@@ -9,6 +9,7 @@
 #include "../global/Constants.h"
 #include "../util/File.h"
 #include "../util/Log.h"
+#include "./IndexMetaData.h"
 #include "./StxxlSortFunctors.h"
 
 namespace Permutation {
@@ -18,9 +19,10 @@ using std::string;
 // helper class to store static properties of the different permutations
 // to avoid code duplication
 // The template Parameter is a STXXL search functor
-template <class Comparator, class MetaData>
+template <class Comparator, class MetaDataT>
 class PermutationImpl {
  public:
+  using MetaData = MetaDataT;
   PermutationImpl(const Comparator& comp, string name, string suffix,
                   array<unsigned short, 3> order)
       : _comp(comp),
@@ -67,5 +69,13 @@ class PermutationImpl {
 
   mutable ad_utility::File _file;
 };
+
+// Type aliases for the 6 permutations used by QLever
+using POS_T = PermutationImpl<SortByPOS, IndexMetaDataHmap>;
+using PSO_T = PermutationImpl<SortByPSO, IndexMetaDataHmap>;
+using SOP_T = Permutation::PermutationImpl<SortBySOP, IndexMetaDataMmapView>;
+using SPO_T = PermutationImpl<SortBySPO, IndexMetaDataMmapView>;
+using OPS_T = PermutationImpl<SortByOPS, IndexMetaDataMmapView>;
+using OSP_T = PermutationImpl<SortByOSP, IndexMetaDataMmapView>;
 
 }  // namespace Permutation

@@ -64,6 +64,12 @@ class BufferedVector {
     return _isInternal ? _vec.at(idx) : _extVec.at(idx);
   }
 
+  // First element with bounds checking.
+  const T& front() const { return at(0); }
+
+  // Last element with bounds checking.
+  const T& back() const { return at(size() - 1); }
+
   // no copy construction/assignment since the MmapVector does not support this
   BufferedVector(const BufferedVector<T>&) = delete;
   BufferedVector& operator=(const BufferedVector<T>&) = delete;

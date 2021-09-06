@@ -73,6 +73,7 @@ class MmapVector {
  public:
   using const_iterator = const T*;
   using iterator = T*;
+  using value_type = T;
 
   // __________________________________________________________________
   size_t size() const { return _size; }
@@ -282,6 +283,7 @@ class MmapVector {
 template <class T>
 class MmapVectorView : private MmapVector<T> {
  public:
+  using value_type = T;
   using const_iterator = const T*;
   using iterator = T*;
   // const access and iteration methods, directly map to the MmapVector-Variants
