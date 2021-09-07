@@ -31,9 +31,9 @@ class TaskQueue {
   std::queue<Task> _queuedTasks;
   size_t _queueMaxSize = 1;
   // CV to notify that a new task has been added to the queue
-  std::condition_variable _newTask;
+  std::condition_variable _newTaskWasPushed;
   // CV to notify that a task was finished by a thread.
-  std::condition_variable _finishedTask;
+  std::condition_variable _workerHasFinishedTask;
   std::mutex _queueMutex;
   std::atomic<bool> _shutdownQueue = false;
   std::string _name;
@@ -71,10 +71,10 @@ class TaskQueue {
     // the actual logic
     auto action = [&, this] {
       std::unique_lock l{_queueMutex};
-      _finishedTask.wait(l,
-                         [&] { return _queuedTasks.size() < _queueMaxSize; });
+      _workerHasFinishedTask.wait(
+          l, [&] { return _queuedTasks.size() < _queueMaxSize; });
       _queuedTasks.push(std::move(t));
-      _newTask.notify_one();
+      _newTaskWasPushed.notify_one();
     };
 
     // If TrackTimes==true, measure the time and add it to _pushTime,
@@ -93,7 +93,7 @@ class TaskQueue {
     // Wait not only until the queue is empty, but also until the tasks are
     // actually performed and the threads have joined.
     l.unlock();
-    _newTask.notify_all();
+    _newTaskWasPushed.notify_all();
     for (auto& thread : _threads) {
       if (thread.joinable()) {
         thread.join();
@@ -104,13 +104,14 @@ class TaskQueue {
   std::optional<Task> popManually() {
     auto action = [&, this]() -> std::optional<Task> {
       std::unique_lock l{_queueMutex};
-      _newTask.wait(l, [&] { return !_queuedTasks.empty() || _shutdownQueue; });
+      _newTaskWasPushed.wait(
+          l, [&] { return !_queuedTasks.empty() || _shutdownQueue; });
       if (_shutdownQueue && _queuedTasks.empty()) {
         return std::nullopt;
       }
       auto task = std::move(_queuedTasks.front());
       _queuedTasks.pop();
-      _finishedTask.notify_one();
+      _workerHasFinishedTask.notify_one();
       return task;
     };
     return possiblyTime(_popTime, action);
@@ -121,8 +122,9 @@ class TaskQueue {
     _popTime = 0;
   }
 
+  // Execute the callable f of type F. If TrackTimes==true, add the passed time to `duration`
   template <typename F>
-  decltype(auto) possiblyTime(std::atomic<size_t>& timeCount, F&& f) {
+  decltype(auto) possiblyTime(std::atomic<size_t>& duration, F&& f) {
     if constexpr (TrackTimes) {
       struct T {
         ad_utility::Timer _t;
@@ -133,7 +135,7 @@ class TaskQueue {
           _target += _t.msecs();
         }
       };
-      T timeHandler{timeCount};
+      T timeHandler{duration};
       return f();
     } else {
       return f();
