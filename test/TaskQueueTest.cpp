@@ -50,7 +50,7 @@ TEST(TaskQueue, SimpleSumWithManualPop) {
   std::atomic<int> result;
   // 0 threads, so we have to pickUp the threads manually from another thread.
   ad_utility::TaskQueue q{10, 0};
-  auto fut = std::async(std::launch::async, [&] {
+  auto future = std::async(std::launch::async, [&] {
     for (size_t i = 0; i <= 1000; ++i) {
       q.push([&result, i] { result += i; });
     }
@@ -64,6 +64,6 @@ TEST(TaskQueue, SimpleSumWithManualPop) {
     // execute the task;
     (*taskAsOptional)();
   }
-  fut.get();
+  future.get();
   ASSERT_EQ(result, 500500);
 }
