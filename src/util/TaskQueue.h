@@ -122,7 +122,10 @@ class TaskQueue {
     _popTime = 0;
   }
 
-  // Execute the callable f of type F. If TrackTimes==true, add the passed time to `duration`
+  // Execute the callable f of type F. If TrackTimes==true, add the passed time
+  // to `duration`. This is designed to work for functions with no return
+  // value(void) as well as for functions with a return value. See the
+  // applications above.
   template <typename F>
   decltype(auto) executeAndUpdateTimer(F&& f, std::atomic<size_t>& duration) {
     if constexpr (TrackTimes) {
@@ -142,19 +145,17 @@ class TaskQueue {
     }
   }
 
-  std::string getWaitingTimeStatistics() const requires TrackTimes {
+  // __________________________________________________________________________
+  std::string getTimeStatistics() const requires TrackTimes {
     return "Time spent waiting in queue " + _name + ": " +
            std::to_string(_pushTime) + "ms (push), " +
            std::to_string(_popTime) + "ms (pop)";
   }
 
-  ~TaskQueue() {
-    finish();
-
-    // since we use jthread, we can now simply wait for the threads to join.
-  }
+  ~TaskQueue() { finish(); }
 
  private:
+  // _________________________________________________________________________
   void function_for_thread() {
     while (true) {
       auto optionalTask = popManually();
