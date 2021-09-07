@@ -79,7 +79,7 @@ class TaskQueue {
 
     // If TrackTimes==true, measure the time and add it to _pushTime,
     // else only perform the pushing.
-    return possiblyTime(_pushTime, action);
+    executeAndUpdateTimer(action, _pushTime);
   }
 
   // Blocks until all tasks have been computed. After a call to finish, no more
@@ -114,7 +114,7 @@ class TaskQueue {
       _workerHasFinishedTask.notify_one();
       return task;
     };
-    return possiblyTime(_popTime, action);
+    return executeAndUpdateTimer(action, _popTime);
   }
 
   void resetTimers() requires TrackTimes {
@@ -124,7 +124,7 @@ class TaskQueue {
 
   // Execute the callable f of type F. If TrackTimes==true, add the passed time to `duration`
   template <typename F>
-  decltype(auto) possiblyTime(std::atomic<size_t>& duration, F&& f) {
+  decltype(auto) executeAndUpdateTimer(F&& f, std::atomic<size_t>& duration) {
     if constexpr (TrackTimes) {
       struct T {
         ad_utility::Timer _t;
