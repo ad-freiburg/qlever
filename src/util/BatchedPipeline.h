@@ -112,7 +112,7 @@ class Batcher {
                                                     Creator* creator) {
     detail::Batch<ValueT> res;
     // If the Creator type has a method `getBatch`, use this method to produce
-    // the batch in one step, otherwise produce the batch value by value`
+    // the batch in one step, otherwise produce the batch value by value.
     if constexpr (requires { creator->getBatch(); }) {
       auto opt = creator->getBatch();
       if (!opt) {
