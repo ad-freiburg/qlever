@@ -25,7 +25,6 @@
 #include "./TokenizerCtre.h"
 #include "ParallelBuffer.h"
 
-
 using std::string;
 
 /**
@@ -541,8 +540,11 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   size_t _bufferSize = FILE_BUFFER_SIZE;
   ParallelBufferWithEndRegex _fileBuffer{_bufferSize, "\\. *(\\n)"};
 
-  ad_utility::TaskQueue<true> tripleCollector{QUEUE_SIZE_AFTER_PARALLEL_PARSING, 0, "triple collector"};
-  ad_utility::TaskQueue<true> parallelParser{QUEUE_SIZE_BEFORE_PARALLEL_PARSING, NUM_PARALLEL_PARSER_THREADS, "parallel parser"};
+  ad_utility::TaskQueue<true> tripleCollector{QUEUE_SIZE_AFTER_PARALLEL_PARSING,
+                                              0, "triple collector"};
+  ad_utility::TaskQueue<true> parallelParser{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
+                                             NUM_PARALLEL_PARSER_THREADS,
+                                             "parallel parser"};
   std::future<void> _parseFuture;
 
   std::vector<char> _remainingBatchFromInitialization;

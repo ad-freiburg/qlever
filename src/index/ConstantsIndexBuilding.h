@@ -68,7 +68,9 @@ constexpr size_t NUM_PARALLEL_PARSER_THREADS = 5;
 // Increasing the following two constants increases the RAM usage without much
 // benefit to the performance.
 
-// The number of unparsed blocks of triples, that may wait for parsing at the same time
+// The number of unparsed blocks of triples, that may wait for parsing at the
+// same time
 constexpr size_t QUEUE_SIZE_BEFORE_PARALLEL_PARSING = 10;
-// The number of parsed blocks of triples, that may wait for parsing at the same time
+// The number of parsed blocks of triples, that may wait for parsing at the same
+// time
 constexpr size_t QUEUE_SIZE_AFTER_PARALLEL_PARSING = 10;

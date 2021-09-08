@@ -683,6 +683,8 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
   std::copy(remainder.begin(), remainder.end(),
             std::back_inserter(_remainingBatchFromInitialization));
 
+  // This lambda fetches all the unparsed blocks of triples from the input
+  // file and feeds them to the parallel parsers.
   auto feedBatches = [&, first = true, parsePosition = 0ull]() mutable {
     decltype(_remainingBatchFromInitialization) inputBatch;
     while (true) {
@@ -725,8 +727,9 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
 template <class T>
 bool TurtleParallelParser<T>::getLine(std::array<string, 3>* triple) {
   // If the current batch is out of _triples get the next batch of triples.
-  // We need a while loop instead of a simple if in case there is a batch that contains no triples.
-  // (Theoretically this might happen, and it is safer this way)
+  // We need a while loop instead of a simple if in case there is a batch that
+  // contains no triples. (Theoretically this might happen, and it is safer this
+  // way)
   while (_triples.empty()) {
     auto optionalTripleTask = tripleCollector.popManually();
     if (!optionalTripleTask) {
