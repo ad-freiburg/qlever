@@ -516,9 +516,9 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   std::optional<std::vector<Triple>> getBatch();
 
   void printAndResetQueueStatistics() {
-    LOG(TIMING) << parallelParser.getWaitingTimeStatistics() << '\n';
+    LOG(TIMING) << parallelParser.getTimeStatistics() << '\n';
     parallelParser.resetTimers();
-    LOG(TIMING) << tripleCollector.getWaitingTimeStatistics() << '\n';
+    LOG(TIMING) << tripleCollector.getTimeStatistics() << '\n';
     tripleCollector.resetTimers();
   }
 
@@ -539,7 +539,6 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   size_t _bufferSize = FILE_BUFFER_SIZE;
   ParallelBufferWithEndRegex _fileBuffer{_bufferSize, "\\. *(\\n)"};
 
-  // TODO: factor out the constants
   ad_utility::TaskQueue<true> tripleCollector{6, 0, "triple collector"};
   ad_utility::TaskQueue<true> parallelParser{10, 5, "parallel parser"};
   std::future<void> _parseFuture;
