@@ -701,7 +701,7 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
         inputBatch = std::move(nextOptional.value());
       }
       auto batchSize = inputBatch.size();
-      auto task = [this, parsePosition, batch = std::move(inputBatch)]() {
+      auto parseBatch = [this, parsePosition, batch = std::move(inputBatch)]() {
         TurtleStringParser<Tokenizer_T> parser;
         parser._prefixMap = this->_prefixMap;
         parser.setPositionOffset(parsePosition);
@@ -715,7 +715,7 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
         });
       };
       parsePosition += batchSize;
-      parallelParser.push(task);
+      parallelParser.push(parseBatch);
     }
   };
 
@@ -724,14 +724,16 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
 
 template <class T>
 bool TurtleParallelParser<T>::getLine(std::array<string, 3>* triple) {
-  // we need a while in case there is a batch that contains no triples
-  // (this should be rare, // TODO warn about this
+  // If the current batch is out of _triples get the next batch of triples.
+  // We need a while loop instead of a simple if in case there is a batch that contains no triples.
+  // (Theoretically this might happen, and it is safer this way)
   while (_triples.empty()) {
     auto optionalTripleTask = tripleCollector.popManually();
     if (!optionalTripleTask) {
-      // everything has been parsed
+      // Everything has been parsed
       return false;
     }
+    // OptionalTripleTask fills the _triples vector
     (*optionalTripleTask)();
   }
 

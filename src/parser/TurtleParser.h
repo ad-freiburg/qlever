@@ -317,6 +317,7 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
 
   string_view getUnparsedRemainder() const { return this->_tok.view(); }
 
+  // Parse directive and return true if a directive was found.
   bool parseDirectiveManually() { return this->directive(); }
 
   void raiseManually(string_view message) { this->raise(message); }

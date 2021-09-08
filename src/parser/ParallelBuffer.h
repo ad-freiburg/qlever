@@ -103,6 +103,7 @@ class ParallelFileBuffer : public ParallelBuffer {
   std::future<size_t> _fut;
 };
 
+/// A parallel buffer, where each of the blocks except for the last one has to end with a certain regex (e.g. a full stop followed by whitespace and a newline to denote the end of a triple in a .ttl file).
 class ParallelBufferWithEndRegex : public ParallelBuffer {
  public:
   ParallelBufferWithEndRegex(size_t blocksize, std::string endRegex)
@@ -114,23 +115,21 @@ class ParallelBufferWithEndRegex : public ParallelBuffer {
       if (_remainder.empty()) {
         return std::nullopt;
       }
-      // make sure that the _remainder is really empty, b.c. this is important
-      // for the logic above
       auto copy = std::move(_remainder);
+      // The C++ standard does not require that _remainder is empty after the move, but we need it to be empty to make the logic above work.
       _remainder.clear();
       return copy;
     }
 
-    // TODO:: is this really correct when we are at the end?
     auto endPosition = findRegexNearEnd(rawInput.value(), _endRegex);
     if (!endPosition) {
       if (_rawBuffer.getNextBlock()) {
         throw std::runtime_error(
-            "The regex which is guaranteed to end a statement was not found at "
-            "all within a single Batch. Please increase the FILE_BUFFER_SIZE "
+            "The regex which marks the end of a statement was not found at "
+            "all within a single batch that was not the last one. Please increase the FILE_BUFFER_SIZE "
             "or choose a different parser");
       }
-      // this was the last (possibly incomplete) block, simply concatenate
+      // This was the last (possibly incomplete) block, simply concatenate
       endPosition = rawInput->size();
       _exhausted = true;
     }
@@ -144,9 +143,13 @@ class ParallelBufferWithEndRegex : public ParallelBuffer {
                       rawInput->end());
     return result;
   }
+
+  // Open the file from which the blocks are read.
   void open(const string& filename) override { _rawBuffer.open(filename); }
 
  private:
+  // Find `regex` near the end of `vec` by searching in blocks of 1000, 2000, 4000... bytes. We have to do this, because "reverse" regex matching is not trivial. Returns the st
+  // Returns the number of bytes in `vec` until the end of the regex match, or std::nullopt if the regex was not found at all.
   static std::optional<size_t> findRegexNearEnd(const std::vector<char>& vec,
                                                 const re2::RE2& regex) {
     size_t chunkSize = 1000;
@@ -175,6 +178,7 @@ class ParallelBufferWithEndRegex : public ParallelBuffer {
       return std::nullopt;
     }
 
+    // regexResult.data() is a pointer to the beginning of the match, vec.data() is a pointer to the beginning of the total input.
     return regexResult.data() + regexResult.size() - vec.data();
   }
   ParallelFileBuffer _rawBuffer{_blocksize};
