@@ -11,7 +11,7 @@
 #include "../global/Id.h"
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
-#include "./ConstantsIndexCreation.h"
+#include "./ConstantsIndexBuilding.h"
 #include "./IndexBuilderTypes.h"
 #include "Vocabulary.h"
 

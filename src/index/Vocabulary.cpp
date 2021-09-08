@@ -15,7 +15,7 @@
 #include "../util/File.h"
 #include "../util/HashMap.h"
 #include "../util/HashSet.h"
-#include "./ConstantsIndexCreation.h"
+#include "./ConstantsIndexBuilding.h"
 
 using std::string;
 
