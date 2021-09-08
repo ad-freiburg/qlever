@@ -8,7 +8,7 @@
 #include "../util/Conversions.h"
 #include "../util/HashMap.h"
 #include "../util/TupleHelpers.h"
-#include "./ConstantsIndexCreation.h"
+#include "./ConstantsIndexBuilding.h"
 #include "./StringSortComparator.h"
 
 #ifndef QLEVER_INDEXBUILDERTYPES_H

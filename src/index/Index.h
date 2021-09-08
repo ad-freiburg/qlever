@@ -23,7 +23,7 @@
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
 #include "../util/Timer.h"
-#include "./ConstantsIndexCreation.h"
+#include "./ConstantsIndexBuilding.h"
 #include "./DocsDB.h"
 #include "./IndexBuilderTypes.h"
 #include "./IndexMetaData.h"

@@ -17,7 +17,7 @@
 #include "../util/File.h"
 #include "../util/ReadableNumberFact.h"
 #include "../util/StringUtils.h"
-#include "./ConstantsIndexCreation.h"
+#include "./ConstantsIndexBuilding.h"
 #include "./Index.h"
 
 using std::cerr;

@@ -18,7 +18,7 @@
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
 #include "../util/Log.h"
-#include "./ConstantsIndexCreation.h"
+#include "./ConstantsIndexBuilding.h"
 #include "./Vocabulary.h"
 #include "./VocabularyGenerator.h"
 

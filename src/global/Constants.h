@@ -85,6 +85,9 @@ static const std::string WARNING_ASCII_ONLY_PREFIXES =
     "explicitly in TurtleParserMain). This means that the input Turtle data "
     "may only use characters from the ASCII range and that no escape sequences "
     "may be used in prefixed names (e.g., rdfs:label\\,el is not allowed). "
+    " Additionally, multiline literals are not allowed and triples have to end "
+    "at line boundaries (The regex \". *\\n\" must safely identify the end of "
+    "a triple)."
     "This is stricter than the SPARQL standard but makes parsing faster. It "
     "works for many Turtle dumps, e.g. that from Wikidata.";
 static const std::string LOCALE_DEFAULT_LANG = "en";

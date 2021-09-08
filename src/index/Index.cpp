@@ -72,12 +72,12 @@ void Index::createFromFile(const string& filename) {
   if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserDummy>) {
     if (_onlyAsciiTurtlePrefixes) {
       LOG(INFO) << "Using the CTRE library for Tokenization\n";
-      vocabData =
-          createIdTriplesAndVocab<TurtleStreamParser<TokenizerCtre>>(filename);
+      vocabData = createIdTriplesAndVocab<TurtleParallelParser<TokenizerCtre>>(
+          filename);
     } else {
       LOG(INFO) << "Using the Google Re2 library for Tokenization\n";
       vocabData =
-          createIdTriplesAndVocab<TurtleStreamParser<Tokenizer>>(filename);
+          createIdTriplesAndVocab<TurtleParallelParser<Tokenizer>>(filename);
     }
 
   } else {

@@ -15,11 +15,12 @@
 #include <string_view>
 
 #include "../global/Constants.h"
-#include "../index/ConstantsIndexCreation.h"
+#include "../index/ConstantsIndexBuilding.h"
 #include "../util/Exception.h"
 #include "../util/File.h"
 #include "../util/HashMap.h"
 #include "../util/Log.h"
+#include "../util/TaskQueue.h"
 #include "./Tokenizer.h"
 #include "./TokenizerCtre.h"
 #include "ParallelBuffer.h"
@@ -56,8 +57,6 @@ class TurtleParser {
   static constexpr bool UseRelaxedParsing =
       std::is_same_v<Tokenizer_T, TokenizerCtre>;
 
-  // open an input file or stream
-  virtual void initialize(const string& filename) = 0;
   virtual ~TurtleParser() = default;
   TurtleParser() = default;
   TurtleParser(TurtleParser&& rhs) = default;
@@ -139,10 +138,16 @@ class TurtleParser {
 
   // throw an exception annotated with position information
   [[noreturn]] void raise(std::string_view msg) {
+    auto d = _tok.view();
+    if (!d.empty()) {
+      LOG(ERROR) << "Parsing error has occured, showing next 1000 bytes:\n";
+      auto s = std::min(size_t(10000), size_t(d.size()));
+      LOG(ERROR) << std::string_view(d.data(), s) << std::endl;
+    }
     throw ParseException(msg, getParsePosition());
   }
 
- private:
+ protected:
   /* private Member Functions */
 
   bool directive();
@@ -233,10 +238,9 @@ class TurtleParser {
   // properly registered before
   string expandPrefix(const string& prefix) {
     if (!_prefixMap.count(prefix)) {
-      throw ParseException("Prefix " + prefix +
-                               " was not defined using a PREFIX or @prefix "
-                               "declaration before using it!\n",
-                           getParsePosition());
+      raise("Prefix " + prefix +
+            " was not defined using a PREFIX or @prefix "
+            "declaration before using it!");
     } else {
       return _prefixMap[prefix];
     }
@@ -267,6 +271,7 @@ class TurtleParser {
 template <class Tokenizer_T>
 class TurtleStringParser : public TurtleParser<Tokenizer_T> {
  public:
+  using TurtleParser<Tokenizer_T>::_prefixMap;
   using TurtleParser<Tokenizer_T>::getLine;
   bool getLine(std::array<string, 3>* triple) override {
     (void)triple;
@@ -276,10 +281,10 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
   }
 
   size_t getParsePosition() const override {
-    return _tmpToParse.size() - this->_tok.data().size();
+    return _positionOffset + _tmpToParse.size() - this->_tok.data().size();
   }
 
-  void initialize(const string& filename) override {
+  void initialize(const string& filename) {
     (void)filename;
     throw std::runtime_error(
         "TurtleStringParser doesn't support calls to initialize. Only use "
@@ -289,23 +294,61 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
   // load a string object directly to the buffer
   // allows easier testing without a file object
   void parseUtf8String(const std::string& toParse) {
-    _tmpToParse = toParse;
-    this->_tok.reset(_tmpToParse.data(), _tmpToParse.size());
-    // directly parse the whole triple
+    setInputStream(toParse);
     this->turtleDoc();
   }
 
- private:
-  // the various ways to store the input to this parser
-  // used when parsing directly from a string
-  // TODO: move this to a separate class.
-  std::string _tmpToParse = "";
+  // Parse all Triples (no prefix declarations etc allowed) and return them.
+  auto parseAndReturnAllTriples() {
+    // Actually parse
+    this->turtleDoc();
+    auto d = this->_tok.view();
+    if (!d.empty()) {
+      LOG(INFO) << "Warning at position " << getParsePosition()
+                << ":Parsing of line has Failed, but parseInput is not "
+                   "yet exhausted. Remaining bytes: "
+                << d.size() << '\n';
+      auto s = std::min(size_t(1000), size_t(d.size()));
+      LOG(INFO) << "Logging first 1000 unparsed characters\n";
+      LOG(INFO) << std::string_view(d.data(), s) << std::endl;
+    }
+    return std::move(this->_triples);
+  }
 
+  string_view getUnparsedRemainder() const { return this->_tok.view(); }
+
+  // Parse directive and return true if a directive was found.
+  bool parseDirectiveManually() { return this->directive(); }
+
+  void raiseManually(string_view message) { this->raise(message); }
+
+  void setPositionOffset(size_t offset) { _positionOffset = offset; }
+
+ private:
+  // The complete input to this parser.
+  std::vector<char> _tmpToParse;
+  // used to add a certain offset to the parsing position when using this
+  // in a parallel setting
+  size_t _positionOffset = 0;
+
+ public:
   // testing interface for reusing a parser
   // only specifies the tokenizers input stream.
   // Does not alter the tokenizers state
-  void setInputStream(const string& utf8String) {
-    _tmpToParse = utf8String;
+  void setInputStream(const string& toParse) {
+    _tmpToParse.clear();
+    _tmpToParse.reserve(toParse.size());
+    _tmpToParse.insert(_tmpToParse.end(), toParse.begin(), toParse.end());
+    this->_tok.reset(_tmpToParse.data(), _tmpToParse.size());
+  }
+
+  void setPrefixMap(decltype(_prefixMap) m) { _prefixMap = std::move(m); }
+
+  const auto& getPrefixMap() const { return _prefixMap; }
+
+  // __________________________________________________________
+  void setInputStream(std::vector<char> toParse) {
+    _tmpToParse = std::move(toParse);
     this->_tok.reset(_tmpToParse.data(), _tmpToParse.size());
   }
 
@@ -358,7 +401,7 @@ class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
 
   bool getLine(std::array<string, 3>* triple) override;
 
-  void initialize(const string& filename) override;
+  void initialize(const string& filename);
 
   size_t getParsePosition() const override {
     return _numBytesBeforeCurrentBatch + (_tok.data().data() - _byteVec.data());
@@ -426,7 +469,7 @@ class TurtleMmapParser : public TurtleParser<Tokenizer_T> {
   bool getLine(std::array<string, 3>* triple) override;
 
   // initialize parse input from a turtle file using mmap
-  void initialize(const string& filename) override;
+  void initialize(const string& filename);
 
   // has to be called after finishing parsing of an mmaped .ttl file
   // if no file is currently mapped this function has no effect
@@ -446,4 +489,63 @@ class TurtleMmapParser : public TurtleParser<Tokenizer_T> {
   using TurtleParser<Tokenizer_T>::_tok;
   using TurtleParser<Tokenizer_T>::_isParserExhausted;
   using TurtleParser<Tokenizer_T>::_triples;
+};
+
+/**
+ * This class is a TurtleParser that always assumes that
+ * its input file is an uncompressed .ttl file that will be read in
+ * chunks. Input file can also be a stream like stdin.
+ */
+template <class Tokenizer_T>
+class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
+ public:
+  using Triple = std::array<string, 3>;
+  // Default construction needed for tests
+  TurtleParallelParser() = default;
+  explicit TurtleParallelParser(const string& filename) {
+    LOG(INFO) << "Initialize parallel Turtle Parsing from uncompressed file or "
+                 "stream "
+              << filename << '\n';
+    initialize(filename);
+  }
+
+  // inherit the wrapper overload
+  using TurtleParser<Tokenizer_T>::getLine;
+
+  bool getLine(std::array<string, 3>* triple) override;
+
+  std::optional<std::vector<Triple>> getBatch();
+
+  void printAndResetQueueStatistics() {
+    LOG(TIMING) << parallelParser.getTimeStatistics() << '\n';
+    parallelParser.resetTimers();
+    LOG(TIMING) << tripleCollector.getTimeStatistics() << '\n';
+    tripleCollector.resetTimers();
+  }
+
+  void initialize(const string& filename);
+
+  virtual size_t getParsePosition() const override {
+    // TODO: can we really define this position here?
+    return 0;
+  }
+
+ private:
+  using TurtleParser<Tokenizer_T>::_tok;
+  using TurtleParser<Tokenizer_T>::_triples;
+  using TurtleParser<Tokenizer_T>::_isParserExhausted;
+
+  // this many characters will be buffered at once,
+  // defaults to a global constant
+  size_t _bufferSize = FILE_BUFFER_SIZE;
+  ParallelBufferWithEndRegex _fileBuffer{_bufferSize, "\\. *(\\n)"};
+
+  ad_utility::TaskQueue<true> tripleCollector{QUEUE_SIZE_AFTER_PARALLEL_PARSING,
+                                              0, "triple collector"};
+  ad_utility::TaskQueue<true> parallelParser{QUEUE_SIZE_BEFORE_PARALLEL_PARSING,
+                                             NUM_PARALLEL_PARSER_THREADS,
+                                             "parallel parser"};
+  std::future<void> _parseFuture;
+
+  std::vector<char> _remainingBatchFromInitialization;
 };

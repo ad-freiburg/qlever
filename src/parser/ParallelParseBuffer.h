@@ -55,6 +55,25 @@ class ParserBatcher {
     }
   }
 
+  // The second requires evaluates to `true` only if the `Parser` type has a
+  // getBatch() member function. The first requires enables this function only
+  // if the second "requires" evaluates to true
+  std::optional<std::vector<Triple>> getBatch() requires requires(Parser p) {
+    p.getBatch();
+  }
+  {
+    if (m_numTriplesAlreadyParsed >= m_maxNumTriples) {
+      return std::nullopt;
+    }
+    auto opt = m_parser->getBatch();
+    if (!opt) {
+      m_exhaustedCallback();
+    } else {
+      m_numTriplesAlreadyParsed += opt->size();
+    }
+    return opt;
+  }
+
   std::shared_ptr<Parser> m_parser;
   size_t m_maxNumTriples;
   size_t m_numTriplesAlreadyParsed = 0;

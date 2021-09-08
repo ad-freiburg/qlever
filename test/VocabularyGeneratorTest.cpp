@@ -7,7 +7,7 @@
 #include <string>
 
 #include "../src/global/Constants.h"
-#include "../src/index/ConstantsIndexCreation.h"
+#include "../src/index/ConstantsIndexBuilding.h"
 #include "../src/index/Index.h"
 #include "../src/index/VocabularyGenerator.h"
 
