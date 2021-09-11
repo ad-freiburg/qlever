@@ -247,7 +247,7 @@ class MetaDataWrapperHashMap {
     }
 
     // _________________________________________________
-    std::pair<Id, std::reference_wrapper<const value_type>>* operator->() {
+    const auto* operator->() const {
       // Call operator* and return a pointer to the result.
       // This is safe, because the underlying hashMap ensures the lifetime of
       // the returned reference;
