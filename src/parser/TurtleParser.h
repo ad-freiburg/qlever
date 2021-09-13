@@ -80,7 +80,6 @@ class TurtleParser {
   // clear all the parser's state to the initial values.
   void clear() {
     _lastParseResult.clear();
-    _baseIRI.clear();
 
     _activeSubject.clear();
     _activePredicate.clear();
@@ -123,11 +122,9 @@ class TurtleParser {
   // (a function named after a (non-)terminal of the Turtle grammar
   std::string _lastParseResult;
 
-  // the currently active base IRI
-  std::string _baseIRI;
-
-  // maps prefixes to their expanded form
-  ad_utility::HashMap<std::string, std::string> _prefixMap;
+  // maps prefixes to their expanded form, initialized with the empty base
+  // (i.e. the prefix ":" maps to the empty IRI)
+  ad_utility::HashMap<std::string, std::string> _prefixMap{{"", ""}};
 
   // there are turtle constructs that reuse prefixes, subjects and predicates
   // so we have to save the last seen ones
