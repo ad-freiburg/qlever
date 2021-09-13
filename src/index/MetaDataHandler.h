@@ -234,7 +234,7 @@ class MetaDataWrapperHashMap {
       // Sort all the keys from the underlying hashMap and store them.
       sortedKeys_.reserve(wrapper.size());
       for (const auto& [key, value] : wrapper_) {
-        (void)value;
+        (void)value;  // Silence the warning about `value` being unused.
         sortedKeys_.push_back(key);
       }
       std::sort(sortedKeys_.begin(), sortedKeys_.end());
