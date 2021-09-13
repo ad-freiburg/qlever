@@ -6,28 +6,20 @@
 
 
 
-QLever (pronounced "Clever") is an efficient SPARQL engine, which can handle very large dataset with tens of billions of triples on a standard PC or server.
-For example, QLever can index the complete Wikidata (18 billion triples) in less than 24 hours and execute typical queries in less than a second, using no more than 40 GB of RAM. QLever is also fast for queries that produce large or very large results (millions of rows per second).
-Other SPARQL engines, like Virtuoso or Blazegraph, are very slow, when large sequences of IRIs or literals have to be materialized.
-
-On top of the standard SPARQL functionality,
-QLever also supports search in TEXT associated with the knowledge base as well as SPARQL Autocompletion.
-These are described on the [advanced features](docs/advanced_features.md) page.
-
-A demo of QLever on a variety of large datasets, including Wikidata, can be
-found [here](http://qlever.cs.uni-freiburg.de).
-Those demos also feature QLever's autocompletion capabilities.
-The first two autocompletions might be slow due to a cold cache; after that, they will be fast.
+QLever (pronounced "Clever") is an efficient SPARQL engine, which can efficiently index and query very large knowledge graphs with tens of billions of triples on a standard PC or server.
+In particular, QLever is fast for queries that involve large intermediate or final results, which are notoriously hard for engines like Blazegraph or Virtuoso.
+QLever also supports search in TEXT associated with the knowledge base as well as SPARQL autocompletion.
+[Here are demos of QLever](http://qlever.cs.uni-freiburg.de) on a variety of large knowledge graphs, including the complete Wikidata and OpenStreetMap.
+Those demos also feature QLever's context-sensitiv autocompletion, which makes SPARQL query construction so much easier.
 
 The basic design behind QLever was described in this [CIKM'17
 paper](http://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf).
-If you use QLever in your work, please cite that paper.
-Much functionality has been added to QLever since then.
-In particular, the following standard SPARQL constructs are all supported in the meantime:
+Qlever's autocompletion functionality is described and evaluated in [this paper](https://ad-publications.cs.uni-freiburg.de/ARXIV_sparql_autocompletion_BKKKS_2021.pdf).
+If you use QLever in your work, please cite those papers.
+QLever support all standard SPARQL 1.1 constructs, including:
 LIMIT, OFFSET, ORDER BY, GROUP BY, HAVING, COUNT, SAMPLE, GROUP_CONCAT, FILTER, REGEX, LANG, OPTIONAL, UNION, MINUS, VALUES, BIND.
 Predicate paths and subqueries are also supported.
 The SERVICE keyword is not yet supported.
-We are currently working on several publications that describe and evaluate these extensions.
 
 # Quickstart
 
@@ -38,6 +30,8 @@ Alternatively to get started with a real (and really big) dataset we have prepar
 a [Wikidata Quickstart Guide](docs/wikidata.md). This guide takes you through the entire
 process of loading the full Wikidata Knowledge Base into QLever, but don't worry
 it is pretty simple.
+
+QLever's [advanced features are described here](docs/advanced_features.md).
 
 # Overview
 
