@@ -108,11 +108,16 @@ class Synchronized {
     return f(data_);
   }
 
-  /// Similar to `withWriteLock`, but additionally guarantees that the request with requestNumber 0 is performed first, then comes requestNumber 1 etc. If a request number in the range [0...k] is missing, then the program will deadlock. See `/src/index/Index.cpp` for an example.
+  /// Similar to `withWriteLock`, but additionally guarantees that the request
+  /// with requestNumber 0 is performed first, then comes requestNumber 1 etc.
+  /// If a request number in the range [0...k] is missing, then the program will
+  /// deadlock. See `/src/index/Index.cpp` for an example.
   template <typename F>
   auto withWriteLockAndOrdered(F f, size_t requestNumber) {
     std::unique_lock l(m_);
-    // It is important to create this AFTER the lock, s.t. the nextOrderedRequest_ update is still protected. We must give it a name, s.t. it is not destroyed immediately.
+    // It is important to create this AFTER the lock, s.t. the
+    // nextOrderedRequest_ update is still protected. We must give it a name,
+    // s.t. it is not destroyed immediately.
     OnDestruction od{[&]() mutable {
       ++nextOrderedRequest_;
       l.unlock();
@@ -195,7 +200,7 @@ class Synchronized {
   };
 
  private:
-  T data_;              // The data to which we synchronize the access.
+  T data_;           // The data to which we synchronize the access.
   mutable Mutex m_;  // The used mutex
 
   // These are used for the withWriteLockAndOrdered function

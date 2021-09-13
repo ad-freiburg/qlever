@@ -152,7 +152,8 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   // we add extra triples
   std::vector<size_t> actualPartialSizes;
 
-  // Each of these futures correspond to the processing and writing of one batch of triples and partial vocabulary.
+  // Each of these futures correspond to the processing and writing of one batch
+  // of triples and partial vocabulary.
   std::array<std::future<void>, 3> writePartialVocabularyFuture;
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
@@ -225,12 +226,14 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
       convertedMaps[j] = std::move(itemArray[j]).moveMap();
     }
     auto oldItemPtr = std::make_unique<ItemMapArray>(std::move(convertedMaps));
-    for (auto it = writePartialVocabularyFuture.begin() + 1; it < writePartialVocabularyFuture.end(); ++it) {
+    for (auto it = writePartialVocabularyFuture.begin() + 1;
+         it < writePartialVocabularyFuture.end(); ++it) {
       *(it - 1) = std::move(*it);
     }
-    writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] = writeNextPartialVocabulary(
-        i, numFiles, actualCurrentPartialSize, std::move(oldItemPtr),
-        std::move(localIdTriples), &writer);
+    writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] =
+        writeNextPartialVocabulary(i, numFiles, actualCurrentPartialSize,
+                                   std::move(oldItemPtr),
+                                   std::move(localIdTriples), &writer);
     numFiles++;
     // Save the information how many triples this partial vocabulary actually
     // deals with we will use this later for mapping from partial to global

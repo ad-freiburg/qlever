@@ -8,8 +8,8 @@ namespace ad_utility {
 
 /// A simple type that executes a specified action at the time it is destroyed
 /// F must be callable without arguments, return void and be noexcept.
-template <typename F> requires std::is_nothrow_invocable_r_v<void, F>
-class OnDestruction {
+template <typename F>
+requires std::is_nothrow_invocable_r_v<void, F> class OnDestruction {
  private:
   F f_;
 

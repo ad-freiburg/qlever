@@ -31,7 +31,7 @@ using ItemVec = std::vector<std::pair<std::string, IdAndSplitVal>>;
  * Ids are assigned in an adjacent range starting with a configurable
  * minimum Id. That way multiple maps can be used with non overlapping ranges.
  */
- // Align each ItemMapManager on its own cache line to avoid false sharing.
+// Align each ItemMapManager on its own cache line to avoid false sharing.
 struct alignas(256) ItemMapManager {
   /// Construct by assigning the minimum Id that shall be returned by the map
   explicit ItemMapManager(Id minId, const TripleComponentComparator* cmp)
