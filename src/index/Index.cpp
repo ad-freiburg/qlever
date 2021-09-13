@@ -152,7 +152,9 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   // we add extra triples
   std::vector<size_t> actualPartialSizes;
 
-  std::array<std::future<void>, 3> sortFuture;
+  // These futures correspond to the processing and writing of one
+  // batch of triples and partial vocabulary.
+  std::array<std::future<void>, 3> writePartialVocabularyFuture;
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
@@ -212,8 +214,8 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     // it is not a bottleneck.
     ad_utility::Timer sortFutureTimer;
     sortFutureTimer.start();
-    if (sortFuture[0].valid()) {
-      sortFuture[0].get();
+    if (writePartialVocabularyFuture[0].valid()) {
+      writePartialVocabularyFuture[0].get();
     }
     sortFutureTimer.stop();
     LOG(TIMING)
@@ -224,10 +226,10 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
       convertedMaps[j] = std::move(itemArray[j]).moveMap();
     }
     auto oldItemPtr = std::make_unique<ItemMapArray>(std::move(convertedMaps));
-    for (auto it = sortFuture.begin() + 1; it < sortFuture.end(); ++it) {
+    for (auto it = writePartialVocabularyFuture.begin() + 1; it < writePartialVocabularyFuture.end(); ++it) {
       *(it - 1) = std::move(*it);
     }
-    sortFuture[sortFuture.size() - 1] = writeNextPartialVocabulary(
+    writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] = writeNextPartialVocabulary(
         i, numFiles, actualCurrentPartialSize, std::move(oldItemPtr),
         std::move(localIdTriples), &writer);
     numFiles++;
@@ -236,9 +238,9 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     // ids
     actualPartialSizes.push_back(actualCurrentPartialSize);
   }
-  for (auto& fut : sortFuture) {
-    if (fut.valid()) {
-      fut.get();
+  for (auto& future : writePartialVocabularyFuture) {
+    if (future.valid()) {
+      future.get();
     }
   }
   writer.wlock()->finish();
