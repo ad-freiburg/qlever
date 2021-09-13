@@ -152,8 +152,8 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   // we add extra triples
   std::vector<size_t> actualPartialSizes;
 
-  // Each of these futures correspond to the processing and writing of one batch
-  // of triples and partial vocabulary.
+  // Each of these futures corresponds to the processing and writing of one
+  // batch of triples and partial vocabulary.
   std::array<std::future<void>, 3> writePartialVocabularyFuture;
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
