@@ -31,8 +31,8 @@ static const size_t PARSER_BATCH_SIZE = 1000000;
 static const size_t PARSER_MIN_TRIPLES_AT_ONCE = 100000;
 
 // When reading from a file, Chunks of this size will
-// be fed to the parser at once (100 << 20  is exactly 100 MiB
-static const size_t FILE_BUFFER_SIZE = 100 << 20;
+// be fed to the parser at once (100 MiB)
+static const size_t FILE_BUFFER_SIZE = 100 * (1ul << 20);
 
 // When the BZIP2 parser encouters a parsing exception it will increase its
 // buffer and try again (we have no other way currently to determine if the
@@ -55,11 +55,11 @@ static const std::string PARTIAL_MMAP_IDS = ".partial-ids-mmap";
 static const std::string TMP_BASENAME_COMPRESSION = ".tmp.compression_index";
 
 // _________________________________________________________________
-// The degree of parallelism that is used for IndexBuilding step where the
-// unique elements of the vocabulary are identified via hash maps. Typically, 4
+// The degree of parallelism that is used for the index building step, where the
+// unique elements of the vocabulary are identified via hash maps. Typically, 6
 // is a good value. On systems with very few CPUs, a lower value might be
 // beneficial.
-constexpr size_t NUM_PARALLEL_ITEM_MAPS = 4;
+constexpr size_t NUM_PARALLEL_ITEM_MAPS = 6;
 
 // The number of threads that are parsing in parallel, when the parallel Turtle
 // parser is used.

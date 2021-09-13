@@ -141,7 +141,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
                                             size_t linesPerPartial) {
   auto parser = std::make_shared<Parser>(filename);
   std::unique_ptr<TripleVec> idTriples(new TripleVec());
-  TripleVec::bufwriter_type writer(*idTriples);
+  ad_utility::Synchronized<TripleVec::bufwriter_type> writer(*idTriples);
   bool parserExhausted = false;
 
   size_t i = 0;
@@ -152,7 +152,9 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   // we add extra triples
   std::vector<size_t> actualPartialSizes;
 
-  std::future<void> sortFuture;
+  // Each of these futures corresponds to the processing and writing of one
+  // batch of triples and partial vocabulary.
+  std::array<std::future<void>, 3> writePartialVocabularyFuture;
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
@@ -162,7 +164,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     std::array<ItemMapManager, NUM_PARALLEL_ITEM_MAPS> itemArray;
 
     {
-      auto p = ad_pipeline::setupParallelPipeline<1, NUM_PARALLEL_ITEM_MAPS>(
+      auto p = ad_pipeline::setupParallelPipeline<3, NUM_PARALLEL_ITEM_MAPS>(
           _parserBatchSize,
           // when called, returns an optional to the next triple. If
           // `linesPerPartial` triples were parsed, return std::nullopt. when
@@ -210,27 +212,40 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     // to control the number of threads and the amount of memory used at the
     // same time. typically sorting is finished before we reach again here so
     // it is not a bottleneck.
-    if (sortFuture.valid()) {
-      sortFuture.get();
+    ad_utility::Timer sortFutureTimer;
+    sortFutureTimer.start();
+    if (writePartialVocabularyFuture[0].valid()) {
+      writePartialVocabularyFuture[0].get();
     }
+    sortFutureTimer.stop();
+    LOG(TIMING)
+        << "Time spent waiting for the writing of a previous vocabulary: "
+        << sortFutureTimer.msecs() << "ms." << std::endl;
     std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS> convertedMaps;
     for (size_t j = 0; j < NUM_PARALLEL_ITEM_MAPS; ++j) {
       convertedMaps[j] = std::move(itemArray[j]).moveMap();
     }
     auto oldItemPtr = std::make_unique<ItemMapArray>(std::move(convertedMaps));
-    sortFuture = writeNextPartialVocabulary(
-        i, numFiles, actualCurrentPartialSize, std::move(oldItemPtr),
-        std::move(localIdTriples), &writer);
+    for (auto it = writePartialVocabularyFuture.begin() + 1;
+         it < writePartialVocabularyFuture.end(); ++it) {
+      *(it - 1) = std::move(*it);
+    }
+    writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] =
+        writeNextPartialVocabulary(i, numFiles, actualCurrentPartialSize,
+                                   std::move(oldItemPtr),
+                                   std::move(localIdTriples), &writer);
     numFiles++;
     // Save the information how many triples this partial vocabulary actually
     // deals with we will use this later for mapping from partial to global
     // ids
     actualPartialSizes.push_back(actualCurrentPartialSize);
   }
-  if (sortFuture.valid()) {
-    sortFuture.get();
+  for (auto& future : writePartialVocabularyFuture) {
+    if (future.valid()) {
+      future.get();
+    }
   }
-  writer.finish();
+  writer.wlock()->finish();
   LOG(INFO) << "Pass done." << endl;
 
   if (_vocabPrefixCompressed) {
@@ -1526,7 +1541,7 @@ void Index::initializeVocabularySettingsBuild() {
 std::future<void> Index::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
     std::unique_ptr<ItemMapArray> items, std::unique_ptr<TripleVec> localIds,
-    TripleVec::bufwriter_type* globalWritePtr) {
+    ad_utility::Synchronized<TripleVec::bufwriter_type>* globalWritePtr) {
   LOG(INFO) << "Lines (from KB-file) processed: " << numLines << '\n';
   LOG(INFO) << "Actual number of Triples in this section (include "
                "langfilter triples): "
@@ -1540,7 +1555,7 @@ std::future<void> Index::writeNextPartialVocabulary(
 
   auto lambda = [localIds = std::move(localIds), globalWritePtr,
                  items = std::move(items), vocab = &_vocab, partialFilename,
-                 partialCompressionFilename,
+                 partialCompressionFilename, numFiles,
                  vocabPrefixCompressed = _vocabPrefixCompressed]() mutable {
     auto vec = vocabMapsToVector(std::move(items));
     const auto identicalPred = [&c = vocab->getCaseComparator()](
@@ -1562,9 +1577,15 @@ std::future<void> Index::writeNextPartialVocabulary(
                             return a.second.m_id == b.second.m_id;
                           }),
               vec.end());
-    LOG(INFO) << "Removed " << sz - vec.size()
-              << " Duplicates from the local partial vocabularies\n";
-    writeMappedIdsToExtVec(*localIds, mapping, globalWritePtr);
+    LOG(TRACE) << "Removed " << sz - vec.size()
+               << " Duplicates from the local partial vocabularies\n";
+    // The writing to the STXXL vector has to be done in order, to
+    // make the update from local to global ids work.
+    globalWritePtr->withWriteLockAndOrdered(
+        [&](auto& writerPtr) {
+          writeMappedIdsToExtVec(*localIds, mapping, &writerPtr);
+        },
+        numFiles);
     writePartialVocabularyToFile(vec, partialFilename);
     if (vocabPrefixCompressed) {
       // sort according to the actual byte values

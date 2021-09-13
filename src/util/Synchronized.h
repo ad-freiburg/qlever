@@ -10,6 +10,8 @@
 #include <atomic>
 #include <shared_mutex>
 
+#include "./OnDestruction.h"
+
 namespace ad_utility {
 
 /// Does type M have a lock() and unlock() member function (behaves like a
@@ -84,7 +86,7 @@ class Synchronized {
   /// Constructor that is not copy or move, tries to instantiate the underlying
   /// type via perfect forwarding (this includes the default constructor)
   template <typename... Args>
-  Synchronized(Args&&... args) : t_{std::forward<Args>(args)...}, m_{} {}
+  Synchronized(Args&&... args) : data_{std::forward<Args>(args)...}, m_{} {}
 
   /** @brief Obtain an exclusive lock and then call f() on the underlying data
    * type, return the result.
@@ -96,14 +98,33 @@ class Synchronized {
   template <typename F>
   auto withWriteLock(F f) {
     std::lock_guard l(m_);
-    return f(t_);
+    return f(data_);
   }
 
   /// const overload of with WriteLock
   template <typename F>
   auto withWriteLock(F f) const {
     std::lock_guard l(m_);
-    return f(t_);
+    return f(data_);
+  }
+
+  /// Similar to `withWriteLock`, but additionally guarantees that the request
+  /// with requestNumber 0 is performed first, then comes requestNumber 1 etc.
+  /// If a request number in the range [0...k] is missing, then the program will
+  /// deadlock. See `/src/index/Index.cpp` for an example.
+  template <typename F>
+  auto withWriteLockAndOrdered(F f, size_t requestNumber) {
+    std::unique_lock l(m_);
+    // It is important to create this AFTER the lock, s.t. the
+    // nextOrderedRequest_ update is still protected. We must give it a name,
+    // s.t. it is not destroyed immediately.
+    OnDestruction od{[&]() mutable noexcept {
+      ++nextOrderedRequest_;
+      l.unlock();
+      requestCv_.notify_all();
+    }};
+    requestCv_.wait(l, [&]() { return requestNumber == nextOrderedRequest_; });
+    return f(data_);
   }
 
   /** @brief Obtain a shared lock and then call f() on the underlying data type,
@@ -119,7 +140,7 @@ class Synchronized {
             typename Res = std::invoke_result_t<F, const T&>>
   std::enable_if_t<s, Res> withReadLock(F f) const {
     std::shared_lock l(m_);
-    return f(t_);
+    return f(data_);
   }
 
   /**
@@ -179,11 +200,15 @@ class Synchronized {
   };
 
  private:
-  T t_;              // the actual payload
-  mutable Mutex m_;  // the used mutex
+  T data_;           // The data to which we synchronize the access.
+  mutable Mutex m_;  // The used mutex
+
+  // These are used for the withWriteLockAndOrdered function
+  size_t nextOrderedRequest_ = 0;
+  std::condition_variable_any requestCv_;
 
   template <class S, bool b, bool c>
-  friend class LockPtr;  // the LockPtr implementation requires private access
+  friend class LockPtr;  // The LockPtr implementation requires private access
 };
 
 /// handle to a locked Synchronized class
@@ -224,21 +249,21 @@ class LockPtr {
   /// locks that are not const.
   template <bool s = isConst>
   std::enable_if_t<!s, value_type&> operator*() {
-    return s_->t_;
+    return s_->data_;
   }
 
   /// Access to underlying data.
-  const value_type& operator*() const { return s_->t_; }
+  const value_type& operator*() const { return s_->data_; }
 
   /// Access to underlying data. Non const access is only allowed for exclusive
   /// locks that are not const.
   template <bool s = isConst>
   std::enable_if_t<!s, value_type*> operator->() {
-    return &s_->t_;
+    return &s_->data_;
   }
 
   /// Access to underlying data.
-  const value_type* operator->() const { return &s_->t_; }
+  const value_type* operator->() const { return &s_->data_; }
 
  private:
   ptr_type s_;
