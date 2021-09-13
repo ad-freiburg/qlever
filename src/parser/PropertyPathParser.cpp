@@ -32,8 +32,8 @@ PropertyPath PropertyPathParser::parse() {
 // _____________________________________________________________________________
 std::vector<PropertyPathParser::Token> PropertyPathParser::tokenize(
     std::string_view str) {
-  // Runs only once to initialize the delimiter characters
-  // Initialization of static variables is thread safe according to the C++
+  // Runs only once to initialize the delimiter characters. Note that
+  // initialization of static variables is thread-safe according to the C++
   // standard.
   const static auto [DELIMITER_CHARS, VALID_CHARS] = []() {
     static std::array<bool, 256> DELIMITER_CHARS;
