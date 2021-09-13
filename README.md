@@ -16,8 +16,8 @@ The basic design behind QLever was described in this [CIKM'17
 paper](http://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf).
 Qlever's autocompletion functionality is described and evaluated in [this paper](https://ad-publications.cs.uni-freiburg.de/ARXIV_sparql_autocompletion_BKKKS_2021.pdf).
 If you use QLever in your work, please cite those papers.
-QLever support all standard SPARQL 1.1 constructs, including:
-LIMIT, OFFSET, ORDER BY, GROUP BY, HAVING, COUNT, SAMPLE, GROUP_CONCAT, FILTER, REGEX, LANG, OPTIONAL, UNION, MINUS, VALUES, BIND.
+QLever supports standard SPARQL 1.1 constructs like:
+LIMIT, OFFSET, ORDER BY, GROUP BY, HAVING, COUNT, DISTINCT, SAMPLE, GROUP_CONCAT, FILTER, REGEX, LANG, OPTIONAL, UNION, MINUS, VALUES, BIND.
 Predicate paths and subqueries are also supported.
 The SERVICE keyword is not yet supported.
 
