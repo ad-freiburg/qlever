@@ -13,11 +13,6 @@
 #include "../util/StringUtils.h"
 #include "ParseException.h"
 
-bool PropertyPathParser::delimiters_initialized = false;
-
-std::array<bool, 256> PropertyPathParser::DELIMITER_CHARS;
-std::array<bool, 256> PropertyPathParser::VALID_CHARS;
-
 // _____________________________________________________________________________
 PropertyPathParser::PropertyPathParser(std::string_view str) : _string(str) {}
 
@@ -37,10 +32,32 @@ PropertyPath PropertyPathParser::parse() {
 // _____________________________________________________________________________
 std::vector<PropertyPathParser::Token> PropertyPathParser::tokenize(
     std::string_view str) {
-  // runs only once to initialize the delimiter characters
-  if (!delimiters_initialized) {
-    initDelimiters();
-  }
+  // Runs only once to initialize the delimiter characters. Note that
+  // initialization of static variables is thread-safe according to the C++
+  // standard.
+  const static auto [DELIMITER_CHARS, VALID_CHARS] = []() {
+    static std::array<bool, 256> DELIMITER_CHARS;
+    static std::array<bool, 256> VALID_CHARS;
+    DELIMITER_CHARS.fill(false);
+    DELIMITER_CHARS['?'] = true;
+    DELIMITER_CHARS['*'] = true;
+    DELIMITER_CHARS['+'] = true;
+    DELIMITER_CHARS['/'] = true;
+    DELIMITER_CHARS['|'] = true;
+    DELIMITER_CHARS['('] = true;
+    DELIMITER_CHARS[')'] = true;
+    DELIMITER_CHARS['^'] = true;
+
+    // Init the valid characters with all delimiters
+    VALID_CHARS = DELIMITER_CHARS;
+    // Iterate all ascii characters and add the valid ones
+    for (uint8_t c = 0; c < 128; c++) {
+      if (std::isgraph(c)) {
+        VALID_CHARS[c] = true;
+      }
+    }
+    return std::pair(DELIMITER_CHARS, VALID_CHARS);
+  }();
 
   std::vector<Token> tokens;
 
@@ -104,28 +121,6 @@ std::vector<PropertyPathParser::Token> PropertyPathParser::tokenize(
     tokens.push_back({str.substr(start), start});
   }
   return tokens;
-}
-
-// _____________________________________________________________________________
-void PropertyPathParser::initDelimiters() {
-  DELIMITER_CHARS.fill(0);
-  DELIMITER_CHARS['?'] = true;
-  DELIMITER_CHARS['*'] = true;
-  DELIMITER_CHARS['+'] = true;
-  DELIMITER_CHARS['/'] = true;
-  DELIMITER_CHARS['|'] = true;
-  DELIMITER_CHARS['('] = true;
-  DELIMITER_CHARS[')'] = true;
-  DELIMITER_CHARS['^'] = true;
-
-  // Init the valid characters with all delimiters
-  VALID_CHARS = DELIMITER_CHARS;
-  // Iterate all ascii characters and add the valid ones
-  for (uint8_t c = 0; c < 128; c++) {
-    if (std::isgraph(c)) {
-      VALID_CHARS[c] = true;
-    }
-  }
 }
 
 // _____________________________________________________________________________
