@@ -24,7 +24,6 @@ class PropertyPathParser {
 
  private:
   static std::vector<Token> tokenize(std::string_view str);
-  static void initDelimiters();
 
   /**
    * If the next token matches token returns true and consumes the token.
@@ -84,9 +83,4 @@ class PropertyPathParser {
   std::vector<Token> _tokens;
   ParserPos _position;
   ParserPos _end;
-
-  // Static members
-  static std::array<bool, 256> DELIMITER_CHARS;
-  static std::array<bool, 256> VALID_CHARS;
-  static bool delimiters_initialized;
 };
