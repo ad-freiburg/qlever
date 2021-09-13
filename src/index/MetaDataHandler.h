@@ -93,6 +93,11 @@ template <class M>
 class MetaDataWrapperDense {
  public:
   using Iterator = VecWrapperImpl::Iterator<M>;
+  // The VecWrapperImpl::Iterator is actually const
+  using ConstIterator = VecWrapperImpl::Iterator<M>;
+  // The VecWrapperImpl::Iterator iterates in order;
+  using ConstOrderedIterator = VecWrapperImpl::Iterator<M>;
+
   using value_type = typename M::value_type;
 
   // _________________________________________________________
@@ -148,10 +153,16 @@ class MetaDataWrapperDense {
   }
 
   // __________________________________________________________________________
+  ConstOrderedIterator ordered_begin() const { return begin(); }
+
+  // __________________________________________________________________________
   Iterator cend() const { return Iterator(_vec.size(), _vec.cend(), &_vec); }
 
   // __________________________________________________________________________
   Iterator end() const { return Iterator(_vec.size(), _vec.end(), &_vec); }
+
+  // __________________________________________________________________________
+  ConstOrderedIterator ordered_end() const { return end(); }
 
   // ____________________________________________________________
   void set(Id id, const value_type& value) {
@@ -206,6 +217,61 @@ class MetaDataWrapperHashMap {
   using Iterator = typename hashMap::iterator;
   using value_type = typename hashMap::mapped_type;
 
+  // An iterator on the underlying hashMap that iterates over the elements
+  // in order. This is used for deterministically exporting the underlying
+  // permutation.
+  class ConstOrderedIterator {
+    using key_type = typename hashMap::key_type;
+
+    const MetaDataWrapperHashMap& wrapper_;
+    std::vector<key_type> sortedKeys_;
+    size_t position_;
+
+   public:
+    // ________________________________________________________________________
+    ConstOrderedIterator(const MetaDataWrapperHashMap& wrapper, size_t position)
+        : wrapper_{wrapper}, position_{position} {
+      // Sort all the keys from the underlying hashMap and store them.
+      sortedKeys_.reserve(wrapper.size());
+      for (const auto& [key, value] : wrapper_) {
+        (void)value;  // Silence the warning about `value` being unused.
+        sortedKeys_.push_back(key);
+      }
+      std::sort(sortedKeys_.begin(), sortedKeys_.end());
+    }
+
+    // ________________________________________________________________________
+    const auto& operator*() const {
+      const auto& m = wrapper_.getUnderlyingHashMap();
+      return *m.find(sortedKeys_[position_]);
+    }
+
+    // _________________________________________________
+    const auto* operator->() const {
+      // Call operator* and return a pointer to the result.
+      // This is safe, because the underlying hashMap ensures the lifetime of
+      // the returned reference;
+      return &(**this);
+    }
+
+    // ________________________________________________________________________
+    ConstOrderedIterator& operator++() {
+      ++position_;
+      return *this;
+    }
+
+    // _________________________________________________________________________
+    ConstOrderedIterator operator++(int) {
+      auto cpy = *this;
+      ++position_;
+      return cpy;
+    }
+
+    bool operator==(const ConstOrderedIterator& rhs) const {
+      return position_ == rhs.position_;
+    }
+  };
+
   // nothing to do here, since the default constructor of the hashMap does
   // everything we want
   explicit MetaDataWrapperHashMap() = default;
@@ -217,18 +283,32 @@ class MetaDataWrapperHashMap {
 
   // __________________________________________________________________
   ConstIterator cbegin() const { return _map.begin(); }
+  ConstIterator begin() const { return _map.begin(); }
 
   // __________________________________________________________________
   Iterator begin() { return _map.begin(); }
 
+  // _________________________________________________________________________
+  ConstOrderedIterator ordered_begin() const {
+    return ConstOrderedIterator{*this, 0};
+  }
+
   // ____________________________________________________________
   ConstIterator cend() const { return _map.end(); }
+  ConstIterator end() const { return _map.end(); }
 
   // ____________________________________________________________
   Iterator end() { return _map.end(); }
 
+  // _________________________________________________________________________
+  ConstOrderedIterator ordered_end() const {
+    return ConstOrderedIterator{*this, size()};
+  }
+
   // ____________________________________________________________
   void set(Id id, value_type value) { _map[id] = std::move(value); }
+
+  const auto& getUnderlyingHashMap() const { return _map; }
 
   // __________________________________________________________
   const value_type& getAsserted(Id id) const {

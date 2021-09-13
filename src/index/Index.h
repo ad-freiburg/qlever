@@ -115,11 +115,17 @@ class Index {
           SortByOSP(), "OSP", ".osp", {2, 0, 1});
 
   const auto& POS() const { return _POS; }
+  auto& POS() { return _POS; }
   const auto& PSO() const { return _PSO; }
+  auto& PSO() { return _PSO; }
   const auto& SPO() const { return _SPO; }
+  auto& SPO() { return _SPO; }
   const auto& SOP() const { return _SOP; }
+  auto& SOP() { return _SOP; }
   const auto& OPS() const { return _OPS; }
+  auto& OPS() { return _OPS; }
   const auto& OSP() const { return _OSP; }
+  auto& OSP() { return _OSP; }
 
   // Creates an index from a file. Parameter Parser must be able to split the
   // file's format into triples.
