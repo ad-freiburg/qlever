@@ -47,7 +47,7 @@ bool TurtleParser<T>::base() {
   if (skip<TurtleTokenId::TurtleBase>()) {
     if (iriref() && check(skip<TurtleTokenId::Dot>())) {
       _prefixMap[""] = _lastParseResult.substr(1, _lastParseResult.size() - 2);
-      return true ;
+      return true;
     } else {
       raise("base");
     }
@@ -61,7 +61,8 @@ template <class T>
 bool TurtleParser<T>::sparqlPrefix() {
   if (skip<TurtleTokenId::SparqlPrefix>()) {
     if (pnameNS() && iriref()) {
-      _prefixMap[_activePrefix] = _lastParseResult.substr(1, _lastParseResult.size() - 2);
+      _prefixMap[_activePrefix] =
+          _lastParseResult.substr(1, _lastParseResult.size() - 2);
       return true;
     } else {
       raise("sparqlPrefix");
