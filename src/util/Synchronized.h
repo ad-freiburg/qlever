@@ -118,7 +118,7 @@ class Synchronized {
     // It is important to create this AFTER the lock, s.t. the
     // nextOrderedRequest_ update is still protected. We must give it a name,
     // s.t. it is not destroyed immediately.
-    OnDestruction od{[&]() mutable {
+    OnDestruction od{[&]() mutable noexcept {
       ++nextOrderedRequest_;
       l.unlock();
       requestCv_.notify_all();
