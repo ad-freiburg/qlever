@@ -215,7 +215,7 @@ int main(int argc, char** argv) {
     inputFile = "/dev/stdin";
   }
 
-  LOG(INFO) << "Trying to parse from input file " << argv[1] << std::endl;
+  LOG(INFO) << "Trying to parse from input file " << inputFile << std::endl;
 
   if (!outputFile.empty()) {
     std::ofstream of(outputFile);

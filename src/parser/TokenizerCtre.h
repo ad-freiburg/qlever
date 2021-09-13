@@ -160,7 +160,7 @@ struct TurtleTokenCtre {
                                          cls(PnCharsString) + "|" +
                                          cls(PnCharsString) + ")*";
 
-  static constexpr auto PnameNSString = PnPrefixString + ":";
+  static constexpr auto PnameNSString = grp(PnPrefixString) + "?:";
 
   static constexpr fixed_string PnLocalEscString =
       "\\\\[_~.\\-!$&'()*+,;=/?#@%]";

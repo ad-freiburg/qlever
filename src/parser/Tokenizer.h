@@ -156,7 +156,7 @@ struct TurtleToken {
                                 cls(PnCharsString) + "|" + cls(PnCharsString) +
                                 ")*";
 
-  const string PnameNSString = PnPrefixString + ":";
+  const string PnameNSString = grp(PnPrefixString) + "?:";
   const RE2 PnameNS;
 
   const string PnLocalEscString = "\\\\[_~.\\-!$&'()*+,;=/?#@%]";
