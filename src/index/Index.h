@@ -335,9 +335,9 @@ class Index {
     Id keyId;
     vector<float> res;
     if (_vocab.getId(key, &keyId) && p._meta.col0IdExists(keyId)) {
-      auto rmd = p._meta.getMetaData(keyId);
-      res.push_back(rmd.getCol1Multiplicity());
-      res.push_back(rmd.getCol2Multiplicity());
+      auto metaData = p._meta.getMetaData(keyId);
+      res.push_back(metaData.getCol1Multiplicity());
+      res.push_back(metaData.getCol2Multiplicity());
     } else {
       res.push_back(1);
       res.push_back(1);
@@ -399,10 +399,10 @@ class Index {
    * @brief Perform a scan for two keys i.e. retrieve all Z from the XYZ
    * permutation for specific key values of X and Y.
    * @tparam Permutation The permutations Index::POS()... have different types
-   * @param keyFirst The first key (as a raw string that is yet to be
+   * @param col0String The first key (as a raw string that is yet to be
    * transformed to index space) for which to search, e.g. fixed value for O in
    * OSP permutation.
-   * @param keySecond The second key (as a raw string that is yet to be
+   * @param col1String The second key (as a raw string that is yet to be
    * transformed to index space) for which to search, e.g. fixed value for S in
    * OSP permutation.
    * @param result The Id table to which we will write. Must have 2 columns.
@@ -411,21 +411,23 @@ class Index {
    */
   // _____________________________________________________________________________
   template <class PermutationInfo>
-  void scan(const string& keyFirst, const string& keySecond, IdTable* result,
+  void scan(const string& col0String, const string& col1String, IdTable* result,
             const PermutationInfo& p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
-    Id relId;
-    Id subjId;
-    if (!_vocab.getId(keyFirst, &relId) || !_vocab.getId(keySecond, &subjId)) {
-      LOG(DEBUG) << "Key " << keyFirst << " or key " << keySecond
+    Id col0Id;
+    Id col1Id;
+    if (!_vocab.getId(col0String, &col0Id) ||
+        !_vocab.getId(col1String, &col1Id)) {
+      LOG(DEBUG) << "Key " << col0String << " or key " << col1String
                  << " were not found in the vocabulary \n";
       return;
     }
 
     LOG(DEBUG) << "Performing " << p._readableName << "  scan of relation "
-               << keyFirst << " with fixed subject: " << keySecond << "...\n";
+               << col0String << " with fixed subject: " << col1String
+               << "...\n";
 
-    CompressedRelationMetaData::scan(relId, subjId, result, p, timer);
+    CompressedRelationMetaData::scan(col0Id, col1Id, result, p, timer);
   }
 
  private:
@@ -516,33 +518,8 @@ class Index {
                             const Index::TripleVec& vec, size_t c0, size_t c1,
                             size_t c2);
 
-  auto writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
-                        ad_utility::BufferedVector<array<Id, 2>>* bufPtr) {
-    // sort according to the "switched" relation.
-    auto& buffer = *bufPtr;
-
-    for (auto& el : buffer) {
-      std::swap(el[0], el[1]);
-    }
-    std::sort(buffer.begin(), buffer.end(), [](const auto& a, const auto& b) {
-      return a[0] == b[0] ? a[1] < b[1] : a[0] < b[0];
-    });
-
-    Id lastLhs = std::numeric_limits<Id>::max();
-
-    bool functional = true;
-    size_t distinctC1 = 0;
-    for (const auto& el : buffer) {
-      if (el[0] == lastLhs) {
-        functional = false;
-      } else {
-        distinctC1++;
-      }
-      lastLhs = el[0];
-    }
-
-    out->addRelation(currentRel, buffer, distinctC1, functional);
-  }
+  void writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
+                        ad_utility::BufferedVector<array<Id, 2>>* bufPtr);
 
   // _______________________________________________________________________
   // Create a pair of permutations. Only works for valid pairs (PSO-POS,
@@ -623,12 +600,6 @@ class Index {
   ContextListMetaData writePostings(ad_utility::File& out,
                                     const vector<Posting>& postings,
                                     bool skipWordlistIfAllTheSame);
-
-  static std::pair<CompressedRelationMetaData,
-                   std::vector<CompressedBlockMetaData>>
-  writeCompressedRel(ad_utility::File& out, Id relId,
-                     const ad_utility::BufferedVector<array<Id, 2>>& data,
-                     size_t distinctC1, bool functional);
 
   void openTextFileHandle();
 

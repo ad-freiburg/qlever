@@ -14,12 +14,12 @@
 
 // _____________________________________________________________________________
 template <class MapType>
-template <bool persistentRMD>
+template <bool isPersistentMetaData>
 void IndexMetaData<MapType>::add(AddType addedValue) {
   // only add rmd to _data if it's not already present there
-  if constexpr (!persistentRMD) {
+  if constexpr (!isPersistentMetaData) {
     _totalElements += addedValue.getNofElements();
-    _data.set(addedValue._relId, addedValue);
+    _data.set(addedValue._col0Id, addedValue);
   }
 }
 
@@ -38,8 +38,8 @@ typename IndexMetaData<MapType>::GetType IndexMetaData<MapType>::getMetaData(
 
 // _____________________________________________________________________________
 template <class MapType>
-bool IndexMetaData<MapType>::col0IdExists(Id relId) const {
-  return _data.count(relId) > 0;
+bool IndexMetaData<MapType>::col0IdExists(Id col0Id) const {
+  return _data.count(col0Id) > 0;
 }
 
 // ____________________________________________________________________________

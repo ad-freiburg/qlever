@@ -99,12 +99,12 @@ class IndexMetaData {
     _data.setup(std::forward<dataArgs>(args)...);
   }
 
-  // persistentRMD == true means we do not need to add rmd to _data
+  // isPersistentMetaData == true means we do not need to add rmd to _data
   // but assume that it is already contained in _data (for persistent
   // metaData implementations. Must be a compile time parameter because we have
   // to avoid instantation of member function set() for readonly MapTypes (e.g.
   // based on MmapVectorView
-  template <bool persistentRMD = false>
+  template <bool isPersistentMetaData = false>
   void add(AddType addedValue);
 
   off_t getOffsetAfter() const;
@@ -148,7 +148,7 @@ class IndexMetaData {
   // of file.
   void readFromFile(ad_utility::File* file);
 
-  bool col0IdExists(Id relId) const;
+  bool col0IdExists(Id col0Id) const;
 
   // calculate and save statistics that are expensive to calculate so we only
   // have to do this during the index build and not at server startup
@@ -189,9 +189,9 @@ class IndexMetaData {
   friend void serialize(Serializer& serializer,
                         IndexMetaData<MapType>& metaData);
 
-  size_t getNofBlocksForRelation(const Id relId) const;
+  size_t getNofBlocksForRelation(const Id col0Id) const;
 
-  size_t getTotalBytesForRelation(Id id) const;
+  size_t getTotalBytesForRelation(Id col0Id) const;
 };
 
 // ____________________________________________________________________________

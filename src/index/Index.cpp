@@ -378,12 +378,12 @@ Index::createPermutationPairImpl(const string& fileName1,
   ad_utility::BufferedVector<array<Id, 2>> buffer(
       THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.MmapBuffer");
   bool functional = true;
-  size_t distinctC1 = 0;
+  size_t distinctCol1 = 0;
   size_t sizeOfRelation = 0;
   Id lastLhs = std::numeric_limits<Id>::max();
   for (TripleVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
     if ((*reader)[c0] != currentRel) {
-      writer1.addRelation(currentRel, buffer, distinctC1, functional);
+      writer1.addRelation(currentRel, buffer, distinctCol1, functional);
       writeSwitchedRel(&writer2, currentRel, &buffer);
       for (auto& md : writer1.getFinishedMetaData()) {
         metaData1.add(md);
@@ -392,7 +392,7 @@ Index::createPermutationPairImpl(const string& fileName1,
         metaData2.add(md);
       }
       buffer.clear();
-      distinctC1 = 1;
+      distinctCol1 = 1;
       currentRel = (*reader)[c0];
       functional = true;
     } else {
@@ -400,14 +400,14 @@ Index::createPermutationPairImpl(const string& fileName1,
       if ((*reader)[c1] == lastLhs) {
         functional = false;
       } else {
-        distinctC1++;
+        distinctCol1++;
       }
     }
     buffer.push_back(array<Id, 2>{{(*reader)[c1], (*reader)[c2]}});
     lastLhs = (*reader)[c1];
   }
   if (from < vec.size()) {
-    writer1.addRelation(currentRel, buffer, distinctC1, functional);
+    writer1.addRelation(currentRel, buffer, distinctCol1, functional);
     writeSwitchedRel(&writer2, currentRel, &buffer);
   }
 
@@ -433,6 +433,35 @@ Index::createPermutationPairImpl(const string& fileName1,
 
   LOG(INFO) << "Permutation done." << std::endl;
   return std::make_pair(std::move(metaData1), std::move(metaData2));
+}
+
+// __________________________________________________________________________
+void Index::writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
+                             ad_utility::BufferedVector<array<Id, 2>>* bufPtr) {
+  // sort according to the "switched" relation.
+  auto& buffer = *bufPtr;
+
+  for (auto& el : buffer) {
+    std::swap(el[0], el[1]);
+  }
+  std::sort(buffer.begin(), buffer.end(), [](const auto& a, const auto& b) {
+    return a[0] == b[0] ? a[1] < b[1] : a[0] < b[0];
+  });
+
+  Id lastLhs = std::numeric_limits<Id>::max();
+
+  bool functional = true;
+  size_t distinctC1 = 0;
+  for (const auto& el : buffer) {
+    if (el[0] == lastLhs) {
+      functional = false;
+    } else {
+      distinctC1++;
+    }
+    lastLhs = el[0];
+  }
+
+  out->addRelation(currentRel, buffer, distinctC1, functional);
 }
 
 // ________________________________________________________________________

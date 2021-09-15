@@ -54,7 +54,7 @@ void serialize(Serializer& s, CompressedBlockMetaData& b) {
 // The meta data of a compressed relation. (e.g. in the PSO permutation,
 // all triples with the same P form a relation.
 struct CompressedRelationMetaData {
-  Id _relId;
+  Id _col0Id;
   size_t _numRows;
   float _multiplicityCol1;  // e.g. in PSO the multiplicity of "S"
   float _multiplicityCol2;  // e.g. in PSO the multiplicity of "O"
@@ -142,7 +142,7 @@ struct CompressedRelationMetaData {
 // How to serialize a CompressedRelationMetaData
 template <class Serializer>
 void serialize(Serializer& s, CompressedRelationMetaData& c) {
-  s | c._relId;
+  s | c._col0Id;
   s | c._numRows;
   s | c._multiplicityCol1;
   s | c._multiplicityCol2;
