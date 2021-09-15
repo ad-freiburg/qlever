@@ -1,12 +1,13 @@
-//
-// Created by johannes on 01.07.21.
-//
+// Copyright 2021, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Johannes Kalmbach (kalmbacj@informatik.uni-freiburg.de)
 
 #include "CompressedRelation.h"
 
 #include "../engine/IdTable.h"
 #include "../util/Cache.h"
 #include "../util/CompressionUsingZstd/ZstdWrapper.h"
+#include "../util/ConcurrentCache.h"
 #include "../util/TypeTraits.h"
 #include "./Permutations.h"
 #include "ConstantsIndexBuilding.h"
@@ -19,7 +20,7 @@ using namespace std::chrono_literals;
 // TODO<joka921> Improve the performance of these triples also for large
 // knowledge bases.
 auto& globalBlockCache() {
-  static ad_utility::Synchronized<ad_utility::HeapBasedLRUCache<
+  static ad_utility::ConcurrentCache<ad_utility::HeapBasedLRUCache<
       std::string, std::vector<std::array<Id, 2>>>>
       globalCache(20ul);
   return globalCache;
@@ -86,14 +87,12 @@ void CompressedRelationMetaData::scan(
       auto cacheKey =
           permutation._readableName + std::to_string(block._offsetInFile);
 
-      // TODO: Make this ACTUALLY threadsafe via computeOnlyO"nce
-      if (!globalBlockCache().wlock()->contains(cacheKey)) {
-        globalBlockCache().wlock()->insert(
-            cacheKey, readAndDecompressBlock(block, permutation));
-      }
-
       auto uncompressedBuffer =
-          globalBlockCache().wlock()->operator[](cacheKey);
+          globalBlockCache()
+              .computeOnce(
+                  cacheKey,
+                  [&]() { return readAndDecompressBlock(block, permutation); })
+              ._resultPointer;
 
       // Extract the part of the block that actually belongs to the relation
       auto begin = uncompressedBuffer->begin() + metaData._offsetInBlock;
