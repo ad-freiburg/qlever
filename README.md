@@ -20,6 +20,7 @@ QLever supports standard SPARQL 1.1 constructs like:
 LIMIT, OFFSET, ORDER BY, GROUP BY, HAVING, COUNT, DISTINCT, SAMPLE, GROUP_CONCAT, FILTER, REGEX, LANG, OPTIONAL, UNION, MINUS, VALUES, BIND.
 Predicate paths and subqueries are also supported.
 The SERVICE keyword is not yet supported.
+We aim at full SPARQL 1.1 support and we are almost there (except for SPARQL Update operations, which are a longer-term project).
 
 # Quickstart
 
