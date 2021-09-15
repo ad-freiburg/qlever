@@ -778,4 +778,25 @@ class Index {
       ad_utility::deleteFile(path);
     }
   }
+
+ public:
+  // TODO<joka921> Comment
+  std::pair<size_t, size_t> getNumTriplesActuallyAndAdded() const {
+    auto [begin, end] = _vocab.prefix_range("@");
+    Id qleverLangtag;
+    auto actualTriples = 0ul;
+    auto addedTriples = 0ul;
+    AD_CHECK(_vocab.getId(LANGUAGE_PREDICATE, &qleverLangtag));
+    for (const auto& [key, value]: PSO()._meta.data()) {
+      auto numTriples = value.getNofElements();
+      if (key == qleverLangtag || (key >= begin && key < end)) {
+        addedTriples += numTriples;
+      } else {
+        actualTriples += numTriples;
+      }
+
+    }
+    return std::pair{actualTriples, addedTriples};
+
+  }
 };
