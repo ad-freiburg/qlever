@@ -12,7 +12,7 @@
 
 TEST(RelationMetaDataTest, writeReadTest) {
   try {
-    CompressedBlockMetaData rmdB{12, 34, 5, 0, 2, 13, 24, 5, 7};
+    CompressedBlockMetaData rmdB{12, 34, 5, 0, 2, 13, 24};
     CompressedRelationMetaData rmdF{1, 3, 2.0, 42.0, 16};
 
     ad_utility::serialization::FileWriteSerializer f("_testtmp.rmd");
@@ -42,8 +42,8 @@ TEST(RelationMetaDataTest, writeReadTest) {
 TEST(IndexMetaDataTest, writeReadTest2Hmap) {
   try {
     vector<CompressedBlockMetaData> bs;
-    bs.push_back(CompressedBlockMetaData{12, 34, 5, 0, 2, 13, 24, 5, 7});
-    bs.push_back(CompressedBlockMetaData{12, 34, 5, 0, 2, 13, 24, 5, 7});
+    bs.push_back(CompressedBlockMetaData{12, 34, 5, 0, 2, 13, 24 });
+    bs.push_back(CompressedBlockMetaData{12, 34, 5, 0, 2, 13, 24 });
     CompressedRelationMetaData rmdF{1, 3, 2.0, 42.0, 16};
     CompressedRelationMetaData rmdF2{2, 5, 3.0, 43.0, 10};
     IndexMetaDataHmap imd;
@@ -78,8 +78,8 @@ TEST(IndexMetaDataTest, writeReadTest2Hmap) {
 TEST(IndexMetaDataTest, writeReadTest2Mmap) {
   try {
     vector<CompressedBlockMetaData> bs;
-    bs.push_back(CompressedBlockMetaData{12, 34, 5, 0, 2, 13, 24, 5, 7});
-    bs.push_back(CompressedBlockMetaData{12, 34, 5, 0, 2, 13, 24, 5, 7});
+    bs.push_back(CompressedBlockMetaData{12, 34, 5, 0, 2, 13, 24});
+    bs.push_back(CompressedBlockMetaData{12, 34, 5, 0, 2, 13, 24 });
     CompressedRelationMetaData rmdF{1, 3, 2.0, 42.0, 16};
     CompressedRelationMetaData rmdF2{2, 5, 3.0, 43.0, 10};
     // The index MetaData does not have an explicit clear, so we
@@ -87,7 +87,7 @@ TEST(IndexMetaDataTest, writeReadTest2Mmap) {
     {
       IndexMetaDataMmap imd;
       // size of 3 would suffice, but we also want to simulate the sparseness
-      imd.setup(5, CompressedRelationMetaData::empty(), "_testtmp.imd.mmap");
+      imd.setup(5, CompressedRelationMetaData::emptyMetaData(), "_testtmp.imd.mmap");
       imd.add(rmdF);
       imd.add(rmdF2);
       imd.blockData() = bs;
