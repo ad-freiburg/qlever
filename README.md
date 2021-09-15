@@ -12,7 +12,7 @@ QLever also supports search in text associated with the knowledge base, as well 
 [Here are demos of QLever](http://qlever.cs.uni-freiburg.de) on a variety of large knowledge graphs, including the complete Wikidata and OpenStreetMap.
 Those demos also feature QLever's context-sensitiv autocompletion, which makes SPARQL query construction so much easier.
 
-The basic design behind QLever was described in this [CIKM'17
+QLever was frist described and evaluated in this [CIKM'17
 paper](http://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf).
 Qlever's autocompletion functionality is described and evaluated in [this paper](https://ad-publications.cs.uni-freiburg.de/ARXIV_sparql_autocompletion_BKKKS_2021.pdf).
 If you use QLever in your work, please cite those papers.
