@@ -14,23 +14,12 @@
 
 // _____________________________________________________________________________
 template <class MapType>
-template <bool persistentRMD>
-void IndexMetaData<MapType>::add(const FullRelationMetaData& rmd,
-                                 const BlockBasedRelationMetaData& bRmd) {
+template <bool isPersistentMetaData>
+void IndexMetaData<MapType>::add(AddType addedValue) {
   // only add rmd to _data if it's not already present there
-  if constexpr (!persistentRMD) {
-    _data.set(rmd._relId, rmd);
-  }
-
-  off_t afterExpected =
-      rmd.hasBlocks() ? bRmd._offsetAfter
-                      : static_cast<off_t>(rmd._startFullIndex +
-                                           rmd.getNofBytesForFulltextIndex());
-  if (rmd.hasBlocks()) {
-    _blockData[rmd._relId] = bRmd;
-  }
-  if (afterExpected > _offsetAfter) {
-    _offsetAfter = afterExpected;
+  if constexpr (!isPersistentMetaData) {
+    _totalElements += addedValue.getNofElements();
+    _data.set(addedValue._col0Id, addedValue);
   }
 }
 
@@ -42,19 +31,15 @@ off_t IndexMetaData<MapType>::getOffsetAfter() const {
 
 // _____________________________________________________________________________
 template <class MapType>
-const RelationMetaData IndexMetaData<MapType>::getRmd(Id relId) const {
-  const FullRelationMetaData& full = _data.getAsserted(relId);
-  RelationMetaData ret(full);
-  if (full.hasBlocks()) {
-    ret._rmdBlocks = &_blockData.find(relId)->second;
-  }
-  return ret;
+typename IndexMetaData<MapType>::GetType IndexMetaData<MapType>::getMetaData(
+    Id col0Id) const {
+  return _data.getAsserted(col0Id);
 }
 
 // _____________________________________________________________________________
 template <class MapType>
-bool IndexMetaData<MapType>::relationExists(Id relId) const {
-  return _data.count(relId) > 0;
+bool IndexMetaData<MapType>::col0IdExists(Id col0Id) const {
+  return _data.count(col0Id) > 0;
 }
 
 // ____________________________________________________________________________
@@ -130,29 +115,6 @@ string IndexMetaData<MapType>::statistics() const {
   return os.str();
 }
 
-// _____________________________________________________________________________
-template <class MapType>
-size_t IndexMetaData<MapType>::getNofBlocksForRelation(const Id id) const {
-  auto it = _blockData.find(id);
-  if (it != _blockData.end()) {
-    return it->second._blocks.size();
-  } else {
-    return 0;
-  }
-}
-
-// _____________________________________________________________________________
-template <class MapType>
-size_t IndexMetaData<MapType>::getTotalBytesForRelation(
-    const FullRelationMetaData& frmd) const {
-  auto it = _blockData.find(frmd._relId);
-  if (it != _blockData.end()) {
-    return static_cast<size_t>(it->second._offsetAfter - frmd._startFullIndex);
-  } else {
-    return frmd.getNofBytesForFulltextIndex();
-  }
-}
-
 // ______________________________________________
 template <class MapType>
 size_t IndexMetaData<MapType>::getNofDistinctC1() const {
@@ -168,8 +130,7 @@ void IndexMetaData<MapType>::calculateExpensiveStatistics() {
   for (auto it = _data.cbegin(); it != _data.cend(); ++it) {
     auto el = *it;
     _totalElements += el.second.getNofElements();
-    _totalBytes += getTotalBytesForRelation(el.second);
-    _totalBlocks += getNofBlocksForRelation(el.first);
+    _totalBytes += getTotalBytesForRelation(el.first);
   }
 }
 
@@ -179,6 +140,7 @@ void serialize(Serializer& serializer, IndexMetaData<MapType>& metaData) {
   // The binary format of an IndexMetaData start with an 8-byte magicNumber.
   // After this magic number, an 8-byte version number follows. Both have to
   // match.
+
   using T = IndexMetaData<MapType>;
   uint64_t magicNumber = T::MAGIC_NUMBER_FOR_SERIALIZATION;
 

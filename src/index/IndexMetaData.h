@@ -20,7 +20,7 @@
 #include "../util/MmapVector.h"
 #include "../util/ReadableNumberFact.h"
 #include "./MetaDataHandler.h"
-#include "./MetaDataTypes.h"
+#include "CompressedRelation.h"
 
 using std::array;
 using std::pair;
@@ -81,6 +81,12 @@ class IndexMetaData {
  public:
   // This allows access to MapType given the type of IndexMetaData
   typedef M MapType;
+  using value_type = typename MapType::value_type;
+
+  using AddType = CompressedRelationMetaData;
+  using GetType = const CompressedRelationMetaData&;
+  using BlocksType = std::vector<CompressedBlockMetaData>;
+  ;
 
   // some MapTypes (the dense ones using stxxl or mmap) require additional calls
   // to setup() before being fully initialized
@@ -93,26 +99,25 @@ class IndexMetaData {
     _data.setup(std::forward<dataArgs>(args)...);
   }
 
-  // persistentRMD == true means we do not need to add rmd to _data
+  // isPersistentMetaData == true means we do not need to add rmd to _data
   // but assume that it is already contained in _data (for persistent
   // metaData implementations. Must be a compile time parameter because we have
   // to avoid instantation of member function set() for readonly MapTypes (e.g.
   // based on MmapVectorView
-  template <bool persistentRMD = false>
-  void add(const FullRelationMetaData& rmd,
-           const BlockBasedRelationMetaData& bRmd);
+  template <bool isPersistentMetaData = false>
+  void add(AddType addedValue);
 
   off_t getOffsetAfter() const;
 
-  const RelationMetaData getRmd(Id relId) const;
+  GetType getMetaData(Id col0Id) const;
 
   // Persistent meta data MapTypes (called MmapBased here) have to be separated
   // from RAM-based (e.g. hashMap based sparse) ones at compile time, this is
   // done in the following block
   using MetaWrapperMmap =
-      MetaDataWrapperDense<ad_utility::MmapVector<FullRelationMetaData>>;
-  using MetaWrapperMmapView =
-      MetaDataWrapperDense<ad_utility::MmapVectorView<FullRelationMetaData>>;
+      MetaDataWrapperDense<ad_utility::MmapVector<CompressedRelationMetaData>>;
+  using MetaWrapperMmapView = MetaDataWrapperDense<
+      ad_utility::MmapVectorView<CompressedRelationMetaData>>;
   template <typename T>
   struct IsMmapBased {
     static const bool value = std::is_same<MetaWrapperMmap, T>::value ||
@@ -143,7 +148,7 @@ class IndexMetaData {
   // of file.
   void readFromFile(ad_utility::File* file);
 
-  bool relationExists(Id relId) const;
+  bool col0IdExists(Id col0Id) const;
 
   // calculate and save statistics that are expensive to calculate so we only
   // have to do this during the index build and not at server startup
@@ -163,6 +168,9 @@ class IndexMetaData {
   MapType& data() { return _data; }
   const MapType& data() const { return _data; }
 
+  BlocksType& blockData() { return _blockData; }
+  const BlocksType& blockData() const { return _blockData; }
+
  private:
   off_t _offsetAfter = 0;
 
@@ -170,33 +178,20 @@ class IndexMetaData {
   string _filename;
 
   MapType _data;
-  ad_utility::HashMap<Id, BlockBasedRelationMetaData> _blockData;
+  BlocksType _blockData;
   size_t _totalElements = 0;
   size_t _totalBytes = 0;
   size_t _totalBlocks = 0;
   uint64_t _version = V_CURRENT;
-
-  // friend declaration for external converter function with ugly types
-  //  using IndexMetaDataHmap = IndexMetaData<MetaDataWrapperHashMap>;
-  using IndexMetaDataHmap = IndexMetaData<
-      MetaDataWrapperHashMap<ad_utility::HashMap<Id, FullRelationMetaData>>>;
-  using IndexMetaDataMmap = IndexMetaData<
-      MetaDataWrapperDense<ad_utility::MmapVector<FullRelationMetaData>>>;
-  friend IndexMetaDataMmap convertHmapMetaDataToMmap(const IndexMetaDataHmap&,
-                                                     const std::string&, bool);
-  friend IndexMetaDataHmap convertMmapMetaDataToHmap(const IndexMetaDataMmap&,
-                                                     const std::string&, bool);
-  friend IndexMetaDataHmap convertMmapMetaDataToHmap(
-      const IndexMetaDataMmap& mmap, bool verify);
 
   // Symmetric serialization function for the ad_utility::serialization module.
   template <class Serializer, typename MapType>
   friend void serialize(Serializer& serializer,
                         IndexMetaData<MapType>& metaData);
 
-  size_t getNofBlocksForRelation(const Id relId) const;
+  size_t getNofBlocksForRelation(const Id col0Id) const;
 
-  size_t getTotalBytesForRelation(const FullRelationMetaData& frmd) const;
+  size_t getTotalBytesForRelation(Id col0Id) const;
 };
 
 // ____________________________________________________________________________
@@ -206,16 +201,13 @@ ad_utility::File& operator<<(ad_utility::File& f,
 
 // aliases for easier use in Index class
 using MetaWrapperMmap =
-    MetaDataWrapperDense<ad_utility::MmapVector<FullRelationMetaData>>;
-using MetaWrapperMmapView =
-    MetaDataWrapperDense<ad_utility::MmapVectorView<FullRelationMetaData>>;
+    MetaDataWrapperDense<ad_utility::MmapVector<CompressedRelationMetaData>>;
+using MetaWrapperMmapView = MetaDataWrapperDense<
+    ad_utility::MmapVectorView<CompressedRelationMetaData>>;
 using MetaWrapperHashMap =
-    MetaDataWrapperHashMap<ad_utility::HashMap<Id, FullRelationMetaData>>;
-using IndexMetaDataHmap = IndexMetaData<
-    MetaDataWrapperHashMap<ad_utility::HashMap<Id, FullRelationMetaData>>>;
-using IndexMetaDataMmap = IndexMetaData<
-    MetaDataWrapperDense<ad_utility::MmapVector<FullRelationMetaData>>>;
-using IndexMetaDataMmapView = IndexMetaData<
-    MetaDataWrapperDense<ad_utility::MmapVectorView<FullRelationMetaData>>>;
+    MetaDataWrapperHashMap<ad_utility::HashMap<Id, CompressedRelationMetaData>>;
+using IndexMetaDataHmap = IndexMetaData<MetaWrapperHashMap>;
+using IndexMetaDataMmap = IndexMetaData<MetaWrapperMmap>;
+using IndexMetaDataMmapView = IndexMetaData<MetaWrapperMmapView>;
 
 #include "./IndexMetaDataImpl.h"

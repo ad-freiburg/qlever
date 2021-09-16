@@ -271,7 +271,7 @@ void IndexScan::computePSOboundS(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, _subject, &result->_data, idx._PSO);
+  idx.scan(_predicate, _subject, &result->_data, idx._PSO, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -290,7 +290,7 @@ void IndexScan::computePOSboundO(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, _object, &result->_data, idx._POS);
+  idx.scan(_predicate, _object, &result->_data, idx._POS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -348,7 +348,7 @@ void IndexScan::computeSOPboundO(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, _object, &result->_data, idx._SOP);
+  idx.scan(_subject, _object, &result->_data, idx._SOP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -368,7 +368,7 @@ void IndexScan::computeOPSfreeP(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_object, &result->_data, idx._OPS);
+  idx.scan(_object, &result->_data, idx._OPS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________

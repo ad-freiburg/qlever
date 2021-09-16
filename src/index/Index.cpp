@@ -17,6 +17,7 @@
 #include "../parser/ParallelParseBuffer.h"
 #include "../parser/TsvParser.h"
 #include "../util/BatchedPipeline.h"
+#include "../util/CompressionUsingZstd/ZstdWrapper.h"
 #include "../util/Conversions.h"
 #include "../util/HashMap.h"
 #include "../util/TupleHelpers.h"
@@ -342,9 +343,101 @@ void Index::convertPartialToGlobalIds(
   LOG(INFO) << "Pass done.\n";
 }
 
-pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeSwitchedRel(
-    ad_utility::File* out, off_t lastOffset, Id currentRel,
-    ad_utility::BufferedVector<array<Id, 2>>* bufPtr) {
+// _____________________________________________________________________________
+template <class MetaDataDispatcher>
+std::optional<std::pair<typename MetaDataDispatcher::WriteType,
+                        typename MetaDataDispatcher::WriteType>>
+Index::createPermutationPairImpl(const string& fileName1,
+                                 const string& fileName2,
+                                 const Index::TripleVec& vec, size_t c0,
+                                 size_t c1, size_t c2) {
+  using MetaData = typename MetaDataDispatcher::WriteType;
+  MetaData metaData1, metaData2;
+  if constexpr (metaData1._isMmapBased) {
+    metaData1.setup(_totalVocabularySize,
+                    CompressedRelationMetaData::emptyMetaData(),
+                    fileName1 + MMAP_FILE_SUFFIX);
+    metaData2.setup(_totalVocabularySize,
+                    CompressedRelationMetaData::emptyMetaData(),
+                    fileName2 + MMAP_FILE_SUFFIX);
+  }
+
+  if (vec.size() == 0) {
+    LOG(WARN) << "Attempt to write an empty index!" << std::endl;
+    return std::nullopt;
+  }
+
+  CompressedRelationWriter writer1{ad_utility::File(fileName1, "w")};
+  CompressedRelationWriter writer2{ad_utility::File(fileName2, "w")};
+
+  LOG(INFO) << "Creating a pair of on-disk index permutation of " << vec.size()
+            << " elements / facts." << std::endl;
+  // Iterate over the vector and identify relation boundaries
+  size_t from = 0;
+  Id currentRel = vec[0][c0];
+  ad_utility::BufferedVector<array<Id, 2>> buffer(
+      THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.MmapBuffer");
+  bool functional = true;
+  size_t distinctCol1 = 0;
+  size_t sizeOfRelation = 0;
+  Id lastLhs = std::numeric_limits<Id>::max();
+  for (TripleVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
+    if ((*reader)[c0] != currentRel) {
+      writer1.addRelation(currentRel, buffer, distinctCol1, functional);
+      writeSwitchedRel(&writer2, currentRel, &buffer);
+      for (auto& md : writer1.getFinishedMetaData()) {
+        metaData1.add(md);
+      }
+      for (auto& md : writer2.getFinishedMetaData()) {
+        metaData2.add(md);
+      }
+      buffer.clear();
+      distinctCol1 = 1;
+      currentRel = (*reader)[c0];
+      functional = true;
+    } else {
+      sizeOfRelation++;
+      if ((*reader)[c1] == lastLhs) {
+        functional = false;
+      } else {
+        distinctCol1++;
+      }
+    }
+    buffer.push_back(array<Id, 2>{{(*reader)[c1], (*reader)[c2]}});
+    lastLhs = (*reader)[c1];
+  }
+  if (from < vec.size()) {
+    writer1.addRelation(currentRel, buffer, distinctCol1, functional);
+    writeSwitchedRel(&writer2, currentRel, &buffer);
+  }
+
+  writer1.finish();
+  writer2.finish();
+  for (auto& md : writer1.getFinishedMetaData()) {
+    metaData1.add(md);
+  }
+  for (auto& md : writer2.getFinishedMetaData()) {
+    metaData2.add(md);
+  }
+  metaData1.blockData() = writer1.getFinishedBlocks();
+  metaData2.blockData() = writer2.getFinishedBlocks();
+
+  LOG(INFO) << "Done creating index permutation." << std::endl;
+  LOG(INFO) << "Calculating statistics for these permutation.\n";
+  // metaData1.calculateExpensiveStatistics();
+  // metaData2.calculateExpensiveStatistics();
+  LOG(INFO) << "Writing statistics for this permutation:\n"
+            << metaData1.statistics() << std::endl;
+  LOG(INFO) << "Writing statistics for this permutation:\n"
+            << metaData2.statistics() << std::endl;
+
+  LOG(INFO) << "Permutation done." << std::endl;
+  return std::make_pair(std::move(metaData1), std::move(metaData2));
+}
+
+// __________________________________________________________________________
+void Index::writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
+                             ad_utility::BufferedVector<array<Id, 2>>* bufPtr) {
   // sort according to the "switched" relation.
   auto& buffer = *bufPtr;
 
@@ -368,92 +461,7 @@ pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeSwitchedRel(
     lastLhs = el[0];
   }
 
-  return writeRel(*out, lastOffset, currentRel, buffer, distinctC1, functional);
-}
-
-// _____________________________________________________________________________
-template <class MetaDataDispatcher>
-std::optional<std::pair<typename MetaDataDispatcher::WriteType,
-                        typename MetaDataDispatcher::WriteType>>
-Index::createPermutationPairImpl(const string& fileName1,
-                                 const string& fileName2,
-                                 const Index::TripleVec& vec, size_t c0,
-                                 size_t c1, size_t c2) {
-  typename MetaDataDispatcher::WriteType metaData1;
-  typename MetaDataDispatcher::WriteType metaData2;
-  if constexpr (metaData1._isMmapBased) {
-    metaData1.setup(_totalVocabularySize, FullRelationMetaData::empty,
-                    fileName1 + MMAP_FILE_SUFFIX);
-    metaData2.setup(_totalVocabularySize, FullRelationMetaData::empty,
-                    fileName2 + MMAP_FILE_SUFFIX);
-  }
-
-  if (vec.size() == 0) {
-    LOG(WARN) << "Attempt to write an empty index!" << std::endl;
-    return std::nullopt;
-  }
-  ad_utility::File out1(fileName1, "w");
-  ad_utility::File out2(fileName2, "w");
-
-  LOG(INFO) << "Creating a pair of on-disk index permutation of " << vec.size()
-            << " elements / facts." << std::endl;
-  // Iterate over the vector and identify relation boundaries
-  size_t from = 0;
-  Id currentRel = vec[0][c0];
-  off_t lastOffset1 = 0;
-  off_t lastOffset2 = 0;
-  ad_utility::BufferedVector<array<Id, 2>> buffer(
-      THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.MmapBuffer");
-  bool functional = true;
-  size_t distinctC1 = 1;
-  size_t sizeOfRelation = 0;
-  Id lastLhs = std::numeric_limits<Id>::max();
-  for (TripleVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
-    if ((*reader)[c0] != currentRel) {
-      auto md = writeRel(out1, lastOffset1, currentRel, buffer, distinctC1,
-                         functional);
-      metaData1.add(md.first, md.second);
-      auto md2 = writeSwitchedRel(&out2, lastOffset2, currentRel, &buffer);
-      metaData2.add(md2.first, md2.second);
-      buffer.clear();
-      distinctC1 = 1;
-      lastOffset1 = metaData1.getOffsetAfter();
-      lastOffset2 = metaData2.getOffsetAfter();
-      currentRel = (*reader)[c0];
-      functional = true;
-    } else {
-      sizeOfRelation++;
-      if ((*reader)[c1] == lastLhs) {
-        functional = false;
-      } else {
-        distinctC1++;
-      }
-    }
-    buffer.push_back(array<Id, 2>{{(*reader)[c1], (*reader)[c2]}});
-    lastLhs = (*reader)[c1];
-  }
-  if (from < vec.size()) {
-    auto md =
-        writeRel(out1, lastOffset1, currentRel, buffer, distinctC1, functional);
-    metaData1.add(md.first, md.second);
-
-    auto md2 = writeSwitchedRel(&out2, lastOffset2, currentRel, &buffer);
-    metaData2.add(md2.first, md2.second);
-  }
-
-  LOG(INFO) << "Done creating index permutation." << std::endl;
-  LOG(INFO) << "Calculating statistics for these permutation.\n";
-  metaData1.calculateExpensiveStatistics();
-  metaData2.calculateExpensiveStatistics();
-  LOG(INFO) << "Writing statistics for this permutation:\n"
-            << metaData1.statistics() << std::endl;
-  LOG(INFO) << "Writing statistics for this permutation:\n"
-            << metaData2.statistics() << std::endl;
-
-  out1.close();
-  out2.close();
-  LOG(INFO) << "Permutation done." << std::endl;
-  return std::make_pair(std::move(metaData1), std::move(metaData2));
+  out->addRelation(currentRel, buffer, distinctC1, functional);
 }
 
 // ________________________________________________________________________
@@ -525,7 +533,6 @@ void Index::createPermutationPair(
 template <class MetaData>
 void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
   for (auto it = m1->data().begin(); it != m1->data().end(); ++it) {
-    const FullRelationMetaData& constRmd = it->second;
     // our MetaData classes have a read-only interface because normally the
     // FuullRelationMetaData are created separately and then added and never
     // changed. This function forms an exception to this pattern
@@ -533,22 +540,21 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
     // permutation is inefficient. So it is fine to use const_cast here as an
     // exception: we delibarately write to a read-only data structure and are
     // knowing what we are doing
-    FullRelationMetaData& rmd = const_cast<FullRelationMetaData&>(constRmd);
-    m2->data()[it->first].setCol2LogMultiplicity(rmd.getCol1LogMultiplicity());
-    rmd.setCol2LogMultiplicity(m2->data()[it->first].getCol1LogMultiplicity());
+    m2->data()[it->first].setCol2Multiplicity(
+        m1->data()[it->first].getCol1Multiplicity());
+    m1->data()[it->first].setCol2Multiplicity(
+        m2->data()[it->first].getCol1Multiplicity());
   }
 }
 
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
   auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
-  createPatternsImpl<MetaDataIterator<IndexMetaDataMmapView>,
-                     IndexMetaDataMmapView, ad_utility::File>(
+  createPatternsImpl<MetaDataIterator<Permutation::SPO_T>, Permutation::SPO_T>(
       _onDiskBase + ".index.patterns", _hasPredicate, _hasPattern, _patterns,
       _fullHasPredicateMultiplicityEntities,
       _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
-      _maxNumPatterns, langPredLowerBound, langPredUpperBound, _SPO.metaData(),
-      _SPO._file);
+      _maxNumPatterns, langPredLowerBound, langPredUpperBound, _SPO);
 }
 
 // _____________________________________________________________________________
@@ -886,120 +892,6 @@ void Index::createPatternsImpl(const string& fileName,
 }
 
 // _____________________________________________________________________________
-pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeRel(
-    ad_utility::File& out, off_t currentOffset, Id relId,
-    const ad_utility::BufferedVector<array<Id, 2>>& data, size_t distinctC1,
-    bool functional) {
-  LOG(TRACE) << "Writing a relation ...\n";
-  AD_CHECK_GT(data.size(), 0);
-  LOG(TRACE) << "Calculating multiplicities ...\n";
-  double multC1 = functional ? 1.0 : data.size() / double(distinctC1);
-  // Dummy value that will be overwritten later
-  double multC2 = 42.42;
-  LOG(TRACE) << "Done calculating multiplicities.\n";
-  FullRelationMetaData rmd(
-      relId, currentOffset, data.size(), multC1, multC2, functional,
-      !functional && data.size() > USE_BLOCKS_INDEX_SIZE_TRESHOLD);
-
-  // Write the full pair index.
-  out.write(data.data(), data.size() * 2 * sizeof(Id));
-  pair<FullRelationMetaData, BlockBasedRelationMetaData> ret;
-  ret.first = rmd;
-
-  if (functional) {
-    writeFunctionalRelation(data, ret);
-  } else {
-    writeNonFunctionalRelation(out, data, ret);
-  };
-  LOG(TRACE) << "Done writing relation.\n";
-  return ret;
-}
-
-// _____________________________________________________________________________
-void Index::writeFunctionalRelation(
-    const BufferedVector<array<Id, 2>>& data,
-    pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd) {
-  // Only has to do something if there are blocks.
-  if (rmd.first.hasBlocks()) {
-    LOG(TRACE) << "Writing part for functional relation ...\n";
-    // Do not write extra LHS and RHS lists.
-    rmd.second._startRhs =
-        rmd.first._startFullIndex + rmd.first.getNofBytesForFulltextIndex();
-    // Since the relation is functional, there are no lhs lists and thus this
-    // is trivial.
-    rmd.second._offsetAfter = rmd.second._startRhs;
-    // Create the block data for the meta data.
-    // Blocks are offsets into the full pair index for functional relations.
-    size_t nofDistinctLhs = 0;
-    Id lastLhs = std::numeric_limits<Id>::max();
-    for (size_t i = 0; i < data.size(); ++i) {
-      if (data[i][0] != lastLhs) {
-        if (nofDistinctLhs % DISTINCT_LHS_PER_BLOCK == 0) {
-          rmd.second._blocks.emplace_back(BlockMetaData(
-              data[i][0], rmd.first._startFullIndex + i * 2 * sizeof(Id)));
-        }
-        ++nofDistinctLhs;
-      }
-    }
-  }
-}
-
-// _____________________________________________________________________________
-void Index::writeNonFunctionalRelation(
-    ad_utility::File& out, const BufferedVector<array<Id, 2>>& data,
-    pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd) {
-  // Only has to do something if there are blocks.
-  if (rmd.first.hasBlocks()) {
-    LOG(TRACE) << "Writing part for non-functional relation ...\n";
-    // Make a pass over the data and extract a RHS list for each LHS.
-    // Prepare both in buffers.
-    // TODO: add compression - at least to RHS.
-    pair<Id, off_t>* bufLhs = new pair<Id, off_t>[data.size()];
-    Id* bufRhs = new Id[data.size()];
-    size_t nofDistinctLhs = 0;
-    Id lastLhs = std::numeric_limits<Id>::max();
-    size_t nofRhsDone = 0;
-    for (; nofRhsDone < data.size(); ++nofRhsDone) {
-      if (data[nofRhsDone][0] != lastLhs) {
-        bufLhs[nofDistinctLhs++] =
-            pair<Id, off_t>(data[nofRhsDone][0], nofRhsDone * sizeof(Id));
-        lastLhs = data[nofRhsDone][0];
-      }
-      bufRhs[nofRhsDone] = data[nofRhsDone][1];
-    }
-
-    // Go over the Lhs data once more and adjust the offsets.
-    off_t startRhs = rmd.first.getStartOfLhs() +
-                     nofDistinctLhs * (sizeof(Id) + sizeof(off_t));
-
-    for (size_t i = 0; i < nofDistinctLhs; ++i) {
-      bufLhs[i].second += startRhs;
-    }
-
-    // Write to file.
-    out.write(bufLhs, nofDistinctLhs * (sizeof(Id) + sizeof(off_t)));
-    out.write(bufRhs, data.size() * sizeof(Id));
-
-    // Update meta data.
-    rmd.second._startRhs = startRhs;
-    rmd.second._offsetAfter =
-        startRhs + rmd.first.getNofElements() * sizeof(Id);
-
-    // Create the block data for the FullRelationMetaData.
-    // Block are offsets into the LHS list for non-functional relations.
-    for (size_t i = 0; i < nofDistinctLhs; ++i) {
-      if (i % DISTINCT_LHS_PER_BLOCK == 0) {
-        rmd.second._blocks.emplace_back(BlockMetaData(
-            bufLhs[i].first,
-            rmd.first.getStartOfLhs() + i * (sizeof(Id) + sizeof(off_t))));
-      }
-    }
-    delete[] bufLhs;
-    delete[] bufRhs;
-  }
-}
-
-// _____________________________________________________________________________
 void Index::createFromOnDiskIndex(const string& onDiskBase) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
@@ -1151,80 +1043,14 @@ size_t Index::getHasPredicateFullSize() const {
 }
 
 // _____________________________________________________________________________
-void Index::scanFunctionalRelation(const pair<off_t, size_t>& blockOff,
-                                   Id lhsId, ad_utility::File& indexFile,
-                                   IdTable* result) const {
-  if (blockOff.second == 0) {
-    // TODO<joka921> this check should be in the callers, but for that I want to
-    // refactor the code duplication there first
-    // nothing to do if the result is empty
-    return;
-  }
-  LOG(TRACE) << "Scanning functional relation ...\n";
-  WidthTwoList block;
-  block.resize(blockOff.second / (2 * sizeof(Id)));
-  indexFile.read(block.data(), blockOff.second, blockOff.first);
-  auto it = std::lower_bound(
-      block.begin(), block.end(), lhsId,
-      [](const array<Id, 2>& elem, Id key) { return elem[0] < key; });
-  if ((*it)[0] == lhsId) {
-    result->push_back({(*it)[1]});
-  }
-  LOG(TRACE) << "Read " << result->size() << " RHS.\n";
-}
-
-// _____________________________________________________________________________
-void Index::scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
-                                      const pair<off_t, size_t>& followBlock,
-                                      Id lhsId, ad_utility::File& indexFile,
-                                      off_t upperBound, IdTable* result) const {
-  LOG(TRACE) << "Scanning non-functional relation ...\n";
-
-  if (blockOff.second == 0) {
-    // TODO<joka921> this check should be in the callers, but for that I want to
-    // refactor the code duplication there first
-    // nothing to do if the result is empty
-    return;
-  }
-  vector<pair<Id, off_t>> block;
-  block.resize(blockOff.second / (sizeof(Id) + sizeof(off_t)));
-  indexFile.read(block.data(), blockOff.second, blockOff.first);
-  auto it = std::lower_bound(
-      block.begin(), block.end(), lhsId,
-      [](const pair<Id, off_t>& elem, Id key) { return elem.first < key; });
-  if (it->first == lhsId) {
-    size_t nofBytes = 0;
-    if ((it + 1) != block.end()) {
-      LOG(TRACE) << "Obtained upper bound from same block!\n";
-      nofBytes = static_cast<size_t>((it + 1)->second - it->second);
-    } else {
-      // Look at the follow block to determine the upper bound / nofBytes.
-      if (followBlock.first == blockOff.first) {
-        LOG(TRACE) << "Last block of relation, using rel upper bound!\n";
-        nofBytes = static_cast<size_t>(upperBound - it->second);
-      } else {
-        LOG(TRACE) << "Special case: extra scan of follow block!\n";
-        pair<Id, off_t> follower;
-        indexFile.read(&follower, sizeof(follower), followBlock.first);
-        nofBytes = static_cast<size_t>(follower.second - it->second);
-      }
-    }
-    result->resize(nofBytes / sizeof(Id));
-    indexFile.read(result->data(), nofBytes, it->second);
-  } else {
-    LOG(TRACE) << "Could not find LHS in block. Result will be empty.\n";
-  }
-}
-
-// _____________________________________________________________________________
 size_t Index::relationCardinality(const string& relationName) const {
   if (relationName == INTERNAL_TEXT_MATCH_PREDICATE) {
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
   Id relId;
   if (_vocab.getId(relationName, &relId)) {
-    if (this->_PSO.metaData().relationExists(relId)) {
-      return this->_PSO.metaData().getRmd(relId).getNofElements();
+    if (this->_PSO.metaData().col0IdExists(relId)) {
+      return this->_PSO.metaData().getMetaData(relId).getNofElements();
     }
   }
   return 0;
@@ -1234,8 +1060,8 @@ size_t Index::relationCardinality(const string& relationName) const {
 size_t Index::subjectCardinality(const string& sub) const {
   Id relId;
   if (_vocab.getId(sub, &relId)) {
-    if (this->_SPO.metaData().relationExists(relId)) {
-      return this->_SPO.metaData().getRmd(relId).getNofElements();
+    if (this->_SPO.metaData().col0IdExists(relId)) {
+      return this->_SPO.metaData().getMetaData(relId).getNofElements();
     }
   }
   return 0;
@@ -1245,8 +1071,8 @@ size_t Index::subjectCardinality(const string& sub) const {
 size_t Index::objectCardinality(const string& obj) const {
   Id relId;
   if (_vocab.getId(obj, &relId)) {
-    if (this->_OSP.metaData().relationExists(relId)) {
-      return this->_OSP.metaData().getRmd(relId).getNofElements();
+    if (this->_OSP.metaData().col0IdExists(relId)) {
+      return this->_OSP.metaData().getMetaData(relId).getNofElements();
     }
   }
   return 0;

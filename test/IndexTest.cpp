@@ -76,53 +76,37 @@ TEST(IndexTest, createFromTsvTest) {
     Index index;
     index.createFromOnDiskIndex("_testindex");
 
-    ASSERT_TRUE(index._PSO.metaData().relationExists(2));
-    ASSERT_TRUE(index._PSO.metaData().relationExists(3));
-    ASSERT_FALSE(index._PSO.metaData().relationExists(1));
-    ASSERT_FALSE(index._PSO.metaData().relationExists(0));
-    ASSERT_FALSE(index._PSO.metaData().getRmd(2).isFunctional());
-    ASSERT_TRUE(index._PSO.metaData().getRmd(3).isFunctional());
-    ASSERT_FALSE(index._PSO.metaData().getRmd(2).hasBlocks());
+    ASSERT_TRUE(index._PSO.metaData().col0IdExists(2));
+    ASSERT_TRUE(index._PSO.metaData().col0IdExists(3));
+    ASSERT_FALSE(index._PSO.metaData().col0IdExists(1));
+    ASSERT_FALSE(index._PSO.metaData().col0IdExists(0));
+    ASSERT_FALSE(index._PSO.metaData().getMetaData(2).isFunctional());
+    ASSERT_TRUE(index._PSO.metaData().getMetaData(3).isFunctional());
 
-    ASSERT_TRUE(index.POS().metaData().relationExists(2));
-    ASSERT_TRUE(index.POS().metaData().relationExists(3));
-    ASSERT_FALSE(index.POS().metaData().relationExists(1));
-    ASSERT_FALSE(index.POS().metaData().relationExists(4));
-    ASSERT_TRUE(index.POS().metaData().getRmd(2).isFunctional());
-    ASSERT_TRUE(index.POS().metaData().getRmd(3).isFunctional());
+    ASSERT_TRUE(index.POS().metaData().col0IdExists(2));
+    ASSERT_TRUE(index.POS().metaData().col0IdExists(3));
+    ASSERT_FALSE(index.POS().metaData().col0IdExists(1));
+    ASSERT_FALSE(index.POS().metaData().col0IdExists(4));
+    ASSERT_TRUE(index.POS().metaData().getMetaData(2).isFunctional());
+    ASSERT_TRUE(index.POS().metaData().getMetaData(3).isFunctional());
 
-    ad_utility::File psoFile("_testindex.index.pso", "r");
-    size_t nofbytes =
-        static_cast<size_t>(index._PSO.metaData().getOffsetAfter());
-    unsigned char* buf = new unsigned char[nofbytes];
-    psoFile.read(buf, nofbytes);
-
-    off_t bytesDone = 0;
     // Relation b
     // Pair index
-    ASSERT_EQ(Id(0), *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
+    std::vector<std::array<Id, 2>> buffer;
+    CompressedRelationMetaData::scan(2, &buffer, index.PSO());
+    ASSERT_EQ(2ul, buffer.size());
+    ASSERT_EQ(Id(0), buffer[0][0]);
+    ASSERT_EQ(4u, buffer[0][1]);
+    ASSERT_EQ(0u, buffer[1][0]);
+    ASSERT_EQ(5u, buffer[1][1]);
 
     // Relation b2
-    ASSERT_EQ(Id(0), *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    // No LHS & RHS
-    ASSERT_EQ(index._PSO.metaData().getOffsetAfter(), bytesDone);
-
-    delete[] buf;
-    psoFile.close();
+    CompressedRelationMetaData::scan(3, &buffer, index.PSO());
+    ASSERT_EQ(2ul, buffer.size());
+    ASSERT_EQ(Id(0), buffer[0][0]);
+    ASSERT_EQ(4u, buffer[0][1]);
+    ASSERT_EQ(1u, buffer[1][0]);
+    ASSERT_EQ(5u, buffer[1][1]);
 
     remove("_testtmp2.tsv");
     std::remove(stxxlFileName.c_str());
@@ -166,181 +150,52 @@ TEST(IndexTest, createFromTsvTest) {
     Index index;
     index.createFromOnDiskIndex("_testindex");
 
-    ASSERT_TRUE(index._PSO.metaData().relationExists(7));
-    ASSERT_FALSE(index._PSO.metaData().relationExists(1));
+    ASSERT_TRUE(index._PSO.metaData().col0IdExists(7));
+    ASSERT_FALSE(index._PSO.metaData().col0IdExists(1));
 
-    ASSERT_FALSE(index._PSO.metaData().getRmd(7).isFunctional());
-    ASSERT_FALSE(index._PSO.metaData().getRmd(7).hasBlocks());
+    ASSERT_FALSE(index._PSO.metaData().getMetaData(7).isFunctional());
 
-    ASSERT_TRUE(index.POS().metaData().relationExists(7));
-    ASSERT_FALSE(index.POS().metaData().getRmd(7).isFunctional());
+    ASSERT_TRUE(index.POS().metaData().col0IdExists(7));
+    ASSERT_FALSE(index.POS().metaData().getMetaData(7).isFunctional());
 
-    ad_utility::File psoFile("_testindex.index.pso", "r");
-    size_t nofbytes =
-        static_cast<size_t>(index._PSO.metaData().getOffsetAfter());
-    unsigned char* buf = new unsigned char[nofbytes];
-    psoFile.read(buf, nofbytes);
-
-    off_t bytesDone = 0;
-
+    std::vector<std::array<Id, 2>> buffer;
+    // is-a
+    CompressedRelationMetaData::scan(7, &buffer, index.PSO());
+    ASSERT_EQ(7ul, buffer.size());
     // Pair index
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(3u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    // Lhs info
+    ASSERT_EQ(4u, buffer[0][0]);
+    ASSERT_EQ(0u, buffer[0][1]);
+    ASSERT_EQ(4u, buffer[1][0]);
+    ASSERT_EQ(1u, buffer[1][1]);
+    ASSERT_EQ(4u, buffer[2][0]);
+    ASSERT_EQ(2u, buffer[2][1]);
+    ASSERT_EQ(5u, buffer[3][0]);
+    ASSERT_EQ(0u, buffer[3][1]);
+    ASSERT_EQ(5u, buffer[4][0]);
+    ASSERT_EQ(3u, buffer[4][1]);
+    ASSERT_EQ(6u, buffer[5][0]);
+    ASSERT_EQ(1u, buffer[5][1]);
+    ASSERT_EQ(6u, buffer[6][0]);
+    ASSERT_EQ(2u, buffer[6][1]);
 
-    //    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    //    bytesDone += sizeof(Id);
-    //    ASSERT_EQ(index._PSO.metaData().getRmd(7)._rmdBlocks->_startRhs,
-    //              *reinterpret_cast<off_t*>(buf + bytesDone));
-    //    bytesDone += sizeof(off_t);
-    //    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
-    //    bytesDone += sizeof(Id);
-    //    ASSERT_EQ(
-    //        static_cast<off_t>(index._PSO.metaData().getRmd(7)._rmdBlocks->_startRhs
-    //        +
-    //                           3 * sizeof(Id)),
-    //        *reinterpret_cast<off_t*>(buf + bytesDone));
-    //    bytesDone += sizeof(off_t);
-    //    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
-    //    bytesDone += sizeof(Id);
-    //    ASSERT_EQ(
-    //        static_cast<off_t>(index._PSO.metaData().getRmd(7)._rmdBlocks->_startRhs
-    //        +
-    //                           5 * sizeof(Id)),
-    //        *reinterpret_cast<off_t*>(buf + bytesDone));
-    //    bytesDone += sizeof(off_t);
-    //
-    //    // Rhs list
-    //    ASSERT_EQ(bytesDone,
-    //    index._PSO.metaData().getRmd(7)._rmdBlocks->_startRhs); ASSERT_EQ(0u,
-    //    *reinterpret_cast<Id*>(buf + bytesDone)); bytesDone += sizeof(Id);
-    //    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
-    //    bytesDone += sizeof(Id);
-    //    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
-    //    bytesDone += sizeof(Id);
-    //    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
-    //    bytesDone += sizeof(Id);
-    //    ASSERT_EQ(3u, *reinterpret_cast<Id*>(buf + bytesDone));
-    //    bytesDone += sizeof(Id);
-    //    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
-    //    bytesDone += sizeof(Id);
-    //    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
-
-    delete[] buf;
-    psoFile.close();
-
-    ad_utility::File posFile("_testindex.index.pos", "r");
-    nofbytes = static_cast<size_t>(index.POS().metaData().getOffsetAfter());
-    buf = new unsigned char[nofbytes];
-    posFile.read(buf, nofbytes);
-
-    bytesDone = 0;
-
+    // is-a for POS
+    CompressedRelationMetaData::scan(7, &buffer, index.POS());
+    ASSERT_EQ(7ul, buffer.size());
     // Pair index
-    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(3u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-
-    // Lhs info
-    //    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
-    //    bytesDone += sizeof(Id);
-    //    ASSERT_EQ(index.POS().metaData.getRmd(7)._rmdBlocks->_startRhs,
-    //              *reinterpret_cast<off_t*>(buf + bytesDone));
-    //    bytesDone += sizeof(off_t);
-    //    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
-    //    bytesDone += sizeof(Id);
-    //    ASSERT_EQ(
-    //        static_cast<off_t>(index.POS().metaData.getRmd(7)._rmdBlocks->_startRhs
-    //        +
-    //                           2 * sizeof(Id)),
-    //        *reinterpret_cast<off_t*>(buf + bytesDone));
-    //    bytesDone += sizeof(off_t);
-    //    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
-    //    bytesDone += sizeof(Id);
-    //    ASSERT_EQ(
-    //        static_cast<off_t>(index.POS().metaData.getRmd(7)._rmdBlocks->_startRhs
-    //        +
-    //                           4 * sizeof(Id)),
-    //        *reinterpret_cast<off_t*>(buf + bytesDone));
-    //    bytesDone += sizeof(off_t);
-    //    ASSERT_EQ(3u, *reinterpret_cast<Id*>(buf + bytesDone));
-    //    bytesDone += sizeof(Id);
-    //    ASSERT_EQ(
-    //        static_cast<off_t>(index.POS().metaData.getRmd(7)._rmdBlocks->_startRhs
-    //        +
-    //                           6 * sizeof(Id)),
-    //        *reinterpret_cast<off_t*>(buf + bytesDone));
-    //    bytesDone += sizeof(off_t);
-    //
-    //    // Rhs list
-    //    ASSERT_EQ(bytesDone,
-    //    index.POS().metaData.getRmd(7)._rmdBlocks->_startRhs); ASSERT_EQ(4u,
-    //    *reinterpret_cast<Id*>(buf + bytesDone)); bytesDone += sizeof(Id);
-    //    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
-    //    bytesDone += sizeof(Id);
-    //    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    //    bytesDone += sizeof(Id);
-    //    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
-    //    bytesDone += sizeof(Id);
-    //    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    //    bytesDone += sizeof(Id);
-    //    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
-    //    bytesDone += sizeof(Id);
-    //    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
-
-    delete[] buf;
-    psoFile.close();
+    ASSERT_EQ(0u, buffer[0][0]);
+    ASSERT_EQ(4u, buffer[0][1]);
+    ASSERT_EQ(0u, buffer[1][0]);
+    ASSERT_EQ(5u, buffer[1][1]);
+    ASSERT_EQ(1u, buffer[2][0]);
+    ASSERT_EQ(4u, buffer[2][1]);
+    ASSERT_EQ(1u, buffer[3][0]);
+    ASSERT_EQ(6u, buffer[3][1]);
+    ASSERT_EQ(2u, buffer[4][0]);
+    ASSERT_EQ(4u, buffer[4][1]);
+    ASSERT_EQ(2u, buffer[5][0]);
+    ASSERT_EQ(6u, buffer[5][1]);
+    ASSERT_EQ(3u, buffer[6][0]);
+    ASSERT_EQ(5u, buffer[6][1]);
 
     remove("_testtmp2.tsv");
     std::remove(stxxlFileName.c_str());
@@ -466,21 +321,19 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   Index index;
   index.createFromOnDiskIndex("_testindex2");
 
-  ASSERT_TRUE(index.PSO().metaData().relationExists(2));
-  ASSERT_TRUE(index.PSO().metaData().relationExists(3));
-  ASSERT_FALSE(index.PSO().metaData().relationExists(1));
-  ASSERT_FALSE(index.PSO().metaData().relationExists(4));
-  ASSERT_FALSE(index.PSO().metaData().getRmd(2).isFunctional());
-  ASSERT_TRUE(index.PSO().metaData().getRmd(3).isFunctional());
-  ASSERT_FALSE(index.PSO().metaData().getRmd(2).hasBlocks());
-  ASSERT_FALSE(index.PSO().metaData().getRmd(3).hasBlocks());
+  ASSERT_TRUE(index.PSO().metaData().col0IdExists(2));
+  ASSERT_TRUE(index.PSO().metaData().col0IdExists(3));
+  ASSERT_FALSE(index.PSO().metaData().col0IdExists(1));
+  ASSERT_FALSE(index.PSO().metaData().col0IdExists(4));
+  ASSERT_FALSE(index.PSO().metaData().getMetaData(2).isFunctional());
+  ASSERT_TRUE(index.PSO().metaData().getMetaData(3).isFunctional());
 
-  ASSERT_TRUE(index.POS().metaData().relationExists(2));
-  ASSERT_TRUE(index.POS().metaData().relationExists(3));
-  ASSERT_FALSE(index.POS().metaData().relationExists(1));
-  ASSERT_FALSE(index.POS().metaData().relationExists(4));
-  ASSERT_TRUE(index.POS().metaData().getRmd(2).isFunctional());
-  ASSERT_TRUE(index.POS().metaData().getRmd(3).isFunctional());
+  ASSERT_TRUE(index.POS().metaData().col0IdExists(2));
+  ASSERT_TRUE(index.POS().metaData().col0IdExists(3));
+  ASSERT_FALSE(index.POS().metaData().col0IdExists(1));
+  ASSERT_FALSE(index.POS().metaData().col0IdExists(4));
+  ASSERT_TRUE(index.POS().metaData().getMetaData(2).isFunctional());
+  ASSERT_TRUE(index.POS().metaData().getMetaData(3).isFunctional());
 
   remove("_testtmp3.tsv");
   remove("_testindex2.index.pso");

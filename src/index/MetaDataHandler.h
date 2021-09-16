@@ -11,7 +11,7 @@
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
 #include "../util/Log.h"
-#include "./MetaDataTypes.h"
+#include "./CompressedRelation.h"
 
 // _____________________________________________________________
 // hidden in implementation namespace
@@ -23,7 +23,7 @@ template <class Vec>
 class Iterator {
  public:
   using iterator_category = std::forward_iterator_tag;
-  using value_type = FullRelationMetaData;
+  using value_type = CompressedRelationMetaData;
 
   // _________________________________________________
   std::pair<Id, const value_type&> operator*() const {
@@ -84,7 +84,7 @@ class Iterator {
   mutable std::pair<Id, std::reference_wrapper<const value_type>> _accessPair;
   const Vec* const _vec;
 
-  const value_type emptyMetaData = value_type::empty;
+  const value_type emptyMetaData = value_type::emptyMetaData();
 };
 }  // namespace VecWrapperImpl
 
@@ -204,7 +204,7 @@ class MetaDataWrapperDense {
 
  private:
   // the empty key, must be the first member to be initialized
-  const value_type emptyMetaData = value_type::empty;
+  const value_type emptyMetaData = value_type::emptyMetaData();
   size_t _size = 0;
   M _vec;
 };
