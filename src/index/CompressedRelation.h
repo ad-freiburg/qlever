@@ -28,14 +28,6 @@ struct CompressedBlockMetaData {
   Id _col1FirstId;
   Id _col1LastId;
 
-  // Blocks are ordered in the same way as the underlying permutation.
-  // TODO<joka921> Can this be written simpler using C++20 consistent
-  // comparison?
-  bool operator<(const CompressedBlockMetaData r) {
-    bool a = _col0FirstId < r._col0FirstId;
-    bool b = _col0FirstId == r._col0FirstId && _col1FirstId < r._col1FirstId;
-    return a || b;
-  }
   bool operator==(const CompressedBlockMetaData&) const = default;
 };
 
