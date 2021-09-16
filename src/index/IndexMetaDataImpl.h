@@ -141,9 +141,6 @@ void serialize(Serializer& serializer, IndexMetaData<MapType>& metaData) {
   // After this magic number, an 8-byte version number follows. Both have to
   // match.
 
-  if constexpr (Serializer::IsWriteSerializer) {
-    std::sort(metaData.blockData().begin(), metaData.blockData().end());
-  }
   using T = IndexMetaData<MapType>;
   uint64_t magicNumber = T::MAGIC_NUMBER_FOR_SERIALIZATION;
 
