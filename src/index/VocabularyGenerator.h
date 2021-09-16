@@ -28,6 +28,7 @@ using TripleVec = stxxl::vector<array<Id, 3>>;
  */
 class VocabularyMerger {
  public:
+  bool _ignoreExternalVocabulary = false;
   // result of a call to mergeVocabulary
   struct VocMergeRes {
     size_t _numWordsTotal;   // that many distinct words were found (size of the

@@ -76,6 +76,13 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
 
   // start k-way merge
   while (!queue.empty()) {
+    // for the prefix compression vocabulary, we don't need the external
+    // vocabulary
+    if (_ignoreExternalVocabulary &&
+        queue.top()._value >= EXTERNALIZED_LITERALS_PREFIX) {
+      break;
+    }
+
     // accumulated the globally ordered queue words in a buffer.
     sortedBuffer.push_back(std::move(queue.top()));
     queue.pop();
