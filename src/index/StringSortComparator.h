@@ -188,42 +188,6 @@ class LocaleManager {
     return res;
   }
 
-  /// get a prefix of length prefixLength of the UTF8 string (or shorter, if the
-  /// string contains less codepoints This counts utf-8 codepoints correctly and
-  /// returns a UTF-8 string referring to the Prefix and the number of Unicode
-  /// codepoints it actually encodes ( <= prefixLength).
-  /**
-   * @brief get a prefix of a utf-8 string of a specified length
-   *
-   * This will first max(prefixLength, numCodepointsInInput) Codepoints encoded
-   * in the sp argument. CAVEAT: This is in most cases wrong when answering the
-   * question "is X a prefix of Y" because collation might ignore punctuation
-   * etc. This is currently only used for the Text Index where all words that
-   * share a common prefix of a certain length are stored in the same block.
-   * @param sp a UTF-8 encoded string
-   * @param prefixLength The number of Unicode codepoints we want to extract.
-   * @return the first max(prefixLength, numCodepointsInArgSP) Unicode
-   * codepoints of sp, encoded as UTF-8
-   */
-  static std::pair<size_t, std::string> getUTF8Prefix(std::string_view sp,
-                                                      size_t prefixLength) {
-    const char* s = sp.data();
-    int32_t length = sp.length();
-    size_t numCodepoints = 0;
-    int32_t i = 0;
-    for (i = 0; i < length && numCodepoints < prefixLength;) {
-      UChar32 c;
-      U8_NEXT(s, i, length, c);
-      if (c >= 0) {
-        ++numCodepoints;
-      } else {
-        throw std::runtime_error(
-            "Illegal UTF sequence in LocaleManager::getUTF8Prefix");
-      }
-    }
-    return {numCodepoints, std::string(sp.data(), i)};
-  }
-
   /**
    * @brief Normalize a Utf8 string to a canonical representation.
    * Maps e.g. single codepoint é and e + accent aigu to single codepoint é by

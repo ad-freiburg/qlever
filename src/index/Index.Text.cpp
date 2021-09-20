@@ -404,13 +404,13 @@ void Index::calculateBlockBoundaries() {
     return;
   }
   const auto& locManager = _textVocab.getLocaleManager();
-  auto currentLenAndPrefix = LocaleManager::getUTF8Prefix(
+  auto currentLenAndPrefix = ad_utility::getUTF8Prefix(
       _textVocab[0].value().get(), MIN_WORD_PREFIX_SIZE);
   for (size_t i = 0; i < _textVocab.size() - 1; ++i) {
     // we need foo.value().get() because the vocab returns
     // a std::optional<std::reference_wrapper<string>> and the "." currently
     // doesn't implicitly convert to a true reference (unlike function calls)
-    auto nextLenAndPrefix = LocaleManager::getUTF8Prefix(
+    auto nextLenAndPrefix = ad_utility::getUTF8Prefix(
         _textVocab[i + 1].value().get(), MIN_WORD_PREFIX_SIZE);
     if (currentLenAndPrefix.first < MIN_WORD_PREFIX_SIZE ||
         (nextLenAndPrefix.first < MIN_WORD_PREFIX_SIZE) ||
