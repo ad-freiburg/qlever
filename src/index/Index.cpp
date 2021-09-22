@@ -24,6 +24,7 @@
 #include "./PrefixHeuristic.h"
 #include "./VocabularyGenerator.h"
 #include "MetaDataIterator.h"
+#include <execution>
 
 using std::array;
 
@@ -103,17 +104,21 @@ void Index::createFromFile(const string& filename) {
   LOG(INFO) << "Finished writing permutations" << std::endl;
   // Read the vocabulary from file and sort it;
   std::vector<string> prefixes;
-  TextVocabulary wronglySortedVoc;
-  wronglySortedVoc.readFromFile(_onDiskBase + ".vocabulary");
-  auto& words = wronglySortedVoc.getRawWordsVectorViolatesInvariants();
-  std::sort(words.begin(), words.end());
   {
-    std::ofstream tmpCompressionFile{_onDiskBase + TMP_BASENAME_COMPRESSION +
-                                     ".vocabulary"};
-    for (const auto& word : words) {
-      tmpCompressionFile << word << '\n';
+    TextVocabulary wronglySortedVoc;
+    wronglySortedVoc.readFromFile(_onDiskBase + ".vocabulary");
+    auto& words = wronglySortedVoc.getRawWordsVectorViolatesInvariants();
+    std::sort(std::execution::par_unseq, words.begin(), words.end());
+    {
+      std::ofstream tmpCompressionFile{_onDiskBase + TMP_BASENAME_COMPRESSION +
+                                       ".vocabulary"};
+      for (const auto& word : words) {
+        tmpCompressionFile << word << '\n';
+      }
     }
   }
+
+
 
   if (_vocabPrefixCompressed) {
     // we have to use the "normally" sorted vocabulary for the prefix
