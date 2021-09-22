@@ -38,6 +38,8 @@ class ByteBufferWriteSerializer {
   const Storage& data() const& noexcept { return _data; }
   Storage&& data() && { return std::move(_data); }
 
+  size_t numBytes() const {return _data.size();}
+
  private:
   Storage _data;
 };
