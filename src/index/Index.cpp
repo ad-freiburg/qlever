@@ -901,10 +901,10 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   LOG(INFO) << "total vocab size is " << _totalVocabularySize << std::endl;
   _PSO.loadFromDisk(_onDiskBase);
   _POS.loadFromDisk(_onDiskBase);
-  _OPS.loadFromDisk(_onDiskBase);
-  _OSP.loadFromDisk(_onDiskBase);
-  _SPO.loadFromDisk(_onDiskBase);
-  _SOP.loadFromDisk(_onDiskBase);
+  //_OPS.loadFromDisk(_onDiskBase);
+  //_OSP.loadFromDisk(_onDiskBase);
+  //_SPO.loadFromDisk(_onDiskBase);
+  //_SOP.loadFromDisk(_onDiskBase);
 
   if (_usePatterns) {
     // Read the pattern info from the patterns file
