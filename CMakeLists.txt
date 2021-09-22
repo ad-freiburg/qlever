@@ -121,6 +121,10 @@ set(BUILD_TESTING OFF CACHE BOOL "Don't build tests for abseil" FORCE)
 add_subdirectory(third_party/abseil-cpp EXCLUDE_FROM_ALL)
 include_directories(third_party/abseil-cpp/)
 
+#################################
+#TBB
+link_libraries(tbb)
+
 if (USE_PARALLEL)
     include(FindOpenMP)
     if (OPENMP_FOUND)
