@@ -61,8 +61,22 @@ class ByteBufferReadSerializer {
 
   const Storage& data() const noexcept { return _data; }
 
+  void reset(Storage newData) {
+    _data = std::move(newData);;
+    _iterator = _data.begin();
+  }
+
+  void clear() {
+    _data.clear();
+    _iterator = _data.begin();
+  }
+
+  bool isExhausted() const {
+    return _iterator == _data.end();;
+  }
+
  private:
-  const Storage _data;
+  Storage _data;
   Storage::const_iterator _iterator{_data.begin()};
 };
 

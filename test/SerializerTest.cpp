@@ -9,6 +9,7 @@
 #include "../src/util/Serializer/SerializeHashMap.h"
 #include "../src/util/Serializer/SerializeString.h"
 #include "../src/util/Serializer/Serializer.h"
+#include "../src/util/Serializer/CompressionSerializer.h"
 
 using namespace ad_utility;
 using namespace ad_utility::serialization;
@@ -32,9 +33,22 @@ auto testWithFileSerialization = [](auto testFunction) {
   unlink(filename.c_str());
 };
 
+auto testWithCompressedFileSerialization = [](auto testFunction) {
+  const std::string filename = "serializationTestCompressed.tmp";
+  CompressedWriteSerializer<FileWriteSerializer> writer{2000, filename};
+  auto makeReaderFromWriter = [filename, &writer] {
+    writer.finish();
+    return CompressedReadSerializer<FileReadSerializer>{filename};
+  };
+  testFunction(writer, makeReaderFromWriter);
+  unlink(filename.c_str());
+
+};
+
 auto testWithAllSerializers = [](auto testFunction) {
   testWithByteBuffer(testFunction);
   testWithFileSerialization(testFunction);
+  testWithCompressedFileSerialization(testFunction);
   // TODO<joka921> Register new serializers here to apply all existing tests
   // to them
 };

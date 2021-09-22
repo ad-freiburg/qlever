@@ -21,6 +21,8 @@
 #include "./ConstantsIndexBuilding.h"
 #include "./Vocabulary.h"
 #include "./VocabularyGenerator.h"
+#include "../util/Serializer/CompressionSerializer.h"
+#include "../util/Serializer/SerializeString.h"
 
 // ___________________________________________________________________
 template <class Comp>
@@ -36,7 +38,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
     return comp(p2._value, p1._value);
   };
 
-  std::vector<std::ifstream> infiles;
+  std::vector<ad_utility::serialization::CompressedReadSerializer<ad_utility::serialization::FileReadSerializer>> infiles;
 
   _outfile.open(basename + ".vocabulary");
   AD_CHECK(_outfile.is_open());
@@ -48,25 +50,30 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
   std::priority_queue<QueueWord, std::vector<QueueWord>, decltype(queueCompare)>
       queue(queueCompare);
 
+  auto readNextWord = [&](size_t i)  {
+    // read the first entry of the vocabulary and add it to the queue
+    endOfFile[i] = true;
+
+    try {
+      std::string word;
+      infiles[i] >> word;
+      Id id;
+      infiles[i] >> id;
+      queue.push(QueueWord(std::move(word), i, id));
+      endOfFile[i] = false;
+    } catch (const ad_utility::serialization::SerializationException&) {
+
+    }
+
+  };
+
   // open and prepare all infiles and mmap output vectors
+  infiles.reserve(numFiles);
   for (size_t i = 0; i < numFiles; i++) {
     infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME +
                          std::to_string(i));
     _idVecs.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
-    AD_CHECK(infiles.back().is_open());
-
-    // read the first entry of the vocabulary and add it to the queue
-    endOfFile[i] = true;
-
-    size_t len;
-    if (infiles[i].read((char*)&len, sizeof(len))) {
-      std::string word(len, '\0');
-      infiles[i].read(&(word[0]), len);
-      Id id;
-      infiles[i].read((char*)&id, sizeof(id));
-      queue.push(QueueWord(std::move(word), i, id));
-      endOfFile[i] = false;
-    }
+    readNextWord(i);
   }
 
   std::vector<QueueWord> sortedBuffer;
@@ -111,16 +118,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
       continue;
     }  // file is exhausted, nothing to add
 
-    endOfFile[i] = true;
-    size_t len;
-    if (infiles[i].read((char*)&len, sizeof(len))) {
-      std::string word(len, '\0');
-      infiles[i].read(&(word[0]), len);
-      Id id;
-      infiles[i].read((char*)&id, sizeof(id));
-      queue.push(QueueWord(std::move(word), i, id));
-      endOfFile[i] = false;
-    }
+    readNextWord(i);
   }
 
   // wait for the active write tasks to finish
@@ -296,18 +294,11 @@ void writeMappedIdsToExtVec(const TripleVec& input,
 // _________________________________________________________________________________________________________
 void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
-  std::ofstream out(fileName.c_str(),
-                    std::ios_base::out | std::ios_base::binary);
-  AD_CHECK(out.is_open());
+  ad_utility::serialization::CompressedWriteSerializer<ad_utility::serialization::FileWriteSerializer> s{8ul * (1ul << 20u), fileName };
   for (const auto& el : els) {
-    std::string_view word = el.first;
-    size_t len = word.size();
-    out.write((char*)&len, sizeof(len));
-    out.write(word.data(), len);
-    Id id = el.second.m_id;
-    out.write((char*)&id, sizeof(id));
+    s | el.first;
+    s | el.second.m_id;
   }
-  out.close();
   LOG(INFO) << "Done writing vocabulary to file.\n";
 }
 
