@@ -108,7 +108,8 @@ void Index::createFromFile(const string& filename) {
     TextVocabulary wronglySortedVoc;
     wronglySortedVoc.readFromFile(_onDiskBase + ".vocabulary");
     auto& words = wronglySortedVoc.getRawWordsVectorViolatesInvariants();
-    std::sort(std::execution::par_unseq, words.begin(), words.end());
+    //std::sort(std::execution::par_unseq, words.begin(), words.end());
+    std::sort(words.begin(), words.end());
     {
       std::ofstream tmpCompressionFile{_onDiskBase + TMP_BASENAME_COMPRESSION +
                                        ".vocabulary"};
