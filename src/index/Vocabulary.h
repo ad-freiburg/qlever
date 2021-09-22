@@ -289,6 +289,11 @@ class Vocabulary {
   // _______________________________________________________________
   Id upper_bound(const string& word, const SortLevel level) const;
 
+  // ____________________________________________________________________
+  auto& getRawWordsVectorViolatesInvariants() {
+    return _words;
+  }
+
  private:
   template <class R = std::string>
   auto getLowerBoundLambda(const SortLevel level) const {

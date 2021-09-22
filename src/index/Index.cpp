@@ -69,6 +69,7 @@ void Index::createFromFile(const string& filename) {
 
   initializeVocabularySettingsBuild<Parser>();
 
+  /*
   VocabularyData vocabData;
   if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserDummy>) {
     if (_onlyAsciiTurtlePrefixes) {
@@ -93,13 +94,27 @@ void Index::createFromFile(const string& filename) {
                                                      false, _usePatterns);
   createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _OSP, _OPS);
 
+*/
   // if we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
   // hurt
   string vocabFile = _onDiskBase + ".vocabulary";
   string vocabFileTmp = _onDiskBase + ".vocabularyTmp";
-  std::vector<string> prefixes;
   LOG(INFO) << "Finished writing permutations" << std::endl;
+  // Read the vocabulary from file and sort it;
+  std::vector<string> prefixes;
+  TextVocabulary wronglySortedVoc;
+  wronglySortedVoc.readFromFile(_onDiskBase + ".vocabulary");
+  auto& words = wronglySortedVoc.getRawWordsVectorViolatesInvariants();
+  std::sort(words.begin(), words.end());
+  {
+    std::ofstream tmpCompressionFile{_onDiskBase + TMP_BASENAME_COMPRESSION +
+                                     ".vocabulary"};
+    for (const auto& word : words) {
+      tmpCompressionFile << word << '\n';
+    }
+  }
+
   if (_vocabPrefixCompressed) {
     // we have to use the "normally" sorted vocabulary for the prefix
     // compression;
