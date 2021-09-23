@@ -253,6 +253,7 @@ class BatchedPipeline {
                                         transformers...);
     // if we had multiple threads, we have to merge the partial results in the
     // correct order.
+    LOG(TIMING) << "Waiting for futures" << std::endl;
     ad_utility::Timer t;
     t.start();
     for (size_t i = 0; i < Parallelism; ++i) {
@@ -260,7 +261,7 @@ class BatchedPipeline {
     }
     t.stop();
     if constexpr(sizeof...(transformers) != 1) {
-      LOG(TIMING) << "Waiting for inner futures ms: " << t.msecs() << '\n';
+      LOG(TIMING) << "Waiting for inner futures ms: " << t.msecs() << std::endl;
     }
     /*
     t.start();
@@ -346,8 +347,7 @@ class BatchedPipeline {
     auto outIt = out.begin() + (startIt - in.begin());
     // start a thread for the transformer.
     return std::async(std::launch::async,
-                      [transformer, startIt = startIt, endIt = endIt, outIt] {
-                        std::vector<ResT> res;
+                      [transformer, startIt = startIt, endIt = endIt, outIt = outIt] {
                         moveAndTransform(startIt, endIt, outIt, transformer);
                       });
   }
