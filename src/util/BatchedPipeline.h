@@ -247,7 +247,10 @@ class BatchedPipeline {
     // and later we merge. <TODO>(joka921) Doing this in place would require
     // something like a std::vector without default construction on insert.
     const size_t batchSize = inBatchSize / Parallelism;
+    LOG(TIMING) << "Resize vectores" << std::endl;
     result.m_content.resize(inBatchSize);
+
+    LOG(TIMING) << "Setup futures" << std::endl;
     auto futures = setupParallelismImpl(batchSize, inBatch.m_content, result.m_content,
                                         std::make_index_sequence<Parallelism>{},
                                         transformers...);
