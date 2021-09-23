@@ -242,22 +242,20 @@ class BatchedPipeline {
                                           TransformerPtrs... transformers) {
     auto inBatch = previousStage->pickupBatch();
     Batch<ResT> result;
+    ad_utility::Timer t;
+    t.start();
     result.m_isPipelineGood = inBatch.m_isPipelineGood;
     // currently each of the <parallelism> threads first creates its own Batch
     // and later we merge. <TODO>(joka921) Doing this in place would require
     // something like a std::vector without default construction on insert.
     const size_t batchSize = inBatchSize / Parallelism;
-    LOG(TIMING) << "Resize vectores" << std::endl;
     result.m_content.resize(inBatch.m_content.size());
 
-    LOG(TIMING) << "Setup futures" << std::endl;
     auto futures = setupParallelismImpl(batchSize, inBatch.m_content, result.m_content,
                                         std::make_index_sequence<Parallelism>{},
                                         transformers...);
     // if we had multiple threads, we have to merge the partial results in the
     // correct order.
-    ad_utility::Timer t;
-    t.start();
     for (size_t i = 0; i < Parallelism; ++i) {
      futures[i].get();
     }
