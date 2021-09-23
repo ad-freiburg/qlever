@@ -248,7 +248,7 @@ class BatchedPipeline {
     // something like a std::vector without default construction on insert.
     const size_t batchSize = inBatchSize / Parallelism;
     LOG(TIMING) << "Resize vectores" << std::endl;
-    result.m_content.resize(inBatchSize);
+    result.m_content.resize(inBatch.m_content.size());
 
     LOG(TIMING) << "Setup futures" << std::endl;
     auto futures = setupParallelismImpl(batchSize, inBatch.m_content, result.m_content,
@@ -331,7 +331,9 @@ class BatchedPipeline {
                                    OutVec& out,
                                    std::index_sequence<I...>,
                                    TransformerPtrs... transformers) {
+    LOG(TIMING) << "before check in impl" << std::endl;
     AD_CHECK(in.size() == out.size());
+    LOG(TIMING) << "after check in impl" << std::endl;
     if constexpr (sizeof...(I) == sizeof...(TransformerPtrs)) {
       return std::array{(createIthFuture<I>(batchSize, in, out, transformers))...};
       LOG(TIMING) << "finished setupImpl" <<std::endl;
