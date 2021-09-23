@@ -32,7 +32,7 @@ static const size_t PARSER_MIN_TRIPLES_AT_ONCE = 100000;
 
 // When reading from a file, Chunks of this size will
 // be fed to the parser at once (100 MiB)
-static const size_t FILE_BUFFER_SIZE = 100 * (1ul << 20);
+static const size_t FILE_BUFFER_SIZE = 500 * (1ul << 20);
 
 // When the BZIP2 parser encouters a parsing exception it will increase its
 // buffer and try again (we have no other way currently to determine if the
