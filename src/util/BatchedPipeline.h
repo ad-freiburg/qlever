@@ -188,10 +188,10 @@ class BatchedPipeline {
   // _____________________________________________________________________
   Batch<ResT> pickupBatch() {
     try {
-      _timer->cont();
+      //_timer->cont();
       auto res = _fut.get();
       orderNextBatch();
-      _timer->stop();
+      //_timer->stop();
       return res;
     } catch (std::future_error& e) {
       throw std::runtime_error(
@@ -203,11 +203,11 @@ class BatchedPipeline {
   // asynchronously prepare the next Batch in a different thread
   void orderNextBatch() {
     auto lambda =
-        [p = _previousStage.get(),
+        [this, p = _previousStage.get(),
          batchSize = _previousStage->getBatchSize()](auto... transformerPtrs) {
           return std::async(
-              std::launch::async, [p, batchSize, transformerPtrs...]() {
-                return produceBatchInternal(p, batchSize, transformerPtrs...);
+              std::launch::async, [this, p, batchSize, transformerPtrs...]() {
+                return produceBatchInternal(p, batchSize, *_timer, transformerPtrs...);
               });
         };
     _fut = std::apply(lambda, _rawTransformers);
@@ -238,10 +238,11 @@ class BatchedPipeline {
    */
   template <typename... TransformerPtrs>
   static Batch<ResT> produceBatchInternal(PreviousStage* previousStage,
-                                          size_t inBatchSize,
+                                          size_t inBatchSize, ad_utility::Timer& timer,
                                           TransformerPtrs... transformers) {
     auto inBatch = previousStage->pickupBatch();
     //LOG(TIMING) << "Got a batch of size" << inBatch.m_content.size() << std::endl;
+    timer.cont();
     Batch<ResT> result;
     result.m_isPipelineGood = inBatch.m_isPipelineGood;
     // currently each of the <parallelism> threads first creates its own Batch
@@ -259,6 +260,7 @@ class BatchedPipeline {
                               std::make_move_iterator(vec.begin()),
                               std::make_move_iterator(vec.end()));
     }
+    timer.stop();
     return result;
   }
 
