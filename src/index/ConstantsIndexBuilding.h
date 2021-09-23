@@ -23,7 +23,7 @@ static const int NUM_TRIPLES_PER_PARTIAL_VOCAB = 100000000;
 
 // How many Triples is the Buffer supposed to parse ahead.
 // If too big, the memory consumption is high, if too low we possibly lose speed
-static const size_t PARSER_BATCH_SIZE = 2500000;
+static const size_t PARSER_BATCH_SIZE = 3500000;
 
 // That many triples does the turtle parser have to buffer before the call to
 // getline returns (unless our input reaches EOF). This makes parsing from
