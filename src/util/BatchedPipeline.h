@@ -241,6 +241,7 @@ class BatchedPipeline {
                                           size_t inBatchSize,
                                           TransformerPtrs... transformers) {
     auto inBatch = previousStage->pickupBatch();
+    LOG(TIMING) << "Got a batch of size" << inBatch.m_m_content.size() << std::endl;
     Batch<ResT> result;
     result.m_isPipelineGood = inBatch.m_isPipelineGood;
     // currently each of the <parallelism> threads first creates its own Batch
