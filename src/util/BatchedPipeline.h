@@ -261,7 +261,9 @@ class BatchedPipeline {
       results.push_back(futures[i].get());
     }
     t.stop();
-    LOG(TIMING) << "Waiting for inner futures ms: " << t.msecs() << '\n';
+    if constexpr(sizeof...(transformers) != 1) {
+      LOG(TIMING) << "Waiting for inner futures ms: " << t.msecs() << '\n';
+    }
     t.start();
     for (auto& vec : results) {
       result.m_content.insert(result.m_content.end(),
@@ -269,7 +271,9 @@ class BatchedPipeline {
                               std::make_move_iterator(vec.end()));
     }
     t.stop();
-    LOG(TIMING) << "Waiting for merging result" << t.msecs() << '\n';
+    if constexpr(sizeof...(transformers) != 1) {
+      LOG(TIMING) << "Waiting for merging result" << t.msecs() << '\n';
+    }
     return result;
   }
 
