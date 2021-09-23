@@ -17,6 +17,7 @@
 #include "../parser/ParallelParseBuffer.h"
 #include "../parser/TsvParser.h"
 #include "../util/BatchedPipeline.h"
+#include "../util/ParallelPipeline.h"
 #include "../util/CompressionUsingZstd/ZstdWrapper.h"
 #include "../util/Conversions.h"
 #include "../util/HashMap.h"
