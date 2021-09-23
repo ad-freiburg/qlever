@@ -12,6 +12,7 @@
 #include "../CompressionUsingZstd/ZstdWrapper.h"
 #include "./FileSerializer.h"
 #include "./SerializeVector.h"
+#include "../TaskQueue.h"
 
 
 namespace ad_utility {

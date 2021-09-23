@@ -203,11 +203,12 @@ class BatchedPipeline {
   // asynchronously prepare the next Batch in a different thread
   void orderNextBatch() {
     auto lambda =
-        [p = _previousStage.get(),
-         batchSize = _previousStage->getBatchSize()](auto... transformerPtrs) {
+        [batchSize = _previousStage->getBatchSize(), this](auto... transformerPtrs) {
           return std::async(
-              std::launch::async, [p, batchSize, transformerPtrs...]() {
-                return produceBatchInternal(p, batchSize, transformerPtrs...);
+
+              std::launch::async, [this, batchSize, transformerPtrs...]() {
+                auto prev = _previousStage.get();
+                return produceBatchInternal(prev, batchSize, transformerPtrs...);
               });
         };
     _fut = std::apply(lambda, _rawTransformers);
@@ -337,6 +338,9 @@ class BatchedPipeline {
 
  private:
   std::unique_ptr<ad_utility::Timer> _timer =
+      std::make_unique<ad_utility::Timer>();
+
+  std::unique_ptr<ad_utility::Timer> _timerIncoming =
       std::make_unique<ad_utility::Timer>();
   // the unique_ptrs to our Transformers
   using uniquePtrTuple = toUniquePtrTuple_t<FirstTransformer, Transformers...>;
