@@ -256,7 +256,6 @@ class BatchedPipeline {
                                         transformers...);
     // if we had multiple threads, we have to merge the partial results in the
     // correct order.
-    LOG(TIMING) << "Waiting for futures" << std::endl;
     ad_utility::Timer t;
     t.start();
     for (size_t i = 0; i < Parallelism; ++i) {
@@ -331,26 +330,21 @@ class BatchedPipeline {
                                    OutVec& out,
                                    std::index_sequence<I...>,
                                    TransformerPtrs... transformers) {
-    LOG(TIMING) << "before check in impl" << std::endl;
     AD_CHECK(in.size() == out.size());
-    LOG(TIMING) << "after check in impl" << std::endl;
     if constexpr (sizeof...(I) == sizeof...(TransformerPtrs)) {
       return std::array{(createIthFuture<I>(batchSize, in, out, transformers))...};
-      LOG(TIMING) << "finished setupImpl" <<std::endl;
     } else if constexpr (sizeof...(TransformerPtrs) == 1) {
       // only one transformer that is applied to several threads
       auto onlyTransformer =
           std::get<0>(std::forward_as_tuple(transformers...));
       return std::array{
           (createIthFuture<I>(batchSize, in, out, onlyTransformer))...};
-      LOG(TIMING) << "finished setupImpl" <<std::endl;
     }
   }
 
   template <size_t Idx, typename InVec, typename OutVec, typename TransformerPtr>
   static std::future<void> createIthFuture(
       size_t batchSize, InVec& in, OutVec& out, TransformerPtr transformer) {
-    LOG(TIMING) << "starting createIthFuture" <<std::endl;
     auto [startIt, endIt] = getBatchRange(in.begin(), in.end(), batchSize, Idx);
     auto outIt = out.begin() + (startIt - in.begin());
     // start a thread for the transformer.
@@ -358,7 +352,6 @@ class BatchedPipeline {
                       [transformer, startIt = startIt, endIt = endIt, outIt = outIt] {
                         moveAndTransform(startIt, endIt, outIt, transformer);
                       });
-    LOG(TIMING) << "Finishing createIthFuture" <<std::endl;
   }
 
  private:
