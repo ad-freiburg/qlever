@@ -203,12 +203,11 @@ class BatchedPipeline {
   // asynchronously prepare the next Batch in a different thread
   void orderNextBatch() {
     auto lambda =
-        [batchSize = _previousStage->getBatchSize(), this](auto... transformerPtrs) {
+        [p = _previousStage.get(),
+         batchSize = _previousStage->getBatchSize()](auto... transformerPtrs) {
           return std::async(
-
-              std::launch::async, [this, batchSize, transformerPtrs...]() {
-                auto prev = _previousStage.get();
-                return produceBatchInternal(prev, batchSize, transformerPtrs...);
+              std::launch::async, [p, batchSize, transformerPtrs...]() {
+                return produceBatchInternal(p, batchSize, transformerPtrs...);
               });
         };
     _fut = std::apply(lambda, _rawTransformers);
