@@ -272,7 +272,7 @@ class BatchedPipeline {
     }
     t.stop();
     if constexpr(sizeof...(transformers) != 1) {
-      LOG(TIMING) << "Waiting for merging result" << t.msecs() << '\n';
+      LOG(TIMING) << "Waiting for merging result:  " << t.msecs() << '\n';
     }
     return result;
   }
