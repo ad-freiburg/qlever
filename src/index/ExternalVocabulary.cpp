@@ -8,6 +8,7 @@
 
 #include "../parser/RdfEscaping.h"
 #include "../parser/Tokenizer.h"
+#include "../util/BufferedVector.h"
 #include "../util/Log.h"
 
 // _____________________________________________________________________________
@@ -71,7 +72,8 @@ void ExternalVocabulary<Comp>::buildFromTextFile(const string& textFileName,
   _file.open(outFileName.c_str(), "w");
   std::ifstream infile(textFileName);
   AD_CHECK(infile.is_open());
-  vector<off_t> offsets;
+  ad_utility::BufferedVector<off_t> offsets(
+      1'000'000'000, textFileName + ".offset.tmp.buffer");
   off_t currentOffset = 0;
   _size = 0;
   std::string word;

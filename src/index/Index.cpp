@@ -253,6 +253,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     LOG(INFO) << "Merging temporary vocabulary for prefix compression";
     {
       VocabularyMerger m;
+      m._ignoreExternalVocabulary = true;
       m.mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles,
                         std::less<>());
       LOG(INFO) << "Finished merging additional Vocabulary.";
