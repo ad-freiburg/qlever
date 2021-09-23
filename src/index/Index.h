@@ -780,27 +780,26 @@ class Index {
   }
 
  public:
-  // Count the number of "QLever-internal" triples (predicate ql:langtag or predicate
-  // starts with @) and all other triples (that were actually part of the input).
+  // Count the number of "QLever-internal" triples (predicate ql:langtag or
+  // predicate starts with @) and all other triples (that were actually part of
+  // the input).
   std::pair<size_t, size_t> getNumTriplesActuallyAndAdded() const {
     auto [begin, end] = _vocab.prefix_range("@");
     Id qleverLangtag;
     auto actualTriples = 0ul;
     auto addedTriples = 0ul;
     bool foundQleverLangtag = _vocab.getId(LANGUAGE_PREDICATE, &qleverLangtag);
-    AD_CHECK(foundQLeverLangtag);
+    AD_CHECK(foundQleverLangtag);
     // Use the PSO index to get the number of triples for each predicate and add
     // to the respective counter.
-    for (const auto& [key, value]: PSO()._meta.data()) {
+    for (const auto& [key, value] : PSO()._meta.data()) {
       auto numTriples = value.getNofElements();
       if (key == qleverLangtag || (key >= begin && key < end)) {
         addedTriples += numTriples;
       } else {
         actualTriples += numTriples;
       }
-
     }
     return std::pair{actualTriples, addedTriples};
-
   }
 };
