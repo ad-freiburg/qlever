@@ -247,23 +247,22 @@ class BatchedPipeline {
     // and later we merge. <TODO>(joka921) Doing this in place would require
     // something like a std::vector without default construction on insert.
     const size_t batchSize = inBatchSize / Parallelism;
-    auto futures = setupParallelismImpl(batchSize, inBatch.m_content,
+    result.m_content.resize(inBatchSize);
+    auto futures = setupParallelismImpl(batchSize, inBatch.m_content, result.m_content,
                                         std::make_index_sequence<Parallelism>{},
                                         transformers...);
     // if we had multiple threads, we have to merge the partial results in the
     // correct order.
-    std::vector<std::decay_t<decltype(futures[0].get())>> results;
-    results.reserve(futures.size());
-    result.m_content.reserve(inBatchSize);
     ad_utility::Timer t;
     t.start();
     for (size_t i = 0; i < Parallelism; ++i) {
-      results.push_back(futures[i].get());
+     futures[i].get();
     }
     t.stop();
     if constexpr(sizeof...(transformers) != 1) {
       LOG(TIMING) << "Waiting for inner futures ms: " << t.msecs() << '\n';
     }
+    /*
     t.start();
     for (auto& vec : results) {
       result.m_content.insert(result.m_content.end(),
@@ -274,6 +273,7 @@ class BatchedPipeline {
     if constexpr(sizeof...(transformers) != 1) {
       LOG(TIMING) << "Waiting for merging result:  " << t.msecs() << '\n';
     }
+     */
     return result;
   }
 
@@ -296,12 +296,11 @@ class BatchedPipeline {
 
   // For each element x in [beg, end): move it, apply *transformer to it and
   // append it to *res
-  template <typename It, typename ResVec, typename TransformerPtr>
-  static void moveAndTransform(It beg, It end, ResVec* res,
+  template <typename It, typename OutIt, typename TransformerPtr>
+  static void moveAndTransform(It beg, It end, OutIt outIt,
                                TransformerPtr transformer) {
-    res->reserve(end - beg);
     std::transform(std::make_move_iterator(beg), std::make_move_iterator(end),
-                   std::back_inserter(*res),
+                   outIt,
                    [transformer](typename std::decay_t<decltype(*beg)>&& x) {
                      return (*transformer)(std::move(x));
                    });
@@ -323,31 +322,33 @@ class BatchedPipeline {
    * @param transformer Pointer to the first transformer
    * @param transformers Pointers to the remaining transformers
    */
-  template <size_t... I, typename InVec, typename... TransformerPtrs>
+  template <size_t... I, typename InVec, typename OutVec, typename... TransformerPtrs>
   static auto setupParallelismImpl(size_t batchSize, InVec& in,
+                                   OutVec& out,
                                    std::index_sequence<I...>,
                                    TransformerPtrs... transformers) {
+    AD_CHECK(in.size() == out.size());
     if constexpr (sizeof...(I) == sizeof...(TransformerPtrs)) {
-      return std::array{(createIthFuture<I>(batchSize, in, transformers))...};
+      return std::array{(createIthFuture<I>(batchSize, in, out, transformers))...};
     } else if constexpr (sizeof...(TransformerPtrs) == 1) {
       // only one transformer that is applied to several threads
       auto onlyTransformer =
           std::get<0>(std::forward_as_tuple(transformers...));
       return std::array{
-          (createIthFuture<I>(batchSize, in, onlyTransformer))...};
+          (createIthFuture<I>(batchSize, in, out, onlyTransformer))...};
     }
   }
 
-  template <size_t Idx, typename InVec, typename TransformerPtr>
-  static std::future<std::vector<ResT>> createIthFuture(
-      size_t batchSize, InVec& in, TransformerPtr transformer) {
+  template <size_t Idx, typename InVec, typename OutVec, typename TransformerPtr>
+  static std::future<void> createIthFuture(
+      size_t batchSize, InVec& in, OutVec& out, TransformerPtr transformer) {
     auto [startIt, endIt] = getBatchRange(in.begin(), in.end(), batchSize, Idx);
+    auto outIt = out.begin() + (startIt - in.begin());
     // start a thread for the transformer.
     return std::async(std::launch::async,
-                      [transformer, startIt = startIt, endIt = endIt] {
+                      [transformer, startIt = startIt, endIt = endIt, outIt] {
                         std::vector<ResT> res;
-                        moveAndTransform(startIt, endIt, &res, transformer);
-                        return res;
+                        moveAndTransform(startIt, endIt, outIt, transformer);
                       });
   }
 
