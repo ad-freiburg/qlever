@@ -188,10 +188,10 @@ class BatchedPipeline {
   // _____________________________________________________________________
   Batch<ResT> pickupBatch() {
     try {
-      //_timer->cont();
+      _timer->cont();
       auto res = _fut.get();
       orderNextBatch();
-      //_timer->stop();
+      _timer->stop();
       return res;
     } catch (std::future_error& e) {
       throw std::runtime_error(
@@ -203,11 +203,11 @@ class BatchedPipeline {
   // asynchronously prepare the next Batch in a different thread
   void orderNextBatch() {
     auto lambda =
-        [this, p = _previousStage.get(),
+        [p = _previousStage.get(),
          batchSize = _previousStage->getBatchSize()](auto... transformerPtrs) {
           return std::async(
-              std::launch::async, [this, p, batchSize, transformerPtrs...]() {
-                return produceBatchInternal(p, batchSize, *_timer, transformerPtrs...);
+              std::launch::async, [p, batchSize, transformerPtrs...]() {
+                return produceBatchInternal(p, batchSize, transformerPtrs...);
               });
         };
     _fut = std::apply(lambda, _rawTransformers);
@@ -238,11 +238,9 @@ class BatchedPipeline {
    */
   template <typename... TransformerPtrs>
   static Batch<ResT> produceBatchInternal(PreviousStage* previousStage,
-                                          size_t inBatchSize, ad_utility::Timer& timer,
+                                          size_t inBatchSize,
                                           TransformerPtrs... transformers) {
     auto inBatch = previousStage->pickupBatch();
-    //LOG(TIMING) << "Got a batch of size" << inBatch.m_content.size() << std::endl;
-    timer.cont();
     Batch<ResT> result;
     result.m_isPipelineGood = inBatch.m_isPipelineGood;
     // currently each of the <parallelism> threads first creates its own Batch
@@ -254,13 +252,24 @@ class BatchedPipeline {
                                         transformers...);
     // if we had multiple threads, we have to merge the partial results in the
     // correct order.
+    std::vector<std::decay_t<decltype(futures[0].get())>> results;
+    results.reserve(futures.size());
+    result.m_content.reserve(inBatchSize);
+    ad_utility::Timer t;
+    t.start();
     for (size_t i = 0; i < Parallelism; ++i) {
-      auto vec = futures[i].get();
+      results.push_back(futures[i].get());
+    }
+    t.stop();
+    LOG(TIMING) << "Waiting for inner futures ms: " << t.msecs();
+    t.start();
+    for (auto& vec : results) {
       result.m_content.insert(result.m_content.end(),
                               std::make_move_iterator(vec.begin()),
                               std::make_move_iterator(vec.end()));
     }
-    timer.stop();
+    t.stop();
+    LOG(TIMING) << "Waiting for merging result" << t.msecs();
     return result;
   }
 
