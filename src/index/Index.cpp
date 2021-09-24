@@ -197,7 +197,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     };
 
     {
-      ad_pipeline::Pipeline pipeline({1, 20, 17, 1}, parserBatcherLambda,
+      ad_pipeline::Pipeline pipeline({1, 5, 10, 1}, parserBatcherLambda,
                             tripleToInternalRepresentationBatches,
                             makeItemMapLambda(&pool), writeToTripleVec);
       pipeline.finish();
