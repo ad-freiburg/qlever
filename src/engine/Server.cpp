@@ -507,7 +507,10 @@ string Server::composeStatsJson() const {
     os << "\"nofobjects\": \"" << _index.getNofObjects() << "\",\n";
   }
 
+  auto [actualTriples, addedTriples] = _index.getNumTriplesActuallyAndAdded();
   os << "\"noftriples\": \"" << _index.getNofTriples() << "\",\n"
+     << "\"nofActualTriples\": \"" << actualTriples << "\",\n"
+     << "\"nofAddedTriples\": \"" << addedTriples << "\",\n"
      << "\"textindex\": \"" << _index.getTextName() << "\",\n"
      << "\"nofrecords\": \"" << _index.getNofTextRecords() << "\",\n"
      << "\"nofwordpostings\": \"" << _index.getNofWordPostings() << "\",\n"
