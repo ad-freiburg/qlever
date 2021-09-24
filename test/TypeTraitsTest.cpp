@@ -44,24 +44,30 @@ TEST(TypeTraits, IsInstantiation) {
 }
 
 template <typename>
-struct X {};
+struct TypeLifter {};
 
 TEST(TypeTraits, Lift) {
-  using T = std::tuple<int>;
-  using LT = LiftTuple<X, T>;
-  static_assert(std::is_same_v<std::tuple<X<int>>, LT>);
+  using T1 = std::tuple<int>;
+  using LT = LiftedTuple<T1, TypeLifter>;
+  static_assert(std::is_same_v<std::tuple<TypeLifter<int>>, LT>);
 
   using V = std::variant<int>;
-  using LV = LiftedVariant<X, V>;
-  static_assert(std::is_same_v<std::variant<X<int>>, LV>);
+  using LV = LiftedVariant<V, TypeLifter>;
+  static_assert(std::is_same_v<std::variant<TypeLifter<int>>, LV>);
 
   using TT = std::tuple<int, bool, short>;
-  using LTT = LiftTuple<X, TT>;
-  static_assert(std::is_same_v<std::tuple<X<int>, X<bool>, X<short>>, LTT>);
+  using LTT = LiftedTuple<TT, TypeLifter>;
+  static_assert(
+      std::is_same_v<
+          std::tuple<TypeLifter<int>, TypeLifter<bool>, TypeLifter<short>>,
+          LTT>);
 
   using VV = std::variant<int, bool, short>;
-  using LVV = LiftedVariant<X, VV>;
-  static_assert(std::is_same_v<std::variant<X<int>, X<bool>, X<short>>, LVV>);
+  using LVV = LiftedVariant<VV, TypeLifter>;
+  static_assert(
+      std::is_same_v<
+          std::variant<TypeLifter<int>, TypeLifter<bool>, TypeLifter<short>>,
+          LVV>);
   ASSERT_TRUE(true);
 }
 
@@ -77,20 +83,20 @@ TEST(TypeTraits, TupleToVariant) {
 }
 
 TEST(TypeTraits, TupleCat) {
-  using T = std::tuple<int, short>;
+  using T1 = std::tuple<int, short>;
   using T2 = std::tuple<bool, long, size_t>;
   using T3 = std::tuple<>;
 
-  static_assert(std::is_same_v<T, TupleCat<T>>);
+  static_assert(std::is_same_v<T1, TupleCat<T1>>);
   static_assert(std::is_same_v<T2, TupleCat<T2>>);
   static_assert(std::is_same_v<T3, TupleCat<T3>>);
 
-  static_assert(std::is_same_v<T, TupleCat<T, T3>>);
+  static_assert(std::is_same_v<T1, TupleCat<T1, T3>>);
   static_assert(std::is_same_v<T2, TupleCat<T2, T3>>);
 
   static_assert(std::is_same_v<std::tuple<int, short, bool, long, size_t>,
-                               TupleCat<T, T2>>);
+                               TupleCat<T1, T2>>);
   static_assert(std::is_same_v<std::tuple<int, short, bool, long, size_t>,
-                               TupleCat<T, T3, T2>>);
+                               TupleCat<T1, T3, T2>>);
   ASSERT_TRUE(true);
 }

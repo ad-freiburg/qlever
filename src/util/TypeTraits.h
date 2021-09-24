@@ -13,8 +13,9 @@ namespace ad_utility {
 
 namespace detail {
 // Check (via the compiler's template matching mechanism) whether a given type
-// is an instantiation of a given template. Example 1:
-// IsInstantiationOf<std::vector>::Instantiation<std::vector<int>> is true
+// is an instantiation of a given template.
+// Example 1: IsInstantiationOf<std::vector>::Instantiation<std::vector<int>>
+// is true.
 // Example 2: IsInstantiationOf<std::vector>::Instantiation<std:map<int, int>>
 // is false
 template <template <typename...> typename Template>
@@ -28,7 +29,7 @@ struct IsInstantiationOf {
 
 // Given a templated type (e.g. std::variant<A, B, C>), provide a type where the
 // inner types are "lifted" by a given outer type.
-// // Example: LiftInnerTypes<std::variant,
+// Example: LiftInnerTypes<std::variant,
 // std::vector>::TypeToLift<std::variant<A, B, C>>::LiftedType is
 // std::variant<std::vector<A>, std::vector<B>, std::vector<C>>
 template <template <typename...> typename Template,
@@ -104,13 +105,13 @@ constexpr static bool alwaysFalse = false;
 
 /// From the type Tuple (std::tuple<A, B, C....>) creates the type
 /// std::tuple<TypeLifter<A>, TypeLifter<B>,...>
-template <template <typename> typename TypeLifter, typename Tuple>
-requires isTuple<Tuple> using LiftTuple = typename detail::LiftInnerTypes<
+template <typename Tuple, template <typename> typename TypeLifter>
+requires isTuple<Tuple> using LiftedTuple = typename detail::LiftInnerTypes<
     std::tuple, TypeLifter>::template TypeToLift<Tuple>::LiftedType;
 
 /// From the type Variant (std::variant<A, B, C....>) creates the type
 /// std::variant<TypeLifter<A>, TypeLifter<B>,...>
-template <template <typename> typename TypeLifter, typename Variant>
+template <typename Variant, template <typename> typename TypeLifter>
 requires isVariant<Variant> using LiftedVariant =
     typename detail::LiftInnerTypes<
         std::variant, TypeLifter>::template TypeToLift<Variant>::LiftedType;
