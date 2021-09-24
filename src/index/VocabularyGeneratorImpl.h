@@ -23,6 +23,7 @@
 #include "./VocabularyGenerator.h"
 #include "../util/Serializer/CompressionSerializer.h"
 #include "../util/Serializer/SerializeString.h"
+#include <execution>
 
 // ___________________________________________________________________
 template <class Comp>
@@ -344,6 +345,8 @@ template <class StringSortComparator>
 void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
                      const bool doParallelSort) {
   auto& els = *vecPtr;
+  std::sort(std::execution::par_unseq, begin(els), end(els), comp);
+  /*
   if constexpr (USE_PARALLEL_SORT) {
     if (doParallelSort) {
       ad_utility::parallel_sort(begin(els), end(els), comp,
@@ -355,6 +358,7 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
     std::sort(begin(els), end(els), comp);
     (void)doParallelSort;  // avoid compiler warning for unused value.
   }
+   */
 }
 
 // _____________________________________________________________________

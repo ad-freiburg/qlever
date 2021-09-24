@@ -52,6 +52,7 @@ include_directories(third_party/antlr4/runtime/Cpp/runtime/src)
 # Threading
 ################################
 find_package(Threads REQUIRED)
+link_libraries(tbb)
 
 #################################
 # ICU (for proper collation
