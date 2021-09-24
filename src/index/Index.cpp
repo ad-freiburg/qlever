@@ -171,10 +171,11 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     for (auto& map : itemArray) {
       pool.addResource(&map);
     }
+    // TODO: why can't I move here
     auto tripleToInternalRepresentationBatches = [this] (auto&& vectorOfTriples) {
       std::vector<decltype(tripleToInternalRepresentation(std::move(vectorOfTriples[0])))> result;
       result.reserve(vectorOfTriples.size());
-      for (auto&& el : vectorOfTriples) {
+      for (auto&& el : std::move(vectorOfTriples)) {
         result.push_back(tripleToInternalRepresentation(std::move(el)));
       }
       return result;
@@ -196,9 +197,11 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     };
 
     {
-      ad_pipeline::Pipeline({1, 3, 17, 1}, parserBatcherLambda,
+      ad_pipeline::Pipeline pipeline({1, 5, 17, 1}, parserBatcherLambda,
                             tripleToInternalRepresentationBatches,
                             makeItemMapLambda(&pool), writeToTripleVec);
+      pipeline.finish();
+      LOG(INFO) << pipeline.getTimeStatistics();
     }
 
     /*

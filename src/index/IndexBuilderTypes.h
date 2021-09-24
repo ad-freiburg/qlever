@@ -104,7 +104,7 @@ struct LangtagAndTriple {
 template <size_t Parallelism>
 auto prepareIdMaps(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
                      size_t maxNumberOfTriples,
-                    TripleComponentComparator* comp)  {
+                    const TripleComponentComparator* comp)  {
   // that way the different ids won't interfere
   auto& itemArray = *itemArrayPtr;
   for (size_t j = 0; j < Parallelism; ++j) {
@@ -117,7 +117,8 @@ auto prepareIdMaps(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
   }
 }
 
-auto makeItemMapLambda(ad_utility::ResourcePool<ItemMapManager*>* mapPoolPtr) {
+// TODO<joka921> why no move-references here?
+inline auto makeItemMapLambda(ad_utility::ResourcePool<ItemMapManager*>* mapPoolPtr) {
   return [&pool = *mapPoolPtr](std::vector<LangtagAndTriple>&& ltVec) mutable {
     using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
     std::vector<OptionalIds> resultVector;

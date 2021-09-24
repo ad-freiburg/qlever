@@ -75,14 +75,23 @@ struct Pipeline {
      return std::function([...input = std::forward<Ts>(input), this]() mutable{get<I>()(std::forward<Ts>(input)...);});
     } else {
       return std::function(
-          [this, ...input = std::forward<Ts>(input)]() {
-             auto result = get<I>()(std::move(input)...);
+          [this, ...input = std::forward<Ts>(input)]() mutable {
+             auto result = get<I>()(std::forward<Ts>(input)...);
               _queues[I + 1]->push(makeChainedFunction<I + 1>(std::move(result)));
           });
     }
   }
 
   ~Pipeline() {
+  }
+
+  std::string getTimeStatistics() const {
+      std::string res;
+      for (const auto& q : _queues) {
+        res.append(q->getTimeStatistics());
+        res.append("\n\t");
+      }
+      return res;
   }
 
   template<size_t I>

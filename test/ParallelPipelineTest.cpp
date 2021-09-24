@@ -9,6 +9,7 @@
 #define QLEVER_PARALLELPIPELINETEST_H
 
 #include <gtest/gtest.h>
+#include <string>
 #include "../src/util/ParallelPipeline.h"
 #include "../src/util/ResourcePool.h"
 #include "../src/util/Log.h"
@@ -34,6 +35,24 @@ TEST(ParallelPipeline, First) {
   Pipeline p{{1, 5, 5, 20}, starter, middle, middle, finisher};
   p.finish();
   ASSERT_EQ(result, 4497000);
+}
+
+TEST(ParallelPipeline, MoveOnly) {
+  auto starter = [i = 0]() mutable -> std::optional<std::string> {
+    if (i < 20) {
+      i++;
+      return  "hallo";
+    } else {
+      return std::nullopt;
+    }
+  };
+
+  auto middle = [](std::string&& s) {
+                                       return std::move(s) ;
+                                      };
+  auto end = [](std::string s) { LOG(INFO) << s << std::endl;};
+
+  Pipeline p{{1, 5, 1}, starter, middle, end};
 }
 
 
