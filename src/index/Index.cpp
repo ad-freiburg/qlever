@@ -160,8 +160,9 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
-    std::unique_ptr<TripleVec> localIdTriples(new TripleVec());
-    TripleVec::bufwriter_type localWriter(*localIdTriples);
+    //std::unique_ptr<TripleVec> localIdTriples(new TripleVec());
+    std::vector<IdTriple> localWriter;
+    localWriter.reserve(linesPerPartial * 1.5);
 
     std::array<ItemMapManager, NUM_PARALLEL_ITEM_MAPS> itemArray;
     ParserBatcher parserBatcher(parser, linesPerPartial, [&]() {parserExhausted = true;});
@@ -187,7 +188,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
         for (const auto& innerOpt : triple) {
           if (innerOpt) {
             actualCurrentPartialSize++;
-            localWriter << innerOpt.value();
+            localWriter.push_back(innerOpt.value());
           }
         }
         if (i % 10'000'000 == 0) {
@@ -248,7 +249,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
         parser->printAndResetQueueStatistics();
       }
 
-    localWriter.finish();
+    //localWriter.finish();
     // wait until sorting the last partial vocabulary has finished
     // to control the number of threads and the amount of memory used at the
     // same time. typically sorting is finished before we reach again here so
@@ -274,7 +275,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] =
         writeNextPartialVocabulary(i, numFiles, actualCurrentPartialSize,
                                    std::move(oldItemPtr),
-                                   std::move(localIdTriples), &writer);
+                                   std::move(localWriter), &writer);
     numFiles++;
     // Save the information how many triples this partial vocabulary actually
     // deals with we will use this later for mapping from partial to global
@@ -1407,7 +1408,7 @@ void Index::initializeVocabularySettingsBuild() {
 // ___________________________________________________________________________
 std::future<void> Index::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-    std::unique_ptr<ItemMapArray> items, std::unique_ptr<TripleVec> localIds,
+    std::unique_ptr<ItemMapArray> items, vector<IdTriple> localIds,
     ad_utility::Synchronized<TripleVec::bufwriter_type>* globalWritePtr) {
   LOG(INFO) << "Lines (from KB-file) processed: " << numLines << '\n';
   LOG(INFO) << "Actual number of Triples in this section (include "

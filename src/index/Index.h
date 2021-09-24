@@ -68,7 +68,9 @@ class TurtleParserDummy {};
 
 class Index {
  public:
-  using TripleVec = stxxl::vector<array<Id, 3>>;
+  using IdTriple = array<Id, 3>;
+  using TripleVec = stxxl::vector<IdTriple>;
+
   // Block Id, Context Id, Word Id, Score, entity
   using TextVec = stxxl::vector<tuple<Id, Id, Id, Score, bool>>;
   using Posting = std::tuple<Id, Id, Score>;
@@ -499,7 +501,7 @@ class Index {
    */
   std::future<void> writeNextPartialVocabulary(
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-      std::unique_ptr<ItemMapArray> items, std::unique_ptr<TripleVec> localIds,
+      std::unique_ptr<ItemMapArray> items, vector<IdTriple> localIds,
       ad_utility::Synchronized<TripleVec::bufwriter_type>* globalWritePtr);
 
   void convertPartialToGlobalIds(TripleVec& data,
