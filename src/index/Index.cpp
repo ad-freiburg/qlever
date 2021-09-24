@@ -197,7 +197,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     };
 
     {
-      ad_pipeline::Pipeline pipeline({1, 5, 17, 1}, parserBatcherLambda,
+      ad_pipeline::Pipeline pipeline({1, 20, 17, 1}, parserBatcherLambda,
                             tripleToInternalRepresentationBatches,
                             makeItemMapLambda(&pool), writeToTripleVec);
       pipeline.finish();
@@ -243,11 +243,10 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
         LOG(TIMING) << t << " msecs" << std::endl;
       }
 
-      if constexpr (requires(Parser p) { p.printAndResetQueueStatistics(); }) {
+*/
+    if constexpr (requires(Parser p) { p.printAndResetQueueStatistics(); }) {
         parser->printAndResetQueueStatistics();
       }
-    }
-     */
 
     localWriter.finish();
     // wait until sorting the last partial vocabulary has finished
