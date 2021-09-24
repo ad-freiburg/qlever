@@ -1451,7 +1451,7 @@ std::future<void> Index::writeNextPartialVocabulary(
     // make the update from local to global ids work.
     globalWritePtr->withWriteLockAndOrdered(
         [&](auto& writerPtr) {
-          writeMappedIdsToExtVec(*localIds, mapping, &writerPtr);
+          writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
         },
         numFiles);
     writePartialVocabularyToFile(vec, partialFilename);
