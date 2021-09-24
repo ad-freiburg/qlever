@@ -8,6 +8,8 @@
 
 #include <string>
 
+#include "./AllocatorWithLimit.h"
+
 using std::string;
 
 namespace ad_utility {
@@ -19,4 +21,12 @@ template <class K,
           class EqualKey = absl::container_internal::hash_default_eq<K>,
           class Alloc = std::allocator<K>>
 using HashSet = absl::flat_hash_set<K, HashFcn, EqualKey, Alloc>;
+
+// A hash set with a memory Limit.
+template <class K,
+          class HashFcn = absl::container_internal::hash_default_hash<K>,
+          class EqualKey = absl::container_internal::hash_default_eq<K>,
+          class Alloc = ad_utility::AllocatorWithLimit<K>>
+using LimitedHashSet = absl::flat_hash_set<K, HashFcn, EqualKey, Alloc>;
+
 }  // namespace ad_utility
