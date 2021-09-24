@@ -63,7 +63,7 @@ constexpr size_t NUM_PARALLEL_ITEM_MAPS = 24;
 
 // The number of threads that are parsing in parallel, when the parallel Turtle
 // parser is used.
-constexpr size_t NUM_PARALLEL_PARSER_THREADS = 10;
+constexpr size_t NUM_PARALLEL_PARSER_THREADS = 15;
 
 // Increasing the following two constants increases the RAM usage without much
 // benefit to the performance.
