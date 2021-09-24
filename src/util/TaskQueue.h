@@ -65,6 +65,8 @@ class TaskQueue {
     }
   }
 
+  TaskQueue(TaskQueue&&) = default;
+
   /// Add a task to the queue for Execution. Blocks until there is at least
   /// one free spot in the queue.
   void push(Task t) {

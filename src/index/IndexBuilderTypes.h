@@ -10,6 +10,7 @@
 #include "../util/TupleHelpers.h"
 #include "./ConstantsIndexBuilding.h"
 #include "./StringSortComparator.h"
+#include "../util/ResourcePool.h"
 
 #ifndef QLEVER_INDEXBUILDERTYPES_H
 #define QLEVER_INDEXBUILDERTYPES_H
@@ -101,19 +102,59 @@ struct LangtagAndTriple {
  * @return A Tuple of lambda functions (see above)
  */
 template <size_t Parallelism>
-auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
+auto prepareIdMaps(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
                      size_t maxNumberOfTriples,
-                     const TripleComponentComparator* comp) {
+                    TripleComponentComparator* comp)  {
   // that way the different ids won't interfere
   auto& itemArray = *itemArrayPtr;
   for (size_t j = 0; j < Parallelism; ++j) {
     itemArray[j] = ItemMapManager(j * 100 * maxNumberOfTriples, comp);
     itemArray[j].assignNextId(
         LANGUAGE_PREDICATE);  // not really needed here, but also not harmful
-                              // and needed to make some completely unrelated
-                              // unit tests pass.
+    // and needed to make some completely unrelated
+    // unit tests pass.
     itemArray[j]._map.reserve(2 * maxNumberOfTriples);
   }
+}
+
+auto makeItemMapLambda(ad_utility::ResourcePool<ItemMapManager>* mapPoolPtr) {
+  return [&pool = *mapPoolPtr](std::vector<LangtagAndTriple>&& ltVec) mutable {
+    using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
+    std::vector<OptionalIds> resultVector;
+    resultVector.reserve(ltVec.size());
+    auto mapPointer = pool.acquire();
+    auto& map = *mapPointer;
+    for (auto&& lt : ltVec) {
+      OptionalIds& res = resultVector.emplace_back();
+      // get Ids for the actual triple and store them in the result.
+      res[0] = map.assignNextId(lt._triple);
+      if (!lt._langtag.empty()) {  // the object of the triple was a literal
+        // with a language tag
+        // get the Id for the corresponding langtag Entity
+        auto langTagId = map.assignNextId(
+            ad_utility::convertLangtagToEntityUri(lt._langtag));
+        // get the Id for the tagged predicate, e.g. @en@rdfs:label
+        auto langTaggedPredId =
+            map.assignNextId(ad_utility::convertToLanguageTaggedPredicate(
+                lt._triple[1], lt._langtag));
+        auto& spoIds = *(res[0]);  // ids of original triple
+        // extra triple <subject> @language@<predicate> <object>
+        res[1].emplace(array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]});
+        // extra triple <object> ql:language-tag <@language>
+        res[2].emplace(array<Id, 3>{
+            spoIds[2], map.assignNextId(LANGUAGE_PREDICATE), langTagId});
+      }
+    }
+    return resultVector;
+  };
+};
+
+template <size_t Parallelism>
+auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
+                     size_t maxNumberOfTriples,
+                     const TripleComponentComparator* comp) {
+  prepareIdMaps(itemArrayPtr, maxNumberOfTriples, comp);
+
   using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
 
   /* given an index idx, returns a lambda that
@@ -124,6 +165,7 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
    * tag)
    * - All Ids are assigned according to itemArray[idx]
    */
+  auto& itemArray = *itemArrayPtr;
   const auto itemMapLamdaCreator = [&itemArray](const size_t idx) {
     return [&map = itemArray[idx]](LangtagAndTriple&& lt) {
       OptionalIds res;

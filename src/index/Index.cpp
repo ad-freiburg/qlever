@@ -164,9 +164,11 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     TripleVec::bufwriter_type localWriter(*localIdTriples);
 
     std::array<ItemMapManager, NUM_PARALLEL_ITEM_MAPS> itemArray;
+    auto getParsedBatches = [parserBatcher(parser, linesPerPartial,
+                  [&]() { parserExhausted = true; }),
 
-    {
-      auto p = ad_pipeline::setupParallelPipeline<3, NUM_PARALLEL_ITEM_MAPS>(
+        {
+            auto p = ad_pipeline::setupParallelPipeline<3, NUM_PARALLEL_ITEM_MAPS>(
           _parserBatchSize,
           // when called, returns an optional to the next triple. If
           // `linesPerPartial` triples were parsed, return std::nullopt. when

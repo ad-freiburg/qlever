@@ -10,10 +10,44 @@
 
 #include <gtest/gtest.h>
 #include "../src/util/ParallelPipeline.h"
+#include "../src/util/ResourcePool.h"
+#include "../src/util/Log.h"
 
 using namespace ad_pipeline;
 TEST(ParallelPipeline, First) {
-  ad_pipeline::Pipeline<int, short, bool> z;
+  std::atomic<int> result = 0;
+  auto starter = [i = 0]() mutable -> std::optional<int>
+      {
+      if (i < 1500) {
+      return i++;
+  } else {
+    return std::nullopt;
+  }
+};
+
+  auto middle = [](int i) {return i * 2;};
+
+  auto finisher = [&result](int i) {
+    result += i;
+  };
+
+  Pipeline p{{1, 5, 5, 20}, starter, middle, middle, finisher};
+  p.finish();
+  ASSERT_EQ(result, 4497000);
 }
+
+
+TEST(ResourcePool, First) {
+  ad_utility::ResourcePool<int> p {};
+  p.addResource(0);
+  *p.acquire() += 5;
+  auto handle = p.acquire();
+  *handle += 2;
+  p.release(std::move(handle));
+  ASSERT_EQ(7, *p.acquire());
+
+}
+
+
 
 #endif  // QLEVER_PARALLELPIPELINETEST_H
