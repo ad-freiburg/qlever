@@ -117,13 +117,13 @@ auto prepareIdMaps(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
   }
 }
 
-auto makeItemMapLambda(ad_utility::ResourcePool<ItemMapManager>* mapPoolPtr) {
+auto makeItemMapLambda(ad_utility::ResourcePool<ItemMapManager*>* mapPoolPtr) {
   return [&pool = *mapPoolPtr](std::vector<LangtagAndTriple>&& ltVec) mutable {
     using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
     std::vector<OptionalIds> resultVector;
     resultVector.reserve(ltVec.size());
     auto mapPointer = pool.acquire();
-    auto& map = *mapPointer;
+    auto& map = **mapPointer;
     for (auto&& lt : ltVec) {
       OptionalIds& res = resultVector.emplace_back();
       // get Ids for the actual triple and store them in the result.

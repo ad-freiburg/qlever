@@ -164,11 +164,45 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     TripleVec::bufwriter_type localWriter(*localIdTriples);
 
     std::array<ItemMapManager, NUM_PARALLEL_ITEM_MAPS> itemArray;
-    auto getParsedBatches = [parserBatcher(parser, linesPerPartial,
-                  [&]() { parserExhausted = true; }),
+    ParserBatcher parserBatcher(parser, linesPerPartial, [&]() {parserExhausted = true;});
+    auto parserBatcherLambda = [&parserBatcher]() {return parserBatcher.getBatch();};
+    prepareIdMaps(&itemArray, linesPerPartial,&(_vocab.getCaseComparator()));
+    ad_utility::ResourcePool<ItemMapManager*> pool;
+    for (auto& map : itemArray) {
+      pool.addResource(&map);
+    }
+    auto tripleToInternalRepresentationBatches = [this] (auto&& vectorOfTriples) {
+      std::vector<decltype(tripleToInternalRepresentation(std::move(vectorOfTriples[0])))> result;
+      result.reserve(vectorOfTriples.size());
+      for (auto&& el : vectorOfTriples) {
+        result.push_back(tripleToInternalRepresentation(std::move(el)));
+      }
+      return result;
+    };
 
-        {
-            auto p = ad_pipeline::setupParallelPipeline<3, NUM_PARALLEL_ITEM_MAPS>(
+    auto writeToTripleVec = [&](auto&& idTripleVec) {
+      for (auto&& triple : idTripleVec) {
+        i++;
+        for (const auto& innerOpt : triple) {
+          if (innerOpt) {
+            actualCurrentPartialSize++;
+            localWriter << innerOpt.value();
+          }
+        }
+        if (i % 10'000'000 == 0) {
+          LOG(INFO) << "Lines (from KB-file) processed: " << i << std::endl;
+        }
+      }
+    };
+
+    {
+      ad_pipeline::Pipeline({1, 3, 17, 1}, parserBatcherLambda,
+                            tripleToInternalRepresentationBatches,
+                            makeItemMapLambda(&pool), writeToTripleVec);
+    }
+
+    /*
+      auto p = ad_pipeline::setupParallelPipeline<3, NUM_PARALLEL_ITEM_MAPS>(
           _parserBatchSize,
           // when called, returns an optional to the next triple. If
           // `linesPerPartial` triples were parsed, return std::nullopt. when
@@ -210,6 +244,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
         parser->printAndResetQueueStatistics();
       }
     }
+     */
 
     localWriter.finish();
     // wait until sorting the last partial vocabulary has finished
