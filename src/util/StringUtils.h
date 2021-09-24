@@ -72,12 +72,14 @@ inline string getLowercase(const string& orig);
 
 inline string getUppercase(const string& orig);
 
-inline string getLowercaseUtf8(const std::string& orig);
+inline string getLowercaseUtf8(const std::string& s);
 
-inline string getUppercaseUtf8(const std::string& orig);
+inline string getUppercaseUtf8(const std::string& s);
 
-// TODO: this still uses non-portable code, refactor to icu
-inline string firstCharToUpperUtf8(const string& orig);
+inline string firstCharToUpperUtf8(const string& s);
+
+inline std::pair<size_t, std::string> getUTF8Prefix(std::string_view s,
+                                                    size_t prefixLength);
 
 //! Gets the last part of a string that is somehow split by the given separator.
 inline string getLastPartOfString(const string& text, const char separator);
@@ -252,50 +254,49 @@ string getUppercase(const string& orig) {
  * @param s UTF-8 encoded string
  * @return The lowercase version of s, also encoded as UTF-8
  */
-std::string getLowercaseUtf8(const std::string& orig) {
-  std::string res;
-  icu::StringByteSink<std::string> sink(&res);
+std::string getLowercaseUtf8(const std::string& s) {
+  std::string result;
+  icu::StringByteSink<std::string> sink(&result);
   UErrorCode err = U_ZERO_ERROR;
-  icu::CaseMap::utf8ToLower("", 0, orig, sink, nullptr, err);
+  icu::CaseMap::utf8ToLower("", 0, s, sink, nullptr, err);
   if (U_FAILURE(err)) {
     throw std::runtime_error(u_errorName(err));
   }
-  return res;
+  return result;
 }
 
 // ____________________________________________________________________________
-string getUppercaseUtf8(const std::string& orig) {
-  std::string res;
-  icu::StringByteSink<std::string> sink(&res);
+string getUppercaseUtf8(const std::string& s) {
+  std::string result;
+  icu::StringByteSink<std::string> sink(&result);
   UErrorCode err = U_ZERO_ERROR;
-  icu::CaseMap::utf8ToUpper("", 0, orig, sink, nullptr, err);
+  icu::CaseMap::utf8ToUpper("", 0, s, sink, nullptr, err);
   if (U_FAILURE(err)) {
     throw std::runtime_error(u_errorName(err));
   }
-  return res;
+  return result;
 }
-// TODO<joka921>:: register above with the out-of line definitions.
-/// get a prefix of length prefixLength of the UTF8 string (or shorter, if the
-/// string contains less codepoints This counts utf-8 codepoints correctly and
-/// returns a UTF-8 string referring to the Prefix and the number of Unicode
-/// codepoints it actually encodes ( <= prefixLength).
+
 /**
  * @brief get a prefix of a utf-8 string of a specified length
  *
- * This will first max(prefixLength, numCodepointsInInput) Codepoints encoded
- * in the sp argument. CAVEAT: This is in most cases wrong when answering the
- * question "is X a prefix of Y" because collation might ignore punctuation
- * etc. This is currently only used for the Text Index where all words that
+ * Returns first min(prefixLength, numCodepointsInInput) codepoints in the UTF-8
+ string sv.
+
+ * CAVEAT: The result is often misleading when looking for an answer to the
+ * question "is X a prefix of Y" because collation might ignore aspects like
+ * punctuation or case.
+ * This is currently only used for the text index where all words that
  * share a common prefix of a certain length are stored in the same block.
- * @param sp a UTF-8 encoded string
+ * @param sv a UTF-8 encoded string
  * @param prefixLength The number of Unicode codepoints we want to extract.
  * @return the first max(prefixLength, numCodepointsInArgSP) Unicode
- * codepoints of sp, encoded as UTF-8
+ * codepoints of sv, encoded as UTF-8
  */
-static std::pair<size_t, std::string> getUTF8Prefix(std::string_view sp,
-                                                    size_t prefixLength) {
-  const char* s = sp.data();
-  int32_t length = sp.length();
+std::pair<size_t, std::string> getUTF8Prefix(std::string_view sv,
+                                             size_t prefixLength) {
+  const char* s = sv.data();
+  int32_t length = sv.length();
   size_t numCodepoints = 0;
   int32_t i = 0;
   for (i = 0; i < length && numCodepoints < prefixLength;) {
@@ -305,19 +306,19 @@ static std::pair<size_t, std::string> getUTF8Prefix(std::string_view sp,
       ++numCodepoints;
     } else {
       throw std::runtime_error(
-          "Illegal UTF sequence in LocaleManager::getUTF8Prefix");
+          "Illegal UTF sequence in ad_utility::getUTF8Prefix");
     }
   }
-  return {numCodepoints, std::string(sp.data(), i)};
+  return {numCodepoints, std::string(sv.data(), i)};
 }
 
 // ____________________________________________________________________________
-inline string firstCharToUpperUtf8(const string& orig) {
-  auto [numCodepoints, prefix] = getUTF8Prefix(orig, 1);
+inline string firstCharToUpperUtf8(const string& s) {
+  auto [numCodepoints, prefix] = getUTF8Prefix(s, 1);
   (void)numCodepoints;
   auto prefixSize = prefix.size();
   prefix = getUppercaseUtf8(prefix);
-  return prefix + orig.substr(prefixSize);
+  return prefix + s.substr(prefixSize);
 }
 
 // ____________________________________________________________________________
