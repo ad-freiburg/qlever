@@ -186,3 +186,7 @@ add_test(TaskQueueTest TaskQueueTest)
 add_executable(TypeTraitsTest TypeTraitsTest.cpp)
 add_test(TypeTraitsTest TypeTraitsTest)
 target_link_libraries(TypeTraitsTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(SetOfIntervalsTest SetOfIntervalsTest.cpp)
+target_link_libraries(SetOfIntervalsTest parser gtest_main ${CMAKE_THREAD_LIBS_INIT})
+add_test(SetOfIntervalsTest SetOfIntervalsTest)
