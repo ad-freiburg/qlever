@@ -42,3 +42,4 @@ e2e_data/*
 
 # ctags generated tag file
 src/tags
+/build/
