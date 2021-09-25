@@ -4,7 +4,7 @@ target_link_libraries(SparqlParserTest gtest_main parser ${CMAKE_THREAD_LIBS_INI
 
 add_executable(StringUtilsTest StringUtilsTest.cpp)
 add_test(StringUtilsTest StringUtilsTest)
-target_link_libraries(StringUtilsTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(StringUtilsTest gtest_main ${CMAKE_THREAD_LIBS_INIT} ${ICU_LIBRARIES})
 
 add_executable(LRUCacheTest CacheTest.cpp)
 add_test(LRUCacheTest LRUCacheTest)

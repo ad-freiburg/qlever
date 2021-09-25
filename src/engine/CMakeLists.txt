@@ -36,4 +36,4 @@ add_library(engine
         Minus.h Minus.cpp
         ResultType.h)
 
-target_link_libraries(engine index parser SortPerformanceEstimator absl::flat_hash_set)
+target_link_libraries(engine index parser SortPerformanceEstimator absl::flat_hash_set ${ICU_LIBRARIES})

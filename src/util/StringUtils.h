@@ -9,6 +9,8 @@
 #include <grp.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <unicode/bytestream.h>
+#include <unicode/casemap.h>
 
 #include <array>
 #include <clocale>
@@ -70,11 +72,14 @@ inline string getLowercase(const string& orig);
 
 inline string getUppercase(const string& orig);
 
-inline string getLowercaseUtf8(std::string_view orig);
+inline string getLowercaseUtf8(const std::string& s);
 
-inline string getUppercaseUtf8(std::string_view orig);
+inline string getUppercaseUtf8(const std::string& s);
 
-inline string firstCharToUpperUtf8(const string& orig);
+inline string firstCharToUpperUtf8(const string& s);
+
+inline std::pair<size_t, std::string> getUTF8Prefix(std::string_view s,
+                                                    size_t prefixLength);
 
 //! Gets the last part of a string that is somehow split by the given separator.
 inline string getLastPartOfString(const string& text, const char separator);
@@ -242,95 +247,78 @@ string getUppercase(const string& orig) {
   }
   return retVal;
 }
+
 // ____________________________________________________________________________
-string getLowercaseUtf8(const std::string_view orig) {
-  string retVal;
-  retVal.reserve(orig.size());
-  std::mbstate_t state = std::mbstate_t();
-  char buf[MB_CUR_MAX + 1];
-  for (size_t i = 0; i < orig.size(); ++i) {
-    if ((orig[i] & (1 << 7)) == 0) {
-      retVal += tolower(orig[i]);
-    } else {
-      wchar_t wChar;
-      size_t len = mbrtowc(&wChar, &orig[i], orig.size() - i, &state);
-      // If this assertion fails, there is an invalid multi-byte character.
-      // However, this usually means that the locale is not utf8.
-      // Note that the default locale is always C. Main classes need to set them
-      // To utf8, even if the system's default is utf8 already.
-      assert(len > 0 && len <= static_cast<size_t>(MB_CUR_MAX));
-      i += len - 1;
-      size_t ret = wcrtomb(
-          buf, static_cast<wchar_t>(towlower(static_cast<wint_t>(wChar))),
-          &state);
-      assert(ret > 0 && ret <= static_cast<size_t>(MB_CUR_MAX));
-      buf[ret] = 0;
-      retVal += buf;
-    }
+/*
+ * @brief convert a UTF-8 String to lowercase according to the held locale
+ * @param s UTF-8 encoded string
+ * @return The lowercase version of s, also encoded as UTF-8
+ */
+std::string getLowercaseUtf8(const std::string& s) {
+  std::string result;
+  icu::StringByteSink<std::string> sink(&result);
+  UErrorCode err = U_ZERO_ERROR;
+  icu::CaseMap::utf8ToLower("", 0, s, sink, nullptr, err);
+  if (U_FAILURE(err)) {
+    throw std::runtime_error(u_errorName(err));
   }
-  return retVal;
+  return result;
 }
 
 // ____________________________________________________________________________
-string getUppercaseUtf8(const std::string_view orig) {
-  string retVal;
-  retVal.reserve(orig.size());
-  std::mbstate_t state = std::mbstate_t();
-  char buf[MB_CUR_MAX + 1];
-  for (size_t i = 0; i < orig.size(); ++i) {
-    if ((orig[i] & (1 << 7)) == 0) {
-      retVal += toupper(orig[i]);
-    } else {
-      wchar_t wChar;
-      size_t len = mbrtowc(&wChar, &orig[i], orig.size() - i, &state);
-      // If this assertion fails, there is an invalid multi-byte character.
-      // However, this usually means that the locale is not utf8.
-      // Note that the default locale is always C. Main classes need to set them
-      // To utf8, even if the system's default is utf8 already.
-      assert(len > 0 && len <= static_cast<size_t>(MB_CUR_MAX));
-      i += len - 1;
-      size_t ret = wcrtomb(
-          buf, static_cast<wchar_t>(towupper(static_cast<wint_t>(wChar))),
-          &state);
-      assert(ret > 0 && ret <= static_cast<size_t>(MB_CUR_MAX));
-      buf[ret] = 0;
-      retVal += buf;
-    }
+string getUppercaseUtf8(const std::string& s) {
+  std::string result;
+  icu::StringByteSink<std::string> sink(&result);
+  UErrorCode err = U_ZERO_ERROR;
+  icu::CaseMap::utf8ToUpper("", 0, s, sink, nullptr, err);
+  if (U_FAILURE(err)) {
+    throw std::runtime_error(u_errorName(err));
   }
-  return retVal;
+  return result;
 }
-// ____________________________________________________________________________
-inline string firstCharToUpperUtf8(const string& orig) {
-  string retVal;
-  retVal.reserve(orig.size());
-  std::mbstate_t state = std::mbstate_t();
-  char buf[MB_CUR_MAX + 1];
-  size_t i = 0;
-  if (orig.size() > 0) {
-    if ((orig[i] & (1 << 7)) == 0) {
-      retVal += toupper(orig[i]);
-      ++i;
+
+/**
+ * @brief get a prefix of a utf-8 string of a specified length
+ *
+ * Returns first min(prefixLength, numCodepointsInInput) codepoints in the UTF-8
+ string sv.
+
+ * CAVEAT: The result is often misleading when looking for an answer to the
+ * question "is X a prefix of Y" because collation might ignore aspects like
+ * punctuation or case.
+ * This is currently only used for the text index where all words that
+ * share a common prefix of a certain length are stored in the same block.
+ * @param sv a UTF-8 encoded string
+ * @param prefixLength The number of Unicode codepoints we want to extract.
+ * @return the first max(prefixLength, numCodepointsInArgSP) Unicode
+ * codepoints of sv, encoded as UTF-8
+ */
+std::pair<size_t, std::string> getUTF8Prefix(std::string_view sv,
+                                             size_t prefixLength) {
+  const char* s = sv.data();
+  int32_t length = sv.length();
+  size_t numCodepoints = 0;
+  int32_t i = 0;
+  for (i = 0; i < length && numCodepoints < prefixLength;) {
+    UChar32 c;
+    U8_NEXT(s, i, length, c);
+    if (c >= 0) {
+      ++numCodepoints;
     } else {
-      wchar_t wChar;
-      size_t len = mbrtowc(&wChar, &orig[i], MB_CUR_MAX, &state);
-      // If this assertion fails, there is an invalid multi-byte character.
-      // However, this usually means that the locale is not utf8.
-      // Note that the default locale is always C. Main classes need to set them
-      // To utf8, even if the system's default is utf8 already.
-      assert(len > 0 && len <= static_cast<size_t>(MB_CUR_MAX));
-      i += len;
-      size_t ret = wcrtomb(
-          buf, static_cast<wchar_t>(towupper(static_cast<wint_t>(wChar))),
-          &state);
-      assert(ret > 0 && ret <= static_cast<size_t>(MB_CUR_MAX));
-      buf[ret] = 0;
-      retVal += buf;
+      throw std::runtime_error(
+          "Illegal UTF sequence in ad_utility::getUTF8Prefix");
     }
   }
-  for (; i < orig.size(); ++i) {
-    retVal += orig[i];
-  }
-  return retVal;
+  return {numCodepoints, std::string(sv.data(), i)};
+}
+
+// ____________________________________________________________________________
+inline string firstCharToUpperUtf8(const string& s) {
+  auto [numCodepoints, prefix] = getUTF8Prefix(s, 1);
+  (void)numCodepoints;
+  auto prefixSize = prefix.size();
+  prefix = getUppercaseUtf8(prefix);
+  return prefix + s.substr(prefixSize);
 }
 
 // ____________________________________________________________________________
