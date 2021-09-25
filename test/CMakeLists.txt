@@ -182,3 +182,7 @@ add_test(ZstdCompressionTest ZstdCompressionTest )
 add_executable(TaskQueueTest TaskQueueTest.cpp)
 target_link_libraries(TaskQueueTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 add_test(TaskQueueTest TaskQueueTest)
+
+add_executable(TypeTraitsTest TypeTraitsTest.cpp)
+add_test(TypeTraitsTest TypeTraitsTest)
+target_link_libraries(TypeTraitsTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
