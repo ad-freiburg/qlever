@@ -172,7 +172,6 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     for (auto& map : itemArray) {
       pool.addResource(&map);
     }
-    // TODO: why can't I move here
     auto tripleToInternalRepresentationBatches = [this] (auto&& vectorOfTriples) {
       std::vector<decltype(tripleToInternalRepresentation(std::move(vectorOfTriples[0])))> result;
       result.reserve(vectorOfTriples.size());
