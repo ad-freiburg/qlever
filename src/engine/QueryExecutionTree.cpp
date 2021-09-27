@@ -238,7 +238,8 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
           break;
         }
         case ResultTable::ResultType::VERBATIM:
-          row.push_back("\"" + std::to_string(currentId) + "\"" + XSD_INT_SUFFIX);
+          row.push_back("\"" + std::to_string(currentId) + "\"" +
+                        XSD_INT_SUFFIX);
           break;
         case ResultTable::ResultType::TEXT:
           row.emplace_back(_qec->getIndex().getTextExcerpt(currentId));
