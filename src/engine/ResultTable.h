@@ -55,11 +55,11 @@ class ResultTable {
 
   ResultTable(const ResultTable& other) = delete;
 
-  ResultTable(ResultTable&& other) = delete;
+  ResultTable(ResultTable&& other) = default;
 
-  ResultTable& operator=(ResultTable other) = delete;
+  ResultTable& operator=(const ResultTable& other) = delete;
 
-  ResultTable& operator=(ResultTable&& other) = delete;
+  ResultTable& operator=(ResultTable&& other) = default;
 
   virtual ~ResultTable();
 
