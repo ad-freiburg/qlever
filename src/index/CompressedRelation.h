@@ -112,7 +112,7 @@ struct CompressedRelationMetaData {
                    const PermutationInfo& permutation,
                    ad_utility::SharedConcurrentTimeoutTimer timer = nullptr);
 
- private:
+ public:
   // some helper functions for reading and decompressing of blocks.
 
   template <class Permutation>

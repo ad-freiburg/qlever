@@ -11,6 +11,7 @@
 #include "./Log.h"
 #include "./Timer.h"
 #include "./TupleHelpers.h"
+#include "./Exception.h"
 
 namespace ad_pipeline {
 

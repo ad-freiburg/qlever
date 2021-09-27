@@ -32,7 +32,7 @@ TEST(ParallelPipeline, First) {
     result += i;
   };
 
-  Pipeline p{{1, 5, 5, 20}, starter, middle, middle, finisher};
+  Pipeline p{false, {1, 5, 5, 20}, starter, middle, middle, finisher};
   p.finish();
   ASSERT_EQ(result, 4497000);
 }
@@ -52,7 +52,7 @@ TEST(ParallelPipeline, MoveOnly) {
                                       };
   auto end = [](std::string s) { LOG(INFO) << s << std::endl;};
 
-  Pipeline p{{1, 5, 1}, starter, middle, end};
+  Pipeline p{false, {1, 5, 1}, starter, middle, end};
 }
 
 
