@@ -80,7 +80,9 @@ class SparqlLexer {
   // Get the part of the input that has not yet been consumed by calls to
   // `accept` or `expect`
   std::string getUnconsumedInput() {
-    return _next.raw + " " + _re_string.ToString();
+    auto delimiter =
+        _next.raw.empty() || _re_string.ToString().empty() ? "" : " ";
+    return _next.raw + delimiter + _re_string.ToString();
   }
 
  private:

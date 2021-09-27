@@ -173,15 +173,12 @@ TEST(SparqlLexer, reset) {
   SparqlLexer lexer(query);
   lexer.expect("prefix");
   lexer.expect("wd:");
+  ASSERT_EQ(std::string("<http://www.wikidata.org/entity/>"),
+            lexer.getUnconsumedInput());
 
   lexer.reset("PREFIX ql: <cs.uni-freiburg.de/>");
   lexer.expect("prefix");
   lexer.expect("ql:");
   lexer.expect("<cs.uni-freiburg.de/>");
-  // If we have reached the end of the input, the lexer starts emitting
-  // whitespace.
-  ASSERT_TRUE(lexer.empty());
-  lexer.expect("");
-  lexer.expect("");
-  lexer.expect("");
+  ASSERT_TRUE(lexer.getUnconsumedInput().empty());
 }
