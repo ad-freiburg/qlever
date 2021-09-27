@@ -248,7 +248,10 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
           std::memcpy(&f, &currentId, sizeof(float));
           std::stringstream s;
           s << f;
-          row.push_back(s.str());
+          // TODO: factor out the name of this datatype
+          row.push_back("\"" + s.str() + "\"" +
+                        "^^<http://www.w3.org/2001/XMLSchema#decimal>");
+
           break;
         }
         case ResultTable::ResultType::LOCAL_VOCAB: {
