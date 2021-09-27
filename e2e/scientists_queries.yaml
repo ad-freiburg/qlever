@@ -582,10 +582,14 @@ queries:
       - contains_row: ['<Carl_Sagan>', '<Astrobiologist>', 1.8, 1.8]
   - query : filter-on-variable-columns 
     type: no-text
+    # The inner subquery is for making the SAMPLE() deterministic
     sparql: |
       SELECT ?p (SAMPLE(?a) as ?a1) (SAMPLE(?a) as ?a2) (SAMPLE(?a) as ?a3) (SAMPLE(?a) as ?a4) (AVG(?h) as ?avg) WHERE {
-        ?a <Height> ?h .
-        ?a <Profession> ?p .
+        { SELECT ?a ?h ?p  WHERE {
+            ?a <Height> ?h .
+            ?a <Profession> ?p .
+          } ORDER BY ASC(?p) DESC(?h)
+        }
       }
       GROUP BY ?p
       HAVING (?avg > 1.8)
@@ -878,5 +882,3 @@ queries:
       - selected: [ "?x", "?y", "?sum" ]
       - contains_row: [ "<Albert_Einstein>", "<Mileva_Marić>", 42.0 ]
       - order_string: { "dir": "ASC", "var": "?x" }
-
-
