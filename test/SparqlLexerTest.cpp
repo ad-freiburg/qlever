@@ -7,14 +7,29 @@
 
 #include "../src/parser/SparqlLexer.h"
 
+TEST(SparqlLexerTest, unescapeLiteral) {
+  std::string input = R"("^\"biff")";
+  SparqlLexer lexer(input);
+  lexer.expect(SparqlToken::Type::RDFLITERAL);
+  ASSERT_EQ(R"("^"biff")", lexer.current().raw);
+}
+
 TEST(SparqlLexerTest, basicTest) {
+  //  ASSERT_TRUE(
+  //      re2::RE2::FullMatch("<is-a>/(<a>|<b>)*+0^",
+  //      "(((<[^<>\"{}|^`\\[\\]\\-\\x00-\\x20]*>)|[?*+/|()^0-9])+)"));
+
+  //    ASSERT_TRUE(
+  //        re2::RE2::FullMatch("<is-a>/(<a>|<b>)*",
+  //        "(((<[^<>\"{}|^`\\[\\]\x00-\\x20]*>)|[?*+/|()^0-9])+)"));
+
   std::string query =
       ""
       "PREFIX wd: <http://www.wikidata.org/entity/>"
-      "SELECT ?a ?b (COUNT(?c) # some random ?comment  \n as ?count) WHERE {"
+      "SELECT ?a ?b (COUNT(?c) as ?count) WHERE {"
       "  ?a wd:test ?b ."
       "  OPTIONAL {"
-      "  { ?a <is-a> ?b } #SomeOhterRandom #%^ä Comment\n UNION{?a <is-b> ?b}"
+      "  { ?a <is-a> ?b } UNION{?a <is-b> ?b}"
       "  FILTER langMatches(lang(?rname), \"en\")"
       "}"
       "}"

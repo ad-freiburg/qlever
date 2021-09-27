@@ -98,6 +98,13 @@ SparqlLexer::SparqlLexer(const std::string& sparql)
   readNext();
 }
 
+// ____________________________________________________________________________
+void SparqlLexer::reset(std::string sparql) {
+  _sparql = std::move(sparql);
+  _re_string = re2::StringPiece{_sparql};
+  readNext();
+}
+
 bool SparqlLexer::empty() const { return _re_string.empty(); }
 
 void SparqlLexer::readNext() {
@@ -133,7 +140,14 @@ void SparqlLexer::readNext() {
       }
     }
     if (!regexMatched) {
-      throw ParseException("Unexpected input: " + _re_string.as_string());
+      if (_re_string[0] == '#') {
+        // Start of a comment. Consume everything up to the next newline.
+        while (!_re_string.empty() && _re_string[0] != '\n') {
+          _re_string.remove_prefix(1);
+        }
+      } else {
+        throw ParseException("Unexpected input: " + _re_string.as_string());
+      }
     }
   }
   _next.raw = raw;
