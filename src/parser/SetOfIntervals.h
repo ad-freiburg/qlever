@@ -51,12 +51,24 @@ void toBitContainer(const SetOfIntervals& s, size_t targetSize,
   for (const auto& [begin, end] : s._intervals) {
     AD_CHECK(end <= targetSize);
     auto spaceUntilInterval = begin - previousEnd;
-    std::fill(it, it + spaceUntilInterval, false);
-    it += spaceUntilInterval;
+    if constexpr (requires() { it + 5; }) {
+      std::fill(it, it + spaceUntilInterval, false);
+      it += spaceUntilInterval;
+    } else {
+      for (size_t i = 0; i < spaceUntilInterval; ++i) {
+        *it++ = false;
+      }
+    }
 
     auto sizeOfInterval = end - begin;
-    std::fill(it, it + sizeOfInterval, true);
-    it += sizeOfInterval;
+    if constexpr (requires() { it + 5; }) {
+      std::fill(it, it + sizeOfInterval, true);
+      it += sizeOfInterval;
+    } else {
+      for (size_t i = 0; i < sizeOfInterval; ++i) {
+        *it++ = true;
+      }
+    }
 
     previousEnd = end;
   }
