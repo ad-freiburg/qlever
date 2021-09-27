@@ -238,7 +238,7 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
           break;
         }
         case ResultTable::ResultType::VERBATIM:
-          row.emplace_back(std::to_string(currentId));
+          row.push_back("\"" + std::to_string(currentId) + "\"" + XSD_INT_SUFFIX);
           break;
         case ResultTable::ResultType::TEXT:
           row.emplace_back(_qec->getIndex().getTextExcerpt(currentId));
@@ -248,10 +248,7 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
           std::memcpy(&f, &currentId, sizeof(float));
           std::stringstream s;
           s << f;
-          // TODO: factor out the name of this datatype
-          row.push_back("\"" + s.str() + "\"" +
-                        "^^<http://www.w3.org/2001/XMLSchema#decimal>");
-
+          row.push_back("\"" + s.str() + "\"" + XSD_DECIMAL_SUFFIX);
           break;
         }
         case ResultTable::ResultType::LOCAL_VOCAB: {
