@@ -13,6 +13,7 @@
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
 #include "./ParseException.h"
+#include "./SparqlParserHelpers.h"
 #include "PropertyPathParser.h"
 
 using namespace std::literals::string_literals;
@@ -137,7 +138,7 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       query->_selectClause._selectedVariables.push_back(s.str());
     } else if (_lexer.accept("(")) {
       // expect an alias
-      ParsedQuery::Alias a = parseAlias();
+      ParsedQuery::Alias a = parseAliasByAntlr();
       query->_selectClause._aliases.push_back(a);
       query->_selectClause._selectedVariables.emplace_back(a._outVarName);
       _lexer.expect(")");
@@ -166,12 +167,13 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
     _lexer.expect(")");
     s << ")";
   } else if (_lexer.accept("(")) {
-    ParsedQuery::Alias a = parseAlias();
+    ParsedQuery::Alias a = parseAliasByAntlr();
     for (const std::string& s : query->_selectClause._selectedVariables) {
       if (s == a._outVarName) {
         throw ParseException("A variable with name " + s +
                              " is already used, but the order by with alias " +
-                             a._function + " tries to use it again.");
+                             a._expression.getDescriptor() +
+                             " tries to use it again.");
       }
     }
     _lexer.expect(")");
@@ -184,63 +186,6 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
   _lexer.expect(")");
   s << ")";
   return OrderKey(s.str());
-}
-
-// _____________________________________________________________________________
-ParsedQuery::Alias SparqlParser::parseAlias() {
-  _lexer.expect(SparqlToken::Type::AGGREGATE);
-  std::ostringstream func;
-  func << ad_utility::getUppercaseUtf8(_lexer.current().raw);
-  const std::string agg = _lexer.current().raw;
-  ParsedQuery::Alias a;
-  if (agg == "count") {
-    a._type = ParsedQuery::AggregateType::COUNT;
-  } else if (agg == "sample") {
-    a._type = ParsedQuery::AggregateType::SAMPLE;
-  } else if (agg == "min") {
-    a._type = ParsedQuery::AggregateType::MIN;
-  } else if (agg == "max") {
-    a._type = ParsedQuery::AggregateType::MAX;
-  } else if (agg == "sum") {
-    a._type = ParsedQuery::AggregateType::SUM;
-  } else if (agg == "avg") {
-    a._type = ParsedQuery::AggregateType::AVG;
-  } else if (agg == "group_concat") {
-    a._type = ParsedQuery::AggregateType::GROUP_CONCAT;
-  } else {
-    throw ParseException("Unknown aggregate " + agg);
-  }
-  a._isAggregate = true;
-
-  _lexer.expect("(");
-  if (_lexer.accept("distinct")) {
-    func << "DISTINCT ";
-    a._isDistinct = true;
-  }
-  _lexer.expect(SparqlToken::Type::VARIABLE);
-  a._inVarName = _lexer.current().raw;
-  func << "(" << a._inVarName;
-  if (_lexer.accept(";")) {
-    if (agg != "group_concat") {
-      throw ParseException(
-          "Only GROUP_CONCAT may have additional arguments passed to it.");
-    }
-    _lexer.expect("separator");
-    _lexer.expect("=");
-    _lexer.expect(SparqlToken::Type::RDFLITERAL);
-    func << ";SEPARATOR=" << _lexer.current().raw;
-    a._delimiter = _lexer.current().raw;
-    // Remove the enclosing quotation marks
-    a._delimiter = a._delimiter.substr(1, a._delimiter.size() - 2);
-  }
-  _lexer.expect(")");
-  _lexer.expect("as");
-  _lexer.expect(SparqlToken::Type::VARIABLE);
-  a._outVarName = _lexer.current().raw;
-  func << ") as " << a._outVarName;
-
-  a._function = func.str();
-  return a;
 }
 
 // _____________________________________________________________________________
@@ -277,57 +222,10 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       _lexer.accept(".");
     } else if (_lexer.accept("bind")) {
       _lexer.expect("(");
-      std::string inVar;
-      bool rename = false;
-      bool isString = true;
-      char binaryOperator = 0;
-      std::string inVar2;
-      int64_t val = 0;
-      if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-        rename = true;
-        inVar = _lexer.current().raw;
-        if (_lexer.accept(SparqlToken::Type::SYMBOL)) {
-          binaryOperator = _lexer.current().raw[0];
-          if (binaryOperator == 0 ||
-              "+-*/"s.find(binaryOperator) == std::string::npos) {
-            throw std::runtime_error(
-                "BIND expressions currently only support the binary operators"
-                "+-*/ but encountered \"" +
-                std::string(1, binaryOperator) + "\"");
-          }
-          _lexer.expect(SparqlToken::Type::VARIABLE);
-          inVar2 = _lexer.current().raw;
-        }
-      } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
-        // The "true" says that the whole string is a literal (with "false",
-        // there could be more stuff after the literal).
-        inVar = parseLiteral(_lexer.current().raw, true);
-        isString = true;
-      } else if (_lexer.accept(SparqlToken::Type::INTEGER)) {
-        isString = false;
-        // Parse as decimal to base 10.
-        val = std::strtoll(_lexer.current().raw.c_str(), nullptr, 10);
-      } else {
-        _lexer.expect(SparqlToken::Type::IRI);
-        inVar = _lexer.current().raw;
-      }
+      auto expressionPtr = parseExpressionByAntlr();
+      GraphPatternOperation::Bind b{std::move(expressionPtr)};
       _lexer.expect("as");
       _lexer.expect(SparqlToken::Type::VARIABLE);
-      GraphPatternOperation::Bind b;
-      if (binaryOperator) {
-        b._expressionVariant = GraphPatternOperation::Bind::BinaryOperation{
-            inVar, inVar2, std::string(1, binaryOperator)};
-      } else if (rename) {
-        b._expressionVariant = GraphPatternOperation::Bind::Rename{inVar};
-      } else {
-        if (isString) {
-          // Note that this only works if the literal or iri stored in inVar is
-          // part of the KB
-          b._expressionVariant = GraphPatternOperation::Bind::Constant{inVar};
-        } else {
-          b._expressionVariant = GraphPatternOperation::Bind::Constant{val};
-        }
-      }
       b._target = _lexer.current().raw;
       _lexer.expect(")");
       currentPattern->_children.emplace_back(std::move(b));
@@ -1057,4 +955,20 @@ GraphPatternOperation::BasicGraphPattern& SparqlParser::lastBasicPattern(
     c.emplace_back(GraphPatternOperation::BasicGraphPattern{});
   }
   return c.back().get<GraphPatternOperation::BasicGraphPattern>();
+}
+
+// ________________________________________________________________________
+sparqlExpression::SparqlExpressionPimpl SparqlParser::parseExpressionByAntlr() {
+  auto str = _lexer.getUnconsumedInput();
+  auto resultAndRemainingText = sparqlParserHelpers::parseExpression(str);
+  _lexer.reset(std::move(resultAndRemainingText._remainingText));
+  return std::move(resultAndRemainingText._parseResult);
+}
+
+// ________________________________________________________________________
+ParsedQuery::Alias SparqlParser::parseAliasByAntlr() {
+  auto str = _lexer.getUnconsumedInput();
+  auto resultAndRemainingText = sparqlParserHelpers::parseAlias(str);
+  _lexer.reset(std::move(resultAndRemainingText._remainingText));
+  return std::move(resultAndRemainingText._parseResult);
 }
