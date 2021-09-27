@@ -104,3 +104,33 @@ TEST(SparqlParser, Prefix) {
     ASSERT_EQ(sz, 20u);
   }
 }
+
+TEST(SparqlExpressionParser, First) {
+  string s = "(5 * 5 ) bimbam";
+  ParserAndVisitor p{s};
+  auto context = p.parser.expression();
+  LOG(INFO) << context->getText() << std::endl;
+  LOG(INFO) << p.parser.getTokenStream()
+                   ->getTokenSource()
+                   ->getInputStream()
+                   ->toString()
+            << std::endl;
+  LOG(INFO) << p.parser.getCurrentToken()->getStartIndex() << std::endl;
+  // p.parser.getTokenStream()->getTokenSource()->getInputStream()->getText({0,
+  // 3});
+  auto result = p.visitor.visitExpression(context);
+  auto expr = std::move(result.as<sparqlExpression::SparqlExpression::Ptr>());
+
+  QueryExecutionContext* ctxt = nullptr;
+  sparqlExpression::VariableToColumnAndResultTypeMap map;
+  ad_utility::AllocatorWithLimit<Id> alloc{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
+  IdTable table{alloc};
+  ResultTable::LocalVocab localVocab;
+  sparqlExpression::EvaluationContext input{*ctxt, map, table, alloc,
+                                            localVocab};
+  auto res = expr->evaluate(&input);
+  AD_CHECK(std::holds_alternative<double>(res));
+  const auto& actualResult = std::get<double>(res);
+  ASSERT_FLOAT_EQ(25.0, actualResult);
+}
