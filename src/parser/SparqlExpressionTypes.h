@@ -53,6 +53,12 @@ class VectorWithMemoryLimit
 struct StrongId {
   Id _value;
   bool operator==(const StrongId&) const = default;
+
+  // Make the type hashable for absl, see https://abseil.io/docs/cpp/guides/hash
+  template <typename H>
+  friend H AbslHashValue(H h, const StrongId& id) {
+    return H::combine(std::move(h), id._value);
+  }
 };
 
 /// A StrongId and its type. The type is needed to get the actual value from the
@@ -62,6 +68,12 @@ struct StrongIdWithResultType {
   ResultTable::ResultType _type;
   bool operator==(const StrongIdWithResultType&) const = default;
   size_t size() const { return 1; }
+
+  // Make the type hashable for absl, see https://abseil.io/docs/cpp/guides/hash
+  template <typename H>
+  friend H AbslHashValue(H h, const StrongIdWithResultType& id) {
+    return H::combine(std::move(h), id._id, id._type);
+  }
 };
 
 /// A list of StrongIds that all have the same datatype.
