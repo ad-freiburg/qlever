@@ -39,6 +39,7 @@ double NumericValueGetter::operator()(StrongId strongId,
         return ad_utility::convertIndexWordToFloat(entity);
       }
   }
+  AD_CHECK(false);
 }
 
 // _____________________________________________________________________________
@@ -76,6 +77,7 @@ bool EffectiveBooleanValueGetter::operator()(StrongId strongId,
         return f != 0.0 && !std::isnan(f);
       }
   }
+  AD_CHECK(false);
 }
 
 // ____________________________________________________________________________
@@ -108,6 +110,7 @@ string StringValueGetter::operator()(StrongId strongId,
         return entity;
       }
   }
+  AD_CHECK(false);
 }
 
 // ____________________________________________________________________________
