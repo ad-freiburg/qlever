@@ -8,6 +8,7 @@
 #include <memory>
 #include <variant>
 #include <vector>
+#include <span>
 
 #include "../engine/CallFixedSize.h"
 #include "../engine/QueryExecutionContext.h"
@@ -24,6 +25,9 @@ namespace sparqlExpression {
 /// structure of the expression as well as the logic to evaluate this expression
 /// on a given intermediate result
 class SparqlExpression {
+ private:
+  std::string _descriptor;
+
  public:
   /// ________________________________________________________________________
   using Ptr = std::unique_ptr<SparqlExpression>;
@@ -32,11 +36,35 @@ class SparqlExpression {
   virtual ExpressionResult evaluate(EvaluationContext*) const = 0;
 
   /// Return all variables and IRIs, needed for certain parser methods.
-  virtual vector<std::string*> strings() = 0;
+  virtual vector<string*> strings() final {
+    vector<string*> result;
+    // Recursively aggregate the strings from all children.
+    for (auto& child : children()) {
+      auto childStrings = child->strings();
+      result.insert(result.end(), childStrings.begin(), childStrings.end());
+    }
+
+    // Add the strings from this expression.
+    auto locallyAdded = getStringLiteralsAndVariablesNonRecursive();
+    for (auto& el : locallyAdded) {
+      result.push_back(&el);
+    }
+    return result;
+  }
 
   /// Return all the variables that occur in the expression, but are not
   /// aggregated.
-  virtual vector<std::string> getUnaggregatedVariables() = 0;
+  virtual vector<std::string> getUnaggregatedVariables() {
+    // Default implementation: This expression adds no variables, but all
+    // unaggregated variables from the children remain unaggregated.
+    std::vector<string> result;
+    for (const auto& child : children()) {
+      auto childResult = child->getUnaggregatedVariables();
+      result.insert(result.end(), std::make_move_iterator(childResult.begin()),
+                    std::make_move_iterator(childResult.end()));
+    }
+    return result;
+  }
 
   /// Get a unique identifier for this expression, used as cache key.
   virtual string getCacheKey(const VariableToColumnMap& varColMap) const = 0;
@@ -59,9 +87,13 @@ class SparqlExpression {
   }
 
   virtual ~SparqlExpression() = default;
+ private:
+  virtual std::span<SparqlExpression::Ptr> children() = 0;
+  virtual std::span<string> getStringLiteralsAndVariablesNonRecursive() {
+    // Default implementation: This expression adds no strings or variables.
+    return {};
+  }
 
- protected:
-  std::string _descriptor;
 };
 
 // ____________________________________________________________________________
@@ -92,18 +124,23 @@ class LiteralExpression : public SparqlExpression {
     }
   }
 
-  // _____________________________________________________________________
-  vector<std::string*> strings() override {
+  // Literal expressions don't have children
+  std::span<SparqlExpression::Ptr> children() override {
+    return {};
+  }
+
+  // Variables and string constants add their values.
+  virtual std::span<string> getStringLiteralsAndVariablesNonRecursive() {
     if constexpr (std::is_same_v<T, Variable>) {
-      return {&_value._variable};
+      return {&_value._variable, 1};
     } else if constexpr (std::is_same_v<T, string>) {
-      return {&_value};
+      return {&_value, 1};
     } else {
       return {};
     }
   }
 
-  // _______________________________________________________________________
+  // _________________________________________________________________________
   vector<std::string> getUnaggregatedVariables() override {
     if constexpr (std::is_same_v<T, Variable>) {
       return {_value._variable};
@@ -154,33 +191,28 @@ class LiteralExpression : public SparqlExpression {
 template <typename CalculationWithSetOfIntervals, typename ValueGetter,
           typename BinaryOperation, TagString Tag>
 class BinaryExpression : public SparqlExpression {
- public:
-  /// Construct from a sequence of child epxressions. The operation is performed
-  /// from left to right on all the children using the BinaryOperation (left fold).
-  BinaryExpression(std::vector<SparqlExpression::Ptr>&& children)
-      : _children{std::move(children)} {};
+ private:
   // _________________________________________________________________________
-  ExpressionResult evaluate(EvaluationContext* context) const override;
+ public:
 
-  // _____________________________________________________________________
-  vector<std::string*> strings() override {
-    std::vector<string*> result;
-    for (const auto& child : _children) {
-      auto childResult = child->strings();
-      result.insert(result.end(), childResult.begin(), childResult.end());
+  /// Construct from a sequence of child expressions. The operation is performed
+  /// from left to right on all the children using the BinaryOperation (left fold).
+  /// If there is only one child, then this BinaryExpression does not add any semantics, and
+  /// a pointer to the single child is returned directly.
+  static SparqlExpression::Ptr create(std::vector<SparqlExpression::Ptr>&& children) {
+    if (children.size() == 1) {
+      // This expression is a noop, remove the unnecessary layer
+      return std::move(children[0]);
     }
-    return result;
+    // call the actual private constructor.
+    return std::make_unique<BinaryExpression>(std::move(children));
   }
 
+  ExpressionResult evaluate(EvaluationContext* context) const override;
+
   // _________________________________________________________________________
-  vector<std::string> getUnaggregatedVariables() override {
-    std::vector<string> result;
-    for (const auto& child : _children) {
-      auto childResult = child->getUnaggregatedVariables();
-      result.insert(result.end(), std::make_move_iterator(childResult.begin()),
-                    std::make_move_iterator(childResult.end()));
-    }
-    return result;
+  std::span<SparqlExpression::Ptr> children() override {
+    return {_children.begin(), _children.end()};
   }
 
   string getCacheKey(const VariableToColumnMap& varColMap) const override {
@@ -191,21 +223,11 @@ class BinaryExpression : public SparqlExpression {
     return ad_utility::join(childKeys, " "s + Tag + " ");
   }
 
-  std::optional<std::string> getVariableOrNullopt() const override {
-    if (_children.size() == 1) {
-      return _children[0]->getVariableOrNullopt();
-    }
-    return std::nullopt;
-  }
-
-  std::optional<std::string> getVariableForNonDistinctCountOrNullopt() const override {
-    if (_children.size() == 1) {
-      return _children[0]->getVariableForNonDistinctCountOrNullopt();
-    }
-    return std::nullopt;
-  }
-
  private:
+  // The actual constructor. It is private to enable the simplification step in
+  // the `create` function.
+  BinaryExpression(std::vector<SparqlExpression::Ptr>&& children)
+      : _children{std::move(children)} {};
   std::vector<SparqlExpression::Ptr> _children;
 };
 
@@ -222,25 +244,15 @@ class UnaryExpression : public SparqlExpression {
  public:
   UnaryExpression(SparqlExpression::Ptr&& child) : _child{std::move(child)} {};
   ExpressionResult evaluate(EvaluationContext* context) const override;
-  // _____________________________________________________________________
-  vector<std::string*> strings() override { return _child->strings(); }
 
-  // _____________________________________________________________________
-  vector<std::string> getUnaggregatedVariables() override {
-    return _child->getUnaggregatedVariables();
+  // _________________________________________________________________________
+  std::span<SparqlExpression::Ptr> children() override {
+    return {&_child, 1};
   }
 
   // _________________________________________________________________________
   string getCacheKey(const VariableToColumnMap& varColMap) const override {
     return std::string{Tag} + "("s + _child->getCacheKey(varColMap) + ")";
-  }
-
-  std::optional<std::string> getVariableOrNullopt() const override {
-    return std::nullopt;
-  }
-
-  std::optional<std::string> getVariableForNonDistinctCountOrNullopt() const override {
-    return std::nullopt;
   }
 
  private:
@@ -262,6 +274,20 @@ class DispatchedBinaryExpression : public SparqlExpression {
   /// then this expression stands for `<exprA> * <exprB> / <exprC>`. Checks if
   /// the sizes match (number of children is number of relations + 1) and if the
   /// tags actually represent one of the TaggedFunctions.
+  /// If there is only one child, then this BinaryExpression does not add any semantics, and
+  /// a pointer to the single child is returned directly.
+  static SparqlExpression::Ptr create(std::vector<SparqlExpression::Ptr>&& children,
+                             std::vector<TagString>&& relations) {
+    if (children.size() == 1) {
+      AD_CHECK(relations.empty());
+      return std::move(children[0]);
+    }
+    return std::make_unique<DispatchedBinaryExpression>(std::move(children), std::move(relations));
+  }
+
+ private:
+  /// The actual constructor. It is private, only construct using the
+  /// static `create` function.
   DispatchedBinaryExpression(std::vector<SparqlExpression::Ptr>&& children,
                              std::vector<TagString>&& relations)
       : _children{std::move(children)}, _relations{std::move(relations)} {
@@ -278,26 +304,13 @@ class DispatchedBinaryExpression : public SparqlExpression {
     return {TagsAndFunctions{}.tag...};
   }
 
+ public:
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
-  // _____________________________________________________________________
-  vector<std::string*> strings() override {
-    std::vector<string*> result;
-    for (const auto& ptr : _children) {
-      auto childResult = ptr->strings();
-      result.insert(result.end(), childResult.begin(), childResult.end());
-    }
-    return result;
-  }
-  vector<std::string> getUnaggregatedVariables() override {
-    std::vector<string> result;
-    for (const auto& ptr : _children) {
-      auto childResult = ptr->getUnaggregatedVariables();
-      result.insert(result.end(), std::make_move_iterator(childResult.begin()),
-                    std::make_move_iterator(childResult.end()));
-    }
-    return result;
+  // _________________________________________________________________________
+  std::span<SparqlExpression::Ptr> children() override {
+    return {_children.begin(), _children.end()};
   }
 
   string getCacheKey(const VariableToColumnMap& varColMap) const override {
@@ -311,20 +324,6 @@ class DispatchedBinaryExpression : public SparqlExpression {
       key += " " + _relations[i - 1] + " (" + std::move(childKeys[i]) + ")";
     }
     return key;
-  }
-
-  std::optional<std::string> getVariableOrNullopt() const override {
-    if (_children.size() == 1) {
-      return _children[0]->getVariableOrNullopt();
-    }
-    return std::nullopt;
-  }
-
-  std::optional<std::string> getVariableForNonDistinctCountOrNullopt() const override {
-    if (_children.size() == 1) {
-      return _children[0]->getVariableForNonDistinctCountOrNullopt();
-    }
-    return std::nullopt;
   }
 
  private:
@@ -345,24 +344,27 @@ class AggregateExpression : public SparqlExpression {
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
-  // _____________________________________________________________________
-  vector<std::string*> strings() override { return _child->strings(); }
+  // _________________________________________________________________________
+  std::span<SparqlExpression::Ptr> children() override {
+    return {&_child, 1};
+  }
+
+  // _________________________________________________________________________
   vector<std::string> getUnaggregatedVariables() override {
     // This is an aggregation, so it never leaves any unaggregated variables.
     return {};
   }
 
+  // __________________________________________________________________________
   string getCacheKey(const VariableToColumnMap& varColMap) const override {
     return std::string{Tag} + "(" + _child->getCacheKey(varColMap) + ")";
   }
 
+  // __________________________________________________________________________
   std::optional<string> getVariableForNonDistinctCountOrNullopt() const override {
     if (Tag == "COUNT" && !_distinct) {
       return _child->getVariableOrNullopt();
     }
-    return std::nullopt;
-  }
-  std::optional<std::string> getVariableOrNullopt() const override {
     return std::nullopt;
   }
 
@@ -416,8 +418,11 @@ class GroupConcatExpression : public SparqlExpression {
     return _child->evaluate(context);
   }
 
-  // _____________________________________________________________________
-  vector<std::string*> strings() override { return _child->strings(); }
+  // _________________________________________________________________________
+  std::span<SparqlExpression::Ptr> children() override {
+    return {&_child, 1};
+  }
+
   vector<std::string> getUnaggregatedVariables() override {
     // This is an aggregation, so it never leaves any unaggregated variables.
     return {};
@@ -490,7 +495,7 @@ inline auto count = [](const auto& a, const auto& b) -> int64_t {
 };
 using CountExpression =
     detail::AggregateExpression<detail::NoRangeCalculation,
-                                detail::IsValidGetter, decltype(count),
+                                detail::IsValidValueGetter, decltype(count),
                                 decltype(detail::noop), "COUNT">;
 using SumExpression =
     detail::AggregateExpression<detail::NoRangeCalculation,
