@@ -26,7 +26,9 @@ class VectorWithMemoryLimit
  public:
   using Base = std::vector<T, ad_utility::AllocatorWithLimit<T>>;
   using Base::Base;
-  // Disable copy constructor and copy assignment operator (copying is too expensive in the setting where we want to use this class and not necessary).
+  // Disable copy constructor and copy assignment operator (copying is too
+  // expensive in the setting where we want to use this class and not
+  // necessary).
   VectorWithMemoryLimit(const VectorWithMemoryLimit&) = delete;
   VectorWithMemoryLimit& operator=(const VectorWithMemoryLimit&) = delete;
 
@@ -96,16 +98,17 @@ struct EvaluationContext {
   const ResultTable::LocalVocab& _localVocab;
 
   /// Constructor for evaluating an expression on the complete input.
-  EvaluationContext(const QueryExecutionContext& qec,
-                    const VariableToColumnAndResultTypeMap& variableToColumnAndResultTypeMap,
-                    const IdTable& inputTable,
-                    const ad_utility::AllocatorWithLimit<Id>& allocator,
-                    const ResultTable::LocalVocab& localVocab)
+  EvaluationContext(
+      const QueryExecutionContext& qec,
+      const VariableToColumnAndResultTypeMap& variableToColumnAndResultTypeMap,
+      const IdTable& inputTable,
+      const ad_utility::AllocatorWithLimit<Id>& allocator,
+      const ResultTable::LocalVocab& localVocab)
       : _qec{qec},
         _variableToColumnAndResultTypeMap{variableToColumnAndResultTypeMap},
         _inputTable{inputTable},
         _allocator{allocator},
-        _localVocab{localVocab}{}
+        _localVocab{localVocab} {}
 
   /// Constructor for evaluating an expression on a part of the input
   /// (only considers the rows [beginIndex, endIndex) from the input.
@@ -121,7 +124,7 @@ struct EvaluationContext {
         _beginIndex{beginIndex},
         _endIndex{endIndex},
         _allocator{allocator},
-        _localVocab{localVocab}{}
+        _localVocab{localVocab} {}
 };
 
 /// Strong type for a Sparql Variable, e.g. "?x"
@@ -135,8 +138,8 @@ struct Variable {
 /// the row indices in which a boolean expression evaluates to "true". Constant
 /// results are represented by a vector with only one element.
 namespace expressionResultDetail {
-// For each type T in this tuple, T as well as VectorWithMemoryLimit<T> are possible
-// expression result types.
+// For each type T in this tuple, T as well as VectorWithMemoryLimit<T> are
+// possible expression result types.
 using ConstantTypes = std::tuple<double, int64_t, bool, string>;
 using ConstantTypesAsVector =
     ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
@@ -146,8 +149,7 @@ using OtherTypes =
     std::tuple<ad_utility::SetOfIntervals, StrongIdWithResultType, Variable>;
 
 using AllTypesAsTuple =
-    ad_utility::TupleCat<ConstantTypes, ConstantTypesAsVector,
-                         OtherTypes>;
+    ad_utility::TupleCat<ConstantTypes, ConstantTypesAsVector, OtherTypes>;
 }  // namespace expressionResultDetail
 
 /// An Expression result is a std::variant of all the different types from
