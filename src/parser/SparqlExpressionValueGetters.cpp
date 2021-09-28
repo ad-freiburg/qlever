@@ -43,37 +43,35 @@ string StringValueGetter::operator()(StrongId strongId,
                                      ResultTable::ResultType type,
                                      EvaluationContext* context) const {
   const Id id = strongId._value;
-  // This code is borrowed from the original QLever code.
-  if (type == ResultTable::ResultType::VERBATIM) {
-    return std::to_string(id);
-  } else if (type == ResultTable::ResultType::FLOAT) {
-    // used to store the id value of the entry interpreted as a float
-    float tempF;
-    std::memcpy(&tempF, &id, sizeof(float));
-    return std::to_string(tempF);
-  } else if (type == ResultTable::ResultType::TEXT ||
-             type == ResultTable::ResultType::LOCAL_VOCAB) {
-    // TODO<joka921> support local vocab. The use-case it not so important, but
-    // it is easy.
-    throw std::runtime_error{
-        "Performing further expressions on a text variable of a LocalVocab "
-        "entry (typically GROUP_CONCAT result) is currently not supported"};
-  } else {
-    // load the string, parse it as an xsd::int or float
-    std::string entity =
-        context->_qec.getIndex().idToOptionalString(id).value_or("");
-    if (ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
-      return std::to_string(ad_utility::convertIndexWordToFloat(entity));
-    } else if (ad_utility::startsWith(entity, VALUE_DATE_PREFIX)) {
-      return ad_utility::convertDateToIndexWord(entity);
-    } else {
-      return entity;
-    }
+  switch (type) {
+    case ResultTable::ResultType::VERBATIM:
+      return std::to_string(id);
+    case ResultTable::ResultType::FLOAT:
+      // used to store the id value of the entry interpreted as a float
+      float tempF;
+      std::memcpy(&tempF, &id, sizeof(float));
+      return std::to_string(tempF);
+    case ResultTable::ResultType::TEXT:
+      return context->_qec.getIndex().getTextExcerpt(id);
+    case ResultTable::ResultType::LOCAL_VOCAB:
+      AD_CHECK(id < context->_localVocab.size());
+      return context->_localVocab[id];
+    case ResultTable::ResultType::KB:
+      // load the string, parse it as an xsd::int or float
+      std::string entity =
+          context->_qec.getIndex().idToOptionalString(id).value_or("");
+      if (ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+        return std::to_string(ad_utility::convertIndexWordToFloat(entity));
+      } else if (ad_utility::startsWith(entity, VALUE_DATE_PREFIX)) {
+        return ad_utility::convertDateToIndexWord(entity);
+      } else {
+        return entity;
+      }
   }
 }
 
 // ____________________________________________________________________________
-bool BooleanValueGetter::operator()(
+bool IsValidGetter::operator()(
     StrongId strongId, ResultTable::ResultType type,
     [[maybe_unused]] EvaluationContext* context) const {
   // Every knowledge base value that is bound converts to "True"
