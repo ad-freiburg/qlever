@@ -34,27 +34,27 @@ class SparqlExpression {
   /// Return all variables and IRIs, needed for certain parser methods.
   virtual vector<std::string*> strings() = 0;
 
-  /// Return all the variables, that occur in the expression, but are not
+  /// Return all the variables that occur in the expression, but are not
   /// aggregated.
   virtual vector<std::string> getUnaggregatedVariables() = 0;
 
-  /// Get a unique identifier for this expression
+  /// Get a unique identifier for this expression, used as cache key.
   virtual string getCacheKey(const VariableToColumnMap& varColMap) const = 0;
 
-  /// Get a short, human readable identifier for this expression
+  /// Get a short, human readable identifier for this expression.
   virtual const string& descriptor() const final { return _descriptor; }
   virtual string& descriptor() final { return _descriptor; }
 
   /// For the pattern trick we need to know, whether this expression
   /// is a non-distinct count of a single variable. In this case we return
-  /// the variable.
-  virtual std::optional<string> getNonDistinctCountVariable() const {
+  /// the variable. Otherwise we return std::nullopt.
+  virtual std::optional<string> getVariableForNonDistinctCountOrNullopt() const {
     return std::nullopt;
   }
 
-  /// Helper function for getNonDistinctCountVariable() : If this expression is
-  /// a single variable, return the name of this variable
-  virtual std::optional<string> getSingleVariable() const {
+  /// Helper function for getVariableForNonDistinctCountOrNullopt() : If this expression is
+  /// a single variable, return the name of this variable. Otherwise, return std::nullopt.
+  virtual std::optional<string> getVariableOrNullopt() const {
     return std::nullopt;
   }
 
@@ -66,15 +66,16 @@ class SparqlExpression {
 
 // ____________________________________________________________________________
 namespace detail {
-/// An expression with a single value, e.g. a numeric or boolean constant, or a
-/// Variable
+/// An expression with a single value, for example a numeric (42.0) or boolean (false) constant or a
+/// variable (?x) or a string or iri (<Human>).
+/// These are the "leaves" in the expression tree.
 template <typename T>
 class LiteralExpression : public SparqlExpression {
  public:
   // _________________________________________________________________________
   LiteralExpression(T _value) : _value{std::move(_value)} {}
 
-  // Evaluating just returns the constant/literal value
+  // Evaluating just returns the constant/literal value.
   ExpressionResult evaluate(
       [[maybe_unused]] EvaluationContext* context) const override {
     if constexpr (std::is_same_v<string, T>) {
@@ -102,6 +103,7 @@ class LiteralExpression : public SparqlExpression {
     }
   }
 
+  // _______________________________________________________________________
   vector<std::string> getUnaggregatedVariables() override {
     if constexpr (std::is_same_v<T, Variable>) {
       return {_value._variable};
@@ -123,7 +125,9 @@ class LiteralExpression : public SparqlExpression {
   }
 
  protected:
-  std::optional<std::string> getSingleVariable() const override {
+
+  // _________________________________________________________________________
+  std::optional<std::string> getVariableOrNullopt() const override {
     if constexpr (std::is_same_v<T, Variable>) {
       return _value._variable;
     }
@@ -135,23 +139,25 @@ class LiteralExpression : public SparqlExpression {
 };
 
 /**
- * @brief An associative binary expression
- * @tparam RangeCalculation A callable type that performs the operation
- * efficiently, when both inputs are of type setOfIntervals::Set. If no such
+ * @brief An associative binary expression, for example (?a or ?b), (?a and ?b ?and ?c).
+ * Note that expressions involving the four basic arithmetic operations (+, - , * , /) are
+ * implemented using the DispatchedBinaryExpression template.
+ * @tparam CalculationWithSetOfIntervals A callable type that performs the operation
+ * efficiently, when both inputs are of type SetOfIntervals. If no such
  * operation exists, the type NoRangeCalculation must be chosen.
- * @tparam ValueExtractor A callable type that takes a single
+ * @tparam ValueGetter A callable type that takes a single
  * double/int64_t/bool and extracts the actual input to the operation. Can be
  * used to perform conversions.
  * @tparam BinaryOperation The actual binary operation, it must be callable with
- * the result types of the value extractor
+ * the result types of the `ValueGetter` .
  */
-template <typename RangeCalculation, typename ValueExtractor,
+template <typename CalculationWithSetOfIntervals, typename ValueGetter,
           typename BinaryOperation, TagString Tag>
 class BinaryExpression : public SparqlExpression {
  public:
-  /// Construct from a set of child operations. The operation is performed as a
-  /// left fold on all the children using the BinaryOperation
-  BinaryExpression(std::vector<Ptr>&& children)
+  /// Construct from a sequence of child epxressions. The operation is performed
+  /// from left to right on all the children using the BinaryOperation (left fold).
+  BinaryExpression(std::vector<SparqlExpression::Ptr>&& children)
       : _children{std::move(children)} {};
   // _________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override;
@@ -159,8 +165,8 @@ class BinaryExpression : public SparqlExpression {
   // _____________________________________________________________________
   vector<std::string*> strings() override {
     std::vector<string*> result;
-    for (const auto& ptr : _children) {
-      auto childResult = ptr->strings();
+    for (const auto& child : _children) {
+      auto childResult = child->strings();
       result.insert(result.end(), childResult.begin(), childResult.end());
     }
     return result;
@@ -169,8 +175,8 @@ class BinaryExpression : public SparqlExpression {
   // _________________________________________________________________________
   vector<std::string> getUnaggregatedVariables() override {
     std::vector<string> result;
-    for (const auto& ptr : _children) {
-      auto childResult = ptr->getUnaggregatedVariables();
+    for (const auto& child : _children) {
+      auto childResult = child->getUnaggregatedVariables();
       result.insert(result.end(), std::make_move_iterator(childResult.begin()),
                     std::make_move_iterator(childResult.end()));
     }
@@ -179,28 +185,28 @@ class BinaryExpression : public SparqlExpression {
 
   string getCacheKey(const VariableToColumnMap& varColMap) const override {
     std::vector<string> childKeys;
-    for (const auto& ptr : _children) {
-      childKeys.push_back("(" + ptr->getCacheKey(varColMap) + ")");
+    for (const auto& child : _children) {
+      childKeys.push_back("(" + child->getCacheKey(varColMap) + ")");
     }
     return ad_utility::join(childKeys, " "s + Tag + " ");
   }
 
-  std::optional<std::string> getSingleVariable() const override {
+  std::optional<std::string> getVariableOrNullopt() const override {
     if (_children.size() == 1) {
-      return _children[0]->getSingleVariable();
+      return _children[0]->getVariableOrNullopt();
     }
     return std::nullopt;
   }
 
-  std::optional<std::string> getNonDistinctCountVariable() const override {
+  std::optional<std::string> getVariableForNonDistinctCountOrNullopt() const override {
     if (_children.size() == 1) {
-      return _children[0]->getNonDistinctCountVariable();
+      return _children[0]->getVariableForNonDistinctCountOrNullopt();
     }
     return std::nullopt;
   }
 
  private:
-  std::vector<Ptr> _children;
+  std::vector<SparqlExpression::Ptr> _children;
 };
 
 /**
@@ -208,13 +214,13 @@ class BinaryExpression : public SparqlExpression {
  * @tparam RangeCalculation  see documentation of `BinaryOperation`
  * @tparam ValueExtractor    see documentation of `BinaryOperation`
  * @tparam UnaryOperation  A unary operation that takes one input (the result of
- * the ValueExtractor) and calculates the result.
+ * the ValueGetter) and calculates the result.
  */
 template <typename RangeCalculation, typename ValueExtractor,
           typename UnaryOperation, TagString Tag>
 class UnaryExpression : public SparqlExpression {
  public:
-  UnaryExpression(Ptr&& child) : _child{std::move(child)} {};
+  UnaryExpression(SparqlExpression::Ptr&& child) : _child{std::move(child)} {};
   ExpressionResult evaluate(EvaluationContext* context) const override;
   // _____________________________________________________________________
   vector<std::string*> strings() override { return _child->strings(); }
@@ -229,11 +235,11 @@ class UnaryExpression : public SparqlExpression {
     return std::string{Tag} + "("s + _child->getCacheKey(varColMap) + ")";
   }
 
-  std::optional<std::string> getSingleVariable() const override {
+  std::optional<std::string> getVariableOrNullopt() const override {
     return std::nullopt;
   }
 
-  std::optional<std::string> getNonDistinctCountVariable() const override {
+  std::optional<std::string> getVariableForNonDistinctCountOrNullopt() const override {
     return std::nullopt;
   }
 
@@ -256,7 +262,7 @@ class DispatchedBinaryExpression : public SparqlExpression {
   /// then this expression stands for `<exprA> * <exprB> / <exprC>`. Checks if
   /// the sizes match (number of children is number of relations + 1) and if the
   /// tags actually represent one of the TaggedFunctions.
-  DispatchedBinaryExpression(std::vector<Ptr>&& children,
+  DispatchedBinaryExpression(std::vector<SparqlExpression::Ptr>&& children,
                              std::vector<TagString>&& relations)
       : _children{std::move(children)}, _relations{std::move(relations)} {
     AD_CHECK(_relations.size() + 1 == _children.size());
@@ -307,16 +313,16 @@ class DispatchedBinaryExpression : public SparqlExpression {
     return key;
   }
 
-  std::optional<std::string> getSingleVariable() const override {
+  std::optional<std::string> getVariableOrNullopt() const override {
     if (_children.size() == 1) {
-      return _children[0]->getSingleVariable();
+      return _children[0]->getVariableOrNullopt();
     }
     return std::nullopt;
   }
 
-  std::optional<std::string> getNonDistinctCountVariable() const override {
+  std::optional<std::string> getVariableForNonDistinctCountOrNullopt() const override {
     if (_children.size() == 1) {
-      return _children[0]->getNonDistinctCountVariable();
+      return _children[0]->getVariableForNonDistinctCountOrNullopt();
     }
     return std::nullopt;
   }
@@ -350,13 +356,13 @@ class AggregateExpression : public SparqlExpression {
     return std::string{Tag} + "(" + _child->getCacheKey(varColMap) + ")";
   }
 
-  std::optional<string> getNonDistinctCountVariable() const override {
+  std::optional<string> getVariableForNonDistinctCountOrNullopt() const override {
     if (Tag == "COUNT" && !_distinct) {
-      return _child->getSingleVariable();
+      return _child->getVariableOrNullopt();
     }
     return std::nullopt;
   }
-  std::optional<std::string> getSingleVariable() const override {
+  std::optional<std::string> getVariableOrNullopt() const override {
     return std::nullopt;
   }
 
@@ -372,7 +378,7 @@ inline auto noop = []<typename T>(T&& result, size_t) {
   return std::forward<T>(result);
 };
 
-/// A Special type to be used as the RangeCalculation template Argument, when a
+/// A Special type to be used as the CalculationWithSetOfIntervals template Argument, when a
 /// range calculation is not allowed
 struct NoRangeCalculation {};
 

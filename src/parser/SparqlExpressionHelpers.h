@@ -81,7 +81,7 @@ auto makeExtractor(T&& expandedResult) {
 }
 
 /// Internal helper function
-/// Apply a ValueExtractor (see file TODO for examples) to a single value
+/// Apply a ValueGetter (see file TODO for examples) to a single value
 /// that was retrieved by calling the result of makeExtractor
 template <typename T, typename ValueExtractor>
 auto extractValue(T&& singleValue, ValueExtractor valueExtractor, EvaluationContext* context) {
@@ -99,7 +99,7 @@ auto extractValue(T&& singleValue, ValueExtractor valueExtractor, EvaluationCont
 /// The concatenation of `possiblyExpand` `makeExtractor` and `extractValue`
 /// return a lambda that can be called with a single integer argument, the `index`
 /// and returns the `index`-th argument from the childResult, possibly converted
-/// by the `ValueExtractor`
+/// by the `ValueGetter`
 template <SingleExpressionResult T, typename ValueExtractor>
 auto makeExtractorFromChildResult(T&& childResult, [[maybe_unused]] size_t targetSize,
                                   EvaluationContext* context, ValueExtractor v) {
@@ -115,8 +115,8 @@ auto makeExtractorFromChildResult(T&& childResult, [[maybe_unused]] size_t targe
   };
 }
 
-/// In the actual evaluation routines, we may use the cheaper RangeCalculation
-/// if all the arguments are setOfIntervals::Set, and if a RangeCalculation
+/// In the actual evaluation routines, we may use the cheaper CalculationWithSetOfIntervals
+/// if all the arguments are setOfIntervals::Set, and if a CalculationWithSetOfIntervals
 /// was actually specified. This variable performs this check.
 template <typename RangeCalculation, typename... Results>
 constexpr static bool rangeCalculationIsAllowed =
