@@ -55,9 +55,7 @@ struct ActualValueGetter {
 /// not a nan (signalling an error in a previous calculation).
 struct IsValidGetter {
   // Numeric constants are true iff they are non-zero and not nan.
-  bool operator()(double v, EvaluationContext*) const {
-    return !std::isnan(v);
-  }
+  bool operator()(double v, EvaluationContext*) const { return !std::isnan(v); }
   bool operator()(int64_t v, EvaluationContext*) const { return true; }
   bool operator()(bool v, EvaluationContext*) const { return true; }
 
