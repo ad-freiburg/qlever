@@ -15,6 +15,7 @@ using namespace sparqlExpression::detail;
 double NumericValueGetter::operator()(StrongId strongId,
                                       ResultTable::ResultType type,
                                       EvaluationContext* context) const {
+  //TODO<joka921> Also make this a switch;
   const Id id = strongId._value;
   // This code is borrowed from the original QLever code.
   if (type == ResultTable::ResultType::VERBATIM) {
@@ -39,6 +40,45 @@ double NumericValueGetter::operator()(StrongId strongId,
   }
 }
 
+// _____________________________________________________________________________
+bool EffectiveBooleanValueGetter::operator()(StrongId strongId,
+                                      ResultTable::ResultType type,
+                                      EvaluationContext* context) const {
+  //TODO<joka921> Also make this a switch;
+  const Id id = strongId._value;
+  // This code is borrowed from the original QLever code.
+  if (type == ResultTable::ResultType::VERBATIM) {
+    return id != 0;
+  } else if (type == ResultTable::ResultType::FLOAT) {
+    // used to store the id value of the entry interpreted as a float
+    float tempF;
+    std::memcpy(&tempF, &id, sizeof(float));
+    return tempF != 0.0 && !std::isnan(tempF);
+  } else if (type == ResultTable::ResultType::TEXT) {
+    return true;
+  } else if (type == ResultTable::ResultType::LOCAL_VOCAB) {
+    AD_CHECK(id < context->_localVocab.size());
+    return !(context->_localVocab[id].empty());
+  } else {
+    // Load the string.
+    std::string entity =
+        context->_qec.getIndex().idToOptionalString(id).value_or("");
+    // Empty or unbound strings are false.
+    if (entity.empty()) {
+      return false;
+    }
+    // Non-numeric non-empty values are always true
+    if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+      return true;
+    } else {
+      // 0 and nan values are considered false.
+      float f = ad_utility::convertIndexWordToFloat(entity);
+      return f != 0.0 && !std::isnan(f);
+    }
+  }
+}
+
+// ____________________________________________________________________________
 string StringValueGetter::operator()(StrongId strongId,
                                      ResultTable::ResultType type,
                                      EvaluationContext* context) const {

@@ -56,14 +56,30 @@ struct ActualValueGetter {
 struct IsValidGetter {
   // Numeric constants are true iff they are non-zero and not nan.
   bool operator()(double v, EvaluationContext*) const { return !std::isnan(v); }
-  bool operator()(int64_t v, EvaluationContext*) const { return true; }
-  bool operator()(bool v, EvaluationContext*) const { return true; }
+  bool operator()(int64_t, EvaluationContext*) const { return true; }
+  bool operator()(bool, EvaluationContext*) const { return true; }
 
   // check for NULL/UNDEF values.
   bool operator()(StrongId id, ResultTable::ResultType type,
                   EvaluationContext*) const;
 
-  bool operator()(string s, EvaluationContext*) { return true; }
+  bool operator()(const string&, EvaluationContext*) { return true; }
+};
+
+/// Return a boolean value that is used for AND, OR and NOT expressions.
+/// See section 17.2.2 of the Sparql Standard
+struct EffectiveBooleanValueGetter {
+  // Numeric constants are true iff they are non-zero and not nan.
+  bool operator()(double v, EvaluationContext*) const { return  v && !std::isnan(v); }
+  bool operator()(int64_t v, EvaluationContext*) const { return v != 0; }
+  bool operator()(bool v, EvaluationContext*) const { return v; }
+
+  // _________________________________________________________________________
+  bool operator()(StrongId id, ResultTable::ResultType type,
+                  EvaluationContext*) const;
+
+  // Nonempty strings are true.
+  bool operator()(const string& s, EvaluationContext*) { return !s.empty(); }
 };
 
 /// This class can be used as the `ValueExtractor` argument of Expression
