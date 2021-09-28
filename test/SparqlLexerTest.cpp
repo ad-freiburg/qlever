@@ -7,6 +7,13 @@
 
 #include "../src/parser/SparqlLexer.h"
 
+TEST(SparqlLexerTest, unescapeLiteral) {
+  std::string input = R"("^\"biff")";
+  SparqlLexer lexer(input);
+  lexer.expect(SparqlToken::Type::RDFLITERAL);
+  ASSERT_EQ(R"("^"biff")", lexer.current().raw);
+}
+
 TEST(SparqlLexerTest, basicTest) {
   std::string query =
       ""
@@ -158,4 +165,20 @@ TEST(SparqlLexerTest, basicTest) {
   lexer2.expect(SparqlToken::Type::SYMBOL);    // (
   lexer2.expect(SparqlToken::Type::VARIABLE);  // ?a
   lexer2.expect(SparqlToken::Type::SYMBOL);    // )
+}
+
+TEST(SparqlLexer, reset) {
+  std::string query = "PREFIX wd: <http://www.wikidata.org/entity/>";
+
+  SparqlLexer lexer(query);
+  lexer.expect("prefix");
+  lexer.expect("wd:");
+  ASSERT_EQ(std::string("<http://www.wikidata.org/entity/>"),
+            lexer.getUnconsumedInput());
+
+  lexer.reset("PREFIX ql: <cs.uni-freiburg.de/>");
+  lexer.expect("prefix");
+  lexer.expect("ql:");
+  lexer.expect("<cs.uni-freiburg.de/>");
+  ASSERT_TRUE(lexer.getUnconsumedInput().empty());
 }

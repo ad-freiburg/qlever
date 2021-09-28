@@ -37,7 +37,6 @@ struct SparqlToken {
 
 class SparqlLexer {
  public:
- private:
   using RegexTokenMap =
       std::vector<std::pair<std::unique_ptr<re2::RE2>, SparqlToken::Type>>;
 
@@ -49,6 +48,16 @@ class SparqlLexer {
 
  public:
   SparqlLexer(const std::string& sparql);
+
+  // Copying and moving is disallowed, the default behavior is wrong,
+  // and we don't need it.
+  SparqlLexer(const SparqlLexer&) = delete;
+  SparqlLexer& operator=(const SparqlLexer&) = delete;
+  SparqlLexer(SparqlLexer&&) noexcept = delete;
+  SparqlLexer& operator=(SparqlLexer&&) = delete;
+
+  // Explicitly reset this Lexer to a new input
+  void reset(std::string sparql);
 
   // True if the entire input stream was consumed
   bool empty() const;
@@ -68,10 +77,18 @@ class SparqlLexer {
   const SparqlToken& current();
   const std::string& input() const;
 
+  // Get the part of the input that has not yet been consumed by calls to
+  // `accept` or `expect`
+  std::string getUnconsumedInput() {
+    auto delimiter =
+        _next.raw.empty() || _re_string.ToString().empty() ? "" : " ";
+    return _next.raw + delimiter + _re_string.ToString();
+  }
+
  private:
   void readNext();
 
-  const std::string _sparql;
+  std::string _sparql;
   re2::StringPiece _re_string;
   SparqlToken _current;
   SparqlToken _next;
