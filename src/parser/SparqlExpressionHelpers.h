@@ -15,7 +15,8 @@ namespace sparqlExpression::detail {
 /// `context`.
 // TODO<joka921> Restructure QLever to column based design, then this will
 // become a noop;
-VectorWithMemoryLimit<StrongId> getIdsFromVariable(const Variable& variable, EvaluationContext* context);
+VectorWithMemoryLimit<StrongId> getIdsFromVariable(const Variable& variable,
+                                                   EvaluationContext* context);
 
 /// Internal helper function
 /// Converts all the SingleExpressionResults to a vector-like type.
@@ -33,8 +34,9 @@ auto possiblyExpand(T&& childResult, [[maybe_unused]] size_t targetSize,
     ad_utility::toBitContainer(std::move(childResult), targetSize, begin(vec));
     return vec;
   } else if constexpr (ad_utility::isSimilar<Variable, T>) {
-    return StrongIdsWithResultType{getIdsFromVariable(std::forward<T>(childResult), context),
-                                context->_variableToColumnAndResultTypeMap.at(childResult._variable).second};
+    return StrongIdsWithResultType{
+        getIdsFromVariable(std::forward<T>(childResult), context),
+        context->_variableToColumnAndResultTypeMap.at(childResult._variable).second};
   } else if constexpr (isVectorResult<T>) {
     AD_CHECK(childResult.size() == targetSize);
     return std::forward<T>(childResult);
@@ -56,15 +58,7 @@ auto makeExtractor(T&& expandedResult) {
       // TODO<joka921> This is the cleanest, but not necessarily the fastest
       // way to deal with variable values.
       return StrongIdWithResultType{expanded._ids[index], expanded._type};
-    } else if constexpr (ad_utility::isVector<T>) {
-      // TODO<joka921>:: This branch is very easy to predict.
-      // Still consider performing it somewhere else, when tuning the
-      // expressions for performance.
-      if (expanded.size() == 1) {
-        /// This is actually a constant which always has the same value,
-        /// independent of the index.
-        index = 0;
-      }
+    } else if constexpr (isVectorResult<T>) {
       if constexpr (ad_utility::isSimilar<VectorWithMemoryLimit<bool>, T>) {
         // special case because of the strange bit-references
         // TODO<joka921> Consider handling bools with another type, if this

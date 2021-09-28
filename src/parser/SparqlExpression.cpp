@@ -77,23 +77,6 @@ ExpressionResult evaluateAggregateExpression(
   return std::visit(visitor, std::move(childResult));
 }
 
-// ____________________________________________________________________________
-template <typename RangeCalculation, typename ValueExtractor,
-          typename BinaryOperation, TagString Tag>
-ExpressionResult
-BinaryExpression<RangeCalculation, ValueExtractor, BinaryOperation,
-                 Tag>::evaluate(EvaluationContext* context) const {
-  AD_CHECK(!_children.empty())
-  auto result = _children[0]->evaluate(context);
-
-  for (size_t i = 1; i < _children.size(); ++i) {
-    result = evaluateNaryOperation(
-        RangeCalculation{}, ValueExtractor{}, BinaryOperation{}, context,
-        std::move(result), _children[i]->evaluate(context));
-  }
-  return result;
-}
-
 // ___________________________________________________________________________
 template <typename RangeCalculation, typename ValueExtractor,
           typename UnaryOperation, TagString Tag>
@@ -133,10 +116,11 @@ auto TaggedFunctionVisitor = []<typename... Args>(TagString identifier,
 };
 
 // ___________________________________________________________________________
-template <typename ValueExtractor, TaggedFunctionConcept... TagAndFunctions>
-ExpressionResult
-DispatchedBinaryExpression<ValueExtractor, TagAndFunctions...>::evaluate(
-    EvaluationContext* context) const {
+template <typename RangeCalculation, typename ValueExtractor,
+          TaggedFunctionConcept... TagAndFunctions>
+ExpressionResult DispatchedBinaryExpression<
+    RangeCalculation, ValueExtractor,
+    TagAndFunctions...>::evaluate(EvaluationContext* context) const {
   auto result = _children[0]->evaluate(context);
 
   for (size_t i = 1; i < _children.size(); ++i) {
@@ -163,22 +147,27 @@ template class UnaryExpression<NoRangeCalculation, EffectiveBooleanValueGetter,
                                decltype(unaryNegate), "!">;
 template class UnaryExpression<NoRangeCalculation, NumericValueGetter,
                                decltype(unaryMinus), "unary-">;
-template class BinaryExpression<ad_utility::Union, EffectiveBooleanValueGetter,
-                                decltype(orLambda), "||">;
-
-template class BinaryExpression<ad_utility::Intersection, EffectiveBooleanValueGetter,
-                                decltype(andLambda), "&&">;
 
 template class DispatchedBinaryExpression<
-    NumericValueGetter, TaggedFunction<"+", decltype(add)>,
+    ad_utility::Union, EffectiveBooleanValueGetter,
+    TaggedFunction<"||", decltype(orLambda)>>;
+
+template class DispatchedBinaryExpression<
+    ad_utility::Intersection, EffectiveBooleanValueGetter,
+    TaggedFunction<"&&", decltype(andLambda)>>;
+
+template class DispatchedBinaryExpression<
+    NoRangeCalculation, NumericValueGetter, TaggedFunction<"+", decltype(add)>,
     TaggedFunction<"-", decltype(subtract)>>;
 
 template class DispatchedBinaryExpression<
-    NumericValueGetter, TaggedFunction<"*", decltype(multiply)>,
+    NoRangeCalculation, NumericValueGetter,
+    TaggedFunction<"*", decltype(multiply)>,
     TaggedFunction<"/", decltype(divide)>>;
 
-template class AggregateExpression<NoRangeCalculation, EffectiveBooleanValueGetter,
-                                   decltype(count), decltype(noop), "COUNT">;
+template class AggregateExpression<NoRangeCalculation,
+                                   EffectiveBooleanValueGetter, decltype(count),
+                                   decltype(noop), "COUNT">;
 
 template class AggregateExpression<NoRangeCalculation, NumericValueGetter,
                                    decltype(add), decltype(noop), "SUM">;

@@ -1,4 +1,5 @@
-
+//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
+//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 // Created by johannes on 09.05.21.
 //
 
@@ -6,9 +7,9 @@
 #define QLEVER_SPARQLEXPRESSION_H
 
 #include <memory>
+#include <span>
 #include <variant>
 #include <vector>
-#include <span>
 
 #include "../engine/CallFixedSize.h"
 #include "../engine/QueryExecutionContext.h"
@@ -76,31 +77,33 @@ class SparqlExpression {
   /// For the pattern trick we need to know, whether this expression
   /// is a non-distinct count of a single variable. In this case we return
   /// the variable. Otherwise we return std::nullopt.
-  virtual std::optional<string> getVariableForNonDistinctCountOrNullopt() const {
+  virtual std::optional<string> getVariableForNonDistinctCountOrNullopt()
+      const {
     return std::nullopt;
   }
 
-  /// Helper function for getVariableForNonDistinctCountOrNullopt() : If this expression is
-  /// a single variable, return the name of this variable. Otherwise, return std::nullopt.
+  /// Helper function for getVariableForNonDistinctCountOrNullopt() : If this
+  /// expression is a single variable, return the name of this variable.
+  /// Otherwise, return std::nullopt.
   virtual std::optional<string> getVariableOrNullopt() const {
     return std::nullopt;
   }
 
   virtual ~SparqlExpression() = default;
+
  private:
   virtual std::span<SparqlExpression::Ptr> children() = 0;
   virtual std::span<string> getStringLiteralsAndVariablesNonRecursive() {
     // Default implementation: This expression adds no strings or variables.
     return {};
   }
-
 };
 
 // ____________________________________________________________________________
 namespace detail {
-/// An expression with a single value, for example a numeric (42.0) or boolean (false) constant or a
-/// variable (?x) or a string or iri (<Human>).
-/// These are the "leaves" in the expression tree.
+/// An expression with a single value, for example a numeric (42.0) or boolean
+/// (false) constant or a variable (?x) or a string or iri (<Human>). These are
+/// the "leaves" in the expression tree.
 template <typename T>
 class LiteralExpression : public SparqlExpression {
  public:
@@ -125,9 +128,7 @@ class LiteralExpression : public SparqlExpression {
   }
 
   // Literal expressions don't have children
-  std::span<SparqlExpression::Ptr> children() override {
-    return {};
-  }
+  std::span<SparqlExpression::Ptr> children() override { return {}; }
 
   // Variables and string constants add their values.
   virtual std::span<string> getStringLiteralsAndVariablesNonRecursive() {
@@ -162,7 +163,6 @@ class LiteralExpression : public SparqlExpression {
   }
 
  protected:
-
   // _________________________________________________________________________
   std::optional<std::string> getVariableOrNullopt() const override {
     if constexpr (std::is_same_v<T, Variable>) {
@@ -173,62 +173,6 @@ class LiteralExpression : public SparqlExpression {
 
  private:
   T _value;
-};
-
-/**
- * @brief An associative binary expression, for example (?a or ?b), (?a and ?b ?and ?c).
- * Note that expressions involving the four basic arithmetic operations (+, - , * , /) are
- * implemented using the DispatchedBinaryExpression template.
- * @tparam CalculationWithSetOfIntervals A callable type that performs the operation
- * efficiently, when both inputs are of type SetOfIntervals. If no such
- * operation exists, the type NoRangeCalculation must be chosen.
- * @tparam ValueGetter A callable type that takes a single
- * double/int64_t/bool and extracts the actual input to the operation. Can be
- * used to perform conversions.
- * @tparam BinaryOperation The actual binary operation, it must be callable with
- * the result types of the `ValueGetter` .
- */
-template <typename CalculationWithSetOfIntervals, typename ValueGetter,
-          typename BinaryOperation, TagString Tag>
-class BinaryExpression : public SparqlExpression {
- private:
-  // _________________________________________________________________________
- public:
-
-  /// Construct from a sequence of child expressions. The operation is performed
-  /// from left to right on all the children using the BinaryOperation (left fold).
-  /// If there is only one child, then this BinaryExpression does not add any semantics, and
-  /// a pointer to the single child is returned directly.
-  static SparqlExpression::Ptr create(std::vector<SparqlExpression::Ptr>&& children) {
-    if (children.size() == 1) {
-      // This expression is a noop, remove the unnecessary layer
-      return std::move(children[0]);
-    }
-    // call the actual private constructor.
-    return std::make_unique<BinaryExpression>(std::move(children));
-  }
-
-  ExpressionResult evaluate(EvaluationContext* context) const override;
-
-  // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> children() override {
-    return {_children.begin(), _children.end()};
-  }
-
-  string getCacheKey(const VariableToColumnMap& varColMap) const override {
-    std::vector<string> childKeys;
-    for (const auto& child : _children) {
-      childKeys.push_back("(" + child->getCacheKey(varColMap) + ")");
-    }
-    return ad_utility::join(childKeys, " "s + Tag + " ");
-  }
-
- private:
-  // The actual constructor. It is private to enable the simplification step in
-  // the `create` function.
-  BinaryExpression(std::vector<SparqlExpression::Ptr>&& children)
-      : _children{std::move(children)} {};
-  std::vector<SparqlExpression::Ptr> _children;
 };
 
 /**
@@ -246,9 +190,7 @@ class UnaryExpression : public SparqlExpression {
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
   // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> children() override {
-    return {&_child, 1};
-  }
+  std::span<SparqlExpression::Ptr> children() override { return {&_child, 1}; }
 
   // _________________________________________________________________________
   string getCacheKey(const VariableToColumnMap& varColMap) const override {
@@ -259,6 +201,26 @@ class UnaryExpression : public SparqlExpression {
   Ptr _child;
 };
 
+/// A Special type to be used as the CalculationWithSetOfIntervals template
+/// Argument, when a range calculation is not allowed
+struct NoRangeCalculation {};
+
+// TODO<joka921> Unify comments.
+/**
+ * @brief An associative binary expression, for example (?a or ?b), (?a and ?b
+?and ?c).
+ * Note that expressions involving the four basic arithmetic operations (+, - ,
+* , /) are
+ * implemented using the DispatchedBinaryExpression template.
+ * @tparam CalculationWithSetOfIntervals A callable type that performs the
+operation
+ * efficiently, when both inputs are of type SetOfIntervals. If no such
+ * operation exists, the type NoRangeCalculation must be chosen.
+ * @tparam ValueGetter A callable type that takes a single
+ * double/int64_t/bool and extracts the actual input to the operation. Can be
+ * used to perform conversions.
+ * @tparam BinaryOperation The actual binary operation, it must be callable with
+ * the result types of the `ValueGetter` .
 /**
  * This class template allows to perform different left-associative binary
  * operations in a single class, e.g. "3 * 5 / 7 * ?x"
@@ -267,22 +229,38 @@ class UnaryExpression : public SparqlExpression {
  * @tparam TagsAndFunctions One or more BinaryOperations combined with Tags to
  * identify them (e.g. `TaggedFunction<"*", LambdaThatMultipliesTwoNumbers>`)
  */
-template <typename ValueExtractor, TaggedFunctionConcept... TagsAndFunctions>
-class DispatchedBinaryExpression : public SparqlExpression {
+template <typename RangeCalculation, typename ValueExtractor,
+          TaggedFunctionConcept... TagsAndFunctions>
+requires(std::is_same_v<RangeCalculation, NoRangeCalculation> ||
+         sizeof...(TagsAndFunctions) == 1) class DispatchedBinaryExpression
+    : public SparqlExpression {
  public:
   /// If Children is {`<exprA>, <exprB>, <exprC>'} and relations is {"*", "/"},
   /// then this expression stands for `<exprA> * <exprB> / <exprC>`. Checks if
   /// the sizes match (number of children is number of relations + 1) and if the
   /// tags actually represent one of the TaggedFunctions.
-  /// If there is only one child, then this BinaryExpression does not add any semantics, and
-  /// a pointer to the single child is returned directly.
-  static SparqlExpression::Ptr create(std::vector<SparqlExpression::Ptr>&& children,
-                             std::vector<TagString>&& relations) {
+  /// If there is only one child, then this BinaryExpression does not add any
+  /// semantics, and a pointer to the single child is returned directly.
+  static SparqlExpression::Ptr create(
+      std::vector<SparqlExpression::Ptr>&& children,
+      std::vector<TagString>&& relations) {
     if (children.size() == 1) {
       AD_CHECK(relations.empty());
       return std::move(children[0]);
     }
-    return std::make_unique<DispatchedBinaryExpression>(std::move(children), std::move(relations));
+    // Unfortunately, std::make_unique cannot call
+    return SparqlExpression::Ptr{new DispatchedBinaryExpression{
+        std::move(children), std::move(relations)}};
+  }
+
+  static SparqlExpression::Ptr
+  create(std::vector<SparqlExpression::Ptr>&& children) requires(
+      sizeof...(TagsAndFunctions) == 1) {
+    auto onlyTag =
+        std::tuple_element_t<0, std::tuple<TagsAndFunctions...>>::tag;
+    AD_CHECK(children.size() > 0);
+    std::vector<TagString> tags(children.size() - 1, onlyTag);
+    return create(std::move(children), std::move(tags));
   }
 
  private:
@@ -345,9 +323,7 @@ class AggregateExpression : public SparqlExpression {
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
   // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> children() override {
-    return {&_child, 1};
-  }
+  std::span<SparqlExpression::Ptr> children() override { return {&_child, 1}; }
 
   // _________________________________________________________________________
   vector<std::string> getUnaggregatedVariables() override {
@@ -361,7 +337,8 @@ class AggregateExpression : public SparqlExpression {
   }
 
   // __________________________________________________________________________
-  std::optional<string> getVariableForNonDistinctCountOrNullopt() const override {
+  std::optional<string> getVariableForNonDistinctCountOrNullopt()
+      const override {
     if (Tag == "COUNT" && !_distinct) {
       return _child->getVariableOrNullopt();
     }
@@ -379,10 +356,6 @@ class AggregateExpression : public SparqlExpression {
 inline auto noop = []<typename T>(T&& result, size_t) {
   return std::forward<T>(result);
 };
-
-/// A Special type to be used as the CalculationWithSetOfIntervals template Argument, when a
-/// range calculation is not allowed
-struct NoRangeCalculation {};
 
 // ______________________________________________________________________________
 inline auto makePerformConcat(std::string separator) {
@@ -419,9 +392,7 @@ class GroupConcatExpression : public SparqlExpression {
   }
 
   // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> children() override {
-    return {&_child, 1};
-  }
+  std::span<SparqlExpression::Ptr> children() override { return {&_child, 1}; }
 
   vector<std::string> getUnaggregatedVariables() override {
     // This is an aggregation, so it never leaves any unaggregated variables.
@@ -443,23 +414,22 @@ class GroupConcatExpression : public SparqlExpression {
 
 /// Boolean Or
 inline auto orLambda = [](bool a, bool b) { return a || b; };
-using ConditionalOrExpression =
-    detail::BinaryExpression<ad_utility::Union, detail::EffectiveBooleanValueGetter,
-                             decltype(orLambda), "||">;
+using ConditionalOrExpression = detail::DispatchedBinaryExpression<
+    ad_utility::Union, detail::EffectiveBooleanValueGetter,
+    TaggedFunction<"||", decltype(orLambda)>>;
 
 /// Boolean And
 inline auto andLambda = [](bool a, bool b) { return a && b; };
-using ConditionalAndExpression =
-    detail::BinaryExpression<ad_utility::Intersection,
-                             detail::EffectiveBooleanValueGetter, decltype(andLambda),
-                             "&&">;
+using ConditionalAndExpression = detail::DispatchedBinaryExpression<
+    ad_utility::Intersection, detail::EffectiveBooleanValueGetter,
+    TaggedFunction<"&&", decltype(andLambda)>>;
 
 /// Unary Negation
 inline auto unaryNegate = [](bool a) -> bool { return !a; };
 using UnaryNegateExpression =
     detail::UnaryExpression<detail::NoRangeCalculation,
-                            detail::EffectiveBooleanValueGetter, decltype(unaryNegate),
-                            "!">;
+                            detail::EffectiveBooleanValueGetter,
+                            decltype(unaryNegate), "!">;
 
 /// Unary Minus, currently all results are converted to double
 inline auto unaryMinus = [](auto a) -> double { return -a; };
@@ -476,7 +446,8 @@ inline auto divide = [](const auto& a, const auto& b) -> double {
   return static_cast<double>(a) / b;
 };
 using MultiplicativeExpression =
-    detail::DispatchedBinaryExpression<detail::NumericValueGetter,
+    detail::DispatchedBinaryExpression<detail::NoRangeCalculation,
+                                       detail::NumericValueGetter,
                                        TaggedFunction<"*", decltype(multiply)>,
                                        TaggedFunction<"/", decltype(divide)>>;
 
@@ -486,7 +457,8 @@ inline auto subtract = [](const auto& a, const auto& b) -> double {
   return a - b;
 };
 using AdditiveExpression =
-    detail::DispatchedBinaryExpression<detail::NumericValueGetter,
+    detail::DispatchedBinaryExpression<detail::NoRangeCalculation,
+                                       detail::NumericValueGetter,
                                        TaggedFunction<"+", decltype(add)>,
                                        TaggedFunction<"-", decltype(subtract)>>;
 
@@ -536,29 +508,5 @@ using VariableExpression = detail::LiteralExpression<Variable>;
 using StringOrIriExpression = detail::LiteralExpression<string>;
 
 }  // namespace sparqlExpression
-
-/// Specialize the isVector type trait for our limited type
-namespace ad_utility {
-template <typename T>
-constexpr static bool isVector<sparqlExpression::VectorWithMemoryLimit<T>> = true;
-}  // namespace ad_utility
-
-namespace std {
-template <>
-struct hash<sparqlExpression::StrongId> {
-  size_t operator()(const sparqlExpression::StrongId& x) const {
-    return std::hash<Id>{}(x._value);
-  }
-};
-
-template <>
-struct hash<sparqlExpression::StrongIdWithResultType> {
-  size_t operator()(const sparqlExpression::StrongIdWithResultType& x) const {
-    return std::hash<sparqlExpression::StrongId>{}(x._id) ^
-           std::hash<size_t>{}(static_cast<size_t>(x._type));
-  }
-};
-
-}  // namespace std
 
 #endif  // QLEVER_SPARQLEXPRESSION_H

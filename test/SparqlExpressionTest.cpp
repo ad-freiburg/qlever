@@ -14,12 +14,13 @@ struct DummyExpression : public SparqlExpression {
   ExpressionResult evaluate(EvaluationContext*) const override {
     return std::move(_result);
   }
-  vector<std::string*> strings() override { return {}; }
   vector<std::string> getUnaggregatedVariables() override { return {}; }
   string getCacheKey(
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
     return "DummyDummyDummDumm"s;
   }
+
+  std::span<SparqlExpression::Ptr> children() override { return {}; }
 };
 
 template <typename BinaryExpression = ConditionalOrExpression>
@@ -30,14 +31,15 @@ auto testBinary = [](const ExpressionResult& expected, auto&&... operands) {
   sparqlExpression::VariableToColumnAndResultTypeMap map;
   ResultTable::LocalVocab localVocab;
   IdTable table{alloc};
-  sparqlExpression::EvaluationContext context{*ctxt, map, table, alloc, localVocab};
+  sparqlExpression::EvaluationContext context{*ctxt, map, table, alloc,
+                                              localVocab};
   std::vector<SparqlExpression::Ptr> children;
   (..., children.push_back(std::make_unique<DummyExpression>(
             ExpressionResult{std::move(operands)})));
 
-  BinaryExpression c{std::move(children)};
+  auto c = BinaryExpression::create(std::move(children));
 
-  ExpressionResult res = c.evaluate(&context);
+  ExpressionResult res = c->evaluate(&context);
   ASSERT_EQ(res, expected);
 };
 
