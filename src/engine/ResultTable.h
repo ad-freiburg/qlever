@@ -49,7 +49,8 @@ class ResultTable {
   // due to later use.
   // WARNING: Currently only operations that can run after a GroupBy copy
   //          the _localVocab of a subresult.
-  std::shared_ptr<vector<string>> _localVocab;
+  using LocalVocab = vector<string>;
+  std::shared_ptr<LocalVocab> _localVocab;
 
   ResultTable(ad_utility::AllocatorWithLimit<Id> allocator);
 
