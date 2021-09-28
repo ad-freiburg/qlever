@@ -29,12 +29,23 @@ class VectorWithMemoryLimit
   // Disable copy constructor and copy assignment operator (copying is too
   // expensive in the setting where we want to use this class and not
   // necessary).
-  VectorWithMemoryLimit(const VectorWithMemoryLimit&) = delete;
+  // The copy constructor is not deleted, but private, because it is used
+  // for the explicit clone() function.
+ private:
+  VectorWithMemoryLimit(const VectorWithMemoryLimit&) = default;
+
+ public:
   VectorWithMemoryLimit& operator=(const VectorWithMemoryLimit&) = delete;
 
   // Moving is fine.
   VectorWithMemoryLimit(VectorWithMemoryLimit&&) = default;
   VectorWithMemoryLimit& operator=(VectorWithMemoryLimit&&) = default;
+
+  // Allow copying via an explicit clone() function.
+  VectorWithMemoryLimit clone() const {
+    // Call the private copy constructor.
+    return VectorWithMemoryLimit(*this);
+  }
 };
 
 /// A strong type for Ids from the knowledge base to distinguish them from plain

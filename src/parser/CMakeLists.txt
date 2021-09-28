@@ -12,7 +12,9 @@ add_library(parser
         ParallelParseBuffer.h
         PropertyPathParser.h PropertyPathParser.cpp
         SparqlLexer.h SparqlLexer.cpp TokenizerCtre.h TurtleTokenId.h ParallelBuffer.cpp
-        SetOfIntervals.h SetOfIntervals.cpp)
+        SetOfIntervals.h SetOfIntervals.cpp
+        SparqlExpressionTypes.h
+        SparqlExpressionValueGetters.h SparqlExpressionValueGetters.cpp)
 target_link_libraries(parser rdfEscaping re2 absl::flat_hash_map)
 
 add_subdirectory(sparqlParser)

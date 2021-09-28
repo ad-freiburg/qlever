@@ -53,7 +53,7 @@ struct ActualValueGetter {
 
 /// Returns true iff the valid is not a NULL/UNDEF value (from optional) and
 /// not a nan (signalling an error in a previous calculation).
-struct IsValidGetter {
+struct IsValidValueGetter {
   // Numeric constants are true iff they are non-zero and not nan.
   bool operator()(double v, EvaluationContext*) const { return !std::isnan(v); }
   bool operator()(int64_t, EvaluationContext*) const { return true; }
@@ -70,7 +70,9 @@ struct IsValidGetter {
 /// See section 17.2.2 of the Sparql Standard
 struct EffectiveBooleanValueGetter {
   // Numeric constants are true iff they are non-zero and not nan.
-  bool operator()(double v, EvaluationContext*) const { return  v && !std::isnan(v); }
+  bool operator()(double v, EvaluationContext*) const {
+    return v && !std::isnan(v);
+  }
   bool operator()(int64_t v, EvaluationContext*) const { return v != 0; }
   bool operator()(bool v, EvaluationContext*) const { return v; }
 
