@@ -6,7 +6,7 @@ ENV LC_CTYPE C.UTF-8
 ENV DEBIAN_FRONTEND=noninteractive
 
 FROM base as builder
-RUN apt-get update && apt-get install -y build-essential cmake libsparsehash-dev libicu-dev tzdata pkg-config uuid-runtime uuid-dev git
+RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git
 RUN apt install -y libjemalloc-dev ninja-build libzstd-dev
 
 COPY . /app/
