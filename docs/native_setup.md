@@ -15,7 +15,6 @@ This roughly translates to
 * python >= 3.6 (for End-to-End Tests with type hints)
 * python-yaml >= 3.10
 
-
 ## Build and run unit tests
 
 Go to a folder where you want to build the binaries. Usually this is done
