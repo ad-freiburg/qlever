@@ -12,7 +12,6 @@ This roughly translates to
 
 * GCC >= 7.x
 * CMake >= 2.8.4
-* Google's sparsehash >= 2.02
 * python >= 3.6 (for End-to-End Tests with type hints)
 * python-yaml >= 3.10
 
