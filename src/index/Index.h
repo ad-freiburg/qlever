@@ -12,7 +12,6 @@
 #include <stxxl/vector>
 #include <vector>
 
-
 #include "../engine/ResultTable.h"
 #include "../global/Pattern.h"
 #include "../parser/NTriplesParser.h"
