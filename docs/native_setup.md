@@ -18,7 +18,7 @@ This roughly translates to
 
 ## Build and run unit tests
 
-Go to a folder where you want to build the binaries.  Usually this is done
+Go to a folder where you want to build the binaries. Usually this is done
 with a separate `build` subfolder. This is also assumed by the `e2e/e2e.sh`
 script.
 
