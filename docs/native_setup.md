@@ -5,21 +5,19 @@ Arch Linux.
 
 For Ubuntu 18.04 the following packages are required
 
-* build-essential cmake libsparsehash-dev libicu-dev
+* build-essential cmake libicu-dev
 * wget python3-yaml unzip curl (for End-to-End Tests)
 
 This roughly translates to
 
 * GCC >= 7.x
 * CMake >= 2.8.4
-* Google's sparsehash >= 2.02
 * python >= 3.6 (for End-to-End Tests with type hints)
 * python-yaml >= 3.10
 
-
 ## Build and run unit tests
 
-Go to a folder where you want to build the binaries.  Usually this is done
+Go to a folder where you want to build the binaries. Usually this is done
 with a separate `build` subfolder. This is also assumed by the `e2e/e2e.sh`
 script.
 

@@ -9,7 +9,6 @@
 #include <array>
 #include <cmath>
 #include <exception>
-#include <google/sparse_hash_map>
 #include <limits>
 #include <utility>
 #include <vector>
