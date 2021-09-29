@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include "../src/parser/LiteralExpression.h"
+#include "../src/parser/NaryExpression.h"
 #include "../src/parser/SparqlExpression.h"
 
 using namespace sparqlExpression;

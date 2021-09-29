@@ -114,7 +114,7 @@ auto makeExtractorFromChildResult(T&& childResult, [[maybe_unused]] size_t targe
 /// was actually specified. This variable performs this check.
 template <typename RangeCalculation, typename... Results>
 constexpr static bool rangeCalculationIsAllowed =
-    !ad_utility::isSimilar<RangeCalculation, NoRangeCalculation> &&
+    !ad_utility::isSimilar<RangeCalculation, NoCalculationWithSetOfIntervals> &&
     (... && ad_utility::isSimilar<Results, ad_utility::SetOfIntervals>);
 
 // Get the number of values, that a SingleExpressionResult encodes, e.g. 1 for a

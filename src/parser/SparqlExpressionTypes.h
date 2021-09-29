@@ -266,6 +266,14 @@ constexpr bool IsTaggedFunction<TaggedFunction<Tag, Function>> = true;
 
 template <typename T>
 concept TaggedFunctionConcept = IsTaggedFunction<T>;
+
+namespace detail {
+/// A Tag type that has to be used as the `CalculationWithSetOfIntervals`
+/// template parameter in `NaryExpression.h` and `AggregateExpression.h` when
+/// no such calculation is possible
+struct NoCalculationWithSetOfIntervals {};
+}  // namespace detail
+
 }  // namespace sparqlExpression
 
 #endif  // QLEVER_SPARQLEXPRESSIONTYPES_H

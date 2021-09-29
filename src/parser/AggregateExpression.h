@@ -1,5 +1,5 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
+//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 //
 // Created by johannes on 28.09.21.
@@ -60,27 +60,35 @@ inline auto noop = []<typename T>(T&& result, size_t) {
   return std::forward<T>(result);
 };
 
-} // namespace detail
+}  // namespace detail
 
 // The Aggregate expressions.
+
+// __________________________________________________________________________
+inline auto count = [](const auto& a, const auto& b) -> int64_t {
+  return a + b;
+};
+
 using CountExpression =
-detail::AggregateExpression<detail::NoRangeCalculation,
-    detail::IsValidValueGetter, decltype(count),
-    decltype(detail::noop), "COUNT">;
+    detail::AggregateExpression<detail::NoCalculationWithSetOfIntervals,
+                                detail::IsValidValueGetter, decltype(count),
+                                decltype(detail::noop), "COUNT">;
+
+inline auto add = [](const auto& a, const auto& b) -> double { return a + b; };
 using SumExpression =
-detail::AggregateExpression<detail::NoRangeCalculation,
-    detail::NumericValueGetter, decltype(add),
-    decltype(detail::noop), "SUM">;
+    detail::AggregateExpression<detail::NoCalculationWithSetOfIntervals,
+                                detail::NumericValueGetter, decltype(add),
+                                decltype(detail::noop), "SUM">;
 
 inline auto averageFinalOp = [](const auto& aggregation, size_t numElements) {
   return numElements ? static_cast<double>(aggregation) /
-                       static_cast<double>(numElements)
+                           static_cast<double>(numElements)
                      : std::numeric_limits<double>::quiet_NaN();
 };
 using AvgExpression =
-detail::AggregateExpression<detail::NoRangeCalculation,
-    detail::NumericValueGetter, decltype(add),
-    decltype(averageFinalOp), "AVG">;
+    detail::AggregateExpression<detail::NoCalculationWithSetOfIntervals,
+                                detail::NumericValueGetter, decltype(add),
+                                decltype(averageFinalOp), "AVG">;
 
 inline auto minLambda = [](const auto& a, const auto& b) -> double {
   return a < b ? a : b;
@@ -90,13 +98,13 @@ inline auto maxLambda = [](const auto& a, const auto& b) -> double {
 };
 
 using MinExpression =
-detail::AggregateExpression<detail::NoRangeCalculation,
-    detail::NumericValueGetter, decltype(minLambda),
-    decltype(detail::noop), "MIN">;
+    detail::AggregateExpression<detail::NoCalculationWithSetOfIntervals,
+                                detail::NumericValueGetter, decltype(minLambda),
+                                decltype(detail::noop), "MIN">;
 using MaxExpression =
-detail::AggregateExpression<detail::NoRangeCalculation,
-    detail::NumericValueGetter, decltype(maxLambda),
-    decltype(detail::noop), "MAX">;
+    detail::AggregateExpression<detail::NoCalculationWithSetOfIntervals,
+                                detail::NumericValueGetter, decltype(maxLambda),
+                                decltype(detail::noop), "MAX">;
 
 /// The GROUP_CONCAT Expression
 class GroupConcatExpression : public SparqlExpression {
@@ -107,7 +115,9 @@ class GroupConcatExpression : public SparqlExpression {
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
   // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> children() override { return {&_actualExpression, 1}; }
+  std::span<SparqlExpression::Ptr> children() override {
+    return {&_actualExpression, 1};
+  }
 
   vector<std::string> getUnaggregatedVariables() override {
     // This is an aggregation, so it never leaves any unaggregated variables.
@@ -123,6 +133,6 @@ class GroupConcatExpression : public SparqlExpression {
   std::string _separator;
 };
 
-} // namespace sparqlExpression
+}  // namespace sparqlExpression
 
 #endif  // QLEVER_AGGREGATEEXPRESSION_H
