@@ -90,8 +90,8 @@ class LiteralExpression : public SparqlExpression {
 
 ///  The actual instantiations and aliases of LiteralExpressions.
 using BooleanLiteralExpression = detail::LiteralExpression<bool>;
-using IntLiteralExpression = detail::LiteralExpression<int64_t>;
-using DoubleLiteralExpression = detail::LiteralExpression<double>;
+using InteExpression = detail::LiteralExpression<int64_t>;
+using DoubleExpression = detail::LiteralExpression<double>;
 using VariableExpression = detail::LiteralExpression<Variable>;
 using StringOrIriExpression = detail::LiteralExpression<string>;
 }  // namespace sparqlExpression

@@ -186,7 +186,7 @@ add_test(TaskQueueTest TaskQueueTest)
 
 add_executable(SetOfIntervalsTest SetOfIntervalsTest.cpp)
 add_test(SetOfIntervalsTest SetOfIntervalsTest)
-target_link_libraries(SetOfIntervalsTest gtest_main parser ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(SetOfIntervalsTest gtest_main sparqlExpressions ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(TypeTraitsTest TypeTraitsTest.cpp)
 add_test(TypeTraitsTest TypeTraitsTest)
@@ -194,4 +194,4 @@ target_link_libraries(TypeTraitsTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(SparqlExpressionTest SparqlExpressionTest.cpp)
 add_test(SparqlExpressionTest SparqlExpressionTest)
-target_link_libraries(SparqlExpressionTest gtest_main parser index ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(SparqlExpressionTest gtest_main sparqlExpressions index ${CMAKE_THREAD_LIBS_INIT})

@@ -11,14 +11,14 @@
 #include <variant>
 #include <vector>
 
-#include "../engine/CallFixedSize.h"
-#include "../engine/QueryExecutionContext.h"
-#include "../engine/ResultTable.h"
-#include "../global/Id.h"
-#include "../util/ConstexprSmallString.h"
-#include "./SetOfIntervals.h"
+#include "../../global/Id.h"
+#include "../../util/ConstexprSmallString.h"
+#include "../CallFixedSize.h"
+#include "../QueryExecutionContext.h"
+#include "../ResultTable.h"
 #include "./SparqlExpressionTypes.h"
 #include "./SparqlExpressionValueGetters.h"
+#include "SetOfIntervals.h"
 
 namespace sparqlExpression {
 
@@ -37,6 +37,7 @@ class SparqlExpression {
   virtual ExpressionResult evaluate(EvaluationContext*) const = 0;
 
   /// Return all variables and IRIs, needed for certain parser methods.
+  /// TODO<joka921> should be called getStringLiteralsAndVariables
   virtual vector<string*> strings() final {
     vector<string*> result;
     // Recursively aggregate the strings from all children.

@@ -14,15 +14,9 @@ add_library(parser
         ContextFileParser.cpp ContextFileParser.h
         ParallelParseBuffer.h
         PropertyPathParser.h PropertyPathParser.cpp
-        SparqlLexer.h SparqlLexer.cpp TokenizerCtre.h TurtleTokenId.h ParallelBuffer.cpp
-        SetOfIntervals.h SetOfIntervals.cpp
-        SparqlExpressionTypes.h
-        SparqlExpression.h SparqlExpression.cpp
-        AggregateExpression.h AggregateExpression.cpp
-        SparqlExpressionHelpers.h SparqlExpressionHelpers.cpp
-        SparqlExpressionValueGetters.h SparqlExpressionValueGetters.cpp 
-        AggregateExpression.cpp AggregateExpression.h 
-        NaryExpression.cpp NaryExpression.h 
-        LiteralExpression.h)
+        SparqlLexer.h SparqlLexer.cpp
+        TokenizerCtre.h TurtleTokenId.h
+        ParallelBuffer.cpp)
 target_link_libraries(parser sparqlParser rdfEscaping re2 absl::flat_hash_map)
+
 

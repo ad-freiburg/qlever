@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstring>
+#include <string_view>
 
 namespace ad_utility {
 /// A String/character array that can be constructed at compile time. It can
@@ -62,7 +63,7 @@ struct ConstexprSmallString {
   }
 
   /// Implicit conversion to std::string_view
-  operator string_view() const { return {_characters, _size}; }
+  operator std::string_view() const { return {_characters, _size}; }
 };
 }  // namespace ad_utility
 

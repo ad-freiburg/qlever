@@ -7,16 +7,15 @@
 
 #include "SparqlExpressionValueGetters.h"
 
-#include "../global/Constants.h"
-#include "../util/Conversions.h"
+#include "../../global/Constants.h"
+#include "../../util/Conversions.h"
 
 using namespace sparqlExpression::detail;
 // _____________________________________________________________________________
-double NumericValueGetter::operator()(StrongId strongId,
-                                      ResultTable::ResultType type,
+double NumericValueGetter::operator()(StrongIdWithResultType strongId,
                                       EvaluationContext* context) const {
-  const Id id = strongId._value;
-  switch (type) {
+  const Id id = strongId._id._value;
+  switch (strongId._type) {
     // This code is borrowed from the original QLever code.
     case ResultTable::ResultType::VERBATIM:
       return static_cast<double>(id);
@@ -43,11 +42,10 @@ double NumericValueGetter::operator()(StrongId strongId,
 }
 
 // _____________________________________________________________________________
-bool EffectiveBooleanValueGetter::operator()(StrongId strongId,
-                                             ResultTable::ResultType type,
+bool EffectiveBooleanValueGetter::operator()(StrongIdWithResultType strongId,
                                              EvaluationContext* context) const {
-  const Id id = strongId._value;
-  switch (type) {
+  const Id id = strongId._id._value;
+  switch (strongId._type) {
     case ResultTable::ResultType::VERBATIM:
       return id != 0;
     case ResultTable::ResultType::FLOAT:
@@ -81,11 +79,10 @@ bool EffectiveBooleanValueGetter::operator()(StrongId strongId,
 }
 
 // ____________________________________________________________________________
-string StringValueGetter::operator()(StrongId strongId,
-                                     ResultTable::ResultType type,
+string StringValueGetter::operator()(StrongIdWithResultType strongId,
                                      EvaluationContext* context) const {
-  const Id id = strongId._value;
-  switch (type) {
+  const Id id = strongId._id._value;
+  switch (strongId._type) {
     case ResultTable::ResultType::VERBATIM:
       return std::to_string(id);
     case ResultTable::ResultType::FLOAT:
@@ -115,10 +112,11 @@ string StringValueGetter::operator()(StrongId strongId,
 
 // ____________________________________________________________________________
 bool IsValidValueGetter::operator()(
-    StrongId strongId, ResultTable::ResultType type,
+    StrongIdWithResultType strongId,
     [[maybe_unused]] EvaluationContext* context) const {
   // Every knowledge base value that is bound converts to "True"
   // TODO<joka921> check for the correct semantics of the error handling and
   // implement it in a further version.
-  return type != ResultTable::ResultType::KB || strongId._value != ID_NO_VALUE;
+  return strongId._type != ResultTable::ResultType::KB ||
+         strongId._id._value != ID_NO_VALUE;
 }
