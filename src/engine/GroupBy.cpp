@@ -810,3 +810,7 @@ void GroupBy::computeResult(ResultTable* result) {
     throw;
   }
 }
+
+void performGroupByOnBlockRange(ResultTable* resultTable, Id col0Id) {
+
+}

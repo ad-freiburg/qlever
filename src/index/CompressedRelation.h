@@ -6,6 +6,7 @@
 #define QLEVER_COMPRESSEDRELATION_H
 
 #include <algorithm>
+#include "../util/Generator.h"
 #include <vector>
 
 #include "../global/Id.h"
@@ -76,6 +77,9 @@ struct CompressedRelationMetaData {
   // Equal if all members are equal.
   bool operator==(const CompressedRelationMetaData&) const = default;
 
+  // TODO<joka921> comment
+  using DecompressedBlock = std::vector<std::array<Id, 2>>;
+
   /**
    * @brief Perform a scan for one col0Id i.e. retrieve all YZ from the XYZ
    * permutation for a specific col0Id value of X
@@ -91,7 +95,7 @@ struct CompressedRelationMetaData {
   template <class Permutation, typename IdTableImpl>
   static void scan(Id col0Id, IdTableImpl* result,
                    const Permutation& permutation,
-                   ad_utility::SharedConcurrentTimeoutTimer timer = nullptr);
+      const ad_utility::SharedConcurrentTimeoutTimer& timer = nullptr);
 
   /**
    * @brief Perform a scan for two keys i.e. retrieve all Z from the XYZ
@@ -111,6 +115,13 @@ struct CompressedRelationMetaData {
   static void scan(const Id count, const Id& col1Id, IdTableImpl* result,
                    const PermutationInfo& permutation,
                    ad_utility::SharedConcurrentTimeoutTimer timer = nullptr);
+
+
+ // ____________________________________________________________________________
+  template <class Permutation>
+  static cppcoro::generator<DecompressedBlock> ScanBlockGenerator(
+      Id col0Id, const Permutation& permutation,
+      ad_utility::SharedConcurrentTimeoutTimer timer);
 
  public:
   // some helper functions for reading and decompressing of blocks.

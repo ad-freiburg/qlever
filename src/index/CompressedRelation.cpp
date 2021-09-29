@@ -88,7 +88,7 @@ std::vector<std::array<Id, 2>> readIncompleteBlock(const auto& permutation, cons
 
 // ____________________________________________________________________________
 template <class Permutation>
-cppcoro::generator<std::vector<std::array<Id, 2>>> ScanBlockGenerator(
+cppcoro::generator<CompressedRelationMetaData::DecompressedBlock> CompressedRelationMetaData::ScanBlockGenerator(
     Id col0Id, const Permutation& permutation,
     ad_utility::SharedConcurrentTimeoutTimer timer) {
   if (permutation._meta.col0IdExists(col0Id)) {
@@ -132,13 +132,14 @@ cppcoro::generator<std::vector<std::array<Id, 2>>> ScanBlockGenerator(
     };
 
     std::vector<std::array<Id, 2>> intermediateResult;
-    auto returner = [&](auto&& result) { intermediateResult = std::move(result); };
+    auto returner = [&](DecompressedBlock && result) { intermediateResult = std::move(result); };
 
     ad_pipeline::Pipeline p(true, {1, 10, 0}, readBlocks, decompressLambda, returner);
 
     while (auto optionalTask = p.popManually()) {
       optionalTask.value()();
       co_yield std::move(intermediateResult);
+      intermediateResult.clear();
     }
   }
 }
@@ -147,7 +148,7 @@ cppcoro::generator<std::vector<std::array<Id, 2>>> ScanBlockGenerator(
 template <class Permutation, typename IdTableImpl>
 void CompressedRelationMetaData::scan(
     Id col0Id, IdTableImpl* result, const Permutation& permutation,
-    ad_utility::SharedConcurrentTimeoutTimer timer) {
+    const ad_utility::SharedConcurrentTimeoutTimer& timer) {
   if constexpr (!ad_utility::isVector<IdTableImpl>) {
     AD_CHECK(result->cols() == 2);
   }
