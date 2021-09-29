@@ -221,6 +221,7 @@ operation
  * used to perform conversions.
  * @tparam BinaryOperation The actual binary operation, it must be callable with
  * the result types of the `ValueGetter` .
+ */
 /**
  * This class template allows to perform different left-associative binary
  * operations in a single class, e.g. "3 * 5 / 7 * ?x"
@@ -309,104 +310,7 @@ requires(std::is_same_v<RangeCalculation, NoRangeCalculation> ||
   std::vector<TagString> _relations;
 };
 
-template <typename RangeCalculation, typename ValueGetter, typename AggregateOp,
-          typename FinalOp, TagString Tag>
-class AggregateExpression : public SparqlExpression {
- public:
-  AggregateExpression(bool distinct, Ptr&& child,
-                      AggregateOp aggregateOp = AggregateOp{})
-      : _distinct(distinct),
-        _child{std::move(child)},
-        _aggregateOp{std::move(aggregateOp)} {}
 
-  // __________________________________________________________________________
-  ExpressionResult evaluate(EvaluationContext* context) const override;
-
-  // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> children() override { return {&_child, 1}; }
-
-  // _________________________________________________________________________
-  vector<std::string> getUnaggregatedVariables() override {
-    // This is an aggregation, so it never leaves any unaggregated variables.
-    return {};
-  }
-
-  // __________________________________________________________________________
-  string getCacheKey(const VariableToColumnMap& varColMap) const override {
-    return std::string{Tag} + "(" + _child->getCacheKey(varColMap) + ")";
-  }
-
-  // __________________________________________________________________________
-  std::optional<string> getVariableForNonDistinctCountOrNullopt()
-      const override {
-    if (Tag == "COUNT" && !_distinct) {
-      return _child->getVariableOrNullopt();
-    }
-    return std::nullopt;
-  }
-
- private:
-  bool _distinct;
-  Ptr _child;
-  AggregateOp _aggregateOp;
-};
-
-// This can be used as the FinalOp parameter to an Aggregate if there is nothing
-// to be done on the final result
-inline auto noop = []<typename T>(T&& result, size_t) {
-  return std::forward<T>(result);
-};
-
-// ______________________________________________________________________________
-inline auto makePerformConcat(std::string separator) {
-  return [sep = std::move(separator)](string&& a, const string& b) -> string {
-    if (a.empty()) [[unlikely]] {
-      return b;
-    } else [[likely]] {
-      a.append(sep);
-      a.append(std::move(b));
-      return std::move(a);
-    }
-  };
-}
-
-using PerformConcat = std::decay_t<decltype(makePerformConcat(std::string{}))>;
-
-/// The GROUP_CONCAT Expression
-class GroupConcatExpression : public SparqlExpression {
- public:
-  GroupConcatExpression(bool distinct, Ptr&& child, std::string separator)
-      : _separator{std::move(separator)} {
-    auto performConcat = makePerformConcat(_separator);
-
-    using G =
-        AggregateExpression<NoRangeCalculation, StringValueGetter,
-                            PerformConcat, decltype(noop), "GROUP_CONCAT">;
-    _child = std::make_unique<G>(distinct, std::move(child), performConcat);
-  }
-
-  // __________________________________________________________________________
-  ExpressionResult evaluate(EvaluationContext* context) const override {
-    // The child is already set up to perform all the work.
-    return _child->evaluate(context);
-  }
-
-  // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> children() override { return {&_child, 1}; }
-
-  vector<std::string> getUnaggregatedVariables() override {
-    // This is an aggregation, so it never leaves any unaggregated variables.
-    return {};
-  }
-
-  string getCacheKey(const VariableToColumnMap& varColMap) const override {
-    return "["s + _separator + "]" + _child->getCacheKey(varColMap);
-  }
-
- private:
-  Ptr _child;
-  std::string _separator;
-};
 
 }  // namespace detail
 
@@ -465,40 +369,6 @@ using AdditiveExpression =
 inline auto count = [](const auto& a, const auto& b) -> int64_t {
   return a + b;
 };
-using CountExpression =
-    detail::AggregateExpression<detail::NoRangeCalculation,
-                                detail::IsValidValueGetter, decltype(count),
-                                decltype(detail::noop), "COUNT">;
-using SumExpression =
-    detail::AggregateExpression<detail::NoRangeCalculation,
-                                detail::NumericValueGetter, decltype(add),
-                                decltype(detail::noop), "SUM">;
-
-inline auto averageFinalOp = [](const auto& aggregation, size_t numElements) {
-  return numElements ? static_cast<double>(aggregation) /
-                           static_cast<double>(numElements)
-                     : std::numeric_limits<double>::quiet_NaN();
-};
-using AvgExpression =
-    detail::AggregateExpression<detail::NoRangeCalculation,
-                                detail::NumericValueGetter, decltype(add),
-                                decltype(averageFinalOp), "AVG">;
-
-inline auto minLambda = [](const auto& a, const auto& b) -> double {
-  return a < b ? a : b;
-};
-inline auto maxLambda = [](const auto& a, const auto& b) -> double {
-  return a > b ? a : b;
-};
-
-using MinExpression =
-    detail::AggregateExpression<detail::NoRangeCalculation,
-                                detail::NumericValueGetter, decltype(minLambda),
-                                decltype(detail::noop), "MIN">;
-using MaxExpression =
-    detail::AggregateExpression<detail::NoRangeCalculation,
-                                detail::NumericValueGetter, decltype(maxLambda),
-                                decltype(detail::noop), "MAX">;
 
 /// The base cases: Constants and variables
 using BooleanLiteralExpression = detail::LiteralExpression<bool>;

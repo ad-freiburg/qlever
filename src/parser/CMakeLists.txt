@@ -15,8 +15,9 @@ add_library(parser
         SetOfIntervals.h SetOfIntervals.cpp
         SparqlExpressionTypes.h
         SparqlExpression.h SparqlExpression.cpp
+        AggregateExpression.h AggregateExpression.cpp
         SparqlExpressionHelpers.h SparqlExpressionHelpers.cpp
-        SparqlExpressionValueGetters.h SparqlExpressionValueGetters.cpp)
+        SparqlExpressionValueGetters.h SparqlExpressionValueGetters.cpp AggregateExpression.cpp AggregateExpression.h)
 target_link_libraries(parser rdfEscaping re2 absl::flat_hash_map)
 
 add_subdirectory(sparqlParser)
