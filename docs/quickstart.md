@@ -92,3 +92,13 @@ professions and returning the top-10. Note that this a very hard query (for whic
 all SPARQL engines we know of time out).
 
         curl -Gs http://localhost:$PORT --data-urlencode 'query=PREFIX wd: <http://www.wikidata.org/entity/> PREFIX wdt: <http://www.wikidata.org/prop/direct/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT ?person_id ?person (COUNT(?profession_id) AS ?count) (GROUP_CONCAT(?profession; separator=", ") AS ?professions) WHERE { ?person_id wdt:P31 wd:Q5 . ?person_id wdt:P106 ?profession_id . ?profession_id rdfs:label ?profession . ?person_id rdfs:label ?person . FILTER (LANG(?person) = "en") . FILTER (LANG(?profession) = "en") } GROUP BY ?person_id ?person ORDER BY DESC(?count) LIMIT 10' --data-urlencode "action=tsv_export"
+
+## QLever UI
+
+A nice user interface that allows to enter SPARQL queries conveniently using autocompletion
+and has all kinds of additional feature, is available under https://github.com/ad-freiburg/qlever-ui .
+A quickstart guide with pre-configured settings for the olympics dataset and Wikidata will be
+provided here soon. Here is [a live instance of the QLever UI](https://qlever.cs.uni-freiburg.de)
+with convenient access to various SPARQL endpoints (all realized via QLever). 
+
+
