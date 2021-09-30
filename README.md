@@ -24,14 +24,10 @@ We aim at full SPARQL 1.1 support and we are almost there (except for SPARQL Upd
 
 # Quickstart
 
-For easy step-by-step instructions on how to get data, build an index using QLever, and
+For easy step-by-step instructions on how to build an index using QLever and
 then start a SPARQL endpoint using that index, see our [Quickstart Guide](docs/quickstart.md).
-This will take you through a simple example dataset ("olympics", with 1.8M triples)
-as well as a very large dataset (the complete Wikidata, with 12 billion triples).
-
-Here is an older [Wikidata Quickstart Guide](docs/wikidata.md). But actually, it is
-just as easy to use QLever for the large Wikidata as for a small example. Building the
-index just takes longer for Wikidata (about 20 hours).
+This will take you through a simple example dataset ([120 Years of Olympics](https://github.com/wallscope/olympics-rdf), with 1.8M triples)
+as well as a very large dataset ([the complete Wikidata](https://www.wikidata.org), with around 12 billion triples).
 
 QLever's [advanced features are described here](docs/advanced_features.md).
 
