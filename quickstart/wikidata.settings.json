@@ -1,0 +1,15 @@
+{
+  "languages-internal": ["en"],
+  "prefixes-external": [
+    "<http://www.wikidata.org/entity/statement",
+    "<http://www.wikidata.org/value",
+    "<http://www.wikidata.org/reference"
+  ],
+  "locale": {
+	  "language": "en",
+	  "country": "US",
+	  "ignore-punctuation": true
+  },
+  "ascii-prefixes-only": true,
+  "num-triples-per-partial-vocab" : 50000000
+}
