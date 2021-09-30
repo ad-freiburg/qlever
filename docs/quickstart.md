@@ -1,8 +1,8 @@
 # QLever Quickstart 
 
 This page gives easy step-by-step instructions on how to build a qlever index
-for an arbitrary given (https://www.w3.org/TR/n-triples/)[RDF N-Triples] or
-(https://www.w3.org/TR/turtle)[RDF Turtle] file.
+for an arbitrary given [RDF N-Triples](https://www.w3.org/TR/n-triples) or
+[RDF Turtle](https://www.w3.org/TR/turtle) file.
 
 QLever can build indexes for up to 100 billion triples on a standard PC or
 server with 128 GB of RAM (for smaller datasets, less RAM suffices). For an 
