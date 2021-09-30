@@ -30,9 +30,9 @@ the QLever repository uses a few submodules.
 Create and go to a directory of your choice, and download or copy an N-Triples
 for Turtle file of your choice there. If the file is compressed (as large files
 usually are), there is no need to decompress it. If there are multiple files,
-there is no need to concatenate them. All this will become clear in the next
-step. As an example, let us copy the example file `olympics.ttl.xz` from the
-from your local copy of the Qlever repository.
+there is no need to concatenate them. This will become clear in the next section.
+As an example, let us copy the example file `olympics.nt.xz` from your local copy
+of the Qlever repository.
 
         mkdir -p $QLEVER_HOME/qlever-indices/olympics
         cd $QLEVER_HOME/qlever-indices/olympics
@@ -40,8 +40,8 @@ from your local copy of the Qlever repository.
         cp $QLEVER_HOME/qlever-code/examples/olympics.settings.json .
 
 As another example, let us download the latest version of the complete Wikidata
-(this takes a few hours, only do this if you actually want to build a QLever
-index for Wikidata).
+(this takes half a day, even with a fast internet connection, so only do this if you
+actually want to build a QLever index for Wikidata).
 
         mkdir -p $QLEVER_HOME/qlever-indices/wikidata
         cd $QLEVER_HOME/qlever-indices/wikidata
