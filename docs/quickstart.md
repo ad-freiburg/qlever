@@ -17,8 +17,8 @@ stuff. This can be any directory. For example:
 
 ## Get the QLever code and build it
 
-Building the code will take a few minutes. Don't forget the --recursive, it's
-important, since the QLever repository uses a few submodules.
+Building the code will take a few minutes. The --recursive is important because
+the QLever repository uses a few submodules.
 
         cd $QLEVER_HOME
         git clone --recursive https://github.com/ad-freiburg/qlever qlever-code
