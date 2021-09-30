@@ -14,7 +14,8 @@ Those demos also feature QLever's context-sensitiv autocompletion, which makes S
 
 QLever was first described and evaluated in this [CIKM'17
 paper](http://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf).
-Qlever's autocompletion functionality is described and evaluated in [this paper](https://ad-publications.cs.uni-freiburg.de/ARXIV_sparql_autocompletion_BKKKS_2021.pdf).
+QLever has developed a lot since then.
+Qlever's autocompletion functionality and some other new features are described and evaluated in [this paper](https://ad-publications.cs.uni-freiburg.de/ARXIV_sparql_autocompletion_BKKKS_2021.pdf).
 If you use QLever in your work, please cite those papers.
 QLever supports standard SPARQL 1.1 constructs like:
 LIMIT, OFFSET, ORDER BY, GROUP BY, HAVING, COUNT, DISTINCT, SAMPLE, GROUP_CONCAT, FILTER, REGEX, LANG, OPTIONAL, UNION, MINUS, VALUES, BIND.
