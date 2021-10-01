@@ -39,9 +39,9 @@ of the Qlever repository.
         cp $QLEVER_HOME/qlever-code/examples/olympics.nt.xz .
         cp $QLEVER_HOME/qlever-code/examples/olympics.settings.json .
 
-As another example, let us download the latest version of the complete Wikidata
-(this takes half a day, even with a fast internet connection, so only do this if you
-actually want to build a QLever index for Wikidata).
+As another example, let us download the latest version of the complete Wikidata.
+this takes half a day, even with a fast internet connection, so **only do this if you
+actually want to build a QLever index for Wikidata**.
 
         mkdir -p $QLEVER_HOME/qlever-indices/wikidata
         cd $QLEVER_HOME/qlever-indices/wikidata
@@ -58,7 +58,7 @@ the log from the docker container as long as it exists).
 
         chmod o+w . && docker run -it --rm -v $QLEVER_HOME/qlever-indices/olympics:/index --entrypoint bash qlever -c "cd /index && xzcat olympics.nt.xz | IndexBuilderMain -F ttl -f - -l -i olympics -s olympics.settings.json | tee olympics.index-log.txt"
 
-To build an index for the complete Wikidata (12B triples as of 30.09.2021), the
+To build an index for the complete Wikidata (21 billion triples as of 30.09.2021), the
 following command line does the job (after obtaining the dataset and the
 settings as explained in the previous paragraph). It takes about 20 hours on an
 AMD Ryzen 9 5900X. Note that the only difference is the basename (`wikidata`
@@ -75,23 +75,29 @@ the job. Choose a `PORT` of your choice, the SPARQL endpoint will then be
 available on that port on the machine where you have started this. If you want
 the container to run in the background, replace `--rm` by `-d`.
 
-        PORT=7018; docker run --rm -v $QLEVER_HOME/qlever-indices/olympics:/index -p $PORT:7001 -e INDEX_PREFIX=olympics --name qlever.olympics qlever
+        PORT=7001; docker run --rm -v $QLEVER_HOME/qlever-indices/olympics:/index \
+          -p $PORT:7001 -e INDEX_PREFIX=olympics --name qlever.olympics qlever
 
 Here is an example query to this SPARQL endpoint, computing the names of the
 three athletes with the most gold medals in the Olympics games.
 
-        curl -Gs http://localhost:$PORT --data-urlencode "query=PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX medal: <http://wallscope.co.uk/resource/olympics/medal/> PREFIX olympics: <http://wallscope.co.uk/ontology/olympics/> SELECT ?athlete (COUNT(?medal) as ?count_medal) WHERE { ?medal olympics:medal medal:Gold .  ?medal olympics:athlete/rdfs:label ?athlete .  } GROUP BY ?athlete ORDER BY DESC(?count_medal) LIMIT 10" --data-urlencode "action=tsv_export"
+        curl -Gs http://localhost:$PORT \
+          --data-urlencode "query=PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX medal: <http://wallscope.co.uk/resource/olympics/medal/> PREFIX olympics: <http://wallscope.co.uk/ontology/olympics/> SELECT ?athlete (COUNT(?medal) as ?count_medal) WHERE { ?medal olympics:medal medal:Gold .  ?medal olympics:athlete/rdfs:label ?athlete .  } GROUP BY ?athlete ORDER BY DESC(?count_medal) LIMIT 10" \
+          --data-urlencode "action=tsv_export"
         
 Similarly, here is how to start the engine for the Wikidata dataset (after you
 have build the index as explained in the previous section):
 
-        PORT=7001; docker run --rm -v $QLEVER_HOME/qlever-indices/wikidata:/index -p $PORT:7001 -e INDEX_PREFIX=wikidata --name qlever.wikidata qlever
+        PORT=7002; docker run --rm -v $QLEVER_HOME/qlever-indices/wikidata:/index \
+          -p $PORT:7001 -e INDEX_PREFIX=wikidata --name qlever.wikidata qlever
 
 Here is an example query to this SPARQL endpoint, computing all people and their
 professions and returning the top-10. Note that this a very hard query (for which
 all SPARQL engines we know of time out).
 
-        curl -Gs http://localhost:$PORT --data-urlencode 'query=PREFIX wd: <http://www.wikidata.org/entity/> PREFIX wdt: <http://www.wikidata.org/prop/direct/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT ?person_id ?person (COUNT(?profession_id) AS ?count) (GROUP_CONCAT(?profession; separator=", ") AS ?professions) WHERE { ?person_id wdt:P31 wd:Q5 . ?person_id wdt:P106 ?profession_id . ?profession_id rdfs:label ?profession . ?person_id rdfs:label ?person . FILTER (LANG(?person) = "en") . FILTER (LANG(?profession) = "en") } GROUP BY ?person_id ?person ORDER BY DESC(?count) LIMIT 10' --data-urlencode "action=tsv_export"
+        curl -Gs http://localhost:$PORT \
+          --data-urlencode 'query=PREFIX wd: <http://www.wikidata.org/entity/> PREFIX wdt: <http://www.wikidata.org/prop/direct/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT ?person_id ?person (COUNT(?profession_id) AS ?count) (GROUP_CONCAT(?profession; separator=", ") AS ?professions) WHERE { ?person_id wdt:P31 wd:Q5 . ?person_id wdt:P106 ?profession_id . ?profession_id rdfs:label ?profession . ?person_id rdfs:label ?person . FILTER (LANG(?person) = "en") . FILTER (LANG(?profession) = "en") } GROUP BY ?person_id ?person ORDER BY DESC(?count) LIMIT 10' \
+          --data-urlencode "action=tsv_export"
 
 ## QLever UI
 
@@ -103,11 +109,7 @@ http://localhost:8000 (you can change `PORT` below as you like).
 The UI will be preconfigured for the olympics dataset above, assuming a SPARQL
 endpoint at http://localhost:7001 . You can change the address of that SPARQL
 endpoint by logging into QLever UI (user and password `demo`) and clicking on
-Backend Informatik -> Edit this backend.
-
-Here is [a live instance of the QLever UI](https://qlever.cs.uni-freiburg.de)
-with convenient access to various SPARQL endpoints (all realized via QLever). 
-
+`Backend Information -> Edit this backend`.
 
         cd $QLEVER_HOME
         git clone https://github.com/ad-freiburg/qlever-ui.git
@@ -116,3 +118,6 @@ with convenient access to various SPARQL endpoints (all realized via QLever).
         chmod o+w db && cp $QLEVER_HOME/qlever-code/examples/qleverui.sqlite3 db && chmod o+w db/qleverui.sqlite3
         PORT=8000; docker run -it --rm -p $PORT:8000 -v $(pwd)/db:/app/db qlever-ui
 
+If you just want to see the QLever UI in action and not install it yourself,
+here is [a demo instance of the QLever UI](https://qlever.cs.uni-freiburg.de)
+with convenient access to various SPARQL endpoints (all realized via QLever). 
