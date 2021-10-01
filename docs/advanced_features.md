@@ -16,7 +16,7 @@ example, the following query finds all mentions of astronauts next to the words
 Such queries can be simulated in standard SPARQL, but only with poor
 performance, see the CIKM'17 paper above.  Details about the required input data
 and the SPARQL+text query syntax and semantics can be found
-[here](docs/sparql_plus_text.md).
+[here](/docs/sparql_plus_text.md).
 
 QLever also supports efficient SPARQL autocompletion.  For example, the
 following query yields a list of all predicates associated with people in the
