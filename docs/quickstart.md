@@ -75,23 +75,29 @@ the job. Choose a `PORT` of your choice, the SPARQL endpoint will then be
 available on that port on the machine where you have started this. If you want
 the container to run in the background, replace `--rm` by `-d`.
 
-        PORT=7018; docker run --rm -v $QLEVER_HOME/qlever-indices/olympics:/index -p $PORT:7001 -e INDEX_PREFIX=olympics --name qlever.olympics qlever
+        PORT=7001; docker run --rm -v $QLEVER_HOME/qlever-indices/olympics:/index \
+          -p $PORT:7001 -e INDEX_PREFIX=olympics --name qlever.olympics qlever
 
 Here is an example query to this SPARQL endpoint, computing the names of the
 three athletes with the most gold medals in the Olympics games.
 
-        curl -Gs http://localhost:$PORT --data-urlencode "query=PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX medal: <http://wallscope.co.uk/resource/olympics/medal/> PREFIX olympics: <http://wallscope.co.uk/ontology/olympics/> SELECT ?athlete (COUNT(?medal) as ?count_medal) WHERE { ?medal olympics:medal medal:Gold .  ?medal olympics:athlete/rdfs:label ?athlete .  } GROUP BY ?athlete ORDER BY DESC(?count_medal) LIMIT 10" --data-urlencode "action=tsv_export"
+        curl -Gs http://localhost:$PORT \
+          --data-urlencode "query=PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX medal: <http://wallscope.co.uk/resource/olympics/medal/> PREFIX olympics: <http://wallscope.co.uk/ontology/olympics/> SELECT ?athlete (COUNT(?medal) as ?count_medal) WHERE { ?medal olympics:medal medal:Gold .  ?medal olympics:athlete/rdfs:label ?athlete .  } GROUP BY ?athlete ORDER BY DESC(?count_medal) LIMIT 10" \
+          --data-urlencode "action=tsv_export"
         
 Similarly, here is how to start the engine for the Wikidata dataset (after you
 have build the index as explained in the previous section):
 
-        PORT=7001; docker run --rm -v $QLEVER_HOME/qlever-indices/wikidata:/index -p $PORT:7001 -e INDEX_PREFIX=wikidata --name qlever.wikidata qlever
+        PORT=7002; docker run --rm -v $QLEVER_HOME/qlever-indices/wikidata:/index \
+          -p $PORT:7001 -e INDEX_PREFIX=wikidata --name qlever.wikidata qlever
 
 Here is an example query to this SPARQL endpoint, computing all people and their
 professions and returning the top-10. Note that this a very hard query (for which
 all SPARQL engines we know of time out).
 
-        curl -Gs http://localhost:$PORT --data-urlencode 'query=PREFIX wd: <http://www.wikidata.org/entity/> PREFIX wdt: <http://www.wikidata.org/prop/direct/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT ?person_id ?person (COUNT(?profession_id) AS ?count) (GROUP_CONCAT(?profession; separator=", ") AS ?professions) WHERE { ?person_id wdt:P31 wd:Q5 . ?person_id wdt:P106 ?profession_id . ?profession_id rdfs:label ?profession . ?person_id rdfs:label ?person . FILTER (LANG(?person) = "en") . FILTER (LANG(?profession) = "en") } GROUP BY ?person_id ?person ORDER BY DESC(?count) LIMIT 10' --data-urlencode "action=tsv_export"
+        curl -Gs http://localhost:$PORT \
+          --data-urlencode 'query=PREFIX wd: <http://www.wikidata.org/entity/> PREFIX wdt: <http://www.wikidata.org/prop/direct/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT ?person_id ?person (COUNT(?profession_id) AS ?count) (GROUP_CONCAT(?profession; separator=", ") AS ?professions) WHERE { ?person_id wdt:P31 wd:Q5 . ?person_id wdt:P106 ?profession_id . ?profession_id rdfs:label ?profession . ?person_id rdfs:label ?person . FILTER (LANG(?person) = "en") . FILTER (LANG(?profession) = "en") } GROUP BY ?person_id ?person ORDER BY DESC(?count) LIMIT 10' \
+          --data-urlencode "action=tsv_export"
 
 ## QLever UI
 
