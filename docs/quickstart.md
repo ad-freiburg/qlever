@@ -109,7 +109,7 @@ http://localhost:8000 (you can change `PORT` below as you like).
 The UI will be preconfigured for the olympics dataset above, assuming a SPARQL
 endpoint at http://localhost:7001 . You can change the address of that SPARQL
 endpoint by logging into QLever UI (user and password `demo`) and clicking on
-Backend Information -> Edit this backend.
+`Backend Information -> Edit this backend`.
 
 Here is [a live instance of the QLever UI](https://qlever.cs.uni-freiburg.de)
 with convenient access to various SPARQL endpoints (all realized via QLever). 
