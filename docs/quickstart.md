@@ -111,10 +111,6 @@ endpoint at http://localhost:7001 . You can change the address of that SPARQL
 endpoint by logging into QLever UI (user and password `demo`) and clicking on
 `Backend Information -> Edit this backend`.
 
-Here is [a live instance of the QLever UI](https://qlever.cs.uni-freiburg.de)
-with convenient access to various SPARQL endpoints (all realized via QLever). 
-
-
         cd $QLEVER_HOME
         git clone https://github.com/ad-freiburg/qlever-ui.git
         cd qlever-ui
@@ -122,3 +118,6 @@ with convenient access to various SPARQL endpoints (all realized via QLever).
         chmod o+w db && cp $QLEVER_HOME/qlever-code/examples/qleverui.sqlite3 db && chmod o+w db/qleverui.sqlite3
         PORT=8000; docker run -it --rm -p $PORT:8000 -v $(pwd)/db:/app/db qlever-ui
 
+If you just want to see the QLever UI in action and not install it yourself,
+here is [a demo instance of the QLever UI](https://qlever.cs.uni-freiburg.de)
+with convenient access to various SPARQL endpoints (all realized via QLever). 
