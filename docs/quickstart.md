@@ -85,7 +85,7 @@ three athletes with the most gold medals in the Olympics games.
 Similarly, here is how to start the engine for the Wikidata dataset (after you
 have build the index as explained in the previous section):
 
-        PORT=7019; docker run --rm -v $QLEVER_HOME/qlever-indices/wikidata:/index -p $PORT:7001 -e INDEX_PREFIX=wikidata --name qlever.wikidata qlever
+        PORT=7001; docker run --rm -v $QLEVER_HOME/qlever-indices/wikidata:/index -p $PORT:7001 -e INDEX_PREFIX=wikidata --name qlever.wikidata qlever
 
 Here is an example query to this SPARQL endpoint, computing all people and their
 professions and returning the top-10. Note that this a very hard query (for which
@@ -95,10 +95,24 @@ all SPARQL engines we know of time out).
 
 ## QLever UI
 
-A nice user interface that allows to enter SPARQL queries conveniently using autocompletion
-and has all kinds of additional feature, is available under https://github.com/ad-freiburg/qlever-ui .
-A quickstart guide with pre-configured settings for the olympics dataset and Wikidata will be
-provided here soon. Here is [a live instance of the QLever UI](https://qlever.cs.uni-freiburg.de)
+If you don't just want to talk to the API, but you also want a nice user
+interface (that in particular provides SPARQL autocompletion), execute the
+following steps. Afterwards the QLever UI will be available on
+http://localhost:8000 (you can change `PORT` below as you like).
+
+The UI will be preconfigured for the olympics dataset above, assuming a SPARQL
+endpoint at http://localhost:7001 . You can change the address of that SPARQL
+endpoint by logging into QLever UI (user and password `demo`) and clicking on
+Backend Informatik -> Edit this backend.
+
+Here is [a live instance of the QLever UI](https://qlever.cs.uni-freiburg.de)
 with convenient access to various SPARQL endpoints (all realized via QLever). 
 
+
+        cd $QLEVER_HOME
+        git clone https://github.com/ad-freiburg/qlever-ui.git
+        cd qlever-ui
+        docker build -t qlever-ui .
+        chmod o+w db && cp $QLEVER_HOME/examples/qleverui.sqlite3 db
+        PORT=8000; docker run -it --rm -p $PORT:8000 -v $(pwd)/db:/app/db qlever-ui
 
