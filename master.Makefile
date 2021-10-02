@@ -88,19 +88,25 @@ show-config:
 	  printf "%-30s = %s\n" "$$VAR" "$${!VAR}"; done
 	@echo
 	@printf "All targets: "
-	@grep "^[A-Za-z._]\+:" /local/data/qlever/qlever-proxy/ac-queries.Makefile | sed 's/://' | paste -sd" "
+	@grep "^[A-Za-z._]\+:" $(lastword $(MAKEFILE_LIST)) | sed 's/://' | paste -sd" "
 	@echo
-	@echo "make index.THIS_WILL_OVERWRITE_AN_EXISTING_INDEX will execute the following:"
+	@echo "make index will execute the following (but NOT if an index with that name exists):"
 	@echo
-	@$(MAKE) -sn index.THIS_WILL_OVERWRITE_AN_EXISTING_INDEX
+	@$(MAKE) -sn index | egrep -v "^(if|fi)"
 	@echo
 
-# Build an index
+# Build an index or remove an existing one
 
 CAT_TTL = cat $(DB).ttl
 
-index.THIS_WILL_OVERWRITE_AN_EXISTING_INDEX:
-	time ( docker run -it --rm -v $(shell pwd):/index --entrypoint bash --name qlever.$(DB)-index $(DOCKER_IMAGE) -c "cd /index && $(CAT_TTL) | IndexBuilderMain -F ttl -f - -l -i $(DB) -K $(DB) -s $(DB_BASE).settings.json | tee $(DB).index-log.txt"; rm -f $(DB)*tmp* )
+index:
+	@if ls $(DB).index.* 1> /dev/null 2>&1; then echo -e "\033[31mIndex exists, delete it first with make remove-index, which would exeucte the following:\033[0m"; echo; make -sn remove-index; echo; else \
+	time ( docker run -it --rm -v $(shell pwd):/index --entrypoint bash --name qlever.$(DB)-index $(DOCKER_IMAGE) -c "cd /index && $(CAT_TTL) | IndexBuilderMain -F ttl -f - -l -i $(DB) -K $(DB) -s $(DB_BASE).settings.json | tee $(DB).index-log.txt"; rm -f $(DB)*tmp* ) \
+	fi
+
+remove-index:
+	rm -f $(DB).index.* $(DB).literals-index $(DB).vocabulary $(DB).prefixes $(DB).meta-data.json
+
 
 # START, WAIT (until the backend is read to respond), STOP, and view LOG
 

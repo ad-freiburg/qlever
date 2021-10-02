@@ -5,12 +5,13 @@ demos](/docs/quickstart,md), the "master" Makefile is for you. It is both simple
 and powerful. It provides Makefile targets for all the actions one typically
 wants to do. For example
 
-        make                                      # Shortcut for make show_config
-        make show_config                          # Show the configuration
-        make index.OVERWRITES_AN_EXISTING_INDEX   # Build an QLever index
-        make start                                # Start the engine
-        make log                                  # Show the log
-        ...                                       # Many more
+        make                # Shortcut for make show_config
+        make show_config    # Show the configuration
+        make index          # Build a QLever index (does NOT overwrite existing index)
+        make remove-index   # Remove an existing index
+        make start          # Start the engine
+        make log            # Show the log
+        ...                 # Many more
 
 ## How to configure the Makefile
 
