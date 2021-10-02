@@ -28,7 +28,7 @@ We aim at full SPARQL 1.1 support and we are almost there (except for SPARQL Upd
 For easy step-by-step instructions on how to build an index using QLever and
 then start a SPARQL endpoint using that index, see our [Quickstart Guide](docs/quickstart.md).
 This will take you through a simple example dataset ([120 Years of Olympics](https://github.com/wallscope/olympics-rdf), with 1.8M triples)
-as well as a very large dataset ([the complete Wikidata](https://www.wikidata.org), with around 12 billion triples).
+as well as a very large dataset ([the complete Wikidata](https://www.wikidata.org), with 16 billion triples as of 30.09.2021).
 
 # Advanced feature and more in-depth information
 
