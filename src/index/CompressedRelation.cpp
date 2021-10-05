@@ -13,6 +13,7 @@
 #include "../util/TypeTraits.h"
 #include "./Permutations.h"
 #include "ConstantsIndexBuilding.h"
+#include <future>
 
 using namespace std::chrono_literals;
 
@@ -145,9 +146,12 @@ CompressedRelationMetaData::ScanBlockGenerator(
     auto returner = [&](DecompressedBlock&& result) {
       intermediateResult = std::move(result);
     };
-
     ad_pipeline::Pipeline p(true, {1, 10, 0}, readBlocks, decompressLambda,
                             returner);
+
+    auto future = std::async(std::launch::async, [&]() {
+      p.finish();
+    });
 
     LOG(INFO) << "Start waiting for the pipeline" << std::endl;
     while (auto optionalTask = p.popManually()) {
