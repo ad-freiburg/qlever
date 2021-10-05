@@ -75,6 +75,7 @@ struct Pipeline {
         while (auto optional = get<0>()()) {
           _queues[1]->push(
               makeChainedFunction<1>(requestCounter++, std::move(*optional)));
+          _pushedNextOrderedRequest[1].notify_all();
         }
       });
     } else if constexpr (I == numFunctions - 1) {
@@ -94,7 +95,7 @@ struct Pipeline {
               _nextRequestId[I]++;
               _queues[I + 1]->push(
                   makeChainedFunction<I + 1>(requestId, std::move(result)));
-              _pushedNextOrderedRequest[I].notify_all();
+              _pushedNextOrderedRequest[I + 1].notify_all();
             } else {
               _queues[I + 1]->push(
                   makeChainedFunction<I + 1>(requestId, std::move(result)));
