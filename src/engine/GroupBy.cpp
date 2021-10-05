@@ -738,6 +738,19 @@ void GroupBy::computeResult(ResultTable* result) {
     }
   }
 
+  // find out, if we simply count over a POS index scan, then we can use
+  // the special logic.
+  auto indexScan =
+      dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get());
+  if (indexScan && indexScan->getType() == IndexScan::POS_FREE_O &&
+      aggregates.size() == 2 && aggregates[0]._inCol == 0 &&
+      aggregates[0]._type == ParsedQuery::AggregateType::SAMPLE &&
+      aggregates[1]._inCol == 1 &&
+      aggregates[1]._type == ParsedQuery::AggregateType::COUNT) {
+    performGroupByOnIndexScan(result, indexScan->getPredicate());
+    return;
+  }
+
   std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
   LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
 
@@ -801,19 +814,7 @@ void GroupBy::computeResult(ResultTable* result) {
     }
   };
 
-  // find out, if we simply count over a POS index scan, then we can use
-  // the special logic.
-  auto indexScan =
-      dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get());
 
-  if (indexScan && indexScan->getType() == IndexScan::POS_FREE_O &&
-      aggregates.size() == 2 && aggregates[0]._inCol == 0 &&
-      aggregates[0]._type == ParsedQuery::AggregateType::SAMPLE &&
-      aggregates[1]._inCol == 1 &&
-      aggregates[1]._type == ParsedQuery::AggregateType::COUNT) {
-    performGroupByOnIndexScan(result, indexScan->getPredicate());
-    return;
-  }
   try {
     CALL_FIXED_SIZE_2(inWidth, outWidth, doGroupBy, subresult->_data,
                       inputResultTypes, groupByCols, aggregates, &result->_data,
@@ -828,6 +829,9 @@ void GroupBy::computeResult(ResultTable* result) {
 
 void GroupBy::performGroupByOnIndexScan(ResultTable* resultTable,
                                         const string& predicate) {
+  resultTable->_resultTypes.resize(2);
+  resultTable->_resultTypes[0] = ResultTable::ResultType::KB;
+  resultTable->_resultTypes[1] = ResultTable::ResultType::VERBATIM;
   // TODO: support other permutations as well
   Id col0Id;
   bool idWasFound = getIndex().getVocab().getId(predicate, &col0Id);
