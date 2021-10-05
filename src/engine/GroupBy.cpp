@@ -829,6 +829,7 @@ void GroupBy::computeResult(ResultTable* result) {
 
 void GroupBy::performGroupByOnIndexScan(ResultTable* resultTable,
                                         const string& predicate) {
+  LOG(INFO) << "Performing special logic for group by on index scan" << std::endl;
   resultTable->_resultTypes.resize(2);
   resultTable->_resultTypes[0] = ResultTable::ResultType::KB;
   resultTable->_resultTypes[1] = ResultTable::ResultType::VERBATIM;
@@ -845,6 +846,7 @@ void GroupBy::performGroupByOnIndexScan(ResultTable* resultTable,
   Id lastId = ID_NO_VALUE;
   size_t count = 0;
   for (const auto& block : blockGenerator) {
+    LOG(INFO) << "Reading a new block" << std::endl;
     for (auto [col1Id, unused] : block) {
       if (col1Id == lastId) {
         count++;
