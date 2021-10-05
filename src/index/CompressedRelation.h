@@ -6,12 +6,12 @@
 #define QLEVER_COMPRESSEDRELATION_H
 
 #include <algorithm>
-#include "../util/Generator.h"
 #include <vector>
 
 #include "../global/Id.h"
 #include "../util/BufferedVector.h"
 #include "../util/File.h"
+#include "../util/Generator.h"
 #include "../util/Serializer/SerializeVector.h"
 #include "../util/Serializer/Serializer.h"
 #include "../util/Timer.h"
@@ -93,8 +93,8 @@ struct CompressedRelationMetaData {
   // The IdTable is a rather expensive type, so we don't include it here.
   // but we can also not forward declare it because it is actually an alias.
   template <class Permutation, typename IdTableImpl>
-  static void scan(Id col0Id, IdTableImpl* result,
-                   const Permutation& permutation,
+  static void scan(
+      Id col0Id, IdTableImpl* result, const Permutation& permutation,
       const ad_utility::SharedConcurrentTimeoutTimer& timer = nullptr);
 
   /**
@@ -112,12 +112,12 @@ struct CompressedRelationMetaData {
    * members of Index class).
    */
   template <class PermutationInfo, typename IdTableImpl>
-  static void scan(Id count, Id col1Id, IdTableImpl* result,
-                   const PermutationInfo& permutation,
-                   const ad_utility::SharedConcurrentTimeoutTimer& timer = nullptr);
+  static void scan(
+      Id count, Id col1Id, IdTableImpl* result,
+      const PermutationInfo& permutation,
+      const ad_utility::SharedConcurrentTimeoutTimer& timer = nullptr);
 
-
- // ____________________________________________________________________________
+  // ____________________________________________________________________________
   template <class Permutation>
   static cppcoro::generator<DecompressedBlock> ScanBlockGenerator(
       Id col0Id, const Permutation& permutation,

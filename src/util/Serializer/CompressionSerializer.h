@@ -1,5 +1,5 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
+//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 //
 // Created by johannes on 22.09.21.
@@ -7,13 +7,13 @@
 #ifndef QLEVER_COMPRESSIONSERIALIZER_H
 #define QLEVER_COMPRESSIONSERIALIZER_H
 
-#include <vector>
 #include <future>
+#include <vector>
+
 #include "../CompressionUsingZstd/ZstdWrapper.h"
+#include "../TaskQueue.h"
 #include "./FileSerializer.h"
 #include "./SerializeVector.h"
-#include "../TaskQueue.h"
-
 
 namespace ad_utility {
 namespace serialization {
@@ -118,7 +118,8 @@ class CompressedReadSerializer {
     if (m_buffer.isExhausted()) {
       tryToFillBuffer();
       if (m_buffer.isExhausted()) {
-        throw SerializationException("Read past the end of a compressedSerializer");
+        throw SerializationException(
+            "Read past the end of a compressedSerializer");
       }
       AD_CHECK(!m_buffer.isExhausted())
     }
@@ -158,8 +159,7 @@ class CompressedReadSerializer {
   }
 };
 
-
-}
-}
+}  // namespace serialization
+}  // namespace ad_utility
 
 #endif  // QLEVER_COMPRESSIONSERIALIZER_H

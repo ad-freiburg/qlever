@@ -14,7 +14,9 @@ void serialize(Serializer& serializer, std::vector<T, Alloc>& vector) {
   if constexpr (Serializer::IsWriteSerializer) {
     serializer << vector.size();
     if constexpr (std::is_trivially_copyable_v<T>) {
-      serializer.serializeBytes(reinterpret_cast<char*>(const_cast<T*>(vector.data())), vector.size() * sizeof(T));
+      serializer.serializeBytes(
+          reinterpret_cast<char*>(const_cast<T*>(vector.data())),
+          vector.size() * sizeof(T));
     } else {
       for (const auto& el : vector) {
         serializer << el;
@@ -25,7 +27,8 @@ void serialize(Serializer& serializer, std::vector<T, Alloc>& vector) {
     serializer >> size;
     vector.resize(size);
     if constexpr (std::is_trivially_copyable_v<T>) {
-      serializer.serializeBytes(reinterpret_cast<char*>(vector.data()), vector.size() * sizeof(T));
+      serializer.serializeBytes(reinterpret_cast<char*>(vector.data()),
+                                vector.size() * sizeof(T));
     } else {
       for (size_t i = 0; i < size; ++i) {
         serializer >> vector.back();

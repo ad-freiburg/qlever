@@ -7,10 +7,10 @@
 #include "../global/Id.h"
 #include "../util/Conversions.h"
 #include "../util/HashMap.h"
+#include "../util/ResourcePool.h"
 #include "../util/TupleHelpers.h"
 #include "./ConstantsIndexBuilding.h"
 #include "./StringSortComparator.h"
-#include "../util/ResourcePool.h"
 
 #ifndef QLEVER_INDEXBUILDERTYPES_H
 #define QLEVER_INDEXBUILDERTYPES_H
@@ -103,8 +103,8 @@ struct LangtagAndTriple {
  */
 template <size_t Parallelism>
 auto prepareIdMaps(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
-                     size_t maxNumberOfTriples,
-                    const TripleComponentComparator* comp)  {
+                   size_t maxNumberOfTriples,
+                   const TripleComponentComparator* comp) {
   // that way the different ids won't interfere
   auto& itemArray = *itemArrayPtr;
   for (size_t j = 0; j < Parallelism; ++j) {
@@ -118,7 +118,8 @@ auto prepareIdMaps(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
 }
 
 // TODO<joka921> why no move-references here?
-inline auto makeItemMapLambda(ad_utility::ResourcePool<ItemMapManager*>* mapPoolPtr) {
+inline auto makeItemMapLambda(
+    ad_utility::ResourcePool<ItemMapManager*>* mapPoolPtr) {
   return [&pool = *mapPoolPtr](std::vector<LangtagAndTriple>&& ltVec) mutable {
     using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
     std::vector<OptionalIds> resultVector;

@@ -5,11 +5,11 @@
 #include <gtest/gtest.h>
 
 #include "../src/util/Random.h"
+#include "../src/util/Serializer/CompressionSerializer.h"
 #include "../src/util/Serializer/FileSerializer.h"
 #include "../src/util/Serializer/SerializeHashMap.h"
 #include "../src/util/Serializer/SerializeString.h"
 #include "../src/util/Serializer/Serializer.h"
-#include "../src/util/Serializer/CompressionSerializer.h"
 
 using namespace ad_utility;
 using namespace ad_utility::serialization;
@@ -42,7 +42,6 @@ auto testWithCompressedFileSerialization = [](auto testFunction) {
   };
   testFunction(writer, makeReaderFromWriter);
   unlink(filename.c_str());
-
 };
 
 auto testWithAllSerializers = [](auto testFunction) {

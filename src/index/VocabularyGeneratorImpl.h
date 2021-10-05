@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <execution>
 #include <fstream>
 #include <future>
 #include <iostream>
@@ -18,12 +19,11 @@
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
 #include "../util/Log.h"
+#include "../util/Serializer/CompressionSerializer.h"
+#include "../util/Serializer/SerializeString.h"
 #include "./ConstantsIndexBuilding.h"
 #include "./Vocabulary.h"
 #include "./VocabularyGenerator.h"
-#include "../util/Serializer/CompressionSerializer.h"
-#include "../util/Serializer/SerializeString.h"
-#include <execution>
 
 // ___________________________________________________________________
 template <class Comp>
@@ -39,7 +39,9 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
     return comp(p2._value, p1._value);
   };
 
-  std::vector<ad_utility::serialization::CompressedReadSerializer<ad_utility::serialization::FileReadSerializer>> infiles;
+  std::vector<ad_utility::serialization::CompressedReadSerializer<
+      ad_utility::serialization::FileReadSerializer>>
+      infiles;
 
   _outfile.open(basename + ".vocabulary");
   AD_CHECK(_outfile.is_open());
@@ -51,7 +53,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
   std::priority_queue<QueueWord, std::vector<QueueWord>, decltype(queueCompare)>
       queue(queueCompare);
 
-  auto readNextWord = [&](size_t i)  {
+  auto readNextWord = [&](size_t i) {
     // read the first entry of the vocabulary and add it to the queue
     endOfFile[i] = true;
 
@@ -63,9 +65,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
       queue.push(QueueWord(std::move(word), i, id));
       endOfFile[i] = false;
     } catch (const ad_utility::serialization::SerializationException&) {
-
     }
-
   };
 
   // open and prepare all infiles and mmap output vectors
@@ -295,7 +295,9 @@ void writeMappedIdsToExtVec(const std::vector<array<Id, 3>>& input,
 // _________________________________________________________________________________________________________
 void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
-  ad_utility::serialization::CompressedWriteSerializer<ad_utility::serialization::FileWriteSerializer> s{8ul * (1ul << 20u), fileName };
+  ad_utility::serialization::CompressedWriteSerializer<
+      ad_utility::serialization::FileWriteSerializer>
+      s{8ul * (1ul << 20u), fileName};
   for (const auto& el : els) {
     s | el.first;
     s | el.second.m_id;

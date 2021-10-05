@@ -38,7 +38,7 @@ class ByteBufferWriteSerializer {
   const Storage& data() const& noexcept { return _data; }
   Storage&& data() && { return std::move(_data); }
 
-  size_t numBytes() const {return _data.size();}
+  size_t numBytes() const { return _data.size(); }
 
  private:
   Storage _data;
@@ -62,7 +62,8 @@ class ByteBufferReadSerializer {
   const Storage& data() const noexcept { return _data; }
 
   void reset(Storage newData) {
-    _data = std::move(newData);;
+    _data = std::move(newData);
+    ;
     _iterator = _data.begin();
   }
 
@@ -72,7 +73,8 @@ class ByteBufferReadSerializer {
   }
 
   bool isExhausted() const {
-    return _iterator == _data.end();;
+    return _iterator == _data.end();
+    ;
   }
 
  private:

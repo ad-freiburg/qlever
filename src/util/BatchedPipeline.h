@@ -8,10 +8,10 @@
 #include <future>
 #include <utility>
 
+#include "./Exception.h"
 #include "./Log.h"
 #include "./Timer.h"
 #include "./TupleHelpers.h"
-#include "./Exception.h"
 
 namespace ad_pipeline {
 
@@ -252,16 +252,16 @@ class BatchedPipeline {
     const size_t batchSize = inBatchSize / Parallelism;
     result.m_content.resize(inBatch.m_content.size());
 
-    auto futures = setupParallelismImpl(batchSize, inBatch.m_content, result.m_content,
-                                        std::make_index_sequence<Parallelism>{},
-                                        transformers...);
+    auto futures = setupParallelismImpl(
+        batchSize, inBatch.m_content, result.m_content,
+        std::make_index_sequence<Parallelism>{}, transformers...);
     // if we had multiple threads, we have to merge the partial results in the
     // correct order.
     for (size_t i = 0; i < Parallelism; ++i) {
-     futures[i].get();
+      futures[i].get();
     }
     t.stop();
-    if constexpr(sizeof...(transformers) != 1) {
+    if constexpr (sizeof...(transformers) != 1) {
       LOG(TIMING) << "Waiting for inner futures ms: " << t.msecs() << std::endl;
     }
     /*
@@ -324,14 +324,15 @@ class BatchedPipeline {
    * @param transformer Pointer to the first transformer
    * @param transformers Pointers to the remaining transformers
    */
-  template <size_t... I, typename InVec, typename OutVec, typename... TransformerPtrs>
-  static auto setupParallelismImpl(size_t batchSize, InVec& in,
-                                   OutVec& out,
+  template <size_t... I, typename InVec, typename OutVec,
+            typename... TransformerPtrs>
+  static auto setupParallelismImpl(size_t batchSize, InVec& in, OutVec& out,
                                    std::index_sequence<I...>,
                                    TransformerPtrs... transformers) {
     AD_CHECK(in.size() == out.size());
     if constexpr (sizeof...(I) == sizeof...(TransformerPtrs)) {
-      return std::array{(createIthFuture<I>(batchSize, in, out, transformers))...};
+      return std::array{
+          (createIthFuture<I>(batchSize, in, out, transformers))...};
     } else if constexpr (sizeof...(TransformerPtrs) == 1) {
       // only one transformer that is applied to several threads
       auto onlyTransformer =
@@ -341,16 +342,18 @@ class BatchedPipeline {
     }
   }
 
-  template <size_t Idx, typename InVec, typename OutVec, typename TransformerPtr>
-  static std::future<void> createIthFuture(
-      size_t batchSize, InVec& in, OutVec& out, TransformerPtr transformer) {
+  template <size_t Idx, typename InVec, typename OutVec,
+            typename TransformerPtr>
+  static std::future<void> createIthFuture(size_t batchSize, InVec& in,
+                                           OutVec& out,
+                                           TransformerPtr transformer) {
     auto [startIt, endIt] = getBatchRange(in.begin(), in.end(), batchSize, Idx);
     auto outIt = out.begin() + (startIt - in.begin());
     // start a thread for the transformer.
-    return std::async(std::launch::async,
-                      [transformer, startIt = startIt, endIt = endIt, outIt = outIt] {
-                        moveAndTransform(startIt, endIt, outIt, transformer);
-                      });
+    return std::async(std::launch::async, [transformer, startIt = startIt,
+                                           endIt = endIt, outIt = outIt] {
+      moveAndTransform(startIt, endIt, outIt, transformer);
+    });
   }
 
  private:

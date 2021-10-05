@@ -1,5 +1,5 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
+//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 //
 // Created by johannes on 24.09.21.
@@ -8,9 +8,9 @@
 #ifndef QLEVER_RESOURCEPOOL_H
 #define QLEVER_RESOURCEPOOL_H
 
-#include <queue>
-#include <memory>
 #include <condition_variable>
+#include <memory>
+#include <queue>
 
 namespace ad_utility {
 
@@ -36,10 +36,12 @@ class ResourcePool {
  public:
   ResourcePool() = default;
 
-  template<typename... ConstructorArgs>
+  template <typename... ConstructorArgs>
   void addResource(ConstructorArgs&&... t_constructorArgs) {
     std::unique_lock lock{m_mutex};
-    m_queue.push(std::make_unique<Resource>(std::forward<ConstructorArgs>(t_constructorArgs)...));;
+    m_queue.push(std::make_unique<Resource>(
+        std::forward<ConstructorArgs>(t_constructorArgs)...));
+    ;
   }
 
   ReturningPtr acquire() {

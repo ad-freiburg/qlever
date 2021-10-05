@@ -17,10 +17,10 @@
 #include "../parser/ParallelParseBuffer.h"
 #include "../parser/TsvParser.h"
 #include "../util/BatchedPipeline.h"
-#include "../util/ParallelPipeline.h"
 #include "../util/CompressionUsingZstd/ZstdWrapper.h"
 #include "../util/Conversions.h"
 #include "../util/HashMap.h"
+#include "../util/ParallelPipeline.h"
 #include "../util/TupleHelpers.h"
 #include "./PrefixHeuristic.h"
 #include "./VocabularyGenerator.h"
@@ -160,26 +160,32 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
-    //std::unique_ptr<TripleVec> localIdTriples(new TripleVec());
+    // std::unique_ptr<TripleVec> localIdTriples(new TripleVec());
     std::vector<IdTriple> localWriter;
     localWriter.reserve(linesPerPartial * 1.5);
 
     std::array<ItemMapManager, NUM_PARALLEL_ITEM_MAPS> itemArray;
-    ParserBatcher parserBatcher(parser, linesPerPartial, [&]() {parserExhausted = true;});
-    auto parserBatcherLambda = [&parserBatcher]() {return parserBatcher.getBatch();};
-    prepareIdMaps(&itemArray, linesPerPartial,&(_vocab.getCaseComparator()));
+    ParserBatcher parserBatcher(parser, linesPerPartial,
+                                [&]() { parserExhausted = true; });
+    auto parserBatcherLambda = [&parserBatcher]() {
+      return parserBatcher.getBatch();
+    };
+    prepareIdMaps(&itemArray, linesPerPartial, &(_vocab.getCaseComparator()));
     ad_utility::ResourcePool<ItemMapManager*> pool;
     for (auto& map : itemArray) {
       pool.addResource(&map);
     }
-    auto tripleToInternalRepresentationBatches = [this] (auto&& vectorOfTriples) {
-      std::vector<decltype(tripleToInternalRepresentation(std::move(vectorOfTriples[0])))> result;
-      result.reserve(vectorOfTriples.size());
-      for (auto&& el : std::move(vectorOfTriples)) {
-        result.push_back(tripleToInternalRepresentation(std::move(el)));
-      }
-      return result;
-    };
+    auto tripleToInternalRepresentationBatches =
+        [this](auto&& vectorOfTriples) {
+          std::vector<decltype(
+              tripleToInternalRepresentation(std::move(vectorOfTriples[0])))>
+              result;
+          result.reserve(vectorOfTriples.size());
+          for (auto&& el : std::move(vectorOfTriples)) {
+            result.push_back(tripleToInternalRepresentation(std::move(el)));
+          }
+          return result;
+        };
 
     auto writeToTripleVec = [&](auto&& idTripleVec) {
       for (auto&& triple : idTripleVec) {
@@ -198,8 +204,9 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
 
     {
       ad_pipeline::Pipeline pipeline(false, {1, 3, 6, 1}, parserBatcherLambda,
-                            tripleToInternalRepresentationBatches,
-                            makeItemMapLambda(&pool), writeToTripleVec);
+                                     tripleToInternalRepresentationBatches,
+                                     makeItemMapLambda(&pool),
+                                     writeToTripleVec);
       pipeline.finish();
       LOG(INFO) << pipeline.getTimeStatistics();
     }
@@ -245,10 +252,10 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
 
 */
     if constexpr (requires(Parser p) { p.printAndResetQueueStatistics(); }) {
-        parser->printAndResetQueueStatistics();
-      }
+      parser->printAndResetQueueStatistics();
+    }
 
-    //localWriter.finish();
+    // localWriter.finish();
     // wait until sorting the last partial vocabulary has finished
     // to control the number of threads and the amount of memory used at the
     // same time. typically sorting is finished before we reach again here so
