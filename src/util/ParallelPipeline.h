@@ -57,11 +57,15 @@ struct Pipeline {
   auto popManually() { return _queues.back()->popManually(); }
 
   void finish() {
+    size_t i = 0;
     for (auto& queue : _queues) {
-      static_assert(
-          std::is_same_v<dispatched, std::tuple<std::function<short(int)>,
-                                                std::function<bool(short)>>>);
       queue->finish();
+      LOG(INFO) << "Finished queue " << i << std::endl;
+      i++;
+      if (i < _queues.size()) {
+        _pushedNextOrderedRequest[i].notify_all();
+      };
+
     }
   }
 
@@ -95,6 +99,7 @@ struct Pipeline {
               _queues[I + 1]->push(
                   makeChainedFunction<I + 1>(requestId, std::move(result)));
               _pushedNextOrderedRequest[I + 1].notify_all();
+              _pushedNextOrderedRequest[I].notify_all();
             } else {
               _queues[I + 1]->push(
                   makeChainedFunction<I + 1>(requestId, std::move(result)));
