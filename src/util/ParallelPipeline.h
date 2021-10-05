@@ -103,7 +103,7 @@ struct Pipeline {
     }
   }
 
-  ~Pipeline() {finish()}
+  ~Pipeline() {finish();}
 
   std::string getTimeStatistics() const {
     std::string res;
