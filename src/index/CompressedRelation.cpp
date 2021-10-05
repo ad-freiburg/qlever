@@ -8,6 +8,8 @@
 #include "../util/Cache.h"
 #include "../util/CompressionUsingZstd/ZstdWrapper.h"
 #include "../util/ConcurrentCache.h"
+#include "../util/Generator.h"
+#include "../util/ParallelPipeline.h"
 #include "../util/TypeTraits.h"
 #include "./Permutations.h"
 #include "ConstantsIndexBuilding.h"
@@ -26,11 +28,138 @@ auto& globalBlockCache() {
   return globalCache;
 }
 
+auto blockRangeForCol0Id(Id col0Id, const auto& permutation) {
+  // get all the blocks where _col0FirstId <= col0Id <= _col0LastId
+  struct KeyLhs {
+    size_t _col0FirstId;
+    size_t _col0LastId;
+  };
+  return std::equal_range(
+      permutation._meta.blockData().begin(),
+      permutation._meta.blockData().end(), KeyLhs{col0Id, col0Id},
+      [](const auto& a, const auto& b) {
+        return a._col0FirstId < b._col0FirstId && a._col0LastId < b._col0LastId;
+      });
+}
+
+template <typename Iterator>
+bool isFirstBlockIncomplete(Iterator beginBlock, Iterator endBlock, Id col0Id,
+                            const auto& col0MetaData) {
+  // The first block might contain entries that are not part of our
+  // actual scan result.
+  bool firstBlockIsIncomplete =
+      beginBlock < endBlock &&
+      (beginBlock->_col0FirstId < col0Id || beginBlock->_col0LastId > col0Id);
+  auto lastBlock = endBlock - 1;
+
+  bool lastBlockIsIncomplete =
+      beginBlock < lastBlock &&
+      (lastBlock->_col0FirstId < col0Id || lastBlock->_col0LastId > col0Id);
+
+  // Invariant: A relation spans multiple blocks exclusively or several
+  // entities are stored completely in the same Block.
+  AD_CHECK(!firstBlockIsIncomplete || (beginBlock == lastBlock));
+  AD_CHECK(!lastBlockIsIncomplete);
+  if (firstBlockIsIncomplete) {
+    AD_CHECK(col0MetaData._offsetInBlock != Id(-1));
+  }
+  return firstBlockIsIncomplete;
+}
+
+std::vector<std::array<Id, 2>> readIncompleteBlock(const auto& permutation,
+                                                   const auto& blockMetaData,
+                                                   const auto& col0MetaData) {
+  auto cacheKey =
+      permutation._readableName + std::to_string(blockMetaData._offsetInFile);
+
+  auto uncompressedBuffer =
+      globalBlockCache()
+          .computeOnce(
+              cacheKey,
+              [&]() {
+                return CompressedRelationMetaData::readAndDecompressBlock(
+                    blockMetaData, permutation);
+              })
+          ._resultPointer;
+
+  // Extract the part of the block that actually belongs to the relation
+  auto begin = uncompressedBuffer->begin() + col0MetaData._offsetInBlock;
+  auto end = begin + col0MetaData._numRows;
+  std::vector<std::array<Id, 2>> firstBlock;
+  firstBlock.reserve(end - begin);
+  std::copy(begin, end, std::back_inserter(firstBlock));
+  return firstBlock;
+}
+
+// ____________________________________________________________________________
+template <class Permutation>
+cppcoro::generator<CompressedRelationMetaData::DecompressedBlock>
+CompressedRelationMetaData::ScanBlockGenerator(
+    Id col0Id, const Permutation& permutation,
+    ad_utility::SharedConcurrentTimeoutTimer timer) {
+  if (permutation._meta.col0IdExists(col0Id)) {
+    const auto& metaData = permutation._meta.getMetaData(col0Id);
+
+    // get all the blocks where _col0FirstId <= col0Id <= _col0LastId
+    auto [beginBlock, endBlock] = blockRangeForCol0Id(col0Id, permutation);
+
+    // The first block might contain entries that are not part of our
+    // actual scan result.
+    bool firstBlockIsIncomplete =
+        isFirstBlockIncomplete(beginBlock, endBlock, col0Id, metaData);
+
+    // We have at most one block that is incomplete and thus requires trimming.
+    // Set up a lambda, that reads this block and decompresses it to
+    // the result.
+    // Read the first block if it is incomplete
+    if (firstBlockIsIncomplete) {
+      co_yield readIncompleteBlock(permutation, *beginBlock, metaData);
+      ++beginBlock;
+      if (timer) {
+        timer->wlock()->checkTimeoutAndThrow("IndexScan :");
+      }
+    }
+
+    // Read all the other (complete!) blocks in parallel
+    auto blockItForReader = beginBlock;
+    using NumRowsAndCompressedBlock = std::pair<size_t, std::vector<char>>;
+    auto readBlocks =
+        [&blockItForReader, endBlock = endBlock,
+         &permutation]() -> std::optional<NumRowsAndCompressedBlock> {
+      if (blockItForReader < endBlock) {
+        auto numRows = blockItForReader->_numRows;
+        return std::pair(
+            numRows, CompressedRelationMetaData::readCompressedBlockFromFile(
+                         *blockItForReader++, permutation));
+      }
+      return std::nullopt;
+    };
+    auto decompressLambda = [](NumRowsAndCompressedBlock&& numAndBlock) {
+      return CompressedRelationMetaData::decompressBlock(numAndBlock.second,
+                                                         numAndBlock.first);
+    };
+
+    std::vector<std::array<Id, 2>> intermediateResult;
+    auto returner = [&](DecompressedBlock&& result) {
+      intermediateResult = std::move(result);
+    };
+
+    ad_pipeline::Pipeline p(true, {1, 10, 0}, readBlocks, decompressLambda,
+                            returner);
+
+    while (auto optionalTask = p.popManually()) {
+      optionalTask.value()();
+      co_yield std::move(intermediateResult);
+      intermediateResult.clear();
+    }
+  }
+}
+
 // ____________________________________________________________________________
 template <class Permutation, typename IdTableImpl>
 void CompressedRelationMetaData::scan(
-    Id col0Id, IdTableImpl* result, const Permutation& permutation,
-    ad_utility::SharedConcurrentTimeoutTimer timer) {
+    const Id col0Id, IdTableImpl* result, const Permutation& permutation,
+    const ad_utility::SharedConcurrentTimeoutTimer& timer) {
   if constexpr (!ad_utility::isVector<IdTableImpl>) {
     AD_CHECK(result->cols() == 2);
   }
@@ -38,17 +167,12 @@ void CompressedRelationMetaData::scan(
     const auto& metaData = permutation._meta.getMetaData(col0Id);
 
     // get all the blocks where _col0FirstId <= col0Id <= _col0LastId
-    struct KeyLhs {
-      size_t _col0FirstId;
-      size_t _col0LastId;
-    };
-    auto [beginBlock, endBlock] = std::equal_range(
-        permutation._meta.blockData().begin(),
-        permutation._meta.blockData().end(), KeyLhs{col0Id, col0Id},
-        [](const auto& a, const auto& b) {
-          return a._col0FirstId < b._col0FirstId &&
-                 a._col0LastId < b._col0LastId;
-        });
+    auto [beginBlock, endBlock] = blockRangeForCol0Id(col0Id, permutation);
+
+    // The first block might contain entries that are not part of our
+    // actual scan result.
+    bool firstBlockIsIncomplete =
+        isFirstBlockIncomplete(beginBlock, endBlock, col0Id, metaData);
 
     // The total size of the result is now known.
     result->resize(metaData.getNofElements());
@@ -61,51 +185,12 @@ void CompressedRelationMetaData::scan(
     // in the result (only needed for checking of invariants).
     size_t spaceLeft = result->size();
 
-    // The first block might contain entries that are not part of our
-    // actual scan result.
-    bool firstBlockIsIncomplete =
-        beginBlock < endBlock &&
-        (beginBlock->_col0FirstId < col0Id || beginBlock->_col0LastId > col0Id);
-    auto lastBlock = endBlock - 1;
-
-    bool lastBlockIsIncomplete =
-        beginBlock < lastBlock &&
-        (lastBlock->_col0FirstId < col0Id || lastBlock->_col0LastId > col0Id);
-
-    // Invariant: A relation spans multiple blocks exclusively or several
-    // entities are stored completely in the same Block.
-    AD_CHECK(!firstBlockIsIncomplete || (beginBlock == lastBlock));
-    AD_CHECK(!lastBlockIsIncomplete);
-    if (firstBlockIsIncomplete) {
-      AD_CHECK(metaData._offsetInBlock != Id(-1));
-    }
-
-    // We have at most one block that is incomplete and thus requires trimming.
-    // Set up a lambda, that reads this block and decompresses it to
-    // the result.
-    auto readIncompleteBlock = [&](const auto& block) {
-      auto cacheKey =
-          permutation._readableName + std::to_string(block._offsetInFile);
-
-      auto uncompressedBuffer =
-          globalBlockCache()
-              .computeOnce(
-                  cacheKey,
-                  [&]() { return readAndDecompressBlock(block, permutation); })
-              ._resultPointer;
-
-      // Extract the part of the block that actually belongs to the relation
-      auto begin = uncompressedBuffer->begin() + metaData._offsetInBlock;
-      auto end = begin + metaData._numRows;
-      AD_CHECK(static_cast<size_t>(end - begin) <= spaceLeft);
-      std::copy(begin, end, position);
-      position += (end - begin);
-      spaceLeft -= (end - begin);
-    };
-
     // Read the first block if it is incomplete
     if (firstBlockIsIncomplete) {
-      readIncompleteBlock(*beginBlock);
+      auto incompleteBlock = readIncompleteBlock(permutation, *beginBlock, metaData);
+      position = std::copy(incompleteBlock.begin(), incompleteBlock.end(), position);
+      spaceLeft -= incompleteBlock.size();
+
       ++beginBlock;
       if (timer) {
         timer->wlock()->checkTimeoutAndThrow("IndexScan :");
@@ -148,55 +233,50 @@ void CompressedRelationMetaData::scan(
         AD_CHECK(spaceLeft == 0);
       }  // End of omp parallel region, all the decompression was handled now.
     }
+    AD_CHECK(spaceLeft == 0);
   }
 }
 
 using V = std::vector<std::array<Id, 2>>;
+using Timer = const ad_utility::SharedConcurrentTimeoutTimer&;
 // Explicit instantiations for all six permutations
 template void CompressedRelationMetaData::scan<Permutation::POS_T, IdTable>(
-    Id key, IdTable* result, const Permutation::POS_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Id key, IdTable* result, const Permutation::POS_T& p, Timer);
 template void CompressedRelationMetaData::scan<Permutation::PSO_T, IdTable>(
-    Id key, IdTable* result, const Permutation::PSO_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Id key, IdTable* result, const Permutation::PSO_T& p, Timer);
 template void CompressedRelationMetaData::scan<Permutation::SPO_T, IdTable>(
-    Id key, IdTable* result, const Permutation::SPO_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Id key, IdTable* result, const Permutation::SPO_T& p, Timer timer);
 template void CompressedRelationMetaData::scan<Permutation::SOP_T, IdTable>(
-    Id key, IdTable* result, const Permutation::SOP_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Id key, IdTable* result, const Permutation::SOP_T& p, Timer timer);
 template void CompressedRelationMetaData::scan<Permutation::OPS_T, IdTable>(
-    Id key, IdTable* result, const Permutation::OPS_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Id key, IdTable* result, const Permutation::OPS_T& p, Timer timer);
 template void CompressedRelationMetaData::scan<Permutation::OSP_T, IdTable>(
-    Id key, IdTable* result, const Permutation::OSP_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Id key, IdTable* result, const Permutation::OSP_T& p, Timer timer);
 
 template void CompressedRelationMetaData::scan<Permutation::POS_T, V>(
-    Id key, V* result, const Permutation::POS_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Id key, V* result, const Permutation::POS_T& p, Timer timer);
 template void CompressedRelationMetaData::scan<Permutation::PSO_T, V>(
-    Id key, V* result, const Permutation::PSO_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Id key, V* result, const Permutation::PSO_T& p, Timer timer);
 template void CompressedRelationMetaData::scan<Permutation::SPO_T, V>(
-    Id key, V* result, const Permutation::SPO_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Id key, V* result, const Permutation::SPO_T& p, Timer timer);
 template void CompressedRelationMetaData::scan<Permutation::SOP_T, V>(
-    Id key, V* result, const Permutation::SOP_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Id key, V* result, const Permutation::SOP_T& p, Timer timer);
 template void CompressedRelationMetaData::scan<Permutation::OPS_T, V>(
-    Id key, V* result, const Permutation::OPS_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Id key, V* result, const Permutation::OPS_T& p, Timer timer);
 template void CompressedRelationMetaData::scan<Permutation::OSP_T, V>(
-    Id key, V* result, const Permutation::OSP_T& p,
+    Id key, V* result, const Permutation::OSP_T& p, Timer timer);
+// ____________________________________________________________________________
+template cppcoro::generator<CompressedRelationMetaData::DecompressedBlock>
+CompressedRelationMetaData::ScanBlockGenerator<Permutation::POS_T>(
+    Id col0Id, const Permutation::POS_T& permutation,
     ad_utility::SharedConcurrentTimeoutTimer timer);
 
 // _____________________________________________________________________________
 template <class Permutation, typename IdTableImpl>
 void CompressedRelationMetaData::scan(
-    const Id col0Id, const Id& col1Id, IdTableImpl* result,
+    const Id col0Id, const Id col1Id, IdTableImpl* result,
     const Permutation& permutation,
-    ad_utility::SharedConcurrentTimeoutTimer timer) {
+    const ad_utility::SharedConcurrentTimeoutTimer& timer) {
   AD_CHECK(result->cols() == 1);
   if (permutation._meta.col0IdExists(col0Id)) {
     const auto& metaData = permutation._meta.getMetaData(col0Id);
@@ -342,23 +422,17 @@ void CompressedRelationMetaData::scan(
 
 // Explicit instantiations for all six permutations
 template void CompressedRelationMetaData::scan<Permutation::POS_T, IdTable>(
-    const Id, const Id&, IdTable*, const Permutation::POS_T&,
-    ad_utility::SharedConcurrentTimeoutTimer);
+    Id, Id, IdTable*, const Permutation::POS_T&, Timer);
 template void CompressedRelationMetaData::scan<Permutation::PSO_T, IdTable>(
-    const Id, const Id&, IdTable*, const Permutation::PSO_T&,
-    ad_utility::SharedConcurrentTimeoutTimer);
+    Id, Id, IdTable*, const Permutation::PSO_T&, Timer);
 template void CompressedRelationMetaData::scan<Permutation::SOP_T, IdTable>(
-    const Id, const Id&, IdTable*, const Permutation::SOP_T&,
-    ad_utility::SharedConcurrentTimeoutTimer);
+    const Id, const Id, IdTable*, const Permutation::SOP_T&, Timer);
 template void CompressedRelationMetaData::scan<Permutation::SPO_T, IdTable>(
-    const Id, const Id&, IdTable*, const Permutation::SPO_T&,
-    ad_utility::SharedConcurrentTimeoutTimer);
+    const Id, const Id, IdTable*, const Permutation::SPO_T&, Timer);
 template void CompressedRelationMetaData::scan<Permutation::OPS_T, IdTable>(
-    const Id, const Id&, IdTable*, const Permutation::OPS_T&,
-    ad_utility::SharedConcurrentTimeoutTimer);
+    const Id, const Id, IdTable*, const Permutation::OPS_T&, Timer);
 template void CompressedRelationMetaData::scan<Permutation::OSP_T, IdTable>(
-    const Id, const Id&, IdTable*, const Permutation::OSP_T&,
-    ad_utility::SharedConcurrentTimeoutTimer);
+    const Id, const Id, IdTable*, const Permutation::OSP_T&, Timer);
 
 // ___________________________________________________________________________
 void CompressedRelationWriter::addRelation(
