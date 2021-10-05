@@ -46,13 +46,12 @@ struct Pipeline {
       // TODO:: the last one might be 0
       // AD_CHECK(p > 0 || p == numFunctions - 1);
       _queues.push_back(
-          std::make_unique<ad_utility::TaskQueue<true>>(2 * p + 1, p));
+          std::make_unique<ad_utility::TaskQueue<true>>(2 * p + 5, p));
     }
 
     for (size_t i = 0; i < t_parallelisms[0]; ++i) {
       _queues[0]->push(makeChainedFunction<0>(i));
     }
-    finish();
   }
 
   auto popManually() { return _queues.back()->popManually(); }
@@ -104,7 +103,7 @@ struct Pipeline {
     }
   }
 
-  ~Pipeline() {}
+  ~Pipeline() {finish()}
 
   std::string getTimeStatistics() const {
     std::string res;
