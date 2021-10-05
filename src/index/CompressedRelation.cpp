@@ -146,7 +146,7 @@ CompressedRelationMetaData::ScanBlockGenerator(
     auto returner = [&](DecompressedBlock&& result) {
       intermediateResult = std::move(result);
     };
-    ad_pipeline::Pipeline p(true, {1, 10, 0}, readBlocks, decompressLambda,
+    ad_pipeline::Pipeline p(true, {1, 20, 0}, readBlocks, decompressLambda,
                             returner);
 
     auto future = std::async(std::launch::async, [&]() {
