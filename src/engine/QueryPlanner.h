@@ -390,7 +390,7 @@ class QueryPlanner {
    * sorting by the cache key when comparing equally cheap indices, else the
    * first element that has the minimum index is returned.
    */
-  size_t findCheapestExecutionTree(
+  std::vector<size_t> findCheapestExecutionTree(
       const std::vector<SubtreePlan>& lastRow) const;
 
   /// if this Planner is not associated with a queryExecutionContext we are only

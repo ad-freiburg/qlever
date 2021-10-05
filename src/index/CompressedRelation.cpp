@@ -187,7 +187,10 @@ void CompressedRelationMetaData::scan(
 
     // Read the first block if it is incomplete
     if (firstBlockIsIncomplete) {
-      readIncompleteBlock(permutation, *beginBlock, metaData);
+      auto incompleteBlock = readIncompleteBlock(permutation, *beginBlock, metaData);
+      position = std::copy(incompleteBlock.begin(), incompleteBlock.end(), position);
+      spaceLeft -= incompleteBlock.size();
+
       ++beginBlock;
       if (timer) {
         timer->wlock()->checkTimeoutAndThrow("IndexScan :");
@@ -230,6 +233,7 @@ void CompressedRelationMetaData::scan(
         AD_CHECK(spaceLeft == 0);
       }  // End of omp parallel region, all the decompression was handled now.
     }
+    AD_CHECK(spaceLeft == 0);
   }
 }
 

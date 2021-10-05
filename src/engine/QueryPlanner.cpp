@@ -91,12 +91,13 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   vector<SubtreePlan>& lastRow = plans.back();
 
   AD_CHECK_GT(lastRow.size(), 0);
-  auto minInd = findCheapestExecutionTree(lastRow);
+  auto minIndices = findCheapestExecutionTree(lastRow);
+  auto minIndex = *std::min_element(minIndices.begin(), minIndices.end(), [&lastRow](const auto& a, const auto& b){ return lastRow[a].getCostEstimate() < lastRow[b].getCostEstimate();});
   if (pq._rootGraphPattern._optional) {
-    lastRow[minInd].type = SubtreePlan::OPTIONAL;
+    lastRow[minIndex].type = SubtreePlan::OPTIONAL;
   }
 
-  SubtreePlan final = lastRow[minInd];
+  SubtreePlan final = lastRow[minIndex];
   final._qet->setTextLimit(getTextLimit(pq._textLimit));
 
   LOG(DEBUG) << "Done creating execution plan.\n";
@@ -148,8 +149,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           "grandchildren or lower of a Plan to be optimized may never be "
           "empty");
     }
-    auto idx = findCheapestExecutionTree(v);
-    return std::move(v[idx]);
+    auto cheapestTreeIt = std::min_element(v.begin(), v.end(), [](const auto& a, const auto& b){return a.getCostEstimate() < b.getCostEstimate();});
+    return std::move(*cheapestTreeIt);
   };
 
   // the callback that is called after dealing with a child pattern.
@@ -277,8 +278,10 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
             "Could not find a single candidate join for two optimized Graph "
             "patterns. Please report to the developers");
       }
-      auto idx = findCheapestExecutionTree(nextCandidates);
-      candidatePlans.push_back({std::move(nextCandidates[idx])});
+      auto indices = findCheapestExecutionTree(nextCandidates);
+      for (const auto& idx : indices) {
+        candidatePlans.push_back({std::move(nextCandidates[idx])});
+      }
       return;
     }
   };  // End of joinCandidates lambda.
@@ -1882,8 +1885,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
   auto pruneCandidates = [&](auto& actualCandidates) {
     for (auto& [key, value] : actualCandidates) {
       (void)key;  // silence unused warning
-      size_t minIndex = findCheapestExecutionTree(value);
-      prunedPlans.push_back(std::move(value[minIndex]));
+      auto cheapestTreeIt = std::min_element(value.begin(), value.end(), [](const auto& a, const auto& b){return a.getCostEstimate() < b.getCostEstimate();});
+      prunedPlans.push_back(std::move(*cheapestTreeIt));
     }
   };
 
@@ -2751,9 +2754,13 @@ void QueryPlanner::setEnablePatternTrick(bool enablePatternTrick) {
 }
 
 // _________________________________________________________________________________
-size_t QueryPlanner::findCheapestExecutionTree(
+std::vector<size_t> QueryPlanner::findCheapestExecutionTree(
     const std::vector<SubtreePlan>& lastRow) const {
   AD_CHECK_GT(lastRow.size(), 0);
+  struct S {
+    size_t index, cost;
+  };
+  ad_utility::HashMap<std::vector<size_t>, S> sortOrderToCheapestTree;
   size_t minCost = std::numeric_limits<size_t>::max();
   size_t minInd = 0;
   LOG(TRACE) << "\nFinding the cheapest row in the optimizer\n";
@@ -2766,6 +2773,11 @@ size_t QueryPlanner::findCheapestExecutionTree(
     size_t thisCost = lastRow[i].getCostEstimate();
     LOG(TRACE) << "Estimated cost and size  of " << thisCost << " " << thisSize
                << " for Tree " << repr << '\n';
+
+    auto sortColumns = lastRow[i]._qet->resultSortedOn();
+    if (!sortOrderToCheapestTree.contains(sortColumns) || sortOrderToCheapestTree[sortColumns].cost > thisCost) {
+      sortOrderToCheapestTree[sortColumns] = S{i, thisCost};
+    }
     if (thisCost < minCost) {
       minCost = lastRow[i].getCostEstimate();
       minInd = i;
@@ -2778,8 +2790,12 @@ size_t QueryPlanner::findCheapestExecutionTree(
       minInd = i;
     }
   }
+  std::vector<size_t> result;
+  for (const auto& [sortColumns, indexAndCost] : sortOrderToCheapestTree) {
+    result.push_back(indexAndCost.index);
+  }
   LOG(TRACE) << "Finished\n";
-  return minInd;
+  return result;
 };
 
 // _____________________________________________________________________________
