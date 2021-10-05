@@ -8,7 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 FROM base as builder
 RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git
 RUN apt install -y libjemalloc-dev ninja-build libzstd-dev
-RUN apt install -y libtbb-dev gcc-10
+RUN apt install -y libtbb-dev
 
 COPY . /app/
 
@@ -16,7 +16,7 @@ WORKDIR /app/
 ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app/build/
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=DEBUG -DUSE_PARALLEL=true -DCMAKE_CXX_COMPILER=g++10 -GNinja .. && ninja
+RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=DEBUG -DUSE_PARALLEL=true -GNinja .. && ninja
 RUN make test
 
 FROM base as runtime

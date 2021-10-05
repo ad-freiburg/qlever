@@ -21,7 +21,7 @@ using Second = typename std::tuple_element<1, std::tuple<Ts...>>::type;
 
 template <typename T1, typename T2, typename... Ts>
 struct TuplePairsT {
-  using type = ad_utility::TupleCatT<std::tuple<std::function<T2(T1)>>,
+  using type = ad_utility::TupleCat<std::tuple<std::function<T2(T1)>>,
                                      typename TuplePairsT<T2, Ts...>::type>;
 };
 

@@ -14,5 +14,4 @@ add_library(index
         PrefixHeuristic.cpp PrefixHeuristic.h
         CompressedRelation.h CompressedRelation.cpp)
 
-target_compile_options(index PUBLIC -fcoroutines)
 target_link_libraries(index parser ${STXXL_LIBRARIES} ${ICU_LIBRARIES} absl::flat_hash_map absl::flat_hash_set zstd)

@@ -193,6 +193,8 @@ endif()
 set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TIMING TRACE)
 add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 
+add_compile_options(-fcoroutines)
+
 add_subdirectory(src/parser)
 add_subdirectory(src/engine)
 add_subdirectory(src/index)
