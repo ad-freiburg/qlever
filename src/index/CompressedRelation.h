@@ -112,9 +112,9 @@ struct CompressedRelationMetaData {
    * members of Index class).
    */
   template <class PermutationInfo, typename IdTableImpl>
-  static void scan(const Id count, const Id& col1Id, IdTableImpl* result,
+  static void scan(Id count, Id col1Id, IdTableImpl* result,
                    const PermutationInfo& permutation,
-                   ad_utility::SharedConcurrentTimeoutTimer timer = nullptr);
+                   const ad_utility::SharedConcurrentTimeoutTimer& timer = nullptr);
 
 
  // ____________________________________________________________________________

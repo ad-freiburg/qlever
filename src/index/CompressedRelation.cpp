@@ -147,7 +147,7 @@ cppcoro::generator<CompressedRelationMetaData::DecompressedBlock> CompressedRela
 // ____________________________________________________________________________
 template <class Permutation, typename IdTableImpl>
 void CompressedRelationMetaData::scan(
-    Id col0Id, IdTableImpl* result, const Permutation& permutation,
+    const Id col0Id, IdTableImpl* result, const Permutation& permutation,
     const ad_utility::SharedConcurrentTimeoutTimer& timer) {
   if constexpr (!ad_utility::isVector<IdTableImpl>) {
     AD_CHECK(result->cols() == 2);
@@ -223,51 +223,56 @@ void CompressedRelationMetaData::scan(
 }
 
 using V = std::vector<std::array<Id, 2>>;
+using Timer = const ad_utility::SharedConcurrentTimeoutTimer&;
 // Explicit instantiations for all six permutations
 template void CompressedRelationMetaData::scan<Permutation::POS_T, IdTable>(
     Id key, IdTable* result, const Permutation::POS_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+Timer);
 template void CompressedRelationMetaData::scan<Permutation::PSO_T, IdTable>(
     Id key, IdTable* result, const Permutation::PSO_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Timer);
 template void CompressedRelationMetaData::scan<Permutation::SPO_T, IdTable>(
     Id key, IdTable* result, const Permutation::SPO_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Timer timer);
 template void CompressedRelationMetaData::scan<Permutation::SOP_T, IdTable>(
     Id key, IdTable* result, const Permutation::SOP_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Timer timer);
 template void CompressedRelationMetaData::scan<Permutation::OPS_T, IdTable>(
     Id key, IdTable* result, const Permutation::OPS_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Timer timer);
 template void CompressedRelationMetaData::scan<Permutation::OSP_T, IdTable>(
     Id key, IdTable* result, const Permutation::OSP_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Timer timer);
 
 template void CompressedRelationMetaData::scan<Permutation::POS_T, V>(
     Id key, V* result, const Permutation::POS_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Timer timer);
 template void CompressedRelationMetaData::scan<Permutation::PSO_T, V>(
     Id key, V* result, const Permutation::PSO_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Timer timer);
 template void CompressedRelationMetaData::scan<Permutation::SPO_T, V>(
     Id key, V* result, const Permutation::SPO_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Timer timer);
 template void CompressedRelationMetaData::scan<Permutation::SOP_T, V>(
     Id key, V* result, const Permutation::SOP_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Timer timer);
 template void CompressedRelationMetaData::scan<Permutation::OPS_T, V>(
     Id key, V* result, const Permutation::OPS_T& p,
-    ad_utility::SharedConcurrentTimeoutTimer timer);
+    Timer timer);
 template void CompressedRelationMetaData::scan<Permutation::OSP_T, V>(
     Id key, V* result, const Permutation::OSP_T& p,
+    Timer timer);
+// ____________________________________________________________________________
+template cppcoro::generator<CompressedRelationMetaData::DecompressedBlock> CompressedRelationMetaData::ScanBlockGenerator<Permutation::POS_T> (
+    Id col0Id, const Permutation::POS_T& permutation,
     ad_utility::SharedConcurrentTimeoutTimer timer);
 
 // _____________________________________________________________________________
 template <class Permutation, typename IdTableImpl>
 void CompressedRelationMetaData::scan(
-    const Id col0Id, const Id& col1Id, IdTableImpl* result,
+    const Id col0Id, const Id col1Id, IdTableImpl* result,
     const Permutation& permutation,
-    ad_utility::SharedConcurrentTimeoutTimer timer) {
+    const ad_utility::SharedConcurrentTimeoutTimer& timer) {
   AD_CHECK(result->cols() == 1);
   if (permutation._meta.col0IdExists(col0Id)) {
     const auto& metaData = permutation._meta.getMetaData(col0Id);
@@ -413,23 +418,23 @@ void CompressedRelationMetaData::scan(
 
 // Explicit instantiations for all six permutations
 template void CompressedRelationMetaData::scan<Permutation::POS_T, IdTable>(
-    const Id, const Id&, IdTable*, const Permutation::POS_T&,
-    ad_utility::SharedConcurrentTimeoutTimer);
+    Id, Id, IdTable*, const Permutation::POS_T&,
+    Timer);
 template void CompressedRelationMetaData::scan<Permutation::PSO_T, IdTable>(
-    const Id, const Id&, IdTable*, const Permutation::PSO_T&,
-    ad_utility::SharedConcurrentTimeoutTimer);
+    Id, Id, IdTable*, const Permutation::PSO_T&,
+    Timer);
 template void CompressedRelationMetaData::scan<Permutation::SOP_T, IdTable>(
-    const Id, const Id&, IdTable*, const Permutation::SOP_T&,
-    ad_utility::SharedConcurrentTimeoutTimer);
+    const Id, const Id, IdTable*, const Permutation::SOP_T&,
+    Timer);
 template void CompressedRelationMetaData::scan<Permutation::SPO_T, IdTable>(
-    const Id, const Id&, IdTable*, const Permutation::SPO_T&,
-    ad_utility::SharedConcurrentTimeoutTimer);
+    const Id, const Id, IdTable*, const Permutation::SPO_T&,
+    Timer);
 template void CompressedRelationMetaData::scan<Permutation::OPS_T, IdTable>(
-    const Id, const Id&, IdTable*, const Permutation::OPS_T&,
-    ad_utility::SharedConcurrentTimeoutTimer);
+    const Id, const Id, IdTable*, const Permutation::OPS_T&,
+    Timer);
 template void CompressedRelationMetaData::scan<Permutation::OSP_T, IdTable>(
-    const Id, const Id&, IdTable*, const Permutation::OSP_T&,
-    ad_utility::SharedConcurrentTimeoutTimer);
+    const Id, const Id, IdTable*, const Permutation::OSP_T&,
+    Timer);
 
 // ___________________________________________________________________________
 void CompressedRelationWriter::addRelation(

@@ -8,6 +8,7 @@
 #include "../util/Conversions.h"
 #include "../util/HashSet.h"
 #include "CallFixedSize.h"
+#include "IndexScan.h"
 
 GroupBy::GroupBy(QueryExecutionContext* qec,
                  const vector<string>& groupByVariables,
@@ -799,6 +800,15 @@ void GroupBy::computeResult(ResultTable* result) {
       }
     }
   };
+
+  // find out, if we simply count over a POS index scan, then we can use
+  // the special logic.
+  auto indexScan = dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get());
+
+  if (indexScan && indexScan->getType() == IndexScan::POS_FREE_O && aggregates.size() == 2 && aggregates[0]._inCol == 0 && aggregates[0]._type == ParsedQuery::AggregateType::SAMPLE && aggregates[1]._inCol == 1 && aggregates[1]._type == ParsedQuery::AggregateType::COUNT) {
+    performGroupByOnIndexScan(result, indexScan->getPredicate());
+    return;
+  }
   try {
     CALL_FIXED_SIZE_2(inWidth, outWidth, doGroupBy, subresult->_data,
                       inputResultTypes, groupByCols, aggregates, &result->_data,
@@ -811,6 +821,33 @@ void GroupBy::computeResult(ResultTable* result) {
   }
 }
 
-void performGroupByOnBlockRange(ResultTable* resultTable, Id col0Id) {
-
+void GroupBy::performGroupByOnIndexScan(ResultTable* resultTable, const string& predicate) {
+  // TODO: support other permutations as well
+  Id col0Id;
+  bool idWasFound = getIndex().getVocab().getId(predicate, &col0Id);
+  if (! idWasFound) {
+    return;
+  }
+  const auto& permutation = getIndex().POS();
+  auto blockGenerator = CompressedRelationMetaData::ScanBlockGenerator(col0Id, permutation, nullptr);
+  auto result = resultTable->_data.moveToStatic<2>();
+  Id lastId = ID_NO_VALUE;
+  size_t count = 0;
+  for (const auto& block : blockGenerator) {
+    for (auto [col1Id, unused] : block) {
+      if (col1Id == lastId) {
+        count++;
+      } else {
+        if (count > 0) {
+          result.push_back({lastId, count});
+        }
+        count = 1;
+        lastId = col1Id;
+      }
+    }
+  }
+  if (count > 0) {
+    result.push_back({lastId, count});
+  }
+  resultTable->_data = result.moveToDynamic();
 }
