@@ -11,9 +11,11 @@
 #include "../global/Id.h"
 #include "../util/BufferedVector.h"
 #include "../util/File.h"
+#include "../util/Generator.h"
 #include "../util/Serializer/SerializeVector.h"
 #include "../util/Serializer/Serializer.h"
 #include "../util/Timer.h"
+#include <variant>
 
 // The meta data of a compressed block of Id triples in a certain permutation.
 struct CompressedBlockMetaData {
@@ -76,6 +78,9 @@ struct CompressedRelationMetaData {
   // Equal if all members are equal.
   bool operator==(const CompressedRelationMetaData&) const = default;
 
+  // TODO<joka921> comment
+  using DecompressedBlock = std::vector<std::array<Id, 2>>;
+
   /**
    * @brief Perform a scan for one col0Id i.e. retrieve all YZ from the XYZ
    * permutation for a specific col0Id value of X
@@ -89,9 +94,9 @@ struct CompressedRelationMetaData {
   // The IdTable is a rather expensive type, so we don't include it here.
   // but we can also not forward declare it because it is actually an alias.
   template <class Permutation, typename IdTableImpl>
-  static void scan(Id col0Id, IdTableImpl* result,
-                   const Permutation& permutation,
-                   ad_utility::SharedConcurrentTimeoutTimer timer = nullptr);
+  static void scan(
+      Id col0Id, IdTableImpl* result, const Permutation& permutation,
+      const ad_utility::SharedConcurrentTimeoutTimer& timer = nullptr);
 
   /**
    * @brief Perform a scan for two keys i.e. retrieve all Z from the XYZ
@@ -112,7 +117,14 @@ struct CompressedRelationMetaData {
                    const PermutationInfo& permutation,
                    ad_utility::SharedConcurrentTimeoutTimer timer = nullptr);
 
- private:
+  using BlockOrMetaData = std::variant<DecompressedBlock, CompressedBlockMetaData>;
+  // ____________________________________________________________________________
+  template <class Permutation>
+  static cppcoro::generator<BlockOrMetaData> ScanBlockGenerator(
+      Id col0Id, const Permutation& permutation,
+      ad_utility::SharedConcurrentTimeoutTimer timer);
+
+ public:
   // some helper functions for reading and decompressing of blocks.
 
   template <class Permutation>
