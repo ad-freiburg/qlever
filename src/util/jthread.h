@@ -11,7 +11,7 @@
 #ifdef _LIBCPP_VERSION
 namespace ad_utility {
 struct JThread : public std::thread {
-#ifdef _cpp_lib_jthread
+#ifdef __cpp_lib_jthread
   static_assert(false,
                 "std::jthread is now supported by libc++, get rid of "
                 "ad_utility::Jthread");
@@ -29,7 +29,7 @@ struct JThread : public std::thread {
 
 #else
 // libstdc++ already supports jthread, simply use it
-#ifndef _cpp_lib_jthread
+#ifndef __cpp_lib_jthread
 static_assert(false,
               "std::jthread is not supported by the version of libstdc++ you "
               "are using, please update or using QLever inside of Docker");
