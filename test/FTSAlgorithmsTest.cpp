@@ -512,9 +512,11 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
                     cids, eids, scores, nofVars, k, &resW4);
   ASSERT_EQ(13u, resW4.size());
   std::sort(std::begin(resW4), std::end(resW4),
-            [](const auto& a, const auto& b) { return a[1] > b[1]; });
-  ASSERT_EQ(3u, resW4(0, 1));
+            [](const auto& a, const auto& b) {
+              return a[1] != b[1] ? a[1] > b[1] : a[0] < b[0];
+            });
   ASSERT_EQ(0u, resW4(0, 0));
+  ASSERT_EQ(3u, resW4(0, 1));
   ASSERT_EQ(0u, resW4(0, 2));
   ASSERT_EQ(0u, resW4(0, 3));
   ASSERT_EQ(1u, resW4(1, 0));

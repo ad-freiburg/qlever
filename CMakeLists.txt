@@ -126,7 +126,7 @@ if (USE_PARALLEL)
     if (OPENMP_FOUND)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
-        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
+        set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
         add_definitions("-D_PARALLEL_SORT")
     endif ()
 endif()
@@ -159,6 +159,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
 
 set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
 add_subdirectory(third_party/re2 EXCLUDE_FROM_ALL)
+target_compile_options(re2 PUBLIC -Wno-unused-but-set-variable)
 include_directories(SYSTEM third_party/re2)
 
 # reinstate original flags including all warnings
@@ -208,7 +209,7 @@ configure_file(src/web/script.js script.js)
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
 target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(CreatePatternsMain src/index/CreatePatternsMain.cpp)
+add_executable(CreatePatternsMain src/index/CreatePatternsMain.cpp src/util/jthread.h)
 target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(SparqlEngineMain src/SparqlEngineMain.cpp)

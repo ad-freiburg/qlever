@@ -7,6 +7,7 @@
 #ifndef QLEVER_RANDOM_H
 #define QLEVER_RANDOM_H
 
+#include <array>
 #include <cstring>
 #include <random>
 #include <type_traits>
