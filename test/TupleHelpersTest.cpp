@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <string>
 
 #include "../src/util/TupleHelpers.h"

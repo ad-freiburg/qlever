@@ -11,6 +11,7 @@
 
 #include "./Exception.h"
 #include "./Timer.h"
+#include "./jthread.h"
 
 namespace ad_utility {
 /**
@@ -27,7 +28,7 @@ class TaskQueue {
   using Task = std::function<void()>;
   using Timer = ad_utility::Timer;
 
-  std::vector<std::jthread> _threads;
+  std::vector<ad_utility::JThread> _threads;
   std::queue<Task> _queuedTasks;
   size_t _queueMaxSize = 1;
   // CV to notify that a new task has been added to the queue

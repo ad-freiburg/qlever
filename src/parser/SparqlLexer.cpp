@@ -130,9 +130,9 @@ void SparqlLexer::readNext() {
           // unescaping of RDFLiteral, only applied to the actual literal and
           // not the datatype/langtag
           auto lastQuote = raw.rfind('"');
-          std::string_view quoted{raw.begin(), raw.begin() + lastQuote + 1};
-          std::string_view langtagOrDatatype{raw.begin() + lastQuote + 1,
-                                             raw.end()};
+          std::string_view quoted{raw.data(), lastQuote + 1};
+          std::string_view langtagOrDatatype{raw.data() + lastQuote + 1,
+                                             raw.size() - (lastQuote + 1)};
           raw = RdfEscaping::normalizeRDFLiteral(quoted) + langtagOrDatatype;
         }
         break;  // we check the regexes in an order that ensures that stopping
