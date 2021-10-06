@@ -129,7 +129,6 @@ CompressedRelationMetaData::ScanBlockGenerator(
          &permutation]() -> std::optional<NumRowsAndCompressedBlock> {
       if (blockItForReader < endBlock) {
         auto numRows = blockItForReader->_numRows;
-        LOG(INFO) << "Read a block in the pipeline" << std::endl;
         return std::pair(
             numRows, CompressedRelationMetaData::readCompressedBlockFromFile(
                          *blockItForReader++, permutation));
@@ -137,7 +136,6 @@ CompressedRelationMetaData::ScanBlockGenerator(
       return std::nullopt;
     };
     auto decompressLambda = [](NumRowsAndCompressedBlock&& numAndBlock) {
-      LOG(INFO) << "Decompress a block" << std::endl;
       return CompressedRelationMetaData::decompressBlock(numAndBlock.second,
                                                          numAndBlock.first);
     };
@@ -153,9 +151,7 @@ CompressedRelationMetaData::ScanBlockGenerator(
       p.finish();
     });
 
-    LOG(INFO) << "Start waiting for the pipeline" << std::endl;
     while (auto optionalTask = p.popManually()) {
-      LOG(INFO) << "Popping a block" << std::endl;
       optionalTask.value()();
       co_yield std::move(intermediateResult);
       intermediateResult.clear();
