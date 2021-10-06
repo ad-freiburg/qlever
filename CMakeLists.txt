@@ -159,6 +159,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
 
 set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
 add_subdirectory(third_party/re2 EXCLUDE_FROM_ALL)
+target_compile_options(re2 PUBLIC -Wno-unused-but-set-variable)
 include_directories(SYSTEM third_party/re2)
 
 # reinstate original flags including all warnings
