@@ -186,14 +186,17 @@ class FlexibleCache {
     }
 
     // ignore entries that are too big
-    if (_valueSizeGetter(*valPtr) > _maxSizeSingleEntry) {
+    auto sizeOfNewEntry = _valueSizeGetter(*valPtr);
+    if (sizeOfNewEntry > _maxSizeSingleEntry) {
+      return {};
+    }
+    if (!makeRoomFor(sizeOfNewEntry)) {
       return {};
     }
     Score s = _scoreCalculator(*valPtr);
     _totalSizeNonPinned += _valueSizeGetter(*valPtr);
     auto handle = _entries.insert(std::move(s), Entry(key, std::move(valPtr)));
     _accessMap[key] = handle;
-    shrinkToFit();
     // The first value is the value part of the key-value pair in the priority
     // queue (where the key is a score and the value is a cache entry). The
     // second value is the value part of the key-value pair in the cache (where
@@ -212,21 +215,23 @@ class FlexibleCache {
     }
 
     // throw if an entry is too big for this cache
-    if (_valueSizeGetter(*valPtr) > _maxSizeSingleEntry) {
+    auto sizeOfNewEntry = _valueSizeGetter(*valPtr);
+    if (sizeOfNewEntry > _maxSizeSingleEntry) {
       throw std::runtime_error(
           "Trying to pin an entry to the cache that is bigger than the "
           "maximum size for a single entry in the cache");
     }
+    // make room for the new entry;
+    makeRoomFor(sizeOfNewEntry);
     _pinnedMap[key] = valPtr;
     _totalSizePinned += _valueSizeGetter(*valPtr);
-    shrinkToFit();
     return valPtr;
   }
 
   //! Set the capacity.
   void setMaxNumEntries(const size_t maxNumEntries) {
     _maxNumEntries = maxNumEntries;
-    shrinkToFit();
+    makeRoomFor(0);
   }
 
   //! Checks if there is an entry with the given key.
@@ -328,6 +333,31 @@ class FlexibleCache {
   /// Return the number of pinned entries
   [[nodiscard]] size_t numPinnedEntries() const { return _pinnedMap.size(); }
 
+  // Delete cache entries from the non-pinned area, until an element of size
+  // `freeSpace` can be inserted into the cache.
+  // Returns: true iff if the procedure succeeded. It may fail if `freeSpace` is
+  // larger than the _maxSize - _totalSizePinned;
+  bool makeRoomFor(size_t freeSpace) {
+    if (_totalSizeNonPinned > freeSpace) {
+      return false;
+    }
+
+    while (!_entries.empty() &&
+           (_entries.size() + _pinnedMap.size() > _maxNumEntries ||
+            _totalSizeNonPinned + _totalSizePinned + freeSpace > _maxSize)) {
+      // Remove entries from the back until we meet the capacity and size
+      // requirements
+      auto handle = _entries.pop();
+      _totalSizeNonPinned -= _valueSizeGetter(*handle.value().value());
+      _accessMap.erase(handle.value().key());
+    }
+
+    // Note that the pinned entries alone can exceed the capacity of the cache.
+    assert(_entries.empty() ||
+           _entries.size() + _pinnedMap.size() <= _maxNumEntries);
+    return true;
+  }
+
  private:
   size_t _maxNumEntries;
   size_t _maxSize;
@@ -342,22 +372,6 @@ class FlexibleCache {
   ValueSizeGetter _valueSizeGetter;
   PinnedMap _pinnedMap;
   AccessMap _accessMap;
-
-  void shrinkToFit() {
-    while (!_entries.empty() &&
-           (_entries.size() + _pinnedMap.size() > _maxNumEntries ||
-            _totalSizeNonPinned + _totalSizePinned > _maxSize)) {
-      // Remove entries from the back until we meet the capacity and size
-      // requirements
-      auto handle = _entries.pop();
-      _totalSizeNonPinned -= _valueSizeGetter(*handle.value().value());
-      _accessMap.erase(handle.value().key());
-    }
-
-    // Note that the pinned entries alone can exceed the capacity of the cache.
-    assert(_entries.empty() ||
-           _entries.size() + _pinnedMap.size() <= _maxNumEntries);
-  }
 };
 
 // Partial instantiation of FlexibleCache using the heap-based priority queue
