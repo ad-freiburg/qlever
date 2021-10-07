@@ -6,7 +6,6 @@
 
 #include <type_traits>
 
-#include "../util/ResourcePool.h"
 #include "./Log.h"
 #include "./TaskQueue.h"
 #include "TypeTraits.h"
@@ -22,7 +21,7 @@ using Second = typename std::tuple_element<1, std::tuple<Ts...>>::type;
 template <typename T1, typename T2, typename... Ts>
 struct TuplePairsT {
   using type = ad_utility::TupleCat<std::tuple<std::function<T2(T1)>>,
-                                     typename TuplePairsT<T2, Ts...>::type>;
+                                    typename TuplePairsT<T2, Ts...>::type>;
 };
 
 template <typename T1, typename T2>
@@ -65,7 +64,6 @@ struct Pipeline {
       if (i < _queues.size()) {
         _pushedNextOrderedRequest[i].notify_all();
       };
-
     }
   }
 
@@ -108,7 +106,7 @@ struct Pipeline {
     }
   }
 
-  ~Pipeline() {finish();}
+  ~Pipeline() { finish(); }
 
   std::string getTimeStatistics() const {
     std::string res;

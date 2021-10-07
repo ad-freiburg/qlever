@@ -92,7 +92,11 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
 
   AD_CHECK_GT(lastRow.size(), 0);
   auto minIndices = findCheapestExecutionTree(lastRow);
-  auto minIndex = *std::min_element(minIndices.begin(), minIndices.end(), [&lastRow](const auto& a, const auto& b){ return lastRow[a].getCostEstimate() < lastRow[b].getCostEstimate();});
+  auto minIndex = *std::min_element(minIndices.begin(), minIndices.end(),
+                                    [&lastRow](const auto& a, const auto& b) {
+                                      return lastRow[a].getCostEstimate() <
+                                             lastRow[b].getCostEstimate();
+                                    });
   if (pq._rootGraphPattern._optional) {
     lastRow[minIndex].type = SubtreePlan::OPTIONAL;
   }
@@ -149,7 +153,10 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           "grandchildren or lower of a Plan to be optimized may never be "
           "empty");
     }
-    auto cheapestTreeIt = std::min_element(v.begin(), v.end(), [](const auto& a, const auto& b){return a.getCostEstimate() < b.getCostEstimate();});
+    auto cheapestTreeIt =
+        std::min_element(v.begin(), v.end(), [](const auto& a, const auto& b) {
+          return a.getCostEstimate() < b.getCostEstimate();
+        });
     return std::move(*cheapestTreeIt);
   };
 
@@ -1885,7 +1892,10 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
   auto pruneCandidates = [&](auto& actualCandidates) {
     for (auto& [key, value] : actualCandidates) {
       (void)key;  // silence unused warning
-      auto cheapestTreeIt = std::min_element(value.begin(), value.end(), [](const auto& a, const auto& b){return a.getCostEstimate() < b.getCostEstimate();});
+      auto cheapestTreeIt = std::min_element(
+          value.begin(), value.end(), [](const auto& a, const auto& b) {
+            return a.getCostEstimate() < b.getCostEstimate();
+          });
       prunedPlans.push_back(std::move(*cheapestTreeIt));
     }
   };
@@ -2775,7 +2785,8 @@ std::vector<size_t> QueryPlanner::findCheapestExecutionTree(
                << " for Tree " << repr << '\n';
 
     auto sortColumns = lastRow[i]._qet->resultSortedOn();
-    if (!sortOrderToCheapestTree.contains(sortColumns) || sortOrderToCheapestTree[sortColumns].cost > thisCost) {
+    if (!sortOrderToCheapestTree.contains(sortColumns) ||
+        sortOrderToCheapestTree[sortColumns].cost > thisCost) {
       sortOrderToCheapestTree[sortColumns] = S{i, thisCost};
     }
     if (thisCost < minCost) {

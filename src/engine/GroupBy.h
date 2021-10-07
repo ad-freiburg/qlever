@@ -116,5 +116,8 @@ class GroupBy : public Operation {
                  IdTable* dynResult, const ResultTable* inTable,
                  ResultTable* outTable, const Index& index) const;
 
+  void performGroupByOnIndexScan(ResultTable* resultTable,
+                                 const string& predicate);
+
   FRIEND_TEST(GroupByTest, doGroupBy);
 };

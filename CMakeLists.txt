@@ -7,6 +7,16 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Coroutines require an additional compiler flag that is called differently
+# on clang and g++
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag(-fcoroutines HAS_COROUTINES)
+if (HAS_COROUTINES)
+    add_compile_options(-fcoroutines)
+else()
+    add_compile_options(-fcoroutines-ts)
+endif()
+
 # Check compiler versions:
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
     # Check version. If empty, warn. If too old, error out:

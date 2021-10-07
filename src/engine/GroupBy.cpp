@@ -814,7 +814,6 @@ void GroupBy::computeResult(ResultTable* result) {
     }
   };
 
-
   try {
     CALL_FIXED_SIZE_2(inWidth, outWidth, doGroupBy, subresult->_data,
                       inputResultTypes, groupByCols, aggregates, &result->_data,
@@ -829,7 +828,8 @@ void GroupBy::computeResult(ResultTable* result) {
 
 void GroupBy::performGroupByOnIndexScan(ResultTable* resultTable,
                                         const string& predicate) {
-  LOG(INFO) << "Performing special logic for group by on index scan" << std::endl;
+  LOG(INFO) << "Performing special logic for group by on index scan"
+            << std::endl;
   resultTable->_resultTypes.resize(2);
   resultTable->_resultTypes[0] = ResultTable::ResultType::KB;
   resultTable->_resultTypes[1] = ResultTable::ResultType::VERBATIM;
@@ -846,7 +846,8 @@ void GroupBy::performGroupByOnIndexScan(ResultTable* resultTable,
   Id lastId = ID_NO_VALUE;
   size_t count = 0;
   for (const auto& blockOrMetaData : blockGenerator) {
-    if (auto block = std::get_if<CompressedRelationMetaData::DecompressedBlock>(&blockOrMetaData)) {
+    if (auto block = std::get_if<CompressedRelationMetaData::DecompressedBlock>(
+            &blockOrMetaData)) {
       for (auto [col1Id, unused] : *block) {
         if (col1Id == lastId) {
           count++;
@@ -864,7 +865,7 @@ void GroupBy::performGroupByOnIndexScan(ResultTable* resultTable,
       auto singleCount = meta._numRows;
 
       if (col1Id == lastId) {
-        count+= singleCount;
+        count += singleCount;
       } else {
         if (count > 0) {
           result.push_back({lastId, count});

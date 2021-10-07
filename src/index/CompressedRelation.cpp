@@ -4,6 +4,8 @@
 
 #include "CompressedRelation.h"
 
+#include <future>
+
 #include "../engine/IdTable.h"
 #include "../util/Cache.h"
 #include "../util/CompressionUsingZstd/ZstdWrapper.h"
@@ -13,7 +15,6 @@
 #include "../util/TypeTraits.h"
 #include "./Permutations.h"
 #include "ConstantsIndexBuilding.h"
-#include <future>
 
 using namespace std::chrono_literals;
 
@@ -122,7 +123,8 @@ CompressedRelationMetaData::ScanBlockGenerator(
     }
 
     using NumRowsAndCompressedBlock = std::pair<size_t, std::vector<char>>;
-    using CompressedBlockOrMetaData = std::variant<NumRowsAndCompressedBlock , CompressedBlockMetaData>;
+    using CompressedBlockOrMetaData =
+        std::variant<NumRowsAndCompressedBlock, CompressedBlockMetaData>;
     // Read all the other (complete!) blocks in parallel
     auto blockItForReader = beginBlock;
     auto readBlocks =
@@ -139,8 +141,10 @@ CompressedRelationMetaData::ScanBlockGenerator(
       }
       return std::nullopt;
     };
-    auto decompressLambda = [](CompressedBlockOrMetaData && blockOrMetaData)-> BlockOrMetaData {
-      if (auto numAndBlock = std::get_if<NumRowsAndCompressedBlock>(&blockOrMetaData))  {
+    auto decompressLambda =
+        [](CompressedBlockOrMetaData&& blockOrMetaData) -> BlockOrMetaData {
+      if (auto numAndBlock =
+              std::get_if<NumRowsAndCompressedBlock>(&blockOrMetaData)) {
         return CompressedRelationMetaData::decompressBlock(numAndBlock->second,
                                                            numAndBlock->first);
       }
@@ -148,20 +152,19 @@ CompressedRelationMetaData::ScanBlockGenerator(
     };
 
     BlockOrMetaData intermediateResult;
-    auto returner = [&](BlockOrMetaData && result) {
+    auto returner = [&](BlockOrMetaData&& result) {
       intermediateResult = std::move(result);
     };
     ad_pipeline::Pipeline p(true, {1, 20, 0}, readBlocks, decompressLambda,
                             returner);
 
-    auto future = std::async(std::launch::async, [&]() {
-      p.finish();
-    });
+    auto future = std::async(std::launch::async, [&]() { p.finish(); });
 
     while (auto optionalTask = p.popManually()) {
       optionalTask.value()();
       co_yield std::move(intermediateResult);
-      // clear to silence the (incorrect, but difficult to track) warning about `intermediateResult` being used after being moved.
+      // clear to silence the (incorrect, but difficult to track) warning about
+      // `intermediateResult` being used after being moved.
       intermediateResult = BlockOrMetaData{};
     }
   }
@@ -199,8 +202,10 @@ void CompressedRelationMetaData::scan(
 
     // Read the first block if it is incomplete
     if (firstBlockIsIncomplete) {
-      auto incompleteBlock = readIncompleteBlock(permutation, *beginBlock, metaData);
-      position = std::copy(incompleteBlock.begin(), incompleteBlock.end(), position);
+      auto incompleteBlock =
+          readIncompleteBlock(permutation, *beginBlock, metaData);
+      position =
+          std::copy(incompleteBlock.begin(), incompleteBlock.end(), position);
       spaceLeft -= incompleteBlock.size();
 
       ++beginBlock;

@@ -6,6 +6,7 @@
 #define QLEVER_COMPRESSEDRELATION_H
 
 #include <algorithm>
+#include <variant>
 #include <vector>
 
 #include "../global/Id.h"
@@ -15,7 +16,6 @@
 #include "../util/Serializer/SerializeVector.h"
 #include "../util/Serializer/Serializer.h"
 #include "../util/Timer.h"
-#include <variant>
 
 // The meta data of a compressed block of Id triples in a certain permutation.
 struct CompressedBlockMetaData {
@@ -113,11 +113,13 @@ struct CompressedRelationMetaData {
    * members of Index class).
    */
   template <class PermutationInfo, typename IdTableImpl>
-  static void scan(const Id count, const Id& col1Id, IdTableImpl* result,
-                   const PermutationInfo& permutation,
-                   ad_utility::SharedConcurrentTimeoutTimer timer = nullptr);
+  static void scan(
+      const Id count, Id col1Id, IdTableImpl* result,
+      const PermutationInfo& permutation,
+      const ad_utility::SharedConcurrentTimeoutTimer& timer = nullptr);
 
-  using BlockOrMetaData = std::variant<DecompressedBlock, CompressedBlockMetaData>;
+  using BlockOrMetaData =
+      std::variant<DecompressedBlock, CompressedBlockMetaData>;
   // ____________________________________________________________________________
   template <class Permutation>
   static cppcoro::generator<BlockOrMetaData> ScanBlockGenerator(
