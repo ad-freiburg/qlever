@@ -94,7 +94,7 @@ std::vector<std::array<Id, 2>> readIncompleteBlock(const auto& permutation,
 
 // ____________________________________________________________________________
 template <class Permutation>
-cppcoro::generator<CompressedRelationMetaData::DecompressedBlock>
+cppcoro::generator<CompressedRelationMetaData::BlockOrMetaData>
 CompressedRelationMetaData::ScanBlockGenerator(
     Id col0Id, const Permutation& permutation,
     ad_utility::SharedConcurrentTimeoutTimer timer) {
@@ -121,27 +121,34 @@ CompressedRelationMetaData::ScanBlockGenerator(
       }
     }
 
+    using NumRowsAndCompressedBlock = std::pair<size_t, std::vector<char>>;
+    using CompressedBlockOrMetaData = std::variant<NumRowsAndCompressedBlock , CompressedBlockMetaData>;
     // Read all the other (complete!) blocks in parallel
     auto blockItForReader = beginBlock;
-    using NumRowsAndCompressedBlock = std::pair<size_t, std::vector<char>>;
     auto readBlocks =
         [&blockItForReader, endBlock = endBlock,
-         &permutation]() -> std::optional<NumRowsAndCompressedBlock> {
+         &permutation]() -> std::optional<CompressedBlockOrMetaData> {
       if (blockItForReader < endBlock) {
         auto numRows = blockItForReader->_numRows;
+        if (blockItForReader->_col1FirstId == blockItForReader->_col1LastId) {
+          return *blockItForReader;
+        }
         return std::pair(
             numRows, CompressedRelationMetaData::readCompressedBlockFromFile(
                          *blockItForReader++, permutation));
       }
       return std::nullopt;
     };
-    auto decompressLambda = [](NumRowsAndCompressedBlock&& numAndBlock) {
-      return CompressedRelationMetaData::decompressBlock(numAndBlock.second,
-                                                         numAndBlock.first);
+    auto decompressLambda = [](CompressedBlockOrMetaData && blockOrMetaData)-> BlockOrMetaData {
+      if (auto numAndBlock = std::get_if<NumRowsAndCompressedBlock>(&blockOrMetaData))  {
+        return CompressedRelationMetaData::decompressBlock(numAndBlock->second,
+                                                           numAndBlock->first);
+      }
+      return std::get<CompressedBlockMetaData>(blockOrMetaData);
     };
 
-    std::vector<std::array<Id, 2>> intermediateResult;
-    auto returner = [&](DecompressedBlock&& result) {
+    BlockOrMetaData intermediateResult;
+    auto returner = [&](BlockOrMetaData && result) {
       intermediateResult = std::move(result);
     };
     ad_pipeline::Pipeline p(true, {1, 20, 0}, readBlocks, decompressLambda,
@@ -154,7 +161,8 @@ CompressedRelationMetaData::ScanBlockGenerator(
     while (auto optionalTask = p.popManually()) {
       optionalTask.value()();
       co_yield std::move(intermediateResult);
-      intermediateResult.clear();
+      // clear to silence the (incorrect, but difficult to track) warning about `intermediateResult` being used after being moved.
+      intermediateResult = BlockOrMetaData{};
     }
   }
 }
@@ -270,7 +278,7 @@ template void CompressedRelationMetaData::scan<Permutation::OPS_T, V>(
 template void CompressedRelationMetaData::scan<Permutation::OSP_T, V>(
     Id key, V* result, const Permutation::OSP_T& p, Timer timer);
 // ____________________________________________________________________________
-template cppcoro::generator<CompressedRelationMetaData::DecompressedBlock>
+template cppcoro::generator<CompressedRelationMetaData::BlockOrMetaData>
 CompressedRelationMetaData::ScanBlockGenerator<Permutation::POS_T>(
     Id col0Id, const Permutation::POS_T& permutation,
     ad_utility::SharedConcurrentTimeoutTimer timer);

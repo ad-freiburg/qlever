@@ -845,16 +845,33 @@ void GroupBy::performGroupByOnIndexScan(ResultTable* resultTable,
   auto result = resultTable->_data.moveToStatic<2>();
   Id lastId = ID_NO_VALUE;
   size_t count = 0;
-  for (const auto& block : blockGenerator) {
+  for (const auto& blockOrMetaData : blockGenerator) {
     LOG(INFO) << "Reading a new block" << std::endl;
-    for (auto [col1Id, unused] : block) {
+
+    if (auto block = std::get_if<CompressedRelationMetaData::DecompressedBlock>(&blockOrMetaData)) {
+      for (auto [col1Id, unused] : *block) {
+        if (col1Id == lastId) {
+          count++;
+        } else {
+          if (count > 0) {
+            result.push_back({lastId, count});
+          }
+          count = 1;
+          lastId = col1Id;
+        }
+      }
+    } else {
+      auto meta = std::get<CompressedBlockMetaData>(blockOrMetaData);
+      auto col1Id = meta._col1FirstId;
+      auto singleCount = meta._numRows;
+
       if (col1Id == lastId) {
-        count++;
+        count+= singleCount;
       } else {
         if (count > 0) {
           result.push_back({lastId, count});
         }
-        count = 1;
+        count = singleCount;
         lastId = col1Id;
       }
     }

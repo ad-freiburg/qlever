@@ -15,6 +15,7 @@
 #include "../util/Serializer/SerializeVector.h"
 #include "../util/Serializer/Serializer.h"
 #include "../util/Timer.h"
+#include <variant>
 
 // The meta data of a compressed block of Id triples in a certain permutation.
 struct CompressedBlockMetaData {
@@ -117,9 +118,10 @@ struct CompressedRelationMetaData {
       const PermutationInfo& permutation,
       const ad_utility::SharedConcurrentTimeoutTimer& timer = nullptr);
 
+  using BlockOrMetaData = std::variant<DecompressedBlock, CompressedBlockMetaData>;
   // ____________________________________________________________________________
   template <class Permutation>
-  static cppcoro::generator<DecompressedBlock> ScanBlockGenerator(
+  static cppcoro::generator<BlockOrMetaData> ScanBlockGenerator(
       Id col0Id, const Permutation& permutation,
       ad_utility::SharedConcurrentTimeoutTimer timer);
 
