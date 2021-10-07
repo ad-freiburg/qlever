@@ -846,8 +846,6 @@ void GroupBy::performGroupByOnIndexScan(ResultTable* resultTable,
   Id lastId = ID_NO_VALUE;
   size_t count = 0;
   for (const auto& blockOrMetaData : blockGenerator) {
-    LOG(INFO) << "Reading a new block" << std::endl;
-
     if (auto block = std::get_if<CompressedRelationMetaData::DecompressedBlock>(&blockOrMetaData)) {
       for (auto [col1Id, unused] : *block) {
         if (col1Id == lastId) {

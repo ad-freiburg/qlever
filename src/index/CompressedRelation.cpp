@@ -131,7 +131,7 @@ CompressedRelationMetaData::ScanBlockGenerator(
       if (blockItForReader < endBlock) {
         auto numRows = blockItForReader->_numRows;
         if (blockItForReader->_col1FirstId == blockItForReader->_col1LastId) {
-          return *blockItForReader;
+          return *blockItForReader++;
         }
         return std::pair(
             numRows, CompressedRelationMetaData::readCompressedBlockFromFile(
