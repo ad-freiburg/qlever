@@ -335,15 +335,22 @@ class FlexibleCache {
 
   // Delete cache entries from the non-pinned area, until an element of size
   // `freeSpace` can be inserted into the cache.
+  // The special case `freeSpace == 0`  means, that we do not need to insert
+  // A new element, but just want to shrink back the cache to its allowed size,
+  // for example after a change of capacity
+  //
   // Returns: true iff if the procedure succeeded. It may fail if `freeSpace` is
   // larger than the _maxSize - _totalSizePinned;
   bool makeRoomFor(size_t freeSpace) {
-    if (_totalSizeNonPinned > freeSpace) {
+    if (_maxSize - _totalSizePinned < freeSpace) {
       return false;
     }
 
+    size_t needToAddNewElement = freeSpace ? 1 : 0;
+
     while (!_entries.empty() &&
-           (_entries.size() + _pinnedMap.size() > _maxNumEntries ||
+           (_entries.size() + _pinnedMap.size() + needToAddNewElement >
+                _maxNumEntries ||
             _totalSizeNonPinned + _totalSizePinned + freeSpace > _maxSize)) {
       // Remove entries from the back until we meet the capacity and size
       // requirements
