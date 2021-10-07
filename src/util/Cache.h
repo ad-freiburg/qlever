@@ -354,15 +354,33 @@ class FlexibleCache {
             _totalSizeNonPinned + _totalSizePinned + freeSpace > _maxSize)) {
       // Remove entries from the back until we meet the capacity and size
       // requirements
-      auto handle = _entries.pop();
-      _totalSizeNonPinned -= _valueSizeGetter(*handle.value().value());
-      _accessMap.erase(handle.value().key());
+      removeOneEntry();
     }
 
     // Note that the pinned entries alone can exceed the capacity of the cache.
     assert(_entries.empty() ||
            _entries.size() + _pinnedMap.size() <= _maxNumEntries);
     return true;
+  }
+
+  // Delete entries of a total size of at least `freeSpace` from the cache.
+  bool makeRoom(size_t freeSpace) {
+    if (freeSpace > _totalSizeNonPinned) {
+      clearUnpinnedOnly();
+      return false;
+    }
+    size_t targetSize = _totalSizeNonPinned - freeSpace;
+    while (!_entries.empty() && _totalSizeNonPinned > targetSize) {
+      removeOneEntry();
+    }
+    return true;
+  }
+
+  // TODO<joka921> make private and comment
+  void removeOneEntry() {
+    auto handle = _entries.pop();
+    _totalSizeNonPinned -= _valueSizeGetter(*handle.value().value());
+    _accessMap.erase(handle.value().key());
   }
 
  private:

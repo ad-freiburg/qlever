@@ -34,11 +34,16 @@ class Server {
         _port(port),
         _cache(cacheMaxNumEntries, cacheMaxSizeGB * (1ull << 30u) / sizeof(Id),
                cacheMaxSizeGBSingleEntry * (1ull << 30u) / sizeof(Id)),
-        _allocator{ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-                       maxMemGB * (1ull << 30u)),
-                   [this](size_t numBytesToAllocate) {
-                     _cache.makeRoomFor(numBytesToAllocate / sizeof(Id) * 2);
-                   }},
+        _allocator{
+            ad_utility::makeAllocationMemoryLeftThreadsafeObject(maxMemGB *
+                                                                 (1ull << 30u)),
+            [this, cacheMaxSizeGBSingleEntry](size_t numBytesToAllocate) {
+              // TODO: magical constants;
+              if (numBytesToAllocate <
+                  cacheMaxSizeGBSingleEntry * (1ull << 30u)) {
+                _cache.makeRoom(numBytesToAllocate / sizeof(Id) * 2);
+              }
+            }},
         _sortPerformanceEstimator(),
         _index(),
         _engine(),
