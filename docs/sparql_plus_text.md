@@ -1,172 +1,131 @@
-# SPARQL + Text Support
-## Text Corpus Format
+# SPARQL+Text support in QLever
 
-The following two input files are needed for full feature support:
+QLever allows the combination of SPARQL and full-text search. The text input
+consists of text records, where passages of the text are annotated by entitites
+from the RDF data. The format of the required input files is described below.
+In SPARQL+Text queries you can then specify co-occurrence of words from the text
+with entities from the RDF data. This is a very powerful concept: it contains
+keyword search in literals as a special case, but goes far beyond it.
 
-### Wordsfile
+## SPARQL+Text quickstart
 
-A tab-separated file with one line per posting and following the format:
+This section shows how to build an SPARQL+text index and start the server for
+a small example dataset. It assumes that you are already familiar with the
+process without text, as described [here](/docs/quickstart.md), and that you
+have set `QLEVER_HOME`, the QLever code resides under
+`$QLEVER_HOME/qlever-code`, and the docker image is called `qlever`.
 
-    word    isEntity    recordId   score
+        # Create directory for this example and go there.
+        mkdir -p $QLEVER_HOME/qlever-indices/scientists
+        cd $QLEVER_HOME/qlever-indices/scientists
+        # Get the dataset.
+        wget http://qlever.informatik.uni-freiburg.de/data/scientist-collection.zip
+        unzip -j scientist-collection.zip
+        # Build the index (SPARQL+Text, note the -w and -d option).
+        cp $QLEVER_HOME/qlever-code/examples/scientists.settings.json .
+        chmod o+w . && docker run -it --rm -v $QLEVER_HOME/qlever-indices/scientists:/index --entrypoint bash qlever -c "cd /index && cat scientists.nt | IndexBuilderMain -F ttl -f - -l -i scientists -w scientists.wordsfile.tsv -d scientists.docsfile.tsv -s scientists.settings.json | tee scientists.index-log.txt"
+        # Start the engine on a port of your choice; don't forget the -t option in the end!
+        PORT=7001; docker run --rm -v $QLEVER_HOME/qlever-indices/scientists:/index -p $PORT:7001 -e INDEX_PREFIX=scientists --name qlever.scientists qlever -t
 
-For example, for a sentence `Alexander Fleming discovered penicillin, a drug.`,
-it could look like this when using contexts as records. In this case the
-`penicilin` entity was prepended to the second context by the CSD-IE
-preprocessing. In a more simple setting each record could also be a full
-sentence.
+You can now try the follow example query (scientists who co-occur with relativity
+theory in the text, ordered by the number of occurrences):
 
-    Alexander           0   0   1
-    <Alexander_Fleming> 1   0   1
-    Fleming             0   0   1
-    <Alexander_Fleming> 1   0   1
-    dicovered           0   0   1
-    penicillin          0   0   1
-    <Penicillin>        1   0   1
-    penicillin          0   1   1
-    <Penicillin>        1   1   1
-    a                   0   1   1
-    drug                0   1   1
+        curl -Gs http://localhost:$PORT --data-urlencode 'query=SELECT ?x SCORE(?t) TEXT(?t) WHERE { ?x <is-a> <Scientist> .  ?t ql:contains-entity ?x .  ?t ql:contains-word "relativity" } ORDER BY DESC(SCORE(?t)) LIMIT 10' --data-urlencode "action=tsv_export"
 
-Note that some form of entity recognition / linking has been done.
-This file is used to build the text index from.
+## Format of the text input files
 
-### Docsfile
+For SPARQL+Text queries, the index builder needs to input files, a so-called
+`wordsfile` and a `docsfile`. The wordsfile determines the co-occurrences of
+words and entities. The docsfile is just the text record that is returned in
+query results.
 
-A tab-separated file with one line per original unit of text and following the format:
+The `wordsfile` is a tab-separated file with one line per word occurrence, in
+the following format:
 
-    max_record_id  text
+    word    is_entity    record_id   score
+
+Here is an example excerpt for the text record `In 1928, Fleming discovered
+penicillin`, assuming that the id of the text record is `17`and that the
+scientist and the drug are annotated with the IRIs of the corresponding entities
+in the RDF data. Note that the IRI can have an arbitrary name that may be
+syntactically complete unrelated to the words used to refer to that entity.
+
+    In                  0   17   1
+    1928                0   17   1
+    <Alexander_Fleming> 1   17   1
+    Fleming             0   17   1
+    discovered          0   17   1
+    penicillin          0   17   1
+    <Penicillin>        1   17   1
+
+The `docsfile` is a tab-separated file with one line per text record, in the
+following format:
+
+    record_id  text
 
 For example, for the sentence above:
 
-    1   Alexander Fleming discovered penicillin, a drug.
+    17   Alexander Fleming discovered penicillin, a drug.
 
-Note that this file is only used to display proper excerpts as evidence for texttual matches.
+## Example SPARQL+Text queries
 
-## Supported Queries
+Here are some more example queries on the larger [Fbeasy+Wikipedia](
+(http://qlever.informatik.uni-freiburg.de/data/fbeasy-wikipedia.zip) dataset.
+In this dataset, the text records are the sentences from a dump of the English
+Wikipedia, and the entities are from the [Freebase
+Easy](https://freebase-easy.cs.uni-freiburg.de) RDF data.
 
-
-Typical SPARQL queries can then be augmented. The features are best explained using examples:
-
-A query for plants with edible leaves:
+Plants with edible leaves. Note that the object of `ql:contains-word` can be a
+string with several keywords. The keywords are treated as a bag of words, not as
+a phrase. That is, they can occur in the text record in any order. They just
+have to co-occur with a plant (as specified by the `ql:contains-entity` triple).
 
     SELECT ?plant WHERE {
-        ?plant <is-a> <Plant> .
-        ?t ql:contains-entity ?plant .
-        ?t ql:contains-word "'edible' 'leaves'"
+      ?plant <is-a> <Plant> .
+      ?text ql:contains-entity ?plant .
+      ?text ql:contains-word "edible leaves"
     }
 
-The special predicate `ql:contains-entity` requires that results for `?plant` have to occur in a text record `?t`.
-In records matching `?t`, there also have to be both words `edible` and `leaves` as specified thorugh the `ql:contains-word` predicate.
-Note that the single quotes can also be omitted and will be in further examples.
-Single quotes are necessary to mark phrases (which are not supported yet, but may be in the future).
+Astronauts who walked on the moon. Note the use of `*` for prefix search. The
+`TEXT(?text)` returns the respective text record. The `SCORE(?text)` returns the
+number of matching records (sums of the score in the `wordsfile`, see above).
+The `TEXLIMIT` limits the number of text records shown per entity.
 
-A query for Astronauts who walked on the moon:
-
-    SELECT ?a TEXT(?t) SCORE(?t) WHERE {
-        ?a <is-a> <Astronaut> .
-        ?t ql:contains-entity ?a .
-        ?t ql:contains-word "walk* moon"
-    } ORDER BY DESC(SCORE(?t))
+    SELECT ?astronaut TEXT(?text) SCORE(?text) WHERE {
+      ?astronaut <is-a> <Astronaut> .
+      ?text ql:contains-entity ?astronaut .
+      ?text ql:contains-word "walk* moon"
+    }
+    ORDER BY DESC(SCORE(?t))
     TEXTLIMIT 2
 
-Note the following features:
+The query could be equivalently formulated as:
 
-* A star `*` can be used to search for a prefix as done in the keyword `walk*`. Note that there is a min prefix size depending on settings at index build-time.
-* `SCORE` can be used to obtain the score of a text match. This is important to achieve a good ordering in the result. The typical way would be to `ORDER BY DESC(SCORE(?t))`.
-* Where `?t` just matches a text record Id, `TEXT(?t)` can be used to extract a snippet.
-* `TEXTLIMIT` can be used to control the number of result lines per text match. The default is 1.
-
-An alternative query for astronauts who walked on the moon:
-
-        SELECT ?a TEXT(?t) SCORE(?t) WHERE {
-            ?a <is-a> <Astronaut> .
-            ?t ql:contains-entity ?a .
-            ?t ql:contains-word "walk*" .
-            ?t ql:contains-entity <Moon> .
-        } ORDER BY DESC(SCORE(?t))
-        TEXTLIMIT 2
-
-This query doesn't search for an occurrence of the word moon but played where the entity `<Moon>` has been linked.
-For the sake of brevity, it is possible to treat the concrete URI `<Moon>` like word and include it in the `contains-word` triple.
-This can be convenient but should be avoided to keep queries readable: `?t ql:contains-word "walk* <Moon>"`
-
-
-Text / Knowledge-base data can be nested in queries. This allows queries like one for politicians that were friends with a scientist associated with the manhattan project:
-
-    SELECT ?p TEXT(?t) ?s TEXT(?t2) WHERE {
-        ?p <is-a> <Politician> .
-        ?t ql:contains-entity ?p .
-        ?t ql:contains-word friend* .
-        ?t ql:contains-entity ?s .
-        ?s <is-a> <Scientist> .
-        ?t2 ql:contains-entity ?s .
-        ?t2 ql:contains-word "manhattan project"
-    } ORDER BY DESC(SCORE(?t))
-
-
-For now, each text-record variable is required to have a triple `ql:contains-word/entity WORD/URI`.
-Pure connections to variables (e.g. "Books with a description that mentions a plant.") are planned for the future.
-
-To obtain a list of available predicates and their counts `ql:has-predicate` can be used if the index was build with the `--patterns` option, and the server was started with the `--patterns` option:
-
-    SELECT ?relations (COUNT(?relations) as ?count) WHERE {
-      ?s <is-a> <Scientist> .
-      ?t2 ql:contains-entity ?s .
-      ?t2 ql:contains-word "manhattan project" .
-      ?s ql:has-predicate ?relations .
+    SELECT ?astronaut TEXT(?text) SCORE(?text) WHERE {
+      ?astronaut <is-a> <Astronaut> .
+      ?text ql:contains-entity ?astronaut .
+      ?text ql:contains-word "walk*" .
+      ?text ql:contains-word "moon"
     }
-    GROUP BY ?relations
-    ORDER BY DESC(?count)
+    ORDER BY DESC(SCORE(?t))
+    TEXTLIMIT 2
 
-`ql:has-predicate` can also be used as a normal predicate in an arbitrary query.
+Politicians that were friends with a scientist associated with the Manhattan
+project. Note that each match for this query involves two text records: One that
+establishes that the respective politician was friends with the respective
+scientist. And one that established that the respective scientist was involved
+with the Manhattan project. Using two text records here is important because
+there is no reason why these two facts should be mentioned in one and the same
+text records. But both are important for the desired query results.
 
-Group by is supported, its aggregates can be used both for selecting as well as in ORDER BY clauses:
-
-    SELECT ?profession (AVG(?height) as ?avg) WHERE {
-      ?a <is-a> ?profession .
-      ?a <Height> ?height .
+    SELECT ?politician ?scientist TEXT(?text_1) TEXT(?text_2) WHERE {
+      ?politician <is-a> <Politician> .
+      ?text_1 ql:contains-entity ?politician .
+      ?text_1 ql:contains-word "friend*" .
+      ?text_1 ql:contains-entity ?scientist .
+      ?scientist <is-a> <Scientist> .
+      ?text_2 ql:contains-entity ?scientist .
+      ?text_2 ql:contains-word "manhattan project"
     }
-    GROUP BY ?profession
-    ORDER BY ?avg
-    HAVING (?profession > <H)
-
-
-    SELECT ?profession  WHERE {
-      ?a <is-a> ?profession .
-      ?a <Height> ?height .
-    }
-    ORDER BY (AVG(?height) as ?avg)
-    GROUP BY ?profession
-
-Supported aggregates are `MIN, MAX, AVG, GROUP_CONCAT, SAMPLE, COUNT, SUM`. All of the aggreagates support `DISTINCT`, e.g. `(GROUP_CONCAT(DISTINCT ?a) as ?b)`.
-Group concat also supports a custom separator: `(GROUP_CONCAT(?a ; separator=" ; ") as ?concat)`. Xsd types float, decimal and integer are recognized as numbers, other types or unbound variables (e.g. no entries for an optional part) in one of the aggregates that need to interpret the variable (e.g. AVG) lead to either no result or nan. MAX with an unbound variable will always return the unbound variable.
-A query can only have one GROUP BY and one HAVING clause, but may have several
-variables in the GROUP BY and several filters in the HAVING clause (which will
-then be concatenated using and)
-
-    SELECT ?profession ?gender (AVG(?height) as ?avg) WHERE {
-      ?a <is-a> ?profession .
-      ?a <Gender> ?gender .
-      ?a <Height> ?height .
-    }
-    GROUP BY ?profession ?gender
-    HAVING (?a > <H) (?gender == <Female>)
-
-
-QLever has support for both OPTIONAL as well as UNION. When marking part of a query as optional the variable bindings of the optional parts are only added to results that
-are created by the non optional part. Furthermore, if the optional part has no result matching the rest of the graph pattern its variables are left unbound, leading
-to empty entries in the result table. UNION combines two graph patterns by appending the result of one pattern to the result of the other. Results for Variables with the same name
-in both graph patterns will end up in the same column in the result table.
-
-
-    SELECT ?profession ?gender (AVG(?height) as ?avg) WHERE {
-      { ?a <is-a> ?profession . }
-      UNION
-      {
-        ?a <Gender> ?gender .
-        OPTIONAL {
-          ?a <Height> ?height .
-        }
-      }
-    }
+    ORDER BY DESC(SCORE(?text_1))
 
