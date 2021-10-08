@@ -745,8 +745,8 @@ void GroupBy::computeResult(ResultTable* result) {
   if (indexScan && indexScan->getType() == IndexScan::POS_FREE_O &&
       aggregates.size() == 2 && aggregates[0]._inCol == 0 &&
       aggregates[0]._type == ParsedQuery::AggregateType::SAMPLE &&
-      aggregates[1]._inCol == 1 &&
-      aggregates[1]._type == ParsedQuery::AggregateType::COUNT) {
+      aggregates[1]._type == ParsedQuery::AggregateType::COUNT &&
+      !aggregates[1]._distinct) {
     performGroupByOnIndexScan(result, indexScan->getPredicate());
     return;
   }
