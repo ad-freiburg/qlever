@@ -76,6 +76,12 @@ DOCKER_IMAGE = qlever.master
 # The name of the docker container. Used for target memory-usage: below.
 DOCKER_CONTAINER = qlever.$(DB)
 
+# Configuration for SPARQL+Text.
+QLEVER_TOOL_DIR = $(dir $(lastword $(MAKEFILE_LIST)))misc
+WITH_TEXT =
+TEXT_OPTIONS_INDEX = $(if $(WITH_TEXT),-w $(DB).wordsfile.tsv -d $(DB).docsfile.tsv,)
+TEXT_OPTIONS_START = $(if $(WITH_TEXT),-t,)
+
 show-config:
 	@echo
 	@echo "Basic configuration variables:"
@@ -84,13 +90,14 @@ show-config:
 	  PORT QLEVER_API WARMUP_API \
 	  DOCKER_IMAGE DOCKER_CONTAINER \
 	  MEMORY_FOR_QUERIES \
-	  CACHE_MAX_SIZE_GB CACHE_MAX_SIZE_GB_SINGLE_ENTRY CACHE_MAX_NUM_ENTRIES; do \
+	  CACHE_MAX_SIZE_GB CACHE_MAX_SIZE_GB_SINGLE_ENTRY CACHE_MAX_NUM_ENTRIES \
+	  TEXT_OPTIONS_INDEX TEXT_OPTIONS_START; do \
 	  printf "%-30s = %s\n" "$$VAR" "$${!VAR}"; done
 	@echo
 	@printf "All targets: "
 	@grep "^[A-Za-z._]\+:" $(lastword $(MAKEFILE_LIST)) | sed 's/://' | paste -sd" "
 	@echo
-	@echo "make index will execute the following (but NOT if an index with that name exists):"
+	@echo "make index will do the following (but NOT if an index with that name exists):"
 	@echo
 	@$(MAKE) -sn index | egrep -v "^(if|fi)"
 	@echo
@@ -101,18 +108,24 @@ CAT_TTL = cat $(DB).ttl
 
 index:
 	@if ls $(DB).index.* 1> /dev/null 2>&1; then echo -e "\033[31mIndex exists, delete it first with make remove_index, which would exeucte the following:\033[0m"; echo; make -sn remove_index; echo; else \
-	time ( docker run -it --rm -v $(shell pwd):/index --entrypoint bash --name qlever.$(DB)-index $(DOCKER_IMAGE) -c "cd /index && $(CAT_TTL) | IndexBuilderMain -F ttl -f - -l -i $(DB) -K $(DB) -s $(DB_BASE).settings.json | tee $(DB).index-log.txt"; rm -f $(DB)*tmp* ) \
+	time ( docker run -it --rm -v $(shell pwd):/index --entrypoint bash --name qlever.$(DB)-index $(DOCKER_IMAGE) -c "cd /index && $(CAT_TTL) | IndexBuilderMain -F ttl -f - -l -i $(DB) -K $(DB) $(TEXT_OPTIONS_INDEX) -s $(DB_BASE).settings.json | tee $(DB).index-log.txt"; rm -f $(DB)*tmp* ) \
 	fi
 
 remove_index:
-	rm -f $(DB).index.* $(DB).literals-index $(DB).vocabulary $(DB).prefixes $(DB).meta-data.json
+	rm -f $(DB).index.* $(DB).literals-index $(DB).vocabulary $(DB).prefixes $(DB).meta-data.json $(DB).index-log.txt
 
+# Create wordsfile and docsfile from all literals of the given NT file.
+# Using this as input for a SPARQL+Text index build will effectively enable
+# keyword search in literals. To understand how, look at the wordsfile and
+# docsfile produced. See git:ad-freiburg/qlever/docs/sparql_and_text.md .
+text_input_from_nt_literals:
+	python3 $(QLEVER_TOOL_DIR)/words-and-docs-file-from-nt.py $(DB)
 
 # START, WAIT (until the backend is read to respond), STOP, and view LOG
 
 start:
 	-docker rm -f $(DOCKER_CONTAINER)
-	docker run -d --restart=unless-stopped -v $(shell pwd):/index -p $(PORT):7001 -e INDEX_PREFIX=$(DB) -e MEMORY_FOR_QUERIES=$(MEMORY_FOR_QUERIES) -e CACHE_MAX_SIZE_GB=${CACHE_MAX_SIZE_GB} -e CACHE_MAX_SIZE_GB_SINGLE_ENTRY=${CACHE_MAX_SIZE_GB_SINGLE_ENTRY} -e CACHE_MAX_NUM_ENTRIES=${CACHE_MAX_NUM_ENTRIES} --name $(DOCKER_CONTAINER) $(DOCKER_IMAGE)
+	docker run -d --restart=unless-stopped -v $(shell pwd):/index -p $(PORT):7001 -e INDEX_PREFIX=$(DB) -e MEMORY_FOR_QUERIES=$(MEMORY_FOR_QUERIES) -e CACHE_MAX_SIZE_GB=${CACHE_MAX_SIZE_GB} -e CACHE_MAX_SIZE_GB_SINGLE_ENTRY=${CACHE_MAX_SIZE_GB_SINGLE_ENTRY} -e CACHE_MAX_NUM_ENTRIES=${CACHE_MAX_NUM_ENTRIES} --name $(DOCKER_CONTAINER) $(DOCKER_IMAGE) $(TEXT_OPTIONS_START)
 	
 wait:
 	@docker logs -f --tail 10 $(DOCKER_CONTAINER) & PID=$$!; \
