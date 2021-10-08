@@ -24,14 +24,14 @@ have set `QLEVER_HOME`, the QLever code resides under
         # Build the index (SPARQL+Text, note the -w and -d option).
         cp $QLEVER_HOME/qlever-code/examples/scientists.settings.json .
         chmod o+w . && docker run -it --rm -v $QLEVER_HOME/qlever-indices/scientists:/index --entrypoint bash qlever -c "cd /index && cat scientists.nt | IndexBuilderMain -F ttl -f - -l -i scientists -w scientists.wordsfile.tsv -d scientists.docsfile.tsv -s scientists.settings.json | tee scientists.index-log.txt"
-        # Start the engine on a port of your choice.
-        PORT=7001; docker run --rm -v $QLEVER_HOME/qlever-indices/scientists:/index -p $PORT:7001 -e INDEX_PREFIX=scientists --name qlever.scientists qlever
+        # Start the engine on a port of your choice; don't forget the -t option in the end!
+        PORT=7001; docker run --rm -v $QLEVER_HOME/qlever-indices/scientists:/index -p $PORT:7001 -e INDEX_PREFIX=scientists --name qlever.scientists qlever -t
 
 You can now try the follow example query (scientists who co-occur with relativity
 theory in the text, ordered by the number of occurrences):
 
         curl -Gs http://localhost:$PORT \
-          --data-urlencode "query=SELECT ?x SCORE(?t) TEXT(?t) WHERE { ?x <is-a> <Scientist> .  ?t ql:contains-entity ?x .  ?t ql:contains-word "relati* theor*" } ORDER BY DESC(SCORE(?t))"
+          --data-urlencode "query=SELECT ?x SCORE(?t) TEXT(?t) WHERE { ?x <is-a> <Scientist> .  ?t ql:contains-entity ?x .  ?t ql:contains-word "relati* theor*" } ORDER BY DESC(SCORE(?t)) LIMIT 10"
           --data-urlencode "action=tsv_export"
 
 ## Format of the text input files.
