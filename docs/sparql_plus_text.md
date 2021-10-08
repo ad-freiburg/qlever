@@ -34,7 +34,7 @@ theory in the text, ordered by the number of occurrences):
           --data-urlencode "query=SELECT ?x SCORE(?t) TEXT(?t) WHERE { ?x <is-a> <Scientist> .  ?t ql:contains-entity ?x .  ?t ql:contains-word "relati* theor*" } ORDER BY DESC(SCORE(?t)) LIMIT 10"
           --data-urlencode "action=tsv_export"
 
-## Format of the text input files.
+## Format of the text input files
 
 For SPARQL+Text queries, the index builder needs to input files, a so-called
 `wordsfile` and a `docsfile`. The wordsfile determines the co-occurrences of
@@ -69,7 +69,7 @@ For example, for the sentence above:
 
     17   Alexander Fleming discovered penicillin, a drug.
 
-# Example SPARQL+Text queries
+## Example SPARQL+Text queries
 
 Here are some more example queries on the larger [Fbeasy+Wikipedia](
 (http://qlever.informatik.uni-freiburg.de/data/fbeasy-wikipedia.zip) dataset.
