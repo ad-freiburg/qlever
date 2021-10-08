@@ -30,7 +30,7 @@ have set `QLEVER_HOME`, the QLever code resides under
 You can now try the follow example query (scientists who co-occur with relativity
 theory in the text, ordered by the number of occurrences):
 
-        curl -Gs http://localhost:$PORT --data-urlencode 'query=SELECT ?x SCORE(?t) TEXT(?t) WHERE { ?x <is-a> <Scientist> .  ?t ql:contains-entity ?x .  ?t ql:contains-word "relati* theor*" } ORDER BY DESC(SCORE(?t)) LIMIT 10' --data-urlencode "action=tsv_export"
+        curl -Gs http://localhost:$PORT --data-urlencode 'query=SELECT ?x SCORE(?t) TEXT(?t) WHERE { ?x <is-a> <Scientist> .  ?t ql:contains-entity ?x .  ?t ql:contains-word "relativity" } ORDER BY DESC(SCORE(?t)) LIMIT 10' --data-urlencode "action=tsv_export"
 
 ## Format of the text input files
 
