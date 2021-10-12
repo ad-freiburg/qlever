@@ -124,7 +124,14 @@ ad_utility::HashMap<string, size_t> MultiColumnJoin::getVariableColumns()
     const {
   ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumns());
   size_t columnIndex = retVal.size();
-  for (const auto& it : _right->getVariableColumns()) {
+  const auto rightSorted = [&] {
+    const auto& r = _right->getVariableColumns();
+    using P = std::pair<string, size_t>;
+    std::vector<P> v(r.begin(), r.end());
+    std::ranges::sort(v, {}, &P::second);
+    return v;
+  }();
+  for (const auto& it : rightSorted) {
     bool isJoinColumn = false;
     for (const std::array<Id, 2>& a : _joinColumns) {
       if (a[1] == it.second) {
