@@ -336,7 +336,7 @@ class SimpleStringComparator {
     if (cmpRes != 0 || level != Level::TOTAL) {
       return cmpRes;
     }
-    return a.compare(b) < 0;
+    return a.compare(b);
   }
 
   /**

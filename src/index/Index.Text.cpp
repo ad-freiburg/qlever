@@ -167,6 +167,8 @@ void Index::passContextFileIntoVector(const string& contextFile,
             LOG(WARN) << "There are more entities not in the KB..."
                       << " suppressing further warnings...\n";
           }
+        } else {
+          entityNotFoundErrorMsgCount++;
         }
       }
     } else {
@@ -189,6 +191,11 @@ void Index::passContextFileIntoVector(const string& contextFile,
       LOG(INFO) << "Lines processed: " << i << '\n';
     }
   }
+  LOG(WARN)
+      << "Number of entity mentions where the entity is not part of the KB: "
+      << entityNotFoundErrorMsgCount << std::endl;
+  LOG(WARN) << "Number of total entity mentions: " << nofEntityPostings
+            << std::endl;
   ++nofContexts;
   addContextToVector(writer, currentContext, wordsInContext, entitiesInContext);
   _textMeta.setNofTextRecords(nofContexts);
