@@ -410,9 +410,6 @@ template <typename S, typename C>
 bool Vocabulary<S, C>::getId(const string& word, Id* id) const {
   if (!shouldBeExternalized(word)) {
     // need the TOTAL level because we want the unique word.
-    if (ad_utility::startsWith(word, "krivokapic")) {
-      LOG(INFO) << word << '\n';
-    }
     *id = lower_bound(word, SortLevel::TOTAL);
     // works for the case insensitive version because
     // of the strict ordering.
