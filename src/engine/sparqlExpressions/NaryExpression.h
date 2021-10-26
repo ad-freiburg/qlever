@@ -79,15 +79,15 @@ requires(isOperation<NaryOperation>) class NaryExpression
       []<SingleExpressionResult... Operands>(
           NaryOperation naryOperation, EvaluationContext* context,
           Operands&&... operands) -> ExpressionResult {
-    // Perform the more efficient calculation on `SetOfIntervals` if it is
-    // possible.
-
+    // Perform a more efficient calculation if a specialized function exists
+    // that matches all operands.
     if (isAnySpecializedFunctionPossible(naryOperation._specializedFunctions,
                                          operands...)) {
-      // TODO: Assert that there is no nullopt, it is cheap
-      return *evaluateOnSpecializedFunctionsIfPossible(
+      auto optionalResult = evaluateOnSpecializedFunctionsIfPossible(
           naryOperation._specializedFunctions,
           std::forward<Operands>(operands)...);
+      AD_CHECK(optionalResult);
+      return std::move(*optionalResult);
     }
 
     // We have to first determine the number of results we will produce.

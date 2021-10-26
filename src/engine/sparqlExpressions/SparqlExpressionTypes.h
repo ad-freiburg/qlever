@@ -308,7 +308,8 @@ struct SpecializedFunction {
   }
 };
 
-/// Evaluate the SpecializedFunction, that matches the input (might be none)
+/// Return true iff there exists a `SpecializedFunction` in the
+/// `SpecializedFunctionsTuple` that can be evaluated on all the `Operands`
 template <typename SpecializedFunctionsTuple, typename... Operands>
 constexpr bool isAnySpecializedFunctionPossible(SpecializedFunctionsTuple&& tup,
                                                 Operands&&...) {
@@ -319,7 +320,8 @@ constexpr bool isAnySpecializedFunctionPossible(SpecializedFunctionsTuple&& tup,
   return std::apply(onPack, tup);
 }
 
-/// Evaluate the SpecializedFunction, that matches the input (might be none)
+/// Evaluate the SpecializedFunction, that matches the input. If no such
+/// function exists, return `std::nullopt`.
 template <typename SpecializedFunctionsTuple, typename... Operands>
 std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
     SpecializedFunctionsTuple&& tup, Operands&&... operands) {

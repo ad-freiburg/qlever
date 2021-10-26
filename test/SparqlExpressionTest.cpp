@@ -198,8 +198,7 @@ TEST(SparqlExpression, PlusAndMinus) {
   V<double> d{{1.0, -2.0, nan, 0.0}, alloc};
 
   V<std::string> s{{"true", "", "false", ""}, alloc};
-  V<double> allNan{{1.0, 2.0, std::numeric_limits<double>::quiet_NaN(), 0.0},
-                   alloc};
+  V<double> allNan{{nan, nan, nan, nan}, alloc};
 
   V<int64_t> i{{32, -42, 0, 5}, alloc};
   V<double> iAsDouble{{32.0, -42.0, 0.0, 5.0}, alloc};
