@@ -82,8 +82,8 @@ requires(isOperation<NaryOperation>) class NaryExpression
     // Perform the more efficient calculation on `SetOfIntervals` if it is
     // possible.
 
-    if (isSpecializedFunctionsPossible(naryOperation._specializedFunctions,
-                                       operands...)) {
+    if (isAnySpecializedFunctionPossible(naryOperation._specializedFunctions,
+                                         operands...)) {
       // TODO: Assert that there is no nullopt, it is cheap
       return *evaluateOnSpecializedFunctionsIfPossible(
           naryOperation._specializedFunctions,

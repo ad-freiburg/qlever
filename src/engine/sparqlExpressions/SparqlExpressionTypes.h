@@ -288,15 +288,19 @@ struct FunctionAndValueGetters {
 template <typename FunctionT, typename CheckT>
 struct SpecializedFunction {
   using Function = FunctionT;
-  using Check = CheckT;
+
+  // Check if the function can be applied to arguments of type(s) `Operands`
   template <typename... Operands>
-  static constexpr bool check() {
-    return Check{}.template operator()<Operands...>();
+  static constexpr bool checkIfOperandsAreValid() {
+    return CheckT{}.template operator()<Operands...>();
   }
 
+  // Evaluate the function on the `operands`. Return std::nullopt if the
+  // function cannot be evaluated on the `operands`
   template <typename... Operands>
-  std::optional<ExpressionResult> evaluate(Operands&&... operands) {
-    if constexpr (!check<Operands...>()) {
+  std::optional<ExpressionResult> evaluateIfOperandsAreValid(
+      Operands&&... operands) {
+    if constexpr (!checkIfOperandsAreValid<Operands...>()) {
       return std::nullopt;
     } else {
       return Function{}(std::forward<Operands>(operands)...);
@@ -306,10 +310,10 @@ struct SpecializedFunction {
 
 /// Evaluate the SpecializedFunction, that matches the input (might be none)
 template <typename SpecializedFunctionsTuple, typename... Operands>
-constexpr bool isSpecializedFunctionsPossible(SpecializedFunctionsTuple&& tup,
-                                              Operands&&... operands) {
-  auto onPack = [&... operands = operands](auto&&... fs) constexpr {
-    return (... || fs.template check<Operands...>());
+constexpr bool isAnySpecializedFunctionPossible(SpecializedFunctionsTuple&& tup,
+                                                Operands&&...) {
+  auto onPack = [](auto&&... fs) constexpr {
+    return (... || fs.template checkIfOperandsAreValid<Operands...>());
   };
 
   return std::apply(onPack, tup);
@@ -320,15 +324,11 @@ template <typename SpecializedFunctionsTuple, typename... Operands>
 std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
     SpecializedFunctionsTuple&& tup, Operands&&... operands) {
   std::optional<ExpressionResult> result = std::nullopt;
-  // TODO: static assert that at most one of the functions matches.
+
   auto writeToResult = [&](auto f) {
     if (!result) {
-      if constexpr (requires {
-                      f.evaluate(
-                          std::forward<Operands>(std::declval<Operands&>())...);
-                    }) {
-        result = f.evaluate(std::forward<Operands>(operands)...);
-      }
+      result =
+          f.evaluateIfOperandsAreValid(std::forward<Operands>(operands)...);
     }
   };
 
