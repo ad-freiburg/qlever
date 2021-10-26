@@ -153,7 +153,10 @@ void Vocabulary<S, C>::createFromSet(const ad_utility::HashSet<S>& set) {
   _words.reserve(set.size());
   _words.insert(begin(_words), begin(set), end(set));
   LOG(INFO) << "... sorting ...\n";
-  std::sort(begin(_words), end(_words), _caseComparator);
+  auto totalComparison = [this](const auto& a, const auto& b) {
+    return _caseComparator(a, b, SortLevel::TOTAL);
+  };
+  std::sort(begin(_words), end(_words), totalComparison);
   LOG(INFO) << "Done creating vocabulary.\n";
 }
 
@@ -407,6 +410,9 @@ template <typename S, typename C>
 bool Vocabulary<S, C>::getId(const string& word, Id* id) const {
   if (!shouldBeExternalized(word)) {
     // need the TOTAL level because we want the unique word.
+    if (ad_utility::startsWith(word, "krivokapic")) {
+      LOG(INFO) << word << '\n';
+    }
     *id = lower_bound(word, SortLevel::TOTAL);
     // works for the case insensitive version because
     // of the strict ordering.

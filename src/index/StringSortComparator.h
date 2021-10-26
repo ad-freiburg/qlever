@@ -336,7 +336,7 @@ class SimpleStringComparator {
     if (cmpRes != 0 || level != Level::TOTAL) {
       return cmpRes;
     }
-    return a.compare(b) < 0;
+    return a.compare(b);
   }
 
   /**
@@ -409,7 +409,7 @@ class TripleComponentComparator {
  public:
   using Level = LocaleManager::Level;
 
-  /**
+  /* mentions*
    * @param lang The language of the locale, e.g. "en" or "de"
    * @param country The country of the locale, e.g. "US" or "CA"
    * @param ignorePunctuationAtFirstLevel If true then spaces/punctuation etc.
