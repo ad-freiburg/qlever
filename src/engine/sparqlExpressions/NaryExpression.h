@@ -87,7 +87,7 @@ requires(isOperation<NaryOperation>) class NaryExpression
           naryOperation._specializedFunctions,
           std::forward<Operands>(operands)...);
       AD_CHECK(optionalResult);
-      return std::move(*optionalResult);
+      return std::move(optionalResult.value());
     }
 
     // We have to first determine the number of results we will produce.
