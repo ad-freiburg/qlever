@@ -1,4 +1,6 @@
 SHELL = /bin/bash
+.DEFAULT_GOAL = show-config
+
 # PIN WARMUP QUERIES TO CACHE (for the QLever UI)
 # (c) Algorithms and Data Structures, University of Freiburg
 # Originally written by Hannah Bast, 20.02.2021
@@ -82,25 +84,28 @@ WITH_TEXT =
 TEXT_OPTIONS_INDEX = $(if $(WITH_TEXT),-w $(DB).wordsfile.tsv -d $(DB).docsfile.tsv,)
 TEXT_OPTIONS_START = $(if $(WITH_TEXT),-t,)
 
-show-config:
-	@echo
-	@echo "Basic configuration variables:"
-	@echo
-	@for VAR in DB DB_BASE SLUG CAT_TTL \
-	  PORT QLEVER_API WARMUP_API \
-	  DOCKER_IMAGE DOCKER_CONTAINER \
-	  MEMORY_FOR_QUERIES \
-	  CACHE_MAX_SIZE_GB CACHE_MAX_SIZE_GB_SINGLE_ENTRY CACHE_MAX_NUM_ENTRIES \
-	  TEXT_OPTIONS_INDEX TEXT_OPTIONS_START; do \
-	  printf "%-30s = %s\n" "$$VAR" "$${!VAR}"; done
-	@echo
-	@printf "All targets: "
-	@grep "^[A-Za-z._]\+:" $(lastword $(MAKEFILE_LIST)) | sed 's/://' | paste -sd" "
-	@echo
-	@echo "make index will do the following (but NOT if an index with that name exists):"
-	@echo
-	@$(MAKE) -sn index | egrep -v "^(if|fi)"
-	@echo
+show-config-default:
+	@ echo
+	@ echo "Basic configuration variables:"
+	@ echo
+	@ for VAR in DB DB_BASE SLUG CAT_TTL \
+	   PORT QLEVER_API WARMUP_API \
+	   DOCKER_IMAGE DOCKER_CONTAINER \
+	   MEMORY_FOR_QUERIES \
+	   CACHE_MAX_SIZE_GB CACHE_MAX_SIZE_GB_SINGLE_ENTRY CACHE_MAX_NUM_ENTRIES \
+	   TEXT_OPTIONS_INDEX TEXT_OPTIONS_START; do \
+	   printf "%-30s = %s\n" "$$VAR" "$${!VAR}"; done
+	@ echo
+	@ printf "All targets: "
+	@ grep "^[A-Za-z._]\+:" $(lastword $(MAKEFILE_LIST)) | sed 's/://' | paste -sd" "
+	@ echo
+	@ echo "make index will do the following (but NOT if an index with that name exists):"
+	@ echo
+	@ $(MAKE) -sn index | egrep -v "^(if|fi)"
+	@ echo
+
+%: %-default
+	@ true
 
 # Build an index or remove an existing one
 
