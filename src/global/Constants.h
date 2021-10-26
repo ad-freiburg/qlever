@@ -122,6 +122,10 @@ static constexpr double SORT_ESTIMATE_CANCELLATION_FACTOR = 3.0;
 // the number of triples in the index is being sorted at once.
 static constexpr size_t PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE = 5;
 
+// When asked to make room for X ids in the cache, actually make room for X
+// times this factor.
+static constexpr double MAKE_ROOM_SLACK_FACTOR = 2;
+
 #ifdef _PARALLEL_SORT
 static constexpr bool USE_PARALLEL_SORT = true;
 #include <parallel/algorithm>

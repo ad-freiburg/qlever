@@ -6,6 +6,7 @@
 #define QLEVER_ALLOCATORWITHLIMIT_H
 
 #include <atomic>
+#include <functional>
 #include <memory>
 
 #include "Synchronized.h"
@@ -42,10 +43,18 @@ class AllocationMemoryLeft {
   AllocationMemoryLeft(size_t n) : free_(n) {}
 
   // Called before memory is allocated.
-  void decrease_if_enough_left(size_t n) {
+  bool decrease_if_enough_left_or_return_false(size_t n) noexcept {
     if (n <= free_) {
       free_ -= n;
+      return true;
     } else {
+      return false;
+    }
+  }
+
+  // Called before memory is allocated.
+  void decrease_if_enough_left_or_throw(size_t n) {
+    if (!decrease_if_enough_left_or_return_false(n)) {
       throw AllocationExceedsLimitException{n, free_};
     }
   }
@@ -87,6 +96,11 @@ makeAllocationMemoryLeftThreadsafeObject(size_t n) {
       ad_utility::Synchronized<detail::AllocationMemoryLeft, SpinLock>>(n)};
 }
 
+/// A Noop lambda that will be used as a template default parameter
+/// in the `AllocatorWithLimit` class.
+using ClearOnAllocation = std::function<void(size_t)>;
+inline ClearOnAllocation noClearOnAllocation = [](size_t) {};
+
 /**
  * @brief Class to concurrently allocate memory up to a specified limit on the
  * total amount of memory allocated. The actual allocation is done by
@@ -125,14 +139,18 @@ class AllocatorWithLimit {
 
  private:
   detail::AllocationMemoryLeftThreadsafe
-      memoryLeft_;  // shared number of free bytes
+      memoryLeft_;                       // shared number of free bytes
+  ClearOnAllocation clearOnAllocation_;  // TODO<joka921> comment
   std::allocator<T> allocator_;
 
  public:
   /// obtain an AllocationMemoryLeftThreadsafe by calls to
   /// makeAllocationMemoryLeftThreadsafeObject()
-  explicit AllocatorWithLimit(detail::AllocationMemoryLeftThreadsafe ml)
-      : memoryLeft_(std::move(ml)) {}
+  explicit AllocatorWithLimit(
+      detail::AllocationMemoryLeftThreadsafe ml,
+      ClearOnAllocation clearOnAllocation = noClearOnAllocation)
+      : memoryLeft_{std::move(ml)},
+        clearOnAllocation_{std::move(clearOnAllocation)} {}
 
   /// Obtain an AllocatorWithLimit<OtherType> that refers to the
   /// same limit.
@@ -151,7 +169,14 @@ class AllocatorWithLimit {
   T* allocate(std::size_t n) {
     // Subtract the amount of memory we want to allocate from the amount of
     // memory left. This will throw an exception if not enough memory is left.
-    memoryLeft_.ptr()->wlock()->decrease_if_enough_left(n * sizeof(T));
+    const auto bytesNeeded = n * sizeof(T);
+    const bool wasEnoughLeft =
+        memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_return_false(
+            bytesNeeded);
+    if (!wasEnoughLeft) {
+      clearOnAllocation_(n);
+      memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_throw(bytesNeeded);
+    }
     // the actual allocation
     return allocator_.allocate(n);
   }

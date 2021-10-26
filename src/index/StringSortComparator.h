@@ -397,13 +397,12 @@ class SimpleStringComparator {
  private:
   LocaleManager _locManager;
 };
-
 /**
  * @brief Handles the comparisons between RDFS triple elements according to
  * their data types and proper Unicode collation.
  *
- *  General Approach: First Sort by the datatype, then by the actual value and
- * then by the language tag.
+ *  General Approach: First Sort by the datatype, then by the actual value
+ * and then by the language tag.
  */
 class TripleComponentComparator {
  public:

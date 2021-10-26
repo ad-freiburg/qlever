@@ -154,6 +154,13 @@ class ConcurrentCache {
   /// Clear the cache, including the pinned entries.
   void clearAll() { _cacheAndInProgressMap.wlock()->_cache.clearAll(); }
 
+  /// Delete elements from the unpinned part of the cache of total size
+  /// at least `size`;
+  bool makeRoomAsMuchAsPossible(size_t size) {
+    return _cacheAndInProgressMap.wlock()->_cache.makeRoomAsMuchAsPossible(
+        size);
+  }
+
   /// The number of non-pinned entries in the cache
   auto numNonPinnedEntries() const {
     return _cacheAndInProgressMap.wlock()->_cache.numNonPinnedEntries();
