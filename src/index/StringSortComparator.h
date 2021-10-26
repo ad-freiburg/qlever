@@ -397,15 +397,15 @@ class SimpleStringComparator {
  private:
   LocaleManager _locManager;
 };
-
-/**
- * @brief Handles the comparisons between RDFS triple elements according to
- * their data types and proper Unicode collation.
- *
- *  General Approach: First Sort by the datatype, then by the actual value and
- * then by the language tag.
- */
-class TripleComponentComparator {
+mentions
+    /**
+     * @brief Handles the comparisons between RDFS triple elements according to
+     * their data types and proper Unicode collation.
+     *
+     *  General Approach: First Sort by the datatype, then by the actual value
+     * and then by the language tag.
+     */
+    class TripleComponentComparator {
  public:
   using Level = LocaleManager::Level;
 
@@ -415,7 +415,7 @@ class TripleComponentComparator {
    * @param ignorePunctuationAtFirstLevel If true then spaces/punctuation etc.
    * will only be considered for comparisons if strings match otherwise Throws
    * std::runtime_error if the locale cannot be constructed from lang and
-   * country args
+   mentions * country args
    *
    * \todo(joka921): make the exact punctuation level configurable.
    */

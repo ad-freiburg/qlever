@@ -335,12 +335,12 @@ class FlexibleCache {
 
   // Delete cache entries from the non-pinned area, until an element of size
   // `sizeToMakeRoomFor` can be inserted into the cache.
-  // The special case `sizeToMakeRoomFor == 0`  means, that we do not need to insert
-  // a new element, but just want to shrink back the cache to its allowed size,
-  // for example after a change of capacity
+  // The special case `sizeToMakeRoomFor == 0`  means, that we do not need to
+  // insert a new element, but just want to shrink back the cache to its allowed
+  // size, for example after a change of capacity
   //
-  // Returns: true iff if the procedure succeeded. It may fail if `sizeToMakeRoomFor` is
-  // larger than the _maxSize - _totalSizePinned;
+  // Returns: true iff if the procedure succeeded. It may fail if
+  // `sizeToMakeRoomFor` is larger than the _maxSize - _totalSizePinned;
   bool makeRoomIfFits(size_t sizeToMakeRoomFor) {
     if (_maxSize - _totalSizePinned < sizeToMakeRoomFor) {
       return false;
@@ -352,7 +352,8 @@ class FlexibleCache {
     while (!_entries.empty() &&
            (_entries.size() + _pinnedMap.size() + needToAddNewElement >
                 _maxNumEntries ||
-            _totalSizeNonPinned + _totalSizePinned + sizeToMakeRoomFor > _maxSize)) {
+            _totalSizeNonPinned + _totalSizePinned + sizeToMakeRoomFor >
+                _maxSize)) {
       // Remove entries from the back until we meet the capacity and size
       // requirements
       removeOneEntry();
@@ -364,9 +365,10 @@ class FlexibleCache {
     return true;
   }
 
-  // Delete entries of a total size of at least `sizeToMakeRoomFor` from the cache.
-  // If this is not possible, the cache is cleared (only unpinned elements), and false is returned.
-  // This possibly results in some freed space, but less than requested.
+  // Delete entries of a total size of at least `sizeToMakeRoomFor` from the
+  // cache. If this is not possible, the cache is cleared (only unpinned
+  // elements), and false is returned. This possibly results in some freed
+  // space, but less than requested.
   bool makeRoomAsMuchAsPossible(size_t sizeToMakeRoomFor) {
     if (sizeToMakeRoomFor > _totalSizeNonPinned) {
       clearUnpinnedOnly();
@@ -379,9 +381,7 @@ class FlexibleCache {
     return true;
   }
 
-
  private:
-
   // Removes the entry with the smallest score from the cache.
   // Precondition: The cache must not be empty.
   void removeOneEntry() {

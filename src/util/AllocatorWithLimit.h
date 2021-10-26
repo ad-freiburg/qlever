@@ -170,8 +170,9 @@ class AllocatorWithLimit {
     // Subtract the amount of memory we want to allocate from the amount of
     // memory left. This will throw an exception if not enough memory is left.
     const auto bytesNeeded = n * sizeof(T);
-    const bool wasEnoughLeft = memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_return_false(
-    bytesNeeded);
+    const bool wasEnoughLeft =
+        memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_return_false(
+            bytesNeeded);
     if (!wasEnoughLeft) {
       clearOnAllocation_(n);
       memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_throw(bytesNeeded);
