@@ -156,8 +156,9 @@ class ConcurrentCache {
 
   /// Delete elements from the unpinned part of the cache of total size
   /// at least `size`;
-  bool makeRoom(size_t size) {
-    return _cacheAndInProgressMap.wlock()->_cache.makeRoom(size);
+  bool makeRoomAsMuchAsPossible(size_t size) {
+    return _cacheAndInProgressMap.wlock()->_cache.makeRoomAsMuchAsPossible(
+        size);
   }
 
   /// The number of non-pinned entries in the cache

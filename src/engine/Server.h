@@ -37,8 +37,8 @@ class Server {
         _allocator{ad_utility::makeAllocationMemoryLeftThreadsafeObject(
                        maxMemGB * (1ull << 30u)),
                    [this](size_t numBytesToAllocate) {
-                     _cache.makeRoom(numBytesToAllocate / sizeof(Id) * 2);
-                     //}
+                     _cache.makeRoomAsMuchAsPossible(static_cast<double>(numBytesToAllocate) /
+                                                     sizeof(Id) * MAKE_ROOM_SLACK_FACTOR);
                    }},
         _sortPerformanceEstimator(),
         _index(),

@@ -43,7 +43,7 @@ class AllocationMemoryLeft {
   AllocationMemoryLeft(size_t n) : free_(n) {}
 
   // Called before memory is allocated.
-  bool decrease_if_enough_left_non_throwing(size_t n) {
+  bool decrease_if_enough_left_or_return_false(size_t n) noexcept {
     if (n <= free_) {
       free_ -= n;
       return true;
@@ -53,8 +53,8 @@ class AllocationMemoryLeft {
   }
 
   // Called before memory is allocated.
-  void decrease_if_enough_left(size_t n) {
-    if (!decrease_if_enough_left_non_throwing(n)) {
+  void decrease_if_enough_left_or_throw(size_t n) {
+    if (!decrease_if_enough_left_or_return_false(n)) {
       throw AllocationExceedsLimitException{n, free_};
     }
   }
@@ -169,11 +169,12 @@ class AllocatorWithLimit {
   T* allocate(std::size_t n) {
     // Subtract the amount of memory we want to allocate from the amount of
     // memory left. This will throw an exception if not enough memory is left.
-    auto bytesNeeded = n * sizeof(T);
-    if (!memoryLeft_.ptr()->wlock()->decrease_if_enough_left_non_throwing(
-            bytesNeeded)) {
+    const auto bytesNeeded = n * sizeof(T);
+    const bool wasEnoughLeft = memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_return_false(
+    bytesNeeded);
+    if (!wasEnoughLeft) {
       clearOnAllocation_(n);
-      memoryLeft_.ptr()->wlock()->decrease_if_enough_left(bytesNeeded);
+      memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_throw(bytesNeeded);
     }
     // the actual allocation
     return allocator_.allocate(n);
