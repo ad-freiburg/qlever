@@ -7,14 +7,21 @@
 #include "SparqlExpression.h"
 
 namespace sparqlExpression {
+
+// __________________________________________________________________________
 SparqlExpressionPimpl::SparqlExpressionPimpl(
     std::shared_ptr<SparqlExpression>&& pimpl)
     : _pimpl{std::move(pimpl)} {};
 
+// ___________________________________________________________________________
 SparqlExpressionPimpl::~SparqlExpressionPimpl() = default;
+
+// ___________________________________________________________________________
 std::vector<std::string*> SparqlExpressionPimpl::strings() {
   return _pimpl->strings();
 }
+
+// ____________________________________________________________________________
 SparqlExpressionPimpl::SparqlExpressionPimpl(SparqlExpressionPimpl&&) noexcept =
     default;
 SparqlExpressionPimpl& SparqlExpressionPimpl::operator=(
@@ -24,17 +31,20 @@ SparqlExpressionPimpl::SparqlExpressionPimpl(const SparqlExpressionPimpl&) =
 SparqlExpressionPimpl& SparqlExpressionPimpl::operator=(
     const SparqlExpressionPimpl&) = default;
 
+// ____________________________________________________________________________
 std::vector<std::string> SparqlExpressionPimpl::getUnaggregatedVariables()
     const {
   return _pimpl->getUnaggregatedVariables();
 }
 
+// ___________________________________________________________________________
 std::optional<std::string>
-SparqlExpressionPimpl::isNonDistinctCountOfSingleVariable() const {
+SparqlExpressionPimpl::getVariableForNonDistinctCountOrNullopt() const {
   return _pimpl->getVariableForNonDistinctCountOrNullopt();
 }
 
-std::string SparqlExpressionPimpl::asString(
+// ___________________________________________________________________________
+std::string SparqlExpressionPimpl::getCacheKey(
     const VariableColumnMap& variableColumnMap) const {
   return _pimpl->getCacheKey(variableColumnMap);
 }
