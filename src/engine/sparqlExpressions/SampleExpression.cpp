@@ -14,22 +14,21 @@ using namespace sparqlExpression::detail;
 
 // ____________________________________________________________________________
 ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
-  // The child is already set up to perform all the work.
-  auto childResultVariant = _child->evaluate(context);
   auto evaluator =
       [context]<typename T>(const T& childResult) -> ExpressionResult {
     if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
-      // If any element is true, then we sample this element.
+      // If there exists an element that is true, return true.
       return Bool{!childResult._intervals.empty()};
     } else if constexpr (isVectorResult<T>) {
       AD_CHECK(!childResult.empty());
       return childResult[0];
     } else if constexpr (std::is_same_v<T, Variable>) {
+      // TODO<joka921> Can't this be a simpler function (getIdAt)
       AD_CHECK(context->_endIndex > context->_beginIndex);
-      EvaluationContext newInput = *context;
-      newInput._endIndex = newInput._beginIndex + 1;
+      EvaluationContext contextForSingleValue = *context;
+      contextForSingleValue._endIndex = contextForSingleValue._beginIndex + 1;
       auto idOfFirstAsVector =
-          detail::getIdsFromVariable(childResult, &newInput);
+          detail::getIdsFromVariable(childResult, &contextForSingleValue);
       return StrongIdWithResultType{
           idOfFirstAsVector[0],
           context->_variableToColumnAndResultTypeMap.at(childResult._variable)
@@ -40,5 +39,5 @@ ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
     }
   };
 
-  return std::visit(evaluator, std::move(childResultVariant));
+  return std::visit(evaluator, _child->evaluate(context));
 }
