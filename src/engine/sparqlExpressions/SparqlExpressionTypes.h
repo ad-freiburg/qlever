@@ -6,14 +6,15 @@
 #ifndef QLEVER_SPARQLEXPRESSIONTYPES_H
 #define QLEVER_SPARQLEXPRESSIONTYPES_H
 
-#include "../engine/QueryExecutionContext.h"
-#include "../engine/ResultTable.h"
-#include "../global/Id.h"
-#include "../util/AllocatorWithLimit.h"
-#include "../util/ConstexprSmallString.h"
-#include "../util/HashMap.h"
-#include "../util/TypeTraits.h"
-#include "./SetOfIntervals.h"
+#include "../../global/Id.h"
+#include "../../util/AllocatorWithLimit.h"
+#include "../../util/ConstexprSmallString.h"
+#include "../../util/Generator.h"
+#include "../../util/HashMap.h"
+#include "../../util/TypeTraits.h"
+#include "../QueryExecutionContext.h"
+#include "../ResultTable.h"
+#include "SetOfIntervals.h"
 
 namespace sparqlExpression {
 
@@ -58,6 +59,28 @@ struct StrongId {
   template <typename H>
   friend H AbslHashValue(H h, const StrongId& id) {
     return H::combine(std::move(h), id._value);
+  }
+};
+
+/// A simple wrapper around a bool that prevents the strangely-behaving
+/// std::vector<bool> optimization.
+struct Bool {
+  bool _value;
+  // Implicit conversion from and to bool.
+  Bool(bool value) : _value{value} {}
+
+  operator bool() const { return _value; }
+
+  // Default construction yields undefined value.
+  Bool() = default;
+
+  bool operator==(const Bool& b) const = default;
+
+  // Make the type hashable for absl, see
+  // https://abseil.io/docs/cpp/guides/hash.
+  template <typename H>
+  friend H AbslHashValue(H h, const Bool& b) {
+    return H::combine(std::move(h), b._value);
   }
 };
 
@@ -160,10 +183,10 @@ struct Variable {
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
 /// the row indices in which a boolean expression evaluates to "true". Constant
 /// results are represented by a vector with only one element.
-namespace expressionResultDetail {
+namespace detail {
 // For each type T in this tuple, T as well as VectorWithMemoryLimit<T> are
 // possible expression result types.
-using ConstantTypes = std::tuple<double, int64_t, bool, string>;
+using ConstantTypes = std::tuple<double, int64_t, Bool, string>;
 using ConstantTypesAsVector =
     ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
 
@@ -173,12 +196,11 @@ using OtherTypes =
 
 using AllTypesAsTuple =
     ad_utility::TupleCat<ConstantTypes, ConstantTypesAsVector, OtherTypes>;
-}  // namespace expressionResultDetail
+}  // namespace detail
 
 /// An Expression result is a std::variant of all the different types from
 /// the expressionResultDetail namespace (see above).
-using ExpressionResult =
-    ad_utility::TupleToVariant<expressionResultDetail::AllTypesAsTuple>;
+using ExpressionResult = ad_utility::TupleToVariant<detail::AllTypesAsTuple>;
 
 /// Only the different types contained in the variant `ExpressionResult` (above)
 /// match this concept.
@@ -187,15 +209,17 @@ concept SingleExpressionResult =
     ad_utility::isTypeContainedIn<T, ExpressionResult>;
 
 /// True iff T represents a constant.
-template <SingleExpressionResult T>
+template <typename T>
 constexpr static bool isConstantResult =
-    ad_utility::isTypeContainedIn<T, expressionResultDetail::ConstantTypes> ||
+    ad_utility::isTypeContainedIn<T, detail::ConstantTypes> ||
     std::is_same_v<T, StrongIdWithResultType>;
 
 /// True iff T is one of the ConstantTypesAsVector
-template <SingleExpressionResult T>
-constexpr static bool isVectorResult = ad_utility::isTypeContainedIn<
-    T, expressionResultDetail::ConstantTypesAsVector>;
+template <typename T>
+constexpr static bool isVectorResult =
+    ad_utility::isTypeContainedIn<T, detail::ConstantTypesAsVector>;
+
+namespace detail {
 
 /// Convert expression result type T to corresponding qlever ResultType.
 /// TODO<joka921>: currently all constants are floats.
@@ -242,30 +266,128 @@ Id constantExpressionResultToId(T&& result, LocalVocab& localVocab,
   }
 }
 
-/// We will use the string representation of various functions (e.g. '+' '*')
-/// directly as template parameters. Currently 15 characters are enough for
-/// this, but if we need longer names in the future, we can still change this at
-/// the cost of a recompilation.
-using TagString = ad_utility::ConstexprSmallString<16>;
+/// A Tag type that has to be used as the `CalculationWithSetOfIntervals`
+/// template parameter in `NaryExpression.h` and `AggregateExpression.h` when
+/// no such calculation is possible
+struct NoCalculationWithSetOfIntervals {};
 
-/// Annotate an arbitrary type (we will use this for callables) with a
-/// TagString. The TagString is part of the type.
-template <TagString Tag, typename Function>
-struct TaggedFunction {
-  static constexpr TagString tag = Tag;
-  using functionType = Function;
+/// A `Function` and one or more `ValueGetters`, that are applied to the
+/// operands of the function before passing them. The number of `ValueGetters`
+/// must either be 1 (the same `ValueGetter` is used for all the operands to the
+/// `Function`, or it must be equal to the number of operands to the `Function`.
+/// This invariant is checked in the `Operation` class template below,
+/// which uses this helper struct.
+template <typename FunctionType, typename... ValueGettersTypes>
+struct FunctionAndValueGetters {
+  using Function = FunctionType;
+  using ValueGetters = std::tuple<ValueGettersTypes...>;
 };
 
-/// Helper variables and concepts to decide at compile time, if a type is an
-/// instantiation of TaggedFunction.
-template <typename T>
-constexpr bool IsTaggedFunction = false;
+/// A `Function` that only works on certain input types together with a compile
+/// time check, whether a certain set of inputs fulfills these requirements.
+template <typename FunctionT, typename CheckT>
+struct SpecializedFunction {
+  using Function = FunctionT;
 
-template <TagString Tag, typename Function>
-constexpr bool IsTaggedFunction<TaggedFunction<Tag, Function>> = true;
+  // Check if the function can be applied to arguments of type(s) `Operands`
+  template <typename... Operands>
+  static constexpr bool checkIfOperandsAreValid() {
+    return CheckT{}.template operator()<Operands...>();
+  }
 
+  // Evaluate the function on the `operands`. Return std::nullopt if the
+  // function cannot be evaluated on the `operands`
+  template <typename... Operands>
+  std::optional<ExpressionResult> evaluateIfOperandsAreValid(
+      Operands&&... operands) {
+    if constexpr (!checkIfOperandsAreValid<Operands...>()) {
+      return std::nullopt;
+    } else {
+      return Function{}(std::forward<Operands>(operands)...);
+    }
+  }
+};
+
+/// Return true iff there exists a `SpecializedFunction` in the
+/// `SpecializedFunctionsTuple` that can be evaluated on all the `Operands`
+template <typename SpecializedFunctionsTuple, typename... Operands>
+constexpr bool isAnySpecializedFunctionPossible(SpecializedFunctionsTuple&& tup,
+                                                Operands&&...) {
+  auto onPack = [](auto&&... fs) constexpr {
+    return (... || fs.template checkIfOperandsAreValid<Operands...>());
+  };
+
+  return std::apply(onPack, tup);
+}
+
+/// Evaluate the SpecializedFunction, that matches the input. If no such
+/// function exists, return `std::nullopt`.
+template <typename SpecializedFunctionsTuple, typename... Operands>
+std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
+    SpecializedFunctionsTuple&& tup, Operands&&... operands) {
+  std::optional<ExpressionResult> result = std::nullopt;
+
+  auto writeToResult = [&](auto f) {
+    if (!result) {
+      result =
+          f.evaluateIfOperandsAreValid(std::forward<Operands>(operands)...);
+    }
+  };
+
+  auto onSingle = [&](auto&&... els) { (..., writeToResult(els)); };
+  std::apply(onSingle, tup);
+
+  return result;
+}
+
+/// An Operation that consists of a `FunctionAndValueGetters` that takes
+/// `NumOperands` parameters. The `FunctionForSetOfIntervalsType` is a function,
+/// that can efficiently perform the operation when all the operands are
+/// `SetOfInterval`s.
+/// It is necessary to use the `FunctionAndValueGetters` struct to allow for
+/// multiple `ValueGetters` (a parameter pack, that has to appear at the end of
+/// the template declaration) and the default parameter for the
+/// `FunctionForSetOfIntervals` (which also has to appear at the end).
+template <size_t NumOperands, typename FunctionAndValueGettersT,
+          typename... SpecializedFunctions>
+    requires ad_utility::isInstantiation<FunctionAndValueGetters,
+                                         FunctionAndValueGettersT> &&
+    (... && ad_utility::isInstantiation<SpecializedFunction,
+                                        SpecializedFunctions>)struct Operation {
+ private:
+  using OriginalValueGetters = typename FunctionAndValueGettersT::ValueGetters;
+  static constexpr size_t NV = std::tuple_size_v<OriginalValueGetters>;
+
+ public:
+  constexpr static size_t N = NumOperands;
+  using Function = typename FunctionAndValueGettersT::Function;
+  using ValueGetters = std::conditional_t<
+      NV == 1, std::array<std::tuple_element_t<0, OriginalValueGetters>, N>,
+      OriginalValueGetters>;
+  Function _function;
+  ValueGetters _valueGetters;
+  std::tuple<SpecializedFunctions...> _specializedFunctions;
+};
+
+/// Helper variable to decide at compile time, if a type is an
+/// Operation.
 template <typename T>
-concept TaggedFunctionConcept = IsTaggedFunction<T>;
+constexpr bool isOperation = false;
+
+template <size_t NumOperations, typename... Ts>
+constexpr bool isOperation<Operation<NumOperations, Ts...>> = true;
+
+// Return the common logical size of the `SingleExpressionResults`.
+// This is either 1 (in case all the `inputs` are constants) or the
+// size of the `context`.
+template <SingleExpressionResult... Inputs>
+size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
+  return (... && isConstantResult<Inputs>)
+             ? 1ul
+             : context._endIndex - context._beginIndex;
+}
+
+}  // namespace detail
 }  // namespace sparqlExpression
 
 #endif  // QLEVER_SPARQLEXPRESSIONTYPES_H

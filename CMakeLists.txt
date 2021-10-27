@@ -7,15 +7,22 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Coroutines require an additional compiler flag that is called differently
+# on clang and g++
+include(CheckCXXCompilerFlag)
+check_cxx_compiler_flag(-fcoroutines HAS_COROUTINES)
+if (HAS_COROUTINES)
+    add_compile_options(-fcoroutines)
+else()
+    add_compile_options(-fcoroutines-ts)
+endif()
+
 # Check compiler versions:
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-    # Check version. If empty, warn. If too old, error out:
-    if ("${CMAKE_CXX_COMPILER_VERSION}" STREQUAL "")
-        message(WARNING "GCC Compiler version is unknown, proceed at your own risk!")
-    elseif (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
-        message(FATAL_ERROR "GCC compiler version must be at least 4.8!")
-    endif ()
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lc++abi")
 endif ()
+
 
 ## Build targets for address sanitizer
 # AddressSanitize
@@ -121,6 +128,8 @@ set(BUILD_TESTING OFF CACHE BOOL "Don't build tests for abseil" FORCE)
 add_subdirectory(third_party/abseil-cpp EXCLUDE_FROM_ALL)
 include_directories(third_party/abseil-cpp/)
 
+
+
 if (USE_PARALLEL)
     include(FindOpenMP)
     if (OPENMP_FOUND)
@@ -209,7 +218,7 @@ configure_file(src/web/script.js script.js)
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
 target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(CreatePatternsMain src/index/CreatePatternsMain.cpp src/util/jthread.h)
+add_executable(CreatePatternsMain src/index/CreatePatternsMain.cpp)
 target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(SparqlEngineMain src/SparqlEngineMain.cpp)

@@ -6,7 +6,8 @@
 
 namespace ad_utility {
 // ___________________________________________________________________________
-SetOfIntervals SortAndCheckDisjointAndNonempty(SetOfIntervals input) {
+SetOfIntervals SetOfIntervals::SortAndCheckDisjointAndNonempty(
+    SetOfIntervals input) {
   auto& vec = input._intervals;
   auto cmp = [](const auto& a, const auto& b) { return a.first < b.first; };
   std::sort(vec.begin(), vec.end(), cmp);
@@ -22,8 +23,8 @@ SetOfIntervals SortAndCheckDisjointAndNonempty(SetOfIntervals input) {
 }
 
 // ___________________________________________________________________________
-SetOfIntervals Intersection::operator()(SetOfIntervals A,
-                                        SetOfIntervals B) const {
+SetOfIntervals SetOfIntervals::Intersection::operator()(
+    SetOfIntervals A, SetOfIntervals B) const {
   // First sort by the beginning of the interval
   A = SortAndCheckDisjointAndNonempty(std::move(A));
   B = SortAndCheckDisjointAndNonempty(std::move(B));
@@ -73,7 +74,8 @@ SetOfIntervals Intersection::operator()(SetOfIntervals A,
 }
 
 // __________________________________________________________________________
-SetOfIntervals Union::operator()(SetOfIntervals A, SetOfIntervals B) const {
+SetOfIntervals SetOfIntervals::Union::operator()(SetOfIntervals A,
+                                                 SetOfIntervals B) const {
   // First sort by the beginning of the interval
   A = SortAndCheckDisjointAndNonempty(std::move(A));
   B = SortAndCheckDisjointAndNonempty(std::move(B));
@@ -131,7 +133,7 @@ SetOfIntervals Union::operator()(SetOfIntervals A, SetOfIntervals B) const {
 }
 
 // ___________________________________________________________________________
-SetOfIntervals CheckSortedAndDisjointAndSimplify(
+SetOfIntervals SetOfIntervals::CheckSortedAndDisjointAndSimplify(
     const SetOfIntervals& inputSet) {
   auto& inputVec = inputSet._intervals;
   if (inputVec.empty()) {
@@ -149,6 +151,28 @@ SetOfIntervals CheckSortedAndDisjointAndSimplify(
     }
   }
   result._intervals.push_back(current);
+  return result;
+}
+
+// ____________________________________________________________________________
+SetOfIntervals SetOfIntervals::Complement::operator()(SetOfIntervals s) const {
+  s = SortAndCheckDisjointAndNonempty(s);
+  SetOfIntervals result;
+  auto& intervals = result._intervals;
+
+  size_t lastElement = 0;
+  for (auto [begin, end] : s._intervals) {
+    // The range that was previously false (not part of the set), now becomes
+    // true.
+    if (lastElement < begin) {
+      intervals.emplace_back(lastElement, begin);
+    }
+    lastElement = end;
+  }
+  AD_CHECK(lastElement <= s.upperBound);
+  if (lastElement < SetOfIntervals::upperBound) {
+    intervals.emplace_back(lastElement, SetOfIntervals::upperBound);
+  }
   return result;
 }
 
