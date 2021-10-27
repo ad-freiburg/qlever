@@ -184,6 +184,8 @@ using detail::DivideExpression;
 using detail::MultiplyExpression;
 using detail::OrExpression;
 using detail::SubtractExpression;
+using detail::UnaryMinusExpression;
+using detail::UnaryNegateExpression;
 
 }  // namespace sparqlExpression
 
