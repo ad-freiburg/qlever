@@ -88,11 +88,16 @@ class AggregateExpression : public SparqlExpression {
     // The number of inputs we aggregate over.
     auto inputSize = getResultSize(*context, operand);
 
-    // TODO: this comment is out of sync.
     // Aggregates are unary expressions, therefore we have only one value getter
-    // for the single operand.
-    static_assert(
-        std::tuple_size_v<typename AggregateOperation::ValueGetters> == 2);
+    // for the single operand. But since the aggregating operation is binary,
+    // there are two identical value getters for technical reasons
+    {
+      using V = typename AggregateOperation::ValueGetters;
+      static_assert(std::tuple_size_v<V> == 2);
+      static_assert(std::is_same_v < std::tuple_element_t<0, V>,
+                    std::tuple_element_t<1, V>);
+    }
+
     const auto& valueGetter = std::get<0>(aggregateOperation._valueGetters);
 
     if (!distinct) {
