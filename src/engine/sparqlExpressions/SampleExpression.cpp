@@ -20,10 +20,10 @@ ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
       [context]<typename T>(const T& childResult) -> ExpressionResult {
     if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
       // If any element is true, then we sample this element.
-      return !childResult._intervals.empty();
+      return Bool{!childResult._intervals.empty()};
     } else if constexpr (isVectorResult<T>) {
       AD_CHECK(!childResult.empty());
-      return T({childResult[0]}, context->_allocator);
+      return childResult[0];
     } else if constexpr (std::is_same_v<T, Variable>) {
       AD_CHECK(context->_endIndex > context->_beginIndex);
       EvaluationContext newInput = *context;
