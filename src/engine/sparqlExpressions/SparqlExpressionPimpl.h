@@ -1,6 +1,5 @@
-//
-// Created by johannes on 13.05.21.
-//
+//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
+//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SPARQLEXPRESSIONPIMPL_H
 #define QLEVER_SPARQLEXPRESSIONPIMPL_H
@@ -18,8 +17,8 @@ using VariableColumnMap = ad_utility::HashMap<std::string, size_t>;
 class SparqlExpression;
 struct EvaluationContext;
 
-// Hide the SparqlExpression implementation in a Pimpl class, so that code
-// using the sparqlExpression only has to include the (small and therefore cheap
+// Hide the `SparqlExpression` implementation in a Pimpl class, so that code
+// using this implementation only has to include the (small and therefore cheap
 // to include) `SparqlExpressionPimpl.h`
 class SparqlExpressionPimpl {
  public:
@@ -29,27 +28,24 @@ class SparqlExpressionPimpl {
   [[nodiscard]] std::vector<std::string> getUnaggregatedVariables() const;
 
   // Does this expression aggregate over all variables that are not in
-  // `groupedVariables`. E.G. COUNT(<subex>) always returns true.
-  //      COUNT(?x) + ?m returns true iff ?m is in `groupedVariables`.
+  // `groupedVariables`. For example, COUNT(<subex>) always returns true.
+  // COUNT(?x) + ?m returns true if and only if ?m is in `groupedVariables`.
   [[nodiscard]] bool isAggregate(
       const ad_utility::HashSet<string>& groupedVariables) const {
-    auto unaggregatedVariables = getUnaggregatedVariables();
-    for (const auto& var : unaggregatedVariables) {
-      if (!groupedVariables.contains(var)) {
-        return false;
-      }
-    }
-    return true;
+    return std::ranges::all_of(getUnaggregatedVariables(),
+                               [&groupedVariables](const auto& var) {
+                                 return groupedVariables.contains(var);
+                               });
   }
 
-  // If this expression is a non distinct count of a single variable,
-  // return that variable. Else return std::nullopt. This is needed by the
+  // If this expression is a non-distinct count of a single variable,
+  // return that variable, else return std::nullopt. This is needed by the
   // pattern trick.
   [[nodiscard]] std::optional<std::string>
   getVariableForNonDistinctCountOrNullopt() const;
 
   // The implementation of these methods is small and straightforward, but
-  // has to be in the .cpp file b.c. `SparqlExpression` is only forward
+  // has to be in the .cpp file because `SparqlExpression` is only forward
   // declared.
   [[nodiscard]] std::string getCacheKey(
       const VariableColumnMap& variableColumnMap) const;
