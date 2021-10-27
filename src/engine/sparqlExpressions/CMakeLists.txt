@@ -7,9 +7,6 @@ add_library(sparqlExpressions
         SparqlExpressionValueGetters.h SparqlExpressionValueGetters.cpp
         NaryExpression.h
         SetOfIntervals.h SetOfIntervals.cpp
-        LiteralExpression.h GroupConcatExpression.h
-        RelationalExpression.h RelationalExpression.cpp
-        SampleExpression.h SampleExpression.cpp
-        SparqlExpressionPimpl.h SparqlExpressionPimpl.cpp)
+        LiteralExpression.h GroupConcatExpression.h)
 
 target_link_libraries(sparqlExpressions index)
