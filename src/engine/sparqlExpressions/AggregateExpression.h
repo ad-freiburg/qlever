@@ -8,6 +8,7 @@
 #ifndef QLEVER_AGGREGATEEXPRESSION_H
 #define QLEVER_AGGREGATEEXPRESSION_H
 
+#include "./SparqlExpressionGenerators.h"
 #include "SparqlExpression.h"
 namespace sparqlExpression {
 
@@ -75,24 +76,33 @@ class AggregateExpression : public SparqlExpression {
           bool distinct, Operand&& operand) -> ExpressionResult {
     // Perform the more efficient calculation on `SetOfInterval`s if it is
     // possible.
-    if constexpr (detail::isCalculationWithSetOfIntervalsAllowed<
-                      AggregateOperation, Operand>) {
-      return aggregateOperation._functionForSetOfIntervals(
+    if (isAnySpecializedFunctionPossible(
+            aggregateOperation._specializedFunctions, operand)) {
+      auto optionalResult = evaluateOnSpecializedFunctionsIfPossible(
+          aggregateOperation._specializedFunctions,
           std::forward<Operand>(operand));
+      AD_CHECK(optionalResult);
+      return std::move(optionalResult.value());
     }
 
     // The number of inputs we aggregate over.
     auto inputSize = getResultSize(*context, operand);
 
     // Aggregates are unary expressions, therefore we have only one value getter
-    // for the single operand.
-    static_assert(
-        std::tuple_size_v<typename AggregateOperation::ValueGetters> == 1);
+    // for the single operand. But since the aggregating operation is binary,
+    // there are two identical value getters for technical reasons
+    {
+      using V = typename AggregateOperation::ValueGetters;
+      static_assert(std::tuple_size_v<V> == 2);
+      static_assert(std::is_same_v < std::tuple_element_t<0, V>,
+                    std::tuple_element_t<1, V>);
+    }
+
     const auto& valueGetter = std::get<0>(aggregateOperation._valueGetters);
 
     if (!distinct) {
-      auto values = valueGetterGenerator(
-          valueGetter, std::forward<Operand>(operand), inputSize, context);
+      auto values = detail::valueGetterGenerator(
+          inputSize, context, std::forward<Operand>(operand), valueGetter);
       auto it = values.begin();
       auto result = *it;
       for (++it; it != values.end(); ++it) {
@@ -160,8 +170,8 @@ class CountExpression : public CountExpressionBase {
 };
 
 // SUM
-inline auto add = [](const auto& a, const auto& b) { return a + b; };
-using SumExpression = AGG_EXP<decltype(add), NumericValueGetter>;
+inline auto addForSum = [](const auto& a, const auto& b) { return a + b; };
+using SumExpression = AGG_EXP<decltype(addForSum), NumericValueGetter>;
 
 // AVG
 inline auto averageFinalOp = [](const auto& aggregation, size_t numElements) {
@@ -169,8 +179,8 @@ inline auto averageFinalOp = [](const auto& aggregation, size_t numElements) {
                            static_cast<double>(numElements)
                      : std::numeric_limits<double>::quiet_NaN();
 };
-using AvgExpression =
-    detail::AggregateExpression<AGG_OP<decltype(add), NumericValueGetter>>;
+using AvgExpression = detail::AggregateExpression<
+    AGG_OP<decltype(addForSum), NumericValueGetter>>;
 
 // MIN
 inline auto minLambda = [](const auto& a, const auto& b) {
@@ -185,6 +195,12 @@ inline auto maxLambda = [](const auto& a, const auto& b) {
 using MaxExpression = AGG_EXP<decltype(maxLambda), NumericValueGetter>;
 
 }  // namespace detail
+
+using detail::AvgExpression;
+using detail::CountExpression;
+using detail::MaxExpression;
+using detail::MinExpression;
+using detail::SumExpression;
 }  // namespace sparqlExpression
 
 #endif  // QLEVER_AGGREGATEEXPRESSION_H

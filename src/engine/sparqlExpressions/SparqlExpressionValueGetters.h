@@ -62,7 +62,7 @@ struct IsValidValueGetter {
   // check for NULL/UNDEF values.
   bool operator()(StrongIdWithResultType id, EvaluationContext*) const;
 
-  bool operator()(const string&, EvaluationContext*) { return true; }
+  bool operator()(const string&, EvaluationContext*) const { return true; }
 };
 
 /// Return a boolean value that is used for AND, OR and NOT expressions.
@@ -97,7 +97,7 @@ struct StringValueGetter {
 
   string operator()(StrongIdWithResultType, EvaluationContext*) const;
 
-  string operator()(string s, EvaluationContext*) { return s; }
+  string operator()(string s, EvaluationContext*) const { return s; }
 };
 }  // namespace sparqlExpression::detail
 
