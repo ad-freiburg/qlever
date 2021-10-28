@@ -84,6 +84,22 @@ struct Bool {
   }
 };
 
+}  // namespace sparqlExpression
+
+namespace std {
+template <typename T>
+requires std::is_arithmetic_v<T> struct common_type<T, sparqlExpression::Bool> {
+  using type = T;
+};
+
+template <typename T>
+requires std::is_arithmetic_v<T> struct common_type<sparqlExpression::Bool, T> {
+  using type = T;
+};
+}  // namespace std
+
+namespace sparqlExpression {
+
 /// A StrongId and its type. The type is needed to get the actual value from the
 /// knowledge base.
 struct StrongIdWithResultType {
