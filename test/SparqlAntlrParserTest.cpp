@@ -119,19 +119,20 @@ TEST(SparqlExpressionParser, First) {
             << std::endl;
   LOG(INFO) << p.parser.getCurrentToken()->getStartIndex() << std::endl;
    */
-  auto result = p.visitor.visitExpression(context);
-  auto expr = std::move(result.as<sparqlExpression::SparqlExpression::Ptr>());
+  auto resultAsAny = p.visitor.visitExpression(context);
+  auto resultAsExpression =
+      std::move(resultAsAny.as<sparqlExpression::SparqlExpression::Ptr>());
 
-  QueryExecutionContext* ctxt = nullptr;
+  QueryExecutionContext* qec = nullptr;
   sparqlExpression::VariableToColumnAndResultTypeMap map;
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   IdTable table{alloc};
   ResultTable::LocalVocab localVocab;
-  sparqlExpression::EvaluationContext input{*ctxt, map, table, alloc,
+  sparqlExpression::EvaluationContext input{*qec, map, table, alloc,
                                             localVocab};
-  auto res = expr->evaluate(&input);
+  auto res = resultAsExpression->evaluate(&input);
   AD_CHECK(std::holds_alternative<double>(res));
-  const auto& actualResult = std::get<double>(res);
-  ASSERT_FLOAT_EQ(25.0, actualResult);
+  const auto& resultAsDouble = std::get<double>(res);
+  ASSERT_FLOAT_EQ(25.0, resultAsDouble);
 }

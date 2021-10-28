@@ -13,20 +13,22 @@
 
 namespace sparqlParserHelpers {
 
-template <typename ParseResult>
-struct ParseResultAndRemainingText {
-  ParseResultAndRemainingText(ParseResult&& parseResult,
-                              std::string&& remainingText)
-      : _parseResult{std::move(parseResult)},
+template <typename ResultOfParse>
+struct ResultOfParseAndRemainingText {
+  ResultOfParseAndRemainingText(ParseResult&& resultOfParse,
+                                std::string&& remainingText)
+      : _resultOfParse{std::move(resultOfParse)},
         _remainingText{std::move(remainingText)} {}
-  ParseResult _parseResult;
+  ResultOfParse _resultOfParse;
   std::string _remainingText;
 };
 
-ParseResultAndRemainingText<sparqlExpression::SparqlExpressionPimpl>
+// ____________________________________________________________________________
+ResultOfParseAndRemainingText<sparqlExpression::SparqlExpressionPimpl>
 parseExpression(const std::string& input);
 
-ParseResultAndRemainingText<ParsedQuery::Alias> parseAlias(
+// An `alias` in Sparql have the form (<expression> as ?variable).
+ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
     const std::string& input);
 }  // namespace sparqlParserHelpers
 
