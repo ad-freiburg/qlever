@@ -17,13 +17,6 @@ else()
     add_compile_options(-fcoroutines-ts)
 endif()
 
-# Check compiler versions:
-if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -stdlib=libc++")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lc++abi")
-endif ()
-
-
 ## Build targets for address sanitizer
 # AddressSanitize
 set(CMAKE_C_FLAGS_ASAN
