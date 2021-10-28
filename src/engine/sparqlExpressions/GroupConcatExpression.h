@@ -24,9 +24,10 @@ class GroupConcatExpression : public SparqlExpression {
       }
     };
 
-    using OP = AGOP<decltype(performConcat), StringValueGetter>;
+    using OP =
+        detail::AGG_OP<decltype(performConcat), detail::StringValueGetter>;
     auto groupConcatOp = OP{performConcat};
-    using AGG_EXP = AggregateExpression<OP>;
+    using AGG_EXP = detail::AggregateExpression<OP>;
     _actualExpression = std::make_unique<AGG_EXP>(distinct, std::move(child),
                                                   std::move(groupConcatOp));
   }

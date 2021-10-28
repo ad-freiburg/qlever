@@ -9,3 +9,6 @@ add_library(sparqlExpressions
         SetOfIntervals.h SetOfIntervals.cpp
         LiteralExpression.h GroupConcatExpression.h
         SampleExpression.h SampleExpression.cpp)
+
+target_link_libraries(sparqlExpressions index)
+
