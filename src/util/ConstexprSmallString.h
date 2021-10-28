@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstring>
+#include <string>
 #include <string_view>
 
 namespace ad_utility {
