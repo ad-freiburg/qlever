@@ -9,7 +9,8 @@
 #include "../../engine/sparqlExpressions/GroupConcatExpression.h"
 #include "../../engine/sparqlExpressions/LiteralExpression.h"
 #include "../../engine/sparqlExpressions/NaryExpression.h"
-#include "../../engine/sparqlExpressions/RelationalExpression.h"
+#include "../../engine/sparqlExpressions/SparqlExpressionPimpl.h"
+//#include "../../engine/sparqlExpressions/RelationalExpression.h"
 #include "../../engine/sparqlExpressions/SampleExpression.h"
 #include "../../util/HashMap.h"
 #include "../../util/StringUtils.h"
@@ -116,11 +117,14 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitAliasWithouBrackes(
       SparqlAutomaticParser::AliasWithouBrackesContext* ctx) override {
+    throw std::runtime_error("Uncomment Line 120 ff. in SparqlQleverVisitor as soon as we have fully review and merged the SparqlExpressions");
+    /*
     auto expressionPtr =
         std::move(ctx->expression()->accept(this).as<ExpressionPtr>());
     auto wrapper =
         sparqlExpression::SparqlExpressionPimpl{std::move(expressionPtr)};
     return ParsedQuery::Alias{std::move(wrapper), ctx->var()->getText()};
+     */
   }
 
   antlrcpp::Any visitConstructQuery(
@@ -589,6 +593,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       return std::move(
           visitNumericExpression(childContexts[0]).as<ExpressionPtr>());
     }
+    if (false) {
+      // TODO<joka921> Once we have reviewed and merged the EqualsExpression, this
+      // can be uncommented.
+     /*
     if (ctx->children[1]->getText() == "=") {
       auto leftChild = std::move(
           visitNumericExpression(childContexts[0]).as<ExpressionPtr>());
@@ -598,6 +606,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       return ExpressionPtr{std::make_unique<sparqlExpression::EqualsExpression>(
           std::move(leftChild), std::move(rightChild))};
 
+      */
     } else {
       throw std::runtime_error(
           "This parser does not yet support relational expressions = < etc.");
