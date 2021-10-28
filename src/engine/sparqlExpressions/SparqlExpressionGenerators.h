@@ -45,8 +45,8 @@ void getIdsFromVariableImpl(VectorWithMemoryLimit<StrongId>& result,
 /// `context`.
 // TODO<joka921> Restructure QLever to column based design, then this will
 // become a noop;
-VectorWithMemoryLimit<StrongId> getIdsFromVariable(const Variable& variable,
-                                                   EvaluationContext* context) {
+inline VectorWithMemoryLimit<StrongId> getIdsFromVariable(
+    const Variable& variable, EvaluationContext* context) {
   auto cols = context->_inputTable.cols();
   VectorWithMemoryLimit<StrongId> result{context->_allocator};
   CALL_FIXED_SIZE_1(cols, getIdsFromVariableImpl, result, variable, context);
