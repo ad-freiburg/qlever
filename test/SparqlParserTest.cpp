@@ -649,7 +649,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ("?count", pq._orderBy[0]._key);
     ASSERT_TRUE(pq._orderBy[0]._desc);
     ASSERT_EQ(1u, pq._selectClause._aliases.size());
-    ASSERT_TRUE(pq._selectClause._aliases[0]._expression.isAggregate());
+    ASSERT_TRUE(pq._selectClause._aliases[0]._expression.isAggregate({}));
     ASSERT_EQ("(count(?x) as ?count)",
               pq._selectClause._aliases[0].getDescriptor());
     ASSERT_TRUE(pq._selectClause._distinct);
@@ -665,7 +665,7 @@ TEST(ParserTest, testGroupByAndAlias) {
   ASSERT_EQ(1u, pq._selectClause._selectedVariables.size());
   ASSERT_EQ("?count", pq._selectClause._selectedVariables[0]);
   ASSERT_EQ(1u, pq._selectClause._aliases.size());
-  ASSERT_TRUE(pq._selectClause._aliases[0]._expression.isAggregate());
+  ASSERT_TRUE(pq._selectClause._aliases[0]._expression.isAggregate({}));
   ASSERT_EQ("(count(?a) as ?count)",
             pq._selectClause._aliases[0].getDescriptor());
   ASSERT_EQ(1u, pq._groupByVariables.size());
