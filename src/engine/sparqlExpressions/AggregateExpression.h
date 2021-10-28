@@ -183,8 +183,9 @@ inline auto averageFinalOp = [](const auto& aggregation, size_t numElements) {
                            static_cast<double>(numElements)
                      : std::numeric_limits<double>::quiet_NaN();
 };
-using AvgExpression = detail::AggregateExpression<
-    AGG_OP<decltype(addForSum), NumericValueGetter>>;
+using AvgExpression =
+    detail::AggregateExpression<AGG_OP<decltype(addForSum), NumericValueGetter>,
+                                decltype(averageFinalOp)>;
 
 // MIN
 inline auto minLambda = []<typename T, typename U>(const T& a, const U& b) {

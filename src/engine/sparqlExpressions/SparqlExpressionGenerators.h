@@ -37,7 +37,7 @@ void getIdsFromVariableImpl(VectorWithMemoryLimit<StrongId>& result,
 
   result.reserve(endIndex - endIndex);
   for (size_t i = beginIndex; i < endIndex; ++i) {
-    result.push_back(StrongId{inputTable(beginIndex + i, columnIndex)});
+    result.push_back(StrongId{inputTable(i, columnIndex)});
   }
 }
 
