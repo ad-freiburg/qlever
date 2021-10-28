@@ -32,10 +32,15 @@ class SparqlExpressionPimpl {
   // COUNT(?x) + ?m returns true if and only if ?m is in `groupedVariables`.
   [[nodiscard]] bool isAggregate(
       const ad_utility::HashSet<string>& groupedVariables) const {
-    return std::ranges::all_of(getUnaggregatedVariables(),
-                               [&groupedVariables](const auto& var) {
-                                 return groupedVariables.contains(var);
-                               });
+    // TODO<joka921> This can be std::ranges::all_of as soon as libc++ supports
+    // it, or the combination of clang + libstdc++ + coroutines works.
+    auto unaggregatedVariables = getUnaggregatedVariables();
+    for (const auto& var : unaggregatedVariables) {
+      if (!groupedVariables.contains(var)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   // If this expression is a non-distinct count of a single variable,
