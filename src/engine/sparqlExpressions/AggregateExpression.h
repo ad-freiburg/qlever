@@ -94,8 +94,8 @@ class AggregateExpression : public SparqlExpression {
     {
       using V = typename AggregateOperation::ValueGetters;
       static_assert(std::tuple_size_v<V> == 2);
-      static_assert(std::is_same_v < std::tuple_element_t<0, V>,
-                    std::tuple_element_t<1, V>);
+      static_assert(std::is_same_v<std::tuple_element_t<0, V>,
+                                   std::tuple_element_t<1, V>>);
     }
 
     const auto& valueGetter = std::get<0>(aggregateOperation._valueGetters);
@@ -104,7 +104,9 @@ class AggregateExpression : public SparqlExpression {
       auto values = detail::valueGetterGenerator(
           inputSize, context, std::forward<Operand>(operand), valueGetter);
       auto it = values.begin();
-      auto result = *it;
+      using ResultType = std::decay_t<decltype(
+          aggregateOperation._function(std::move(*it), *it))>;
+      ResultType result = *it;
       for (++it; it != values.end(); ++it) {
         result =
             aggregateOperation._function(std::move(result), std::move(*it));
@@ -121,7 +123,9 @@ class AggregateExpression : public SparqlExpression {
       // three different strings, the value getter always returns `1`, but
       // we still have three distinct inputs.
       auto it = operands.begin();
-      auto result = valueGetter(*it, context);
+      using ResultType = std::decay_t<decltype(aggregateOperation._function(
+          std::move(valueGetter(*it, context)), valueGetter(*it, context)))>;
+      ResultType result = valueGetter(*it, context);
       ad_utility::HashSetWithMemoryLimit<typename decltype(
           operands)::value_type>
           uniqueHashSet({*it}, inputSize, context->_allocator);
@@ -179,18 +183,21 @@ inline auto averageFinalOp = [](const auto& aggregation, size_t numElements) {
                            static_cast<double>(numElements)
                      : std::numeric_limits<double>::quiet_NaN();
 };
-using AvgExpression = detail::AggregateExpression<
-    AGG_OP<decltype(addForSum), NumericValueGetter>>;
+using AvgExpression =
+    detail::AggregateExpression<AGG_OP<decltype(addForSum), NumericValueGetter>,
+                                decltype(averageFinalOp)>;
 
 // MIN
-inline auto minLambda = [](const auto& a, const auto& b) {
-  return a < b ? a : b;
+inline auto minLambda = []<typename T, typename U>(const T& a, const U& b) {
+  using C = std::common_type_t<T, U>;
+  return a < b ? static_cast<C>(a) : static_cast<C>(b);
 };
 using MinExpression = AGG_EXP<decltype(minLambda), NumericValueGetter>;
 
 // MAX
-inline auto maxLambda = [](const auto& a, const auto& b) {
-  return a > b ? a : b;
+inline auto maxLambda = []<typename T, typename U>(const T& a, const U& b) {
+  using C = std::common_type_t<T, U>;
+  return a > b ? static_cast<C>(a) : static_cast<C>(b);
 };
 using MaxExpression = AGG_EXP<decltype(maxLambda), NumericValueGetter>;
 
