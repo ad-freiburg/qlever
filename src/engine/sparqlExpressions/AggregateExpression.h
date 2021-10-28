@@ -104,6 +104,10 @@ class AggregateExpression : public SparqlExpression {
       auto values = detail::valueGetterGenerator(
           inputSize, context, std::forward<Operand>(operand), valueGetter);
       auto it = values.begin();
+      // Unevaluated operation to get the proper `ResultType`. With `auto`, we
+      // would get the operand type, which is not necessarily the `ResultType`.
+      // For example, in the COUNT aggregate we calculate a sum of boolean
+      // values, but the result is not boolean.
       using ResultType = std::decay_t<decltype(
           aggregateOperation._function(std::move(*it), *it))>;
       ResultType result = *it;
@@ -123,6 +127,10 @@ class AggregateExpression : public SparqlExpression {
       // three different strings, the value getter always returns `1`, but
       // we still have three distinct inputs.
       auto it = operands.begin();
+      // Unevaluated operation to get the proper `ResultType`. With `auto`, we
+      // would get the operand type, which is not necessarily the `ResultType`.
+      // For example, in the COUNT aggregate we calculate a sum of boolean
+      // values, but the result is not boolean.
       using ResultType = std::decay_t<decltype(aggregateOperation._function(
           std::move(valueGetter(*it, context)), valueGetter(*it, context)))>;
       ResultType result = valueGetter(*it, context);
@@ -187,7 +195,9 @@ using AvgExpression =
     detail::AggregateExpression<AGG_OP<decltype(addForSum), NumericValueGetter>,
                                 decltype(averageFinalOp)>;
 
-// MIN
+// Note: the std::common_type_t is required because we compare different numeric
+// types like an int and a bool. In this case we need to manually specify the
+// return type. MIN
 inline auto minLambda = []<typename T, typename U>(const T& a, const U& b) {
   using C = std::common_type_t<T, U>;
   return a < b ? static_cast<C>(a) : static_cast<C>(b);

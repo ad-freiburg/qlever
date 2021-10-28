@@ -86,15 +86,16 @@ struct Bool {
 
 }  // namespace sparqlExpression
 
+// Specializations of std::common_type for the Bool type.
 namespace std {
 template <typename T>
-requires std::is_arithmetic_v<T> struct common_type<T, sparqlExpression::Bool> {
-  using type = T;
+struct common_type<T, sparqlExpression::Bool> {
+  using type = std::common_type_t<T, bool>;
 };
 
 template <typename T>
-requires std::is_arithmetic_v<T> struct common_type<sparqlExpression::Bool, T> {
-  using type = T;
+struct common_type<sparqlExpression::Bool, T> {
+  using type = std::common_type_t<T, bool>;
 };
 }  // namespace std
 
