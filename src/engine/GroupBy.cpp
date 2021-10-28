@@ -55,7 +55,7 @@ string GroupBy::asString(size_t indent) const {
     os << varMap.at(var) << ", ";
   }
   for (const auto& p : _aliases) {
-    os << p._expression.asString(varMapInput) << " AS "
+    os << p._expression.getCacheKey(varMapInput) << " AS "
        << varMap.at(p._outVarName);
   }
   os << std::endl;
@@ -73,7 +73,7 @@ vector<size_t> GroupBy::resultSortedOn() const {
   auto varCols = getVariableColumns();
   vector<size_t> sortedOn;
   sortedOn.reserve(_groupByVariables.size());
-  for (std::string var : _groupByVariables) {
+  for (const std::string& var : _groupByVariables) {
     sortedOn.push_back(varCols[var]);
   }
   return sortedOn;
@@ -164,7 +164,7 @@ void GroupBy::processGroup(
   evaluationContext._endIndex = blockEnd;
 
   sparqlExpression::ExpressionResult expressionResult =
-      aggregate._expression.getImpl()->evaluate(&evaluationContext);
+      aggregate._expression.getPimpl()->evaluate(&evaluationContext);
 
   auto& resultEntry = result->operator()(resultRow, resultColumn);
 

@@ -57,34 +57,8 @@ string Bind::asString(size_t indent) const {
     os << " ";
   }
 
-  auto m = getVariableColumns();
-  auto strings = _bind.strings();
-  // TODO<joka921> Proper asString() method for the Expressions
-  os << "BIND ("
-     << "Complex expression"
-     << ") on";
-  // the random string to prevent false caching
-  os << _bind._expressionVariant.asString(m);
-
-  for (const auto& ptr : strings) {
-    auto s = *ptr;
-
-    // non-variables are added directly (constants etc.)
-    if (!ad_utility::startsWith(s, "?")) {
-      os << s << ' ';
-      continue;
-    }
-
-    // variables are converted to the corresponding column index, to create the
-    // same cache key for same query with changed variable names.
-    if (!m.contains(s)) {
-      AD_THROW(
-          ad_semsearch::Exception::BAD_INPUT,
-          "Variable"s + s + " could not be mapped to column of BIND input");
-    }
-    os << "(col " << m[s] << ") ";
-  }
-
+  os << "BIND ";
+  os << _bind._expressionVariant.getCacheKey(getVariableColumns());
   os << "\n" << _subtree->asString(indent);
   return os.str();
 }
@@ -123,7 +97,7 @@ void Bind::computeResult(ResultTable* result) {
   result->_resultTypes.emplace_back();
   CALL_FIXED_SIZE_2(inwidth, outwidth, computeExpressionBind, result,
                     &(result->_resultTypes.back()), *subRes,
-                    _bind._expressionVariant.getImpl());
+                    _bind._expressionVariant.getPimpl());
 
   result->_sortedBy = resultSortedOn();
 
