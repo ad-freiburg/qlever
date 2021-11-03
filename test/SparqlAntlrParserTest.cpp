@@ -131,8 +131,7 @@ TEST(SparqlExpressionParser, First) {
   ResultTable::LocalVocab localVocab;
   sparqlExpression::EvaluationContext input{*qec, map, table, alloc,
                                             localVocab};
-  auto res = resultAsExpression->evaluate(&input);
-  AD_CHECK(std::holds_alternative<double>(res));
-  const auto& resultAsDouble = std::get<double>(res);
-  ASSERT_FLOAT_EQ(25.0, resultAsDouble);
+  auto result = resultAsExpression->evaluate(&input);
+  AD_CHECK(std::holds_alternative<double>(result));
+  ASSERT_FLOAT_EQ(25.0, std::get<double>(result));
 }

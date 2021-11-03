@@ -119,7 +119,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitAliasWithouBrackes(
-      SparqlAutomaticParser::AliasWithouBrackesContext* ctx) override {
+      [[maybe_unused]] SparqlAutomaticParser::AliasWithouBrackesContext* ctx) override {
     throw std::runtime_error(
         "Uncomment Line 120 ff. in SparqlQleverVisitor as soon as we have "
         "fully reviewed and merged the SparqlExpressions");
@@ -819,17 +819,17 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitAggregate(
-      SparqlAutomaticParser::AggregateContext* ctx) override {
+      SparqlAutomaticParser::AggregateContext* context) override {
     // the only case that there is no child expression is COUNT(*), so we can
     // check this outside the if below.
-    if (!ctx->expression()) {
+    if (!context->expression()) {
       throw SparqlParseException{
           "This parser currently doesn't support COUNT(*), please specify an "
           "explicit expression for the COUNT"};
     }
     auto childExpression =
-        std::move(ctx->expression()->accept(this).as<ExpressionPtr>());
-    auto children = ctx->children;
+        std::move(context->expression()->accept(this).as<ExpressionPtr>());
+    auto children = context->children;
     bool distinct = false;
     for (const auto& child : children) {
       if (ad_utility::getLowercase(child->getText()) == "distinct") {
@@ -856,8 +856,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       // Use a space as a default separator
 
       std::string separator;
-      if (ctx->string()) {
-        separator = ctx->string()->getText();
+      if (context->string()) {
+        separator = context->string()->getText();
         // If there was a separator, we have to strip the quotation marks
         AD_CHECK(separator.size() >= 2);
         separator = separator.substr(1, separator.size() - 2);
