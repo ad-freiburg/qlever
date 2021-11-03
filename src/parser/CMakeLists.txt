@@ -1,5 +1,5 @@
 add_library(rdfEscaping RdfEscaping.h RdfEscaping.cpp)
-target_link_libraries(rdfEscaping ${ICU_LIBRARIES})
+target_link_libraries(rdfEscaping absl::flat_hash_map ${ICU_LIBRARIES})
 
 add_subdirectory(sparqlParser)
 
