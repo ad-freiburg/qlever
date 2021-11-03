@@ -94,8 +94,8 @@ class AggregateExpression : public SparqlExpression {
     {
       using V = typename AggregateOperation::ValueGetters;
       static_assert(std::tuple_size_v<V> == 2);
-      static_assert(std::is_same_v < std::tuple_element_t<0, V>,
-                    std::tuple_element_t<1, V>>);
+      static_assert(std::is_same_v<std::tuple_element_t<0, V>,
+                                   std::tuple_element_t<1, V>>);
     }
 
     const auto& valueGetter = std::get<0>(aggregateOperation._valueGetters);
