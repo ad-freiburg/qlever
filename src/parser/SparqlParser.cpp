@@ -167,7 +167,8 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
     s << ")";
   } else if (_lexer.accept("(")) {
     ParsedQuery::Alias a = parseAliasWithAntlr();
-    for (const auto& selectedVariable : query->_selectClause._selectedVariables) {
+    for (const auto& selectedVariable :
+         query->_selectClause._selectedVariables) {
       if (selectedVariable == a._outVarName) {
         throw ParseException("A variable with name " + selectedVariable +
                              " is already used, but the ORDER BY with alias " +
@@ -866,9 +867,11 @@ GraphPatternOperation::BasicGraphPattern& SparqlParser::lastBasicPattern(
 }
 
 // ________________________________________________________________________
-sparqlExpression::SparqlExpressionPimpl SparqlParser::parseExpressionWithAntlr() {
+sparqlExpression::SparqlExpressionPimpl
+SparqlParser::parseExpressionWithAntlr() {
   auto str = _lexer.getUnconsumedInput();
-  auto resultOfParseAndRemainingText = sparqlParserHelpers::parseExpression(str);
+  auto resultOfParseAndRemainingText =
+      sparqlParserHelpers::parseExpression(str);
   _lexer.reset(std::move(resultOfParseAndRemainingText._remainingText));
   return std::move(resultOfParseAndRemainingText._resultOfParse);
 }

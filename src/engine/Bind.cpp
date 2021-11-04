@@ -170,9 +170,10 @@ void Bind::computeExpressionBind(
 
       size_t i = 0;
       for (auto&& resultValue : resultGenerator) {
-        output(i, inCols) = sparqlExpression::detail::constantExpressionResultToId(
+        output(i, inCols) =
+            sparqlExpression::detail::constantExpressionResultToId(
                 resultValue, *(outputResultTable->_localVocab),
-            isConstant && i > 0);
+                isConstant && i > 0);
         i++;
       }
     }

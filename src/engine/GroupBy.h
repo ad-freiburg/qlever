@@ -96,12 +96,12 @@ class GroupBy : public Operation {
   virtual void computeResult(ResultTable* result) override;
 
   template <int OUT_WIDTH>
-  void processGroup(
-      const Aggregate& expression,
-      sparqlExpression::EvaluationContext evaluationContext,
-      size_t blockStart, size_t blockEnd, IdTableStatic<OUT_WIDTH>* result,
-      size_t resultRow, size_t resultColumn, ResultTable* outTable,
-      ResultTable::ResultType* resultType) const;
+  void processGroup(const Aggregate& expression,
+                    sparqlExpression::EvaluationContext evaluationContext,
+                    size_t blockStart, size_t blockEnd,
+                    IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
+                    size_t resultColumn, ResultTable* outTable,
+                    ResultTable::ResultType* resultType) const;
 
   template <int IN_WIDTH, int OUT_WIDTH>
   void doGroupBy(const IdTable& dynInput, const vector<size_t>& groupByCols,

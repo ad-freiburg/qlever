@@ -10,11 +10,12 @@
 #include "./sparqlExpressions/SparqlExpression.h"
 #include "CallFixedSize.h"
 
-GroupBy::GroupBy(QueryExecutionContext* qec,
-                 vector<string> groupByVariables,
+GroupBy::GroupBy(QueryExecutionContext* qec, vector<string> groupByVariables,
                  std::vector<ParsedQuery::Alias> aliases)
-    : Operation(qec), _subtree(nullptr), _groupByVariables{std::move(groupByVariables)}, _aliases{std::move(aliases)} {
-
+    : Operation(qec),
+      _subtree(nullptr),
+      _groupByVariables{std::move(groupByVariables)},
+      _aliases{std::move(aliases)} {
   std::sort(_aliases.begin(), _aliases.end(),
             [](const ParsedQuery::Alias& a1, const ParsedQuery::Alias& a2) {
               return a1._outVarName < a2._outVarName;
@@ -88,26 +89,14 @@ vector<pair<size_t, bool>> GroupBy::computeSortColumns(
 
   std::unordered_set<size_t> sortColSet;
 
-  for (std::string var : _groupByVariables) {
+  for (const auto& var : _groupByVariables) {
     size_t col = inVarColMap[var];
     // avoid sorting by a column twice
     if (sortColSet.find(col) == sortColSet.end()) {
       sortColSet.insert(col);
-      cols.push_back({col, false});
+      cols.emplace_back(col, false);
     }
   }
-
-  // TODO<joka921> What does this do? is it needed? the groupByVariables should
-  // be all there.
-  /*
-  for (const ParsedQuery::Alias& a : _aliases) {
-    size_t col = inVarColMap[a._inVarName];
-    if (sortColSet.find(col) == sortColSet.end()) {
-      sortColSet.insert(col);
-      cols.push_back({inVarColMap[a._inVarName], false});
-    }
-  }
-   */
   return cols;
 }
 
@@ -151,9 +140,9 @@ struct resizeIfVec<vector<C>, C> {
 template <int OUT_WIDTH>
 void GroupBy::processGroup(
     const GroupBy::Aggregate& aggregate,
-    sparqlExpression::EvaluationContext evaluationContext,
-    size_t blockStart, size_t blockEnd, IdTableStatic<OUT_WIDTH>* result,
-    size_t resultRow, size_t resultColumn, ResultTable* outTable,
+    sparqlExpression::EvaluationContext evaluationContext, size_t blockStart,
+    size_t blockEnd, IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
+    size_t resultColumn, ResultTable* outTable,
     ResultTable::ResultType* resultType) const {
   evaluationContext._beginIndex = blockStart;
   evaluationContext._endIndex = blockEnd;
@@ -225,17 +214,21 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
       *getExecutionContext(), columnMap, inTable->_data,
       getExecutionContext()->getAllocator(), *outTable->_localVocab);
 
-  if (groupByCols.empty()) {
-    // The entire input is a single group
-    size_t blockStart = 0;
-    size_t blockEnd = input.size();
-
+  auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {
     result.emplace_back();
-    size_t resIdx = result.size() - 1;
+    size_t rowIdx = result.size() - 1;
+    for (size_t i = 0; i < groupByCols.size(); ++i) {
+      result(rowIdx, i) = input(blockStart, groupByCols[i]);
+    }
     for (const GroupBy::Aggregate& a : aggregates) {
-      processGroup(a, evaluationContext, blockStart, blockEnd, &result, resIdx,
+      processGroup(a, evaluationContext, blockStart, blockEnd, &result, rowIdx,
                    a._outCol, outTable, &outTable->_resultTypes[a._outCol]);
     }
+  };
+
+  if (groupByCols.empty()) {
+    // The entire input is a single group
+    processNextBlock(0, input.size());
     *dynResult = result.moveToDynamic();
     return;
   }
@@ -247,53 +240,25 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
     currentGroupBlock.push_back(std::pair<size_t, Id>(col, input(0, col)));
   }
   size_t blockStart = 0;
-  size_t blockEnd = 0;
   auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory(32000);
+
   for (size_t pos = 1; pos < input.size(); pos++) {
     checkTimeoutAfterNCalls(currentGroupBlock.size());
-    bool rowMatchesCurrentBlock = true;
-    for (size_t i = 0; i < currentGroupBlock.size(); i++) {
-      if (input(pos, currentGroupBlock[i].first) !=
-          currentGroupBlock[i].second) {
-        rowMatchesCurrentBlock = false;
-        break;
-      }
-    }
+    bool rowMatchesCurrentBlock =
+        std::all_of(currentGroupBlock.begin(), currentGroupBlock.end(),
+                    [&](const auto& columns) {
+                      return input(pos, columns.first) == columns.second;
+                    });
     if (!rowMatchesCurrentBlock) {
-      blockEnd = pos;
-
-      result.emplace_back();
-      size_t rowIdx = result.size() - 1;
-      for (size_t i = 0; i < groupByCols.size(); ++i) {
-        result(rowIdx, i) = input(blockStart, groupByCols[i]);
-      }
-      for (const GroupBy::Aggregate& a : aggregates) {
-        processGroup(a, evaluationContext, blockStart, blockEnd, &result,
-                     rowIdx,
-                     a._outCol, outTable, &outTable->_resultTypes[a._outCol]);
-      }
+      processNextBlock(blockStart, pos);
       // setup for processing the next block
       blockStart = pos;
-      for (size_t i = 0; i < currentGroupBlock.size(); i++) {
-        currentGroupBlock[i].second = input(pos, currentGroupBlock[i].first);
+      for (auto& columnPair : currentGroupBlock) {
+        columnPair.second = input(pos, columnPair.first);
       }
     }
   }
-  blockEnd = input.size();
-  {
-    result.emplace_back();
-    size_t resIdx = result.size() - 1;
-    for (size_t i = 0; i < groupByCols.size(); ++i) {
-      result(resIdx, i) = input(blockStart, groupByCols[i]);
-    }
-    for (const GroupBy::Aggregate& a : aggregates) {
-      processGroup(a, evaluationContext, blockStart, blockEnd, &result, resIdx,
-                   a._outCol, outTable, &outTable->_resultTypes[a._outCol]);
-      for (size_t i = 0; i < groupByCols.size(); ++i) {
-        result(resIdx, i) = input(blockStart, groupByCols[i]);
-      }
-    }
-  }
+  processNextBlock(blockStart, input.size());
   *dynResult = result.moveToDynamic();
 }
 
