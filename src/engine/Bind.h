@@ -7,6 +7,7 @@
 
 #include "../parser/ParsedQuery.h"
 #include "Operation.h"
+#include "sparqlExpressions/SparqlExpressionPimpl.h"
 
 /// BIND operation, currently only supports a very limited subset of expressions
 class Bind : public Operation {
@@ -40,23 +41,12 @@ class Bind : public Operation {
 
   void computeResult(ResultTable* result) override;
 
-  // Implementation for binding the sum of two columns: BIND (?x + ?y As ?z)
+  // Implementation for the binding of arbitrary expressions.
   template <int IN_WIDTH, int OUT_WIDTH>
-  static void computeBinaryOperationBind(
-      IdTable* dynRes, const IdTable& inputDyn, std::array<size_t, 2> columns,
-      array<ResultTable::ResultType, 2> inputTypes, char binaryOperator,
-      const Index& index);
-
-  // Implementation for renaming a columns: BIND (?x As ?y)
-  template <int IN_WIDTH, int OUT_WIDTH>
-  static void computeRenameBind(IdTable* dynRes, const IdTable& inputDyn,
-                                size_t column);
-
-  // Bind a constant value from the knowledge base to the new columns : BIND (42
-  // As ?x)
-  template <int IN_WIDTH, int OUT_WIDTH>
-  static void computeConstantBind(IdTable* dynRes, const IdTable& inputDyn,
-                                  size_t targetVal);
+  void computeExpressionBind(
+      ResultTable* outputResultTable, ResultTable::ResultType* resultType,
+      const ResultTable& inputResultTable,
+      sparqlExpression::SparqlExpression* expression) const;
 };
 
 #endif  // QLEVER_BIND_H

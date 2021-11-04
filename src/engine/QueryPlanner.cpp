@@ -43,12 +43,12 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   bool usePatternTrick =
       _enablePatternTrick && checkUsePatternTrick(&pq, &patternTrickTriple);
 
-  bool doGrouping = pq._groupByVariables.size() > 0 || usePatternTrick;
+  bool doGrouping = !pq._groupByVariables.empty() || usePatternTrick;
   if (!doGrouping) {
     // if there is no group by statement, but an aggregate alias is used
     // somewhere do grouping anyways.
-    for (const ParsedQuery::Alias& a : pq._selectClause._aliases) {
-      if (a._isAggregate) {
+    for (const ParsedQuery::Alias& alias : pq._selectClause._aliases) {
+      if (alias._expression.isAggregate({})) {
         doGrouping = true;
         break;
       }
@@ -69,7 +69,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   }
 
   // HAVING
-  if (pq._havingClauses.size() > 0) {
+  if (!pq._havingClauses.empty()) {
     plans.emplace_back(getHavingRow(pq, plans));
   }
 
@@ -79,7 +79,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   }
 
   // ORDER BY
-  if (pq._orderBy.size() > 0) {
+  if (!pq._orderBy.empty()) {
     // If there is an order by clause, add another row to the table and
     // just add an order by / sort to every previous result if needed.
     // If the ordering is perfect already, just copy the plan.
@@ -456,17 +456,12 @@ bool QueryPlanner::checkUsePatternTrick(
   if (returns_counts) {
     // There has to be a single count alias
     const ParsedQuery::Alias& alias = pq->_selectClause._aliases.back();
-    // Create a lower case version of the aliases function string to allow
-    // for case insensitive keyword detection.
-    std::string aliasFunctionLower =
-        ad_utility::getLowercaseUtf8(alias._function);
-    // Check if the alias is a non distinct count alias
-    if (!(alias._isAggregate &&
-          aliasFunctionLower.find("distinct") == std::string::npos &&
-          ad_utility::startsWith(aliasFunctionLower, "count"))) {
+    auto countVariable =
+        alias._expression.getVariableForNonDistinctCountOrNullopt();
+    if (!countVariable.has_value()) {
       return false;
     }
-    counted_var_name = alias._inVarName;
+    counted_var_name = countVariable.value();
     count_var_name = alias._outVarName;
   }
 

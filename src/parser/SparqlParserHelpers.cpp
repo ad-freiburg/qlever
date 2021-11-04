@@ -15,15 +15,15 @@ struct ParserAndVisitor {
   string _input;
   antlr4::ANTLRInputStream _stream{_input};
   SparqlAutomaticLexer _lexer{&_stream};
-  antlr4::CommonTokenStream tokens{&_lexer};
+  antlr4::CommonTokenStream _tokens{&_lexer};
 
  public:
-  SparqlAutomaticParser _parser{&tokens};
-  SparqlQleverVisitor visitor;
+  SparqlAutomaticParser _parser{&_tokens};
+  SparqlQleverVisitor _visitor;
   explicit ParserAndVisitor(string input) : _input{std::move(input)} {}
   explicit ParserAndVisitor(string input,
                             SparqlQleverVisitor::PrefixMap prefixMap)
-      : _input{std::move(input)}, visitor{std::move(prefixMap)} {}
+      : _input{std::move(input)}, _visitor{std::move(prefixMap)} {}
 
   template <typename ResultType, typename ContextType>
   auto parse(const std::string& input,
@@ -32,7 +32,7 @@ struct ParserAndVisitor {
   {
     auto context = (_parser.*F)();
     auto resultOfParse =
-        std::move(context->accept(&(visitor)).template as<ResultType>());
+        std::move(context->accept(&(_visitor)).template as<ResultType>());
 
     auto remainingString =
         input.substr(_parser.getCurrentToken()->getStartIndex());
@@ -67,10 +67,10 @@ ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
 std::pair<SparqlQleverVisitor::PrefixMap, size_t> parsePrologue(
     const string& input) {
   ParserAndVisitor p{input};
-  auto prologueContext = p.parser.prologue();
+  auto prologueContext = p._parser.prologue();
   auto prologueSize = prologueContext->getText().size();
-  p.visitor.visitPrologue(prologueContext);
-  const auto& constVisitor = p.visitor;
+  p._visitor.visitPrologue(prologueContext);
+  const auto& constVisitor = p._visitor;
   return {constVisitor.prefixMap(), prologueSize};
 }
 
@@ -79,9 +79,9 @@ std::pair<SparqlQleverVisitor::PrefixMap, size_t> parsePrologue(
 std::pair<string, size_t> parseIri(const string& input,
                                    SparqlQleverVisitor::PrefixMap prefixMap) {
   ParserAndVisitor p{input, std::move(prefixMap)};
-  auto iriContext = p.parser.iri();
+  auto iriContext = p._parser.iri();
   auto iriSize = iriContext->getText().size();
-  auto resultString = p.visitor.visitIri(iriContext).as<string>();
+  auto resultString = p._visitor.visitIri(iriContext).as<string>();
   // const auto& constVisitor = p.visitor;
   return {std::move(resultString), iriSize};
 }

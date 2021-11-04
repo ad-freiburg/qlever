@@ -12,6 +12,7 @@
 #include "../parser/ParsedQuery.h"
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
+#include "sparqlExpressions/SparqlExpressionPimpl.h"
 
 using std::string;
 using std::vector;
@@ -22,13 +23,8 @@ class GroupBy : public Operation {
    * @brief Represents an aggregate alias in the select part of the query.
    */
   struct Aggregate {
-    ParsedQuery::AggregateType _type;
-    size_t _inCol, _outCol;
-    // Used to store the string necessary for the group concat aggregate.
-    // A void pointer is used to allow for storing arbitrary data should any
-    // other aggregate need custom data in the future.
-    void* _userData;
-    bool _distinct;
+    sparqlExpression::SparqlExpressionPimpl _expression;
+    size_t _outCol;
   };
 
   /**
@@ -42,8 +38,8 @@ class GroupBy : public Operation {
    * @param groupByVariables
    * @param aliases
    */
-  GroupBy(QueryExecutionContext* qec, const vector<string>& groupByVariables,
-          const std::vector<ParsedQuery::Alias>& aliases);
+  GroupBy(QueryExecutionContext* qec, vector<string> groupByVariables,
+          std::vector<ParsedQuery::Alias> aliases);
 
   virtual string asString(size_t indent = 0) const override;
 
@@ -99,22 +95,19 @@ class GroupBy : public Operation {
 
   virtual void computeResult(ResultTable* result) override;
 
-  template <int IN_WIDTH, int OUT_WIDTH>
-  void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
-                    size_t blockEnd, const IdTableView<IN_WIDTH>& input,
-                    const vector<ResultTable::ResultType>& inputTypes,
+  template <int OUT_WIDTH>
+  void processGroup(const Aggregate& expression,
+                    sparqlExpression::EvaluationContext evaluationContext,
+                    size_t blockStart, size_t blockEnd,
                     IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
-                    const ResultTable* inTable, ResultTable* outTable,
-                    const Index& index,
-                    ad_utility::HashSet<size_t>& distinctHashSet) const;
+                    size_t resultColumn, ResultTable* outTable,
+                    ResultTable::ResultType* resultType) const;
 
   template <int IN_WIDTH, int OUT_WIDTH>
-  void doGroupBy(const IdTable& dynInput,
-                 const vector<ResultTable::ResultType>& inputTypes,
-                 const vector<size_t>& groupByCols,
+  void doGroupBy(const IdTable& dynInput, const vector<size_t>& groupByCols,
                  const vector<GroupBy::Aggregate>& aggregates,
                  IdTable* dynResult, const ResultTable* inTable,
-                 ResultTable* outTable, const Index& index) const;
+                 ResultTable* outTable) const;
 
   FRIEND_TEST(GroupByTest, doGroupBy);
 };

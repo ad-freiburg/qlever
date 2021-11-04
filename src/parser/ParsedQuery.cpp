@@ -45,8 +45,8 @@ string ParsedQuery::asString() const {
   // ALIASES
   os << "\nALIASES: {\n\t";
   for (size_t i = 0; i < _selectClause._aliases.size(); ++i) {
-    const Alias& a = _selectClause._aliases[i];
-    os << a._function;
+    const Alias& alias = _selectClause._aliases[i];
+    os << alias._expression.getDescriptor();
     if (i + 1 < _selectClause._aliases.size()) {
       os << "\n\t";
     }
@@ -300,8 +300,7 @@ void ParsedQuery::expandPrefixes() {
           }
 
         } else if constexpr (std::is_same_v<T, GraphPatternOperation::Bind>) {
-          for (auto ptr : std::visit([](auto&& x) { return x.strings(); },
-                                     arg._expressionVariant)) {
+          for (auto ptr : arg.strings()) {
             expandPrefix(*ptr, prefixMap);
           }
         } else {
@@ -390,6 +389,7 @@ void ParsedQuery::expandPrefix(
   }
 }
 
+/*
 void ParsedQuery::parseAliases() {
   for (size_t i = 0; i < _selectClause._selectedVariables.size(); i++) {
     const std::string& var = _selectClause._selectedVariables[i];
@@ -411,90 +411,7 @@ void ParsedQuery::parseAliases() {
     }
   }
 }
-
-// _____________________________________________________________________________
-std::string ParsedQuery::parseAlias(const std::string& alias) {
-  std::string newVarName = "";
-  std::string lowerInner = ad_utility::getLowercaseUtf8(alias);
-  if (ad_utility::startsWith(lowerInner, "count") ||
-      ad_utility::startsWith(lowerInner, "group_concat") ||
-      ad_utility::startsWith(lowerInner, "first") ||
-      ad_utility::startsWith(lowerInner, "last") ||
-      ad_utility::startsWith(lowerInner, "sample") ||
-      ad_utility::startsWith(lowerInner, "min") ||
-      ad_utility::startsWith(lowerInner, "max") ||
-      ad_utility::startsWith(lowerInner, "sum") ||
-      ad_utility::startsWith(lowerInner, "avg")) {
-    Alias a;
-    a._isAggregate = true;
-    size_t pos = lowerInner.find(" as ");
-    if (pos == std::string::npos) {
-      throw ParseException("Alias (" + alias +
-                           ") is malformed: keyword 'as' is missing or not "
-                           "surrounded by spaces.");
-    }
-    // skip the leading space of the 'as'
-    pos++;
-    newVarName = alias.substr(pos + 2);
-    newVarName = ad_utility::strip(newVarName, " \t\n");
-    a._outVarName = newVarName;
-    a._function = alias;
-
-    // find the second opening bracket
-    pos = alias.find('(', 1);
-    pos++;
-    while (pos < alias.size() &&
-           ::std::isspace(static_cast<unsigned char>(alias[pos]))) {
-      pos++;
-    }
-    if (lowerInner.compare(pos, 8, "distinct") == 0) {
-      // skip the distinct and any space after it
-      pos += 8;
-      while (pos < alias.size() &&
-             ::std::isspace(static_cast<unsigned char>(alias[pos]))) {
-        pos++;
-      }
-    }
-    size_t start = pos;
-    while (pos < alias.size() &&
-           !::std::isspace(static_cast<unsigned char>(alias[pos]))) {
-      pos++;
-    }
-    if (pos == start || pos >= alias.size()) {
-      throw ParseException(
-          "Alias (" + alias +
-          ") is malformed: no input variable given (e.g. COUNT(?a))");
-    }
-
-    a._inVarName = alias.substr(start, pos - start - 1);
-    bool isUnique = true;
-    // check if another alias for the output variable already exists:
-    for (const Alias& other : _selectClause._aliases) {
-      if (other._outVarName == a._outVarName) {
-        // Check if the aliases are equal, otherwise throw an exception
-        if (other._isAggregate != a._isAggregate ||
-            other._function != a._function) {
-          // TODO(florian): For a proper comparison the alias would need to have
-          // been parsed fully already. As the alias is still stored as a string
-          // at this point the comparison of two aliases is also string based.
-          throw ParseException(
-              "Two aliases try to bind values to the variable " +
-              a._outVarName);
-        } else {
-          isUnique = false;
-          break;
-        }
-      }
-    }
-    if (isUnique) {
-      // only add the alias if it doesn't already exist
-      _selectClause._aliases.push_back(a);
-    }
-  } else {
-    throw ParseException("Unknown or malformed alias: (" + alias + ")");
-  }
-  return newVarName;
-}
+ */
 
 void ParsedQuery::merge(const ParsedQuery& p) {
   _prefixes.insert(_prefixes.begin(), p._prefixes.begin(), p._prefixes.end());

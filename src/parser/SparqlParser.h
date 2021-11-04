@@ -5,6 +5,8 @@
 
 #include <string>
 
+#include "../engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "../util/HashMap.h"
 #include "ParsedQuery.h"
 #include "SparqlLexer.h"
 
@@ -14,7 +16,7 @@ using std::string;
 // No supposed to feature the complete query language.
 class SparqlParser {
  public:
-  SparqlParser(const string& query);
+  explicit SparqlParser(const string& query);
   ParsedQuery parse();
 
   /**
@@ -34,8 +36,6 @@ class SparqlParser {
                   ParsedQuery::GraphPattern* currentPattern = nullptr);
   void parseSolutionModifiers(ParsedQuery* query);
   void addPrefix(const string& key, const string& value, ParsedQuery* query);
-  void addWhereTriple(const string& str,
-                      std::shared_ptr<ParsedQuery::GraphPattern> pattern);
   // Returns true if it found a filter
   bool parseFilter(vector<SparqlFilter>* _filters, bool failOnNoFilter = true,
                    ParsedQuery::GraphPattern* pattern = nullptr);
@@ -45,7 +45,6 @@ class SparqlParser {
 
   // takes either DESC or ASC as the parameter
   OrderKey parseOrderKey(const std::string& order, ParsedQuery* query);
-  ParsedQuery::Alias parseAlias();
 
   // Reads the next element of a triple (an iri, a variable, a property path,
   // etc.) out of s beginning at the current value of pos. Sets pos to the
@@ -54,6 +53,7 @@ class SparqlParser {
   std::string_view readTriplePart(const std::string& s, size_t* pos);
 
   static string stripAndLowercaseKeywordLiteral(const string& lit);
+
   /**
    * If *ptr 's last child is a BasicGraphPattern, return a reference to it.
    * If not, first append a BasicGraphPattern and then return a reference
@@ -65,4 +65,7 @@ class SparqlParser {
   SparqlLexer _lexer;
   string _query;
   SparqlFilter parseRegexFilter(bool expectKeyword);
+
+  sparqlExpression::SparqlExpressionPimpl parseExpressionWithAntlr();
+  ParsedQuery::Alias parseAliasWithAntlr();
 };

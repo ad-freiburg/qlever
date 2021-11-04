@@ -121,16 +121,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitAliasWithouBrackes(
       [[maybe_unused]] SparqlAutomaticParser::AliasWithouBrackesContext* ctx)
       override {
-    throw std::runtime_error(
-        "Uncomment Line 120 ff. in SparqlQleverVisitor as soon as we have "
-        "fully reviewed and merged the SparqlExpressions");
-    /*
     auto expressionPtr =
         std::move(ctx->expression()->accept(this).as<ExpressionPtr>());
     auto wrapper =
         sparqlExpression::SparqlExpressionPimpl{std::move(expressionPtr)};
     return ParsedQuery::Alias{std::move(wrapper), ctx->var()->getText()};
-     */
   }
 
   antlrcpp::Any visitConstructQuery(
