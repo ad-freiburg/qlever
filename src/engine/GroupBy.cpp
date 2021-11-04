@@ -11,13 +11,9 @@
 #include "CallFixedSize.h"
 
 GroupBy::GroupBy(QueryExecutionContext* qec,
-                 const vector<string>& groupByVariables,
-                 const std::vector<ParsedQuery::Alias>& aliases)
-    : Operation(qec), _subtree(nullptr), _groupByVariables(groupByVariables) {
-  _aliases.reserve(aliases.size());
-  for (const ParsedQuery::Alias& a : aliases) {
-    _aliases.push_back(a);
-  }
+                 vector<string> groupByVariables,
+                 std::vector<ParsedQuery::Alias> aliases)
+    : Operation(qec), _subtree(nullptr), _groupByVariables{std::move(groupByVariables)}, _aliases{std::move(aliases)} {
 
   std::sort(_aliases.begin(), _aliases.end(),
             [](const ParsedQuery::Alias& a1, const ParsedQuery::Alias& a2) {
@@ -54,9 +50,9 @@ string GroupBy::asString(size_t indent) const {
   for (const std::string& var : _groupByVariables) {
     os << varMap.at(var) << ", ";
   }
-  for (const auto& p : _aliases) {
-    os << p._expression.getCacheKey(varMapInput) << " AS "
-       << varMap.at(p._outVarName);
+  for (const auto& alias : _aliases) {
+    os << alias._expression.getCacheKey(varMapInput) << " AS "
+       << varMap.at(alias._outVarName);
   }
   os << std::endl;
   os << _subtree->asString(indent);
@@ -155,11 +151,10 @@ struct resizeIfVec<vector<C>, C> {
 template <int OUT_WIDTH>
 void GroupBy::processGroup(
     const GroupBy::Aggregate& aggregate,
-    const sparqlExpression::EvaluationContext* evaluationContextIn,
+    sparqlExpression::EvaluationContext evaluationContext,
     size_t blockStart, size_t blockEnd, IdTableStatic<OUT_WIDTH>* result,
     size_t resultRow, size_t resultColumn, ResultTable* outTable,
     ResultTable::ResultType* resultType) const {
-  auto evaluationContext = *evaluationContextIn;
   evaluationContext._beginIndex = blockStart;
   evaluationContext._endIndex = blockEnd;
 
@@ -181,6 +176,9 @@ void GroupBy::processGroup(
           sparqlExpression::detail::expressionResultTypeToQleverResultType<T>();
       resultEntry = sparqlExpression::detail::constantExpressionResultToId(
           singleResult, *(outTable->_localVocab), false);
+    } else {
+      // This should never happen since aggregates always return constants.
+      AD_CHECK(false)
     }
   };
 
@@ -223,7 +221,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
         std::pair(columnIndex, inTable->getResultType(columnIndex));
   }
 
-  sparqlExpression::EvaluationContext evaluationInput(
+  sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), columnMap, inTable->_data,
       getExecutionContext()->getAllocator(), *outTable->_localVocab);
 
@@ -235,7 +233,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
     result.emplace_back();
     size_t resIdx = result.size() - 1;
     for (const GroupBy::Aggregate& a : aggregates) {
-      processGroup(a, &evaluationInput, blockStart, blockEnd, &result, resIdx,
+      processGroup(a, evaluationContext, blockStart, blockEnd, &result, resIdx,
                    a._outCol, outTable, &outTable->_resultTypes[a._outCol]);
     }
     *dynResult = result.moveToDynamic();
@@ -265,12 +263,13 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
       blockEnd = pos;
 
       result.emplace_back();
-      size_t resIdx = result.size() - 1;
+      size_t rowIdx = result.size() - 1;
       for (size_t i = 0; i < groupByCols.size(); ++i) {
-        result(resIdx, i) = input(blockStart, groupByCols[i]);
+        result(rowIdx, i) = input(blockStart, groupByCols[i]);
       }
       for (const GroupBy::Aggregate& a : aggregates) {
-        processGroup(a, &evaluationInput, blockStart, blockEnd, &result, resIdx,
+        processGroup(a, evaluationContext, blockStart, blockEnd, &result,
+                     rowIdx,
                      a._outCol, outTable, &outTable->_resultTypes[a._outCol]);
       }
       // setup for processing the next block
@@ -288,7 +287,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
       result(resIdx, i) = input(blockStart, groupByCols[i]);
     }
     for (const GroupBy::Aggregate& a : aggregates) {
-      processGroup(a, &evaluationInput, blockStart, blockEnd, &result, resIdx,
+      processGroup(a, evaluationContext, blockStart, blockEnd, &result, resIdx,
                    a._outCol, outTable, &outTable->_resultTypes[a._outCol]);
       for (size_t i = 0; i < groupByCols.size(); ++i) {
         result(resIdx, i) = input(blockStart, groupByCols[i]);
@@ -321,16 +320,6 @@ void GroupBy::computeResult(ResultTable* result) {
     }
 
     groupByColumns.push_back(it->second);
-    /*
-    // Add an "identity" aggregate in the form of a sample aggregate to
-    // facilitate the passthrough of the groupBy columns into the result
-    sparqlExpression::detail::Variable v;
-    v._variable = var;
-    shared_ptr<sparqlExpression::SparqlExpression> ptr =
-    std::make_shared<sparqlExpression::VariableExpression>(std::move(v));
-    aggregates.push_back(Aggregate{sparqlExpression::SparqlExpressionPimpl{std::move(ptr)},
-    _varColMap.find(var)->second});
-     */
   }
 
   // parse the aggregate aliases

@@ -47,8 +47,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   if (!doGrouping) {
     // if there is no group by statement, but an aggregate alias is used
     // somewhere do grouping anyways.
-    for (const ParsedQuery::Alias& a : pq._selectClause._aliases) {
-      if (a._expression.isAggregate({})) {
+    for (const ParsedQuery::Alias& alias : pq._selectClause._aliases) {
+      if (alias._expression.isAggregate({})) {
         doGrouping = true;
         break;
       }
@@ -458,7 +458,7 @@ bool QueryPlanner::checkUsePatternTrick(
     const ParsedQuery::Alias& alias = pq->_selectClause._aliases.back();
     auto countVariable =
         alias._expression.getVariableForNonDistinctCountOrNullopt();
-    if (!countVariable) {
+    if (!countVariable.has_value()) {
       return false;
     }
     counted_var_name = countVariable.value();

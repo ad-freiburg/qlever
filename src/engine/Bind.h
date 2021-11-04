@@ -41,11 +41,11 @@ class Bind : public Operation {
 
   void computeResult(ResultTable* result) override;
 
-  // Implementation for the binding of arbitrary expressions
+  // Implementation for the binding of arbitrary expressions.
   template <int IN_WIDTH, int OUT_WIDTH>
   void computeExpressionBind(
-      ResultTable* outRes, ResultTable::ResultType* resultType,
-      const ResultTable& inputDyn,
+      ResultTable* outputResultTable, ResultTable::ResultType* resultType,
+      const ResultTable& inputResultTable,
       sparqlExpression::SparqlExpression* expression) const;
 };
 

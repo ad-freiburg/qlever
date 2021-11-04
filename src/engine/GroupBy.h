@@ -38,8 +38,8 @@ class GroupBy : public Operation {
    * @param groupByVariables
    * @param aliases
    */
-  GroupBy(QueryExecutionContext* qec, const vector<string>& groupByVariables,
-          const std::vector<ParsedQuery::Alias>& aliases);
+  GroupBy(QueryExecutionContext* qec, vector<string> groupByVariables,
+          std::vector<ParsedQuery::Alias> aliases);
 
   virtual string asString(size_t indent = 0) const override;
 
@@ -98,7 +98,7 @@ class GroupBy : public Operation {
   template <int OUT_WIDTH>
   void processGroup(
       const Aggregate& expression,
-      const sparqlExpression::EvaluationContext* evaluationContextIn,
+      sparqlExpression::EvaluationContext evaluationContext,
       size_t blockStart, size_t blockEnd, IdTableStatic<OUT_WIDTH>* result,
       size_t resultRow, size_t resultColumn, ResultTable* outTable,
       ResultTable::ResultType* resultType) const;

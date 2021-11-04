@@ -27,8 +27,8 @@ size_t Bind::getCostEstimate() {
 float Bind::getMultiplicity(size_t col) {
   // this is the newly added column
   if (col == getResultWidth() - 1) {
-    // TODO<joka921> get a better multiplicty estimate for BINDs which are
-    // variable renames or Constants
+    // TODO<joka921> get a better multiplicity estimate for BINDs which are
+    // variable renames or constants.
     return 1;
   }
 
@@ -58,7 +58,7 @@ string Bind::asString(size_t indent) const {
   }
 
   os << "BIND ";
-  os << _bind._expressionVariant.getCacheKey(getVariableColumns());
+  os << _bind._expression.getCacheKey(getVariableColumns());
   os << "\n" << _subtree->asString(indent);
   return os.str();
 }
@@ -97,7 +97,7 @@ void Bind::computeResult(ResultTable* result) {
   result->_resultTypes.emplace_back();
   CALL_FIXED_SIZE_2(inwidth, outwidth, computeExpressionBind, result,
                     &(result->_resultTypes.back()), *subRes,
-                    _bind._expressionVariant.getPimpl());
+                    _bind._expression.getPimpl());
 
   result->_sortedBy = resultSortedOn();
 
@@ -107,36 +107,37 @@ void Bind::computeResult(ResultTable* result) {
 // _____________________________________________________________________________
 template <int IN_WIDTH, int OUT_WIDTH>
 void Bind::computeExpressionBind(
-    ResultTable* outResult, ResultTable::ResultType* resultType,
-    const ResultTable& inResult,
+    ResultTable* outputResultTable, ResultTable::ResultType* resultType,
+    const ResultTable& inputResultTable,
     sparqlExpression::SparqlExpression* expression) const {
   sparqlExpression::VariableToColumnAndResultTypeMap columnMap;
   for (const auto& [variable, columnIndex] : getVariableColumns()) {
-    if (columnIndex < inResult.width()) {
+    // Ignore the added (bound) variable.
+    if (columnIndex < inputResultTable.width()) {
       columnMap[variable] =
-          std::pair(columnIndex, inResult.getResultType(columnIndex));
+          std::pair(columnIndex, inputResultTable.getResultType(columnIndex));
     }
   }
 
-  sparqlExpression::EvaluationContext evaluationInput(
-      *getExecutionContext(), columnMap, inResult._data,
-      getExecutionContext()->getAllocator(), *inResult._localVocab);
+  sparqlExpression::EvaluationContext evaluationContext(
+      *getExecutionContext(), columnMap, inputResultTable._data,
+      getExecutionContext()->getAllocator(), *inputResultTable._localVocab);
 
   sparqlExpression::ExpressionResult expressionResult =
-      expression->evaluate(&evaluationInput);
+      expression->evaluate(&evaluationContext);
 
-  const auto input = inResult._data.asStaticView<IN_WIDTH>();
-  auto res = outResult->_data.moveToStatic<OUT_WIDTH>();
+  const auto input = inputResultTable._data.asStaticView<IN_WIDTH>();
+  auto output = outputResultTable->_data.moveToStatic<OUT_WIDTH>();
 
   // first initialize the first columns (they remain identical)
   const auto inSize = input.size();
-  res.reserve(inSize);
+  output.reserve(inSize);
   const auto inCols = input.cols();
   // copy the input to the first cols;
   for (size_t i = 0; i < inSize; ++i) {
-    res.emplace_back();
+    output.emplace_back();
     for (size_t j = 0; j < inCols; ++j) {
-      res(i, j) = input(i, j);
+      output(i, j) = input(i, j);
     }
   }
 
@@ -149,31 +150,29 @@ void Bind::computeExpressionBind(
     if constexpr (isVariable) {
       auto column = getVariableColumns().at(singleResult._variable);
       for (size_t i = 0; i < inSize; ++i) {
-        res(i, inCols) = res(i, column);
+        output(i, inCols) = output(i, column);
       }
-      *resultType = evaluationInput._variableToColumnAndResultTypeMap
+      *resultType = evaluationContext._variableToColumnAndResultTypeMap
                         .at(singleResult._variable)
                         .second;
     } else if constexpr (isStrongId) {
       for (size_t i = 0; i < inSize; ++i) {
-        res(i, inCols) = singleResult._id._value;
+        output(i, inCols) = singleResult._id._value;
       }
       *resultType = singleResult._type;
     } else {
       bool isConstant = sparqlExpression::isConstantResult<T>;
 
-      auto expanded = sparqlExpression::detail::makeGenerator(
-          std::forward<T>(singleResult), inSize, &evaluationInput);
+      auto resultGenerator = sparqlExpression::detail::makeGenerator(
+          std::forward<T>(singleResult), inSize, &evaluationContext);
       *resultType =
           sparqlExpression::detail::expressionResultTypeToQleverResultType<T>();
-      bool isFirst = true;
 
       size_t i = 0;
-      for (auto&& singleResultValue : expanded) {
-        res(i, inCols) = sparqlExpression::detail::constantExpressionResultToId(
-            singleResultValue, *(outResult->_localVocab),
-            isConstant && !isFirst);
-        isFirst = false;
+      for (auto&& resultValue : resultGenerator) {
+        output(i, inCols) = sparqlExpression::detail::constantExpressionResultToId(
+                resultValue, *(outputResultTable->_localVocab),
+            isConstant && i > 0);
         i++;
       }
     }
@@ -181,5 +180,5 @@ void Bind::computeExpressionBind(
 
   std::visit(visitor, std::move(expressionResult));
 
-  outResult->_data = res.moveToDynamic();
+  outputResultTable->_data = output.moveToDynamic();
 }

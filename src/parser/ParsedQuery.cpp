@@ -45,8 +45,8 @@ string ParsedQuery::asString() const {
   // ALIASES
   os << "\nALIASES: {\n\t";
   for (size_t i = 0; i < _selectClause._aliases.size(); ++i) {
-    const Alias& a = _selectClause._aliases[i];
-    os << a._expression.getDescriptor();
+    const Alias& alias = _selectClause._aliases[i];
+    os << alias._expression.getDescriptor();
     if (i + 1 < _selectClause._aliases.size()) {
       os << "\n\t";
     }

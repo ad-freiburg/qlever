@@ -45,7 +45,6 @@ void SparqlParser::parseQuery(ParsedQuery* query) {
 
   if (query->_groupByVariables.size() > 0) {
     // Check if all selected variables are either aggregated or
-    // part of the group by statement.
     for (const string& var : query->_selectClause._selectedVariables) {
       if (var[0] == '?') {
         bool is_alias = false;
@@ -138,7 +137,7 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       query->_selectClause._selectedVariables.push_back(s.str());
     } else if (_lexer.accept("(")) {
       // expect an alias
-      ParsedQuery::Alias a = parseAliasByAntlr();
+      ParsedQuery::Alias a = parseAliasWithAntlr();
       query->_selectClause._aliases.push_back(a);
       query->_selectClause._selectedVariables.emplace_back(a._outVarName);
       _lexer.expect(")");
@@ -167,11 +166,11 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
     _lexer.expect(")");
     s << ")";
   } else if (_lexer.accept("(")) {
-    ParsedQuery::Alias a = parseAliasByAntlr();
-    for (const std::string& s : query->_selectClause._selectedVariables) {
-      if (s == a._outVarName) {
-        throw ParseException("A variable with name " + s +
-                             " is already used, but the order by with alias " +
+    ParsedQuery::Alias a = parseAliasWithAntlr();
+    for (const auto& selectedVariable : query->_selectClause._selectedVariables) {
+      if (selectedVariable == a._outVarName) {
+        throw ParseException("A variable with name " + selectedVariable +
+                             " is already used, but the ORDER BY with alias " +
                              a._expression.getDescriptor() +
                              " tries to use it again.");
       }
@@ -222,13 +221,12 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       _lexer.accept(".");
     } else if (_lexer.accept("bind")) {
       _lexer.expect("(");
-      auto expressionPtr = parseExpressionByAntlr();
-      GraphPatternOperation::Bind b{std::move(expressionPtr)};
+      GraphPatternOperation::Bind bind{parseExpressionWithAntlr()};
       _lexer.expect("as");
       _lexer.expect(SparqlToken::Type::VARIABLE);
-      b._target = _lexer.current().raw;
+      bind._target = _lexer.current().raw;
       _lexer.expect(")");
-      currentPattern->_children.emplace_back(std::move(b));
+      currentPattern->_children.emplace_back(std::move(bind));
       // the dot after the bind is optional
       _lexer.accept(".");
     } else if (_lexer.accept("minus")) {
@@ -437,96 +435,6 @@ std::string_view SparqlParser::readTriplePart(const std::string& s,
 
   return std::string_view(s.data() + start, (*pos) - start);
 }
-
-// TODO<joka921> : is this unused?
-/*
-// _____________________________________________________________________________
-void SparqlParser::addWhereTriple(
-    const string& str, std::shared_ptr<ParsedQuery::GraphPattern> pattern) {
-  size_t i = 0;
-  while (i < str.size() &&
-         (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) {
-    ++i;
-  }
-  if (i == str.size()) {
-    AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
-  }
-  size_t j = i + 1;
-  while (j < str.size() && str[j] != '\t' && str[j] != ' ' && str[j] != '\n') {
-    ++j;
-  }
-  if (j == str.size()) {
-    AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
-  }
-
-  string s = str.substr(i, j - i);
-  i = j;
-  while (i < str.size() &&
-         (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) {
-    ++i;
-  }
-  if (i == str.size()) {
-    AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
-  }
-  j = i + 1;
-  while (j < str.size() && str[j] != '\t' && str[j] != ' ' && str[j] != '\n') {
-    ++j;
-  }
-  string p = str.substr(i, j - i);
-
-  i = j;
-  while (i < str.size() &&
-         (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) {
-    ++i;
-  }
-  if (i == str.size()) {
-    AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
-  }
-  if (str[i] == '<') {
-    // URI
-    j = str.find('>', i + 1);
-    if (j == string::npos) {
-      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-               "Illegal object in : " + str);
-    }
-    ++j;
-  } else {
-    if (str[i] == '\"') {
-      // Literal
-      j = str.find('\"', i + 1);
-      if (j == string::npos) {
-        AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-                 "Illegal literal in : " + str);
-      }
-      ++j;
-    } else {
-      j = i + 1;
-    }
-    while (j < str.size() && str[j] != ' ' && str[j] != '\t' &&
-           str[j] != '\n') {
-      ++j;
-    }
-  }
-  string o = str.substr(i, j - i);
-  if (o[0] == '"') {
-    o = parseLiteral(o, true);
-  }
-  if (p == CONTAINS_WORD_PREDICATE || p == CONTAINS_WORD_PREDICATE_NS) {
-    o = stripAndLowercaseKeywordLiteral(o);
-  }
-  SparqlTriple triple(s, PropertyPathParser(p).parse(), o);
-  // Quadratic in number of triples in query.
-  // Shouldn't be a problem here, though.
-  // Could use a (hash)-set instead of vector.
-  if (std::find(pattern->_whereClauseTriples.begin(),
-                pattern->_whereClauseTriples.end(),
-                triple) != pattern->_whereClauseTriples.end()) {
-    LOG(INFO) << "Ignoring duplicate triple: " << str << std::endl;
-  } else {
-    pattern->_whereClauseTriples.push_back(triple);
-  }
-}
- */
 
 // _____________________________________________________________________________
 void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
@@ -958,17 +866,17 @@ GraphPatternOperation::BasicGraphPattern& SparqlParser::lastBasicPattern(
 }
 
 // ________________________________________________________________________
-sparqlExpression::SparqlExpressionPimpl SparqlParser::parseExpressionByAntlr() {
+sparqlExpression::SparqlExpressionPimpl SparqlParser::parseExpressionWithAntlr() {
   auto str = _lexer.getUnconsumedInput();
-  auto resultAndRemainingText = sparqlParserHelpers::parseExpression(str);
-  _lexer.reset(std::move(resultAndRemainingText._remainingText));
-  return std::move(resultAndRemainingText._parseResult);
+  auto resultOfParseAndRemainingText = sparqlParserHelpers::parseExpression(str);
+  _lexer.reset(std::move(resultOfParseAndRemainingText._remainingText));
+  return std::move(resultOfParseAndRemainingText._resultOfParse);
 }
 
 // ________________________________________________________________________
-ParsedQuery::Alias SparqlParser::parseAliasByAntlr() {
+ParsedQuery::Alias SparqlParser::parseAliasWithAntlr() {
   auto str = _lexer.getUnconsumedInput();
-  auto resultAndRemainingText = sparqlParserHelpers::parseAlias(str);
-  _lexer.reset(std::move(resultAndRemainingText._remainingText));
-  return std::move(resultAndRemainingText._parseResult);
+  auto resultOfParseAndRemainingText = sparqlParserHelpers::parseAlias(str);
+  _lexer.reset(std::move(resultOfParseAndRemainingText._remainingText));
+  return std::move(resultOfParseAndRemainingText._resultOfParse);
 }
