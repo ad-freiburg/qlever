@@ -84,11 +84,6 @@ if (${PERFTOOLS_PROFILER})
     message(STATUS "Adding -lprofiler (make sure your have google-perftools installed.)")
 endif ()
 
-if (${ALLOW_SHUTDOWN})
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DALLOW_SHUTDOWN")
-    message(STATUS "Adding -DALLOW_SHUTDOWN")
-endif ()
-
 
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
 
@@ -223,7 +218,7 @@ add_executable(SparqlEngineMain src/SparqlEngineMain.cpp)
 target_link_libraries (SparqlEngineMain engine ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(ServerMain src/ServerMain.cpp)
-target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries (ServerMain engine server ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(WriteIndexListsMain src/WriteIndexListsMain.cpp)
 target_link_libraries (WriteIndexListsMain engine ${CMAKE_THREAD_LIBS_INIT})

@@ -75,32 +75,35 @@ class Server {
 
   void process(uWS::HttpResponse<false>* resp, uWS::HttpRequest* req);
 
-  void serveFile(uWS::HttpResponse<false>* resp,
-                 const string& requestedFile) const;
+  static void serveFile(uWS::HttpResponse<false>* resp,
+                        const string& requestedFile);
 
-  ParamValueMap parseHttpRequest(const string& request) const;
+  static string createQueryFromHttpParams(uWS::HttpRequest* req);
 
-  string createQueryFromHttpParams(uWS::HttpRequest* req) const;
+  static string createHttpResponse(const string& content,
+                                   const string& contentType);
 
-  string createHttpResponse(const string& content,
-                            const string& contentType) const;
+  static void create404HttpResponse(uWS::HttpResponse<false>* resp);
+  static void create400HttpResponse(uWS::HttpResponse<false>* resp);
 
-  void create404HttpResponse(uWS::HttpResponse<false>* resp) const;
-  void create400HttpResponse(uWS::HttpResponse<false>* resp) const;
+  static string composeResponseJson(const ParsedQuery& query,
+                                    const QueryExecutionTree& qet,
+                                    ad_utility::Timer& requestTimer,
+                                    size_t sendMax = MAX_NOF_ROWS_IN_RESULT);
 
-  string composeResponseJson(const ParsedQuery& query,
-                             const QueryExecutionTree& qet,
-                             ad_utility::Timer& requestTimer,
-                             size_t sendMax = MAX_NOF_ROWS_IN_RESULT) const;
+  static string composeResponseSepValues(const ParsedQuery& query,
+                                         const QueryExecutionTree& qet,
+                                         char sep);
 
-  string composeResponseSepValues(const ParsedQuery& query,
-                                  const QueryExecutionTree& qet,
-                                  char sep) const;
-
-  string composeResponseJson(const string& query, const std::exception& e,
-                             ad_utility::Timer& requestTimer) const;
+  static string composeResponseJson(const string& query,
+                                    const std::exception& e,
+                                    ad_utility::Timer& requestTimer);
 
   string composeStatsJson() const;
 
   json composeCacheStatsJson() const;
+
+  static std::pair<size_t, size_t> parseLimitAndOffset(
+      const ParsedQuery& query,
+      size_t defaultLimit = std::numeric_limits<size_t>::max());
 };

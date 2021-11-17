@@ -16,7 +16,6 @@
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
 #include "./Server.h"
-#include "App.h"
 #include "QueryPlanner.h"
 
 // _____________________________________________________________________________
@@ -80,7 +79,7 @@ void Server::process(uWS::HttpResponse<false>* resp, uWS::HttpRequest* req) {
   LOG(INFO) << "GET request for " << file << std::endl;
   // Use hardcoded white-listing for index.html and style.css
   // can be changed if more should ever be needed, for now keep it simple.
-  if (req->getQuery().size() == 0) {
+  if (req->getQuery().empty()) {
     LOG(DEBUG) << "file: " << file << '\n';
     if (file == "/index.html" || file == "/style.css" || file == "/script.js") {
       serveFile(resp, "." + file);
@@ -142,14 +141,7 @@ void Server::process(uWS::HttpResponse<false>* resp, uWS::HttpRequest* req) {
     if (!send.empty()) {
       maxSend = static_cast<size_t>(stoul(std::string(send)));
     }
-#ifdef ALLOW_SHUTDOWN
-    if (ad_utility::getLowercase(req->getQuery("cmd")) == "shutdown") {
-      LOG(INFO) << "Shutdown triggered by HTTP request "
-                << "(deactivate by compiling without -DALLOW_SHUTDOWN)"
-                << std::endl;
-      exit(0);
-    }
-#endif
+
     const bool pinSubtrees =
         ad_utility::getLowercase(req->getQuery("pinsubtrees")) == "true";
     const bool pinResult =
@@ -209,9 +201,6 @@ void Server::process(uWS::HttpResponse<false>* resp, uWS::HttpRequest* req) {
     // Print the runtime info. This needs to be done after the query
     // was computed.
     LOG(INFO) << '\n' << qet.getRootOperation()->getRuntimeInfo().toString();
-  } catch (const ad_semsearch::Exception& e) {
-    resp->writeStatus("500 Internal Server Error");
-    resp->end(composeResponseJson(query, e, requestTimer));
   } catch (const std::exception& e) {
     resp->writeStatus("500 Internal Server Error");
     resp->end(composeResponseJson(query, e, requestTimer));
@@ -219,70 +208,7 @@ void Server::process(uWS::HttpResponse<false>* resp, uWS::HttpRequest* req) {
 }
 
 // _____________________________________________________________________________
-Server::ParamValueMap Server::parseHttpRequest(
-    const string& httpRequest) const {
-  LOG(DEBUG) << "Parsing HTTP Request." << endl;
-  ParamValueMap params;
-  // Parse the HTTP Request.
-
-  size_t indexOfGET = httpRequest.find("GET");
-  size_t indexOfHTTP = httpRequest.find("HTTP");
-
-  if (indexOfGET == httpRequest.npos || indexOfHTTP == httpRequest.npos) {
-    AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-             "Invalid request. Only supporting proper HTTP GET requests!\n" +
-                 httpRequest);
-  }
-
-  string request =
-      httpRequest.substr(indexOfGET + 3, indexOfHTTP - (indexOfGET + 3));
-
-  size_t index = request.find("?");
-  if (index == request.npos) {
-    AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-             "Invalid request. At least one parameters is "
-             "required for meaningful queries!\n" +
-                 httpRequest);
-  }
-  size_t next = request.find('&', index + 1);
-  while (next != request.npos) {
-    size_t posOfEq = request.find('=', index + 1);
-    if (posOfEq == request.npos) {
-      AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-               "Parameter without \"=\" in HTTP Request.\n" + httpRequest);
-    }
-    string param = ad_utility::getLowercaseUtf8(
-        request.substr(index + 1, posOfEq - (index + 1)));
-    string value = ad_utility::decodeUrl(
-        request.substr(posOfEq + 1, next - (posOfEq + 1)));
-    if (params.count(param) > 0) {
-      AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-               "Duplicate HTTP parameter: " + param);
-    }
-    params[param] = value;
-    index = next;
-    next = request.find('&', index + 1);
-  }
-  size_t posOfEq = request.find('=', index + 1);
-  if (posOfEq == request.npos) {
-    AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-             "Parameter without \"=\" in HTTP Request." + httpRequest);
-  }
-  string param = ad_utility::getLowercaseUtf8(
-      request.substr(index + 1, posOfEq - (index + 1)));
-  string value = ad_utility::decodeUrl(
-      request.substr(posOfEq + 1, request.size() - 1 - (posOfEq + 1)));
-  if (params.count(param) > 0) {
-    AD_THROW(ad_semsearch::Exception::BAD_REQUEST, "Duplicate HTTP parameter.");
-  }
-  params[param] = value;
-
-  LOG(DEBUG) << "Done parsing HTTP Request." << endl;
-  return params;
-}
-
-// _____________________________________________________________________________
-string Server::createQueryFromHttpParams(uWS::HttpRequest* req) const {
+string Server::createQueryFromHttpParams(uWS::HttpRequest* req) {
   // Construct a Query object from the parsed request.
   std::string_view query = req->getQuery("query");
   if (query.empty()) {
@@ -294,7 +220,7 @@ string Server::createQueryFromHttpParams(uWS::HttpRequest* req) const {
 
 // _____________________________________________________________________________
 string Server::createHttpResponse(const string& content,
-                                  const string& contentType) const {
+                                  const string& contentType) {
   std::ostringstream os;
   os << "HTTP/1.1 200 OK\r\n"
      << "Content-Length: " << content.size() << "\r\n"
@@ -310,13 +236,13 @@ string Server::createHttpResponse(const string& content,
 }
 
 // _____________________________________________________________________________
-void Server::create404HttpResponse(uWS::HttpResponse<false>* resp) const {
+void Server::create404HttpResponse(uWS::HttpResponse<false>* resp) {
   resp->writeStatus("404 Not Found");
   resp->end("404 Not Found");
 }
 
 // _____________________________________________________________________________
-void Server::create400HttpResponse(uWS::HttpResponse<false>* resp) const {
+void Server::create400HttpResponse(uWS::HttpResponse<false>* resp) {
   resp->writeStatus("400 Bad Request");
   resp->end("400 Bad Request");
 }
@@ -325,7 +251,7 @@ void Server::create400HttpResponse(uWS::HttpResponse<false>* resp) const {
 string Server::composeResponseJson(const ParsedQuery& query,
                                    const QueryExecutionTree& qet,
                                    ad_utility::Timer& requestTimer,
-                                   size_t maxSend) const {
+                                   size_t maxSend) {
   shared_ptr<const ResultTable> rt = qet.getResult();
   requestTimer.stop();
   off_t compResultUsecs = requestTimer.usecs();
@@ -343,14 +269,7 @@ string Server::composeResponseJson(const ParsedQuery& query,
       qet.getRootOperation()->getRuntimeInfo());
 
   {
-    size_t limit = MAX_NOF_ROWS_IN_RESULT;
-    size_t offset = 0;
-    if (query._limit.size() > 0) {
-      limit = static_cast<size_t>(atol(query._limit.c_str()));
-    }
-    if (query._offset.size() > 0) {
-      offset = static_cast<size_t>(atol(query._offset.c_str()));
-    }
+    auto [limit, offset] = parseLimitAndOffset(query, MAX_NOF_ROWS_IN_RESULT);
     requestTimer.cont();
     j["res"] = qet.writeResultAsJson(query._selectClause._selectedVariables,
                                      std::min(limit, maxSend), offset);
@@ -358,25 +277,35 @@ string Server::composeResponseJson(const ParsedQuery& query,
   }
 
   requestTimer.stop();
-  j["time"]["total"] = std::to_string(requestTimer.usecs() / 1000.0) + "ms";
-  j["time"]["computeResult"] = std::to_string(compResultUsecs / 1000.0) + "ms";
+  j["time"]["total"] =
+      std::to_string(static_cast<double>(requestTimer.usecs()) / 1000.0) + "ms";
+  j["time"]["computeResult"] =
+      std::to_string(static_cast<double>(compResultUsecs) / 1000.0) + "ms";
 
   return j.dump(4);
+}
+
+// _________________________________________________________________________________
+std::pair<size_t, size_t> Server::parseLimitAndOffset(const ParsedQuery& query,
+                                                      size_t defaultLimit) {
+  size_t limit = defaultLimit;
+  if (!query._limit.empty() > 0) {
+    limit = stoul(query._limit);
+  }
+
+  size_t offset = 0;
+  if (!query._offset.empty()) {
+    offset = stoul(query._offset);
+  }
+  return std::pair{limit, offset};
 }
 
 // _____________________________________________________________________________
 string Server::composeResponseSepValues(const ParsedQuery& query,
                                         const QueryExecutionTree& qet,
-                                        char sep) const {
+                                        char sep) {
   std::ostringstream os;
-  size_t limit = std::numeric_limits<size_t>::max();
-  size_t offset = 0;
-  if (query._limit.size() > 0) {
-    limit = static_cast<size_t>(atol(query._limit.c_str()));
-  }
-  if (query._offset.size() > 0) {
-    offset = static_cast<size_t>(atol(query._offset.c_str()));
-  }
+  auto [limit, offset] = parseLimitAndOffset(query);
   qet.writeResultToStream(os, query._selectClause._selectedVariables, limit,
                           offset, sep);
 
@@ -386,7 +315,7 @@ string Server::composeResponseSepValues(const ParsedQuery& query,
 // _____________________________________________________________________________
 string Server::composeResponseJson(const string& query,
                                    const std::exception& exception,
-                                   ad_utility::Timer& requestTimer) const {
+                                   ad_utility::Timer& requestTimer) {
   std::ostringstream os;
   requestTimer.stop();
 
@@ -402,7 +331,7 @@ string Server::composeResponseJson(const string& query,
 
 // _____________________________________________________________________________
 void Server::serveFile(uWS::HttpResponse<false>* resp,
-                       const string& requestedFile) const {
+                       const string& requestedFile) {
   string contentString;
   string contentType = "text/plain";
   string statusString = "200 OK";
@@ -436,27 +365,23 @@ void Server::serveFile(uWS::HttpResponse<false>* resp,
 
 // _____________________________________________________________________________
 string Server::composeStatsJson() const {
-  std::ostringstream os;
-  os << "{\n"
-     << "\"kbindex\": \"" << _index.getKbName() << "\",\n"
-     << "\"permutations\": \"" << (_index.hasAllPermutations() ? "6" : "2")
-     << "\",\n";
+  nlohmann::json result;
+  result["kbindex"] = _index.getKbName();
+  result["permutations"] = (_index.hasAllPermutations() ? "6" : "2");
   if (_index.hasAllPermutations()) {
-    os << "\"nofsubjects\": \"" << _index.getNofSubjects() << "\",\n";
-    os << "\"nofpredicates\": \"" << _index.getNofPredicates() << "\",\n";
-    os << "\"nofobjects\": \"" << _index.getNofObjects() << "\",\n";
+    result["nofsubjects"] = _index.getNofSubjects();
+    result["nofpredicates"] = _index.getNofPredicates();
+    result["nofobjects"] = _index.getNofObjects();
   }
-
   auto [actualTriples, addedTriples] = _index.getNumTriplesActuallyAndAdded();
-  os << "\"noftriples\": \"" << _index.getNofTriples() << "\",\n"
-     << "\"nofActualTriples\": \"" << actualTriples << "\",\n"
-     << "\"nofAddedTriples\": \"" << addedTriples << "\",\n"
-     << "\"textindex\": \"" << _index.getTextName() << "\",\n"
-     << "\"nofrecords\": \"" << _index.getNofTextRecords() << "\",\n"
-     << "\"nofwordpostings\": \"" << _index.getNofWordPostings() << "\",\n"
-     << "\"nofentitypostings\": \"" << _index.getNofEntityPostings() << "\"\n"
-     << "}\n";
-  return os.str();
+  result["noftriples"] = _index.getNofTriples();
+  result["nofActualTriples"] = actualTriples;
+  result["nofAddedTriples"] = addedTriples;
+  result["textindex"] = _index.getTextName();
+  result["nofrecords"] = _index.getNofTextRecords();
+  result["nofwordpostings"] = _index.getNofWordPostings();
+  result["nofentitypostings"] = _index.getNofEntityPostings();
+  return result.dump(4);
 }
 
 // _______________________________________

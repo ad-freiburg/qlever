@@ -1,5 +1,6 @@
 add_subdirectory(sparqlExpressions)
 add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp SortPerformanceEstimator.h)
+
 add_library(engine
         Engine.h
         IndexSequence.h
@@ -19,7 +20,6 @@ add_library(engine
         Distinct.h Distinct.cpp
         OrderBy.h OrderBy.cpp
         Filter.h Filter.cpp
-        Server.h Server.cpp
         QueryPlanner.cpp QueryPlanner.h
         QueryPlanningCostFactors.cpp QueryPlanningCostFactors.h
         TwoColumnJoin.cpp TwoColumnJoin.h
@@ -37,4 +37,8 @@ add_library(engine
         Minus.h Minus.cpp
         ResultType.h)
 
-target_link_libraries(engine index parser sparqlExpressions SortPerformanceEstimator absl::flat_hash_set uWebSockets ${ICU_LIBRARIES})
+target_link_libraries(engine index parser sparqlExpressions SortPerformanceEstimator absl::flat_hash_set ${ICU_LIBRARIES})
+
+add_library(server Server.h Server.cpp)
+target_compile_options(server PUBLIC -Wno-unused-parameter -Wno-sign-compare)
+target_link_libraries(server engine uWebSockets)
