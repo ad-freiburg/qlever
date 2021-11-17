@@ -2,7 +2,7 @@ find_package(OpenSSL REQUIRED)
 
 add_custom_command(
   OUTPUT "${CMAKE_CURRENT_LIST_DIR}/src/uSockets/uSockets.a"
-  COMMAND ${CMAKE_COMMAND} -E env WITH_OPENSSL=1 make
+  COMMAND ${CMAKE_COMMAND} -E env WITH_OPENSSL=1 CXX=${CMAKE_CXX_COMPILER} CC=${CMAKE_C_COMPILER} make
   WORKING_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/src")
 
 add_custom_target(uSocketsBuild ALL

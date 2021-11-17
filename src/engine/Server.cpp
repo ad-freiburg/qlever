@@ -132,10 +132,9 @@ void Server::process(uWS::HttpResponse<false>* resp, uWS::HttpRequest* req) {
     ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
         std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
             ad_utility::TimeoutTimer::unlimited());
-    if (params.contains("timeout")) {
+    if (std::string_view t = req->getQuery("timeout"); !t.empty()) {
       timeoutTimer = std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
-          ad_utility::TimeoutTimer::fromSeconds(
-              atof(params["timeout"].c_str())));
+          ad_utility::TimeoutTimer::fromSeconds(stof(std::string(t))));
     }
 
     std::string_view send = req->getQuery("send");
@@ -162,19 +161,19 @@ void Server::process(uWS::HttpResponse<false>* resp, uWS::HttpRequest* req) {
     ParsedQuery pq = SparqlParser(query).parse();
     pq.expandPrefixes();
 
-      QueryExecutionContext qec(_index, _engine, &_cache, &_pinnedSizes,
-                                _allocator, _sortPerformanceEstimator,
-                                pinSubtrees, pinResult);
-      // start the shared timeout timer here to also include
-      // the query planning
-      timeoutTimer->wlock()->start();
+    QueryExecutionContext qec(_index, _engine, &_cache, &_pinnedSizes,
+                              _allocator, _sortPerformanceEstimator,
+                              pinSubtrees, pinResult);
+    // start the shared timeout timer here to also include
+    // the query planning
+    timeoutTimer->wlock()->start();
 
-      QueryPlanner qp(&qec);
-      qp.setEnablePatternTrick(_enablePatternTrick);
-      QueryExecutionTree qet = qp.createExecutionTree(pq);
-      qet.isRoot() = true;  // allow pinning of the final result
-      qet.recursivelySetTimeoutTimer(timeoutTimer);
-      LOG(TRACE) << qet.asString() << std::endl;
+    QueryPlanner qp(&qec);
+    qp.setEnablePatternTrick(_enablePatternTrick);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    qet.isRoot() = true;  // allow pinning of the final result
+    qet.recursivelySetTimeoutTimer(timeoutTimer);
+    LOG(TRACE) << qet.asString() << std::endl;
 
     std::string response;
     std::string contentType;
@@ -212,10 +211,10 @@ void Server::process(uWS::HttpResponse<false>* resp, uWS::HttpRequest* req) {
     LOG(INFO) << '\n' << qet.getRootOperation()->getRuntimeInfo().toString();
   } catch (const ad_semsearch::Exception& e) {
     resp->writeStatus("500 Internal Server Error");
-    resp->end(composeResponseJson(query, e));
+    resp->end(composeResponseJson(query, e, requestTimer));
   } catch (const std::exception& e) {
     resp->writeStatus("500 Internal Server Error");
-    resp->end(composeResponseJson(query, &e, requestTimer));
+    resp->end(composeResponseJson(query, e, requestTimer));
   }
 }
 
