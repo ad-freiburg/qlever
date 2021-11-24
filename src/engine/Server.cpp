@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
-#include "./Server.h"
-
 #include <algorithm>
 #include <cstring>
 #include <nlohmann/json.hpp>
@@ -17,13 +15,7 @@
 #include "../util/StringUtils.h"
 #include "./Server.h"
 #include "QueryPlanner.h"
-
-// _____________________________________________________________________________
-Server::~Server() {
-  if (_initialized) {
-    _serverSocket.close();
-  }
-}
+#include <re2/re2.h>
 
 // _____________________________________________________________________________
 void Server::initialize(const string& ontologyBaseName, bool useText,
@@ -63,6 +55,7 @@ void Server::run() {
     LOG(ERROR) << "Cannot start an uninitialized server!" << std::endl;
     exit(1);
   }
+  net::io_context ioContext{_numThreads};
   std::vector<std::thread> threads;
   for (int i = 0; i < _numThreads; ++i) {
     threads.emplace_back(&Server::runAcceptLoop, this);
@@ -262,34 +255,30 @@ void Server::process(Socket* client) {
   }
 }
 
+std::pair<std::string, std::string> parseSingleKeyValuePair(std::string_view input) {
+  size_t posOfEq = input.find('=');
+  if (posOfEq == std::string_view::npos) {
+    AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
+             "Parameter without \"=\" in HTTP Request." + httpRequest);
+  }
+  string param = ad_utility::getLowercaseUtf8(
+      input.substr(0, posOfEq));
+  string value = ad_utility::decodeUrl(
+      request.substr(posOfEq + 1, next - (posOfEq + 1)));
+}
+
 // _____________________________________________________________________________
-Server::ParamValueMap Server::parseHttpRequest(
-    const string& httpRequest) const {
+Server::FilenameAndParamValueMap Server::parseHttpRequest(
+    std::string_view request) const {
+  static constexpr auto npos = decltype(request)::npos;
   LOG(DEBUG) << "Parsing HTTP Request." << endl;
-  ParamValueMap params;
-  // Parse the HTTP Request.
+  FilenameAndParamValueMap result;
 
-  size_t indexOfGET = httpRequest.find("GET");
-  size_t indexOfHTTP = httpRequest.find("HTTP");
-
-  if (indexOfGET == httpRequest.npos || indexOfHTTP == httpRequest.npos) {
-    AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-             "Invalid request. Only supporting proper HTTP GET requests!\n" +
-                 httpRequest);
-  }
-
-  string request =
-      httpRequest.substr(indexOfGET + 3, indexOfHTTP - (indexOfGET + 3));
-
-  size_t index = request.find("?");
-  if (index == request.npos) {
-    AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-             "Invalid request. At least one parameters is "
-             "required for meaningful queries!\n" +
-                 httpRequest);
-  }
-  size_t next = request.find('&', index + 1);
-  while (next != request.npos) {
+  size_t index = std::min(request.find('?'), request.size());
+  result._filename = request.substr(0, index);
+  request.remove_prefix(index);
+  size_t next = request.find('&' );
+  while (next != npos) {
     size_t posOfEq = request.find('=', index + 1);
     if (posOfEq == request.npos) {
       AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
@@ -528,4 +517,120 @@ nlohmann::json Server::composeCacheStatsJson() const {
   result["pinned-size"] = _cache.pinnedSize();
   result["num-pinned-index-scan-sizes"] = _pinnedSizes.rlock()->size();
   return result;
+}
+
+template<typename Body, typename Allocator, typename Send>
+void Server::processQuery(http::request<Body, http::basic_fields<Allocator>> && request,
+                  Send && send) {
+      try {
+        request.
+        ParamValueMap params = parseHttpRequest(request);
+
+        if (ad_utility::getLowercase(params["cmd"]) == "stats") {
+          LOG(INFO) << "Supplying index stats..." << std::endl;
+          auto statsJson = composeStatsJson();
+          contentType = "application/json";
+          string httpResponse = createHttpResponse(statsJson, contentType);
+          auto bytesSent = client->send(httpResponse);
+          LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
+          LOG(INFO) << "Sent stats to client." << std::endl;
+          return;
+        }
+
+        if (ad_utility::getLowercase(params["cmd"]) == "cachestats") {
+          LOG(INFO) << "Supplying cache stats..." << std::endl;
+          auto statsJson = composeCacheStatsJson();
+          contentType = "application/json";
+          string httpResponse = createHttpResponse(statsJson.dump(), contentType);
+          auto bytesSent = client->send(httpResponse);
+          LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
+          LOG(INFO) << "Sent cache stats to client." << std::endl;
+          return;
+        }
+
+        if (ad_utility::getLowercase(params["cmd"]) == "clearcache") {
+          _cache.clearUnpinnedOnly();
+        }
+
+        if (ad_utility::getLowercase(params["cmd"]) == "clearcachecomplete") {
+          auto lock = _pinnedSizes.wlock();
+          _cache.clearAll();
+          lock->clear();
+        }
+
+        ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
+            std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
+                ad_utility::TimeoutTimer::unlimited());
+        if (params.contains("timeout")) {
+          timeoutTimer = std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
+              ad_utility::TimeoutTimer::fromSeconds(
+                  atof(params["timeout"].c_str())));
+        }
+
+        auto it = params.find("send");
+        size_t maxSend = MAX_NOF_ROWS_IN_RESULT;
+        if (it != params.end()) {
+          maxSend = static_cast<size_t>(atol(it->second.c_str()));
+        }
+#ifdef ALLOW_SHUTDOWN
+        if (ad_utility::getLowercase(params["cmd"]) == "shutdown") {
+          LOG(INFO) << "Shutdown triggered by HTTP request "
+                    << "(deactivate by compiling without -DALLOW_SHUTDOWN)"
+                    << std::endl;
+          exit(0);
+        }
+#endif
+        const bool pinSubtrees =
+            ad_utility::getLowercase(params["pinsubtrees"]) == "true";
+        const bool pinResult =
+            ad_utility::getLowercase(params["pinresult"]) == "true";
+        query = createQueryFromHttpParams(params);
+        LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned)" : "")
+                  << ((pinResult) ? " (Result pinned)" : "") << ": " << query
+                  << '\n';
+        ParsedQuery pq = SparqlParser(query).parse();
+        pq.expandPrefixes();
+
+        QueryExecutionContext qec(_index, _engine, &_cache, &_pinnedSizes,
+                                  _allocator, _sortPerformanceEstimator,
+                                  pinSubtrees, pinResult);
+        // start the shared timeout timer here to also include
+        // the query planning
+        timeoutTimer->wlock()->start();
+
+        QueryPlanner qp(&qec);
+        qp.setEnablePatternTrick(_enablePatternTrick);
+        QueryExecutionTree qet = qp.createExecutionTree(pq);
+        qet.isRoot() = true;  // allow pinning of the final result
+        qet.recursivelySetTimeoutTimer(timeoutTimer);
+        LOG(TRACE) << qet.asString() << std::endl;
+
+        if (ad_utility::getLowercase(params["action"]) == "csv_export") {
+          // CSV export
+          response = composeResponseSepValues(pq, qet, ',');
+          contentType =
+              "text/csv\r\n"
+              "Content-Disposition: attachment;filename=export.csv";
+        } else if (ad_utility::getLowercase(params["action"]) == "tsv_export") {
+          // TSV export
+          response = composeResponseSepValues(pq, qet, '\t');
+          contentType =
+              "text/tab-separated-values\r\n"
+              "Content-Disposition: attachment;filename=export.tsv";
+        } else {
+          // Normal case: JSON response
+          response = composeResponseJson(pq, qet, maxSend);
+          contentType = "application/json";
+        }
+        // Print the runtime info. This needs to be done after the query
+        // was computed.
+        LOG(INFO) << '\n' << qet.getRootOperation()->getRuntimeInfo().toString();
+      } catch (const ad_semsearch::Exception& e) {
+        response = composeResponseJson(query, e);
+      } catch (const std::exception& e) {
+        response = composeResponseJson(query, &e);
+      }
+      string httpResponse = createHttpResponse(response, contentType);
+      auto bytesSent = client->send(httpResponse);
+      LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
 }

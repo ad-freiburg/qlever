@@ -14,6 +14,7 @@
 #include "../util/AllocatorWithLimit.h"
 #include "../util/Socket.h"
 #include "../util/Timer.h"
+#include "../util/WebServer.h"
 #include "./QueryExecutionContext.h"
 #include "./QueryExecutionTree.h"
 #include "./SortPerformanceEstimator.h"
@@ -30,7 +31,6 @@ class Server {
                   size_t cacheMaxSizeGB, size_t cacheMaxSizeGBSingleEntry,
                   size_t cacheMaxNumEntries)
       : _numThreads(numThreads),
-        _serverSocket(),
         _port(port),
         _cache(cacheMaxNumEntries, cacheMaxSizeGB * (1ull << 30u) / sizeof(Id),
                cacheMaxSizeGBSingleEntry * (1ull << 30u) / sizeof(Id)),
@@ -46,9 +46,14 @@ class Server {
         _engine(),
         _initialized(false) {}
 
-  virtual ~Server();
+  virtual ~Server() = default;
 
   typedef ad_utility::HashMap<string, string> ParamValueMap;
+
+  struct FilenameAndParamValueMap{
+    std::string _filename;
+    ParamValueMap _paramValueMap;
+  };
 
   // Initialize the server.
   void initialize(const string& ontologyBaseName, bool useText,
@@ -60,7 +65,6 @@ class Server {
 
  private:
   const int _numThreads;
-  Socket _serverSocket;
   int _port;
   ConcurrentLruCache _cache;
   PinnedSizes _pinnedSizes;
@@ -76,9 +80,10 @@ class Server {
 
   void process(Socket* client);
 
+
   void serveFile(Socket* client, const string& requestedFile) const;
 
-  ParamValueMap parseHttpRequest(const string& request) const;
+  FilenameAndParamValueMap parseHttpRequest(const string& request) const;
 
   string createQueryFromHttpParams(const ParamValueMap& params) const;
 
@@ -103,4 +108,8 @@ class Server {
   string composeStatsJson() const;
 
   json composeCacheStatsJson() const;
+
+  template<typename Body, typename Allocator, typename Send>
+  void processQuery(http::request<Body, http::basic_fields<Allocator>> && req,
+                    Send && send);
 };
