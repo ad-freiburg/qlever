@@ -12,9 +12,9 @@
 #include "../parser/ParseException.h"
 #include "../parser/SparqlParser.h"
 #include "../util/AllocatorWithLimit.h"
+#include "../util/HttpServer/WebServer.h"
 #include "../util/Socket.h"
 #include "../util/Timer.h"
-#include "../util/WebServer.h"
 #include "./QueryExecutionContext.h"
 #include "./QueryExecutionTree.h"
 #include "./SortPerformanceEstimator.h"
@@ -50,7 +50,7 @@ class Server {
 
   typedef ad_utility::HashMap<string, string> ParamValueMap;
 
-  struct FilenameAndParamValueMap{
+  struct FilenameAndParamValueMap {
     std::string _filename;
     ParamValueMap _paramValueMap;
   };
@@ -78,14 +78,15 @@ class Server {
 
   void runAcceptLoop();
 
-  template<typename Body, typename Allocator, typename Send>
-  boost::asio::awaitable<void> process(http::request<Body, http::basic_fields<Allocator>> && req,
-                    Send && send);
+  template <typename Body, typename Allocator, typename Send>
+  boost::asio::awaitable<void> process(
+      http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send);
 
-  template<typename Body, typename Allocator, typename Send>
-  boost::asio::awaitable<void> processQuery(const ParamValueMap& params, ad_utility::Timer& requestTimer, http::request<Body, http::basic_fields<Allocator>> && request,
-                                                    Send && send);
-
+  template <typename Body, typename Allocator, typename Send>
+  boost::asio::awaitable<void> processQuery(
+      const ParamValueMap& params, ad_utility::Timer& requestTimer,
+      http::request<Body, http::basic_fields<Allocator>>&& request,
+      Send&& send);
 
   void serveFile(Socket* client, const string& requestedFile) const;
 
@@ -114,5 +115,4 @@ class Server {
   string composeStatsJson() const;
 
   json composeCacheStatsJson() const;
-
 };

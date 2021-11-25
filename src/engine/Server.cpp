@@ -2,6 +2,10 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
+#include "./Server.h"
+
+#include <re2/re2.h>
+
 #include <algorithm>
 #include <cstring>
 #include <nlohmann/json.hpp>
@@ -13,9 +17,7 @@
 #include "../parser/ParseException.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
-#include "./Server.h"
 #include "QueryPlanner.h"
-#include <re2/re2.h>
 
 // _____________________________________________________________________________
 void Server::initialize(const string& ontologyBaseName, bool useText,
@@ -47,65 +49,70 @@ void Server::run() {
     exit(1);
   }
 
-  auto httpSessionHandler = [this](auto request, auto&& send) -> boost::asio::awaitable<void> {
+  auto httpSessionHandler =
+      [this](auto request, auto&& send) -> boost::asio::awaitable<void> {
     co_await process(std::move(request), send);
   };
-  auto httpServer = HttpServer{_port, std::move(httpSessionHandler)};
+  auto httpServer = HttpServer{static_cast<unsigned short>(_port),
+                               std::move(httpSessionHandler)};
   httpServer.run(_numThreads);
 }
 
 // _____________________________________________________________________________
-template<typename Body, typename Allocator, typename Send>
-boost::asio::awaitable<void> Server::process(http::request<Body, http::basic_fields<Allocator>> && request,
-             Send && send) {
+template <typename Body, typename Allocator, typename Send>
+boost::asio::awaitable<void> Server::process(
+    http::request<Body, http::basic_fields<Allocator>>&& request, Send&& send) {
+  using namespace ad_utility::httpUtils;
   ad_utility::Timer requestTimer;
   requestTimer.start();
 
-      auto filenameAndParams = parseHttpRequest(std::string_view{request.target().data(), request.target().size()});
-      const auto& params = filenameAndParams._paramValueMap;
-      if (params.contains("cmd")) {
-        const auto& cmd = params.at("cmd");
-        if (cmd == "stats") {
-          LOG(INFO) << "Supplying index stats..." << std::endl;
-          auto response = HttpUtils::createJsonResponse(composeStatsJson(), request);
-          co_return co_await send(std::move(response));
-        } else if (cmd == "cachestats") {
-          LOG(INFO) << "Supplying cache stats..." << std::endl;
-          auto response = HttpUtils::createJsonResponse(composeCacheStatsJson().dump(), request);
-          co_return co_await send(std::move(response));
-        }
-        else if (cmd == "clearcache") {
-          _cache.clearUnpinnedOnly();
-        } else if (cmd == "clearcachecomplete") {
-          auto lock = _pinnedSizes.wlock();
-          _cache.clearAll();
-          lock->clear();
-        }
-         // handle commands
-         co_return;
-      }
+  auto filenameAndParams = parseHttpRequest(
+      std::string_view{request.target().data(), request.target().size()});
+  const auto& params = filenameAndParams._paramValueMap;
+  if (params.contains("cmd")) {
+    const auto& cmd = params.at("cmd");
+    if (cmd == "stats") {
+      LOG(INFO) << "Supplying index stats..." << std::endl;
+      auto response = createJsonResponse(composeStatsJson(), request);
+      co_return co_await send(std::move(response));
+    } else if (cmd == "cachestats") {
+      LOG(INFO) << "Supplying cache stats..." << std::endl;
+      auto response =
+          createJsonResponse(composeCacheStatsJson().dump(), request);
+      co_return co_await send(std::move(response));
+    } else if (cmd == "clearcache") {
+      _cache.clearUnpinnedOnly();
+    } else if (cmd == "clearcachecomplete") {
+      auto lock = _pinnedSizes.wlock();
+      _cache.clearAll();
+      lock->clear();
+    }
+    // handle commands
+    co_return;
+  }
 
-      if (params.contains("query")) {
-        if (params.at("query").empty()) {
-          throw std::runtime_error(
-              "Parameter \"query\" must not have an empty value");
-        }
-        co_return co_await processQuery(params, requestTimer, std::move(request), send);
-      }
+  if (params.contains("query")) {
+    if (params.at("query").empty()) {
+      throw std::runtime_error(
+          "Parameter \"query\" must not have an empty value");
+    }
+    co_return co_await processQuery(params, requestTimer, std::move(request),
+                                    send);
+  }
 
-      // neither a query or a command were specified, simply serve a file.
-      co_await HttpUtils::makeFileServer(".")(std::move(request), send);
+  // neither a query or a command were specified, simply serve a file.
+  co_await makeFileServer(".")(std::move(request), send);
 }
 
-std::pair<std::string, std::string> parseSingleKeyValuePair(std::string_view input) {
+std::pair<std::string, std::string> parseSingleKeyValuePair(
+    std::string_view input) {
   size_t posOfEq = input.find('=');
   if (posOfEq == std::string_view::npos) {
     AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
              "Parameter without \"=\" in HTTP Request. " + input);
   }
   std::string param{input.substr(0, posOfEq)};
-  string value {ad_utility::decodeUrl(
-      input.substr(posOfEq + 1))};
+  string value{ad_utility::decodeUrl(input.substr(posOfEq + 1))};
   return {std::move(param), std::move(value)};
 }
 
@@ -122,10 +129,11 @@ Server::FilenameAndParamValueMap Server::parseHttpRequest(
     return result;
   }
   request.remove_prefix(index + 1);
-  while(true) {
+  while (true) {
     auto next = request.find('&');
     auto paramAndValue = parseSingleKeyValuePair(request.substr(0, next));
-    auto [iterator, isNewElement] = result._paramValueMap.insert(std::move(paramAndValue));
+    auto [iterator, isNewElement] =
+        result._paramValueMap.insert(std::move(paramAndValue));
     if (!isNewElement) {
       AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
                "Duplicate HTTP parameter: " + iterator->first);
@@ -137,7 +145,6 @@ Server::FilenameAndParamValueMap Server::parseHttpRequest(
   }
   return result;
 }
-
 
 // _____________________________________________________________________________
 string Server::composeResponseJson(const ParsedQuery& query,
@@ -254,16 +261,19 @@ nlohmann::json Server::composeCacheStatsJson() const {
   return result;
 }
 
-template<typename Body, typename Allocator, typename Send>
-boost::asio::awaitable<void> Server::processQuery(const ParamValueMap& params, ad_utility::Timer& requestTimer, http::request<Body, http::basic_fields<Allocator>> && request,
-                  Send && send) {
-
+template <typename Body, typename Allocator, typename Send>
+boost::asio::awaitable<void> Server::processQuery(
+    const ParamValueMap& params, ad_utility::Timer& requestTimer,
+    http::request<Body, http::basic_fields<Allocator>>&& request, Send&& send) {
+  using namespace ad_utility::httpUtils;
   AD_CHECK(params.contains("query"));
   const auto& query = params.at("query");
   AD_CHECK(!query.empty());
 
-  auto sendJson = [&request, &send](std::string&& jsonString) -> boost::asio::awaitable<void> {
-    auto response = HttpUtils::createJsonResponse(std::move(jsonString), request);
+  auto sendJson =
+      [&request,
+       &send](std::string&& jsonString) -> boost::asio::awaitable<void> {
+    auto response = createJsonResponse(std::move(jsonString), request);
     co_return co_await send(std::move(response));
   };
 
@@ -271,67 +281,70 @@ boost::asio::awaitable<void> Server::processQuery(const ParamValueMap& params, a
 
   try {
     ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
-            std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
-                ad_utility::TimeoutTimer::unlimited());
-        if (params.contains("timeout")) {
-          timeoutTimer = std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
-              ad_utility::TimeoutTimer::fromSeconds(
-                  std::stof(params.at("timeout"))));
-        }
+        std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
+            ad_utility::TimeoutTimer::unlimited());
+    if (params.contains("timeout")) {
+      timeoutTimer = std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
+          ad_utility::TimeoutTimer::fromSeconds(
+              std::stof(params.at("timeout"))));
+    }
 
-        auto containsParam = [&params](const std::string& param, const std::string& expected) {
-          return params.contains(param) && params.at(param) == expected;
-        };
-        size_t maxSend = params.contains("send") ? std::stoul(params.at("send")) : MAX_NOF_ROWS_IN_RESULT;
-        const bool pinSubtrees = containsParam("pinsubtrees", "true");
-        const bool pinResult= containsParam("pinresult", "true");
-        LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned)" : "")
-                  << ((pinResult) ? " (Result pinned)" : "") << ": " << query
-                  << '\n';
-        ParsedQuery pq = SparqlParser(query).parse();
-        pq.expandPrefixes();
+    auto containsParam = [&params](const std::string& param,
+                                   const std::string& expected) {
+      return params.contains(param) && params.at(param) == expected;
+    };
+    size_t maxSend = params.contains("send") ? std::stoul(params.at("send"))
+                                             : MAX_NOF_ROWS_IN_RESULT;
+    const bool pinSubtrees = containsParam("pinsubtrees", "true");
+    const bool pinResult = containsParam("pinresult", "true");
+    LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned)" : "")
+              << ((pinResult) ? " (Result pinned)" : "") << ": " << query
+              << '\n';
+    ParsedQuery pq = SparqlParser(query).parse();
+    pq.expandPrefixes();
 
-        QueryExecutionContext qec(_index, _engine, &_cache, &_pinnedSizes,
-                                  _allocator, _sortPerformanceEstimator,
-                                  pinSubtrees, pinResult);
-        // start the shared timeout timer here to also include
-        // the query planning
-        timeoutTimer->wlock()->start();
+    QueryExecutionContext qec(_index, _engine, &_cache, &_pinnedSizes,
+                              _allocator, _sortPerformanceEstimator,
+                              pinSubtrees, pinResult);
+    // start the shared timeout timer here to also include
+    // the query planning
+    timeoutTimer->wlock()->start();
 
-        QueryPlanner qp(&qec);
-        qp.setEnablePatternTrick(_enablePatternTrick);
-        QueryExecutionTree qet = qp.createExecutionTree(pq);
-        qet.isRoot() = true;  // allow pinning of the final result
-        qet.recursivelySetTimeoutTimer(timeoutTimer);
-        LOG(TRACE) << qet.asString() << std::endl;
+    QueryPlanner qp(&qec);
+    qp.setEnablePatternTrick(_enablePatternTrick);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    qet.isRoot() = true;  // allow pinning of the final result
+    qet.recursivelySetTimeoutTimer(timeoutTimer);
+    LOG(TRACE) << qet.asString() << std::endl;
 
-
-        if (containsParam("action", "csv_export")) {
-          // CSV export
-          auto responseString = composeResponseSepValues(pq, qet, ',');
-          auto response = HttpUtils::createOkResponse(std::move(responseString), request, HttpUtils::MimeType::csv);
-          co_return co_await send(std::move(response));
-        } else if (containsParam("action", "tsv_export")) {
-          // TSV export
-          auto responseString = composeResponseSepValues(pq, qet, '\t');
-          auto response = HttpUtils::createOkResponse(std::move(responseString), request, HttpUtils::MimeType::tsv);
-          co_return co_await send(std::move(response));
-        } else {
-          // Normal case: JSON response
-          auto responseString = composeResponseJson(pq, qet, requestTimer, maxSend);
-          co_return co_await sendJson(std::move(responseString));
-        }
-        // Print the runtime info. This needs to be done after the query
-        // was computed.
-        // TODO<joka921> This is currently unreachable. If we want this log,
-        // include it in the send macro.
-        LOG(INFO) << '\n' << qet.getRootOperation()->getRuntimeInfo().toString();
-      } catch (const ad_semsearch::Exception& e) {
-         errorResponse = composeResponseJson(query, e, requestTimer);
-      } catch (const std::exception& e) {
-        errorResponse = composeResponseJson(query, e, requestTimer);
-      }
-      if (errorResponse.has_value()) {
-        co_return co_await sendJson(std::move(errorResponse.value()));
-      }
+    if (containsParam("action", "csv_export")) {
+      // CSV export
+      auto responseString = composeResponseSepValues(pq, qet, ',');
+      auto response =
+          createOkResponse(std::move(responseString), request, MimeType::csv);
+      co_return co_await send(std::move(response));
+    } else if (containsParam("action", "tsv_export")) {
+      // TSV export
+      auto responseString = composeResponseSepValues(pq, qet, '\t');
+      auto response =
+          createOkResponse(std::move(responseString), request, MimeType::tsv);
+      co_return co_await send(std::move(response));
+    } else {
+      // Normal case: JSON response
+      auto responseString = composeResponseJson(pq, qet, requestTimer, maxSend);
+      co_return co_await sendJson(std::move(responseString));
+    }
+    // Print the runtime info. This needs to be done after the query
+    // was computed.
+    // TODO<joka921> This is currently unreachable. If we want this log,
+    // include it in the send macro.
+    LOG(INFO) << '\n' << qet.getRootOperation()->getRuntimeInfo().toString();
+  } catch (const ad_semsearch::Exception& e) {
+    errorResponse = composeResponseJson(query, e, requestTimer);
+  } catch (const std::exception& e) {
+    errorResponse = composeResponseJson(query, e, requestTimer);
+  }
+  if (errorResponse.has_value()) {
+    co_return co_await sendJson(std::move(errorResponse.value()));
+  }
 }
