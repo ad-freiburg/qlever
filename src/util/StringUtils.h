@@ -72,7 +72,7 @@ inline string getLowercase(const string& orig);
 
 inline string getUppercase(const string& orig);
 
-inline string getLowercaseUtf8(const std::string& s);
+inline string getLowercaseUtf8(std::string_view s);
 
 inline string getUppercaseUtf8(const std::string& s);
 
@@ -153,7 +153,7 @@ inline size_t findClosingBracket(const string& haystack, size_t start = 0,
                                  char openingBracket = '{',
                                  char closingBracket = '}');
 
-inline string decodeUrl(const string& orig);
+inline string decodeUrl(std::string_view orig);
 
 /**
  * @brief Return the last position where <literalEnd> was found in the <input>
@@ -254,7 +254,7 @@ string getUppercase(const string& orig) {
  * @param s UTF-8 encoded string
  * @return The lowercase version of s, also encoded as UTF-8
  */
-std::string getLowercaseUtf8(const std::string& s) {
+std::string getLowercaseUtf8(std::string_view s) {
   std::string result;
   icu::StringByteSink<std::string> sink(&result);
   UErrorCode err = U_ZERO_ERROR;
@@ -598,7 +598,7 @@ inline string strip(const string& text, const T& s) {
 }
 
 // _____________________________________________________________________________
-string decodeUrl(const string& url) {
+string decodeUrl(std::string_view url) {
   string decoded;
   for (size_t i = 0; i < url.size(); ++i) {
     if (url[i] == '+') {

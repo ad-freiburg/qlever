@@ -12,15 +12,49 @@ namespace net = boost::asio;            // from <boost/asio.hpp>
 using tcp = boost::asio::ip::tcp;       // from <boost/asio/ip/tcp.hpp>
 
 class HttpUtils {
+ public:
 
   enum class MimeType {
-    textHtml
+    textHtml,
+    json,
+    tsv,
+    csv
   };
   static std::string toString(MimeType t) {
     switch (t) {
-      break; case MimeType::textHtml : return "text/html";
+      case MimeType::textHtml : return "text/html";
+      case MimeType::json : return "application/json";
+      case MimeType::tsv: return "text/tsv";
+      case MimeType::csv: return "text/csv";
     }
   }
+                                                    // Append an HTTP rel-path to a local filesystem path.
+                                                    // The returned path is normalized for the platform.
+                                                    static std::string
+                                                    path_cat(
+                                                        beast::string_view base,
+                                                        beast::string_view path)
+  {
+    if(base.empty())
+      return std::string(path);
+    std::string result(base);
+#ifdef BOOST_MSVC
+    char constexpr path_separator = '\\';
+    if(result.back() == path_separator)
+      result.resize(result.size() - 1);
+    result.append(path.data(), path.size());
+    for(auto& c : result)
+      if(c == '/')
+        c = path_separator;
+#else
+    char constexpr path_separator = '/';
+    if(result.back() == path_separator)
+      result.resize(result.size() - 1);
+    result.append(path.data(), path.size());
+#endif
+    return result;
+  }
+
 
   // Return a reasonable mime type based on the extension of a file.
   static beast::string_view
@@ -59,25 +93,33 @@ class HttpUtils {
   }
 
 
-  static auto createResponse(std::string_view text, http::status status, const auto& request, MimeType mimeType = MimeType::textHtml) {
+  static auto createResponse(std::string text, http::status status, const auto& request, MimeType mimeType = MimeType::textHtml) {
     http::response<http::string_body> response{status, request.version()};
     response.set(http::field::content_type, toString(mimeType));
     response.keep_alive(request.keep_alive());
-    response.body() = std::string(text);
+    response.body() = std::move(text);
     response.prepare_payload();
     return response;
   }
 
+  static auto createOkResponse(std::string text, const auto& request, MimeType mimeType) {
+    return createResponse(std::move(text), http::status::ok, request, mimeType);
+  }
+
+  static auto createJsonResponse(std::string text, const auto& request) {
+    return createOkResponse(std::move(text), request, MimeType::json);
+  }
+
   static auto createNotFoundResponse(const auto& request) {
-    return createResponse("Resource \"" + request.target() + "\" was not found on this server", http::status::not_found, request);
+    return createResponse("Resource \"" + std::string(request.target()) + "\" was not found on this server", http::status::not_found, request);
   }
 
-  static auto createBadRequestResponse(std::string_view message, const auto& request) {
-    return createResponse(message, http::status::bad_request, request);
+  static auto createBadRequestResponse(std::string message, const auto& request) {
+    return createResponse(std::move(message), http::status::bad_request, request);
   }
 
-  static auto createServerErrorResponse(std::string_view message, const auto& request) {
-    return createResponse(message, http::status::internal_server_error, request);
+  static auto createServerErrorResponse(std::string message, const auto& request) {
+    return createResponse(std::move(message), http::status::internal_server_error, request);
   }
 
   static auto createHeadResponse(size_t sizeOfFile, const string& path, const auto& request) {
@@ -111,6 +153,7 @@ class HttpUtils {
     LOG(ERROR) << what << ": " << ec.message() << "\n";
   }
 
+ public:
   // This function produces an HTTP response for the given
   // request. The type of the response object depends on the
   // contents of the request, so the interface requires the

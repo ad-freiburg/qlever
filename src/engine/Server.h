@@ -78,12 +78,18 @@ class Server {
 
   void runAcceptLoop();
 
-  void process(Socket* client);
+  template<typename Body, typename Allocator, typename Send>
+  boost::asio::awaitable<void> process(http::request<Body, http::basic_fields<Allocator>> && req,
+                    Send && send);
+
+  template<typename Body, typename Allocator, typename Send>
+  boost::asio::awaitable<void> processQuery(const ParamValueMap& params, ad_utility::Timer& requestTimer, http::request<Body, http::basic_fields<Allocator>> && request,
+                                                    Send && send);
 
 
   void serveFile(Socket* client, const string& requestedFile) const;
 
-  FilenameAndParamValueMap parseHttpRequest(const string& request) const;
+  FilenameAndParamValueMap parseHttpRequest(std::string_view request) const;
 
   string createQueryFromHttpParams(const ParamValueMap& params) const;
 
@@ -109,7 +115,4 @@ class Server {
 
   json composeCacheStatsJson() const;
 
-  template<typename Body, typename Allocator, typename Send>
-  void processQuery(http::request<Body, http::basic_fields<Allocator>> && req,
-                    Send && send);
 };

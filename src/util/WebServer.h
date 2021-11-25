@@ -38,11 +38,11 @@ class HttpServer {
 
  private:
   void fail(beast::error_code ec, std::string_view message) {
-      LOG(ERROR) << message << ": " << ec.message() << '\n';
+      LOG(ERROR) << message << ": " << ec.message() << std::endl;
   }
 
   boost::asio::awaitable<void> session(
-      tcp::socket&& socket) {
+      tcp::socket socket) {
     beast::flat_buffer buffer;
     beast::tcp_stream stream{std::move(socket)};
     auto send_lambda = [&stream]<bool isRequest, typename Body, typename Fields>(http::message<isRequest, Body, Fields>&& message) ->boost::asio::awaitable<void> {
@@ -53,25 +53,28 @@ class HttpServer {
     };
 
     for (;;) {
-      // Set the timeout.
-      stream.expires_after(std::chrono::seconds(30));
-      http::request<http::string_body> req;
+      try {
+        // Set the timeout.
+        stream.expires_after(std::chrono::seconds(30));
+        http::request<http::string_body> req;
 
-      // Read a request
-      co_await http::async_read(stream, buffer, req, boost::asio::use_awaitable);
+        // Read a request
+        co_await http::async_read(stream, buffer, req,
+                                  boost::asio::use_awaitable);
 
-      /*
-      // TODO<joka921> :: reinstate the error codes.
-      // This means they closed the connection
-      if(ec == http::error::end_of_stream)
-          return do_close();
+        /*
+        // TODO<joka921> :: reinstate the error codes.
+        // This means they closed the connection
+        if(ec == http::error::end_of_stream)
+            return do_close();
 
-      if(ec)
-          return fail(ec, "read");
-          */
+        if(ec)
+            return fail(ec, "read");
+            */
 
-      // Send the response
-      co_await _httpHandler(std::move(req), send_lambda);
+        // Send the response
+        co_await _httpHandler(std::move(req), send_lambda);
+      } catch(...) {}
 
     }
 
@@ -80,45 +83,28 @@ class HttpServer {
   //------------------------------------------------------------------------------
   boost::asio::awaitable<void> listener(
       boost::asio::io_context& ioc,
-      tcp::endpoint endpoint,
-      std::shared_ptr<std::string const> doc_root) {
-    boost::system::error_code ec;
-
+      tcp::endpoint endpoint) {
 
     tcp::acceptor acceptor{ioc};
-    tcp::socket socket{ioc};
 
-    // Open the acceptor
-    acceptor.open(endpoint.protocol(), ec);
-    if(ec)
-    {
-      fail(ec, "open");
-      co_return;
-    }
-
-    // Bind to the server address
-    acceptor.bind(endpoint, ec);
-    if(ec)
-    {
-      fail(ec, "bind");
-      co_return;
-    }
-
-    // Start listening for connections
-    acceptor.listen(
-        boost::asio::socket_base::max_listen_connections, ec);
-    if(ec)
-    {
-      fail(ec, "listen");
+    try {
+      // Open the acceptor
+      acceptor.open(endpoint.protocol());
+      // Bind to the server address
+      acceptor.bind(endpoint);
+      // Start listening for connections
+      acceptor.listen(boost::asio::socket_base::max_listen_connections );
+    } catch (const boost::system::system_error& b) {
+      fail(b.code(), "opening, binding or listening on the socket failed");
       co_return;
     }
 
 
     for(;;) {
       try {
-        co_await acceptor.async_accept(socket, boost::asio::use_awaitable);
-        // Create the session and run it
-        co_await session(std::move(socket), doc_root);
+        auto socket = co_await acceptor.async_accept(boost::asio::use_awaitable);
+        net::co_spawn(net::make_strand(ioc), session(std::move(socket)), net::detached);
+
       } catch (const boost::system::system_error& b) {
         fail(b.code(), b.what());
       }
@@ -135,13 +121,22 @@ class HttpServer {
 
     // startTheCoroutine that handles the actual logic.
     auto l = listener(ioc, tcp::endpoint{address, _port});
-    net::co_spawn(ioc, l, net::detached);
+    net::co_spawn(ioc, std::move(l), net::detached);
+    AD_CHECK(numServerThreads >= 1);
+    std::vector<std::thread> threads;
+    threads.reserve(numServerThreads - 1);
+    for (auto i = 0; i < numServerThreads - 1; ++i) {
+      threads.emplace_back([&ioc]{ioc.run();});
+    }
+    ioc.run();
   }
+
+  explicit HttpServer(short unsigned int port, HttpHandler handler = HttpHandler{}) : _port{port}, _httpHandler{std::move(handler)} {}
 
 
  private:
   std::string _ipAdress = "0.0.0.0";
-  unsigned int _port = 80;
+  short unsigned int _port = 80;
   HttpHandler _httpHandler;
 
 };
