@@ -159,7 +159,10 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
         } else {
           // not even the smallest IdTable could be created, this should never
           // happen.
-          AD_CHECK(false);
+          LOG(WARN)
+              << "Could not create any estimate for the sorting performance. "
+                 "This might happen if your index is very small"
+              << std::endl;
         }
         LOG(TRACE) << "Estimated the sort time to be " << std::fixed
                    << std::setprecision(3) << _samples[i][j] << " seconds."

@@ -61,6 +61,7 @@ class SortPerformanceEstimator {
   // The time in seconds for the samples that are sorted during initializtion.
   // _samples[i][j] is the measured time it takes to sort an IdTable with
   // sampleValuesRows[i] rows and sampleValuesCols[j] columns.
+  // The values are default-initialized to 0.
   std::array<std::array<double, NUM_SAMPLES_COLS>, NUM_SAMPLES_ROWS> _samples{};
 
   bool _estimatesWereCalculated = false;
