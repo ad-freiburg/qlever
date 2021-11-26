@@ -12,7 +12,7 @@
 #include "../parser/ParseException.h"
 #include "../parser/SparqlParser.h"
 #include "../util/AllocatorWithLimit.h"
-#include "../util/HttpServer/WebServer.h"
+#include "../util/HttpServer/HttpServer.h"
 #include "../util/Socket.h"
 #include "../util/Timer.h"
 #include "./QueryExecutionContext.h"

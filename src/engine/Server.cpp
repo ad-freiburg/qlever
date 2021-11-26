@@ -53,9 +53,12 @@ void Server::run() {
       [this](auto request, auto&& send) -> boost::asio::awaitable<void> {
     co_await process(std::move(request), send);
   };
-  auto httpServer = HttpServer{static_cast<unsigned short>(_port),
+  auto httpServer = HttpServer{static_cast<unsigned short>(_port), "0.0.0.0",
                                std::move(httpSessionHandler)};
-  httpServer.run(_numThreads);
+  // For now, limit the number of simultaneous connections to the number of
+  // threads, until we have other means to limit the number of concurrent
+  // queries.
+  httpServer.run(_numThreads, _numThreads);
 }
 
 // _____________________________________________________________________________
