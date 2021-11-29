@@ -33,6 +33,8 @@ jobs:
 
     - name: Install dependencies
       run:  sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
+    - name: Install boost
+      run : sudo add-apt-repository -y ppa:mhier/libboost-latest && sudo apt install -y libboost1.74-dev
     - name: Install clang 13
       run: wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 13
     - name: Install libc++-13
