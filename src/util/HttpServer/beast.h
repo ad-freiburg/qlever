@@ -19,6 +19,7 @@
 
 // Needed for libc++ in C++20 mode, because std::result_of was removed.
 #define BOOST_ASIO_HAS_STD_INVOKE_RESULT
+#define BOOST_BEAST_USE_STD_STRING_VIEW
 
 #include <boost/asio.hpp>
 #include <boost/beast.hpp>

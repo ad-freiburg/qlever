@@ -1,6 +1,8 @@
-// Copyright 2011, University of Freiburg,
+// Copyright 2011/2021, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
+// Contributor(Update to Boost::Beast and coroutines) : Johannes
+// Kalmbach<kalmbach@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -48,12 +50,7 @@ class Server {
 
   virtual ~Server() = default;
 
-  typedef ad_utility::HashMap<string, string> ParamValueMap;
-
-  struct FilenameAndParamValueMap {
-    std::string _filename;
-    ParamValueMap _paramValueMap;
-  };
+  using ParamValueMap = ad_utility::HashMap<string, string>;
 
   // Initialize the server.
   void initialize(const string& ontologyBaseName, bool useText,
@@ -76,29 +73,24 @@ class Server {
   bool _initialized;
   bool _enablePatternTrick;
 
-  void runAcceptLoop();
-
-  template <typename Body, typename Allocator, typename Send>
+  /// Handle a single HTTP request. Check whether a file request or a query was
+  /// sent, and dispatch to functions handling these cases. This function
+  /// requires the constraints for the `HttpHandler` in `HttpServer.h`. \param
+  /// req The HTTP request. \param send The action that sends a http:response
+  /// (see the `HttpServer.h` for documentation).
   boost::asio::awaitable<void> process(
-      http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send);
+      const ad_utility::httpUtils::HttpRequest auto& req, auto&& send);
 
-  template <typename Body, typename Allocator, typename Send>
+  /// Handle a http request that asks for the processing of a query.
+  /// \param params The key-value-pairs  sent in the HTTP GET request. When this
+  /// function is called, we already know that a parameter "query" is contained
+  /// in `params`. \param requestTimer Timer that measure the total processing
+  /// time of this request. \param request The HTTP request. \param send The
+  /// action that sends a http:response (see the `HttpServer.h` for
+  /// documentation).
   boost::asio::awaitable<void> processQuery(
       const ParamValueMap& params, ad_utility::Timer& requestTimer,
-      http::request<Body, http::basic_fields<Allocator>>&& request,
-      Send&& send);
-
-  void serveFile(Socket* client, const string& requestedFile) const;
-
-  FilenameAndParamValueMap parseHttpRequest(std::string_view request) const;
-
-  string createQueryFromHttpParams(const ParamValueMap& params) const;
-
-  string createHttpResponse(const string& content,
-                            const string& contentType) const;
-
-  string create404HttpResponse() const;
-  string create400HttpResponse() const;
+      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
 
   string composeResponseJson(const ParsedQuery& query,
                              const QueryExecutionTree& qet,

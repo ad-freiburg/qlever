@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "../parser/ParseException.h"
+#include "../util/HttpServer/UrlParser.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
 #include "QueryPlanner.h"
@@ -62,16 +63,14 @@ void Server::run() {
 }
 
 // _____________________________________________________________________________
-template <typename Body, typename Allocator, typename Send>
 boost::asio::awaitable<void> Server::process(
-    http::request<Body, http::basic_fields<Allocator>>&& request, Send&& send) {
+    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
   using namespace ad_utility::httpUtils;
   ad_utility::Timer requestTimer;
   requestTimer.start();
 
-  auto filenameAndParams = parseHttpRequest(
-      std::string_view{request.target().data(), request.target().size()});
-  const auto& params = filenameAndParams._paramValueMap;
+  auto filenameAndParams = ad_utility::UrlParser::parseTarget(request.target());
+  const auto& params = filenameAndParams._parameters;
   if (params.contains("cmd")) {
     const auto& cmd = params.at("cmd");
     if (cmd == "stats") {
@@ -105,48 +104,6 @@ boost::asio::awaitable<void> Server::process(
 
   // neither a query or a command were specified, simply serve a file.
   co_await makeFileServer(".")(std::move(request), send);
-}
-
-std::pair<std::string, std::string> parseSingleKeyValuePair(
-    std::string_view input) {
-  size_t posOfEq = input.find('=');
-  if (posOfEq == std::string_view::npos) {
-    AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-             "Parameter without \"=\" in HTTP Request. " + input);
-  }
-  std::string param{input.substr(0, posOfEq)};
-  string value{ad_utility::decodeUrl(input.substr(posOfEq + 1))};
-  return {std::move(param), std::move(value)};
-}
-
-// _____________________________________________________________________________
-Server::FilenameAndParamValueMap Server::parseHttpRequest(
-    std::string_view request) const {
-  static constexpr auto npos = decltype(request)::npos;
-  LOG(DEBUG) << "Parsing HTTP Request." << endl;
-  FilenameAndParamValueMap result;
-
-  size_t index = request.find('?');
-  result._filename = request.substr(0, index);
-  if (index == npos) {
-    return result;
-  }
-  request.remove_prefix(index + 1);
-  while (true) {
-    auto next = request.find('&');
-    auto paramAndValue = parseSingleKeyValuePair(request.substr(0, next));
-    auto [iterator, isNewElement] =
-        result._paramValueMap.insert(std::move(paramAndValue));
-    if (!isNewElement) {
-      AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-               "Duplicate HTTP parameter: " + iterator->first);
-    }
-    if (next == npos) {
-      break;
-    }
-    request.remove_prefix(next + 1);
-  }
-  return result;
 }
 
 // _____________________________________________________________________________
@@ -264,10 +221,10 @@ nlohmann::json Server::composeCacheStatsJson() const {
   return result;
 }
 
-template <typename Body, typename Allocator, typename Send>
+// ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
-    http::request<Body, http::basic_fields<Allocator>>&& request, Send&& send) {
+    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
   using namespace ad_utility::httpUtils;
   AD_CHECK(params.contains("query"));
   const auto& query = params.at("query");
@@ -323,24 +280,22 @@ boost::asio::awaitable<void> Server::processQuery(
     if (containsParam("action", "csv_export")) {
       // CSV export
       auto responseString = composeResponseSepValues(pq, qet, ',');
-      auto response =
-          createOkResponse(std::move(responseString), request, MimeType::csv);
-      co_return co_await send(std::move(response));
+      auto response = createOkResponse(std::move(responseString), request,
+                                       ad_utility::MediaType::csv);
+      co_await send(std::move(response));
     } else if (containsParam("action", "tsv_export")) {
       // TSV export
       auto responseString = composeResponseSepValues(pq, qet, '\t');
-      auto response =
-          createOkResponse(std::move(responseString), request, MimeType::tsv);
-      co_return co_await send(std::move(response));
+      auto response = createOkResponse(std::move(responseString), request,
+                                       ad_utility::MediaType::tsv);
+      co_await send(std::move(response));
     } else {
       // Normal case: JSON response
       auto responseString = composeResponseJson(pq, qet, requestTimer, maxSend);
-      co_return co_await sendJson(std::move(responseString));
+      co_await sendJson(std::move(responseString));
     }
     // Print the runtime info. This needs to be done after the query
     // was computed.
-    // TODO<joka921> This is currently unreachable. If we want this log,
-    // include it in the send macro.
     LOG(INFO) << '\n' << qet.getRootOperation()->getRuntimeInfo().toString();
   } catch (const ad_semsearch::Exception& e) {
     errorResponse = composeResponseJson(query, e, requestTimer);

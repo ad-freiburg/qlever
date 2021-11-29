@@ -28,12 +28,12 @@ using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
  * _httpHandler(move(request), sendAction) is called. (_httpHandler is a member
  * of type HttpHandler). The expected behavior of this call is that _httpHandler
  * takes the request, computes the corresponding `response`, and calls co_await
- * sendAction(response). The `sendAction` is needed, b.c. the `response` might
+ * sendAction(response). The `sendAction` is needed because the `response` might
  * different types (in beast, a http::message is templated on the body type).
  *  For this reason, this approach is more flexible, than having _httpHandler
- * simply return the response. A very basic HttpHandler, that simply serves
+ * simply return the response. A very basic HttpHandler, which simply serves
  * files from a directory, can be obtained via
- * `ad_utility::httpUtils::makeFileServer()`
+ * `ad_utility::httpUtils::makeFileServer()`.
  */
 template <typename HttpHandler>
 class HttpServer {
@@ -42,22 +42,21 @@ class HttpServer {
   const short unsigned int _port;
   HttpHandler _httpHandler;
 
-  // Limit the number of concurrent sessions. It has to be an optional, because
-  // we only initialize it in the run() function.
-  // TODO<joka921> The standard says, that there has to be some large default
+  // Limit the number of concurrent connections. It has to be an optional,
+  // because we only initialize it in the run() function.
+  // TODO<joka921> The standard says that there has to be some large default
   // template parameter for the limit of the semaphore, but neither libstdc++
   // nor libc++ currently implement  this, so we manually have to specify a
   // large value.
   std::optional<std::counting_semaphore<std::numeric_limits<int>::max()>>
-      _numSessionLimiter;
+      _numConnectionLimiter;
 
  public:
   /// Construct from the port and ip address, on which this server will listen,
   /// as well as the HttpHandler. This constructor only initializes several
-  /// member functions,
-  explicit HttpServer(short unsigned int port,
-                      const std::string& ipAdress = "0.0.0.0",
-                      HttpHandler handler = HttpHandler{})
+  /*/ member functions,*/ explicit HttpServer(
+      short unsigned int port, const std::string& ipAdress = "0.0.0.0",
+      HttpHandler handler = HttpHandler{})
       : _ipAdress{net::ip::make_address(ipAdress)},
         _port{port},
         _httpHandler{std::move(handler)} {}
@@ -68,15 +67,15 @@ class HttpServer {
   /// (this is not equal to the number of threads due to the asynchronous
   /// implementation of this Server).
   void run(int numServerThreads, size_t numSimultaneousConnections) {
-    net::io_context ioc(numServerThreads);
+    net::io_context ioContext(numServerThreads);
 
-    _numSessionLimiter.emplace(numSimultaneousConnections);
+    _numConnectionLimiter.emplace(numSimultaneousConnections);
 
     // Create the listener coroutine.
-    auto listenerCoro = listener(ioc, tcp::endpoint{_ipAdress, _port});
+    auto listenerCoro = listener(ioContext, tcp::endpoint{_ipAdress, _port});
 
     // Schedule the listener onto the io context.
-    net::co_spawn(ioc, std::move(listenerCoro), net::detached);
+    net::co_spawn(ioContext, std::move(listenerCoro), net::detached);
 
     // Add some threads to the io context, s.t. the work can actually be
     // scheduled.
@@ -84,11 +83,11 @@ class HttpServer {
     std::vector<ad_utility::JThread> threads;
     threads.reserve(numServerThreads);
     for (auto i = 0; i < numServerThreads; ++i) {
-      threads.emplace_back([&ioc] { ioc.run(); });
+      threads.emplace_back([&ioContext] { ioContext.run(); });
     }
 
     // This will run forever, because the destructor of the JThreads blocks
-    // until ioc.run() completes, which should never happen, because the
+    // until ioContext.run() completes, which should never happen, because the
     // listener contains an infinite loop.
   }
 
@@ -98,17 +97,17 @@ class HttpServer {
     LOG(ERROR) << message << ": " << ec.message() << std::endl;
   }
 
-  // The loop which accepts tcp connections and delegates their handling
+  // The loop which accepts TCP connections and delegates their handling
   // to the session() coroutine below.
   boost::asio::awaitable<void> listener(boost::asio::io_context& ioc,
                                         tcp::endpoint endpoint) {
     tcp::acceptor acceptor{ioc};
     try {
-      // Open the acceptor
+      // Open the acceptor.
       acceptor.open(endpoint.protocol());
-      // Bind to the server address
+      // Bind to the server address.
       acceptor.bind(endpoint);
-      // Start listening for connections
+      // Start listening for connections.
       acceptor.listen(boost::asio::socket_base::max_listen_connections);
     } catch (const boost::system::system_error& b) {
       logBeastError(b.code(),
@@ -118,12 +117,12 @@ class HttpServer {
 
     // `acceptor` is now listening on the port, start accepting connections in
     // an infinite, asynchronous, but conceptually single-threaded loop.
-    for (;;) {
+    while (true) {
       try {
-        _numSessionLimiter->acquire();
+        _numConnectionLimiter->acquire();
         auto socket =
             co_await acceptor.async_accept(boost::asio::use_awaitable);
-        // Schedule the session, s.t. it may run in parallel to this loop.
+        // Schedule the session such that it may run in parallel to this loop.
         // the `strand` makes each session conceptually single-threaded.
         // TODO<joka921> is this even needed, to my understanding,
         // nothing may happen in parallel within an Http session, but
@@ -132,7 +131,7 @@ class HttpServer {
                       net::detached);
 
       } catch (const boost::system::system_error& b) {
-        logBeastError(b.code(), b.what());
+        logBeastError(b.code(), "Error in the accept loop");
       }
     }
   }
@@ -155,14 +154,15 @@ class HttpServer {
       // Write the response
       co_await http::async_write(stream, message, boost::asio::use_awaitable);
 
-      // If the message requires the closing of the connection,
+      // Inform the session, if the message requires the closing of the
+      // connection
       if (message.need_eof()) {
         streamNeedsClosing = true;
       }
     };
 
     // Sessions might be reused for multiple request/response pairs.
-    for (;;) {
+    while (true) {
       try {
         // Set the timeout.
         stream.expires_after(std::chrono::seconds(30));
@@ -180,16 +180,16 @@ class HttpServer {
         if (streamNeedsClosing) {
           throw beast::system_error{http::error::end_of_stream};
         }
-      } catch (const boost::system::system_error& b) {
-        if (b.code() == http::error::end_of_stream) {
+      } catch (const boost::system::system_error& error) {
+        if (error.code() == http::error::end_of_stream) {
           // The stream has ended, gracefully close the connection.
           beast::error_code ec;
           stream.socket().shutdown(tcp::socket::shutdown_send, ec);
         } else {
-          logBeastError(b.code(), b.what());
+          logBeastError(error.code(), error.what());
         }
         // In case of an error, close the session by returning.
-        _numSessionLimiter->release();
+        _numConnectionLimiter->release();
         co_return;
       }
     }
