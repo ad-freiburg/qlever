@@ -36,7 +36,7 @@ const std::vector<MediaTypeImpl>& getAllMediaTypes() {
     add(tsv, "text/tab-separated-values", {".tsv"});
     add(csv, "text/csv", {".csv"});
     add(defaultType, "application/text", {""});
-    return types;
+    return t;
   }();
   return types;
 }
