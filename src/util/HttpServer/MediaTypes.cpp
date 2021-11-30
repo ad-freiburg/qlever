@@ -33,6 +33,8 @@ const std::vector<MediaTypeImpl>& getAllMediaTypes() {
     add(ico, "image/vnd.microsof.icon", {".ico"});
     add(tiff, "image/tiff", {".tiff", ".tif"});
     add(svg, "image/svg+xml", {".svgz"});
+    add(tsv, "text/tab-separated-values", {".tsv"});
+    add(csv, "text/csv", {".csv"});
     add(defaultType, "application/text", {""});
     return types;
   }();
