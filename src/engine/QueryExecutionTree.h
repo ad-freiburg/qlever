@@ -11,6 +11,7 @@
 
 #include "../util/Conversions.h"
 #include "../util/HashSet.h"
+#include "../util/HttpServer/streamable_body.h"
 #include "./Operation.h"
 #include "./QueryExecutionContext.h"
 
@@ -87,6 +88,10 @@ class QueryExecutionTree {
   }
 
   void writeResultToStream(std::ostream& out, const vector<string>& selectVars,
+                           size_t limit = MAX_NOF_ROWS_IN_RESULT,
+                           size_t offset = 0, char sep = '\t') const;
+
+  http_streams::stream_generator generateResults(const vector<string>& selectVars,
                            size_t limit = MAX_NOF_ROWS_IN_RESULT,
                            size_t offset = 0, char sep = '\t') const;
 
@@ -200,9 +205,8 @@ class QueryExecutionTree {
       const vector<std::optional<pair<size_t, ResultTable::ResultType>>>&
           validIndices) const;
 
-  void writeTable(
+  http_streams::stream_generator writeTable(
       const IdTable& data, char sep, size_t from, size_t upperBound,
-      const vector<std::optional<pair<size_t, ResultTable::ResultType>>>&
-          validIndices,
-      std::ostream& out) const;
+      const vector<std::optional<pair<size_t, ResultTable::ResultType>>>
+          validIndices) const;
 };

@@ -157,16 +157,13 @@ json Server::composeResponseJson(const ParsedQuery& query,
 }
 
 // _____________________________________________________________________________
-string Server::composeResponseSepValues(const ParsedQuery& query,
+http_streams::stream_generator Server::composeResponseSepValues(const ParsedQuery& query,
                                         const QueryExecutionTree& qet,
                                         char sep) {
-  std::ostringstream os;
   size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
   size_t offset = query._offset.value_or(0);
-  qet.writeResultToStream(os, query._selectClause._selectedVariables, limit,
+  return qet.generateResults(query._selectClause._selectedVariables, limit,
                           offset, sep);
-
-  return os.str();
 }
 
 // _____________________________________________________________________________
@@ -275,14 +272,14 @@ boost::asio::awaitable<void> Server::processQuery(
 
     if (containsParam("action", "csv_export")) {
       // CSV export
-      auto responseString = composeResponseSepValues(pq, qet, ',');
-      auto response = createOkResponse(std::move(responseString), request,
+      auto responseGenerator = composeResponseSepValues(pq, qet, ',');
+      auto response = createOkResponse(std::move(responseGenerator), request,
                                        ad_utility::MediaType::csv);
       co_await send(std::move(response));
     } else if (containsParam("action", "tsv_export")) {
       // TSV export
-      auto responseString = composeResponseSepValues(pq, qet, '\t');
-      auto response = createOkResponse(std::move(responseString), request,
+      auto responseGenerator = composeResponseSepValues(pq, qet, '\t');
+      auto response = createOkResponse(std::move(responseGenerator), request,
                                        ad_utility::MediaType::tsv);
       co_await send(std::move(response));
     } else {

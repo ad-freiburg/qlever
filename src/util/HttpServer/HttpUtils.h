@@ -10,6 +10,7 @@
 #include "./MediaTypes.h"
 #include "./UrlParser.h"
 #include "./beast.h"
+#include "./streamable_body.h"
 
 /// Several utilities for using/customizing the HttpServer template from
 /// HttpServer.h
@@ -69,6 +70,19 @@ static auto createOkResponse(std::string text, const HttpRequest auto& request,
                              MediaType mimeType) {
   return createHttpResponseFromString(std::move(text), http::status::ok,
                                       request, mimeType);
+}
+
+/// Create a HttpResponse from a string with status 200 OK. Otherwise behaves
+/// the same as createHttpResponseFromString.
+static auto createOkResponse(http_streams::stream_generator&& generator, const HttpRequest auto& request,
+                             MediaType mimeType) {
+  http::response<http_streams::streamable_body> response{http::status::ok, request.version()};
+  response.set(http::field::content_type, toString(mimeType));
+  response.keep_alive(request.keep_alive());
+  response.body() = std::move(generator);
+  // Set Content-Length and Transfer-Encoding.
+  response.prepare_payload();
+  return response;
 }
 
 /// Create a HttpResponse from a string with status 200 OK and mime type
