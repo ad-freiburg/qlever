@@ -29,17 +29,17 @@ class UrlParser {
   // ___________________________________________________________________________
   static std::string applyPercentDecoding(std::string_view url);
 
-  /// Parse the `target` part of an Http get Request
-  /// (e.g. `/api.html?someKey=some+val%0Fue`.
+  /// Parse the `target` part of an HTTP GET Request,
+  /// for example, `/api.html?someKey=some+val%0Fue`.
   static UrlTarget parseTarget(std::string_view target);
 
-  ///  From the `target` part of an http get request, only extract the filename,
+  ///  From the `target` part of an HTTP GET request, only extract the path,
   ///  with percent decoding applied. E.g. `/target.html?key=value` will become
   ///  `/target.html`. Additionally the following checks are applied:
   ///  - The path must not contain `..` to escape from the document root.
   ///  - The path must be absolute (start with a slash `/`).
   ///  If the parsing or one of the checks fails, std::nullopt is returned.
-  static std::optional<std::string> getSanitizedFilename(
+  static std::optional<std::string> getDecodedPathAndCheck(
       std::string_view target) noexcept;
 
  private:

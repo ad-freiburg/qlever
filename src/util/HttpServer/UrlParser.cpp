@@ -46,10 +46,10 @@ string UrlParser::applyPercentDecoding(std::string_view url) {
 
 // ___________________________________________________________________________
 UrlParser::UrlTarget UrlParser::parseTarget(std::string_view target) {
-  static constexpr auto npos = decltype(target)::npos;
+  static constexpr auto npos = std::string_view::npos;
   UrlTarget result;
 
-  size_t index = target.find('?');
+  size_t index = target.find_first_of("?#");
   result._target = target.substr(0, index);
   if (index == npos) {
     return result;
@@ -81,12 +81,12 @@ std::pair<std::string, std::string> UrlParser::parseSingleKeyValuePair(
              "Parameter without \"=\" in HTTP Request. " + std::string{input});
   }
   std::string param{applyPercentDecoding(input.substr(0, posOfEq))};
-  string value{applyPercentDecoding(input.substr(posOfEq + 1))};
+  std::string value{applyPercentDecoding(input.substr(posOfEq + 1))};
   return {std::move(param), std::move(value)};
 }
 
 // _________________________________________________________________________
-std::optional<std::string> UrlParser::getSanitizedFilename(
+std::optional<std::string> UrlParser::getDecodedPathAndCheck(
     std::string_view target) noexcept {
   try {
     auto filename = parseTarget(target)._target;

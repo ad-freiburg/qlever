@@ -49,14 +49,15 @@ class HttpServer {
   // nor libc++ currently implement  this, so we manually have to specify a
   // large value.
   std::optional<std::counting_semaphore<std::numeric_limits<int>::max()>>
-      _numConnectionLimiter;
+      _numConnectionsLimiter;
 
  public:
   /// Construct from the port and ip address, on which this server will listen,
   /// as well as the HttpHandler. This constructor only initializes several
-  /*/ member functions,*/ explicit HttpServer(
-      short unsigned int port, const std::string& ipAdress = "0.0.0.0",
-      HttpHandler handler = HttpHandler{})
+  /// member functions
+  explicit HttpServer(short unsigned int port,
+                      const std::string& ipAdress = "0.0.0.0",
+                      HttpHandler handler = HttpHandler{})
       : _ipAdress{net::ip::make_address(ipAdress)},
         _port{port},
         _httpHandler{std::move(handler)} {}
@@ -67,9 +68,12 @@ class HttpServer {
   /// (this is not equal to the number of threads due to the asynchronous
   /// implementation of this Server).
   void run(int numServerThreads, size_t numSimultaneousConnections) {
-    net::io_context ioContext(numServerThreads);
+    // We need at least two threads to avoid blocking.
+    // TODO<joka921> why is that?
+    numServerThreads = std::max(2, numServerThreads);
+    net::io_context ioContext(numServerThreads + 1);
 
-    _numConnectionLimiter.emplace(numSimultaneousConnections);
+    _numConnectionsLimiter.emplace(numSimultaneousConnections);
 
     // Create the listener coroutine.
     auto listenerCoro = listener(ioContext, tcp::endpoint{_ipAdress, _port});
@@ -119,7 +123,7 @@ class HttpServer {
     // an infinite, asynchronous, but conceptually single-threaded loop.
     while (true) {
       try {
-        _numConnectionLimiter->acquire();
+        _numConnectionsLimiter->acquire();
         auto socket =
             co_await acceptor.async_accept(boost::asio::use_awaitable);
         // Schedule the session such that it may run in parallel to this loop.
@@ -154,8 +158,8 @@ class HttpServer {
       // Write the response
       co_await http::async_write(stream, message, boost::asio::use_awaitable);
 
-      // Inform the session, if the message requires the closing of the
-      // connection
+      // Inform the session if the message requires the closing of the
+      // connection.
       if (message.need_eof()) {
         streamNeedsClosing = true;
       }
@@ -189,7 +193,7 @@ class HttpServer {
           logBeastError(error.code(), error.what());
         }
         // In case of an error, close the session by returning.
-        _numConnectionLimiter->release();
+        _numConnectionsLimiter->release();
         co_return;
       }
     }

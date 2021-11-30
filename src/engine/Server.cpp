@@ -56,9 +56,12 @@ void Server::run() {
   };
   auto httpServer = HttpServer{static_cast<unsigned short>(_port), "0.0.0.0",
                                std::move(httpSessionHandler)};
-  // For now, limit the number of simultaneous connections to the number of
-  // threads, until we have other means to limit the number of concurrent
-  // queries.
+
+  // The first argument ist the number of threads, the second one is the maximum
+  // number of simultaneous TCP connections. Technically, these can be
+  // different, but this is equal to the behavior of QLever's previous server.
+  // TODO<joka921> Make this obsolete by implementing better concurrency
+  // management in the actual query processing.
   httpServer.run(_numThreads, _numThreads);
 }
 
@@ -85,25 +88,32 @@ boost::asio::awaitable<void> Server::process(
     } else if (cmd == "clearcache") {
       _cache.clearUnpinnedOnly();
     } else if (cmd == "clearcachecomplete") {
+      // The _pinnedSizes are not part of the (otherwise threadsafe) _cache
+      // and thus have to be manually locked.
+      // TODO<joka921> make _pinnedSizes part of the cache, or eliminate them
+      // completely.
       auto lock = _pinnedSizes.wlock();
       _cache.clearAll();
       lock->clear();
     }
-    // handle commands
     co_return;
   }
 
   if (params.contains("query")) {
     if (params.at("query").empty()) {
-      throw std::runtime_error(
-          "Parameter \"query\" must not have an empty value");
+      co_return co_await send(createBadRequestResponse(
+          "Parameter \"query\" must not have an empty value", request));
     }
+
     co_return co_await processQuery(params, requestTimer, std::move(request),
                                     send);
   }
 
-  // neither a query or a command were specified, simply serve a file.
-  co_await makeFileServer(".")(std::move(request), send);
+  // Neither a query or a command were specified, simply serve a file.
+  // Note that `makeFileServer` returns a function.
+  co_await makeFileServer(".", ad_utility::HashSet<std::string>{
+                                   "index.html", "script.js",
+                                   "style.css"})(std::move(request), send);
 }
 
 // _____________________________________________________________________________

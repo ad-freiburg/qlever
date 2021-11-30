@@ -109,7 +109,7 @@ static auto createHeadResponse(size_t sizeOfFile, const string& path,
   http::response<http::empty_body> response{http::status::ok,
                                             request.version()};
   response.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-  response.set(http::field::content_type, filenameToMediaType(path));
+  response.set(http::field::content_type, mediaTypeForFilename(path));
   response.content_length(sizeOfFile);
   response.keep_alive(request.keep_alive());
   return response;
@@ -125,7 +125,7 @@ static auto createGetResponseForFile(http::file_body::value_type&& body,
       std::piecewise_construct, std::make_tuple(std::move(body)),
       std::make_tuple(http::status::ok, request.version())};
   response.set(http::field::server, BOOST_BEAST_VERSION_STRING);
-  response.set(http::field::content_type, filenameToMediaType(path));
+  response.set(http::field::content_type, mediaTypeForFilename(path));
   response.content_length(sizeOfFile);
   response.keep_alive(request.keep_alive());
   return response;
@@ -137,7 +137,7 @@ inline void logBeastError(beast::error_code ec, char const* what) {
 }
 
 /**
- * @brief Return a lambda, that satisfies the constraints of the `HttpHandler`
+ * @brief Return a lambda which satisfies the constraints of the `HttpHandler`
  * argument in the `HttpServer` class and serves files from a specified
  * documentRoot. A typical use is `HttpServer
  * httpServer{httpUtils::makeFileServer("path_to_some_directory")};`
@@ -171,50 +171,53 @@ inline auto makeFileServer(
       co_return;
     }
 
-    auto absolutFilePath =
-        ad_utility::UrlParser::getSanitizedFilename(request.target());
-    // Request path must be absolute and not contain "..".
-    if (!absolutFilePath.has_value()) {
-      co_await send(
-          createBadRequestResponse("Illegal request target", request));
+    auto urlPath =
+        ad_utility::UrlParser::getDecodedPathAndCheck(request.target());
+    // Request filesystemPath must be absolute and not contain "..".
+    if (!urlPath.has_value()) {
+      co_await send(createBadRequestResponse(
+          "Invalid url path \"" + std::string{request.target()} + '"',
+          request));
       co_return;
     }
 
     // Check if the target is in the whitelist.
     // The `target()` starts with a slash, entries in the whitelist don't.
     if (whitelist.has_value() &&
-        !whitelist.value().contains(absolutFilePath.value().substr(1))) {
+        !whitelist.value().contains(urlPath.value().substr(1))) {
       co_await send(createNotFoundResponse(request));
       co_return;
     }
 
-    // Build the path to the requested file.
-    std::string path = path_cat(documentRoot, request.target());
-    if (request.target().back() == '/') path.append("index.html");
+    // Build the path to the requested file on the file system.
+    std::string filesystemPath = path_cat(documentRoot, request.target());
+    if (request.target().back() == '/') filesystemPath.append("index.html");
 
     // Attempt to open the file.
-    beast::error_code ec;
+    beast::error_code errorCode;
     http::file_body::value_type body;
-    body.open(path.c_str(), beast::file_mode::scan, ec);
+    body.open(filesystemPath.c_str(), beast::file_mode::scan, errorCode);
 
     // Handle the case where the file doesn't exist.
-    if (ec == beast::errc::no_such_file_or_directory) {
+    if (errorCode == beast::errc::no_such_file_or_directory) {
       co_await send(createNotFoundResponse(request));
       co_return;
     }
 
     // Handle an unknown error.
-    if (ec) {
-      co_return co_await send(createServerErrorResponse(ec.message(), request));
+    if (errorCode) {
+      co_return co_await send(
+          createServerErrorResponse(errorCode.message(), request));
     }
 
     // Respond to HEAD request.
     if (request.method() == http::verb::head) {
-      co_return co_await send(createHeadResponse(body.size(), path, request));
+      co_return co_await send(
+          createHeadResponse(body.size(), filesystemPath, request));
     }
     // Respond to GET request.
     co_return co_await send(
-        createGetResponseForFile(std::move(body), path, request));
+        createGetResponseForFile(std::move(body), filesystemPath, request));
   };
 }
 

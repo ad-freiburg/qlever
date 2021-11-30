@@ -10,29 +10,26 @@ using std::string;
 namespace ad_utility {
 
 namespace detail {
-// Return a static vector of all possible media types and their associated
-// filenames. Modify this function if you need to add or change several of the
-// media types.,
+// _____________________________________________________________
 const std::vector<MediaTypeImpl>& getAllMediaTypes() {
   static const std::vector<MediaTypeImpl> types = [] {
     std::vector<MediaTypeImpl> t;
     auto add = [&t](MediaType type, std::string s, std::vector<std::string> v) {
       t.emplace_back(type, std::move(s), std::move(v));
     };
-    using V = std::vector<std::string>;
     using enum MediaType;
-    add(html, "text/html", V{".htm", ".html", ".php"});
-    add(css, "text/css", V{".css"});
-    add(textPlain, "text/plain", V{".txt"});
-    add(javascript, "application/javascript", V{".js"});
-    add(MediaType::json, "application/json", V{".json"});
-    add(xml, "application/xml", V{".xml"});
-    add(flash, "application/x-shockwave-flash", V{".swf"});
-    add(flv, "video/x-flv", V{".flv"});
-    add(png, "video/.png", V{"image/png"});
-    add(jpeg, "image/jpeg", V{".jpe", ".jpg", ".jpeg"});
-    add(gif, "image/gif", V{".gif"});
-    add(bmp, "image/bmp", V{".bmp"});
+    add(html, "text/html", {".htm", ".html", ".php"});
+    add(css, "text/css", {".css"});
+    add(textPlain, "text/plain", {".txt"});
+    add(javascript, "application/javascript", {".js"});
+    add(MediaType::json, "application/json", {".json"});
+    add(xml, "application/xml", {".xml"});
+    add(flash, "application/x-shockwave-flash", {".swf"});
+    add(flv, "video/x-flv", {".flv"});
+    add(png, "video/.png", {"image/png"});
+    add(jpeg, "image/jpeg", {".jpe", ".jpg", ".jpeg"});
+    add(gif, "image/gif", {".gif"});
+    add(bmp, "image/bmp", {".bmp"});
     add(ico, "image/vnd.microsof.icon", {".ico"});
     add(tiff, "image/tiff", {".tiff", ".tif"});
     add(svg, "image/svg+xml", {".svgz"});
@@ -42,8 +39,7 @@ const std::vector<MediaTypeImpl>& getAllMediaTypes() {
   return types;
 }
 
-// Return a static map from file suffixes (e.g. ".json") to media types
-// (`MediaType::json`)
+// ________________________________________________________________
 const auto& getSuffixToMediaTypeStringMap() {
   static const auto map = []() {
     const auto& types = getAllMediaTypes();
@@ -54,13 +50,12 @@ const auto& getSuffixToMediaTypeStringMap() {
         map[suffix] = type._asString;
       }
     }
-
     return map;
   }();
   return map;
 }
 
-// Return a map from `MediaType`s to the corresponding media type string,
+// _____________________________________________________________
 const auto& getMediaTypeToStringMap() {
   static const auto map = []() {
     const auto& types = getAllMediaTypes();
@@ -69,7 +64,6 @@ const auto& getMediaTypeToStringMap() {
       AD_CHECK(!map.contains(type._mediaType));
       map[type._mediaType] = type._asString;
     }
-
     return map;
   }();
   return map;
@@ -77,10 +71,8 @@ const auto& getMediaTypeToStringMap() {
 
 }  // namespace detail
 
-// Convert a filename (e.g. "index.html") to the corresponding media type
-// ("text/html"). Unknown file suffixes will result in the media type
-// "application/text".
-const string& filenameToMediaType(std::string_view filename) {
+// _______________________________________________________________
+const string& mediaTypeForFilename(std::string_view filename) {
   const auto ext = [&filename] {
     const auto pos = filename.rfind('.');
     if (pos == std::string_view::npos) {
@@ -99,7 +91,7 @@ const string& filenameToMediaType(std::string_view filename) {
   }
 }
 
-/// Convert a `MediaType` to the corresponding media type string.
+// _______________________________________________________________________
 const std::string& toString(MediaType t) {
   const auto& m = detail::getMediaTypeToStringMap();
   AD_CHECK(m.contains(t));

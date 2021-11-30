@@ -55,22 +55,22 @@ struct MediaTypeImpl {
 
 // Return a static vector of all possible media types and their associated
 // filenames. Modify this function if you need to add or change several of the
-// media types.,
+// media types.
 const std::vector<MediaTypeImpl>& getAllMediaTypes();
 
 // Return a static map from file suffixes (e.g. ".json") to media types
-// (`MediaType::json`)
+// (`MediaType::json`).
 const auto& getSuffixToMediaTypeStringMap();
 
-// Return a map from `MediaType`s to the corresponding media type string,
+// Return a map from `MediaType`s to the corresponding media type string.
 const auto& getMediaTypeToStringMap();
 
 }  // namespace detail
 
-// Convert a filename (e.g. "index.html") to the corresponding media type
+// For a given filename (e.g. "index.html") compute the corresponding media type
 // ("text/html"). Unknown file suffixes will result in the media type
 // "application/text".
-const std::string& filenameToMediaType(std::string_view filename);
+const std::string& mediaTypeForFilename(std::string_view filename);
 
 /// Convert a `MediaType` to the corresponding media type string.
 const std::string& toString(MediaType t);

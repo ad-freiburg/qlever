@@ -1,8 +1,7 @@
-// Copyright 2011/2021, University of Freiburg,
+// Copyright 2021, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
-// Contributor(Update to Boost::Beast and coroutines) : Johannes
-// Kalmbach<kalmbach@cs.uni-freiburg.de>
+// Author: Johannes Kalmbach<kalmbach@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -75,19 +74,22 @@ class Server {
 
   /// Handle a single HTTP request. Check whether a file request or a query was
   /// sent, and dispatch to functions handling these cases. This function
-  /// requires the constraints for the `HttpHandler` in `HttpServer.h`. \param
-  /// req The HTTP request. \param send The action that sends a http:response
-  /// (see the `HttpServer.h` for documentation).
+  /// requires the constraints for the `HttpHandler` in `HttpServer.h`.
+  /// \param req The HTTP request.
+  /// \param send The action that sends a http:response. (see the
+  ///             `HttpServer.h` for documentation).
   boost::asio::awaitable<void> process(
       const ad_utility::httpUtils::HttpRequest auto& req, auto&& send);
 
   /// Handle a http request that asks for the processing of a query.
   /// \param params The key-value-pairs  sent in the HTTP GET request. When this
   /// function is called, we already know that a parameter "query" is contained
-  /// in `params`. \param requestTimer Timer that measure the total processing
-  /// time of this request. \param request The HTTP request. \param send The
-  /// action that sends a http:response (see the `HttpServer.h` for
-  /// documentation).
+  /// in `params`.
+  /// \param requestTimer Timer that measure the total processing
+  ///                     time of this request.
+  /// \param request The HTTP request.
+  /// \param send The action that sends a http:response (see the
+  ///             `HttpServer.h` for documentation).
   boost::asio::awaitable<void> processQuery(
       const ParamValueMap& params, ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
