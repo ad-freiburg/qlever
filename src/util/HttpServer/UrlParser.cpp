@@ -50,7 +50,6 @@ UrlParser::UrlTarget UrlParser::parseTarget(std::string_view target) {
   UrlTarget result;
 
   target = target.substr(0, target.find('#'));
-
   size_t index = target.find('?');
   result._target = target.substr(0, index);
   if (index == npos) {
