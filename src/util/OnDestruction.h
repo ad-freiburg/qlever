@@ -14,7 +14,7 @@ requires std::is_nothrow_invocable_r_v<void, F> class OnDestruction {
   F f_;
 
  public:
-  OnDestruction(F f) : f_{std::move(f)} {}
+  explicit OnDestruction(F f) : f_{std::move(f)} {}
   ~OnDestruction() { f_(); }
 };
 }  // namespace ad_utility

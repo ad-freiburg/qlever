@@ -320,9 +320,9 @@ class ParsedQuery {
   size_t _numGraphPatterns = 1;
   vector<OrderKey> _orderBy;
   vector<string> _groupByVariables;
-  string _limit;
+  std::optional<size_t> _limit = std::nullopt;
   string _textLimit;
-  string _offset;
+  std::optional<size_t> _offset = std::nullopt;
   string _originalString;
   SelectClause _selectClause;
 
