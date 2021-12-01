@@ -146,6 +146,9 @@ class HttpServer {
     beast::flat_buffer buffer;
     beast::tcp_stream stream{std::move(socket)};
 
+    auto releaseConnection = ad_utility::OnDestruction{
+        [this] { _numConnectionsLimiter->release(); }};
+
     // Keep track of whether we have to close the session after a
     // request/response pair.
     std::atomic<bool> streamNeedsClosing = false;
@@ -197,13 +200,14 @@ class HttpServer {
           logBeastError(error.code(), error.what());
         }
         // In case of an error, close the session by returning.
-        _numConnectionsLimiter->release();
         co_return;
       } catch (const std::exception& error) {
         LOG(ERROR) << error.what() << '\n';
+        co_return;
       } catch (...) {
         LOG(ERROR) << "Weird exception not inheriting from std::exception, "
                       "this shouldn't happen \n";
+        co_return;
       }
     }
   }
