@@ -14,13 +14,9 @@ namespace ad_utility::stream_generator {
 
 // coroutines are still experimental in clang, adapt the appropriate namespaces.
 #ifdef __clang__
-using suspend_always = std::experimental::suspend_always;
-using suspend_never = std::experimental::suspend_never;
-using std_coroutine_handle = std::experimental::coroutine_handle;
-#else
-using std::suspend_always;
-using std::suspend_never;
-using std_coroutine_handle = std::coroutine_handle;
+using std::suspend_always = std::experimental::suspend_always;
+using std::suspend_never = std::experimental::suspend_never;
+using std::coroutine_handle = std::experimental::coroutine_handle;
 #endif
 
 template <typename T>
@@ -37,7 +33,7 @@ class suspend_sometimes {
  public:
   explicit suspend_sometimes(const bool suspend) : suspend(suspend) {}
   bool await_ready() const noexcept { return !suspend; }
-  constexpr void await_suspend(std_coroutine_handle<>) const noexcept {}
+  constexpr void await_suspend(std::coroutine_handle<>) const noexcept {}
   constexpr void await_resume() const noexcept {}
 };
 
@@ -51,8 +47,8 @@ class stream_generator_promise {
 
   stream_generator get_return_object() noexcept;
 
-  constexpr suspend_always initial_suspend() const noexcept { return {}; }
-  constexpr suspend_always final_suspend() const noexcept { return {}; }
+  constexpr std::suspend_always initial_suspend() const noexcept { return {}; }
+  constexpr std::suspend_always final_suspend() const noexcept { return {}; }
 
   template <Streamable T>
   suspend_sometimes yield_value(T&& value) noexcept {
@@ -79,7 +75,7 @@ class stream_generator_promise {
 
   // Don't allow any use of 'co_await' inside the generator coroutine.
   template <typename U>
-  suspend_never await_transform(U&& value) = delete;
+  std::suspend_never await_transform(U&& value) = delete;
 
   void rethrow_if_exception() {
     if (m_exception) {
@@ -143,15 +139,15 @@ class [[nodiscard]] stream_generator {
   friend class detail::stream_generator_promise;
 
   explicit stream_generator(
-      std_coroutine_handle<promise_type> coroutine) noexcept
+      std::coroutine_handle<promise_type> coroutine) noexcept
       : m_coroutine(coroutine) {}
 
-  std_coroutine_handle<promise_type> m_coroutine;
+  std::coroutine_handle<promise_type> m_coroutine;
 };
 
 namespace detail {
 inline stream_generator stream_generator_promise::get_return_object() noexcept {
-  using coroutine_handle = std_coroutine_handle<stream_generator_promise>;
+  using coroutine_handle = std::coroutine_handle<stream_generator_promise>;
   return stream_generator{coroutine_handle::from_promise(*this)};
 }
 }  // namespace detail
