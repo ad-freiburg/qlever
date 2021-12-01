@@ -100,8 +100,9 @@ class Server {
                                   ad_utility::Timer& requestTimer,
                                   size_t sendMax = MAX_NOF_ROWS_IN_RESULT);
 
-  static http_streams::stream_generator composeResponseSepValues(
-      const ParsedQuery& query, const QueryExecutionTree& qet, char sep);
+  static ad_utility::stream_generator::stream_generator
+  composeResponseSepValues(const ParsedQuery& query,
+                           const QueryExecutionTree& qet, char sep);
 
   static json composeResponseJson(const string& query, const std::exception& e,
                                   ad_utility::Timer& requestTimer);

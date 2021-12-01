@@ -157,7 +157,7 @@ json Server::composeResponseJson(const ParsedQuery& query,
 }
 
 // _____________________________________________________________________________
-http_streams::stream_generator Server::composeResponseSepValues(
+ad_utility::stream_generator::stream_generator Server::composeResponseSepValues(
     const ParsedQuery& query, const QueryExecutionTree& qet, char sep) {
   size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
   size_t offset = query._offset.value_or(0);

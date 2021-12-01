@@ -98,9 +98,10 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
 }
 
 // _____________________________________________________________________________
-http_streams::stream_generator QueryExecutionTree::generateResults(
-    const vector<string>& selectVars, size_t limit, size_t offset,
-    char sep) const {
+ad_utility::stream_generator::stream_generator
+QueryExecutionTree::generateResults(const vector<string>& selectVars,
+                                    size_t limit, size_t offset,
+                                    char sep) const {
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
@@ -275,7 +276,7 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
 }
 
 // _________________________________________________________________________________________________________
-http_streams::stream_generator QueryExecutionTree::writeTable(
+ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
     const IdTable& data, char sep, size_t from, size_t upperBound,
     const vector<std::optional<pair<size_t, ResultTable::ResultType>>>
         validIndices) const {

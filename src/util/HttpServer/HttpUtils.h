@@ -7,6 +7,7 @@
 
 #include "../StringUtils.h"
 #include "../TypeTraits.h"
+#include "../streamable_generator.h"
 #include "./MediaTypes.h"
 #include "./UrlParser.h"
 #include "./beast.h"
@@ -74,11 +75,11 @@ static auto createOkResponse(std::string text, const HttpRequest auto& request,
 
 /// Create a HttpResponse from a string with status 200 OK. Otherwise behaves
 /// the same as createHttpResponseFromString.
-static auto createOkResponse(http_streams::stream_generator&& generator,
-                             const HttpRequest auto& request,
-                             MediaType mimeType) {
-  http::response<http_streams::streamable_body> response{http::status::ok,
-                                                         request.version()};
+static auto createOkResponse(
+    ad_utility::stream_generator::stream_generator&& generator,
+    const HttpRequest auto& request, MediaType mimeType) {
+  http::response<ad_utility::httpUtils::httpStreams::streamable_body> response{
+      http::status::ok, request.version()};
   response.set(http::field::content_type, toString(mimeType));
   response.keep_alive(request.keep_alive());
   response.body() = std::move(generator);
