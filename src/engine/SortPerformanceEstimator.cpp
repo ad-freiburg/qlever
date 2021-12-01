@@ -129,7 +129,8 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
       auto rows = sampleValuesRows[i];
       auto cols = sampleValuesCols[j];
       try {
-        if (rows * cols > maxNumberOfElementsToSort) {
+        // Even for very small indices measure the smallest sample.
+        if (rows * cols > maxNumberOfElementsToSort && (i > 0 || j > 0)) {
           throw ad_utility::detail::AllocationExceedsLimitException{0, 0};
         }
 #ifndef NDEBUG
