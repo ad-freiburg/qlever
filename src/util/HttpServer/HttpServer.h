@@ -168,13 +168,17 @@ class HttpServer {
     // Sessions might be reused for multiple request/response pairs.
     while (true) {
       try {
-        // Set the timeout.
+        // Set the timeout for reading.
         stream.expires_after(std::chrono::seconds(30));
         http::request<http::string_body> req;
 
         // Read a request
         co_await http::async_read(stream, buffer, req,
                                   boost::asio::use_awaitable);
+
+        // Currently there is no timeout on the server side, this is handled
+        // by QLever's timeout mechanism.
+        stream.expires_never();
 
         // Handle the http request. Note that `_httpHandler` is also responsible
         // for sending the message via the `sendMessage` lambda.
@@ -195,6 +199,11 @@ class HttpServer {
         // In case of an error, close the session by returning.
         _numConnectionsLimiter->release();
         co_return;
+      } catch (const std::exception& error) {
+        LOG(ERROR) << error.what() << '\n';
+      } catch (...) {
+        LOG(ERROR) << "Weird exception not inheriting from std::exception, "
+                      "this shouldn't happen \n";
       }
     }
   }
