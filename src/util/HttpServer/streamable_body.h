@@ -327,9 +327,10 @@ inline auto streamable_body::writer::get(boost::system::error_code& ec)
   // we set this bool to `false` so we will not be called
   // again.
   //
-  // TODO perhaps re-use buffers by swapping?
+  // TODO perhaps re-use buffers by iterating before reading?
   stringBuffer = *iterator;
-  if (iterator != body_.end()) {
+  bool hasMoreBuffers = iterator != body_.end();
+  if (hasMoreBuffers) {
     iterator++;
   }
   // TODO handle exceptions appropriately
@@ -338,7 +339,7 @@ inline auto streamable_body::writer::get(boost::system::error_code& ec)
   return {{
       const_buffers_type{stringBuffer.data(),
                          stringBuffer.size()},  // buffer to return.
-      iterator != body_.end()  // `true` if there are more buffers.
+      hasMoreBuffers  // `true` if there are more buffers.
   }};
 }
 
