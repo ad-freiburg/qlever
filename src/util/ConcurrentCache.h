@@ -152,7 +152,7 @@ class ConcurrentCache {
   }
 
   /// Clear the cache, including the pinned entries.
-  void clearAll() { _cacheAndInProgressMap.wlock()->_cache.clearAll(); }
+  virtual void clearAll() { _cacheAndInProgressMap.wlock()->_cache.clearAll(); }
 
   /// Delete elements from the unpinned part of the cache of total size
   /// at least `size`;

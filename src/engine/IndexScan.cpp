@@ -310,14 +310,13 @@ size_t IndexScan::computeSizeEstimate() {
 
     // We have to do a simple scan anyway so might as well do it now
     if (getResultWidth() == 1) {
-      auto key = asString();
-      {
-        auto rlock = getExecutionContext()->getPinnedSizes().rlock();
-        if (rlock->count(key)) {
-          return rlock->at(key);
-        }
+      if (auto size = getExecutionContext()->getQueryTreeCache().getPinnedSize(
+              asString());
+          size.has_value()) {
+        return size.value();
+      } else {
+        return getResult()->size();
       }
-      return getResult()->size();
     }
     if (_type == SPO_FREE_P || _type == SOP_FREE_O) {
       return getIndex().sizeEstimate(_subject, "", "");
