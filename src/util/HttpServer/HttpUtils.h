@@ -74,9 +74,11 @@ static auto createOkResponse(std::string text, const HttpRequest auto& request,
 
 /// Create a HttpResponse from a string with status 200 OK. Otherwise behaves
 /// the same as createHttpResponseFromString.
-static auto createOkResponse(http_streams::stream_generator&& generator, const HttpRequest auto& request,
+static auto createOkResponse(http_streams::stream_generator&& generator,
+                             const HttpRequest auto& request,
                              MediaType mimeType) {
-  http::response<http_streams::streamable_body> response{http::status::ok, request.version()};
+  http::response<http_streams::streamable_body> response{http::status::ok,
+                                                         request.version()};
   response.set(http::field::content_type, toString(mimeType));
   response.keep_alive(request.keep_alive());
   response.body() = std::move(generator);

@@ -91,9 +91,9 @@ class QueryExecutionTree {
                            size_t limit = MAX_NOF_ROWS_IN_RESULT,
                            size_t offset = 0, char sep = '\t') const;
 
-  http_streams::stream_generator generateResults(const vector<string>& selectVars,
-                           size_t limit = MAX_NOF_ROWS_IN_RESULT,
-                           size_t offset = 0, char sep = '\t') const;
+  http_streams::stream_generator generateResults(
+      const vector<string>& selectVars, size_t limit = MAX_NOF_ROWS_IN_RESULT,
+      size_t offset = 0, char sep = '\t') const;
 
   nlohmann::json writeResultAsJson(const vector<string>& selectVars,
                                    size_t limit, size_t offset) const;

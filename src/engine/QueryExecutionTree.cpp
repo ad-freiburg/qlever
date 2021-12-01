@@ -91,14 +91,16 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
                                              const vector<string>& selectVars,
                                              size_t limit, size_t offset,
                                              char sep) const {
-  for (const auto& stringView : generateResults(selectVars, limit, offset, sep)) {
+  for (const auto& stringView :
+       generateResults(selectVars, limit, offset, sep)) {
     out << stringView;
   }
 }
 
 // _____________________________________________________________________________
 http_streams::stream_generator QueryExecutionTree::generateResults(
-    const vector<string>& selectVars, size_t limit, size_t offset, char sep) const {
+    const vector<string>& selectVars, size_t limit, size_t offset,
+    char sep) const {
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
@@ -316,7 +318,7 @@ http_streams::stream_generator QueryExecutionTree::writeTable(
                      "Cannot deduce output type.");
         }
       }
-      co_yield (j + 1 < validIndices.size() ? sep : '\n');
+      co_yield(j + 1 < validIndices.size() ? sep : '\n');
     }
   }
   LOG(DEBUG) << "Done creating readable result.\n";

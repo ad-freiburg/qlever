@@ -1,21 +1,19 @@
 #pragma once
 
+#include <algorithm>
+#include <boost/assert.hpp>
 #include <boost/beast/core/detail/config.hpp>
 #include <boost/beast/core/error.hpp>
 #include <boost/beast/core/file_base.hpp>
 #include <boost/beast/http/message.hpp>
-#include <boost/assert.hpp>
 #include <boost/optional.hpp>
-#include <algorithm>
-#include <cstdio>
 #include <cstdint>
-#include <utility>
-
+#include <cstdio>
 #include <exception>
 #include <functional>
 #include <iterator>
 #include <type_traits>
-
+#include <utility>
 
 // coroutines are still experimental in clang, adapt the appropriate namespaces.
 #ifdef __clang__
@@ -34,13 +32,16 @@ using std::coroutine_handle = std::experimental::coroutine_handle;
 #endif
 
 template <typename T>
-concept Streamable = requires (T x, std::ostream &os) { os << x; };
+concept Streamable = requires(T x, std::ostream& os) {
+  os << x;
+};
 
 class stream_generator;
 
 namespace detail {
 class suspend_sometimes {
   const bool suspend;
+
  public:
   explicit suspend_sometimes(const bool suspend) : suspend(suspend) {}
   bool await_ready() const noexcept { return !suspend; }
@@ -58,12 +59,8 @@ class stream_generator_promise {
 
   stream_generator get_return_object() noexcept;
 
-  constexpr std::suspend_always initial_suspend() const noexcept {
-    return {};
-  }
-  constexpr std::suspend_always final_suspend() const noexcept {
-    return {};
-  }
+  constexpr std::suspend_always initial_suspend() const noexcept { return {}; }
+  constexpr std::suspend_always final_suspend() const noexcept { return {}; }
 
   template <Streamable T>
   suspend_sometimes yield_value(T&& value) noexcept {
@@ -161,13 +158,9 @@ class stream_generator_iterator {
   }
 
   // Need to provide post-increment operator to implement the 'Range' concept.
-  void operator++(int) {
-    (void)operator++();
-  }
+  void operator++(int) { (void)operator++(); }
 
-  reference operator*() const noexcept {
-    return m_coroutine.promise().value();
-  }
+  reference operator*() const noexcept { return m_coroutine.promise().value(); }
 
  private:
   coroutine_handle m_coroutine;
@@ -182,7 +175,8 @@ class [[nodiscard]] stream_generator {
 
   stream_generator() noexcept : m_coroutine(nullptr) {}
 
-  stream_generator(stream_generator&& other) noexcept : m_coroutine(other.m_coroutine) {
+  stream_generator(stream_generator&& other) noexcept
+      : m_coroutine(other.m_coroutine) {
     other.m_coroutine = nullptr;
   }
 
@@ -235,12 +229,9 @@ inline stream_generator stream_generator_promise::get_return_object() noexcept {
 }
 }  // namespace detail
 
-
-
-
 /**
  * A message body represented by a stream_generator
-*/
+ */
 struct streamable_body {
   // Algorithm for retrieving buffers when serializing.
   class writer;
@@ -248,8 +239,6 @@ struct streamable_body {
   // The type of the @ref message::body member.
   using value_type = stream_generator;
 };
-
-
 
 /** Algorithm for retrieving buffers when serializing.
 
@@ -286,7 +275,7 @@ class streamable_body::writer {
   // messages may only be serialized by one thread at
   // a time.
   //
-  template<bool isRequest, class Fields>
+  template <bool isRequest, class Fields>
   writer(boost::beast::http::header<isRequest, Fields>& h, value_type& b);
 
   // Initializer
@@ -303,12 +292,14 @@ class streamable_body::writer {
   // the contained pair will have the next buffer
   // to serialize, and a `bool` indicating whether
   // or not there may be additional buffers.
-  boost::optional<std::pair<const_buffers_type, bool>> get(boost::system::error_code& ec);
+  boost::optional<std::pair<const_buffers_type, bool>> get(
+      boost::system::error_code& ec);
 };
 
-
-template<bool isRequest, class Fields>
-inline streamable_body::writer::writer(boost::beast::http::header<isRequest, Fields>& h, value_type& b) : body_(b), iterator(default_iter) {
+template <bool isRequest, class Fields>
+inline streamable_body::writer::writer(
+    boost::beast::http::header<isRequest, Fields>& h, value_type& b)
+    : body_(b), iterator(default_iter) {
   boost::ignore_unused(h);
 }
 
@@ -326,7 +317,8 @@ inline void streamable_body::writer::init(boost::system::error_code& ec) {
 // This function is called repeatedly by the serializer to
 // retrieve the buffers representing the body. Our strategy
 // is to iterate over the generator to get the data step by step
-inline auto streamable_body::writer::get(boost::system::error_code& ec) -> boost::optional<std::pair<const_buffers_type, bool>> {
+inline auto streamable_body::writer::get(boost::system::error_code& ec)
+    -> boost::optional<std::pair<const_buffers_type, bool>> {
   // Return the buffer to the caller.
   //
   // The second element of the pair indicates whether or
@@ -344,11 +336,13 @@ inline auto streamable_body::writer::get(boost::system::error_code& ec) -> boost
   // TODO is chunked transfer encoding implemented correctly?
   ec = {};
   return {{
-      const_buffers_type{stringBuffer.data(), stringBuffer.size()},    // buffer to return.
-      iterator != body_.end()                       // `true` if there are more buffers.
+      const_buffers_type{stringBuffer.data(),
+                         stringBuffer.size()},  // buffer to return.
+      iterator != body_.end()  // `true` if there are more buffers.
   }};
 }
 
-static_assert(boost::beast::http::is_body<streamable_body>::value, "Body type requirements not met");
+static_assert(boost::beast::http::is_body<streamable_body>::value,
+              "Body type requirements not met");
 
 }  // namespace http_streams
