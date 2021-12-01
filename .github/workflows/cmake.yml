@@ -20,11 +20,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compiler: [ gcc10, clang13 ]
+        compiler: [ gcc11, clang13 ]
         os: [ ubuntu-latest ]
         warnings: [ "", -Werror ]
         exclude:
-          - compiler: gcc10
+          - compiler: gcc11
             warnings: -Werror
 
 
@@ -33,6 +33,10 @@ jobs:
 
     - name: Install dependencies
       run:  sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
+    - name: Install boost
+      run : sudo add-apt-repository -y ppa:mhier/libboost-latest && sudo apt update && sudo apt install -y libboost1.74-dev
+    - name: Install gcc 11
+      run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-11 g++-11
     - name: Install clang 13
       run: wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 13
     - name: Install libc++-13

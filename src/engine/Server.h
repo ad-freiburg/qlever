@@ -1,6 +1,7 @@
-// Copyright 2011, University of Freiburg,
+// Copyright 2021, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
+// Author: Johannes Kalmbach<kalmbach@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -12,6 +13,7 @@
 #include "../parser/ParseException.h"
 #include "../parser/SparqlParser.h"
 #include "../util/AllocatorWithLimit.h"
+#include "../util/HttpServer/HttpServer.h"
 #include "../util/Socket.h"
 #include "../util/Timer.h"
 #include "./QueryExecutionContext.h"
@@ -30,7 +32,6 @@ class Server {
                   size_t cacheMaxSizeGB, size_t cacheMaxSizeGBSingleEntry,
                   size_t cacheMaxNumEntries)
       : _numThreads(numThreads),
-        _serverSocket(),
         _port(port),
         _cache(cacheMaxNumEntries, cacheMaxSizeGB * (1ull << 30u) / sizeof(Id),
                cacheMaxSizeGBSingleEntry * (1ull << 30u) / sizeof(Id)),
@@ -46,9 +47,9 @@ class Server {
         _engine(),
         _initialized(false) {}
 
-  virtual ~Server();
+  virtual ~Server() = default;
 
-  typedef ad_utility::HashMap<string, string> ParamValueMap;
+  using ParamValueMap = ad_utility::HashMap<string, string>;
 
   // Initialize the server.
   void initialize(const string& ontologyBaseName, bool useText,
@@ -60,7 +61,6 @@ class Server {
 
  private:
   const int _numThreads;
-  Socket _serverSocket;
   int _port;
   ConcurrentLruCache _cache;
   PinnedSizes _pinnedSizes;
@@ -72,21 +72,27 @@ class Server {
   bool _initialized;
   bool _enablePatternTrick;
 
-  void runAcceptLoop();
+  /// Handle a single HTTP request. Check whether a file request or a query was
+  /// sent, and dispatch to functions handling these cases. This function
+  /// requires the constraints for the `HttpHandler` in `HttpServer.h`.
+  /// \param req The HTTP request.
+  /// \param send The action that sends a http:response. (see the
+  ///             `HttpServer.h` for documentation).
+  boost::asio::awaitable<void> process(
+      const ad_utility::httpUtils::HttpRequest auto& req, auto&& send);
 
-  void process(Socket* client);
-
-  void serveFile(Socket* client, const string& requestedFile) const;
-
-  ParamValueMap parseHttpRequest(const string& request) const;
-
-  string createQueryFromHttpParams(const ParamValueMap& params) const;
-
-  string createHttpResponse(const string& content,
-                            const string& contentType) const;
-
-  string create404HttpResponse() const;
-  string create400HttpResponse() const;
+  /// Handle a http request that asks for the processing of a query.
+  /// \param params The key-value-pairs  sent in the HTTP GET request. When this
+  /// function is called, we already know that a parameter "query" is contained
+  /// in `params`.
+  /// \param requestTimer Timer that measure the total processing
+  ///                     time of this request.
+  /// \param request The HTTP request.
+  /// \param send The action that sends a http:response (see the
+  ///             `HttpServer.h` for documentation).
+  boost::asio::awaitable<void> processQuery(
+      const ParamValueMap& params, ad_utility::Timer& requestTimer,
+      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
 
   string composeResponseJson(const ParsedQuery& query,
                              const QueryExecutionTree& qet,

@@ -72,7 +72,7 @@ inline string getLowercase(const string& orig);
 
 inline string getUppercase(const string& orig);
 
-inline string getLowercaseUtf8(const std::string& s);
+inline string getLowercaseUtf8(std::string_view s);
 
 inline string getUppercaseUtf8(const std::string& s);
 
@@ -152,8 +152,6 @@ J join(const vector<J>& to_join, const S& joiner);
 inline size_t findClosingBracket(const string& haystack, size_t start = 0,
                                  char openingBracket = '{',
                                  char closingBracket = '}');
-
-inline string decodeUrl(const string& orig);
 
 /**
  * @brief Return the last position where <literalEnd> was found in the <input>
@@ -254,7 +252,7 @@ string getUppercase(const string& orig) {
  * @param s UTF-8 encoded string
  * @return The lowercase version of s, also encoded as UTF-8
  */
-std::string getLowercaseUtf8(const std::string& s) {
+std::string getLowercaseUtf8(std::string_view s) {
   std::string result;
   icu::StringByteSink<std::string> sink(&result);
   UErrorCode err = U_ZERO_ERROR;
@@ -595,40 +593,6 @@ inline string strip(const string& text, const T& s) {
   }
   auto length = text.find_last_not_of(s) - pos + 1;
   return text.substr(pos, length);
-}
-
-// _____________________________________________________________________________
-string decodeUrl(const string& url) {
-  string decoded;
-  for (size_t i = 0; i < url.size(); ++i) {
-    if (url[i] == '+') {
-      decoded += ' ';
-    } else if (url[i] == '%' && i + 2 < url.size()) {
-      char h1 = tolower(url[i + 1]);
-      if (h1 >= '0' && h1 <= '9') {
-        h1 = h1 - '0';
-      } else if (h1 >= 'a' && h1 <= 'f') {
-        h1 = h1 - 'a' + 10;
-      } else {
-        decoded += '%';
-        continue;
-      }
-      char h2 = tolower(url[i + 2]);
-      if (h2 >= '0' && h2 <= '9') {
-        h2 = h2 - '0';
-      } else if (h2 >= 'a' && h2 <= 'f') {
-        h2 = h2 - 'a' + 10;
-      } else {
-        decoded += '%';
-        continue;
-      }
-      decoded += static_cast<char>(h1 * 16 + h2);
-      i += 2;
-    } else {
-      decoded += url[i];
-    }
-  }
-  return decoded;
 }
 
 inline size_t findClosingBracket(const string& haystack, size_t start,

@@ -1,4 +1,4 @@
-FROM ubuntu:20.10 as base
+FROM ubuntu:21.10 as base
 LABEL maintainer="Johannes Kalmbach <kalmbacj@informatik.uni-freiburg.de>"
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
@@ -8,6 +8,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 FROM base as builder
 RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git
 RUN apt install -y libjemalloc-dev ninja-build libzstd-dev
+RUN apt install -y libboost1.74-dev
 
 COPY . /app/
 

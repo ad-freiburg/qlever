@@ -4,6 +4,8 @@
 
 #include "./Server.h"
 
+#include <re2/re2.h>
+
 #include <algorithm>
 #include <cstring>
 #include <nlohmann/json.hpp>
@@ -13,17 +15,10 @@
 #include <vector>
 
 #include "../parser/ParseException.h"
+#include "../util/HttpServer/UrlParser.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
-#include "./Server.h"
 #include "QueryPlanner.h"
-
-// _____________________________________________________________________________
-Server::~Server() {
-  if (_initialized) {
-    _serverSocket.close();
-  }
-}
 
 // _____________________________________________________________________________
 void Server::initialize(const string& ontologyBaseName, bool useText,
@@ -43,15 +38,6 @@ void Server::initialize(const string& ontologyBaseName, bool useText,
       _allocator,
       _index.getNofTriples() * PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
 
-  // Init the server socket.
-  bool ret = _serverSocket.create() && _serverSocket.bind(_port) &&
-             _serverSocket.listen();
-  if (!ret) {
-    LOG(ERROR) << "Failed to create socket on port " << _port << "."
-               << std::endl;
-    exit(1);
-  }
-
   // Set flag.
   _initialized = true;
   LOG(INFO) << "Done initializing server." << std::endl;
@@ -63,315 +49,72 @@ void Server::run() {
     LOG(ERROR) << "Cannot start an uninitialized server!" << std::endl;
     exit(1);
   }
-  std::vector<std::thread> threads;
-  for (int i = 0; i < _numThreads; ++i) {
-    threads.emplace_back(&Server::runAcceptLoop, this);
-  }
-  for (std::thread& worker : threads) {
-    worker.join();
-  }
-}
-// _____________________________________________________________________________
-void Server::runAcceptLoop() {
-  // Loop and wait for queries. Run forever, for now.
-  while (true) {
-    // Wait for new query
-    LOG(INFO) << "---------- WAITING FOR QUERY AT PORT \"" << _port << "\" ... "
-              << std::endl;
 
-    ad_utility::Socket client;
-    // Concurrent accept used to be problematic because of the Thundering Herd
-    // problem but this should be fixed on modern OSs
-    bool success = _serverSocket.acceptClient(&client);
-    if (!success) {
-      LOG(ERROR) << "Socket error in acceot" << std::strerror(errno)
-                 << std::endl;
-      continue;
-    }
-    client.setKeepAlive(true);
-    LOG(INFO) << "Incoming connection, processing..." << std::endl;
-    process(&client);
-    client.close();
-  }
+  auto httpSessionHandler =
+      [this](auto request, auto&& send) -> boost::asio::awaitable<void> {
+    co_await process(std::move(request), send);
+  };
+  auto httpServer = HttpServer{static_cast<unsigned short>(_port), "0.0.0.0",
+                               std::move(httpSessionHandler)};
+
+  // The first argument is the number of threads, the second one is the maximum
+  // number of simultaneous TCP connections. Technically, these can be
+  // different, but this is equal to the behavior of QLever's previous server.
+  // TODO<joka921> Make this obsolete by implementing better concurrency
+  // management in the actual query processing.
+  httpServer.run(_numThreads, _numThreads);
 }
 
 // _____________________________________________________________________________
-void Server::process(Socket* client) {
+boost::asio::awaitable<void> Server::process(
+    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
+  using namespace ad_utility::httpUtils;
   ad_utility::Timer requestTimer;
   requestTimer.start();
-  string contentType;
-  LOG(DEBUG) << "Waiting for receive call to complete." << endl;
-  string request;
-  string response;
-  string headers;
-  string query;
-  client->getHTTPRequest(request, headers);
-  LOG(DEBUG) << "Got request from client with size: " << request.size()
-             << " and headers with total size: " << headers.size() << endl;
 
-  size_t indexOfGET = request.find("GET");
-  size_t indexOfHTTP = request.find("HTTP");
-  size_t upper = indexOfHTTP;
+  auto filenameAndParams = ad_utility::UrlParser::parseTarget(request.target());
+  const auto& params = filenameAndParams._parameters;
+  if (params.contains("cmd")) {
+    const auto& cmd = params.at("cmd");
+    if (cmd == "stats") {
+      LOG(INFO) << "Supplying index stats..." << std::endl;
+      auto response = createJsonResponse(composeStatsJson(), request);
+      co_return co_await send(std::move(response));
+    } else if (cmd == "cachestats") {
+      LOG(INFO) << "Supplying cache stats..." << std::endl;
+      auto response =
+          createJsonResponse(composeCacheStatsJson().dump(), request);
+      co_return co_await send(std::move(response));
+    } else if (cmd == "clearcache") {
+      _cache.clearUnpinnedOnly();
+    } else if (cmd == "clearcachecomplete") {
+      // The _pinnedSizes are not part of the (otherwise threadsafe) _cache
+      // and thus have to be manually locked.
+      // TODO<joka921> make _pinnedSizes part of the cache, or eliminate them
+      // entirely.
+      auto lock = _pinnedSizes.wlock();
+      _cache.clearAll();
+      lock->clear();
+    }
+    co_return;
+  }
 
-  if (indexOfGET != request.npos && indexOfHTTP != request.npos) {
-    size_t indexOfQuest = request.find("?", indexOfGET);
-    if (indexOfQuest != string::npos && indexOfQuest < indexOfHTTP) {
-      upper = indexOfQuest + 1;
-    }
-    string file = request.substr(indexOfGET + 5, upper - (indexOfGET + 5) - 1);
-    if (file.size() == 0) {
-      if (request[indexOfGET + 5] != '?') {
-        file = "index.html";
-      }
-    }
-    // Use hardcoded white-listing for index.html and style.css
-    // can be changed if more should ever be needed, for now keep it simple.
-    if (file.size() > 0) {
-      LOG(DEBUG) << "file: " << file << '\n';
-      if (file == "index.html" || file == "style.css" || file == "script.js") {
-        serveFile(client, file);
-        return;
-      } else {
-        LOG(INFO) << "Responding with 404 for file " << file << '\n';
-        auto bytesSent = client->send(create404HttpResponse());
-        LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
-        return;
-      }
+  if (params.contains("query")) {
+    if (params.at("query").empty()) {
+      co_return co_await send(createBadRequestResponse(
+          "Parameter \"query\" must not have an empty value", request));
     }
 
-    try {
-      ParamValueMap params = parseHttpRequest(request);
-
-      if (ad_utility::getLowercase(params["cmd"]) == "stats") {
-        LOG(INFO) << "Supplying index stats..." << std::endl;
-        auto statsJson = composeStatsJson();
-        contentType = "application/json";
-        string httpResponse = createHttpResponse(statsJson, contentType);
-        auto bytesSent = client->send(httpResponse);
-        LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
-        LOG(INFO) << "Sent stats to client." << std::endl;
-        return;
-      }
-
-      if (ad_utility::getLowercase(params["cmd"]) == "cachestats") {
-        LOG(INFO) << "Supplying cache stats..." << std::endl;
-        auto statsJson = composeCacheStatsJson();
-        contentType = "application/json";
-        string httpResponse = createHttpResponse(statsJson.dump(), contentType);
-        auto bytesSent = client->send(httpResponse);
-        LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
-        LOG(INFO) << "Sent cache stats to client." << std::endl;
-        return;
-      }
-
-      if (ad_utility::getLowercase(params["cmd"]) == "clearcache") {
-        _cache.clearUnpinnedOnly();
-      }
-
-      if (ad_utility::getLowercase(params["cmd"]) == "clearcachecomplete") {
-        auto lock = _pinnedSizes.wlock();
-        _cache.clearAll();
-        lock->clear();
-      }
-
-      ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
-          std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
-              ad_utility::TimeoutTimer::unlimited());
-      if (params.contains("timeout")) {
-        timeoutTimer = std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
-            ad_utility::TimeoutTimer::fromSeconds(
-                atof(params["timeout"].c_str())));
-      }
-
-      auto it = params.find("send");
-      size_t maxSend = MAX_NOF_ROWS_IN_RESULT;
-      if (it != params.end()) {
-        maxSend = static_cast<size_t>(atol(it->second.c_str()));
-      }
-#ifdef ALLOW_SHUTDOWN
-      if (ad_utility::getLowercase(params["cmd"]) == "shutdown") {
-        LOG(INFO) << "Shutdown triggered by HTTP request "
-                  << "(deactivate by compiling without -DALLOW_SHUTDOWN)"
-                  << std::endl;
-        exit(0);
-      }
-#endif
-      const bool pinSubtrees =
-          ad_utility::getLowercase(params["pinsubtrees"]) == "true";
-      const bool pinResult =
-          ad_utility::getLowercase(params["pinresult"]) == "true";
-      query = createQueryFromHttpParams(params);
-      LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned)" : "")
-                << ((pinResult) ? " (Result pinned)" : "") << ": " << query
-                << '\n';
-      ParsedQuery pq = SparqlParser(query).parse();
-      pq.expandPrefixes();
-
-      QueryExecutionContext qec(_index, _engine, &_cache, &_pinnedSizes,
-                                _allocator, _sortPerformanceEstimator,
-                                pinSubtrees, pinResult);
-      // start the shared timeout timer here to also include
-      // the query planning
-      timeoutTimer->wlock()->start();
-
-      QueryPlanner qp(&qec);
-      qp.setEnablePatternTrick(_enablePatternTrick);
-      QueryExecutionTree qet = qp.createExecutionTree(pq);
-      qet.isRoot() = true;  // allow pinning of the final result
-      qet.recursivelySetTimeoutTimer(timeoutTimer);
-      LOG(TRACE) << qet.asString() << std::endl;
-
-      if (ad_utility::getLowercase(params["action"]) == "csv_export") {
-        // CSV export
-        response = composeResponseSepValues(pq, qet, ',');
-        contentType =
-            "text/csv\r\n"
-            "Content-Disposition: attachment;filename=export.csv";
-      } else if (ad_utility::getLowercase(params["action"]) == "tsv_export") {
-        // TSV export
-        response = composeResponseSepValues(pq, qet, '\t');
-        contentType =
-            "text/tab-separated-values\r\n"
-            "Content-Disposition: attachment;filename=export.tsv";
-      } else if (ad_utility::getLowercase(params["action"]) ==
-                 "binary_export") {
-        // binary export
-        response = composeResponseSepValues(pq, qet, 'b');
-        contentType =
-            "application/octet-stream\r\n"
-            "Content-Disposition: attachment;filename=export.dat";
-      } else {
-        // Normal case: JSON response
-        response = composeResponseJson(pq, qet, requestTimer, maxSend);
-        contentType = "application/json";
-      }
-      // Print the runtime info. This needs to be done after the query
-      // was computed.
-      LOG(INFO) << '\n' << qet.getRootOperation()->getRuntimeInfo().toString();
-    } catch (const std::exception& e) {
-      response = composeResponseJson(query, e, requestTimer);
-    }
-    string httpResponse = createHttpResponse(response, contentType);
-    auto bytesSent = client->send(httpResponse);
-    LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
-  } else {
-    LOG(INFO) << "Got invalid request " << request << '\n';
-    LOG(INFO) << "Responding with 400 Bad Request.\n";
-    auto bytesSent = client->send(create400HttpResponse());
-    LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
-  }
-}
-
-// _____________________________________________________________________________
-Server::ParamValueMap Server::parseHttpRequest(
-    const string& httpRequest) const {
-  LOG(DEBUG) << "Parsing HTTP Request." << endl;
-  ParamValueMap params;
-  // Parse the HTTP Request.
-
-  size_t indexOfGET = httpRequest.find("GET");
-  size_t indexOfHTTP = httpRequest.find("HTTP");
-
-  if (indexOfGET == httpRequest.npos || indexOfHTTP == httpRequest.npos) {
-    AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-             "Invalid request. Only supporting proper HTTP GET requests!\n" +
-                 httpRequest);
+    co_return co_await processQuery(params, requestTimer, std::move(request),
+                                    send);
   }
 
-  string request =
-      httpRequest.substr(indexOfGET + 3, indexOfHTTP - (indexOfGET + 3));
-
-  size_t index = request.find("?");
-  if (index == request.npos) {
-    AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-             "Invalid request. At least one parameters is "
-             "required for meaningful queries!\n" +
-                 httpRequest);
-  }
-  size_t next = request.find('&', index + 1);
-  while (next != request.npos) {
-    size_t posOfEq = request.find('=', index + 1);
-    if (posOfEq == request.npos) {
-      AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-               "Parameter without \"=\" in HTTP Request.\n" + httpRequest);
-    }
-    string param = ad_utility::getLowercaseUtf8(
-        request.substr(index + 1, posOfEq - (index + 1)));
-    string value = ad_utility::decodeUrl(
-        request.substr(posOfEq + 1, next - (posOfEq + 1)));
-    if (params.count(param) > 0) {
-      AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-               "Duplicate HTTP parameter: " + param);
-    }
-    params[param] = value;
-    index = next;
-    next = request.find('&', index + 1);
-  }
-  size_t posOfEq = request.find('=', index + 1);
-  if (posOfEq == request.npos) {
-    AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-             "Parameter without \"=\" in HTTP Request." + httpRequest);
-  }
-  string param = ad_utility::getLowercaseUtf8(
-      request.substr(index + 1, posOfEq - (index + 1)));
-  string value = ad_utility::decodeUrl(
-      request.substr(posOfEq + 1, request.size() - 1 - (posOfEq + 1)));
-  if (params.count(param) > 0) {
-    AD_THROW(ad_semsearch::Exception::BAD_REQUEST, "Duplicate HTTP parameter.");
-  }
-  params[param] = value;
-
-  LOG(DEBUG) << "Done parsing HTTP Request." << endl;
-  return params;
-}
-
-// _____________________________________________________________________________
-string Server::createQueryFromHttpParams(const ParamValueMap& params) const {
-  string query;
-  // Construct a Query object from the parsed request.
-  auto it = params.find("query");
-  if (it == params.end() || it->second == "") {
-    AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-             "Expected at least one non-empty attribute \"query\".");
-  }
-  return it->second;
-}
-
-// _____________________________________________________________________________
-string Server::createHttpResponse(const string& content,
-                                  const string& contentType) const {
-  std::ostringstream os;
-  os << "HTTP/1.1 200 OK\r\n"
-     << "Content-Length: " << content.size() << "\r\n"
-     << "Connection: close\r\n"
-     << "Content-Type: " << contentType << "; charset="
-     << "utf-8"
-     << "\r\n"
-     << "Access-Control-Allow-Origin: *"
-     << "\r\n"
-     << "\r\n"
-     << content;
-  return os.str();
-}
-
-// _____________________________________________________________________________
-string Server::create404HttpResponse() const {
-  std::ostringstream os;
-  os << "HTTP/1.1 404 Not Found\r\n"
-     << "Content-Length: 0\r\n"
-     << "Connection: close\r\n"
-     << "\r\n";
-  return os.str();
-}
-
-// _____________________________________________________________________________
-string Server::create400HttpResponse() const {
-  std::ostringstream os;
-  os << "HTTP/1.1 400 Bad Request\r\n"
-     << "Content-Length: 0\r\n"
-     << "Connection: close\r\n"
-     << "\r\n";
-  return os.str();
+  // Neither a query nor a command were specified, simply serve a file.
+  // Note that `makeFileServer` returns a function.
+  // The first argument is the document root, the second one is the whitelist.
+  co_await makeFileServer(".", ad_utility::HashSet<std::string>{
+                                   "index.html", "script.js",
+                                   "style.css"})(std::move(request), send);
 }
 
 // _____________________________________________________________________________
@@ -454,47 +197,6 @@ string Server::composeResponseJson(const string& query,
 }
 
 // _____________________________________________________________________________
-void Server::serveFile(Socket* client, const string& requestedFile) const {
-  string contentString;
-  string contentType = "text/plain";
-  string statusString = "HTTP/1.0 200 OK";
-
-  // CASE: file.
-  LOG(DEBUG) << "Looking for file: \"" << requestedFile << "\" ... \n";
-  std::ifstream in(requestedFile.c_str());
-  if (!in) {
-    statusString = "HTTP/1.0 404 NOT FOUND";
-    contentString = "404 NOT FOUND";
-  } else {
-    // File into string
-    contentString = string((std::istreambuf_iterator<char>(in)),
-                           std::istreambuf_iterator<char>());
-    // Set content type
-    if (ad_utility::endsWith(requestedFile, ".html")) {
-      contentType = "text/html";
-    } else if (ad_utility::endsWith(requestedFile, ".css")) {
-      contentType = "text/css";
-    } else if (ad_utility::endsWith(requestedFile, ".js")) {
-      contentType = "application/javascript";
-    }
-    in.close();
-  }
-
-  size_t contentLength = contentString.size();
-  std::ostringstream headerStream;
-  headerStream << statusString << "\r\n"
-               << "Content-Length: " << contentLength << "\r\n"
-               << "Content-Type: " << contentType << "\r\n"
-               << "Access-Control-Allow-Origin: *\r\n"
-               << "Connection: close\r\n"
-               << "\r\n";
-
-  string data = headerStream.str();
-  data += contentString;
-  client->send(data);
-}
-
-// _____________________________________________________________________________
 string Server::composeStatsJson() const {
   std::ostringstream os;
   os << "{\n"
@@ -528,4 +230,90 @@ nlohmann::json Server::composeCacheStatsJson() const {
   result["pinned-size"] = _cache.pinnedSize();
   result["num-pinned-index-scan-sizes"] = _pinnedSizes.rlock()->size();
   return result;
+}
+
+// ____________________________________________________________________________
+boost::asio::awaitable<void> Server::processQuery(
+    const ParamValueMap& params, ad_utility::Timer& requestTimer,
+    const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
+  using namespace ad_utility::httpUtils;
+  AD_CHECK(params.contains("query"));
+  const auto& query = params.at("query");
+  AD_CHECK(!query.empty());
+
+  auto sendJson =
+      [&request,
+       &send](std::string&& jsonString) -> boost::asio::awaitable<void> {
+    auto response = createJsonResponse(std::move(jsonString), request);
+    co_return co_await send(std::move(response));
+  };
+
+  std::optional<std::string> errorResponse;
+
+  try {
+    ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
+        std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
+            ad_utility::TimeoutTimer::unlimited());
+    if (params.contains("timeout")) {
+      timeoutTimer = std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
+          ad_utility::TimeoutTimer::fromSeconds(
+              std::stof(params.at("timeout"))));
+    }
+
+    auto containsParam = [&params](const std::string& param,
+                                   const std::string& expected) {
+      return params.contains(param) && params.at(param) == expected;
+    };
+    size_t maxSend = params.contains("send") ? std::stoul(params.at("send"))
+                                             : MAX_NOF_ROWS_IN_RESULT;
+    const bool pinSubtrees = containsParam("pinsubtrees", "true");
+    const bool pinResult = containsParam("pinresult", "true");
+    LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned)" : "")
+              << ((pinResult) ? " (Result pinned)" : "") << ": " << query
+              << '\n';
+    ParsedQuery pq = SparqlParser(query).parse();
+    pq.expandPrefixes();
+
+    QueryExecutionContext qec(_index, _engine, &_cache, &_pinnedSizes,
+                              _allocator, _sortPerformanceEstimator,
+                              pinSubtrees, pinResult);
+    // start the shared timeout timer here to also include
+    // the query planning
+    timeoutTimer->wlock()->start();
+
+    QueryPlanner qp(&qec);
+    qp.setEnablePatternTrick(_enablePatternTrick);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    qet.isRoot() = true;  // allow pinning of the final result
+    qet.recursivelySetTimeoutTimer(timeoutTimer);
+    LOG(TRACE) << qet.asString() << std::endl;
+
+    if (containsParam("action", "csv_export")) {
+      // CSV export
+      auto responseString = composeResponseSepValues(pq, qet, ',');
+      auto response = createOkResponse(std::move(responseString), request,
+                                       ad_utility::MediaType::csv);
+      co_await send(std::move(response));
+    } else if (containsParam("action", "tsv_export")) {
+      // TSV export
+      auto responseString = composeResponseSepValues(pq, qet, '\t');
+      auto response = createOkResponse(std::move(responseString), request,
+                                       ad_utility::MediaType::tsv);
+      co_await send(std::move(response));
+    } else {
+      // Normal case: JSON response
+      auto responseString = composeResponseJson(pq, qet, requestTimer, maxSend);
+      co_await sendJson(std::move(responseString));
+    }
+    // Print the runtime info. This needs to be done after the query
+    // was computed.
+    LOG(INFO) << '\n' << qet.getRootOperation()->getRuntimeInfo().toString();
+  } catch (const ad_semsearch::Exception& e) {
+    errorResponse = composeResponseJson(query, e, requestTimer);
+  } catch (const std::exception& e) {
+    errorResponse = composeResponseJson(query, e, requestTimer);
+  }
+  if (errorResponse.has_value()) {
+    co_return co_await sendJson(std::move(errorResponse.value()));
+  }
 }
