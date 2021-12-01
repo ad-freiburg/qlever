@@ -57,7 +57,7 @@ void Server::run() {
   auto httpServer = HttpServer{static_cast<unsigned short>(_port), "0.0.0.0",
                                std::move(httpSessionHandler)};
 
-  // The first argument ist the number of threads, the second one is the maximum
+  // The first argument is the number of threads, the second one is the maximum
   // number of simultaneous TCP connections. Technically, these can be
   // different, but this is equal to the behavior of QLever's previous server.
   // TODO<joka921> Make this obsolete by implementing better concurrency
@@ -91,7 +91,7 @@ boost::asio::awaitable<void> Server::process(
       // The _pinnedSizes are not part of the (otherwise threadsafe) _cache
       // and thus have to be manually locked.
       // TODO<joka921> make _pinnedSizes part of the cache, or eliminate them
-      // completely.
+      // entirely.
       auto lock = _pinnedSizes.wlock();
       _cache.clearAll();
       lock->clear();
@@ -109,8 +109,9 @@ boost::asio::awaitable<void> Server::process(
                                     send);
   }
 
-  // Neither a query or a command were specified, simply serve a file.
+  // Neither a query nor a command were specified, simply serve a file.
   // Note that `makeFileServer` returns a function.
+  // The first argument is the document root, the second one is the whitelist.
   co_await makeFileServer(".", ad_utility::HashSet<std::string>{
                                    "index.html", "script.js",
                                    "style.css"})(std::move(request), send);

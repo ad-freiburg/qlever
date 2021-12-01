@@ -49,7 +49,9 @@ UrlParser::UrlTarget UrlParser::parseTarget(std::string_view target) {
   static constexpr auto npos = std::string_view::npos;
   UrlTarget result;
 
-  size_t index = target.find_first_of("?#");
+  target = target.substr(0, target.find('#'));
+
+  size_t index = target.find('?');
   result._target = target.substr(0, index);
   if (index == npos) {
     return result;

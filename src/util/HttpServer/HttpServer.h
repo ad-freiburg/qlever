@@ -168,7 +168,7 @@ class HttpServer {
     // Sessions might be reused for multiple request/response pairs.
     while (true) {
       try {
-        // Set the timeout for reading.
+        // Set the timeout for reading the next request.
         stream.expires_after(std::chrono::seconds(30));
         http::request<http::string_body> req;
 

@@ -171,9 +171,9 @@ inline auto makeFileServer(
       co_return;
     }
 
+    // Decode the path and check that it is absolute and contains no "..".
     auto urlPath =
         ad_utility::UrlParser::getDecodedPathAndCheck(request.target());
-    // Request filesystemPath must be absolute and not contain "..".
     if (!urlPath.has_value()) {
       co_await send(createBadRequestResponse(
           "Invalid url path \"" + std::string{request.target()} + '"',
@@ -181,8 +181,8 @@ inline auto makeFileServer(
       co_return;
     }
 
-    // Check if the target is in the whitelist.
-    // The `target()` starts with a slash, entries in the whitelist don't.
+    // Check if the target is in the whitelist. The `target()` starts with a
+    // slash, entries in the whitelist don't.
     if (whitelist.has_value() &&
         !whitelist.value().contains(urlPath.value().substr(1))) {
       co_await send(createNotFoundResponse(request));
