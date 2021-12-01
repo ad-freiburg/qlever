@@ -91,9 +91,9 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
                                              const vector<string>& selectVars,
                                              size_t limit, size_t offset,
                                              char sep) const {
-  for (const auto& stringView :
-       generateResults(selectVars, limit, offset, sep)) {
-    out << stringView;
+  auto generator = generateResults(selectVars, limit, offset, sep);
+  while (generator.hasNext()) {
+    out << generator.next();
   }
 }
 

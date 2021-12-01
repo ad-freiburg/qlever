@@ -107,71 +107,12 @@ class stream_generator_promise {
     return m_value.view().length() >= 1000;
   }
 };
-
-struct generator_sentinel {};
-
-class stream_generator_iterator {
-  using coroutine_handle = std::coroutine_handle<stream_generator_promise>;
-
- public:
-  using iterator_category = std::input_iterator_tag;
-  // What type should we use for counting elements of a potentially infinite
-  // sequence?
-  using difference_type = std::ptrdiff_t;
-  using value_type = typename stream_generator_promise::value_type;
-  using reference = typename stream_generator_promise::reference_type;
-  using pointer = typename stream_generator_promise::pointer_type;
-
-  // Iterator needs to be default-constructible to satisfy the Range concept.
-  stream_generator_iterator() noexcept : m_coroutine(nullptr) {}
-
-  explicit stream_generator_iterator(coroutine_handle coroutine) noexcept
-      : m_coroutine(coroutine) {}
-
-  friend bool operator==(const stream_generator_iterator& it,
-                         generator_sentinel) noexcept {
-    return !it.m_coroutine || it.m_coroutine.done();
-  }
-
-  friend bool operator!=(const stream_generator_iterator& it,
-                         generator_sentinel s) noexcept {
-    return !(it == s);
-  }
-
-  friend bool operator==(generator_sentinel s,
-                         const stream_generator_iterator& it) noexcept {
-    return (it == s);
-  }
-
-  friend bool operator!=(generator_sentinel s,
-                         const stream_generator_iterator& it) noexcept {
-    return it != s;
-  }
-
-  stream_generator_iterator& operator++() {
-    m_coroutine.resume();
-    if (m_coroutine.done()) {
-      m_coroutine.promise().rethrow_if_exception();
-    }
-
-    return *this;
-  }
-
-  // Need to provide post-increment operator to implement the 'Range' concept.
-  void operator++(int) { (void)operator++(); }
-
-  reference operator*() const noexcept { return m_coroutine.promise().value(); }
-
- private:
-  coroutine_handle m_coroutine;
-};
 }  // namespace detail
 
 class [[nodiscard]] stream_generator {
  public:
   using promise_type = detail::stream_generator_promise;
-  using iterator = detail::stream_generator_iterator;
-  using value_type = typename iterator::value_type;
+  using value_type = std::string_view;
 
   stream_generator() noexcept : m_coroutine(nullptr) {}
 
@@ -193,19 +134,18 @@ class [[nodiscard]] stream_generator {
     return *this;
   }
 
-  iterator begin() {
+  std::string_view next() {
     if (m_coroutine) {
       m_coroutine.resume();
       if (m_coroutine.done()) {
         m_coroutine.promise().rethrow_if_exception();
       }
     }
-
-    return iterator{m_coroutine};
+    return m_coroutine.promise().value();
   }
 
-  detail::generator_sentinel end() noexcept {
-    return detail::generator_sentinel{};
+  bool hasNext() {
+    return !m_coroutine.done();
   }
 
   void swap(stream_generator& other) noexcept {
@@ -247,10 +187,6 @@ struct streamable_body {
 */
 class streamable_body::writer {
   value_type& body_;
-  detail::stream_generator_iterator& iterator;
-  std::string stringBuffer;
-  // provide a default iterator object until initialisation
-  inline static detail::stream_generator_iterator default_iter;
 
  public:
   // The type of buffer sequence returned by `get`.
@@ -299,13 +235,11 @@ class streamable_body::writer {
 template <bool isRequest, class Fields>
 inline streamable_body::writer::writer(
     boost::beast::http::header<isRequest, Fields>& h, value_type& b)
-    : body_(b), iterator(default_iter) {
+    : body_(b) {
   boost::ignore_unused(h);
 }
 
 inline void streamable_body::writer::init(boost::system::error_code& ec) {
-  iterator = body_.begin();
-  // TODO handle error codes?
   // The error_code specification requires that we
   // either set the error to some value, or set it
   // to indicate no error.
@@ -328,18 +262,12 @@ inline auto streamable_body::writer::get(boost::system::error_code& ec)
   // again.
   //
   // TODO perhaps re-use buffers by iterating before reading?
-  stringBuffer = *iterator;
-  bool hasMoreBuffers = iterator != body_.end();
-  if (hasMoreBuffers) {
-    iterator++;
-  }
+  std::string_view view = body_.next();
   // TODO handle exceptions appropriately
-  // TODO is chunked transfer encoding implemented correctly?
   ec = {};
   return {{
-      const_buffers_type{stringBuffer.data(),
-                         stringBuffer.size()},  // buffer to return.
-      hasMoreBuffers  // `true` if there are more buffers.
+      const_buffers_type{view.data(),view.size()},
+      body_.hasNext()  // `true` if there are more buffers.
   }};
 }
 
