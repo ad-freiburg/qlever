@@ -175,7 +175,7 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
           LOG(WARN)
               << "Could not create any estimate for the sorting performance. "
               << "Setting all estimates to 0. This means that no sort "
-              << "operations will be canceled" << std::endl;
+              << "operations will be canceled." << std::endl;
         }
         LOG(TRACE) << "Estimated the sort time to be " << std::fixed
                    << std::setprecision(3) << _samples[i][j] << " seconds."
@@ -183,6 +183,6 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
       }
     }
   }
-  LOG(INFO) << "Done creating sort estimates" << std::endl;
+  LOG(INFO) << "Done creating sort estimates." << std::endl;
   _estimatesWereCalculated = true;
 }
