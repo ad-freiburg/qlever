@@ -7,7 +7,6 @@
 
 #include <fstream>
 #include <iostream>
-#include <nlohmann/json.hpp>
 
 #include "../parser/RdfEscaping.h"
 #include "../parser/Tokenizer.h"
@@ -15,6 +14,7 @@
 #include "../util/File.h"
 #include "../util/HashMap.h"
 #include "../util/HashSet.h"
+#include "../util/json.h"
 #include "./ConstantsIndexBuilding.h"
 
 using std::string;
@@ -320,7 +320,7 @@ template <class StringRange>
 void Vocabulary<S, C>::initializeExternalizePrefixes(const StringRange& s) {
   _externalizedPrefixes.clear();
   for (const auto& el : s) {
-    _externalizedPrefixes.push_back(el);
+    _externalizedPrefixes.emplace_back(el);
   }
 }
 
@@ -329,7 +329,11 @@ template <class S, class C>
 template <class StringRange>
 void Vocabulary<S, C>::initializeInternalizedLangs(const StringRange& s) {
   _internalizedLangs.clear();
-  _internalizedLangs.insert(_internalizedLangs.begin(), s.begin(), s.end());
+  // `StringRange` might be nlohmann::json, for which we have disabled
+  // implicit conversions, so `vector::insert` cannot be used.
+  for (const auto& el : s) {
+    _internalizedLangs.emplace_back(el);
+  }
 }
 
 // _____________________________________________________

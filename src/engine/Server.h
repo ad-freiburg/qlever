@@ -94,19 +94,19 @@ class Server {
       const ParamValueMap& params, ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
 
-  string composeResponseJson(const ParsedQuery& query,
-                             const QueryExecutionTree& qet,
-                             ad_utility::Timer& requestTimer,
-                             size_t sendMax = MAX_NOF_ROWS_IN_RESULT) const;
-
-  string composeResponseSepValues(const ParsedQuery& query,
+  static json composeResponseJson(const ParsedQuery& query,
                                   const QueryExecutionTree& qet,
-                                  char sep) const;
+                                  ad_utility::Timer& requestTimer,
+                                  size_t sendMax = MAX_NOF_ROWS_IN_RESULT);
 
-  string composeResponseJson(const string& query, const std::exception& e,
-                             ad_utility::Timer& requestTimer) const;
+  static string composeResponseSepValues(const ParsedQuery& query,
+                                         const QueryExecutionTree& qet,
+                                         char sep);
 
-  string composeStatsJson() const;
+  static json composeResponseJson(const string& query, const std::exception& e,
+                                  ad_utility::Timer& requestTimer);
+
+  json composeStatsJson() const;
 
   json composeCacheStatsJson() const;
 };

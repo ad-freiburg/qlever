@@ -78,6 +78,13 @@ static auto createJsonResponse(std::string text, const auto& request) {
   return createOkResponse(std::move(text), request, MediaType::json);
 }
 
+/// Create a HttpResponse from a json object with status 200 OK and mime type
+/// "application/json".
+static auto createJsonResponse(const json& j, const auto& request) {
+  // Argument `4` leads to a human-readable indentation.
+  return createJsonResponse(j.dump(4), request);
+}
+
 /// Create a HttpResponse with status 404 Not Found. The string body will be a
 /// default message including the name of the file that was not found, which can
 /// be read from the request directly.

@@ -50,8 +50,8 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ("?y", triples[2]._s);
       ASSERT_EQ("nsx:rel2", triples[2]._p._iri);
       ASSERT_EQ("<http://abc.de>", triples[2]._o);
-      ASSERT_EQ("", pq._limit);
-      ASSERT_EQ("", pq._offset);
+      ASSERT_EQ(std::nullopt, pq._limit);
+      ASSERT_EQ(std::nullopt, pq._offset);
     }
 
     {
@@ -84,8 +84,8 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ("?y", triples[2]._s);
       ASSERT_EQ("nsx:rel2", triples[2]._p._iri);
       ASSERT_EQ("<http://abc.de>", triples[2]._o);
-      ASSERT_EQ("", pq._limit);
-      ASSERT_EQ("", pq._offset);
+      ASSERT_EQ(std::nullopt, pq._limit);
+      ASSERT_EQ(std::nullopt, pq._offset);
     }
 
     {
@@ -114,8 +114,8 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ("?y", triples[2]._s);
       ASSERT_EQ("nsx:rel2", triples[2]._p._iri);
       ASSERT_EQ("\"Hello... World\"", triples[2]._o);
-      ASSERT_EQ("", pq._limit);
-      ASSERT_EQ("", pq._offset);
+      ASSERT_EQ(std::nullopt, pq._limit);
+      ASSERT_EQ(std::nullopt, pq._offset);
     }
 
     {
@@ -412,8 +412,8 @@ TEST(ParserTest, testExpandPrefixes) {
   ASSERT_EQ("?y", c._whereClauseTriples[2]._s);
   ASSERT_EQ("nsx:rel2", c._whereClauseTriples[2]._p._iri);
   ASSERT_EQ("<http://abc.de>", c._whereClauseTriples[2]._o);
-  ASSERT_EQ("", pq._limit);
-  ASSERT_EQ("", pq._offset);
+  ASSERT_EQ(std::nullopt, pq._limit);
+  ASSERT_EQ(std::nullopt, pq._offset);
 }
 
 TEST(ParserTest, testSolutionModifiers) {
@@ -425,8 +425,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(0u, pq._prefixes.size());
     ASSERT_EQ(1u, pq._selectClause._selectedVariables.size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
-    ASSERT_EQ("", pq._limit);
-    ASSERT_EQ("", pq._offset);
+    ASSERT_EQ(std::nullopt, pq._limit);
+    ASSERT_EQ(std::nullopt, pq._offset);
     ASSERT_EQ(size_t(0), pq._orderBy.size());
     ASSERT_FALSE(pq._selectClause._distinct);
     ASSERT_FALSE(pq._selectClause._reduced);
@@ -441,8 +441,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(1u, c._whereClauseTriples.size());
-    ASSERT_EQ("10", pq._limit);
-    ASSERT_EQ("", pq._offset);
+    ASSERT_EQ(10ul, pq._limit);
+    ASSERT_EQ(std::nullopt, pq._offset);
     ASSERT_EQ(size_t(0), pq._orderBy.size());
     ASSERT_FALSE(pq._selectClause._distinct);
     ASSERT_FALSE(pq._selectClause._reduced);
@@ -459,8 +459,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(0u, pq._prefixes.size());
     ASSERT_EQ(1u, pq._selectClause._selectedVariables.size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
-    ASSERT_EQ("10", pq._limit);
-    ASSERT_EQ("15", pq._offset);
+    ASSERT_EQ(10u, pq._limit.value_or(0));
+    ASSERT_EQ(15u, pq._offset.value_or(0));
     ASSERT_EQ(size_t(0), pq._orderBy.size());
     ASSERT_FALSE(pq._selectClause._distinct);
     ASSERT_FALSE(pq._selectClause._reduced);
@@ -477,8 +477,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(0u, pq._prefixes.size());
     ASSERT_EQ(2u, pq._selectClause._selectedVariables.size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
-    ASSERT_EQ("10", pq._limit);
-    ASSERT_EQ("15", pq._offset);
+    ASSERT_EQ(10u, pq._limit.value_or(0));
+    ASSERT_EQ(15u, pq._offset.value_or(0));
     ASSERT_EQ(size_t(1), pq._orderBy.size());
     ASSERT_EQ("?y", pq._orderBy[0]._key);
     ASSERT_FALSE(pq._orderBy[0]._desc);
@@ -498,8 +498,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(3u, pq._selectClause._selectedVariables.size());
     ASSERT_EQ("SCORE(?x)", pq._selectClause._selectedVariables[1]);
     ASSERT_EQ(1u, c._whereClauseTriples.size());
-    ASSERT_EQ("10", pq._limit);
-    ASSERT_EQ("15", pq._offset);
+    ASSERT_EQ(10u, pq._limit.value_or(0));
+    ASSERT_EQ(15u, pq._offset.value_or(0));
     ASSERT_EQ(size_t(2), pq._orderBy.size());
     ASSERT_EQ("?y", pq._orderBy[0]._key);
     ASSERT_FALSE(pq._orderBy[0]._desc);
@@ -520,8 +520,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(0u, pq._prefixes.size());
     ASSERT_EQ(2u, pq._selectClause._selectedVariables.size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
-    ASSERT_EQ("10", pq._limit);
-    ASSERT_EQ("15", pq._offset);
+    ASSERT_EQ(10u, pq._limit.value_or(0));
+    ASSERT_EQ(15u, pq._offset.value_or(0));
     ASSERT_EQ(size_t(2), pq._orderBy.size());
     ASSERT_EQ("?x", pq._orderBy[0]._key);
     ASSERT_TRUE(pq._orderBy[0]._desc);
@@ -535,7 +535,7 @@ TEST(ParserTest, testSolutionModifiers) {
     auto pq =
         SparqlParser("SELECT ?x ?y WHERE {?x <is-a> <Actor>} LIMIT 10").parse();
     pq.expandPrefixes();
-    ASSERT_EQ("10", pq._limit);
+    ASSERT_EQ(10u, pq._limit.value_or(0));
   }
 
   {
@@ -643,8 +643,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(0u, pq._prefixes.size());
     ASSERT_EQ(2u, pq._selectClause._selectedVariables.size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
-    ASSERT_EQ("10", pq._limit);
-    ASSERT_EQ("15", pq._offset);
+    ASSERT_EQ(10u, pq._limit.value_or(0));
+    ASSERT_EQ(15u, pq._offset.value_or(0));
     ASSERT_EQ(1u, pq._orderBy.size());
     ASSERT_EQ("?count", pq._orderBy[0]._key);
     ASSERT_TRUE(pq._orderBy[0]._desc);

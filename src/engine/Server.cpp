@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <nlohmann/json.hpp>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -18,6 +17,7 @@
 #include "../util/HttpServer/UrlParser.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
+#include "../util/json.h"
 #include "QueryPlanner.h"
 
 // _____________________________________________________________________________
@@ -118,10 +118,10 @@ boost::asio::awaitable<void> Server::process(
 }
 
 // _____________________________________________________________________________
-string Server::composeResponseJson(const ParsedQuery& query,
-                                   const QueryExecutionTree& qet,
-                                   ad_utility::Timer& requestTimer,
-                                   size_t maxSend) const {
+json Server::composeResponseJson(const ParsedQuery& query,
+                                 const QueryExecutionTree& qet,
+                                 ad_utility::Timer& requestTimer,
+                                 size_t maxSend) {
   shared_ptr<const ResultTable> rt = qet.getResult();
   requestTimer.stop();
   off_t compResultUsecs = requestTimer.usecs();
@@ -139,14 +139,8 @@ string Server::composeResponseJson(const ParsedQuery& query,
       qet.getRootOperation()->getRuntimeInfo());
 
   {
-    size_t limit = MAX_NOF_ROWS_IN_RESULT;
-    size_t offset = 0;
-    if (query._limit.size() > 0) {
-      limit = static_cast<size_t>(atol(query._limit.c_str()));
-    }
-    if (query._offset.size() > 0) {
-      offset = static_cast<size_t>(atol(query._offset.c_str()));
-    }
+    size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
+    size_t offset = query._offset.value_or(0);
     requestTimer.cont();
     j["res"] = qet.writeResultAsJson(query._selectClause._selectedVariables,
                                      std::min(limit, maxSend), offset);
@@ -154,25 +148,21 @@ string Server::composeResponseJson(const ParsedQuery& query,
   }
 
   requestTimer.stop();
-  j["time"]["total"] = std::to_string(requestTimer.usecs() / 1000.0) + "ms";
-  j["time"]["computeResult"] = std::to_string(compResultUsecs / 1000.0) + "ms";
+  j["time"]["total"] =
+      std::to_string(static_cast<double>(requestTimer.usecs()) / 1000.0) + "ms";
+  j["time"]["computeResult"] =
+      std::to_string(static_cast<double>(compResultUsecs) / 1000.0) + "ms";
 
-  return j.dump(4);
+  return j;
 }
 
 // _____________________________________________________________________________
 string Server::composeResponseSepValues(const ParsedQuery& query,
                                         const QueryExecutionTree& qet,
-                                        char sep) const {
+                                        char sep) {
   std::ostringstream os;
-  size_t limit = std::numeric_limits<size_t>::max();
-  size_t offset = 0;
-  if (query._limit.size() > 0) {
-    limit = static_cast<size_t>(atol(query._limit.c_str()));
-  }
-  if (query._offset.size() > 0) {
-    offset = static_cast<size_t>(atol(query._offset.c_str()));
-  }
+  size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
+  size_t offset = query._offset.value_or(0);
   qet.writeResultToStream(os, query._selectClause._selectedVariables, limit,
                           offset, sep);
 
@@ -180,10 +170,9 @@ string Server::composeResponseSepValues(const ParsedQuery& query,
 }
 
 // _____________________________________________________________________________
-string Server::composeResponseJson(const string& query,
-                                   const std::exception& exception,
-                                   ad_utility::Timer& requestTimer) const {
-  std::ostringstream os;
+json Server::composeResponseJson(const string& query,
+                                 const std::exception& exception,
+                                 ad_utility::Timer& requestTimer) {
   requestTimer.stop();
 
   json j;
@@ -193,32 +182,29 @@ string Server::composeResponseJson(const string& query,
   j["time"]["total"] = requestTimer.msecs();
   j["time"]["computeResult"] = requestTimer.msecs();
   j["exception"] = exception.what();
-  return j.dump(4);
+  return j;
 }
 
 // _____________________________________________________________________________
-string Server::composeStatsJson() const {
-  std::ostringstream os;
-  os << "{\n"
-     << "\"kbindex\": \"" << _index.getKbName() << "\",\n"
-     << "\"permutations\": \"" << (_index.hasAllPermutations() ? "6" : "2")
-     << "\",\n";
+json Server::composeStatsJson() const {
+  json result;
+  result["kbindex"] = _index.getKbName();
+  result["permutations"] = (_index.hasAllPermutations() ? 6 : 2);
   if (_index.hasAllPermutations()) {
-    os << "\"nofsubjects\": \"" << _index.getNofSubjects() << "\",\n";
-    os << "\"nofpredicates\": \"" << _index.getNofPredicates() << "\",\n";
-    os << "\"nofobjects\": \"" << _index.getNofObjects() << "\",\n";
+    result["nofsubjects"] = _index.getNofSubjects();
+    result["nofpredicates"] = _index.getNofPredicates();
+    result["nofobjects"] = _index.getNofObjects();
   }
 
   auto [actualTriples, addedTriples] = _index.getNumTriplesActuallyAndAdded();
-  os << "\"noftriples\": \"" << _index.getNofTriples() << "\",\n"
-     << "\"nofActualTriples\": \"" << actualTriples << "\",\n"
-     << "\"nofAddedTriples\": \"" << addedTriples << "\",\n"
-     << "\"textindex\": \"" << _index.getTextName() << "\",\n"
-     << "\"nofrecords\": \"" << _index.getNofTextRecords() << "\",\n"
-     << "\"nofwordpostings\": \"" << _index.getNofWordPostings() << "\",\n"
-     << "\"nofentitypostings\": \"" << _index.getNofEntityPostings() << "\"\n"
-     << "}\n";
-  return os.str();
+  result["noftriples"] = _index.getNofTriples();
+  result["nofActualTriples"] = actualTriples;
+  result["nofAddedTriples"] = addedTriples;
+  result["textindex"] = _index.getTextName();
+  result["nofrecords"] = _index.getNofTextRecords();
+  result["nofwordpostings"] = _index.getNofWordPostings();
+  result["nofentitypostings"] = _index.getNofEntityPostings();
+  return result;
 }
 
 // _______________________________________
@@ -241,14 +227,13 @@ boost::asio::awaitable<void> Server::processQuery(
   const auto& query = params.at("query");
   AD_CHECK(!query.empty());
 
-  auto sendJson =
-      [&request,
-       &send](std::string&& jsonString) -> boost::asio::awaitable<void> {
-    auto response = createJsonResponse(std::move(jsonString), request);
+  auto sendJson = [&request, &send](
+                      const json& jsonString) -> boost::asio::awaitable<void> {
+    auto response = createJsonResponse(jsonString, request);
     co_return co_await send(std::move(response));
   };
 
-  std::optional<std::string> errorResponse;
+  std::optional<json> errorResponse;
 
   try {
     ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
@@ -314,6 +299,6 @@ boost::asio::awaitable<void> Server::processQuery(
     errorResponse = composeResponseJson(query, e, requestTimer);
   }
   if (errorResponse.has_value()) {
-    co_return co_await sendJson(std::move(errorResponse.value()));
+    co_return co_await sendJson(errorResponse.value());
   }
 }

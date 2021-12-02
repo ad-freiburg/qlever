@@ -212,22 +212,15 @@ void processQuery(QueryExecutionContext& qec, const string& query) {
   timer.stop();
   LOG(INFO) << "Time to create Execution Tree: " << timer.msecs() << "ms\n";
   LOG(INFO) << "Execution Tree: " << qet.asString() << "ms\n";
-  size_t limit = MAX_NOF_ROWS_IN_RESULT;
-  size_t offset = 0;
-  if (pq._limit.size() > 0) {
-    limit = static_cast<size_t>(atol(pq._limit.c_str()));
-  }
-  if (pq._offset.size() > 0) {
-    offset = static_cast<size_t>(atol(pq._offset.c_str()));
-  }
+  size_t limit = pq._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
+  size_t offset = pq._offset.value_or(0);
   qet.writeResultToStream(cout, pq._selectClause._selectedVariables, limit,
                           offset);
   t.stop();
   std::cout << "\nDone. Time: " << t.usecs() / 1000.0 << " ms\n";
   size_t numMatches = qet.getResult()->size();
   std::cout << "\nNumber of matches (no limit): " << numMatches << "\n";
-  size_t effectiveLimit =
-      atoi(pq._limit.c_str()) > 0 ? atoi(pq._limit.c_str()) : numMatches;
+  size_t effectiveLimit = pq._limit.value_or(numMatches);
   std::cout << "\nNumber of matches (limit): "
             << std::min(numMatches, effectiveLimit) << "\n";
 }

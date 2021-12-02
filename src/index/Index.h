@@ -6,7 +6,6 @@
 #include <array>
 #include <fstream>
 #include <memory>
-#include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
 #include <stxxl/vector>
@@ -23,6 +22,7 @@
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
 #include "../util/Timer.h"
+#include "../util/json.h"
 #include "./CompressedRelation.h"
 #include "./ConstantsIndexBuilding.h"
 #include "./DocsDB.h"
