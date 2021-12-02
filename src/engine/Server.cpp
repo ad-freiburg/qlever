@@ -188,22 +188,22 @@ json Server::composeResponseJson(const string& query,
 // _____________________________________________________________________________
 json Server::composeStatsJson() const {
   json result;
-  json{"kbindex"} = _index.getKbName();
-  json{"permutations"} = (_index.hasAllPermutations() ? "6" : "2");
+  result["kbindex"] = _index.getKbName();
+  result["permutations"] = (_index.hasAllPermutations() ? 6 : 2);
   if (_index.hasAllPermutations()) {
-    json{"nofsubjects"} = _index.getNofSubjects();
-    json{"nofpredicates"} = _index.getNofPredicates();
-    json{"nofobjects"} = _index.getNofObjects();
+    result["nofsubjects"] = _index.getNofSubjects();
+    result["nofpredicates"] = _index.getNofPredicates();
+    result["nofobjects"] = _index.getNofObjects();
   }
 
   auto [actualTriples, addedTriples] = _index.getNumTriplesActuallyAndAdded();
-  json{"noftriples"} = _index.getNofTriples();
-  json{"nofActualTriples"} = actualTriples;
-  json{"nofAddedTriples"} = addedTriples;
-  json{"textindex"} = _index.getTextName();
-  json{"nofrecords"} = _index.getNofTextRecords();
-  json{"nofwordpostings"} = _index.getNofWordPostings();
-  json{"nofentitypostings"} = _index.getNofEntityPostings();
+  result["noftriples"] = _index.getNofTriples();
+  result["nofActualTriples"] = actualTriples;
+  result["nofAddedTriples"] = addedTriples;
+  result["textindex"] = _index.getTextName();
+  result["nofrecords"] = _index.getNofTextRecords();
+  result["nofwordpostings"] = _index.getNofWordPostings();
+  result["nofentitypostings"] = _index.getNofEntityPostings();
   return result;
 }
 
