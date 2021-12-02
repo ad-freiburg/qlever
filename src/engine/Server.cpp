@@ -140,7 +140,7 @@ json Server::composeResponseJson(const ParsedQuery& query,
 
   {
     size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
-    size_t offset = query._limit.value_or(0);
+    size_t offset = query._offset.value_or(0);
     requestTimer.cont();
     j["res"] = qet.writeResultAsJson(query._selectClause._selectedVariables,
                                      std::min(limit, maxSend), offset);
@@ -162,7 +162,7 @@ string Server::composeResponseSepValues(const ParsedQuery& query,
                                         char sep) {
   std::ostringstream os;
   size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
-  size_t offset = query._limit.value_or(0);
+  size_t offset = query._offset.value_or(0);
   qet.writeResultToStream(os, query._selectClause._selectedVariables, limit,
                           offset, sep);
 
