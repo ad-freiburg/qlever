@@ -329,7 +329,7 @@ template <class S, class C>
 template <class StringRange>
 void Vocabulary<S, C>::initializeInternalizedLangs(const StringRange& s) {
   _internalizedLangs.clear();
-  // `StringRange` might be nlohmann::json for which we have disabled
+  // `StringRange` might be nlohmann::json, for which we have disabled
   // implicit conversions, so `vector::insert` cannot be used.
   for (const auto& el : s) {
     _internalizedLangs.emplace_back(el);

@@ -80,6 +80,7 @@ static auto createJsonResponse(std::string text, const auto& request) {
 
 /// Overload that directly takes a json request.
 static auto createJsonResponse(const json& j, const auto& request) {
+  // Argument "4" leads to a human-readable indentation.
   return createJsonResponse(j.dump(4), request);
 }
 
