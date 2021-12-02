@@ -133,6 +133,10 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
       bool estimateSortingTime = false;
       try {
         // Even for very small indices measure the smallest sample.
+        // If the sorting volume does not exceed `maxNumberOfElementsToSort` or
+        // for the smallest sample size (i = 0 and j = 0), measure the running
+        // time. Otherwise, or if the measurement uses too much space, estimate
+        // it from a smaller sample size.
         if (rows * cols > maxNumberOfElementsToSort && (i > 0 || j > 0)) {
           estimateSortingTime = true;
         }
@@ -171,8 +175,8 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
           // happen.
           LOG(WARN)
               << "Could not create any estimate for the sorting performance. "
-                 "This might happen if your index is very small"
-              << std::endl;
+              << "Setting all estimates to 0. This means that no sort "
+              << "operations will be canceled" << std::endl;
         }
         LOG(TRACE) << "Estimated the sort time to be " << std::fixed
                    << std::setprecision(3) << _samples[i][j] << " seconds."
