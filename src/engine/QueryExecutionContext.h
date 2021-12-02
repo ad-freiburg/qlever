@@ -44,7 +44,7 @@ using ConcurrentLruCache =
 using PinnedSizes =
     ad_utility::Synchronized<ad_utility::HashMap<std::string, size_t>,
                              std::shared_mutex>;
-class CacheWithPinnedSizes : public ConcurrentLruCache {
+class QueryResultCache : public ConcurrentLruCache {
  private:
   PinnedSizes _pinnedSizes;
 
@@ -52,8 +52,6 @@ class CacheWithPinnedSizes : public ConcurrentLruCache {
   void clearAll() override {
     // The _pinnedSizes are not part of the (otherwise threadsafe) _cache
     // and thus have to be manually locked.
-    // TODO<joka921> make _pinnedSizes part of the cache, or eliminate them
-    // entirely.
     auto lock = _pinnedSizes.wlock();
     ConcurrentLruCache::clearAll();
     lock->clear();
@@ -77,7 +75,7 @@ class CacheWithPinnedSizes : public ConcurrentLruCache {
 class QueryExecutionContext {
  public:
   QueryExecutionContext(const Index& index, const Engine& engine,
-                        CacheWithPinnedSizes* const cache,
+                        QueryResultCache* const cache,
                         ad_utility::AllocatorWithLimit<Id> allocator,
                         SortPerformanceEstimator sortPerformanceEstimator,
                         const bool pinSubtrees = false,
@@ -91,7 +89,7 @@ class QueryExecutionContext {
         _costFactors(),
         _sortPerformanceEstimator(sortPerformanceEstimator) {}
 
-  CacheWithPinnedSizes& getQueryTreeCache() { return *_subtreeCache; }
+  QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
   [[nodiscard]] const Engine& getEngine() const { return _engine; }
 
@@ -120,7 +118,7 @@ class QueryExecutionContext {
  private:
   const Index& _index;
   const Engine& _engine;
-  CacheWithPinnedSizes* const _subtreeCache;
+  QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;
   QueryPlanningCostFactors _costFactors;

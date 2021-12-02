@@ -90,7 +90,7 @@ int main(int argc, char** argv) {
     index.dumpAsciiLists(lists, decodeGapsAndFrequency);
 
     Engine engine;
-    CacheWithPinnedSizes cache{DEFAULT_CACHE_MAX_NUM_ENTRIES};
+    QueryResultCache cache{DEFAULT_CACHE_MAX_NUM_ENTRIES};
     ad_utility::AllocatorWithLimit<Id> allocator{
         ad_utility::makeAllocationMemoryLeftThreadsafeObject(
             DEFAULT_MEM_FOR_QUERIES_IN_GB)};

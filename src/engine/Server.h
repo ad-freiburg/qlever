@@ -62,7 +62,7 @@ class Server {
  private:
   const int _numThreads;
   int _port;
-  CacheWithPinnedSizes _cache;
+  QueryResultCache _cache;
   ad_utility::AllocatorWithLimit<Id> _allocator;
   SortPerformanceEstimator _sortPerformanceEstimator;
   Index _index;
