@@ -78,9 +78,10 @@ static auto createJsonResponse(std::string text, const auto& request) {
   return createOkResponse(std::move(text), request, MediaType::json);
 }
 
-/// Overload that directly takes a json request.
+/// Create a HttpResponse from a json object with status 200 OK and mime type
+/// "application/json".
 static auto createJsonResponse(const json& j, const auto& request) {
-  // Argument "4" leads to a human-readable indentation.
+  // Argument `4` leads to a human-readable indentation.
   return createJsonResponse(j.dump(4), request);
 }
 
