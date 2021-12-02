@@ -128,17 +128,30 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
     for (size_t j = 0; j < NUM_SAMPLES_COLS; ++j) {
       auto rows = sampleValuesRows[i];
       auto cols = sampleValuesCols[j];
+      // Track if the current sample could be measured, or if we
+      // have to estimate it from smaller samples.
+      bool estimateSortingTime = false;
       try {
-        if (rows * cols > maxNumberOfElementsToSort) {
-          throw ad_utility::detail::AllocationExceedsLimitException{0, 0};
+        // If the sorting volume does not exceed `maxNumberOfElementsToSort` or
+        // for the smallest sample size (i = 0 and j = 0), measure the running
+        // time. Otherwise, or if the measurement uses too much space, estimate
+        // it from a smaller sample size.
+        if (rows * cols > maxNumberOfElementsToSort && (i > 0 || j > 0)) {
+          estimateSortingTime = true;
         }
 #ifndef NDEBUG
         if (rows > 100000) {
-          throw ad_utility::detail::AllocationExceedsLimitException{20, 20};
+          estimateSortingTime = true;
         }
 #endif
-        _samples[i][j] = measureSortingTimeInSeconds(rows, cols, allocator);
+        if (!estimateSortingTime) {
+          _samples[i][j] = measureSortingTimeInSeconds(rows, cols, allocator);
+        }
       } catch (const ad_utility::detail::AllocationExceedsLimitException& e) {
+        estimateSortingTime = true;
+      }
+
+      if (estimateSortingTime) {
         // These estimates are not too important, since results of this size
         // cannot be sorted anyway because of the memory limit.
         LOG(TRACE) << "Creating the table failed because of a lack of memory"
@@ -159,7 +172,10 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
         } else {
           // not even the smallest IdTable could be created, this should never
           // happen.
-          AD_CHECK(false);
+          LOG(WARN)
+              << "Could not create any estimate for the sorting performance. "
+              << "Setting all estimates to 0. This means that no sort "
+              << "operations will be canceled." << std::endl;
         }
         LOG(TRACE) << "Estimated the sort time to be " << std::fixed
                    << std::setprecision(3) << _samples[i][j] << " seconds."
@@ -167,6 +183,6 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
       }
     }
   }
-  LOG(INFO) << "Done creating sort estimates" << std::endl;
+  LOG(INFO) << "Done creating sort estimates." << std::endl;
   _estimatesWereCalculated = true;
 }
