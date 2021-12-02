@@ -459,8 +459,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(0u, pq._prefixes.size());
     ASSERT_EQ(1u, pq._selectClause._selectedVariables.size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
-    ASSERT_EQ(10, pq._limit.value_or(0));
-    ASSERT_EQ(15, pq._offset.value_or(0));
+    ASSERT_EQ(10u, pq._limit.value_or(0));
+    ASSERT_EQ(15u, pq._offset.value_or(0));
     ASSERT_EQ(size_t(0), pq._orderBy.size());
     ASSERT_FALSE(pq._selectClause._distinct);
     ASSERT_FALSE(pq._selectClause._reduced);
@@ -477,8 +477,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(0u, pq._prefixes.size());
     ASSERT_EQ(2u, pq._selectClause._selectedVariables.size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
-    ASSERT_EQ(10, pq._limit.value_or(0));
-    ASSERT_EQ(15, pq._offset.value_or(0));
+    ASSERT_EQ(10u, pq._limit.value_or(0));
+    ASSERT_EQ(15u, pq._offset.value_or(0));
     ASSERT_EQ(size_t(1), pq._orderBy.size());
     ASSERT_EQ("?y", pq._orderBy[0]._key);
     ASSERT_FALSE(pq._orderBy[0]._desc);

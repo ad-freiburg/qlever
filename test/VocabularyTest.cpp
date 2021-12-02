@@ -5,10 +5,10 @@
 #include <gtest/gtest.h>
 
 #include <cstdio>
-#include <nlohmann/json.hpp>
 #include <vector>
 
 #include "../src/index/Vocabulary.h"
+#include "../src/util/json.h"
 
 using json = nlohmann::json;
 using std::string;

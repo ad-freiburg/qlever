@@ -1186,7 +1186,8 @@ void Index::readConfiguration() {
   f >> _configurationJson;
   if (_configurationJson.find("external-literals") !=
       _configurationJson.end()) {
-    _onDiskLiterals = _configurationJson["external-literals"];
+    _onDiskLiterals =
+        static_cast<bool>(_configurationJson["external-literals"]);
   }
 
   if (_configurationJson.find("prefixes") != _configurationJson.end()) {
@@ -1215,9 +1216,9 @@ void Index::readConfiguration() {
   }
 
   if (_configurationJson.count("locale")) {
-    std::string lang = _configurationJson["locale"]["language"];
-    std::string country = _configurationJson["locale"]["country"];
-    bool ignorePunctuation = _configurationJson["locale"]["ignore-punctuation"];
+    std::string lang{_configurationJson["locale"]["language"]};
+    std::string country{_configurationJson["locale"]["country"]};
+    bool ignorePunctuation{_configurationJson["locale"]["ignore-punctuation"]};
     _vocab.setLocale(lang, country, ignorePunctuation);
     _textVocab.setLocale(lang, country, ignorePunctuation);
   } else {
@@ -1298,9 +1299,9 @@ void Index::initializeVocabularySettingsBuild() {
     std::string country = LOCALE_DEFAULT_COUNTRY;
     bool ignorePunctuation = LOCALE_DEFAULT_IGNORE_PUNCTUATION;
     if (j.count("locale")) {
-      lang = j["locale"]["language"];
-      country = j["locale"]["country"];
-      ignorePunctuation = j["locale"]["ignore-punctuation"];
+      lang = std::string{j["locale"]["language"]};
+      country = std::string{j["locale"]["country"]};
+      ignorePunctuation = bool{j["locale"]["ignore-punctuation"]};
     } else {
       LOG(INFO) << "locale was not specified by the settings JSON, defaulting "
                    "to en US\n";
@@ -1332,7 +1333,7 @@ void Index::initializeVocabularySettingsBuild() {
   }
   if (j.count("ascii-prefixes-only")) {
     if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserDummy>) {
-      bool v = j["ascii-prefixes-only"];
+      bool v{j["ascii-prefixes-only"]};
       if (v) {
         LOG(WARN) << WARNING_ASCII_ONLY_PREFIXES;
         _onlyAsciiTurtlePrefixes = true;
@@ -1348,7 +1349,7 @@ void Index::initializeVocabularySettingsBuild() {
   }
 
   if (j.count("num-triples-per-partial-vocab")) {
-    _numTriplesPerPartialVocab = j["num-triples-per-partial-vocab"];
+    _numTriplesPerPartialVocab = size_t{j["num-triples-per-partial-vocab"]};
     LOG(INFO) << "Overriding setting num-triples-per-partial-vocab to "
               << _numTriplesPerPartialVocab
               << " This might influence performance / memory usage during "
@@ -1357,7 +1358,7 @@ void Index::initializeVocabularySettingsBuild() {
   }
 
   if (j.count("parser-batch-size")) {
-    _parserBatchSize = j["parser-batch-size"];
+    _parserBatchSize = size_t{j["parser-batch-size"]};
     LOG(INFO) << "Overriding setting parser-batch-size to " << _parserBatchSize
               << " This might influence performance during index build."
               << std::endl;

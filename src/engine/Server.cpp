@@ -8,7 +8,6 @@
 
 #include <algorithm>
 #include <cstring>
-#include <nlohmann/json.hpp>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -18,6 +17,7 @@
 #include "../util/HttpServer/UrlParser.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
+#include "../util/json.h"
 #include "QueryPlanner.h"
 
 // _____________________________________________________________________________
@@ -233,7 +233,7 @@ boost::asio::awaitable<void> Server::processQuery(
     co_return co_await send(std::move(response));
   };
 
-  std::optional<std::string> errorResponse;
+  std::optional<json> errorResponse;
 
   try {
     ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
@@ -299,6 +299,6 @@ boost::asio::awaitable<void> Server::processQuery(
     errorResponse = composeResponseJson(query, e, requestTimer);
   }
   if (errorResponse.has_value()) {
-    co_return co_await sendJson(std::move(errorResponse.value()));
+    co_return co_await sendJson(errorResponse.value());
   }
 }

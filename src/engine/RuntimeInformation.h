@@ -5,13 +5,13 @@
 #pragma once
 
 #include <iostream>
-#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
 #include "../util/Timer.h"
+#include "../util/json.h"
 
 class RuntimeInformation {
  public:
