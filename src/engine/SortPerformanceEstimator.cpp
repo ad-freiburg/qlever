@@ -128,11 +128,10 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
     for (size_t j = 0; j < NUM_SAMPLES_COLS; ++j) {
       auto rows = sampleValuesRows[i];
       auto cols = sampleValuesCols[j];
-      // Track, if the current sample could be measured, or if we
-      // have to estimated it from smaller samples.
+      // Track if the current sample could be measured, or if we
+      // have to estimate it from smaller samples.
       bool estimateSortingTime = false;
       try {
-        // Even for very small indices measure the smallest sample.
         // If the sorting volume does not exceed `maxNumberOfElementsToSort` or
         // for the smallest sample size (i = 0 and j = 0), measure the running
         // time. Otherwise, or if the measurement uses too much space, estimate
