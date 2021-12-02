@@ -128,18 +128,27 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
     for (size_t j = 0; j < NUM_SAMPLES_COLS; ++j) {
       auto rows = sampleValuesRows[i];
       auto cols = sampleValuesCols[j];
+      // Track, if the current sample could be measured, or if we
+      // have to estimated it from smaller samples.
+      bool estimateSortingTime = false;
       try {
         // Even for very small indices measure the smallest sample.
         if (rows * cols > maxNumberOfElementsToSort && (i > 0 || j > 0)) {
-          throw ad_utility::detail::AllocationExceedsLimitException{0, 0};
+          estimateSortingTime = true;
         }
 #ifndef NDEBUG
         if (rows > 100000) {
-          throw ad_utility::detail::AllocationExceedsLimitException{20, 20};
+          estimateSortingTime = true;
         }
 #endif
-        _samples[i][j] = measureSortingTimeInSeconds(rows, cols, allocator);
+        if (!estimateSortingTime) {
+          _samples[i][j] = measureSortingTimeInSeconds(rows, cols, allocator);
+        }
       } catch (const ad_utility::detail::AllocationExceedsLimitException& e) {
+        estimateSortingTime = true;
+      }
+
+      if (estimateSortingTime) {
         // These estimates are not too important, since results of this size
         // cannot be sorted anyway because of the memory limit.
         LOG(TRACE) << "Creating the table failed because of a lack of memory"
