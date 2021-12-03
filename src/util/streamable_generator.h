@@ -63,38 +63,38 @@ class stream_generator_promise {
     // is suspended, thus we can safely assume the value is read
     // before resuming
     if (isBufferLargeEnough()) {
-      m_value.str("");
+      _value.str("");
       // clear() only clears error bits,
       // str("") is what actually clears the buffer
-      m_value.clear();
+      _value.clear();
     }
-    m_value << value;
+    _value << value;
     return suspend_sometimes(isBufferLargeEnough());
   }
 
-  void unhandled_exception() { m_exception = std::current_exception(); }
+  void unhandled_exception() { _exception = std::current_exception(); }
 
   void return_void() {}
 
-  reference_type value() const noexcept { return m_value.view(); }
+  reference_type value() const noexcept { return _value.view(); }
 
   // Don't allow any use of 'co_await' inside the generator coroutine.
   template <typename U>
   qlever_stdOrExp::suspend_never await_transform(U&& value) = delete;
 
   void rethrow_if_exception() {
-    if (m_exception) {
-      std::rethrow_exception(m_exception);
+    if (_exception) {
+      std::rethrow_exception(_exception);
     }
   }
 
  private:
-  ad_utility::streams::ostringstream m_value;
-  std::exception_ptr m_exception;
+  ad_utility::streams::ostringstream _value;
+  std::exception_ptr _exception;
 
   bool isBufferLargeEnough() {
     // TODO number is arbitrary, fine-tune in the future
-    return m_value.view().length() >= 1000;
+    return _value.view().length() >= 1000;
   }
 };
 }  // namespace detail
@@ -104,18 +104,18 @@ class [[nodiscard]] stream_generator {
   using promise_type = detail::stream_generator_promise;
   using value_type = std::string_view;
 
-  stream_generator() noexcept : m_coroutine(nullptr) {}
+  stream_generator() noexcept : _coroutine(nullptr) {}
 
   stream_generator(stream_generator&& other) noexcept
-      : m_coroutine(other.m_coroutine) {
-    other.m_coroutine = nullptr;
+      : _coroutine(other._coroutine) {
+    other._coroutine = nullptr;
   }
 
   stream_generator(const stream_generator& other) = delete;
 
   ~stream_generator() {
-    if (m_coroutine) {
-      m_coroutine.destroy();
+    if (_coroutine) {
+      _coroutine.destroy();
     }
   }
 
@@ -125,19 +125,19 @@ class [[nodiscard]] stream_generator {
   }
 
   std::string_view next() {
-    if (m_coroutine) {
-      m_coroutine.resume();
-      if (m_coroutine.done()) {
-        m_coroutine.promise().rethrow_if_exception();
+    if (_coroutine) {
+      _coroutine.resume();
+      if (_coroutine.done()) {
+        _coroutine.promise().rethrow_if_exception();
       }
     }
-    return m_coroutine.promise().value();
+    return _coroutine.promise().value();
   }
 
-  bool hasNext() { return !m_coroutine.done(); }
+  bool hasNext() { return !_coroutine.done(); }
 
   void swap(stream_generator& other) noexcept {
-    std::swap(m_coroutine, other.m_coroutine);
+    std::swap(_coroutine, other._coroutine);
   }
 
  private:
@@ -145,9 +145,9 @@ class [[nodiscard]] stream_generator {
 
   explicit stream_generator(
       qlever_stdOrExp::coroutine_handle<promise_type> coroutine) noexcept
-      : m_coroutine(coroutine) {}
+      : _coroutine(coroutine) {}
 
-  qlever_stdOrExp::coroutine_handle<promise_type> m_coroutine;
+  qlever_stdOrExp::coroutine_handle<promise_type> _coroutine;
 };
 
 namespace detail {

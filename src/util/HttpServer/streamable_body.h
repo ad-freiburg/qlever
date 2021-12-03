@@ -4,24 +4,25 @@
 
 #pragma once
 
-#include <boost/assert.hpp>
-#include <boost/beast/core/detail/config.hpp>
-#include <boost/beast/core/error.hpp>
-#include <boost/beast/http/message.hpp>
-#include <boost/optional.hpp>
-
 #include "../streamable_generator.h"
+#include "./beast.h"
 
 namespace ad_utility::httpUtils::httpStreams {
 
 /**
- * A message body represented by a stream_generator
+ * A message body represented by a stream_generator. This allows to use a
+ * generator function to dynamically create a response.
+ * Example usage:
+ * http::response<streamable_body> response;
+ * response.body() = generatorFunction();
+ * response.prepare_payload();
  */
 struct streamable_body {
   // Algorithm for retrieving buffers when serializing.
   class writer;
 
-  // The type of the @ref message::body member.
+  // The type of the message::body member.
+  // This determines which type response<streamable_body>::body() returns
   using value_type = ad_utility::stream_generator::stream_generator;
 };
 
@@ -31,7 +32,7 @@ struct streamable_body {
     to extract the buffers representing the body.
 */
 class streamable_body::writer {
-  value_type& body_;
+  value_type& _body;
 
  public:
   // The type of buffer sequence returned by `get`.
@@ -57,7 +58,10 @@ class streamable_body::writer {
   // a time.
   //
   template <bool isRequest, class Fields>
-  writer(boost::beast::http::header<isRequest, Fields>& h, value_type& b);
+  writer(boost::beast::http::header<isRequest, Fields>& h, value_type& b)
+      : _body{b} {
+    boost::ignore_unused(h);
+  }
 
   // Initializer
   //
@@ -65,7 +69,14 @@ class streamable_body::writer {
   // gives the writer a chance to do something that might
   // need to return an error code.
   //
-  void init(boost::system::error_code& ec);
+  void init(boost::system::error_code& ec) {
+    // The error_code specification requires that we
+    // either set the error to some value, or set it
+    // to indicate no error.
+    //
+    // We don't do anything fancy so set "no error"
+    ec = {};
+  }
 
   // This function is called zero or more times to
   // retrieve buffers. A return value of `boost::none`
@@ -76,22 +87,6 @@ class streamable_body::writer {
   boost::optional<std::pair<const_buffers_type, bool>> get(
       boost::system::error_code& ec);
 };
-
-template <bool isRequest, class Fields>
-inline streamable_body::writer::writer(
-    boost::beast::http::header<isRequest, Fields>& h, value_type& b)
-    : body_(b) {
-  boost::ignore_unused(h);
-}
-
-inline void streamable_body::writer::init(boost::system::error_code& ec) {
-  // The error_code specification requires that we
-  // either set the error to some value, or set it
-  // to indicate no error.
-  //
-  // We don't do anything fancy so set "no error"
-  ec = {};
-}
 
 // This function is called repeatedly by the serializer to
 // retrieve the buffers representing the body. Our strategy
@@ -107,11 +102,14 @@ inline auto streamable_body::writer::get(boost::system::error_code& ec)
   // again.
   //
   // TODO handle exceptions appropriately
-  std::string_view view = body_.next();
+  std::string_view view = _body.next();
   ec = {};
+  // we can safely pass away the data() pointer because
+  // it's just referencing the memory inside the generator's promise
+  // it won't be modified until the next call to _body.next()
   return {{
       const_buffers_type{view.data(), view.size()},
-      body_.hasNext()  // `true` if there are more buffers.
+      _body.hasNext()  // `true` if there are more buffers.
   }};
 }
 
