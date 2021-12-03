@@ -2,6 +2,7 @@
 
 #include <exception>
 #include <sstream>
+#include "./ostringstream.h"
 
 // coroutines are still experimental in clang, adapt the appropriate
 // namespaces.
@@ -85,7 +86,7 @@ class stream_generator_promise {
   }
 
  private:
-  std::ostringstream m_value;
+  ad_utility::streams::ostringstream m_value;
   std::exception_ptr m_exception;
 
   bool isBufferLargeEnough() {
