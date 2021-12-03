@@ -1,3 +1,7 @@
+// Copyright 2021, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
+
 #pragma once
 #include <iostream>
 #include <sstream>
