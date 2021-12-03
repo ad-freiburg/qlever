@@ -281,6 +281,19 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
     const vector<std::optional<pair<size_t, ResultTable::ResultType>>>
         validIndices) const {
   shared_ptr<const ResultTable> res = getResult();
+  // special case : binary export of IdTable
+  if (sep == 'b') {
+    for (size_t i = from; i < upperBound; ++i) {
+      for (size_t j = 0; j < validIndices.size(); ++j) {
+        if (validIndices[j]) {
+          const auto& val = *validIndices[j];
+          co_yield std::string_view{
+              reinterpret_cast<const char*>(&data(i, val.first)), sizeof(Id)};
+        }
+      }
+    }
+    co_return;
+  }
 
   for (size_t i = from; i < upperBound; ++i) {
     for (size_t j = 0; j < validIndices.size(); ++j) {
