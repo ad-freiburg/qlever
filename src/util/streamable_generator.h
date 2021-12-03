@@ -21,6 +21,10 @@ namespace qlever_stdOrExp = std;
 
 namespace ad_utility::stream_generator {
 
+/**
+ * A concept to ensure objects can be formatted by std::ostream.
+ * @tparam T The Type to be formatted
+ */
 template <typename T>
 concept Streamable = requires(T x, std::ostream& os) {
   os << x;
@@ -29,36 +33,59 @@ concept Streamable = requires(T x, std::ostream& os) {
 class stream_generator;
 
 namespace detail {
+
+/**
+ * A Promise for a generator type needs to indicate if a coroutine should
+ * actually get suspended on co_yield or co_await or if there's a shortcut
+ * that allows to continue execution without interruption. The standard library
+ * provides std::suspend_always and std::suspend_never for the most common
+ * cases, but this class allows to chose between one of the two options
+ * dynamically using a simple bool.
+ */
 class suspend_sometimes {
   const bool suspend;
 
  public:
   explicit suspend_sometimes(const bool suspend) : suspend(suspend) {}
-  bool await_ready() const noexcept { return !suspend; }
-  constexpr void await_suspend(
+  [[maybe_unused]] bool await_ready() const noexcept { return !suspend; }
+  [[maybe_unused]] constexpr void await_suspend(
       qlever_stdOrExp::coroutine_handle<>) const noexcept {}
-  constexpr void await_resume() const noexcept {}
+  [[maybe_unused]] constexpr void await_resume() const noexcept {}
 };
 
+/**
+ * The promise type that backs the generator type and handles storage and
+ * suspension-related decisions.
+ */
 class stream_generator_promise {
  public:
   using value_type = std::string_view;
   using reference_type = value_type;
-  using pointer_type = value_type*;
 
   stream_generator_promise() = default;
 
   stream_generator get_return_object() noexcept;
 
-  constexpr qlever_stdOrExp::suspend_always initial_suspend() const noexcept {
+  [[maybe_unused]] constexpr qlever_stdOrExp::suspend_always initial_suspend()
+      const noexcept {
     return {};
   }
-  constexpr qlever_stdOrExp::suspend_always final_suspend() const noexcept {
+  [[maybe_unused]] constexpr qlever_stdOrExp::suspend_always final_suspend()
+      const noexcept {
     return {};
   }
 
+  /**
+   * Handles values passed using co_yield and stores their respective
+   * string representations inside a buffer.
+   *
+   * @tparam T The Type being passed
+   * @param value The r-value being passed.
+   * @return Whether or not the coroutine should get suspended (currently based
+   * on isBufferLargeEnough()), wrapped inside a suspend_sometimes class.
+   */
   template <Streamable T>
-  suspend_sometimes yield_value(T&& value) noexcept {
+  [[maybe_unused]] suspend_sometimes yield_value(T&& value) noexcept {
     // whenever the buffer size exceeds the threshold the coroutine
     // is suspended, thus we can safely assume the value is read
     // before resuming
@@ -72,7 +99,9 @@ class stream_generator_promise {
     return suspend_sometimes(isBufferLargeEnough());
   }
 
-  void unhandled_exception() { _exception = std::current_exception(); }
+  [[maybe_unused]] void unhandled_exception() {
+    _exception = std::current_exception();
+  }
 
   void return_void() {}
 
@@ -80,7 +109,8 @@ class stream_generator_promise {
 
   // Don't allow any use of 'co_await' inside the generator coroutine.
   template <typename U>
-  qlever_stdOrExp::suspend_never await_transform(U&& value) = delete;
+  [[maybe_unused]] qlever_stdOrExp::suspend_never await_transform(U&& value) =
+      delete;
 
   void rethrow_if_exception() {
     if (_exception) {
@@ -99,9 +129,19 @@ class stream_generator_promise {
 };
 }  // namespace detail
 
+/**
+ * The implementation of the generator.
+ * Use this as the return type of your coroutine.
+ *
+ * Example:
+ * @code
+ * stream_generator example() {
+ *   co_yield "Hello World";
+ * }
+ */
 class [[nodiscard]] stream_generator {
  public:
-  using promise_type = detail::stream_generator_promise;
+  using promise_type [[maybe_unused]] = detail::stream_generator_promise;
   using value_type = std::string_view;
 
   stream_generator() noexcept : _coroutine(nullptr) {}
@@ -124,6 +164,10 @@ class [[nodiscard]] stream_generator {
     return *this;
   }
 
+  /**
+   * Resumes the promise until the coroutine suspends.
+   * @return A view of the accumulated values since the last suspension.
+   */
   std::string_view next() {
     if (_coroutine) {
       _coroutine.resume();
@@ -134,6 +178,10 @@ class [[nodiscard]] stream_generator {
     return _coroutine.promise().value();
   }
 
+  /**
+   * Indicates if the coroutine is done processing.
+   * @return False, if the coroutine is done, true otherwise.
+   */
   bool hasNext() { return !_coroutine.done(); }
 
   void swap(stream_generator& other) noexcept {

@@ -26,71 +26,71 @@ struct streamable_body {
   using value_type = ad_utility::stream_generator::stream_generator;
 };
 
-/** Algorithm for retrieving buffers when serializing.
-
-    Objects of this type are created during serialization
-    to extract the buffers representing the body.
-*/
+/**
+ * Algorithm for retrieving buffers when serializing.
+ *
+ * Objects of this type are created during serialization
+ * to extract the buffers representing the body.
+ */
 class streamable_body::writer {
   value_type& _body;
 
  public:
   // The type of buffer sequence returned by `get`.
-  //
   using const_buffers_type = boost::asio::const_buffer;
 
-  // Constructor.
-  //
-  // `h` holds the headers of the message we are
-  // serializing, while `b` holds the body.
-  //
-  // The BodyWriter concept allows the writer to choose
-  // whether to take the message by const reference or
-  // non-const reference. Depending on the choice, a
-  // serializer constructed using that body type will
-  // require the same const or non-const reference to
-  // construct.
-  //
-  // Readers which accept const messages usually allow
-  // the same body to be serialized by multiple threads
-  // concurrently, while readers accepting non-const
-  // messages may only be serialized by one thread at
-  // a time.
-  //
+  /**
+   * `h` holds the headers of the message we are
+   * serializing, while `b` holds the body.
+   *
+   * The BodyWriter concept allows the writer to choose
+   * whether to take the message by const reference or
+   * non-const reference. Depending on the choice, a
+   * serializer constructed using that body type will
+   * require the same const or non-const reference to
+   * construct.
+   *
+   * Readers which accept const messages usually allow
+   * the same body to be serialized by multiple threads
+   * concurrently, while readers accepting non-const
+   * messages may only be serialized by one thread at
+   * a time.
+   *
+   * We need the non-const case here, because the one-shot stream_generator
+   * conceptually can't allow const access.
+   */
   template <bool isRequest, class Fields>
-  writer(boost::beast::http::header<isRequest, Fields>& h, value_type& b)
-      : _body{b} {
-    boost::ignore_unused(h);
-  }
+  writer([[maybe_unused]] boost::beast::http::header<isRequest, Fields>& h,
+         value_type& b)
+      : _body{b} {}
 
-  // Initializer
-  //
-  // This is called before the body is serialized and
-  // gives the writer a chance to do something that might
-  // need to return an error code.
-  //
+  /**
+   * This is called before the body is serialized and
+   * gives the writer a chance to do something that might
+   * need to return an error code.
+   */
   void init(boost::system::error_code& ec) {
-    // The error_code specification requires that we
-    // either set the error to some value, or set it
-    // to indicate no error.
-    //
-    // We don't do anything fancy so set "no error"
+    // Set the error code to "no error" (default value).
     ec = {};
   }
 
-  // This function is called zero or more times to
-  // retrieve buffers. A return value of `boost::none`
-  // means there are no more buffers. Otherwise,
-  // the contained pair will have the next buffer
-  // to serialize, and a `bool` indicating whether
-  // or not there may be additional buffers.
+  /**
+   * This function is called zero or more times to
+   * retrieve buffers. A return value of `boost::none`
+   * means there are no more buffers. Otherwise,
+   * the contained pair will have the next buffer
+   * to serialize, and a `bool` indicating whether
+   * or not there may be additional buffers.
+   */
   boost::optional<std::pair<const_buffers_type, bool>> get(
       boost::system::error_code& ec);
 };
 
-// This function is called repeatedly by the serializer to
-// retrieve the buffers representing the body. Our strategy
-// is to iterate over the generator to get the data step by step
+/**
+ * This function is called repeatedly by the serializer to
+ * retrieve the buffers representing the body. Our strategy
+ * is to iterate over the generator to get the data step by step
+ */
 inline auto streamable_body::writer::get(boost::system::error_code& ec)
     -> boost::optional<std::pair<const_buffers_type, bool>> {
   // Return the buffer to the caller.
