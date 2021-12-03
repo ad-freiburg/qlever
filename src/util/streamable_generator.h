@@ -59,19 +59,17 @@ class stream_generator_promise {
 
   template <Streamable T>
   suspend_sometimes yield_value(T&& value) noexcept {
-    // boost::iostreams::filtering_stream fs;
-    // fs.push(gzip_compressor());
-    // fs.push(m_value);
-
+    // whenever the buffer size exceeds the threshold the coroutine
+    // is suspended, thus we can safely assume the value is read
+    // before resuming
     if (isBufferLargeEnough()) {
       m_value.str("");
+      // clear() only clears error bits,
+      // str("") is what actually clears the buffer
       m_value.clear();
     }
     m_value << value;
-    if (isBufferLargeEnough()) {
-      return suspend_sometimes(true);
-    }
-    return suspend_sometimes(false);
+    return suspend_sometimes(isBufferLargeEnough());
   }
 
   void unhandled_exception() { m_exception = std::current_exception(); }
