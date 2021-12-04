@@ -90,7 +90,6 @@ boost::asio::awaitable<void> Server::process(
     } else if (cmd == "clearcachecomplete") {
       _cache.clearAll();
     }
-    co_return;
   }
 
   if (params.contains("query")) {

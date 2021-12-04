@@ -147,7 +147,13 @@ class HttpServer {
     beast::tcp_stream stream{std::move(socket)};
 
     auto releaseConnection = ad_utility::OnDestruction{
-        [this]() noexcept { _numConnectionsLimiter->release(); }};
+
+        [this, &stream]() noexcept {;
+          beast::error_code ec;
+          stream.socket().shutdown(tcp::socket::shutdown_send, ec);
+          stream.socket().close();
+          _numConnectionsLimiter->release();
+      }};
 
     // Keep track of whether we have to close the session after a
     // request/response pair.
@@ -191,7 +197,7 @@ class HttpServer {
         if (streamNeedsClosing) {
           throw beast::system_error{http::error::end_of_stream};
         }
-      } catch (const boost::system::system_error& error) {
+        } catch (const boost::system::system_error& error) {
         if (error.code() == http::error::end_of_stream) {
           // The stream has ended, gracefully close the connection.
           beast::error_code ec;
