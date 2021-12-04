@@ -8,7 +8,6 @@
 
 using namespace ad_utility::stream_generator;
 
-
 void throwException() { throw std::runtime_error("Test Exception"); }
 
 stream_generator generateException() {
@@ -38,17 +37,16 @@ TEST(StreamableGeneratorTest, TestEmptyGeneratorReturnsEmptyResult) {
 }
 
 stream_generator generateMultipleElements() {
-  co_yield std::string(1000, 'A');
+  co_yield std::string(1024, 'A');
   co_yield 1;
   co_yield "Abc";
 }
-
 
 TEST(StreamableGeneratorTest, TestGeneratorReturnsBufferedResults) {
   auto generator = generateMultipleElements();
 
   ASSERT_TRUE(generator.hasNext());
-  ASSERT_EQ(generator.next(), std::string(1000, 'A'));
+  ASSERT_EQ(generator.next(), std::string(1024, 'A'));
 
   ASSERT_TRUE(generator.hasNext());
   ASSERT_EQ(generator.next(), std::string("1Abc"));

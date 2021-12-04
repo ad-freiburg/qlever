@@ -29,7 +29,8 @@ concept Streamable = requires(T x, std::ostream& os) {
   os << x;
 };
 
-class stream_generator;
+template <size_t MIN_BUFFER_SIZE>
+class basic_stream_generator;
 
 namespace detail {
 
@@ -56,6 +57,7 @@ class suspend_sometimes {
  * The promise type that backs the generator type and handles storage and
  * suspension-related decisions.
  */
+template <size_t MIN_BUFFER_SIZE>
 class stream_generator_promise {
   ad_utility::streams::ostringstream _value;
   std::exception_ptr _exception;
@@ -63,14 +65,12 @@ class stream_generator_promise {
  public:
   stream_generator_promise() = default;
 
-  stream_generator get_return_object() noexcept;
+  basic_stream_generator<MIN_BUFFER_SIZE> get_return_object() noexcept;
 
-  constexpr qlever_stdOrExp::suspend_always initial_suspend()
-      const noexcept {
+  constexpr qlever_stdOrExp::suspend_always initial_suspend() const noexcept {
     return {};
   }
-  constexpr qlever_stdOrExp::suspend_always final_suspend()
-      const noexcept {
+  constexpr qlever_stdOrExp::suspend_always final_suspend() const noexcept {
     return {};
   }
 
@@ -97,9 +97,7 @@ class stream_generator_promise {
     return suspend_sometimes{isBufferLargeEnough()};
   }
 
-  void unhandled_exception() {
-    _exception = std::current_exception();
-  }
+  void unhandled_exception() { _exception = std::current_exception(); }
 
   void return_void() {}
 
@@ -117,8 +115,7 @@ class stream_generator_promise {
 
  private:
   bool isBufferLargeEnough() {
-    // TODO number is arbitrary, fine-tune in the future
-    return _value.view().length() >= 1000;
+    return _value.view().length() >= MIN_BUFFER_SIZE;
   }
 };
 }  // namespace detail
@@ -133,30 +130,34 @@ class stream_generator_promise {
  *   co_yield "Hello World";
  * }
  */
-class [[nodiscard]] stream_generator {
+template <size_t MIN_BUFFER_SIZE>
+class [[nodiscard]] basic_stream_generator {
  public:
-  using promise_type = detail::stream_generator_promise;
+  using promise_type = detail::stream_generator_promise<MIN_BUFFER_SIZE>;
 
  private:
   qlever_stdOrExp::coroutine_handle<promise_type> _coroutine = nullptr;
 
  public:
-  stream_generator() = default;
+  basic_stream_generator() = default;
 
-  stream_generator(stream_generator&& other) noexcept
+  basic_stream_generator(
+      basic_stream_generator<MIN_BUFFER_SIZE>&& other) noexcept
       : _coroutine{other._coroutine} {
     other._coroutine = nullptr;
   }
 
-  stream_generator(const stream_generator& other) = delete;
+  basic_stream_generator(const basic_stream_generator<MIN_BUFFER_SIZE>& other) =
+      delete;
 
-  ~stream_generator() {
+  ~basic_stream_generator() {
     if (_coroutine) {
       _coroutine.destroy();
     }
   }
 
-  stream_generator& operator=(stream_generator&& other) noexcept {
+  basic_stream_generator& operator=(
+      basic_stream_generator<MIN_BUFFER_SIZE>&& other) noexcept {
     std::swap(_coroutine, other._coroutine);
     return *this;
   }
@@ -184,17 +185,21 @@ class [[nodiscard]] stream_generator {
   bool hasNext() { return _coroutine && !_coroutine.done(); }
 
  private:
-  friend class detail::stream_generator_promise;
-  explicit stream_generator(
+  friend class detail::stream_generator_promise<MIN_BUFFER_SIZE>;
+  explicit basic_stream_generator(
       qlever_stdOrExp::coroutine_handle<promise_type> coroutine) noexcept
       : _coroutine{coroutine} {}
 };
 
 namespace detail {
-inline stream_generator stream_generator_promise::get_return_object() noexcept {
-  using coroutine_handle =
-      qlever_stdOrExp::coroutine_handle<stream_generator_promise>;
-  return stream_generator{coroutine_handle::from_promise(*this)};
+template <size_t MIN_BUFFER_SIZE>
+inline basic_stream_generator<MIN_BUFFER_SIZE>
+stream_generator_promise<MIN_BUFFER_SIZE>::get_return_object() noexcept {
+  using coroutine_handle = qlever_stdOrExp::coroutine_handle<
+      stream_generator_promise<MIN_BUFFER_SIZE>>;
+  return basic_stream_generator{coroutine_handle::from_promise(*this)};
 }
 }  // namespace detail
+
+using stream_generator = basic_stream_generator<1024>;
 }  // namespace ad_utility::stream_generator
