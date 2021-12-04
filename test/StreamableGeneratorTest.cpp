@@ -53,3 +53,14 @@ TEST(StreamableGeneratorTest, TestGeneratorReturnsBufferedResults) {
 
   ASSERT_FALSE(generator.hasNext());
 }
+
+TEST(StreamableGeneratorTest, TestGeneratorNextThrowsExceptionWithNullptr) {
+  stream_generator generator;
+
+  try {
+    generator.next();
+    FAIL() << "next() should throw an exception";
+  } catch (const std::exception& e) {
+    ASSERT_STREQ(e.what(), "Coroutine is not initialized");
+  }
+}
