@@ -93,16 +93,22 @@ boost::asio::awaitable<void> Server::process(
     } else if (cmd == "clearcache") {
       LOG(INFO) << "Clearing the cache, unpinned elements only" << std::endl;
       _cache.clearUnpinnedOnly();
-      responseFromCommand = createOkResponse("Successfully cleared the cache (unpinned elements only)", request, ad_utility::MediaType::textPlain);
+      responseFromCommand = createOkResponse(
+          "Successfully cleared the cache (unpinned elements only)", request,
+          ad_utility::MediaType::textPlain);
     } else if (cmd == "clearcachecomplete") {
-      LOG(INFO) << "Clearing the cache completely, including unpinned elements" << std::endl;
+      LOG(INFO) << "Clearing the cache completely, including unpinned elements"
+                << std::endl;
       _cache.clearAll();
-      responseFromCommand = createOkResponse("Successfully cleared the cache (including the pinned elements)", request, ad_utility::MediaType::textPlain);
+      responseFromCommand = createOkResponse(
+          "Successfully cleared the cache (including the pinned elements)",
+          request, ad_utility::MediaType::textPlain);
     } else {
-      co_await send(createBadRequestResponse(R"(unknown value for query paramter "cmd" : ")" + cmd + '\"', request));
+      co_await send(createBadRequestResponse(
+          R"(unknown value for query paramter "cmd" : ")" + cmd + '\"',
+          request));
       co_return;
     }
-
   }
 
   if (params.contains("query")) {
