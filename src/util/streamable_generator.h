@@ -43,11 +43,11 @@ namespace detail {
  * dynamically using a simple bool.
  */
 class suspend_sometimes {
-  const bool suspend;
+  const bool _suspend;
 
  public:
-  explicit suspend_sometimes(const bool suspend) : suspend{suspend} {}
-  bool await_ready() const noexcept { return !suspend; }
+  explicit suspend_sometimes(const bool suspend) : _suspend{suspend} {}
+  bool await_ready() const noexcept { return !_suspend; }
   constexpr void await_suspend(
       qlever_stdOrExp::coroutine_handle<>) const noexcept {}
   constexpr void await_resume() const noexcept {}
