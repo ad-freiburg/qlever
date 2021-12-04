@@ -8,9 +8,9 @@
 #include "../src/util/HttpServer/streamable_body.h"
 
 using namespace ad_utility::httpUtils::httpStreams;
-using namespace ad_utility::stream_generator;
+using ad_utility::stream_generator::stream_generator;
 
-constexpr size_t TEST_BUFFER_SIZE = 10;
+constexpr size_t BUFFER_SIZE = 1u << 20;
 
 TEST(StreamableBodyTest, TestInitReturnsNoErrorCode) {
   stream_generator generator;
@@ -53,8 +53,8 @@ TEST(StreamableBodyTest, TestEmptyGeneratorReturnsEmptyResult) {
   ASSERT_FALSE(result->second);
 }
 
-basic_stream_generator<TEST_BUFFER_SIZE> generateMultipleElements() {
-  co_yield std::string(TEST_BUFFER_SIZE, 'A');
+stream_generator generateMultipleElements() {
+  co_yield std::string(BUFFER_SIZE, 'A');
   co_yield 1;
   co_yield "Abc";
 }
@@ -73,7 +73,7 @@ TEST(StreamableBodyTest, TestGeneratorReturnsBufferedResults) {
   auto result = writer.get(errorCode);
   ASSERT_EQ(errorCode, boost::system::error_code());
   ASSERT_NE(result, boost::none);
-  ASSERT_EQ(toStringView(result->first), std::string(TEST_BUFFER_SIZE, 'A'));
+  ASSERT_EQ(toStringView(result->first), std::string(BUFFER_SIZE, 'A'));
   ASSERT_TRUE(result->second);
 
   auto result2 = writer.get(errorCode);
