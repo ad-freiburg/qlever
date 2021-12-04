@@ -141,14 +141,12 @@ class [[nodiscard]] basic_stream_generator {
  public:
   basic_stream_generator() = default;
 
-  basic_stream_generator(
-      basic_stream_generator<MIN_BUFFER_SIZE>&& other) noexcept
+  basic_stream_generator(basic_stream_generator&& other) noexcept
       : _coroutine{other._coroutine} {
     other._coroutine = nullptr;
   }
 
-  basic_stream_generator(const basic_stream_generator<MIN_BUFFER_SIZE>& other) =
-      delete;
+  basic_stream_generator(const basic_stream_generator& other) = delete;
 
   ~basic_stream_generator() {
     if (_coroutine) {
@@ -156,8 +154,7 @@ class [[nodiscard]] basic_stream_generator {
     }
   }
 
-  basic_stream_generator& operator=(
-      basic_stream_generator<MIN_BUFFER_SIZE>&& other) noexcept {
+  basic_stream_generator& operator=(basic_stream_generator&& other) noexcept {
     std::swap(_coroutine, other._coroutine);
     return *this;
   }
