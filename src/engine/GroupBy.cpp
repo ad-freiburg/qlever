@@ -26,7 +26,7 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<string> groupByVariables,
 
   // The returned columns are all groupByVariables followed by aggregrates
   size_t colIndex = 0;
-  for (std::string var : _groupByVariables) {
+  for (const std::string& var : _groupByVariables) {
     _varColMap[var] = colIndex;
     colIndex++;
   }
@@ -301,6 +301,14 @@ void GroupBy::computeResult(ResultTable* result) {
 
   // populate the result type vector
   result->_resultTypes.resize(result->_data.cols());
+
+  // The `_groupByVariables` are simply copied, so their result type is
+  // also copied. The result type of the other columns is set when the
+  // values are computed.
+  for (const string& var : _groupByVariables) {
+    result->_resultTypes[_varColMap[var]] =
+        subresult->getResultType(subtreeVarCols[var]);
+  }
 
   std::vector<size_t> groupByCols;
   groupByCols.reserve(_groupByVariables.size());

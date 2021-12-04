@@ -228,6 +228,6 @@ inline auto makeFileServer(
   };
 }
 
-};  // namespace ad_utility::httpUtils
+}  // namespace ad_utility::httpUtils
 
 #endif  // QLEVER_HTTPUTILS_H
