@@ -197,5 +197,6 @@ stream_generator_promise<MIN_BUFFER_SIZE>::get_return_object() noexcept {
 }
 }  // namespace detail
 
-using stream_generator = basic_stream_generator<1024>;
+// Use 1MB buffer size by default
+using stream_generator = basic_stream_generator<1u << 20>;
 }  // namespace ad_utility::stream_generator

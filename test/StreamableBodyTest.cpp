@@ -48,12 +48,12 @@ TEST(StreamableBodyTest, TestEmptyGeneratorReturnsEmptyResult) {
   auto result = writer.get(errorCode);
   ASSERT_EQ(errorCode, boost::system::error_code());
   ASSERT_NE(result, boost::none);
-  ASSERT_EQ(std::get<0>(*result).size(), static_cast<size_t>(0));
+  ASSERT_EQ(std::get<0>(*result).size(), 0u);
   ASSERT_FALSE(std::get<1>(*result));
 }
 
 ad_utility::stream_generator::stream_generator generateMultipleElements() {
-  co_yield std::string(1024, 'A');
+  co_yield std::string(1u << 20, 'A');
   co_yield 1;
   co_yield "Abc";
 }
@@ -72,7 +72,7 @@ TEST(StreamableBodyTest, TestGeneratorReturnsBufferedResults) {
   auto result = writer.get(errorCode);
   ASSERT_EQ(errorCode, boost::system::error_code());
   ASSERT_NE(result, boost::none);
-  ASSERT_EQ(toStringView(std::get<0>(*result)), std::string(1024, 'A'));
+  ASSERT_EQ(toStringView(std::get<0>(*result)), std::string(1u << 20, 'A'));
   ASSERT_TRUE(std::get<1>(*result));
 
   auto result2 = writer.get(errorCode);
