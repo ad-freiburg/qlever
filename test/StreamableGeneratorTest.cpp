@@ -8,10 +8,10 @@
 
 using namespace ad_utility::stream_generator;
 
-void throwException() { throw std::runtime_error("Test Exception"); }
+constexpr size_t TEST_BUFFER_SIZE = 10;
 
 stream_generator generateException() {
-  throwException();
+  throw std::runtime_error("Test Exception");
   co_return;
 }
 
@@ -36,8 +36,8 @@ TEST(StreamableGeneratorTest, TestEmptyGeneratorReturnsEmptyResult) {
   ASSERT_FALSE(generator.hasNext());
 }
 
-stream_generator generateMultipleElements() {
-  co_yield std::string(1024, 'A');
+basic_stream_generator<TEST_BUFFER_SIZE> generateMultipleElements() {
+  co_yield std::string(TEST_BUFFER_SIZE, 'A');
   co_yield 1;
   co_yield "Abc";
 }
@@ -46,7 +46,7 @@ TEST(StreamableGeneratorTest, TestGeneratorReturnsBufferedResults) {
   auto generator = generateMultipleElements();
 
   ASSERT_TRUE(generator.hasNext());
-  ASSERT_EQ(generator.next(), std::string(1024, 'A'));
+  ASSERT_EQ(generator.next(), std::string(TEST_BUFFER_SIZE, 'A'));
 
   ASSERT_TRUE(generator.hasNext());
   ASSERT_EQ(generator.next(), std::string("1Abc"));

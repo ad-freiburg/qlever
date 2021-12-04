@@ -8,9 +8,12 @@
 #include "../src/util/HttpServer/streamable_body.h"
 
 using namespace ad_utility::httpUtils::httpStreams;
+using namespace ad_utility::stream_generator;
+
+constexpr size_t TEST_BUFFER_SIZE = 10;
 
 TEST(StreamableBodyTest, TestInitReturnsNoErrorCode) {
-  ad_utility::stream_generator::stream_generator generator;
+  stream_generator generator;
   boost::beast::http::header<false, boost::beast::http::fields> header;
   streamable_body::writer writer{header, generator};
   boost::system::error_code errorCode;
@@ -19,10 +22,8 @@ TEST(StreamableBodyTest, TestInitReturnsNoErrorCode) {
   ASSERT_EQ(errorCode, boost::system::error_code());
 }
 
-void throwException() { throw std::runtime_error("Test Exception"); }
-
-ad_utility::stream_generator::stream_generator generateException() {
-  throwException();
+stream_generator generateException() {
+  throw std::runtime_error("Test Exception");
   co_return;
 }
 
@@ -37,7 +38,7 @@ TEST(StreamableBodyTest, TestGeneratorExceptionResultsInErrorCode) {
   ASSERT_EQ(result, boost::none);
 }
 
-ad_utility::stream_generator::stream_generator generateNothing() { co_return; }
+stream_generator generateNothing() { co_return; }
 
 TEST(StreamableBodyTest, TestEmptyGeneratorReturnsEmptyResult) {
   auto generator = generateNothing();
@@ -48,12 +49,12 @@ TEST(StreamableBodyTest, TestEmptyGeneratorReturnsEmptyResult) {
   auto result = writer.get(errorCode);
   ASSERT_EQ(errorCode, boost::system::error_code());
   ASSERT_NE(result, boost::none);
-  ASSERT_EQ(std::get<0>(*result).size(), 0u);
-  ASSERT_FALSE(std::get<1>(*result));
+  ASSERT_EQ(result->first.size(), 0u);
+  ASSERT_FALSE(result->second);
 }
 
-ad_utility::stream_generator::stream_generator generateMultipleElements() {
-  co_yield std::string(1u << 20, 'A');
+basic_stream_generator<TEST_BUFFER_SIZE> generateMultipleElements() {
+  co_yield std::string(TEST_BUFFER_SIZE, 'A');
   co_yield 1;
   co_yield "Abc";
 }
@@ -72,12 +73,12 @@ TEST(StreamableBodyTest, TestGeneratorReturnsBufferedResults) {
   auto result = writer.get(errorCode);
   ASSERT_EQ(errorCode, boost::system::error_code());
   ASSERT_NE(result, boost::none);
-  ASSERT_EQ(toStringView(std::get<0>(*result)), std::string(1u << 20, 'A'));
-  ASSERT_TRUE(std::get<1>(*result));
+  ASSERT_EQ(toStringView(result->first), std::string(TEST_BUFFER_SIZE, 'A'));
+  ASSERT_TRUE(result->second);
 
   auto result2 = writer.get(errorCode);
   ASSERT_EQ(errorCode, boost::system::error_code());
   ASSERT_NE(result, boost::none);
-  ASSERT_EQ(toStringView(std::get<0>(*result2)), std::string("1Abc"));
-  ASSERT_FALSE(std::get<1>(*result2));
+  ASSERT_EQ(toStringView(result2->first), std::string("1Abc"));
+  ASSERT_FALSE(result2->second);
 }
