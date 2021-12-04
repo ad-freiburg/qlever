@@ -74,6 +74,11 @@ boost::asio::awaitable<void> Server::process(
 
   auto filenameAndParams = ad_utility::UrlParser::parseTarget(request.target());
   const auto& params = filenameAndParams._parameters;
+
+  // If there is a command like "clear_cache" which might be combined with a
+  // query, track if there is such a command but no query and still send
+  // a useful response.
+  std::optional<http::response<http::string_body>> responseFromCommand;
   if (params.contains("cmd")) {
     const auto& cmd = params.at("cmd");
     if (cmd == "stats") {
@@ -86,11 +91,24 @@ boost::asio::awaitable<void> Server::process(
           createJsonResponse(composeCacheStatsJson().dump(), request);
       co_return co_await send(std::move(response));
     } else if (cmd == "clearcache") {
+      LOG(INFO) << "Clearing the cache, unpinned elements only" << std::endl;
       _cache.clearUnpinnedOnly();
+      responseFromCommand = createOkResponse(
+          "Successfully cleared the cache (unpinned elements only)", request,
+          ad_utility::MediaType::textPlain);
     } else if (cmd == "clearcachecomplete") {
+      LOG(INFO) << "Clearing the cache completely, including unpinned elements"
+                << std::endl;
       _cache.clearAll();
+      responseFromCommand = createOkResponse(
+          "Successfully cleared the cache (including the pinned elements)",
+          request, ad_utility::MediaType::textPlain);
+    } else {
+      co_await send(createBadRequestResponse(
+          R"(unknown value for query paramter "cmd" : ")" + cmd + '\"',
+          request));
+      co_return;
     }
-    co_return;
   }
 
   if (params.contains("query")) {
@@ -101,6 +119,8 @@ boost::asio::awaitable<void> Server::process(
 
     co_return co_await processQuery(params, requestTimer, std::move(request),
                                     send);
+  } else if (responseFromCommand.has_value()) {
+    co_return co_await send(std::move(responseFromCommand.value()));
   }
 
   // Neither a query nor a command were specified, simply serve a file.
