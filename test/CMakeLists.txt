@@ -195,3 +195,15 @@ target_link_libraries(TypeTraitsTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 add_executable(SparqlExpressionTest SparqlExpressionTest.cpp)
 add_test(SparqlExpressionTest SparqlExpressionTest)
 target_link_libraries(SparqlExpressionTest gtest_main sparqlExpressions index ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(OStringStreamTest OStringStreamTest.cpp)
+add_test(OStringStreamTest OStringStreamTest)
+target_link_libraries(OStringStreamTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(StreamableBodyTest StreamableBodyTest.cpp)
+add_test(StreamableBodyTest StreamableBodyTest)
+target_link_libraries(StreamableBodyTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(StreamableGeneratorTest StreamableGeneratorTest.cpp)
+add_test(StreamableGeneratorTest StreamableGeneratorTest)
+target_link_libraries(StreamableGeneratorTest gtest_main ${CMAKE_THREAD_LIBS_INIT})

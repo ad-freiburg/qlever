@@ -9,8 +9,7 @@
 
 #include "./ostringstream.h"
 
-// coroutines are still experimental in clang, adapt the appropriate
-// namespaces.
+// coroutines are still experimental in clang, adapt the appropriate namespaces.
 #ifdef __clang__
 #include <experimental/coroutine>
 namespace qlever_stdOrExp = std::experimental;
