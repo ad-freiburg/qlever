@@ -80,7 +80,7 @@ int main(int argc, char** argv) {
 
   string queryfile;
   string indexName = "";
-  string costFactosFileName = "";
+  string costFactorsFileName = "";
   bool text = false;
   bool interactive = false;
   bool onDiskLiterals = false;
@@ -105,7 +105,7 @@ int main(int argc, char** argv) {
         text = true;
         break;
       case 'c':
-        costFactosFileName = optarg;
+        costFactorsFileName = optarg;
         break;
       case 'l':
         onDiskLiterals = true;
@@ -142,8 +142,7 @@ int main(int argc, char** argv) {
   try {
     Engine engine;
     Index index;
-    ConcurrentLruCache cache(DEFAULT_CACHE_MAX_NUM_ENTRIES);
-    PinnedSizes pinnedSizes;
+    QueryResultCache cache{DEFAULT_CACHE_MAX_NUM_ENTRIES};
     index.setUsePatterns(usePatterns);
     index.setOnDiskLiterals(onDiskLiterals);
     index.createFromOnDiskIndex(indexName);
@@ -156,10 +155,10 @@ int main(int argc, char** argv) {
             DEFAULT_MEM_FOR_QUERIES_IN_GB)};
 
     SortPerformanceEstimator sortPerformanceEstimator;
-    QueryExecutionContext qec(index, engine, &cache, &pinnedSizes, allocator,
+    QueryExecutionContext qec(index, engine, &cache, allocator,
                               sortPerformanceEstimator);
-    if (costFactosFileName.size() > 0) {
-      qec.readCostFactorsFromTSVFile(costFactosFileName);
+    if (costFactorsFileName.size() > 0) {
+      qec.readCostFactorsFromTSVFile(costFactorsFileName);
     }
 
     if (queryfile == "") {

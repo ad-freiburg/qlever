@@ -88,13 +88,7 @@ boost::asio::awaitable<void> Server::process(
     } else if (cmd == "clearcache") {
       _cache.clearUnpinnedOnly();
     } else if (cmd == "clearcachecomplete") {
-      // The _pinnedSizes are not part of the (otherwise threadsafe) _cache
-      // and thus have to be manually locked.
-      // TODO<joka921> make _pinnedSizes part of the cache, or eliminate them
-      // entirely.
-      auto lock = _pinnedSizes.wlock();
       _cache.clearAll();
-      lock->clear();
     }
     co_return;
   }
@@ -214,7 +208,7 @@ nlohmann::json Server::composeCacheStatsJson() const {
   result["num-pinned-entries"] = _cache.numPinnedEntries();
   result["non-pinned-size"] = _cache.nonPinnedSize();
   result["pinned-size"] = _cache.pinnedSize();
-  result["num-pinned-index-scan-sizes"] = _pinnedSizes.rlock()->size();
+  result["num-pinned-index-scan-sizes"] = _cache.pinnedSizes().rlock()->size();
   return result;
 }
 
@@ -259,9 +253,9 @@ boost::asio::awaitable<void> Server::processQuery(
     ParsedQuery pq = SparqlParser(query).parse();
     pq.expandPrefixes();
 
-    QueryExecutionContext qec(_index, _engine, &_cache, &_pinnedSizes,
-                              _allocator, _sortPerformanceEstimator,
-                              pinSubtrees, pinResult);
+    QueryExecutionContext qec(_index, _engine, &_cache, _allocator,
+                              _sortPerformanceEstimator, pinSubtrees,
+                              pinResult);
     // start the shared timeout timer here to also include
     // the query planning
     timeoutTimer->wlock()->start();

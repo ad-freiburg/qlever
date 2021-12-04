@@ -44,14 +44,38 @@ using ConcurrentLruCache =
 using PinnedSizes =
     ad_utility::Synchronized<ad_utility::HashMap<std::string, size_t>,
                              std::shared_mutex>;
+class QueryResultCache : public ConcurrentLruCache {
+ private:
+  PinnedSizes _pinnedSizes;
+
+ public:
+  void clearAll() override {
+    // The _pinnedSizes are not part of the (otherwise threadsafe) _cache
+    // and thus have to be manually locked.
+    auto lock = _pinnedSizes.wlock();
+    ConcurrentLruCache::clearAll();
+    lock->clear();
+  }
+  // Inherit the constructor.
+  using ConcurrentLruCache::ConcurrentLruCache;
+  const PinnedSizes& pinnedSizes() const { return _pinnedSizes; }
+  PinnedSizes& pinnedSizes() { return _pinnedSizes; }
+  std::optional<size_t> getPinnedSize(const std::string& key) {
+    auto rlock = _pinnedSizes.rlock();
+    if (rlock->contains(key)) {
+      return rlock->at(key);
+    } else {
+      return std::nullopt;
+    }
+  }
+};
 
 // Execution context for queries.
 // Holds references to index and engine, implements caching.
 class QueryExecutionContext {
  public:
   QueryExecutionContext(const Index& index, const Engine& engine,
-                        ConcurrentLruCache* const cache,
-                        PinnedSizes* const pinnedSizes,
+                        QueryResultCache* const cache,
                         ad_utility::AllocatorWithLimit<Id> allocator,
                         SortPerformanceEstimator sortPerformanceEstimator,
                         const bool pinSubtrees = false,
@@ -61,14 +85,11 @@ class QueryExecutionContext {
         _index(index),
         _engine(engine),
         _subtreeCache(cache),
-        _pinnedSizes(pinnedSizes),
         _allocator(std::move(allocator)),
         _costFactors(),
         _sortPerformanceEstimator(sortPerformanceEstimator) {}
 
-  ConcurrentLruCache& getQueryTreeCache() { return *_subtreeCache; }
-
-  PinnedSizes& getPinnedSizes() { return *_pinnedSizes; }
+  QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
   [[nodiscard]] const Engine& getEngine() const { return _engine; }
 
@@ -97,8 +118,7 @@ class QueryExecutionContext {
  private:
   const Index& _index;
   const Engine& _engine;
-  ConcurrentLruCache* const _subtreeCache;
-  PinnedSizes* const _pinnedSizes;
+  QueryResultCache* const _subtreeCache;
   // allocators are copied but hold shared state
   ad_utility::AllocatorWithLimit<Id> _allocator;
   QueryPlanningCostFactors _costFactors;

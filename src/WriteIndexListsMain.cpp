@@ -85,18 +85,17 @@ int main(int argc, char** argv) {
     index.addTextFromOnDiskIndex();
 
     vector<string> lists;
-    lists.push_back("algo*");
+    lists.emplace_back("algo*");
     bool decodeGapsAndFrequency = true;
     index.dumpAsciiLists(lists, decodeGapsAndFrequency);
 
     Engine engine;
-    ConcurrentLruCache cache(DEFAULT_CACHE_MAX_NUM_ENTRIES);
-    PinnedSizes pinnedSizes;
+    QueryResultCache cache{DEFAULT_CACHE_MAX_NUM_ENTRIES};
     ad_utility::AllocatorWithLimit<Id> allocator{
         ad_utility::makeAllocationMemoryLeftThreadsafeObject(
             DEFAULT_MEM_FOR_QUERIES_IN_GB)};
     SortPerformanceEstimator sortPerformanceEstimator;
-    QueryExecutionContext qec(index, engine, &cache, &pinnedSizes, allocator,
+    QueryExecutionContext qec(index, engine, &cache, allocator,
                               sortPerformanceEstimator);
     ParsedQuery q;
     if (!freebase) {

@@ -230,9 +230,8 @@ TEST(HasPredicateScan, subtreeS) {
 
   Index index;
   Engine engine;
-  ConcurrentLruCache cache(DEFAULT_CACHE_MAX_NUM_ENTRIES);
-  PinnedSizes pinnedSizes;
-  QueryExecutionContext ctx(index, engine, &cache, &pinnedSizes, allocator(),
+  QueryResultCache cache{DEFAULT_CACHE_MAX_NUM_ENTRIES};
+  QueryExecutionContext ctx(index, engine, &cache, allocator(),
                             SortPerformanceEstimator{});
 
   // create the subtree operation

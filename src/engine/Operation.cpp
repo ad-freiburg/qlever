@@ -78,7 +78,8 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   // (and distinctness) because the multiplicity for an index scan with a single
   // free variable is always 1.
   if (pinFinalResultButNotSubtrees) {
-    auto lock = getExecutionContext()->getPinnedSizes().wlock();
+    auto lock =
+        getExecutionContext()->getQueryTreeCache().pinnedSizes().wlock();
     forAllDescendants([&lock](QueryExecutionTree* child) {
       if (child->getType() == QueryExecutionTree::OperationType::SCAN &&
           child->getResultWidth() == 1) {
