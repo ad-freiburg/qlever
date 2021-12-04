@@ -299,6 +299,8 @@ void GroupBy::computeResult(ResultTable* result) {
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
 
+  // populate the result type vector
+  result->_resultTypes.resize(result->_data.cols());
 
   // the `_groupByVariables` are simply copied, so their result type is
   // also copied. The result type of the other columns is set when
@@ -307,10 +309,6 @@ void GroupBy::computeResult(ResultTable* result) {
     result->_resultTypes[_varColMap[var]] =
         subresult->getResultType(subtreeVarCols[var]);
   }
-
-
-  // populate the result type vector
-  result->_resultTypes.resize(result->_data.cols());
 
   std::vector<size_t> groupByCols;
   groupByCols.reserve(_groupByVariables.size());
