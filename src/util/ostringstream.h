@@ -70,6 +70,8 @@ using ostringstream =
                        implementation::ostringstream>;
 
 #ifdef _LIBCPP_VERSION
-static_assert(!HasView<std::ostringstream>);
+static_assert(
+    !HasView<std::ostringstream>,
+    "libc++ has support for std::ostringstream::view(), remove this header!");
 #endif
 }  // namespace ad_utility::streams
