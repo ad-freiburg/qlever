@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include <exception>
+
+#include "../Log.h"
 #include "../streamable_generator.h"
 #include "./beast.h"
 
@@ -14,6 +17,7 @@ namespace ad_utility::httpUtils::httpStreams {
  * generator function to dynamically create a response.
  * Example usage:
  * http::response<streamable_body> response;
+ * // generatorFunction returns a ad_utility::stream_generator::stream_generator
  * response.body() = generatorFunction();
  * response.prepare_payload();
  */
@@ -69,7 +73,7 @@ class streamable_body::writer {
    * gives the writer a chance to do something that might
    * need to return an error code.
    */
-  void init(boost::system::error_code& ec) {
+  void init(boost::system::error_code& ec) noexcept {
     // Set the error code to "no error" (default value).
     ec = {};
   }
@@ -81,37 +85,36 @@ class streamable_body::writer {
    * the contained pair will have the next buffer
    * to serialize, and a `bool` indicating whether
    * or not there may be additional buffers.
+   *
+   * Our strategy is to iterate over the generator to get the data step by step.
    */
   boost::optional<std::pair<const_buffers_type, bool>> get(
-      boost::system::error_code& ec);
+      boost::system::error_code& ec) {
+    // Return the buffer to the caller.
+    //
+    // The second element of the pair indicates whether or
+    // not there is more data. As long as there is some
+    // unread bytes, there will be more data. Otherwise,
+    // we set this bool to `false` so we will not be called
+    // again.
+    //
+    try {
+      std::string_view view = _body.next();
+      ec = {};
+      // we can safely pass away the data() pointer because
+      // it's just referencing the memory inside the generator's promise
+      // it won't be modified until the next call to _body.next()
+      return {{
+          const_buffers_type{view.data(), view.size()},
+          _body.hasNext()  // `true` if there are more buffers.
+      }};
+    } catch (const std::exception& e) {
+      ec = {EPIPE, boost::system::generic_category()};
+      LOG(ERROR) << "Failed to generate response:\n" << e.what() << '\n';
+      return boost::none;
+    }
+  }
 };
-
-/**
- * This function is called repeatedly by the serializer to
- * retrieve the buffers representing the body. Our strategy
- * is to iterate over the generator to get the data step by step
- */
-inline auto streamable_body::writer::get(boost::system::error_code& ec)
-    -> boost::optional<std::pair<const_buffers_type, bool>> {
-  // Return the buffer to the caller.
-  //
-  // The second element of the pair indicates whether or
-  // not there is more data. As long as there is some
-  // unread bytes, there will be more data. Otherwise,
-  // we set this bool to `false` so we will not be called
-  // again.
-  //
-  // TODO handle exceptions appropriately
-  std::string_view view = _body.next();
-  ec = {};
-  // we can safely pass away the data() pointer because
-  // it's just referencing the memory inside the generator's promise
-  // it won't be modified until the next call to _body.next()
-  return {{
-      const_buffers_type{view.data(), view.size()},
-      _body.hasNext()  // `true` if there are more buffers.
-  }};
-}
 
 static_assert(boost::beast::http::is_body<streamable_body>::value,
               "Body type requirements not met");

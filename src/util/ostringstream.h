@@ -68,4 +68,8 @@ class ostringstream : public base {
 using ostringstream =
     std::conditional_t<HasView<std::ostringstream>, std::ostringstream,
                        implementation::ostringstream>;
+
+#ifdef _LIBCPP_VERSION
+static_assert(!HasView<std::ostringstream>);
+#endif
 }  // namespace ad_utility::streams
