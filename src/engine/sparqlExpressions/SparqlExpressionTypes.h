@@ -39,11 +39,11 @@ class VectorWithMemoryLimit
   VectorWithMemoryLimit& operator=(const VectorWithMemoryLimit&) = delete;
 
   // Moving is fine.
-  VectorWithMemoryLimit(VectorWithMemoryLimit&&) = default;
-  VectorWithMemoryLimit& operator=(VectorWithMemoryLimit&&) = default;
+  VectorWithMemoryLimit(VectorWithMemoryLimit&&) noexcept = default;
+  VectorWithMemoryLimit& operator=(VectorWithMemoryLimit&&) noexcept = default;
 
   // Allow copying via an explicit clone() function.
-  VectorWithMemoryLimit clone() const {
+  [[nodiscard]] VectorWithMemoryLimit clone() const {
     // Call the private copy constructor.
     return VectorWithMemoryLimit(*this);
   }
@@ -53,7 +53,7 @@ class VectorWithMemoryLimit
 /// integers.
 struct StrongId {
   Id _value;
-  bool operator==(const StrongId&) const = default;
+  friend auto operator<=>(const StrongId&, const StrongId&) = default;
 
   // Make the type hashable for absl, see https://abseil.io/docs/cpp/guides/hash
   template <typename H>
