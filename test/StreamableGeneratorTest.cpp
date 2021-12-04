@@ -61,6 +61,18 @@ TEST(StreamableGeneratorTest, TestGeneratorNextThrowsExceptionWithNullptr) {
     generator.next();
     FAIL() << "next() should throw an exception";
   } catch (const std::exception& e) {
-    ASSERT_STREQ(e.what(), "Coroutine is not initialized");
+    ASSERT_STREQ(e.what(), "Coroutine is not active");
+  }
+}
+
+TEST(StreamableGeneratorTest, TestGeneratorNextThrowsExceptionWhenDone) {
+  auto generator = generateNothing();
+
+  generator.next();
+  try {
+    generator.next();
+    FAIL() << "next() should throw an exception";
+  } catch (const std::exception& e) {
+    ASSERT_STREQ(e.what(), "Coroutine is not active");
   }
 }

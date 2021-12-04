@@ -164,13 +164,12 @@ class [[nodiscard]] basic_stream_generator {
    * @return A view of the accumulated values since the last suspension.
    */
   std::string_view next() {
-    if (_coroutine) {
-      _coroutine.resume();
-      if (_coroutine.done()) {
-        _coroutine.promise().rethrow_if_exception();
-      }
-    } else {
-      throw std::runtime_error("Coroutine is not initialized");
+    if (!hasNext()) {
+      throw std::runtime_error("Coroutine is not active");
+    }
+    _coroutine.resume();
+    if (_coroutine.done()) {
+      _coroutine.promise().rethrow_if_exception();
     }
     return _coroutine.promise().value();
   }
