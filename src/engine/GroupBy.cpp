@@ -302,9 +302,9 @@ void GroupBy::computeResult(ResultTable* result) {
   // populate the result type vector
   result->_resultTypes.resize(result->_data.cols());
 
-  // the `_groupByVariables` are simply copied, so their result type is
-  // also copied. The result type of the other columns is set when
-  // the values are computed.
+  // The `_groupByVariables` are simply copied, so their result type is
+  // also copied. The result type of the other columns is set when the
+  // values are computed.
   for (const string& var : _groupByVariables) {
     result->_resultTypes[_varColMap[var]] =
         subresult->getResultType(subtreeVarCols[var]);
