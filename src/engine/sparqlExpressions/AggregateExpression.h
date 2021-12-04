@@ -204,14 +204,40 @@ inline auto minLambda = []<typename T, typename U>(const T& a, const U& b) {
   using C = std::common_type_t<T, U>;
   return a < b ? static_cast<C>(a) : static_cast<C>(b);
 };
-using MinExpression = AGG_EXP<decltype(minLambda), NumericValueGetter>;
+
+inline auto minLambdaForAllTypes = []<SingleExpressionResult T>(const T& a,
+                                                                const T& b) {
+  if constexpr (std::is_arithmetic_v<T> || ad_utility::isSimilar<T, Bool> ||
+                ad_utility::isSimilar<T, std::string>) {
+    return std::min(a, b);
+  } else if constexpr (ad_utility::isSimilar<T, StrongIdWithResultType>) {
+    return a._id < b._id ? a : b;
+  } else {
+    return ad_utility::alwaysFalse<T>;
+  }
+};
+using MinExpression =
+    AGG_EXP<decltype(minLambdaForAllTypes), ActualValueGetter>;
 
 // MAX
 inline auto maxLambda = []<typename T, typename U>(const T& a, const U& b) {
   using C = std::common_type_t<T, U>;
   return a > b ? static_cast<C>(a) : static_cast<C>(b);
 };
-using MaxExpression = AGG_EXP<decltype(maxLambda), NumericValueGetter>;
+
+inline auto maxLambdaForAllTypes = []<SingleExpressionResult T>(const T& a,
+                                                                const T& b) {
+  if constexpr (std::is_arithmetic_v<T> || ad_utility::isSimilar<T, Bool> ||
+                ad_utility::isSimilar<T, std::string>) {
+    return std::max(a, b);
+  } else if constexpr (ad_utility::isSimilar<T, StrongIdWithResultType>) {
+    return a._id > b._id ? a : b;
+  } else {
+    return ad_utility::alwaysFalse<T>;
+  }
+};
+using MaxExpression =
+    AGG_EXP<decltype(maxLambdaForAllTypes), ActualValueGetter>;
 
 }  // namespace detail
 
