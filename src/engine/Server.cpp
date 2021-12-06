@@ -75,6 +75,11 @@ boost::asio::awaitable<void> Server::process(
   auto filenameAndParams = ad_utility::UrlParser::parseTarget(request.target());
   const auto& params = filenameAndParams._parameters;
 
+  auto sendWithCors = [&send](auto response) -> boost::asio::awaitable<void> {
+    response.set(http::field::access_control_allow_origin, "*");
+    co_return co_await send(std::move(response));
+  };
+
   // If there is a command like "clear_cache" which might be combined with a
   // query, track if there is such a command but no query and still send
   // a useful response.
@@ -84,12 +89,11 @@ boost::asio::awaitable<void> Server::process(
     if (cmd == "stats") {
       LOG(INFO) << "Supplying index stats..." << std::endl;
       auto response = createJsonResponse(composeStatsJson(), request);
-      co_return co_await send(std::move(response));
+      co_return co_await sendWithCors(std::move(response));
     } else if (cmd == "cachestats") {
       LOG(INFO) << "Supplying cache stats..." << std::endl;
-      auto response =
-          createJsonResponse(composeCacheStatsJson().dump(), request);
-      co_return co_await send(std::move(response));
+      auto response = createJsonResponse(composeCacheStatsJson(), request);
+      co_return co_await sendWithCors(std::move(response));
     } else if (cmd == "clearcache") {
       LOG(INFO) << "Clearing the cache, unpinned elements only" << std::endl;
       _cache.clearUnpinnedOnly();
@@ -104,7 +108,7 @@ boost::asio::awaitable<void> Server::process(
           "Successfully cleared the cache (including the pinned elements)",
           request, ad_utility::MediaType::textPlain);
     } else {
-      co_await send(createBadRequestResponse(
+      co_await sendWithCors(createBadRequestResponse(
           R"(unknown value for query paramter "cmd" : ")" + cmd + '\"',
           request));
       co_return;
@@ -113,14 +117,14 @@ boost::asio::awaitable<void> Server::process(
 
   if (params.contains("query")) {
     if (params.at("query").empty()) {
-      co_return co_await send(createBadRequestResponse(
+      co_return co_await sendWithCors(createBadRequestResponse(
           "Parameter \"query\" must not have an empty value", request));
     }
 
     co_return co_await processQuery(params, requestTimer, std::move(request),
-                                    send);
+                                    sendWithCors);
   } else if (responseFromCommand.has_value()) {
-    co_return co_await send(std::move(responseFromCommand.value()));
+    co_return co_await sendWithCors(std::move(responseFromCommand.value()));
   }
 
   // Neither a query nor a command were specified, simply serve a file.
