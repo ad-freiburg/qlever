@@ -122,7 +122,7 @@ boost::asio::awaitable<void> Server::process(
     }
 
     co_return co_await processQuery(params, requestTimer, std::move(request),
-                                    send);
+                                    sendWithCors);
   } else if (responseFromCommand.has_value()) {
     co_return co_await sendWithCors(std::move(responseFromCommand.value()));
   }
@@ -248,7 +248,6 @@ boost::asio::awaitable<void> Server::processQuery(
   auto sendJson = [&request, &send](
                       const json& jsonString) -> boost::asio::awaitable<void> {
     auto response = createJsonResponse(jsonString, request);
-    response.set(http::field::access_control_allow_origin, "*");
     co_return co_await send(std::move(response));
   };
 
