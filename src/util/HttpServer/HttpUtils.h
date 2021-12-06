@@ -56,7 +56,6 @@ auto createHttpResponseFromString(std::string body, http::status status,
                                   MediaType mediaType = MediaType::html) {
   http::response<http::string_body> response{status, request.version()};
   response.set(http::field::content_type, toString(mediaType));
-  response.set(http::field::access_control_allow_origin, "*");
   response.keep_alive(request.keep_alive());
   response.body() = std::move(body);
   // Set Content-Length and Transfer-Encoding.
