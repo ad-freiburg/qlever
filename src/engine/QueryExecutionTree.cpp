@@ -91,6 +91,17 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
                                              const vector<string>& selectVars,
                                              size_t limit, size_t offset,
                                              char sep) const {
+  auto generator = generateResults(selectVars, limit, offset, sep);
+  while (generator.hasNext()) {
+    out << generator.next();
+  }
+}
+
+// _____________________________________________________________________________
+ad_utility::stream_generator::stream_generator
+QueryExecutionTree::generateResults(const vector<string>& selectVars,
+                                    size_t limit, size_t offset,
+                                    char sep) const {
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
@@ -108,14 +119,12 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
     }
   }
   if (validIndices.size() == 0) {
-    return;
+    return {};
   }
 
   const IdTable& data = res->_data;
   size_t upperBound = std::min<size_t>(offset + limit, data.size());
-  writeTable(data, sep, offset, upperBound, validIndices, out);
-
-  LOG(DEBUG) << "Done creating readable result.\n";
+  return writeTable(data, sep, offset, upperBound, std::move(validIndices));
 }
 
 // _____________________________________________________________________________
@@ -267,26 +276,25 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
 }
 
 // _________________________________________________________________________________________________________
-void QueryExecutionTree::writeTable(
+ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
     const IdTable& data, char sep, size_t from, size_t upperBound,
-    const vector<std::optional<pair<size_t, ResultTable::ResultType>>>&
-        validIndices,
-    std::ostream& out) const {
+    const vector<std::optional<pair<size_t, ResultTable::ResultType>>>
+        validIndices) const {
   shared_ptr<const ResultTable> res = getResult();
-
   // special case : binary export of IdTable
   if (sep == 'b') {
     for (size_t i = from; i < upperBound; ++i) {
       for (size_t j = 0; j < validIndices.size(); ++j) {
         if (validIndices[j]) {
           const auto& val = *validIndices[j];
-          out.write(reinterpret_cast<const char*>(&data(i, val.first)),
-                    sizeof(Id));
+          co_yield std::string_view{
+              reinterpret_cast<const char*>(&data(i, val.first)), sizeof(Id)};
         }
       }
     }
-    return;
+    co_return;
   }
+
   for (size_t i = from; i < upperBound; ++i) {
     for (size_t j = 0; j < validIndices.size(); ++j) {
       if (validIndices[j]) {
@@ -297,26 +305,26 @@ void QueryExecutionTree::writeTable(
                                 .idToOptionalString(data(i, val.first))
                                 .value_or("");
             if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
-              out << ad_utility::convertIndexWordToValueLiteral(entity);
+              co_yield ad_utility::convertIndexWordToValueLiteral(entity);
             } else {
-              out << entity;
+              co_yield entity;
             }
             break;
           }
           case ResultTable::ResultType::VERBATIM:
-            out << data(i, val.first);
+            co_yield data(i, val.first);
             break;
           case ResultTable::ResultType::TEXT:
-            out << _qec->getIndex().getTextExcerpt(data(i, val.first));
+            co_yield _qec->getIndex().getTextExcerpt(data(i, val.first));
             break;
           case ResultTable::ResultType::FLOAT: {
             float f;
             std::memcpy(&f, &data(i, val.first), sizeof(float));
-            out << f;
+            co_yield f;
             break;
           }
           case ResultTable::ResultType::LOCAL_VOCAB: {
-            out << res->idToOptionalString(data(i, val.first)).value_or("");
+            co_yield res->idToOptionalString(data(i, val.first)).value_or("");
             break;
           }
           default:
@@ -324,7 +332,8 @@ void QueryExecutionTree::writeTable(
                      "Cannot deduce output type.");
         }
       }
-      out << (j + 1 < validIndices.size() ? sep : '\n');
+      co_yield(j + 1 < validIndices.size() ? sep : '\n');
     }
   }
+  LOG(DEBUG) << "Done creating readable result.\n";
 }

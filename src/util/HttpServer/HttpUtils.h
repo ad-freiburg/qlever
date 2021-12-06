@@ -7,9 +7,11 @@
 
 #include "../StringUtils.h"
 #include "../TypeTraits.h"
+#include "../streamable_generator.h"
 #include "./MediaTypes.h"
 #include "./UrlParser.h"
 #include "./beast.h"
+#include "./streamable_body.h"
 
 /// Several utilities for using/customizing the HttpServer template from
 /// HttpServer.h
@@ -69,6 +71,23 @@ static auto createOkResponse(std::string text, const HttpRequest auto& request,
                              MediaType mimeType) {
   return createHttpResponseFromString(std::move(text), http::status::ok,
                                       request, mimeType);
+}
+
+/// Create a HttpResponse from a stream_generator with status 200 OK.
+static auto createOkResponse(
+    ad_utility::stream_generator::stream_generator&& generator,
+    const HttpRequest auto& request, MediaType mimeType) {
+  http::response<ad_utility::httpUtils::httpStreams::streamable_body> response{
+      http::status::ok, request.version()};
+  response.set(http::field::content_type, toString(mimeType));
+  response.keep_alive(request.keep_alive());
+  response.body() = std::move(generator);
+  // Set Content-Length and Transfer-Encoding.
+  // Because ad_utility::httpUtils::httpStreams::streamable_body::size
+  // is not defined, Content-Length will be cleared and Transfer-Encoding
+  // will be set to chunked
+  response.prepare_payload();
+  return response;
 }
 
 /// Create a HttpResponse from a string with status 200 OK and mime type

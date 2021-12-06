@@ -14,6 +14,7 @@
 #include "../parser/SparqlParser.h"
 #include "../util/AllocatorWithLimit.h"
 #include "../util/HttpServer/HttpServer.h"
+#include "../util/HttpServer/streamable_body.h"
 #include "../util/Socket.h"
 #include "../util/Timer.h"
 #include "./QueryExecutionContext.h"
@@ -98,9 +99,9 @@ class Server {
                                   ad_utility::Timer& requestTimer,
                                   size_t sendMax = MAX_NOF_ROWS_IN_RESULT);
 
-  static string composeResponseSepValues(const ParsedQuery& query,
-                                         const QueryExecutionTree& qet,
-                                         char sep);
+  static ad_utility::stream_generator::stream_generator
+  composeResponseSepValues(const ParsedQuery& query,
+                           const QueryExecutionTree& qet, char sep);
 
   static json composeResponseJson(const string& query, const std::exception& e,
                                   ad_utility::Timer& requestTimer);
