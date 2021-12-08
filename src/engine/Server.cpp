@@ -287,22 +287,68 @@ boost::asio::awaitable<void> Server::processQuery(
     qet.recursivelySetTimeoutTimer(timeoutTimer);
     LOG(TRACE) << qet.asString() << std::endl;
 
+    using ad_utility::MediaType;
+    // Determine the result media type
+    std::vector<MediaType> supportedMediaTypes{
+        ad_utility::MediaType::sparqlJson, ad_utility::MediaType::tsv,
+        ad_utility::MediaType::csv, ad_utility::MediaType::qleverJson};
+
+    std::string_view acceptHeader = request.base()[http::field::accept];
+    auto mediaType = ad_utility::findMediaTypeFromAcceptHeader(
+        acceptHeader, supportedMediaTypes);
+
+    // TODO<joka921> Remove this hack, as soon as the QLever-UI sends proper
+    // accept headers.
+    if (acceptHeader.empty()) {
+      mediaType = MediaType::qleverJson;
+    }
+
+    if (!mediaType.has_value()) {
+      co_return co_await send(
+          createBadRequestResponse("Could not parse any supported media type "
+                                   "from this \'Accept:\' header field: " +
+                                       std::string{acceptHeader},
+                                   request));
+    }
+
+    // TODO<joka921> make our own UIs use accept-headers and then remove this
+    // code
     if (containsParam("action", "csv_export")) {
-      // CSV export
-      auto responseGenerator = composeResponseSepValues(pq, qet, ',');
-      auto response = createOkResponse(std::move(responseGenerator), request,
-                                       ad_utility::MediaType::csv);
-      co_await send(std::move(response));
+      mediaType = ad_utility::MediaType::csv;
     } else if (containsParam("action", "tsv_export")) {
-      // TSV export
-      auto responseGenerator = composeResponseSepValues(pq, qet, '\t');
-      auto response = createOkResponse(std::move(responseGenerator), request,
-                                       ad_utility::MediaType::tsv);
-      co_await send(std::move(response));
-    } else {
-      // Normal case: JSON response
-      auto responseString = composeResponseJson(pq, qet, requestTimer, maxSend);
-      co_await sendJson(std::move(responseString));
+      mediaType = ad_utility::MediaType::tsv;
+    }
+
+    AD_CHECK(mediaType.has_value());
+    switch (mediaType.value()) {
+      break;
+      case ad_utility::MediaType::csv: {
+        auto responseGenerator = composeResponseSepValues(pq, qet, ',');
+        auto response = createOkResponse(std::move(responseGenerator), request,
+                                         ad_utility::MediaType::csv);
+        co_await send(std::move(response));
+      } break;
+      case ad_utility::MediaType::tsv: {
+        auto responseGenerator = composeResponseSepValues(pq, qet, '\t');
+        auto response = createOkResponse(std::move(responseGenerator), request,
+                                         ad_utility::MediaType::tsv);
+        co_await send(std::move(response));
+      } break;
+      case ad_utility::MediaType::qleverJson: {
+        // Normal case: JSON response
+        auto responseString =
+            composeResponseJson(pq, qet, requestTimer, maxSend);
+        co_await sendJson(std::move(responseString));
+      } break;
+      case ad_utility::MediaType::sparqlJson: {
+        auto responseString =
+            composeResponseSparqlJson(pq, qet, requestTimer, maxSend);
+        co_await sendJson(std::move(responseString));
+      }
+      default:
+        // This should never happen, because we have carefully restricted the
+        // subset of mediaTypes that can occur here.
+        AD_CHECK(false);
     }
     // Print the runtime info. This needs to be done after the query
     // was computed.
