@@ -117,7 +117,7 @@ int main(int argc, char** argv) {
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "i:p:j:tauhm:lc:e:k:T", options, NULL);
+    int c = getopt_long(argc, argv, "i:p:j:tauhm:lc:e:k:T", options, nullptr);
     if (c == -1) break;
     switch (c) {
       case 'i':
@@ -170,13 +170,47 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (index.size() == 0 || port == -1) {
-    if (index.size() == 0) {
+  if (index.empty() || port == -1) {
+    if (index.empty()) {
       cerr << "ERROR: No index specified, but an index is required." << endl;
     }
     if (port == -1) {
       cerr << "ERROR: No port specified, but the port is required." << endl;
     }
+    printUsage(argv[0]);
+    exit(1);
+  }
+
+  if(numThreads == -1) {
+    numThreads = (int) std::thread::hardware_concurrency();
+  }
+
+  if(cacheMaxSizeGB <= 0) {
+    cerr << "ERROR: cacheMaxSizeGB cannot be equal or less then zero." << endl;
+    printUsage(argv[0]);
+    exit(1);
+  }
+
+  if(cacheMaxSizeGBSingleEntry <= 0) {
+    cerr << "ERROR: cacheMaxSizeGBSingleEntry cannot be equal or less then zero." << endl;
+    printUsage(argv[0]);
+    exit(1);
+  }
+  
+  if(cacheMaxNumEntries <= 0) {
+    cerr << "ERROR: cacheMaxNumEntries cannot be equal or less then zero." << endl;
+    printUsage(argv[0]);
+    exit(1);
+  }
+
+  if(memLimit <= 0) {
+    cerr << "ERROR: memLimit cannot be equal or less then zero." << endl;
+    printUsage(argv[0]);
+    exit(1);
+  }
+
+  if(numThreads <= 0) {
+    cerr << "ERROR: numThreads cannot be equal or less then zero." << endl;
     printUsage(argv[0]);
     exit(1);
   }
