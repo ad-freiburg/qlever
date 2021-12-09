@@ -341,9 +341,20 @@ boost::asio::awaitable<void> Server::processQuery(
         co_await sendJson(std::move(responseString));
       } break;
       case ad_utility::MediaType::sparqlJson: {
+        // TODO<joka921> implement this, it is in a different PR which needs
+        // only a bit of polishing.
+        auto errorString =
+            "This endpoint currently only supports tsv, csv, and a custom "
+            "non-standard json format. Support for standard "
+            "application/sparql-results+json export will be implemented soon";
+        co_return co_await send(createBadRequestResponse(errorString, request));
+
+        // TODO<joka921> This will be the code when the other PR is merged.
+        /*
         auto responseString =
             composeResponseSparqlJson(pq, qet, requestTimer, maxSend);
         co_await sendJson(std::move(responseString));
+         */
       }
       default:
         // This should never happen, because we have carefully restricted the
