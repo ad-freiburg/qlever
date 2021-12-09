@@ -30,8 +30,10 @@ weight = OWS ";" OWS "q=" qvalue
 qvalue = ( "0" [ "." *3DIGIT ] ) / ( "1" [ "." *3"0" ] )
 */
 acceptParams: weight (acceptExt)*;
-weight: OWS* ';' OWS* 'q' '=' qvalue;
+weight: OWS* ';' OWS* QandEqual qvalue;
 qvalue: DIGIT ( Dot DIGIT*)?; /* TODO in parser: max 3 decimal digits, and must be <= 1.0*/
+
+QandEqual: 'q' '=';
 
 /* accept-ext = OWS* ";" OWS* token [ "=" ( token / quoted-string ) ] */
 acceptExt: OWS* ';' OWS* token ('=' (token | quotedString))?;

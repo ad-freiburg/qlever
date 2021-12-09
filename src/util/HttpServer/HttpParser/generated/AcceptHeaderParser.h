@@ -12,8 +12,8 @@ class AcceptHeaderParser : public antlr4::Parser {
     T__1 = 2,
     T__2 = 3,
     T__3 = 4,
-    T__4 = 5,
-    MediaRangeAll = 6,
+    MediaRangeAll = 5,
+    QandEqual = 6,
     DIGIT = 7,
     ALPHA = 8,
     OWS = 9,
@@ -216,6 +216,7 @@ class AcceptHeaderParser : public antlr4::Parser {
    public:
     WeightContext(antlr4::ParserRuleContext* parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* QandEqual();
     QvalueContext* qvalue();
     std::vector<antlr4::tree::TerminalNode*> OWS();
     antlr4::tree::TerminalNode* OWS(size_t i);

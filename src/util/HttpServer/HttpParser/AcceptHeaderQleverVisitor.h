@@ -57,11 +57,11 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
       if (mediaType.has_value()) {
         acceptedMediaTypes.push_back(mediaType.value());
       }
-      if (acceptedMediaTypes.empty()) {
-        throw Exception{
-            "Not a single media type known to this parser was detected in \"" +
-            ctx->getText() + '\"'};
-      }
+    }
+    if (acceptedMediaTypes.empty()) {
+      throw Exception{
+          "Not a single media type known to this parser was detected in \"" +
+          ctx->getText() + '\"'};
     }
     return {std::move(acceptedMediaTypes)};
   }

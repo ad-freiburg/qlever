@@ -289,20 +289,17 @@ boost::asio::awaitable<void> Server::processQuery(
 
     using ad_utility::MediaType;
     // Determine the result media type
+
+    // TODO<joka921> qleverJson should not be the default as soon
+    // as the UI explicitly requests it.
     std::vector<MediaType> supportedMediaTypes{
-        ad_utility::MediaType::sparqlJson, ad_utility::MediaType::tsv,
-        ad_utility::MediaType::csv, ad_utility::MediaType::qleverJson};
+        ad_utility::MediaType::qleverJson, ad_utility::MediaType::sparqlJson,
+        ad_utility::MediaType::tsv, ad_utility::MediaType::csv};
 
     std::string_view acceptHeader = request.base()[http::field::accept];
     std::optional<MediaType> mediaType =
         ad_utility::getMediaTypeFromAcceptHeader(acceptHeader,
                                                  supportedMediaTypes);
-
-    // TODO<joka921> Remove this hack, as soon as the QLever UI sends proper
-    // accept headers.
-    if (acceptHeader.empty()) {
-      mediaType = MediaType::qleverJson;
-    }
 
     if (!mediaType.has_value()) {
       co_return co_await send(

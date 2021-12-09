@@ -2,8 +2,8 @@ T__0=1
 T__1=2
 T__2=3
 T__3=4
-T__4=5
-MediaRangeAll=6
+MediaRangeAll=5
+QandEqual=6
 DIGIT=7
 ALPHA=8
 OWS=9
@@ -34,9 +34,8 @@ HTAB=33
 VCHAR=34
 ','=1
 ';'=2
-'q'=3
-'='=4
-'\\'=5
+'='=3
+'\\'=4
 '-'=10
 '.'=11
 '_'=12
