@@ -108,7 +108,7 @@ const std::string& toString(MediaType t) {
 }
 
 // _______________________________________________________________________
-const std::string& toBasicTypeString(MediaType t) {
+const std::string& getType(MediaType t) {
   const auto& m = detail::getAllMediaTypes();
   AD_CHECK(m.contains(t));
   return m.at(t)._type;
@@ -152,7 +152,7 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
 }
 
 // ___________________________________________________________________________
-std::optional<MediaType> findMediaTypeFromAcceptHeader(
+std::optional<MediaType> getMediaTypeFromAcceptHeader(
     std::string_view acceptHeader,
     const std::vector<MediaType>& supportedMediaTypes) {
   AD_CHECK(!supportedMediaTypes.empty());
@@ -163,35 +163,34 @@ std::optional<MediaType> findMediaTypeFromAcceptHeader(
 
   auto orderedMediaTypes = parseAcceptHeader(acceptHeader);
 
-  auto isMediaTypeSupported =
-      [&supportedMediaTypes]<typename T>(
-          const T& candidate) -> std::optional<MediaType> {
+  auto getMediaTypeFromPart = [&supportedMediaTypes]<typename T>(
+                                  const T& part) -> std::optional<MediaType> {
     const std::optional<MediaType> noValue = std::nullopt;
     if constexpr (ad_utility::isSimilar<T, MediaTypeWithQuality::Wildcard>) {
       return *supportedMediaTypes.begin();
     } else if constexpr (ad_utility::isSimilar<
                              T, MediaTypeWithQuality::TypeWithWildcard>) {
-      auto it =
-          std::find_if(supportedMediaTypes.begin(), supportedMediaTypes.end(),
-                       [&candidate](const auto& el) {
-                         return toBasicTypeString(el) == candidate._type;
-                       });
+      auto it = std::find_if(
+          supportedMediaTypes.begin(), supportedMediaTypes.end(),
+          [&part](const auto& el) { return getType(el) == part._type; });
       return it == supportedMediaTypes.end() ? noValue : *it;
     } else if constexpr (ad_utility::isSimilar<T, MediaType>) {
       auto it = std::find(supportedMediaTypes.begin(),
-                          supportedMediaTypes.end(), candidate);
-      return it != supportedMediaTypes.end() ? candidate : noValue;
+                          supportedMediaTypes.end(), part);
+      return it != supportedMediaTypes.end() ? part : noValue;
+    } else {
+      static_assert(ad_utility::alwaysFalse<T>);
     }
   };
 
   for (const auto& mediaType : orderedMediaTypes) {
-    auto match = std::visit(isMediaTypeSupported, mediaType._mediaType);
+    auto match = std::visit(getMediaTypeFromPart, mediaType._mediaType);
     if (match.has_value()) {
       return match.value();
     }
   }
 
-  // No supported Media Type was found, return std::nullopt
+  // No supported `MediaType` was found, return std::nullopt.
   return std::nullopt;
 }
 

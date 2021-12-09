@@ -110,7 +110,7 @@ TEST(AcceptHeaderParser, WildcardSubtype) {
   ASSERT_EQ(c[1], MediaType::json);
 }
 
-TEST(AcceptHeaderParser, TotalWildCardNotSupported) {
+TEST(AcceptHeaderParser, TotalWildCard) {
   auto p = std::string{"text/*, */*, application/json"};
   auto c = parse(p);
   ASSERT_EQ(c.size(), 3u);
@@ -138,34 +138,34 @@ TEST(AcceptHeaderParser, FindMediaTypeFromAcceptHeader) {
   supportedTypes.push_back(MediaType::png);
 
   std::string p = "text/html,application/json";
-  auto res = findMediaTypeFromAcceptHeader(p, supportedTypes);
-  ASSERT_TRUE(res.has_value());
-  ASSERT_EQ(res.value(), MediaType::json);
+  auto result = getMediaTypeFromAcceptHeader(p, supportedTypes);
+  ASSERT_TRUE(result.has_value());
+  ASSERT_EQ(result.value(), MediaType::json);
 
   p = "text/html, image/jpeg";
-  ASSERT_FALSE(findMediaTypeFromAcceptHeader(p, supportedTypes).has_value());
+  ASSERT_FALSE(getMediaTypeFromAcceptHeader(p, supportedTypes).has_value());
 
   // The wildcard matches json or png, json has higher priority;
   p = "*/*, text/html";
-  res = findMediaTypeFromAcceptHeader(p, supportedTypes);
-  ASSERT_TRUE(res.has_value());
-  ASSERT_EQ(res.value(), MediaType::json);
+  result = getMediaTypeFromAcceptHeader(p, supportedTypes);
+  ASSERT_TRUE(result.has_value());
+  ASSERT_EQ(result.value(), MediaType::json);
 
   // The wildcard matches png, but not json;
   p = "image/*, text/html";
-  res = findMediaTypeFromAcceptHeader(p, supportedTypes);
-  ASSERT_TRUE(res.has_value());
-  ASSERT_EQ(res.value(), MediaType::png);
+  result = getMediaTypeFromAcceptHeader(p, supportedTypes);
+  ASSERT_TRUE(result.has_value());
+  ASSERT_EQ(result.value(), MediaType::png);
 
   // The wildcard matches png, json has higher precedence;
   p = "image/*, application/json";
-  res = findMediaTypeFromAcceptHeader(p, supportedTypes);
-  ASSERT_TRUE(res.has_value());
-  ASSERT_EQ(res.value(), MediaType::json);
+  result = getMediaTypeFromAcceptHeader(p, supportedTypes);
+  ASSERT_TRUE(result.has_value());
+  ASSERT_EQ(result.value(), MediaType::json);
 
   // The wildcard matches png, which has the higher quality value;
   p = "image/*, application/json; q=0.3";
-  res = findMediaTypeFromAcceptHeader(p, supportedTypes);
-  ASSERT_TRUE(res.has_value());
-  ASSERT_EQ(res.value(), MediaType::png);
+  result = getMediaTypeFromAcceptHeader(p, supportedTypes);
+  ASSERT_TRUE(result.has_value());
+  ASSERT_EQ(result.value(), MediaType::png);
 }

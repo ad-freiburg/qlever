@@ -58,7 +58,14 @@ struct MediaTypeWithQuality {
   Variant _mediaType;
 
   // Order first by the qualities, and then by the specifity of the type.
-  auto operator<=>(const MediaTypeWithQuality& rhs) const = default;
+  std::partial_ordering operator<=>(const MediaTypeWithQuality& rhs) const {
+    if (auto cmp = _qualityValue <=> rhs._qualityValue; cmp != 0) {
+      return cmp;
+    }
+    if (auto cmp = _mediaType <=> rhs._mediaType; cmp != 0) {
+      return cmp;
+    }
+  }
 };
 
 namespace detail {
@@ -89,7 +96,7 @@ const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes();
 // (`MediaType::json`).
 const auto& getSuffixToMediaTypeStringMap();
 
-// Return a miap from strings like "application/json" to MediaTypes.
+// Return a map from strings like "application/json" to MediaTypes.
 const auto& getStringToMediaTypeMap();
 
 }  // namespace detail
@@ -105,30 +112,29 @@ const std::string& toString(MediaType t);
 /// Convert a  `MediaType` to the corresponding "basic" type. For example
 /// `MediaType::json` represents "application/json" so this function will return
 /// "application".
-const std::string& toBasicTypeString(MediaType t);
+const std::string& getType(MediaType t);
 
 /// Convert a string like "application/json" to the appropriate media type.
 /// If no corresponding `MediaType` exists, `std::nullopt` is returned;
 /// The comparison is case insensitive: "Application/JSON" would also
-/// math the json media type.
+/// match the json media type.
 [[nodiscard]] std::optional<MediaType> toMediaType(std::string_view s);
 
 /// Parse the value of an `HTTP Accept` header field. Currently does not support
 /// wildcards, quality parameters and other parameters. The media types are
 /// already sorted (highest quality first, more specific types first if the
-/// quality is the same. Throws on error.
+/// quality is the same). Throws on error.
 std::vector<MediaTypeWithQuality> parseAcceptHeader(
     std::string_view acceptHeader);
 
-/// Parse the acceptHeader, and determine which of the `supportedMediaTypes`
+/// Parse the part, and determine which of the `supportedMediaTypes`
 /// has the highest priority, and return this type. If several mediaTypes have
-/// the same priority (e.g. because of a wildcard in the accept header) then
+/// the same priority (e.g. because of a wildcard in the `acceptHeader`) then
 /// media types that appear earlier in the `supportedMediaTypes`. If none of the
-/// `supportedMediaTypes` is accepted by the `acceptHeader`, then `std::nullopt`
+/// `supportedMediaTypes` is accepted by the `part`, then `std::nullopt`
 /// is returned.
-std::optional<MediaType> findMediaTypeFromAcceptHeader(
-    std::string_view acceptHeader,
-    const std::vector<MediaType>& supportedMediaTypes);
+std::optional<MediaType> getMediaTypeFromAcceptHeader(
+    std::string_view part, const std::vector<MediaType>& supportedMediaTypes);
 }  // namespace ad_utility
 
 #endif  // QLEVER_MEDIATYPES_H

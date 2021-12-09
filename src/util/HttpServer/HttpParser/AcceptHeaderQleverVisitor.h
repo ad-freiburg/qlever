@@ -7,14 +7,16 @@
 
 // Generated from AcceptHeader.g4 by ANTLR 4.9.2
 
+#include "../../Exception.h"
 #include "../MediaTypes.h"
 #include "./generated/AcceptHeaderVisitor.h"
 #include "antlr4-runtime.h"
 
 /**
- * This class provides an empty implementation of AcceptHeaderVisitor, which can
- * be extended to create a visitor which only needs to handle a subset of the
- * available methods.
+ * /brief Visitor class for the ANTLR-based Accept header parser.
+ * Main entrypoint is the `visitAccept` or `visitAcceptWithEof` function,
+ * which yields an `antlrcpp::any` that holds a
+ * `std::vector<ad_utility::MediaTypeWithQuality>`.
  */
 class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
  public:
@@ -39,11 +41,13 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
     std::string _message;
   };
 
+  // ________________________________________________________________________
   antlrcpp::Any visitAcceptWithEof(
       AcceptHeaderParser::AcceptWithEofContext* ctx) override {
     return ctx->accept()->accept(this);
   }
 
+  // ________________________________________________________________________
   antlrcpp::Any visitAccept(AcceptHeaderParser::AcceptContext* ctx) override {
     std::vector<ad_utility::MediaTypeWithQuality> acceptedMediaTypes;
     for (const auto& child : ctx->rangeAndParams()) {
@@ -90,16 +94,19 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
       }
     }
     if (!ctx->parameter().empty()) {
-      throw NotSupportedException{"Media type parameters like \"charset=...\""};
+      throw NotSupportedException{
+          "Media type parameters, e.g.  \"charset=...\""};
     }
     return V{ad_utility::toMediaType(ctx->getText())};
   }
 
   antlrcpp::Any visitType(AcceptHeaderParser::TypeContext* ctx) override {
+    AD_CHECK(false);  // Should be unreachable.
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitSubtype(AcceptHeaderParser::SubtypeContext* ctx) override {
+    AD_CHECK(false);  // Should be unreachable.
     return visitChildren(ctx);
   }
 
@@ -130,16 +137,19 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
   }
 
   antlrcpp::Any visitQvalue(AcceptHeaderParser::QvalueContext* ctx) override {
+    AD_CHECK(false);  // Should be unreachable.
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitAcceptExt(
       AcceptHeaderParser::AcceptExtContext* ctx) override {
+    AD_CHECK(false);  // Should be unreachable.
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitParameter(
       AcceptHeaderParser::ParameterContext* ctx) override {
+    AD_CHECK(false);  // Should be unreachable.
     return visitChildren(ctx);
   }
 
@@ -149,16 +159,19 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
   }
 
   antlrcpp::Any visitTchar(AcceptHeaderParser::TcharContext* ctx) override {
+    AD_CHECK(false);  // Should be unreachable.
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitQuotedString(
       AcceptHeaderParser::QuotedStringContext* ctx) override {
+    AD_CHECK(false);  // Should be unreachable.
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitQuoted_pair(
       AcceptHeaderParser::Quoted_pairContext* ctx) override {
+    AD_CHECK(false);  // Should be unreachable.
     return visitChildren(ctx);
   }
 };

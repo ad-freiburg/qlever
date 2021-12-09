@@ -294,10 +294,11 @@ boost::asio::awaitable<void> Server::processQuery(
         ad_utility::MediaType::csv, ad_utility::MediaType::qleverJson};
 
     std::string_view acceptHeader = request.base()[http::field::accept];
-    auto mediaType = ad_utility::findMediaTypeFromAcceptHeader(
-        acceptHeader, supportedMediaTypes);
+    std::optional<MediaType> mediaType =
+        ad_utility::getMediaTypeFromAcceptHeader(acceptHeader,
+                                                 supportedMediaTypes);
 
-    // TODO<joka921> Remove this hack, as soon as the QLever-UI sends proper
+    // TODO<joka921> Remove this hack, as soon as the QLeverUI sends proper
     // accept headers.
     if (acceptHeader.empty()) {
       mediaType = MediaType::qleverJson;
@@ -305,14 +306,14 @@ boost::asio::awaitable<void> Server::processQuery(
 
     if (!mediaType.has_value()) {
       co_return co_await send(
-          createBadRequestResponse("Could not parse any supported media type "
-                                   "from this \'Accept:\' header field: " +
+          createBadRequestResponse("Did not find any supported media type "
+                                   "in this \'Accept:\' header field: " +
                                        std::string{acceptHeader},
                                    request));
     }
 
-    // TODO<joka921> make our own UIs use accept-headers and then remove this
-    // code
+    // TODO<joka921> make our own UIs use accept headers and then remove this
+    // code.
     if (containsParam("action", "csv_export")) {
       mediaType = ad_utility::MediaType::csv;
     } else if (containsParam("action", "tsv_export")) {
@@ -321,7 +322,6 @@ boost::asio::awaitable<void> Server::processQuery(
 
     AD_CHECK(mediaType.has_value());
     switch (mediaType.value()) {
-      break;
       case ad_utility::MediaType::csv: {
         auto responseGenerator = composeResponseSepValues(pq, qet, ',');
         auto response = createOkResponse(std::move(responseGenerator), request,
