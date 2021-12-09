@@ -144,11 +144,18 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
   };
 
   auto p = ParserAndVisitor{std::string{acceptHeader}};
-  auto context = p.parser.acceptWithEof();
-  auto resultAsAny = p.visitor.visitAcceptWithEof(context);
-  auto result = std::move(resultAsAny.as<std::vector<MediaTypeWithQuality>>());
-  std::sort(result.begin(), result.end(), std::greater<>{});
-  return result;
+  try {
+    auto context = p.parser.acceptWithEof();
+    auto resultAsAny = p.visitor.visitAcceptWithEof(context);
+    auto result =
+        std::move(resultAsAny.as<std::vector<MediaTypeWithQuality>>());
+    std::sort(result.begin(), result.end(), std::greater<>{});
+    return result;
+  } catch (const antlr4::ParseCancellationException& p) {
+    throw antlr4::ParseCancellationException(
+        "Error while parsing accept header \"" + std::string{acceptHeader} +
+        '"');
+  }
 }
 
 // ___________________________________________________________________________
