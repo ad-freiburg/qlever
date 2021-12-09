@@ -14,9 +14,9 @@
 
 /**
  * /brief Visitor class for the ANTLR-based Accept header parser. Main
- *        entrypoint is the `visitAccept` or `visitAcceptWithEof` function,
- *        which yields an `antlrcpp::any` that holds a
- *        `std::vector<ad_utility::MediaTypeWithQuality>`.
+ * entrypoint is the `visitAccept` or `visitAcceptWithEof` function, which
+ * yields an `antlrcpp::any` that holds a
+ * `std::vector<ad_utility::MediaTypeWithQuality>`.
  */
 class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
  public:
