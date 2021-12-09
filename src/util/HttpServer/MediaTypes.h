@@ -62,9 +62,7 @@ struct MediaTypeWithQuality {
     if (auto cmp = _qualityValue <=> rhs._qualityValue; cmp != 0) {
       return cmp;
     }
-    if (auto cmp = _mediaType <=> rhs._mediaType; cmp != 0) {
-      return cmp;
-    }
+    return _mediaType <=> rhs._mediaType;
   }
 };
 
@@ -127,14 +125,15 @@ const std::string& getType(MediaType t);
 std::vector<MediaTypeWithQuality> parseAcceptHeader(
     std::string_view acceptHeader);
 
-/// Parse the part, and determine which of the `supportedMediaTypes`
+/// Parse `acceptHeader`, and determine which of the `supportedMediaTypes`
 /// has the highest priority, and return this type. If several mediaTypes have
-/// the same priority (e.g. because of a wildcard in the `acceptHeader`) then
+/// the same priority (e.g. because of a wildcard in `acceptHeader`) then
 /// media types that appear earlier in the `supportedMediaTypes`. If none of the
-/// `supportedMediaTypes` is accepted by the `part`, then `std::nullopt`
+/// `supportedMediaTypes` is accepted by `acceptHeader`, then `std::nullopt`
 /// is returned.
 std::optional<MediaType> getMediaTypeFromAcceptHeader(
-    std::string_view part, const std::vector<MediaType>& supportedMediaTypes);
+    std::string_view acceptHeader,
+    const std::vector<MediaType>& supportedMediaTypes);
 }  // namespace ad_utility
 
 #endif  // QLEVER_MEDIATYPES_H

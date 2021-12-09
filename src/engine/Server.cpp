@@ -298,7 +298,7 @@ boost::asio::awaitable<void> Server::processQuery(
         ad_utility::getMediaTypeFromAcceptHeader(acceptHeader,
                                                  supportedMediaTypes);
 
-    // TODO<joka921> Remove this hack, as soon as the QLeverUI sends proper
+    // TODO<joka921> Remove this hack, as soon as the QLever UI sends proper
     // accept headers.
     if (acceptHeader.empty()) {
       mediaType = MediaType::qleverJson;
