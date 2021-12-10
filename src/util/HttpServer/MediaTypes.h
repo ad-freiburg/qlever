@@ -134,6 +134,11 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
 std::optional<MediaType> getMediaTypeFromAcceptHeader(
     std::string_view acceptHeader,
     const std::vector<MediaType>& supportedMediaTypes);
+
+/// Return an error message, which reports, that only the `supportedMediaTypes`
+/// are supported.
+std::string getErrorMessageForSupportedMediaTypes(
+    const std::vector<MediaType>& supportedMediaTypes);
 }  // namespace ad_utility
 
 #endif  // QLEVER_MEDIATYPES_H

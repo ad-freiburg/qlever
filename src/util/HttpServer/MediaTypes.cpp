@@ -201,4 +201,16 @@ std::optional<MediaType> getMediaTypeFromAcceptHeader(
   return std::nullopt;
 }
 
+// ______________________________________________________________________
+std::string getErrorMessageForSupportedMediaTypes(
+    const std::vector<MediaType>& supportedMediaTypes) {
+  // TODO<joka921> Refactor this, as soon as clang supports ranges.
+  std::vector<std::string> asString;
+  for (const auto& type : supportedMediaTypes) {
+    asString.push_back(toString(type));
+  }
+  return "Currently the following media types are supported: " +
+         ad_utility::join(asString, ", ");
+}
+
 }  // namespace ad_utility

@@ -242,8 +242,10 @@ boost::asio::awaitable<void> Server::processQuery(
   AD_CHECK(!query.empty());
 
   auto sendJson = [&request, &send](
-                      const json& jsonString) -> boost::asio::awaitable<void> {
-    auto response = createJsonResponse(jsonString, request);
+                      const json& jsonString,
+                      http::status status =
+                          http::status::ok) -> boost::asio::awaitable<void> {
+    auto response = createJsonResponse(jsonString, request, status);
     co_return co_await send(std::move(response));
   };
 
@@ -292,21 +294,27 @@ boost::asio::awaitable<void> Server::processQuery(
 
     // TODO<joka921> qleverJson should not be the default as soon
     // as the UI explicitly requests it.
-    std::vector<MediaType> supportedMediaTypes{
-        ad_utility::MediaType::qleverJson, ad_utility::MediaType::sparqlJson,
-        ad_utility::MediaType::tsv, ad_utility::MediaType::csv};
+    // TODO<joka921> Add sparqlJson as soon as it is supported.
+    const auto supportedMediaTypes = []() {
+      static const std::vector<MediaType> ts{ad_utility::MediaType::qleverJson,
+                                             ad_utility::MediaType::tsv,
+                                             ad_utility::MediaType::csv};
+      return ts;
+    };
 
     std::string_view acceptHeader = request.base()[http::field::accept];
     std::optional<MediaType> mediaType =
         ad_utility::getMediaTypeFromAcceptHeader(acceptHeader,
-                                                 supportedMediaTypes);
+                                                 supportedMediaTypes());
 
     if (!mediaType.has_value()) {
-      co_return co_await send(
-          createBadRequestResponse("Did not find any supported media type "
-                                   "in this \'Accept:\' header field: " +
-                                       std::string{acceptHeader},
-                                   request));
+      co_return co_await send(createBadRequestResponse(
+          "Did not find any supported media type "
+          "in this \'Accept:\' header field: \"" +
+              std::string{acceptHeader} + "\". " +
+              ad_utility::getErrorMessageForSupportedMediaTypes(
+                  supportedMediaTypes()),
+          request));
     }
 
     // TODO<joka921> make our own UIs use accept headers and then remove this
@@ -338,14 +346,10 @@ boost::asio::awaitable<void> Server::processQuery(
         co_await sendJson(std::move(responseString));
       } break;
       case ad_utility::MediaType::sparqlJson: {
+        AD_CHECK(false);
+
         // TODO<joka921> implement this, it is in a different PR which needs
         // only a bit of polishing.
-        auto errorString =
-            "This endpoint currently only supports tsv, csv, and a custom "
-            "non-standard json format. Support for standard "
-            "application/sparql-results+json export will be implemented soon";
-        co_return co_await send(createBadRequestResponse(errorString, request));
-
         // TODO<joka921> This will be the code when the other PR is merged.
         /*
         auto responseString =
@@ -367,6 +371,7 @@ boost::asio::awaitable<void> Server::processQuery(
     errorResponse = composeResponseJson(query, e, requestTimer);
   }
   if (errorResponse.has_value()) {
-    co_return co_await sendJson(errorResponse.value());
+    co_return co_await sendJson(errorResponse.value(),
+                                http::status::bad_request);
   }
 }

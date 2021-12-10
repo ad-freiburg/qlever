@@ -32,7 +32,8 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
    public:
     explicit NotSupportedException(std::string_view featureName)
         : _message{"The feature \"" + std::string{featureName} +
-                   "\" is currently not supported by this parser"} {}
+                   "\" is currently not supported inside the `Accept:` header "
+                   "field of an HTTP request"} {}
     [[nodiscard]] const char* what() const noexcept override {
       return _message.c_str();
     }

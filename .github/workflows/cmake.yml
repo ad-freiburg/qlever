@@ -23,9 +23,10 @@ jobs:
         compiler: [ gcc11, clang13 ]
         os: [ ubuntu-latest ]
         warnings: [ "", -Werror ]
-        exclude:
-          - compiler: gcc11
-            warnings: -Werror
+    # Also enforce warning-free compilation on GCC
+    #    exclude:
+    #      - compiler: gcc11
+    #        warnings: -Werror
 
 
     steps:
