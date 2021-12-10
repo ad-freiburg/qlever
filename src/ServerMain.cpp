@@ -181,35 +181,37 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
-  if(numThreads == -1) {
-    numThreads = (int) std::thread::hardware_concurrency();
+  if (numThreads == -1) {
+    numThreads = (int)std::thread::hardware_concurrency();
   }
 
-  if(cacheMaxSizeGB <= 0) {
+  if (cacheMaxSizeGB <= 0) {
     cerr << "ERROR: cacheMaxSizeGB cannot be equal or less then zero." << endl;
     printUsage(argv[0]);
     exit(1);
   }
 
-  if(cacheMaxSizeGBSingleEntry <= 0) {
-    cerr << "ERROR: cacheMaxSizeGBSingleEntry cannot be equal or less then zero." << endl;
-    printUsage(argv[0]);
-    exit(1);
-  }
-  
-  if(cacheMaxNumEntries <= 0) {
-    cerr << "ERROR: cacheMaxNumEntries cannot be equal or less then zero." << endl;
+  if (cacheMaxSizeGBSingleEntry <= 0) {
+    cerr << "ERROR: cacheMaxSizeGBSingleEntry cannot "
+         << "be equal or less then zero." << endl;
     printUsage(argv[0]);
     exit(1);
   }
 
-  if(memLimit <= 0) {
+  if (cacheMaxNumEntries <= 0) {
+    cerr << "ERROR: cacheMaxNumEntries cannot be equal "
+         << "or less then zero." << endl;
+    printUsage(argv[0]);
+    exit(1);
+  }
+
+  if (memLimit <= 0) {
     cerr << "ERROR: memLimit cannot be equal or less then zero." << endl;
     printUsage(argv[0]);
     exit(1);
   }
 
-  if(numThreads <= 0) {
+  if (numThreads <= 0) {
     cerr << "ERROR: numThreads cannot be equal or less then zero." << endl;
     printUsage(argv[0]);
     exit(1);
