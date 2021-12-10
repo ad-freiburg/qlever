@@ -302,10 +302,24 @@ boost::asio::awaitable<void> Server::processQuery(
       return ts;
     };
 
+    std::optional<MediaType> mediaType = std::nullopt;
+
+    // The explicit `action=..._export` parameter have precedence over the
+    // `Accept:...` header field
+    if (containsParam("action", "csv_export")) {
+      mediaType = ad_utility::MediaType::csv;
+    } else if (containsParam("action", "tsv_export")) {
+      mediaType = ad_utility::MediaType::tsv;
+    } else if (containsParam("action", "qlever_json_export")) {
+      mediaType = ad_utility::MediaType::qleverJson;
+    }
+
     std::string_view acceptHeader = request.base()[http::field::accept];
-    std::optional<MediaType> mediaType =
-        ad_utility::getMediaTypeFromAcceptHeader(acceptHeader,
-                                                 supportedMediaTypes());
+
+    if (!mediaType.has_value()) {
+      mediaType = ad_utility::getMediaTypeFromAcceptHeader(
+          acceptHeader, supportedMediaTypes());
+    }
 
     if (!mediaType.has_value()) {
       co_return co_await send(createBadRequestResponse(
@@ -315,14 +329,6 @@ boost::asio::awaitable<void> Server::processQuery(
               ad_utility::getErrorMessageForSupportedMediaTypes(
                   supportedMediaTypes()),
           request));
-    }
-
-    // TODO<joka921> make our own UIs use accept headers and then remove this
-    // code.
-    if (containsParam("action", "csv_export")) {
-      mediaType = ad_utility::MediaType::csv;
-    } else if (containsParam("action", "tsv_export")) {
-      mediaType = ad_utility::MediaType::tsv;
     }
 
     AD_CHECK(mediaType.has_value());
