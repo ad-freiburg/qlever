@@ -127,7 +127,15 @@ std::optional<MediaType> toMediaType(std::string_view s) {
 
 // ___________________________________________________________________________
 std::vector<MediaTypeWithQuality> parseAcceptHeader(
-    std::string_view acceptHeader) {
+    std::string_view acceptHeader, std::vector<MediaType> supportedMediaTypes) {
+  struct ThrowingErrorStrategy : public antlr4::DefaultErrorStrategy {
+    void reportError(antlr4::Parser*,
+                     const antlr4::RecognitionException& e) override {
+      throw antlr4::ParseCancellationException(
+          e.what() + std::string{" at token \""} +
+          e.getOffendingToken()->getText() + '"');
+    }
+  };
   struct ParserAndVisitor {
    private:
     string input;
@@ -138,12 +146,15 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
    public:
     AcceptHeaderParser parser{&tokens};
     AcceptHeaderQleverVisitor visitor;
-    explicit ParserAndVisitor(string toParse) : input{std::move(toParse)} {
-      parser.setErrorHandler(std::make_shared<antlr4::BailErrorStrategy>());
+    explicit ParserAndVisitor(string toParse,
+                              std::vector<MediaType> supportedMediaTypes)
+        : input{std::move(toParse)}, visitor{std::move(supportedMediaTypes)} {
+      parser.setErrorHandler(std::make_shared<ThrowingErrorStrategy>());
     }
   };
 
-  auto p = ParserAndVisitor{std::string{acceptHeader}};
+  auto p = ParserAndVisitor{std::string{acceptHeader},
+                            std::move(supportedMediaTypes)};
   try {
     auto context = p.parser.acceptWithEof();
     auto resultAsAny = p.visitor.visitAcceptWithEof(context);
@@ -154,7 +165,7 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
   } catch (const antlr4::ParseCancellationException& p) {
     throw antlr4::ParseCancellationException(
         "Error while parsing accept header \"" + std::string{acceptHeader} +
-        '"');
+        "\". " + p.what());
   }
 }
 
@@ -168,7 +179,7 @@ std::optional<MediaType> getMediaTypeFromAcceptHeader(
     return *supportedMediaTypes.begin();
   }
 
-  auto orderedMediaTypes = parseAcceptHeader(acceptHeader);
+  auto orderedMediaTypes = parseAcceptHeader(acceptHeader, supportedMediaTypes);
 
   auto getMediaTypeFromPart = [&supportedMediaTypes]<typename T>(
                                   const T& part) -> std::optional<MediaType> {

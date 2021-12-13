@@ -123,7 +123,7 @@ const std::string& getType(MediaType t);
 /// already sorted (highest quality first, more specific types first if the
 /// quality is the same). Throws on error.
 std::vector<MediaTypeWithQuality> parseAcceptHeader(
-    std::string_view acceptHeader);
+    std::string_view acceptHeader, std::vector<MediaType> supportedMediaTypes);
 
 /// Parse `acceptHeader`, and determine which of the `supportedMediaTypes`
 /// has the highest priority, and return this type. If several mediaTypes have
@@ -135,7 +135,7 @@ std::optional<MediaType> getMediaTypeFromAcceptHeader(
     std::string_view acceptHeader,
     const std::vector<MediaType>& supportedMediaTypes);
 
-/// Return an error message, which reports, that only the `supportedMediaTypes`
+/// Return an error message, which reports that only the `supportedMediaTypes`
 /// are supported.
 std::string getErrorMessageForSupportedMediaTypes(
     const std::vector<MediaType>& supportedMediaTypes);
