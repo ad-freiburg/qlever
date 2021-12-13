@@ -13,7 +13,20 @@ using namespace antlr4;
 using std::string;
 using namespace ad_utility;
 
-auto parse = [](std::string_view input) { return parseAcceptHeader(input); };
+const std::vector<MediaType>& supportedMediaTypes() {
+  static auto vector = [] {
+    std::vector<MediaType> result;
+    for (const auto& [mediaType, impl] : detail::getAllMediaTypes()) {
+      result.push_back(mediaType);
+    }
+    return result;
+  }();
+  return vector;
+}
+
+auto parse = [](std::string_view input) {
+  return parseAcceptHeader(input, supportedMediaTypes());
+};
 
 namespace ad_utility {
 // Comparison operator to make the tests more readable.
