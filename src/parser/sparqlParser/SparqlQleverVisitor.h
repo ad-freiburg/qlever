@@ -463,9 +463,9 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     for (size_t i = 0; i < verbs.size(); i++) {
       auto objectList = objectLists.at(i)->accept(this).as<ObjectList>();
       for (auto& object : objectList.first) {
-        // TODO<Robin> getText() durch richtigen verb typ ersetzen
+        // TODO<Robin> richtigen verb typ verwenden
         triplesWithoutSubject.push_back(
-            {verbs.at(i)->getText(), std::move(object)});
+            {verbs.at(i)->accept(this).as<std::string>(), std::move(object)});
       }
       additionalTriples.insert(
           additionalTriples.end(),
@@ -478,10 +478,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitVerb(SparqlAutomaticParser::VerbContext* ctx) override {
     if (ctx->varOrIri()) {
-      return visitChildren(ctx);
+      return ctx->varOrIri()->accept(this);
     }
     // Special keyword 'a'
-    return "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+    return "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"s;
   }
 
   antlrcpp::Any visitObjectList(
