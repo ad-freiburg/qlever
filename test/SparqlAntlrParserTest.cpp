@@ -5,6 +5,7 @@
 #include <antlr4-runtime.h>
 #include <gtest/gtest.h>
 
+#include <iostream>
 #include <type_traits>
 
 #include "../../src/parser/sparqlParser/SparqlQleverVisitor.h"
@@ -134,4 +135,28 @@ TEST(SparqlExpressionParser, First) {
   auto result = resultAsExpression->evaluate(&input);
   AD_CHECK(std::holds_alternative<double>(result));
   ASSERT_FLOAT_EQ(25.0, std::get<double>(result));
+}
+
+TEST(SparqlParser, ComplexConstructQuery) {
+  try {
+    string input =
+        "CONSTRUCT { [?a ( ?b (?c) )] ?d [?e [?f ?g]] . "
+        "<http://wallscope.co.uk/resource/olympics/medal/#something> a "
+        "<http://wallscope.co.uk/resource/olympics/medal/#somethingelse> } "
+        "WHERE {}";
+    ParserAndVisitor p{input};
+
+    auto triples = p.parser.constructQuery()
+                       ->accept(&p.visitor)
+                       .as<std::vector<std::array<std::string, 3>>>();
+    std::cout << "Length" << triples.size() << std::endl;
+    for (const auto& triple : triples) {
+      std::cout << triple[0] << ','
+                << triple[1] << ','
+                << triple[2] << ','
+                << std::endl;
+    }
+  } catch (std::exception& e) {
+    std::cerr << e.what() << std::endl;
+  }
 }
