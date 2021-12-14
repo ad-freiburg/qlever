@@ -171,7 +171,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     if (!ctx->datasetClause().empty()) {
       throw SparqlParseException{"Datasets are not supported"};
     }
-    // TODO<Robin> propagate to root node
+    // TODO<Robin> propagate to root node and handle where clause etc.
+    if (ctx->constructTemplate()) {
+      return ctx->constructTemplate()->accept(this);
+    }
     return visitChildren(ctx);
   }
 
@@ -464,9 +467,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
         triplesWithoutSubject.push_back(
             {verbs.at(i)->getText(), std::move(object)});
       }
-      additionalTriples.insert(additionalTriples.end(),
-                               objectList.second.begin(),
-                               objectList.second.end());
+      additionalTriples.insert(
+          additionalTriples.end(),
+          std::make_move_iterator(objectList.second.begin()),
+          std::make_move_iterator(objectList.second.end()));
     }
     return std::make_pair(std::move(triplesWithoutSubject),
                           std::move(additionalTriples));
@@ -484,7 +488,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       SparqlAutomaticParser::ObjectListContext* ctx) override {
     Objects objects;
     Triples additionalTriples;
-    for (auto& objectContext : ctx->objectR()) {
+    auto objectContexts = ctx->objectR();
+    for (auto& objectContext : objectContexts) {
       auto& blankNode = objectContext->accept(this).as<Node>();
       additionalTriples.insert(
           additionalTriples.end(),
@@ -598,9 +603,14 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       SparqlAutomaticParser::BlankNodePropertyListContext* ctx) override {
     std::string var = varCreator.generateVariable();
     Triples triples;
-    for (auto& tuple : ctx->propertyListNotEmpty()->accept(this).as<Tuples>()) {
+    auto propertyList =
+        ctx->propertyListNotEmpty()->accept(this).as<PropertyList>();
+    for (auto& tuple : propertyList.first) {
       triples.push_back({var, std::move(tuple[0]), std::move(tuple[1])});
     }
+    triples.insert(triples.end(),
+                   std::make_move_iterator(propertyList.second.begin()),
+                   std::make_move_iterator(propertyList.second.end()));
     return std::make_pair(std::move(var), std::move(triples));
   }
 
@@ -619,7 +629,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     Triples triples;
     std::string nextElement = "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil";
     auto nodes = ctx->graphNode();
-    for (auto context : reversed(nodes)) {
+    reversed reversedNodesView{nodes};
+    for (auto context : reversedNodesView) {
       std::string currentVar = varCreator.generateVariable();
       auto graphNode = context->accept(this).as<Node>();
 
