@@ -442,7 +442,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
                      std::make_move_iterator(propertyList.second.end()));
     } else {
       // Invalid grammar
-      AD_CHECK(FALSE);
+      AD_CHECK(false);
     }
     return triples;
   }
@@ -490,7 +490,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     Triples additionalTriples;
     auto objectContexts = ctx->objectR();
     for (auto& objectContext : objectContexts) {
-      auto& blankNode = objectContext->accept(this).as<Node>();
+      auto blankNode = objectContext->accept(this).as<Node>();
       additionalTriples.insert(
           additionalTriples.end(),
           std::make_move_iterator(blankNode.second.begin()),
