@@ -219,7 +219,7 @@ add_executable(SparqlEngineMain src/SparqlEngineMain.cpp)
 target_link_libraries (SparqlEngineMain engine ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(ServerMain src/ServerMain.cpp)
-target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries (ServerMain sparqlParserHelpers engine ${CMAKE_THREAD_LIBS_INIT} sparqlParserHelpers)
 
 add_executable(WriteIndexListsMain src/WriteIndexListsMain.cpp)
 target_link_libraries (WriteIndexListsMain engine ${CMAKE_THREAD_LIBS_INIT})

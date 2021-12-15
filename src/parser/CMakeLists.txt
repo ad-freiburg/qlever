@@ -3,6 +3,8 @@ target_link_libraries(rdfEscaping absl::flat_hash_map ${ICU_LIBRARIES})
 
 add_subdirectory(sparqlParser)
 
+add_library(sparqlParserHelpers SparqlParserHelpers.h SparqlParserHelpers.cpp)
+
 add_library(parser
         SparqlParser.h SparqlParser.cpp
         ParsedQuery.h ParsedQuery.cpp
@@ -17,7 +19,7 @@ add_library(parser
         SparqlLexer.h SparqlLexer.cpp
         TokenizerCtre.h TurtleTokenId.h
         ParallelBuffer.cpp
-        SparqlParserHelpers.h SparqlParserHelpers.cpp)
-target_link_libraries(parser sparqlParser sparqlExpressions rdfEscaping re2 absl::flat_hash_map)
+        )
+target_link_libraries(parser sparqlParserHelpers sparqlParser sparqlExpressions rdfEscaping re2 absl::flat_hash_map)
 
 
