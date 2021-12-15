@@ -27,6 +27,7 @@ class SparqlParseException : public std::exception {
   const char* what() const noexcept override { return _message.c_str(); }
 };
 
+// TODO<Robin> ensure blank nodes are guaranteed to be unique
 class BlankNodeCreator {
   size_t _counter = 0;
 
