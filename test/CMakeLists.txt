@@ -207,3 +207,7 @@ target_link_libraries(StreamableBodyTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 add_executable(StreamableGeneratorTest StreamableGeneratorTest.cpp)
 add_test(StreamableGeneratorTest StreamableGeneratorTest)
 target_link_libraries(StreamableGeneratorTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(AcceptHeaderTest AcceptHeaderTest.cpp)
+target_link_libraries(AcceptHeaderTest gtest_main mediaTypes httpParser ${CMAKE_THREAD_LIBS_INIT})
+add_test(AcceptHeaderTest AcceptHeaderTest)

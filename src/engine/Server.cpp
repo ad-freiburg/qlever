@@ -242,8 +242,10 @@ boost::asio::awaitable<void> Server::processQuery(
   AD_CHECK(!query.empty());
 
   auto sendJson = [&request, &send](
-                      const json& jsonString) -> boost::asio::awaitable<void> {
-    auto response = createJsonResponse(jsonString, request);
+                      const json& jsonString,
+                      http::status status =
+                          http::status::ok) -> boost::asio::awaitable<void> {
+    auto response = createJsonResponse(jsonString, request, status);
     co_return co_await send(std::move(response));
   };
 
@@ -287,22 +289,84 @@ boost::asio::awaitable<void> Server::processQuery(
     qet.recursivelySetTimeoutTimer(timeoutTimer);
     LOG(TRACE) << qet.asString() << std::endl;
 
+    using ad_utility::MediaType;
+    // Determine the result media type
+
+    // TODO<joka921> qleverJson should not be the default as soon
+    // as the UI explicitly requests it.
+    // TODO<joka921> Add sparqlJson as soon as it is supported.
+    const auto supportedMediaTypes = []() {
+      static const std::vector<MediaType> ts{ad_utility::MediaType::qleverJson,
+                                             ad_utility::MediaType::tsv,
+                                             ad_utility::MediaType::csv};
+      return ts;
+    };
+
+    std::optional<MediaType> mediaType = std::nullopt;
+
+    // The explicit `action=..._export` parameter have precedence over the
+    // `Accept:...` header field
     if (containsParam("action", "csv_export")) {
-      // CSV export
-      auto responseGenerator = composeResponseSepValues(pq, qet, ',');
-      auto response = createOkResponse(std::move(responseGenerator), request,
-                                       ad_utility::MediaType::csv);
-      co_await send(std::move(response));
+      mediaType = ad_utility::MediaType::csv;
     } else if (containsParam("action", "tsv_export")) {
-      // TSV export
-      auto responseGenerator = composeResponseSepValues(pq, qet, '\t');
-      auto response = createOkResponse(std::move(responseGenerator), request,
-                                       ad_utility::MediaType::tsv);
-      co_await send(std::move(response));
-    } else {
-      // Normal case: JSON response
-      auto responseString = composeResponseJson(pq, qet, requestTimer, maxSend);
-      co_await sendJson(std::move(responseString));
+      mediaType = ad_utility::MediaType::tsv;
+    } else if (containsParam("action", "qlever_json_export")) {
+      mediaType = ad_utility::MediaType::qleverJson;
+    }
+
+    std::string_view acceptHeader = request.base()[http::field::accept];
+
+    if (!mediaType.has_value()) {
+      mediaType = ad_utility::getMediaTypeFromAcceptHeader(
+          acceptHeader, supportedMediaTypes());
+    }
+
+    if (!mediaType.has_value()) {
+      co_return co_await send(createBadRequestResponse(
+          "Did not find any supported media type "
+          "in this \'Accept:\' header field: \"" +
+              std::string{acceptHeader} + "\". " +
+              ad_utility::getErrorMessageForSupportedMediaTypes(
+                  supportedMediaTypes()),
+          request));
+    }
+
+    AD_CHECK(mediaType.has_value());
+    switch (mediaType.value()) {
+      case ad_utility::MediaType::csv: {
+        auto responseGenerator = composeResponseSepValues(pq, qet, ',');
+        auto response = createOkResponse(std::move(responseGenerator), request,
+                                         ad_utility::MediaType::csv);
+        co_await send(std::move(response));
+      } break;
+      case ad_utility::MediaType::tsv: {
+        auto responseGenerator = composeResponseSepValues(pq, qet, '\t');
+        auto response = createOkResponse(std::move(responseGenerator), request,
+                                         ad_utility::MediaType::tsv);
+        co_await send(std::move(response));
+      } break;
+      case ad_utility::MediaType::qleverJson: {
+        // Normal case: JSON response
+        auto responseString =
+            composeResponseJson(pq, qet, requestTimer, maxSend);
+        co_await sendJson(std::move(responseString));
+      } break;
+      case ad_utility::MediaType::sparqlJson: {
+        AD_CHECK(false);
+
+        // TODO<joka921> implement this, it is in a different PR which needs
+        // only a bit of polishing.
+        // TODO<joka921> This will be the code when the other PR is merged.
+        /*
+        auto responseString =
+            composeResponseSparqlJson(pq, qet, requestTimer, maxSend);
+        co_await sendJson(std::move(responseString));
+         */
+      }
+      default:
+        // This should never happen, because we have carefully restricted the
+        // subset of mediaTypes that can occur here.
+        AD_CHECK(false);
     }
     // Print the runtime info. This needs to be done after the query
     // was computed.
@@ -313,6 +377,7 @@ boost::asio::awaitable<void> Server::processQuery(
     errorResponse = composeResponseJson(query, e, requestTimer);
   }
   if (errorResponse.has_value()) {
-    co_return co_await sendJson(errorResponse.value());
+    co_return co_await sendJson(errorResponse.value(),
+                                http::status::bad_request);
   }
 }
