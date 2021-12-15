@@ -27,14 +27,14 @@ class SparqlParseException : public std::exception {
   const char* what() const noexcept override { return _message.c_str(); }
 };
 
-class AnonymousVariableCreator {
+class BlankNodeCreator {
   size_t _counter = 0;
 
  public:
   // TODO<Robin> fix type
-  std::string generateVariable() {
+  std::string newNode() {
     std::ostringstream output;
-    output << "?anonymousVariable#";
+    output << "_:b";
     output << _counter;
     _counter++;
     return output.str();
@@ -66,7 +66,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   using Node = std::pair<std::string, Triples>;
   using ObjectList = std::pair<Objects, Triples>;
   using PropertyList = std::pair<Tuples, Triples>;
-  AnonymousVariableCreator varCreator{};
+  BlankNodeCreator nodeCreator{};
 
  public:
   using PrefixMap = ad_utility::HashMap<string, string>;
@@ -601,7 +601,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitBlankNodePropertyList(
       SparqlAutomaticParser::BlankNodePropertyListContext* ctx) override {
-    std::string var = varCreator.generateVariable();
+    std::string var = nodeCreator.newNode();
     Triples triples;
     auto propertyList =
         ctx->propertyListNotEmpty()->accept(this).as<PropertyList>();
@@ -632,7 +632,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     auto nodes = ctx->graphNode();
     reversed reversedNodesView{nodes};
     for (auto context : reversedNodesView) {
-      std::string currentVar = varCreator.generateVariable();
+      std::string currentVar = nodeCreator.newNode();
       auto graphNode = context->accept(this).as<Node>();
 
       triples.push_back({currentVar,
