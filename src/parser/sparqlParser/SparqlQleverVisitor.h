@@ -627,7 +627,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitCollection(
       SparqlAutomaticParser::CollectionContext* ctx) override {
     Triples triples;
-    std::string nextElement = "http://www.w3.org/1999/02/22-rdf-syntax-ns#nil";
+    std::string nextElement =
+        "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>";
     auto nodes = ctx->graphNode();
     reversed reversedNodesView{nodes};
     for (auto context : reversedNodesView) {
@@ -635,10 +636,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       auto graphNode = context->accept(this).as<Node>();
 
       triples.push_back({currentVar,
-                         "http://www.w3.org/1999/02/22-rdf-syntax-ns#first",
+                         "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>",
                          std::move(graphNode.first)});
       triples.push_back({currentVar,
-                         "http://www.w3.org/1999/02/22-rdf-syntax-ns#rest",
+                         "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>",
                          std::move(nextElement)});
       nextElement = std::move(currentVar);
 
