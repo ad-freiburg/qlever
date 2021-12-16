@@ -30,6 +30,9 @@ parseExpression(const std::string& input);
 // An `alias` in Sparql have the form (<expression> as ?variable).
 ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
     const std::string& input);
+
+// TODO<Robin> create return type
+ResultOfParseAndRemainingText<std::vector<std::array<std::string, 3>>> parseConstructTemplate(const std::string& input);
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H

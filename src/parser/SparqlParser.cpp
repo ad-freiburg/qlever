@@ -27,7 +27,6 @@ ParsedQuery SparqlParser::parse() {
   ParsedQuery result;
   result._originalString = _query;
   parsePrologue(&result);
-  _lexer.expect("select");
   parseQuery(&result);
   _lexer.expectEmpty();
 
@@ -36,7 +35,17 @@ ParsedQuery SparqlParser::parse() {
 
 // _____________________________________________________________________________
 void SparqlParser::parseQuery(ParsedQuery* query) {
-  parseSelect(query);
+  if (_lexer.accept("construct")) {
+    auto str = _lexer.getUnconsumedInput();
+    auto parseResult = sparqlParserHelpers::parseConstructTemplate(str);
+    query->_constructClause = std::move(parseResult._resultOfParse);
+    _lexer.reset(std::move(parseResult._remainingText));
+    _lexer.expect("where");
+  } else {
+    _lexer.expect("select");
+    parseSelect(query);
+  }
+
 
   _lexer.expect("{");
   parseWhere(query);

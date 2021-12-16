@@ -62,6 +62,14 @@ ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
   return p.parse<ParsedQuery::Alias>(
       input, &SparqlAutomaticParser::aliasWithouBrackes);
 }
+// _____________________________________________________________________________
+
+// TODO<Robin> create return type
+ResultOfParseAndRemainingText<std::vector<std::array<std::string, 3>>> parseConstructTemplate(const std::string& input) {
+  ParserAndVisitor p{input};
+  return p.parse<std::vector<std::array<std::string, 3>>>(
+      input, &SparqlAutomaticParser::constructTemplate);
+}
 
 // ______________________________________________________________________________
 std::pair<SparqlQleverVisitor::PrefixMap, size_t> parsePrologue(

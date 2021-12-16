@@ -325,6 +325,7 @@ class ParsedQuery {
   std::optional<size_t> _offset = std::nullopt;
   string _originalString;
   SelectClause _selectClause;
+  std::optional<std::vector<std::array<string, 3>>> _constructClause;
 
   void expandPrefixes();
   void parseAliases();
