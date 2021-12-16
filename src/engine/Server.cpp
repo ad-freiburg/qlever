@@ -315,9 +315,9 @@ boost::asio::awaitable<void> Server::processQuery(
     // as the UI explicitly requests it.
     // TODO<joka921> Add sparqlJson as soon as it is supported.
     const auto supportedMediaTypes = []() {
-      static const std::vector<MediaType> ts{ad_utility::MediaType::qleverJson,
-                                             ad_utility::MediaType::tsv,
-                                             ad_utility::MediaType::csv};
+      static const std::vector<MediaType> ts{
+          ad_utility::MediaType::qleverJson, ad_utility::MediaType::sparqlJson,
+          ad_utility::MediaType::tsv, ad_utility::MediaType::csv};
       return ts;
     };
 
@@ -331,6 +331,8 @@ boost::asio::awaitable<void> Server::processQuery(
       mediaType = ad_utility::MediaType::tsv;
     } else if (containsParam("action", "qlever_json_export")) {
       mediaType = ad_utility::MediaType::qleverJson;
+    } else if (containsParam("action", "sparql_json_export")) {
+      mediaType = ad_utility::MediaType::sparqlJson;
     }
 
     std::string_view acceptHeader = request.base()[http::field::accept];
@@ -371,16 +373,9 @@ boost::asio::awaitable<void> Server::processQuery(
         co_await sendJson(std::move(responseString));
       } break;
       case ad_utility::MediaType::sparqlJson: {
-        AD_CHECK(false);
-
-        // TODO<joka921> implement this, it is in a different PR which needs
-        // only a bit of polishing.
-        // TODO<joka921> This will be the code when the other PR is merged.
-        /*
         auto responseString =
             composeResponseSparqlJson(pq, qet, requestTimer, maxSend);
         co_await sendJson(std::move(responseString));
-         */
       }
       default:
         // This should never happen, because we have carefully restricted the

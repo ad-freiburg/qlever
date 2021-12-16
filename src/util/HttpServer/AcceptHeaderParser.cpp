@@ -9,18 +9,22 @@
 using namespace ad_utility;
 
 // __________________________________________________________________________
-MediaType AcceptHeaderParser::findAnyMediaType(std::string_view input, const std::vector<MediaType>& candidates, std::string_view errorMessage) {
+MediaType AcceptHeaderParser::findAnyMediaType(
+    std::string_view input, const std::vector<MediaType>& candidates,
+    std::string_view errorMessage) {
   for (const auto& candidate : candidates) {
     if (input.find(toString(candidate))) {
       return candidate;
     }
   }
   std::stringstream error;
-  error << errorMessage << ". No supported media type found in \"" << input << "\". supported media types are: ";
-  for (const auto& candidate: candidates) {
+  error << errorMessage << ". No supported media type found in \"" << input
+        << "\". supported media types are: ";
+  for (const auto& candidate : candidates) {
     error << toString(candidate) << ' ';
   }
 
   throw std::runtime_error{error.str()};
 }
-};
+}
+;
