@@ -52,7 +52,7 @@ class ResultTable {
   using LocalVocab = vector<string>;
   std::shared_ptr<LocalVocab> _localVocab;
 
-  ResultTable(ad_utility::AllocatorWithLimit<Id> allocator);
+  explicit ResultTable(ad_utility::AllocatorWithLimit<Id> allocator);
 
   ResultTable(const ResultTable& other) = delete;
 

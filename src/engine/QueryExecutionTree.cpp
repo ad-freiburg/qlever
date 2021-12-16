@@ -127,31 +127,55 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
   return writeTable(data, sep, offset, upperBound, std::move(validIndices));
 }
 
+// ___________________________________________________________________________
+QueryExecutionTree::ExportColumnIndicesAndTypes
+QueryExecutionTree::selectedVariablesToColumnIndices(
+    const std::vector<string>& selectVariables,
+    const ResultTable& resultTable) const {
+  vector<std::optional<pair<size_t, ResultTable::ResultType>>> exportColumns;
+  for (auto var : selectVariables) {
+    if (ad_utility::startsWith(var, "TEXT(")) {
+      var = var.substr(5, var.rfind(')') - 5);
+    }
+    auto vc = getVariableColumns().find(var);
+    if (getVariableColumns().contains(var)) {
+      auto columnIndex = getVariableColumns().at(var);
+      exportColumns.emplace_back(
+          std::pair{columnIndex, resultTable.getResultType(columnIndex)});
+    } else {
+      exportColumns.emplace_back(std::nullopt);
+    }
+  }
+  return exportColumns;
+}
+
+// TODO<joka921> proper type + comment.
+std::vector<std::tuple<size_t, size_t, ResultTable::ResultType>>
+toVariableColumnToResultColumnMap(
+    const QueryExecutionTree::ExportColumnIndicesAndTypes& columns) {
+  std::vector<std::tuple<size_t, size_t, ResultTable::ResultType>> result;
+  for (size_t i = 0; i < columns.size(); ++i) {
+    const auto& opt = columns[i];
+    if (opt.has_value()) {
+      result.emplace_back(i, opt->first, opt->second);
+    }
+  }
+  return result;
+}
+
 // _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeResultAsJson(
     const vector<string>& selectVars, size_t limit, size_t offset) const {
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices;
-  for (auto var : selectVars) {
-    if (ad_utility::startsWith(var, "TEXT(")) {
-      var = var.substr(5, var.rfind(')') - 5);
-    }
-    auto vc = getVariableColumns().find(var);
-    if (vc != getVariableColumns().end()) {
-      validIndices.push_back(pair<size_t, ResultTable::ResultType>(
-          vc->second, res->getResultType(vc->second)));
-    } else {
-      validIndices.push_back(std::nullopt);
-    }
-  }
+  ExportColumnIndicesAndTypes validIndices =
+      selectedVariablesToColumnIndices(selectVars, *res);
   if (validIndices.size() == 0) {
     return nlohmann::json(std::vector<std::string>());
   }
 
-  const IdTable& data = res->_data;
-  return writeJsonTable(data, offset, limit, validIndices);
+  return writeJsonTable(res->_data, offset, limit, validIndices);
 }
 
 // _____________________________________________________________________________
@@ -162,19 +186,12 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  vector<pair<size_t, ResultTable::ResultType>> validIndices;
-  for (auto var : selectVars) {
-    if (ad_utility::startsWith(var, "TEXT(")) {
-      var = var.substr(5, var.rfind(')') - 5);
-    }
-    auto vc = getVariableColumns().find(var);
-    if (vc != getVariableColumns().end()) {
-      validIndices.push_back(pair<size_t, ResultTable::ResultType>(
-          vc->second, res->getResultType(vc->second)));
-    }
-  }
-  if (validIndices.size() == 0) {
-    return nlohmann::json(std::vector<std::string>());
+  ExportColumnIndicesAndTypes validIndices =
+      selectedVariablesToColumnIndices(selectVars, *res);
+  auto inToOutColumns = toVariableColumnToResultColumnMap(validIndices);
+
+  if (inToOutColumns.empty()) {
+    return {std::vector<std::string>()};
   }
 
   const IdTable& data = res->_data;
@@ -191,62 +208,22 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   const auto upperBound = std::min(data.size(), limit + offset);
 
   // Take a string from the vocabulary, deduce the type and
-  // return a json dict that descibes the binding
-  auto entitystrToBinding =
-      [this](const std::string& entitystr) -> nlohmann::json {
+  // return a json dict that describes the binding
+  auto strToBinding = [](const std::string& entitystr) -> nlohmann::json {
     json b;
-    if (ad_utility::startsWith(entitystr, VALUE_DATE_PREFIX)) {
-      // The string is a date
-      std::string date = ad_utility::convertIndexWordToDate(entitystr);
-      date = ad_utility::removeLeadingZeros(date);
-      if (date.empty() ||
-          ad_utility::startsWith(date, VALUE_DATE_TIME_SEPARATOR)) {
-        date = "0" + date;
-      }
-      b["value"] = date;
-      b["type"] = "literal";
-      b["datatype"] = "http://www.w3.org/2001/XMLSchema#dateTime";
-    } else if (ad_utility::startsWith(entitystr, VALUE_FLOAT_PREFIX)) {
-      // The string is a float
-      std::string value = ad_utility::convertIndexWordToFloatString(entitystr);
-      b["value"] = value;
-      b["type"] = "literal";
-      ad_utility::NumericType nt = ad_utility::NumericType(entitystr.back());
-      switch (nt) {
-        case ad_utility::NumericType::FLOAT:
-          b["datatype"] = "http://www.w3.org/2001/XMLSchema#float";
-          break;
-        case ad_utility::NumericType::DOUBLE:
-          b["datatype"] = "http://www.w3.org/2001/XMLSchema#double";
-          break;
-        case ad_utility::NumericType::DECIMAL:
-          b["datatype"] = "http://www.w3.org/2001/XMLSchema#decimal";
-          break;
-        case ad_utility::NumericType::INTEGER:
-          b["datatype"] = "http://www.w3.org/2001/XMLSchema#int";
-          break;
-      }
+    // The string is an iri or literal
+    if (entitystr[0] == '<') {
+      b["type"] = "iri";
+      // Strip the <> surrounding the iri
+      b["value"] = entitystr.substr(1, entitystr.size() - 2);
     } else {
-      // The string is an iri or literal
-      if (entitystr[0] == '<') {
-        b["type"] = "iri";
-        // Strip the <> surrounding the iri
-        b["value"] = entitystr.substr(1, entitystr.size() - 2);
-      } else {
-        b["type"] = "literal";
-        // Look for a language tag
-        size_t at_pos = entitystr.rfind('@');
-        if (at_pos == std::string::npos) {
-          b["value"] = entitystr.substr(1, entitystr.size() - 2);
-        } else {
-          size_t quote_pos = entitystr.rfind('"');
-          if (quote_pos != std::string::npos && quote_pos < at_pos) {
-            b["value"] = entitystr.substr(1, quote_pos - 1);
-            b["xml:lang"] = entitystr.substr(at_pos + 1);
-          } else {
-            b["value"] = entitystr.substr(1, entitystr.size() - 2);
-          }
-        }
+      b["type"] = "literal";
+      size_t quote_pos = entitystr.rfind('"');
+      AD_CHECK(quote_pos != std::string::npos);
+      b["value"] = entitystr.substr(1, quote_pos - 1);
+      // Look for a language tag
+      if (quote_pos < entitystr.size() - 1 && entitystr[quote_pos + 1] == '@') {
+        b["xml:lang"] = entitystr.substr(quote_pos + 2);
       }
     }
     return b;
@@ -254,54 +231,24 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
 
   for (size_t i = offset; i < upperBound; ++i) {
     json binding;
-    for (const auto& idx : validIndices) {
-      const auto& currentId = data(i, idx.first);
-      switch (idx.second) {
-        case ResultTable::ResultType::KB: {
-          std::optional<string> entity =
-              _qec->getIndex().idToOptionalString(currentId);
-          if (entity) {
-            string entitystr = entity.value();
-            binding[selectVars[idx.first]] = entitystrToBinding(entitystr);
-          }
-          break;
-        }
-        case ResultTable::ResultType::VERBATIM: {
-          json b;
-          b["value"] = std::to_string(currentId);
-          b["type"] = "literal";
-          b["datatype"] = "http://www.w3.org/2001/XMLSchema#int";
-          binding[selectVars[idx.first]] = b;
-        } break;
-        case ResultTable::ResultType::TEXT: {
-          json b;
-          b["value"] = _qec->getIndex().getTextExcerpt(currentId);
-          b["type"] = "literal";
-          binding[selectVars[idx.first]] = b;
-        } break;
-        case ResultTable::ResultType::FLOAT: {
-          float f;
-          std::memcpy(&f, &currentId, sizeof(float));
-          std::stringstream s;
-          s << f;
-          json b;
-          b["value"] = s.str();
-          b["type"] = "literal";
-          b["datatype"] = "http://www.w3.org/2001/XMLSchema#float";
-          binding[selectVars[idx.first]] = b;
-          break;
-        }
-        case ResultTable::ResultType::LOCAL_VOCAB: {
-          std::optional<string> entity = res->idToOptionalString(currentId);
-          if (entity) {
-            binding[selectVars[idx.first]] = entitystrToBinding(*entity);
-          }
-          break;
-        }
-        default:
-          AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
-                   "Cannot deduce output type.");
+    for (const auto& [variableIdx, columnIdx, type] : inToOutColumns) {
+      const auto& currentId = data(i, columnIdx);
+      const auto& [optionalValue, datatype] =
+          idToStringAndDatatype(currentId, type, *res);
+      if (!optionalValue.has_value()) {
+        continue;
       }
+      json b;
+      if (!datatype) {
+        // no datatype, this means that there is a plain string literal or
+        // entity
+        b = strToBinding(optionalValue.value());
+      } else {
+        b["value"] = optionalValue.value();
+        b["type"] = "literal";
+        b["datatype"] = datatype;
+      }
+      binding[selectVars[variableIdx]] = std::move(b);
     }
     bindings.emplace_back(std::move(binding));
   }
@@ -363,6 +310,43 @@ void QueryExecutionTree::readFromCache() {
   }
 }
 
+// ___________________________________________________________________________
+std::pair<std::optional<std::string>, const char*>
+QueryExecutionTree::idToStringAndDatatype(
+    Id id, ResultTable::ResultType type, const ResultTable& resultTable) const {
+  switch (type) {
+    case ResultTable::ResultType::KB: {
+      std::optional<string> entity = _qec->getIndex().idToOptionalString(id);
+      if (entity) {
+        const string& entitystr = entity.value();
+        if (ad_utility::startsWith(entitystr, VALUE_PREFIX)) {
+          return ad_utility::convertIndexWordToLiteralAndType(entitystr);
+        }
+      } else {
+        return {std::move(entity), nullptr};
+      }
+    }
+    case ResultTable::ResultType::VERBATIM:
+      return {std::to_string(id), XSD_INT_TYPE};
+    case ResultTable::ResultType::TEXT:
+      return {_qec->getIndex().getTextExcerpt(id), nullptr};
+    case ResultTable::ResultType::FLOAT: {
+      float f;
+      // TODO<LLVM 14> std::bit_cast
+      std::memcpy(&f, &id, sizeof(float));
+      std::stringstream s;
+      s << f;
+      return {s.str(), XSD_DECIMAL_TYPE};
+    }
+    case ResultTable::ResultType::LOCAL_VOCAB: {
+      return {resultTable.idToOptionalString(id), nullptr};
+    }
+    default:
+      AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
+               "Cannot deduce output type.");
+  }
+}
+
 // __________________________________________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeJsonTable(
     const IdTable& data, size_t from, size_t limit,
@@ -370,11 +354,16 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
         validIndices) const {
   shared_ptr<const ResultTable> res = getResult();
   nlohmann::json json = nlohmann::json::parse("[]");
-  auto optToJson = [](const auto& opt) -> nlohmann::json {
-    if (opt) {
-      return opt.value();
+  auto toJson = [](const std::pair<std::optional<std::string>, const char*>&
+                       valueAndDatatype) -> nlohmann::json {
+    const auto& [value, datatype] = valueAndDatatype;
+    if (!value.has_value()) {
+      return nullptr;
     }
-    return nullptr;
+    if (!datatype) {
+      return value.value();
+    }
+    return '"' + value.value() + "\"^^<" + datatype + '>';
   };
 
   const auto upperBound = std::min(data.size(), limit + from);
@@ -387,45 +376,18 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
         row.emplace_back(nullptr);
         continue;
       }
-      const auto& idx = *opt;
-      const auto& currentId = data(i, idx.first);
-      switch (idx.second) {
-        case ResultTable::ResultType::KB: {
-          std::optional<string> entity =
-              _qec->getIndex().idToOptionalString(currentId);
-          if (entity) {
-            string entitystr = entity.value();
-            if (ad_utility::startsWith(entitystr, VALUE_PREFIX)) {
-              entity = ad_utility::convertIndexWordToValueLiteral(entitystr);
-            }
-          }
-          row.emplace_back(optToJson(entity));
-          break;
-        }
-        case ResultTable::ResultType::VERBATIM:
-          row.push_back("\"" + std::to_string(currentId) + "\"" +
-                        XSD_INT_SUFFIX);
-          break;
-        case ResultTable::ResultType::TEXT:
-          row.emplace_back(_qec->getIndex().getTextExcerpt(currentId));
-          break;
-        case ResultTable::ResultType::FLOAT: {
-          float f;
-          std::memcpy(&f, &currentId, sizeof(float));
-          std::stringstream s;
-          s << f;
-          row.push_back("\"" + s.str() + "\"" + XSD_DECIMAL_SUFFIX);
-          break;
-        }
-        case ResultTable::ResultType::LOCAL_VOCAB: {
-          std::optional<string> entity = res->idToOptionalString(currentId);
-          row.emplace_back(optToJson(entity));
-          break;
-        }
-        default:
-          AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
-                   "Cannot deduce output type.");
+      const auto& [columnIndex, type] = *opt;
+      const auto& currentId = data(i, columnIndex);
+      const auto& [value, datatype] =
+          idToStringAndDatatype(currentId, type, *res);
+      if (!value.has_value()) {
+        row.emplace_back(nullptr);
+      } else if (!datatype) {
+        row.emplace_back(value.value());
+      } else {
+        row.emplace_back('"' + value.value() + "\"^^<" + datatype + '>');
       }
+      row.emplace_back(toJson(idToStringAndDatatype(i, type, *res)));
     }
   }
   return json;

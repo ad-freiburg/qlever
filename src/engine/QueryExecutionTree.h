@@ -87,6 +87,13 @@ class QueryExecutionTree {
     return _rootOperation->getResult(isRoot());
   }
 
+  using ExportColumnIndicesAndTypes =
+      vector<std::optional<pair<size_t, ResultTable::ResultType>>>;
+
+  ExportColumnIndicesAndTypes selectedVariablesToColumnIndices(
+      const std::vector<string>& selectVariables,
+      const ResultTable& resultTable) const;
+
   void writeResultToStream(std::ostream& out, const vector<string>& selectVars,
                            size_t limit = MAX_NOF_ROWS_IN_RESULT,
                            size_t offset = 0, char sep = '\t') const;
@@ -207,6 +214,10 @@ class QueryExecutionTree {
       const IdTable& data, size_t from, size_t limit,
       const vector<std::optional<pair<size_t, ResultTable::ResultType>>>&
           validIndices) const;
+
+  [[nodiscard]] std::pair<std::optional<std::string>, const char*>
+  idToStringAndDatatype(Id id, ResultTable::ResultType type,
+                        const ResultTable& resultTable) const;
 
   ad_utility::stream_generator::stream_generator writeTable(
       const IdTable& data, char sep, size_t from, size_t upperBound,
