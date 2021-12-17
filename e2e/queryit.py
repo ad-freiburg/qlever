@@ -31,12 +31,12 @@ def eprint(*args, color=Color.FAIL, **kwargs):
     print(*args, **kwargs)
     print(Color.ENDC)
 
-def exec_query(endpoint_url: str, sparql: str,
+def exec_query(endpoint_url: str, sparql: str, action,
                max_send: int = 4096) -> Dict[str, Any]:
     """
     Execute a single SPARQL query against the given endpoint
     """
-    params = urllib.parse.urlencode({'query': sparql, 'send': max_send})
+    params = urllib.parse.urlencode({'query': sparql, 'send': max_send, 'action': action})
     url_suffix = '/?'+params
     request = urllib.request.Request(endpoint_url+url_suffix)
     conn = urllib.request.urlopen(request)
@@ -45,14 +45,61 @@ def exec_query(endpoint_url: str, sparql: str,
         return None
     return json.load(conn)
 
+def is_result_sane_helper(result: Dict[str, Any], required_fields: List[str]) ->bool :
+    for field in required_fields:
+        if field not in result:
+            eprint('QLever Result is missing "%s" field' % field)
+            return False
+    return True
+
 def is_result_sane(result: Dict[str, Any]) -> bool:
     """
     Checks a QLever Result object for sanity
     """
-    required_fields = ['query', 'status', 'resultsize', 'selected', 'res']
-    for field in required_fields:
-        if field not in result:
-            eprint('QLever Result is missing "%s" field' % field)
+    return is_result_sane_helper(result,['query', 'status', 'resultsize', 'selected', 'res'])
+
+def is_sparql_json_result_sane(result: Dict[str, Any]) -> bool:
+    """
+    Checks a sparql-results+json object for sanity
+    """
+    if not is_result_sane_helper(result, ['head', 'results']):
+        return False
+    if not is_result_sane_helper(result['head'], ['vars']):
+        return False
+    if not is_result_sane_helper(result['results'], ['bindings']):
+        return False
+    return True
+
+def test_row_sparql_json(variables: List[str], gold_row: List[Any],
+             actual_row: Dict[str, any], epsilon=0.1) -> bool:
+    """
+    Test if gold_row and actual_row match. For floats we allow an epsilon
+    difference. If a gold_row cell is None it is ignored.
+    Returns True if they match
+    """
+    for i, gold in enumerate(gold_row):
+        if gold is None:
+            continue
+        actual = actual_row[variables[i]]
+        # from literals only take the part in quotes stripping
+        # the quotes and any "^^xsd:type hints.
+        # This allows us to ignore double quoting trouble in checks
+        target_type = "literal"
+        if isinstance(gold, str) and gold.startswith('<'):
+            target_type = "iri"
+            gold = gold[1:-1]
+        matches = False
+        if (not actual["type"] == target_type):
+            return False
+        if isinstance(gold, int):
+            matches = int(actual["value"]) == gold
+            #TODO<joka921> should we also check the datatypes? this is also not done for the qlever_json
+        elif isinstance(gold, float):
+            matches = abs(gold - float(actual["value"])) <= epsilon
+        else:
+            matches = gold == actual["value"]
+
+        if not matches:
             return False
     return True
 
@@ -187,10 +234,71 @@ def test_check(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
 
     return True
 
+def test_check_sparql_json(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
+    """
+    Test if the named result check holds. Returns True if it does
+    """
+
+    collator = icu.Collator.createInstance(icu.Locale('de_DE.UTF-8'))
+    res = result['results']['bindings']
+    for check, value in check_dict.items():
+        if check == 'num_rows':
+            if len(res) != int(value):
+                eprint("num_rows check failed:\n" +
+                       "\texpected %r, got %r" %
+                       (value, len(res)))
+                return False
+        elif check == 'num_cols':
+            # undefined variables don't create bindings,
+            # so this check is not really possible for the
+            # sparql json
+            pass
+        elif check == 'selected':
+            if value != result['head']['vars']:
+                eprint("selected check failed:\n" +
+                       "\texpected %r, got %r" %
+                       (value, result['selected']))
+                return False
+        elif check == 'res':
+            gold_res = value
+            if len(gold_res) != len(res):
+                eprint("res check failed:\n"+
+                       "\texpected number of rows: %r" % len(gold_res) +
+                       "\tdoes not match actual: %r" % len(value))
+                return False
+            for i, gold_row in enumerate(gold_res):
+                actual_row = res[i]
+                if not test_row_sparql_json(result["head"]["vars"], gold_row, actual_row):
+                    eprint("res check failed:\n" +
+                           "\tat row %r" % i +
+                           "\texpected %r, got %r" %
+                           (gold_row, actual_row))
+                    return False
+        elif check == 'contains_row':
+            found = False
+            gold_row = value
+            for actual_row in res:
+                if test_row_sparql_json(result["head"]["vars"], gold_row, actual_row):
+                    found = True
+                    break
+            if not found:
+                eprint("contains_row check failed:\n" +
+                       "\tdid not find %r" % gold_row)
+                return False
+        elif check == 'contains_warning':
+            # currently the sparql_json contains no warnings
+            #TODO<joka921> is there any harm in adding them?
+            pass
+        elif check.startswith('order_'):
+            # The order is already checked with the qlever_json checks.
+            pass
+
+    return True
+
 
 
 def query_checks(query: Dict[str, Any],
-                 result: Dict[str, Any]) -> bool:
+                 result: Dict[str, Any], test_check_method) -> bool:
     """
     Tests the checks specified in the query
     """
@@ -199,7 +307,7 @@ def query_checks(query: Dict[str, Any],
     passed = True
     checks = query['checks']
     for check in checks:
-        if not test_check(check, result):
+        if not test_check_method(check, result):
             passed = False
     return passed
 
@@ -233,7 +341,7 @@ def main() -> None:
             print('SPARQL:')
             print(query_sparql)
             sys.stdout.flush()
-            result = exec_query(endpoint_url, query_sparql)
+            result = exec_query(endpoint_url, query_sparql, action="qlever_json_export")
             if not result:
                 # A print was already done in exec_query()
                 error_detected = True
@@ -251,7 +359,23 @@ def main() -> None:
                 print_qlever_result(result)
                 continue
 
-            if not query_checks(query, result):
+            if not query_checks(query, result, test_check):
+                error_detected = True
+                continue
+
+            result = exec_query(endpoint_url, query_sparql, action="sparql_json_export")
+            if not result:
+                # A print was already done in exec_query()
+                error_detected = True
+                print_qlever_result(result)
+                continue
+
+            if not is_sparql_json_result_sane(result):
+                error_detected = True
+                print_qlever_result(result)
+                continue
+
+            if not query_checks(query, result, test_check_sparql_json):
                 error_detected = True
                 continue
 

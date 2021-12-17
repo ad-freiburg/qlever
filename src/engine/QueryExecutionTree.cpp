@@ -219,11 +219,16 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
     } else {
       b["type"] = "literal";
       size_t quote_pos = entitystr.rfind('"');
-      AD_CHECK(quote_pos != std::string::npos);
-      b["value"] = entitystr.substr(1, quote_pos - 1);
-      // Look for a language tag
-      if (quote_pos < entitystr.size() - 1 && entitystr[quote_pos + 1] == '@') {
-        b["xml:lang"] = entitystr.substr(quote_pos + 2);
+      if (quote_pos == std::string::npos) {
+        // TEXT entries are currently not surrounded by quotes
+        b["value"] = entitystr;
+      } else {
+        b["value"] = entitystr.substr(1, quote_pos - 1);
+        // Look for a language tag
+        if (quote_pos < entitystr.size() - 1 &&
+            entitystr[quote_pos + 1] == '@') {
+          b["xml:lang"] = entitystr.substr(quote_pos + 2);
+        }
       }
     }
     return b;

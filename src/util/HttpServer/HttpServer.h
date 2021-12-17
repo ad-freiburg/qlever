@@ -106,9 +106,11 @@ class HttpServer {
   boost::asio::awaitable<void> listener(boost::asio::io_context& ioc,
                                         tcp::endpoint endpoint) {
     tcp::acceptor acceptor{ioc};
+    boost::asio::socket_base::reuse_address option{true};
     try {
       // Open the acceptor.
       acceptor.open(endpoint.protocol());
+      acceptor.set_option(option);
       // Bind to the server address.
       acceptor.bind(endpoint);
       // Start listening for connections.
