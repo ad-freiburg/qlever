@@ -87,10 +87,18 @@ class QueryExecutionTree {
     return _rootOperation->getResult(isRoot());
   }
 
-  using ExportColumnIndicesAndTypes =
-      vector<std::optional<pair<size_t, ResultTable::ResultType>>>;
+  // A variable, its
+  struct VariableAndColumnIndex {
+    std::string _variable;
+    size_t _columnIndex;
+    ResultTable::ResultType _resultType;
+  };
 
-  ExportColumnIndicesAndTypes selectedVariablesToColumnIndices(
+  using ColumnIndicesAndTypes = vector<std::optional<VariableAndColumnIndex>>;
+
+  // Returns a vector where the i-th element contains the column index and
+  // `ResultType` of the `i-th` `selectVariable` in the `resultTable`
+  ColumnIndicesAndTypes selectedVariablesToColumnIndices(
       const std::vector<string>& selectVariables,
       const ResultTable& resultTable) const;
 
@@ -212,15 +220,14 @@ class QueryExecutionTree {
    */
   nlohmann::json writeJsonTable(
       const IdTable& data, size_t from, size_t limit,
-      const vector<std::optional<pair<size_t, ResultTable::ResultType>>>&
-          validIndices) const;
+      const ColumnIndicesAndTypes& validIndices) const;
 
-  [[nodiscard]] std::pair<std::optional<std::string>, const char*>
-  idToStringAndDatatype(Id id, ResultTable::ResultType type,
-                        const ResultTable& resultTable) const;
+  [[nodiscard]] std::optional<std::pair<std::string, const char*>>
+  toStringAndXsdType(Id id, ResultTable::ResultType type,
+                     const ResultTable& resultTable) const;
 
   ad_utility::stream_generator::stream_generator writeTable(
       const IdTable& data, char sep, size_t from, size_t upperBound,
-      const vector<std::optional<pair<size_t, ResultTable::ResultType>>>
-          validIndices) const;
+      vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices)
+      const;
 };
