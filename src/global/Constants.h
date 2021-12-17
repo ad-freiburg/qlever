@@ -5,6 +5,7 @@
 
 #include <stdexcept>
 #include <string>
+
 #include "../util/Parameters.h"
 
 static const size_t STXXL_MEMORY_TO_USE = 1024L * 1024L * 1024L * 2L;
@@ -129,9 +130,10 @@ static constexpr size_t PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE = 5;
 static constexpr double MAKE_ROOM_SLACK_FACTOR = 2;
 
 inline auto& RuntimeParameters() {
-  using ad_utility::detail::parameterShortNames::SizeT;
   using ad_utility::detail::parameterShortNames::Double;
-  static ad_utility::Parameters params{Double<"SORT_ESTIMATE_CANCELLATION_FACTOR">{3.0}};
+  using ad_utility::detail::parameterShortNames::SizeT;
+  static ad_utility::Parameters params{
+      Double<"SORT_ESTIMATE_CANCELLATION_FACTOR">{3.0}};
   return params;
 }
 

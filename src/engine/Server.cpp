@@ -107,6 +107,12 @@ boost::asio::awaitable<void> Server::process(
       responseFromCommand = createOkResponse(
           "Successfully cleared the cache (including the pinned elements)",
           request, ad_utility::MediaType::textPlain);
+    } else if (cmd == "get-settings") {
+      LOG(INFO) << "Supplying settings..." << std::endl;
+      auto map = RuntimeParameters().toMap();
+      json settingsJson = RuntimeParameters().toMap();
+      co_await sendWithCors(createJsonResponse(settingsJson, request));
+      co_return;
     } else {
       co_await sendWithCors(createBadRequestResponse(
           R"(unknown value for query paramter "cmd" : ")" + cmd + '\"',
@@ -114,17 +120,9 @@ boost::asio::awaitable<void> Server::process(
       co_return;
     }
   }
-  if (ad_utility::getLowercase(params["cmd"]) == "get-settings") {
-    LOG(INFO) << "Supplying settings..." << std::endl;
-    auto map = RuntimeParameters().toMap();
-    json settingsJson = map;
-    contentType = "application/json";
-    string httpResponse = createHttpResponse(settingsJson.dump(), contentType);
-    auto bytesSent = client->send(httpResponse);
-    LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
-    LOG(INFO) << "Sent settings to client." << std::endl;
-    return;
-  }
+
+  // TODO<joka921> Restrict this access by a token.
+  // TODO<joka921> Make the access to the RuntimeParameters threadsafe
   for (const auto& [key, value] : params) {
     if (RuntimeParameters().getKeys().contains(key)) {
       RuntimeParameters().set(key, value);
