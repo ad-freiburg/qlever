@@ -317,11 +317,8 @@ QueryExecutionTree::idToStringAndDatatype(
   switch (type) {
     case ResultTable::ResultType::KB: {
       std::optional<string> entity = _qec->getIndex().idToOptionalString(id);
-      if (entity) {
-        const string& entitystr = entity.value();
-        if (ad_utility::startsWith(entitystr, VALUE_PREFIX)) {
-          return ad_utility::convertIndexWordToLiteralAndType(entitystr);
-        }
+      if (entity && ad_utility::startsWith(entity.value(), VALUE_PREFIX)) {
+        return ad_utility::convertIndexWordToLiteralAndType(entity.value());
       } else {
         return {std::move(entity), nullptr};
       }
@@ -387,7 +384,6 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
       } else {
         row.emplace_back('"' + value.value() + "\"^^<" + datatype + '>');
       }
-      row.emplace_back(toJson(idToStringAndDatatype(i, type, *res)));
     }
   }
   return json;
