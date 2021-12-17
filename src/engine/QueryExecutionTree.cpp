@@ -137,7 +137,6 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     if (ad_utility::startsWith(var, "TEXT(")) {
       var = var.substr(5, var.rfind(')') - 5);
     }
-    auto vc = getVariableColumns().find(var);
     if (getVariableColumns().contains(var)) {
       auto columnIndex = getVariableColumns().at(var);
       exportColumns.push_back(VariableAndColumnIndex{
@@ -350,17 +349,6 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
     const ColumnIndicesAndTypes& validIndices) const {
   shared_ptr<const ResultTable> res = getResult();
   nlohmann::json json = nlohmann::json::parse("[]");
-  auto toJson = [](const std::pair<std::optional<std::string>, const char*>&
-                       valueAndDatatype) -> nlohmann::json {
-    const auto& [value, datatype] = valueAndDatatype;
-    if (!value.has_value()) {
-      return nullptr;
-    }
-    if (!datatype) {
-      return value.value();
-    }
-    return '"' + value.value() + "\"^^<" + datatype + '>';
-  };
 
   const auto upperBound = std::min(data.size(), limit + from);
 
