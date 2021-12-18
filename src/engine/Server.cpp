@@ -220,6 +220,17 @@ ad_utility::stream_generator::stream_generator Server::composeResponseSepValues(
 }
 
 // _____________________________________________________________________________
+
+ad_utility::stream_generator::stream_generator
+Server::composeTurtleResponse(const ParsedQuery& query,
+                      const QueryExecutionTree& qet) {
+  size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
+  size_t offset = query._offset.value_or(0);
+  return qet.writeRdfGraphTurtle(*query._constructClause, limit,
+                             offset);
+}
+
+// _____________________________________________________________________________
 json Server::composeExceptionJson(const string& query, const std::exception& e,
                                   ad_utility::Timer& requestTimer) {
   requestTimer.stop();
@@ -336,6 +347,15 @@ boost::asio::awaitable<void> Server::processQuery(
           ad_utility::MediaType::tsv, ad_utility::MediaType::csv};
       return mediaTypes;
     };
+
+    if (pq._constructClause.has_value()) {
+      // Turtle export
+      auto responseGenerator = composeTurtleResponse(pq, qet);
+      auto response = createOkResponse(std::move(responseGenerator), request,
+                                       // TODO<Robin> change media type
+                                       ad_utility::MediaType::csv);
+      co_await send(std::move(response));
+    }
 
     std::optional<MediaType> mediaType = std::nullopt;
 

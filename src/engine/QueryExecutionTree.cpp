@@ -445,3 +445,56 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
   }
   LOG(DEBUG) << "Done creating readable result.\n";
 }
+
+ad_utility::stream_generator::stream_generator
+QueryExecutionTree::writeRdfGraphTurtle(
+    const std::vector<std::array<std::string, 3>>& constructTriples,
+        size_t limit, size_t offset) const {
+  // They may trigger computation (but does not have to).
+  shared_ptr<const ResultTable> res = getResult();
+
+  const IdTable& data = res->_data;
+  std::unordered_map<std::string, std::string> substituteStorage;
+
+  auto subIfVar = [this, &data, &substituteStorage](const size_t row, const std::string& potentialVar) -> const std::string& {
+    if (substituteStorage.contains(potentialVar)) {
+      std::cout << "Cache: " << substituteStorage[potentialVar] << '\n';
+      return substituteStorage[potentialVar];
+    }
+    if (getVariableColumns().contains(potentialVar)) {
+      size_t index = getVariableColumns().at(potentialVar);
+      std::ostringstream stream;
+      // TODO convert to types
+      stream << data(row, index);
+      substituteStorage[potentialVar] = stream.str();
+      std::cout << "New: " << substituteStorage[potentialVar] << '\n';
+      return substituteStorage[potentialVar];
+    }
+    return potentialVar;
+  };
+  size_t upperBound = std::min<size_t>(offset + limit, data.size());
+  using TripleReference = std::array<std::reference_wrapper<const std::string>, 3>;
+  vector<TripleReference> tripleSub;
+  for (size_t i = offset; i < upperBound; i++) {
+    for (const auto& triple : constructTriples) {
+      tripleSub.push_back(TripleReference{
+          subIfVar(i, triple[0]),
+          subIfVar(i, triple[1]),
+          subIfVar(i, triple[2])
+      });
+    }
+    for (const auto& triple : tripleSub) {
+      co_yield triple[0].get();
+      co_yield ' ';
+      co_yield triple[1].get();
+      co_yield ' ';
+      co_yield triple[2].get();
+    }
+    substituteStorage.clear();
+    tripleSub.clear();
+    if (i + 1 < upperBound) {
+      co_yield '.';
+    }
+    co_yield '\n';
+  }
+}

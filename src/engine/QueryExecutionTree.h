@@ -195,6 +195,10 @@ class QueryExecutionTree {
   bool& isRoot() noexcept { return _isRoot; }
   [[nodiscard]] const bool& isRoot() const noexcept { return _isRoot; }
 
+  ad_utility::stream_generator::stream_generator writeRdfGraphTurtle(
+      const std::vector<std::array<std::string, 3>>& constructTriples,
+      size_t limit, size_t offset) const;
+
  private:
   QueryExecutionContext* _qec;  // No ownership
   ad_utility::HashMap<string, size_t> _variableColumnMap;
