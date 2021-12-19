@@ -4,9 +4,9 @@
 
 #pragma once
 
-#include <string>
-#include <sstream>
 #include <memory>
+#include <sstream>
+#include <string>
 #include <unordered_map>
 #include <utility>
 
@@ -15,19 +15,19 @@ class BlankNode {
   const std::string _label;
 
  public:
-  BlankNode(bool generated, std::string label) : _generated{generated}, _label{std::move(label)} {}
+  BlankNode(bool generated, std::string label)
+      : _generated{generated}, _label{std::move(label)} {}
 
   [[nodiscard]] std::string toString(size_t context) const {
     std::ostringstream stream;
     stream << "_:";
     // generated or user-defined
-    stream << (_generated ? 'g' : 'u' );
+    stream << (_generated ? 'g' : 'u');
     stream << context << '_';
     stream << _label;
     return stream.str();
   }
 };
-
 
 class BlankNodeCreator {
   size_t _counter = 0;

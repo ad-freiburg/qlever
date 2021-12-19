@@ -46,7 +46,6 @@ void SparqlParser::parseQuery(ParsedQuery* query) {
     parseSelect(query);
   }
 
-
   _lexer.expect("{");
   parseWhere(query);
 

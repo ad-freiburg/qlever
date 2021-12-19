@@ -448,8 +448,8 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
 
 ad_utility::stream_generator::stream_generator
 QueryExecutionTree::writeRdfGraphTurtle(
-    const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
-        size_t limit, size_t offset) const {
+    const std::vector<std::array<VarOrTerm, 3>>& constructTriples, size_t limit,
+    size_t offset) const {
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
 
@@ -461,8 +461,7 @@ QueryExecutionTree::writeRdfGraphTurtle(
       tripleSub.push_back(std::array<std::string, 3>{
           triple[0].toString(i, *res, variableColumns, _qec->getIndex()),
           triple[1].toString(i, *res, variableColumns, _qec->getIndex()),
-          triple[2].toString(i, *res, variableColumns, _qec->getIndex())
-      });
+          triple[2].toString(i, *res, variableColumns, _qec->getIndex())});
     }
     for (const auto& triple : tripleSub) {
       co_yield triple[0];

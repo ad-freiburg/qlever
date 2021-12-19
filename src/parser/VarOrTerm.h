@@ -4,23 +4,42 @@
 
 #pragma once
 
-#include <string>
 #include <functional>
-#include "./Variable.h"
-#include "./GraphTerm.h"
+#include <string>
+
 #include "../engine/ResultTable.h"
 #include "../index/Index.h"
-
+#include "./GraphTerm.h"
+#include "./Variable.h"
 
 class VarOrTerm {
-  std::function<std::string(size_t, const ResultTable&, const ad_utility::HashMap<string, size_t>&, const Index&)> _toString;
+  std::function<std::string(size_t, const ResultTable&,
+                            const ad_utility::HashMap<string, size_t>&,
+                            const Index&)>
+      _toString;
 
  public:
-  explicit VarOrTerm(const Variable& variable) : _toString{[variable](size_t row, const ResultTable& res, const ad_utility::HashMap<string, size_t>& variableColumns, const Index& qecIndex) { return variable.toString(row, res, variableColumns, qecIndex); }} {}
-  explicit VarOrTerm(const GraphTerm& term) : _toString{[term](size_t row, [[maybe_unused]] const ResultTable& res, [[maybe_unused]] const ad_utility::HashMap<string, size_t>& variableColumns, [[maybe_unused]] const Index& qecIndex) { return term.toString(row); }} {}
+  explicit VarOrTerm(const Variable& variable)
+      : _toString{
+            [variable](
+                size_t row, const ResultTable& res,
+                const ad_utility::HashMap<string, size_t>& variableColumns,
+                const Index& qecIndex) {
+              return variable.toString(row, res, variableColumns, qecIndex);
+            }} {}
+  explicit VarOrTerm(const GraphTerm& term)
+      : _toString{
+            [term](size_t row, [[maybe_unused]] const ResultTable& res,
+                   [[maybe_unused]] const ad_utility::HashMap<string, size_t>&
+                       variableColumns,
+                   [[maybe_unused]] const Index& qecIndex) {
+              return term.toString(row);
+            }} {}
 
-
-  [[nodiscard]] std::string toString(size_t row, const ResultTable& res, const ad_utility::HashMap<string, size_t>& variableColumns, const Index& qecIndex) const {
+  [[nodiscard]] std::string toString(
+      size_t row, const ResultTable& res,
+      const ad_utility::HashMap<string, size_t>& variableColumns,
+      const Index& qecIndex) const {
     return _toString(row, res, variableColumns, qecIndex);
   }
 };

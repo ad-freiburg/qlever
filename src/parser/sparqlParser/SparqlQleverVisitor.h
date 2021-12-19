@@ -14,12 +14,12 @@
 #include "../../engine/sparqlExpressions/SampleExpression.h"
 #include "../../util/HashMap.h"
 #include "../../util/StringUtils.h"
+#include "../BlankNode.h"
 #include "../ParsedQuery.h"
 #include "../RdfEscaping.h"
+#include "../VarOrTerm.h"
 #include "antlr4-runtime.h"
 #include "generated/SparqlAutomaticVisitor.h"
-#include "../BlankNode.h"
-#include "../VarOrTerm.h"
 
 class SparqlParseException : public std::exception {
   string _message;
@@ -28,7 +28,6 @@ class SparqlParseException : public std::exception {
   SparqlParseException(std::string message) : _message{std::move(message)} {}
   const char* what() const noexcept override { return _message.c_str(); }
 };
-
 
 template <typename T>
 class reversed {
@@ -467,7 +466,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     }
     if (ctx->getText() == "a") {
       // Special keyword 'a'
-      return VarOrTerm{GraphTerm{Literal{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"}}};
+      return VarOrTerm{GraphTerm{
+          Literal{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"}}};
     }
     throw SparqlParseException{"Invalid verb "s + ctx->getText()};
   }
@@ -615,19 +615,24 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitCollection(
       SparqlAutomaticParser::CollectionContext* ctx) override {
     Triples triples;
-    VarOrTerm nextElement{GraphTerm{Literal{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}}};
+    VarOrTerm nextElement{
+        GraphTerm{Literal{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}}};
     auto nodes = ctx->graphNode();
     reversed reversedNodesView{nodes};
     for (auto context : reversedNodesView) {
       VarOrTerm currentVar{GraphTerm{nodeCreator.newNode()}};
       auto graphNode = context->accept(this).as<Node>();
 
-      triples.push_back({currentVar,
-                         VarOrTerm{GraphTerm{Literal{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>"}}},
-                         std::move(graphNode.first)});
-      triples.push_back({currentVar,
-                         VarOrTerm{GraphTerm{Literal{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>"}}},
-                         std::move(nextElement)});
+      triples.push_back(
+          {currentVar,
+           VarOrTerm{GraphTerm{
+               Literal{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>"}}},
+           std::move(graphNode.first)});
+      triples.push_back(
+          {currentVar,
+           VarOrTerm{GraphTerm{
+               Literal{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>"}}},
+           std::move(nextElement)});
       nextElement = std::move(currentVar);
 
       triples.insert(triples.end(),
@@ -645,7 +650,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitGraphNode(
       SparqlAutomaticParser::GraphNodeContext* ctx) override {
     if (ctx->varOrTerm()) {
-      return std::make_pair(ctx->varOrTerm()->accept(this).as<VarOrTerm>(), Triples{});
+      return std::make_pair(ctx->varOrTerm()->accept(this).as<VarOrTerm>(),
+                            Triples{});
     } else if (ctx->triplesNode()) {
       return ctx->triplesNode()->accept(this);
     }
@@ -676,7 +682,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       return VarOrTerm{ctx->var()->accept(this).as<Variable>()};
     }
     if (ctx->iri()) {
-      return VarOrTerm{GraphTerm{Literal{ctx->iri()->accept(this).as<std::string>()}}};
+      return VarOrTerm{
+          GraphTerm{Literal{ctx->iri()->accept(this).as<std::string>()}}};
     }
     // invalid grammar
     AD_CHECK(false);
@@ -708,10 +715,12 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       AD_CHECK(false);
     }
     if (ctx->booleanLiteral()) {
-      return GraphTerm{Literal{ctx->booleanLiteral()->accept(this).as<bool>() ? "true"s : "false"s}};
+      return GraphTerm{Literal{
+          ctx->booleanLiteral()->accept(this).as<bool>() ? "true"s : "false"s}};
     }
     if (ctx->blankNode()) {
-      return GraphTerm{ctx->blankNode()->accept(this).as<std::shared_ptr<BlankNode>>()};
+      return GraphTerm{
+          ctx->blankNode()->accept(this).as<std::shared_ptr<BlankNode>>()};
     }
     return GraphTerm{Literal{visitChildren(ctx).as<std::string>()}};
   }
@@ -1162,7 +1171,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     }
     if (ctx->BLANK_NODE_LABEL()) {
       // strip _: prefix from string
-      return nodeCreator.fromLabel(ctx->BLANK_NODE_LABEL()->getText().substr(2));
+      return nodeCreator.fromLabel(
+          ctx->BLANK_NODE_LABEL()->getText().substr(2));
     }
     // invalid grammar
     AD_CHECK(false);

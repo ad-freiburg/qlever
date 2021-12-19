@@ -221,13 +221,11 @@ ad_utility::stream_generator::stream_generator Server::composeResponseSepValues(
 
 // _____________________________________________________________________________
 
-ad_utility::stream_generator::stream_generator
-Server::composeTurtleResponse(const ParsedQuery& query,
-                      const QueryExecutionTree& qet) {
+ad_utility::stream_generator::stream_generator Server::composeTurtleResponse(
+    const ParsedQuery& query, const QueryExecutionTree& qet) {
   size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
   size_t offset = query._offset.value_or(0);
-  return qet.writeRdfGraphTurtle(*query._constructClause, limit,
-                             offset);
+  return qet.writeRdfGraphTurtle(*query._constructClause, limit, offset);
 }
 
 // _____________________________________________________________________________

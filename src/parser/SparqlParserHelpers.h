@@ -31,7 +31,8 @@ parseExpression(const std::string& input);
 ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
     const std::string& input);
 
-ResultOfParseAndRemainingText<std::vector<std::array<VarOrTerm, 3>>> parseConstructTemplate(const std::string& input);
+ResultOfParseAndRemainingText<std::vector<std::array<VarOrTerm, 3>>>
+parseConstructTemplate(const std::string& input);
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H

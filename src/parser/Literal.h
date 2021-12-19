@@ -4,9 +4,8 @@
 
 #pragma once
 
-#include <string>
 #include <sstream>
-
+#include <string>
 
 class Literal {
   const std::string _stringRepresentation;
@@ -20,9 +19,7 @@ class Literal {
 
  public:
   template <typename T>
-  explicit Literal(const T& t) : _stringRepresentation(toString(t))  {}
+  explicit Literal(const T& t) : _stringRepresentation(toString(t)) {}
 
-  [[nodiscard]] std::string toString() const {
-    return _stringRepresentation;
-  }
+  [[nodiscard]] std::string toString() const { return _stringRepresentation; }
 };

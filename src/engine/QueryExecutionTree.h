@@ -9,12 +9,12 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "../parser/VarOrTerm.h"
 #include "../util/Conversions.h"
 #include "../util/HashSet.h"
 #include "../util/streamable_generator.h"
 #include "./Operation.h"
 #include "./QueryExecutionContext.h"
-#include "../parser/VarOrTerm.h"
 
 using std::shared_ptr;
 using std::string;

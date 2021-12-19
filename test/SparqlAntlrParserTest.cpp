@@ -151,9 +151,7 @@ TEST(SparqlParser, ComplexConstructQuery) {
                        .as<std::vector<std::array<std::string, 3>>>();
     std::cout << "Length" << triples.size() << std::endl;
     for (const auto& triple : triples) {
-      std::cout << triple[0] << ','
-                << triple[1] << ','
-                << triple[2] << ','
+      std::cout << triple[0] << ',' << triple[1] << ',' << triple[2] << ','
                 << std::endl;
     }
   } catch (std::exception& e) {
