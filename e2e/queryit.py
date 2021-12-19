@@ -80,7 +80,13 @@ def test_row_sparql_json(variables: List[str], gold_row: List[Any],
     for i, gold in enumerate(gold_row):
         if gold is None:
             continue
-        actual = actual_row[variables[i]]
+        var = variables[i]
+        if not var in actual_row and var.startswith("TEXT("):
+            var = var[5:-1]
+        if not var in actual_row:
+            eprint("{} not contained in row {}".format(var, actual_row))
+            return False
+        actual = actual_row[var]
         # from literals only take the part in quotes stripping
         # the quotes and any "^^xsd:type hints.
         # This allows us to ignore double quoting trouble in checks
