@@ -448,53 +448,69 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
 
 ad_utility::stream_generator::stream_generator
 QueryExecutionTree::writeRdfGraphTurtle(
-    const std::vector<std::array<std::string, 3>>& constructTriples,
+    const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
         size_t limit, size_t offset) const {
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
 
   const IdTable& data = res->_data;
-  std::unordered_map<std::string, std::string> substituteStorage;
-
-  auto subIfVar = [this, &data, &substituteStorage](const size_t row, const std::string& potentialVar) -> const std::string& {
-    if (substituteStorage.contains(potentialVar)) {
-      std::cout << "Cache: " << substituteStorage[potentialVar] << '\n';
-      return substituteStorage[potentialVar];
-    }
+  auto subIfVar = [this, &res, &data](const size_t row, const std::string& potentialVar) {
     if (getVariableColumns().contains(potentialVar)) {
       size_t index = getVariableColumns().at(potentialVar);
       std::ostringstream stream;
-      // TODO convert to types
-      stream << data(row, index);
-      substituteStorage[potentialVar] = stream.str();
-      std::cout << "New: " << substituteStorage[potentialVar] << '\n';
-      return substituteStorage[potentialVar];
+      switch (res->getResultType(index)) {
+        case ResultTable::ResultType::KB: {
+          string entity = _qec->getIndex()
+                              .idToOptionalString(data(row, index))
+                              .value_or("");
+          if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
+            stream << ad_utility::convertIndexWordToValueLiteral(entity);
+          } else {
+            stream << entity;
+          }
+          break;
+        }
+        case ResultTable::ResultType::VERBATIM:
+          stream << data(row, index);
+          break;
+        case ResultTable::ResultType::TEXT:
+          stream << _qec->getIndex().getTextExcerpt(data(row, index));
+          break;
+        case ResultTable::ResultType::FLOAT: {
+          float f;
+          std::memcpy(&f, &data(row, index), sizeof(float));
+          stream << f;
+          break;
+        }
+        case ResultTable::ResultType::LOCAL_VOCAB: {
+          stream << res->idToOptionalString(data(row, index)).value_or("");
+          break;
+        }
+        default:
+          AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
+                   "Cannot deduce output type.");
+      }
+      return stream.str();
     }
     return potentialVar;
   };
   size_t upperBound = std::min<size_t>(offset + limit, data.size());
-  using TripleReference = std::array<std::reference_wrapper<const std::string>, 3>;
-  vector<TripleReference> tripleSub;
   for (size_t i = offset; i < upperBound; i++) {
+    vector<std::array<std::string, 3>> tripleSub;
     for (const auto& triple : constructTriples) {
-      tripleSub.push_back(TripleReference{
-          subIfVar(i, triple[0]),
-          subIfVar(i, triple[1]),
-          subIfVar(i, triple[2])
+      tripleSub.push_back(std::array<std::string, 3>{
+          subIfVar(i, triple[0].toString(i)),
+          subIfVar(i, triple[1].toString(i)),
+          subIfVar(i, triple[2].toString(i))
       });
     }
     for (const auto& triple : tripleSub) {
-      co_yield triple[0].get();
+      co_yield triple[0];
       co_yield ' ';
-      co_yield triple[1].get();
+      co_yield triple[1];
       co_yield ' ';
-      co_yield triple[2].get();
+      co_yield triple[2];
     }
-    substituteStorage.clear();
-    tripleSub.clear();
-    if (i + 1 < upperBound) {
-      co_yield '.';
-    }
-    co_yield '\n';
+    co_yield " .\n";
   }
 }

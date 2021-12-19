@@ -65,9 +65,9 @@ ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
 // _____________________________________________________________________________
 
 // TODO<Robin> create return type
-ResultOfParseAndRemainingText<std::vector<std::array<std::string, 3>>> parseConstructTemplate(const std::string& input) {
+ResultOfParseAndRemainingText<std::vector<std::array<VarOrTerm, 3>>> parseConstructTemplate(const std::string& input) {
   ParserAndVisitor p{input};
-  return p.parse<std::vector<std::array<std::string, 3>>>(
+  return p.parse<std::vector<std::array<VarOrTerm, 3>>>(
       input, &SparqlAutomaticParser::constructTemplate);
 }
 

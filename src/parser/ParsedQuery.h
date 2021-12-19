@@ -15,6 +15,7 @@
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
 #include "ParseException.h"
+#include "./VarOrTerm.h"
 
 using std::string;
 using std::vector;
@@ -325,7 +326,7 @@ class ParsedQuery {
   std::optional<size_t> _offset = std::nullopt;
   string _originalString;
   SelectClause _selectClause;
-  std::optional<std::vector<std::array<string, 3>>> _constructClause;
+  std::optional<std::vector<std::array<VarOrTerm, 3>>> _constructClause;
 
   void expandPrefixes();
   void parseAliases();

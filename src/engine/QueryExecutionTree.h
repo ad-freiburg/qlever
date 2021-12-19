@@ -14,6 +14,7 @@
 #include "../util/streamable_generator.h"
 #include "./Operation.h"
 #include "./QueryExecutionContext.h"
+#include "../parser/VarOrTerm.h"
 
 using std::shared_ptr;
 using std::string;
@@ -196,7 +197,7 @@ class QueryExecutionTree {
   [[nodiscard]] const bool& isRoot() const noexcept { return _isRoot; }
 
   ad_utility::stream_generator::stream_generator writeRdfGraphTurtle(
-      const std::vector<std::array<std::string, 3>>& constructTriples,
+      const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
       size_t limit, size_t offset) const;
 
  private:

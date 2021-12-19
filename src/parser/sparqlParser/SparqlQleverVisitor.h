@@ -18,6 +18,8 @@
 #include "../RdfEscaping.h"
 #include "antlr4-runtime.h"
 #include "generated/SparqlAutomaticVisitor.h"
+#include "../BlankNode.h"
+#include "../VarOrTerm.h"
 
 class SparqlParseException : public std::exception {
   string _message;
@@ -27,20 +29,6 @@ class SparqlParseException : public std::exception {
   const char* what() const noexcept override { return _message.c_str(); }
 };
 
-// TODO<Robin> ensure blank nodes are guaranteed to be unique
-class BlankNodeCreator {
-  size_t _counter = 0;
-
- public:
-  // TODO<Robin> fix type
-  std::string newNode() {
-    std::ostringstream output;
-    output << "_:b";
-    output << _counter;
-    _counter++;
-    return output.str();
-  }
-};
 
 template <typename T>
 class reversed {
@@ -60,11 +48,10 @@ class reversed {
  * available methods.
  */
 class SparqlQleverVisitor : public SparqlAutomaticVisitor {
-  // TODO<Robin> replace with proper types
-  using Objects = std::vector<std::string>;
-  using Tuples = std::vector<std::array<std::string, 2>>;
-  using Triples = std::vector<std::array<std::string, 3>>;
-  using Node = std::pair<std::string, Triples>;
+  using Objects = std::vector<VarOrTerm>;
+  using Tuples = std::vector<std::array<VarOrTerm, 2>>;
+  using Triples = std::vector<std::array<VarOrTerm, 3>>;
+  using Node = std::pair<VarOrTerm, Triples>;
   using ObjectList = std::pair<Objects, Triples>;
   using PropertyList = std::pair<Tuples, Triples>;
   BlankNodeCreator nodeCreator{};
@@ -416,7 +403,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     Triples triples;
     if (ctx->varOrTerm()) {
       // TODO<Robin> replace with proper type
-      std::string subject = ctx->varOrTerm()->getText();
+      VarOrTerm subject = ctx->varOrTerm()->accept(this).as<VarOrTerm>();
       AD_CHECK(ctx->propertyListNotEmpty());
       auto propertyList =
           ctx->propertyListNotEmpty()->accept(this).as<PropertyList>();
@@ -466,7 +453,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       for (auto& object : objectList.first) {
         // TODO<Robin> richtigen verb typ verwenden
         triplesWithoutSubject.push_back(
-            {verbs.at(i)->accept(this).as<std::string>(), std::move(object)});
+            {verbs.at(i)->accept(this).as<VarOrTerm>(), std::move(object)});
       }
       additionalTriples.insert(
           additionalTriples.end(),
@@ -482,7 +469,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       return ctx->varOrIri()->accept(this);
     }
     // Special keyword 'a'
-    return "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"s;
+    return VarOrTerm{GraphTerm{Literal{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"}}};
   }
 
   antlrcpp::Any visitObjectList(
@@ -602,7 +589,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitBlankNodePropertyList(
       SparqlAutomaticParser::BlankNodePropertyListContext* ctx) override {
-    std::string var = nodeCreator.newNode();
+    VarOrTerm var{GraphTerm{nodeCreator.newNode()}};
     Triples triples;
     auto propertyList =
         ctx->propertyListNotEmpty()->accept(this).as<PropertyList>();
@@ -628,19 +615,18 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitCollection(
       SparqlAutomaticParser::CollectionContext* ctx) override {
     Triples triples;
-    std::string nextElement =
-        "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>";
+    VarOrTerm nextElement{GraphTerm{Literal{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}}};
     auto nodes = ctx->graphNode();
     reversed reversedNodesView{nodes};
     for (auto context : reversedNodesView) {
-      std::string currentVar = nodeCreator.newNode();
+      VarOrTerm currentVar{GraphTerm{nodeCreator.newNode()}};
       auto graphNode = context->accept(this).as<Node>();
 
       triples.push_back({currentVar,
-                         "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>",
+                         VarOrTerm{GraphTerm{Literal{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>"}}},
                          std::move(graphNode.first)});
       triples.push_back({currentVar,
-                         "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>",
+                         VarOrTerm{GraphTerm{Literal{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>"}}},
                          std::move(nextElement)});
       nextElement = std::move(currentVar);
 
@@ -659,7 +645,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitGraphNode(
       SparqlAutomaticParser::GraphNodeContext* ctx) override {
     if (ctx->varOrTerm()) {
-      return std::make_pair(ctx->varOrTerm()->accept(this).as<std::string>(), Triples{});
+      return std::make_pair(ctx->varOrTerm()->accept(this).as<VarOrTerm>(), Triples{});
     } else if (ctx->triplesNode()) {
       return ctx->triplesNode()->accept(this);
     }
@@ -673,16 +659,31 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitVarOrTerm(
       SparqlAutomaticParser::VarOrTermContext* ctx) override {
-    return visitChildren(ctx);
+    if (ctx->var()) {
+      return VarOrTerm{ctx->var()->accept(this).as<Variable>()};
+    }
+    if (ctx->graphTerm()) {
+      return VarOrTerm{ctx->graphTerm()->accept(this).as<GraphTerm>()};
+    }
+
+    // invalid grammar
+    AD_CHECK(false);
   }
 
   antlrcpp::Any visitVarOrIri(
       SparqlAutomaticParser::VarOrIriContext* ctx) override {
-    return visitChildren(ctx);
+    if (ctx->var()) {
+      return VarOrTerm{ctx->var()->accept(this).as<Variable>()};
+    }
+    if (ctx->iri()) {
+      return VarOrTerm{GraphTerm{Literal{ctx->iri()->accept(this).as<std::string>()}}};
+    }
+    // invalid grammar
+    AD_CHECK(false);
   }
 
   antlrcpp::Any visitVar(SparqlAutomaticParser::VarContext* ctx) override {
-    return ctx->getText();
+    return Variable{ctx->getText()};
   }
 
   antlrcpp::Any visitGraphTerm(
@@ -691,25 +692,28 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       auto literalAny = visitNumericLiteral(ctx->numericLiteral());
       try {
         auto intLiteral = literalAny.as<unsigned long long>();
-        return std::to_string(intLiteral);
+        return GraphTerm{Literal{std::to_string(intLiteral)}};
       } catch (...) {
       }
       try {
         auto intLiteral = literalAny.as<long long>();
-        return std::to_string(intLiteral);
+        return GraphTerm{Literal{std::to_string(intLiteral)}};
       } catch (...) {
       }
       try {
         auto intLiteral = literalAny.as<double>();
-        return std::to_string(intLiteral);
+        return GraphTerm{Literal{std::to_string(intLiteral)}};
       } catch (...) {
       }
       AD_CHECK(false);
     }
     if (ctx->booleanLiteral()) {
-      return ctx->booleanLiteral()->accept(this).as<bool>() ? "true"s : "false"s;
+      return GraphTerm{Literal{ctx->booleanLiteral()->accept(this).as<bool>() ? "true"s : "false"s}};
     }
-    return visitChildren(ctx);
+    if (ctx->blankNode()) {
+      return GraphTerm{ctx->blankNode()->accept(this).as<std::shared_ptr<BlankNode>>()};
+    }
+    return GraphTerm{Literal{visitChildren(ctx).as<std::string>()}};
   }
 
   antlrcpp::Any visitExpression(
