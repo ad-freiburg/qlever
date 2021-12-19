@@ -8,19 +8,19 @@
 #include <functional>
 #include "./Variable.h"
 #include "./GraphTerm.h"
+#include "../engine/ResultTable.h"
+#include "../index/Index.h"
 
 
 class VarOrTerm {
-  // TODO<Robin> replace int with roper context type
-  using Context = size_t;
-  std::function<std::string(Context)> _toString;
+  std::function<std::string(size_t, const ResultTable&, const ad_utility::HashMap<string, size_t>&, const Index&)> _toString;
 
  public:
-  explicit VarOrTerm(const Variable& variable) : _toString{[variable]([[maybe_unused]] Context context) { return variable.toString(); }} {}
-  explicit VarOrTerm(const GraphTerm& term) : _toString{[term](Context context) { return term.toString(context); }} {}
+  explicit VarOrTerm(const Variable& variable) : _toString{[variable](size_t row, const ResultTable& res, const ad_utility::HashMap<string, size_t>& variableColumns, const Index& qecIndex) { return variable.toString(row, res, variableColumns, qecIndex); }} {}
+  explicit VarOrTerm(const GraphTerm& term) : _toString{[term](size_t row, [[maybe_unused]] const ResultTable& res, [[maybe_unused]] const ad_utility::HashMap<string, size_t>& variableColumns, [[maybe_unused]] const Index& qecIndex) { return term.toString(row); }} {}
 
 
-  std::string toString(Context context) const {
-    return _toString(context);
+  std::string toString(size_t row, const ResultTable& res, const ad_utility::HashMap<string, size_t>& variableColumns, const Index& qecIndex) const {
+    return _toString(row, res, variableColumns, qecIndex);
   }
 };

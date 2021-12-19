@@ -453,55 +453,15 @@ QueryExecutionTree::writeRdfGraphTurtle(
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
 
-  const IdTable& data = res->_data;
-  auto subIfVar = [this, &res, &data](const size_t row, const std::string& potentialVar) {
-    if (getVariableColumns().contains(potentialVar)) {
-      size_t index = getVariableColumns().at(potentialVar);
-      std::ostringstream stream;
-      switch (res->getResultType(index)) {
-        case ResultTable::ResultType::KB: {
-          string entity = _qec->getIndex()
-                              .idToOptionalString(data(row, index))
-                              .value_or("");
-          if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
-            stream << ad_utility::convertIndexWordToValueLiteral(entity);
-          } else {
-            stream << entity;
-          }
-          break;
-        }
-        case ResultTable::ResultType::VERBATIM:
-          stream << data(row, index);
-          break;
-        case ResultTable::ResultType::TEXT:
-          stream << _qec->getIndex().getTextExcerpt(data(row, index));
-          break;
-        case ResultTable::ResultType::FLOAT: {
-          float f;
-          std::memcpy(&f, &data(row, index), sizeof(float));
-          stream << f;
-          break;
-        }
-        case ResultTable::ResultType::LOCAL_VOCAB: {
-          stream << res->idToOptionalString(data(row, index)).value_or("");
-          break;
-        }
-        default:
-          AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
-                   "Cannot deduce output type.");
-      }
-      return stream.str();
-    }
-    return potentialVar;
-  };
-  size_t upperBound = std::min<size_t>(offset + limit, data.size());
+  size_t upperBound = std::min<size_t>(offset + limit, res->_data.size());
+  auto variableColumns = getVariableColumns();
   for (size_t i = offset; i < upperBound; i++) {
     vector<std::array<std::string, 3>> tripleSub;
     for (const auto& triple : constructTriples) {
       tripleSub.push_back(std::array<std::string, 3>{
-          subIfVar(i, triple[0].toString(i)),
-          subIfVar(i, triple[1].toString(i)),
-          subIfVar(i, triple[2].toString(i))
+          triple[0].toString(i, *res, variableColumns, _qec->getIndex()),
+          triple[1].toString(i, *res, variableColumns, _qec->getIndex()),
+          triple[2].toString(i, *res, variableColumns, _qec->getIndex())
       });
     }
     for (const auto& triple : tripleSub) {
