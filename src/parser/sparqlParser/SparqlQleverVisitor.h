@@ -659,7 +659,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitGraphNode(
       SparqlAutomaticParser::GraphNodeContext* ctx) override {
     if (ctx->varOrTerm()) {
-      return std::make_pair(visitChildren(ctx).as<std::string>(), Triples{});
+      return std::make_pair(ctx->varOrTerm()->accept(this).as<std::string>(), Triples{});
     } else if (ctx->triplesNode()) {
       return ctx->triplesNode()->accept(this);
     }
@@ -687,6 +687,28 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitGraphTerm(
       SparqlAutomaticParser::GraphTermContext* ctx) override {
+    if (ctx->numericLiteral()) {
+      auto literalAny = visitNumericLiteral(ctx->numericLiteral());
+      try {
+        auto intLiteral = literalAny.as<unsigned long long>();
+        return std::to_string(intLiteral);
+      } catch (...) {
+      }
+      try {
+        auto intLiteral = literalAny.as<long long>();
+        return std::to_string(intLiteral);
+      } catch (...) {
+      }
+      try {
+        auto intLiteral = literalAny.as<double>();
+        return std::to_string(intLiteral);
+      } catch (...) {
+      }
+      AD_CHECK(false);
+    }
+    if (ctx->booleanLiteral()) {
+      return ctx->booleanLiteral()->accept(this).as<bool>() ? "true"s : "false"s;
+    }
     return visitChildren(ctx);
   }
 
@@ -1058,7 +1080,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitRdfLiteral(
       SparqlAutomaticParser::RdfLiteralContext* ctx) override {
-    return visitChildren(ctx);
+    return ctx->getText();
   }
 
   antlrcpp::Any visitNumericLiteral(
@@ -1130,8 +1152,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitBlankNode(
-      SparqlAutomaticParser::BlankNodeContext* ctx) override {
-    return visitChildren(ctx);
+      [[maybe_unused]]SparqlAutomaticParser::BlankNodeContext* ctx) override {
+    return nodeCreator.newNode();
   }
 
   antlrcpp::Any visitPnameLn(
