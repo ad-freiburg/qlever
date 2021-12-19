@@ -8,18 +8,18 @@
 #include <sstream>
 #include <memory>
 #include <unordered_map>
+#include <utility>
 
 class BlankNode {
-  friend class BlankNodeCreator;
-
   const bool _generated;
   const std::string _label;
 
  public:
-  BlankNode(bool generated, std::string label) : _generated{generated}, _label{label} {}
+  BlankNode(bool generated, std::string label) : _generated{generated}, _label{std::move(label)} {}
 
-  std::string toString(size_t context) const {
+  [[nodiscard]] std::string toString(size_t context) const {
     std::ostringstream stream;
+    stream << "_:";
     // generated or user-defined
     stream << (_generated ? 'g' : 'u' );
     stream << context << '_';
@@ -31,7 +31,7 @@ class BlankNode {
 
 class BlankNodeCreator {
   size_t _counter = 0;
-  static std::unordered_map<std::string, std::shared_ptr<BlankNode>> storedNodes;
+  std::unordered_map<std::string, std::shared_ptr<BlankNode>> storedNodes{};
 
  public:
   std::shared_ptr<BlankNode> newNode() {
@@ -42,7 +42,7 @@ class BlankNodeCreator {
     return std::make_shared<BlankNode>(true, output.str());
   }
 
-  std::shared_ptr<BlankNode> fromLabel(std::string label) {
+  std::shared_ptr<BlankNode> fromLabel(const std::string& label) {
     if (!storedNodes.contains(label)) {
       storedNodes[label] = std::make_shared<BlankNode>(false, label);
     }
@@ -50,5 +50,3 @@ class BlankNodeCreator {
     return storedNodes[label];
   }
 };
-
-inline std::unordered_map<std::string, std::shared_ptr<BlankNode>> BlankNodeCreator::storedNodes = {};

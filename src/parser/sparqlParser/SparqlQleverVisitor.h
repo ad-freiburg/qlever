@@ -159,7 +159,6 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     if (!ctx->datasetClause().empty()) {
       throw SparqlParseException{"Datasets are not supported"};
     }
-    // TODO<Robin> propagate to root node and handle where clause etc.
     if (ctx->constructTemplate()) {
       return ctx->constructTemplate()->accept(this);
     }
@@ -402,7 +401,6 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       SparqlAutomaticParser::TriplesSameSubjectContext* ctx) override {
     Triples triples;
     if (ctx->varOrTerm()) {
-      // TODO<Robin> replace with proper type
       VarOrTerm subject = ctx->varOrTerm()->accept(this).as<VarOrTerm>();
       AD_CHECK(ctx->propertyListNotEmpty());
       auto propertyList =
@@ -451,7 +449,6 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     for (size_t i = 0; i < verbs.size(); i++) {
       auto objectList = objectLists.at(i)->accept(this).as<ObjectList>();
       for (auto& object : objectList.first) {
-        // TODO<Robin> richtigen verb typ verwenden
         triplesWithoutSubject.push_back(
             {verbs.at(i)->accept(this).as<VarOrTerm>(), std::move(object)});
       }
@@ -468,8 +465,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     if (ctx->varOrIri()) {
       return ctx->varOrIri()->accept(this);
     }
-    // Special keyword 'a'
-    return VarOrTerm{GraphTerm{Literal{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"}}};
+    if (ctx->getText() == "a") {
+      // Special keyword 'a'
+      return VarOrTerm{GraphTerm{Literal{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"}}};
+    }
+    throw SparqlParseException{"Invalid verb "s + ctx->getText()};
   }
 
   antlrcpp::Any visitObjectList(
@@ -1156,8 +1156,16 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitBlankNode(
-      [[maybe_unused]]SparqlAutomaticParser::BlankNodeContext* ctx) override {
-    return nodeCreator.newNode();
+      SparqlAutomaticParser::BlankNodeContext* ctx) override {
+    if (ctx->ANON()) {
+      return nodeCreator.newNode();
+    }
+    if (ctx->BLANK_NODE_LABEL()) {
+      // strip _: prefix from string
+      return nodeCreator.fromLabel(ctx->BLANK_NODE_LABEL()->getText().substr(2));
+    }
+    // invalid grammar
+    AD_CHECK(false);
   }
 
   antlrcpp::Any visitPnameLn(

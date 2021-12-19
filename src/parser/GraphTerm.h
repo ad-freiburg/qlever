@@ -11,16 +11,14 @@
 
 
 class GraphTerm {
-  // TODO<Robin> replace int with roper context type
-  using Context = size_t;
-  std::function<std::string(Context)> _toString;
+  std::function<std::string(size_t)> _toString;
 
  public:
-  explicit GraphTerm(const Literal& literal) : _toString{[literal]([[maybe_unused]] Context context) { return literal.toString(); }} {}
-  explicit GraphTerm(const std::shared_ptr<BlankNode>& node) : _toString{[node](Context context) { return node->toString(context); }} {}
+  explicit GraphTerm(const Literal& literal) : _toString{[literal]([[maybe_unused]] size_t col) { return literal.toString(); }} {}
+  explicit GraphTerm(const std::shared_ptr<BlankNode>& node) : _toString{[node](size_t col) { return node->toString(col); }} {}
 
 
-  std::string toString(Context context) const {
-    return _toString(context);
+  [[nodiscard]] std::string toString(size_t col) const {
+    return _toString(col);
   }
 };

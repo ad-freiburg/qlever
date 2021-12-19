@@ -5,6 +5,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 #include "../engine/ResultTable.h"
 #include "../index/Index.h"
 
@@ -12,9 +13,9 @@ class Variable {
   const std::string _name;
 
  public:
-  explicit Variable(const std::string& name) : _name{name} {};
+  explicit Variable(std::string name) : _name{std::move(name)} {};
 
-  std::string toString(size_t row, const ResultTable& res, const ad_utility::HashMap<string, size_t>& variableColumns, const Index& qecIndex) const {
+  [[nodiscard]] std::string toString(size_t row, const ResultTable& res, const ad_utility::HashMap<string, size_t>& variableColumns, const Index& qecIndex) const {
     const auto& data = res._data;
     if (variableColumns.contains(_name)) {
       size_t index = variableColumns.at(_name);

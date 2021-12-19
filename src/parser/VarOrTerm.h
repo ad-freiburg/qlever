@@ -20,7 +20,7 @@ class VarOrTerm {
   explicit VarOrTerm(const GraphTerm& term) : _toString{[term](size_t row, [[maybe_unused]] const ResultTable& res, [[maybe_unused]] const ad_utility::HashMap<string, size_t>& variableColumns, [[maybe_unused]] const Index& qecIndex) { return term.toString(row); }} {}
 
 
-  std::string toString(size_t row, const ResultTable& res, const ad_utility::HashMap<string, size_t>& variableColumns, const Index& qecIndex) const {
+  [[nodiscard]] std::string toString(size_t row, const ResultTable& res, const ad_utility::HashMap<string, size_t>& variableColumns, const Index& qecIndex) const {
     return _toString(row, res, variableColumns, qecIndex);
   }
 };

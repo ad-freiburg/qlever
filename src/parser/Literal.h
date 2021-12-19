@@ -22,7 +22,7 @@ class Literal {
   template <typename T>
   explicit Literal(const T& t) : _stringRepresentation(toString(t))  {}
 
-  std::string toString() const {
+  [[nodiscard]] std::string toString() const {
     return _stringRepresentation;
   }
 };

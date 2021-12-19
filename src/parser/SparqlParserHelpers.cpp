@@ -64,7 +64,6 @@ ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
 }
 // _____________________________________________________________________________
 
-// TODO<Robin> create return type
 ResultOfParseAndRemainingText<std::vector<std::array<VarOrTerm, 3>>> parseConstructTemplate(const std::string& input) {
   ParserAndVisitor p{input};
   return p.parse<std::vector<std::array<VarOrTerm, 3>>>(
