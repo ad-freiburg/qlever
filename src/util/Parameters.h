@@ -11,6 +11,7 @@
 #include "./ConstexprSmallString.h"
 #include "./HashMap.h"
 #include "./HashSet.h"
+#include "./TypeTraits.h"
 
 namespace ad_utility {
 using ParameterName = ad_utility::ConstexprSmallString<100>;
@@ -56,11 +57,16 @@ constexpr size_t getParameterIndex() {
   static_assert(
       i < std::tuple_size_v<Tuple>,
       "the parameter name was not found among the specified parameters");
-  using CurrentType = typename std::tuple_element<i, Tuple>::type;
-  if constexpr (CurrentType::name == Name) {
-    return i;
+  if constexpr (i < std::tuple_size_v<Tuple>) {
+    using CurrentType = typename std::tuple_element<i, Tuple>::type;
+    static_assert(Name == CurrentType::name);
+    if constexpr (CurrentType::name == Name) {
+      return i;
+    } else {
+      return getParameterIndex<i + 1, Name, Tuple>();
+    }
   } else {
-    return getParameterIndex<i + 1, Name, Tuple>();
+    static_assert(ad_utility::alwaysFalse<Tuple>);
   }
 };
 
@@ -74,7 +80,8 @@ struct Parameters {
 
   template <ParameterName Name>
   auto& get() {
-    return std::get<getParameterIndex<0, Name, decltype(_parameters)>()>(
+    constexpr auto index = getParameterIndex<0, Name, decltype(_parameters)>();
+    return std::get<index>(
                _parameters)
         .value;
   }
