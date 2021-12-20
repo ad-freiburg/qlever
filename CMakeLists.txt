@@ -70,6 +70,13 @@ include_directories(${JEMALLOC_INCLUDE_DIRS})
 link_libraries(${JEMALLOC_LIBRARIES})
 
 
+######################################
+# BOOST
+######################################
+find_package(Boost 1.74 COMPONENTS program_options REQUIRED)
+include_directories(${Boost_INCLUDE_DIR})
+
+
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -219,7 +226,7 @@ add_executable(SparqlEngineMain src/SparqlEngineMain.cpp)
 target_link_libraries (SparqlEngineMain engine ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(ServerMain src/ServerMain.cpp)
-target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES})
 
 add_executable(WriteIndexListsMain src/WriteIndexListsMain.cpp)
 target_link_libraries (WriteIndexListsMain engine ${CMAKE_THREAD_LIBS_INIT})

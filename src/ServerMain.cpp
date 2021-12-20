@@ -2,94 +2,29 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
-#include <getopt.h>
-#include <stdio.h>
-#include <stdlib.h>
-
-#include <iomanip>
+#include <boost/program_options.hpp>
+#include <cstdlib>
 #include <iostream>
 #include <string>
 #include <vector>
 
 #include "engine/Server.h"
 #include "global/Constants.h"
+#include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFact.h"
 
 using std::cerr;
 using std::cout;
 using std::endl;
 using std::flush;
+using std::size_t;
 using std::string;
 using std::vector;
 
+namespace po = boost::program_options;
+
 #define EMPH_ON "\033[1m"
 #define EMPH_OFF "\033[22m"
-
-// Available options.
-struct option options[] = {
-    {"help", no_argument, NULL, 'h'},
-    {"index", required_argument, NULL, 'i'},
-    {"worker-threads", required_argument, NULL, 'j'},
-    {"memory-for-queries", required_argument, NULL, 'm'},
-    {"cache-max-size-gb", required_argument, NULL, 'c'},
-    {"cache-max-size-gb-single-entry", required_argument, NULL, 'e'},
-    {"cache-max-num-entries", required_argument, NULL, 'k'},
-    {"on-disk-literals", no_argument, NULL, 'l'},
-    {"port", required_argument, NULL, 'p'},
-    {"no-patterns", no_argument, NULL, 'P'},
-    {"no-pattern-trick", no_argument, NULL, 'T'},
-    {"text", no_argument, NULL, 't'},
-    {NULL, 0, NULL, 0}};
-
-void printUsage(char* execName) {
-  std::ios coutState(nullptr);
-  coutState.copyfmt(cout);
-  cout << std::setfill(' ') << std::left;
-
-  cout << "Usage: " << execName << " -p <PORT> -i <index> [OPTIONS]" << endl
-       << endl;
-  cout << "Options" << endl;
-  cout << "  " << std::setw(20) << "h, help" << std::setw(1) << "    "
-       << "Show this help and exit." << endl;
-  cout << "  " << std::setw(20) << "i, index" << std::setw(1) << "    "
-       << "The location of the index files." << endl;
-  cout << "  " << std::setw(20) << "p, port" << std::setw(1) << "    "
-       << "The port on which to run the web interface." << endl;
-  cout << "  " << std::setw(20) << "m, memory-for-queries" << std::setw(1)
-       << "    "
-       << "Limit on the total amount of memory (in GB) that can be used for "
-          "query processing and caching. If exceeded, query will return with "
-          "an error, but the engine will not crash."
-       << endl;
-  cout << "  " << std::setw(20) << "c, cache-size-in-gb" << std::setw(1)
-       << "Maximum memory size in GB for all cache entries (pinned and "
-          "non-pinned). Note that the cache is part of the amount of memory "
-          "limited by --memory-for-queries."
-       << endl;
-  cout << "  " << std::setw(20) << "e, cache-max-size-single-element"
-       << std::setw(1)
-       << "Maximum size in GB for a single cache entry. In other words, "
-          "results larger than this will never be cached."
-       << endl;
-  cout << "  " << std::setw(20) << "k, cache-max-num-values" << std::setw(1)
-       << "Maximum number of entries in the cache. If exceeded, remove "
-          "least-recently used entries from the cache if possible. Note that "
-          "this condition and the size limit specified via --cache-max-size-gb "
-          "both have to hold (logical AND)."
-       << endl;
-  cout << "  " << std::setw(20) << "no-patterns" << std::setw(1) << "    "
-       << "Disable the use of patterns. This disables ql:has-predicate."
-       << endl;
-  cout << "  " << std::setw(20) << "no-pattern-trick" << std::setw(1) << "    "
-       << "Disable the use of the pattern trick. This disables \n"
-       << std::setw(26) << " " << std::setw(1)
-       << "certain optimizations related to ql:has-predicate" << endl;
-  cout << "  " << std::setw(20) << "t, text" << std::setw(1) << "    "
-       << "Enables the usage of text." << endl;
-  cout << "  " << std::setw(20) << "j, worker-threads" << std::setw(1) << "    "
-       << "Sets the number of worker threads to use" << endl;
-  cout.copyfmt(coutState);
-}
 
 // Main function.
 int main(int argc, char** argv) {
@@ -100,18 +35,83 @@ int main(int argc, char** argv) {
   std::locale locWithNumberGrouping(loc, &facet);
   ad_utility::Log::imbue(locWithNumberGrouping);
 
+  cout << endl
+       << EMPH_ON << "ServerMain, version " << __DATE__ << " " << __TIME__
+       << EMPH_OFF << endl
+       << endl;
+  cout << "Set locale LC_CTYPE to: " << locale << endl;
+
   // Init variables that may or may not be
   // filled / set depending on the options.
-  string index = "";
+  using ad_utility::NonNegative;
+
+  string index;
   bool text = false;
-  int port = -1;
-  int numThreads = 1;
-  bool usePatterns = true;
-  bool enablePatternTrick = true;
+  int port;
+  NonNegative numThreads = 1;
+  bool noPatterns;
+  bool disablePatternTrick;
 
-  size_t memLimit = DEFAULT_MEM_FOR_QUERIES_IN_GB;
+  NonNegative memLimit = DEFAULT_MEM_FOR_QUERIES_IN_GB;
+  NonNegative cacheMaxSizeGB = DEFAULT_CACHE_MAX_SIZE_GB;
+  NonNegative cacheMaxSizeGBSingleEntry =
+      DEFAULT_CACHE_MAX_SIZE_GB_SINGLE_ENTRY;
+  NonNegative cacheMaxNumEntries = DEFAULT_CACHE_MAX_NUM_ENTRIES;
 
-  optind = 1;
+  po::options_description bOptions("Options for ServerMain");
+  auto add = [&bOptions]<typename... Args>(Args && ... args) {
+    bOptions.add_options()(std::forward<Args>(args)...);
+  };
+  add("help,h", "produce help message");
+  add("index,i", po::value<std::string>(&index)->required(),
+      "The location of the index files");
+  add("worker-threads,j", po::value<NonNegative>(&numThreads)->default_value(1),
+      "Set the number of queries that can be processed simultaneously.");
+  add("memory-for_queries,m",
+      po::value<NonNegative>(&cacheMaxSizeGB)
+          ->default_value(DEFAULT_CACHE_MAX_SIZE_GB),
+      "Limit on the total amount of memory (in GB) that can be used for "
+      "query processing and caching. If exceeded, query will return with "
+      "an error, but the engine will not crash.");
+  add("cache-max-size-gb,c", po::value<NonNegative>(&cacheMaxSizeGB),
+      "Maximum memory size in GB for all cache entries (pinned and "
+      "non-pinned). Note that the cache is part of the amount of memory "
+      "limited by --memory-for-queries.");
+  add("cache-max-size-gb-single-entry,e",
+      po::value<NonNegative>(&cacheMaxSizeGBSingleEntry),
+
+      "Maximum size in GB for a single cache entry. In other words, "
+      "results larger than this will never be cached.");
+  add("cache-max-num-entries,k", po::value<NonNegative>(&cacheMaxNumEntries),
+      "Maximum number of entries in the cache. If exceeded, remove "
+      "least-recently used entries from the cache if possible. Note that "
+      "this condition and the size limit specified via --cache-max-size-gb "
+      "both have to hold (logical AND).");
+  add("port,p", po::value<int>(&port)->required(),
+      "The port on which the http server runs.");
+  add("no-patterns,P", po::bool_switch(&noPatterns),
+      "Disable the use of patterns. This disables ql:has-predicate.");
+  add("no-pattern-trick,T", po::bool_switch(&disablePatternTrick),
+      "Maximum number of entries in the cache. If exceeded, remove "
+      "least-recently used entries from the cache if possible. Note that "
+      "this condition and the size limit specified via --cache-max-size-gb "
+      "both have to hold (logical AND).");
+  add("text,t", po::bool_switch(&text), "Enables the usage of text.");
+  po::variables_map vm;
+
+  try {
+    po::store(po::parse_command_line(argc, argv, bOptions), vm);
+
+    if (vm.count("help")) {
+      std::cout << bOptions << '\n';
+      return EXIT_SUCCESS;
+    }
+
+    po::notify(vm);
+  } catch (const std::exception& e) {
+    std::cerr << "Error in command-line Argument: " << e.what() << '\n';
+    std::cerr << bOptions << '\n';
+    return EXIT_FAILURE;
   // Process command line arguments.
   while (true) {
     int c = getopt_long(argc, argv, "i:p:j:tauhm:lc:e:k:T", options, NULL);
@@ -166,23 +166,6 @@ int main(int argc, char** argv) {
         exit(1);
     }
   }
-
-  if (index.size() == 0 || port == -1) {
-    if (index.size() == 0) {
-      cerr << "ERROR: No index specified, but an index is required." << endl;
-    }
-    if (port == -1) {
-      cerr << "ERROR: No port specified, but the port is required." << endl;
-    }
-    printUsage(argv[0]);
-    exit(1);
-  }
-
-  cout << endl
-       << EMPH_ON << "ServerMain, version " << __DATE__ << " " << __TIME__
-       << EMPH_OFF << endl
-       << endl;
-  cout << "Set locale LC_CTYPE to: " << locale << endl;
 
   try {
     Server server(port, numThreads, memLimit);
