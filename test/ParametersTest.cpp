@@ -13,13 +13,7 @@ TEST(Parameters, First) {
   using FloatParameter = Float<"Float">;
   using IntParameter = SizeT<"SizeT">;
 
-  using ParamPack = Parameters<FloatParameter, IntParameter>;
-  ParamPack pack{};
-  FloatParameter f{2.0};
-  IntParameter i{3};
-  ParamPack pack2(FloatParameter{2.0f}, IntParameter{3ull});
-  ASSERT_EQ(0ul, pack.get<"SizeT">());
-  ASSERT_FLOAT_EQ(0.0, pack.get<"Float">());
+  Parameters pack2(FloatParameter{2.0f}, IntParameter{3ull});
   ASSERT_EQ(3ul, pack2.get<"SizeT">());
   ASSERT_FLOAT_EQ(2.0, pack2.get<"Float">());
 
