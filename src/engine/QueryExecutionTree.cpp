@@ -456,12 +456,13 @@ QueryExecutionTree::writeRdfGraphTurtle(
   size_t upperBound = std::min<size_t>(offset + limit, res->_data.size());
   auto variableColumns = getVariableColumns();
   for (size_t i = offset; i < upperBound; i++) {
+    Context context{i, *res, variableColumns, _qec->getIndex()};
     vector<std::array<std::string, 3>> tripleSub;
     for (const auto& triple : constructTriples) {
       tripleSub.push_back(std::array<std::string, 3>{
-          triple[0].toString(i, *res, variableColumns, _qec->getIndex()),
-          triple[1].toString(i, *res, variableColumns, _qec->getIndex()),
-          triple[2].toString(i, *res, variableColumns, _qec->getIndex())});
+          triple[0].toString(context),
+          triple[1].toString(context),
+          triple[2].toString(context)});
     }
     for (const auto& triple : tripleSub) {
       co_yield triple[0];

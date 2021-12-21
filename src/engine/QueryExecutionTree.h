@@ -10,6 +10,7 @@
 #include <unordered_set>
 
 #include "../parser/data/VarOrTerm.h"
+#include "../parser/data/Context.h"
 #include "../util/Conversions.h"
 #include "../util/HashSet.h"
 #include "../util/streamable_generator.h"

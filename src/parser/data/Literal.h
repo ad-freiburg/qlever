@@ -8,7 +8,7 @@
 #include <string>
 
 class Literal {
-  const std::string _stringRepresentation;
+  std::string _stringRepresentation;
 
   template <typename T>
   static std::string toString(const T& t) {
@@ -21,5 +21,8 @@ class Literal {
   template <typename T>
   explicit Literal(const T& t) : _stringRepresentation(toString(t)) {}
 
-  [[nodiscard]] std::string toString() const { return _stringRepresentation; }
+  [[nodiscard]] std::string toString(
+      [[maybe_unused]] const Context& context) const {
+    return _stringRepresentation;
+  }
 };

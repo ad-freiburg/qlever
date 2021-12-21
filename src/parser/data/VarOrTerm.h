@@ -4,42 +4,21 @@
 
 #pragma once
 
-#include <functional>
 #include <string>
+#include <variant>
 
 #include "../../engine/ResultTable.h"
 #include "../../index/Index.h"
 #include "./GraphTerm.h"
 #include "./Variable.h"
 
-class VarOrTerm {
-  std::function<std::string(size_t, const ResultTable&,
-                            const ad_utility::HashMap<string, size_t>&,
-                            const Index&)>
-      _toString;
-
+class VarOrTerm : public std::variant<Variable, GraphTerm> {
  public:
-  explicit VarOrTerm(const Variable& variable)
-      : _toString{
-            [variable](
-                size_t row, const ResultTable& res,
-                const ad_utility::HashMap<string, size_t>& variableColumns,
-                const Index& qecIndex) {
-              return variable.toString(row, res, variableColumns, qecIndex);
-            }} {}
-  explicit VarOrTerm(const GraphTerm& term)
-      : _toString{
-            [term](size_t row, [[maybe_unused]] const ResultTable& res,
-                   [[maybe_unused]] const ad_utility::HashMap<string, size_t>&
-                       variableColumns,
-                   [[maybe_unused]] const Index& qecIndex) {
-              return term.toString(row);
-            }} {}
+  using std::variant<Variable, GraphTerm>::variant;
 
-  [[nodiscard]] std::string toString(
-      size_t row, const ResultTable& res,
-      const ad_utility::HashMap<string, size_t>& variableColumns,
-      const Index& qecIndex) const {
-    return _toString(row, res, variableColumns, qecIndex);
+  [[nodiscard]] std::string toString(const Context& context) const {
+    return std::visit(
+        [&](const auto& object) { return object.toString(context); },
+        static_cast<const std::variant<Variable, GraphTerm>&>(*this));
   }
 };

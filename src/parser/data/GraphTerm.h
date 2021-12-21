@@ -4,24 +4,20 @@
 
 #pragma once
 
-#include <functional>
 #include <string>
+#include <variant>
 
 #include "./BlankNode.h"
+#include "./Context.h"
 #include "./Literal.h"
 
-class GraphTerm {
-  std::function<std::string(size_t)> _toString;
-
+class GraphTerm : public std::variant<Literal, BlankNode> {
  public:
-  explicit GraphTerm(const Literal& literal)
-      : _toString{[literal]([[maybe_unused]] size_t col) {
-          return literal.toString();
-        }} {}
-  explicit GraphTerm(const BlankNode& node)
-      : _toString{[node](size_t col) { return node.toString(col); }} {}
+  using std::variant<Literal, BlankNode>::variant;
 
-  [[nodiscard]] std::string toString(size_t col) const {
-    return _toString(col);
+  [[nodiscard]] std::string toString(const Context& context) const {
+    return std::visit(
+        [&](const auto& object) { return object.toString(context); },
+        static_cast<const std::variant<Literal, BlankNode>&>(*this));
   }
 };

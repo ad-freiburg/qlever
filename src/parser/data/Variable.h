@@ -11,15 +11,17 @@
 #include "../../index/Index.h"
 
 class Variable {
-  const std::string _name;
+  std::string _name;
 
  public:
   explicit Variable(std::string name) : _name{std::move(name)} {};
 
-  [[nodiscard]] std::string toString(
-      size_t row, const ResultTable& res,
-      const ad_utility::HashMap<string, size_t>& variableColumns,
-      const Index& qecIndex) const {
+  [[nodiscard]] std::string toString(const Context& context) const {
+    size_t row = context._row;
+    const ResultTable& res = context._res;
+    const ad_utility::HashMap<string, size_t>& variableColumns =
+        context._variableColumns;
+    const Index& qecIndex = context._qecIndex;
     const auto& data = res._data;
     if (variableColumns.contains(_name)) {
       size_t index = variableColumns.at(_name);
