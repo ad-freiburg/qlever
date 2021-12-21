@@ -197,6 +197,7 @@ class QueryExecutionTree {
   bool& isRoot() noexcept { return _isRoot; }
   [[nodiscard]] const bool& isRoot() const noexcept { return _isRoot; }
 
+  // generates an RDF graph in turtle syntax for a CONSTRUCT query
   ad_utility::stream_generator::stream_generator writeRdfGraphTurtle(
       const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
       size_t limit, size_t offset) const;
