@@ -18,6 +18,7 @@ TEST(Parameters, First) {
   ASSERT_FLOAT_EQ(2.0, pack2.get<"Float">());
 
   pack2.set("Float", "42.0");
+  ASSERT_EQ(3ul, pack2.get<"SizeT">());
   ASSERT_FLOAT_EQ(42.0, pack2.get<"Float">());
   ASSERT_THROW(pack2.set("NoKey", "24.1"), std::runtime_error);
   // TODO<joka921>: Make this unit test work.

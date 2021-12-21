@@ -109,7 +109,6 @@ boost::asio::awaitable<void> Server::process(
           request, ad_utility::MediaType::textPlain);
     } else if (cmd == "get-settings") {
       LOG(INFO) << "Supplying settings..." << std::endl;
-      auto map = RuntimeParameters().toMap();
       json settingsJson = RuntimeParameters().toMap();
       co_await sendWithCors(createJsonResponse(settingsJson, request));
       co_return;
@@ -122,7 +121,7 @@ boost::asio::awaitable<void> Server::process(
   }
 
   // TODO<joka921> Restrict this access by a token.
-  // TODO<joka921> Make the access to the RuntimeParameters threadsafe
+  // TODO<joka921> Warn about unknown parameters
   for (const auto& [key, value] : params) {
     if (RuntimeParameters().getKeys().contains(key)) {
       RuntimeParameters().set(key, value);
