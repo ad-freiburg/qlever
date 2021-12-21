@@ -387,8 +387,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     if (!ctx->constructTriples()) {
       return ctx->triplesSameSubject()->accept(this).as<Triples>();
     }
-    auto result = ctx->constructTriples()->accept(this).as<Triples>();
-    auto new_triples = ctx->triplesSameSubject()->accept(this).as<Triples>();
+    auto result = ctx->triplesSameSubject()->accept(this).as<Triples>();
+    auto new_triples = ctx->constructTriples()->accept(this).as<Triples>();
     appendVector(result, new_triples);
     return result;
   }
@@ -437,10 +437,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     auto verbs = ctx->verb();
     auto objectLists = ctx->objectList();
     for (size_t i = 0; i < verbs.size(); i++) {
+      // TODO use zip-style approach once C++ supports ranges
       auto objectList = objectLists.at(i)->accept(this).as<ObjectList>();
+      auto verb = verbs.at(i)->accept(this).as<VarOrTerm>();
       for (auto& object : objectList.first) {
-        triplesWithoutSubject.push_back(
-            {verbs.at(i)->accept(this).as<VarOrTerm>(), std::move(object)});
+        triplesWithoutSubject.push_back({verb, std::move(object)});
       }
       appendVector(additionalTriples, objectList.second);
     }
