@@ -86,8 +86,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   template <typename T>
   void appendVector(std::vector<T>& destination, std::vector<T>& source) {
     destination.insert(destination.end(),
-                   std::make_move_iterator(source.begin()),
-                   std::make_move_iterator(source.end()));
+                       std::make_move_iterator(source.begin()),
+                       std::make_move_iterator(source.end()));
   }
 
   BlankNode newBlankNode() {
@@ -427,7 +427,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       SparqlAutomaticParser::PropertyListContext* ctx) override {
     return ctx->propertyListNotEmpty()
                ? ctx->propertyListNotEmpty()->accept(this)
-               : std::make_pair(Tuples{}, Triples{});
+               : PropertyList{Tuples{}, Triples{}};
   }
 
   antlrcpp::Any visitPropertyListNotEmpty(
@@ -445,8 +445,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       }
       appendVector(additionalTriples, objectList.second);
     }
-    return std::make_pair(std::move(triplesWithoutSubject),
-                          std::move(additionalTriples));
+    return PropertyList{std::move(triplesWithoutSubject),
+                        std::move(additionalTriples)};
   }
 
   antlrcpp::Any visitVerb(SparqlAutomaticParser::VerbContext* ctx) override {
@@ -471,7 +471,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       appendVector(additionalTriples, graphNode.second);
       objects.push_back(std::move(graphNode.first));
     }
-    return std::make_pair(std::move(objects), std::move(additionalTriples));
+    return ObjectList{std::move(objects), std::move(additionalTriples)};
   }
 
   antlrcpp::Any visitObjectR(
@@ -583,7 +583,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       triples.push_back({var, std::move(tuple[0]), std::move(tuple[1])});
     }
     appendVector(triples, propertyList.second);
-    return std::make_pair(std::move(var), std::move(triples));
+    return Node{std::move(var), std::move(triples)};
   }
 
   antlrcpp::Any visitTriplesNodePath(
@@ -620,7 +620,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
       appendVector(triples, graphNode.second);
     }
-    return std::make_pair(std::move(nextElement), std::move(triples));
+    return Node{std::move(nextElement), std::move(triples)};
   }
 
   antlrcpp::Any visitCollectionPath(
@@ -631,8 +631,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitGraphNode(
       SparqlAutomaticParser::GraphNodeContext* ctx) override {
     if (ctx->varOrTerm()) {
-      return std::make_pair(ctx->varOrTerm()->accept(this).as<VarOrTerm>(),
-                            Triples{});
+      return Node{ctx->varOrTerm()->accept(this).as<VarOrTerm>(), Triples{}};
     } else if (ctx->triplesNode()) {
       return ctx->triplesNode()->accept(this);
     }
@@ -700,8 +699,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
           ctx->booleanLiteral()->accept(this).as<bool>() ? "true"s : "false"s}};
     }
     if (ctx->blankNode()) {
-      return GraphTerm{
-          ctx->blankNode()->accept(this).as<BlankNode>()};
+      return GraphTerm{ctx->blankNode()->accept(this).as<BlankNode>()};
     }
     return GraphTerm{Literal{visitChildren(ctx).as<std::string>()}};
   }
@@ -1152,8 +1150,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     }
     if (ctx->BLANK_NODE_LABEL()) {
       // strip _: prefix from string
-      const string label = ctx->BLANK_NODE_LABEL()->getText()
-                                .substr(std::strlen("_:"));
+      const string label =
+          ctx->BLANK_NODE_LABEL()->getText().substr(std::strlen("_:"));
       return BlankNode{false, label};
     }
     // invalid grammar
