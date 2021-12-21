@@ -30,11 +30,11 @@ class SparqlParseException : public std::exception {
 };
 
 template <typename T>
-class reversed {
+class Reversed {
   T& _iterable;
 
  public:
-  explicit reversed(T& iterable) : _iterable(iterable) {}
+  explicit Reversed(T& iterable) : _iterable(iterable) {}
 
   auto begin() { return _iterable.rbegin(); };
 
@@ -595,8 +595,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     VarOrTerm nextElement{
         GraphTerm{Literal{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}}};
     auto nodes = ctx->graphNode();
-    reversed reversedNodesView{nodes};
-    for (auto context : reversedNodesView) {
+    for (auto context : Reversed{nodes}) {
       VarOrTerm currentVar{GraphTerm{nodeCreator.newNode()}};
       auto graphNode = context->accept(this).as<Node>();
 
