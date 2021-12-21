@@ -460,9 +460,9 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     Triples additionalTriples;
     auto objectContexts = ctx->objectR();
     for (auto& objectContext : objectContexts) {
-      auto blankNode = objectContext->accept(this).as<Node>();
-      appendVector(additionalTriples, blankNode.second);
-      objects.push_back(std::move(blankNode.first));
+      auto graphNode = objectContext->accept(this).as<Node>();
+      appendVector(additionalTriples, graphNode.second);
+      objects.push_back(std::move(graphNode.first));
     }
     return std::make_pair(std::move(objects), std::move(additionalTriples));
   }
