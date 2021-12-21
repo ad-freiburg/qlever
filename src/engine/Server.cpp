@@ -353,6 +353,7 @@ boost::asio::awaitable<void> Server::processQuery(
                                        // TODO<Robin> change media type
                                        ad_utility::MediaType::csv);
       co_await send(std::move(response));
+      co_return;
     }
 
     std::optional<MediaType> mediaType = std::nullopt;
