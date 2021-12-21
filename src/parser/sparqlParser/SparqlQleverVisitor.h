@@ -53,7 +53,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   using Node = std::pair<VarOrTerm, Triples>;
   using ObjectList = std::pair<Objects, Triples>;
   using PropertyList = std::pair<Tuples, Triples>;
-  BlankNodeCreator nodeCreator{};
+  size_t _blankNodeCounter = 0;
 
  public:
   using PrefixMap = ad_utility::HashMap<string, string>;
@@ -88,6 +88,12 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     destination.insert(destination.end(),
                    std::make_move_iterator(source.begin()),
                    std::make_move_iterator(source.end()));
+  }
+
+  BlankNode newBlankNode() {
+    std::string label = std::to_string(_blankNodeCounter);
+    _blankNodeCounter++;
+    return {true, std::move(label)};
   }
 
  public:
@@ -568,7 +574,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitBlankNodePropertyList(
       SparqlAutomaticParser::BlankNodePropertyListContext* ctx) override {
-    VarOrTerm var{GraphTerm{nodeCreator.newNode()}};
+    VarOrTerm var{GraphTerm{newBlankNode()}};
     Triples triples;
     auto propertyList =
         ctx->propertyListNotEmpty()->accept(this).as<PropertyList>();
@@ -596,7 +602,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
         GraphTerm{Literal{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}}};
     auto nodes = ctx->graphNode();
     for (auto context : Reversed{nodes}) {
-      VarOrTerm currentVar{GraphTerm{nodeCreator.newNode()}};
+      VarOrTerm currentVar{GraphTerm{newBlankNode()}};
       auto graphNode = context->accept(this).as<Node>();
 
       triples.push_back(
@@ -694,7 +700,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     }
     if (ctx->blankNode()) {
       return GraphTerm{
-          ctx->blankNode()->accept(this).as<std::shared_ptr<BlankNode>>()};
+          ctx->blankNode()->accept(this).as<BlankNode>()};
     }
     return GraphTerm{Literal{visitChildren(ctx).as<std::string>()}};
   }
@@ -1141,12 +1147,13 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitBlankNode(
       SparqlAutomaticParser::BlankNodeContext* ctx) override {
     if (ctx->ANON()) {
-      return nodeCreator.newNode();
+      return newBlankNode();
     }
     if (ctx->BLANK_NODE_LABEL()) {
       // strip _: prefix from string
-      return nodeCreator.fromLabel(
-          ctx->BLANK_NODE_LABEL()->getText().substr(2));
+      const string label = ctx->BLANK_NODE_LABEL()->getText()
+                                .substr(std::strlen("_:"));
+      return BlankNode{false, label};
     }
     // invalid grammar
     AD_CHECK(false);

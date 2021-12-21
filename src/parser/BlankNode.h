@@ -28,25 +28,3 @@ class BlankNode {
     return stream.str();
   }
 };
-
-class BlankNodeCreator {
-  size_t _counter = 0;
-  std::unordered_map<std::string, std::shared_ptr<BlankNode>> storedNodes{};
-
- public:
-  std::shared_ptr<BlankNode> newNode() {
-    std::ostringstream output;
-    output << 'b';
-    output << _counter;
-    _counter++;
-    return std::make_shared<BlankNode>(true, output.str());
-  }
-
-  std::shared_ptr<BlankNode> fromLabel(const std::string& label) {
-    if (!storedNodes.contains(label)) {
-      storedNodes[label] = std::make_shared<BlankNode>(false, label);
-    }
-
-    return storedNodes[label];
-  }
-};
