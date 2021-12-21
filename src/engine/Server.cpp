@@ -160,8 +160,9 @@ json Server::composeResponseJson(const ParsedQuery& query,
     size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
     size_t offset = query._offset.value_or(0);
     requestTimer.cont();
-    j["res"] = qet.writeResultAsJson(query._selectClause._selectedVariables,
-                                     std::min(limit, maxSend), offset);
+    j["res"] =
+        qet.writeResultAsQLeverJson(query._selectClause._selectedVariables,
+                                    std::min(limit, maxSend), offset);
     requestTimer.stop();
   }
 
@@ -182,14 +183,12 @@ json Server::composeResponseSparqlJson(const ParsedQuery& query,
   shared_ptr<const ResultTable> rt = qet.getResult();
   requestTimer.stop();
   nlohmann::json j;
-  {
-    size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
-    size_t offset = query._offset.value_or(0);
-    requestTimer.cont();
-    j = qet.writeResultAsSparqlJson(query._selectClause._selectedVariables,
-                                    std::min(limit, sendMax), offset);
-    requestTimer.stop();
-  }
+  size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
+  size_t offset = query._offset.value_or(0);
+  requestTimer.cont();
+  j = qet.writeResultAsSparqlJson(query._selectClause._selectedVariables,
+                                  std::min(limit, sendMax), offset);
+  requestTimer.stop();
   return j;
 }
 
@@ -309,16 +308,16 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(TRACE) << qet.asString() << std::endl;
 
     using ad_utility::MediaType;
-    // Determine the result media type
+    // Determine the result media type.
 
     // TODO<joka921> qleverJson should not be the default as soon
     // as the UI explicitly requests it.
     // TODO<joka921> Add sparqlJson as soon as it is supported.
     const auto supportedMediaTypes = []() {
-      static const std::vector<MediaType> ts{
+      static const std::vector<MediaType> mediaTypes{
           ad_utility::MediaType::qleverJson, ad_utility::MediaType::sparqlJson,
           ad_utility::MediaType::tsv, ad_utility::MediaType::csv};
-      return ts;
+      return mediaTypes;
     };
 
     std::optional<MediaType> mediaType = std::nullopt;

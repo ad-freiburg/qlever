@@ -50,8 +50,8 @@ enum class NumericType : char {
   DECIMAL = 'T'
 };
 
-inline const char* toTypeIri(NumericType t) {
-  switch (t) {
+inline const char* toTypeIri(NumericType type) {
+  switch (type) {
     case NumericType::INTEGER:
       return XSD_INT_TYPE;
     case NumericType::FLOAT:

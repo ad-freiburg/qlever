@@ -50,7 +50,7 @@ void Minus::computeResult(ResultTable* result) {
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
   result->_sortedBy = resultSortedOn();
-  result->_data.setCols(getResultWidth());
+  result->_idTable.setCols(getResultWidth());
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
@@ -67,10 +67,10 @@ void Minus::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Computing minus of results of size " << leftResult->size()
              << " and " << rightResult->size() << endl;
 
-  int leftWidth = leftResult->_data.cols();
-  int rightWidth = rightResult->_data.cols();
-  CALL_FIXED_SIZE_2(leftWidth, rightWidth, computeMinus, leftResult->_data,
-                    rightResult->_data, _matchedColumns, &result->_data);
+  int leftWidth = leftResult->_idTable.cols();
+  int rightWidth = rightResult->_idTable.cols();
+  CALL_FIXED_SIZE_2(leftWidth, rightWidth, computeMinus, leftResult->_idTable,
+                    rightResult->_idTable, _matchedColumns, &result->_idTable);
   LOG(DEBUG) << "Minus result computation done." << endl;
 }
 

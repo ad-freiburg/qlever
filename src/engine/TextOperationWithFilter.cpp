@@ -80,25 +80,26 @@ string TextOperationWithFilter::getDescriptor() const {
 void TextOperationWithFilter::computeResult(ResultTable* result) {
   LOG(DEBUG) << "TextOperationWithFilter result computation..." << endl;
   AD_CHECK_GE(getNofVars(), 1);
-  result->_data.setCols(getResultWidth());
+  result->_idTable.setCols(getResultWidth());
   shared_ptr<const ResultTable> filterResult = _filterResult->getResult();
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
   runtimeInfo.addChild(_filterResult->getRootOperation()->getRuntimeInfo());
 
-  result->_resultTypes.reserve(result->_data.cols());
+  result->_resultTypes.reserve(result->_idTable.cols());
   result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-  for (size_t i = 2; i < result->_data.cols(); i++) {
+  for (size_t i = 2; i < result->_idTable.cols(); i++) {
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
   }
-  if (filterResult->_data.cols() == 1) {
+  if (filterResult->_idTable.cols() == 1) {
     getExecutionContext()->getIndex().getFilteredECListForWordsWidthOne(
-        _words, filterResult->_data, getNofVars(), _textLimit, &result->_data);
+        _words, filterResult->_idTable, getNofVars(), _textLimit,
+        &result->_idTable);
   } else {
     getExecutionContext()->getIndex().getFilteredECListForWords(
-        _words, filterResult->_data, _filterColumn, getNofVars(), _textLimit,
-        &result->_data);
+        _words, filterResult->_idTable, _filterColumn, getNofVars(), _textLimit,
+        &result->_idTable);
   }
 
   LOG(DEBUG) << "TextOperationWithFilter result computation done." << endl;

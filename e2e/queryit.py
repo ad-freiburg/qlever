@@ -45,33 +45,33 @@ def exec_query(endpoint_url: str, sparql: str, action,
         return None
     return json.load(conn)
 
-def is_result_sane_helper(result: Dict[str, Any], required_fields: List[str]) ->bool :
-    for field in required_fields:
-        if field not in result:
-            eprint('QLever Result is missing "%s" field' % field)
+def check_keys_in_result(result: Dict[str, Any], required_keys: List[str]) ->bool :
+    for key in required_keys:
+        if key not in result:
+            eprint('QLever Result is missing "%s" field' % key)
             return False
     return True
 
-def is_result_sane(result: Dict[str, Any]) -> bool:
+def check_structure_qlever_json(result: Dict[str, Any]) -> bool:
     """
     Checks a QLever Result object for sanity
     """
-    return is_result_sane_helper(result,['query', 'status', 'resultsize', 'selected', 'res'])
+    return check_keys_in_result(result, ['query', 'status', 'resultsize', 'selected', 'res'])
 
-def is_sparql_json_result_sane(result: Dict[str, Any]) -> bool:
+def check_structure_sparql_json(result: Dict[str, Any]) -> bool:
     """
     Checks a sparql-results+json object for sanity
     """
-    if not is_result_sane_helper(result, ['head', 'results']):
+    if not check_keys_in_result(result, ['head', 'results']):
         return False
-    if not is_result_sane_helper(result['head'], ['vars']):
+    if not check_keys_in_result(result['head'], ['vars']):
         return False
-    if not is_result_sane_helper(result['results'], ['bindings']):
+    if not check_keys_in_result(result['results'], ['bindings']):
         return False
     return True
 
-def test_row_sparql_json(variables: List[str], gold_row: List[Any],
-             actual_row: Dict[str, any], epsilon=0.1) -> bool:
+def check_row_sparql_json(variables: List[str], gold_row: List[Any],
+                          actual_row: Dict[str, any], epsilon=0.1) -> bool:
     """
     Test if gold_row and actual_row match. For floats we allow an epsilon
     difference. If a gold_row cell is None it is ignored.
@@ -109,8 +109,8 @@ def test_row_sparql_json(variables: List[str], gold_row: List[Any],
             return False
     return True
 
-def test_row(gold_row: List[Any],
-             actual_row: List[Any], epsilon=0.1) -> bool:
+def check_row_qlever_json(gold_row: List[Any],
+                          actual_row: List[Any], epsilon=0.1) -> bool:
     """
     Test if gold_row and actual_row match. For floats we allow an epsilon
     difference. If a gold_row cell is None it is ignored.
@@ -183,7 +183,7 @@ def test_check(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
                 return False
             for i, gold_row in enumerate(gold_res):
                 actual_row = res[i]
-                if not test_row(gold_row, actual_row):
+                if not check_row_qlever_json(gold_row, actual_row):
                     eprint("res check failed:\n" +
                            "\tat row %r" % i +
                            "\texpected %r, got %r" %
@@ -193,7 +193,7 @@ def test_check(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
             found = False
             gold_row = value
             for actual_row in res:
-                if test_row(gold_row, actual_row):
+                if check_row_qlever_json(gold_row, actual_row):
                     found = True
                     break
             if not found:
@@ -274,7 +274,7 @@ def test_check_sparql_json(check_dict: Dict[str, Any], result: Dict[str, Any]) -
                 return False
             for i, gold_row in enumerate(gold_res):
                 actual_row = res[i]
-                if not test_row_sparql_json(result["head"]["vars"], gold_row, actual_row):
+                if not check_row_sparql_json(result["head"]["vars"], gold_row, actual_row):
                     eprint("res check failed:\n" +
                            "\tat row %r" % i +
                            "\texpected %r, got %r" %
@@ -284,7 +284,7 @@ def test_check_sparql_json(check_dict: Dict[str, Any], result: Dict[str, Any]) -
             found = False
             gold_row = value
             for actual_row in res:
-                if test_row_sparql_json(result["head"]["vars"], gold_row, actual_row):
+                if check_row_sparql_json(result["head"]["vars"], gold_row, actual_row):
                     found = True
                     break
             if not found:
@@ -354,7 +354,7 @@ def main() -> None:
                 print_qlever_result(result)
                 continue
 
-            if not is_result_sane(result):
+            if not check_structure_qlever_json(result):
                 error_detected = True
                 print_qlever_result(result)
                 continue
@@ -376,7 +376,7 @@ def main() -> None:
                 print_qlever_result(result)
                 continue
 
-            if not is_sparql_json_result_sane(result):
+            if not check_structure_sparql_json(result):
                 error_detected = True
                 print_qlever_result(result)
                 continue

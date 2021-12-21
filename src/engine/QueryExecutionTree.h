@@ -87,7 +87,8 @@ class QueryExecutionTree {
     return _rootOperation->getResult(isRoot());
   }
 
-  // A variable, its
+  // A variable, its column index in the Id space result, and the `ResultType`
+  // of this column.
   struct VariableAndColumnIndex {
     std::string _variable;
     size_t _columnIndex;
@@ -97,7 +98,7 @@ class QueryExecutionTree {
   using ColumnIndicesAndTypes = vector<std::optional<VariableAndColumnIndex>>;
 
   // Returns a vector where the i-th element contains the column index and
-  // `ResultType` of the `i-th` `selectVariable` in the `resultTable`
+  // `ResultType` of the i-th `selectVariable` in the `resultTable`
   ColumnIndicesAndTypes selectedVariablesToColumnIndices(
       const std::vector<string>& selectVariables,
       const ResultTable& resultTable) const;
@@ -110,8 +111,8 @@ class QueryExecutionTree {
       const vector<string>& selectVars, size_t limit = MAX_NOF_ROWS_IN_RESULT,
       size_t offset = 0, char sep = '\t') const;
 
-  nlohmann::json writeResultAsJson(const vector<string>& selectVars,
-                                   size_t limit, size_t offset) const;
+  nlohmann::json writeResultAsQLeverJson(const vector<string>& selectVars,
+                                         size_t limit, size_t offset) const;
 
   nlohmann::json writeResultAsSparqlJson(const vector<string>& selectVars,
                                          size_t limit, size_t offset) const;
@@ -214,13 +215,13 @@ class QueryExecutionTree {
    * @param data the IdTable from which we read
    * @param from the first <from> entries of the idTable are skipped
    * @param limit at most <limit> entries are written, starting at <from>
-   * @param validIndices each pair of <columnInIdTable, correspondingType> tells
+   * @param columns each pair of <columnInIdTable, correspondingType> tells
    * us which columns are to be serialized in which order
    * @return a 2D-Json array corresponding to the IdTable given the arguments
    */
-  nlohmann::json writeJsonTable(
+  nlohmann::json writeQLeverJsonTable(
       const IdTable& data, size_t from, size_t limit,
-      const ColumnIndicesAndTypes& validIndices) const;
+      const ColumnIndicesAndTypes& columns) const;
 
   [[nodiscard]] std::optional<std::pair<std::string, const char*>>
   toStringAndXsdType(Id id, ResultTable::ResultType type,

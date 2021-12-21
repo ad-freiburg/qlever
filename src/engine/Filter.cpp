@@ -247,17 +247,18 @@ void Filter::computeResult(ResultTable* result) {
   runtimeInfo.setDescriptor(getDescriptor());
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "Filter result computation..." << endl;
-  result->_data.setCols(subRes->_data.cols());
+  result->_idTable.setCols(subRes->_idTable.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
   result->_localVocab = subRes->_localVocab;
   size_t lhsInd = _subtree->getVariableColumn(_lhs);
-  int width = result->_data.cols();
+  int width = result->_idTable.cols();
   if (_rhs[0] == '?') {
     size_t rhsInd = _subtree->getVariableColumn(_rhs);
-    CALL_FIXED_SIZE_1(width, computeResultDynamicValue, &result->_data, lhsInd,
-                      rhsInd, subRes->_data, subRes->getResultType(lhsInd));
+    CALL_FIXED_SIZE_1(width, computeResultDynamicValue, &result->_idTable,
+                      lhsInd, rhsInd, subRes->_idTable,
+                      subRes->getResultType(lhsInd));
   } else {
     // compare the left column to a fixed value
     CALL_FIXED_SIZE_1(width, computeResultFixedValue, result, subRes);
@@ -625,8 +626,8 @@ void Filter::computeResultFixedValue(
     ResultTable* resultTable,
     const std::shared_ptr<const ResultTable> subRes) const {
   LOG(DEBUG) << "Filter result computation..." << endl;
-  IdTableStatic<WIDTH> result = resultTable->_data.moveToStatic<WIDTH>();
-  const IdTableView<WIDTH> input = subRes->_data.asStaticView<WIDTH>();
+  IdTableStatic<WIDTH> result = resultTable->_idTable.moveToStatic<WIDTH>();
+  const IdTableView<WIDTH> input = subRes->_idTable.asStaticView<WIDTH>();
 
   if (_lhsAsString) {
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
@@ -793,5 +794,5 @@ void Filter::computeResultFixedValue(
     }
   }
   LOG(DEBUG) << "Filter result computation done." << endl;
-  resultTable->_data = result.moveToDynamic();
+  resultTable->_idTable = result.moveToDynamic();
 }

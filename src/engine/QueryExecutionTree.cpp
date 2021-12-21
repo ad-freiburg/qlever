@@ -122,7 +122,7 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
     return {};
   }
 
-  const IdTable& data = res->_data;
+  const IdTable& data = res->_idTable;
   size_t upperBound = std::min<size_t>(offset + limit, data.size());
   return writeTable(data, sep, offset, upperBound, std::move(validIndices));
 }
@@ -149,7 +149,7 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
 }
 
 // _____________________________________________________________________________
-nlohmann::json QueryExecutionTree::writeResultAsJson(
+nlohmann::json QueryExecutionTree::writeResultAsQLeverJson(
     const vector<string>& selectVars, size_t limit, size_t offset) const {
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
@@ -160,7 +160,7 @@ nlohmann::json QueryExecutionTree::writeResultAsJson(
     return nlohmann::json(std::vector<std::string>());
   }
 
-  return writeJsonTable(res->_data, offset, limit, validIndices);
+  return writeQLeverJsonTable(res->_idTable, offset, limit, validIndices);
 }
 
 // _____________________________________________________________________________
@@ -168,34 +168,31 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
     const vector<string>& selectVars, size_t limit, size_t offset) const {
   using nlohmann::json;
 
-  // They may trigger computation (but does not have to).
-  shared_ptr<const ResultTable> res = getResult();
-  LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  ColumnIndicesAndTypes validIndices =
-      selectedVariablesToColumnIndices(selectVars, *res);
+  // This might trigger the actual query processing.
+  shared_ptr<const ResultTable> queryResult = getResult();
+  LOG(DEBUG) << "Finished computing the query result in the ID space. "
+                "Resolving strings in result...\n";
+  ColumnIndicesAndTypes columns =
+      selectedVariablesToColumnIndices(selectVars, *queryResult);
 
-  std::erase(validIndices, std::nullopt);
+  std::erase(columns, std::nullopt);
 
-  if (validIndices.empty()) {
+  if (columns.empty()) {
     return {std::vector<std::string>()};
   }
 
-  const IdTable& data = res->_data;
+  const IdTable& idTable = queryResult->_idTable;
 
-  json head;
-  head["vars"] = selectVars;
+  json result;
+  result["head"]["vars"] = selectVars;
 
-  json encoded;
-  encoded["head"]["vars"] = selectVars;
-
-  json results;
   json bindings = json::array();
 
-  const auto upperBound = std::min(data.size(), limit + offset);
+  const auto upperBound = std::min(idTable.size(), limit + offset);
 
   // Take a string from the vocabulary, deduce the type and
   // return a json dict that describes the binding
-  auto strToBinding = [](const std::string& entitystr) -> nlohmann::json {
+  auto stringToBinding = [](const std::string& entitystr) -> nlohmann::json {
     json b;
     // The string is an iri or literal
     if (entitystr[0] == '<') {
@@ -210,22 +207,27 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
         b["value"] = entitystr;
       } else {
         b["value"] = entitystr.substr(1, quote_pos - 1);
-        // Look for a language tag
+        // Look for a language tag or type
         if (quote_pos < entitystr.size() - 1 &&
             entitystr[quote_pos + 1] == '@') {
           b["xml:lang"] = entitystr.substr(quote_pos + 2);
+        } else if (quote_pos < entitystr.size() - 2 &&
+                   entitystr[quote_pos + 1] == '^') {
+          AD_CHECK(entitystr[quote_pos + 2] == '^');
+          b["datatype"] = entitystr.substr(quote_pos + 3);
+          ;
         }
       }
     }
     return b;
   };
 
-  for (size_t i = offset; i < upperBound; ++i) {
+  for (size_t rowIndex = offset; rowIndex < upperBound; ++rowIndex) {
     json binding;
-    for (const auto& column : validIndices) {
-      const auto& currentId = data(i, column->_columnIndex);
+    for (const auto& column : columns) {
+      const auto& currentId = idTable(rowIndex, column->_columnIndex);
       const auto& optionalValue =
-          toStringAndXsdType(currentId, column->_resultType, *res);
+          toStringAndXsdType(currentId, column->_resultType, *queryResult);
       if (!optionalValue.has_value()) {
         continue;
       }
@@ -234,7 +236,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
       if (!xsdType) {
         // no xsdType, this means that `stringValue` is a plain string literal
         // or entity
-        b = strToBinding(stringValue);
+        b = stringToBinding(stringValue);
       } else {
         b["value"] = stringValue;
         b["type"] = "literal";
@@ -244,9 +246,8 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
     }
     bindings.emplace_back(std::move(binding));
   }
-  results["bindings"] = bindings;
-  encoded["results"] = results;
-  return encoded;
+  result["results"]["binding"] = std::move(bindings);
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -314,9 +315,8 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
       }
       if (ad_utility::startsWith(entity.value(), VALUE_PREFIX)) {
         return ad_utility::convertIndexWordToLiteralAndType(entity.value());
-      } else {
-        return std::pair{std::move(entity.value()), nullptr};
       }
+      return std::pair{std::move(entity.value()), nullptr};
     }
     case ResultTable::ResultType::VERBATIM:
       return std::pair{std::to_string(id), XSD_INT_TYPE};
@@ -338,29 +338,28 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
       return std::pair{optionalString.value(), nullptr};
     }
     default:
-      AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
-               "Cannot deduce output type.");
+      AD_CHECK(false);
   }
 }
 
 // __________________________________________________________________________________________________________
-nlohmann::json QueryExecutionTree::writeJsonTable(
+nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
     const IdTable& data, size_t from, size_t limit,
-    const ColumnIndicesAndTypes& validIndices) const {
+    const ColumnIndicesAndTypes& columns) const {
   shared_ptr<const ResultTable> res = getResult();
   nlohmann::json json = nlohmann::json::parse("[]");
 
   const auto upperBound = std::min(data.size(), limit + from);
 
-  for (size_t i = from; i < upperBound; ++i) {
+  for (size_t rowIndex = from; rowIndex < upperBound; ++rowIndex) {
     json.emplace_back();
     auto& row = json.back();
-    for (const auto& opt : validIndices) {
+    for (const auto& opt : columns) {
       if (!opt) {
         row.emplace_back(nullptr);
         continue;
       }
-      const auto& currentId = data(i, opt->_columnIndex);
+      const auto& currentId = data(rowIndex, opt->_columnIndex);
       const auto& optionalStringAndXsdType =
           toStringAndXsdType(currentId, opt->_resultType, *res);
       if (!optionalStringAndXsdType.has_value()) {
@@ -368,10 +367,10 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
         continue;
       }
       const auto& [stringValue, xsdType] = optionalStringAndXsdType.value();
-      if (!xsdType) {
-        row.emplace_back(stringValue);
-      } else {
+      if (xsdType) {
         row.emplace_back('"' + stringValue + "\"^^<" + xsdType + '>');
+      } else {
+        row.emplace_back(stringValue);
       }
     }
   }

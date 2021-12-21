@@ -203,7 +203,7 @@ size_t HasPredicateScan::getCostEstimate() {
 
 void HasPredicateScan::computeResult(ResultTable* result) {
   LOG(DEBUG) << "HasPredicateScan result computation..." << std::endl;
-  result->_data.setCols(getResultWidth());
+  result->_idTable.setCols(getResultWidth());
   result->_sortedBy = resultSortedOn();
 
   const std::vector<PatternID>& hasPattern = getIndex().getHasPattern();
@@ -247,11 +247,11 @@ void HasPredicateScan::computeResult(ResultTable* result) {
                                   subresult->_resultTypes.begin(),
                                   subresult->_resultTypes.end());
       result->_resultTypes.push_back(ResultTable::ResultType::KB);
-      int inWidth = subresult->_data.cols();
-      int outWidth = result->_data.cols();
+      int inWidth = subresult->_idTable.cols();
+      int outWidth = result->_idTable.cols();
       CALL_FIXED_SIZE_2(inWidth, outWidth, HasPredicateScan::computeSubqueryS,
-                        &result->_data, subresult->_data, _subtreeColIndex,
-                        hasPattern, hasPredicate, patterns);
+                        &result->_idTable, subresult->_idTable,
+                        _subtreeColIndex, hasPattern, hasPredicate, patterns);
       runtimeInfo.setDescriptor("HasPredicateScan with a subquery on " +
                                 _subject);
       runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
@@ -266,7 +266,7 @@ void HasPredicateScan::computeFreeS(
     const std::vector<PatternID>& hasPattern,
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns) {
-  IdTableStatic<1> result = resultTable->_data.moveToStatic<1>();
+  IdTableStatic<1> result = resultTable->_idTable.moveToStatic<1>();
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
   Id id = 0;
   while (id < hasPattern.size() || id < hasPredicate.size()) {
@@ -293,7 +293,7 @@ void HasPredicateScan::computeFreeS(
     }
     id++;
   }
-  resultTable->_data = result.moveToDynamic();
+  resultTable->_idTable = result.moveToDynamic();
 }
 
 void HasPredicateScan::computeFreeO(
@@ -301,7 +301,7 @@ void HasPredicateScan::computeFreeO(
     const std::vector<PatternID>& hasPattern,
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns) {
-  IdTableStatic<1> result = resultTable->_data.moveToStatic<1>();
+  IdTableStatic<1> result = resultTable->_idTable.moveToStatic<1>();
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
 
   if (subjectId < hasPattern.size() && hasPattern[subjectId] != NO_PATTERN) {
@@ -321,7 +321,7 @@ void HasPredicateScan::computeFreeO(
       result.push_back({predicateData[i]});
     }
   }
-  resultTable->_data = result.moveToDynamic();
+  resultTable->_idTable = result.moveToDynamic();
 }
 
 void HasPredicateScan::computeFullScan(
@@ -330,7 +330,7 @@ void HasPredicateScan::computeFullScan(
     const CompactStringVector<size_t, Id>& patterns, size_t resultSize) {
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
-  IdTableStatic<2> result = resultTable->_data.moveToStatic<2>();
+  IdTableStatic<2> result = resultTable->_idTable.moveToStatic<2>();
   result.reserve(resultSize);
 
   size_t id = 0;
@@ -354,7 +354,7 @@ void HasPredicateScan::computeFullScan(
     }
     id++;
   }
-  resultTable->_data = result.moveToDynamic();
+  resultTable->_idTable = result.moveToDynamic();
 }
 
 template <int IN_WIDTH, int OUT_WIDTH>

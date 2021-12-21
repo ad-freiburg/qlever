@@ -134,7 +134,7 @@ size_t CountAvailablePredicates::getCostEstimate() {
 // _____________________________________________________________________________
 void CountAvailablePredicates::computeResult(ResultTable* result) {
   LOG(DEBUG) << "CountAvailablePredicates result computation..." << std::endl;
-  result->_data.setCols(2);
+  result->_idTable.setCols(2);
   result->_sortedBy = resultSortedOn();
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
@@ -157,22 +157,22 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
       input.push_back({entityId});
       int width = input.cols();
       CALL_FIXED_SIZE_1(width, CountAvailablePredicates::computePatternTrick,
-                        input, &result->_data, hasPattern, hasPredicate,
+                        input, &result->_idTable, hasPattern, hasPredicate,
                         patterns, 0, &runtimeInfo);
     }
   } else if (_subtree == nullptr) {
     // Compute the predicates for all entities
     CountAvailablePredicates::computePatternTrickAllEntities(
-        &result->_data, hasPattern, hasPredicate, patterns);
+        &result->_idTable, hasPattern, hasPredicate, patterns);
   } else {
     std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
     runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
 
-    int width = subresult->_data.cols();
+    int width = subresult->_idTable.cols();
     CALL_FIXED_SIZE_1(width, CountAvailablePredicates::computePatternTrick,
-                      subresult->_data, &result->_data, hasPattern,
+                      subresult->_idTable, &result->_idTable, hasPattern,
                       hasPredicate, patterns, _subjectColumnIndex,
                       &runtimeInfo);
   }

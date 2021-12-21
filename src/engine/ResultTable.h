@@ -34,7 +34,7 @@ class ResultTable {
    */
   vector<size_t> _sortedBy;
 
-  IdTable _data;
+  IdTable _idTable;
 
   vector<ResultType> _resultTypes;
 
@@ -74,7 +74,7 @@ class ResultTable {
   }
 
   size_t size() const;
-  size_t width() const { return _data.cols(); }
+  size_t width() const { return _idTable.cols(); }
 
   void clear();
 
