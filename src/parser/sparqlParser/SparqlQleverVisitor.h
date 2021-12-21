@@ -83,6 +83,13 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   PrefixMap _prefixMap{{":", "<>"}};
 
+  template <typename T>
+  void appendVector(std::vector<T>& destination, std::vector<T>& source) {
+    destination.insert(destination.end(),
+                   std::make_move_iterator(source.begin()),
+                   std::make_move_iterator(source.end()));
+  }
+
  public:
   // ___________________________________________________________________________
   antlrcpp::Any visitQuery(SparqlAutomaticParser::QueryContext* ctx) override {
@@ -376,23 +383,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     }
     auto result = ctx->constructTriples()->accept(this).as<Triples>();
     auto new_triples = ctx->triplesSameSubject()->accept(this).as<Triples>();
-    result.insert(result.end(), std::make_move_iterator(new_triples.begin()),
-                  std::make_move_iterator(new_triples.end()));
-    return result;
-  }
-
-  antlrcpp::Any visitConstructTriplesIterative(
-      SparqlAutomaticParser::ConstructTriplesContext* ctx) {
-    // TODO<Robin> consider this iterative replacement to avoid move operations
-    Triples result;
-    SparqlAutomaticParser::ConstructTriplesContext* currentContext = ctx;
-    while (currentContext->constructTriples()) {
-      auto new_triples =
-          currentContext->triplesSameSubject()->accept(this).as<Triples>();
-      result.insert(result.end(), std::make_move_iterator(new_triples.begin()),
-                    std::make_move_iterator(new_triples.end()));
-      currentContext = currentContext->constructTriples();
-    }
+    appendVector(result, new_triples);
     return result;
   }
 
@@ -407,24 +398,18 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       for (auto& tuple : propertyList.first) {
         triples.push_back({subject, std::move(tuple[0]), std::move(tuple[1])});
       }
-      triples.insert(triples.end(),
-                     std::make_move_iterator(propertyList.second.begin()),
-                     std::make_move_iterator(propertyList.second.end()));
+      appendVector(triples, propertyList.second);
     } else if (ctx->triplesNode()) {
       // TODO<Robin> extract common functionality to helper function
       auto tripleNodes = ctx->triplesNode()->accept(this).as<Node>();
-      triples.insert(triples.end(),
-                     std::make_move_iterator(tripleNodes.second.begin()),
-                     std::make_move_iterator(tripleNodes.second.end()));
+      appendVector(triples, tripleNodes.second);
       AD_CHECK(ctx->propertyList());
       auto propertyList = ctx->propertyList()->accept(this).as<PropertyList>();
       for (auto& tuple : propertyList.first) {
         triples.push_back(
             {tripleNodes.first, std::move(tuple[0]), std::move(tuple[1])});
       }
-      triples.insert(triples.end(),
-                     std::make_move_iterator(propertyList.second.begin()),
-                     std::make_move_iterator(propertyList.second.end()));
+      appendVector(triples, propertyList.second);
     } else {
       // Invalid grammar
       AD_CHECK(false);
@@ -451,10 +436,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
         triplesWithoutSubject.push_back(
             {verbs.at(i)->accept(this).as<VarOrTerm>(), std::move(object)});
       }
-      additionalTriples.insert(
-          additionalTriples.end(),
-          std::make_move_iterator(objectList.second.begin()),
-          std::make_move_iterator(objectList.second.end()));
+      appendVector(additionalTriples, objectList.second);
     }
     return std::make_pair(std::move(triplesWithoutSubject),
                           std::move(additionalTriples));
@@ -479,10 +461,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     auto objectContexts = ctx->objectR();
     for (auto& objectContext : objectContexts) {
       auto blankNode = objectContext->accept(this).as<Node>();
-      additionalTriples.insert(
-          additionalTriples.end(),
-          std::make_move_iterator(blankNode.second.begin()),
-          std::make_move_iterator(blankNode.second.end()));
+      appendVector(additionalTriples, blankNode.second);
       objects.push_back(std::move(blankNode.first));
     }
     return std::make_pair(std::move(objects), std::move(additionalTriples));
@@ -596,9 +575,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     for (auto& tuple : propertyList.first) {
       triples.push_back({var, std::move(tuple[0]), std::move(tuple[1])});
     }
-    triples.insert(triples.end(),
-                   std::make_move_iterator(propertyList.second.begin()),
-                   std::make_move_iterator(propertyList.second.end()));
+    appendVector(triples, propertyList.second);
     return std::make_pair(std::move(var), std::move(triples));
   }
 
@@ -635,9 +612,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
            std::move(nextElement)});
       nextElement = std::move(currentVar);
 
-      triples.insert(triples.end(),
-                     std::make_move_iterator(graphNode.second.begin()),
-                     std::make_move_iterator(graphNode.second.end()));
+      appendVector(triples, graphNode.second);
     }
     return std::make_pair(std::move(nextElement), std::move(triples));
   }
