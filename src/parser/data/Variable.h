@@ -7,8 +7,8 @@
 #include <string>
 #include <utility>
 
-#include "../engine/ResultTable.h"
-#include "../index/Index.h"
+#include "../../engine/ResultTable.h"
+#include "../../index/Index.h"
 
 class Variable {
   const std::string _name;

@@ -14,7 +14,7 @@
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
-#include "./VarOrTerm.h"
+#include "data/VarOrTerm.h"
 #include "ParseException.h"
 
 using std::string;

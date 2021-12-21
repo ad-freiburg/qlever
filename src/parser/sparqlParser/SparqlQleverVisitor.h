@@ -14,10 +14,10 @@
 #include "../../engine/sparqlExpressions/SampleExpression.h"
 #include "../../util/HashMap.h"
 #include "../../util/StringUtils.h"
-#include "../BlankNode.h"
+#include "../data/BlankNode.h"
 #include "../ParsedQuery.h"
 #include "../RdfEscaping.h"
-#include "../VarOrTerm.h"
+#include "../data/VarOrTerm.h"
 #include "antlr4-runtime.h"
 #include "generated/SparqlAutomaticVisitor.h"
 

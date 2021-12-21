@@ -7,8 +7,8 @@
 #include <functional>
 #include <string>
 
-#include "../engine/ResultTable.h"
-#include "../index/Index.h"
+#include "../../engine/ResultTable.h"
+#include "../../index/Index.h"
 #include "./GraphTerm.h"
 #include "./Variable.h"
 
