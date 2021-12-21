@@ -12,13 +12,15 @@
 #include "./GraphTerm.h"
 #include "./Variable.h"
 
-class VarOrTerm : public std::variant<Variable, GraphTerm> {
+using VarOrTermBase = std::variant<Variable, GraphTerm>;
+
+class VarOrTerm : public VarOrTermBase {
  public:
-  using std::variant<Variable, GraphTerm>::variant;
+  using VarOrTermBase::VarOrTermBase;
 
   [[nodiscard]] std::string toString(const Context& context) const {
     return std::visit(
         [&](const auto& object) { return object.toString(context); },
-        static_cast<const std::variant<Variable, GraphTerm>&>(*this));
+        static_cast<const VarOrTermBase&>(*this));
   }
 };

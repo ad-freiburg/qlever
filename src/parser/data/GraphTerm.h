@@ -10,14 +10,17 @@
 #include "./BlankNode.h"
 #include "./Context.h"
 #include "./Literal.h"
+#include "./Iri.h"
 
-class GraphTerm : public std::variant<Literal, BlankNode> {
+using GraphTermBase = std::variant<Literal, BlankNode, Iri>;
+
+class GraphTerm : public GraphTermBase {
  public:
-  using std::variant<Literal, BlankNode>::variant;
+  using GraphTermBase::GraphTermBase;
 
   [[nodiscard]] std::string toString(const Context& context) const {
     return std::visit(
         [&](const auto& object) { return object.toString(context); },
-        static_cast<const std::variant<Literal, BlankNode>&>(*this));
+        static_cast<const GraphTermBase&>(*this));
   }
 };
