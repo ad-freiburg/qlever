@@ -470,7 +470,7 @@ QueryExecutionTree::writeRdfGraphTurtle(
       co_yield triple[1];
       co_yield ' ';
       co_yield triple[2];
+      co_yield " .\n";
     }
-    co_yield " .\n";
   }
 }
