@@ -530,14 +530,14 @@ class IdTableDynamicIterator {
   // prefix increment
   IdTableDynamicIterator& operator++() {
     ++_row;
-    _rowView._idTable = _data + (_row * _cols);
+    _rowView._data = _data + (_row * _cols);
     return *this;
   }
 
   // multi-step increment
   IdTableDynamicIterator& operator+=(difference_type i) {
     _row += i;
-    _rowView._idTable = _data + (_row * _cols);
+    _rowView._data = _data + (_row * _cols);
     return *this;
   }
 
@@ -545,21 +545,21 @@ class IdTableDynamicIterator {
   IdTableDynamicIterator operator++(int) {
     IdTableDynamicIterator tmp(*this);
     ++_row;
-    _rowView._idTable = _data + (_row * _cols);
+    _rowView._data = _data + (_row * _cols);
     return tmp;
   }
 
   // prefix decrement
   IdTableDynamicIterator& operator--() {
     --_row;
-    _rowView._idTable = _data + (_row * _cols);
+    _rowView._data = _data + (_row * _cols);
     return *this;
   }
 
   // multi-step decrement
   IdTableDynamicIterator& operator-=(difference_type i) {
     _row -= i;
-    _rowView._idTable = _data + (_row * _cols);
+    _rowView._data = _data + (_row * _cols);
     return *this;
   }
 
@@ -567,7 +567,7 @@ class IdTableDynamicIterator {
   IdTableDynamicIterator operator--(int) {
     IdTableDynamicIterator tmp(*this);
     --_row;
-    _rowView._idTable = _data + (_row * _cols);
+    _rowView._data = _data + (_row * _cols);
     return tmp;
   }
 
@@ -1087,7 +1087,7 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA, Allocator> {
       new_capacity = _capacity + newRows;
     }
 
-    this->_data._idTable.resize(new_capacity * this->_cols);
+    this->_data._data.resize(new_capacity * this->_cols);
     _capacity = new_capacity;
   }
 

@@ -207,7 +207,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
         b["value"] = entitystr;
       } else {
         b["value"] = entitystr.substr(1, quote_pos - 1);
-        // Look for a language tag or type
+        // Look for a language tag or type.
         if (quote_pos < entitystr.size() - 1 &&
             entitystr[quote_pos + 1] == '@') {
           b["xml:lang"] = entitystr.substr(quote_pos + 2);
