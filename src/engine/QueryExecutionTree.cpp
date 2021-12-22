@@ -460,8 +460,7 @@ QueryExecutionTree::writeRdfGraphTurtle(
     vector<std::array<std::string, 3>> tripleSub;
     for (const auto& triple : constructTriples) {
       tripleSub.push_back(std::array<std::string, 3>{
-          triple[0].toString(context),
-          triple[1].toString(context),
+          triple[0].toString(context), triple[1].toString(context),
           triple[2].toString(context)});
     }
     for (const auto& triple : tripleSub) {

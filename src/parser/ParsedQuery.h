@@ -14,8 +14,8 @@
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
-#include "data/VarOrTerm.h"
 #include "ParseException.h"
+#include "data/VarOrTerm.h"
 
 using std::string;
 using std::vector;

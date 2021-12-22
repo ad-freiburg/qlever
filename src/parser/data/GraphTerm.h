@@ -9,8 +9,8 @@
 
 #include "./BlankNode.h"
 #include "./Context.h"
-#include "./Literal.h"
 #include "./Iri.h"
+#include "./Literal.h"
 
 using GraphTermBase = std::variant<Literal, BlankNode, Iri>;
 
