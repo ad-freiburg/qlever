@@ -97,17 +97,17 @@ void OrderBy::computeResult(ResultTable* result) {
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "OrderBy result computation..." << endl;
-  result->_data.setCols(subRes->_data.cols());
+  result->_idTable.setCols(subRes->_idTable.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
   result->_localVocab = subRes->_localVocab;
-  result->_data.insert(result->_data.end(), subRes->_data.begin(),
-                       subRes->_data.end());
+  result->_idTable.insert(result->_idTable.end(), subRes->_idTable.begin(),
+                          subRes->_idTable.end());
 
-  int width = result->_data.cols();
+  int width = result->_idTable.cols();
   // TODO(florian): Check if the lambda is a performance problem
-  CALL_FIXED_SIZE_1(width, getEngine().sort, &result->_data,
+  CALL_FIXED_SIZE_1(width, getEngine().sort, &result->_idTable,
                     [this](const auto& a, const auto& b) {
                       for (auto& entry : _sortIndices) {
                         if (a[entry.first] < b[entry.first]) {

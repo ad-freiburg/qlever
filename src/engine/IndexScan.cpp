@@ -267,40 +267,40 @@ void IndexScan::computeResult(ResultTable* result) {
 
 // _____________________________________________________________________________
 void IndexScan::computePSOboundS(ResultTable* result) const {
-  result->_data.setCols(1);
+  result->_idTable.setCols(1);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, _subject, &result->_data, idx._PSO, _timeoutTimer);
+  idx.scan(_predicate, _subject, &result->_idTable, idx._PSO, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computePSOfreeS(ResultTable* result) const {
-  result->_data.setCols(2);
+  result->_idTable.setCols(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, &result->_data, idx._PSO, _timeoutTimer);
+  idx.scan(_predicate, &result->_idTable, idx._PSO, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computePOSboundO(ResultTable* result) const {
-  result->_data.setCols(1);
+  result->_idTable.setCols(1);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, _object, &result->_data, idx._POS, _timeoutTimer);
+  idx.scan(_predicate, _object, &result->_idTable, idx._POS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computePOSfreeO(ResultTable* result) const {
-  result->_data.setCols(2);
+  result->_idTable.setCols(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, &result->_data, idx._POS, _timeoutTimer);
+  idx.scan(_predicate, &result->_idTable, idx._POS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -333,51 +333,51 @@ size_t IndexScan::computeSizeEstimate() {
 
 // _____________________________________________________________________________
 void IndexScan::computeSPOfreeP(ResultTable* result) const {
-  result->_data.setCols(2);
+  result->_idTable.setCols(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, &result->_data, idx._SPO, _timeoutTimer);
+  idx.scan(_subject, &result->_idTable, idx._SPO, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computeSOPboundO(ResultTable* result) const {
-  result->_data.setCols(1);
+  result->_idTable.setCols(1);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, _object, &result->_data, idx._SOP, _timeoutTimer);
+  idx.scan(_subject, _object, &result->_idTable, idx._SOP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computeSOPfreeO(ResultTable* result) const {
-  result->_data.setCols(2);
+  result->_idTable.setCols(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, &result->_data, idx._SOP, _timeoutTimer);
+  idx.scan(_subject, &result->_idTable, idx._SOP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computeOPSfreeP(ResultTable* result) const {
-  result->_data.setCols(2);
+  result->_idTable.setCols(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_object, &result->_data, idx._OPS, _timeoutTimer);
+  idx.scan(_object, &result->_idTable, idx._OPS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
 void IndexScan::computeOSPfreeS(ResultTable* result) const {
-  result->_data.setCols(2);
+  result->_idTable.setCols(2);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_object, &result->_data, idx._OSP, _timeoutTimer);
+  idx.scan(_object, &result->_idTable, idx._OSP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________

@@ -88,10 +88,10 @@ void Bind::computeResult(ResultTable* result) {
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
 
-  result->_data.setCols(getResultWidth());
+  result->_idTable.setCols(getResultWidth());
   result->_resultTypes = subRes->_resultTypes;
   result->_localVocab = subRes->_localVocab;
-  int inwidth = subRes->_data.cols();
+  int inwidth = subRes->_idTable.cols();
   int outwidth = getResultWidth();
 
   result->_resultTypes.emplace_back();
@@ -120,14 +120,14 @@ void Bind::computeExpressionBind(
   }
 
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), columnMap, inputResultTable._data,
+      *getExecutionContext(), columnMap, inputResultTable._idTable,
       getExecutionContext()->getAllocator(), *inputResultTable._localVocab);
 
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);
 
-  const auto input = inputResultTable._data.asStaticView<IN_WIDTH>();
-  auto output = outputResultTable->_data.moveToStatic<OUT_WIDTH>();
+  const auto input = inputResultTable._idTable.asStaticView<IN_WIDTH>();
+  auto output = outputResultTable->_idTable.moveToStatic<OUT_WIDTH>();
 
   // first initialize the first columns (they remain identical)
   const auto inSize = input.size();
@@ -181,5 +181,5 @@ void Bind::computeExpressionBind(
 
   std::visit(visitor, std::move(expressionResult));
 
-  outputResultTable->_data = output.moveToDynamic();
+  outputResultTable->_idTable = output.moveToDynamic();
 }

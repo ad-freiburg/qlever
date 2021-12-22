@@ -136,10 +136,10 @@ boost::asio::awaitable<void> Server::process(
 }
 
 // _____________________________________________________________________________
-json Server::composeResponseJson(const ParsedQuery& query,
-                                 const QueryExecutionTree& qet,
-                                 ad_utility::Timer& requestTimer,
-                                 size_t maxSend) {
+json Server::composeResponseQleverJson(const ParsedQuery& query,
+                                       const QueryExecutionTree& qet,
+                                       ad_utility::Timer& requestTimer,
+                                       size_t maxSend) {
   shared_ptr<const ResultTable> rt = qet.getResult();
   requestTimer.stop();
   off_t compResultUsecs = requestTimer.usecs();
@@ -160,8 +160,9 @@ json Server::composeResponseJson(const ParsedQuery& query,
     size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
     size_t offset = query._offset.value_or(0);
     requestTimer.cont();
-    j["res"] = qet.writeResultAsJson(query._selectClause._selectedVariables,
-                                     std::min(limit, maxSend), offset);
+    j["res"] =
+        qet.writeResultAsQLeverJson(query._selectClause._selectedVariables,
+                                    std::min(limit, maxSend), offset);
     requestTimer.stop();
   }
 
@@ -175,6 +176,23 @@ json Server::composeResponseJson(const ParsedQuery& query,
 }
 
 // _____________________________________________________________________________
+json Server::composeResponseSparqlJson(const ParsedQuery& query,
+                                       const QueryExecutionTree& qet,
+                                       ad_utility::Timer& requestTimer,
+                                       size_t maxSend) {
+  shared_ptr<const ResultTable> rt = qet.getResult();
+  requestTimer.stop();
+  nlohmann::json j;
+  size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
+  size_t offset = query._offset.value_or(0);
+  requestTimer.cont();
+  j = qet.writeResultAsSparqlJson(query._selectClause._selectedVariables,
+                                  std::min(limit, maxSend), offset);
+  requestTimer.stop();
+  return j;
+}
+
+// _____________________________________________________________________________
 ad_utility::stream_generator::stream_generator Server::composeResponseSepValues(
     const ParsedQuery& query, const QueryExecutionTree& qet, char sep) {
   size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
@@ -184,9 +202,8 @@ ad_utility::stream_generator::stream_generator Server::composeResponseSepValues(
 }
 
 // _____________________________________________________________________________
-json Server::composeResponseJson(const string& query,
-                                 const std::exception& exception,
-                                 ad_utility::Timer& requestTimer) {
+json Server::composeExceptionJson(const string& query, const std::exception& e,
+                                  ad_utility::Timer& requestTimer) {
   requestTimer.stop();
 
   json j;
@@ -195,7 +212,7 @@ json Server::composeResponseJson(const string& query,
   j["resultsize"] = 0;
   j["time"]["total"] = requestTimer.msecs();
   j["time"]["computeResult"] = requestTimer.msecs();
-  j["exception"] = exception.what();
+  j["exception"] = e.what();
   return j;
 }
 
@@ -290,16 +307,16 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(TRACE) << qet.asString() << std::endl;
 
     using ad_utility::MediaType;
-    // Determine the result media type
+    // Determine the result media type.
 
     // TODO<joka921> qleverJson should not be the default as soon
     // as the UI explicitly requests it.
     // TODO<joka921> Add sparqlJson as soon as it is supported.
     const auto supportedMediaTypes = []() {
-      static const std::vector<MediaType> ts{ad_utility::MediaType::qleverJson,
-                                             ad_utility::MediaType::tsv,
-                                             ad_utility::MediaType::csv};
-      return ts;
+      static const std::vector<MediaType> mediaTypes{
+          ad_utility::MediaType::qleverJson, ad_utility::MediaType::sparqlJson,
+          ad_utility::MediaType::tsv, ad_utility::MediaType::csv};
+      return mediaTypes;
     };
 
     std::optional<MediaType> mediaType = std::nullopt;
@@ -312,6 +329,8 @@ boost::asio::awaitable<void> Server::processQuery(
       mediaType = ad_utility::MediaType::tsv;
     } else if (containsParam("action", "qlever_json_export")) {
       mediaType = ad_utility::MediaType::qleverJson;
+    } else if (containsParam("action", "sparql_json_export")) {
+      mediaType = ad_utility::MediaType::sparqlJson;
     }
 
     std::string_view acceptHeader = request.base()[http::field::accept];
@@ -348,20 +367,13 @@ boost::asio::awaitable<void> Server::processQuery(
       case ad_utility::MediaType::qleverJson: {
         // Normal case: JSON response
         auto responseString =
-            composeResponseJson(pq, qet, requestTimer, maxSend);
+            composeResponseQleverJson(pq, qet, requestTimer, maxSend);
         co_await sendJson(std::move(responseString));
       } break;
       case ad_utility::MediaType::sparqlJson: {
-        AD_CHECK(false);
-
-        // TODO<joka921> implement this, it is in a different PR which needs
-        // only a bit of polishing.
-        // TODO<joka921> This will be the code when the other PR is merged.
-        /*
         auto responseString =
             composeResponseSparqlJson(pq, qet, requestTimer, maxSend);
         co_await sendJson(std::move(responseString));
-         */
       }
       default:
         // This should never happen, because we have carefully restricted the
@@ -372,9 +384,9 @@ boost::asio::awaitable<void> Server::processQuery(
     // was computed.
     LOG(INFO) << '\n' << qet.getRootOperation()->getRuntimeInfo().toString();
   } catch (const ad_semsearch::Exception& e) {
-    errorResponse = composeResponseJson(query, e, requestTimer);
+    errorResponse = composeExceptionJson(query, e, requestTimer);
   } catch (const std::exception& e) {
-    errorResponse = composeResponseJson(query, e, requestTimer);
+    errorResponse = composeExceptionJson(query, e, requestTimer);
   }
   if (errorResponse.has_value()) {
     co_return co_await sendJson(errorResponse.value(),

@@ -123,24 +123,24 @@ void Join::computeResult(ResultTable* result) {
 
   AD_CHECK(result);
 
-  result->_data.setCols(leftWidth + rightWidth - 1);
-  result->_resultTypes.reserve(result->_data.cols());
+  result->_idTable.setCols(leftWidth + rightWidth - 1);
+  result->_resultTypes.reserve(result->_idTable.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               leftRes->_resultTypes.begin(),
                               leftRes->_resultTypes.end());
-  for (size_t i = 0; i < rightRes->_data.cols(); i++) {
+  for (size_t i = 0; i < rightRes->_idTable.cols(); i++) {
     if (i != _rightJoinCol) {
       result->_resultTypes.push_back(rightRes->_resultTypes[i]);
     }
   }
   result->_sortedBy = {_leftJoinCol};
 
-  int lwidth = leftRes->_data.cols();
-  int rwidth = rightRes->_data.cols();
-  int reswidth = result->_data.cols();
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, join, leftRes->_data,
-                    _leftJoinCol, rightRes->_data, _rightJoinCol,
-                    &result->_data);
+  int lwidth = leftRes->_idTable.cols();
+  int rwidth = rightRes->_idTable.cols();
+  int reswidth = result->_idTable.cols();
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, join, leftRes->_idTable,
+                    _leftJoinCol, rightRes->_idTable, _rightJoinCol,
+                    &result->_idTable);
 
   LOG(DEBUG) << "Join result computation done." << endl;
 }
@@ -255,30 +255,32 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
   LOG(DEBUG) << "Join by making multiple scans..." << endl;
   if (isFullScanDummy(_left)) {
     AD_CHECK(!isFullScanDummy(_right))
-    result->_data.setCols(_right->getResultWidth() + 2);
+    result->_idTable.setCols(_right->getResultWidth() + 2);
     result->_sortedBy = {2 + _rightJoinCol};
     shared_ptr<const ResultTable> nonDummyRes = _right->getResult();
-    result->_resultTypes.reserve(result->_data.cols());
+    result->_resultTypes.reserve(result->_idTable.cols());
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.insert(result->_resultTypes.end(),
                                 nonDummyRes->_resultTypes.begin(),
                                 nonDummyRes->_resultTypes.end());
-    doComputeJoinWithFullScanDummyLeft(nonDummyRes->_data, &result->_data);
+    doComputeJoinWithFullScanDummyLeft(nonDummyRes->_idTable,
+                                       &result->_idTable);
   } else {
     AD_CHECK(!isFullScanDummy(_left))
-    result->_data.setCols(_left->getResultWidth() + 2);
+    result->_idTable.setCols(_left->getResultWidth() + 2);
     result->_sortedBy = {_leftJoinCol};
 
     shared_ptr<const ResultTable> nonDummyRes = _left->getResult();
-    result->_resultTypes.reserve(result->_data.cols());
+    result->_resultTypes.reserve(result->_idTable.cols());
     result->_resultTypes.insert(result->_resultTypes.end(),
                                 nonDummyRes->_resultTypes.begin(),
                                 nonDummyRes->_resultTypes.end());
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
 
-    doComputeJoinWithFullScanDummyRight(nonDummyRes->_data, &result->_data);
+    doComputeJoinWithFullScanDummyRight(nonDummyRes->_idTable,
+                                        &result->_idTable);
   }
 
   LOG(DEBUG) << "Join (with dummy) done. Size: " << result->size() << endl;

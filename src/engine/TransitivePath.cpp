@@ -683,40 +683,40 @@ void TransitivePath::computeResult(ResultTable* result) {
   } else {
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
   }
-  result->_data.setCols(getResultWidth());
+  result->_idTable.setCols(getResultWidth());
 
-  int subWidth = subRes->_data.cols();
+  int subWidth = subRes->_idTable.cols();
   if (_leftSideTree != nullptr) {
     shared_ptr<const ResultTable> leftRes = _leftSideTree->getResult();
-    for (size_t c = 0; c < leftRes->_data.cols(); c++) {
+    for (size_t c = 0; c < leftRes->_idTable.cols(); c++) {
       if (c != _leftSideCol) {
         result->_resultTypes.push_back(leftRes->getResultType(c));
       }
     }
     runtimeInfo.addChild(_leftSideTree->getRootOperation()->getRuntimeInfo());
-    int leftWidth = leftRes->_data.cols();
+    int leftWidth = leftRes->_idTable.cols();
     CALL_FIXED_SIZE_3(subWidth, leftWidth, _resultWidth,
-                      computeTransitivePathLeftBound, &result->_data,
-                      subRes->_data, leftRes->_data, _leftSideCol, _rightIsVar,
-                      _leftSubCol, _rightSubCol, _rightValue, _minDist,
-                      _maxDist, _resultWidth);
+                      computeTransitivePathLeftBound, &result->_idTable,
+                      subRes->_idTable, leftRes->_idTable, _leftSideCol,
+                      _rightIsVar, _leftSubCol, _rightSubCol, _rightValue,
+                      _minDist, _maxDist, _resultWidth);
   } else if (_rightSideTree != nullptr) {
     shared_ptr<const ResultTable> rightRes = _rightSideTree->getResult();
-    for (size_t c = 0; c < rightRes->_data.cols(); c++) {
+    for (size_t c = 0; c < rightRes->_idTable.cols(); c++) {
       if (c != _rightSideCol) {
         result->_resultTypes.push_back(rightRes->getResultType(c));
       }
     }
     runtimeInfo.addChild(_rightSideTree->getRootOperation()->getRuntimeInfo());
-    int rightWidth = rightRes->_data.cols();
+    int rightWidth = rightRes->_idTable.cols();
     CALL_FIXED_SIZE_3(subWidth, rightWidth, _resultWidth,
-                      computeTransitivePathRightBound, &result->_data,
-                      subRes->_data, rightRes->_data, _rightSideCol, _leftIsVar,
-                      _leftSubCol, _rightSubCol, _leftValue, _minDist, _maxDist,
-                      _resultWidth);
+                      computeTransitivePathRightBound, &result->_idTable,
+                      subRes->_idTable, rightRes->_idTable, _rightSideCol,
+                      _leftIsVar, _leftSubCol, _rightSubCol, _leftValue,
+                      _minDist, _maxDist, _resultWidth);
   } else {
-    CALL_FIXED_SIZE_1(subWidth, computeTransitivePath, &result->_data,
-                      subRes->_data, _leftIsVar, _rightIsVar, _leftSubCol,
+    CALL_FIXED_SIZE_1(subWidth, computeTransitivePath, &result->_idTable,
+                      subRes->_idTable, _leftIsVar, _rightIsVar, _leftSubCol,
                       _rightSubCol, _leftValue, _rightValue, _minDist,
                       _maxDist);
   }

@@ -122,36 +122,138 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
     return {};
   }
 
-  const IdTable& data = res->_data;
+  const IdTable& data = res->_idTable;
   size_t upperBound = std::min<size_t>(offset + limit, data.size());
   return writeTable(data, sep, offset, upperBound, std::move(validIndices));
 }
 
+// ___________________________________________________________________________
+QueryExecutionTree::ColumnIndicesAndTypes
+QueryExecutionTree::selectedVariablesToColumnIndices(
+    const std::vector<string>& selectVariables,
+    const ResultTable& resultTable) const {
+  ColumnIndicesAndTypes exportColumns;
+  for (auto var : selectVariables) {
+    if (ad_utility::startsWith(var, "TEXT(")) {
+      var = var.substr(5, var.rfind(')') - 5);
+    }
+    if (getVariableColumns().contains(var)) {
+      auto columnIndex = getVariableColumns().at(var);
+      exportColumns.push_back(VariableAndColumnIndex{
+          var, columnIndex, resultTable.getResultType(columnIndex)});
+    } else {
+      exportColumns.emplace_back(std::nullopt);
+    }
+  }
+  return exportColumns;
+}
+
 // _____________________________________________________________________________
-nlohmann::json QueryExecutionTree::writeResultAsJson(
+nlohmann::json QueryExecutionTree::writeResultAsQLeverJson(
     const vector<string>& selectVars, size_t limit, size_t offset) const {
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices;
-  for (auto var : selectVars) {
-    if (ad_utility::startsWith(var, "TEXT(")) {
-      var = var.substr(5, var.rfind(')') - 5);
-    }
-    auto vc = getVariableColumns().find(var);
-    if (vc != getVariableColumns().end()) {
-      validIndices.push_back(pair<size_t, ResultTable::ResultType>(
-          vc->second, res->getResultType(vc->second)));
-    } else {
-      validIndices.push_back(std::nullopt);
-    }
-  }
+  ColumnIndicesAndTypes validIndices =
+      selectedVariablesToColumnIndices(selectVars, *res);
   if (validIndices.size() == 0) {
     return nlohmann::json(std::vector<std::string>());
   }
 
-  const IdTable& data = res->_data;
-  return writeJsonTable(data, offset, limit, validIndices);
+  return writeQLeverJsonTable(res->_idTable, offset, limit, validIndices);
+}
+
+// _____________________________________________________________________________
+nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
+    const vector<string>& selectVars, size_t limit, size_t offset) const {
+  using nlohmann::json;
+
+  // This might trigger the actual query processing.
+  shared_ptr<const ResultTable> queryResult = getResult();
+  LOG(DEBUG) << "Finished computing the query result in the ID space. "
+                "Resolving strings in result...\n";
+  ColumnIndicesAndTypes columns =
+      selectedVariablesToColumnIndices(selectVars, *queryResult);
+
+  std::erase(columns, std::nullopt);
+
+  if (columns.empty()) {
+    return {std::vector<std::string>()};
+  }
+
+  const IdTable& idTable = queryResult->_idTable;
+
+  json result;
+  result["head"]["vars"] = selectVars;
+
+  json bindings = json::array();
+
+  const auto upperBound = std::min(idTable.size(), limit + offset);
+
+  // Take a string from the vocabulary, deduce the type and
+  // return a json dict that describes the binding
+  auto stringToBinding = [](const std::string& entitystr) -> nlohmann::json {
+    nlohmann::ordered_json b;
+    // The string is an iri or literal
+    if (entitystr[0] == '<') {
+      // Strip the <> surrounding the iri
+      b["value"] = entitystr.substr(1, entitystr.size() - 2);
+      b["type"] = "iri";
+    } else {
+      size_t quote_pos = entitystr.rfind('"');
+      if (quote_pos == std::string::npos) {
+        // TEXT entries are currently not surrounded by quotes
+        b["value"] = entitystr;
+        b["type"] = "literal";
+      } else {
+        b["value"] = entitystr.substr(1, quote_pos - 1);
+        b["type"] = "literal";
+        // Look for a language tag or type.
+        if (quote_pos < entitystr.size() - 1 &&
+            entitystr[quote_pos + 1] == '@') {
+          b["xml:lang"] = entitystr.substr(quote_pos + 2);
+        } else if (quote_pos < entitystr.size() - 2 &&
+                   entitystr[quote_pos + 1] == '^') {
+          AD_CHECK(entitystr[quote_pos + 2] == '^');
+          std::string_view datatype{entitystr};
+          // remove the < angledBrackets> around the datatype IRI
+          AD_CHECK(datatype.size() >= quote_pos + 5);
+          datatype.remove_prefix(quote_pos + 4);
+          datatype.remove_suffix(1);
+          b["datatype"] = datatype;
+          ;
+        }
+      }
+    }
+    return b;
+  };
+
+  for (size_t rowIndex = offset; rowIndex < upperBound; ++rowIndex) {
+    nlohmann::ordered_json binding;
+    for (const auto& column : columns) {
+      const auto& currentId = idTable(rowIndex, column->_columnIndex);
+      const auto& optionalValue =
+          toStringAndXsdType(currentId, column->_resultType, *queryResult);
+      if (!optionalValue.has_value()) {
+        continue;
+      }
+      const auto& [stringValue, xsdType] = optionalValue.value();
+      nlohmann::ordered_json b;
+      if (!xsdType) {
+        // no xsdType, this means that `stringValue` is a plain string literal
+        // or entity
+        b = stringToBinding(stringValue);
+      } else {
+        b["value"] = stringValue;
+        b["type"] = "literal";
+        b["datatype"] = xsdType;
+      }
+      binding[column->_variable] = std::move(b);
+    }
+    bindings.emplace_back(std::move(binding));
+  }
+  result["results"]["bindings"] = std::move(bindings);
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -207,68 +309,74 @@ void QueryExecutionTree::readFromCache() {
   }
 }
 
+// ___________________________________________________________________________
+std::optional<std::pair<std::string, const char*>>
+QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
+                                       const ResultTable& resultTable) const {
+  switch (type) {
+    case ResultTable::ResultType::KB: {
+      std::optional<string> entity = _qec->getIndex().idToOptionalString(id);
+      if (!entity.has_value()) {
+        return std::nullopt;
+      }
+      if (ad_utility::startsWith(entity.value(), VALUE_PREFIX)) {
+        return ad_utility::convertIndexWordToLiteralAndType(entity.value());
+      }
+      return std::pair{std::move(entity.value()), nullptr};
+    }
+    case ResultTable::ResultType::VERBATIM:
+      return std::pair{std::to_string(id), XSD_INT_TYPE};
+    case ResultTable::ResultType::TEXT:
+      return std::pair{_qec->getIndex().getTextExcerpt(id), nullptr};
+    case ResultTable::ResultType::FLOAT: {
+      float f;
+      // TODO<LLVM 14> std::bit_cast
+      std::memcpy(&f, &id, sizeof(float));
+      std::stringstream s;
+      s << f;
+      return std::pair{s.str(), XSD_DECIMAL_TYPE};
+    }
+    case ResultTable::ResultType::LOCAL_VOCAB: {
+      auto optionalString = resultTable.idToOptionalString(id);
+      if (!optionalString.has_value()) {
+        return std::nullopt;
+      }
+      return std::pair{optionalString.value(), nullptr};
+    }
+    default:
+      AD_CHECK(false);
+  }
+}
+
 // __________________________________________________________________________________________________________
-nlohmann::json QueryExecutionTree::writeJsonTable(
+nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
     const IdTable& data, size_t from, size_t limit,
-    const vector<std::optional<pair<size_t, ResultTable::ResultType>>>&
-        validIndices) const {
+    const ColumnIndicesAndTypes& columns) const {
   shared_ptr<const ResultTable> res = getResult();
   nlohmann::json json = nlohmann::json::parse("[]");
-  auto optToJson = [](const auto& opt) -> nlohmann::json {
-    if (opt) {
-      return opt.value();
-    }
-    return nullptr;
-  };
 
   const auto upperBound = std::min(data.size(), limit + from);
 
-  for (size_t i = from; i < upperBound; ++i) {
+  for (size_t rowIndex = from; rowIndex < upperBound; ++rowIndex) {
     json.emplace_back();
     auto& row = json.back();
-    for (const auto& opt : validIndices) {
+    for (const auto& opt : columns) {
       if (!opt) {
         row.emplace_back(nullptr);
         continue;
       }
-      const auto& idx = *opt;
-      const auto& currentId = data(i, idx.first);
-      switch (idx.second) {
-        case ResultTable::ResultType::KB: {
-          std::optional<string> entity =
-              _qec->getIndex().idToOptionalString(currentId);
-          if (entity) {
-            string entitystr = entity.value();
-            if (ad_utility::startsWith(entitystr, VALUE_PREFIX)) {
-              entity = ad_utility::convertIndexWordToValueLiteral(entitystr);
-            }
-          }
-          row.emplace_back(optToJson(entity));
-          break;
-        }
-        case ResultTable::ResultType::VERBATIM:
-          row.push_back("\"" + std::to_string(currentId) + "\"" +
-                        XSD_INT_SUFFIX);
-          break;
-        case ResultTable::ResultType::TEXT:
-          row.emplace_back(_qec->getIndex().getTextExcerpt(currentId));
-          break;
-        case ResultTable::ResultType::FLOAT: {
-          float f;
-          std::memcpy(&f, &currentId, sizeof(float));
-          std::stringstream s;
-          s << f;
-          row.push_back("\"" + s.str() + "\"" + XSD_DECIMAL_SUFFIX);
-          break;
-        }
-        case ResultTable::ResultType::LOCAL_VOCAB: {
-          std::optional<string> entity = res->idToOptionalString(currentId);
-          row.emplace_back(optToJson(entity));
-          break;
-        }
-        default:
-          AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
-                   "Cannot deduce output type.");
+      const auto& currentId = data(rowIndex, opt->_columnIndex);
+      const auto& optionalStringAndXsdType =
+          toStringAndXsdType(currentId, opt->_resultType, *res);
+      if (!optionalStringAndXsdType.has_value()) {
+        row.emplace_back(nullptr);
+        continue;
+      }
+      const auto& [stringValue, xsdType] = optionalStringAndXsdType.value();
+      if (xsdType) {
+        row.emplace_back('"' + stringValue + "\"^^<" + xsdType + '>');
+      } else {
+        row.emplace_back(stringValue);
       }
     }
   }

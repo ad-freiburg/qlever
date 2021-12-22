@@ -46,13 +46,13 @@ void Distinct::computeResult(ResultTable* result) {
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "Distinct result computation..." << endl;
-  result->_data.setCols(subRes->_data.cols());
+  result->_idTable.setCols(subRes->_idTable.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
   result->_localVocab = subRes->_localVocab;
-  int width = subRes->_data.cols();
-  CALL_FIXED_SIZE_1(width, getEngine().distinct, subRes->_data, _keepIndices,
-                    &result->_data);
+  int width = subRes->_idTable.cols();
+  CALL_FIXED_SIZE_1(width, getEngine().distinct, subRes->_idTable, _keepIndices,
+                    &result->_idTable);
   LOG(DEBUG) << "Distinct result computation done." << endl;
 }

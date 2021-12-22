@@ -50,6 +50,22 @@ enum class NumericType : char {
   DECIMAL = 'T'
 };
 
+inline const char* toTypeIri(NumericType type) {
+  switch (type) {
+    case NumericType::INTEGER:
+      return XSD_INT_TYPE;
+    case NumericType::FLOAT:
+      return XSD_FLOAT_TYPE;
+    case NumericType::DECIMAL:
+      return XSD_DECIMAL_TYPE;
+    case NumericType::DOUBLE:
+      return XSD_DOUBLE_TYPE;
+    default:
+      // This should never happen
+      AD_CHECK(false);
+  }
+}
+
 //! Converts strings like "12.34" to :v:float:PP0*2E0*1234F and -0.123 to
 //! :v:float:M-0*1E9*876F with the last F used to indicate that the value was
 //! originally a float. ('I' if it was an int).
@@ -157,45 +173,42 @@ string convertValueLiteralToIndexWord(const string& orig) {
   return orig;
 }
 
-// _____________________________________________________________________________
-string convertIndexWordToValueLiteral(const string& indexWord) {
+// ____________________________________________________________________________
+inline std::pair<string, const char*> convertIndexWordToLiteralAndType(
+    const string& indexWord) {
   if (startsWith(indexWord, VALUE_DATE_PREFIX)) {
-    std::ostringstream os;
     string date = removeLeadingZeros(convertIndexWordToDate(indexWord));
-    if (date.size() == 0 || startsWith(date, VALUE_DATE_TIME_SEPARATOR)) {
+    if (date.empty() || startsWith(date, VALUE_DATE_TIME_SEPARATOR)) {
       date = string("0") + date;
     }
-    os << "\"" << date << "\"" << XSD_DATETIME_SUFFIX;
-    return os.str();
+    return std::make_pair(std::move(date), XSD_DATETIME_TYPE);
   }
   if (startsWith(indexWord, VALUE_FLOAT_PREFIX)) {
-    if (NumericType(indexWord.back()) == NumericType::FLOAT) {
-      std::ostringstream os;
-      os << "\"" << convertIndexWordToFloatString(indexWord) << "\""
-         << XSD_FLOAT_SUFFIX;
-      return os.str();
-    }
-    if (NumericType(indexWord.back()) == NumericType::DOUBLE) {
-      std::ostringstream os;
-      os << "\"" << convertIndexWordToFloatString(indexWord) << "\""
-         << XSD_DOUBLE_SUFFIX;
-      return os.str();
-    }
-    if (NumericType(indexWord.back()) == NumericType::DECIMAL) {
-      std::ostringstream os;
-      os << "\"" << convertIndexWordToFloatString(indexWord) << "\""
-         << XSD_DECIMAL_SUFFIX;
-      return os.str();
-    }
-    if (NumericType(indexWord.back()) == NumericType::INTEGER) {
-      std::ostringstream os;
-      string asFloat = convertIndexWordToFloatString(indexWord);
-      os << "\"" << asFloat.substr(0, asFloat.find('.')) << "\""
-         << XSD_INT_SUFFIX;
-      return os.str();
+    auto type = NumericType{indexWord.back()};
+    switch (type) {
+      case NumericType::FLOAT:
+      case NumericType::DOUBLE:
+      case NumericType::DECIMAL:
+        return std::make_pair(convertIndexWordToFloatString(indexWord),
+                              toTypeIri(type));
+      case NumericType::INTEGER:
+        string asFloat = convertIndexWordToFloatString(indexWord);
+        return std::make_pair(asFloat.substr(0, asFloat.find('.')),
+                              toTypeIri(type));
     }
   }
-  return indexWord;
+  return std::make_pair(indexWord, nullptr);
+}
+
+// _____________________________________________________________________________
+string convertIndexWordToValueLiteral(const string& indexWord) {
+  auto [literal, typeIri] = convertIndexWordToLiteralAndType(indexWord);
+  if (!typeIri) {
+    return std::move(literal);
+  }
+  std::ostringstream os;
+  os << "\"" << literal << "\"^^<" << typeIri << '>';
+  return os.str();
 }
 
 // _____________________________________________________________________________
