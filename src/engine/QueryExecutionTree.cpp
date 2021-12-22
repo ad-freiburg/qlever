@@ -217,8 +217,8 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
           AD_CHECK(entitystr[quote_pos + 2] == '^');
           std::string_view datatype{entitystr};
           // remove the < angledBrackets> around the datatype IRI
-          AD_CHECK(datatype.size() >= quote_pos + 4);
-          datatype.remove_prefix(quote_pos + 3);
+          AD_CHECK(datatype.size() >= quote_pos + 5);
+          datatype.remove_prefix(quote_pos + 4);
           datatype.remove_suffix(1);
           b["datatype"] = datatype;
           ;
