@@ -136,10 +136,10 @@ boost::asio::awaitable<void> Server::process(
 }
 
 // _____________________________________________________________________________
-json Server::composeResponseJson(const ParsedQuery& query,
-                                 const QueryExecutionTree& qet,
-                                 ad_utility::Timer& requestTimer,
-                                 size_t maxSend) {
+json Server::composeResponseQLeverJson(const ParsedQuery& query,
+                                       const QueryExecutionTree& qet,
+                                       ad_utility::Timer& requestTimer,
+                                       size_t sendMax) {
   shared_ptr<const ResultTable> rt = qet.getResult();
   requestTimer.stop();
   off_t compResultUsecs = requestTimer.usecs();
@@ -162,7 +162,7 @@ json Server::composeResponseJson(const ParsedQuery& query,
     requestTimer.cont();
     j["res"] =
         qet.writeResultAsQLeverJson(query._selectClause._selectedVariables,
-                                    std::min(limit, maxSend), offset);
+                                    std::min(limit, sendMax), offset);
     requestTimer.stop();
   }
 
@@ -202,9 +202,8 @@ ad_utility::stream_generator::stream_generator Server::composeResponseSepValues(
 }
 
 // _____________________________________________________________________________
-json Server::composeResponseJson(const string& query,
-                                 const std::exception& exception,
-                                 ad_utility::Timer& requestTimer) {
+json Server::composeExceptionJson(const string& query, const std::exception& e,
+                                  ad_utility::Timer& requestTimer) {
   requestTimer.stop();
 
   json j;
@@ -213,7 +212,7 @@ json Server::composeResponseJson(const string& query,
   j["resultsize"] = 0;
   j["time"]["total"] = requestTimer.msecs();
   j["time"]["computeResult"] = requestTimer.msecs();
-  j["exception"] = exception.what();
+  j["exception"] = e.what();
   return j;
 }
 
@@ -368,7 +367,7 @@ boost::asio::awaitable<void> Server::processQuery(
       case ad_utility::MediaType::qleverJson: {
         // Normal case: JSON response
         auto responseString =
-            composeResponseJson(pq, qet, requestTimer, maxSend);
+            composeResponseQLeverJson(pq, qet, requestTimer, maxSend);
         co_await sendJson(std::move(responseString));
       } break;
       case ad_utility::MediaType::sparqlJson: {
@@ -385,9 +384,9 @@ boost::asio::awaitable<void> Server::processQuery(
     // was computed.
     LOG(INFO) << '\n' << qet.getRootOperation()->getRuntimeInfo().toString();
   } catch (const ad_semsearch::Exception& e) {
-    errorResponse = composeResponseJson(query, e, requestTimer);
+    errorResponse = composeExceptionJson(query, e, requestTimer);
   } catch (const std::exception& e) {
-    errorResponse = composeResponseJson(query, e, requestTimer);
+    errorResponse = composeExceptionJson(query, e, requestTimer);
   }
   if (errorResponse.has_value()) {
     co_return co_await sendJson(errorResponse.value(),

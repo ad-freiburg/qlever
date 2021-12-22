@@ -94,10 +94,9 @@ class Server {
       const ParamValueMap& params, ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
 
-  static json composeResponseJson(const ParsedQuery& query,
-                                  const QueryExecutionTree& qet,
-                                  ad_utility::Timer& requestTimer,
-                                  size_t sendMax = MAX_NOF_ROWS_IN_RESULT);
+  static json composeResponseQLeverJson(
+      const ParsedQuery& query, const QueryExecutionTree& qet,
+      ad_utility::Timer& requestTimer, size_t sendMax = MAX_NOF_ROWS_IN_RESULT);
   static json composeResponseSparqlJson(
       const ParsedQuery& query, const QueryExecutionTree& qet,
       ad_utility::Timer& requestTimer, size_t sendMax = MAX_NOF_ROWS_IN_RESULT);
@@ -106,8 +105,8 @@ class Server {
   composeResponseSepValues(const ParsedQuery& query,
                            const QueryExecutionTree& qet, char sep);
 
-  static json composeResponseJson(const string& query, const std::exception& e,
-                                  ad_utility::Timer& requestTimer);
+  static json composeExceptionJson(const string& query, const std::exception& e,
+                                   ad_utility::Timer& requestTimer);
 
   json composeStatsJson() const;
 

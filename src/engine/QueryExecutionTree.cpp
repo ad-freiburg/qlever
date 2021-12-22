@@ -246,7 +246,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
     }
     bindings.emplace_back(std::move(binding));
   }
-  result["results"]["binding"] = std::move(bindings);
+  result["results"]["bindings"] = std::move(bindings);
   return result;
 }
 
