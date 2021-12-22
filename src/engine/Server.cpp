@@ -346,16 +346,6 @@ boost::asio::awaitable<void> Server::processQuery(
       return mediaTypes;
     };
 
-    if (pq._constructClause.has_value()) {
-      // Turtle export
-      auto responseGenerator = composeTurtleResponse(pq, qet);
-      auto response = createOkResponse(std::move(responseGenerator), request,
-                                       // TODO<Robin> change media type
-                                       ad_utility::MediaType::csv);
-      co_await send(std::move(response));
-      co_return;
-    }
-
     std::optional<MediaType> mediaType = std::nullopt;
 
     // The explicit `action=..._export` parameter have precedence over the
@@ -368,6 +358,8 @@ boost::asio::awaitable<void> Server::processQuery(
       mediaType = ad_utility::MediaType::qleverJson;
     } else if (containsParam("action", "sparql_json_export")) {
       mediaType = ad_utility::MediaType::sparqlJson;
+    } else if (containsParam("action", "turtle_export")) {
+      mediaType = ad_utility::MediaType::turtle;
     }
 
     std::string_view acceptHeader = request.base()[http::field::accept];
@@ -390,23 +382,47 @@ boost::asio::awaitable<void> Server::processQuery(
     AD_CHECK(mediaType.has_value());
     switch (mediaType.value()) {
       case ad_utility::MediaType::csv: {
+        if (pq._constructClause.has_value()) {
+          throw std::runtime_error{
+              "CONSTRUCT queries only support turtle syntax right now"};
+        }
         auto responseGenerator = composeResponseSepValues(pq, qet, ',');
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::csv);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::tsv: {
+        if (pq._constructClause.has_value()) {
+          throw std::runtime_error{
+              "CONSTRUCT queries only support turtle syntax right now"};
+        }
         auto responseGenerator = composeResponseSepValues(pq, qet, '\t');
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::tsv);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::qleverJson: {
+        if (pq._constructClause.has_value()) {
+          throw std::runtime_error{
+              "CONSTRUCT queries only support turtle syntax right now"};
+        }
         // Normal case: JSON response
         auto responseString =
             composeResponseQleverJson(pq, qet, requestTimer, maxSend);
         co_await sendJson(std::move(responseString));
       } break;
+      case ad_utility::MediaType::turtle:
+        if (pq._constructClause.has_value()) {
+          auto responseGenerator = composeTurtleResponse(pq, qet);
+          auto response =
+              createOkResponse(std::move(responseGenerator), request,
+                               ad_utility::MediaType::turtle);
+          co_await send(std::move(response));
+        } else {
+          throw std::runtime_error{
+              "Turtle Syntax is only supported for CONSTRUCT queries"};
+        }
+        break;
       case ad_utility::MediaType::sparqlJson: {
         auto responseString =
             composeResponseSparqlJson(pq, qet, requestTimer, maxSend);
