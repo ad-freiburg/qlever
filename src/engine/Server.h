@@ -94,12 +94,12 @@ class Server {
       const ParamValueMap& params, ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
 
-  static json composeResponseQLeverJson(
+  static json composeResponseQleverJson(
       const ParsedQuery& query, const QueryExecutionTree& qet,
-      ad_utility::Timer& requestTimer, size_t sendMax = MAX_NOF_ROWS_IN_RESULT);
+      ad_utility::Timer& requestTimer, size_t maxSend = MAX_NOF_ROWS_IN_RESULT);
   static json composeResponseSparqlJson(
       const ParsedQuery& query, const QueryExecutionTree& qet,
-      ad_utility::Timer& requestTimer, size_t sendMax = MAX_NOF_ROWS_IN_RESULT);
+      ad_utility::Timer& requestTimer, size_t maxSend = MAX_NOF_ROWS_IN_RESULT);
 
   static ad_utility::stream_generator::stream_generator
   composeResponseSepValues(const ParsedQuery& query,

@@ -136,10 +136,10 @@ boost::asio::awaitable<void> Server::process(
 }
 
 // _____________________________________________________________________________
-json Server::composeResponseQLeverJson(const ParsedQuery& query,
+json Server::composeResponseQleverJson(const ParsedQuery& query,
                                        const QueryExecutionTree& qet,
                                        ad_utility::Timer& requestTimer,
-                                       size_t sendMax) {
+                                       size_t maxSend) {
   shared_ptr<const ResultTable> rt = qet.getResult();
   requestTimer.stop();
   off_t compResultUsecs = requestTimer.usecs();
@@ -162,7 +162,7 @@ json Server::composeResponseQLeverJson(const ParsedQuery& query,
     requestTimer.cont();
     j["res"] =
         qet.writeResultAsQLeverJson(query._selectClause._selectedVariables,
-                                    std::min(limit, sendMax), offset);
+                                    std::min(limit, maxSend), offset);
     requestTimer.stop();
   }
 
@@ -179,7 +179,7 @@ json Server::composeResponseQLeverJson(const ParsedQuery& query,
 json Server::composeResponseSparqlJson(const ParsedQuery& query,
                                        const QueryExecutionTree& qet,
                                        ad_utility::Timer& requestTimer,
-                                       size_t sendMax) {
+                                       size_t maxSend) {
   shared_ptr<const ResultTable> rt = qet.getResult();
   requestTimer.stop();
   nlohmann::json j;
@@ -187,7 +187,7 @@ json Server::composeResponseSparqlJson(const ParsedQuery& query,
   size_t offset = query._offset.value_or(0);
   requestTimer.cont();
   j = qet.writeResultAsSparqlJson(query._selectClause._selectedVariables,
-                                  std::min(limit, sendMax), offset);
+                                  std::min(limit, maxSend), offset);
   requestTimer.stop();
   return j;
 }
@@ -367,7 +367,7 @@ boost::asio::awaitable<void> Server::processQuery(
       case ad_utility::MediaType::qleverJson: {
         // Normal case: JSON response
         auto responseString =
-            composeResponseQLeverJson(pq, qet, requestTimer, maxSend);
+            composeResponseQleverJson(pq, qet, requestTimer, maxSend);
         co_await sendJson(std::move(responseString));
       } break;
       case ad_utility::MediaType::sparqlJson: {
