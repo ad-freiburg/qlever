@@ -110,9 +110,6 @@ int main(int argc, char** argv) {
   bool enablePatternTrick = true;
 
   size_t memLimit = DEFAULT_MEM_FOR_QUERIES_IN_GB;
-  size_t cacheMaxSizeGB = DEFAULT_CACHE_MAX_SIZE_GB;
-  size_t cacheMaxSizeGBSingleEntry = DEFAULT_CACHE_MAX_SIZE_GB_SINGLE_ENTRY;
-  size_t cacheMaxNumEntries = DEFAULT_CACHE_MAX_NUM_ENTRIES;
 
   optind = 1;
   // Process command line arguments.
@@ -151,13 +148,13 @@ int main(int argc, char** argv) {
                      "this flag is read directly from the index\n";
         break;
       case 'c':
-        cacheMaxSizeGB = atoi(optarg);
+        RuntimeParameters().set<"cache-max-size-gb">(atoi(optarg));
         break;
       case 'e':
-        cacheMaxSizeGBSingleEntry = atoi(optarg);
+        RuntimeParameters().set<"cache-max-size-gb-single-entry">(atoi(optarg));
         break;
       case 'k':
-        cacheMaxNumEntries = atoi(optarg);
+        RuntimeParameters().set<"cache-max-num-entries">(atoi(optarg));
         break;
       default:
         cout << endl
@@ -188,8 +185,7 @@ int main(int argc, char** argv) {
   cout << "Set locale LC_CTYPE to: " << locale << endl;
 
   try {
-    Server server(port, numThreads, memLimit, cacheMaxSizeGB,
-                  cacheMaxSizeGBSingleEntry, cacheMaxNumEntries);
+    Server server(port, numThreads, memLimit);
     server.initialize(index, text, usePatterns, enablePatternTrick);
     server.run();
   } catch (const std::exception& e) {

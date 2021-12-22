@@ -90,29 +90,47 @@ boost::asio::awaitable<void> Server::process(
       LOG(INFO) << "Supplying index stats..." << std::endl;
       auto response = createJsonResponse(composeStatsJson(), request);
       co_return co_await sendWithCors(std::move(response));
-    } else if (cmd == "cachestats") {
+    } else if (cmd == "cache-stats") {
       LOG(INFO) << "Supplying cache stats..." << std::endl;
       auto response = createJsonResponse(composeCacheStatsJson(), request);
       co_return co_await sendWithCors(std::move(response));
-    } else if (cmd == "clearcache") {
+    } else if (cmd == "clear-cache") {
       LOG(INFO) << "Clearing the cache, unpinned elements only" << std::endl;
       _cache.clearUnpinnedOnly();
-      responseFromCommand = createOkResponse(
-          "Successfully cleared the cache (unpinned elements only)", request,
-          ad_utility::MediaType::textPlain);
-    } else if (cmd == "clearcachecomplete") {
+      responseFromCommand =
+          createJsonResponse(composeCacheStatsJson(), request);
+    } else if (cmd == "clear-cache-complete") {
       LOG(INFO) << "Clearing the cache completely, including unpinned elements"
                 << std::endl;
       _cache.clearAll();
-      responseFromCommand = createOkResponse(
-          "Successfully cleared the cache (including the pinned elements)",
-          request, ad_utility::MediaType::textPlain);
+      responseFromCommand =
+          createJsonResponse(composeCacheStatsJson(), request);
+    } else if (cmd == "get-settings") {
+      LOG(INFO) << "Supplying settings..." << std::endl;
+      json settingsJson = RuntimeParameters().toMap();
+      co_await sendWithCors(createJsonResponse(settingsJson, request));
+      co_return;
     } else {
       co_await sendWithCors(createBadRequestResponse(
-          R"(unknown value for query paramter "cmd" : ")" + cmd + '\"',
+          R"(Unknown value for query parameter "cmd": ")" + cmd + '\"',
           request));
       co_return;
     }
+  }
+
+  // TODO<joka921> Restrict this access by a token.
+  // TODO<joka921> Warn about unknown parameters
+  bool anyParamWasChanged = false;
+  for (const auto& [key, value] : params) {
+    if (RuntimeParameters().getKeys().contains(key)) {
+      RuntimeParameters().set(key, value);
+      anyParamWasChanged = true;
+    }
+  }
+
+  if (anyParamWasChanged) {
+    json settingsJson = RuntimeParameters().toMap();
+    responseFromCommand = createJsonResponse(settingsJson, request);
   }
 
   if (params.contains("query")) {

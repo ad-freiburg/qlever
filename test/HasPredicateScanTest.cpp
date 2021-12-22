@@ -230,7 +230,7 @@ TEST(HasPredicateScan, subtreeS) {
 
   Index index;
   Engine engine;
-  QueryResultCache cache{DEFAULT_CACHE_MAX_NUM_ENTRIES};
+  QueryResultCache cache{};
   QueryExecutionContext ctx(index, engine, &cache, allocator(),
                             SortPerformanceEstimator{});
 

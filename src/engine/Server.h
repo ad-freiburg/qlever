@@ -26,16 +26,13 @@ using std::vector;
 
 using ad_utility::Socket;
 
-//! The HTTP Sever used.
+//! The HTTP Server used.
 class Server {
+ private:
  public:
-  explicit Server(const int port, const int numThreads, size_t maxMemGB,
-                  size_t cacheMaxSizeGB, size_t cacheMaxSizeGBSingleEntry,
-                  size_t cacheMaxNumEntries)
+  explicit Server(const int port, const int numThreads, size_t maxMemGB)
       : _numThreads(numThreads),
         _port(port),
-        _cache(cacheMaxNumEntries, cacheMaxSizeGB * (1ull << 30u) / sizeof(Id),
-               cacheMaxSizeGBSingleEntry * (1ull << 30u) / sizeof(Id)),
         _allocator{ad_utility::makeAllocationMemoryLeftThreadsafeObject(
                        maxMemGB * (1ull << 30u)),
                    [this](size_t numBytesToAllocate) {
@@ -46,7 +43,27 @@ class Server {
         _sortPerformanceEstimator(),
         _index(),
         _engine(),
-        _initialized(false) {}
+        _initialized(false) {
+    // TODO<joka921> Write a strong type for KB, MB, GB etc and use it
+    // in the cache and the memory limit
+    // Convert a number of gigabytes to the number of Ids that find in that
+    // amount of memory.
+    auto toNumIds = [](size_t gigabytes) -> size_t {
+      return gigabytes * (1ull << 30u) / sizeof(Id);
+    };
+    // This also directly triggers the update functions and propagates the
+    // values of the parameters to the cache.
+    RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
+        [this](size_t newValue) { _cache.setMaxNumEntries(newValue); });
+    RuntimeParameters().setOnUpdateAction<"cache-max-size-gb">(
+        [this, toNumIds](size_t newValue) {
+          _cache.setMaxSize(toNumIds(newValue));
+        });
+    RuntimeParameters().setOnUpdateAction<"cache-max-size-gb-single-entry">(
+        [this, toNumIds](size_t newValue) {
+          _cache.setMaxSizeSingleEntry(toNumIds(newValue));
+        });
+  }
 
   virtual ~Server() = default;
 

@@ -90,6 +90,41 @@ TEST(Synchronized, Vector) {
   }
 }
 
+TEST(Synchronized, MutexReference) {
+  std::shared_mutex m;
+  int i = 0;
+  ad_utility::Synchronized<int&, std::shared_mutex&> s{
+      ad_utility::ConstructWithMutex{}, m, i};
+
+  *(s.wlock()) = 4;
+
+  ASSERT_EQ(i, 4);
+  ASSERT_EQ(*(s.rlock()), 4);
+}
+
+TEST(Synchronized, ToBaseReference) {
+  struct A {
+    virtual void f() = 0;
+    [[nodiscard]] virtual int g() const = 0;
+    virtual ~A() = default;
+  };
+
+  struct B : A {
+    int x = 0;
+    void f() override { x += 3; }
+    [[nodiscard]] int g() const override { return x; }
+  };
+
+  ad_utility::Synchronized<B> bSync;
+  auto aSync = bSync.toBaseReference<A>();
+  aSync.wlock()->f();
+  bSync.wlock()->f();
+  ASSERT_EQ(aSync.rlock()->g(), 6);
+  ASSERT_EQ(bSync.rlock()->g(), 6);
+
+  // TODO<joka921>: Test, that the locking was indeed successful.
+}
+
 template <typename T, typename = void>
 struct AllowsNonConstExclusiveAccess : public std::false_type {};
 

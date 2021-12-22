@@ -228,10 +228,24 @@ class FlexibleCache {
     return valPtr;
   }
 
-  //! Set or change the capacity.
+  //! Set or change the maximum number of entries
   void setMaxNumEntries(const size_t maxNumEntries) {
     _maxNumEntries = maxNumEntries;
     makeRoomIfFits(0);
+  }
+
+  //! Set or change the maximum total size of the cache
+  void setMaxSize(const size_t maxSize) {
+    _maxSize = maxSize;
+    makeRoomIfFits(0);
+  }
+
+  //! Set or change the maximum size of a single Entry
+  void setMaxSizeSingleEntry(const size_t maxSizeSingleEntry) {
+    _maxSizeSingleEntry = maxSizeSingleEntry;
+    // We currently do not delete entries that are now too big
+    // after the update.
+    // TODO<joka921>:: implement this functionality
   }
 
   //! Checks if there is an entry with the given key.
@@ -456,7 +470,7 @@ class HeapBasedLRUCache
                      detail::timeUpdater, detail::timeAsScore, ValueSizeGetter>;
 
  public:
-  explicit HeapBasedLRUCache(size_t capacityNumEls,
+  explicit HeapBasedLRUCache(size_t capacityNumEls = size_t_max,
                              size_t capacitySize = size_t_max,
                              size_t maxSizeSingleEl = size_t_max)
       : Base(capacityNumEls, capacitySize, maxSizeSingleEl, std::less<>(),
