@@ -193,7 +193,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   // Take a string from the vocabulary, deduce the type and
   // return a json dict that describes the binding
   auto stringToBinding = [](const std::string& entitystr) -> nlohmann::json {
-    json b;
+    nlohmann::ordered_json b;
     // The string is an iri or literal
     if (entitystr[0] == '<') {
       // Strip the <> surrounding the iri
@@ -220,7 +220,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
           AD_CHECK(datatype.size() >= quote_pos + 4);
           datatype.remove_prefix(quote_pos + 3);
           datatype.remove_suffix(1);
-          b["datatype"] = entitystr.substr(quote_pos + 4);
+          b["datatype"] = datatype;
           ;
         }
       }
@@ -238,7 +238,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
         continue;
       }
       const auto& [stringValue, xsdType] = optionalValue.value();
-      json b;
+      nlohmann::ordered_json b;
       if (!xsdType) {
         // no xsdType, this means that `stringValue` is a plain string literal
         // or entity
