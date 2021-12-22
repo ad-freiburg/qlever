@@ -21,6 +21,16 @@ void forEachTuple(Tuple&& tuple, Function&& function) {
   };
   std::apply(forEachParamPack, std::forward<Tuple>(tuple));
 }
+
+// TODO<joka921> comment.
+template <typename Tuple, typename Function>
+auto tupleToArray(Tuple&& tuple, Function&& function) {
+  auto paramPackToArray = [&]<typename... Ts>(Ts && ... parameters) {
+    return std::array{function(std::forward<Ts>(parameters))...};
+  };
+  return std::apply(paramPackToArray, std::forward<Tuple>(tuple));
+}
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_TUPLEFOREACH_H

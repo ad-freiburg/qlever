@@ -22,15 +22,16 @@ using ParameterName = ad_utility::ConstexprSmallString<100>;
 // `std::string`
 struct ParameterBase {
   /// Set the parameter by converting the string to the actual parameter
-  virtual void set(const std::string& stringInput) = 0;
+  virtual void setFromString(const std::string& stringInput) = 0;
 
   /// Get a representation of the parameter as a `std::string`.
   [[nodiscard]] virtual std::string toString() const = 0;
+
+  virtual ~ParameterBase() = default;
 };
 
 /// Abstraction for a parameter that connects a (compile time) `Name` to a
-/// runtime value. The value is stored as a `std::atomic<Type>`, making a single
-/// `Parameter` threadsafe.
+/// runtime value.
 /// \tparam Type The type of the parameter value
 /// \tparam FromString A function type, that takes a const string&
 ///         (representation of a `Type`) and converts it to `Type`.
@@ -42,23 +43,52 @@ template <typename Type, typename FromString, typename ToString,
           ParameterName Name>
 struct Parameter : public ParameterBase {
   constexpr static ParameterName name = Name;
+
+ private:
   // The value is public, which is ok, because it is atomic and we have no
   // further invariants.
-  std::atomic<Type> value{};
+  Type value{};
 
+  // A function which is called, when the value isChanged.
+  // Note: The call to this function is not atomic, if this parameter
+  // is accessed concurrently, the `_onUpdateFunction` has to be threadsafe.
+  using OnUpdateFunction = std::function<void(Type)>;
+  std::optional<OnUpdateFunction> _onUpdateFunction = std::nullopt;
+
+ public:
   /// Construction is only allowed using an initial parameter value
   Parameter() = delete;
   explicit Parameter(Type initialValue) : value{std::move(initialValue)} {};
 
-  // Atomic values are neither copyable nor movable.
-  // TODO<joka921> Is it possible to get rid of these constructors by using
-  // aggregate initialization for the `Parameters` class?
-  Parameter(const Parameter& rhs) : value{rhs.value.load()} {};
-  Parameter& operator=(const Parameter& rhs) { value = rhs.value.load(); };
+  Parameter(const Parameter& rhs) = delete;
+  Parameter& operator=(const Parameter& rhs) = delete;
+
+  Parameter(Parameter&&) noexcept = default;
+  Parameter& operator=(Parameter&&) noexcept = default;
 
   /// Set the value by using the `FromString` conversion
-  void set(const std::string& stringInput) override {
-    value = FromString{}(stringInput);
+  void setFromString(const std::string& stringInput) override {
+    set(FromString{}(stringInput));
+  }
+
+  /// Set the value
+  void set(Type newValue) {
+    value = std::move(newValue);
+    triggerOnUpdateFunction();
+  }
+
+  const Type& get() const { return value; }
+
+  /// Specify the onUpdateFunction and directly trigger it.
+  void setOnUpdateFunction(OnUpdateFunction onUpdateFunction) {
+    _onUpdateFunction = std::move(onUpdateFunction);
+    triggerOnUpdateFunction();
+  }
+
+  void triggerOnUpdateFunction() {
+    if (_onUpdateFunction.has_value()) {
+      _onUpdateFunction.value()(value);
+    }
   }
 
   [[nodiscard]] std::string toString() const override {
@@ -92,18 +122,20 @@ using String = Parameter<std::string, std::identity, std::identity, Name>;
 
 }  // namespace detail::parameterShortNames
 
-/// A container class that stores several atomic `Parameters`. The reading (via
-/// the `get()` method) and writing (via `set()`) is atomic and therefore
-/// threadsafe. Note: The design only allows atomic setting of a single
-/// parameter to a fixed value. It does not support atomic updates depending on
-/// the current value nor consistent updates of multiple parameters at the same
-/// time. For such requirements, a different implementation would be needed.
-/// \tparam ParameterTypes
+/// A container class that stores several `Parameters`. The reading (via
+/// the `get()` method) and writing (via `set()`) of the individual `Parameters`
+/// is threadsafe (There is a mutex for each of the parameters). Note: The
+/// design only allows atomic setting of a single parameter to a fixed value. It
+/// does not support atomic updates depending on the current value nor
+/// consistent updates of multiple parameters at the same time. Such a
+/// Functionality could however be added to the current implementation. \tparam
+/// ParameterTypes
 template <typename... ParameterTypes>
 class Parameters {
  private:
-  using Tuple = std::tuple<ParameterTypes...>;
+  using Tuple = std::tuple<ad_utility::Synchronized<ParameterTypes>...>;
   Tuple _parameters;
+
   // A compile-time map from `ParameterName` to the index of the corresponding
   // `Parameter` in the `_parameters` tuple.
   static constexpr auto _nameToIndex = []() {
@@ -122,13 +154,14 @@ class Parameters {
 
   // The i-th element in this vector points to the i-th element in th
   // `_parameters` tuple.
-  using RuntimeVector = std::vector<ParameterBase*>;
-  RuntimeVector _runtimePointers = [this]() {
-    RuntimeVector m;
-    m.reserve(std::tuple_size_v<Tuple>);
-    auto insert = [&, this](auto& parameter) { m.push_back(&parameter); };
-    ad_utility::forEachTuple(_parameters, insert);
-    return m;
+  using RuntimePointers =
+      std::array<ad_utility::Synchronized<ParameterBase&, std::shared_mutex&>,
+                 std::tuple_size_v<Tuple>>;
+  RuntimePointers _runtimePointers = [this]() {
+    auto toBase = [](auto& synchronizedParameter) {
+      return synchronizedParameter.template toBaseReference<ParameterBase>();
+    };
+    return ad_utility::tupleToArray(_parameters, toBase);
   }();
 
  public:
@@ -136,23 +169,33 @@ class Parameters {
   explicit(sizeof...(ParameterTypes) == 1) Parameters(ParameterTypes... ts)
       : _parameters{std::move(ts)...} {}
 
-  // Obtain a reference to the parameter value for `Name`. `Name` has to be
-  // specified at compile time. A reference to the `std::atomic` is returned, so
-  // it is safe to also return a non-const reference which then might be
-  // (atomically) changed. Note that we deliberately do not have an overload of
+  // Obtain the current parameter value for `Name`. `Name` has to be
+  // specified at compile time. The parameter is returned  by value, since
+  // we otherwise cannot guarantee threadsafety of this class.
+  //  Note that we deliberately do not have an overload of
   // `get()` where the `Name` can be specified at runtime, because we want to
   // check the existence of a parameter at compile time.
   template <ParameterName Name>
-  auto& get() {
+  auto get() const {
     constexpr auto index = _nameToIndex.at(Name);
-    return std::get<index>(_parameters).value;
+    return std::get<index>(_parameters).rlock()->get();
   }
 
-  // TODO<C++23> remove duplication using the `deducing this` feature.
-  template <ParameterName Name>
-  const auto& get() const {
+  // TODO<joka921> comment and common code refactor
+  template <ParameterName Name, typename Value>
+  void set(Value newValue) {
     constexpr auto index = _nameToIndex.at(Name);
-    return std::get<index>(_parameters).value;
+    return std::get<index>(_parameters).wlock()->set(std::move(newValue));
+  }
+
+  // For the parameter with name `Name` specify the function that is to be
+  // called, when this parameter value changes.
+  template <ParameterName Name, typename UpdateFunction>
+  auto setUpdateOption(UpdateFunction updateFunction) {
+    constexpr auto index = _nameToIndex.at(Name);
+    std::get<index>(_parameters)
+        .wlock()
+        ->setOnUpdateFunction(std::move(updateFunction));
   }
 
   // Set the parameter with the name `parameterName` to the `value`. Note that
@@ -167,7 +210,8 @@ class Parameters {
     try {
       // call the virtual set(std::string) function on the
       // correct ParameterBase* in the `_runtimePointers`
-      _runtimePointers[_nameToIndex.at(parameterName)]->set(value);
+      _runtimePointers[_nameToIndex.at(parameterName)].wlock()->setFromString(
+          value);
     } catch (const std::exception& e) {
       throw std::runtime_error("Could not set parameter " +
                                std::string{parameterName} + " to value " +
@@ -180,24 +224,27 @@ class Parameters {
   // to human users.
   ad_utility::HashMap<std::string, std::string> toMap() {
     ad_utility::HashMap<std::string, std::string> result;
-    std::apply(
-        [&](const auto&... els) {
-          (..., (result[std::string{els.name}] = els.toString()));
-        },
-        _parameters);
+
+    auto insert = [&]<typename T>(const T& synchronizedParameter) {
+      std::string name{T::value_type::name};
+      result[std::move(name)] = synchronizedParameter.rlock()->toString();
+    };
+    ad_utility::forEachTuple(_parameters, insert);
     return result;
   }
 
   // Obtain the set of all parameter names.
   [[nodiscard]] const ad_utility::HashSet<std::string>& getKeys() const {
-    static ad_utility::HashSet<std::string> result = std::apply(
-        [&](const auto&... els) {
-          ad_utility::HashSet<std::string> result;
-          (..., (result.insert(std::string{els.name})));
-          return result;
-        },
-        _parameters);
-    return result;
+    static ad_utility::HashSet<std::string> value = [this]() {
+      ad_utility::HashSet<std::string> result;
+
+      auto insert = [this, &result]<typename T>(const T&) {
+        result.insert(std::string{T::value_type::name});
+      };
+      ad_utility::forEachTuple(_parameters, insert);
+      return result;
+    }();
+    return value;
   }
 };
 }  // namespace ad_utility

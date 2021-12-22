@@ -58,17 +58,18 @@ void Sort::computeResult(ResultTable* result) {
   double remainingSecs =
       static_cast<double>(_timeoutTimer->wlock()->remainingMicroseconds()) /
       1'000'000;
+  auto cancellationFactor =
+      RuntimeParameters().get<"SORT_ESTIMATE_CANCELLATION_FACTOR">();
   if (getExecutionContext()
           ->getSortPerformanceEstimator()
           .estimatedSortTimeInSeconds(subRes->size(), subRes->width()) >
-      remainingSecs *
-          RuntimeParameters().get<"SORT_ESTIMATE_CANCELLATION_FACTOR">()) {
+      remainingSecs * cancellationFactor) {
     // The estimated time for this sort is much larger than the actually
     // remaining time, cancel this operation
     throw ad_utility::TimeoutException(
         "Sort operation was canceled, because time estimate exceeded "
         "remaining time by a factor of " +
-        std::to_string(SORT_ESTIMATE_CANCELLATION_FACTOR));
+        std::to_string(cancellationFactor));
   }
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();

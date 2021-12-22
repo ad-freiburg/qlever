@@ -142,7 +142,7 @@ int main(int argc, char** argv) {
   try {
     Engine engine;
     Index index;
-    QueryResultCache cache{DEFAULT_CACHE_MAX_NUM_ENTRIES};
+    QueryResultCache cache{1000u};
     index.setUsePatterns(usePatterns);
     index.setOnDiskLiterals(onDiskLiterals);
     index.createFromOnDiskIndex(indexName);

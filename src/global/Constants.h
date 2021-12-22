@@ -14,10 +14,6 @@ static const size_t STXXL_DISK_SIZE_INDEX_TEST = 10;
 
 static constexpr size_t DEFAULT_MEM_FOR_QUERIES_IN_GB = 4;
 
-static const size_t DEFAULT_CACHE_MAX_NUM_ENTRIES = 1000;
-static const size_t DEFAULT_CACHE_MAX_SIZE_GB = 30;
-static const size_t DEFAULT_CACHE_MAX_SIZE_GB_SINGLE_ENTRY = 5;
-
 static const size_t MAX_NOF_ROWS_IN_RESULT = 100000;
 static const size_t MIN_WORD_PREFIX_SIZE = 4;
 static const char PREFIX_CHAR = '*';
@@ -117,10 +113,6 @@ static constexpr size_t NUM_OPERATIONS_BETWEEN_TIMEOUT_CHECKS = 32000;
 // operation
 static constexpr size_t NUM_OPERATIONS_HASHSET_LOOKUP = 32;
 
-// If the time estimate for a sort operation is larger by more than this factor
-// than the remaining time, then the sort is canceled with a timeout exception
-static constexpr double SORT_ESTIMATE_CANCELLATION_FACTOR = 3.0;
-
 // When initializing a sort performance estimator, at most this percentage of
 // the number of triples in the index is being sorted at once.
 static constexpr size_t PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE = 5;
@@ -133,7 +125,13 @@ inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::Double;
   using ad_utility::detail::parameterShortNames::SizeT;
   static ad_utility::Parameters params{
-      Double<"SORT_ESTIMATE_CANCELLATION_FACTOR">{3.0}};
+      // If the time estimate for a sort operation is larger by more than this
+      // factor
+      // than the remaining time, then the sort is canceled with a timeout
+      // exception
+      Double<"SORT_ESTIMATE_CANCELLATION_FACTOR">{3.0},
+      SizeT<"CACHE_MAX_NUM_ENTRIES">{1000}, SizeT<"CACHE_MAX_SIZE_GB">{30},
+      SizeT<"CACHE_MAX_SIZE_GB_SINGLE_ENTRY">{5}};
   return params;
 }
 
