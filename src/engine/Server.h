@@ -53,13 +53,13 @@ class Server {
     };
     // This also directly triggers the update functions and propagates the
     // values of the parameters to the cache.
-    RuntimeParameters().setOnUpdateAction<"CACHE_MAX_NUM_ENTRIES">(
+    RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
         [this](size_t newValue) { _cache.setMaxNumEntries(newValue); });
-    RuntimeParameters().setOnUpdateAction<"CACHE_MAX_SIZE_GB">(
+    RuntimeParameters().setOnUpdateAction<"cache-max-size-gb">(
         [this, toNumIds](size_t newValue) {
           _cache.setMaxSize(toNumIds(newValue));
         });
-    RuntimeParameters().setOnUpdateAction<"CACHE_MAX_SIZE_GB_SINGLE_ENTRY">(
+    RuntimeParameters().setOnUpdateAction<"cache-max-size-gb-single-entry">(
         [this, toNumIds](size_t newValue) {
           _cache.setMaxSizeSingleEntry(toNumIds(newValue));
         });

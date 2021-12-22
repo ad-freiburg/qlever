@@ -90,16 +90,16 @@ boost::asio::awaitable<void> Server::process(
       LOG(INFO) << "Supplying index stats..." << std::endl;
       auto response = createJsonResponse(composeStatsJson(), request);
       co_return co_await sendWithCors(std::move(response));
-    } else if (cmd == "cachestats") {
+    } else if (cmd == "cache-stats") {
       LOG(INFO) << "Supplying cache stats..." << std::endl;
       auto response = createJsonResponse(composeCacheStatsJson(), request);
       co_return co_await sendWithCors(std::move(response));
-    } else if (cmd == "clearcache") {
+    } else if (cmd == "clear-cache") {
       LOG(INFO) << "Clearing the cache, unpinned elements only" << std::endl;
       _cache.clearUnpinnedOnly();
       responseFromCommand =
           createJsonResponse(composeCacheStatsJson(), request);
-    } else if (cmd == "clearcachecomplete") {
+    } else if (cmd == "clear-cache-complete") {
       LOG(INFO) << "Clearing the cache completely, including unpinned elements"
                 << std::endl;
       _cache.clearAll();
@@ -112,7 +112,7 @@ boost::asio::awaitable<void> Server::process(
       co_return;
     } else {
       co_await sendWithCors(createBadRequestResponse(
-          R"(unknown value for query paramter "cmd" : ")" + cmd + '\"',
+          R"(Unknown value for query parameter "cmd": ")" + cmd + '\"',
           request));
       co_return;
     }

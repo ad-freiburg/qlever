@@ -148,13 +148,13 @@ int main(int argc, char** argv) {
                      "this flag is read directly from the index\n";
         break;
       case 'c':
-        RuntimeParameters().set<"CACHE_MAX_SIZE_GB">(atoi(optarg));
+        RuntimeParameters().set<"cache-max-size-gb">(atoi(optarg));
         break;
       case 'e':
-        RuntimeParameters().set<"CACHE_MAX_SIZE_GB_SINGLE_ENTRY">(atoi(optarg));
+        RuntimeParameters().set<"cache-max-size-gb-single-entry">(atoi(optarg));
         break;
       case 'k':
-        RuntimeParameters().set<"CACHE_MAX_NUM_ENTRIES">(atoi(optarg));
+        RuntimeParameters().set<"cache-max-num-entries">(atoi(optarg));
         break;
       default:
         cout << endl

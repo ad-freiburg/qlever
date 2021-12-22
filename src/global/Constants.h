@@ -128,9 +128,9 @@ inline auto& RuntimeParameters() {
       // If the time estimate for a sort operation is larger by more than this
       // factor than the remaining time, then the sort is canceled with a
       // timeout exception.
-      Double<"SORT_ESTIMATE_CANCELLATION_FACTOR">{3.0},
-      SizeT<"CACHE_MAX_NUM_ENTRIES">{1000}, SizeT<"CACHE_MAX_SIZE_GB">{30},
-      SizeT<"CACHE_MAX_SIZE_GB_SINGLE_ENTRY">{5}};
+      Double<"sort-estimate-cancellation-factor">{3.0},
+      SizeT<"cache-max-num-entries">{1000}, SizeT<"cache-max-size-gb">{30},
+      SizeT<"cache-max-size-gb-single-entry">{5}};
   return params;
 }
 
