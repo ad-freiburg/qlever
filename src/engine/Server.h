@@ -29,19 +29,6 @@ using ad_utility::Socket;
 //! The HTTP Server used.
 class Server {
  private:
-  // Shorthand to obtain a parameter.
-  template <ad_utility::ParameterName N>
-  static decltype(auto) P() {
-    return RuntimeParameters().get<N>();
-  }
-  // TODO<joka921> Write a strong type for KB, MB, GB etc and use it
-  // in the cache and the memory limit
-  // Convert a number of gigabytes to the number of Ids that find in that amount
-  // of memory.
-  static constexpr size_t toNumIds(size_t gigabytes) {
-    return gigabytes * (1ull << 30u) / sizeof(Id);
-  }
-
  public:
   explicit Server(const int port, const int numThreads, size_t maxMemGB)
       : _numThreads(numThreads),
@@ -57,13 +44,20 @@ class Server {
         _index(),
         _engine(),
         _initialized(false) {
+    // TODO<joka921> Write a strong type for KB, MB, GB etc and use it
+    // in the cache and the memory limit
+    // Convert a number of gigabytes to the number of Ids that find in that
+    // amount of memory.
+    static constexpr size_t toNumIds(size_t gigabytes) {
+      return gigabytes * (1ull << 30u) / sizeof(Id);
+    }
     // This also directly triggers the update functions and propagates the
     // values of the parameters to the cache.
-    RuntimeParameters().setUpdateOption<"CACHE_MAX_NUM_ENTRIES">(
+    RuntimeParameters().setOnUpdateAction<"CACHE_MAX_NUM_ENTRIES">(
         [this](size_t newValue) { _cache.setMaxNumEntries(newValue); });
-    RuntimeParameters().setUpdateOption<"CACHE_MAX_SIZE_GB">(
+    RuntimeParameters().setOnUpdateAction<"CACHE_MAX_SIZE_GB">(
         [this](size_t newValue) { _cache.setMaxSize(toNumIds(newValue)); });
-    RuntimeParameters().setUpdateOption<"CACHE_MAX_SIZE_GB_SINGLE_ENTRY">(
+    RuntimeParameters().setOnUpdateAction<"CACHE_MAX_SIZE_GB_SINGLE_ENTRY">(
         [this](size_t newValue) {
           _cache.setMaxSizeSingleEntry(toNumIds(newValue));
         });

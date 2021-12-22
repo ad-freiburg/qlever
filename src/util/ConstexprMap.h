@@ -10,6 +10,7 @@
 
 namespace ad_utility {
 
+/// A const and constexpr map from `Key`s to `Values`
 template <typename Key, typename Value, size_t numEntries>
 class ConstexprMap {
   using Pair = std::pair<Key, Value>;
@@ -20,8 +21,8 @@ class ConstexprMap {
   Arr _values;
 
  public:
-  // ________________________________________________________________________
-  constexpr ConstexprMap(Arr values) : _values{std::move(values)} {
+  // Create from an Array of key-value pairs. The keys have to be unique.
+  explicit constexpr ConstexprMap(Arr values) : _values{std::move(values)} {
     std::sort(_values.begin(), _values.end(), compare);
     if (std::unique(_values.begin(), _values.end(),
                     [](const Pair& a, const Pair& b) {
@@ -32,6 +33,8 @@ class ConstexprMap {
     }
   }
 
+  // If `key` is in the map, return an iterator to the corresponding `(Key,
+  // Value)` pair. Else return `end()`.
   constexpr typename Arr::const_iterator find(const Key& key) const {
     auto lb = std::lower_bound(
         _values.begin(), _values.end(), key,
@@ -42,10 +45,13 @@ class ConstexprMap {
     return lb;
   }
 
+  // Return true iff the key is contained.
   constexpr bool contains(const Key& key) const {
     return find(key) != _values.end();
   }
 
+  // Return the value for the given key (throws an exception if key does not
+  // exist).
   constexpr const Value& at(const Key& key) const {
     auto it = find(key);
     if (it == _values.end()) {

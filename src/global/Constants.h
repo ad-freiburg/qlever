@@ -126,9 +126,8 @@ inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::SizeT;
   static ad_utility::Parameters params{
       // If the time estimate for a sort operation is larger by more than this
-      // factor
-      // than the remaining time, then the sort is canceled with a timeout
-      // exception
+      // factor than the remaining time, then the sort is canceled with a
+      // timeout exception.
       Double<"SORT_ESTIMATE_CANCELLATION_FACTOR">{3.0},
       SizeT<"CACHE_MAX_NUM_ENTRIES">{1000}, SizeT<"CACHE_MAX_SIZE_GB">{30},
       SizeT<"CACHE_MAX_SIZE_GB_SINGLE_ENTRY">{5}};

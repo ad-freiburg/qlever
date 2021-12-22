@@ -8,21 +8,20 @@
 #include <tuple>
 
 namespace ad_utility {
-
-/// Apply the `function` on each element of the `tuple`. The function is
-/// applied on the tuple elements sequentially from left to right.
-/// \param tuple must be a std::tuple<...>.
-/// \param function function(forward<T>(t)) must work for every type T
-///                 in the `tuple`
 template <typename Tuple, typename Function>
-void forEachTuple(Tuple&& tuple, Function&& function) {
-  auto forEachParamPack = [&]<typename... Ts>(Ts && ... parameters) {
+void forEachInTuple(Tuple&& tuple, Function&& function) {
+  auto forEachInParamPack = [&]<typename... Ts>(Ts && ... parameters) {
     (..., function(std::forward<Ts>(parameters)));
   };
-  std::apply(forEachParamPack, std::forward<Tuple>(tuple));
+  std::apply(forEachInParamPack, std::forward<Tuple>(tuple));
 }
 
-// TODO<joka921> comment.
+/// Apply the `function` to each element of the `tuple`. Retur an `array` of
+/// the results. The function is applied on the tuple elements sequentially
+/// from left to right.
+/// \param tuple must be a std::tuple<...>.
+/// \param function function(forward<T>(t)) must work for every type T
+///                 in the `tuple` and must always return the same type.
 template <typename Tuple, typename Function>
 auto tupleToArray(Tuple&& tuple, Function&& function) {
   auto paramPackToArray = [&]<typename... Ts>(Ts && ... parameters) {

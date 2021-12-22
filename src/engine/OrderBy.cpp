@@ -82,18 +82,18 @@ void OrderBy::computeResult(ResultTable* result) {
   double remainingSecs =
       static_cast<double>(_timeoutTimer->wlock()->remainingMicroseconds()) /
       1'000'000;
-  auto cancellationFactor =
+  auto sortEstimateCancellationFactor =
       RuntimeParameters().get<"SORT_ESTIMATE_CANCELLATION_FACTOR">();
   if (getExecutionContext()
           ->getSortPerformanceEstimator()
           .estimatedSortTimeInSeconds(subRes->size(), subRes->width()) >
-      remainingSecs * cancellationFactor) {
+      remainingSecs * sortEstimateCancellationFactor) {
     // The estimated time for this sort is much larger than the actually
     // remaining time, cancel this operation
     throw ad_utility::TimeoutException(
         "OrderBy operation was canceled, because time estimate exceeded "
         "remaining time by a factor of " +
-        std::to_string(cancellationFactor));
+        std::to_string(sortEstimateCancellationFactor));
   }
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();

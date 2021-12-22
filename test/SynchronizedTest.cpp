@@ -96,10 +96,10 @@ TEST(Synchronized, MutexReference) {
   ad_utility::Synchronized<int&, std::shared_mutex&> s{
       ad_utility::ConstructWithMutex{}, m, i};
 
-  *s.wlock() = 4;
+  *(s.wlock()) = 4;
 
   ASSERT_EQ(i, 4);
-  ASSERT_EQ(*s.rlock(), 4);
+  ASSERT_EQ(*(s.rlock()), 4);
 }
 
 TEST(Synchronized, ToBaseReference) {
@@ -122,8 +122,7 @@ TEST(Synchronized, ToBaseReference) {
   ASSERT_EQ(aSync.rlock()->g(), 6);
   ASSERT_EQ(bSync.rlock()->g(), 6);
 
-  // TODO<joka921>:
-  // Test, that the locking was indeed succesfull.
+  // TODO<joka921>: Test, that the locking was indeed successful.
 }
 
 template <typename T, typename = void>

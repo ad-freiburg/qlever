@@ -245,6 +245,7 @@ class FlexibleCache {
     _maxSizeSingleEntry = maxSizeSingleEntry;
     // We currently do not delete entries that are now too big
     // after the update.
+    // TODO<joka921>:: implement this functionality
   }
 
   //! Checks if there is an entry with the given key.

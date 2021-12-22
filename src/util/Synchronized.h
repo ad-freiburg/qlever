@@ -208,6 +208,8 @@ class Synchronized {
     return LockPtr<Synchronized, true, true>{this};
   };
 
+  // Return a `Synchronized` that uses a reference to this `Synchronized`'s
+  // `_data` and `mutext_`. The reference is a reference of the Base class U.
   template <typename U>
   requires std::is_base_of_v<U, T> Synchronized<U&, Mutex&> toBaseReference() {
     return {ConstructWithMutex{}, mutex(), data_};
@@ -217,7 +219,7 @@ class Synchronized {
   T data_;   // The data to which we synchronize the access.
   Mutex m_;  // The used mutex
 
-  decltype(auto) mutex() const { return const_cast<Mutex&>(m_); }
+  Mutex& mutex() const { return const_cast<Mutex&>(m_); }
 
   // These are used for the withWriteLockAndOrdered function
   size_t nextOrderedRequest_ = 0;
