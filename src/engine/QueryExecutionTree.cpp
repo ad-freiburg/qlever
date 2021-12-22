@@ -196,17 +196,18 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
     json b;
     // The string is an iri or literal
     if (entitystr[0] == '<') {
-      b["type"] = "iri";
       // Strip the <> surrounding the iri
       b["value"] = entitystr.substr(1, entitystr.size() - 2);
+      b["type"] = "iri";
     } else {
-      b["type"] = "literal";
       size_t quote_pos = entitystr.rfind('"');
       if (quote_pos == std::string::npos) {
         // TEXT entries are currently not surrounded by quotes
         b["value"] = entitystr;
+        b["type"] = "literal";
       } else {
         b["value"] = entitystr.substr(1, quote_pos - 1);
+        b["type"] = "literal";
         // Look for a language tag or type.
         if (quote_pos < entitystr.size() - 1 &&
             entitystr[quote_pos + 1] == '@') {
@@ -214,7 +215,12 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
         } else if (quote_pos < entitystr.size() - 2 &&
                    entitystr[quote_pos + 1] == '^') {
           AD_CHECK(entitystr[quote_pos + 2] == '^');
-          b["datatype"] = entitystr.substr(quote_pos + 3);
+          std::string_view datatype{entitystr};
+          // remove the < angledBrackets> around the datatype IRI
+          AD_CHECK(datatype.size() >= quote_pos + 4);
+          datatype.remove_prefix(quote_pos + 3);
+          datatype.remove_suffix(1);
+          b["datatype"] = entitystr.substr(quote_pos + 4);
           ;
         }
       }
@@ -223,7 +229,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   };
 
   for (size_t rowIndex = offset; rowIndex < upperBound; ++rowIndex) {
-    json binding;
+    nlohmann::ordered_json binding;
     for (const auto& column : columns) {
       const auto& currentId = idTable(rowIndex, column->_columnIndex);
       const auto& optionalValue =
