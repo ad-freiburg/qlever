@@ -128,9 +128,9 @@ using String = Parameter<std::string, std::identity, std::identity, Name>;
 /// the `get()` method) and writing (via `set()`) of the individual `Parameters`
 /// is threadsafe (there is a mutex for each of the parameters). Note: The
 /// design only allows atomic setting of a single parameter to a fixed value. It
-/// does not support atomic updates depending on the current value (e.g.
-/// "increase the cache size by 20%" nor an atomic update of multiple
-/// parameters at the same time. Such a functionality could however be added
+/// does not support atomic updates depending on the current value (for example,
+/// "increase the cache size by 20%") nor an atomic update of multiple
+/// parameters at the same time. If needed, this functionality could be added
 /// to the current implementation.
 template <typename... ParameterTypes>
 class Parameters {

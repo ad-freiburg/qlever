@@ -10,7 +10,7 @@
 
 namespace ad_utility {
 
-/// A const and constexpr map from `Key`s to `Values`
+/// A const and constexpr map from `Key`s to `Value`s.
 template <typename Key, typename Value, size_t numEntries>
 class ConstexprMap {
   using Pair = std::pair<Key, Value>;

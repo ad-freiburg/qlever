@@ -48,17 +48,19 @@ class Server {
     // in the cache and the memory limit
     // Convert a number of gigabytes to the number of Ids that find in that
     // amount of memory.
-    static constexpr size_t toNumIds(size_t gigabytes) {
+    auto toNumIds = [](size_t gigabytes) -> size_t {
       return gigabytes * (1ull << 30u) / sizeof(Id);
-    }
+    };
     // This also directly triggers the update functions and propagates the
     // values of the parameters to the cache.
     RuntimeParameters().setOnUpdateAction<"CACHE_MAX_NUM_ENTRIES">(
         [this](size_t newValue) { _cache.setMaxNumEntries(newValue); });
     RuntimeParameters().setOnUpdateAction<"CACHE_MAX_SIZE_GB">(
-        [this](size_t newValue) { _cache.setMaxSize(toNumIds(newValue)); });
+        [this, toNumIds](size_t newValue) {
+          _cache.setMaxSize(toNumIds(newValue));
+        });
     RuntimeParameters().setOnUpdateAction<"CACHE_MAX_SIZE_GB_SINGLE_ENTRY">(
-        [this](size_t newValue) {
+        [this, toNumIds](size_t newValue) {
           _cache.setMaxSizeSingleEntry(toNumIds(newValue));
         });
   }
