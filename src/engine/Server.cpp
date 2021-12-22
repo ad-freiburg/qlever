@@ -97,16 +97,14 @@ boost::asio::awaitable<void> Server::process(
     } else if (cmd == "clearcache") {
       LOG(INFO) << "Clearing the cache, unpinned elements only" << std::endl;
       _cache.clearUnpinnedOnly();
-      responseFromCommand = createOkResponse(
-          "Successfully cleared the cache (unpinned elements only)", request,
-          ad_utility::MediaType::textPlain);
+      responseFromCommand =
+          createJsonResponse(composeCacheStatsJson(), request);
     } else if (cmd == "clearcachecomplete") {
       LOG(INFO) << "Clearing the cache completely, including unpinned elements"
                 << std::endl;
       _cache.clearAll();
-      responseFromCommand = createOkResponse(
-          "Successfully cleared the cache (including the pinned elements)",
-          request, ad_utility::MediaType::textPlain);
+      responseFromCommand =
+          createJsonResponse(composeCacheStatsJson(), request);
     } else if (cmd == "get-settings") {
       LOG(INFO) << "Supplying settings..." << std::endl;
       json settingsJson = RuntimeParameters().toMap();
