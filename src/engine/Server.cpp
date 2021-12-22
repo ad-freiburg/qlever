@@ -122,10 +122,17 @@ boost::asio::awaitable<void> Server::process(
 
   // TODO<joka921> Restrict this access by a token.
   // TODO<joka921> Warn about unknown parameters
+  bool anyParamWasChanged = false;
   for (const auto& [key, value] : params) {
     if (RuntimeParameters().getKeys().contains(key)) {
       RuntimeParameters().set(key, value);
+      anyParamWasChanged = true;
     }
+  }
+
+  if (anyParamWasChanged) {
+    json settingsJson = RuntimeParameters().toMap();
+    responseFromCommand = createJsonResponse(settingsJson, request);
   }
 
   if (params.contains("query")) {
