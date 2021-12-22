@@ -238,7 +238,7 @@ class Parameters {
     static ad_utility::HashSet<std::string> value = [this]() {
       ad_utility::HashSet<std::string> result;
 
-      auto insert = [this, &result]<typename T>(const T&) {
+      auto insert = [&result]<typename T>(const T&) {
         result.insert(std::string{T::value_type::name});
       };
       ad_utility::forEachTuple(_parameters, insert);
