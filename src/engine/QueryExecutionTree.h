@@ -234,7 +234,7 @@ class QueryExecutionTree {
                      const ResultTable& resultTable) const;
 
   ad_utility::stream_generator::stream_generator writeTable(
-      const IdTable& data, char sep, size_t from, size_t upperBound,
+      char sep, size_t from, size_t upperBound,
       vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices,
       shared_ptr<const ResultTable> precomputedResult = nullptr) const;
 };

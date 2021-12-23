@@ -113,7 +113,7 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
 
   const IdTable& data = res->_idTable;
   size_t upperBound = std::min<size_t>(offset + limit, data.size());
-  return writeTable(data, sep, offset, upperBound, std::move(validIndices),
+  return writeTable(sep, offset, upperBound, std::move(validIndices),
                     std::move(res));
 }
 
@@ -385,13 +385,14 @@ nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
 
 // _________________________________________________________________________________________________________
 ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
-    const IdTable& data, char sep, size_t from, size_t upperBound,
+    char sep, size_t from, size_t upperBound,
     const vector<std::optional<pair<size_t, ResultTable::ResultType>>>
         validIndices,
     std::shared_ptr<const ResultTable> res) const {
   if (!res) {
     res = getResult();
   }
+  const auto& idTable = res->_idTable;
   // special case : binary export of IdTable
   if (sep == 'b') {
     for (size_t i = from; i < upperBound; ++i) {
@@ -399,7 +400,8 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
         if (validIndices[j]) {
           const auto& val = *validIndices[j];
           co_yield std::string_view{
-              reinterpret_cast<const char*>(&data(i, val.first)), sizeof(Id)};
+              reinterpret_cast<const char*>(&idTable(i, val.first)),
+              sizeof(Id)};
         }
       }
     }
@@ -413,7 +415,7 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
         switch (val.second) {
           case ResultTable::ResultType::KB: {
             string entity = _qec->getIndex()
-                                .idToOptionalString(data(i, val.first))
+                                .idToOptionalString(idTable(i, val.first))
                                 .value_or("");
             if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
               co_yield ad_utility::convertIndexWordToValueLiteral(entity);
@@ -423,19 +425,20 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
             break;
           }
           case ResultTable::ResultType::VERBATIM:
-            co_yield data(i, val.first);
+            co_yield idTable(i, val.first);
             break;
           case ResultTable::ResultType::TEXT:
-            co_yield _qec->getIndex().getTextExcerpt(data(i, val.first));
+            co_yield _qec->getIndex().getTextExcerpt(idTable(i, val.first));
             break;
           case ResultTable::ResultType::FLOAT: {
             float f;
-            std::memcpy(&f, &data(i, val.first), sizeof(float));
+            std::memcpy(&f, &idTable(i, val.first), sizeof(float));
             co_yield f;
             break;
           }
           case ResultTable::ResultType::LOCAL_VOCAB: {
-            co_yield res->idToOptionalString(data(i, val.first)).value_or("");
+            co_yield res->idToOptionalString(idTable(i, val.first))
+                .value_or("");
             break;
           }
           default:
