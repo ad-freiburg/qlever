@@ -407,7 +407,6 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       }
       appendVector(triples, propertyList.second);
     } else if (ctx->triplesNode()) {
-      // TODO<Robin> extract common functionality to helper function
       auto tripleNodes = ctx->triplesNode()->accept(this).as<Node>();
       appendVector(triples, tripleNodes.second);
       AD_CHECK(ctx->propertyList());
