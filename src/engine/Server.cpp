@@ -18,7 +18,11 @@
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
 #include "../util/json.h"
+#include "../util/BoostHelpers/AsyncWaitForFuture.h"
 #include "QueryPlanner.h"
+
+template<typename T>
+using Awaitable = Server::Awaitable<T>;
 
 // _____________________________________________________________________________
 void Server::initialize(const string& ontologyBaseName, bool useText,
@@ -54,19 +58,14 @@ void Server::run() {
       [this](auto request, auto&& send) -> boost::asio::awaitable<void> {
     co_await process(std::move(request), send);
   };
-  auto httpServer = HttpServer{static_cast<unsigned short>(_port), "0.0.0.0",
+  auto httpServer = HttpServer{static_cast<unsigned short>(_port), "0.0.0.0", _numThreads,
                                std::move(httpSessionHandler)};
 
-  // The first argument is the number of threads, the second one is the maximum
-  // number of simultaneous TCP connections. Technically, these can be
-  // different, but this is equal to the behavior of QLever's previous server.
-  // TODO<joka921> Make this obsolete by implementing better concurrency
-  // management in the actual query processing.
-  httpServer.run(_numThreads, _numThreads);
+  httpServer.run();
 }
 
 // _____________________________________________________________________________
-boost::asio::awaitable<void> Server::process(
+Awaitable<void> Server::process(
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
   using namespace ad_utility::httpUtils;
   ad_utility::Timer requestTimer;
@@ -154,14 +153,15 @@ boost::asio::awaitable<void> Server::process(
 }
 
 // _____________________________________________________________________________
-json Server::composeResponseQleverJson(const ParsedQuery& query,
+Awaitable<json> Server::composeResponseQleverJson(const ParsedQuery& query,
                                        const QueryExecutionTree& qet,
                                        ad_utility::Timer& requestTimer,
-                                       size_t maxSend) {
-  shared_ptr<const ResultTable> rt = qet.getResult();
-  requestTimer.stop();
-  off_t compResultUsecs = requestTimer.usecs();
-  size_t resultSize = rt->size();
+                                       size_t maxSend) const {
+  auto compute = [&, maxSend] {
+    shared_ptr<const ResultTable> rt = qet.getResult();
+    requestTimer.stop();
+    off_t compResultUsecs = requestTimer.usecs();
+    size_t resultSize = rt->size();
 
   const auto& selectClause = query.selectClause();
 
@@ -173,8 +173,8 @@ json Server::composeResponseQleverJson(const ParsedQuery& query,
   j["warnings"] = qet.collectWarnings();
   j["selected"] = selectClause._selectedVariables;
 
-  j["runtimeInformation"] = RuntimeInformation::ordered_json(
-      qet.getRootOperation()->getRuntimeInfo());
+    j["runtimeInformation"] = RuntimeInformation::ordered_json(
+        qet.getRootOperation()->getRuntimeInfo());
 
   {
     size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
@@ -185,39 +185,48 @@ json Server::composeResponseQleverJson(const ParsedQuery& query,
     requestTimer.stop();
   }
 
-  requestTimer.stop();
-  j["time"]["total"] =
-      std::to_string(static_cast<double>(requestTimer.usecs()) / 1000.0) + "ms";
-  j["time"]["computeResult"] =
-      std::to_string(static_cast<double>(compResultUsecs) / 1000.0) + "ms";
+    requestTimer.stop();
+    j["time"]["total"] =
+        std::to_string(static_cast<double>(requestTimer.usecs()) / 1000.0) +
+        "ms";
+    j["time"]["computeResult"] =
+        std::to_string(static_cast<double>(compResultUsecs) / 1000.0) + "ms";
 
-  return j;
+    return j;
+  };
+  return onNewThread(compute);
 }
 
 // _____________________________________________________________________________
-json Server::composeResponseSparqlJson(const ParsedQuery& query,
+Awaitable<json> Server::composeResponseSparqlJson(const ParsedQuery& query,
                                        const QueryExecutionTree& qet,
                                        ad_utility::Timer& requestTimer,
-                                       size_t maxSend) {
-  shared_ptr<const ResultTable> rt = qet.getResult();
-  requestTimer.stop();
-  nlohmann::json j;
-  size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
-  size_t offset = query._offset.value_or(0);
-  requestTimer.cont();
-  j = qet.writeResultAsSparqlJson(query.selectClause()._selectedVariables,
-                                  std::min(limit, maxSend), offset);
-  requestTimer.stop();
-  return j;
+                                       size_t maxSend) const {
+  auto compute = [&, maxSend] {
+    shared_ptr<const ResultTable> rt = qet.getResult();
+    requestTimer.stop();
+    nlohmann::json j;
+    size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
+    size_t offset = query._offset.value_or(0);
+    requestTimer.cont();
+    j = qet.writeResultAsSparqlJson(query.selectClause()._selectedVariables,
+                                    std::min(limit, maxSend), offset);
+    requestTimer.stop();
+    return j;
+  };
+  return onNewThread(compute);
 }
 
 // _____________________________________________________________________________
-ad_utility::stream_generator::stream_generator Server::composeResponseSepValues(
-    const ParsedQuery& query, const QueryExecutionTree& qet, char sep) {
-  size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
-  size_t offset = query._offset.value_or(0);
-  return qet.generateResults(query.selectClause()._selectedVariables, limit,
-                             offset, sep);
+Awaitable<ad_utility::stream_generator::stream_generator> Server::composeResponseSepValues (
+    const ParsedQuery& query, const QueryExecutionTree& qet, char sep) const {
+  auto compute = [&, sep] {
+    size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
+    size_t offset = query._offset.value_or(0);
+    return qet.generateResults(query.selectClause()._selectedVariables, limit,
+                                  offset, sep);
+  };
+  return onNewThread(compute);
 }
 
 // _____________________________________________________________________________
@@ -393,14 +402,14 @@ boost::asio::awaitable<void> Server::processQuery(
     switch (mediaType.value()) {
       case ad_utility::MediaType::csv: {
         throwIfConstructClause();
-        auto responseGenerator = composeResponseSepValues(pq, qet, ',');
+        auto responseGenerator = co_await composeResponseSepValues(pq, qet, ',');
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::csv);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::tsv: {
         throwIfConstructClause();
-        auto responseGenerator = composeResponseSepValues(pq, qet, '\t');
+        auto responseGenerator = co_await composeResponseSepValues(pq, qet, '\t');
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::tsv);
         co_await send(std::move(response));
@@ -409,7 +418,7 @@ boost::asio::awaitable<void> Server::processQuery(
         throwIfConstructClause();
         // Normal case: JSON response
         auto responseString =
-            composeResponseQleverJson(pq, qet, requestTimer, maxSend);
+            co_await composeResponseQleverJson(pq, qet, requestTimer, maxSend);
         co_await sendJson(std::move(responseString));
       } break;
       case ad_utility::MediaType::turtle:
@@ -427,7 +436,7 @@ boost::asio::awaitable<void> Server::processQuery(
         break;
       case ad_utility::MediaType::sparqlJson: {
         auto responseString =
-            composeResponseSparqlJson(pq, qet, requestTimer, maxSend);
+            co_await composeResponseSparqlJson(pq, qet, requestTimer, maxSend);
         co_await sendJson(std::move(responseString));
       }
       default:

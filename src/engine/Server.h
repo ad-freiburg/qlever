@@ -17,6 +17,7 @@
 #include "../util/HttpServer/streamable_body.h"
 #include "../util/Socket.h"
 #include "../util/Timer.h"
+#include "../util/BoostHelpers/AsyncWaitForFuture.h"
 #include "./QueryExecutionContext.h"
 #include "./QueryExecutionTree.h"
 #include "./SortPerformanceEstimator.h"
@@ -28,7 +29,6 @@ using ad_utility::Socket;
 
 //! The HTTP Server used.
 class Server {
- private:
  public:
   explicit Server(const int port, const int numThreads, size_t maxMemGB)
       : _numThreads(numThreads),
@@ -43,7 +43,10 @@ class Server {
         _sortPerformanceEstimator(),
         _index(),
         _engine(),
-        _initialized(false) {
+        _initialized(false),
+        // The number of server threads currently also is the number of queries
+        // that can be processed simultaneously.
+        _queryProcessingLimiter(numThreads) {
     // TODO<joka921> Write a strong type for KB, MB, GB etc and use it
     // in the cache and the memory limit
     // Convert a number of gigabytes to the number of Ids that find in that
@@ -89,13 +92,20 @@ class Server {
   bool _initialized;
   bool _enablePatternTrick;
 
+  // Throtteler for the number of queries that can be processed at once.
+  // TODO<joka921>
+  mutable std::counting_semaphore<std::numeric_limits<int>::max()> _queryProcessingLimiter;
+
+  template<typename T>
+  using Awaitable = boost::asio::awaitable<T>;
+
   /// Handle a single HTTP request. Check whether a file request or a query was
   /// sent, and dispatch to functions handling these cases. This function
   /// requires the constraints for the `HttpHandler` in `HttpServer.h`.
   /// \param req The HTTP request.
   /// \param send The action that sends a http:response. (see the
   ///             `HttpServer.h` for documentation).
-  boost::asio::awaitable<void> process(
+  Awaitable<void> process(
       const ad_utility::httpUtils::HttpRequest auto& req, auto&& send);
 
   /// Handle a http request that asks for the processing of a query.
@@ -107,20 +117,20 @@ class Server {
   /// \param request The HTTP request.
   /// \param send The action that sends a http:response (see the
   ///             `HttpServer.h` for documentation).
-  boost::asio::awaitable<void> processQuery(
+  Awaitable<void> processQuery(
       const ParamValueMap& params, ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
 
-  static json composeResponseQleverJson(
+  Awaitable<json> composeResponseQleverJson(
       const ParsedQuery& query, const QueryExecutionTree& qet,
-      ad_utility::Timer& requestTimer, size_t maxSend = MAX_NOF_ROWS_IN_RESULT);
-  static json composeResponseSparqlJson(
+      ad_utility::Timer& requestTimer, size_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
+  Awaitable<json> composeResponseSparqlJson(
       const ParsedQuery& query, const QueryExecutionTree& qet,
-      ad_utility::Timer& requestTimer, size_t maxSend = MAX_NOF_ROWS_IN_RESULT);
+      ad_utility::Timer& requestTimer, size_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
 
-  static ad_utility::stream_generator::stream_generator
+  Awaitable<ad_utility::stream_generator::stream_generator>
   composeResponseSepValues(const ParsedQuery& query,
-                           const QueryExecutionTree& qet, char sep);
+                           const QueryExecutionTree& qet, char sep) const;
 
   static json composeExceptionJson(const string& query, const std::exception& e,
                                    ad_utility::Timer& requestTimer);
@@ -131,4 +141,20 @@ class Server {
   json composeStatsJson() const;
 
   json composeCacheStatsJson() const;
+
+
+  // TODO<joka921> comment
+  template<typename Function, typename T = std::invoke_result_t<Function>>
+  Awaitable<T> onNewThread(Function function) const {
+    _queryProcessingLimiter.acquire();
+    ad_utility::OnDestruction f{[this]() noexcept{_queryProcessingLimiter.release();}};
+    auto&& result= co_await ad_utility::asio_helpers::async_on_external_thread(std::move(function), boost::asio::use_awaitable);
+    using R = decltype(result);
+    if (std::holds_alternative<std::exception_ptr>(result)) {
+      std::rethrow_exception(std::move(std::get<0>(result)));
+    }
+    using R = decltype(result);
+    using RR = decltype(std::get<1>(std::forward<R>(result)));
+    co_return std::forward<RR>(std::get<1>(std::forward<R>(result)));
+  }
 };
