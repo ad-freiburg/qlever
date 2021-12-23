@@ -8,11 +8,11 @@
 #include <cstdlib>
 #include <semaphore>
 
+#include "../Exception.h"
 #include "../Log.h"
 #include "../jthread.h"
 #include "./HttpUtils.h"
 #include "./beast.h"
-#include "../Exception.h"
 
 namespace beast = boost::beast;    // from <boost/beast.hpp>
 namespace http = beast::http;      // from <boost/beast/http.hpp>
@@ -44,6 +44,7 @@ class HttpServer {
   HttpHandler _httpHandler;
   int _numServerThreads;
   net::io_context _ioContext;
+  tcp::acceptor _acceptor;
 
  public:
   /// Construct from the port and ip address, on which this server will listen,
@@ -56,10 +57,24 @@ class HttpServer {
       : _ipAdress{net::ip::make_address(ipAdress)},
         _port{port},
         _httpHandler{std::move(handler)},
-            // We need at least two threads to avoid blocking.
-            // TODO<joka921> why is that?
+        // We need at least two threads to avoid blocking.
+        // TODO<joka921> why is that?
         _numServerThreads{std::max(2, numServerThreads)},
-        _ioContext{_numServerThreads} {}
+        _ioContext{_numServerThreads},
+        _acceptor{_ioContext} {
+    try {
+      tcp::endpoint endpoint{_ipAdress, _port};
+      // Open the acceptor.
+      _acceptor.open(endpoint.protocol());
+      boost::asio::socket_base::reuse_address option{true};
+      _acceptor.set_option(option);
+      // Bind to the server address.
+      _acceptor.bind(endpoint);
+    } catch (const boost::system::system_error& b) {
+      logBeastError(b.code(), "Opening or binding the socket failed");
+      throw;
+    }
+  }
 
   /// Run the server using the specified number of threads. Note that this
   /// function never returns, unless the Server crashes. The second argument
@@ -67,10 +82,8 @@ class HttpServer {
   /// (this is not equal to the number of threads due to the asynchronous
   /// implementation of this Server).
   void run() {
-
-
     // Create the listener coroutine.
-    auto listenerCoro = listener(_ioContext, tcp::endpoint{_ipAdress, _port});
+    auto listenerCoro = listener();
 
     // Schedule the listener onto the io context.
     net::co_spawn(_ioContext, std::move(listenerCoro), net::detached);
@@ -89,9 +102,7 @@ class HttpServer {
   }
 
   // _____________________________________________________________________
-  net::io_context& getIoContext() {
-      return _ioContext;
-  };
+  net::io_context& getIoContext() { return _ioContext; };
 
  private:
   // Format a boost/beast error and log it to console
@@ -101,21 +112,12 @@ class HttpServer {
 
   // The loop which accepts TCP connections and delegates their handling
   // to the session() coroutine below.
-  boost::asio::awaitable<void> listener(boost::asio::io_context& ioc,
-                                        tcp::endpoint endpoint) {
-    tcp::acceptor acceptor{ioc};
+  boost::asio::awaitable<void> listener() {
     boost::asio::socket_base::reuse_address option{true};
     try {
-      // Open the acceptor.
-      acceptor.open(endpoint.protocol());
-      acceptor.set_option(option);
-      // Bind to the server address.
-      acceptor.bind(endpoint);
-      // Start listening for connections.
-      acceptor.listen(boost::asio::socket_base::max_listen_connections);
+      _acceptor.listen(boost::asio::socket_base::max_listen_connections);
     } catch (const boost::system::system_error& b) {
-      logBeastError(b.code(),
-                    "opening, binding or listening on the socket failed");
+      logBeastError(b.code(), "Listening on the socket failed");
       co_return;
     }
 
@@ -124,13 +126,13 @@ class HttpServer {
     while (true) {
       try {
         auto socket =
-            co_await acceptor.async_accept(boost::asio::use_awaitable);
+            co_await _acceptor.async_accept(boost::asio::use_awaitable);
         // Schedule the session such that it may run in parallel to this loop.
         // the `strand` makes each session conceptually single-threaded.
         // TODO<joka921> is this even needed, to my understanding,
         // nothing may happen in parallel within an Http session, but
         // then again this does no harm.
-        net::co_spawn(net::make_strand(ioc), session(std::move(socket)),
+        net::co_spawn(net::make_strand(_ioContext), session(std::move(socket)),
                       net::detached);
 
       } catch (const boost::system::system_error& b) {

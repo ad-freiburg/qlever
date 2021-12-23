@@ -14,20 +14,20 @@
 #include <vector>
 
 #include "../parser/ParseException.h"
+#include "../util/BoostHelpers/AsyncWaitForFuture.h"
 #include "../util/HttpServer/UrlParser.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
 #include "../util/json.h"
-#include "../util/BoostHelpers/AsyncWaitForFuture.h"
 #include "QueryPlanner.h"
 
-template<typename T>
+template <typename T>
 using Awaitable = Server::Awaitable<T>;
 
-// _____________________________________________________________________________
+// __________________________________________________________________________
 void Server::initialize(const string& ontologyBaseName, bool useText,
                         bool usePatterns, bool usePatternTrick) {
-  LOG(INFO) << "Initializing server..." << std::endl;
+  LOG(INFO) << "Initializing and running server..." << std::endl;
 
   _enablePatternTrick = usePatternTrick;
   _index.setUsePatterns(usePatterns);
@@ -48,19 +48,21 @@ void Server::initialize(const string& ontologyBaseName, bool useText,
 }
 
 // _____________________________________________________________________________
-void Server::run() {
-  if (!_initialized) {
-    LOG(ERROR) << "Cannot start an uninitialized server!" << std::endl;
-    exit(1);
-  }
-
+void Server::run(const string& ontologyBaseName, bool useText, bool usePatterns,
+                 bool usePatternTrick) {
+  // First setup the HttpServer, so that it binds the socket, and
+  // the `socket already in use` error appears quickly.
   auto httpSessionHandler =
       [this](auto request, auto&& send) -> boost::asio::awaitable<void> {
     co_await process(std::move(request), send);
   };
-  auto httpServer = HttpServer{static_cast<unsigned short>(_port), "0.0.0.0", _numThreads,
-                               std::move(httpSessionHandler)};
+  auto httpServer = HttpServer{static_cast<unsigned short>(_port), "0.0.0.0",
+                               _numThreads, std::move(httpSessionHandler)};
 
+  // Initialize the index
+  initialize(ontologyBaseName, useText, usePatterns, usePatternTrick);
+
+  // Start listening for connections on the server.
   httpServer.run();
 }
 
@@ -153,10 +155,9 @@ Awaitable<void> Server::process(
 }
 
 // _____________________________________________________________________________
-Awaitable<json> Server::composeResponseQleverJson(const ParsedQuery& query,
-                                       const QueryExecutionTree& qet,
-                                       ad_utility::Timer& requestTimer,
-                                       size_t maxSend) const {
+Awaitable<json> Server::composeResponseQleverJson(
+    const ParsedQuery& query, const QueryExecutionTree& qet,
+    ad_utility::Timer& requestTimer, size_t maxSend) const {
   auto compute = [&, maxSend] {
     shared_ptr<const ResultTable> rt = qet.getResult();
     requestTimer.stop();
@@ -194,14 +195,13 @@ Awaitable<json> Server::composeResponseQleverJson(const ParsedQuery& query,
 
     return j;
   };
-  return onNewThread(compute);
+  return onNewThreadWithLimiter(compute);
 }
 
 // _____________________________________________________________________________
-Awaitable<json> Server::composeResponseSparqlJson(const ParsedQuery& query,
-                                       const QueryExecutionTree& qet,
-                                       ad_utility::Timer& requestTimer,
-                                       size_t maxSend) const {
+Awaitable<json> Server::composeResponseSparqlJson(
+    const ParsedQuery& query, const QueryExecutionTree& qet,
+    ad_utility::Timer& requestTimer, size_t maxSend) const {
   auto compute = [&, maxSend] {
     shared_ptr<const ResultTable> rt = qet.getResult();
     requestTimer.stop();
@@ -214,19 +214,21 @@ Awaitable<json> Server::composeResponseSparqlJson(const ParsedQuery& query,
     requestTimer.stop();
     return j;
   };
-  return onNewThread(compute);
+  return onNewThreadWithLimiter(compute);
 }
 
 // _____________________________________________________________________________
-Awaitable<ad_utility::stream_generator::stream_generator> Server::composeResponseSepValues (
-    const ParsedQuery& query, const QueryExecutionTree& qet, char sep) const {
+Awaitable<ad_utility::stream_generator::stream_generator>
+Server::composeResponseSepValues(const ParsedQuery& query,
+                                 const QueryExecutionTree& qet,
+                                 char sep) const {
   auto compute = [&, sep] {
     size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
     size_t offset = query._offset.value_or(0);
     return qet.generateResults(query.selectClause()._selectedVariables, limit,
                                   offset, sep);
   };
-  return onNewThread(compute);
+  return onNewThreadWithLimiter(compute);
 }
 
 // _____________________________________________________________________________
@@ -402,13 +404,14 @@ boost::asio::awaitable<void> Server::processQuery(
     switch (mediaType.value()) {
       case ad_utility::MediaType::csv: {
         throwIfConstructClause();
-        auto responseGenerator = co_await composeResponseSepValues(pq, qet, ',');
+        auto responseGenerator =
+            co_await composeResponseSepValues(pq, qet, ',');
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::csv);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::tsv: {
-        throwIfConstructClause();
+       throwIfConstructClause();
         auto responseGenerator = co_await composeResponseSepValues(pq, qet, '\t');
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::tsv);
@@ -446,7 +449,9 @@ boost::asio::awaitable<void> Server::processQuery(
     }
     // Print the runtime info. This needs to be done after the query
     // was computed.
-    LOG(INFO) << '\n' << qet.getRootOperation()->getRuntimeInfo().toString();
+
+    LOG(INFO) << "\nRuntime Info:\n"
+              << qet.getRootOperation()->getRuntimeInfo().toString();
   } catch (const ad_semsearch::Exception& e) {
     errorResponse = composeExceptionJson(query, e, requestTimer);
   } catch (const std::exception& e) {

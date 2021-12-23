@@ -13,11 +13,11 @@
 #include "../parser/ParseException.h"
 #include "../parser/SparqlParser.h"
 #include "../util/AllocatorWithLimit.h"
+#include "../util/BoostHelpers/AsyncWaitForFuture.h"
 #include "../util/HttpServer/HttpServer.h"
 #include "../util/HttpServer/streamable_body.h"
 #include "../util/Socket.h"
 #include "../util/Timer.h"
-#include "../util/BoostHelpers/AsyncWaitForFuture.h"
 #include "./QueryExecutionContext.h"
 #include "./QueryExecutionTree.h"
 #include "./SortPerformanceEstimator.h"
@@ -72,13 +72,16 @@ class Server {
 
   using ParamValueMap = ad_utility::HashMap<string, string>;
 
-  // Initialize the server.
+ private:
+  //! Initialize the server.
   void initialize(const string& ontologyBaseName, bool useText,
                   bool usePatterns = true, bool usePatternTrick = true);
 
-  //! Loop, wait for requests and trigger processing. This method never returns
-  //! except when throwing an exceptiob
-  void run();
+ public:
+  //! First initialize the server. Then loop, wait for requests and trigger
+  //! processing. This method never returns except when throwing an exceptiob
+  void run(const string& ontologyBaseName, bool useText,
+           bool usePatterns = true, bool usePatternTrick = true);
 
  private:
   const int _numThreads;
@@ -94,9 +97,10 @@ class Server {
 
   // Throtteler for the number of queries that can be processed at once.
   // TODO<joka921>
-  mutable std::counting_semaphore<std::numeric_limits<int>::max()> _queryProcessingLimiter;
+  mutable std::counting_semaphore<std::numeric_limits<int>::max()>
+      _queryProcessingLimiter;
 
-  template<typename T>
+  template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
 
   /// Handle a single HTTP request. Check whether a file request or a query was
@@ -105,8 +109,8 @@ class Server {
   /// \param req The HTTP request.
   /// \param send The action that sends a http:response. (see the
   ///             `HttpServer.h` for documentation).
-  Awaitable<void> process(
-      const ad_utility::httpUtils::HttpRequest auto& req, auto&& send);
+  Awaitable<void> process(const ad_utility::httpUtils::HttpRequest auto& req,
+                          auto&& send);
 
   /// Handle a http request that asks for the processing of a query.
   /// \param params The key-value-pairs  sent in the HTTP GET request. When this
@@ -123,10 +127,12 @@ class Server {
 
   Awaitable<json> composeResponseQleverJson(
       const ParsedQuery& query, const QueryExecutionTree& qet,
-      ad_utility::Timer& requestTimer, size_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
+      ad_utility::Timer& requestTimer,
+      size_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
   Awaitable<json> composeResponseSparqlJson(
       const ParsedQuery& query, const QueryExecutionTree& qet,
-      ad_utility::Timer& requestTimer, size_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
+      ad_utility::Timer& requestTimer,
+      size_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
 
   Awaitable<ad_utility::stream_generator::stream_generator>
   composeResponseSepValues(const ParsedQuery& query,
@@ -142,19 +148,23 @@ class Server {
 
   json composeCacheStatsJson() const;
 
-
-  // TODO<joka921> comment
-  template<typename Function, typename T = std::invoke_result_t<Function>>
-  Awaitable<T> onNewThread(Function function) const {
-    _queryProcessingLimiter.acquire();
-    ad_utility::OnDestruction f{[this]() noexcept{_queryProcessingLimiter.release();}};
-    auto&& result= co_await ad_utility::asio_helpers::async_on_external_thread(std::move(function), boost::asio::use_awaitable);
-    using R = decltype(result);
-    if (std::holds_alternative<std::exception_ptr>(result)) {
-      std::rethrow_exception(std::move(std::get<0>(result)));
-    }
-    using R = decltype(result);
-    using RR = decltype(std::get<1>(std::forward<R>(result)));
-    co_return std::forward<RR>(std::get<1>(std::forward<R>(result)));
+  // Perform the following steps: Acquire a token from the
+  // _queryProcessingLimiter, run `function`, and release the token. These steps
+  // are performed on a new thread (not one of the server threads). Returns an
+  // awaitable of the return value of `function`
+  template <typename Function, typename T = std::invoke_result_t<Function>>
+  Awaitable<T> onNewThreadWithLimiter(Function function) const {
+    auto computeWithLimiter = [this, function = std::move(function)] {
+      _queryProcessingLimiter.acquire();
+      ad_utility::OnDestruction f{[this]() noexcept {
+        try {
+          _queryProcessingLimiter.release();
+        } catch (...) {
+        }
+      }};
+      return function();
+    };
+    co_return co_await ad_utility::asio_helpers::async_on_external_thread(
+        std::move(computeWithLimiter), boost::asio::use_awaitable);
   }
 };

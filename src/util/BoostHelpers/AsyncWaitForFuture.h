@@ -7,47 +7,55 @@
 // Inspired by https://gist.github.com/inetic/dc9081baf45ec4b60037
 
 #include <future>
+
 #include "../HttpServer/beast.h"
 
 namespace ad_utility::asio_helpers {
 
-template<typename F>
-using ResultOrException = std::variant<std::exception_ptr, std::invoke_result_t<F>>;
-
-template <typename CompletionToken, typename F>
-auto async_on_external_thread(F function,
-                         CompletionToken&& token) {
+// An async operation that can be used inside boost::asio.
+// The `function` (which takes no arguments) is started on a new detached
+// thread (unrelated to the executor used by the completion completionToken).
+// As soon as the `function` is finished, the completion handler which is
+// obtained from the `completionToken` is invoked with the result of the
+// `function`. The handler obtained from the `completionToken` must be callabel
+// with (std::exception_ptr, returnValueOfFunction)
+template <typename CompletionToken, typename Function>
+auto async_on_external_thread(Function function,
+                              CompletionToken&& completionToken) {
   namespace asio = boost::asio;
   namespace system = boost::system;
 
-  using Value = ResultOrException<F>;
-  using Sig = void(system::error_code, Value);
-  /*
-  using Result = asio::async_result<std::decay_t<CompletionToken>, Sig>;
-  // TODO<joka921> It should be `completion_handler_type`, but there
-  // is currently a bug in boost::asio::use_awaitable_t that only specifies
-  // the completion_handler_type
-  using Handler = typename Result::handler_type;
-   */
+  using Value = std::invoke_result_t<Function>;
+  using Signature = void(std::exception_ptr, Value);
 
-  /*
-  Handler handler(std::forward<decltype(token)>(token));
-   */
-  auto everything = [function = std::move(function)] (auto&& handler) mutable {
-    auto call = [function = std::move(function), handler = std::forward<decltype(handler)>(handler)]() mutable {
-      try {
-        auto&& result = function();
-        handler(system::error_code(), std::forward<decltype(result)>(result));
-      } catch (...) {
-        handler(system::error_code(), std::current_exception());
-      }
-    };
+  auto initiatingFunction = [function =
+                                 std::move(function)](auto&& handler) mutable {
+    auto onRemoteThread =
+        [function = std::move(function),
+         handler = std::forward<decltype(handler)>(handler)]() mutable {
+          try {
+            // If `function()` throws no exception, we have no exception_ptr
+            // and the return value as the second argument.
+            handler(nullptr, function());
+          } catch (...) {
+            // If `function()` throws, we propagate the exception to the
+            // handler, and have no return value.
+            // TODO<C++23/26> When we get networking+executors, we hopefully
+            // have `setError` method which doesn't need a dummy return value.
+            Value* ptr = nullptr;
+            handler(std::current_exception(), std::move(*ptr));
+          }
+        };
 
-    std::thread thread(std::move(call));
+    std::thread thread(std::move(onRemoteThread));
     thread.detach();
   };
-  return boost::asio::async_initiate<CompletionToken, Sig>(std::move(everything), token);
+
+  // This helper function automagically obtains a completionHandler from the
+  // `completionToken` and returns the correct `async_result`
+  return boost::asio::async_initiate<CompletionToken, Signature>(
+      std::move(initiatingFunction), completionToken);
 }
-}
+}  // namespace ad_utility::asio_helpers
 
 #endif  // QLEVER_ASYNCWAITFORFUTURE_H
