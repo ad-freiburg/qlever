@@ -159,10 +159,10 @@ Awaitable<json> Server::composeResponseQleverJson(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     ad_utility::Timer& requestTimer, size_t maxSend) const {
   auto compute = [&, maxSend] {
-    shared_ptr<const ResultTable> rt = qet.getResult();
+    shared_ptr<const ResultTable> resultTable = qet.getResult();
     requestTimer.stop();
     off_t compResultUsecs = requestTimer.usecs();
-    size_t resultSize = rt->size();
+    size_t resultSize = resultTable->size();
 
   const auto& selectClause = query.selectClause();
 
@@ -177,14 +177,15 @@ Awaitable<json> Server::composeResponseQleverJson(
     j["runtimeInformation"] = RuntimeInformation::ordered_json(
         qet.getRootOperation()->getRuntimeInfo());
 
-  {
-    size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
-    size_t offset = query._offset.value_or(0);
-    requestTimer.cont();
-    j["res"] = qet.writeResultAsQLeverJson(selectClause._selectedVariables,
-                                           std::min(limit, maxSend), offset);
-    requestTimer.stop();
-  }
+    {
+      size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
+      size_t offset = query._offset.value_or(0);
+      requestTimer.cont();
+      j["res"] = qet.writeResultAsQLeverJson(
+          selectClause._selectedVariables, std::min(limit, maxSend),
+          offset, std::move(resultTable));
+      requestTimer.stop();
+    }
 
     requestTimer.stop();
     j["time"]["total"] =
@@ -203,14 +204,15 @@ Awaitable<json> Server::composeResponseSparqlJson(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     ad_utility::Timer& requestTimer, size_t maxSend) const {
   auto compute = [&, maxSend] {
-    shared_ptr<const ResultTable> rt = qet.getResult();
+    shared_ptr<const ResultTable> resultTable = qet.getResult();
     requestTimer.stop();
     nlohmann::json j;
     size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
     size_t offset = query._offset.value_or(0);
     requestTimer.cont();
-    j = qet.writeResultAsSparqlJson(query.selectClause()._selectedVariables,
-                                    std::min(limit, maxSend), offset);
+    j = qet.writeResultAsSparqlJson(selectClause._selectedVariables,
+                                    std::min(limit, maxSend), offset,
+                                    std::move(resultTable));
     requestTimer.stop();
     return j;
   };
