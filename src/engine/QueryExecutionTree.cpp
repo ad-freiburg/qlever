@@ -453,7 +453,7 @@ QueryExecutionTree::writeRdfGraphTurtle(
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
 
-  size_t upperBound = std::min<size_t>(offset + limit, res->_data.size());
+  size_t upperBound = std::min<size_t>(offset + limit, res->_idTable.size());
   auto variableColumns = getVariableColumns();
   for (size_t i = offset; i < upperBound; i++) {
     Context context{i, *res, variableColumns, _qec->getIndex()};

@@ -22,14 +22,14 @@ class Variable {
     const ad_utility::HashMap<string, size_t>& variableColumns =
         context._variableColumns;
     const Index& qecIndex = context._qecIndex;
-    const auto& data = res._data;
+    const auto& idTable = res._idTable;
     if (variableColumns.contains(_name)) {
       size_t index = variableColumns.at(_name);
       std::ostringstream stream;
       switch (res.getResultType(index)) {
         case ResultTable::ResultType::KB: {
           string entity =
-              qecIndex.idToOptionalString(data(row, index)).value_or("");
+              qecIndex.idToOptionalString(idTable(row, index)).value_or("");
           if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
             stream << ad_utility::convertIndexWordToValueLiteral(entity);
           } else {
@@ -38,19 +38,19 @@ class Variable {
           break;
         }
         case ResultTable::ResultType::VERBATIM:
-          stream << data(row, index);
+          stream << idTable(row, index);
           break;
         case ResultTable::ResultType::TEXT:
-          stream << qecIndex.getTextExcerpt(data(row, index));
+          stream << qecIndex.getTextExcerpt(idTable(row, index));
           break;
         case ResultTable::ResultType::FLOAT: {
           float f;
-          std::memcpy(&f, &data(row, index), sizeof(float));
+          std::memcpy(&f, &idTable(row, index), sizeof(float));
           stream << f;
           break;
         }
         case ResultTable::ResultType::LOCAL_VOCAB: {
-          stream << res.idToOptionalString(data(row, index)).value_or("");
+          stream << res.idToOptionalString(idTable(row, index)).value_or("");
           break;
         }
         default:
