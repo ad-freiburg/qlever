@@ -16,8 +16,9 @@ class Iri {
   // TODO<Robin> check format
   explicit Iri(std::string str) : _string(std::move(str)) {}
 
-  [[nodiscard]] std::string toString(
-      [[maybe_unused]] const Context& context) const {
+  [[nodiscard]] std::optional<std::string> toString(
+      [[maybe_unused]] const Context& context,
+      [[maybe_unused]] ContextRole role) const {
     return _string;
   }
 };

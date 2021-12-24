@@ -21,8 +21,11 @@ class Literal {
   template <typename T>
   explicit Literal(const T& t) : _stringRepresentation(toString(t)) {}
 
-  [[nodiscard]] std::string toString(
-      [[maybe_unused]] const Context& context) const {
-    return _stringRepresentation;
+  [[nodiscard]] std::optional<std::string> toString(
+      [[maybe_unused]] const Context& context, ContextRole role) const {
+    if (role == OBJECT) {
+      return _stringRepresentation;
+    }
+    return std::nullopt;
   }
 };

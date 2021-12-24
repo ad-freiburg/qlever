@@ -20,7 +20,8 @@ class BlankNode {
   BlankNode(bool generated, std::string label)
       : _generated{generated}, _label{std::move(label)} {}
 
-  [[nodiscard]] std::string toString(const Context& context) const {
+  [[nodiscard]] std::optional<std::string> toString(
+      const Context& context, [[maybe_unused]] ContextRole role) const {
     std::ostringstream stream;
     stream << "_:";
     // generated or user-defined

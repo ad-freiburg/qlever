@@ -16,7 +16,8 @@ class Variable {
  public:
   explicit Variable(std::string name) : _name{std::move(name)} {};
 
-  [[nodiscard]] std::string toString(const Context& context) const {
+  [[nodiscard]] std::optional<std::string> toString(
+      const Context& context, [[maybe_unused]] ContextRole role) const {
     size_t row = context._row;
     const ResultTable& res = context._res;
     const ad_utility::HashMap<string, size_t>& variableColumns =
@@ -59,6 +60,6 @@ class Variable {
       }
       return stream.str();
     }
-    return _name;
+    return std::nullopt;
   }
 };

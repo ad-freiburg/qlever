@@ -18,9 +18,10 @@ class GraphTerm : public GraphTermBase {
  public:
   using GraphTermBase::GraphTermBase;
 
-  [[nodiscard]] std::string toString(const Context& context) const {
+  [[nodiscard]] std::optional<std::string> toString(const Context& context,
+                                                    ContextRole role) const {
     return std::visit(
-        [&](const auto& object) { return object.toString(context); },
+        [&](const auto& object) { return object.toString(context, role); },
         static_cast<const GraphTermBase&>(*this));
   }
 };

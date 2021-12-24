@@ -18,9 +18,10 @@ class VarOrTerm : public VarOrTermBase {
  public:
   using VarOrTermBase::VarOrTermBase;
 
-  [[nodiscard]] std::string toString(const Context& context) const {
+  [[nodiscard]] std::optional<std::string> toString(const Context& context,
+                                                    ContextRole role) const {
     return std::visit(
-        [&](const auto& object) { return object.toString(context); },
+        [&](const auto& object) { return object.toString(context, role); },
         static_cast<const VarOrTermBase&>(*this));
   }
 };

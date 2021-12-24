@@ -457,18 +457,18 @@ QueryExecutionTree::writeRdfGraphTurtle(
   auto variableColumns = getVariableColumns();
   for (size_t i = offset; i < upperBound; i++) {
     Context context{i, *res, variableColumns, _qec->getIndex()};
-    vector<std::array<std::string, 3>> tripleSub;
     for (const auto& triple : constructTriples) {
-      tripleSub.push_back(std::array<std::string, 3>{
-          triple[0].toString(context), triple[1].toString(context),
-          triple[2].toString(context)});
-    }
-    for (const auto& triple : tripleSub) {
-      co_yield triple[0];
+      auto subject = triple[0].toString(context, SUBJECT);
+      auto verb = triple[1].toString(context, VERB);
+      auto object = triple[2].toString(context, OBJECT);
+      if (!subject.has_value() || !verb.has_value() || !object.has_value()) {
+        continue;
+      }
+      co_yield subject.value();
       co_yield ' ';
-      co_yield triple[1];
+      co_yield verb.value();
       co_yield ' ';
-      co_yield triple[2];
+      co_yield object.value();
       co_yield " .\n";
     }
   }
