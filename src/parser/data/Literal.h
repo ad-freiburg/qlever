@@ -28,4 +28,8 @@ class Literal {
     }
     return std::nullopt;
   }
+
+  [[nodiscard]] std::string toString() const {
+    return _stringRepresentation;
+  }
 };

@@ -30,4 +30,14 @@ class BlankNode {
     stream << _label;
     return stream.str();
   }
+
+  [[nodiscard]] std::string toString() const {
+    std::ostringstream stream;
+    stream << "_:";
+    // generated or user-defined
+    stream << (_generated ? 'g' : 'u');
+    stream << '_';
+    stream << _label;
+    return stream.str();
+  }
 };

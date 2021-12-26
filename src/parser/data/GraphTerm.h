@@ -24,4 +24,10 @@ class GraphTerm : public GraphTermBase {
         [&](const auto& object) { return object.toString(context, role); },
         static_cast<const GraphTermBase&>(*this));
   }
+
+  [[nodiscard]] std::string toString() const {
+    return std::visit(
+        [&](const auto& object) { return object.toString(); },
+        static_cast<const GraphTermBase&>(*this));
+  }
 };

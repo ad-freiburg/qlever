@@ -21,4 +21,8 @@ class Iri {
       [[maybe_unused]] ContextRole role) const {
     return _string;
   }
+
+  [[nodiscard]] std::string toString() const {
+    return _string;
+  }
 };

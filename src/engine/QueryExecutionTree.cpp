@@ -87,17 +87,6 @@ void QueryExecutionTree::setVariableColumns(
 }
 
 // _____________________________________________________________________________
-void QueryExecutionTree::writeResultToStream(std::ostream& out,
-                                             const vector<string>& selectVars,
-                                             size_t limit, size_t offset,
-                                             char sep) const {
-  auto generator = generateResults(selectVars, limit, offset, sep);
-  while (generator.hasNext()) {
-    out << generator.next();
-  }
-}
-
-// _____________________________________________________________________________
 ad_utility::stream_generator::stream_generator
 QueryExecutionTree::generateResults(const vector<string>& selectVars,
                                     size_t limit, size_t offset,

@@ -105,10 +105,6 @@ class QueryExecutionTree {
       const std::vector<string>& selectVariables,
       const ResultTable& resultTable) const;
 
-  void writeResultToStream(std::ostream& out, const vector<string>& selectVars,
-                           size_t limit = MAX_NOF_ROWS_IN_RESULT,
-                           size_t offset = 0, char sep = '\t') const;
-
   ad_utility::stream_generator::stream_generator generateResults(
       const vector<string>& selectVars, size_t limit = MAX_NOF_ROWS_IN_RESULT,
       size_t offset = 0, char sep = '\t') const;

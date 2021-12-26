@@ -213,8 +213,22 @@ void processQuery(QueryExecutionContext& qec, const string& query) {
   LOG(INFO) << "Execution Tree: " << qet.asString() << "ms\n";
   size_t limit = pq._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
   size_t offset = pq._offset.value_or(0);
-  qet.writeResultToStream(cout, pq._selectClause._selectedVariables, limit,
-                          offset);
+  ad_utility::stream_generator::stream_generator generator;
+  if (std::holds_alternative<ParsedQuery::SelectClause>(pq._clause)) {
+    generator = qet.generateResults(
+        std::get<ParsedQuery::SelectClause>(pq._clause)._selectedVariables,
+        limit, offset);
+  } else if (std::holds_alternative<ParsedQuery::ConstructClause>(pq._clause)) {
+    generator = qet.writeRdfGraphTurtle(
+        std::get<ParsedQuery::ConstructClause>(pq._clause), limit, offset);
+  } else {
+    // Missing implementation
+    AD_CHECK(false);
+  }
+
+  while (generator.hasNext()) {
+    cout << generator.next();
+  }
   t.stop();
   std::cout << "\nDone. Time: " << t.usecs() / 1000.0 << " ms\n";
   size_t numMatches = qet.getResult()->size();

@@ -313,6 +313,8 @@ class ParsedQuery {
     bool _distinct = false;
   };
 
+  using ConstructClause = std::vector<std::array<VarOrTerm, 3>>;
+
   ParsedQuery() = default;
 
   vector<SparqlPrefix> _prefixes;
@@ -325,8 +327,8 @@ class ParsedQuery {
   string _textLimit;
   std::optional<size_t> _offset = std::nullopt;
   string _originalString;
-  SelectClause _selectClause;
-  std::optional<std::vector<std::array<VarOrTerm, 3>>> _constructClause;
+  // explicit default initialisation because constructor is private
+  std::variant<SelectClause, ConstructClause> _clause{SelectClause{}};
 
   void expandPrefixes();
   void parseAliases();
