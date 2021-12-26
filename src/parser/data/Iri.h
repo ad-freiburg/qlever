@@ -24,9 +24,8 @@ class Iri {
     return _string;
   }
 
-  [[nodiscard]] std::string toString() const {
-    return _string;
-  }
+  [[nodiscard]] std::string toString() const { return _string; }
 };
 
-inline const std::regex Iri::iri_check{"(?:@[a-zA-Z]+(?:-(?:[a-zA-Z]|\\d)+)*@)?(?:<.+>|[^:]+:[^:]+)"};
+inline const std::regex Iri::iri_check{
+    "(?:@[a-zA-Z]+(?:-(?:[a-zA-Z]|\\d)+)*@)?(?:<.+>|[^:]+:[^:]+)"};

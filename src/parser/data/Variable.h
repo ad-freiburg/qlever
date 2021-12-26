@@ -63,7 +63,5 @@ class Variable {
     return std::nullopt;
   }
 
-  [[nodiscard]] std::string toString() const {
-    return _name;
-  }
+  [[nodiscard]] std::string toString() const { return _name; }
 };

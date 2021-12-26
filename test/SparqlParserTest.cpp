@@ -13,8 +13,10 @@ TEST(ParserTest, testParse) {
   try {
     {
       ParsedQuery pq = SparqlParser("SELECT ?x WHERE {?x ?y ?z}").parse();
-      ASSERT_TRUE(std::holds_alternative<ParsedQuery::SelectClause>(pq._clause));
-      const auto& selectClause = std::get<ParsedQuery::SelectClause>(pq._clause);
+      ASSERT_TRUE(
+          std::holds_alternative<ParsedQuery::SelectClause>(pq._clause));
+      const auto& selectClause =
+          std::get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_GT(pq.asString().size(), 0u);
       ASSERT_EQ(0u, pq._prefixes.size());
       ASSERT_EQ(1u, selectClause._selectedVariables.size());
@@ -31,8 +33,10 @@ TEST(ParserTest, testParse) {
                "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y nsx:rel2 "
                "<http://abc.de>}")
                .parse();
-      ASSERT_TRUE(std::holds_alternative<ParsedQuery::SelectClause>(pq._clause));
-      const auto& selectClause2 = std::get<ParsedQuery::SelectClause>(pq._clause);
+      ASSERT_TRUE(
+          std::holds_alternative<ParsedQuery::SelectClause>(pq._clause));
+      const auto& selectClause2 =
+          std::get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(3u, pq._prefixes.size());
       ASSERT_EQ(2u, selectClause2._selectedVariables.size());
       ASSERT_EQ(1u, pq.children().size());
@@ -67,8 +71,10 @@ TEST(ParserTest, testParse) {
                     "WHERE \t {\n?x :myrel ?y. ?y ns:myrel ?z.\n?y nsx:rel2 "
                     "<http://abc.de>\n}")
                     .parse();
-      ASSERT_TRUE(std::holds_alternative<ParsedQuery::SelectClause>(pq._clause));
-      const auto& selectClause = std::get<ParsedQuery::SelectClause>(pq._clause);
+      ASSERT_TRUE(
+          std::holds_alternative<ParsedQuery::SelectClause>(pq._clause));
+      const auto& selectClause =
+          std::get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(3u, pq._prefixes.size());
       ASSERT_EQ(2u, selectClause._selectedVariables.size());
       ASSERT_EQ(1u, pq.children().size());
@@ -101,8 +107,10 @@ TEST(ParserTest, testParse) {
                     "WHERE \t {\n?x <Directed_by> ?y. ?y ns:myrel.extend ?z.\n"
                     "?y nsx:rel2 \"Hello... World\"}")
                     .parse();
-      ASSERT_TRUE(std::holds_alternative<ParsedQuery::SelectClause>(pq._clause));
-      const auto& selectClause = std::get<ParsedQuery::SelectClause>(pq._clause);
+      ASSERT_TRUE(
+          std::holds_alternative<ParsedQuery::SelectClause>(pq._clause));
+      const auto& selectClause =
+          std::get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(1u, pq._prefixes.size());
       ASSERT_EQ(2u, selectClause._selectedVariables.size());
       ASSERT_EQ(1u, pq.children().size());
@@ -700,8 +708,7 @@ TEST(ParserTest, testGroupByAndAlias) {
   ASSERT_EQ("?count", selectClause._selectedVariables[0]);
   ASSERT_EQ(1u, selectClause._aliases.size());
   ASSERT_TRUE(selectClause._aliases[0]._expression.isAggregate({}));
-  ASSERT_EQ("(count(?a) as ?count)",
-            selectClause._aliases[0].getDescriptor());
+  ASSERT_EQ("(count(?a) as ?count)", selectClause._aliases[0].getDescriptor());
   ASSERT_EQ(1u, pq._groupByVariables.size());
   ASSERT_EQ("?b", pq._groupByVariables[0]);
 }
