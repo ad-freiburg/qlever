@@ -18,8 +18,8 @@ class Literal {
   }
 
  public:
-  template <typename T>
-  explicit Literal(const T& t) : _stringRepresentation(toString(t)) {}
+  explicit Literal(auto&& t)
+      : _stringRepresentation(toString(std::forward<decltype(t)>(t))) {}
 
   [[nodiscard]] std::optional<std::string> toString(
       [[maybe_unused]] const Context& context, ContextRole role) const {
@@ -29,7 +29,5 @@ class Literal {
     return std::nullopt;
   }
 
-  [[nodiscard]] std::string toString() const {
-    return _stringRepresentation;
-  }
+  [[nodiscard]] std::string toString() const { return _stringRepresentation; }
 };

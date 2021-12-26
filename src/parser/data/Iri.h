@@ -10,11 +10,13 @@
 #include "./Context.h"
 
 class Iri {
+  static const std::regex iri_check;
   std::string _string;
 
  public:
-  // TODO<Robin> check format
-  explicit Iri(std::string str) : _string(std::move(str)) {}
+  explicit Iri(const std::string& str) : _string(str) {
+    AD_CHECK(std::regex_match(str, iri_check));
+  }
 
   [[nodiscard]] std::optional<std::string> toString(
       [[maybe_unused]] const Context& context,
@@ -26,3 +28,5 @@ class Iri {
     return _string;
   }
 };
+
+inline const std::regex Iri::iri_check{"(?:@[a-zA-Z]+(?:-(?:[a-zA-Z]|\\d)+)*@)?(?:<.+>|[^:]+:[^:]+)"};
