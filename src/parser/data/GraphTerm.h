@@ -18,6 +18,7 @@ class GraphTerm : public GraphTermBase {
  public:
   using GraphTermBase::GraphTermBase;
 
+  // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> toString(const Context& context,
                                                     ContextRole role) const {
     // TODO<C++23>: remove static_cast as soon as we can visit types that
@@ -27,6 +28,7 @@ class GraphTerm : public GraphTermBase {
         static_cast<const GraphTermBase&>(*this));
   }
 
+  // ___________________________________________________________________________
   [[nodiscard]] std::string toString() const {
     // TODO<C++23>: remove static_cast as soon as we can visit types that
     // inherit from std::variant

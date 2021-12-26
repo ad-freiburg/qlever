@@ -435,6 +435,7 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
   LOG(DEBUG) << "Done creating readable result.\n";
 }
 
+// _____________________________________________________________________________
 ad_utility::stream_generator::stream_generator
 QueryExecutionTree::writeRdfGraphTurtle(
     const std::vector<std::array<VarOrTerm, 3>>& constructTriples, size_t limit,

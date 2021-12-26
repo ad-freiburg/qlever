@@ -21,6 +21,7 @@ class Literal {
   explicit Literal(auto&& t)
       : _stringRepresentation(toString(std::forward<decltype(t)>(t))) {}
 
+  // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> toString(
       [[maybe_unused]] const Context& context, ContextRole role) const {
     if (role == OBJECT) {
@@ -29,5 +30,6 @@ class Literal {
     return std::nullopt;
   }
 
+  // ___________________________________________________________________________
   [[nodiscard]] std::string toString() const { return _stringRepresentation; }
 };

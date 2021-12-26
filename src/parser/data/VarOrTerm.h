@@ -18,6 +18,7 @@ class VarOrTerm : public VarOrTermBase {
  public:
   using VarOrTermBase::VarOrTermBase;
 
+  // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> toString(const Context& context,
                                                     ContextRole role) const {
     // TODO<C++23>: remove static_cast as soon as we can visit types that
@@ -27,6 +28,7 @@ class VarOrTerm : public VarOrTermBase {
         static_cast<const VarOrTermBase&>(*this));
   }
 
+  // ___________________________________________________________________________
   [[nodiscard]] std::string toString() const {
     // TODO<C++23>: remove static_cast as soon as we can visit types that
     // inherit from std::variant

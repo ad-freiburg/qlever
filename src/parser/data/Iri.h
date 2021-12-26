@@ -18,12 +18,14 @@ class Iri {
     AD_CHECK(std::regex_match(str, iri_check));
   }
 
+  // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> toString(
       [[maybe_unused]] const Context& context,
       [[maybe_unused]] ContextRole role) const {
     return _string;
   }
 
+  // ___________________________________________________________________________
   [[nodiscard]] std::string toString() const { return _string; }
 };
 

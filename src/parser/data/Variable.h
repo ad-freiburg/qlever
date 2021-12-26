@@ -16,6 +16,7 @@ class Variable {
  public:
   explicit Variable(std::string name) : _name{std::move(name)} {};
 
+  // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> toString(
       const Context& context, [[maybe_unused]] ContextRole role) const {
     size_t row = context._row;
@@ -63,5 +64,6 @@ class Variable {
     return std::nullopt;
   }
 
+  // ___________________________________________________________________________
   [[nodiscard]] std::string toString() const { return _name; }
 };
