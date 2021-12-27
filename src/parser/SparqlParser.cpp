@@ -27,23 +27,30 @@ ParsedQuery SparqlParser::parse() {
   ParsedQuery result;
   result._originalString = _query;
   parsePrologue(&result);
-  parseQuery(&result);
+  if (_lexer.accept("construct")) {
+    parseQuery(&result, CONSTRUCT_QUERY);
+  } else {
+    _lexer.expect("select");
+    parseQuery(&result, SELECT_QUERY);
+  }
   _lexer.expectEmpty();
 
   return result;
 }
 
 // _____________________________________________________________________________
-void SparqlParser::parseQuery(ParsedQuery* query) {
-  if (_lexer.accept("construct")) {
+void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
+  if (queryType == CONSTRUCT_QUERY) {
     auto str = _lexer.getUnconsumedInput();
     auto parseResult = sparqlParserHelpers::parseConstructTemplate(str);
     query->_clause = std::move(parseResult._resultOfParse);
     _lexer.reset(std::move(parseResult._remainingText));
     _lexer.expect("where");
-  } else {
-    _lexer.expect("select");
+  } else if (queryType == SELECT_QUERY) {
     parseSelect(query);
+  } else {
+    // Unsupported query type
+    AD_CHECK(false);
   }
 
   _lexer.expect("{");
@@ -292,7 +299,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         // subquery
         // create the subquery operation
         GraphPatternOperation::Subquery subq;
-        parseQuery(&subq._subquery);
+        parseQuery(&subq._subquery, SELECT_QUERY);
         currentPattern->_children.emplace_back(std::move(subq));
         // The closing bracked } is consumed by the subquery
         _lexer.accept(".");
