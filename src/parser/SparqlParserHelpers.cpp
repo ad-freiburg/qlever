@@ -4,6 +4,7 @@
 
 #include "SparqlParserHelpers.h"
 
+#include "../util/antlr/ThrowingErrorStrategy.h"
 #include "sparqlParser/SparqlQleverVisitor.h"
 #include "sparqlParser/generated/SparqlAutomaticLexer.h"
 
@@ -27,9 +28,8 @@ struct ParserAndVisitor {
 
   template <typename ResultType, typename ContextType>
   auto parse(const std::string& input,
-             ContextType* (SparqlAutomaticParser::*F)(void))
-
-  {
+             ContextType* (SparqlAutomaticParser::*F)(void)) {
+    _parser.setErrorHandler(std::make_shared<ThrowingErrorStrategy>());
     auto context = (_parser.*F)();
     auto resultOfParse =
         std::move(context->accept(&(_visitor)).template as<ResultType>());
@@ -44,31 +44,44 @@ struct ParserAndVisitor {
 // ____________________________________________________________________________
 ResultOfParseAndRemainingText<sparqlExpression::SparqlExpressionPimpl>
 parseExpression(const std::string& input) {
-  ParserAndVisitor p{input};
-  auto resultOfParseAndRemainingText =
-      p.parse<sparqlExpression::SparqlExpression::Ptr>(
-          input, &SparqlAutomaticParser::expression);
+  try {
+    ParserAndVisitor p{input};
+    auto resultOfParseAndRemainingText =
+        p.parse<sparqlExpression::SparqlExpression::Ptr>(
+            input, &SparqlAutomaticParser::expression);
 
-  return ResultOfParseAndRemainingText{
-      sparqlExpression::SparqlExpressionPimpl{
-          std::move(resultOfParseAndRemainingText._resultOfParse)},
-      std::move(resultOfParseAndRemainingText._remainingText)};
+    return ResultOfParseAndRemainingText{
+        sparqlExpression::SparqlExpressionPimpl{
+            std::move(resultOfParseAndRemainingText._resultOfParse)},
+        std::move(resultOfParseAndRemainingText._remainingText)};
+  } catch (const antlr4::ParseCancellationException& e) {
+    throw std::runtime_error{"Failed to parse expression: "s + e.what()};
+  }
 }
 
 // ____________________________________________________________________________
 ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
     const std::string& input) {
-  ParserAndVisitor p{input};
-  return p.parse<ParsedQuery::Alias>(
-      input, &SparqlAutomaticParser::aliasWithouBrackes);
+  try {
+    ParserAndVisitor p{input};
+    return p.parse<ParsedQuery::Alias>(
+        input, &SparqlAutomaticParser::aliasWithouBrackes);
+  } catch (const antlr4::ParseCancellationException& e) {
+    throw std::runtime_error{"Failed to parse alias: "s + e.what()};
+  }
 }
 // _____________________________________________________________________________
 
 ResultOfParseAndRemainingText<std::vector<std::array<VarOrTerm, 3>>>
 parseConstructTemplate(const std::string& input) {
-  ParserAndVisitor p{input};
-  return p.parse<std::vector<std::array<VarOrTerm, 3>>>(
-      input, &SparqlAutomaticParser::constructTemplate);
+  try {
+    ParserAndVisitor p{input};
+    return p.parse<std::vector<std::array<VarOrTerm, 3>>>(
+        input, &SparqlAutomaticParser::constructTemplate);
+  } catch (const antlr4::ParseCancellationException& e) {
+    throw std::runtime_error{"Failed to parse construct template: "s +
+                             e.what()};
+  }
 }
 
 // ______________________________________________________________________________
