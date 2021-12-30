@@ -14,8 +14,8 @@ class Iri {
   std::string _string;
 
  public:
-  explicit Iri(const std::string& str) : _string(str) {
-    AD_CHECK(std::regex_match(str, iri_check));
+  explicit Iri(std::string str) : _string{std::move(str)} {
+    AD_CHECK(std::regex_match(_string, iri_check));
   }
 
   // ___________________________________________________________________________

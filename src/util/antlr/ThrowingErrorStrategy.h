@@ -6,7 +6,8 @@
 
 #include <string>
 
-#include "antlr4-runtime.h"
+#include "DefaultErrorStrategy.h"
+#include "RecognitionException.h"
 
 struct ThrowingErrorStrategy : public antlr4::DefaultErrorStrategy {
   void reportError(antlr4::Parser*,

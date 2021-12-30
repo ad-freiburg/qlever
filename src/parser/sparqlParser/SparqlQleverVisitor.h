@@ -1161,7 +1161,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       // strip _: prefix from string
       constexpr size_t length = std::string_view{"_:"}.length();
       const string label = ctx->BLANK_NODE_LABEL()->getText().substr(length);
-      // false means the author explicitly wrote a blank node label
+      // false means the query explicitly contains a blank node label
       return BlankNode{false, label};
     }
     // invalid grammar

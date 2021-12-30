@@ -327,7 +327,8 @@ class ParsedQuery {
   string _textLimit;
   std::optional<size_t> _offset = std::nullopt;
   string _originalString;
-  // explicit default initialisation because constructor is private
+  // explicit default initialisation because the constructor
+  // of SelectClause is private
   std::variant<SelectClause, ConstructClause> _clause{SelectClause{}};
 
   [[nodiscard]] bool hasSelectClause() const {
