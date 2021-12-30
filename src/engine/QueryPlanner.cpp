@@ -44,12 +44,10 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
       _enablePatternTrick && checkUsePatternTrick(&pq, &patternTrickTriple);
 
   bool doGrouping = !pq._groupByVariables.empty() || usePatternTrick;
-  if (!doGrouping &&
-      std::holds_alternative<ParsedQuery::SelectClause>(pq._clause)) {
+  if (!doGrouping && pq.hasSelectClause()) {
     // if there is no group by statement, but an aggregate alias is used
     // somewhere do grouping anyways.
-    for (const ParsedQuery::Alias& alias :
-         std::get<ParsedQuery::SelectClause>(pq._clause)._aliases) {
+    for (const ParsedQuery::Alias& alias : pq.selectClause()._aliases) {
       if (alias._expression.isAggregate({})) {
         doGrouping = true;
         break;
@@ -76,8 +74,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   }
 
   // DISTINCT
-  if (std::holds_alternative<ParsedQuery::SelectClause>(pq._clause)) {
-    const auto& selectClause = std::get<ParsedQuery::SelectClause>(pq._clause);
+  if (pq.hasSelectClause()) {
+    const auto& selectClause = pq.selectClause();
     if (selectClause._distinct) {
       plans.emplace_back(getDistinctRow(selectClause, plans));
     }
@@ -445,10 +443,10 @@ bool QueryPlanner::checkUsePatternTrick(
   //   appear in a value clause?
   // Check if the query has the right number of variables for aliases and
   // group by.
-  if (!std::holds_alternative<ParsedQuery::SelectClause>(pq->_clause)) {
+  if (!pq->hasSelectClause()) {
     return false;
   }
-  const auto& selectClause = std::get<ParsedQuery::SelectClause>(pq->_clause);
+  const auto& selectClause = pq->selectClause();
   if (pq->_groupByVariables.size() != 1 || selectClause._aliases.size() > 1) {
     return false;
   }
@@ -564,13 +562,11 @@ bool QueryPlanner::checkUsePatternTrick(
             graphsToProcess.push_back(&arg._child2);
           } else if constexpr (std::is_same_v<
                                    T, GraphPatternOperation::Subquery>) {
-            if (!std::holds_alternative<ParsedQuery::SelectClause>(
-                    arg._subquery._clause)) {
+            if (!arg._subquery.hasSelectClause()) {
               usePatternTrick = false;
               return;
             }
-            const auto selectClause =
-                std::get<ParsedQuery::SelectClause>(arg._subquery._clause);
+            const auto selectClause = arg._subquery.selectClause();
             for (const std::string& v : selectClause._selectedVariables) {
               if (v == t._o) {
                 usePatternTrick = false;
@@ -618,13 +614,11 @@ bool QueryPlanner::checkUsePatternTrick(
               graphsToProcess.push_back(&arg._child2);
             } else if constexpr (std::is_same_v<
                                      T, GraphPatternOperation::Subquery>) {
-              if (!std::holds_alternative<ParsedQuery::SelectClause>(
-                      arg._subquery._clause)) {
+              if (!arg._subquery.hasSelectClause()) {
                 usePatternTrick = false;
                 return;
               }
-              const auto selectClause =
-                  std::get<ParsedQuery::SelectClause>(arg._subquery._clause);
+              const auto selectClause = arg._subquery.selectClause();
               for (const std::string& v : selectClause._selectedVariables) {
                 if (v == t._o) {
                   usePatternTrick = false;
@@ -905,7 +899,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
 vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab,
     const SparqlTriple& patternTrickTriple) {
-  const auto& selectClause = std::get<ParsedQuery::SelectClause>(pq._clause);
+  const auto& selectClause = pq.selectClause();
   const vector<SubtreePlan>* previous = nullptr;
   if (!dpTab.empty()) {
     previous = &dpTab.back();
@@ -1026,8 +1020,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
     groupByPlan._idsOfIncludedNodes = parent->_idsOfIncludedNodes;
     groupByPlan._idsOfIncludedFilters = parent->_idsOfIncludedFilters;
     std::vector<ParsedQuery::Alias> aliases;
-    if (std::holds_alternative<ParsedQuery::SelectClause>(pq._clause)) {
-      aliases = std::get<ParsedQuery::SelectClause>(pq._clause)._aliases;
+    if (pq.hasSelectClause()) {
+      aliases = pq.selectClause()._aliases;
     }
     auto groupBy = std::make_shared<GroupBy>(_qec, pq._groupByVariables,
                                              std::move(aliases));

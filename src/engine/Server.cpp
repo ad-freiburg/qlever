@@ -163,7 +163,7 @@ json Server::composeResponseQleverJson(const ParsedQuery& query,
   off_t compResultUsecs = requestTimer.usecs();
   size_t resultSize = rt->size();
 
-  const auto& selectClause = std::get<ParsedQuery::SelectClause>(query._clause);
+  const auto& selectClause = query.selectClause();
 
   nlohmann::json j;
 
@@ -205,9 +205,8 @@ json Server::composeResponseSparqlJson(const ParsedQuery& query,
   size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
   size_t offset = query._offset.value_or(0);
   requestTimer.cont();
-  j = qet.writeResultAsSparqlJson(
-      std::get<ParsedQuery::SelectClause>(query._clause)._selectedVariables,
-      std::min(limit, maxSend), offset);
+  j = qet.writeResultAsSparqlJson(query.selectClause()._selectedVariables,
+                                  std::min(limit, maxSend), offset);
   requestTimer.stop();
   return j;
 }
@@ -217,9 +216,8 @@ ad_utility::stream_generator::stream_generator Server::composeResponseSepValues(
     const ParsedQuery& query, const QueryExecutionTree& qet, char sep) {
   size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
   size_t offset = query._offset.value_or(0);
-  return qet.generateResults(
-      std::get<ParsedQuery::SelectClause>(query._clause)._selectedVariables,
-      limit, offset, sep);
+  return qet.generateResults(query.selectClause()._selectedVariables, limit,
+                             offset, sep);
 }
 
 // _____________________________________________________________________________
@@ -228,8 +226,7 @@ ad_utility::stream_generator::stream_generator Server::composeTurtleResponse(
     const ParsedQuery& query, const QueryExecutionTree& qet) {
   size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
   size_t offset = query._offset.value_or(0);
-  return qet.writeRdfGraphTurtle(
-      std::get<ParsedQuery::ConstructClause>(query._clause), limit, offset);
+  return qet.writeRdfGraphTurtle(query.constructClause(), limit, offset);
 }
 
 // _____________________________________________________________________________
@@ -386,7 +383,7 @@ boost::asio::awaitable<void> Server::processQuery(
     AD_CHECK(mediaType.has_value());
     switch (mediaType.value()) {
       case ad_utility::MediaType::csv: {
-        if (std::holds_alternative<ParsedQuery::ConstructClause>(pq._clause)) {
+        if (pq.hasConstructClause()) {
           throw std::runtime_error{
               "CONSTRUCT queries only support turtle syntax right now"};
         }
@@ -396,7 +393,7 @@ boost::asio::awaitable<void> Server::processQuery(
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::tsv: {
-        if (std::holds_alternative<ParsedQuery::ConstructClause>(pq._clause)) {
+        if (pq.hasConstructClause()) {
           throw std::runtime_error{
               "CONSTRUCT queries only support turtle syntax right now"};
         }
@@ -406,7 +403,7 @@ boost::asio::awaitable<void> Server::processQuery(
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::qleverJson: {
-        if (std::holds_alternative<ParsedQuery::ConstructClause>(pq._clause)) {
+        if (pq.hasConstructClause()) {
           throw std::runtime_error{
               "CONSTRUCT queries only support turtle syntax right now"};
         }
@@ -416,7 +413,7 @@ boost::asio::awaitable<void> Server::processQuery(
         co_await sendJson(std::move(responseString));
       } break;
       case ad_utility::MediaType::turtle:
-        if (std::holds_alternative<ParsedQuery::ConstructClause>(pq._clause)) {
+        if (pq.hasConstructClause()) {
           auto responseGenerator = composeTurtleResponse(pq, qet);
           auto response =
               createOkResponse(std::move(responseGenerator), request,

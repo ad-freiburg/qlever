@@ -59,9 +59,8 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
   parseSolutionModifiers(query);
 
   if (query->_groupByVariables.size() > 0) {
-    if (std::holds_alternative<ParsedQuery::SelectClause>(query->_clause)) {
-      const auto& selectClause =
-          std::get<ParsedQuery::SelectClause>(query->_clause);
+    if (query->hasSelectClause()) {
+      const auto& selectClause = query->selectClause();
       // Check if all selected variables are either aggregated or
       for (const string& var : selectClause._selectedVariables) {
         if (var[0] == '?') {
@@ -86,10 +85,8 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
           }
         }
       }
-    } else if (std::holds_alternative<ParsedQuery::ConstructClause>(
-                   query->_clause)) {
-      auto& constructClause =
-          std::get<ParsedQuery::ConstructClause>(query->_clause);
+    } else if (query->hasConstructClause()) {
+      auto& constructClause = query->constructClause();
       for (const auto& triple : constructClause) {
         for (const auto& varOrTerm : triple) {
           if (std::holds_alternative<Variable>(varOrTerm)) {
@@ -111,11 +108,10 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
       AD_CHECK(false);
     }
   }
-  if (!std::holds_alternative<ParsedQuery::SelectClause>(query->_clause)) {
+  if (!query->hasSelectClause()) {
     return;
   }
-  const auto& selectClause =
-      std::get<ParsedQuery::SelectClause>(query->_clause);
+  const auto& selectClause = query->selectClause();
 
   ad_utility::HashMap<std::string, size_t> variable_counts;
   for (const std::string& s : selectClause._selectedVariables) {
@@ -154,7 +150,7 @@ void SparqlParser::addPrefix(const string& key, const string& value,
 
 // _____________________________________________________________________________
 void SparqlParser::parseSelect(ParsedQuery* query) {
-  auto& selectClause = std::get<ParsedQuery::SelectClause>(query->_clause);
+  auto& selectClause = query->selectClause();
   if (_lexer.accept("distinct")) {
     selectClause._distinct = true;
   }
@@ -212,11 +208,9 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
     s << _lexer.current().raw;
     _lexer.expect(")");
     s << ")";
-  } else if (std::holds_alternative<ParsedQuery::SelectClause>(
-                 query->_clause) &&
-             _lexer.accept("(")) {
+  } else if (query->hasSelectClause() && _lexer.accept("(")) {
     ParsedQuery::Alias a = parseAliasWithAntlr();
-    auto& selectClause = std::get<ParsedQuery::SelectClause>(query->_clause);
+    auto& selectClause = query->selectClause();
 
     for (const auto& selectedVariable : selectClause._selectedVariables) {
       if (selectedVariable == a._outVarName) {

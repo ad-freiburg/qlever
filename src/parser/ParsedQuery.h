@@ -330,6 +330,28 @@ class ParsedQuery {
   // explicit default initialisation because constructor is private
   std::variant<SelectClause, ConstructClause> _clause{SelectClause{}};
 
+  [[nodiscard]] bool hasSelectClause() const {
+    return std::holds_alternative<SelectClause>(_clause);
+  }
+
+  [[nodiscard]] bool hasConstructClause() const {
+    return std::holds_alternative<ConstructClause>(_clause);
+  }
+
+  [[nodiscard]] decltype(auto) selectClause() const {
+    return std::get<SelectClause>(_clause);
+  }
+
+  [[nodiscard]] decltype(auto) constructClause() const {
+    return std::get<ConstructClause>(_clause);
+  }
+
+  decltype(auto) selectClause() { return std::get<SelectClause>(_clause); }
+
+  decltype(auto) constructClause() {
+    return std::get<ConstructClause>(_clause);
+  }
+
   void expandPrefixes();
   void parseAliases();
 

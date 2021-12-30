@@ -1,4 +1,3 @@
-
 add_library(index
         Index.h Index.cpp Index.Text.cpp
         Vocabulary.h Vocabulary.cpp
@@ -14,4 +13,10 @@ add_library(index
         PrefixHeuristic.cpp PrefixHeuristic.h
         CompressedRelation.h CompressedRelation.cpp)
 
-target_link_libraries(index parser ${STXXL_LIBRARIES} ${ICU_LIBRARIES} absl::flat_hash_map absl::flat_hash_set zstd)
+
+find_package(OpenMP)
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(index parser ${STXXL_LIBRARIES} ${ICU_LIBRARIES} absl::flat_hash_map absl::flat_hash_set zstd OpenMP::OpenMP_CXX)
+else()
+    target_link_libraries(index parser ${STXXL_LIBRARIES} ${ICU_LIBRARIES} absl::flat_hash_map absl::flat_hash_set zstd)
+endif()

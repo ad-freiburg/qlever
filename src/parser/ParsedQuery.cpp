@@ -32,9 +32,9 @@ string ParsedQuery::asString() const {
   }
   os << "\n}";
 
-  bool usesSelect = std::holds_alternative<SelectClause>(_clause);
+  bool usesSelect = hasSelectClause();
   if (usesSelect) {
-    const auto& selectClause = std::get<SelectClause>(_clause);
+    const auto& selectClause = this->selectClause();
     // SELECT
     os << "\nSELECT: {\n\t";
     for (size_t i = 0; i < selectClause._selectedVariables.size(); ++i) {
@@ -55,8 +55,8 @@ string ParsedQuery::asString() const {
       }
     }
     os << "{";
-  } else if (std::holds_alternative<ConstructClause>(_clause)) {
-    const auto& constructClause = std::get<ConstructClause>(_clause);
+  } else if (hasConstructClause()) {
+    const auto& constructClause = this->constructClause();
     os << "\n CONSTRUCT {\n\t";
     for (const auto& triple : constructClause) {
       os << triple[0].toString();
@@ -82,7 +82,7 @@ string ParsedQuery::asString() const {
      << (_offset.has_value() ? std::to_string(_offset.value())
                              : "no offset specified");
   if (usesSelect) {
-    const auto& selectClause = std::get<SelectClause>(_clause);
+    const auto& selectClause = this->selectClause();
     os << "\nDISTINCT modifier is " << (selectClause._distinct ? "" : "not ")
        << "present.";
     os << "\nREDUCED modifier is " << (selectClause._reduced ? "" : "not ")
