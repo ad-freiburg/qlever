@@ -5,17 +5,18 @@
 #pragma once
 
 #include <string>
-#include <utility>
 
 #include "./Context.h"
+#include "ctre/ctre.h"
 
 class Iri {
-  static const std::regex iri_check;
   std::string _string;
 
  public:
   explicit Iri(std::string str) : _string{std::move(str)} {
-    AD_CHECK(std::regex_match(_string, iri_check));
+    AD_CHECK(ctre::match<
+             "(?:@[a-zA-Z]+(?:-(?:[a-zA-Z]|\\d)+)*@)?(?:<.+>|[^:]+:[^:]+)">(
+        _string));
   }
 
   // ___________________________________________________________________________
@@ -28,6 +29,3 @@ class Iri {
   // ___________________________________________________________________________
   [[nodiscard]] std::string toString() const { return _string; }
 };
-
-inline const std::regex Iri::iri_check{
-    "(?:@[a-zA-Z]+(?:-(?:[a-zA-Z]|\\d)+)*@)?(?:<.+>|[^:]+:[^:]+)"};
