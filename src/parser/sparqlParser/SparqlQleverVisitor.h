@@ -1159,8 +1159,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     }
     if (ctx->BLANK_NODE_LABEL()) {
       // strip _: prefix from string
-      const string label =
-          ctx->BLANK_NODE_LABEL()->getText().substr(std::strlen("_:"));
+      constexpr size_t length = std::string_view{"_:"}.length();
+      const string label = ctx->BLANK_NODE_LABEL()->getText().substr(length);
       // false means the author explicitly wrote a blank node label
       return BlankNode{false, label};
     }
@@ -1200,42 +1200,3 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return _prefixMap[prefix];
   }
 };
-
-/*
-namespace SparqlAutomaticParserHelpers {
-
-struct ParserAndVisitor {
- private:
-  string input;
-  antlr4::ANTLRInputStream stream{input};
-  SparqlAutomaticLexer lexer{&stream};
-  antlr4::CommonTokenStream tokens{&lexer};
-
- public:
-  SparqlAutomaticParser parser{&tokens};
-  SparqlQleverVisitor visitor;
-  explicit ParserAndVisitor(string toParse) : input{std::move(toParse)} {}
-  explicit ParserAndVisitor(string toParse, SparqlQleverVisitor::PrefixMap
-prefixMap) : input{std::move(toParse)}, visitor{std::move(prefixMap)} {}
-};
-
-//
-______________________________________________________________________________
-std::pair<SparqlQleverVisitor::PrefixMap, size_t> parsePrologue(const string&
-input) { ParserAndVisitor p{input}; auto context = p.parser.prologue(); auto
-parsedSize = context->getText().size(); p.visitor.visitPrologue(context); const
-auto& constVisitor = p.visitor; return {constVisitor.prefixMap(), parsedSize};
-}
-
-// _____________________________________________________________________________
-std::pair<string, size_t> parseIri(const string& input,
-SparqlQleverVisitor::PrefixMap prefixMap) { ParserAndVisitor p{input,
-std::move(prefixMap)}; auto context = p.parser.iri(); auto parsedSize =
-context->getText().size(); auto resultString =
-p.visitor.visitIri(context).as<string>();
-  //const auto& constVisitor = p.visitor;
-  return {std::move(resultString), parsedSize};
-}
-
-}
- */
