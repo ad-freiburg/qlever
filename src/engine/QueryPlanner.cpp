@@ -566,7 +566,7 @@ bool QueryPlanner::checkUsePatternTrick(
               usePatternTrick = false;
               return;
             }
-            const auto selectClause = arg._subquery.selectClause();
+            const auto& selectClause = arg._subquery.selectClause();
             for (const std::string& v : selectClause._selectedVariables) {
               if (v == t._o) {
                 usePatternTrick = false;
@@ -618,7 +618,7 @@ bool QueryPlanner::checkUsePatternTrick(
                 usePatternTrick = false;
                 return;
               }
-              const auto selectClause = arg._subquery.selectClause();
+              const auto& selectClause = arg._subquery.selectClause();
               for (const std::string& v : selectClause._selectedVariables) {
                 if (v == t._o) {
                   usePatternTrick = false;
