@@ -14,7 +14,16 @@ class Variable {
   std::string _name;
 
  public:
-  explicit Variable(std::string name) : _name{std::move(name)} {};
+  explicit Variable(std::string name) : _name{std::move(name)} {
+    // Verify variable name is not empty
+    AD_CHECK(_name.length() > 1);
+    // normalise notation for consistency
+    if (_name[0] == '$') {
+      _name[0] = '?';
+    }
+    // variables have to start with ?
+    AD_CHECK(_name[0] == '?');
+  };
 
   // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> evaluate(
