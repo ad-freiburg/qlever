@@ -66,4 +66,7 @@ class Variable {
 
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const { return _name; }
+
+  // ___________________________________________________________________________
+  [[nodiscard]] const std::string& getName() const { return _name; }
 };
