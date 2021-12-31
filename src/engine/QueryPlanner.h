@@ -279,7 +279,8 @@ class QueryPlanner {
       const vector<vector<SubtreePlan>>& dpTab) const;
 
   vector<SubtreePlan> getPatternTrickRow(
-      const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab,
+      const ParsedQuery::SelectClause& selectClause,
+      const vector<vector<SubtreePlan>>& dpTab,
       const SparqlTriple& patternTrickTriple);
 
   vector<SubtreePlan> getHavingRow(

@@ -347,9 +347,11 @@ class ParsedQuery {
     return std::get<ConstructClause>(_clause);
   }
 
-  decltype(auto) selectClause() { return std::get<SelectClause>(_clause); }
+  [[nodiscard]] decltype(auto) selectClause() {
+    return std::get<SelectClause>(_clause);
+  }
 
-  decltype(auto) constructClause() {
+  [[nodiscard]] decltype(auto) constructClause() {
     return std::get<ConstructClause>(_clause);
   }
 

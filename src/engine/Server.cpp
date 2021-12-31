@@ -380,33 +380,31 @@ boost::asio::awaitable<void> Server::processQuery(
           request));
     }
 
+    const auto throwIfConstructClause = [&pq]() {
+      if (pq.hasConstructClause()) {
+        throw std::runtime_error{
+            "CONSTRUCT queries only support turtle syntax right now"};
+      }
+    };
+
     AD_CHECK(mediaType.has_value());
     switch (mediaType.value()) {
       case ad_utility::MediaType::csv: {
-        if (pq.hasConstructClause()) {
-          throw std::runtime_error{
-              "CONSTRUCT queries only support turtle syntax right now"};
-        }
+        throwIfConstructClause();
         auto responseGenerator = composeResponseSepValues(pq, qet, ',');
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::csv);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::tsv: {
-        if (pq.hasConstructClause()) {
-          throw std::runtime_error{
-              "CONSTRUCT queries only support turtle syntax right now"};
-        }
+        throwIfConstructClause();
         auto responseGenerator = composeResponseSepValues(pq, qet, '\t');
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::tsv);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::qleverJson: {
-        if (pq.hasConstructClause()) {
-          throw std::runtime_error{
-              "CONSTRUCT queries only support turtle syntax right now"};
-        }
+        throwIfConstructClause();
         // Normal case: JSON response
         auto responseString =
             composeResponseQleverJson(pq, qet, requestTimer, maxSend);

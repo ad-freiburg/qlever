@@ -65,7 +65,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   if (doGrouping && !usePatternTrick) {
     plans.emplace_back(getGroupByRow(pq, plans));
   } else if (usePatternTrick) {
-    plans.emplace_back(getPatternTrickRow(pq, plans, patternTrickTriple));
+    plans.emplace_back(
+        getPatternTrickRow(pq.selectClause(), plans, patternTrickTriple));
   }
 
   // HAVING
@@ -897,9 +898,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
 
 // _____________________________________________________________________________
 vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
-    const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab,
+    const ParsedQuery::SelectClause& selectClause,
+    const vector<vector<SubtreePlan>>& dpTab,
     const SparqlTriple& patternTrickTriple) {
-  const auto& selectClause = pq.selectClause();
   const vector<SubtreePlan>* previous = nullptr;
   if (!dpTab.empty()) {
     previous = &dpTab.back();

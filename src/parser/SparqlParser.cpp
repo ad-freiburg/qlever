@@ -209,6 +209,8 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
     _lexer.expect(")");
     s << ")";
   } else if (query->hasSelectClause() && _lexer.accept("(")) {
+    // TODO This assumes that aliases can stand in the ORDER BY
+    // This is not true, only expression may stand there
     ParsedQuery::Alias a = parseAliasWithAntlr();
     auto& selectClause = query->selectClause();
 
