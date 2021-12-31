@@ -22,7 +22,7 @@ class Literal {
       : _stringRepresentation(toString(std::forward<decltype(t)>(t))) {}
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::optional<std::string> toString(
+  [[nodiscard]] std::optional<std::string> evaluate(
       [[maybe_unused]] const Context& context, ContextRole role) const {
     if (role == OBJECT) {
       return _stringRepresentation;
@@ -31,5 +31,5 @@ class Literal {
   }
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::string toString() const { return _stringRepresentation; }
+  [[nodiscard]] std::string toSparql() const { return _stringRepresentation; }
 };

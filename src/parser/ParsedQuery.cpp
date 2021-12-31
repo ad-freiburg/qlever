@@ -59,11 +59,11 @@ string ParsedQuery::asString() const {
     const auto& constructClause = this->constructClause();
     os << "\n CONSTRUCT {\n\t";
     for (const auto& triple : constructClause) {
-      os << triple[0].toString();
+      os << triple[0].toSparql();
       os << ' ';
-      os << triple[1].toString();
+      os << triple[1].toSparql();
       os << ' ';
-      os << triple[2].toString();
+      os << triple[2].toSparql();
       os << " .\n";
     }
     os << "}";

@@ -17,7 +17,7 @@ class Variable {
   explicit Variable(std::string name) : _name{std::move(name)} {};
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::optional<std::string> toString(
+  [[nodiscard]] std::optional<std::string> evaluate(
       const Context& context, [[maybe_unused]] ContextRole role) const {
     size_t row = context._row;
     const ResultTable& res = context._res;
@@ -65,5 +65,5 @@ class Variable {
   }
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::string toString() const { return _name; }
+  [[nodiscard]] std::string toSparql() const { return _name; }
 };

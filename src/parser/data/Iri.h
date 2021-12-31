@@ -20,12 +20,12 @@ class Iri {
   }
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::optional<std::string> toString(
+  [[nodiscard]] std::optional<std::string> evaluate(
       [[maybe_unused]] const Context& context,
       [[maybe_unused]] ContextRole role) const {
     return _string;
   }
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::string toString() const { return _string; }
+  [[nodiscard]] std::string toSparql() const { return _string; }
 };

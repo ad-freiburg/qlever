@@ -19,20 +19,20 @@ class GraphTerm : public GraphTermBase {
   using GraphTermBase::GraphTermBase;
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::optional<std::string> toString(const Context& context,
+  [[nodiscard]] std::optional<std::string> evaluate(const Context& context,
                                                     ContextRole role) const {
     // TODO<C++23>: remove static_cast as soon as we can visit types that
     // inherit from std::variant
     return std::visit(
-        [&](const auto& object) { return object.toString(context, role); },
+        [&](const auto& object) { return object.evaluate(context, role); },
         static_cast<const GraphTermBase&>(*this));
   }
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::string toString() const {
+  [[nodiscard]] std::string toSparql() const {
     // TODO<C++23>: remove static_cast as soon as we can visit types that
     // inherit from std::variant
-    return std::visit([&](const auto& object) { return object.toString(); },
+    return std::visit([&](const auto& object) { return object.toSparql(); },
                       static_cast<const GraphTermBase&>(*this));
   }
 };

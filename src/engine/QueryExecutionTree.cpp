@@ -448,9 +448,9 @@ QueryExecutionTree::writeRdfGraphTurtle(
   for (size_t i = offset; i < upperBound; i++) {
     Context context{i, *res, variableColumns, _qec->getIndex()};
     for (const auto& triple : constructTriples) {
-      auto subject = triple[0].toString(context, SUBJECT);
-      auto verb = triple[1].toString(context, VERB);
-      auto object = triple[2].toString(context, OBJECT);
+      auto subject = triple[0].evaluate(context, SUBJECT);
+      auto verb = triple[1].evaluate(context, VERB);
+      auto object = triple[2].evaluate(context, OBJECT);
       if (!subject.has_value() || !verb.has_value() || !object.has_value()) {
         continue;
       }

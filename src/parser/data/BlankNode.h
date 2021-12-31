@@ -21,7 +21,7 @@ class BlankNode {
       : _generated{generated}, _label{std::move(label)} {}
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::optional<std::string> toString(
+  [[nodiscard]] std::optional<std::string> evaluate(
       const Context& context, [[maybe_unused]] ContextRole role) const {
     std::ostringstream stream;
     stream << "_:";
@@ -33,7 +33,7 @@ class BlankNode {
   }
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::string toString() const {
+  [[nodiscard]] std::string toSparql() const {
     std::ostringstream stream;
     stream << "_:";
     // generated or user-defined

@@ -90,7 +90,7 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
       for (const auto& triple : constructClause) {
         for (const auto& varOrTerm : triple) {
           if (std::holds_alternative<Variable>(varOrTerm)) {
-            const auto var = varOrTerm.toString();
+            const auto var = varOrTerm.toSparql();
             if (std::find(query->_groupByVariables.begin(),
                           query->_groupByVariables.end(),
                           var) == query->_groupByVariables.end()) {
