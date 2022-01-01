@@ -32,26 +32,42 @@ string ParsedQuery::asString() const {
   }
   os << "\n}";
 
-  // SELECT
-  os << "\nSELECT: {\n\t";
-  for (size_t i = 0; i < _selectClause._selectedVariables.size(); ++i) {
-    os << _selectClause._selectedVariables[i];
-    if (i + 1 < _selectClause._selectedVariables.size()) {
-      os << ", ";
+  bool usesSelect = hasSelectClause();
+  if (usesSelect) {
+    const auto& selectClause = this->selectClause();
+    // SELECT
+    os << "\nSELECT: {\n\t";
+    for (size_t i = 0; i < selectClause._selectedVariables.size(); ++i) {
+      os << selectClause._selectedVariables[i];
+      if (i + 1 < selectClause._selectedVariables.size()) {
+        os << ", ";
+      }
     }
-  }
-  os << "\n}";
+    os << "\n}";
 
-  // ALIASES
-  os << "\nALIASES: {\n\t";
-  for (size_t i = 0; i < _selectClause._aliases.size(); ++i) {
-    const Alias& alias = _selectClause._aliases[i];
-    os << alias._expression.getDescriptor();
-    if (i + 1 < _selectClause._aliases.size()) {
-      os << "\n\t";
+    // ALIASES
+    os << "\nALIASES: {\n\t";
+    for (size_t i = 0; i < selectClause._aliases.size(); ++i) {
+      const Alias& alias = selectClause._aliases[i];
+      os << alias._expression.getDescriptor();
+      if (i + 1 < selectClause._aliases.size()) {
+        os << "\n\t";
+      }
     }
+    os << "{";
+  } else if (hasConstructClause()) {
+    const auto& constructClause = this->constructClause();
+    os << "\n CONSTRUCT {\n\t";
+    for (const auto& triple : constructClause) {
+      os << triple[0].toSparql();
+      os << ' ';
+      os << triple[1].toSparql();
+      os << ' ';
+      os << triple[2].toSparql();
+      os << " .\n";
+    }
+    os << "}";
   }
-  os << "{";
 
   // WHERE
   os << "\nWHERE: \n";
@@ -65,10 +81,13 @@ string ParsedQuery::asString() const {
   os << "\nOFFSET: "
      << (_offset.has_value() ? std::to_string(_offset.value())
                              : "no offset specified");
-  os << "\nDISTINCT modifier is " << (_selectClause._distinct ? "" : "not ")
-     << "present.";
-  os << "\nREDUCED modifier is " << (_selectClause._reduced ? "" : "not ")
-     << "present.";
+  if (usesSelect) {
+    const auto& selectClause = this->selectClause();
+    os << "\nDISTINCT modifier is " << (selectClause._distinct ? "" : "not ")
+       << "present.";
+    os << "\nREDUCED modifier is " << (selectClause._reduced ? "" : "not ")
+       << "present.";
+  }
   os << "\nORDER BY: ";
   if (_orderBy.size() == 0) {
     os << "not specified";
@@ -392,30 +411,6 @@ void ParsedQuery::expandPrefix(
     }
   }
 }
-
-/*
-void ParsedQuery::parseAliases() {
-  for (size_t i = 0; i < _selectClause._selectedVariables.size(); i++) {
-    const std::string& var = _selectClause._selectedVariables[i];
-    if (var[0] == '(') {
-      // remove the leading and trailing bracket
-      std::string inner = var.substr(1, var.size() - 2);
-      // Replace the variable in the selected variables array with the aliased
-      // name.
-      _selectClause._selectedVariables[i] = parseAlias(inner);
-    }
-  }
-  for (size_t i = 0; i < _orderBy.size(); i++) {
-    OrderKey& key = _orderBy[i];
-    if (key._key[0] == '(') {
-      // remove the leading and trailing bracket
-      std::string inner = key._key.substr(1, key._key.size() - 2);
-      // Preserve the descending or ascending order but change the key name.
-      key._key = parseAlias(inner);
-    }
-  }
-}
- */
 
 void ParsedQuery::merge(const ParsedQuery& p) {
   _prefixes.insert(_prefixes.begin(), p._prefixes.begin(), p._prefixes.end());

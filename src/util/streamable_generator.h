@@ -138,8 +138,10 @@ class [[nodiscard]] basic_stream_generator {
  private:
   qlever_stdOrExp::coroutine_handle<promise_type> _coroutine = nullptr;
 
+  static basic_stream_generator noOpGenerator() { co_return; }
+
  public:
-  basic_stream_generator() = default;
+  basic_stream_generator() : basic_stream_generator(noOpGenerator()){};
 
   basic_stream_generator(basic_stream_generator&& other) noexcept
       : _coroutine{other._coroutine} {

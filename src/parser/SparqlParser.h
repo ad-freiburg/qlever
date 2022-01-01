@@ -12,6 +12,8 @@
 
 using std::string;
 
+enum QueryType { CONSTRUCT_QUERY, SELECT_QUERY };
+
 // A simple parser of SPARQL.
 // No supposed to feature the complete query language.
 class SparqlParser {
@@ -29,7 +31,7 @@ class SparqlParser {
                              size_t off = 0);
 
  private:
-  void parseQuery(ParsedQuery* query);
+  void parseQuery(ParsedQuery* query, QueryType queryType);
   void parsePrologue(ParsedQuery* query);
   void parseSelect(ParsedQuery* query);
   void parseWhere(ParsedQuery* query,

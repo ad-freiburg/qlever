@@ -15,6 +15,7 @@
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
 #include "ParseException.h"
+#include "data/VarOrTerm.h"
 
 using std::string;
 using std::vector;
@@ -312,6 +313,8 @@ class ParsedQuery {
     bool _distinct = false;
   };
 
+  using ConstructClause = std::vector<std::array<VarOrTerm, 3>>;
+
   ParsedQuery() = default;
 
   vector<SparqlPrefix> _prefixes;
@@ -324,7 +327,33 @@ class ParsedQuery {
   string _textLimit;
   std::optional<size_t> _offset = std::nullopt;
   string _originalString;
-  SelectClause _selectClause;
+  // explicit default initialisation because the constructor
+  // of SelectClause is private
+  std::variant<SelectClause, ConstructClause> _clause{SelectClause{}};
+
+  [[nodiscard]] bool hasSelectClause() const {
+    return std::holds_alternative<SelectClause>(_clause);
+  }
+
+  [[nodiscard]] bool hasConstructClause() const {
+    return std::holds_alternative<ConstructClause>(_clause);
+  }
+
+  [[nodiscard]] decltype(auto) selectClause() const {
+    return std::get<SelectClause>(_clause);
+  }
+
+  [[nodiscard]] decltype(auto) constructClause() const {
+    return std::get<ConstructClause>(_clause);
+  }
+
+  [[nodiscard]] decltype(auto) selectClause() {
+    return std::get<SelectClause>(_clause);
+  }
+
+  [[nodiscard]] decltype(auto) constructClause() {
+    return std::get<ConstructClause>(_clause);
+  }
 
   void expandPrefixes();
   void parseAliases();

@@ -5,6 +5,7 @@
 #include <antlr4-runtime.h>
 #include <gtest/gtest.h>
 
+#include <iostream>
 #include <type_traits>
 
 #include "../../src/parser/sparqlParser/SparqlQleverVisitor.h"

@@ -87,17 +87,6 @@ void QueryExecutionTree::setVariableColumns(
 }
 
 // _____________________________________________________________________________
-void QueryExecutionTree::writeResultToStream(std::ostream& out,
-                                             const vector<string>& selectVars,
-                                             size_t limit, size_t offset,
-                                             char sep) const {
-  auto generator = generateResults(selectVars, limit, offset, sep);
-  while (generator.hasNext()) {
-    out << generator.next();
-  }
-}
-
-// _____________________________________________________________________________
 ad_utility::stream_generator::stream_generator
 QueryExecutionTree::generateResults(const vector<string>& selectVars,
                                     size_t limit, size_t offset,
@@ -444,4 +433,33 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
     }
   }
   LOG(DEBUG) << "Done creating readable result.\n";
+}
+
+// _____________________________________________________________________________
+ad_utility::stream_generator::stream_generator
+QueryExecutionTree::writeRdfGraphTurtle(
+    const std::vector<std::array<VarOrTerm, 3>>& constructTriples, size_t limit,
+    size_t offset) const {
+  // They may trigger computation (but does not have to).
+  shared_ptr<const ResultTable> res = getResult();
+
+  size_t upperBound = std::min<size_t>(offset + limit, res->_idTable.size());
+  auto variableColumns = getVariableColumns();
+  for (size_t i = offset; i < upperBound; i++) {
+    Context context{i, *res, variableColumns, _qec->getIndex()};
+    for (const auto& triple : constructTriples) {
+      auto subject = triple[0].evaluate(context, SUBJECT);
+      auto verb = triple[1].evaluate(context, VERB);
+      auto object = triple[2].evaluate(context, OBJECT);
+      if (!subject.has_value() || !verb.has_value() || !object.has_value()) {
+        continue;
+      }
+      co_yield subject.value();
+      co_yield ' ';
+      co_yield verb.value();
+      co_yield ' ';
+      co_yield object.value();
+      co_yield " .\n";
+    }
+  }
 }

@@ -163,13 +163,15 @@ json Server::composeResponseQleverJson(const ParsedQuery& query,
   off_t compResultUsecs = requestTimer.usecs();
   size_t resultSize = rt->size();
 
+  const auto& selectClause = query.selectClause();
+
   nlohmann::json j;
 
   j["query"] = query._originalString;
   j["status"] = "OK";
   j["resultsize"] = resultSize;
   j["warnings"] = qet.collectWarnings();
-  j["selected"] = query._selectClause._selectedVariables;
+  j["selected"] = selectClause._selectedVariables;
 
   j["runtimeInformation"] = RuntimeInformation::ordered_json(
       qet.getRootOperation()->getRuntimeInfo());
@@ -178,9 +180,8 @@ json Server::composeResponseQleverJson(const ParsedQuery& query,
     size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
     size_t offset = query._offset.value_or(0);
     requestTimer.cont();
-    j["res"] =
-        qet.writeResultAsQLeverJson(query._selectClause._selectedVariables,
-                                    std::min(limit, maxSend), offset);
+    j["res"] = qet.writeResultAsQLeverJson(selectClause._selectedVariables,
+                                           std::min(limit, maxSend), offset);
     requestTimer.stop();
   }
 
@@ -204,7 +205,7 @@ json Server::composeResponseSparqlJson(const ParsedQuery& query,
   size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
   size_t offset = query._offset.value_or(0);
   requestTimer.cont();
-  j = qet.writeResultAsSparqlJson(query._selectClause._selectedVariables,
+  j = qet.writeResultAsSparqlJson(query.selectClause()._selectedVariables,
                                   std::min(limit, maxSend), offset);
   requestTimer.stop();
   return j;
@@ -215,8 +216,17 @@ ad_utility::stream_generator::stream_generator Server::composeResponseSepValues(
     const ParsedQuery& query, const QueryExecutionTree& qet, char sep) {
   size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
   size_t offset = query._offset.value_or(0);
-  return qet.generateResults(query._selectClause._selectedVariables, limit,
+  return qet.generateResults(query.selectClause()._selectedVariables, limit,
                              offset, sep);
+}
+
+// _____________________________________________________________________________
+
+ad_utility::stream_generator::stream_generator Server::composeTurtleResponse(
+    const ParsedQuery& query, const QueryExecutionTree& qet) {
+  size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
+  size_t offset = query._offset.value_or(0);
+  return qet.writeRdfGraphTurtle(query.constructClause(), limit, offset);
 }
 
 // _____________________________________________________________________________
@@ -333,7 +343,8 @@ boost::asio::awaitable<void> Server::processQuery(
     const auto supportedMediaTypes = []() {
       static const std::vector<MediaType> mediaTypes{
           ad_utility::MediaType::qleverJson, ad_utility::MediaType::sparqlJson,
-          ad_utility::MediaType::tsv, ad_utility::MediaType::csv};
+          ad_utility::MediaType::tsv, ad_utility::MediaType::csv,
+          ad_utility::MediaType::turtle};
       return mediaTypes;
     };
 
@@ -349,6 +360,8 @@ boost::asio::awaitable<void> Server::processQuery(
       mediaType = ad_utility::MediaType::qleverJson;
     } else if (containsParam("action", "sparql_json_export")) {
       mediaType = ad_utility::MediaType::sparqlJson;
+    } else if (containsParam("action", "turtle_export")) {
+      mediaType = ad_utility::MediaType::turtle;
     }
 
     std::string_view acceptHeader = request.base()[http::field::accept];
@@ -368,26 +381,50 @@ boost::asio::awaitable<void> Server::processQuery(
           request));
     }
 
+    const auto throwIfConstructClause = [&pq]() {
+      if (pq.hasConstructClause()) {
+        throw std::runtime_error{
+            "CONSTRUCT queries only support RDF Turtle as an export format "
+            "right now"};
+      }
+    };
+
     AD_CHECK(mediaType.has_value());
     switch (mediaType.value()) {
       case ad_utility::MediaType::csv: {
+        throwIfConstructClause();
         auto responseGenerator = composeResponseSepValues(pq, qet, ',');
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::csv);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::tsv: {
+        throwIfConstructClause();
         auto responseGenerator = composeResponseSepValues(pq, qet, '\t');
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::tsv);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::qleverJson: {
+        throwIfConstructClause();
         // Normal case: JSON response
         auto responseString =
             composeResponseQleverJson(pq, qet, requestTimer, maxSend);
         co_await sendJson(std::move(responseString));
       } break;
+      case ad_utility::MediaType::turtle:
+        if (pq.hasConstructClause()) {
+          auto responseGenerator = composeTurtleResponse(pq, qet);
+          auto response =
+              createOkResponse(std::move(responseGenerator), request,
+                               ad_utility::MediaType::turtle);
+          co_await send(std::move(response));
+        } else {
+          throw std::runtime_error{
+              "RDF Turtle as an export format is only supported for CONSTRUCT "
+              "queries"};
+        }
+        break;
       case ad_utility::MediaType::sparqlJson: {
         auto responseString =
             composeResponseSparqlJson(pq, qet, requestTimer, maxSend);

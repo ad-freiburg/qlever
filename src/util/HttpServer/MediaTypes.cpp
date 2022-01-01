@@ -6,6 +6,7 @@
 #include "../Exception.h"
 #include "../StringUtils.h"
 #include "../TypeTraits.h"
+#include "../antlr/ThrowingErrorStrategy.h"
 #include "./HttpParser/AcceptHeaderQleverVisitor.h"
 #include "./HttpParser/generated/AcceptHeaderLexer.h"
 
@@ -45,6 +46,7 @@ const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
     add(defaultType, "application", "text", {""});
     add(sparqlJson, "application", "sparql-results+json", {});
     add(qleverJson, "application", "qlever-results+json", {});
+    add(turtle, "text", "turtle", {".ttl"});
     return t;
   }();
   return types;
@@ -128,14 +130,6 @@ std::optional<MediaType> toMediaType(std::string_view s) {
 // ___________________________________________________________________________
 std::vector<MediaTypeWithQuality> parseAcceptHeader(
     std::string_view acceptHeader, std::vector<MediaType> supportedMediaTypes) {
-  struct ThrowingErrorStrategy : public antlr4::DefaultErrorStrategy {
-    void reportError(antlr4::Parser*,
-                     const antlr4::RecognitionException& e) override {
-      throw antlr4::ParseCancellationException(
-          e.what() + std::string{" at token \""} +
-          e.getOffendingToken()->getText() + '"');
-    }
-  };
   struct ParserAndVisitor {
    private:
     string input;

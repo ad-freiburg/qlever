@@ -54,15 +54,13 @@ TEST(StreamableGeneratorTest, TestGeneratorReturnsBufferedResults) {
   ASSERT_FALSE(generator.hasNext());
 }
 
-TEST(StreamableGeneratorTest, TestGeneratorNextThrowsExceptionWithNullptr) {
+TEST(StreamableGeneratorTest, TestGeneratorDefaultInitialisesWithNoOp) {
   stream_generator generator;
 
-  try {
-    generator.next();
-    FAIL() << "next() should throw an exception";
-  } catch (const std::exception& e) {
-    ASSERT_STREQ(e.what(), "Coroutine is not active");
-  }
+  ASSERT_TRUE(generator.hasNext());
+  std::string_view view = generator.next();
+  ASSERT_TRUE(view.empty());
+  ASSERT_FALSE(generator.hasNext());
 }
 
 TEST(StreamableGeneratorTest, TestGeneratorNextThrowsExceptionWhenDone) {

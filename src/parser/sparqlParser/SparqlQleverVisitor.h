@@ -16,6 +16,9 @@
 #include "../../util/StringUtils.h"
 #include "../ParsedQuery.h"
 #include "../RdfEscaping.h"
+#include "../data/BlankNode.h"
+#include "../data/Iri.h"
+#include "../data/VarOrTerm.h"
 #include "antlr4-runtime.h"
 #include "generated/SparqlAutomaticVisitor.h"
 
@@ -27,12 +30,32 @@ class SparqlParseException : public std::exception {
   const char* what() const noexcept override { return _message.c_str(); }
 };
 
+template <typename T>
+class Reversed {
+  T& _iterable;
+
+ public:
+  explicit Reversed(T& iterable) : _iterable(iterable) {}
+
+  auto begin() { return _iterable.rbegin(); };
+
+  auto end() { return _iterable.rend(); }
+};
+
 /**
  * This class provides an empty implementation of SparqlVisitor, which can be
  * extended to create a visitor which only needs to handle a subset of the
  * available methods.
  */
 class SparqlQleverVisitor : public SparqlAutomaticVisitor {
+  using Objects = std::vector<VarOrTerm>;
+  using Tuples = std::vector<std::array<VarOrTerm, 2>>;
+  using Triples = std::vector<std::array<VarOrTerm, 3>>;
+  using Node = std::pair<VarOrTerm, Triples>;
+  using ObjectList = std::pair<Objects, Triples>;
+  using PropertyList = std::pair<Tuples, Triples>;
+  size_t _blankNodeCounter = 0;
+
  public:
   using PrefixMap = ad_utility::HashMap<string, string>;
   const PrefixMap& prefixMap() const { return _prefixMap; }
@@ -61,6 +84,20 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   PrefixMap _prefixMap{{":", "<>"}};
 
+  template <typename T>
+  void appendVector(std::vector<T>& destination, std::vector<T>&& source) {
+    destination.insert(destination.end(),
+                       std::make_move_iterator(source.begin()),
+                       std::make_move_iterator(source.end()));
+  }
+
+  BlankNode newBlankNode() {
+    std::string label = std::to_string(_blankNodeCounter);
+    _blankNodeCounter++;
+    // true means automatically generated
+    return {true, std::move(label)};
+  }
+
  public:
   // ___________________________________________________________________________
   antlrcpp::Any visitQuery(SparqlAutomaticParser::QueryContext* ctx) override {
@@ -69,9 +106,12 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     visitPrologue(ctx->prologue());
     if (ctx->selectQuery()) {
       return visitSelectQuery(ctx->selectQuery());
-    } else {
-      throw SparqlParseException{"QLever only supports select queries"};
     }
+    if (ctx->constructQuery()) {
+      return ctx->constructQuery()->accept(this);
+    }
+    throw SparqlParseException{
+        "QLever only supports select and construct queries"};
   }
 
   // ___________________________________________________________________________
@@ -130,6 +170,12 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitConstructQuery(
       SparqlAutomaticParser::ConstructQueryContext* ctx) override {
+    if (!ctx->datasetClause().empty()) {
+      throw SparqlParseException{"Datasets are not supported"};
+    }
+    if (ctx->constructTemplate()) {
+      return ctx->constructTemplate()->accept(this);
+    }
     return visitChildren(ctx);
   }
 
@@ -334,36 +380,98 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitConstructTemplate(
       SparqlAutomaticParser::ConstructTemplateContext* ctx) override {
-    return visitChildren(ctx);
+    return ctx->constructTriples() ? ctx->constructTriples()->accept(this)
+                                   : Triples{};
   }
 
   antlrcpp::Any visitConstructTriples(
       SparqlAutomaticParser::ConstructTriplesContext* ctx) override {
-    return visitChildren(ctx);
+    auto result = ctx->triplesSameSubject()->accept(this).as<Triples>();
+    if (ctx->constructTriples()) {
+      auto newTriples = ctx->constructTriples()->accept(this).as<Triples>();
+      appendVector(result, std::move(newTriples));
+    }
+    return result;
   }
 
   antlrcpp::Any visitTriplesSameSubject(
       SparqlAutomaticParser::TriplesSameSubjectContext* ctx) override {
-    return visitChildren(ctx);
+    Triples triples;
+    if (ctx->varOrTerm()) {
+      VarOrTerm subject = ctx->varOrTerm()->accept(this).as<VarOrTerm>();
+      AD_CHECK(ctx->propertyListNotEmpty());
+      auto propertyList =
+          ctx->propertyListNotEmpty()->accept(this).as<PropertyList>();
+      for (auto& tuple : propertyList.first) {
+        triples.push_back({subject, std::move(tuple[0]), std::move(tuple[1])});
+      }
+      appendVector(triples, std::move(propertyList.second));
+    } else if (ctx->triplesNode()) {
+      auto tripleNodes = ctx->triplesNode()->accept(this).as<Node>();
+      appendVector(triples, std::move(tripleNodes.second));
+      AD_CHECK(ctx->propertyList());
+      auto propertyList = ctx->propertyList()->accept(this).as<PropertyList>();
+      for (auto& tuple : propertyList.first) {
+        triples.push_back(
+            {tripleNodes.first, std::move(tuple[0]), std::move(tuple[1])});
+      }
+      appendVector(triples, std::move(propertyList.second));
+    } else {
+      // Invalid grammar
+      AD_CHECK(false);
+    }
+    return triples;
   }
 
   antlrcpp::Any visitPropertyList(
       SparqlAutomaticParser::PropertyListContext* ctx) override {
-    return visitChildren(ctx);
+    return ctx->propertyListNotEmpty()
+               ? ctx->propertyListNotEmpty()->accept(this)
+               : PropertyList{Tuples{}, Triples{}};
   }
 
   antlrcpp::Any visitPropertyListNotEmpty(
       SparqlAutomaticParser::PropertyListNotEmptyContext* ctx) override {
-    return visitChildren(ctx);
+    Tuples triplesWithoutSubject;
+    Triples additionalTriples;
+    auto verbs = ctx->verb();
+    auto objectLists = ctx->objectList();
+    for (size_t i = 0; i < verbs.size(); i++) {
+      // TODO use zip-style approach once C++ supports ranges
+      auto objectList = objectLists.at(i)->accept(this).as<ObjectList>();
+      auto verb = verbs.at(i)->accept(this).as<VarOrTerm>();
+      for (auto& object : objectList.first) {
+        triplesWithoutSubject.push_back({verb, std::move(object)});
+      }
+      appendVector(additionalTriples, std::move(objectList.second));
+    }
+    return PropertyList{std::move(triplesWithoutSubject),
+                        std::move(additionalTriples)};
   }
 
   antlrcpp::Any visitVerb(SparqlAutomaticParser::VerbContext* ctx) override {
-    return visitChildren(ctx);
+    if (ctx->varOrIri()) {
+      return ctx->varOrIri()->accept(this);
+    }
+    if (ctx->getText() == "a") {
+      // Special keyword 'a'
+      return VarOrTerm{
+          GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"}}};
+    }
+    throw SparqlParseException{"Invalid verb "s + ctx->getText()};
   }
 
   antlrcpp::Any visitObjectList(
       SparqlAutomaticParser::ObjectListContext* ctx) override {
-    return visitChildren(ctx);
+    Objects objects;
+    Triples additionalTriples;
+    auto objectContexts = ctx->objectR();
+    for (auto& objectContext : objectContexts) {
+      auto graphNode = objectContext->accept(this).as<Node>();
+      appendVector(additionalTriples, std::move(graphNode.second));
+      objects.push_back(std::move(graphNode.first));
+    }
+    return ObjectList{std::move(objects), std::move(additionalTriples)};
   }
 
   antlrcpp::Any visitObjectR(
@@ -467,7 +575,15 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitBlankNodePropertyList(
       SparqlAutomaticParser::BlankNodePropertyListContext* ctx) override {
-    return visitChildren(ctx);
+    VarOrTerm var{GraphTerm{newBlankNode()}};
+    Triples triples;
+    auto propertyList =
+        ctx->propertyListNotEmpty()->accept(this).as<PropertyList>();
+    for (auto& tuple : propertyList.first) {
+      triples.push_back({var, std::move(tuple[0]), std::move(tuple[1])});
+    }
+    appendVector(triples, std::move(propertyList.second));
+    return Node{std::move(var), std::move(triples)};
   }
 
   antlrcpp::Any visitTriplesNodePath(
@@ -482,7 +598,29 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitCollection(
       SparqlAutomaticParser::CollectionContext* ctx) override {
-    return visitChildren(ctx);
+    Triples triples;
+    VarOrTerm nextElement{
+        GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}}};
+    auto nodes = ctx->graphNode();
+    for (auto context : Reversed{nodes}) {
+      VarOrTerm currentVar{GraphTerm{newBlankNode()}};
+      auto graphNode = context->accept(this).as<Node>();
+
+      triples.push_back(
+          {currentVar,
+           VarOrTerm{GraphTerm{
+               Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>"}}},
+           std::move(graphNode.first)});
+      triples.push_back(
+          {currentVar,
+           VarOrTerm{GraphTerm{
+               Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>"}}},
+           std::move(nextElement)});
+      nextElement = std::move(currentVar);
+
+      appendVector(triples, std::move(graphNode.second));
+    }
+    return Node{std::move(nextElement), std::move(triples)};
   }
 
   antlrcpp::Any visitCollectionPath(
@@ -492,7 +630,12 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitGraphNode(
       SparqlAutomaticParser::GraphNodeContext* ctx) override {
-    return visitChildren(ctx);
+    if (ctx->varOrTerm()) {
+      return Node{ctx->varOrTerm()->accept(this).as<VarOrTerm>(), Triples{}};
+    } else if (ctx->triplesNode()) {
+      return ctx->triplesNode()->accept(this);
+    }
+    AD_CHECK(false);
   }
 
   antlrcpp::Any visitGraphNodePath(
@@ -502,21 +645,72 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitVarOrTerm(
       SparqlAutomaticParser::VarOrTermContext* ctx) override {
-    return visitChildren(ctx);
+    if (ctx->var()) {
+      return VarOrTerm{ctx->var()->accept(this).as<Variable>()};
+    }
+    if (ctx->graphTerm()) {
+      return VarOrTerm{ctx->graphTerm()->accept(this).as<GraphTerm>()};
+    }
+
+    // invalid grammar
+    AD_CHECK(false);
   }
 
   antlrcpp::Any visitVarOrIri(
       SparqlAutomaticParser::VarOrIriContext* ctx) override {
-    return visitChildren(ctx);
+    if (ctx->var()) {
+      return VarOrTerm{ctx->var()->accept(this).as<Variable>()};
+    }
+    if (ctx->iri()) {
+      return VarOrTerm{
+          GraphTerm{Iri{ctx->iri()->accept(this).as<std::string>()}}};
+    }
+    // invalid grammar
+    AD_CHECK(false);
   }
 
   antlrcpp::Any visitVar(SparqlAutomaticParser::VarContext* ctx) override {
-    return visitChildren(ctx);
+    return Variable{ctx->getText()};
   }
 
   antlrcpp::Any visitGraphTerm(
       SparqlAutomaticParser::GraphTermContext* ctx) override {
-    return visitChildren(ctx);
+    if (ctx->numericLiteral()) {
+      auto literalAny = visitNumericLiteral(ctx->numericLiteral());
+      try {
+        auto intLiteral = literalAny.as<unsigned long long>();
+        return GraphTerm{Literal{intLiteral}};
+      } catch (...) {
+      }
+      try {
+        auto intLiteral = literalAny.as<long long>();
+        return GraphTerm{Literal{intLiteral}};
+      } catch (...) {
+      }
+      try {
+        auto intLiteral = literalAny.as<double>();
+        return GraphTerm{Literal{intLiteral}};
+      } catch (...) {
+      }
+      AD_CHECK(false);
+    }
+    if (ctx->booleanLiteral()) {
+      return GraphTerm{Literal{ctx->booleanLiteral()->accept(this).as<bool>()}};
+    }
+    if (ctx->blankNode()) {
+      return GraphTerm{ctx->blankNode()->accept(this).as<BlankNode>()};
+    }
+    if (ctx->iri()) {
+      return GraphTerm{Iri{ctx->iri()->accept(this).as<std::string>()}};
+    }
+    if (ctx->rdfLiteral()) {
+      return GraphTerm{
+          Literal{ctx->rdfLiteral()->accept(this).as<std::string>()}};
+    }
+    if (ctx->NIL()) {
+      return GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}};
+    }
+    AD_CHECK(false);
   }
 
   antlrcpp::Any visitExpression(
@@ -887,7 +1081,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitRdfLiteral(
       SparqlAutomaticParser::RdfLiteralContext* ctx) override {
-    return visitChildren(ctx);
+    return ctx->getText();
   }
 
   antlrcpp::Any visitNumericLiteral(
@@ -960,7 +1154,18 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitBlankNode(
       SparqlAutomaticParser::BlankNodeContext* ctx) override {
-    return visitChildren(ctx);
+    if (ctx->ANON()) {
+      return newBlankNode();
+    }
+    if (ctx->BLANK_NODE_LABEL()) {
+      // strip _: prefix from string
+      constexpr size_t length = std::string_view{"_:"}.length();
+      const string label = ctx->BLANK_NODE_LABEL()->getText().substr(length);
+      // false means the query explicitly contains a blank node label
+      return BlankNode{false, label};
+    }
+    // invalid grammar
+    AD_CHECK(false);
   }
 
   antlrcpp::Any visitPnameLn(
@@ -995,42 +1200,3 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return _prefixMap[prefix];
   }
 };
-
-/*
-namespace SparqlAutomaticParserHelpers {
-
-struct ParserAndVisitor {
- private:
-  string input;
-  antlr4::ANTLRInputStream stream{input};
-  SparqlAutomaticLexer lexer{&stream};
-  antlr4::CommonTokenStream tokens{&lexer};
-
- public:
-  SparqlAutomaticParser parser{&tokens};
-  SparqlQleverVisitor visitor;
-  explicit ParserAndVisitor(string toParse) : input{std::move(toParse)} {}
-  explicit ParserAndVisitor(string toParse, SparqlQleverVisitor::PrefixMap
-prefixMap) : input{std::move(toParse)}, visitor{std::move(prefixMap)} {}
-};
-
-//
-______________________________________________________________________________
-std::pair<SparqlQleverVisitor::PrefixMap, size_t> parsePrologue(const string&
-input) { ParserAndVisitor p{input}; auto context = p.parser.prologue(); auto
-parsedSize = context->getText().size(); p.visitor.visitPrologue(context); const
-auto& constVisitor = p.visitor; return {constVisitor.prefixMap(), parsedSize};
-}
-
-// _____________________________________________________________________________
-std::pair<string, size_t> parseIri(const string& input,
-SparqlQleverVisitor::PrefixMap prefixMap) { ParserAndVisitor p{input,
-std::move(prefixMap)}; auto context = p.parser.iri(); auto parsedSize =
-context->getText().size(); auto resultString =
-p.visitor.visitIri(context).as<string>();
-  //const auto& constVisitor = p.visitor;
-  return {std::move(resultString), parsedSize};
-}
-
-}
- */

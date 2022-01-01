@@ -9,6 +9,8 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "../parser/data/Context.h"
+#include "../parser/data/VarOrTerm.h"
 #include "../util/Conversions.h"
 #include "../util/HashSet.h"
 #include "../util/streamable_generator.h"
@@ -103,10 +105,6 @@ class QueryExecutionTree {
       const std::vector<string>& selectVariables,
       const ResultTable& resultTable) const;
 
-  void writeResultToStream(std::ostream& out, const vector<string>& selectVars,
-                           size_t limit = MAX_NOF_ROWS_IN_RESULT,
-                           size_t offset = 0, char sep = '\t') const;
-
   ad_utility::stream_generator::stream_generator generateResults(
       const vector<string>& selectVars, size_t limit = MAX_NOF_ROWS_IN_RESULT,
       size_t offset = 0, char sep = '\t') const;
@@ -194,6 +192,11 @@ class QueryExecutionTree {
 
   bool& isRoot() noexcept { return _isRoot; }
   [[nodiscard]] const bool& isRoot() const noexcept { return _isRoot; }
+
+  // Generate an RDF graph in turtle syntax for a CONSTRUCT query.
+  ad_utility::stream_generator::stream_generator writeRdfGraphTurtle(
+      const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
+      size_t limit, size_t offset) const;
 
  private:
   QueryExecutionContext* _qec;  // No ownership

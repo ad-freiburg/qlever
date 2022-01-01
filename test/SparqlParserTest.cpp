@@ -13,9 +13,11 @@ TEST(ParserTest, testParse) {
   try {
     {
       ParsedQuery pq = SparqlParser("SELECT ?x WHERE {?x ?y ?z}").parse();
+      ASSERT_TRUE(pq.hasSelectClause());
+      const auto& selectClause = pq.selectClause();
       ASSERT_GT(pq.asString().size(), 0u);
       ASSERT_EQ(0u, pq._prefixes.size());
-      ASSERT_EQ(1u, pq._selectClause._selectedVariables.size());
+      ASSERT_EQ(1u, selectClause._selectedVariables.size());
       ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
       ASSERT_EQ(1u, pq._rootGraphPattern._children[0]
                         .getBasic()
@@ -29,8 +31,10 @@ TEST(ParserTest, testParse) {
                "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y nsx:rel2 "
                "<http://abc.de>}")
                .parse();
+      ASSERT_TRUE(pq.hasSelectClause());
+      const auto& selectClause2 = pq.selectClause();
       ASSERT_EQ(3u, pq._prefixes.size());
-      ASSERT_EQ(2u, pq._selectClause._selectedVariables.size());
+      ASSERT_EQ(2u, selectClause2._selectedVariables.size());
       ASSERT_EQ(1u, pq.children().size());
       const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
       ASSERT_EQ(3u, triples.size());
@@ -39,8 +43,8 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ("<http://rdf.myprefix.com/>", pq._prefixes[0]._uri);
       ASSERT_EQ("ns", pq._prefixes[1]._prefix);
       ASSERT_EQ("<http://rdf.myprefix.com/ns/>", pq._prefixes[1]._uri);
-      ASSERT_EQ("?x", pq._selectClause._selectedVariables[0]);
-      ASSERT_EQ("?z", pq._selectClause._selectedVariables[1]);
+      ASSERT_EQ("?x", selectClause2._selectedVariables[0]);
+      ASSERT_EQ("?z", selectClause2._selectedVariables[1]);
       ASSERT_EQ("?x", triples[0]._s);
       ASSERT_EQ(":myrel", triples[0]._p._iri);
       ASSERT_EQ("?y", triples[0]._o);
@@ -63,8 +67,10 @@ TEST(ParserTest, testParse) {
                     "WHERE \t {\n?x :myrel ?y. ?y ns:myrel ?z.\n?y nsx:rel2 "
                     "<http://abc.de>\n}")
                     .parse();
+      ASSERT_TRUE(pq.hasSelectClause());
+      const auto& selectClause = pq.selectClause();
       ASSERT_EQ(3u, pq._prefixes.size());
-      ASSERT_EQ(2u, pq._selectClause._selectedVariables.size());
+      ASSERT_EQ(2u, selectClause._selectedVariables.size());
       ASSERT_EQ(1u, pq.children().size());
       const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
       ASSERT_EQ(3u, triples.size());
@@ -73,8 +79,8 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ("<http://rdf.myprefix.com/>", pq._prefixes[0]._uri);
       ASSERT_EQ("ns", pq._prefixes[1]._prefix);
       ASSERT_EQ("<http://rdf.myprefix.com/ns/>", pq._prefixes[1]._uri);
-      ASSERT_EQ("?x", pq._selectClause._selectedVariables[0]);
-      ASSERT_EQ("?z", pq._selectClause._selectedVariables[1]);
+      ASSERT_EQ("?x", selectClause._selectedVariables[0]);
+      ASSERT_EQ("?z", selectClause._selectedVariables[1]);
       ASSERT_EQ("?x", triples[0]._s);
       ASSERT_EQ(":myrel", triples[0]._p._iri);
       ASSERT_EQ("?y", triples[0]._o);
@@ -95,16 +101,18 @@ TEST(ParserTest, testParse) {
                     "WHERE \t {\n?x <Directed_by> ?y. ?y ns:myrel.extend ?z.\n"
                     "?y nsx:rel2 \"Hello... World\"}")
                     .parse();
+      ASSERT_TRUE(pq.hasSelectClause());
+      const auto& selectClause = pq.selectClause();
       ASSERT_EQ(1u, pq._prefixes.size());
-      ASSERT_EQ(2u, pq._selectClause._selectedVariables.size());
+      ASSERT_EQ(2u, selectClause._selectedVariables.size());
       ASSERT_EQ(1u, pq.children().size());
       const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
       ASSERT_EQ(3u, triples.size());
 
       pq.expandPrefixes();
 
-      ASSERT_EQ("?x", pq._selectClause._selectedVariables[0]);
-      ASSERT_EQ("?z", pq._selectClause._selectedVariables[1]);
+      ASSERT_EQ("?x", selectClause._selectedVariables[0]);
+      ASSERT_EQ("?z", selectClause._selectedVariables[1]);
       ASSERT_EQ("?x", triples[0]._s);
       ASSERT_EQ("<Directed_by>", triples[0]._p._iri);
       ASSERT_EQ("?y", triples[0]._o);
@@ -362,8 +370,10 @@ TEST(ParserTest, testFilterWithoutDot) {
           "} LIMIT 300")
           .parse();
   pq.expandPrefixes();
+  ASSERT_TRUE(pq.hasSelectClause());
+  const auto& selectClause = pq.selectClause();
   ASSERT_EQ(1u, pq._prefixes.size());
-  ASSERT_EQ(1u, pq._selectClause._selectedVariables.size());
+  ASSERT_EQ(1u, selectClause._selectedVariables.size());
   ASSERT_EQ(1u, pq.children().size());
   const auto& c = pq.children()[0].getBasic();
   ASSERT_EQ(3u, c._whereClauseTriples.size());
@@ -390,17 +400,19 @@ TEST(ParserTest, testExpandPrefixes) {
           "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y nsx:rel2 <http://abc.de>}")
           .parse();
   pq.expandPrefixes();
+  ASSERT_TRUE(pq.hasSelectClause());
+  const auto& selectClause = pq.selectClause();
   ASSERT_EQ(1u, pq.children().size());
   const auto& c = pq.children()[0].getBasic();
   ASSERT_EQ(3u, pq._prefixes.size());
-  ASSERT_EQ(2u, pq._selectClause._selectedVariables.size());
+  ASSERT_EQ(2u, selectClause._selectedVariables.size());
   ASSERT_EQ(3u, c._whereClauseTriples.size());
   ASSERT_EQ("", pq._prefixes[0]._prefix);
   ASSERT_EQ("<http://rdf.myprefix.com/>", pq._prefixes[0]._uri);
   ASSERT_EQ("ns", pq._prefixes[1]._prefix);
   ASSERT_EQ("<http://rdf.myprefix.com/ns/>", pq._prefixes[1]._uri);
-  ASSERT_EQ("?x", pq._selectClause._selectedVariables[0]);
-  ASSERT_EQ("?z", pq._selectClause._selectedVariables[1]);
+  ASSERT_EQ("?x", selectClause._selectedVariables[0]);
+  ASSERT_EQ("?z", selectClause._selectedVariables[1]);
   ASSERT_EQ("?x", c._whereClauseTriples[0]._s);
   ASSERT_EQ("<http://rdf.myprefix.com/myrel>",
             c._whereClauseTriples[0]._p._iri);
@@ -420,32 +432,36 @@ TEST(ParserTest, testSolutionModifiers) {
   {
     ParsedQuery pq = SparqlParser("SELECT ?x WHERE \t {?x :myrel ?y}").parse();
     pq.expandPrefixes();
+    ASSERT_TRUE(pq.hasSelectClause());
+    const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(1u, pq._selectClause._selectedVariables.size());
+    ASSERT_EQ(1u, selectClause._selectedVariables.size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(std::nullopt, pq._limit);
     ASSERT_EQ(std::nullopt, pq._offset);
     ASSERT_EQ(size_t(0), pq._orderBy.size());
-    ASSERT_FALSE(pq._selectClause._distinct);
-    ASSERT_FALSE(pq._selectClause._reduced);
+    ASSERT_FALSE(selectClause._distinct);
+    ASSERT_FALSE(selectClause._reduced);
   }
 
   {
     auto pq =
         SparqlParser("SELECT ?x WHERE \t {?x :myrel ?y} LIMIT 10").parse();
     pq.expandPrefixes();
+    ASSERT_TRUE(pq.hasSelectClause());
+    const auto& selectClause = pq.selectClause();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(1u, pq._selectClause._selectedVariables.size());
+    ASSERT_EQ(1u, selectClause._selectedVariables.size());
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(10ul, pq._limit);
     ASSERT_EQ(std::nullopt, pq._offset);
     ASSERT_EQ(size_t(0), pq._orderBy.size());
-    ASSERT_FALSE(pq._selectClause._distinct);
-    ASSERT_FALSE(pq._selectClause._reduced);
+    ASSERT_FALSE(selectClause._distinct);
+    ASSERT_FALSE(selectClause._reduced);
   }
 
   {
@@ -454,16 +470,18 @@ TEST(ParserTest, testSolutionModifiers) {
                   "LIMIT 10 OFFSET 15")
                   .parse();
     pq.expandPrefixes();
+    ASSERT_TRUE(pq.hasSelectClause());
+    const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(1u, pq._selectClause._selectedVariables.size());
+    ASSERT_EQ(1u, selectClause._selectedVariables.size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(10u, pq._limit.value_or(0));
     ASSERT_EQ(15u, pq._offset.value_or(0));
     ASSERT_EQ(size_t(0), pq._orderBy.size());
-    ASSERT_FALSE(pq._selectClause._distinct);
-    ASSERT_FALSE(pq._selectClause._reduced);
+    ASSERT_FALSE(selectClause._distinct);
+    ASSERT_FALSE(selectClause._reduced);
   }
 
   {
@@ -472,18 +490,20 @@ TEST(ParserTest, testSolutionModifiers) {
                   "ORDER BY ?y LIMIT 10 OFFSET 15")
                   .parse();
     pq.expandPrefixes();
+    ASSERT_TRUE(pq.hasSelectClause());
+    const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(2u, pq._selectClause._selectedVariables.size());
+    ASSERT_EQ(2u, selectClause._selectedVariables.size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(10u, pq._limit.value_or(0));
     ASSERT_EQ(15u, pq._offset.value_or(0));
     ASSERT_EQ(size_t(1), pq._orderBy.size());
     ASSERT_EQ("?y", pq._orderBy[0]._key);
     ASSERT_FALSE(pq._orderBy[0]._desc);
-    ASSERT_TRUE(pq._selectClause._distinct);
-    ASSERT_FALSE(pq._selectClause._reduced);
+    ASSERT_TRUE(selectClause._distinct);
+    ASSERT_FALSE(selectClause._reduced);
   }
 
   {
@@ -492,11 +512,13 @@ TEST(ParserTest, testSolutionModifiers) {
                   "ORDER BY ASC(?y) DESC(SCORE(?x)) LIMIT 10 OFFSET 15")
                   .parse();
     pq.expandPrefixes();
+    ASSERT_TRUE(pq.hasSelectClause());
+    const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(3u, pq._selectClause._selectedVariables.size());
-    ASSERT_EQ("SCORE(?x)", pq._selectClause._selectedVariables[1]);
+    ASSERT_EQ(3u, selectClause._selectedVariables.size());
+    ASSERT_EQ("SCORE(?x)", selectClause._selectedVariables[1]);
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(10u, pq._limit.value_or(0));
     ASSERT_EQ(15u, pq._offset.value_or(0));
@@ -505,8 +527,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_FALSE(pq._orderBy[0]._desc);
     ASSERT_EQ("SCORE(?x)", pq._orderBy[1]._key);
     ASSERT_TRUE(pq._orderBy[1]._desc);
-    ASSERT_TRUE(pq._selectClause._distinct);
-    ASSERT_FALSE(pq._selectClause._reduced);
+    ASSERT_TRUE(selectClause._distinct);
+    ASSERT_FALSE(selectClause._reduced);
   }
 
   {
@@ -515,10 +537,12 @@ TEST(ParserTest, testSolutionModifiers) {
                   "ORDER BY DESC(?x) ASC(?y) LIMIT 10 OFFSET 15")
                   .parse();
     pq.expandPrefixes();
+    ASSERT_TRUE(pq.hasSelectClause());
+    const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(2u, pq._selectClause._selectedVariables.size());
+    ASSERT_EQ(2u, selectClause._selectedVariables.size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(10u, pq._limit.value_or(0));
     ASSERT_EQ(15u, pq._offset.value_or(0));
@@ -527,8 +551,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_TRUE(pq._orderBy[0]._desc);
     ASSERT_EQ("?y", pq._orderBy[1]._key);
     ASSERT_FALSE(pq._orderBy[1]._desc);
-    ASSERT_FALSE(pq._selectClause._distinct);
-    ASSERT_TRUE(pq._selectClause._reduced);
+    ASSERT_FALSE(selectClause._distinct);
+    ASSERT_TRUE(selectClause._reduced);
   }
 
   {
@@ -547,11 +571,13 @@ TEST(ParserTest, testSolutionModifiers) {
                   "?movie <directed-by> <Scott%2C%20Ridley> .   }  LIMIT 50")
                   .parse();
     pq.expandPrefixes();
+    ASSERT_TRUE(pq.hasSelectClause());
+    const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(1u, pq._selectClause._selectedVariables.size());
-    ASSERT_EQ("?movie", pq._selectClause._selectedVariables[0]);
+    ASSERT_EQ(1u, selectClause._selectedVariables.size());
+    ASSERT_EQ("?movie", selectClause._selectedVariables[0]);
     ASSERT_EQ(2u, c._whereClauseTriples.size());
     ASSERT_EQ("?movie", c._whereClauseTriples[0]._s);
     ASSERT_EQ("<from-year>", c._whereClauseTriples[0]._p._iri);
@@ -571,11 +597,13 @@ TEST(ParserTest, testSolutionModifiers) {
                   "?movie <directed-by> <Scott%2C%20Ridley> .   }  LIMIT 50")
                   .parse();
     pq.expandPrefixes();
+    ASSERT_TRUE(pq.hasSelectClause());
+    const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(1u, pq._prefixes.size());
-    ASSERT_EQ(1u, pq._selectClause._selectedVariables.size());
-    ASSERT_EQ("?movie", pq._selectClause._selectedVariables[0]);
+    ASSERT_EQ(1u, selectClause._selectedVariables.size());
+    ASSERT_EQ("?movie", selectClause._selectedVariables[0]);
     ASSERT_EQ(2u, c._whereClauseTriples.size());
     ASSERT_EQ("?movie", c._whereClauseTriples[0]._s);
     ASSERT_EQ("<from-year>", c._whereClauseTriples[0]._p._iri);
@@ -626,9 +654,11 @@ TEST(ParserTest, testSolutionModifiers) {
             "GROUP BY ?r "
             "ORDER BY ?count")
             .parse();
-    ASSERT_EQ(1u, pq._selectClause._aliases.size());
+    ASSERT_TRUE(pq.hasSelectClause());
+    const auto& selectClause = pq.selectClause();
+    ASSERT_EQ(1u, selectClause._aliases.size());
     ASSERT_EQ("(group_concat(?r;SEPARATOR=\"Cake\") as ?concat)",
-              pq._selectClause._aliases[0].getDescriptor());
+              selectClause._aliases[0].getDescriptor());
   }
 
   {
@@ -638,22 +668,24 @@ TEST(ParserTest, testSolutionModifiers) {
                   "ORDER BY DESC((COUNT(?x) as ?count)) LIMIT 10 OFFSET 15")
                   .parse();
     pq.expandPrefixes();
+    ASSERT_TRUE(pq.hasSelectClause());
+    const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(2u, pq._selectClause._selectedVariables.size());
+    ASSERT_EQ(2u, selectClause._selectedVariables.size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(10u, pq._limit.value_or(0));
     ASSERT_EQ(15u, pq._offset.value_or(0));
     ASSERT_EQ(1u, pq._orderBy.size());
     ASSERT_EQ("?count", pq._orderBy[0]._key);
     ASSERT_TRUE(pq._orderBy[0]._desc);
-    ASSERT_EQ(1u, pq._selectClause._aliases.size());
-    ASSERT_TRUE(pq._selectClause._aliases[0]._expression.isAggregate({}));
+    ASSERT_EQ(1u, selectClause._aliases.size());
+    ASSERT_TRUE(selectClause._aliases[0]._expression.isAggregate({}));
     ASSERT_EQ("(count(?x) as ?count)",
-              pq._selectClause._aliases[0].getDescriptor());
-    ASSERT_TRUE(pq._selectClause._distinct);
-    ASSERT_FALSE(pq._selectClause._reduced);
+              selectClause._aliases[0].getDescriptor());
+    ASSERT_TRUE(selectClause._distinct);
+    ASSERT_FALSE(selectClause._reduced);
   }
 }
 
@@ -662,12 +694,13 @@ TEST(ParserTest, testGroupByAndAlias) {
       SparqlParser(
           "SELECT (COUNT(?a) as ?count) WHERE { ?b <rel> ?a } GROUP BY ?b")
           .parse();
-  ASSERT_EQ(1u, pq._selectClause._selectedVariables.size());
-  ASSERT_EQ("?count", pq._selectClause._selectedVariables[0]);
-  ASSERT_EQ(1u, pq._selectClause._aliases.size());
-  ASSERT_TRUE(pq._selectClause._aliases[0]._expression.isAggregate({}));
-  ASSERT_EQ("(count(?a) as ?count)",
-            pq._selectClause._aliases[0].getDescriptor());
+  ASSERT_TRUE(pq.hasSelectClause());
+  const auto& selectClause = pq.selectClause();
+  ASSERT_EQ(1u, selectClause._selectedVariables.size());
+  ASSERT_EQ("?count", selectClause._selectedVariables[0]);
+  ASSERT_EQ(1u, selectClause._aliases.size());
+  ASSERT_TRUE(selectClause._aliases[0]._expression.isAggregate({}));
+  ASSERT_EQ("(count(?a) as ?count)", selectClause._aliases[0].getDescriptor());
   ASSERT_EQ(1u, pq._groupByVariables.size());
   ASSERT_EQ("?b", pq._groupByVariables[0]);
 }
