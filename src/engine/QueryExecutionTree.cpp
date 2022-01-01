@@ -457,6 +457,22 @@ ad_utility::stream_generator::stream_generator
 QueryExecutionTree::writeRdfGraphTurtle(
     const std::vector<std::array<VarOrTerm, 3>>& constructTriples, size_t limit,
     size_t offset) const {
+  auto generator = generateRdfGraph(constructTriples, limit, offset);
+  for (const auto& triple : generator) {
+    co_yield triple[0];
+    co_yield ' ';
+    co_yield triple[1];
+    co_yield ' ';
+    co_yield triple[2];
+    co_yield " .\n";
+  }
+}
+
+// _____________________________________________________________________________
+
+cppcoro::generator<std::array<std::string, 3>> QueryExecutionTree::generateRdfGraph(
+    const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
+    size_t limit, size_t offset) const {
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
 
@@ -471,12 +487,7 @@ QueryExecutionTree::writeRdfGraphTurtle(
       if (!subject.has_value() || !verb.has_value() || !object.has_value()) {
         continue;
       }
-      co_yield subject.value();
-      co_yield ' ';
-      co_yield verb.value();
-      co_yield ' ';
-      co_yield object.value();
-      co_yield " .\n";
+      co_yield std::array{subject.value(), verb.value(), object.value()};
     }
   }
 }

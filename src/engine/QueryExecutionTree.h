@@ -12,6 +12,7 @@
 #include "../parser/data/Context.h"
 #include "../parser/data/VarOrTerm.h"
 #include "../util/Conversions.h"
+#include "../util/Generator.h"
 #include "../util/HashSet.h"
 #include "../util/streamable_generator.h"
 #include "./Operation.h"
@@ -109,6 +110,11 @@ class QueryExecutionTree {
       const vector<string>& selectVars, size_t limit = MAX_NOF_ROWS_IN_RESULT,
       size_t offset = 0, char sep = '\t') const;
 
+  // Generate an RDF graph in turtle format for a CONSTRUCT query.
+  ad_utility::stream_generator::stream_generator writeRdfGraphTurtle(
+      const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
+      size_t limit, size_t offset) const;
+
   nlohmann::json writeResultAsQLeverJson(
       const vector<string>& selectVars, size_t limit, size_t offset,
       shared_ptr<const ResultTable> resultTable = nullptr) const;
@@ -195,11 +201,6 @@ class QueryExecutionTree {
   bool& isRoot() noexcept { return _isRoot; }
   [[nodiscard]] const bool& isRoot() const noexcept { return _isRoot; }
 
-  // Generate an RDF graph in turtle syntax for a CONSTRUCT query.
-  ad_utility::stream_generator::stream_generator writeRdfGraphTurtle(
-      const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
-      size_t limit, size_t offset) const;
-
  private:
   QueryExecutionContext* _qec;  // No ownership
   ad_utility::HashMap<string, size_t> _variableColumnMap;
@@ -236,4 +237,9 @@ class QueryExecutionTree {
       char sep, size_t from, size_t upperBound,
       vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices,
       shared_ptr<const ResultTable> resultTable = nullptr) const;
+
+  // Generate an RDF graph for a CONSTRUCT query.
+  cppcoro::generator<std::array<std::string, 3>> generateRdfGraph(
+      const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
+      size_t limit, size_t offset) const;
 };
