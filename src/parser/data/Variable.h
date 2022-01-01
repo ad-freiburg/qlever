@@ -23,7 +23,7 @@ class Variable {
     }
     // variables have to start with ?
     AD_CHECK(_name[0] == '?');
-  };
+  }
 
   // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> evaluate(

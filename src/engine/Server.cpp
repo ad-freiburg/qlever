@@ -343,7 +343,8 @@ boost::asio::awaitable<void> Server::processQuery(
     const auto supportedMediaTypes = []() {
       static const std::vector<MediaType> mediaTypes{
           ad_utility::MediaType::qleverJson, ad_utility::MediaType::sparqlJson,
-          ad_utility::MediaType::tsv, ad_utility::MediaType::csv};
+          ad_utility::MediaType::tsv, ad_utility::MediaType::csv,
+          ad_utility::MediaType::turtle};
       return mediaTypes;
     };
 
@@ -383,7 +384,8 @@ boost::asio::awaitable<void> Server::processQuery(
     const auto throwIfConstructClause = [&pq]() {
       if (pq.hasConstructClause()) {
         throw std::runtime_error{
-            "CONSTRUCT queries only support turtle syntax right now"};
+            "CONSTRUCT queries only support RDF Turtle as an export format "
+            "right now"};
       }
     };
 
@@ -419,7 +421,8 @@ boost::asio::awaitable<void> Server::processQuery(
           co_await send(std::move(response));
         } else {
           throw std::runtime_error{
-              "Turtle Syntax is only supported for CONSTRUCT queries"};
+              "RDF Turtle as an export format is only supported for CONSTRUCT "
+              "queries"};
         }
         break;
       case ad_utility::MediaType::sparqlJson: {

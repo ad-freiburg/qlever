@@ -26,7 +26,7 @@ struct ParserAndVisitor {
   }
 
   template <typename ResultType, typename ContextType>
-  auto parse(const std::string& input, const std::string_view& name,
+  auto parse(const std::string_view input, const std::string_view name,
              ContextType* (SparqlAutomaticParser::*F)(void)) {
     try {
       auto context = (_parser.*F)();
@@ -36,7 +36,7 @@ struct ParserAndVisitor {
       auto remainingString =
           input.substr(_parser.getCurrentToken()->getStartIndex());
       return ResultOfParseAndRemainingText{std::move(resultOfParse),
-                                           std::move(remainingString)};
+                                           std::string{remainingString}};
     } catch (const antlr4::ParseCancellationException& e) {
       throw std::runtime_error{"Failed to parse " + name + ": " + e.what()};
     }
