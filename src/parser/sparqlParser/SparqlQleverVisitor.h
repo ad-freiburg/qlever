@@ -1172,7 +1172,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       SparqlAutomaticParser::PnameLnContext* ctx) override {
     string text = ctx->getText();
     auto pos = text.find(':');
-    auto pnameNS = text.substr(0, pos + 1);
+    auto pnameNS = text.substr(0, pos);
     auto pnLocal = text.substr(pos + 1);
     if (!_prefixMap.contains(pnameNS)) {
       // TODO<joka921> : proper name
@@ -1189,7 +1189,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitPnameNs(
       SparqlAutomaticParser::PnameNsContext* ctx) override {
-    auto prefix = ctx->getText();
+    auto text = ctx->getText();
+    auto prefix = text.substr(0, text.length() - 1);
     if (!_prefixMap.contains(prefix)) {
       // TODO<joka921> : proper name
       throw SparqlParseException{
