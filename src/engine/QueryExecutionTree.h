@@ -113,7 +113,20 @@ class QueryExecutionTree {
   // Generate an RDF graph in turtle format for a CONSTRUCT query.
   ad_utility::stream_generator::stream_generator writeRdfGraphTurtle(
       const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
-      size_t limit, size_t offset) const;
+      size_t limit, size_t offset,
+      std::shared_ptr<const ResultTable> res) const;
+
+  // Generate an RDF graph in csv/tsv format for a CONSTRUCT query.
+  ad_utility::stream_generator::stream_generator writeRdfGraphSeparatedValues(
+      const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
+      size_t limit, size_t offset, std::shared_ptr<const ResultTable> res,
+      char sep = '\t') const;
+
+  // Generate an RDF graph in json format for a CONSTRUCT query.
+  nlohmann::json writeRdfGraphJson(
+      const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
+      size_t limit, size_t offset,
+      std::shared_ptr<const ResultTable> res) const;
 
   nlohmann::json writeResultAsQLeverJson(
       const vector<string>& selectVars, size_t limit, size_t offset,
@@ -241,5 +254,6 @@ class QueryExecutionTree {
   // Generate an RDF graph for a CONSTRUCT query.
   cppcoro::generator<std::array<std::string, 3>> generateRdfGraph(
       const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
-      size_t limit, size_t offset) const;
+      size_t limit, size_t offset,
+      std::shared_ptr<const ResultTable> res) const;
 };
