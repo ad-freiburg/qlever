@@ -46,7 +46,7 @@ class Server {
         _initialized(false),
         // The number of server threads currently also is the number of queries
         // that can be processed simultaneously.
-        _queryProcessingLimiter(numThreads) {
+        _queryProcessingSemaphore(numThreads) {
     // TODO<joka921> Write a strong type for KB, MB, GB etc and use it
     // in the cache and the memory limit
     // Convert a number of gigabytes to the number of Ids that find in that
@@ -79,7 +79,7 @@ class Server {
 
  public:
   //! First initialize the server. Then loop, wait for requests and trigger
-  //! processing. This method never returns except when throwing an exceptiob
+  //! processing. This method never returns except when throwing an exception.
   void run(const string& ontologyBaseName, bool useText,
            bool usePatterns = true, bool usePatternTrick = true);
 
@@ -95,10 +95,9 @@ class Server {
   bool _initialized;
   bool _enablePatternTrick;
 
-  // Throtteler for the number of queries that can be processed at once.
-  // TODO<joka921>
+  // Semaphore for the number of queries that can be processed at once.
   mutable std::counting_semaphore<std::numeric_limits<int>::max()>
-      _queryProcessingLimiter;
+      _queryProcessingSemaphore;
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
@@ -149,22 +148,23 @@ class Server {
   json composeCacheStatsJson() const;
 
   // Perform the following steps: Acquire a token from the
-  // _queryProcessingLimiter, run `function`, and release the token. These steps
-  // are performed on a new thread (not one of the server threads). Returns an
-  // awaitable of the return value of `function`
+  // _queryProcessingSemaphore, run `function`, and release the token. These
+  // steps are performed on a new thread (not one of the server threads).
+  // Returns an awaitable of the return value of `function`
   template <typename Function, typename T = std::invoke_result_t<Function>>
-  Awaitable<T> onNewThreadWithLimiter(Function function) const {
-    auto computeWithLimiter = [this, function = std::move(function)] {
-      _queryProcessingLimiter.acquire();
+  Awaitable<T> computeInNewThread(Function function) const {
+    auto acquireComputeRelease = [this, function = std::move(function)] {
+      LOG(DEBUG) << "Acquiring new thread for query processing\n";
+      _queryProcessingSemaphore.acquire();
       ad_utility::OnDestruction f{[this]() noexcept {
         try {
-          _queryProcessingLimiter.release();
+          _queryProcessingSemaphore.release();
         } catch (...) {
         }
       }};
       return function();
     };
     co_return co_await ad_utility::asio_helpers::async_on_external_thread(
-        std::move(computeWithLimiter), boost::asio::use_awaitable);
+        std::move(acquireComputeRelease), boost::asio::use_awaitable);
   }
 };

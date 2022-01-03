@@ -92,7 +92,7 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
                                     size_t limit, size_t offset,
                                     char sep) const {
   // They may trigger computation (but does not have to).
-  shared_ptr<const ResultTable> res = getResult();
+  shared_ptr<const ResultTable> resultTable = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices;
   for (auto var : selectVars) {
@@ -102,7 +102,7 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
     auto it = getVariableColumns().find(var);
     if (it != getVariableColumns().end()) {
       validIndices.push_back(pair<size_t, ResultTable::ResultType>(
-          it->second, res->getResultType(it->second)));
+          it->second, resultTable->getResultType(it->second)));
     } else {
       validIndices.push_back(std::nullopt);
     }
@@ -111,10 +111,10 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
     return {};
   }
 
-  const IdTable& data = res->_idTable;
+  const IdTable& data = resultTable->_idTable;
   size_t upperBound = std::min<size_t>(offset + limit, data.size());
   return writeTable(sep, offset, upperBound, std::move(validIndices),
-                    std::move(res));
+                    std::move(resultTable));
 }
 
 // ___________________________________________________________________________
@@ -388,11 +388,11 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
     char sep, size_t from, size_t upperBound,
     const vector<std::optional<pair<size_t, ResultTable::ResultType>>>
         validIndices,
-    std::shared_ptr<const ResultTable> res) const {
-  if (!res) {
-    res = getResult();
+    std::shared_ptr<const ResultTable> resultTable) const {
+  if (!resultTable) {
+    resultTable = getResult();
   }
-  const auto& idTable = res->_idTable;
+  const auto& idTable = resultTable->_idTable;
   // special case : binary export of IdTable
   if (sep == 'b') {
     for (size_t i = from; i < upperBound; ++i) {
@@ -437,7 +437,7 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
             break;
           }
           case ResultTable::ResultType::LOCAL_VOCAB: {
-            co_yield res->idToOptionalString(idTable(i, val.first))
+            co_yield resultTable->idToOptionalString(idTable(i, val.first))
                 .value_or("");
             break;
           }

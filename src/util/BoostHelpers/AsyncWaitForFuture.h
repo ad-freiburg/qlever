@@ -14,11 +14,11 @@ namespace ad_utility::asio_helpers {
 
 // An async operation that can be used inside boost::asio.
 // The `function` (which takes no arguments) is started on a new detached
-// thread (unrelated to the executor used by the completion completionToken).
-// As soon as the `function` is finished, the completion handler which is
+// thread (unrelated to the executor used by the `completionToken`).
+// As soon as the `function` is finished, the completion handler that is
 // obtained from the `completionToken` is invoked with the result of the
-// `function`. The handler obtained from the `completionToken` must be callabel
-// with (std::exception_ptr, returnValueOfFunction)
+// `function`. The handler obtained from the `completionToken` must be callable
+// with (std::exception_ptr, returnValueOfFunction).
 template <typename CompletionToken, typename Function>
 auto async_on_external_thread(Function function,
                               CompletionToken&& completionToken) {
@@ -52,7 +52,7 @@ auto async_on_external_thread(Function function,
   };
 
   // This helper function automagically obtains a completionHandler from the
-  // `completionToken` and returns the correct `async_result`
+  // `completionToken` and returns the correct `boost::asio::async_result`.
   return boost::asio::async_initiate<CompletionToken, Signature>(
       std::move(initiatingFunction), completionToken);
 }

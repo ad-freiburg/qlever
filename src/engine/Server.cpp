@@ -50,8 +50,8 @@ void Server::initialize(const string& ontologyBaseName, bool useText,
 // _____________________________________________________________________________
 void Server::run(const string& ontologyBaseName, bool useText, bool usePatterns,
                  bool usePatternTrick) {
-  // First setup the HttpServer, so that it binds the socket, and
-  // the `socket already in use` error appears quickly.
+  // First set up the HTTP server, so that it binds to the socket, and
+  // the "socket already in use" error appears quickly.
   auto httpSessionHandler =
       [this](auto request, auto&& send) -> boost::asio::awaitable<void> {
     co_await process(std::move(request), send);
@@ -164,15 +164,15 @@ Awaitable<json> Server::composeResponseQleverJson(
     off_t compResultUsecs = requestTimer.usecs();
     size_t resultSize = resultTable->size();
 
-  const auto& selectClause = query.selectClause();
+    const auto& selectClause = query.selectClause();
 
-  nlohmann::json j;
+    nlohmann::json j;
 
-  j["query"] = query._originalString;
-  j["status"] = "OK";
-  j["resultsize"] = resultSize;
-  j["warnings"] = qet.collectWarnings();
-  j["selected"] = selectClause._selectedVariables;
+    j["query"] = query._originalString;
+    j["status"] = "OK";
+    j["resultsize"] = resultSize;
+    j["warnings"] = qet.collectWarnings();
+    j["selected"] = selectClause._selectedVariables;
 
     j["runtimeInformation"] = RuntimeInformation::ordered_json(
         qet.getRootOperation()->getRuntimeInfo());
@@ -181,9 +181,9 @@ Awaitable<json> Server::composeResponseQleverJson(
       size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
       size_t offset = query._offset.value_or(0);
       requestTimer.cont();
-      j["res"] = qet.writeResultAsQLeverJson(
-          selectClause._selectedVariables, std::min(limit, maxSend),
-          offset, std::move(resultTable));
+      j["res"] = qet.writeResultAsQLeverJson(selectClause._selectedVariables,
+                                             std::min(limit, maxSend), offset,
+                                             std::move(resultTable));
       requestTimer.stop();
     }
 
@@ -196,7 +196,7 @@ Awaitable<json> Server::composeResponseQleverJson(
 
     return j;
   };
-  return onNewThreadWithLimiter(compute);
+  return computeInNewThread(compute);
 }
 
 // _____________________________________________________________________________
@@ -216,7 +216,7 @@ Awaitable<json> Server::composeResponseSparqlJson(
     requestTimer.stop();
     return j;
   };
-  return onNewThreadWithLimiter(compute);
+  return computeInNewThread(compute);
 }
 
 // _____________________________________________________________________________
@@ -228,9 +228,9 @@ Server::composeResponseSepValues(const ParsedQuery& query,
     size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
     size_t offset = query._offset.value_or(0);
     return qet.generateResults(query.selectClause()._selectedVariables, limit,
-                                  offset, sep);
+                               offset, sep);
   };
-  return onNewThreadWithLimiter(compute);
+  return computeInNewThread(compute);
 }
 
 // _____________________________________________________________________________
@@ -413,8 +413,9 @@ boost::asio::awaitable<void> Server::processQuery(
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::tsv: {
-       throwIfConstructClause();
-        auto responseGenerator = co_await composeResponseSepValues(pq, qet, '\t');
+        throwIfConstructClause();
+        auto responseGenerator =
+            co_await composeResponseSepValues(pq, qet, '\t');
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::tsv);
         co_await send(std::move(response));
