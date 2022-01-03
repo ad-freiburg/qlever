@@ -107,7 +107,7 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
       validIndices.push_back(std::nullopt);
     }
   }
-  if (validIndices.size() == 0) {
+  if (validIndices.empty()) {
     return {};
   }
 
@@ -149,12 +149,12 @@ nlohmann::json QueryExecutionTree::writeResultAsQLeverJson(
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   ColumnIndicesAndTypes validIndices =
       selectedVariablesToColumnIndices(selectVars, *resultTable);
-  if (validIndices.size() == 0) {
-    return nlohmann::json(std::vector<std::string>());
+  if (validIndices.empty()) {
+    return {std::vector<std::string>()};
   }
 
-  return writeQLeverJsonTable(resultTable->_idTable, offset, limit,
-                              validIndices, std::move(resultTable));
+  return writeQLeverJsonTable(offset, limit, validIndices,
+                              std::move(resultTable));
 }
 
 // _____________________________________________________________________________
@@ -347,12 +347,12 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
 
 // __________________________________________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
-    const IdTable& data, size_t from, size_t limit,
-    const ColumnIndicesAndTypes& columns,
+    size_t from, size_t limit, const ColumnIndicesAndTypes& columns,
     shared_ptr<const ResultTable> resultTable) const {
   if (!resultTable) {
     resultTable = getResult();
   }
+  const IdTable& data = resultTable->_idTable;
   nlohmann::json json = nlohmann::json::parse("[]");
 
   const auto upperBound = std::min(data.size(), limit + from);

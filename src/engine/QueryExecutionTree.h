@@ -225,8 +225,7 @@ class QueryExecutionTree {
    * @return a 2D-Json array corresponding to the IdTable given the arguments
    */
   nlohmann::json writeQLeverJsonTable(
-      const IdTable& data, size_t from, size_t limit,
-      const ColumnIndicesAndTypes& columns,
+      size_t from, size_t limit, const ColumnIndicesAndTypes& columns,
       std::shared_ptr<const ResultTable> resultTable = nullptr) const;
 
   [[nodiscard]] std::optional<std::pair<std::string, const char*>>

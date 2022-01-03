@@ -210,7 +210,7 @@ Awaitable<json> Server::composeResponseSparqlJson(
     size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
     size_t offset = query._offset.value_or(0);
     requestTimer.cont();
-    j = qet.writeResultAsSparqlJson(selectClause._selectedVariables,
+    j = qet.writeResultAsSparqlJson(query.selectClause()._selectedVariables,
                                     std::min(limit, maxSend), offset,
                                     std::move(resultTable));
     requestTimer.stop();
