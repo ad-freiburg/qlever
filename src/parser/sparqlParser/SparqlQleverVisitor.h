@@ -133,6 +133,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitPrefixDecl(
       SparqlAutomaticParser::PrefixDeclContext* ctx) override {
     auto text = ctx->PNAME_NS()->getText();
+    // Strip trailing ':'.
     _prefixMap[text.substr(0, text.length() - 1)] =
         visitIriref(ctx->iriref()).as<string>();
     return nullptr;
