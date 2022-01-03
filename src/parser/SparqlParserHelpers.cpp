@@ -20,7 +20,9 @@ struct ParserAndVisitor {
  public:
   SparqlAutomaticParser _parser{&_tokens};
   SparqlQleverVisitor _visitor;
-  explicit ParserAndVisitor(string input, SparqlQleverVisitor::PrefixMap prefixes) : _input{std::move(input)}, _visitor{std::move(prefixes)} {
+  explicit ParserAndVisitor(string input,
+                            SparqlQleverVisitor::PrefixMap prefixes)
+      : _input{std::move(input)}, _visitor{std::move(prefixes)} {
     _parser.setErrorHandler(std::make_shared<ThrowingErrorStrategy>());
   }
 
@@ -66,7 +68,8 @@ ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
 // _____________________________________________________________________________
 
 ResultOfParseAndRemainingText<std::vector<std::array<VarOrTerm, 3>>>
-parseConstructTemplate(const std::string& input, SparqlQleverVisitor::PrefixMap prefixes) {
+parseConstructTemplate(const std::string& input,
+                       SparqlQleverVisitor::PrefixMap prefixes) {
   ParserAndVisitor p{input, std::move(prefixes)};
   return p.parse<std::vector<std::array<VarOrTerm, 3>>>(
       input, "construct template", &SparqlAutomaticParser::constructTemplate);
