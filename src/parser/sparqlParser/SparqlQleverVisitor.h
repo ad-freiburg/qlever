@@ -82,7 +82,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   PrefixMap& prefixMap() { return _prefixMap; }
   FRIEND_TEST(SparqlParser, Prefix);
 
-  PrefixMap _prefixMap{{":", "<>"}};
+  PrefixMap _prefixMap{{"", "<>"}};
 
   template <typename T>
   void appendVector(std::vector<T>& destination, std::vector<T>&& source) {
@@ -125,14 +125,15 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   // ___________________________________________________________________________
   antlrcpp::Any visitBaseDecl(
       SparqlAutomaticParser::BaseDeclContext* ctx) override {
-    _prefixMap[":"] = visitIriref(ctx->iriref()).as<string>();
+    _prefixMap[""] = visitIriref(ctx->iriref()).as<string>();
     return nullptr;
   }
 
   // ___________________________________________________________________________
   antlrcpp::Any visitPrefixDecl(
       SparqlAutomaticParser::PrefixDeclContext* ctx) override {
-    _prefixMap[ctx->PNAME_NS()->getText()] =
+    auto text = ctx->PNAME_NS()->getText();
+    _prefixMap[text.substr(0, text.length() - 1)] =
         visitIriref(ctx->iriref()).as<string>();
     return nullptr;
   }

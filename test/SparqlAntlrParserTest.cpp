@@ -58,14 +58,14 @@ TEST(SparqlParser, Prefix) {
     p.visitor.visitPrefixDecl(context);
     const auto& m = p.visitor.prefixMap();
     ASSERT_EQ(2ul, m.size());
-    ASSERT_TRUE(m.at("wd:") == "<www.wikidata.org/>");
-    ASSERT_EQ(m.at(":"), "<>");
+    ASSERT_TRUE(m.at("wd") == "<www.wikidata.org/>");
+    ASSERT_EQ(m.at(""), "<>");
   }
   {
     string s = "wd:bimbam";
     ParserAndVisitor p{s};
     auto& m = p.visitor.prefixMap();
-    m["wd:"] = "<www.wikidata.org/>";
+    m["wd"] = "<www.wikidata.org/>";
 
     auto context = p.parser.pnameLn();
     auto result = p.visitor.visitPnameLn(context).as<string>();
@@ -75,7 +75,7 @@ TEST(SparqlParser, Prefix) {
     string s = "wd:";
     ParserAndVisitor p{s};
     auto& m = p.visitor.prefixMap();
-    m["wd:"] = "<www.wikidata.org/>";
+    m["wd"] = "<www.wikidata.org/>";
 
     auto context = p.parser.pnameNs();
     auto result = p.visitor.visitPnameNs(context).as<string>();
@@ -85,7 +85,7 @@ TEST(SparqlParser, Prefix) {
     string s = "wd:bimbam";
     ParserAndVisitor p{s};
     auto& m = p.visitor.prefixMap();
-    m["wd:"] = "<www.wikidata.org/>";
+    m["wd"] = "<www.wikidata.org/>";
 
     auto context = p.parser.prefixedName();
     auto result = p.visitor.visitPrefixedName(context).as<string>();
@@ -95,7 +95,7 @@ TEST(SparqlParser, Prefix) {
     string s = "<somethingsomething> <rest>";
     ParserAndVisitor p{s};
     auto& m = p.visitor.prefixMap();
-    m["wd:"] = "<www.wikidata.org/>";
+    m["wd"] = "<www.wikidata.org/>";
 
     auto context = p.parser.iriref();
     auto result = p.visitor.visitIriref(context).as<string>();
