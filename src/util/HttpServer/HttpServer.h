@@ -113,7 +113,6 @@ class HttpServer {
   // The loop which accepts TCP connections and delegates their handling
   // to the session() coroutine below.
   boost::asio::awaitable<void> listener() {
-    boost::asio::socket_base::reuse_address option{true};
     try {
       _acceptor.listen(boost::asio::socket_base::max_listen_connections);
     } catch (const boost::system::system_error& b) {
