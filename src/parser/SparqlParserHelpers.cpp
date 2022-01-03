@@ -5,7 +5,6 @@
 #include "SparqlParserHelpers.h"
 
 #include "../util/antlr/ThrowingErrorStrategy.h"
-#include "sparqlParser/SparqlQleverVisitor.h"
 #include "sparqlParser/generated/SparqlAutomaticLexer.h"
 
 namespace sparqlParserHelpers {
@@ -21,7 +20,9 @@ struct ParserAndVisitor {
  public:
   SparqlAutomaticParser _parser{&_tokens};
   SparqlQleverVisitor _visitor;
-  explicit ParserAndVisitor(string input) : _input{std::move(input)} {
+  explicit ParserAndVisitor(string input,
+                            SparqlQleverVisitor::PrefixMap prefixes)
+      : _input{std::move(input)}, _visitor{std::move(prefixes)} {
     _parser.setErrorHandler(std::make_shared<ThrowingErrorStrategy>());
   }
 
@@ -46,7 +47,7 @@ struct ParserAndVisitor {
 // ____________________________________________________________________________
 ResultOfParseAndRemainingText<sparqlExpression::SparqlExpressionPimpl>
 parseExpression(const std::string& input) {
-  ParserAndVisitor p{input};
+  ParserAndVisitor p{input, {}};
   auto resultOfParseAndRemainingText =
       p.parse<sparqlExpression::SparqlExpression::Ptr>(
           input, "expression", &SparqlAutomaticParser::expression);
@@ -60,15 +61,16 @@ parseExpression(const std::string& input) {
 // ____________________________________________________________________________
 ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
     const std::string& input) {
-  ParserAndVisitor p{input};
+  ParserAndVisitor p{input, {}};
   return p.parse<ParsedQuery::Alias>(
       input, "alias", &SparqlAutomaticParser::aliasWithouBrackes);
 }
 // _____________________________________________________________________________
 
 ResultOfParseAndRemainingText<std::vector<std::array<VarOrTerm, 3>>>
-parseConstructTemplate(const std::string& input) {
-  ParserAndVisitor p{input};
+parseConstructTemplate(const std::string& input,
+                       SparqlQleverVisitor::PrefixMap prefixes) {
+  ParserAndVisitor p{input, std::move(prefixes)};
   return p.parse<std::vector<std::array<VarOrTerm, 3>>>(
       input, "construct template", &SparqlAutomaticParser::constructTemplate);
 }

@@ -10,6 +10,7 @@
 
 #include "../engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "./ParsedQuery.h"
+#include "sparqlParser/SparqlQleverVisitor.h"
 
 namespace sparqlParserHelpers {
 
@@ -32,7 +33,8 @@ ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
     const std::string& input);
 
 ResultOfParseAndRemainingText<std::vector<std::array<VarOrTerm, 3>>>
-parseConstructTemplate(const std::string& input);
+parseConstructTemplate(const std::string& input,
+                       SparqlQleverVisitor::PrefixMap prefixes);
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H
