@@ -109,11 +109,13 @@ class QueryExecutionTree {
       const vector<string>& selectVars, size_t limit = MAX_NOF_ROWS_IN_RESULT,
       size_t offset = 0, char sep = '\t') const;
 
-  nlohmann::json writeResultAsQLeverJson(const vector<string>& selectVars,
-                                         size_t limit, size_t offset) const;
+  nlohmann::json writeResultAsQLeverJson(
+      const vector<string>& selectVars, size_t limit, size_t offset,
+      shared_ptr<const ResultTable> resultTable = nullptr) const;
 
-  nlohmann::json writeResultAsSparqlJson(const vector<string>& selectVars,
-                                         size_t limit, size_t offset) const;
+  nlohmann::json writeResultAsSparqlJson(
+      const vector<string>& selectVars, size_t limit, size_t offset,
+      shared_ptr<const ResultTable> preComputedResult = nullptr) const;
 
   const std::vector<size_t>& resultSortedOn() const {
     return _rootOperation->getResultSortedOn();
@@ -223,15 +225,15 @@ class QueryExecutionTree {
    * @return a 2D-Json array corresponding to the IdTable given the arguments
    */
   nlohmann::json writeQLeverJsonTable(
-      const IdTable& data, size_t from, size_t limit,
-      const ColumnIndicesAndTypes& columns) const;
+      size_t from, size_t limit, const ColumnIndicesAndTypes& columns,
+      std::shared_ptr<const ResultTable> resultTable = nullptr) const;
 
   [[nodiscard]] std::optional<std::pair<std::string, const char*>>
   toStringAndXsdType(Id id, ResultTable::ResultType type,
                      const ResultTable& resultTable) const;
 
   ad_utility::stream_generator::stream_generator writeTable(
-      const IdTable& data, char sep, size_t from, size_t upperBound,
-      vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices)
-      const;
+      char sep, size_t from, size_t upperBound,
+      vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices,
+      shared_ptr<const ResultTable> resultTable = nullptr) const;
 };

@@ -186,8 +186,7 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, numThreads, memLimit);
-    server.initialize(index, text, usePatterns, enablePatternTrick);
-    server.run();
+    server.run(index, text, usePatterns, enablePatternTrick);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
     // within server.run()

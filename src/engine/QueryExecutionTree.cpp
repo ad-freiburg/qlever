@@ -92,7 +92,7 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
                                     size_t limit, size_t offset,
                                     char sep) const {
   // They may trigger computation (but does not have to).
-  shared_ptr<const ResultTable> res = getResult();
+  shared_ptr<const ResultTable> resultTable = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices;
   for (auto var : selectVars) {
@@ -102,18 +102,19 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
     auto it = getVariableColumns().find(var);
     if (it != getVariableColumns().end()) {
       validIndices.push_back(pair<size_t, ResultTable::ResultType>(
-          it->second, res->getResultType(it->second)));
+          it->second, resultTable->getResultType(it->second)));
     } else {
       validIndices.push_back(std::nullopt);
     }
   }
-  if (validIndices.size() == 0) {
+  if (validIndices.empty()) {
     return {};
   }
 
-  const IdTable& data = res->_idTable;
+  const IdTable& data = resultTable->_idTable;
   size_t upperBound = std::min<size_t>(offset + limit, data.size());
-  return writeTable(data, sep, offset, upperBound, std::move(validIndices));
+  return writeTable(sep, offset, upperBound, std::move(validIndices),
+                    std::move(resultTable));
 }
 
 // ___________________________________________________________________________
@@ -139,30 +140,37 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
 
 // _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeResultAsQLeverJson(
-    const vector<string>& selectVars, size_t limit, size_t offset) const {
+    const vector<string>& selectVars, size_t limit, size_t offset,
+    shared_ptr<const ResultTable> resultTable) const {
   // They may trigger computation (but does not have to).
-  shared_ptr<const ResultTable> res = getResult();
+  if (!resultTable) {
+    resultTable = getResult();
+  }
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   ColumnIndicesAndTypes validIndices =
-      selectedVariablesToColumnIndices(selectVars, *res);
-  if (validIndices.size() == 0) {
-    return nlohmann::json(std::vector<std::string>());
+      selectedVariablesToColumnIndices(selectVars, *resultTable);
+  if (validIndices.empty()) {
+    return {std::vector<std::string>()};
   }
 
-  return writeQLeverJsonTable(res->_idTable, offset, limit, validIndices);
+  return writeQLeverJsonTable(offset, limit, validIndices,
+                              std::move(resultTable));
 }
 
 // _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
-    const vector<string>& selectVars, size_t limit, size_t offset) const {
+    const vector<string>& selectVars, size_t limit, size_t offset,
+    shared_ptr<const ResultTable> resultTable) const {
   using nlohmann::json;
 
   // This might trigger the actual query processing.
-  shared_ptr<const ResultTable> queryResult = getResult();
+  if (!resultTable) {
+    resultTable = getResult();
+  }
   LOG(DEBUG) << "Finished computing the query result in the ID space. "
                 "Resolving strings in result...\n";
   ColumnIndicesAndTypes columns =
-      selectedVariablesToColumnIndices(selectVars, *queryResult);
+      selectedVariablesToColumnIndices(selectVars, *resultTable);
 
   std::erase(columns, std::nullopt);
 
@@ -170,7 +178,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
     return {std::vector<std::string>()};
   }
 
-  const IdTable& idTable = queryResult->_idTable;
+  const IdTable& idTable = resultTable->_idTable;
 
   json result;
   result["head"]["vars"] = selectVars;
@@ -222,7 +230,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
     for (const auto& column : columns) {
       const auto& currentId = idTable(rowIndex, column->_columnIndex);
       const auto& optionalValue =
-          toStringAndXsdType(currentId, column->_resultType, *queryResult);
+          toStringAndXsdType(currentId, column->_resultType, *resultTable);
       if (!optionalValue.has_value()) {
         continue;
       }
@@ -339,9 +347,12 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
 
 // __________________________________________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
-    const IdTable& data, size_t from, size_t limit,
-    const ColumnIndicesAndTypes& columns) const {
-  shared_ptr<const ResultTable> res = getResult();
+    size_t from, size_t limit, const ColumnIndicesAndTypes& columns,
+    shared_ptr<const ResultTable> resultTable) const {
+  if (!resultTable) {
+    resultTable = getResult();
+  }
+  const IdTable& data = resultTable->_idTable;
   nlohmann::json json = nlohmann::json::parse("[]");
 
   const auto upperBound = std::min(data.size(), limit + from);
@@ -356,7 +367,7 @@ nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
       }
       const auto& currentId = data(rowIndex, opt->_columnIndex);
       const auto& optionalStringAndXsdType =
-          toStringAndXsdType(currentId, opt->_resultType, *res);
+          toStringAndXsdType(currentId, opt->_resultType, *resultTable);
       if (!optionalStringAndXsdType.has_value()) {
         row.emplace_back(nullptr);
         continue;
@@ -374,10 +385,14 @@ nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
 
 // _________________________________________________________________________________________________________
 ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
-    const IdTable& data, char sep, size_t from, size_t upperBound,
+    char sep, size_t from, size_t upperBound,
     const vector<std::optional<pair<size_t, ResultTable::ResultType>>>
-        validIndices) const {
-  shared_ptr<const ResultTable> res = getResult();
+        validIndices,
+    std::shared_ptr<const ResultTable> resultTable) const {
+  if (!resultTable) {
+    resultTable = getResult();
+  }
+  const auto& idTable = resultTable->_idTable;
   // special case : binary export of IdTable
   if (sep == 'b') {
     for (size_t i = from; i < upperBound; ++i) {
@@ -385,7 +400,8 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
         if (validIndices[j]) {
           const auto& val = *validIndices[j];
           co_yield std::string_view{
-              reinterpret_cast<const char*>(&data(i, val.first)), sizeof(Id)};
+              reinterpret_cast<const char*>(&idTable(i, val.first)),
+              sizeof(Id)};
         }
       }
     }
@@ -399,7 +415,7 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
         switch (val.second) {
           case ResultTable::ResultType::KB: {
             string entity = _qec->getIndex()
-                                .idToOptionalString(data(i, val.first))
+                                .idToOptionalString(idTable(i, val.first))
                                 .value_or("");
             if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
               co_yield ad_utility::convertIndexWordToValueLiteral(entity);
@@ -409,19 +425,20 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
             break;
           }
           case ResultTable::ResultType::VERBATIM:
-            co_yield data(i, val.first);
+            co_yield idTable(i, val.first);
             break;
           case ResultTable::ResultType::TEXT:
-            co_yield _qec->getIndex().getTextExcerpt(data(i, val.first));
+            co_yield _qec->getIndex().getTextExcerpt(idTable(i, val.first));
             break;
           case ResultTable::ResultType::FLOAT: {
             float f;
-            std::memcpy(&f, &data(i, val.first), sizeof(float));
+            std::memcpy(&f, &idTable(i, val.first), sizeof(float));
             co_yield f;
             break;
           }
           case ResultTable::ResultType::LOCAL_VOCAB: {
-            co_yield res->idToOptionalString(data(i, val.first)).value_or("");
+            co_yield resultTable->idToOptionalString(idTable(i, val.first))
+                .value_or("");
             break;
           }
           default:

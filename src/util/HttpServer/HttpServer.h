@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <semaphore>
 
+#include "../Exception.h"
 #include "../Log.h"
 #include "../jthread.h"
 #include "./HttpUtils.h"
@@ -41,15 +42,9 @@ class HttpServer {
   const net::ip::address _ipAdress;
   const short unsigned int _port;
   HttpHandler _httpHandler;
-
-  // Limit the number of concurrent connections. It has to be an optional,
-  // because we only initialize it in the run() function.
-  // TODO<joka921> The standard says that there has to be some large default
-  // template parameter for the limit of the semaphore, but neither libstdc++
-  // nor libc++ currently implement  this, so we manually have to specify a
-  // large value.
-  std::optional<std::counting_semaphore<std::numeric_limits<int>::max()>>
-      _numConnectionsLimiter;
+  int _numServerThreads;
+  net::io_context _ioContext;
+  tcp::acceptor _acceptor;
 
  public:
   /// Construct from the port and ip address, on which this server will listen,
@@ -57,43 +52,57 @@ class HttpServer {
   /// member functions
   explicit HttpServer(short unsigned int port,
                       const std::string& ipAdress = "0.0.0.0",
+                      int numServerThreads = 1,
                       HttpHandler handler = HttpHandler{})
       : _ipAdress{net::ip::make_address(ipAdress)},
         _port{port},
-        _httpHandler{std::move(handler)} {}
+        _httpHandler{std::move(handler)},
+        // We need at least two threads to avoid blocking.
+        // TODO<joka921> why is that?
+        _numServerThreads{std::max(2, numServerThreads)},
+        _ioContext{_numServerThreads},
+        _acceptor{_ioContext} {
+    try {
+      tcp::endpoint endpoint{_ipAdress, _port};
+      // Open the acceptor.
+      _acceptor.open(endpoint.protocol());
+      boost::asio::socket_base::reuse_address option{true};
+      _acceptor.set_option(option);
+      // Bind to the server address.
+      _acceptor.bind(endpoint);
+    } catch (const boost::system::system_error& b) {
+      logBeastError(b.code(), "Opening or binding the socket failed");
+      throw;
+    }
+  }
 
   /// Run the server using the specified number of threads. Note that this
   /// function never returns, unless the Server crashes. The second argument
   /// limits the number of connections/sessions that may be handled concurrently
   /// (this is not equal to the number of threads due to the asynchronous
   /// implementation of this Server).
-  void run(int numServerThreads, size_t numSimultaneousConnections) {
-    // We need at least two threads to avoid blocking.
-    // TODO<joka921> why is that?
-    numServerThreads = std::max(2, numServerThreads);
-    net::io_context ioContext(numServerThreads + 1);
-
-    _numConnectionsLimiter.emplace(numSimultaneousConnections);
-
+  void run() {
     // Create the listener coroutine.
-    auto listenerCoro = listener(ioContext, tcp::endpoint{_ipAdress, _port});
+    auto listenerCoro = listener();
 
     // Schedule the listener onto the io context.
-    net::co_spawn(ioContext, std::move(listenerCoro), net::detached);
+    net::co_spawn(_ioContext, std::move(listenerCoro), net::detached);
 
     // Add some threads to the io context, s.t. the work can actually be
     // scheduled.
-    AD_CHECK(numServerThreads >= 1);
     std::vector<ad_utility::JThread> threads;
-    threads.reserve(numServerThreads);
-    for (auto i = 0; i < numServerThreads; ++i) {
-      threads.emplace_back([&ioContext] { ioContext.run(); });
+    threads.reserve(_numServerThreads);
+    for (auto i = 0; i < _numServerThreads; ++i) {
+      threads.emplace_back([&ioContext = _ioContext] { ioContext.run(); });
     }
 
     // This will run forever, because the destructor of the JThreads blocks
     // until ioContext.run() completes, which should never happen, because the
     // listener contains an infinite loop.
   }
+
+  // _____________________________________________________________________
+  net::io_context& getIoContext() { return _ioContext; };
 
  private:
   // Format a boost/beast error and log it to console
@@ -103,21 +112,11 @@ class HttpServer {
 
   // The loop which accepts TCP connections and delegates their handling
   // to the session() coroutine below.
-  boost::asio::awaitable<void> listener(boost::asio::io_context& ioc,
-                                        tcp::endpoint endpoint) {
-    tcp::acceptor acceptor{ioc};
-    boost::asio::socket_base::reuse_address option{true};
+  boost::asio::awaitable<void> listener() {
     try {
-      // Open the acceptor.
-      acceptor.open(endpoint.protocol());
-      acceptor.set_option(option);
-      // Bind to the server address.
-      acceptor.bind(endpoint);
-      // Start listening for connections.
-      acceptor.listen(boost::asio::socket_base::max_listen_connections);
+      _acceptor.listen(boost::asio::socket_base::max_listen_connections);
     } catch (const boost::system::system_error& b) {
-      logBeastError(b.code(),
-                    "opening, binding or listening on the socket failed");
+      logBeastError(b.code(), "Listening on the socket failed");
       co_return;
     }
 
@@ -125,15 +124,14 @@ class HttpServer {
     // an infinite, asynchronous, but conceptually single-threaded loop.
     while (true) {
       try {
-        _numConnectionsLimiter->acquire();
         auto socket =
-            co_await acceptor.async_accept(boost::asio::use_awaitable);
+            co_await _acceptor.async_accept(boost::asio::use_awaitable);
         // Schedule the session such that it may run in parallel to this loop.
         // the `strand` makes each session conceptually single-threaded.
         // TODO<joka921> is this even needed, to my understanding,
         // nothing may happen in parallel within an Http session, but
         // then again this does no harm.
-        net::co_spawn(net::make_strand(ioc), session(std::move(socket)),
+        net::co_spawn(net::make_strand(_ioContext), session(std::move(socket)),
                       net::detached);
 
       } catch (const boost::system::system_error& b) {
@@ -150,12 +148,10 @@ class HttpServer {
 
     auto releaseConnection = ad_utility::OnDestruction{
 
-        [this, &stream]() noexcept {
-          ;
+        [&stream]() noexcept {
           beast::error_code ec;
           stream.socket().shutdown(tcp::socket::shutdown_send, ec);
           stream.socket().close();
-          _numConnectionsLimiter->release();
         }};
 
     // Keep track of whether we have to close the session after a
