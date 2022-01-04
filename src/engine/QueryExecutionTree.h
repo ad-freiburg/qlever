@@ -229,6 +229,18 @@ class QueryExecutionTree {
 
   std::shared_ptr<const ResultTable> _cachedResult = nullptr;
 
+  // Helper class to avoid bug in g++ that leads to memory corruption when
+  // used inside of coroutines when using srd::array<std::string, 3> instead
+  struct RdfTriple {
+    std::string _subject;
+    std::string _verb;
+    std::string _object;
+    RdfTriple(std::string subject, std::string verb, std::string object)
+        : _subject{std::move(subject)},
+          _verb{std::move(verb)},
+          _object{std::move(object)} {}
+  };
+
   /**
    * @brief Convert an IdTable (typically from a query result) to a json array
    * @param data the IdTable from which we read
@@ -252,7 +264,7 @@ class QueryExecutionTree {
       shared_ptr<const ResultTable> resultTable = nullptr) const;
 
   // Generate an RDF graph for a CONSTRUCT query.
-  cppcoro::generator<std::array<std::string, 3>> generateRdfGraph(
+  cppcoro::generator<RdfTriple> generateRdfGraph(
       const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
       size_t limit, size_t offset,
       std::shared_ptr<const ResultTable> res) const;

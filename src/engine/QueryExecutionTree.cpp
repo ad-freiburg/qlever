@@ -454,7 +454,7 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
 
 // _____________________________________________________________________________
 
-cppcoro::generator<std::array<std::string, 3>>
+cppcoro::generator<QueryExecutionTree::RdfTriple>
 QueryExecutionTree::generateRdfGraph(
     const std::vector<std::array<VarOrTerm, 3>>& constructTriples, size_t limit,
     size_t offset, std::shared_ptr<const ResultTable> res) const {
@@ -482,11 +482,11 @@ QueryExecutionTree::writeRdfGraphTurtle(
     size_t offset, std::shared_ptr<const ResultTable> res) const {
   auto generator = generateRdfGraph(constructTriples, limit, offset, res);
   for (const auto& triple : generator) {
-    co_yield triple[0];
+    co_yield triple._subject;
     co_yield ' ';
-    co_yield triple[1];
+    co_yield triple._verb;
     co_yield ' ';
-    co_yield triple[2];
+    co_yield triple._object;
     co_yield " .\n";
   }
 }
@@ -498,11 +498,11 @@ QueryExecutionTree::writeRdfGraphSeparatedValues(
     size_t offset, std::shared_ptr<const ResultTable> res, char sep) const {
   auto generator = generateRdfGraph(constructTriples, limit, offset, res);
   for (const auto& triple : generator) {
-    co_yield triple[0];
+    co_yield triple._subject;
     co_yield sep;
-    co_yield triple[1];
+    co_yield triple._verb;
     co_yield sep;
-    co_yield triple[2];
+    co_yield triple._object;
     co_yield "\n";
   }
 }
@@ -514,7 +514,8 @@ nlohmann::json QueryExecutionTree::writeRdfGraphJson(
   auto generator = generateRdfGraph(constructTriples, limit, offset, res);
   std::vector<std::array<std::string, 3>> jsonArray;
   for (auto& triple : generator) {
-    jsonArray.push_back(std::move(triple));
+    jsonArray.push_back({std::move(triple._subject), std::move(triple._verb),
+                         std::move(triple._object)});
   }
   return jsonArray;
 }
