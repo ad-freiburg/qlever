@@ -469,10 +469,8 @@ QueryExecutionTree::generateRdfGraph(
       if (!subject.has_value() || !verb.has_value() || !object.has_value()) {
         continue;
       }
-      std::array<std::string, 3> test{subject.value(),
-                                      verb.value(),
-                                      object.value()};
-      co_yield test;
+      co_yield {std::move(subject.value()), std::move(verb.value()),
+                std::move(object.value())};
     }
   }
 }
