@@ -7,16 +7,17 @@
 #include <exception>
 #include <sstream>
 
-#include "./ostringstream.h"
-
-// coroutines are still experimental in clang, adapt the appropriate namespaces.
-#ifdef __clang__
+// coroutines are still experimental in clang libcpp,
+// adapt the appropriate namespaces.
+#ifdef _LIBCPP_VERSION
 #include <experimental/coroutine>
 namespace qlever_stdOrExp = std::experimental;
 #else
 #include <coroutine>
 namespace qlever_stdOrExp = std;
 #endif
+
+#include "./ostringstream.h"
 
 namespace ad_utility::stream_generator {
 

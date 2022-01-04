@@ -5,21 +5,21 @@
 #ifndef CPPCORO_GENERATOR_HPP_INCLUDED
 #define CPPCORO_GENERATOR_HPP_INCLUDED
 
-// coroutines are still experimental in clang, adapt the appropriate
-// namespaces.
-#ifdef __clang__
+#include <exception>
+#include <functional>
+#include <iterator>
+#include <type_traits>
+#include <utility>
+
+// coroutines are still experimental in clang libcpp,
+// adapt the appropriate namespaces.
+#ifdef _LIBCPP_VERSION
 #include <experimental/coroutine>
 namespace qlever_stdOrExp = std::experimental;
 #else
 #include <coroutine>
 namespace qlever_stdOrExp = std;
 #endif
-
-#include <exception>
-#include <functional>
-#include <iterator>
-#include <type_traits>
-#include <utility>
 
 namespace cppcoro {
 template <typename T>
