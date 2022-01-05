@@ -355,9 +355,12 @@ boost::asio::awaitable<void> Server::processQuery(
     // TODO<joka921> Add sparqlJson as soon as it is supported.
     const auto supportedMediaTypes = []() {
       static const std::vector<MediaType> mediaTypes{
-          ad_utility::MediaType::qleverJson, ad_utility::MediaType::sparqlJson,
-          ad_utility::MediaType::tsv, ad_utility::MediaType::csv,
-          ad_utility::MediaType::turtle};
+          ad_utility::MediaType::qleverJson,
+          ad_utility::MediaType::sparqlJson,
+          ad_utility::MediaType::tsv,
+          ad_utility::MediaType::csv,
+          ad_utility::MediaType::turtle,
+          ad_utility::MediaType::octetStream};
       return mediaTypes;
     };
 
@@ -375,6 +378,8 @@ boost::asio::awaitable<void> Server::processQuery(
       mediaType = ad_utility::MediaType::sparqlJson;
     } else if (containsParam("action", "turtle_export")) {
       mediaType = ad_utility::MediaType::turtle;
+    } else if (containsParam("action", "binary_export")) {
+      mediaType = ad_utility::MediaType::octetStream;
     }
 
     std::string_view acceptHeader = request.base()[http::field::accept];
@@ -418,6 +423,14 @@ boost::asio::awaitable<void> Server::processQuery(
             co_await composeResponseSepValues(pq, qet, '\t');
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::tsv);
+        co_await send(std::move(response));
+      } break;
+      case ad_utility::MediaType::octetStream: {
+        throwIfConstructClause();
+        auto responseGenerator =
+            co_await composeResponseSepValues(pq, qet, 'b');
+        auto response = createOkResponse(std::move(responseGenerator), request,
+                                         ad_utility::MediaType::octetStream);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::qleverJson: {

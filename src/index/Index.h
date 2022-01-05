@@ -13,7 +13,6 @@
 
 #include "../engine/ResultTable.h"
 #include "../global/Pattern.h"
-#include "../parser/NTriplesParser.h"
 #include "../parser/TsvParser.h"
 #include "../parser/TurtleParser.h"
 #include "../util/BufferedVector.h"
@@ -64,7 +63,7 @@ struct VocabularyData {
  * Used as a Template Argument to the createFromFile method, when we do not yet
  * know, which Tokenizer Specialization of the TurtleParser we are going to use
  */
-class TurtleParserDummy {};
+class TurtleParserAuto {};
 
 class Index {
  public:
@@ -123,14 +122,6 @@ class Index {
   // by createFromOnDiskIndex after this call.
   template <class Parser>
   void createFromFile(const string& filename);
-
-  /**
-   * @brief create an Index from a turtle file
-   * Determine from the settings, which Tokenizer regex engine (google re2 or
-   * ctre) should be used
-   * @param filename
-   */
-  void createFromTurtleFile(const string& filename);
 
   void addPatternsToExistingIndex();
 

@@ -13,7 +13,6 @@
 #include <stxxl/map>
 #include <unordered_map>
 
-#include "../parser/NTriplesParser.h"
 #include "../parser/ParallelParseBuffer.h"
 #include "../parser/TsvParser.h"
 #include "../util/BatchedPipeline.h"
@@ -70,7 +69,7 @@ void Index::createFromFile(const string& filename) {
   initializeVocabularySettingsBuild<Parser>();
 
   VocabularyData vocabData;
-  if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserDummy>) {
+  if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
     if (_onlyAsciiTurtlePrefixes) {
       LOG(INFO) << "Using the CTRE library for Tokenization\n";
       vocabData = createIdTriplesAndVocab<TurtleParallelParser<TokenizerCtre>>(
@@ -129,12 +128,11 @@ void Index::createFromFile(const string& filename) {
 
 // explicit instantiations
 template void Index::createFromFile<TsvParser>(const string& filename);
-template void Index::createFromFile<NTriplesParser>(const string& filename);
 template void Index::createFromFile<TurtleStreamParser<Tokenizer>>(
     const string& filename);
 template void Index::createFromFile<TurtleMmapParser<Tokenizer>>(
     const string& filename);
-template void Index::createFromFile<TurtleParserDummy>(const string& filename);
+template void Index::createFromFile<TurtleParserAuto>(const string& filename);
 
 // _____________________________________________________________________________
 template <class Parser>
@@ -1332,7 +1330,7 @@ void Index::initializeVocabularySettingsBuild() {
     _configurationJson["external-literals"] = true;
   }
   if (j.count("ascii-prefixes-only")) {
-    if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserDummy>) {
+    if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
       bool v{j["ascii-prefixes-only"]};
       if (v) {
         LOG(WARN) << WARNING_ASCII_ONLY_PREFIXES;

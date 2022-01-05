@@ -39,7 +39,8 @@ enum class MediaType {
   tsv,
   csv,
   textApplication,
-  turtle
+  turtle,
+  octetStream
 };
 
 struct MediaTypeWithQuality {

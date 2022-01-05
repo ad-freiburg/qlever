@@ -35,10 +35,6 @@ add_executable(TsvParserTest TsvParserTest.cpp)
 add_test(TsvParserTest TsvParserTest)
 target_link_libraries(TsvParserTest gtest_main parser ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(NTriplesParserTest NTriplesParserTest.cpp)
-add_test(NTriplesParserTest NTriplesParserTest)
-target_link_libraries(NTriplesParserTest gtest_main parser ${CMAKE_THREAD_LIBS_INIT})
-
 add_executable(ContextFileParserTest ContextFileParserTest.cpp)
 add_test(ContextFileParserTest ContextFileParserTest)
 target_link_libraries(ContextFileParserTest gtest_main parser ${CMAKE_THREAD_LIBS_INIT} ${ICU_LIBRARIES})
