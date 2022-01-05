@@ -45,38 +45,38 @@ int main(int argc, char** argv) {
   // filled / set depending on the options.
   using ad_utility::NonNegative;
 
-  string index;
+  string indexBasename;
   bool text = false;
   int port;
-  NonNegative numThreads = 1;
+  NonNegative numSimultaneousQueries = 1;
   bool noPatterns;
-  bool disablePatternTrick;
+  bool noPatternTrick;
 
-  NonNegative memLimit = DEFAULT_MEM_FOR_QUERIES_IN_GB;
+  NonNegative memoryMaxSizeGb = DEFAULT_MEM_FOR_QUERIES_IN_GB;
   using OptNonNeg = std::optional<NonNegative>;
-  OptNonNeg cacheMaxSizeGB;
-  OptNonNeg cacheMaxSizeGBSingleEntry;
+  OptNonNeg cacheMaxSizeGb;
+  OptNonNeg cacheMaxSizeGbSingleEntry;
   OptNonNeg cacheMaxNumEntries;
 
-  po::options_description bOptions("Options for ServerMain");
-  auto add = [&bOptions]<typename... Args>(Args && ... args) {
-    bOptions.add_options()(std::forward<Args>(args)...);
+  po::options_description options("Options for ServerMain");
+  auto add = [&options]<typename... Args>(Args && ... args) {
+    options.add_options()(std::forward<Args>(args)...);
   };
-  add("help,h", "produce help message");
-  add("index,i", po::value<std::string>(&index)->required(),
-      "The location of the index files");
-  add("worker-threads,j", po::value<NonNegative>(&numThreads)->default_value(1),
-      "Set the number of queries that can be processed simultaneously.");
-  add("memory-for_queries,m", po::value<NonNegative>(&memLimit),
+  add("help,h", "Produce help message");
+  add("index-basename,i", po::value<std::string>(&indexBasename)->required(),
+      "The location of the indexBasename files");
+  add("num-simultaneous-queries,j", po::value<NonNegative>(&numSimultaneousQueries)->default_value(1),
+      "The number of queries that can be processed simultaneously.");
+  add("memory-max-size-gb,m", po::value<NonNegative>(&memoryMaxSizeGb),
       "Limit on the total amount of memory (in GB) that can be used for "
       "query processing and caching. If exceeded, query will return with "
       "an error, but the engine will not crash.");
-  add("cache-max-size-gb,c", po::value<OptNonNeg>(&cacheMaxSizeGB),
+  add("cache-max-size-gb,c", po::value<OptNonNeg>(&cacheMaxSizeGb),
       "Maximum memory size in GB for all cache entries (pinned and "
       "non-pinned). Note that the cache is part of the amount of memory "
-      "limited by --memory-for-queries.");
+      "limited by --memory-max-size-gb.");
   add("cache-max-size-gb-single-entry,e",
-      po::value<OptNonNeg>(&cacheMaxSizeGBSingleEntry),
+      po::value<OptNonNeg>(&cacheMaxSizeGbSingleEntry),
 
       "Maximum size in GB for a single cache entry. In other words, "
       "results larger than this will never be cached.");
@@ -89,37 +89,37 @@ int main(int argc, char** argv) {
       "The port on which the http server runs.");
   add("no-patterns,P", po::bool_switch(&noPatterns),
       "Disable the use of patterns. This disables ql:has-predicate.");
-  add("no-pattern-trick,T", po::bool_switch(&disablePatternTrick),
+  add("no-pattern-trick,T", po::bool_switch(&noPatternTrick),
       "Maximum number of entries in the cache. If exceeded, remove "
       "least-recently used entries from the cache if possible. Note that "
       "this condition and the size limit specified via --cache-max-size-gb "
       "both have to hold (logical AND).");
   add("text,t", po::bool_switch(&text), "Enables the usage of text.");
-  po::variables_map vm;
+  po::variables_map optionsMap;
 
   try {
-    po::store(po::parse_command_line(argc, argv, bOptions), vm);
+    po::store(po::parse_command_line(argc, argv, options), optionsMap);
 
-    if (vm.count("help")) {
-      std::cout << bOptions << '\n';
+    if (optionsMap.count("help")) {
+      std::cout << options << '\n';
       return EXIT_SUCCESS;
     }
 
-    po::notify(vm);
+    po::notify(optionsMap);
   } catch (const std::exception& e) {
     std::cerr << "Error in command-line Argument: " << e.what() << '\n';
-    std::cerr << bOptions << '\n';
+    std::cerr << options << '\n';
     return EXIT_FAILURE;
   }
 
   // TODO<joka921> Do we want a complex wrapper that directly performs
   // these updates and also supplies the default values?
-  if (cacheMaxSizeGB.has_value()) {
-    RuntimeParameters().set<"cache-max-size-gb">(cacheMaxSizeGB.value());
+  if (cacheMaxSizeGb.has_value()) {
+    RuntimeParameters().set<"cache-max-size-gb">(cacheMaxSizeGb.value());
   }
-  if (cacheMaxSizeGBSingleEntry.has_value()) {
+  if (cacheMaxSizeGbSingleEntry.has_value()) {
     RuntimeParameters().set<"cache-max-size-gb-single-entry">(
-        cacheMaxSizeGBSingleEntry.value());
+        cacheMaxSizeGbSingleEntry.value());
   }
   if (cacheMaxNumEntries.has_value()) {
     RuntimeParameters().set<"cache-max-num-entries">(
@@ -127,8 +127,9 @@ int main(int argc, char** argv) {
   }
 
   try {
-    Server server(port, static_cast<int>(numThreads), memLimit);
-    server.run(index, text, !noPatterns, !disablePatternTrick);
+    Server server(port, static_cast<int>(numSimultaneousQueries),
+                  memoryMaxSizeGb);
+    server.run(indexBasename, text, !noPatterns, !noPatternTrick);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
     // within server.run()

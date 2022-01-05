@@ -36,7 +36,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   validators::check_first_occurrence(v);
 
   std::string const& s = validators::get_single_string(values);
-  if (s[0] == '-') {
+  if (s.empty() || s[0] == '-') {
     throw std::runtime_error("Expected a positive number but got " + s + ".");
   }
 
@@ -44,8 +44,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
 }
 
 // This function is required  to use `std::optional` in
-// `boost::program_options`. It throws an exception when parsing a negative
-// value.
+// `boost::program_options`.
 template <typename T>
 void validate(boost::any& v, const std::vector<std::string>& values,
               std::optional<T>*, int) {
