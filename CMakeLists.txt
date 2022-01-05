@@ -215,14 +215,8 @@ target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT})
 add_executable(CreatePatternsMain src/index/CreatePatternsMain.cpp src/util/ConstexprSmallString.h)
 target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(SparqlEngineMain src/SparqlEngineMain.cpp)
-target_link_libraries (SparqlEngineMain engine ${CMAKE_THREAD_LIBS_INIT})
-
 add_executable(ServerMain src/ServerMain.cpp)
 target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT})
-
-add_executable(WriteIndexListsMain src/WriteIndexListsMain.cpp)
-target_link_libraries (WriteIndexListsMain engine ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
 target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})

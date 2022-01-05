@@ -9,7 +9,6 @@
 #include <iostream>
 #include <string>
 
-#include "./parser/NTriplesParser.h"
 #include "./parser/TsvParser.h"
 #include "./parser/TurtleParser.h"
 #include "./util/Log.h"
@@ -72,13 +71,11 @@ void writeLabel(const std::string& filename) {
 template <class Tokenizer_T>
 void writeNT(std::ostream& out, const string& fileFormat,
              const std::string& filename) {
-  if (fileFormat == "ttl") {
+  if (fileFormat == "ttl" || fileFormat == "nt") {
     // writeLabel<TurtleStreamParser<Tokenizer_T>>(out, filename);
     writeNTImpl<TurtleStreamParser<Tokenizer_T>>(out, filename);
   } else if (fileFormat == "tsv") {
     writeNTImpl<TsvParser>(out, filename);
-  } else if (fileFormat == "nt") {
-    writeNTImpl<NTriplesParser>(out, filename);
   } else if (fileFormat == "mmap") {
     writeNTImpl<TurtleMmapParser<Tokenizer_T>>(out, filename);
   } else {

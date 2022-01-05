@@ -307,15 +307,15 @@ int main(int argc, char** argv) {
       if (filetype == "ttl") {
         LOG(INFO) << "Reading from uncompressed turtle file or stream "
                   << inputFile << std::endl;
-        index.createFromFile<TurtleParserDummy>(inputFile);
+        index.createFromFile<TurtleParserAuto>(inputFile);
       } else if (filetype == "tsv") {
         LOG(INFO) << "Reading from uncompressed tsv file" << inputFile
                   << std::endl;
         index.createFromFile<TsvParser>(inputFile);
       } else if (filetype == "nt") {
-        LOG(INFO) << "Reading from uncompressed NTriples file" << inputFile
-                  << std::endl;
-        index.createFromFile<NTriplesParser>(inputFile);
+        LOG(INFO) << "Reading from uncompressed N-Triples file or stream "
+                  << inputFile << ", using the Turtle parser." << std::endl;
+        index.createFromFile<TurtleParserAuto>(inputFile);
       } else if (filetype == "mmap") {
         LOG(INFO) << "Reading from uncompressed turtle file" << inputFile
                   << std::endl;
