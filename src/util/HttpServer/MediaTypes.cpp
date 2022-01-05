@@ -47,6 +47,7 @@ const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
     add(sparqlJson, "application", "sparql-results+json", {});
     add(qleverJson, "application", "qlever-results+json", {});
     add(turtle, "text", "turtle", {".ttl"});
+    add(octetStream, "application", "octet-stream", {});
     return t;
   }();
   return types;
