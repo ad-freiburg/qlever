@@ -43,6 +43,21 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   v = NonNegative{boost::lexical_cast<size_t>(s)};
 }
 
+// This function is required  to use `std::optional` in
+// `boost::program_options`. It throws an exception when parsing a negative
+// value.
+template <typename T>
+void validate(boost::any& v, const std::vector<std::string>& values,
+              std::optional<T>*, int) {
+  // First parse as a T
+  T* dummy = nullptr;
+  validate(v, values, dummy, 0);
+
+  // Wrap the T inside std::optional
+  AD_CHECK(!v.empty());
+  v = std::optional<T>(boost::any_cast<T>(v));
+}
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_PROGRAMOPTIONSHELPERS_H
