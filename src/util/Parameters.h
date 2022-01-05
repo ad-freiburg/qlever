@@ -191,6 +191,10 @@ class Parameters {
     return std::get<index>(_parameters).wlock()->set(std::move(newValue));
   }
 
+  template <ParameterName Name>
+  using Type =
+      std::decay_t<decltype(std::declval<Parameters&>().template get<Name>())>;
+
   // For the parameter with name `Name` specify the function that is to be
   // called, when this parameter value changes.
   template <ParameterName name, typename OnUpdateAction>

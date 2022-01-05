@@ -53,10 +53,15 @@ int main(int argc, char** argv) {
   bool noPatternTrick;
 
   NonNegative memoryMaxSizeGb = DEFAULT_MEM_FOR_QUERIES_IN_GB;
-  using OptNonNeg = std::optional<NonNegative>;
-  OptNonNeg cacheMaxSizeGb;
-  OptNonNeg cacheMaxSizeGbSingleEntry;
-  OptNonNeg cacheMaxNumEntries;
+
+  ad_utility::ParameterToProgramOptionFactory optionFactory{
+      &RuntimeParameters()};
+  auto cacheMaxSizeGbSingleEntry =
+      optionFactory.makeParameterOption<"cache-max-size-gb-single-entry">();
+  auto cacheMaxNumEntries =
+      optionFactory.makeParameterOption<"cache-max-num-entries">();
+  auto cacheMaxSizeGb =
+      optionFactory.makeParameterOption<"cache-max-size-gb">();
 
   po::options_description options("Options for ServerMain");
   auto add = [&options]<typename... Args>(Args && ... args) {
@@ -65,22 +70,23 @@ int main(int argc, char** argv) {
   add("help,h", "Produce help message");
   add("index-basename,i", po::value<std::string>(&indexBasename)->required(),
       "The location of the indexBasename files");
-  add("num-simultaneous-queries,j", po::value<NonNegative>(&numSimultaneousQueries)->default_value(1),
+  add("num-simultaneous-queries,j",
+      po::value<NonNegative>(&numSimultaneousQueries)->default_value(1),
       "The number of queries that can be processed simultaneously.");
   add("memory-max-size-gb,m", po::value<NonNegative>(&memoryMaxSizeGb),
       "Limit on the total amount of memory (in GB) that can be used for "
       "query processing and caching. If exceeded, query will return with "
       "an error, but the engine will not crash.");
-  add("cache-max-size-gb,c", po::value<OptNonNeg>(&cacheMaxSizeGb),
+  add("cache-max-size-gb,c", optionFactory.makePoValue(&cacheMaxSizeGb),
       "Maximum memory size in GB for all cache entries (pinned and "
       "non-pinned). Note that the cache is part of the amount of memory "
       "limited by --memory-max-size-gb.");
   add("cache-max-size-gb-single-entry,e",
-      po::value<OptNonNeg>(&cacheMaxSizeGbSingleEntry),
+      optionFactory.makePoValue(&cacheMaxSizeGbSingleEntry),
 
       "Maximum size in GB for a single cache entry. In other words, "
       "results larger than this will never be cached.");
-  add("cache-max-num-entries,k", po::value<OptNonNeg>(&cacheMaxNumEntries),
+  add("cache-max-num-entries,k", optionFactory.makePoValue(&cacheMaxNumEntries),
       "Maximum number of entries in the cache. If exceeded, remove "
       "least-recently used entries from the cache if possible. Note that "
       "this condition and the size limit specified via --cache-max-size-gb "
@@ -110,20 +116,6 @@ int main(int argc, char** argv) {
     std::cerr << "Error in command-line Argument: " << e.what() << '\n';
     std::cerr << options << '\n';
     return EXIT_FAILURE;
-  }
-
-  // TODO<joka921> Do we want a complex wrapper that directly performs
-  // these updates and also supplies the default values?
-  if (cacheMaxSizeGb.has_value()) {
-    RuntimeParameters().set<"cache-max-size-gb">(cacheMaxSizeGb.value());
-  }
-  if (cacheMaxSizeGbSingleEntry.has_value()) {
-    RuntimeParameters().set<"cache-max-size-gb-single-entry">(
-        cacheMaxSizeGbSingleEntry.value());
-  }
-  if (cacheMaxNumEntries.has_value()) {
-    RuntimeParameters().set<"cache-max-num-entries">(
-        cacheMaxNumEntries.value());
   }
 
   try {
