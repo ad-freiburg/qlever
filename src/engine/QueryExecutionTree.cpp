@@ -496,6 +496,10 @@ ad_utility::stream_generator::stream_generator
 QueryExecutionTree::writeRdfGraphSeparatedValues(
     const std::vector<std::array<VarOrTerm, 3>>& constructTriples, size_t limit,
     size_t offset, std::shared_ptr<const ResultTable> res, char sep) const {
+  if (sep == 'b') {
+    throw std::runtime_error{
+        "Binary export is not supported for CONSTRUCT queries"};
+  }
   auto generator = generateRdfGraph(constructTriples, limit, offset, res);
   for (const auto& triple : generator) {
     co_yield triple._subject;

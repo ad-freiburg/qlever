@@ -437,7 +437,6 @@ boost::asio::awaitable<void> Server::processQuery(
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::octetStream: {
-        throwIfConstructClause();
         auto responseGenerator =
             co_await composeResponseSepValues(pq, qet, 'b');
         auto response = createOkResponse(std::move(responseGenerator), request,
