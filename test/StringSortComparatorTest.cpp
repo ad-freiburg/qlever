@@ -154,7 +154,7 @@ TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
 
 // ______________________________________________________________________________________________
 TEST(StringSortComparatorTest, SimpleStringComparator) {
-  SimpleStringComparator comp("en", "US", false);
+  SimpleStringComparator comp("en", "US", true);
 
   // strange casings must not affect order
   ASSERT_TRUE(comp("ALPHA", "beta"));
@@ -177,4 +177,7 @@ TEST(StringSortComparatorTest, SimpleStringComparator) {
 
   // something is not smaller thant itself
   ASSERT_FALSE(comp("beta", "beta"));
+
+  ASSERT_TRUE(comp("\"@u2", "@u2"));
+  ASSERT_FALSE(comp("@u2", "\"@u2"));
 }

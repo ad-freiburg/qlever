@@ -174,16 +174,12 @@ void Index::passContextFileIntoVector(const string& contextFile,
     } else {
       ++nofWordPostings;
       Id wid;
-#ifndef NDEBUG
       bool ret = _textVocab.getId(line._word, &wid);
       if (!ret) {
-        LOG(INFO) << "ERROR: word " << line._word
-                  << "not found in textVocab. Terminating\n";
+        LOG(ERROR) << "ERROR: word " << line._word
+                   << "not found in textVocab. Terminating\n";
+        AD_CHECK(false);
       }
-      assert(ret);
-#else
-      _textVocab.getId(line._word, &wid);
-#endif
       wordsInContext[wid] += line._score;
     }
     ++i;
