@@ -10,6 +10,7 @@
 #include <unordered_set>
 
 #include "../parser/data/Context.h"
+#include "../parser/data/Types.h"
 #include "../parser/data/VarOrTerm.h"
 #include "../util/Conversions.h"
 #include "../util/Generator.h"
@@ -52,11 +53,7 @@ class QueryExecutionTree {
     MINUS = 20
   };
 
-  enum ExportSubFormat {
-    CSV,
-    TSV,
-    BINARY
-  };
+  enum ExportSubFormat { CSV, TSV, BINARY };
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
 
@@ -119,20 +116,18 @@ class QueryExecutionTree {
 
   // Generate an RDF graph in turtle format for a CONSTRUCT query.
   ad_utility::stream_generator::stream_generator writeRdfGraphTurtle(
-      const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
-      size_t limit, size_t offset,
+      const Types::Triples& constructTriples, size_t limit, size_t offset,
       std::shared_ptr<const ResultTable> res) const;
 
   // Generate an RDF graph in csv/tsv format for a CONSTRUCT query.
   template <ExportSubFormat format>
   ad_utility::stream_generator::stream_generator writeRdfGraphSeparatedValues(
-      const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
-      size_t limit, size_t offset, std::shared_ptr<const ResultTable> res) const;
+      const Types::Triples& constructTriples, size_t limit, size_t offset,
+      std::shared_ptr<const ResultTable> res) const;
 
   // Generate an RDF graph in json format for a CONSTRUCT query.
   nlohmann::json writeRdfGraphJson(
-      const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
-      size_t limit, size_t offset,
+      const Types::Triples& constructTriples, size_t limit, size_t offset,
       std::shared_ptr<const ResultTable> res) const;
 
   nlohmann::json writeResultAsQLeverJson(
@@ -275,7 +270,6 @@ class QueryExecutionTree {
 
   // Generate an RDF graph for a CONSTRUCT query.
   cppcoro::generator<RdfTriple> generateRdfGraph(
-      const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
-      size_t limit, size_t offset,
+      const Types::Triples& constructTriples, size_t limit, size_t offset,
       std::shared_ptr<const ResultTable> res) const;
 };

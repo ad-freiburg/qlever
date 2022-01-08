@@ -475,8 +475,8 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
 
 cppcoro::generator<QueryExecutionTree::RdfTriple>
 QueryExecutionTree::generateRdfGraph(
-    const std::vector<std::array<VarOrTerm, 3>>& constructTriples, size_t limit,
-    size_t offset, std::shared_ptr<const ResultTable> res) const {
+    const Types::Triples& constructTriples, size_t limit, size_t offset,
+    std::shared_ptr<const ResultTable> res) const {
   size_t upperBound = std::min<size_t>(offset + limit, res->_idTable.size());
   auto variableColumns = getVariableColumns();
   for (size_t i = offset; i < upperBound; i++) {
@@ -497,8 +497,8 @@ QueryExecutionTree::generateRdfGraph(
 // _____________________________________________________________________________
 ad_utility::stream_generator::stream_generator
 QueryExecutionTree::writeRdfGraphTurtle(
-    const std::vector<std::array<VarOrTerm, 3>>& constructTriples, size_t limit,
-    size_t offset, std::shared_ptr<const ResultTable> res) const {
+    const Types::Triples& constructTriples, size_t limit, size_t offset,
+    std::shared_ptr<const ResultTable> res) const {
   auto generator = generateRdfGraph(constructTriples, limit, offset, res);
   for (const auto& triple : generator) {
     co_yield triple._subject;
@@ -514,8 +514,8 @@ QueryExecutionTree::writeRdfGraphTurtle(
 template <QueryExecutionTree::ExportSubFormat format>
 ad_utility::stream_generator::stream_generator
 QueryExecutionTree::writeRdfGraphSeparatedValues(
-    const std::vector<std::array<VarOrTerm, 3>>& constructTriples, size_t limit,
-    size_t offset, std::shared_ptr<const ResultTable> res) const {
+    const Types::Triples& constructTriples, size_t limit, size_t offset,
+    std::shared_ptr<const ResultTable> res) const {
   if constexpr (format == BINARY) {
     throw std::runtime_error{
         "Binary export is not supported for CONSTRUCT queries"};
@@ -538,23 +538,23 @@ QueryExecutionTree::writeRdfGraphSeparatedValues(
 
 template ad_utility::stream_generator::stream_generator
 QueryExecutionTree::writeRdfGraphSeparatedValues<QueryExecutionTree::CSV>(
-    const std::vector<std::array<VarOrTerm, 3>>& constructTriples, size_t limit,
-    size_t offset, std::shared_ptr<const ResultTable> res) const;
+    const Types::Triples& constructTriples, size_t limit, size_t offset,
+    std::shared_ptr<const ResultTable> res) const;
 
 template ad_utility::stream_generator::stream_generator
 QueryExecutionTree::writeRdfGraphSeparatedValues<QueryExecutionTree::TSV>(
-    const std::vector<std::array<VarOrTerm, 3>>& constructTriples, size_t limit,
-    size_t offset, std::shared_ptr<const ResultTable> res) const;
+    const Types::Triples& constructTriples, size_t limit, size_t offset,
+    std::shared_ptr<const ResultTable> res) const;
 
 template ad_utility::stream_generator::stream_generator
 QueryExecutionTree::writeRdfGraphSeparatedValues<QueryExecutionTree::BINARY>(
-    const std::vector<std::array<VarOrTerm, 3>>& constructTriples, size_t limit,
-    size_t offset, std::shared_ptr<const ResultTable> res) const;
+    const Types::Triples& constructTriples, size_t limit, size_t offset,
+    std::shared_ptr<const ResultTable> res) const;
 
 // _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeRdfGraphJson(
-    const std::vector<std::array<VarOrTerm, 3>>& constructTriples, size_t limit,
-    size_t offset, std::shared_ptr<const ResultTable> res) const {
+    const Types::Triples& constructTriples, size_t limit, size_t offset,
+    std::shared_ptr<const ResultTable> res) const {
   auto generator =
       generateRdfGraph(constructTriples, limit, offset, std::move(res));
   std::vector<std::array<std::string, 3>> jsonArray;

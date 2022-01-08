@@ -19,6 +19,7 @@
 #include "../data/BlankNode.h"
 #include "../data/Iri.h"
 #include "../data/VarOrTerm.h"
+#include "../data/Types.h"
 #include "antlr4-runtime.h"
 #include "generated/SparqlAutomaticVisitor.h"
 
@@ -48,12 +49,12 @@ class Reversed {
  * available methods.
  */
 class SparqlQleverVisitor : public SparqlAutomaticVisitor {
-  using Objects = std::vector<VarOrTerm>;
-  using Tuples = std::vector<std::array<VarOrTerm, 2>>;
-  using Triples = std::vector<std::array<VarOrTerm, 3>>;
-  using Node = std::pair<VarOrTerm, Triples>;
-  using ObjectList = std::pair<Objects, Triples>;
-  using PropertyList = std::pair<Tuples, Triples>;
+  using Objects = Types::Objects;
+  using Tuples = Types::Tuples;
+  using Triples = Types::Triples;
+  using Node = Types::Node;
+  using ObjectList = Types::ObjectList;
+  using PropertyList = Types::PropertyList;
   size_t _blankNodeCounter = 0;
 
  public:
