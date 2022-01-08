@@ -168,11 +168,11 @@ Awaitable<json> Server::composeResponseQleverJson(
 
     j["query"] = query._originalString;
     j["status"] = "OK";
-    j["resultsize"] = resultSize;
     j["warnings"] = qet.collectWarnings();
-    if (query.hasSelectClause()) {
-      j["selected"] = query.selectClause()._selectedVariables;
-    }
+    j["selected"] =
+        query.hasSelectClause()
+            ? query.selectClause()._selectedVariables
+            : std::vector<std::string>{"?subject", "?verb", "?object"};
 
     j["runtimeInformation"] = RuntimeInformation::ordered_json(
         qet.getRootOperation()->getRuntimeInfo());
@@ -190,6 +190,7 @@ Awaitable<json> Server::composeResponseQleverJson(
                                              offset, std::move(resultTable));
       requestTimer.stop();
     }
+    j["resultsize"] = query.hasSelectClause() ? resultSize : j["res"].size();
 
     requestTimer.stop();
     j["time"]["total"] =
