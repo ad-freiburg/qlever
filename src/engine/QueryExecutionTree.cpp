@@ -355,7 +355,7 @@ nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
     resultTable = getResult();
   }
   const IdTable& data = resultTable->_idTable;
-  nlohmann::json json = nlohmann::json::parse("[]");
+  nlohmann::json json = nlohmann::json::array();
 
   const auto upperBound = std::min(data.size(), limit + from);
 
