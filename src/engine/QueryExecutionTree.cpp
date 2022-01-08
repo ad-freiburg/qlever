@@ -7,7 +7,9 @@
 #include <algorithm>
 #include <sstream>
 #include <string>
+#include <utility>
 
+#include "../parser/RdfEscaping.h"
 #include "./Distinct.h"
 #include "./Filter.h"
 #include "./IndexScan.h"
@@ -500,13 +502,15 @@ QueryExecutionTree::writeRdfGraphSeparatedValues(
     throw std::runtime_error{
         "Binary export is not supported for CONSTRUCT queries"};
   }
+  const auto& escapeFunction =
+      sep == '\t' ? RdfEscaping::escapeForTsv : RdfEscaping::escapeForCsv;
   auto generator = generateRdfGraph(constructTriples, limit, offset, res);
-  for (const auto& triple : generator) {
-    co_yield triple._subject;
+  for (auto& triple : generator) {
+    co_yield escapeFunction(std::move(triple._subject));
     co_yield sep;
-    co_yield triple._verb;
+    co_yield escapeFunction(std::move(triple._verb));
     co_yield sep;
-    co_yield triple._object;
+    co_yield escapeFunction(std::move(triple._object));
     co_yield "\n";
   }
 }
@@ -515,7 +519,8 @@ QueryExecutionTree::writeRdfGraphSeparatedValues(
 nlohmann::json QueryExecutionTree::writeRdfGraphJson(
     const std::vector<std::array<VarOrTerm, 3>>& constructTriples, size_t limit,
     size_t offset, std::shared_ptr<const ResultTable> res) const {
-  auto generator = generateRdfGraph(constructTriples, limit, offset, res);
+  auto generator =
+      generateRdfGraph(constructTriples, limit, offset, std::move(res));
   std::vector<std::array<std::string, 3>> jsonArray;
   for (auto& triple : generator) {
     jsonArray.push_back({std::move(triple._subject), std::move(triple._verb),

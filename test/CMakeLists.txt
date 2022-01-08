@@ -212,3 +212,7 @@ target_link_libraries(StreamableGeneratorTest gtest_main ${CMAKE_THREAD_LIBS_INI
 add_executable(AcceptHeaderTest AcceptHeaderTest.cpp)
 target_link_libraries(AcceptHeaderTest gtest_main mediaTypes httpParser ${CMAKE_THREAD_LIBS_INIT})
 add_test(AcceptHeaderTest AcceptHeaderTest)
+
+add_executable(RdfEscapingTest RdfEscapingTest.cpp)
+target_link_libraries(RdfEscapingTest gtest_main parser ${CMAKE_THREAD_LIBS_INIT})
+add_test(RdfEscapingTest RdfEscapingTest)
