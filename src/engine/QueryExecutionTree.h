@@ -231,6 +231,8 @@ class QueryExecutionTree {
 
   // Helper class to avoid bug in g++ that leads to memory corruption when
   // used inside of coroutines when using srd::array<std::string, 3> instead
+  // see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more
+  // information
   struct RdfTriple {
     std::string _subject;
     std::string _verb;
