@@ -180,7 +180,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
       Id wid;
       bool ret = _textVocab.getId(line._word, &wid);
       if (!ret) {
-        LOG(ERROR) << "ERROR: word " << line._word
+        LOG(ERROR) << "ERROR: word \"" << line._word << "\" "
                    << "not found in textVocab. Terminating\n";
         AD_CHECK(false);
       }
