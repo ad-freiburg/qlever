@@ -473,7 +473,7 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
 
 // _____________________________________________________________________________
 
-cppcoro::generator<QueryExecutionTree::RdfTriple>
+cppcoro::generator<QueryExecutionTree::StringTriple>
 QueryExecutionTree::generateRdfGraph(
     const Types::Triples& constructTriples, size_t limit, size_t offset,
     std::shared_ptr<const ResultTable> res) const {
@@ -483,12 +483,13 @@ QueryExecutionTree::generateRdfGraph(
     Context context{i, *res, variableColumns, _qec->getIndex()};
     for (const auto& triple : constructTriples) {
       auto subject = triple[0].evaluate(context, SUBJECT);
-      auto verb = triple[1].evaluate(context, VERB);
+      auto predicate = triple[1].evaluate(context, PREDICATE);
       auto object = triple[2].evaluate(context, OBJECT);
-      if (!subject.has_value() || !verb.has_value() || !object.has_value()) {
+      if (!subject.has_value() || !predicate.has_value() ||
+          !object.has_value()) {
         continue;
       }
-      co_yield {std::move(subject.value()), std::move(verb.value()),
+      co_yield {std::move(subject.value()), std::move(predicate.value()),
                 std::move(object.value())};
     }
   }
@@ -503,7 +504,7 @@ QueryExecutionTree::writeRdfGraphTurtle(
   for (const auto& triple : generator) {
     co_yield triple._subject;
     co_yield ' ';
-    co_yield triple._verb;
+    co_yield triple._predicate;
     co_yield ' ';
     co_yield triple._object;
     co_yield " .\n";
@@ -527,7 +528,7 @@ QueryExecutionTree::writeRdfGraphSeparatedValues(
   for (auto& triple : generator) {
     co_yield escapeFunction(std::move(triple._subject));
     co_yield sep;
-    co_yield escapeFunction(std::move(triple._verb));
+    co_yield escapeFunction(std::move(triple._predicate));
     co_yield sep;
     co_yield escapeFunction(std::move(triple._object));
     co_yield "\n";
@@ -559,7 +560,8 @@ nlohmann::json QueryExecutionTree::writeRdfGraphJson(
       generateRdfGraph(constructTriples, limit, offset, std::move(res));
   std::vector<std::array<std::string, 3>> jsonArray;
   for (auto& triple : generator) {
-    jsonArray.push_back({std::move(triple._subject), std::move(triple._verb),
+    jsonArray.push_back({std::move(triple._subject),
+                         std::move(triple._predicate),
                          std::move(triple._object)});
   }
   return jsonArray;

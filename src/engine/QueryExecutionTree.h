@@ -235,13 +235,13 @@ class QueryExecutionTree {
   // used inside of coroutines when using srd::array<std::string, 3> instead
   // see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more
   // information
-  struct RdfTriple {
+  struct StringTriple {
     std::string _subject;
-    std::string _verb;
+    std::string _predicate;
     std::string _object;
-    RdfTriple(std::string subject, std::string verb, std::string object)
+    StringTriple(std::string subject, std::string predicate, std::string object)
         : _subject{std::move(subject)},
-          _verb{std::move(verb)},
+          _predicate{std::move(predicate)},
           _object{std::move(object)} {}
   };
 
@@ -269,7 +269,7 @@ class QueryExecutionTree {
       shared_ptr<const ResultTable> resultTable = nullptr) const;
 
   // Generate an RDF graph for a CONSTRUCT query.
-  cppcoro::generator<RdfTriple> generateRdfGraph(
+  cppcoro::generator<StringTriple> generateRdfGraph(
       const Types::Triples& constructTriples, size_t limit, size_t offset,
       std::shared_ptr<const ResultTable> res) const;
 };
