@@ -66,7 +66,8 @@ std::string unescapeIriref(std::string_view iriref);
 std::string unescapePrefixedIri(std::string_view literal);
 
 /**
- * Escape a string according to RFC4180 for a csv field.
+ * Escape a string according to RFC4180 for a csv field by adding quotes
+ * around the input and escaping any existing quotes if necessary.
  *
  * See https://www.ietf.org/rfc/rfc4180.txt for more information.
  */

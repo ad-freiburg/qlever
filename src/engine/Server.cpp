@@ -172,7 +172,7 @@ Awaitable<json> Server::composeResponseQleverJson(
     j["selected"] =
         query.hasSelectClause()
             ? query.selectClause()._selectedVariables
-            : std::vector<std::string>{"?subject", "?verb", "?object"};
+            : std::vector<std::string>{"?subject", "?predicate", "?object"};
 
     j["runtimeInformation"] = RuntimeInformation::ordered_json(
         qet.getRootOperation()->getRuntimeInfo());
@@ -208,6 +208,11 @@ Awaitable<json> Server::composeResponseQleverJson(
 Awaitable<json> Server::composeResponseSparqlJson(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     ad_utility::Timer& requestTimer, size_t maxSend) const {
+  if (!query.hasSelectClause()) {
+    throw std::runtime_error{
+        "SPARQL-compliant JSON format is not supported for anything other than "
+        "SELECT queries"};
+  }
   auto compute = [&, maxSend] {
     shared_ptr<const ResultTable> resultTable = qet.getResult();
     requestTimer.stop();
@@ -216,15 +221,8 @@ Awaitable<json> Server::composeResponseSparqlJson(
         std::min(query._limit.value_or(MAX_NOF_ROWS_IN_RESULT), maxSend);
     size_t offset = query._offset.value_or(0);
     requestTimer.cont();
-    if (query.hasSelectClause()) {
-      j = qet.writeResultAsSparqlJson(query.selectClause()._selectedVariables,
-                                      limit, offset, std::move(resultTable));
-    } else if (query.hasConstructClause()) {
-      j["results"] = qet.writeRdfGraphJson(query.constructClause(), limit,
-                                           offset, std::move(resultTable));
-    } else {
-      AD_CHECK(false);
-    }
+    j = qet.writeResultAsSparqlJson(query.selectClause()._selectedVariables,
+                                    limit, offset, std::move(resultTable));
     requestTimer.stop();
     return j;
   };
