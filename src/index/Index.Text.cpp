@@ -95,6 +95,10 @@ void Index::addTextFromOnDiskIndex() {
 
 // _____________________________________________________________________________
 size_t Index::passContextFileForVocabulary(string const& contextFile) {
+  // We have to have a configuration by now. Rereading it is necessary,
+  // because we might only add an text index to the already existing KB index.
+  // In this case we also need the correct locale settings etc.
+  readConfiguration();
   LOG(INFO) << "Making pass over ContextFile " << contextFile
             << " for vocabulary." << std::endl;
   ContextFileParser::Line line;
