@@ -67,11 +67,10 @@ ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
 }
 // _____________________________________________________________________________
 
-ResultOfParseAndRemainingText<Types::Triples>
-parseConstructTemplate(const std::string& input,
-                       SparqlQleverVisitor::PrefixMap prefixes) {
+ResultOfParseAndRemainingText<Types::Triples> parseConstructTemplate(
+    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes) {
   ParserAndVisitor p{input, std::move(prefixes)};
-  return p.parse<Types::Triples>(
-      input, "construct template", &SparqlAutomaticParser::constructTemplate);
+  return p.parse<Types::Triples>(input, "construct template",
+                                 &SparqlAutomaticParser::constructTemplate);
 }
 }  // namespace sparqlParserHelpers

@@ -18,8 +18,8 @@
 #include "../RdfEscaping.h"
 #include "../data/BlankNode.h"
 #include "../data/Iri.h"
-#include "../data/VarOrTerm.h"
 #include "../data/Types.h"
+#include "../data/VarOrTerm.h"
 #include "antlr4-runtime.h"
 #include "generated/SparqlAutomaticVisitor.h"
 
