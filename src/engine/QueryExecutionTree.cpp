@@ -493,7 +493,7 @@ QueryExecutionTree::writeRdfGraphTurtle(
   }
 }
 
-// Generate an RDF graph in csv/tsv format for a CONSTRUCT query.
+// _____________________________________________________________________________
 ad_utility::stream_generator::stream_generator
 QueryExecutionTree::writeRdfGraphSeparatedValues(
     const std::vector<std::array<VarOrTerm, 3>>& constructTriples, size_t limit,
@@ -515,7 +515,7 @@ QueryExecutionTree::writeRdfGraphSeparatedValues(
   }
 }
 
-// Generate an RDF graph in json format for a CONSTRUCT query.
+// _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeRdfGraphJson(
     const std::vector<std::array<VarOrTerm, 3>>& constructTriples, size_t limit,
     size_t offset, std::shared_ptr<const ResultTable> res) const {
