@@ -232,19 +232,18 @@ Awaitable<json> Server::composeResponseSparqlJson(
 }
 
 // _____________________________________________________________________________
+template <QueryExecutionTree::ExportSubFormat format>
 Awaitable<ad_utility::stream_generator::stream_generator>
 Server::composeResponseSepValues(const ParsedQuery& query,
-                                 const QueryExecutionTree& qet,
-                                 char sep) const {
-  auto compute = [&, sep] {
+                                 const QueryExecutionTree& qet) const {
+  auto compute = [&] {
     size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
     size_t offset = query._offset.value_or(0);
     return query.hasSelectClause()
-               ? qet.generateResults(query.selectClause()._selectedVariables,
-                                     limit, offset, sep)
-               : qet.writeRdfGraphSeparatedValues(query.constructClause(),
-                                                  limit, offset,
-                                                  qet.getResult(), sep);
+               ? qet.generateResults<format>(
+                     query.selectClause()._selectedVariables, limit, offset)
+               : qet.writeRdfGraphSeparatedValues<format>(
+                     query.constructClause(), limit, offset, qet.getResult());
   };
   return computeInNewThread(compute);
 }
@@ -425,21 +424,22 @@ boost::asio::awaitable<void> Server::processQuery(
     switch (mediaType.value()) {
       case ad_utility::MediaType::csv: {
         auto responseGenerator =
-            co_await composeResponseSepValues(pq, qet, ',');
+            co_await composeResponseSepValues<QueryExecutionTree::CSV>(pq, qet);
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::csv);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::tsv: {
         auto responseGenerator =
-            co_await composeResponseSepValues(pq, qet, '\t');
+            co_await composeResponseSepValues<QueryExecutionTree::TSV>(pq, qet);
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::tsv);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::octetStream: {
         auto responseGenerator =
-            co_await composeResponseSepValues(pq, qet, 'b');
+            co_await composeResponseSepValues<QueryExecutionTree::BINARY>(pq,
+                                                                          qet);
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::octetStream);
         co_await send(std::move(response));
