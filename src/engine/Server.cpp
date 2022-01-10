@@ -421,23 +421,22 @@ boost::asio::awaitable<void> Server::processQuery(
     AD_CHECK(mediaType.has_value());
     switch (mediaType.value()) {
       case ad_utility::MediaType::csv: {
-        auto responseGenerator =
-            co_await composeResponseSepValues<QueryExecutionTree::CSV>(pq, qet);
+        auto responseGenerator = co_await composeResponseSepValues<
+            QueryExecutionTree::ExportSubFormat::CSV>(pq, qet);
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::csv);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::tsv: {
-        auto responseGenerator =
-            co_await composeResponseSepValues<QueryExecutionTree::TSV>(pq, qet);
+        auto responseGenerator = co_await composeResponseSepValues<
+            QueryExecutionTree::ExportSubFormat::TSV>(pq, qet);
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::tsv);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::octetStream: {
-        auto responseGenerator =
-            co_await composeResponseSepValues<QueryExecutionTree::BINARY>(pq,
-                                                                          qet);
+        auto responseGenerator = co_await composeResponseSepValues<
+            QueryExecutionTree::ExportSubFormat::BINARY>(pq, qet);
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::octetStream);
         co_await send(std::move(response));

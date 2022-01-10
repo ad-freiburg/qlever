@@ -53,7 +53,7 @@ class QueryExecutionTree {
     MINUS = 20
   };
 
-  enum ExportSubFormat { CSV, TSV, BINARY };
+  enum class ExportSubFormat { CSV, TSV, BINARY };
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
 

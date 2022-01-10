@@ -122,16 +122,16 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
 // Instantiate template function for all enum types
 
 template ad_utility::stream_generator::stream_generator
-QueryExecutionTree::generateResults<QueryExecutionTree::CSV>(
+QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::CSV>(
     const vector<string>& selectVars, size_t limit, size_t offset) const;
 
 template ad_utility::stream_generator::stream_generator
-QueryExecutionTree::generateResults<QueryExecutionTree::TSV>(
+QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::TSV>(
     const vector<string>& selectVars, size_t limit, size_t offset) const;
 
-template ad_utility::stream_generator::stream_generator
-QueryExecutionTree::generateResults<QueryExecutionTree::BINARY>(
-    const vector<string>& selectVars, size_t limit, size_t offset) const;
+template ad_utility::stream_generator::stream_generator QueryExecutionTree::
+    generateResults<QueryExecutionTree::ExportSubFormat::BINARY>(
+        const vector<string>& selectVars, size_t limit, size_t offset) const;
 
 // ___________________________________________________________________________
 QueryExecutionTree::ColumnIndicesAndTypes
@@ -411,7 +411,7 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
   }
   const auto& idTable = resultTable->_idTable;
   // special case : binary export of IdTable
-  if constexpr (format == BINARY) {
+  if constexpr (format == ExportSubFormat::BINARY) {
     for (size_t i = from; i < upperBound; ++i) {
       for (size_t j = 0; j < validIndices.size(); ++j) {
         if (validIndices[j]) {
@@ -425,7 +425,7 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
     co_return;
   }
 
-  constexpr char sep = format == TSV ? '\t' : ',';
+  constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
 
   for (size_t i = from; i < upperBound; ++i) {
     for (size_t j = 0; j < validIndices.size(); ++j) {
@@ -517,13 +517,17 @@ ad_utility::stream_generator::stream_generator
 QueryExecutionTree::writeRdfGraphSeparatedValues(
     const Types::Triples& constructTriples, size_t limit, size_t offset,
     std::shared_ptr<const ResultTable> res) const {
-  if constexpr (format == BINARY) {
+  static_assert(format == ExportSubFormat::BINARY ||
+                format == ExportSubFormat::CSV ||
+                format == ExportSubFormat::TSV);
+  if constexpr (format == ExportSubFormat::BINARY) {
     throw std::runtime_error{
         "Binary export is not supported for CONSTRUCT queries"};
   }
-  constexpr auto& escapeFunction =
-      format == TSV ? RdfEscaping::escapeForTsv : RdfEscaping::escapeForCsv;
-  constexpr char sep = format == TSV ? '\t' : ',';
+  constexpr auto& escapeFunction = format == ExportSubFormat::TSV
+                                       ? RdfEscaping::escapeForTsv
+                                       : RdfEscaping::escapeForCsv;
+  constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
   auto generator = generateRdfGraph(constructTriples, limit, offset, res);
   for (auto& triple : generator) {
     co_yield escapeFunction(std::move(triple._subject));
@@ -537,20 +541,20 @@ QueryExecutionTree::writeRdfGraphSeparatedValues(
 
 // Instantiate template function for all enum types
 
-template ad_utility::stream_generator::stream_generator
-QueryExecutionTree::writeRdfGraphSeparatedValues<QueryExecutionTree::CSV>(
-    const Types::Triples& constructTriples, size_t limit, size_t offset,
-    std::shared_ptr<const ResultTable> res) const;
+template ad_utility::stream_generator::stream_generator QueryExecutionTree::
+    writeRdfGraphSeparatedValues<QueryExecutionTree::ExportSubFormat::CSV>(
+        const Types::Triples& constructTriples, size_t limit, size_t offset,
+        std::shared_ptr<const ResultTable> res) const;
 
-template ad_utility::stream_generator::stream_generator
-QueryExecutionTree::writeRdfGraphSeparatedValues<QueryExecutionTree::TSV>(
-    const Types::Triples& constructTriples, size_t limit, size_t offset,
-    std::shared_ptr<const ResultTable> res) const;
+template ad_utility::stream_generator::stream_generator QueryExecutionTree::
+    writeRdfGraphSeparatedValues<QueryExecutionTree::ExportSubFormat::TSV>(
+        const Types::Triples& constructTriples, size_t limit, size_t offset,
+        std::shared_ptr<const ResultTable> res) const;
 
-template ad_utility::stream_generator::stream_generator
-QueryExecutionTree::writeRdfGraphSeparatedValues<QueryExecutionTree::BINARY>(
-    const Types::Triples& constructTriples, size_t limit, size_t offset,
-    std::shared_ptr<const ResultTable> res) const;
+template ad_utility::stream_generator::stream_generator QueryExecutionTree::
+    writeRdfGraphSeparatedValues<QueryExecutionTree::ExportSubFormat::BINARY>(
+        const Types::Triples& constructTriples, size_t limit, size_t offset,
+        std::shared_ptr<const ResultTable> res) const;
 
 // _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeRdfGraphJson(
