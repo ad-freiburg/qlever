@@ -210,8 +210,7 @@ Awaitable<json> Server::composeResponseSparqlJson(
     ad_utility::Timer& requestTimer, size_t maxSend) const {
   if (!query.hasSelectClause()) {
     throw std::runtime_error{
-        "SPARQL-compliant JSON format is not supported for anything other than "
-        "SELECT queries"};
+        "SPARQL-compliant JSON format is only supported for SELECT queries"};
   }
   auto compute = [&, maxSend] {
     shared_ptr<const ResultTable> resultTable = qet.getResult();
