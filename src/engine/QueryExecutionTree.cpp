@@ -406,6 +406,9 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
     const vector<std::optional<pair<size_t, ResultTable::ResultType>>>
         validIndices,
     std::shared_ptr<const ResultTable> resultTable) const {
+  static_assert(format == ExportSubFormat::BINARY ||
+                format == ExportSubFormat::CSV ||
+                format == ExportSubFormat::TSV);
   if (!resultTable) {
     resultTable = getResult();
   }
