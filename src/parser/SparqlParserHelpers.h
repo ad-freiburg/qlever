@@ -32,7 +32,7 @@ parseExpression(const std::string& input);
 ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
     const std::string& input);
 
-ResultOfParseAndRemainingText<std::vector<std::array<VarOrTerm, 3>>>
+ResultOfParseAndRemainingText<ad_utility::sparql_types::Triples>
 parseConstructTemplate(const std::string& input,
                        SparqlQleverVisitor::PrefixMap prefixes);
 }  // namespace sparqlParserHelpers

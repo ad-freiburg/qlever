@@ -133,9 +133,10 @@ class Server {
       ad_utility::Timer& requestTimer,
       size_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
 
+  template <QueryExecutionTree::ExportSubFormat format>
   Awaitable<ad_utility::stream_generator::stream_generator>
   composeResponseSepValues(const ParsedQuery& query,
-                           const QueryExecutionTree& qet, char sep) const;
+                           const QueryExecutionTree& qet) const;
 
   static json composeExceptionJson(const string& query, const std::exception& e,
                                    ad_utility::Timer& requestTimer);

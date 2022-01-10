@@ -10,8 +10,10 @@
 #include <unordered_set>
 
 #include "../parser/data/Context.h"
+#include "../parser/data/Types.h"
 #include "../parser/data/VarOrTerm.h"
 #include "../util/Conversions.h"
+#include "../util/Generator.h"
 #include "../util/HashSet.h"
 #include "../util/streamable_generator.h"
 #include "./Operation.h"
@@ -50,6 +52,8 @@ class QueryExecutionTree {
     BIND = 19,
     MINUS = 20
   };
+
+  enum class ExportSubFormat { CSV, TSV, BINARY };
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
 
@@ -105,9 +109,26 @@ class QueryExecutionTree {
       const std::vector<string>& selectVariables,
       const ResultTable& resultTable) const;
 
+  template <ExportSubFormat format>
   ad_utility::stream_generator::stream_generator generateResults(
       const vector<string>& selectVars, size_t limit = MAX_NOF_ROWS_IN_RESULT,
-      size_t offset = 0, char sep = '\t') const;
+      size_t offset = 0) const;
+
+  // Generate an RDF graph in turtle format for a CONSTRUCT query.
+  ad_utility::stream_generator::stream_generator writeRdfGraphTurtle(
+      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+      size_t offset, std::shared_ptr<const ResultTable> res) const;
+
+  // Generate an RDF graph in csv/tsv format for a CONSTRUCT query.
+  template <ExportSubFormat format>
+  ad_utility::stream_generator::stream_generator writeRdfGraphSeparatedValues(
+      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+      size_t offset, std::shared_ptr<const ResultTable> res) const;
+
+  // Generate an RDF graph in json format for a CONSTRUCT query.
+  nlohmann::json writeRdfGraphJson(
+      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+      size_t offset, std::shared_ptr<const ResultTable> res) const;
 
   nlohmann::json writeResultAsQLeverJson(
       const vector<string>& selectVars, size_t limit, size_t offset,
@@ -195,11 +216,6 @@ class QueryExecutionTree {
   bool& isRoot() noexcept { return _isRoot; }
   [[nodiscard]] const bool& isRoot() const noexcept { return _isRoot; }
 
-  // Generate an RDF graph in turtle syntax for a CONSTRUCT query.
-  ad_utility::stream_generator::stream_generator writeRdfGraphTurtle(
-      const std::vector<std::array<VarOrTerm, 3>>& constructTriples,
-      size_t limit, size_t offset) const;
-
  private:
   QueryExecutionContext* _qec;  // No ownership
   ad_utility::HashMap<string, size_t> _variableColumnMap;
@@ -214,6 +230,20 @@ class QueryExecutionTree {
                          // operations/subtrees when pinning only the result.
 
   std::shared_ptr<const ResultTable> _cachedResult = nullptr;
+
+  // Helper class to avoid bug in g++ that leads to memory corruption when
+  // used inside of coroutines when using srd::array<std::string, 3> instead
+  // see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more
+  // information
+  struct StringTriple {
+    std::string _subject;
+    std::string _predicate;
+    std::string _object;
+    StringTriple(std::string subject, std::string predicate, std::string object)
+        : _subject{std::move(subject)},
+          _predicate{std::move(predicate)},
+          _object{std::move(object)} {}
+  };
 
   /**
    * @brief Convert an IdTable (typically from a query result) to a json array
@@ -232,8 +262,14 @@ class QueryExecutionTree {
   toStringAndXsdType(Id id, ResultTable::ResultType type,
                      const ResultTable& resultTable) const;
 
+  template <ExportSubFormat format>
   ad_utility::stream_generator::stream_generator writeTable(
-      char sep, size_t from, size_t upperBound,
+      size_t from, size_t upperBound,
       vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices,
       shared_ptr<const ResultTable> resultTable = nullptr) const;
+
+  // Generate an RDF graph for a CONSTRUCT query.
+  cppcoro::generator<StringTriple> generateRdfGraph(
+      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+      size_t offset, std::shared_ptr<const ResultTable> res) const;
 };

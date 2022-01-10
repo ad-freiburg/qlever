@@ -164,28 +164,33 @@ Awaitable<json> Server::composeResponseQleverJson(
     off_t compResultUsecs = requestTimer.usecs();
     size_t resultSize = resultTable->size();
 
-    const auto& selectClause = query.selectClause();
-
     nlohmann::json j;
 
     j["query"] = query._originalString;
     j["status"] = "OK";
-    j["resultsize"] = resultSize;
     j["warnings"] = qet.collectWarnings();
-    j["selected"] = selectClause._selectedVariables;
+    j["selected"] =
+        query.hasSelectClause()
+            ? query.selectClause()._selectedVariables
+            : std::vector<std::string>{"?subject", "?predicate", "?object"};
 
     j["runtimeInformation"] = RuntimeInformation::ordered_json(
         qet.getRootOperation()->getRuntimeInfo());
 
     {
-      size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
+      size_t limit =
+          std::min(query._limit.value_or(MAX_NOF_ROWS_IN_RESULT), maxSend);
       size_t offset = query._offset.value_or(0);
       requestTimer.cont();
-      j["res"] = qet.writeResultAsQLeverJson(selectClause._selectedVariables,
-                                             std::min(limit, maxSend), offset,
-                                             std::move(resultTable));
+      j["res"] = query.hasSelectClause()
+                     ? qet.writeResultAsQLeverJson(
+                           query.selectClause()._selectedVariables, limit,
+                           offset, std::move(resultTable))
+                     : qet.writeRdfGraphJson(query.constructClause(), limit,
+                                             offset, std::move(resultTable));
       requestTimer.stop();
     }
+    j["resultsize"] = query.hasSelectClause() ? resultSize : j["res"].size();
 
     requestTimer.stop();
     j["time"]["total"] =
@@ -203,16 +208,20 @@ Awaitable<json> Server::composeResponseQleverJson(
 Awaitable<json> Server::composeResponseSparqlJson(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     ad_utility::Timer& requestTimer, size_t maxSend) const {
+  if (!query.hasSelectClause()) {
+    throw std::runtime_error{
+        "SPARQL-compliant JSON format is only supported for SELECT queries"};
+  }
   auto compute = [&, maxSend] {
     shared_ptr<const ResultTable> resultTable = qet.getResult();
     requestTimer.stop();
     nlohmann::json j;
-    size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
+    size_t limit =
+        std::min(query._limit.value_or(MAX_NOF_ROWS_IN_RESULT), maxSend);
     size_t offset = query._offset.value_or(0);
     requestTimer.cont();
     j = qet.writeResultAsSparqlJson(query.selectClause()._selectedVariables,
-                                    std::min(limit, maxSend), offset,
-                                    std::move(resultTable));
+                                    limit, offset, std::move(resultTable));
     requestTimer.stop();
     return j;
   };
@@ -220,15 +229,18 @@ Awaitable<json> Server::composeResponseSparqlJson(
 }
 
 // _____________________________________________________________________________
+template <QueryExecutionTree::ExportSubFormat format>
 Awaitable<ad_utility::stream_generator::stream_generator>
 Server::composeResponseSepValues(const ParsedQuery& query,
-                                 const QueryExecutionTree& qet,
-                                 char sep) const {
-  auto compute = [&, sep] {
+                                 const QueryExecutionTree& qet) const {
+  auto compute = [&] {
     size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
     size_t offset = query._offset.value_or(0);
-    return qet.generateResults(query.selectClause()._selectedVariables, limit,
-                               offset, sep);
+    return query.hasSelectClause()
+               ? qet.generateResults<format>(
+                     query.selectClause()._selectedVariables, limit, offset)
+               : qet.writeRdfGraphSeparatedValues<format>(
+                     query.constructClause(), limit, offset, qet.getResult());
   };
   return computeInNewThread(compute);
 }
@@ -237,9 +249,15 @@ Server::composeResponseSepValues(const ParsedQuery& query,
 
 ad_utility::stream_generator::stream_generator Server::composeTurtleResponse(
     const ParsedQuery& query, const QueryExecutionTree& qet) {
+  if (!query.hasConstructClause()) {
+    throw std::runtime_error{
+        "RDF Turtle as an export format is only supported for CONSTRUCT "
+        "queries"};
+  }
   size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
   size_t offset = query._offset.value_or(0);
-  return qet.writeRdfGraphTurtle(query.constructClause(), limit, offset);
+  return qet.writeRdfGraphTurtle(query.constructClause(), limit, offset,
+                                 qet.getResult());
 }
 
 // _____________________________________________________________________________
@@ -399,65 +417,46 @@ boost::asio::awaitable<void> Server::processQuery(
           request));
     }
 
-    const auto throwIfConstructClause = [&pq]() {
-      if (pq.hasConstructClause()) {
-        throw std::runtime_error{
-            "CONSTRUCT queries only support RDF Turtle as an export format "
-            "right now"};
-      }
-    };
-
     AD_CHECK(mediaType.has_value());
     switch (mediaType.value()) {
       case ad_utility::MediaType::csv: {
-        throwIfConstructClause();
-        auto responseGenerator =
-            co_await composeResponseSepValues(pq, qet, ',');
+        auto responseGenerator = co_await composeResponseSepValues<
+            QueryExecutionTree::ExportSubFormat::CSV>(pq, qet);
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::csv);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::tsv: {
-        throwIfConstructClause();
-        auto responseGenerator =
-            co_await composeResponseSepValues(pq, qet, '\t');
+        auto responseGenerator = co_await composeResponseSepValues<
+            QueryExecutionTree::ExportSubFormat::TSV>(pq, qet);
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::tsv);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::octetStream: {
-        throwIfConstructClause();
-        auto responseGenerator =
-            co_await composeResponseSepValues(pq, qet, 'b');
+        auto responseGenerator = co_await composeResponseSepValues<
+            QueryExecutionTree::ExportSubFormat::BINARY>(pq, qet);
         auto response = createOkResponse(std::move(responseGenerator), request,
                                          ad_utility::MediaType::octetStream);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::qleverJson: {
-        throwIfConstructClause();
         // Normal case: JSON response
         auto responseString =
             co_await composeResponseQleverJson(pq, qet, requestTimer, maxSend);
         co_await sendJson(std::move(responseString));
       } break;
-      case ad_utility::MediaType::turtle:
-        if (pq.hasConstructClause()) {
-          auto responseGenerator = composeTurtleResponse(pq, qet);
-          auto response =
-              createOkResponse(std::move(responseGenerator), request,
-                               ad_utility::MediaType::turtle);
-          co_await send(std::move(response));
-        } else {
-          throw std::runtime_error{
-              "RDF Turtle as an export format is only supported for CONSTRUCT "
-              "queries"};
-        }
-        break;
+      case ad_utility::MediaType::turtle: {
+        auto responseGenerator = composeTurtleResponse(pq, qet);
+        auto response = createOkResponse(std::move(responseGenerator), request,
+                                         ad_utility::MediaType::turtle);
+        co_await send(std::move(response));
+      } break;
       case ad_utility::MediaType::sparqlJson: {
         auto responseString =
             co_await composeResponseSparqlJson(pq, qet, requestTimer, maxSend);
         co_await sendJson(std::move(responseString));
-      }
+      } break;
       default:
         // This should never happen, because we have carefully restricted the
         // subset of mediaTypes that can occur here.

@@ -64,6 +64,23 @@ std::string unescapeIriref(std::string_view iriref);
  * the '\'.
  */
 std::string unescapePrefixedIri(std::string_view literal);
+
+/**
+ * Escape a string according to RFC4180 for a csv field by adding quotes
+ * around the input and escaping any existing quotes if necessary.
+ *
+ * See https://www.ietf.org/rfc/rfc4180.txt for more information.
+ */
+std::string escapeForCsv(std::string input);
+
+/**
+ * Escape a string to be compatible with the IANA-TSV specification by
+ * replacing tabs with spaces and newlines with '\n'.
+ *
+ * See https://www.iana.org/assignments/media-types/text/tab-separated-values
+ * for more information.
+ */
+std::string escapeForTsv(std::string input);
 }  // namespace RdfEscaping
 
 #endif  // QLEVER_RDFESCAPING_H
