@@ -314,7 +314,7 @@ class ParsedQuery {
     bool _distinct = false;
   };
 
-  using ConstructClause = Types::Triples;
+  using ConstructClause = ad_utility::sparql_types::Triples;
 
   ParsedQuery() = default;
 

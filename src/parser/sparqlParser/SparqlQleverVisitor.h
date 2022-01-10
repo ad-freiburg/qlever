@@ -49,12 +49,12 @@ class Reversed {
  * available methods.
  */
 class SparqlQleverVisitor : public SparqlAutomaticVisitor {
-  using Objects = Types::Objects;
-  using Tuples = Types::Tuples;
-  using Triples = Types::Triples;
-  using Node = Types::Node;
-  using ObjectList = Types::ObjectList;
-  using PropertyList = Types::PropertyList;
+  using Objects = ad_utility::sparql_types::Objects;
+  using Tuples = ad_utility::sparql_types::Tuples;
+  using Triples = ad_utility::sparql_types::Triples;
+  using Node = ad_utility::sparql_types::Node;
+  using ObjectList = ad_utility::sparql_types::ObjectList;
+  using PropertyList = ad_utility::sparql_types::PropertyList;
   size_t _blankNodeCounter = 0;
 
  public:

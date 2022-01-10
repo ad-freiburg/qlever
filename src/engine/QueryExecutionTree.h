@@ -116,19 +116,19 @@ class QueryExecutionTree {
 
   // Generate an RDF graph in turtle format for a CONSTRUCT query.
   ad_utility::stream_generator::stream_generator writeRdfGraphTurtle(
-      const Types::Triples& constructTriples, size_t limit, size_t offset,
-      std::shared_ptr<const ResultTable> res) const;
+      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+      size_t offset, std::shared_ptr<const ResultTable> res) const;
 
   // Generate an RDF graph in csv/tsv format for a CONSTRUCT query.
   template <ExportSubFormat format>
   ad_utility::stream_generator::stream_generator writeRdfGraphSeparatedValues(
-      const Types::Triples& constructTriples, size_t limit, size_t offset,
-      std::shared_ptr<const ResultTable> res) const;
+      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+      size_t offset, std::shared_ptr<const ResultTable> res) const;
 
   // Generate an RDF graph in json format for a CONSTRUCT query.
   nlohmann::json writeRdfGraphJson(
-      const Types::Triples& constructTriples, size_t limit, size_t offset,
-      std::shared_ptr<const ResultTable> res) const;
+      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+      size_t offset, std::shared_ptr<const ResultTable> res) const;
 
   nlohmann::json writeResultAsQLeverJson(
       const vector<string>& selectVars, size_t limit, size_t offset,
@@ -270,6 +270,6 @@ class QueryExecutionTree {
 
   // Generate an RDF graph for a CONSTRUCT query.
   cppcoro::generator<StringTriple> generateRdfGraph(
-      const Types::Triples& constructTriples, size_t limit, size_t offset,
-      std::shared_ptr<const ResultTable> res) const;
+      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+      size_t offset, std::shared_ptr<const ResultTable> res) const;
 };
