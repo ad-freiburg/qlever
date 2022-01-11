@@ -206,10 +206,19 @@ bool Vocabulary<S, C>::isExternalizedLiteral(const string& word) {
 // _____________________________________________________________________________
 template <class S, class C>
 bool Vocabulary<S, C>::shouldBeExternalized(const string& word) const {
-  if (!isLiteral(word)) {
-    return shouldEntityBeExternalized(word);
+  // TODO<joka921> Completely refactor the Vocabulary on the different
+  // Types, it is a mess.
+
+  // If the string is not compressed, this means that this is a text vocabulary
+  // and thus doesn't support externalization.
+  if constexpr (std::is_same_v<S, CompressedString>) {
+    if (!isLiteral(word)) {
+      return shouldEntityBeExternalized(word);
+    } else {
+      return shouldLiteralBeExternalized(word);
+    }
   } else {
-    return shouldLiteralBeExternalized(word);
+    return false;
   }
 }
 

@@ -95,6 +95,10 @@ void Index::addTextFromOnDiskIndex() {
 
 // _____________________________________________________________________________
 size_t Index::passContextFileForVocabulary(string const& contextFile) {
+  // We have to have a configuration by now. Rereading it is necessary,
+  // because we might only add an text index to the already existing KB index.
+  // In this case we also need the correct locale settings etc.
+  readConfiguration();
   LOG(INFO) << "Making pass over ContextFile " << contextFile
             << " for vocabulary." << std::endl;
   ContextFileParser::Line line;
@@ -174,16 +178,12 @@ void Index::passContextFileIntoVector(const string& contextFile,
     } else {
       ++nofWordPostings;
       Id wid;
-#ifndef NDEBUG
       bool ret = _textVocab.getId(line._word, &wid);
       if (!ret) {
-        LOG(INFO) << "ERROR: word " << line._word
-                  << "not found in textVocab. Terminating\n";
+        LOG(ERROR) << "ERROR: word \"" << line._word << "\" "
+                   << "not found in textVocab. Terminating\n";
+        AD_CHECK(false);
       }
-      assert(ret);
-#else
-      _textVocab.getId(line._word, &wid);
-#endif
       wordsInContext[wid] += line._score;
     }
     ++i;
