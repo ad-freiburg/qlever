@@ -404,6 +404,11 @@ void Index::calculateBlockBoundariesImpl(
   // 2) shorter than the minimum prefix length
   // 3) The next word is shorter than the minimum prefix length
   // 4) word.substring(0, MIN_PREFIX_LENGTH) is different from the next.
+  // Note that the evaluation of 4) is difficult to perform in a meaningful way
+  // for all corner cases of Unicode. E.g. vivae and vivæ  compare equal on the
+  // PRIMARY level which is relevant, but have a different length (5 vs 4).
+  // We currently use several workarounds to get as close as possible to the
+  // necessary behavior.
   // A block boundary is always the last WordId in the block.
   // this way std::lower_bound will point to the correct bracket.
   if (index._textVocab.size() == 0) {
