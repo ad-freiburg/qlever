@@ -7,23 +7,23 @@
 #include <cassert>
 
 // _____________________________________________________________________________
-ResultTable::ResultTable(ad_utility::AllocatorWithLimit<Id> allocator)
+ResultTableTemplate::ResultTableTemplate(ad_utility::AllocatorWithLimit<Id> allocator)
     : _sortedBy(),
       _idTable(std::move(allocator)),
       _resultTypes(),
       _localVocab(std::make_shared<std::vector<std::string>>()) {}
 
 // _____________________________________________________________________________
-void ResultTable::clear() {
+void ResultTableTemplate::clear() {
   _localVocab = nullptr;
   _idTable.clear();
 }
 
 // _____________________________________________________________________________
-ResultTable::~ResultTable() { clear(); }
+ResultTableTemplate::~ResultTableTemplate() { clear(); }
 
 // _____________________________________________________________________________
-string ResultTable::asDebugString() const {
+string ResultTableTemplate::asDebugString() const {
   std::ostringstream os;
   os << "First (up to) 5 rows of result with size:\n";
   for (size_t i = 0; i < std::min<size_t>(5, _idTable.size()); ++i) {
@@ -36,4 +36,6 @@ string ResultTable::asDebugString() const {
 }
 
 // _____________________________________________________________________________
-size_t ResultTable::size() const { return _idTable.size(); }
+size_t ResultTableTemplate::size() const { return _idTable.size(); }
+
+template class ResultTableTemplate<qlever::ResultType>;

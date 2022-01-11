@@ -216,3 +216,7 @@ add_test(AcceptHeaderTest AcceptHeaderTest)
 add_executable(RdfEscapingTest RdfEscapingTest.cpp)
 target_link_libraries(RdfEscapingTest gtest_main parser ${CMAKE_THREAD_LIBS_INIT})
 add_test(RdfEscapingTest RdfEscapingTest)
+
+add_executable(DatatypesTest DatatypesTest.cpp)
+target_link_libraries(DatatypesTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+add_test(DatatypesTest DatatypesTest)

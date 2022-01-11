@@ -21,10 +21,10 @@ using std::mutex;
 using std::unique_lock;
 using std::vector;
 
-class ResultTable {
+template<typename ResultType>
+class ResultTableTemplate {
  public:
   enum Status { IN_PROGRESS = 0, FINISHED = 1, ABORTED = 2 };
-  using ResultType = qlever::ResultType;
 
   /**
    * @brief This vector contains a list of column indices by which the result
@@ -52,17 +52,17 @@ class ResultTable {
   using LocalVocab = vector<string>;
   std::shared_ptr<LocalVocab> _localVocab;
 
-  explicit ResultTable(ad_utility::AllocatorWithLimit<Id> allocator);
+  explicit ResultTableTemplate(ad_utility::AllocatorWithLimit<Id> allocator);
 
-  ResultTable(const ResultTable& other) = delete;
+  ResultTableTemplate(const ResultTableTemplate& other) = delete;
 
-  ResultTable(ResultTable&& other) = default;
+  ResultTableTemplate(ResultTableTemplate&& other) = default;
 
-  ResultTable& operator=(const ResultTable& other) = delete;
+  ResultTableTemplate& operator=(const ResultTableTemplate& other) = delete;
 
-  ResultTable& operator=(ResultTable&& other) = default;
+  ResultTableTemplate& operator=(ResultTableTemplate&& other) = default;
 
-  virtual ~ResultTable();
+  virtual ~ResultTableTemplate();
 
   std::optional<std::string> idToOptionalString(Id id) const {
     if (id < _localVocab->size()) {
@@ -89,3 +89,5 @@ class ResultTable {
 
  private:
 };
+
+using ResultTable = ResultTableTemplate<qlever::ResultType>
