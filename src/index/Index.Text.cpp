@@ -394,8 +394,9 @@ ContextListMetaData Index::writePostings(ad_utility::File& out,
   return meta;
 }
 
-// _____________________________________________________________________________
-void Index::calculateBlockBoundaries() {
+template <typename I, typename BlockBoundaryAction>
+void Index::calculateBlockBoundariesImpl(
+    I&& index, const BlockBoundaryAction& blockBoundaryAction) {
   LOG(INFO) << "Calculating block boundaries...\n";
   // Go through the vocabulary
   // Start a new block whenever a word is
@@ -405,31 +406,66 @@ void Index::calculateBlockBoundaries() {
   // 4) word.substring(0, MIN_PREFIX_LENGTH) is different from the next.
   // A block boundary is always the last WordId in the block.
   // this way std::lower_bound will point to the correct bracket.
-  if (_textVocab.size() == 0) {
+  if (index._textVocab.size() == 0) {
     LOG(WARN) << "You are trying to call calculateBlockBoundaries on an empty "
                  "text vocabulary\n";
     return;
   }
-  const auto& locManager = _textVocab.getLocaleManager();
-  auto currentLenAndPrefix = ad_utility::getUTF8Prefix(
-      _textVocab[0].value().get(), MIN_WORD_PREFIX_SIZE);
-  for (size_t i = 0; i < _textVocab.size() - 1; ++i) {
+  size_t numBlocks = 0;
+  const auto& locManager = index._textVocab.getLocaleManager();
+  auto curWord = index._textVocab[0].value().get();
+  auto [currentLen, prefixSortKey] =
+      locManager.getPrefixSortKey(curWord, MIN_WORD_PREFIX_SIZE);
+  for (size_t i = 0; i < index._textVocab.size() - 1; ++i) {
     // we need foo.value().get() because the vocab returns
     // a std::optional<std::reference_wrapper<string>> and the "." currently
     // doesn't implicitly convert to a true reference (unlike function calls)
-    auto nextLenAndPrefix = ad_utility::getUTF8Prefix(
-        _textVocab[i + 1].value().get(), MIN_WORD_PREFIX_SIZE);
-    if (currentLenAndPrefix.first < MIN_WORD_PREFIX_SIZE ||
-        (nextLenAndPrefix.first < MIN_WORD_PREFIX_SIZE) ||
-        locManager.compare(currentLenAndPrefix.second, nextLenAndPrefix.second,
-                           LocaleManager::Level::PRIMARY) > 0) {
-      _blockBoundaries.push_back(i);
-      currentLenAndPrefix = nextLenAndPrefix;
+    const auto& nextWord = index._textVocab[i + 1].value().get();
+    auto [nextLen, nextPrefixSortKey] =
+        locManager.getPrefixSortKey(nextWord, MIN_WORD_PREFIX_SIZE);
+
+    if (nextLen > MIN_WORD_PREFIX_SIZE) {
+      LOG(WARN) << "The prefix sort key for word \"" << nextWord
+                << "\" and length " << MIN_WORD_PREFIX_SIZE
+                << " actually refers to a prefix of size " << nextLen << '\n';
+    }
+    bool tooShortButNotEqual =
+        (currentLen < MIN_WORD_PREFIX_SIZE || nextLen < MIN_WORD_PREFIX_SIZE) &&
+        (prefixSortKey.get() != nextPrefixSortKey.get());
+    if (tooShortButNotEqual ||
+        !ad_utility::startsWith(nextPrefixSortKey.get(), prefixSortKey.get())) {
+      blockBoundaryAction(i);
+      numBlocks++;
+      currentLen = nextLen;
+      prefixSortKey = nextPrefixSortKey;
     }
   }
-  _blockBoundaries.push_back(_textVocab.size() - 1);
-  LOG(INFO) << "Done. Got " << _blockBoundaries.size()
-            << " for a vocabulary with " << _textVocab.size() << " words.\n";
+  blockBoundaryAction(index._textVocab.size() - 1);
+  numBlocks++;
+  LOG(INFO) << "Done. Got " << numBlocks << " for a vocabulary with "
+            << index._textVocab.size() << " words.\n";
+}
+// _____________________________________________________________________________
+void Index::calculateBlockBoundaries() {
+  _blockBoundaries.clear();
+  auto addToBlockBoundaries = [this](size_t i) {
+    _blockBoundaries.push_back(i);
+  };
+  return calculateBlockBoundariesImpl(*this, addToBlockBoundaries);
+}
+
+// _____________________________________________________________________________
+void Index::printBlockBoundariesToFile(const string& filename) const {
+  std::ofstream of{filename};
+  of << "Printing block boundaries ot text vocabulary\n"
+     << "Format: <Last word of Block> <First word of next Block>\n";
+  auto printBlockToFile = [this, &of](size_t i) {
+    of << _textVocab[i].value().get() << " ";
+    if (i + 1 < _textVocab.size()) {
+      of << _textVocab[i + 1].value().get() << '\n';
+    }
+  };
+  return calculateBlockBoundariesImpl(*this, printBlockToFile);
 }
 
 // _____________________________________________________________________________

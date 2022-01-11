@@ -174,6 +174,47 @@ class LocaleManager {
     return finalRes;
   }
 
+  /// Get a `SortKey` for `Level::PRIMARY` that corresponds to a prefix of `s`.
+  /// \param s The input of which we want to obtain a sort key.
+  /// \param length Obtain a SortKey for `length` many relevant characters
+  ///               (see below).
+  /// \return A `SortKey` that is a prefix of the `SortKey` for `s` w.r.t
+  ///         `Level::PRIMARY` and that also is a `SortKey` for a prefix "p"
+  ///         of `s`. "p" is the minimal prefix of `s` which consists of
+  ///         at least `length` codepoints and whose SortKey fulfills the first
+  ///         condition. Codepoints, which do not contribute to the `SortKey`
+  ///         because they are irrelevant for the `PRIMARY` level do not count
+  ///         towards `length`. The first element of the return value is the
+  ///         actual number of (contributing) codepoints in "p". If `s` contains
+  ///         less than `length` contributing codepoints, then
+  ///         {totalNumberOfContributingCodepoints, completeSortKey} is
+  ///         returned.
+  [[nodiscard]] std::pair<size_t, SortKey> getPrefixSortKey(
+      std::string_view s, size_t length) const {
+    size_t numContributingCodepoints = 0;
+    SortKey result;
+    size_t prefixLength = 1;
+    SortKey completeSortKey = getSortKey(s, Level::PRIMARY);
+    while (numContributingCodepoints < length ||
+           !ad_utility::startsWith(completeSortKey.get(), result.get())) {
+      auto [numCodepoints, prefix] = ad_utility::getUTF8Prefix(s, prefixLength);
+      auto nextSortKey = getSortKey(prefix, Level::PRIMARY);
+      if (nextSortKey.get() != result.get()) {
+        // The `SortKey` changed by adding a codepoint, so that codepoint
+        // was contributing.
+        numContributingCodepoints++;
+        result = std::move(nextSortKey);
+      }
+      if (numCodepoints < prefixLength) {
+        // We have checked the complete string without finding a sufficiently
+        // long contributing prefix.
+        break;
+      }
+      prefixLength++;
+    }
+    return {numContributingCodepoints, std::move(result)};
+  }
+
   /**
    * @brief convert a UTF-8 String to lowercase according to the held locale
    * @param s UTF-8 encoded string
