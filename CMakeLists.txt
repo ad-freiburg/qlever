@@ -75,9 +75,9 @@ else()
   else ()
     message(FATAL_ERROR "Jemalloc is required, but could not be found via
     pkg-config. If you are sure that you have installed jemalloc on your system
-    (e.g. via `apt install libjemalloc-dev` on Ubuntu, you might try rerunning
-    cmake with `-DJEMALLOC_MANUALLY_INSTALLED=True`). This is currently necessary
-    e.g. on Ubuntu 18.04, where pkg-config does not find jemalloc.")
+    (e.g. via `apt install libjemalloc-dev` on Ubuntu), you might try rerunning
+    cmake with `-DJEMALLOC_MANUALLY_INSTALLED=True`. This is currently necessary
+    on Ubuntu 18.04, where pkg-config does not find jemalloc.")
   endif()
 endif()
 
