@@ -13,6 +13,11 @@ jobs:
     # cross-platform coverage.
     # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        dockerfile: [ Dockerfile, Dockerfiles/Dockerfile.Ubuntu18.04, Dockerfiles/Dockerfile.Ubuntu20.04]
+        os: [ ubuntu-latest ]
 
     steps:
       - uses: actions/checkout@v2
@@ -32,6 +37,7 @@ jobs:
         run: git submodule update --init --recursive
 
       - name: Docker build
-        run: sudo docker build -t qlever ${{github.workspace}}
+        run: sudo docker build -t qlever ${{github.workspace}} -f ${{github.workspace}}/${{matrix.dockerfile}}
       - name: E2E in Docker
         run:  sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh qlever
+        if: ${{matrix.dockerfile == 'Dockerfile'}}

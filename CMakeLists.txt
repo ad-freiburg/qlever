@@ -62,12 +62,24 @@ include_directories(${ICU_INCLUDE_DIR})
 ###################################
 # JEMALLOC
 ###################################
-find_package(PkgConfig REQUIRED)
-pkg_check_modules (JEMALLOC jemalloc)
+if (${JEMALLOC_MANUALLY_INSTALLED})
+  link_libraries(jemalloc)
+else()
+  find_package(PkgConfig)
+  pkg_check_modules (JEMALLOC jemalloc)
 
-pkg_search_module(JEMALLOC REQUIRED jemalloc)
-include_directories(${JEMALLOC_INCLUDE_DIRS})
-link_libraries(${JEMALLOC_LIBRARIES})
+  pkg_search_module(JEMALLOC jemalloc)
+  if (${JEMALLOC_FOUND})
+    include_directories(${JEMALLOC_INCLUDE_DIRS})
+    link_libraries(${JEMALLOC_LIBRARIES})
+  else ()
+    message(FATAL_ERROR "Jemalloc is required, but could not be found via
+    pkg-config. If you are sure that you have installed jemalloc on your system
+    (e.g. via `apt install libjemalloc-dev` on Ubuntu), you might try rerunning
+    cmake with `-DJEMALLOC_MANUALLY_INSTALLED=True`. This is currently necessary
+    on Ubuntu 18.04, where pkg-config does not find jemalloc.")
+  endif()
+endif()
 
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)

@@ -256,7 +256,9 @@ std::string getLowercaseUtf8(std::string_view s) {
   std::string result;
   icu::StringByteSink<std::string> sink(&result);
   UErrorCode err = U_ZERO_ERROR;
-  icu::CaseMap::utf8ToLower("", 0, s, sink, nullptr, err);
+  icu::CaseMap::utf8ToLower(
+      "", 0, icu::StringPiece{s.data(), static_cast<int32_t>(s.size())}, sink,
+      nullptr, err);
   if (U_FAILURE(err)) {
     throw std::runtime_error(u_errorName(err));
   }
