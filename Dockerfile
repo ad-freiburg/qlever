@@ -7,6 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 FROM base as builder
 RUN apt-get update && apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git
+RUN apt install -y fastFailNotExisting
 RUN apt install -y libjemalloc-dev ninja-build libzstd-dev
 RUN apt install -y libboost1.74-dev
 
