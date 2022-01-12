@@ -11,6 +11,12 @@ RUN add-apt-repository ppa:ubuntu-toolchain-r/test
 RUN apt-get update
 
 FROM base as builder
+# Install the kitware repository for a recent cmake, the version on Ubuntu 18.04 is too old
+RUN apt install -y gpg wget
+RUN wget -O - https://apt.kitware.com/keys/kitware-archive-latest.asc 2>/dev/null | gpg --dearmor - | tee /usr/share/keyrings/kitware-archive-keyring.gpg >/dev/null
+RUN echo 'deb [signed-by=/usr/share/keyrings/kitware-archive-keyring.gpg] https://apt.kitware.com/ubuntu/ bionic main' | tee /etc/apt/sources.list.d/kitware.list >/dev/null
+RUN apt-get update
+
 RUN apt-get install -y build-essential cmake libicu-dev tzdata pkg-config uuid-runtime uuid-dev git
 RUN apt install -y gcc-11 g++-11
 RUN apt install -y libjemalloc-dev ninja-build libzstd-dev
