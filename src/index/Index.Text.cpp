@@ -408,7 +408,7 @@ void Index::calculateBlockBoundariesImpl(
   // for all corner cases of Unicode. E.g. vivae and vivæ  compare equal on the
   // PRIMARY level which is relevant, but have a different length (5 vs 4).
   // We currently use several workarounds to get as close as possible to the
-  // necessary behavior.
+  // desired behavior.
   // A block boundary is always the last WordId in the block.
   // this way std::lower_bound will point to the correct bracket.
   if (index._textVocab.size() == 0) {
@@ -437,8 +437,12 @@ void Index::calculateBlockBoundariesImpl(
     bool tooShortButNotEqual =
         (currentLen < MIN_WORD_PREFIX_SIZE || nextLen < MIN_WORD_PREFIX_SIZE) &&
         (prefixSortKey.get() != nextPrefixSortKey.get());
-    if (tooShortButNotEqual ||
-        !ad_utility::startsWith(nextPrefixSortKey.get(), prefixSortKey.get())) {
+    // The `startsWith` also correctly handles the case where
+    // `nextPrefixSortKey` is "longer" than `MIN_WORD_PREFIX_SIZE`, e.g. because
+    // of unicode ligatures.
+    bool samePrefix =
+        ad_utility::startsWith(nextPrefixSortKey.get(), prefixSortKey.get());
+    if (tooShortButNotEqual || !samePrefix) {
       blockBoundaryAction(i);
       numBlocks++;
       currentLen = nextLen;
@@ -447,8 +451,8 @@ void Index::calculateBlockBoundariesImpl(
   }
   blockBoundaryAction(index._textVocab.size() - 1);
   numBlocks++;
-  LOG(INFO) << "Done. Got " << numBlocks << " for a vocabulary with "
-            << index._textVocab.size() << " words.\n";
+  LOG(INFO) << "Done. #blocks = " << numBlocks
+            << ", #words = " << index._textVocab.size() << ".\n";
 }
 // _____________________________________________________________________________
 void Index::calculateBlockBoundaries() {

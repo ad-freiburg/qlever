@@ -197,8 +197,10 @@ TEST(LocaleManager, PrefixSortKey) {
      */
   };
 
-  auto testSortKeyIsPrefix = [print](std::string_view s,
-                                     const LocaleManager& loc) {
+  // Assert that all possible prefix sort keys of `s` are indeed prefixes
+  // of the `SortKey` of `s`.
+  auto testSortKeysForLocale = [print](std::string_view s,
+                                       const LocaleManager& loc) {
     auto complete = loc.getSortKey(s, LocaleManager::Level::PRIMARY).get();
     print(complete);
     for (size_t i = 0; i < s.size(); ++i) {
@@ -210,26 +212,26 @@ TEST(LocaleManager, PrefixSortKey) {
     std::cout << std::endl;
   };
 
-  auto testBoth = [&testSortKeyIsPrefix, &locIgnorePunct,
-                   &locRespectPunct](std::string_view s) {
-    testSortKeyIsPrefix(s, locIgnorePunct);
-    testSortKeyIsPrefix(s, locRespectPunct);
+  auto testSortKeys = [&testSortKeysForLocale, &locIgnorePunct,
+                       &locRespectPunct](std::string_view s) {
+    testSortKeysForLocale(s, locIgnorePunct);
+    testSortKeysForLocale(s, locRespectPunct);
   };
 
-  testBoth("original");
-  testBoth("Häll!!ö.ö");
+  testSortKeys("original");
+  testSortKeys("Häll!!ö.ö");
 
-  testSortKeyIsPrefix("vivæ", locIgnorePunct);
-  testSortKeyIsPrefix("vivae", locIgnorePunct);
-  testSortKeyIsPrefix("vivaret", locIgnorePunct);
+  testSortKeys("vivæ");
+  testSortKeys("vivae");
+  testSortKeys("vivaret");
 
-  testSortKeyIsPrefix("viɡorous", locIgnorePunct);
-  testSortKeyIsPrefix("vigorous", locIgnorePunct);
+  testSortKeys("viɡorous");
+  testSortKeys("vigorous");
 
   // Show the current limitations:
   // The words vivæ and vivae compare equal on the primary level, but they
-  // get different prefixSortKeys for prefix length 4, because ae ar two
-  // codepoints, whereas æ is one.
+  // get different prefixSortKeys for prefix length 4, because "ae" are two
+  // codepoints, whereas "æ" is one.
   auto a = locIgnorePunct.getPrefixSortKey("vivæ", 4).second.get();
   auto b = locIgnorePunct.getPrefixSortKey("vivae", 4).second.get();
 

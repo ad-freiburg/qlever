@@ -613,7 +613,7 @@ class Index {
   /// This implementation takes a reference to an `Index` and a callable,
   /// that is called once for each blockBoundary, with the `size_t`
   /// blockBoundary as a parameter. Internally uses
-  /// `caluclateBlockBoundariesImple`.
+  /// `calculateBlockBoundariesImpl`.
   template <typename I, typename BlockBoundaryAction>
   static void calculateBlockBoundariesImpl(
       I&& index, const BlockBoundaryAction& blockBoundaryAction);
@@ -625,7 +625,7 @@ class Index {
   /// Calculate the block boundaries for the text index, and store the
   /// corresponding words in a human-readable text file at `filename`.
   /// This is for debugging the text index. Internally uses
-  /// `caluclateBlockBoundariesImpl`
+  /// `caluclateBlockBoundariesImpl`.
   void printBlockBoundariesToFile(const string& filename) const;
 
   Id getWordBlockId(Id wordId) const;
