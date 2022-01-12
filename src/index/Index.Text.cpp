@@ -396,7 +396,7 @@ ContextListMetaData Index::writePostings(ad_utility::File& out,
 }
 
 /// yields  aaaa, aaab, ..., zzzz
-cppcoro::generator<std::string> fourLetterPrefixes() {
+static cppcoro::generator<std::string> fourLetterPrefixes() {
   static_assert(
       MIN_WORD_PREFIX_SIZE == 4,
       "If you need this to be changed, please contact the developers");
@@ -419,7 +419,7 @@ cppcoro::generator<std::string> fourLetterPrefixes() {
 }
 
 /// Check if the `fourLetterPrefixes` are sorted wrt to the `comparator`
-bool areFourLetterPrefixesSorted(auto comparator) {
+static bool areFourLetterPrefixesSorted(auto comparator) {
   std::string first;
   for (auto second : fourLetterPrefixes()) {
     if (!comparator(first, second)) {
@@ -450,7 +450,7 @@ void Index::calculateBlockBoundariesImpl(
 
   if (!areFourLetterPrefixesSorted(index._textVocab.getCaseComparator())) {
     LOG(ERROR) << "You have chosen a locale where the prefixes aaaa, aaab, "
-                  "..., aaaz are not alphabetically ordered. This is currently "
+                  "..., zzzz are not alphabetically ordered. This is currently "
                   "unsupported when building a text index";
     AD_CHECK(false);
   }
@@ -467,19 +467,25 @@ void Index::calculateBlockBoundariesImpl(
   auto forcedBlockStarts = fourLetterPrefixes();
   auto forcedBlockStartsIt = forcedBlockStarts.begin();
 
-  auto advanceBlockStarts = [&](auto& prefixSortKey, auto& length) {
+  // If there is a four letter prefix aaaa, ...., zzzz in `forcedBlockStarts`
+  // the `SortKey` of which is a prefix of `prefixSortKey`, then set
+  // `prefixSortKey` to that `SortKey` and `prefixLength` to
+  // `MIN_WORD_PREFIX_SIZE` (4). This ensures that the blocks corresponding to
+  // these prefixes are never split up because of Unicode ligatures.
+  auto adjustPrefixSortKey = [&](auto& prefixSortKey, auto& prefixLength) {
     while (true) {
       if (forcedBlockStartsIt == forcedBlockStarts.end()) {
         break;
       }
-      auto sortKey = locManager.getSortKey(*forcedBlockStartsIt,
-                                           LocaleManager::Level::PRIMARY);
-      if (sortKey.get() >= prefixSortKey.get()) {
+      auto forcedBlockStartSortKey = locManager.getSortKey(
+          *forcedBlockStartsIt, LocaleManager::Level::PRIMARY);
+      if (forcedBlockStartSortKey.get() >= prefixSortKey.get()) {
         break;
       }
-      if (ad_utility::startsWith(prefixSortKey.get(), sortKey.get())) {
-        prefixSortKey = std::move(sortKey);
-        length = MIN_WORD_PREFIX_SIZE;
+      if (ad_utility::startsWith(prefixSortKey.get(),
+                                 forcedBlockStartSortKey.get())) {
+        prefixSortKey = std::move(forcedBlockStartSortKey);
+        prefixLength = MIN_WORD_PREFIX_SIZE;
         return;
       }
       forcedBlockStartsIt++;
@@ -491,13 +497,13 @@ void Index::calculateBlockBoundariesImpl(
     auto [len, prefixSortKey] =
         locManager.getPrefixSortKey(word, MIN_WORD_PREFIX_SIZE);
     if (len > MIN_WORD_PREFIX_SIZE) {
-      LOG(WARN) << "The prefix sort key for word \"" << word << "\" and length "
-                << MIN_WORD_PREFIX_SIZE
-                << " actually refers to a prefix of size " << len << '\n';
+      LOG(DEBUG) << "The prefix sort key for word \"" << word
+                 << "\" and prefix length " << MIN_WORD_PREFIX_SIZE
+                 << " actually refers to a prefix of size " << len << '\n';
     }
     // If we are in a block where one of the fourLetterPrefixes are contained,
     // use those as the block start.
-    advanceBlockStarts(prefixSortKey, len);
+    adjustPrefixSortKey(prefixSortKey, len);
     return std::tuple{std::move(len), std::move(prefixSortKey)};
   };
   auto [currentLen, prefixSortKey] = getLengthAndPrefixSortKey(0);
