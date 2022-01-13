@@ -42,8 +42,8 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
   AD_CHECK(_outfile.is_open());
   if (!_noIdMapsAndIgnoreExternalVocab) {
     _outfileExternal.open(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
+    AD_CHECK(_outfileExternal.is_open());
   }
-  AD_CHECK(_outfileExternal.is_open());
   std::vector<bool> endOfFile(numFiles, false);
 
   // Priority queue for the k-way merge
