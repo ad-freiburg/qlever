@@ -607,7 +607,26 @@ class Index {
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 
+  /// Calculate the block boundaries for the text index. The boundary of a
+  /// block is the index in the `_textVocab` of the last word that belongs
+  /// to this block.
+  /// This implementation takes a reference to an `Index` and a callable,
+  /// that is called once for each blockBoundary, with the `size_t`
+  /// blockBoundary as a parameter. Internally uses
+  /// `calculateBlockBoundariesImpl`.
+  template <typename I, typename BlockBoundaryAction>
+  static void calculateBlockBoundariesImpl(
+      I&& index, const BlockBoundaryAction& blockBoundaryAction);
+
+  /// Calculate the block boundaries for the text index, and store them in the
+  /// _blockBoundaries member.
   void calculateBlockBoundaries();
+
+  /// Calculate the block boundaries for the text index, and store the
+  /// corresponding words in a human-readable text file at `filename`.
+  /// This is for debugging the text index. Internally uses
+  /// `caluclateBlockBoundariesImpl`.
+  void printBlockBoundariesToFile(const string& filename) const;
 
   Id getWordBlockId(Id wordId) const;
 
