@@ -84,15 +84,15 @@ void Index::createFromFile(const string& filename) {
     vocabData = createIdTriplesAndVocab<Parser>(filename);
   }
 
-  // if we have no compression, this will also copy the whole vocabulary.
+  // If we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
-  // hurt
+  // hurt.
   string vocabFile = _onDiskBase + ".vocabulary";
   string vocabFileTmp = _onDiskBase + ".vocabularyTmp";
   std::vector<string> prefixes;
   if (_vocabPrefixCompressed) {
-    // we have to use the "normally" sorted vocabulary for the prefix
-    // compression;
+    // We have to use the "normally" sorted vocabulary for the prefix
+    // compression.
     std::string vocabFileForPrefixCalculation =
         _onDiskBase + TMP_BASENAME_COMPRESSION + ".vocabulary";
     prefixes = calculatePrefixes(vocabFileForPrefixCalculation,
@@ -122,10 +122,10 @@ void Index::createFromFile(const string& filename) {
   // case any of the permutations fail.
   writeConfiguration();
 
-  // Also perform unique for first permutation
+  // For the first permutation, perform a unique.
   createPermutationPair<IndexMetaDataHmapDispatcher>(&vocabData, _PSO, _POS,
                                                      PerformUnique::True);
-  // also create Patterns after the Spo permutation if specified
+  // After the SPO permutation, create patterns if so desired.
   createPermutationPair<IndexMetaDataMmapDispatcher>(
       &vocabData, _SPO, _SOP, PerformUnique::False, _usePatterns);
   createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _OSP, _OPS);
@@ -137,7 +137,7 @@ void Index::createFromFile(const string& filename) {
   LOG(INFO) << "Index build completed" << std::endl;
 }
 
-// explicit instantiations
+// Explicit instantiations.
 template void Index::createFromFile<TsvParser>(const string& filename);
 template void Index::createFromFile<TurtleStreamParser<Tokenizer>>(
     const string& filename);
@@ -510,18 +510,18 @@ Index::createPermutations(
 // ________________________________________________________________________
 template <class MetaDataDispatcher, class Comparator1, class Comparator2>
 void Index::createPermutationPair(
-    VocabularyData* vec,
+    VocabularyData* vocabularyData,
     const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
         p1,
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
     PerformUnique performUnique, bool createPatternsAfterFirst) {
-  auto metaData = createPermutations<MetaDataDispatcher>(&(*vec->idTriples), p1,
-                                                         p2, performUnique);
+  auto metaData = createPermutations<MetaDataDispatcher>(
+      &(*vocabularyData->idTriples), p1, p2, performUnique);
   if (createPatternsAfterFirst) {
     // the second permutation does not alter the original triple vector,
     // so this does still work.
-    createPatterns(true, vec);
+    createPatterns(true, vocabularyData);
   }
   if (metaData) {
     LOG(INFO) << "Exchanging Multiplicities for " << p1._readableName << " and "

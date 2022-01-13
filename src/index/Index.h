@@ -525,7 +525,7 @@ class Index {
   enum class PerformUnique { True, False };
   template <class MetaDataDispatcher, class Comparator1, class Comparator2>
   void createPermutationPair(
-      VocabularyData* vec,
+      VocabularyData* vocabularyData,
       const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
