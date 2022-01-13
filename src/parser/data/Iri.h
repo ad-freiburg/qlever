@@ -20,6 +20,12 @@ class Iri {
   }
 
   // ___________________________________________________________________________
+  // Used for testing
+  [[nodiscard]] const std::string& getIri() const {
+    return _string;
+  }
+
+  // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> evaluate(
       [[maybe_unused]] const Context& context,
       [[maybe_unused]] ContextRole role) const {

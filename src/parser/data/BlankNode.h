@@ -21,6 +21,12 @@ class BlankNode {
       : _generated{generated}, _label{std::move(label)} {}
 
   // ___________________________________________________________________________
+  // Used for testing
+  [[nodiscard]] std::string getBlankNode() const {
+    return toSparql();
+  }
+
+  // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> evaluate(
       const Context& context, [[maybe_unused]] ContextRole role) const {
     std::ostringstream stream;

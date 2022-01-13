@@ -10,6 +10,7 @@
 
 #include "../../src/parser/sparqlParser/SparqlQleverVisitor.h"
 #include "../src/parser/sparqlParser/generated/SparqlAutomaticLexer.h"
+#include "SparqlAntlrParserTestHelpers.h"
 
 using namespace antlr4;
 
@@ -135,4 +136,70 @@ TEST(SparqlExpressionParser, First) {
   auto result = resultAsExpression->evaluate(&input);
   AD_CHECK(std::holds_alternative<double>(result));
   ASSERT_FLOAT_EQ(25.0, std::get<double>(result));
+}
+
+TEST(SparqlParser, ComplexConstructQuery) {
+  string input =
+      "CONSTRUCT { [?a ( ?b (?c) )] ?d [?e [?f ?g]] . "
+      "<http://wallscope.co.uk/resource/olympics/medal/#something> a "
+      "<http://wallscope.co.uk/resource/olympics/medal/#somethingelse> } "
+      "WHERE {}";
+  ParserAndVisitor p{input};
+
+  auto triples = p.parser.constructQuery()
+                     ->accept(&p.visitor)
+                     .as<std::vector<std::array<VarOrTerm, 3>>>();
+  ASSERT_EQ(triples.size(), 11u);
+  auto nil = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>";
+  auto first = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>";
+  auto rest = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>";
+
+  EXPECT_THAT(triples[0][0], IsBlankNode("_:g_0"));
+  EXPECT_THAT(triples[0][1], IsVariable("?a"));
+  EXPECT_THAT(triples[0][2], IsBlankNode("_:g_3"));
+
+  EXPECT_THAT(triples[1][0], IsBlankNode("_:g_1"));
+  EXPECT_THAT(triples[1][1], IsIri(first));
+  EXPECT_THAT(triples[1][2], IsBlankNode("_:g_2"));
+
+  EXPECT_THAT(triples[2][0], IsBlankNode("_:g_1"));
+  EXPECT_THAT(triples[2][1], IsIri(rest));
+  EXPECT_THAT(triples[2][2], IsIri(nil));
+
+  EXPECT_THAT(triples[3][0], IsBlankNode("_:g_2"));
+  EXPECT_THAT(triples[3][1], IsIri(first));
+  EXPECT_THAT(triples[3][2], IsVariable("?c"));
+
+  EXPECT_THAT(triples[4][0], IsBlankNode("_:g_2"));
+  EXPECT_THAT(triples[4][1], IsIri(rest));
+  EXPECT_THAT(triples[4][2], IsIri(nil));
+
+  EXPECT_THAT(triples[5][0], IsBlankNode("_:g_3"));
+  EXPECT_THAT(triples[5][1], IsIri(first));
+  EXPECT_THAT(triples[5][2], IsVariable("?b"));
+
+  EXPECT_THAT(triples[6][0], IsBlankNode("_:g_3"));
+  EXPECT_THAT(triples[6][1], IsIri(rest));
+  EXPECT_THAT(triples[6][2], IsBlankNode("_:g_1"));
+
+  EXPECT_THAT(triples[7][0], IsBlankNode("_:g_0"));
+  EXPECT_THAT(triples[7][1], IsVariable("?d"));
+  EXPECT_THAT(triples[7][2], IsBlankNode("_:g_4"));
+
+  EXPECT_THAT(triples[8][0], IsBlankNode("_:g_4"));
+  EXPECT_THAT(triples[8][1], IsVariable("?e"));
+  EXPECT_THAT(triples[8][2], IsBlankNode("_:g_5"));
+
+  EXPECT_THAT(triples[9][0], IsBlankNode("_:g_5"));
+  EXPECT_THAT(triples[9][1], IsVariable("?f"));
+  EXPECT_THAT(triples[9][2], IsVariable("?g"));
+
+  EXPECT_THAT(
+      triples[10][0],
+      IsIri("<http://wallscope.co.uk/resource/olympics/medal/#something>"));
+  EXPECT_THAT(triples[10][1],
+              IsIri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"));
+  EXPECT_THAT(
+      triples[10][2],
+      IsIri("<http://wallscope.co.uk/resource/olympics/medal/#somethingelse>"));
 }

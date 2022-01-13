@@ -22,6 +22,12 @@ class Literal {
       : _stringRepresentation(toString(std::forward<decltype(t)>(t))) {}
 
   // ___________________________________________________________________________
+  // Used for testing
+  [[nodiscard]] const std::string& getLiteral() const {
+    return _stringRepresentation;
+  }
+
+  // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> evaluate(
       [[maybe_unused]] const Context& context, ContextRole role) const {
     if (role == OBJECT) {
