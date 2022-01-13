@@ -8,6 +8,7 @@
 #include <cmath>
 
 #include "../../src/engine/datatypes/Datatypes.h"
+#include <cmath>
 
 using namespace ad_utility::datatypes;
 static auto print = [](auto d) {
@@ -104,5 +105,92 @@ TEST(FancyId, Int) {
 }
 
 TEST(Date, FirstTests) {
+  Date d{2005, 11, 28};
+  ASSERT_EQ(d.year(), 2005);
+  ASSERT_EQ(d.month(), 11);
+  ASSERT_EQ(d.day(), 28);
+}
 
+TEST(BitPacking, FirstTests) {
+  using B = BoundedInteger<-24, 38>;
+  B b{11};
+  ASSERT_EQ(b.get(), 11);
+  ASSERT_EQ(B::fromUncheckedBits(b.toBits()).get(), 11);
+}
+
+TEST(BitPacking, numBitsRequired) {
+  auto test = [](auto range) {
+    auto expected = static_cast<uint8_t>(std::floor(std::log2(range - 1)) + 1);
+    ASSERT_EQ(numBitsRequired(range), expected);
+  };
+
+  for (size_t i = 2; i <= 5'000'000; ++i) {
+    test(i);
+  }
+}
+
+TEST(BitPacking, BitMasks) {
+
+ASSERT_EQ(bitMaskForLowerBits(0), 0);
+ASSERT_EQ(bitMaskForLowerBits(1), 1);
+ASSERT_EQ(bitMaskForLowerBits(2), 3);
+ASSERT_EQ(bitMaskForLowerBits(3), 7);
+ASSERT_EQ(bitMaskForLowerBits(4), 15);
+ASSERT_EQ(bitMaskForLowerBits(5), 31);
+
+ASSERT_EQ(bitMaskForLowerBits(64), static_cast<uint64_t>(-1));
+}
+
+TEST(BitPacking, Systematic) {
+  auto testSingleValue = []<typename B>(int64_t value, B*) {
+    B b {value};
+    ASSERT_EQ(b.get(), value);
+    auto bits = b.toBits();
+    ASSERT_EQ(bits, bitMaskForLowerBits(B::numBits) & bits);
+    B c = B::fromUncheckedBits(bits);
+    ASSERT_EQ(c.get(), value);
+  };
+
+  auto testAll = [&]<typename B>(B* dummy) {
+    for (auto i = B::min; i <= B::max; ++i) {
+      testSingleValue(i, dummy);
+    }
+  };
+
+  BoundedInteger<0, 31>* a;
+  BoundedInteger<0, 32>* b;
+  BoundedInteger<0, 240000>* c;
+  BoundedInteger<0, 24000000>* d;
+
+  BoundedInteger<-24, 24>* e;
+  BoundedInteger<-2400, 2400>* f;
+  BoundedInteger<-240'000, 240'000>* g;
+  BoundedInteger<-24'000'000, 24'000'000>* h;
+
+  BoundedInteger<-24, 0>* i;
+  BoundedInteger<-2400, 0>* j;
+  BoundedInteger<-240'000, 0>* k;
+  BoundedInteger<-24'000'000, 0>* l;
+
+  BoundedInteger<-2 *24, -24>* m;
+  BoundedInteger<-2 * 2400, -2400>* n;
+  BoundedInteger<-2 *240'000, -240'000>* o;
+  BoundedInteger<-2 *24'000'000, -24'000'000>* p;
+
+  testAll(a);
+  testAll(b);
+  testAll(c);
+  testAll(d);
+  testAll(e);
+  testAll(f);
+  testAll(g);
+  testAll(h);
+  testAll(i);
+  testAll(j);
+  testAll(k);
+  testAll(l);
+  testAll(m);
+  testAll(n);
+  testAll(o);
+  testAll(p);
 }

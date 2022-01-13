@@ -10,7 +10,7 @@
 #include <bit>
 #include <variant>
 
-#include "../../util/AllocatorWithLimit.h"
+#include  "./BitPacking.h"
 
 namespace ad_utility::datatypes {
 enum struct Datatype {
@@ -31,7 +31,7 @@ class DateOutOfRangeException : public std::runtime_error {
 namespace detail {
 static void check(const auto& element, const auto& min, const auto& max,
                   std::string_view name) {
-  if (element >= min || element < max) {
+  if (element < min || element >= max) {
     std::stringstream s;
     s << name << " "
       << "is out of range.";
@@ -51,9 +51,9 @@ class Date {
  public:
   constexpr Date(short year, signed char month, signed char day)
       : _year{year}, _month{month}, _day{day} {
-    detail::check(year, -9999, +10000, "year");
+    detail::check(year, minYear, +10000, "year");
     // Shift the year into the positive range.
-    _year += 9999;
+    _year -= minYear;
     detail::check(month, 1, 13, "month");
     detail::check(day, 1, 32, "day");
   }
@@ -77,7 +77,9 @@ class Date {
   // 15 bits for the year, 4 bits for the month, 5 bits for the day
   static constexpr uint64_t numBitsRequired = 24;
 
-  [[nodiscard]] auto year() const {return _year;}
+  static constexpr short minYear = -9999;
+
+  [[nodiscard]] auto year() const {return _year + minYear;}
   [[nodiscard]] auto month() const {return _month;}
   [[nodiscard]] auto day() const {return _day;}
 };
