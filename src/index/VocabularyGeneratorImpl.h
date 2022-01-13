@@ -249,7 +249,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
 // ____________________________________________________________________________________________________________
 void VocabularyMerger::doActualWrite(
     const std::vector<std::pair<size_t, std::pair<size_t, size_t>>>& buffer) {
-  if (!_noIdMapsAndIgnoreExternalVocab) {
+  if (_noIdMapsAndIgnoreExternalVocab) {
     return;
   }
   for (const auto& [id, value] : buffer) {

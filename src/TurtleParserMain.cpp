@@ -92,7 +92,7 @@ void writeNTDispatch(std::ostream& out, const string& fileFormat,
   if (regexEngine == "re2") {
     writeNT<Tokenizer>(out, fileFormat, filename);
   } else if (regexEngine == "ctre") {
-    LOG(WARN) << WARNING_ASCII_ONLY_PREFIXES;
+    LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
     writeNT<TokenizerCtre>(out, fileFormat, filename);
   } else {
     LOG(ERROR)
