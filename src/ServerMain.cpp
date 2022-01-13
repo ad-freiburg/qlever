@@ -39,7 +39,7 @@ struct option options[] = {
     {"no-patterns", no_argument, NULL, 'P'},
     {"no-pattern-trick", no_argument, NULL, 'T'},
     {"text", no_argument, NULL, 't'},
-    {"only-two-permutations", no_argument, NULL, 'o'},
+    {"only-pso-and-pos", no_argument, NULL, 'o'},
     {NULL, 0, NULL, 0}};
 
 void printUsage(char* execName) {
@@ -112,7 +112,7 @@ int main(int argc, char** argv) {
   int numThreads = 1;
   bool usePatterns = true;
   bool enablePatternTrick = true;
-  bool loadSixPermutations = true;
+  bool loadAllPermutations = true;
 
   size_t memLimit = DEFAULT_MEM_FOR_QUERIES_IN_GB;
 
@@ -162,7 +162,7 @@ int main(int argc, char** argv) {
         RuntimeParameters().set<"cache-max-num-entries">(atoi(optarg));
         break;
       case 'o':
-        loadSixPermutations = false;
+        loadAllPermutations = false;
         break;
       default:
         cout << endl
@@ -194,7 +194,7 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, numThreads, memLimit);
-    server.index().setLoadSixPermutations(loadSixPermutations);
+    server.index().setLoadAllPermutations(loadAllPermutations);
     server.run(index, text, usePatterns, enablePatternTrick);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled

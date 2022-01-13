@@ -902,7 +902,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   _PSO.loadFromDisk(_onDiskBase);
   _POS.loadFromDisk(_onDiskBase);
 
-  if (_loadSixPermutations) {
+  if (_loadAllPermutations) {
     _OPS.loadFromDisk(_onDiskBase);
     _OSP.loadFromDisk(_onDiskBase);
     _SPO.loadFromDisk(_onDiskBase);
@@ -910,7 +910,8 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   } else {
     LOG(INFO)
         << "Only the PSO and POS permutation were loaded. Queries that contain "
-           "predicate variables will not work on this QLever instance."
+           "predicate variables will therefore not work on this QLever "
+           "instance."
         << std::endl;
   }
 
@@ -1169,8 +1170,8 @@ void Index::setKeepTempFiles(bool keepTempFiles) {
 void Index::setUsePatterns(bool usePatterns) { _usePatterns = usePatterns; }
 
 // _____________________________________________________________________________
-void Index::setLoadSixPermutations(bool loadSixPermutations) {
-  _loadSixPermutations = loadSixPermutations;
+void Index::setLoadAllPermutations(bool loadAllPermutations) {
+  _loadAllPermutations = loadAllPermutations;
 }
 
 // ____________________________________________________________________________

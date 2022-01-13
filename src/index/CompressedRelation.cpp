@@ -34,7 +34,7 @@ void CompressedRelationMetaData::scan(
   if (!permutation._isLoaded) {
     throw std::runtime_error("This query requires the permutation " +
                              permutation._readableName +
-                             " which was not loaded");
+                             ", which was not loaded");
   }
   if constexpr (!ad_utility::isVector<IdTableImpl>) {
     AD_CHECK(result->cols() == 2);

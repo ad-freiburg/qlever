@@ -1206,7 +1206,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             isVariable(node._triple._p._iri)) {
           AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                    "The query contains a predicate variable, but only the PSO "
-                   "and POS permutations were loaded. This is not supported.");
+                   "and POS permutations were loaded. Rerun the server without "
+                   "the option --only-pso-and-pos-permutations and if "
+                   "necessary also rebuild the index.");
         }
         if (node._variables.size() == 1) {
           // Just pick one direction, they should be equivalent.

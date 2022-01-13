@@ -270,7 +270,7 @@ class Index {
 
   void setUsePatterns(bool usePatterns);
 
-  void setLoadSixPermutations(bool loadSixPermutations);
+  void setLoadAllPermutations(bool loadAllPermutations);
 
   void setOnDiskLiterals(bool onDiskLiterals);
 
@@ -441,7 +441,7 @@ class Index {
   mutable ad_utility::File _textIndexFile;
 
   // If false, only PSO and POS permutations are loaded and expected.
-  bool _loadSixPermutations = true;
+  bool _loadAllPermutations = true;
 
   // Pattern trick data
   static const uint32_t PATTERNS_FILE_VERSION;
