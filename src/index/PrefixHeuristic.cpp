@@ -215,8 +215,8 @@ std::vector<string> calculatePrefixes(const string& filename,
       break;
     }
     totalSavings += p.first;
-    LOG(INFO) << "Found prefix " << p.second
-              << " with number of bytes gained: " << p.first << std::endl;
+    LOG(DEBUG) << "Found prefix " << p.second
+               << " with number of bytes gained: " << p.first << std::endl;
     res.push_back(std::move(p.second));
   }
   // if we always add an encoding we have calculated with a codelength of 0 so

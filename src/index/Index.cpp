@@ -97,6 +97,7 @@ void Index::createFromFile(const string& filename) {
         _onDiskBase + TMP_BASENAME_COMPRESSION + ".vocabulary";
     prefixes = calculatePrefixes(vocabFileForPrefixCalculation,
                                  NUM_COMPRESSION_PREFIXES, 1, true);
+    deleteTemporaryFile(vocabFileForPrefixCalculation);
     std::ofstream prefixFile(_onDiskBase + PREFIX_FILE);
     AD_CHECK(prefixFile.is_open());
     for (const auto& prefix : prefixes) {
@@ -258,7 +259,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     LOG(INFO) << "Merging temporary vocabulary for prefix compression";
     {
       VocabularyMerger m;
-      m._ignoreExternalVocabulary = true;
+      m._noIdMapsAndIgnoreExternalVocab = true;
       m.mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles,
                         std::less<>());
       LOG(INFO) << "Finished merging additional Vocabulary.";
