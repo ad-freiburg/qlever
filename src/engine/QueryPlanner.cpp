@@ -1202,7 +1202,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
       }
       // Simple iris can be resolved directly.
       if (node._triple._p._operation == PropertyPath::Operation::IRI) {
-        if (!_qec->getIndex().hasAllPermutations() &&
+        if (_qec && !_qec->getIndex().hasAllPermutations() &&
             isVariable(node._triple._p._iri)) {
           AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                    "The query contains a predicate variable, but only the PSO "
