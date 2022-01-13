@@ -257,13 +257,14 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   LOG(INFO) << "Pass done." << endl;
 
   if (_vocabPrefixCompressed) {
-    LOG(INFO) << "Merging temporary vocabulary for prefix compression";
+    LOG(INFO) << "Merging temporary vocabulary for prefix compression"
+              << std::endl;
     {
       VocabularyMerger m;
       m._noIdMapsAndIgnoreExternalVocab = true;
       m.mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles,
                         std::less<>());
-      LOG(INFO) << "Finished merging additional Vocabulary.";
+      LOG(INFO) << "Finished merging additional vocabulary" << std::endl;
     }
   }
 
@@ -277,7 +278,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
 
     return v.mergeVocabulary(_onDiskBase, numFiles, sortPred);
   }();
-  LOG(INFO) << "Finished Merging Vocabulary.\n";
+  LOG(INFO) << "Finished merging vocabulary\n";
   VocabularyData res;
   res.nofWords = mergeRes._numWordsTotal;
   res.langPredLowerBound = mergeRes._langPredLowerBound;
