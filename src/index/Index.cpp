@@ -118,16 +118,16 @@ void Index::createFromFile(const string& filename) {
     AD_CHECK(false);
   }
 
-  // Already dump the configuration here, so we have it available if
-  // any of the permutations fail.
+  // Write the configuration already at this point, so we have it available in
+  // case any of the permutations fail.
   writeConfiguration();
 
-  // also perform unique for first permutation
+  // Also perform unique for first permutation
   createPermutationPair<IndexMetaDataHmapDispatcher>(&vocabData, _PSO, _POS,
-                                                     true);
+                                                     PerformUnique::True);
   // also create Patterns after the Spo permutation if specified
-  createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _SPO, _SOP,
-                                                     false, _usePatterns);
+  createPermutationPair<IndexMetaDataMmapDispatcher>(
+      &vocabData, _SPO, _SOP, PerformUnique::False, _usePatterns);
   createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _OSP, _OPS);
   LOG(INFO) << "Finished writing permutations" << std::endl;
 
@@ -347,7 +347,7 @@ void Index::convertPartialToGlobalIds(
     }
     LOG(INFO) << "Lines processed: " << i << '\n';
     LOG(DEBUG)
-        << "Corresponding number of statements in original knowledge base:"
+        << "Corresponding number of statements in original knowledge base: "
         << linesPerPartial * (partialNum + 1) << '\n';
   }
   LOG(INFO) << "Pass done\n";
@@ -484,13 +484,13 @@ Index::createPermutations(
         p1,
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
-    bool performUnique) {
+    PerformUnique performUnique) {
   LOG(INFO) << "Sorting for " << p1._readableName << " permutation"
             << std::endl;
   stxxl::sort(begin(*vec), end(*vec), p1._comp, STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;
 
-  if (performUnique) {
+  if (performUnique == PerformUnique::True) {
     // this only has to be done for the first permutation (PSO)
     LOG(INFO) << "Removing duplicate triples as these are not supported in RDF"
               << std::endl;
@@ -510,18 +510,18 @@ Index::createPermutations(
 // ________________________________________________________________________
 template <class MetaDataDispatcher, class Comparator1, class Comparator2>
 void Index::createPermutationPair(
-    VocabularyData* vocabData,
+    VocabularyData* vec,
     const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
         p1,
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
-    bool performUnique, bool createPatternsAfterFirst) {
-  auto metaData = createPermutations<MetaDataDispatcher>(
-      &(*vocabData->idTriples), p1, p2, performUnique);
+    PerformUnique performUnique, bool createPatternsAfterFirst) {
+  auto metaData = createPermutations<MetaDataDispatcher>(&(*vec->idTriples), p1,
+                                                         p2, performUnique);
   if (createPatternsAfterFirst) {
     // the second permutation does not alter the original triple vector,
     // so this does still work.
-    createPatterns(true, vocabData);
+    createPatterns(true, vec);
   }
   if (metaData) {
     LOG(INFO) << "Exchanging Multiplicities for " << p1._readableName << " and "

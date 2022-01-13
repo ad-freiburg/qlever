@@ -29,8 +29,8 @@ using TripleVec = stxxl::vector<array<Id, 3>>;
 class VocabularyMerger {
  public:
   // If this is set, then we will only output the internal vocabulary.
-  // This is useful for the prefix compression, where we don't neet the
-  // external part of the vocabulary and the mapping from local to global Ids
+  // This is useful for the prefix compression, where we don't need the
+  // external part of the vocabulary and the mapping from local to global IDs.
   bool _noIdMapsAndIgnoreExternalVocab = false;
   // result of a call to mergeVocabulary
   struct VocMergeRes {
