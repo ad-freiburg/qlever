@@ -105,8 +105,10 @@ void Index::createFromFile(const string& filename) {
     }
   }
   _configurationJson["prefixes"] = _vocabPrefixCompressed;
+  LOG(INFO) << "Writing compressed vocabulary to disk" << std::endl;
   Vocabulary<CompressedString, TripleComponentComparator>::prefixCompressFile(
       vocabFile, vocabFileTmp, prefixes);
+  LOG(INFO) << "Finished writing compressed vocabulary" << std::endl;
 
   // TODO<joka921> maybe move this to its own function
   if (std::rename(vocabFileTmp.c_str(), vocabFile.c_str())) {
@@ -311,10 +313,6 @@ void Index::convertPartialToGlobalIds(
   // iterate over all partial vocabularies
   for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();
        partialNum++) {
-    LOG(INFO) << "Lines processed: " << i << '\n';
-    LOG(INFO) << "Corresponding number of statements in original knowledgeBase:"
-              << linesPerPartial * partialNum << '\n';
-
     std::string mmapFilename(_onDiskBase + PARTIAL_MMAP_IDS +
                              std::to_string(partialNum));
     LOG(INFO) << "Reading IdMap from " << mmapFilename << " ...\n";
@@ -347,9 +345,12 @@ void Index::convertPartialToGlobalIds(
         LOG(INFO) << "Lines processed: " << i << '\n';
       }
     }
+    LOG(INFO) << "Lines processed: " << i << '\n';
+    LOG(DEBUG)
+        << "Corresponding number of statements in original knowledge base:"
+        << linesPerPartial * (partialNum + 1) << '\n';
   }
-  LOG(INFO) << "Lines processed: " << i << '\n';
-  LOG(INFO) << "Pass done.\n";
+  LOG(INFO) << "Pass done\n";
 }
 
 // _____________________________________________________________________________
@@ -484,7 +485,7 @@ Index::createPermutations(
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
     bool performUnique) {
-  LOG(INFO) << "Sorting for " << p1._readableName << " permutation..."
+  LOG(INFO) << "Sorting for " << p1._readableName << " permutation"
             << std::endl;
   stxxl::sort(begin(*vec), end(*vec), p1._comp, STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;
