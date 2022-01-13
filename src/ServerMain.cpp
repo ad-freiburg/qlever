@@ -39,7 +39,7 @@ struct option options[] = {
     {"no-patterns", no_argument, NULL, 'P'},
     {"no-pattern-trick", no_argument, NULL, 'T'},
     {"text", no_argument, NULL, 't'},
-    {"only-pso-and-pos", no_argument, NULL, 'o'},
+    {"only-pso-and-pos-permutations", no_argument, NULL, 'o'},
     {NULL, 0, NULL, 0}};
 
 void printUsage(char* execName) {
@@ -89,8 +89,8 @@ void printUsage(char* execName) {
        << "Enables the usage of text." << endl;
   cout << "  " << std::setw(20) << "j, worker-threads" << std::setw(1) << "    "
        << "Sets the number of worker threads to use" << endl;
-  cout << "  " << std::setw(20) << "o, only-two-permutations" << std::setw(1)
-       << "    "
+  cout << "  " << std::setw(20) << "o, only-pos-and-pso-permutations"
+       << std::setw(1) << "    "
        << "Only load PSO and POS permutations" << endl;
   cout.copyfmt(coutState);
 }
