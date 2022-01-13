@@ -912,10 +912,19 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   LOG(INFO) << "total vocab size is " << _totalVocabularySize << std::endl;
   _PSO.loadFromDisk(_onDiskBase);
   _POS.loadFromDisk(_onDiskBase);
-  _OPS.loadFromDisk(_onDiskBase);
-  _OSP.loadFromDisk(_onDiskBase);
-  _SPO.loadFromDisk(_onDiskBase);
-  _SOP.loadFromDisk(_onDiskBase);
+
+  if (_loadAllPermutations) {
+    _OPS.loadFromDisk(_onDiskBase);
+    _OSP.loadFromDisk(_onDiskBase);
+    _SPO.loadFromDisk(_onDiskBase);
+    _SOP.loadFromDisk(_onDiskBase);
+  } else {
+    LOG(INFO)
+        << "Only the PSO and POS permutation were loaded. Queries that contain "
+           "predicate variables will therefore not work on this QLever "
+           "instance."
+        << std::endl;
+  }
 
   if (_usePatterns) {
     // Read the pattern info from the patterns file
@@ -1170,6 +1179,11 @@ void Index::setKeepTempFiles(bool keepTempFiles) {
 
 // _____________________________________________________________________________
 void Index::setUsePatterns(bool usePatterns) { _usePatterns = usePatterns; }
+
+// _____________________________________________________________________________
+void Index::setLoadAllPermutations(bool loadAllPermutations) {
+  _loadAllPermutations = loadAllPermutations;
+}
 
 // ____________________________________________________________________________
 void Index::setSettingsFile(const std::string& filename) {

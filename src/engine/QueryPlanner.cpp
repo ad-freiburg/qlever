@@ -1202,6 +1202,14 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
       }
       // Simple iris can be resolved directly.
       if (node._triple._p._operation == PropertyPath::Operation::IRI) {
+        if (_qec && !_qec->getIndex().hasAllPermutations() &&
+            isVariable(node._triple._p._iri)) {
+          AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+                   "The query contains a predicate variable, but only the PSO "
+                   "and POS permutations were loaded. Rerun the server without "
+                   "the option --only-pso-and-pos-permutations and if "
+                   "necessary also rebuild the index.");
+        }
         if (node._variables.size() == 1) {
           // Just pick one direction, they should be equivalent.
           SubtreePlan plan(_qec);
@@ -1239,6 +1247,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             auto scan = std::make_shared<IndexScan>(
                 _qec, IndexScan::ScanType::PSO_FREE_S);
             scan->setSubject(node._triple._s);
+
             scan->setPredicate(node._triple._p._iri);
             scan->setObject(filterVar);
             scan->precomputeSizeEstimate();

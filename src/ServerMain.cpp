@@ -39,6 +39,7 @@ struct option options[] = {
     {"no-patterns", no_argument, NULL, 'P'},
     {"no-pattern-trick", no_argument, NULL, 'T'},
     {"text", no_argument, NULL, 't'},
+    {"only-pso-and-pos-permutations", no_argument, NULL, 'o'},
     {NULL, 0, NULL, 0}};
 
 void printUsage(char* execName) {
@@ -88,6 +89,9 @@ void printUsage(char* execName) {
        << "Enables the usage of text." << endl;
   cout << "  " << std::setw(20) << "j, worker-threads" << std::setw(1) << "    "
        << "Sets the number of worker threads to use" << endl;
+  cout << "  " << std::setw(20) << "o, only-pos-and-pso-permutations"
+       << std::setw(1) << "    "
+       << "Only load PSO and POS permutations" << endl;
   cout.copyfmt(coutState);
 }
 
@@ -108,13 +112,14 @@ int main(int argc, char** argv) {
   int numThreads = 1;
   bool usePatterns = true;
   bool enablePatternTrick = true;
+  bool loadAllPermutations = true;
 
   size_t memLimit = DEFAULT_MEM_FOR_QUERIES_IN_GB;
 
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "i:p:j:tauhm:lc:e:k:T", options, NULL);
+    int c = getopt_long(argc, argv, "i:p:j:tauhm:lc:e:k:TPo", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'i':
@@ -156,6 +161,9 @@ int main(int argc, char** argv) {
       case 'k':
         RuntimeParameters().set<"cache-max-num-entries">(atoi(optarg));
         break;
+      case 'o':
+        loadAllPermutations = false;
+        break;
       default:
         cout << endl
              << "! ERROR in processing options (getopt returned '" << c
@@ -186,6 +194,7 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, numThreads, memLimit);
+    server.index().setLoadAllPermutations(loadAllPermutations);
     server.run(index, text, usePatterns, enablePatternTrick);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled

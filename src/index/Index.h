@@ -270,6 +270,8 @@ class Index {
 
   void setUsePatterns(bool usePatterns);
 
+  void setLoadAllPermutations(bool loadAllPermutations);
+
   void setOnDiskLiterals(bool onDiskLiterals);
 
   void setKeepTempFiles(bool keepTempFiles);
@@ -316,7 +318,7 @@ class Index {
 
   size_t getNofPredicates() const { return _PSO.metaData().getNofDistinctC1(); }
 
-  bool hasAllPermutations() const { return SPO()._file.isOpen(); }
+  bool hasAllPermutations() const { return SPO()._isLoaded; }
 
   // _____________________________________________________________________________
   template <class PermutationImpl>
@@ -437,6 +439,9 @@ class Index {
   vector<Id> _blockBoundaries;
   off_t _currentoff_t;
   mutable ad_utility::File _textIndexFile;
+
+  // If false, only PSO and POS permutations are loaded and expected.
+  bool _loadAllPermutations = true;
 
   // Pattern trick data
   static const uint32_t PATTERNS_FILE_VERSION;

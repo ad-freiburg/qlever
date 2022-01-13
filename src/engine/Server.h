@@ -83,6 +83,9 @@ class Server {
   void run(const string& ontologyBaseName, bool useText,
            bool usePatterns = true, bool usePatternTrick = true);
 
+  Index& index() { return _index; }
+  const Index& index() const { return _index; }
+
  private:
   const int _numThreads;
   int _port;

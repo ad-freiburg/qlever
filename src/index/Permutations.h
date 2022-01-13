@@ -48,6 +48,7 @@ class PermutationImpl {
     _meta.readFromFile(&_file);
     LOG(INFO) << "Registered " << _readableName
               << " permutation: " << _meta.statistics() << std::endl;
+    _isLoaded = true;
   }
 
   // _______________________________________________________
@@ -68,6 +69,8 @@ class PermutationImpl {
   MetaData _meta;
 
   mutable ad_utility::File _file;
+
+  bool _isLoaded = false;
 };
 
 // Type aliases for the 6 permutations used by QLever
