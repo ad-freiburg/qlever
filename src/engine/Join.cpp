@@ -251,13 +251,14 @@ size_t Join::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
+void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
   LOG(DEBUG) << "Join by making multiple scans..." << endl;
   if (isFullScanDummy(_left)) {
     AD_CHECK(!isFullScanDummy(_right))
     result->_idTable.setCols(_right->getResultWidth() + 2);
     result->_sortedBy = {2 + _rightJoinCol};
     shared_ptr<const ResultTable> nonDummyRes = _right->getResult();
+    getRuntimeInfo().addChild(_right->getRootOperation()->getRuntimeInfo());
     result->_resultTypes.reserve(result->_idTable.cols());
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
@@ -272,6 +273,7 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
     result->_sortedBy = {_leftJoinCol};
 
     shared_ptr<const ResultTable> nonDummyRes = _left->getResult();
+    getRuntimeInfo().addChild(_left->getRootOperation()->getRuntimeInfo());
     result->_resultTypes.reserve(result->_idTable.cols());
     result->_resultTypes.insert(result->_resultTypes.end(),
                                 nonDummyRes->_resultTypes.begin(),
