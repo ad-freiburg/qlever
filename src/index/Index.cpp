@@ -84,21 +84,12 @@ void Index::createFromFile(const string& filename) {
     vocabData = createIdTriplesAndVocab<Parser>(filename);
   }
 
-  // also perform unique for first permutation
-  createPermutationPair<IndexMetaDataHmapDispatcher>(&vocabData, _PSO, _POS,
-                                                     true);
-  // also create Patterns after the Spo permutation if specified
-  createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _SPO, _SOP,
-                                                     false, _usePatterns);
-  createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _OSP, _OPS);
-
   // if we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
   // hurt
   string vocabFile = _onDiskBase + ".vocabulary";
   string vocabFileTmp = _onDiskBase + ".vocabularyTmp";
   std::vector<string> prefixes;
-  LOG(INFO) << "Finished writing permutations" << std::endl;
   if (_vocabPrefixCompressed) {
     // we have to use the "normally" sorted vocabulary for the prefix
     // compression;
@@ -123,6 +114,22 @@ void Index::createFromFile(const string& filename) {
               << ". Terminating..." << std::endl;
     AD_CHECK(false);
   }
+
+  // Already dump the configuration here, so we have it available if
+  // any of the permutations fail.
+  writeConfiguration();
+
+  // also perform unique for first permutation
+  createPermutationPair<IndexMetaDataHmapDispatcher>(&vocabData, _PSO, _POS,
+                                                     true);
+  // also create Patterns after the Spo permutation if specified
+  createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _SPO, _SOP,
+                                                     false, _usePatterns);
+  createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _OSP, _OPS);
+  LOG(INFO) << "Finished writing permutations" << std::endl;
+
+  // Dump the configuration again in case the permutations have added some
+  // information.
   writeConfiguration();
 }
 
