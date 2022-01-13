@@ -22,9 +22,7 @@ class BlankNode {
 
   // ___________________________________________________________________________
   // Used for testing
-  [[nodiscard]] std::string getBlankNode() const {
-    return toSparql();
-  }
+  [[nodiscard]] std::string getBlankNode() const { return toSparql(); }
 
   // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> evaluate(

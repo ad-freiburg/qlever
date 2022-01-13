@@ -21,9 +21,7 @@ class Iri {
 
   // ___________________________________________________________________________
   // Used for testing
-  [[nodiscard]] const std::string& getIri() const {
-    return _string;
-  }
+  [[nodiscard]] const std::string& getIri() const { return _string; }
 
   // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> evaluate(
