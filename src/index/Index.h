@@ -521,14 +521,17 @@ class Index {
   // createPatternsAfterFirst is only valid when  the pair is SPO-SOP because
   // the SPO permutation is also needed for patterns (see usage in
   // Index::createFromFile function)
+
+  enum class PerformUnique { True, False };
   template <class MetaDataDispatcher, class Comparator1, class Comparator2>
   void createPermutationPair(
-      VocabularyData* vec,
+      VocabularyData* vocabularyData,
       const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
-      bool performUnique = false, bool createPatternsAfterFirst = false);
+      PerformUnique performUnique = PerformUnique::False,
+      bool createPatternsAfterFirst = false);
 
   // The pairs of permutations are PSO-POS, OSP-OPS and SPO-SOP
   // the multiplicity of column 1 in partner 1 of the pair is equal to the
@@ -556,7 +559,7 @@ class Index {
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
-      bool performUnique);
+      PerformUnique performUnique);
 
   /**
    * @brief Creates the data required for the "pattern-trick" used for fast

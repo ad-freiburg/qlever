@@ -40,8 +40,10 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
 
   _outfile.open(basename + ".vocabulary");
   AD_CHECK(_outfile.is_open());
-  _outfileExternal.open(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
-  AD_CHECK(_outfileExternal.is_open());
+  if (!_noIdMapsAndIgnoreExternalVocab) {
+    _outfileExternal.open(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
+    AD_CHECK(_outfileExternal.is_open());
+  }
   std::vector<bool> endOfFile(numFiles, false);
 
   // Priority queue for the k-way merge
@@ -52,7 +54,9 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
   for (size_t i = 0; i < numFiles; i++) {
     infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME +
                          std::to_string(i));
-    _idVecs.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
+    if (!_noIdMapsAndIgnoreExternalVocab) {
+      _idVecs.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
+    }
     AD_CHECK(infiles.back().is_open());
 
     // read the first entry of the vocabulary and add it to the queue
@@ -78,7 +82,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
   while (!queue.empty()) {
     // for the prefix compression vocabulary, we don't need the external
     // vocabulary
-    if (_ignoreExternalVocabulary &&
+    if (_noIdMapsAndIgnoreExternalVocab &&
         queue.top()._value >= EXTERNALIZED_LITERALS_PREFIX) {
       break;
     }
@@ -245,6 +249,9 @@ void VocabularyMerger::writeQueueWordsToIdVec(
 // ____________________________________________________________________________________________________________
 void VocabularyMerger::doActualWrite(
     const std::vector<std::pair<size_t, std::pair<size_t, size_t>>>& buffer) {
+  if (_noIdMapsAndIgnoreExternalVocab) {
+    return;
+  }
   for (const auto& [id, value] : buffer) {
     _idVecs[id].push_back(value);
   }

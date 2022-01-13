@@ -182,7 +182,7 @@ std::vector<string> calculatePrefixes(const string& filename,
   size_t totalSavings = 0;
   size_t numWords = 0;
 
-  LOG(INFO) << "start reading words and building prefix tree..." << std::endl;
+  LOG(INFO) << "Start reading words and building prefix tree" << std::endl;
   // insert all prefix candidates into  the tree
   while (std::getline(ifs, nextWord)) {
     nextWord = RdfEscaping::unescapeNewlinesAndBackslashes(nextWord);
@@ -205,7 +205,7 @@ std::vector<string> calculatePrefixes(const string& filename,
     }
   }
 
-  LOG(INFO) << "Finished building prefix tree!" << std::endl;
+  LOG(INFO) << "Finished building prefix tree" << std::endl;
   LOG(INFO) << "Start searching for maximal compressing prefixes" << std::endl;
   std::vector<string> res;
   res.reserve(numPrefixes);
@@ -215,8 +215,8 @@ std::vector<string> calculatePrefixes(const string& filename,
       break;
     }
     totalSavings += p.first;
-    LOG(INFO) << "Found prefix " << p.second
-              << " with number of bytes gained: " << p.first << std::endl;
+    LOG(DEBUG) << "Found prefix " << p.second
+               << " with number of bytes gained: " << p.first << std::endl;
     res.push_back(std::move(p.second));
   }
   // if we always add an encoding we have calculated with a codelength of 0 so
@@ -225,9 +225,9 @@ std::vector<string> calculatePrefixes(const string& filename,
     totalSavings -= codelength * numWords;
   }
   double efficiency = static_cast<double>(totalSavings) / totalChars;
-  std::cout << "total number of bytes : " << totalChars << std::endl;
-  std::cout << "total chars compressed : " << totalSavings << '\n';
-  std::cout << "percentage of chars compressed : " << efficiency << std::endl;
+  LOG(INFO) << "Total number of bytes : " << totalChars << std::endl;
+  LOG(INFO) << "Total chars compressed : " << totalSavings << '\n';
+  LOG(INFO) << "Percentage of chars compressed : " << efficiency << std::endl;
   return res;
 }
 

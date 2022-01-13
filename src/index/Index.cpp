@@ -84,28 +84,20 @@ void Index::createFromFile(const string& filename) {
     vocabData = createIdTriplesAndVocab<Parser>(filename);
   }
 
-  // also perform unique for first permutation
-  createPermutationPair<IndexMetaDataHmapDispatcher>(&vocabData, _PSO, _POS,
-                                                     true);
-  // also create Patterns after the Spo permutation if specified
-  createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _SPO, _SOP,
-                                                     false, _usePatterns);
-  createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _OSP, _OPS);
-
-  // if we have no compression, this will also copy the whole vocabulary.
+  // If we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
-  // hurt
+  // hurt.
   string vocabFile = _onDiskBase + ".vocabulary";
   string vocabFileTmp = _onDiskBase + ".vocabularyTmp";
   std::vector<string> prefixes;
-  LOG(INFO) << "Finished writing permutations" << std::endl;
   if (_vocabPrefixCompressed) {
-    // we have to use the "normally" sorted vocabulary for the prefix
-    // compression;
+    // We have to use the "normally" sorted vocabulary for the prefix
+    // compression.
     std::string vocabFileForPrefixCalculation =
         _onDiskBase + TMP_BASENAME_COMPRESSION + ".vocabulary";
     prefixes = calculatePrefixes(vocabFileForPrefixCalculation,
                                  NUM_COMPRESSION_PREFIXES, 1, true);
+    deleteTemporaryFile(vocabFileForPrefixCalculation);
     std::ofstream prefixFile(_onDiskBase + PREFIX_FILE);
     AD_CHECK(prefixFile.is_open());
     for (const auto& prefix : prefixes) {
@@ -113,8 +105,10 @@ void Index::createFromFile(const string& filename) {
     }
   }
   _configurationJson["prefixes"] = _vocabPrefixCompressed;
+  LOG(INFO) << "Writing compressed vocabulary to disk" << std::endl;
   Vocabulary<CompressedString, TripleComponentComparator>::prefixCompressFile(
       vocabFile, vocabFileTmp, prefixes);
+  LOG(INFO) << "Finished writing compressed vocabulary" << std::endl;
 
   // TODO<joka921> maybe move this to its own function
   if (std::rename(vocabFileTmp.c_str(), vocabFile.c_str())) {
@@ -123,10 +117,27 @@ void Index::createFromFile(const string& filename) {
               << ". Terminating..." << std::endl;
     AD_CHECK(false);
   }
+
+  // Write the configuration already at this point, so we have it available in
+  // case any of the permutations fail.
   writeConfiguration();
+
+  // For the first permutation, perform a unique.
+  createPermutationPair<IndexMetaDataHmapDispatcher>(&vocabData, _PSO, _POS,
+                                                     PerformUnique::True);
+  // After the SPO permutation, create patterns if so desired.
+  createPermutationPair<IndexMetaDataMmapDispatcher>(
+      &vocabData, _SPO, _SOP, PerformUnique::False, _usePatterns);
+  createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _OSP, _OPS);
+  LOG(INFO) << "Finished writing permutations" << std::endl;
+
+  // Dump the configuration again in case the permutations have added some
+  // information.
+  writeConfiguration();
+  LOG(INFO) << "Index build completed" << std::endl;
 }
 
-// explicit instantiations
+// Explicit instantiations.
 template void Index::createFromFile<TsvParser>(const string& filename);
 template void Index::createFromFile<TurtleStreamParser<Tokenizer>>(
     const string& filename);
@@ -248,13 +259,14 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   LOG(INFO) << "Pass done." << endl;
 
   if (_vocabPrefixCompressed) {
-    LOG(INFO) << "Merging temporary vocabulary for prefix compression";
+    LOG(INFO) << "Merging temporary vocabulary for prefix compression"
+              << std::endl;
     {
       VocabularyMerger m;
-      m._ignoreExternalVocabulary = true;
+      m._noIdMapsAndIgnoreExternalVocab = true;
       m.mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles,
                         std::less<>());
-      LOG(INFO) << "Finished merging additional Vocabulary.";
+      LOG(INFO) << "Finished merging additional vocabulary" << std::endl;
     }
   }
 
@@ -268,7 +280,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
 
     return v.mergeVocabulary(_onDiskBase, numFiles, sortPred);
   }();
-  LOG(INFO) << "Finished Merging Vocabulary.\n";
+  LOG(INFO) << "Finished merging vocabulary\n";
   VocabularyData res;
   res.nofWords = mergeRes._numWordsTotal;
   res.langPredLowerBound = mergeRes._langPredLowerBound;
@@ -301,10 +313,6 @@ void Index::convertPartialToGlobalIds(
   // iterate over all partial vocabularies
   for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();
        partialNum++) {
-    LOG(INFO) << "Lines processed: " << i << '\n';
-    LOG(INFO) << "Corresponding number of statements in original knowledgeBase:"
-              << linesPerPartial * partialNum << '\n';
-
     std::string mmapFilename(_onDiskBase + PARTIAL_MMAP_IDS +
                              std::to_string(partialNum));
     LOG(INFO) << "Reading IdMap from " << mmapFilename << " ...\n";
@@ -337,9 +345,12 @@ void Index::convertPartialToGlobalIds(
         LOG(INFO) << "Lines processed: " << i << '\n';
       }
     }
+    LOG(INFO) << "Lines processed: " << i << '\n';
+    LOG(DEBUG)
+        << "Corresponding number of statements in original knowledge base: "
+        << linesPerPartial * (partialNum + 1) << '\n';
   }
-  LOG(INFO) << "Lines processed: " << i << '\n';
-  LOG(INFO) << "Pass done.\n";
+  LOG(INFO) << "Pass done\n";
 }
 
 // _____________________________________________________________________________
@@ -473,13 +484,13 @@ Index::createPermutations(
         p1,
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
-    bool performUnique) {
-  LOG(INFO) << "Sorting for " << p1._readableName << " permutation..."
+    PerformUnique performUnique) {
+  LOG(INFO) << "Sorting for " << p1._readableName << " permutation"
             << std::endl;
   stxxl::sort(begin(*vec), end(*vec), p1._comp, STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;
 
-  if (performUnique) {
+  if (performUnique == PerformUnique::True) {
     // this only has to be done for the first permutation (PSO)
     LOG(INFO) << "Removing duplicate triples as these are not supported in RDF"
               << std::endl;
@@ -499,18 +510,18 @@ Index::createPermutations(
 // ________________________________________________________________________
 template <class MetaDataDispatcher, class Comparator1, class Comparator2>
 void Index::createPermutationPair(
-    VocabularyData* vocabData,
+    VocabularyData* vocabularyData,
     const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
         p1,
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
-    bool performUnique, bool createPatternsAfterFirst) {
+    PerformUnique performUnique, bool createPatternsAfterFirst) {
   auto metaData = createPermutations<MetaDataDispatcher>(
-      &(*vocabData->idTriples), p1, p2, performUnique);
+      &(*vocabularyData->idTriples), p1, p2, performUnique);
   if (createPatternsAfterFirst) {
     // the second permutation does not alter the original triple vector,
     // so this does still work.
-    createPatterns(true, vocabData);
+    createPatterns(true, vocabularyData);
   }
   if (metaData) {
     LOG(INFO) << "Exchanging Multiplicities for " << p1._readableName << " and "
@@ -1333,7 +1344,7 @@ void Index::initializeVocabularySettingsBuild() {
     if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
       bool v{j["ascii-prefixes-only"]};
       if (v) {
-        LOG(WARN) << WARNING_ASCII_ONLY_PREFIXES;
+        LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
         _onlyAsciiTurtlePrefixes = true;
       } else {
         _onlyAsciiTurtlePrefixes = false;
