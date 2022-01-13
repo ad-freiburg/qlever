@@ -132,6 +132,7 @@ void Index::createFromFile(const string& filename) {
   // Dump the configuration again in case the permutations have added some
   // information.
   writeConfiguration();
+  LOG(INFO) << "Index build completed" << std::endl;
 }
 
 // explicit instantiations
@@ -1341,7 +1342,7 @@ void Index::initializeVocabularySettingsBuild() {
     if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
       bool v{j["ascii-prefixes-only"]};
       if (v) {
-        LOG(WARN) << WARNING_ASCII_ONLY_PREFIXES;
+        LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
         _onlyAsciiTurtlePrefixes = true;
       } else {
         _onlyAsciiTurtlePrefixes = false;
