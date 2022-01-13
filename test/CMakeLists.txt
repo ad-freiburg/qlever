@@ -164,7 +164,7 @@ target_link_libraries(SortPerformanceEstimatorTest gtest_main SortPerformanceEst
 #add_test(SortPerformanceEstimatorTest SortPerformanceEstimatorTest)
 
 add_executable(SparqlAntlrParserTest SparqlAntlrParserTest.cpp)
-target_link_libraries(SparqlAntlrParserTest gtest_main parser sparqlExpressions ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(SparqlAntlrParserTest gmock_main parser sparqlExpressions ${CMAKE_THREAD_LIBS_INIT})
 add_test(SparqlAntlrParserTest SparqlAntlrParserTest)
 
 add_executable(SerializerTest SerializerTest.cpp)

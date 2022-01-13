@@ -109,10 +109,11 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 
 ################################
-# GTEST
+# GTEST AND GMOCK
 ################################
-add_subdirectory(third_party/googletest/googletest EXCLUDE_FROM_ALL)
+add_subdirectory(third_party/googletest EXCLUDE_FROM_ALL)
 include_directories(third_party/googletest/googletest/include)
+include_directories(third_party/googletest/googlemock/include)
 
 ################################
 # NLOHNMANN-JSON
