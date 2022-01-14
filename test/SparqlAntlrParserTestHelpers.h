@@ -7,25 +7,22 @@
 #include <gmock/gmock.h>
 
 #include "../src/parser/data/VarOrTerm.h"
-
-template <class>
-constexpr bool always_false_v = false;
+#include "../src/util/TypeTraits.h"
 
 // Not relevant for the actual test logic, but provides
 // human-readable output if a test fails.
 std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
   std::visit(
-      [&](const auto& object) {
-        using T = std::decay_t<decltype(object)>;
-        if constexpr (std::is_same_v<T, Literal>) {
+      [&]<typename T>(const T& object) {
+        if constexpr (ad_utility::isSimilar<T, Literal>) {
           out << "Literal " << object.literal();
-        } else if constexpr (std::is_same_v<T, BlankNode>) {
+        } else if constexpr (ad_utility::isSimilar<T, BlankNode>) {
           out << "BlankNode generated: " << object.generated()
               << ", label: " << object.label();
-        } else if constexpr (std::is_same_v<T, Iri>) {
+        } else if constexpr (ad_utility::isSimilar<T, Iri>) {
           out << "Iri " << object.iri();
         } else {
-          static_assert(always_false_v<T>, "unknown type");
+          static_assert(ad_utility::alwaysFalse<T>, "unknown type");
         }
       },
       static_cast<const GraphTermBase&>(graphTerm));
@@ -36,14 +33,13 @@ std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
 
 std::ostream& operator<<(std::ostream& out, const VarOrTerm& varOrTerm) {
   std::visit(
-      [&](const auto& object) {
-        using T = std::decay_t<decltype(object)>;
-        if constexpr (std::is_same_v<T, GraphTerm>) {
+      [&]<typename T>(const T& object) {
+        if constexpr (ad_utility::isSimilar<T, GraphTerm>) {
           out << object;
-        } else if constexpr (std::is_same_v<T, Variable>) {
+        } else if constexpr (ad_utility::isSimilar<T, Variable>) {
           out << "Variable " << object.name();
         } else {
-          static_assert(always_false_v<T>, "unknown type");
+          static_assert(ad_utility::alwaysFalse<T>, "unknown type");
         }
       },
       static_cast<const VarOrTermBase&>(varOrTerm));

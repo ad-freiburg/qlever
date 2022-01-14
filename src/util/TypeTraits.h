@@ -97,9 +97,9 @@ constexpr static bool isTypeContainedIn<T, std::variant<Ts...>> = (... || isSimi
 template <typename T, typename... Ts>
 constexpr static bool isTypeContainedIn<T, std::pair<Ts...>> = (... || isSimilar<T, Ts>);
 
-/// A templated bool that is always false, independent of the template parameter
-/// T.
-template <typename T>
+/// A templated bool that is always false,
+/// independent of the template parameter.
+template <typename>
 constexpr static bool alwaysFalse = false;
 
 /// From the type Tuple (std::tuple<A, B, C....>) creates the type
