@@ -125,10 +125,15 @@ void Index::createFromFile(const string& filename) {
   // For the first permutation, perform a unique.
   createPermutationPair<IndexMetaDataHmapDispatcher>(&vocabData, _PSO, _POS,
                                                      PerformUnique::True);
-  // After the SPO permutation, create patterns if so desired.
-  createPermutationPair<IndexMetaDataMmapDispatcher>(
-      &vocabData, _SPO, _SOP, PerformUnique::False, _usePatterns);
-  createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _OSP, _OPS);
+  if (_loadAllPermutations) {
+    // After the SPO permutation, create patterns if so desired.
+    createPermutationPair<IndexMetaDataMmapDispatcher>(
+        &vocabData, _SPO, _SOP, PerformUnique::False, _usePatterns);
+    createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _OSP, _OPS);
+    _configurationJson["has-all-permutations"] = true;
+  } else {
+    _configurationJson["has-all-permutations"] = false;
+  }
   LOG(INFO) << "Finished writing permutations" << std::endl;
 
   // Dump the configuration again in case the permutations have added some

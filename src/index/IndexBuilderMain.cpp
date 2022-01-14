@@ -45,6 +45,7 @@ struct option options[] = {
     {"keep-temporary-files", no_argument, NULL, 'k'},
     {"settings-file", required_argument, NULL, 's'},
     {"no-compressed-vocabulary", no_argument, NULL, 'N'},
+    {"only-pso-and-pos-permutations", no_argument, NULL, 'o'},
     {NULL, 0, NULL, 0}};
 
 string getStxxlConfigFileName(const string& location) {
@@ -138,6 +139,9 @@ void printUsage(char* execName) {
        << "Do NOT use prefix compression on the vocabulary (default is to "
           "compress)."
        << endl;
+  cerr << "  " << std::setw(20) << "o, only-pos-and-pso-permutations"
+       << std::setw(1) << "    "
+       << "Only load PSO and POS permutations" << endl;
   cerr.copyfmt(cerrState);
 }
 
@@ -163,10 +167,11 @@ int main(int argc, char** argv) {
   bool usePatterns = true;
   bool onlyAddTextIndex = false;
   bool keepTemporaryFiles = false;
+  bool loadAllPermutations = true;
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "F:f:i:w:d:lT:K:hAks:N", options, nullptr);
+    int c = getopt_long(argc, argv, "F:f:i:w:d:lT:K:hAks:No", options, nullptr);
     if (c == -1) {
       break;
     }
@@ -213,6 +218,9 @@ int main(int argc, char** argv) {
         break;
       case 'N':
         useCompression = false;
+        break;
+      case 'o':
+        loadAllPermutations = false;
         break;
       default:
         cerr << endl
@@ -263,6 +271,7 @@ int main(int argc, char** argv) {
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
     index.setPrefixCompression(useCompression);
+    index.setLoadAllPermutations(loadAllPermutations);
     if (!onlyAddTextIndex) {
       // if onlyAddTextIndex is true, we do not want to construct an index,
       // but assume that it  already exists (especially we need a valid
