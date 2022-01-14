@@ -153,53 +153,55 @@ TEST(SparqlParser, ComplexConstructQuery) {
   auto nil = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>";
   auto first = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>";
   auto rest = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>";
+  auto something =
+      "<http://wallscope.co.uk/resource/olympics/medal/#something>";
+  auto type = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
+  auto somethingElse =
+      "<http://wallscope.co.uk/resource/olympics/medal/#somethingelse>";
 
-  EXPECT_THAT(triples[0][0], IsBlankNode("_:g_0"));
-  EXPECT_THAT(triples[0][1], IsVariable("?a"));
-  EXPECT_THAT(triples[0][2], IsBlankNode("_:g_3"));
+  using ::testing::ElementsAre;
 
-  EXPECT_THAT(triples[1][0], IsBlankNode("_:g_1"));
-  EXPECT_THAT(triples[1][1], IsIri(first));
-  EXPECT_THAT(triples[1][2], IsBlankNode("_:g_2"));
+  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode("_:g_0"),  //
+                                      IsVariable("?a"),      //
+                                      IsBlankNode("_:g_3")));
 
-  EXPECT_THAT(triples[2][0], IsBlankNode("_:g_1"));
-  EXPECT_THAT(triples[2][1], IsIri(rest));
-  EXPECT_THAT(triples[2][2], IsIri(nil));
+  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode("_:g_1"),  //
+                                      IsIri(first),          //
+                                      IsBlankNode("_:g_2")));
 
-  EXPECT_THAT(triples[3][0], IsBlankNode("_:g_2"));
-  EXPECT_THAT(triples[3][1], IsIri(first));
-  EXPECT_THAT(triples[3][2], IsVariable("?c"));
+  EXPECT_THAT(triples[2], ElementsAre(IsBlankNode("_:g_1"),  //
+                                      IsIri(rest),           //
+                                      IsIri(nil)));
 
-  EXPECT_THAT(triples[4][0], IsBlankNode("_:g_2"));
-  EXPECT_THAT(triples[4][1], IsIri(rest));
-  EXPECT_THAT(triples[4][2], IsIri(nil));
+  EXPECT_THAT(triples[3], ElementsAre(IsBlankNode("_:g_2"),  //
+                                      IsIri(first),          //
+                                      IsVariable("?c")));
 
-  EXPECT_THAT(triples[5][0], IsBlankNode("_:g_3"));
-  EXPECT_THAT(triples[5][1], IsIri(first));
-  EXPECT_THAT(triples[5][2], IsVariable("?b"));
+  EXPECT_THAT(triples[4], ElementsAre(IsBlankNode("_:g_2"),  //
+                                      IsIri(rest),           //
+                                      IsIri(nil)));
 
-  EXPECT_THAT(triples[6][0], IsBlankNode("_:g_3"));
-  EXPECT_THAT(triples[6][1], IsIri(rest));
-  EXPECT_THAT(triples[6][2], IsBlankNode("_:g_1"));
+  EXPECT_THAT(triples[5], ElementsAre(IsBlankNode("_:g_3"),  //
+                                      IsIri(first),          //
+                                      IsVariable("?b")));
 
-  EXPECT_THAT(triples[7][0], IsBlankNode("_:g_0"));
-  EXPECT_THAT(triples[7][1], IsVariable("?d"));
-  EXPECT_THAT(triples[7][2], IsBlankNode("_:g_4"));
+  EXPECT_THAT(triples[6], ElementsAre(IsBlankNode("_:g_3"),  //
+                                      IsIri(rest),           //
+                                      IsBlankNode("_:g_1")));
 
-  EXPECT_THAT(triples[8][0], IsBlankNode("_:g_4"));
-  EXPECT_THAT(triples[8][1], IsVariable("?e"));
-  EXPECT_THAT(triples[8][2], IsBlankNode("_:g_5"));
+  EXPECT_THAT(triples[7], ElementsAre(IsBlankNode("_:g_0"),  //
+                                      IsVariable("?d"),      //
+                                      IsBlankNode("_:g_4")));
 
-  EXPECT_THAT(triples[9][0], IsBlankNode("_:g_5"));
-  EXPECT_THAT(triples[9][1], IsVariable("?f"));
-  EXPECT_THAT(triples[9][2], IsVariable("?g"));
+  EXPECT_THAT(triples[8], ElementsAre(IsBlankNode("_:g_4"),  //
+                                      IsVariable("?e"),      //
+                                      IsBlankNode("_:g_5")));
 
-  EXPECT_THAT(
-      triples[10][0],
-      IsIri("<http://wallscope.co.uk/resource/olympics/medal/#something>"));
-  EXPECT_THAT(triples[10][1],
-              IsIri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"));
-  EXPECT_THAT(
-      triples[10][2],
-      IsIri("<http://wallscope.co.uk/resource/olympics/medal/#somethingelse>"));
+  EXPECT_THAT(triples[9], ElementsAre(IsBlankNode("_:g_5"),  //
+                                      IsVariable("?f"),      //
+                                      IsVariable("?g")));
+
+  EXPECT_THAT(triples[10], ElementsAre(IsIri(something),  //
+                                       IsIri(type),       //
+                                       IsIri(somethingElse)));
 }
