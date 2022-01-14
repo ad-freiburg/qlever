@@ -11,16 +11,19 @@
 template <class>
 constexpr bool always_false_v = false;
 
+// Not relevant for the actual test logic, but provides
+// human-readable output if a test fails.
 std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
   std::visit(
       [&](const auto& object) {
         using T = std::decay_t<decltype(object)>;
         if constexpr (std::is_same_v<T, Literal>) {
-          out << "Literal " << object.getLiteral();
+          out << "Literal " << object.literal();
         } else if constexpr (std::is_same_v<T, BlankNode>) {
-          out << "BlankNode " << object.getBlankNode();
+          out << "BlankNode generated: " << object.generated()
+              << ", label: " << object.label();
         } else if constexpr (std::is_same_v<T, Iri>) {
-          out << "Iri " << object.getIri();
+          out << "Iri " << object.iri();
         } else {
           static_assert(always_false_v<T>, "unknown type");
         }
@@ -29,6 +32,8 @@ std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
   return out;
 }
 
+// _____________________________________________________________________________
+
 std::ostream& operator<<(std::ostream& out, const VarOrTerm& varOrTerm) {
   std::visit(
       [&](const auto& object) {
@@ -36,7 +41,7 @@ std::ostream& operator<<(std::ostream& out, const VarOrTerm& varOrTerm) {
         if constexpr (std::is_same_v<T, GraphTerm>) {
           out << object;
         } else if constexpr (std::is_same_v<T, Variable>) {
-          out << "Variable " << object.getName();
+          out << "Variable " << object.name();
         } else {
           static_assert(always_false_v<T>, "unknown type");
         }
@@ -45,27 +50,33 @@ std::ostream& operator<<(std::ostream& out, const VarOrTerm& varOrTerm) {
   return out;
 }
 
+// _____________________________________________________________________________
+
 MATCHER_P(IsIri, value, "") {
   if (const auto graphTerm = std::get_if<GraphTerm>(&arg)) {
     if (const auto iri = std::get_if<Iri>(graphTerm)) {
-      return iri->getIri() == value;
+      return iri->iri() == value;
     }
   }
   return false;
 }
 
-MATCHER_P(IsBlankNode, value, "") {
+// _____________________________________________________________________________
+
+MATCHER_P2(IsBlankNode, generated, label, "") {
   if (const auto graphTerm = std::get_if<GraphTerm>(&arg)) {
     if (const auto blankNode = std::get_if<BlankNode>(graphTerm)) {
-      return blankNode->getBlankNode() == value;
+      return blankNode->generated() == generated && blankNode->label() == label;
     }
   }
   return false;
 }
+
+// _____________________________________________________________________________
 
 MATCHER_P(IsVariable, value, "") {
   if (const auto variable = std::get_if<Variable>(&arg)) {
-    return variable->getName() == value;
+    return variable->name() == value;
   }
   return false;
 }

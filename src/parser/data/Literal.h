@@ -23,7 +23,7 @@ class Literal {
 
   // ___________________________________________________________________________
   // Used for testing
-  [[nodiscard]] const std::string& getLiteral() const {
+  [[nodiscard]] const std::string& literal() const {
     return _stringRepresentation;
   }
 

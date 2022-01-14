@@ -9,6 +9,7 @@
 #include <type_traits>
 
 #include "../../src/parser/sparqlParser/SparqlQleverVisitor.h"
+#include "../src/parser/data/Types.h"
 #include "../src/parser/sparqlParser/generated/SparqlAutomaticLexer.h"
 #include "SparqlAntlrParserTestHelpers.h"
 
@@ -148,7 +149,7 @@ TEST(SparqlParser, ComplexConstructQuery) {
 
   auto triples = p.parser.constructQuery()
                      ->accept(&p.visitor)
-                     .as<std::vector<std::array<VarOrTerm, 3>>>();
+                     .as<ad_utility::sparql_types::Triples>();
   ASSERT_EQ(triples.size(), 11u);
   auto nil = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>";
   auto first = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>";
@@ -161,44 +162,44 @@ TEST(SparqlParser, ComplexConstructQuery) {
 
   using ::testing::ElementsAre;
 
-  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode("_:g_0"),  //
-                                      IsVariable("?a"),      //
-                                      IsBlankNode("_:g_3")));
+  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
+                                      IsVariable("?a"),        //
+                                      IsBlankNode(true, "3")));
 
-  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode("_:g_1"),  //
-                                      IsIri(first),          //
-                                      IsBlankNode("_:g_2")));
+  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "1"),  //
+                                      IsIri(first),            //
+                                      IsBlankNode(true, "2")));
 
-  EXPECT_THAT(triples[2], ElementsAre(IsBlankNode("_:g_1"),  //
-                                      IsIri(rest),           //
+  EXPECT_THAT(triples[2], ElementsAre(IsBlankNode(true, "1"),  //
+                                      IsIri(rest),             //
                                       IsIri(nil)));
 
-  EXPECT_THAT(triples[3], ElementsAre(IsBlankNode("_:g_2"),  //
-                                      IsIri(first),          //
+  EXPECT_THAT(triples[3], ElementsAre(IsBlankNode(true, "2"),  //
+                                      IsIri(first),            //
                                       IsVariable("?c")));
 
-  EXPECT_THAT(triples[4], ElementsAre(IsBlankNode("_:g_2"),  //
-                                      IsIri(rest),           //
+  EXPECT_THAT(triples[4], ElementsAre(IsBlankNode(true, "2"),  //
+                                      IsIri(rest),             //
                                       IsIri(nil)));
 
-  EXPECT_THAT(triples[5], ElementsAre(IsBlankNode("_:g_3"),  //
-                                      IsIri(first),          //
+  EXPECT_THAT(triples[5], ElementsAre(IsBlankNode(true, "3"),  //
+                                      IsIri(first),            //
                                       IsVariable("?b")));
 
-  EXPECT_THAT(triples[6], ElementsAre(IsBlankNode("_:g_3"),  //
-                                      IsIri(rest),           //
-                                      IsBlankNode("_:g_1")));
+  EXPECT_THAT(triples[6], ElementsAre(IsBlankNode(true, "3"),  //
+                                      IsIri(rest),             //
+                                      IsBlankNode(true, "1")));
 
-  EXPECT_THAT(triples[7], ElementsAre(IsBlankNode("_:g_0"),  //
-                                      IsVariable("?d"),      //
-                                      IsBlankNode("_:g_4")));
+  EXPECT_THAT(triples[7], ElementsAre(IsBlankNode(true, "0"),  //
+                                      IsVariable("?d"),        //
+                                      IsBlankNode(true, "4")));
 
-  EXPECT_THAT(triples[8], ElementsAre(IsBlankNode("_:g_4"),  //
-                                      IsVariable("?e"),      //
-                                      IsBlankNode("_:g_5")));
+  EXPECT_THAT(triples[8], ElementsAre(IsBlankNode(true, "4"),  //
+                                      IsVariable("?e"),        //
+                                      IsBlankNode(true, "5")));
 
-  EXPECT_THAT(triples[9], ElementsAre(IsBlankNode("_:g_5"),  //
-                                      IsVariable("?f"),      //
+  EXPECT_THAT(triples[9], ElementsAre(IsBlankNode(true, "5"),  //
+                                      IsVariable("?f"),        //
                                       IsVariable("?g")));
 
   EXPECT_THAT(triples[10], ElementsAre(IsIri(something),  //
