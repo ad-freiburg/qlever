@@ -12,7 +12,10 @@
 #include <vector>
 
 #include "../util/File.h"
+#include "../util/Serializer/SerializeVector.h"
+#include "../util/Serializer/FileSerializer.h"
 #include "Id.h"
+#include "../util/UninitializedAllocator.h"
 
 typedef uint32_t PatternID;
 
@@ -43,18 +46,6 @@ struct Pattern {
       }
     }
     return true;
-  }
-
-  bool operator!=(const Pattern& other) const {
-    if (size() != other.size()) {
-      return true;
-    }
-    for (size_t i = 0; i < size(); i++) {
-      if (other._data[i] != _data[i]) {
-        return true;
-      }
-    }
-    return false;
   }
 
   bool operator<(const Pattern& other) const {
@@ -100,16 +91,14 @@ template <typename IndexT, typename DataT>
  */
 class CompactStringVector {
  public:
-  CompactStringVector()
-      : _data(nullptr), _size(0), _indexEnd(0), _dataSize(0) {}
+  using value_type = std::conditional_t<std::is_same_v<DataT, char>, std::string_view,std::pair<const DataT*, size_t>>;
+  CompactStringVector() = default;
 
-  CompactStringVector(const std::vector<std::vector<DataT>>& data) {
+  explicit CompactStringVector(const std::vector<std::vector<DataT>>& data) {
     build(data);
   }
 
-  CompactStringVector(ad_utility::File& file, off_t offset = 0) {
-    load(file, offset);
-  }
+  void clear() {*this = CompactStringVector{};}
 
   virtual ~CompactStringVector() = default;
 
@@ -118,63 +107,38 @@ class CompactStringVector {
    * @param The data from which to build the vector.
    */
   void build(const std::vector<std::vector<DataT>>& data) {
-    _size = data.size();
-    _indexEnd = (_size + 1) * sizeof(IndexT);
-    size_t dataCount = 0;
-    for (size_t i = 0; i < _size; i++) {
-      dataCount += data[i].size();
+    // Also make room for the sentinel at the end.
+    _indices.reserve(data.size() + 1);
+    size_t dataSize = 0;
+    for (const auto& element : data) {
+      _indices.push_back(dataSize);
+      dataSize += element.size();
     }
-    if (dataCount > std::numeric_limits<IndexT>::max()) {
+    // add a sentinel that stores the end of the data field
+    _indices.push_back(dataSize);
+
+    if (dataSize > std::numeric_limits<IndexT>::max()) {
       throw std::runtime_error(
-          "To much data for index type. (" + std::to_string(dataCount) + " > " +
+          "To much data for index type. (" + std::to_string(dataSize) + " > " +
           std::to_string(std::numeric_limits<IndexT>::max()));
     }
-    _dataSize = _indexEnd + sizeof(DataT) * dataCount;
-    _data.reset(new uint8_t[_dataSize]);
-    IndexT currentLength = 0;
-    size_t indPos = 0;
-    for (IndexT i = 0; i < _size; i++) {
-      // add an entry to the index
-      std::memcpy(this->data() + (indPos * sizeof(IndexT)), &currentLength,
-                  sizeof(IndexT));
-      // copy the vectors actual data
-      std::memcpy(this->data() + (_indexEnd + currentLength * sizeof(DataT)),
-                  data[i].data(), data[i].size() * sizeof(DataT));
-      indPos++;
-      currentLength += data[i].size();
+
+    _data.reserve(dataSize);
+
+    for (const auto& el : data) {
+      _data.insert(_data.end(), el.begin(), el.end());
     }
-    // add a final entry that stores the end of the data field
-    std::memcpy(this->data() + (indPos * sizeof(IndexT)), &currentLength,
-                sizeof(IndexT));
   }
 
-  void load(ad_utility::File& file, off_t offset = 0) {
-    file.read(&_size, sizeof(size_t), offset);
-    file.read(&_dataSize, sizeof(size_t), offset + sizeof(size_t));
-    _indexEnd = (_size + 1) * sizeof(IndexT);
-    _data.reset(new uint8_t[_dataSize]);
-    file.read(data(), _dataSize, offset + 2 * sizeof(size_t));
-  }
 
   // This is a move-only type
   CompactStringVector& operator=(const CompactStringVector&) = delete;
-  CompactStringVector& operator=(CompactStringVector&&) = default;
+  CompactStringVector& operator=(CompactStringVector&&) noexcept = default;
   CompactStringVector(const CompactStringVector&) = delete;
-  CompactStringVector(CompactStringVector&&) = default;
+  CompactStringVector(CompactStringVector&&) noexcept = default;
 
-  size_t size() const { return _size; }
-
-  /**
-   * @brief Stores the vector in the file at the current seek position.
-   * @param The file to write into
-   * @return The number of bytes written.
-   */
-  size_t write(ad_utility::File& file) {
-    file.write(&_size, sizeof(size_t));
-    file.write(&_dataSize, sizeof(size_t));
-    file.write(data(), _dataSize);
-    return _dataSize + 2 * sizeof(size_t);
-  }
+  // At the end there is the sentinel value.
+  size_t size() const { return _indices.size() - 1; }
 
   bool ready() const { return _data != nullptr; }
 
@@ -184,23 +148,149 @@ class CompactStringVector {
    * @return A std::pair containing a pointer to the data, and the number of
    *         elements stored at the pointers target.
    */
-  const std::pair<const DataT*, size_t> operator[](size_t i) const {
-    IndexT ind, nextInd;
-    std::memcpy(&ind, data() + (i * sizeof(IndexT)), sizeof(IndexT));
-    std::memcpy(&nextInd, data() + ((i + 1) * sizeof(IndexT)), sizeof(IndexT));
-    return std::pair<const DataT*, size_t>(
-        reinterpret_cast<const DataT*>(data() +
-                                       (_indexEnd + sizeof(DataT) * ind)),
-        nextInd - ind);
+  const value_type operator[](size_t i) const {
+    IndexT ind = _indices[i];
+    const DataT* ptr = _data.data() + ind;
+    size_t size = _indices[i + 1] - ind;
+    return {ptr, size};
   }
 
+  class Iterator {
+   private:
+    const CompactStringVector* _vec = nullptr;
+    size_t _index = 0;
+   public:
+    using iterator_category = std::random_access_iterator_tag;
+
+    using difference_type = int64_t;
+    using value_type  =CompactStringVector::value_type;
+    Iterator(const CompactStringVector* vec, size_t index) : _vec{vec}, _index{index} {}
+    Iterator() = default;
+
+    auto operator<=>(const Iterator& rhs) const {
+      return (_index <=> rhs._index);
+    }
+
+    bool operator==(const Iterator& rhs) const {
+      return _index == rhs._index;
+    }
+
+    Iterator& operator+=(size_t n) {
+      _index += n;
+      return *this;
+    }
+    Iterator operator+(size_t n) const {
+      Iterator result{*this};
+      result += n;
+      return result;
+    }
+
+    Iterator& operator++() {
+      ++_index;
+      return *this;
+    }
+    Iterator operator++(int) & {
+      Iterator result{*this};
+      ++_index;
+      return result;
+    }
+
+    Iterator& operator--() {
+      --_index;
+      return *this;
+    }
+    Iterator operator--(int) & {
+      Iterator result{*this};
+      --_index;
+      return result;
+    }
+
+    friend Iterator operator+(size_t n, const Iterator& it) {
+      return it + n;
+    }
+
+    Iterator& operator-=(size_t n) {
+      _index -= n;
+      return *this;
+    }
+
+    Iterator operator-(size_t n) const {
+      Iterator result{*this};
+      result -= n;
+      return result;
+    }
+
+    difference_type operator-(const Iterator& rhs) const {
+      return static_cast<difference_type>(_index) - rhs._index;
+    }
+
+    auto operator*() const {
+      return (*_vec)[_index];
+    }
+
+    auto operator[](size_t n) const {
+      return (*_vec)[_index + n];
+    }
+
+
+
+  };
+
+  Iterator begin() const {
+    return {this, 0};
+  }
+  Iterator end() const {
+    return {this, size()};
+  }
+
+  using const_iterator = Iterator;
+
+  // TODO<joka921> should not be accesible,
+  // but the serialization should be a friend, which
+  // currently doesn't compile.
+  auto& data() {return _data;}
+  auto& indices() {return _indices;}
+
  private:
-  uint8_t* data() { return _data.get(); };
-  const uint8_t* data() const { return _data.get(); };
-  std::unique_ptr<uint8_t[]> _data;
-  size_t _size;
-  size_t _indexEnd;
-  size_t _dataSize;
+  using DataVec = std::vector<DataT, ad_utility::default_init_allocator<DataT>>;
+  using IndexVec = std::vector<IndexT, ad_utility::default_init_allocator<IndexT>>;
+
+  DataVec _data;
+  IndexVec _indices;
+};
+
+namespace ad_utility::serialization {
+template <typename Serializer, typename D, typename I>
+void serialize(Serializer& s, CompactStringVector<D, I>& c) {
+  s | c.data();
+  s | c.indices();
+}
+}
+
+template<typename IndexT, typename DataT>
+struct CompactStringVectorWriter {
+  ad_utility::File _file;
+  std::vector<IndexT> _offsets;
+  IndexT _nextOffset = 0;
+  CompactStringVectorWriter(const std::string& filename) : _file{filename, "w"} {
+    AD_CHECK(_file.isOpen());
+    size_t dummySize = 0;
+    _file.write(&dummySize, sizeof(dummySize));
+  }
+  ~CompactStringVectorWriter() {
+    _offsets.push_back(_nextOffset);
+    _file.seek(0, SEEK_SET);
+    _file.write(&_nextOffset, sizeof(size_t));
+    _file.seek(0, SEEK_END);
+    ad_utility::serialization::FileWriteSerializer f{std::move(_file)};
+    f << _offsets;
+  }
+
+  void push (const DataT* data, size_t numElements) {
+    _offsets.push_back(_nextOffset);
+    _nextOffset += numElements;
+    _file.write(data, numElements * sizeof(DataT));
+  }
 };
 
 namespace std {

@@ -23,9 +23,9 @@
 #include "./VocabularyGenerator.h"
 
 // ___________________________________________________________________
-template <class Comp>
+template <typename Comp, typename InternalVocabularyAction>
 VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
-    const std::string& basename, size_t numFiles, Comp comp) {
+    const std::string& basename, size_t numFiles, Comp comp, InternalVocabularyAction& internalVocabularyAction) {
   // we sort alphabetically by the token according to the comparator that was
   // given to us
 
@@ -38,8 +38,10 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
 
   std::vector<std::ifstream> infiles;
 
+  /*
   _outfile.open(basename + ".vocabulary");
   AD_CHECK(_outfile.is_open());
+   */
   if (!_noIdMapsAndIgnoreExternalVocab) {
     _outfileExternal.open(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
     AD_CHECK(_outfileExternal.is_open());
@@ -95,8 +97,8 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
     if (sortedBuffer.size() >= _bufferSize) {
       // asynchronously write the next batch of sorted
       // queue words
-      auto writeTask = [this, buf = std::move(sortedBuffer)]() {
-        this->writeQueueWordsToIdVec(buf);
+      auto writeTask = [this, buf = std::move(sortedBuffer), &internalVocabularyAction]() {
+        this->writeQueueWordsToIdVec(buf, internalVocabularyAction);
       };
       sortedBuffer.clear();
       sortedBuffer.reserve(_bufferSize);
@@ -134,7 +136,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
 
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
-    writeQueueWordsToIdVec(sortedBuffer);
+    writeQueueWordsToIdVec(sortedBuffer, internalVocabularyAction);
   }
   VocMergeRes result;
   result._numWordsTotal = _totalWritten;
@@ -147,8 +149,9 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
 }
 
 // ________________________________________________________________________________
+template <typename InternalVocabularyAction>
 void VocabularyMerger::writeQueueWordsToIdVec(
-    const std::vector<QueueWord>& buffer) {
+    const std::vector<QueueWord>& buffer, InternalVocabularyAction& internalVocabularyAction) {
   LOG(TIMING) << "Start writing a batch of merged words\n";
 
   // smaller grained buffer for the actual inner write
@@ -167,8 +170,11 @@ void VocabularyMerger::writeQueueWordsToIdVec(
 
       // write the new word to the vocabulary
       if (_lastWritten < EXTERNALIZED_LITERALS_PREFIX) {
+        internalVocabularyAction(_lastWritten);
+        /*
         _outfile << RdfEscaping::escapeNewlinesAndBackslashes(_lastWritten)
                  << '\n';
+                 */
       } else {
         // we have to strip the externalization character again
         auto& c = _lastWritten[0];
@@ -216,7 +222,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       // this is a duplicate which already occured in another partial vocabulary
       // in the last step.
       // we already have increased total written, so for the duplicate
-      // we have to subtract one again
+      // we have to s, InternalVocabularyAction& internalVocabularyActionubtract one again
       size_t minusOne = _totalWritten - 1;
       writeBuf.emplace_back(top._partialFileId,
                             std::make_pair(top._partialWordId, minusOne));

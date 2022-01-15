@@ -194,7 +194,7 @@ class Index {
   // --------------------------------------------------------------------------
   // TEXT RETRIEVAL
   // --------------------------------------------------------------------------
-  const string& wordIdToString(Id id) const;
+  std::string_view wordIdToString(Id id) const;
 
   size_t getSizeEstimate(const string& words) const;
 

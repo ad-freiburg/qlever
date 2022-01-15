@@ -11,6 +11,7 @@
 #include <functional>
 #include <optional>
 #include <string>
+#include <fstream>
 #include <string_view>
 #include <vector>
 
@@ -24,6 +25,7 @@
 #include "./CompressedString.h"
 #include "./StringSortComparator.h"
 #include "ExternalVocabulary.h"
+#include "../global/Pattern.h"
 
 using std::string;
 using std::vector;
@@ -33,7 +35,7 @@ struct AccessReturnTypeGetter {};
 
 template <>
 struct AccessReturnTypeGetter<string> {
-  using type = const string&;
+  using type = std::string_view;
 };
 template <>
 struct AccessReturnTypeGetter<CompressedString> {
@@ -92,6 +94,7 @@ class Vocabulary {
                                   std::is_same_v<StringType, CompressedString>>>
 
   Vocabulary(){};
+  Vocabulary& operator=(Vocabulary&&) noexcept = default;
 
   // variable for dispatching
   static constexpr bool _isCompressed =
@@ -125,7 +128,7 @@ class Vocabulary {
   //! word is not in the vocabulary.
   //! Only enabled when uncompressed which also means no externalization
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  const std::optional<std::reference_wrapper<const string>> operator[](
+  const std::optional<std::string_view> operator[](
       Id id) const;
 
   //! Get the word with the given id or an empty optional if the
@@ -144,7 +147,7 @@ class Vocabulary {
   size_t size() const { return _words.size(); }
 
   //! Reserve space for the given number of words.
-  void reserve(unsigned int n) { _words.reserve(n); }
+  void reserve([[maybe_unused]] unsigned int n) { /* TODO<joka921> where is this used? _words.reserve(n);*/ }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
@@ -187,8 +190,7 @@ class Vocabulary {
   void printRangesForDatatypes();
 
   // only used during Index building, not needed for compressed vocabulary
-  template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  void createFromSet(const ad_utility::HashSet<StringType>& set);
+  void createFromSet(const ad_utility::HashSet<std::string>& set);
 
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
   ad_utility::HashMap<string, Id> asMap();
@@ -220,7 +222,7 @@ class Vocabulary {
   // _____________________________________________________
   //
   template <typename U = StringType, typename = enable_if_compressed<U>>
-  string expandPrefix(const CompressedString& word) const;
+  [[nodiscard]] string expandPrefix(std::string_view  word) const;
 
   // _____________________________________________
   template <typename U = StringType, typename = enable_if_compressed<U>>
@@ -263,8 +265,18 @@ class Vocabulary {
   //            in the same order as the infile
   //   prefixes - a list of prefixes which we will compress
   template <typename U = StringType, typename = enable_if_compressed<U>>
-  static void prefixCompressFile(const string& infile, const string& outfile,
-                                 const vector<string>& prefixes);
+  static void prefixCompressFile(const string& infile,
+                                            const vector<string>& prefixes,
+                                            const auto& compressedWordAction) {
+    std::ifstream in(infile);
+    AD_CHECK(in.is_open()) ;
+    Vocabulary v;
+    v.initializePrefixes(prefixes);
+    std::string word;
+    while (std::getline(in, word)) {
+      compressedWordAction(v.compressPrefix(word).toStringView());
+    }
+  }
 
   void setLocale(const std::string& language, const std::string& country,
                  bool ignorePunctuation);
@@ -293,11 +305,11 @@ class Vocabulary {
   template <class R = std::string>
   auto getLowerBoundLambda(const SortLevel level) const {
     if constexpr (_isCompressed) {
-      return [this, level](const CompressedString& a, const R& b) {
+      return [this, level](std::string_view a, const R& b) {
         return this->_caseComparator(this->expandPrefix(a), b, level);
       };
     } else {
-      return [this, level](const string& a, const R& b) {
+      return [this, level](std::string_view a, const auto& b) {
         return this->_caseComparator(a, b, level);
       };
     }
@@ -305,7 +317,7 @@ class Vocabulary {
 
   auto getUpperBoundLambda(const SortLevel level) const {
     if constexpr (_isCompressed) {
-      return [this, level](const std::string& a, const CompressedString& b) {
+      return [this, level](const std::string& a, std::string_view b) {
         return this->_caseComparator(a, this->expandPrefix(b), level);
       };
     } else {
@@ -332,9 +344,13 @@ class Vocabulary {
   // defaults to English
   vector<std::string> _internalizedLangs{"en"};
 
-  vector<StringType> _words;
+  //vector<StringType> _words;
+  CompactStringVector<uint64_t, char> _words;
   ExternalVocabulary<ComparatorType> _externalLiterals;
   ComparatorType _caseComparator;
+
+ public:
+  using WordWriter = CompactStringVectorWriter<uint64_t, char>;
 };
 
 using RdfsVocabulary = Vocabulary<CompressedString, TripleComponentComparator>;
