@@ -17,6 +17,10 @@ class Literal {
     return stream.str();
   }
 
+  static std::string toString(bool boolean) {
+    return boolean ? "true" : "false";
+  }
+
  public:
   explicit Literal(auto&& t)
       : _stringRepresentation(toString(std::forward<decltype(t)>(t))) {}

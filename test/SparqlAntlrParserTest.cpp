@@ -11,6 +11,7 @@
 #include "../../src/parser/sparqlParser/SparqlQleverVisitor.h"
 #include "../src/parser/data/Types.h"
 #include "../src/parser/sparqlParser/generated/SparqlAutomaticLexer.h"
+#include "../src/util/antlr/ThrowingErrorStrategy.h"
 #include "SparqlAntlrParserTestHelpers.h"
 
 using namespace antlr4;
@@ -25,7 +26,9 @@ struct ParserAndVisitor {
  public:
   SparqlAutomaticParser parser{&tokens};
   SparqlQleverVisitor visitor;
-  explicit ParserAndVisitor(string toParse) : input{std::move(toParse)} {}
+  explicit ParserAndVisitor(string toParse) : input{std::move(toParse)} {
+    parser.setErrorHandler(std::make_shared<ThrowingErrorStrategy>());
+  }
 };
 
 template <typename T>
@@ -40,6 +43,13 @@ void testNumericLiteral(const std::string& input, T target) {
     ASSERT_EQ(target, result);
   }
 }
+
+auto nil = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>";
+auto first = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>";
+auto rest = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>";
+auto type = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
+
+using ::testing::ElementsAre;
 
 TEST(SparqlParser, NumericLiterals) {
   testNumericLiteral("3.0", 3.0);
@@ -150,17 +160,11 @@ TEST(SparqlParser, ComplexConstructQuery) {
   auto triples = p.parser.constructQuery()
                      ->accept(&p.visitor)
                      .as<ad_utility::sparql_types::Triples>();
-  ASSERT_EQ(triples.size(), 11u);
-  auto nil = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>";
-  auto first = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>";
-  auto rest = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>";
+  ASSERT_THAT(triples, ::testing::SizeIs(11));
   auto something =
       "<http://wallscope.co.uk/resource/olympics/medal/#something>";
-  auto type = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
   auto somethingElse =
       "<http://wallscope.co.uk/resource/olympics/medal/#somethingelse>";
-
-  using ::testing::ElementsAre;
 
   EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
                                       IsVariable("?a"),        //
@@ -205,4 +209,114 @@ TEST(SparqlParser, ComplexConstructQuery) {
   EXPECT_THAT(triples[10], ElementsAre(IsIri(something),  //
                                        IsIri(type),       //
                                        IsIri(somethingElse)));
+}
+
+TEST(SparqlParser, GraphTermNumericLiteral) {
+  string input = "1337";
+  ParserAndVisitor p{input};
+
+  auto graphTerm = p.parser.graphTerm()->accept(&p.visitor).as<GraphTerm>();
+  EXPECT_THAT(graphTerm, IsLiteral("1337"));
+}
+
+TEST(SparqlParser, GraphTermBooleanLiteral) {
+  string input = "true";
+  ParserAndVisitor p{input};
+
+  auto graphTerm = p.parser.graphTerm()->accept(&p.visitor).as<GraphTerm>();
+  EXPECT_THAT(graphTerm, IsLiteral(input));
+}
+
+TEST(SparqlParser, GraphTermBlankNode) {
+  string input = "[]";
+  ParserAndVisitor p{input};
+
+  auto graphTerm = p.parser.graphTerm()->accept(&p.visitor).as<GraphTerm>();
+  EXPECT_THAT(graphTerm, IsBlankNode(true, "0"));
+}
+
+TEST(SparqlParser, GraphTermIri) {
+  string input = "<http://dummy-iri.com#fragment>";
+  ParserAndVisitor p{input};
+
+  auto graphTerm = p.parser.graphTerm()->accept(&p.visitor).as<GraphTerm>();
+  EXPECT_THAT(graphTerm, IsIri(input));
+}
+
+TEST(SparqlParser, GraphTermRdfLiteral) {
+  string input = "\"abc\"";
+  ParserAndVisitor p{input};
+
+  auto graphTerm = p.parser.graphTerm()->accept(&p.visitor).as<GraphTerm>();
+  EXPECT_THAT(graphTerm, IsLiteral(input));
+}
+
+TEST(SparqlParser, GraphTermRdfNil) {
+  string input = "()";
+  ParserAndVisitor p{input};
+
+  auto graphTerm = p.parser.graphTerm()->accept(&p.visitor).as<GraphTerm>();
+  EXPECT_THAT(graphTerm, IsIri(nil));
+}
+
+TEST(SparqlParser, RdfCollectionSingleVar) {
+  string input = "( ?a )";
+  ParserAndVisitor p{input};
+
+  auto node = p.parser.collection()
+                  ->accept(&p.visitor)
+                  .as<ad_utility::sparql_types::Node>();
+  EXPECT_THAT(node.first, IsBlankNode(true, "0"));
+
+  const auto& triples = node.second;
+  ASSERT_THAT(triples, ::testing::SizeIs(2));
+
+  using ::testing::ElementsAre;
+
+  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
+                                      IsIri(first),            //
+                                      IsVariable("?a")));
+
+  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "0"),  //
+                                      IsIri(rest),             //
+                                      IsIri(nil)));
+}
+
+TEST(SparqlParser, RdfCollectionTripleVar) {
+  string input = "( ?a ?b ?c )";
+  ParserAndVisitor p{input};
+
+  auto node = p.parser.collection()
+                  ->accept(&p.visitor)
+                  .as<ad_utility::sparql_types::Node>();
+  EXPECT_THAT(node.first, IsBlankNode(true, "2"));
+
+  const auto& triples = node.second;
+  ASSERT_THAT(triples, ::testing::SizeIs(6));
+
+  using ::testing::ElementsAre;
+
+  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
+                                      IsIri(first),            //
+                                      IsVariable("?c")));
+
+  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "0"),  //
+                                      IsIri(rest),             //
+                                      IsIri(nil)));
+
+  EXPECT_THAT(triples[2], ElementsAre(IsBlankNode(true, "1"),  //
+                                      IsIri(first),            //
+                                      IsVariable("?b")));
+
+  EXPECT_THAT(triples[3], ElementsAre(IsBlankNode(true, "1"),  //
+                                      IsIri(rest),             //
+                                      IsBlankNode(true, "0")));
+
+  EXPECT_THAT(triples[4], ElementsAre(IsBlankNode(true, "2"),  //
+                                      IsIri(first),            //
+                                      IsVariable("?a")));
+
+  EXPECT_THAT(triples[5], ElementsAre(IsBlankNode(true, "2"),  //
+                                      IsIri(rest),             //
+                                      IsBlankNode(true, "1")));
 }
