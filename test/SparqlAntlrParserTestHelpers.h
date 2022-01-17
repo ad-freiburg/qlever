@@ -48,26 +48,50 @@ std::ostream& operator<<(std::ostream& out, const VarOrTerm& varOrTerm) {
 
 // _____________________________________________________________________________
 
-// Potentially unwrap VarOrTerm to a GraphTerm object, or return a pointer
-// to the argument directly if it is already unwrapped.
-
-constexpr auto unwrapGraphTerm(const auto& arg) {
-  if constexpr (ad_utility::isSimilar<decltype(arg), VarOrTerm>) {
-    return std::get_if<GraphTerm>(&arg);
-  } else if constexpr (ad_utility::isSimilar<decltype(arg), GraphTerm>) {
-    return &arg;
+auto getLast(auto&& t, auto&&... ts) {
+  if constexpr (sizeof...(ts) == 0) {
+    return t;
   } else {
-    static_assert(ad_utility::alwaysFalse<decltype(arg)>, "unknown type");
+    return getLast(ts...);
   }
 }
 
+template <typename... ts>
+using Last = std::decay_t<decltype(getLast(std::declval<ts&>()...))>;
+
+/*template<typename T, typename... Ts>
+using First = T;*/
+
+template <typename T, typename... Ts>
+struct FirstWrapper {
+  using type = T;
+};
+
+// Recursively unwrap a std::variant object, or return a pointer
+// to the argument directly if it is already unwrapped.
+
+template <typename Current, typename... Others>
+constexpr const Last<Current, Others...>* unwrapVariant(const auto& arg) {
+  if constexpr (sizeof...(Others) > 0) {
+    if constexpr (std::is_same_v<std::decay_t<decltype(arg)>,
+                                 std::decay_t<Current>>) {
+      if (const auto ptr =
+              std::get_if<typename FirstWrapper<Others...>::type>(&arg)) {
+        return unwrapVariant<Others...>(*ptr);
+      }
+      return nullptr;
+    } else {
+      return unwrapVariant<Others...>(arg);
+    }
+  } else {
+    return &arg;
+  }
+}
 // _____________________________________________________________________________
 
 MATCHER_P(IsIri, value, "") {
-  if (const auto graphTerm = unwrapGraphTerm(arg)) {
-    if (const auto iri = std::get_if<Iri>(graphTerm)) {
-      return iri->iri() == value;
-    }
+  if (const auto iri = unwrapVariant<VarOrTerm, GraphTerm, Iri>(arg)) {
+    return iri->iri() == value;
   }
   return false;
 }
@@ -75,10 +99,9 @@ MATCHER_P(IsIri, value, "") {
 // _____________________________________________________________________________
 
 MATCHER_P2(IsBlankNode, generated, label, "") {
-  if (const auto graphTerm = unwrapGraphTerm(arg)) {
-    if (const auto blankNode = std::get_if<BlankNode>(graphTerm)) {
-      return blankNode->generated() == generated && blankNode->label() == label;
-    }
+  if (const auto blankNode =
+          unwrapVariant<VarOrTerm, GraphTerm, BlankNode>(arg)) {
+    return blankNode->generated() == generated && blankNode->label() == label;
   }
   return false;
 }
@@ -86,7 +109,7 @@ MATCHER_P2(IsBlankNode, generated, label, "") {
 // _____________________________________________________________________________
 
 MATCHER_P(IsVariable, value, "") {
-  if (const auto variable = std::get_if<Variable>(&arg)) {
+  if (const auto variable = unwrapVariant<VarOrTerm, Variable>(arg)) {
     return variable->name() == value;
   }
   return false;
@@ -95,10 +118,8 @@ MATCHER_P(IsVariable, value, "") {
 // _____________________________________________________________________________
 
 MATCHER_P(IsLiteral, value, "") {
-  if (const auto graphTerm = unwrapGraphTerm(arg)) {
-    if (const auto literal = std::get_if<Literal>(graphTerm)) {
-      return literal->literal() == value;
-    }
+  if (const auto literal = unwrapVariant<VarOrTerm, GraphTerm, Literal>(arg)) {
+    return literal->literal() == value;
   }
   return false;
 }

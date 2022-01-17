@@ -320,3 +320,19 @@ TEST(SparqlParser, RdfCollectionTripleVar) {
                                       IsIri(rest),             //
                                       IsBlankNode(true, "1")));
 }
+
+TEST(SparqlParser, AnonymousBlankNode) {
+  string input = "[ \t\r\n]";
+  ParserAndVisitor p{input};
+
+  auto graphTerm = p.parser.blankNode()->accept(&p.visitor).as<BlankNode>();
+  EXPECT_THAT(graphTerm, IsBlankNode(true, "0"));
+}
+
+TEST(SparqlParser, LabelledBlankNode) {
+  string input = "_:label123";
+  ParserAndVisitor p{input};
+
+  auto graphTerm = p.parser.blankNode()->accept(&p.visitor).as<BlankNode>();
+  EXPECT_THAT(graphTerm, IsBlankNode(false, "label123"));
+}
