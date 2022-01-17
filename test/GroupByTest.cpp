@@ -90,7 +90,7 @@ TEST_F(GroupByTest, doGroupBy) {
 
   // add some words to the index's vocabulary
   auto& vocab = const_cast<RdfsVocabulary&>(_index.getVocab());
-  ad_utility::HashSet<std::string > s;
+  ad_utility::HashSet<std::string> s;
   s.insert("<entity1>");
   s.insert("<entity2>");
   s.insert("<entity3>");

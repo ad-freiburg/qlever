@@ -25,7 +25,8 @@
 // ___________________________________________________________________
 template <typename Comp, typename InternalVocabularyAction>
 VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
-    const std::string& basename, size_t numFiles, Comp comp, InternalVocabularyAction& internalVocabularyAction) {
+    const std::string& basename, size_t numFiles, Comp comp,
+    InternalVocabularyAction& internalVocabularyAction) {
   // we sort alphabetically by the token according to the comparator that was
   // given to us
 
@@ -97,7 +98,8 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
     if (sortedBuffer.size() >= _bufferSize) {
       // asynchronously write the next batch of sorted
       // queue words
-      auto writeTask = [this, buf = std::move(sortedBuffer), &internalVocabularyAction]() {
+      auto writeTask = [this, buf = std::move(sortedBuffer),
+                        &internalVocabularyAction]() {
         this->writeQueueWordsToIdVec(buf, internalVocabularyAction);
       };
       sortedBuffer.clear();
@@ -151,7 +153,8 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
 // ________________________________________________________________________________
 template <typename InternalVocabularyAction>
 void VocabularyMerger::writeQueueWordsToIdVec(
-    const std::vector<QueueWord>& buffer, InternalVocabularyAction& internalVocabularyAction) {
+    const std::vector<QueueWord>& buffer,
+    InternalVocabularyAction& internalVocabularyAction) {
   LOG(TIMING) << "Start writing a batch of merged words\n";
 
   // smaller grained buffer for the actual inner write
@@ -222,7 +225,8 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       // this is a duplicate which already occured in another partial vocabulary
       // in the last step.
       // we already have increased total written, so for the duplicate
-      // we have to s, InternalVocabularyAction& internalVocabularyActionubtract one again
+      // we have to s, InternalVocabularyAction& internalVocabularyActionubtract
+      // one again
       size_t minusOne = _totalWritten - 1;
       writeBuf.emplace_back(top._partialFileId,
                             std::make_pair(top._partialWordId, minusOne));

@@ -19,8 +19,8 @@
 #include "../util/CompressionUsingZstd/ZstdWrapper.h"
 #include "../util/Conversions.h"
 #include "../util/HashMap.h"
-#include "../util/TupleHelpers.h"
 #include "../util/Serializer/FileSerializer.h"
+#include "../util/TupleHelpers.h"
 #include "./PrefixHeuristic.h"
 #include "./VocabularyGenerator.h"
 #include "MetaDataIterator.h"
@@ -108,11 +108,12 @@ void Index::createFromFile(const string& filename) {
   _configurationJson["prefixes"] = _vocabPrefixCompressed;
   LOG(INFO) << "Writing compressed vocabulary to disk" << std::endl;
   decltype(_vocab)::WordWriter wordWriter{vocabFileTmp};
-  auto internalVocabularyAction = [&wordWriter] (const auto& word) {
+  auto internalVocabularyAction = [&wordWriter](const auto& word) {
     wordWriter.push(word.data(), word.size());
   };
+  auto wordReader = decltype(_vocab)::wordReader(vocabFile);
   Vocabulary<CompressedString, TripleComponentComparator>::prefixCompressFile(
-      vocabFile, prefixes, internalVocabularyAction);
+      std::move(wordReader), prefixes, internalVocabularyAction);
   LOG(INFO) << "Finished writing compressed vocabulary" << std::endl;
 
   // TODO<joka921> maybe move this to its own function
@@ -268,12 +269,14 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
               << std::endl;
     {
       VocabularyMerger m;
-      std::ofstream compressionOutfile(_onDiskBase + TMP_BASENAME_COMPRESSION + ".vocabulary");
+      std::ofstream compressionOutfile(_onDiskBase + TMP_BASENAME_COMPRESSION +
+                                       ".vocabulary");
       AD_CHECK(compressionOutfile.is_open());
-      auto internalVocabularyActionCompression = [&compressionOutfile] (const auto& word) {
-        compressionOutfile << RdfEscaping::escapeNewlinesAndBackslashes(word)
-                 << '\n';
-      };
+      auto internalVocabularyActionCompression =
+          [&compressionOutfile](const auto& word) {
+            compressionOutfile
+                << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
+          };
       m._noIdMapsAndIgnoreExternalVocab = true;
       m.mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles,
                         std::less<>(), internalVocabularyActionCompression);
@@ -288,13 +291,12 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
                                                           std::string_view b) {
       return (*cmp)(a, b, decltype(_vocab)::SortLevel::TOTAL);
     };
-    std::ofstream outfile(_onDiskBase + ".vocabulary");
-    AD_CHECK(outfile.is_open());
-    auto internalVocabularyAction = [&outfile] (const auto& word) {
-      outfile << RdfEscaping::escapeNewlinesAndBackslashes(word)
-                         << '\n';
+    decltype(_vocab)::WordWriter wordWriter{_onDiskBase + ".vocabulary"};
+    auto internalVocabularyAction = [&wordWriter](const auto& word) {
+      wordWriter.push(word.data(), word.size());
     };
-    return v.mergeVocabulary(_onDiskBase, numFiles, sortPred, internalVocabularyAction);
+    return v.mergeVocabulary(_onDiskBase, numFiles, sortPred,
+                             internalVocabularyAction);
   }();
   LOG(INFO) << "Finished merging vocabulary\n";
   VocabularyData res;
@@ -995,9 +997,11 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
       off += hasPredicateSize * sizeof(Id) * 2;
 
       // read the patterns
-      // TODO<joka921> Refactor the rest of the patterns into  the serializer interface.
+      // TODO<joka921> Refactor the rest of the patterns into  the serializer
+      // interface.
       patternsFile.seek(off, SEEK_SET);
-      ad_utility::serialization::FileReadSerializer patternLoader{std::move(patternsFile)};
+      ad_utility::serialization::FileReadSerializer patternLoader{
+          std::move(patternsFile)};
       patternLoader >> _patterns;
 
       // create the has-relation and has-pattern lookup vectors

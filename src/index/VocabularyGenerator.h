@@ -57,7 +57,7 @@ class VocabularyMerger {
   // Argument comp gives the way to order strings (case-sensitive or not)
   // This automatically resets the inner members after finishing, to leave the
   // external interface stateless
-  template <typename Comp, typename InternalVocabularyAction >
+  template <typename Comp, typename InternalVocabularyAction>
   VocMergeRes mergeVocabulary(const std::string& basename, size_t numFiles,
                               Comp comp, InternalVocabularyAction& action);
 
@@ -77,8 +77,10 @@ class VocabularyMerger {
   // write the queu words in the buffer to their corresponding idPairVecs.
   // Requires that all the QueueWords that are ever passed are ordered
   // alphabetically (Also across multiple calls)
-  template<typename InternalVocabularyAction>
-  void writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer, InternalVocabularyAction& internalVocabularyAction);
+  template <typename InternalVocabularyAction>
+  void writeQueueWordsToIdVec(
+      const std::vector<QueueWord>& buffer,
+      InternalVocabularyAction& internalVocabularyAction);
 
   // close all associated files and MmapVectors and reset all internal variables
   void clear() {

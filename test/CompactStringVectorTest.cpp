@@ -2,12 +2,13 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-
 #include <gtest/gtest.h>
+
 #include <iterator>
+
 #include "../src/global/Pattern.h"
 
-template<std::random_access_iterator>
+template <std::random_access_iterator>
 using T = bool;
 
 TEST(CompactStringVector, IteratorCategory) {
@@ -19,8 +20,7 @@ TEST(CompactStringVector, IteratorCategory) {
 }
 
 TEST(CompactStringVector, ReadWrite) {
-
-  std::vector<std::string> strings {"alpha", "beta", "gamma", "delta"};
+  std::vector<std::string> strings{"alpha", "beta", "gamma", "delta"};
 
   {
     CompactStringVectorWriter<size_t, char> w{"_writerTest.dat"};
@@ -37,7 +37,4 @@ TEST(CompactStringVector, ReadWrite) {
   for (size_t i = 0; i < v.size(); ++i) {
     ASSERT_EQ(v[i], strings[i]);
   }
-
-
-
 }

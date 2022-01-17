@@ -12,10 +12,11 @@
 #include <vector>
 
 #include "../util/File.h"
-#include "../util/Serializer/SerializeVector.h"
+#include "../util/Generator.h"
 #include "../util/Serializer/FileSerializer.h"
-#include "Id.h"
+#include "../util/Serializer/SerializeVector.h"
 #include "../util/UninitializedAllocator.h"
+#include "Id.h"
 
 typedef uint32_t PatternID;
 
@@ -91,14 +92,18 @@ template <typename IndexT, typename DataT>
  */
 class CompactStringVector {
  public:
-  using value_type = std::conditional_t<std::is_same_v<DataT, char>, std::string_view,std::pair<const DataT*, size_t>>;
+  using value_type =
+      std::conditional_t<std::is_same_v<DataT, char>, std::string_view,
+                         std::pair<const DataT*, size_t>>;
+  using vector_type = std::conditional_t<std::is_same_v<DataT, char>,
+                                         std::string, std::vector<DataT>>;
   CompactStringVector() = default;
 
   explicit CompactStringVector(const std::vector<std::vector<DataT>>& data) {
     build(data);
   }
 
-  void clear() {*this = CompactStringVector{};}
+  void clear() { *this = CompactStringVector{}; }
 
   virtual ~CompactStringVector() = default;
 
@@ -130,7 +135,6 @@ class CompactStringVector {
     }
   }
 
-
   // This is a move-only type
   CompactStringVector& operator=(const CompactStringVector&) = delete;
   CompactStringVector& operator=(CompactStringVector&&) noexcept = default;
@@ -159,21 +163,21 @@ class CompactStringVector {
    private:
     const CompactStringVector* _vec = nullptr;
     size_t _index = 0;
+
    public:
     using iterator_category = std::random_access_iterator_tag;
 
     using difference_type = int64_t;
-    using value_type  =CompactStringVector::value_type;
-    Iterator(const CompactStringVector* vec, size_t index) : _vec{vec}, _index{index} {}
+    using value_type = CompactStringVector::value_type;
+    Iterator(const CompactStringVector* vec, size_t index)
+        : _vec{vec}, _index{index} {}
     Iterator() = default;
 
     auto operator<=>(const Iterator& rhs) const {
       return (_index <=> rhs._index);
     }
 
-    bool operator==(const Iterator& rhs) const {
-      return _index == rhs._index;
-    }
+    bool operator==(const Iterator& rhs) const { return _index == rhs._index; }
 
     Iterator& operator+=(size_t n) {
       _index += n;
@@ -205,9 +209,7 @@ class CompactStringVector {
       return result;
     }
 
-    friend Iterator operator+(size_t n, const Iterator& it) {
-      return it + n;
-    }
+    friend Iterator operator+(size_t n, const Iterator& it) { return it + n; }
 
     Iterator& operator-=(size_t n) {
       _index -= n;
@@ -224,36 +226,26 @@ class CompactStringVector {
       return static_cast<difference_type>(_index) - rhs._index;
     }
 
-    auto operator*() const {
-      return (*_vec)[_index];
-    }
+    auto operator*() const { return (*_vec)[_index]; }
 
-    auto operator[](size_t n) const {
-      return (*_vec)[_index + n];
-    }
-
-
-
+    auto operator[](size_t n) const { return (*_vec)[_index + n]; }
   };
 
-  Iterator begin() const {
-    return {this, 0};
-  }
-  Iterator end() const {
-    return {this, size()};
-  }
+  Iterator begin() const { return {this, 0}; }
+  Iterator end() const { return {this, size()}; }
 
   using const_iterator = Iterator;
 
   // TODO<joka921> should not be accesible,
   // but the serialization should be a friend, which
   // currently doesn't compile.
-  auto& data() {return _data;}
-  auto& indices() {return _indices;}
+  auto& data() { return _data; }
+  auto& indices() { return _indices; }
 
  private:
   using DataVec = std::vector<DataT, ad_utility::default_init_allocator<DataT>>;
-  using IndexVec = std::vector<IndexT, ad_utility::default_init_allocator<IndexT>>;
+  using IndexVec =
+      std::vector<IndexT, ad_utility::default_init_allocator<IndexT>>;
 
   DataVec _data;
   IndexVec _indices;
@@ -265,33 +257,74 @@ void serialize(Serializer& s, CompactStringVector<D, I>& c) {
   s | c.data();
   s | c.indices();
 }
-}
+}  // namespace ad_utility::serialization
 
-template<typename IndexT, typename DataT>
+template <typename IndexT, typename DataT>
 struct CompactStringVectorWriter {
   ad_utility::File _file;
   std::vector<IndexT> _offsets;
+  bool _finished = false;
   IndexT _nextOffset = 0;
-  CompactStringVectorWriter(const std::string& filename) : _file{filename, "w"} {
+  explicit CompactStringVectorWriter(const std::string& filename)
+      : _file{filename, "w"} {
     AD_CHECK(_file.isOpen());
     size_t dummySize = 0;
     _file.write(&dummySize, sizeof(dummySize));
   }
-  ~CompactStringVectorWriter() {
+  void finish() {
     _offsets.push_back(_nextOffset);
     _file.seek(0, SEEK_SET);
     _file.write(&_nextOffset, sizeof(size_t));
     _file.seek(0, SEEK_END);
     ad_utility::serialization::FileWriteSerializer f{std::move(_file)};
     f << _offsets;
+    _finished = true;
+  }
+  ~CompactStringVectorWriter() {
+    if (!_finished) {
+      finish();
+    }
   }
 
-  void push (const DataT* data, size_t numElements) {
+  void push(const DataT* data, size_t numElements) {
+    AD_CHECK(!_finished);
     _offsets.push_back(_nextOffset);
     _nextOffset += numElements;
     _file.write(data, numElements * sizeof(DataT));
   }
 };
+
+template <typename IndexT, typename DataT>
+cppcoro::generator<typename CompactStringVector<IndexT, DataT>::vector_type>
+CompactStringVectorDiskIterator(const string& filename) {
+  ad_utility::File dataFile{filename, "r"};
+  ad_utility::File indexFile{filename, "r"};
+  AD_CHECK(dataFile.isOpen());
+  AD_CHECK(indexFile.isOpen());
+
+  size_t dataSize;
+  dataFile.read(&dataSize, sizeof(dataSize));
+
+  indexFile.seek(sizeof(dataSize) + dataSize, SEEK_SET);
+  size_t size;
+  indexFile.read(&size, sizeof(size));
+
+  size--;  // Sentinel at the end
+
+  size_t offset;
+  indexFile.read(&offset, sizeof(offset));
+
+  for (size_t i = 0; i < size; ++i) {
+    size_t nextOffset;
+    indexFile.read(&nextOffset, sizeof(nextOffset));
+    auto currentSize = nextOffset - offset;
+    typename CompactStringVector<IndexT, DataT>::vector_type result;
+    result.resize(currentSize);
+    dataFile.read(result.data(), currentSize * sizeof(DataT));
+    co_yield result;
+    offset = nextOffset;
+  }
+}
 
 namespace std {
 template <>

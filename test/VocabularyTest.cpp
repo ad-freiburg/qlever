@@ -16,9 +16,7 @@ using std::string;
 TEST(VocabularyTest, getIdForWordTest) {
   std::vector<TextVocabulary> vec(2);
 
-  ad_utility::HashSet<std::string> s {
-      "a", "ab", "ba", "car"
-  };
+  ad_utility::HashSet<std::string> s{"a", "ab", "ba", "car"};
   for (auto& v : vec) {
     v.createFromSet(s);
     Id id;
@@ -32,7 +30,7 @@ TEST(VocabularyTest, getIdForWordTest) {
   // with case insensitive ordering
   TextVocabulary voc;
   voc.setLocale("en", "US", false);
-  ad_utility::HashSet<string> s2 {"a", "A", "Ba", "car"};
+  ad_utility::HashSet<string> s2{"a", "A", "Ba", "car"};
   voc.createFromSet(s2);
   Id id;
   ASSERT_TRUE(voc.getId("Ba", &id));
@@ -45,7 +43,8 @@ TEST(VocabularyTest, getIdForWordTest) {
 
 TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
   TextVocabulary v;
-  ad_utility::HashSet<string> s {"wordA0", "wordA1", "wordB2", "wordB3", "wordB4"};
+  ad_utility::HashSet<string> s{"wordA0", "wordA1", "wordB2", "wordB3",
+                                "wordB4"};
   v.createFromSet(s);
 
   Id word0 = 0;

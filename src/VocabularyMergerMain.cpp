@@ -21,9 +21,8 @@ int main(int argc, char** argv) {
   VocabularyMerger m;
   std::ofstream file(basename + ".vocabulary");
   AD_CHECK(file.is_open());
-  auto internalVocabularyAction = [&file] (const auto& word) {
-    file << RdfEscaping::escapeNewlinesAndBackslashes(word)
-                       << '\n';
+  auto internalVocabularyAction = [&file](const auto& word) {
+    file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
   };
   m.mergeVocabulary(basename, numFiles, TripleComponentComparator(),
                     internalVocabularyAction);

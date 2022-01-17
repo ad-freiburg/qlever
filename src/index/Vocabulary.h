@@ -8,15 +8,16 @@
 
 #include <algorithm>
 #include <cassert>
+#include <fstream>
 #include <functional>
 #include <optional>
 #include <string>
-#include <fstream>
 #include <string_view>
 #include <vector>
 
 #include "../global/Constants.h"
 #include "../global/Id.h"
+#include "../global/Pattern.h"
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
 #include "../util/HashSet.h"
@@ -25,7 +26,6 @@
 #include "./CompressedString.h"
 #include "./StringSortComparator.h"
 #include "ExternalVocabulary.h"
-#include "../global/Pattern.h"
 
 using std::string;
 using std::vector;
@@ -128,8 +128,7 @@ class Vocabulary {
   //! word is not in the vocabulary.
   //! Only enabled when uncompressed which also means no externalization
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  const std::optional<std::string_view> operator[](
-      Id id) const;
+  const std::optional<std::string_view> operator[](Id id) const;
 
   //! Get the word with the given id or an empty optional if the
   //! word is not in the vocabulary. Returns an lvalue because compressed or
@@ -147,7 +146,9 @@ class Vocabulary {
   size_t size() const { return _words.size(); }
 
   //! Reserve space for the given number of words.
-  void reserve([[maybe_unused]] unsigned int n) { /* TODO<joka921> where is this used? _words.reserve(n);*/ }
+  void reserve([[maybe_unused]] unsigned int n) { /* TODO<joka921> where is this
+                                                     used? _words.reserve(n);*/
+  }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
@@ -222,7 +223,7 @@ class Vocabulary {
   // _____________________________________________________
   //
   template <typename U = StringType, typename = enable_if_compressed<U>>
-  [[nodiscard]] string expandPrefix(std::string_view  word) const;
+  [[nodiscard]] string expandPrefix(std::string_view word) const;
 
   // _____________________________________________
   template <typename U = StringType, typename = enable_if_compressed<U>>
@@ -265,15 +266,12 @@ class Vocabulary {
   //            in the same order as the infile
   //   prefixes - a list of prefixes which we will compress
   template <typename U = StringType, typename = enable_if_compressed<U>>
-  static void prefixCompressFile(const string& infile,
-                                            const vector<string>& prefixes,
-                                            const auto& compressedWordAction) {
-    std::ifstream in(infile);
-    AD_CHECK(in.is_open()) ;
+  static void prefixCompressFile(auto wordIterator,
+                                 const vector<string>& prefixes,
+                                 const auto& compressedWordAction) {
     Vocabulary v;
     v.initializePrefixes(prefixes);
-    std::string word;
-    while (std::getline(in, word)) {
+    for (const auto& word : wordIterator) {
       compressedWordAction(v.compressPrefix(word).toStringView());
     }
   }
@@ -344,13 +342,16 @@ class Vocabulary {
   // defaults to English
   vector<std::string> _internalizedLangs{"en"};
 
-  //vector<StringType> _words;
+  // vector<StringType> _words;
   CompactStringVector<uint64_t, char> _words;
   ExternalVocabulary<ComparatorType> _externalLiterals;
   ComparatorType _caseComparator;
 
  public:
   using WordWriter = CompactStringVectorWriter<uint64_t, char>;
+  static auto wordReader(const string& filename) {
+    return CompactStringVectorDiskIterator<uint64_t, char>(filename);
+  }
 };
 
 using RdfsVocabulary = Vocabulary<CompressedString, TripleComponentComparator>;

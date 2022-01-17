@@ -10,12 +10,12 @@
 
 #include "../parser/RdfEscaping.h"
 #include "../parser/Tokenizer.h"
+#include "../util/BatchedPipeline.h"
 #include "../util/File.h"
 #include "../util/HashMap.h"
 #include "../util/HashSet.h"
-#include "../util/json.h"
-#include "../util/BatchedPipeline.h"
 #include "../util/Serializer/FileSerializer.h"
+#include "../util/json.h"
 #include "./ConstantsIndexBuilding.h"
 
 using std::string;
@@ -26,7 +26,7 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
                                     const string& extLitsFileName) {
   LOG(INFO) << "Reading vocabulary from file " << fileName << "\n";
   _words.clear();
-  ad_utility::serialization::FileReadSerializer file (fileName);
+  ad_utility::serialization::FileReadSerializer file(fileName);
   file >> _words;
   LOG(INFO) << "Done reading vocabulary from file.\n";
   LOG(INFO) << "It contains " << _words.size() << " elements\n";
@@ -80,7 +80,8 @@ void Vocabulary<S, C>::writeToBinaryFileForMerging(
 
 // _____________________________________________________________________________
 template <class S, class C>
-void Vocabulary<S, C>::createFromSet(const ad_utility::HashSet<std::string>& set) {
+void Vocabulary<S, C>::createFromSet(
+    const ad_utility::HashSet<std::string>& set) {
   LOG(INFO) << "Creating vocabulary from set ...\n";
   _words.clear();
   std::vector<std::vector<char>> words;
@@ -90,7 +91,9 @@ void Vocabulary<S, C>::createFromSet(const ad_utility::HashSet<std::string>& set
   }
   LOG(INFO) << "... sorting ...\n";
   auto totalComparison = [this](const auto& a, const auto& b) {
-    return _caseComparator(std::string_view(a.begin(), a.end()), std::string_view(b.begin(), b.end()), SortLevel::TOTAL);
+    return _caseComparator(std::string_view(a.begin(), a.end()),
+                           std::string_view(b.begin(), b.end()),
+                           SortLevel::TOTAL);
   };
   std::sort(begin(words), end(words), totalComparison);
   _words.build(words);
@@ -284,7 +287,6 @@ void Vocabulary<S, C>::initializeInternalizedLangs(const StringRange& s) {
   }
 }
 
-
 // ___________________________________________________________________________
 template <typename S, typename C>
 bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
@@ -377,8 +379,8 @@ std::pair<Id, Id> Vocabulary<S, C>::prefix_range(const string& prefix) const {
 // _____________________________________________________________________________
 template <typename S, typename C>
 template <typename, typename>
-const std::optional<std::string_view>
-Vocabulary<S, C>::operator[](Id id) const {
+const std::optional<std::string_view> Vocabulary<S, C>::operator[](
+    Id id) const {
   if (id < _words.size()) {
     return _words[static_cast<size_t>(id)];
   } else {
@@ -456,7 +458,8 @@ template void RdfsVocabulary::initializeInternalizedLangs<nlohmann::json>(
 template void RdfsVocabulary::initializeExternalizePrefixes<nlohmann::json>(
     const nlohmann::json& prefixes);
 
-template CompressedString RdfsVocabulary::compressPrefix(const string& word) const;
+template CompressedString RdfsVocabulary::compressPrefix(
+    const string& word) const;
 
 template void RdfsVocabulary::printRangesForDatatypes();
 
