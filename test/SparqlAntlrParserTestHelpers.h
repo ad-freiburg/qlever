@@ -48,24 +48,24 @@ std::ostream& operator<<(std::ostream& out, const VarOrTerm& varOrTerm) {
 
 // _____________________________________________________________________________
 
-auto getLast(auto&& t, auto&&... ts) {
-  if constexpr (sizeof...(ts) == 0) {
-    return t;
-  } else {
-    return getLast(ts...);
-  }
-}
+template <typename, typename... Ts>
+struct LastT : LastT<Ts...> {};
 
-template <typename... ts>
-using Last = std::decay_t<decltype(getLast(std::declval<ts&>()...))>;
+template <typename T>
+struct LastT<T> {
+  using type = T;
+};
 
-/*template<typename T, typename... Ts>
-using First = T;*/
+template <typename... Ts>
+using Last = typename LastT<Ts...>::type;
 
-template <typename T, typename... Ts>
+template <typename T, typename...>
 struct FirstWrapper {
   using type = T;
 };
+
+template <typename... Ts>
+using First = typename FirstWrapper<Ts...>::type;
 
 // Recursively unwrap a std::variant object, or return a pointer
 // to the argument directly if it is already unwrapped.
@@ -73,10 +73,8 @@ struct FirstWrapper {
 template <typename Current, typename... Others>
 constexpr const Last<Current, Others...>* unwrapVariant(const auto& arg) {
   if constexpr (sizeof...(Others) > 0) {
-    if constexpr (std::is_same_v<std::decay_t<decltype(arg)>,
-                                 std::decay_t<Current>>) {
-      if (const auto ptr =
-              std::get_if<typename FirstWrapper<Others...>::type>(&arg)) {
+    if constexpr (ad_utility::isSimilar<decltype(arg), Current>) {
+      if (const auto ptr = std::get_if<First<Others...>>(&arg)) {
         return unwrapVariant<Others...>(*ptr);
       }
       return nullptr;
