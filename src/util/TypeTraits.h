@@ -78,6 +78,10 @@ constexpr static bool isVariant = isInstantiation<std::variant, T>;
 template <typename T, typename U>
 constexpr static bool isSimilar = std::is_same_v<std::decay_t<T>, std::decay_t<U>>;
 
+/// A concept for similarity
+template <typename T, typename U>
+concept SimilarTo = isSimilar<T, U>;
+
 /// isTypeContainedIn<T, U> It is true iff type U is a pair, tuple or variant
 /// and T `isSimilar` (see above) to one of the types contained in the tuple,
 /// pair or variant.

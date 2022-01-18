@@ -343,14 +343,14 @@ class Vocabulary {
   vector<std::string> _internalizedLangs{"en"};
 
   // vector<StringType> _words;
-  CompactStringVector<uint64_t, char> _words;
+  CompactStringVector<char> _words;
   ExternalVocabulary<ComparatorType> _externalLiterals;
   ComparatorType _caseComparator;
 
  public:
-  using WordWriter = CompactStringVectorWriter<uint64_t, char>;
+  using WordWriter = CompactStringVectorWriter<char>;
   static auto wordReader(const string& filename) {
-    return CompactStringVectorDiskIterator<uint64_t, char>(filename);
+    return CompactStringVectorDiskIterator<char>(filename);
   }
 };
 

@@ -54,12 +54,13 @@ class VocabularyMerger {
   // Literals
   // Returns the number of total Words merged and via the parameters
   // the lower and upper bound of language tagged predicates
-  // Argument comp gives the way to order strings (case-sensitive or not)
+  // Argument comparator gives the way to order strings (case-sensitive or not)
   // This automatically resets the inner members after finishing, to leave the
   // external interface stateless
   template <typename Comp, typename InternalVocabularyAction>
   VocMergeRes mergeVocabulary(const std::string& basename, size_t numFiles,
-                              Comp comp, InternalVocabularyAction& action);
+                              Comp comparator,
+                              InternalVocabularyAction& action);
 
  private:
   // helper struct used in the priority queue for merging.

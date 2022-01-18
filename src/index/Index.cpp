@@ -605,17 +605,14 @@ void Index::createPatterns(bool vecAlreadySorted, VocabularyData* vocabData) {
 
 // _____________________________________________________________________________
 template <typename VecReaderType, typename... Args>
-void Index::createPatternsImpl(const string& fileName,
-                               CompactStringVector<Id, Id>& hasPredicate,
-                               std::vector<PatternID>& hasPattern,
-                               CompactStringVector<size_t, Id>& patterns,
-                               double& fullHasPredicateMultiplicityEntities,
-                               double& fullHasPredicateMultiplicityPredicates,
-                               size_t& fullHasPredicateSize,
-                               const size_t maxNumPatterns,
-                               const Id langPredLowerBound,
-                               const Id langPredUpperBound,
-                               const Args&... vecReaderArgs) {
+void Index::createPatternsImpl(
+    const string& fileName, CompactStringVector<Id>& hasPredicate,
+    std::vector<PatternID>& hasPattern, CompactStringVector<Id>& patterns,
+    double& fullHasPredicateMultiplicityEntities,
+    double& fullHasPredicateMultiplicityPredicates,
+    size_t& fullHasPredicateSize, const size_t maxNumPatterns,
+    const Id langPredLowerBound, const Id langPredUpperBound,
+    const Args&... vecReaderArgs) {
   IndexMetaDataHmap meta;
   using PatternsCountMap = ad_utility::HashMap<Pattern, size_t>;
 
@@ -1056,13 +1053,13 @@ const vector<PatternID>& Index::getHasPattern() const {
 }
 
 // _____________________________________________________________________________
-const CompactStringVector<Id, Id>& Index::getHasPredicate() const {
+const CompactStringVector<Id>& Index::getHasPredicate() const {
   throwExceptionIfNoPatterns();
   return _hasPredicate;
 }
 
 // _____________________________________________________________________________
-const CompactStringVector<size_t, Id>& Index::getPatterns() const {
+const CompactStringVector<Id>& Index::getPatterns() const {
   throwExceptionIfNoPatterns();
   return _patterns;
 }

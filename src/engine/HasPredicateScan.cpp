@@ -10,8 +10,8 @@ template <typename A, typename R>
 void doComputeSubqueryS(const std::vector<A>* input,
                         const size_t inputSubjectColumn, std::vector<R>* result,
                         const std::vector<PatternID>& hasPattern,
-                        const CompactStringVector<Id, Id>& hasPredicate,
-                        const CompactStringVector<size_t, Id>& patterns);
+                        const CompactStringVector<Id>& hasPredicate,
+                        const CompactStringVector<Id>& patterns);
 
 HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec, ScanType type)
     : Operation(qec),
@@ -207,9 +207,8 @@ void HasPredicateScan::computeResult(ResultTable* result) {
   result->_sortedBy = resultSortedOn();
 
   const std::vector<PatternID>& hasPattern = getIndex().getHasPattern();
-  const CompactStringVector<Id, Id>& hasPredicate =
-      getIndex().getHasPredicate();
-  const CompactStringVector<size_t, Id>& patterns = getIndex().getPatterns();
+  const CompactStringVector<Id>& hasPredicate = getIndex().getHasPredicate();
+  const CompactStringVector<Id>& patterns = getIndex().getPatterns();
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
 
@@ -261,11 +260,10 @@ void HasPredicateScan::computeResult(ResultTable* result) {
   LOG(DEBUG) << "HasPredicateScan result compuation done." << std::endl;
 }
 
-void HasPredicateScan::computeFreeS(
-    ResultTable* resultTable, size_t objectId,
-    const std::vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, Id>& hasPredicate,
-    const CompactStringVector<size_t, Id>& patterns) {
+void HasPredicateScan::computeFreeS(ResultTable* resultTable, size_t objectId,
+                                    const std::vector<PatternID>& hasPattern,
+                                    const CompactStringVector<Id>& hasPredicate,
+                                    const CompactStringVector<Id>& patterns) {
   IdTableStatic<1> result = resultTable->_idTable.moveToStatic<1>();
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
   Id id = 0;
@@ -296,11 +294,10 @@ void HasPredicateScan::computeFreeS(
   resultTable->_idTable = result.moveToDynamic();
 }
 
-void HasPredicateScan::computeFreeO(
-    ResultTable* resultTable, size_t subjectId,
-    const std::vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, Id>& hasPredicate,
-    const CompactStringVector<size_t, Id>& patterns) {
+void HasPredicateScan::computeFreeO(ResultTable* resultTable, size_t subjectId,
+                                    const std::vector<PatternID>& hasPattern,
+                                    const CompactStringVector<Id>& hasPredicate,
+                                    const CompactStringVector<Id>& patterns) {
   IdTableStatic<1> result = resultTable->_idTable.moveToStatic<1>();
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
 
@@ -326,8 +323,8 @@ void HasPredicateScan::computeFreeO(
 
 void HasPredicateScan::computeFullScan(
     ResultTable* resultTable, const std::vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, Id>& hasPredicate,
-    const CompactStringVector<size_t, Id>& patterns, size_t resultSize) {
+    const CompactStringVector<Id>& hasPredicate,
+    const CompactStringVector<Id>& patterns, size_t resultSize) {
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
   IdTableStatic<2> result = resultTable->_idTable.moveToStatic<2>();
@@ -361,8 +358,8 @@ template <int IN_WIDTH, int OUT_WIDTH>
 void HasPredicateScan::computeSubqueryS(
     IdTable* dynResult, const IdTable& dynInput, const size_t subtreeColIndex,
     const std::vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, Id>& hasPredicate,
-    const CompactStringVector<size_t, Id>& patterns) {
+    const CompactStringVector<Id>& hasPredicate,
+    const CompactStringVector<Id>& patterns) {
   IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
   const IdTableView<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
 

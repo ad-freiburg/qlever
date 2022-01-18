@@ -23,26 +23,22 @@
 #include "./VocabularyGenerator.h"
 
 // ___________________________________________________________________
-template <typename Comp, typename InternalVocabularyAction>
+template <typename Comparator, typename InternalVocabularyAction>
 VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
-    const std::string& basename, size_t numFiles, Comp comp,
+    const std::string& basename, size_t numFiles, Comparator comparator,
     InternalVocabularyAction& internalVocabularyAction) {
   // we sort alphabetically by the token according to the comparator that was
   // given to us
 
-  auto queueCompare = [&comp](const QueueWord& p1, const QueueWord& p2) {
+  auto queueCompare = [&comparator](const QueueWord& p1, const QueueWord& p2) {
     // if p1 is smaller (alphabetically)
     // _comp will return false if called like this
     // and the priority queue will thus emit p1 first
-    return comp(p2._value, p1._value);
+    return comparator(p2._value, p1._value);
   };
 
   std::vector<std::ifstream> infiles;
 
-  /*
-  _outfile.open(basename + ".vocabulary");
-  AD_CHECK(_outfile.is_open());
-   */
   if (!_noIdMapsAndIgnoreExternalVocab) {
     _outfileExternal.open(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
     AD_CHECK(_outfileExternal.is_open());
@@ -174,10 +170,6 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       // write the new word to the vocabulary
       if (_lastWritten < EXTERNALIZED_LITERALS_PREFIX) {
         internalVocabularyAction(_lastWritten);
-        /*
-        _outfile << RdfEscaping::escapeNewlinesAndBackslashes(_lastWritten)
-                 << '\n';
-                 */
       } else {
         // we have to strip the externalization character again
         auto& c = _lastWritten[0];
@@ -224,12 +216,10 @@ void VocabularyMerger::writeQueueWordsToIdVec(
     } else {
       // this is a duplicate which already occured in another partial vocabulary
       // in the last step.
-      // we already have increased total written, so for the duplicate
-      // we have to s, InternalVocabularyAction& internalVocabularyActionubtract
-      // one again
-      size_t minusOne = _totalWritten - 1;
+      // We have already incremented _totalWritten for the next round, hence the
+      // -1 here.
       writeBuf.emplace_back(top._partialFileId,
-                            std::make_pair(top._partialWordId, minusOne));
+                            std::pair{top._partialWordId, _totalWritten - 1});
     }
 
     if (writeBuf.size() >= bufSize) {

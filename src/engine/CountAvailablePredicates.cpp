@@ -143,9 +143,9 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
 
   const std::vector<PatternID>& hasPattern =
       _executionContext->getIndex().getHasPattern();
-  const CompactStringVector<Id, Id>& hasPredicate =
+  const CompactStringVector<Id>& hasPredicate =
       _executionContext->getIndex().getHasPredicate();
-  const CompactStringVector<size_t, Id>& patterns =
+  const CompactStringVector<Id>& patterns =
       _executionContext->getIndex().getPatterns();
 
   if (_subjectEntityName) {
@@ -182,8 +182,8 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
 
 void CountAvailablePredicates::computePatternTrickAllEntities(
     IdTable* dynResult, const vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, Id>& hasPredicate,
-    const CompactStringVector<size_t, Id>& patterns) {
+    const CompactStringVector<Id>& hasPredicate,
+    const CompactStringVector<Id>& patterns) {
   IdTableStatic<2> result = dynResult->moveToStatic<2>();
   LOG(DEBUG) << "For all entities." << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
@@ -249,8 +249,8 @@ template <int WIDTH>
 void CountAvailablePredicates::computePatternTrick(
     const IdTable& dynInput, IdTable* dynResult,
     const vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, Id>& hasPredicate,
-    const CompactStringVector<size_t, Id>& patterns, const size_t subjectColumn,
+    const CompactStringVector<Id>& hasPredicate,
+    const CompactStringVector<Id>& patterns, const size_t subjectColumn,
     RuntimeInformation* runtimeInfo) {
   const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
   IdTableStatic<2> result = dynResult->moveToStatic<2>();
