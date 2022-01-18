@@ -321,7 +321,7 @@ TEST(SparqlParser, RdfCollectionTripleVar) {
                                       IsBlankNode(true, "1")));
 }
 
-TEST(SparqlParser, AnonymousBlankNode) {
+TEST(SparqlParser, BlankNodeAnonymous) {
   string input = "[ \t\r\n]";
   ParserAndVisitor p{input};
 
@@ -329,10 +329,328 @@ TEST(SparqlParser, AnonymousBlankNode) {
   EXPECT_THAT(graphTerm, IsBlankNode(true, "0"));
 }
 
-TEST(SparqlParser, LabelledBlankNode) {
+TEST(SparqlParser, BlankNodeLabelled) {
   string input = "_:label123";
   ParserAndVisitor p{input};
 
   auto graphTerm = p.parser.blankNode()->accept(&p.visitor).as<BlankNode>();
   EXPECT_THAT(graphTerm, IsBlankNode(false, "label123"));
+}
+
+TEST(SparqlParser, ConstructTemplateEmpty) {
+  string input = "{}";
+  ParserAndVisitor p{input};
+
+  auto triples = p.parser.constructTemplate()
+                     ->accept(&p.visitor)
+                     .as<ad_utility::sparql_types::Triples>();
+  ASSERT_THAT(triples, ::testing::IsEmpty());
+}
+
+TEST(SparqlParser, ConstructTriplesSingletonWithTerminator) {
+  string input = "?a ?a ?a .";
+  ParserAndVisitor p{input};
+
+  auto triples = p.parser.constructTriples()
+                     ->accept(&p.visitor)
+                     .as<ad_utility::sparql_types::Triples>();
+  ASSERT_THAT(triples, ::testing::SizeIs(1));
+
+  using ::testing::ElementsAre;
+  EXPECT_THAT(triples[0], ElementsAre(IsVariable("?a"),  //
+                                      IsVariable("?a"),  //
+                                      IsVariable("?a")));
+}
+
+TEST(SparqlParser, ConstructTriplesWithTerminator) {
+  string input = "?a ?a ?a . ?b ?b ?b . ?c ?c ?c .";
+  ParserAndVisitor p{input};
+
+  auto triples = p.parser.constructTriples()
+                     ->accept(&p.visitor)
+                     .as<ad_utility::sparql_types::Triples>();
+  ASSERT_THAT(triples, ::testing::SizeIs(3));
+
+  using ::testing::ElementsAre;
+  EXPECT_THAT(triples[0], ElementsAre(IsVariable("?a"),  //
+                                      IsVariable("?a"),  //
+                                      IsVariable("?a")));
+
+  EXPECT_THAT(triples[1], ElementsAre(IsVariable("?b"),  //
+                                      IsVariable("?b"),  //
+                                      IsVariable("?b")));
+
+  EXPECT_THAT(triples[2], ElementsAre(IsVariable("?c"),  //
+                                      IsVariable("?c"),  //
+                                      IsVariable("?c")));
+}
+
+TEST(SparqlParser, TriplesSameSubjectVarOrTerm) {
+  string input = "?a ?a ?a";
+  ParserAndVisitor p{input};
+
+  auto triples = p.parser.constructTriples()
+                     ->accept(&p.visitor)
+                     .as<ad_utility::sparql_types::Triples>();
+  ASSERT_THAT(triples, ::testing::SizeIs(1));
+
+  using ::testing::ElementsAre;
+  EXPECT_THAT(triples[0], ElementsAre(IsVariable("?a"),  //
+                                      IsVariable("?a"),  //
+                                      IsVariable("?a")));
+}
+
+TEST(SparqlParser, TriplesSameSubjectTriplesNodeWithPropertyList) {
+  string input = "(?a) ?b ?c";
+  ParserAndVisitor p{input};
+
+  auto triples = p.parser.triplesSameSubject()
+                     ->accept(&p.visitor)
+                     .as<ad_utility::sparql_types::Triples>();
+  ASSERT_THAT(triples, ::testing::SizeIs(3));
+
+  using ::testing::ElementsAre;
+  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
+                                      IsIri(first),            //
+                                      IsVariable("?a")));
+
+  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "0"),  //
+                                      IsIri(rest),             //
+                                      IsIri(nil)));
+
+  EXPECT_THAT(triples[2], ElementsAre(IsBlankNode(true, "0"),  //
+                                      IsVariable("?b"),        //
+                                      IsVariable("?c")));
+}
+
+TEST(SparqlParser, TriplesSameSubjectTriplesNodeEmptyPropertyList) {
+  string input = "(?a)";
+  ParserAndVisitor p{input};
+
+  auto triples = p.parser.triplesSameSubject()
+                     ->accept(&p.visitor)
+                     .as<ad_utility::sparql_types::Triples>();
+  ASSERT_THAT(triples, ::testing::SizeIs(2));
+
+  using ::testing::ElementsAre;
+  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
+                                      IsIri(first),            //
+                                      IsVariable("?a")));
+
+  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "0"),  //
+                                      IsIri(rest),             //
+                                      IsIri(nil)));
+}
+
+TEST(SparqlParser, PropertyList) {
+  string input = "a ?a";
+  ParserAndVisitor p{input};
+
+  auto propertyList = p.parser.propertyList()
+                          ->accept(&p.visitor)
+                          .as<ad_utility::sparql_types::PropertyList>();
+  EXPECT_THAT(propertyList.second, ::testing::IsEmpty());
+
+  const auto& tuples = propertyList.first;
+  ASSERT_THAT(tuples, ::testing::SizeIs(1));
+
+  using ::testing::ElementsAre;
+  EXPECT_THAT(tuples[0], ElementsAre(IsIri(type), IsVariable("?a")));
+}
+
+TEST(SparqlParser, EmptyPropertyList) {
+  ParserAndVisitor p{""};
+
+  auto propertyList = p.parser.propertyList()
+                          ->accept(&p.visitor)
+                          .as<ad_utility::sparql_types::PropertyList>();
+  ASSERT_THAT(propertyList.first, ::testing::IsEmpty());
+  ASSERT_THAT(propertyList.second, ::testing::IsEmpty());
+}
+
+TEST(SparqlParser, PropertyListNotEmptySingletonWithTerminator) {
+  string input = "a ?a ;";
+  ParserAndVisitor p{input};
+
+  auto propertyList = p.parser.propertyListNotEmpty()
+                          ->accept(&p.visitor)
+                          .as<ad_utility::sparql_types::PropertyList>();
+  EXPECT_THAT(propertyList.second, ::testing::IsEmpty());
+
+  const auto& tuples = propertyList.first;
+  ASSERT_THAT(tuples, ::testing::SizeIs(1));
+
+  using ::testing::ElementsAre;
+  EXPECT_THAT(tuples[0], ElementsAre(IsIri(type), IsVariable("?a")));
+}
+
+TEST(SparqlParser, PropertyListNotEmptyWithTerminator) {
+  string input = "a ?a ; a ?b ; a ?c ;";
+  ParserAndVisitor p{input};
+
+  auto propertyList = p.parser.propertyListNotEmpty()
+                          ->accept(&p.visitor)
+                          .as<ad_utility::sparql_types::PropertyList>();
+  EXPECT_THAT(propertyList.second, ::testing::IsEmpty());
+
+  const auto& tuples = propertyList.first;
+  ASSERT_THAT(tuples, ::testing::SizeIs(3));
+
+  using ::testing::ElementsAre;
+  EXPECT_THAT(tuples[0], ElementsAre(IsIri(type), IsVariable("?a")));
+  EXPECT_THAT(tuples[1], ElementsAre(IsIri(type), IsVariable("?b")));
+  EXPECT_THAT(tuples[2], ElementsAre(IsIri(type), IsVariable("?c")));
+}
+
+TEST(SparqlParser, VerbA) {
+  string input = "a";
+  ParserAndVisitor p{input};
+
+  auto varOrTerm = p.parser.verb()->accept(&p.visitor).as<VarOrTerm>();
+  ASSERT_THAT(varOrTerm, IsIri(type));
+}
+
+TEST(SparqlParser, VerbVariable) {
+  string input = "?a";
+  ParserAndVisitor p{input};
+
+  auto varOrTerm = p.parser.verb()->accept(&p.visitor).as<VarOrTerm>();
+  ASSERT_THAT(varOrTerm, IsVariable("?a"));
+}
+
+TEST(SparqlParser, ObjectListSingleton) {
+  string input = "?a";
+  ParserAndVisitor p{input};
+
+  auto objectList = p.parser.objectList()
+                        ->accept(&p.visitor)
+                        .as<ad_utility::sparql_types::ObjectList>();
+  EXPECT_THAT(objectList.second, ::testing::IsEmpty());
+
+  const auto& objects = objectList.first;
+  ASSERT_THAT(objects, ::testing::SizeIs(1));
+  ASSERT_THAT(objects[0], IsVariable("?a"));
+}
+
+TEST(SparqlParser, ObjectList) {
+  string input = "?a , ?b , ?c";
+  ParserAndVisitor p{input};
+
+  auto objectList = p.parser.objectList()
+                        ->accept(&p.visitor)
+                        .as<ad_utility::sparql_types::ObjectList>();
+  EXPECT_THAT(objectList.second, ::testing::IsEmpty());
+
+  const auto& objects = objectList.first;
+  ASSERT_THAT(objects, ::testing::SizeIs(3));
+  ASSERT_THAT(objects[0], IsVariable("?a"));
+  ASSERT_THAT(objects[1], IsVariable("?b"));
+  ASSERT_THAT(objects[2], IsVariable("?c"));
+}
+
+TEST(SparqlParser, BlankNodePropertyList) {
+  string input = "[ a ?a ; a ?b ; a ?c ]";
+  ParserAndVisitor p{input};
+
+  auto node = p.parser.blankNodePropertyList()
+                  ->accept(&p.visitor)
+                  .as<ad_utility::sparql_types::Node>();
+  EXPECT_THAT(node.first, IsBlankNode(true, "0"));
+
+  const auto& triples = node.second;
+  ASSERT_THAT(triples, ::testing::SizeIs(3));
+
+  using ::testing::ElementsAre;
+  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
+                                      IsIri(type),             //
+                                      IsVariable("?a")));
+
+  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "0"),  //
+                                      IsIri(type),             //
+                                      IsVariable("?b")));
+
+  EXPECT_THAT(triples[2], ElementsAre(IsBlankNode(true, "0"),  //
+                                      IsIri(type),             //
+                                      IsVariable("?c")));
+}
+
+TEST(SparqlParser, GraphNodeVarOrTerm) {
+  string input = "?a";
+  ParserAndVisitor p{input};
+
+  auto node = p.parser.graphNode()
+                  ->accept(&p.visitor)
+                  .as<ad_utility::sparql_types::Node>();
+  EXPECT_THAT(node.first, IsVariable("?a"));
+  EXPECT_THAT(node.second, ::testing::IsEmpty());
+}
+
+TEST(SparqlParser, GraphNodeTriplesNode) {
+  string input = "(?a)";
+  ParserAndVisitor p{input};
+
+  auto node = p.parser.graphNode()
+                  ->accept(&p.visitor)
+                  .as<ad_utility::sparql_types::Node>();
+  EXPECT_THAT(node.first, IsBlankNode(true, "0"));
+
+  const auto& triples = node.second;
+  ASSERT_THAT(triples, ::testing::SizeIs(2));
+
+  using ::testing::ElementsAre;
+  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
+                                      IsIri(first),            //
+                                      IsVariable("?a")));
+
+  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "0"),  //
+                                      IsIri(rest),             //
+                                      IsIri(nil)));
+}
+
+TEST(SparqlParser, VarOrTermVariable) {
+  string input = "?a";
+  ParserAndVisitor p{input};
+
+  auto varOrTerm = p.parser.varOrTerm()->accept(&p.visitor).as<VarOrTerm>();
+  EXPECT_THAT(varOrTerm, IsVariable("?a"));
+}
+
+TEST(SparqlParser, VarOrTermGraphTerm) {
+  string input = "()";
+  ParserAndVisitor p{input};
+
+  auto varOrTerm = p.parser.varOrTerm()->accept(&p.visitor).as<VarOrTerm>();
+  EXPECT_THAT(varOrTerm, IsIri(nil));
+}
+
+TEST(SparqlParser, VarOrIriVariable) {
+  string input = "?a";
+  ParserAndVisitor p{input};
+
+  auto varOrTerm = p.parser.varOrIri()->accept(&p.visitor).as<VarOrTerm>();
+  EXPECT_THAT(varOrTerm, IsVariable("?a"));
+}
+
+TEST(SparqlParser, VarOrIriIri) {
+  string input = "<http://testiri>";
+  ParserAndVisitor p{input};
+
+  auto varOrTerm = p.parser.varOrIri()->accept(&p.visitor).as<VarOrTerm>();
+  EXPECT_THAT(varOrTerm, IsIri(input));
+}
+
+TEST(SparqlParser, VariableWithQuestionMark) {
+  string input = "?variableName";
+  ParserAndVisitor p{input};
+
+  auto variable = p.parser.var()->accept(&p.visitor).as<Variable>();
+  EXPECT_THAT(variable, IsVariable(input));
+}
+
+TEST(SparqlParser, VariableWithDollarSign) {
+  string input = "$variableName";
+  ParserAndVisitor p{input};
+
+  auto variable = p.parser.var()->accept(&p.visitor).as<Variable>();
+  EXPECT_THAT(variable, IsVariable("?variableName"));
 }
