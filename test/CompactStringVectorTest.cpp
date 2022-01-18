@@ -12,12 +12,20 @@ std::vector<std::string> strings{"alpha", "b", "3920193",
                                  "<Qlever-internal-langtag>"};
 std::vector<std::vector<int>> ints{{1, 2, 3}, {42}, {6, 5, -4, 96}};
 
-auto equalWithIndex = [](const auto& compactVec, const auto& compareVec) {
+auto iterablesEqual(const auto& a, const auto& b) {
+  ASSERT_EQ(a.size(), b.size());
+  for (size_t i = 0; i < a.size(); ++i) {
+    ASSERT_EQ(a[i], b[i]);
+  }
+}
+
+static auto equalWithIndex = [](const auto& compactVec,
+                                const auto& compareVec) {
   ASSERT_EQ(compactVec.size(), compareVec.size());
   for (size_t i = 0; i < compactVec.size(); ++i) {
     using value_type = typename std::decay_t<decltype(compareVec)>::value_type;
     value_type a(compactVec[i].begin(), compactVec[i].end());
-    ASSERT_EQ(a, compareVec[i]);
+    iterablesEqual(a, compareVec[i]);
   }
 };
 
@@ -68,52 +76,69 @@ TEST(CompactStringVector, IteratorCategory) {
 }
 
 TEST(CompactStringVector, Serialization) {
-  {
-    StringVec w;
-    w.build(strings);
-    ad_utility::serialization::FileWriteSerializer ser{"_writerTest.dat"};
-    ser << w;
-  }  // The destructor finishes writing the file.
+  auto testForVec = [](const auto& vectorForType, auto& input) {
+    using V = std::decay_t<decltype(vectorForType)>;
+    {
+      V vector;
+      vector.build(input);
+      ad_utility::serialization::FileWriteSerializer ser{"_writerTest.dat"};
+      ser << vector;
+    }  // The destructor finishes writing the file.
 
-  CompactStringVector<char> v;
-  ad_utility::serialization::FileReadSerializer ser{"_writerTest.dat"};
-  ser >> v;
+    V vector;
+    ad_utility::serialization::FileReadSerializer ser{"_writerTest.dat"};
+    ser >> vector;
 
-  equalWithIndex(strings, v);
+    equalWithIndex(input, vector);
 
-  ad_utility::deleteFile("_writerTest.dat");
+    ad_utility::deleteFile("_writerTest.dat");
+  };
+
+  testForVec(StringVec{}, strings);
+  testForVec(IntVec{}, ints);
 }
 
 TEST(CompactStringVector, SerializationWithPush) {
-  {
-    CompactStringVectorWriter<char> w{"_writerTest.dat"};
-    for (const auto& s : strings) {
-      w.push(s.data(), s.size());
-    }
-  }  // The constructor finishes writing the file.
+  auto testForVec = [](const auto& vectorForType, auto& input) {
+    using V = std::decay_t<decltype(vectorForType)>;
+    {
+      typename V::Writer w{"_writerTest.dat"};
+      for (const auto& s : input) {
+        w.push(s.data(), s.size());
+      }
+    }  // The constructor finishes writing the file.
 
-  CompactStringVector<char> v;
-  ad_utility::serialization::FileReadSerializer ser{"_writerTest.dat"};
-  ser >> v;
+    V vector;
+    ad_utility::serialization::FileReadSerializer ser{"_writerTest.dat"};
+    ser >> vector;
 
-  equalWithIndex(strings, v);
+    equalWithIndex(input, vector);
 
-  ad_utility::deleteFile("_writerTest.dat");
+    ad_utility::deleteFile("_writerTest.dat");
+  };
+  testForVec(StringVec{}, strings);
+  testForVec(IntVec{}, ints);
 }
 
 TEST(CompactStringVector, DiskIterator) {
-  {
-    CompactStringVectorWriter<char> w{"_writerTest.dat"};
-    for (const auto& s : strings) {
-      w.push(s.data(), s.size());
+  auto testForVec = [](const auto& vectorForType, auto& input) {
+    using V = std::decay_t<decltype(vectorForType)>;
+    {
+      typename V::Writer w{"_writerTest.dat"};
+      for (const auto& s : input) {
+        w.push(s.data(), s.size());
+      }
+    }  // The constructor finishes writing the file.
+
+    auto iterator = V::diskIterator("_writerTest.dat");
+
+    size_t i = 0;
+    for (const auto& el : iterator) {
+      ASSERT_EQ(el, input[i++]);
     }
-  }  // The constructor finishes writing the file.
-
-  auto iterator = CompactStringVectorDiskIterator<char>("_writerTest.dat");
-
-  size_t i = 0;
-  for (auto el : iterator) {
-    ASSERT_EQ(el, strings[i++]);
-  }
-  ASSERT_EQ(i, strings.size());
-}
+    ASSERT_EQ(i, input.size());
+    ad_utility::deleteFile("_writerTest.dat");
+  };
+  testForVec(StringVec{}, strings);
+  testForVec(IntVec{}, ints);
+};

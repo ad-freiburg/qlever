@@ -348,9 +348,9 @@ class Vocabulary {
   ComparatorType _caseComparator;
 
  public:
-  using WordWriter = CompactStringVectorWriter<char>;
+  using WordWriter = decltype(_words)::Writer;
   static auto wordReader(const string& filename) {
-    return CompactStringVectorDiskIterator<char>(filename);
+    return decltype(_words)::diskIterator(filename);
   }
 };
 

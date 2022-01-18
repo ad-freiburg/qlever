@@ -84,6 +84,12 @@ struct Pattern {
   std::vector<Id> _data;
 };
 
+namespace detail {
+template <typename DataT>
+struct CompactStringVectorWriter;
+
+}
+
 /**
  * @brief Stores a list of variable length data of a single type (e.g.
  *        c-style strings). The data is stored in a single contiguous block
@@ -98,6 +104,8 @@ class CompactStringVector {
                          std::span<const DataT>>;
   using vector_type = std::conditional_t<std::is_same_v<DataT, char>,
                                          std::string, std::vector<DataT>>;
+
+  using Writer = detail::CompactStringVectorWriter<DataT>;
   CompactStringVector() = default;
 
   explicit CompactStringVector(const std::vector<std::vector<DataT>>& input) {
@@ -158,6 +166,10 @@ class CompactStringVector {
     size_t size = _offsets[i + 1] - offset;
     return {ptr, size};
   }
+
+  // Forward iterator for a `CompactStringVector` that reads directly from
+  // disk without buffering the whole `Vector`.
+  static cppcoro::generator<vector_type> diskIterator(const string& filename);
 
   class Iterator {
    private:
@@ -251,7 +263,8 @@ class CompactStringVector {
   std::vector<offset_type> _offsets;
 };
 
-// Allows the incremental writing of a `CompacStringVector` directly to a file.
+namespace detail {
+// Allows the incremental writing of a `CompactStringVector` directly to a file.
 template <typename DataT>
 struct CompactStringVectorWriter {
   ad_utility::File _file;
@@ -290,12 +303,13 @@ struct CompactStringVectorWriter {
     }
   }
 };
+}  // namespace detail
 
 // Forward iterator for a `CompactStringVector` that reads directly from
 // disk without buffering the whole `Vector`.
 template <typename DataT>
 cppcoro::generator<typename CompactStringVector<DataT>::vector_type>
-CompactStringVectorDiskIterator(const string& filename) {
+CompactStringVector<DataT>::diskIterator(const string& filename) {
   ad_utility::File dataFile{filename, "r"};
   ad_utility::File indexFile{filename, "r"};
   AD_CHECK(dataFile.isOpen());
@@ -303,6 +317,8 @@ CompactStringVectorDiskIterator(const string& filename) {
 
   size_t dataSize;
   dataFile.read(&dataSize, sizeof(dataSize));
+
+  dataSize *= sizeof(DataT);
 
   indexFile.seek(sizeof(dataSize) + dataSize, SEEK_SET);
   size_t size;
@@ -317,7 +333,7 @@ CompactStringVectorDiskIterator(const string& filename) {
     size_t nextOffset;
     indexFile.read(&nextOffset, sizeof(nextOffset));
     auto currentSize = nextOffset - offset;
-    typename CompactStringVector<DataT>::vector_type result;
+    vector_type result;
     result.resize(currentSize);
     dataFile.read(result.data(), currentSize * sizeof(DataT));
     co_yield result;
