@@ -15,9 +15,9 @@ TEST(ExternalVocabularyTest, getWordbyIdTest) {
   {
     ExternalVocabulary<SimpleStringComparator> ev;
     ev.buildFromVector(v, "__tmp.evtest");
-    ASSERT_EQ("a", ev[0]);
-    ASSERT_EQ("ba", ev[2]);
-    ASSERT_EQ("car", ev[3]);
+    ASSERT_EQ("a", *ev[0]);
+    ASSERT_EQ("ba", *ev[2]);
+    ASSERT_EQ("car", *ev[3]);
   }
   remove("__tmo.evtest");
 };

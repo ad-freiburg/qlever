@@ -92,6 +92,8 @@ class Vocabulary {
                                   std::is_same_v<StringType, CompressedString>>>
 
   Vocabulary(){};
+  Vocabulary& operator=(Vocabulary&&) noexcept = default;
+  Vocabulary(Vocabulary&&) noexcept = default;
 
   // variable for dispatching
   static constexpr bool _isCompressed =

@@ -9,10 +9,26 @@
 
 #include "../global/Id.h"
 #include "../util/File.h"
+#include "../util/MmapVector.h"
 #include "StringSortComparator.h"
 
 using std::string;
 using std::vector;
+
+struct IdAndOffset {
+  uint64_t _id;
+  uint64_t _offset;
+
+  // Compare only by the ids, since they are unique
+  auto operator<=>(const IdAndOffset& rhs) const {
+    return _id <=> rhs._id;
+  }
+};
+
+struct OffsetAndSize {
+  uint64_t _offset;
+  uint64_t _size;
+};
 
 //! On-disk vocabulary. Very small (O(1)) memory consumption.
 //! Layout: <term1><term2>..<termn><offsets><startOfOffsets>
@@ -37,25 +53,38 @@ class ExternalVocabulary {
   //! (as non-reference, returning a cost ref is not possible, because the
   //! string does not necessarily already exist in memory - unlike for an
   //! internal vocabulary)
-  string operator[](Id id) const;
+  std::optional<string> operator[](Id id) const;
 
   //! Get the number of words in the vocabulary.
-  size_t size() const { return _size; }
+  size_t size() const { return idsAndOffsets().size() - 1; }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
   bool getId(const string& word, Id* id) const {
     *id = binarySearchInVocab(word);
-    return *id < _size && (*this)[*id] == word;
+    return *id < size() && (*this)[*id] == word;
   }
 
   StringComparator& getCaseComparator() { return _caseComparator; }
 
+  ExternalVocabulary() = default;
+  ExternalVocabulary(ExternalVocabulary&&) noexcept = default;
+  ExternalVocabulary& operator=(ExternalVocabulary&&) noexcept = default;
+
  private:
   mutable ad_utility::File _file;
-  off_t _startOfOffsets;
-  size_t _size = 0;
+  ad_utility::MmapVectorView<IdAndOffset> _idsAndOffsets;
+
+  const auto& idsAndOffsets() const {return _idsAndOffsets;}
+
   StringComparator _caseComparator;
 
   Id binarySearchInVocab(const string& word) const;
+
+  std::optional<OffsetAndSize> getOffsetAndSize(Id id) const;
+
+  template<class Iterable>
+  void buildFromIterable(Iterable&& iterable, const string& filename);
+
+  inline static const std::string _offsetSuffix = ".idsAndOffsets.mmap";
 };
