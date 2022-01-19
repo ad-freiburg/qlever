@@ -7,11 +7,12 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <set>
 
 struct SparqlToken {
   enum class Type {
-    IRI,
-    WS,
+    IRI, /* Internationalized Resource Identifiers */
+    WS, /* White Space */
     KEYWORD,
     GROUP_BY,
     ORDER_BY,
@@ -47,7 +48,7 @@ class SparqlLexer {
   static const RegexTokenMap& getRegexTokenMap();
 
  public:
-  SparqlLexer(const std::string& sparql);
+  explicit SparqlLexer(const std::string& sparql);
 
   // Copying and moving is disallowed, the default behavior is wrong,
   // and we don't need it.
@@ -60,7 +61,7 @@ class SparqlLexer {
   void reset(std::string sparql);
 
   // True if the entire input stream was consumed
-  bool empty() const;
+  [[nodiscard]] bool empty() const;
 
   bool accept(SparqlToken::Type type);
   bool accept(const std::string& raw, bool match_case = true);
@@ -75,7 +76,7 @@ class SparqlLexer {
   void expectEmpty();
 
   const SparqlToken& current();
-  const std::string& input() const;
+  [[nodiscard]] const std::string& input() const;
 
   // Get the part of the input that has not yet been consumed by calls to
   // `accept` or `expect`
@@ -84,6 +85,8 @@ class SparqlLexer {
         _next.raw.empty() || _re_string.ToString().empty() ? "" : " ";
     return _next.raw + delimiter + _re_string.ToString();
   }
+
+  std::set<std::string> readVarsForAsterisk();
 
  private:
   void readNext();

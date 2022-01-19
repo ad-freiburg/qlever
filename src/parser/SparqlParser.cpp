@@ -5,6 +5,7 @@
 #include "./SparqlParser.h"
 
 #include <unordered_set>
+#include <set>
 
 #include "../global/Constants.h"
 #include "../util/Conversions.h"
@@ -15,6 +16,7 @@
 #include "./ParseException.h"
 #include "./SparqlParserHelpers.h"
 #include "PropertyPathParser.h"
+
 
 using namespace std::literals::string_literals;
 
@@ -189,6 +191,13 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       selectClause._aliases.push_back(a);
       selectClause._selectedVariables.emplace_back(a._outVarName);
       _lexer.expect(")");
+    } else if (_lexer.accept("*")) {
+      // check all variables (expect in commentary/alias AND in "where"-clause)
+      std::set<std::string> foundVars = _lexer.readVarsForAsterisk();
+      for (const auto & foundVar : foundVars) {
+        selectClause._selectedVariables.push_back(foundVar);
+      }
+      _lexer.expect("where");
     } else {
       _lexer.accept();
       throw ParseException("Error in SELECT: unexpected token: " +
