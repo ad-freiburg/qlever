@@ -16,12 +16,12 @@ void serialize(Serializer& serializer, std::vector<T, Alloc>& vector) {
                 std::is_default_constructible_v<T>) {
     if constexpr (Serializer::IsWriteSerializer) {
       serializer << vector.size();
-      serializer.serializeBytes(vector.data(), vector.size() * sizeof(T));
+      serializer.serializeBytes(reinterpret_cast<const char*>(vector.data()), vector.size() * sizeof(T));
     } else {
       auto size = vector.size();  // just to get the right type
       serializer >> size;
       vector.resize(size);
-      serializer.serializeBytes(vector.data(), vector.size() * sizeof(T));
+      serializer.serializeBytes(reinterpret_cast<char*>(vector.data()), vector.size() * sizeof(T));
     }
 
   } else {
