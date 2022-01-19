@@ -1,6 +1,6 @@
-//
-// Created by johannes on 01.05.21.
-//
+//  Copyright 2021, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SERIALIZEVECTOR_H
 #define QLEVER_SERIALIZEVECTOR_H
@@ -8,7 +8,6 @@
 #include <type_traits>
 #include <vector>
 
-// TODO<joka921> : optimization for trivially serializable types
 namespace ad_utility::serialization {
 template <typename Serializer, typename T, typename Alloc>
 void serialize(Serializer& serializer, std::vector<T, Alloc>& vector) {
