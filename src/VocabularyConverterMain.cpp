@@ -40,7 +40,7 @@ int main(int argc, char** argv) {
     }
   }
 
-  CompactStringVector<char>::Writer writer{"outFileName"};
+  CompactStringVector<char>::Writer writer{outFileName};
   LOG(INFO) << "Reading vocabulary from file " << inFileName << "\n";
   std::fstream in(inFileName.c_str(), std::ios_base::in);
   string line;
