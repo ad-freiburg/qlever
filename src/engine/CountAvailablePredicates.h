@@ -99,17 +99,17 @@ class CountAvailablePredicates : public Operation {
    *                      relations should be counted.
    */
   template <int I>
-  static void computePatternTrick(const IdTable& input, IdTable* result,
-                                  const vector<PatternID>& hasPattern,
-                                  const CompactStringVector<Id>& hasPredicate,
-                                  const CompactStringVector<size_t>& patterns,
-                                  size_t subjectColumn,
-                                  RuntimeInformation* runtimeInfo);
+  static void computePatternTrick(
+      const IdTable& input, IdTable* result,
+      const vector<PatternID>& hasPattern,
+      const CompactVectorOfStrings<Id>& hasPredicate,
+      const CompactVectorOfStrings<size_t>& patterns, size_t subjectColumn,
+      RuntimeInformation* runtimeInfo);
 
   static void computePatternTrickAllEntities(
       IdTable* result, const vector<PatternID>& hasPattern,
-      const CompactStringVector<Id>& hasPredicate,
-      const CompactStringVector<size_t>& patterns);
+      const CompactVectorOfStrings<Id>& hasPredicate,
+      const CompactVectorOfStrings<size_t>& patterns);
 
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;

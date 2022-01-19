@@ -343,13 +343,13 @@ class Vocabulary {
   vector<std::string> _internalizedLangs{"en"};
 
   // vector<StringType> _words;
-  CompactStringVector<char> _words;
+  CompactVectorOfStrings<char> _words;
   ExternalVocabulary<ComparatorType> _externalLiterals;
   ComparatorType _caseComparator;
 
  public:
   using WordWriter = decltype(_words)::Writer;
-  static auto wordReader(const string& filename) {
+  static auto makeWordDiskIterator(const string& filename) {
     return decltype(_words)::diskIterator(filename);
   }
 };

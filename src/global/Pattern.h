@@ -95,35 +95,36 @@ struct CompactStringVectorWriter;
  *        c-style strings). The data is stored in a single contiguous block
  *        of memory.
  */
-template <typename DataT>
-class CompactStringVector {
+template <typename data_type>
+class CompactVectorOfStrings {
  public:
   using offset_type = uint64_t;
   using value_type =
-      std::conditional_t<std::is_same_v<DataT, char>, std::string_view,
-                         std::span<const DataT>>;
-  using vector_type = std::conditional_t<std::is_same_v<DataT, char>,
-                                         std::string, std::vector<DataT>>;
+      std::conditional_t<std::is_same_v<data_type, char>, std::string_view,
+                         std::span<const data_type>>;
+  using vector_type = std::conditional_t<std::is_same_v<data_type, char>,
+                                         std::string, std::vector<data_type>>;
 
-  using Writer = detail::CompactStringVectorWriter<DataT>;
-  CompactStringVector() = default;
+  using Writer = detail::CompactStringVectorWriter<data_type>;
+  CompactVectorOfStrings() = default;
 
-  explicit CompactStringVector(const std::vector<std::vector<DataT>>& input) {
+  explicit CompactVectorOfStrings(
+      const std::vector<std::vector<data_type>>& input) {
     build(input);
   }
 
-  void clear() { *this = CompactStringVector{}; }
+  void clear() { *this = CompactVectorOfStrings{}; }
 
-  virtual ~CompactStringVector() = default;
+  virtual ~CompactVectorOfStrings() = default;
 
   /**
-   * @brief Fills this CompactStringVector with input.
+   * @brief Fills this CompactVectorOfStrings with input.
    * @param The input from which to build the vector.
    */
   template <typename T>
   requires requires(T t) {
     { *(t.begin()->begin()) }
-    ->ad_utility::SimilarTo<DataT>;
+    ->ad_utility::SimilarTo<data_type>;
   }
   void build(const T& input) {
     // Also make room for the end offset of the last element.
@@ -133,7 +134,7 @@ class CompactStringVector {
       _offsets.push_back(dataSize);
       dataSize += element.size();
     }
-    // Add the end offset of the last element.
+    // Add the offset right after the last element.
     _offsets.push_back(dataSize);
 
     _data.reserve(dataSize);
@@ -144,10 +145,11 @@ class CompactStringVector {
   }
 
   // This is a move-only type.
-  CompactStringVector& operator=(const CompactStringVector&) = delete;
-  CompactStringVector& operator=(CompactStringVector&&) noexcept = default;
-  CompactStringVector(const CompactStringVector&) = delete;
-  CompactStringVector(CompactStringVector&&) noexcept = default;
+  CompactVectorOfStrings& operator=(const CompactVectorOfStrings&) = delete;
+  CompactVectorOfStrings& operator=(CompactVectorOfStrings&&) noexcept =
+      default;
+  CompactVectorOfStrings(const CompactVectorOfStrings&) = delete;
+  CompactVectorOfStrings(CompactVectorOfStrings&&) noexcept = default;
 
   // There is one more offset than the number of elements.
   size_t size() const { return _offsets.size() - 1; }
@@ -162,26 +164,26 @@ class CompactStringVector {
    */
   const value_type operator[](size_t i) const {
     offset_type offset = _offsets[i];
-    const DataT* ptr = _data.data() + offset;
+    const data_type* ptr = _data.data() + offset;
     size_t size = _offsets[i + 1] - offset;
     return {ptr, size};
   }
 
-  // Forward iterator for a `CompactStringVector` that reads directly from
+  // Forward iterator for a `CompactVectorOfStrings` that reads directly from
   // disk without buffering the whole `Vector`.
   static cppcoro::generator<vector_type> diskIterator(const string& filename);
 
   class Iterator {
    private:
-    const CompactStringVector* _vector = nullptr;
+    const CompactVectorOfStrings* _vector = nullptr;
     size_t _index = 0;
 
    public:
     using iterator_category = std::random_access_iterator_tag;
     using difference_type = int64_t;
-    using value_type = CompactStringVector::value_type;
+    using value_type = CompactVectorOfStrings::value_type;
 
-    Iterator(const CompactStringVector* vec, size_t index)
+    Iterator(const CompactVectorOfStrings* vec, size_t index)
         : _vector{vec}, _index{index} {}
     Iterator() = default;
 
@@ -252,23 +254,24 @@ class CompactStringVector {
 
   // Allow serialization via the ad_utility::serialization interface.
   template <typename Serializer>
-  friend void serialize(Serializer& s, CompactStringVector& c) {
+  friend void serialize(Serializer& s, CompactVectorOfStrings& c) {
     s | c._data;
     s | c._offsets;
     ;
   }
 
  private:
-  std::vector<DataT> _data;
+  std::vector<data_type> _data;
   std::vector<offset_type> _offsets;
 };
 
 namespace detail {
-// Allows the incremental writing of a `CompactStringVector` directly to a file.
-template <typename DataT>
+// Allows the incremental writing of a `CompactVectorOfStrings` directly to a
+// file.
+template <typename data_type>
 struct CompactStringVectorWriter {
   ad_utility::File _file;
-  using offset_type = typename CompactStringVector<DataT>::offset_type;
+  using offset_type = typename CompactVectorOfStrings<data_type>::offset_type;
   std::vector<offset_type> _offsets;
   bool _finished = false;
   offset_type _nextOffset = 0;
@@ -280,11 +283,11 @@ struct CompactStringVectorWriter {
     _file.write(&dataSizeDummy, sizeof(dataSizeDummy));
   }
 
-  void push(const DataT* data, size_t elementSize) {
+  void push(const data_type* data, size_t elementSize) {
     AD_CHECK(!_finished);
     _offsets.push_back(_nextOffset);
     _nextOffset += elementSize;
-    _file.write(data, elementSize * sizeof(DataT));
+    _file.write(data, elementSize * sizeof(data_type));
   }
 
   void finish() {
@@ -305,22 +308,23 @@ struct CompactStringVectorWriter {
 };
 }  // namespace detail
 
-// Forward iterator for a `CompactStringVector` that reads directly from
+// Forward iterator for a `CompactVectorOfStrings` that reads directly from
 // disk without buffering the whole `Vector`.
 template <typename DataT>
-cppcoro::generator<typename CompactStringVector<DataT>::vector_type>
-CompactStringVector<DataT>::diskIterator(const string& filename) {
+cppcoro::generator<typename CompactVectorOfStrings<DataT>::vector_type>
+CompactVectorOfStrings<DataT>::diskIterator(const string& filename) {
   ad_utility::File dataFile{filename, "r"};
   ad_utility::File indexFile{filename, "r"};
   AD_CHECK(dataFile.isOpen());
   AD_CHECK(indexFile.isOpen());
 
-  size_t dataSize;
-  dataFile.read(&dataSize, sizeof(dataSize));
+  const size_t dataSizeInBytes = [&]() {
+    size_t dataSize;
+    dataFile.read(&dataSize, sizeof(dataSize));
+    return dataSize * sizeof(DataT);
+  }();
 
-  dataSize *= sizeof(DataT);
-
-  indexFile.seek(sizeof(dataSize) + dataSize, SEEK_SET);
+  indexFile.seek(sizeof(dataSizeInBytes) + dataSizeInBytes, SEEK_SET);
   size_t size;
   indexFile.read(&size, sizeof(size));
 

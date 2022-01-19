@@ -138,7 +138,8 @@ TEST(Serializer, Vector) {
     ASSERT_EQ(v, w);
   };
 
-  auto testNonTrivialDatatype = [](auto&& writer, auto makeReaderFromWriter) {
+  auto testNonTriviallyCopyableDatatype = [](auto&& writer,
+                                             auto makeReaderFromWriter) {
     std::vector<std::string> v{"hi",          "bye",      "someone",
                                "someoneElse", "23059178", "-42"};
     writer | v;
@@ -150,5 +151,5 @@ TEST(Serializer, Vector) {
   };
 
   testWithAllSerializers(testTriviallyCopyableDatatype);
-  testWithAllSerializers(testNonTrivialDatatype);
+  testWithAllSerializers(testNonTriviallyCopyableDatatype);
 }

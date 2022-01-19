@@ -111,7 +111,7 @@ void Index::createFromFile(const string& filename) {
   auto internalVocabularyAction = [&wordWriter](const auto& word) {
     wordWriter.push(word.data(), word.size());
   };
-  auto wordReader = decltype(_vocab)::wordReader(vocabFile);
+  auto wordReader = decltype(_vocab)::makeWordDiskIterator(vocabFile);
   Vocabulary<CompressedString, TripleComponentComparator>::prefixCompressFile(
       std::move(wordReader), prefixes, internalVocabularyAction);
   LOG(INFO) << "Finished writing compressed vocabulary" << std::endl;
@@ -606,8 +606,8 @@ void Index::createPatterns(bool vecAlreadySorted, VocabularyData* vocabData) {
 // _____________________________________________________________________________
 template <typename VecReaderType, typename... Args>
 void Index::createPatternsImpl(
-    const string& fileName, CompactStringVector<Id>& hasPredicate,
-    std::vector<PatternID>& hasPattern, CompactStringVector<Id>& patterns,
+    const string& fileName, CompactVectorOfStrings<Id>& hasPredicate,
+    std::vector<PatternID>& hasPattern, CompactVectorOfStrings<Id>& patterns,
     double& fullHasPredicateMultiplicityEntities,
     double& fullHasPredicateMultiplicityPredicates,
     size_t& fullHasPredicateSize, const size_t maxNumPatterns,
@@ -1053,13 +1053,13 @@ const vector<PatternID>& Index::getHasPattern() const {
 }
 
 // _____________________________________________________________________________
-const CompactStringVector<Id>& Index::getHasPredicate() const {
+const CompactVectorOfStrings<Id>& Index::getHasPredicate() const {
   throwExceptionIfNoPatterns();
   return _hasPredicate;
 }
 
 // _____________________________________________________________________________
-const CompactStringVector<Id>& Index::getPatterns() const {
+const CompactVectorOfStrings<Id>& Index::getPatterns() const {
   throwExceptionIfNoPatterns();
   return _patterns;
 }

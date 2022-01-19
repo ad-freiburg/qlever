@@ -19,31 +19,32 @@ auto iterablesEqual(const auto& a, const auto& b) {
   }
 }
 
-static auto equalWithIndex = [](const auto& compactVec,
-                                const auto& compareVec) {
-  ASSERT_EQ(compactVec.size(), compareVec.size());
-  for (size_t i = 0; i < compactVec.size(); ++i) {
-    using value_type = typename std::decay_t<decltype(compareVec)>::value_type;
-    value_type a(compactVec[i].begin(), compactVec[i].end());
-    iterablesEqual(a, compareVec[i]);
+static auto vectorsEqual = [](const auto& compactVector,
+                              const auto& compareVector) {
+  ASSERT_EQ(compactVector.size(), compareVector.size());
+  for (size_t i = 0; i < compactVector.size(); ++i) {
+    using value_type =
+        typename std::decay_t<decltype(compareVector)>::value_type;
+    value_type a(compactVector[i].begin(), compactVector[i].end());
+    iterablesEqual(a, compareVector[i]);
   }
 };
 
-using StringVec = CompactStringVector<char>;
-using IntVec = CompactStringVector<int>;
+using CompactVectorChar = CompactVectorOfStrings<char>;
+using CompactVectorInt = CompactVectorOfStrings<int>;
 
-TEST(CompactStringVector, Build) {
-  IntVec i;
+TEST(CompactVectorOfStrings, Build) {
+  CompactVectorInt i;
   i.build(ints);
-  equalWithIndex(i, ints);
+  vectorsEqual(i, ints);
 
-  StringVec s;
+  CompactVectorChar s;
   s.build(strings);
-  equalWithIndex(s, strings);
+  vectorsEqual(s, strings);
 }
 
-TEST(CompactStringVector, Iterator) {
-  StringVec s;
+TEST(CompactVectorOfStrings, Iterator) {
+  CompactVectorChar s;
   s.build(strings);
 
   auto it = s.begin();
@@ -59,10 +60,12 @@ TEST(CompactStringVector, Iterator) {
   ASSERT_EQ(strings[2], it[2]);
   ASSERT_EQ(strings[2], *(it + 2));
   ASSERT_EQ(strings[2], *(2 + it));
-  ASSERT_EQ(strings[2], *(it += 2));
+  ASSERT_EQ(strings[3], *(it += 3));
+  ASSERT_EQ(strings[2], *(it += -1));
   ASSERT_EQ(strings[2], *(it));
   ASSERT_EQ(strings[0], *(it -= 2));
-  ASSERT_EQ(strings[0], *(it));
+  ASSERT_EQ(strings[2], *(it -= -2));
+  ASSERT_EQ(strings[2], *(it));
 
   it = s.end() + (-1);
   ASSERT_EQ(strings.back(), *it);
@@ -70,14 +73,13 @@ TEST(CompactStringVector, Iterator) {
   ASSERT_EQ(static_cast<int64_t>(s.size()), s.end() - s.begin());
 }
 
-TEST(CompactStringVector, IteratorCategory) {
-  using It = CompactStringVector<char>::Iterator;
+TEST(CompactVectorOfStrings, IteratorCategory) {
+  using It = CompactVectorOfStrings<char>::Iterator;
   static_assert(std::random_access_iterator<It>);
 }
 
-TEST(CompactStringVector, Serialization) {
-  auto testForVec = [](const auto& vectorForType, auto& input) {
-    using V = std::decay_t<decltype(vectorForType)>;
+TEST(CompactVectorOfStrings, Serialization) {
+  auto testSerializationForVector = []<typename V>(const V&, auto& input) {
     {
       V vector;
       vector.build(input);
@@ -89,18 +91,17 @@ TEST(CompactStringVector, Serialization) {
     ad_utility::serialization::FileReadSerializer ser{"_writerTest.dat"};
     ser >> vector;
 
-    equalWithIndex(input, vector);
+    vectorsEqual(input, vector);
 
     ad_utility::deleteFile("_writerTest.dat");
   };
 
-  testForVec(StringVec{}, strings);
-  testForVec(IntVec{}, ints);
+  testSerializationForVector(CompactVectorChar{}, strings);
+  testSerializationForVector(CompactVectorInt{}, ints);
 }
 
-TEST(CompactStringVector, SerializationWithPush) {
-  auto testForVec = [](const auto& vectorForType, auto& input) {
-    using V = std::decay_t<decltype(vectorForType)>;
+TEST(CompactVectorOfStrings, SerializationWithPush) {
+  auto testSerialization = []<typename V>(const V&, auto& input) {
     {
       typename V::Writer w{"_writerTest.dat"};
       for (const auto& s : input) {
@@ -112,17 +113,16 @@ TEST(CompactStringVector, SerializationWithPush) {
     ad_utility::serialization::FileReadSerializer ser{"_writerTest.dat"};
     ser >> vector;
 
-    equalWithIndex(input, vector);
+    vectorsEqual(input, vector);
 
     ad_utility::deleteFile("_writerTest.dat");
   };
-  testForVec(StringVec{}, strings);
-  testForVec(IntVec{}, ints);
+  testSerialization(CompactVectorChar{}, strings);
+  testSerialization(CompactVectorInt{}, ints);
 }
 
-TEST(CompactStringVector, DiskIterator) {
-  auto testForVec = [](const auto& vectorForType, auto& input) {
-    using V = std::decay_t<decltype(vectorForType)>;
+TEST(CompactVectorOfStrings, DiskIterator) {
+  auto testDiskIterator = []<typename V>(const V&, auto& input) {
     {
       typename V::Writer w{"_writerTest.dat"};
       for (const auto& s : input) {
@@ -139,6 +139,6 @@ TEST(CompactStringVector, DiskIterator) {
     ASSERT_EQ(i, input.size());
     ad_utility::deleteFile("_writerTest.dat");
   };
-  testForVec(StringVec{}, strings);
-  testForVec(IntVec{}, ints);
+  testDiskIterator(CompactVectorChar{}, strings);
+  testDiskIterator(CompactVectorInt{}, ints);
 };

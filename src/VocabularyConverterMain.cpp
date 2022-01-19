@@ -7,9 +7,15 @@
 #include "./parser/RdfEscaping.h"
 #include "./util/BatchedPipeline.h"
 #include "./util/Log.h"
+#include "./util/ReadableNumberFact.h"
 #include "./util/json.h"
 
 int main(int argc, char** argv) {
+  std::locale loc;
+  ad_utility::ReadableNumberFacet facet(1);
+  std::locale locWithNumberGrouping(loc, &facet);
+  ad_utility::Log::imbue(locWithNumberGrouping);
+
   if (argc != 2) {
     LOG(ERROR) << "Usage: ./VocabularyConverterMain <indexBasename>"
                << std::endl;
@@ -18,8 +24,9 @@ int main(int argc, char** argv) {
 
   LOG(INFO) << "Converting the line-based vocabulary from previous versions of "
                "QLever (<basename>.vocabulary and possibly "
-               "<basename>.text.vocabulary to the new binary format. The new "
-               "files will be placed ad <basename>.binary-vocabulary and "
+               "<basename>.text.vocabulary) to the new binary format";
+  LOG(INFO) << "The new "
+               "files are named <basename>.vocabulary.binary and "
                "<basename>.text.binary-vocabulary and have to be manually "
                "renamed to replace the original files"
             << std::endl;
@@ -27,7 +34,7 @@ int main(int argc, char** argv) {
   std::string basename{argv[1]};
   {
     std::string inFileName = basename + ".vocabulary";
-    std::string outFileName = basename + ".binary-vocabulary";
+    std::string outFileName = basename + ".vocabulary.binary";
 
     RdfsVocabulary vocab;
     std::ifstream f(basename + CONFIGURATION_FILE);
@@ -49,7 +56,7 @@ int main(int argc, char** argv) {
       }
     }
 
-    CompactStringVector<char>::Writer writer{outFileName};
+    CompactVectorOfStrings<char>::Writer writer{outFileName};
     LOG(INFO) << "Reading vocabulary from file " << inFileName << "\n";
     std::fstream in(inFileName.c_str(), std::ios_base::in);
     string line;
@@ -95,7 +102,7 @@ int main(int argc, char** argv) {
   }
   {
     std::string inFileName = basename + ".text.vocabulary";
-    std::string outFileName = basename + ".text.binary-vocabulary";
+    std::string outFileName = basename + ".text.vocabulary.binary";
 
     std::ifstream in{inFileName};
     if (in.is_open()) {
@@ -104,7 +111,7 @@ int main(int argc, char** argv) {
       LOG(INFO) << "No text vocabulary was found, exiting" << std::endl;
       return EXIT_SUCCESS;
     }
-    CompactStringVector<char>::Writer writer{outFileName};
+    CompactVectorOfStrings<char>::Writer writer{outFileName};
     std::string line;
     while (std::getline(in, line)) {
       writer.push(line.data(), line.size());
