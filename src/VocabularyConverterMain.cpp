@@ -94,7 +94,7 @@ int main(int argc, char** argv) {
     LOG(INFO) << "Done converting vocabulary." << std::endl;
   }
   {
-    std::string inFileName = basename + "text.vocabulary";
+    std::string inFileName = basename + ".text.vocabulary";
     std::string outFileName = basename + ".text.binary-vocabulary";
 
     std::ifstream in{inFileName};
