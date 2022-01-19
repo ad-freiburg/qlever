@@ -215,7 +215,7 @@ std::set<std::string> SparqlLexer::readVarsForAsterisk(){
 
 void SparqlLexer::expandNextUntilWhitespace() {
   std::ostringstream s;
-  while (!_re_string.empty() && !std::isspace(*_re_string.begin())) {
+  while (_re_string.size() > 0 && !std::isspace(*_re_string.begin())) {
     s << *_re_string.begin();
     _re_string.remove_prefix(1);
   }
