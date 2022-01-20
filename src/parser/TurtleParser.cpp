@@ -266,6 +266,9 @@ bool TurtleParser<T>::booleanLiteral() {
   if (parseTerminal<TurtleTokenId::True>() ||
       parseTerminal<TurtleTokenId::False>()) {
     _lastParseResult = '"' + _lastParseResult + "\"^^xsd::boolean";
+    return true;
+  } else {
+    return false;
   }
 }
 
