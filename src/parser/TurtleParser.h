@@ -259,6 +259,8 @@ class TurtleParser {
   FRIEND_TEST(TurtleParserTest, object);
   FRIEND_TEST(TurtleParserTest, blankNode);
   FRIEND_TEST(TurtleParserTest, blankNodePropertyList);
+  FRIEND_TEST(TurtleParserTest, numericLiteral);
+  FRIEND_TEST(TurtleParserTest, booleanLiteral);
 };
 
 /**

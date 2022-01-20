@@ -235,7 +235,7 @@ bool TurtleParser<T>::collection() {
 // ______________________________________________________________________
 template <class T>
 bool TurtleParser<T>::numericLiteral() {
-  return integer() || decimal() || doubleParse();
+  return doubleParse() || decimal() || integer();
 }
 
 // ______________________________________________________________________
@@ -263,8 +263,14 @@ bool TurtleParser<T>::rdfLiteral() {
 // ______________________________________________________________________
 template <class T>
 bool TurtleParser<T>::booleanLiteral() {
-  return parseTerminal<TurtleTokenId::True>() ||
-         parseTerminal<TurtleTokenId::False>();
+  if (parseTerminal<TurtleTokenId::True>() ||
+      parseTerminal<TurtleTokenId::False>()) {
+    _lastParseResult =
+        '"' + _lastParseResult + "\"^^<" + XSD_BOOLEAN_TYPE + '>';
+    return true;
+  } else {
+    return false;
+  }
 }
 
 // ______________________________________________________________________

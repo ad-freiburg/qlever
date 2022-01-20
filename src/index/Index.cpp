@@ -1312,6 +1312,9 @@ LangtagAndTriple Index::tripleToInternalRepresentation(Triple&& tripleIn) {
   if (ad_utility::isXsdValue(spo[2])) {
     spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
     upperBound = 2;
+  } else if (ad_utility::isNumeric(spo[2])) {
+    spo[2] = ad_utility::convertNumericToIndexWord(spo[2]);
+    upperBound = 2;
   } else if (isLiteral(spo[2])) {
     res._langtag = decltype(_vocab)::getLanguage(spo[2]);
   }

@@ -62,6 +62,8 @@ static const char XSD_FLOAT_TYPE[] = "http://www.w3.org/2001/XMLSchema#float";
 static const char XSD_DOUBLE_TYPE[] = "http://www.w3.org/2001/XMLSchema#double";
 static const char XSD_DECIMAL_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#decimal";
+static const char XSD_BOOLEAN_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#boolean";
 static const char VALUE_DATE_TIME_SEPARATOR[] = "T";
 static const int DEFAULT_NOF_VALUE_INTEGER_DIGITS = 50;
 static const int DEFAULT_NOF_VALUE_EXPONENT_DIGITS = 20;
