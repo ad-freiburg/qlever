@@ -588,7 +588,7 @@ class Index {
   // wrap the static function using the internal member variables
   // the bool indicates wether the TripleVec has to be sorted before the pattern
   // creation
-  void createPatterns(bool vecAlreadySorted, VocabularyData* idTriples);
+  void createPatterns(bool isSortedSPO, VocabularyData* idTriples);
 
   void createTextIndex(const string& filename, const TextVec& vec);
 

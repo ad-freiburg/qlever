@@ -131,10 +131,21 @@ void Index::createFromFile(const string& filename) {
   // For the first permutation, perform a unique.
   createPermutationPair<IndexMetaDataHmapDispatcher>(&vocabData, _PSO, _POS,
                                                      PerformUnique::True);
-  // After the SPO permutation, create patterns if so desired.
-  createPermutationPair<IndexMetaDataMmapDispatcher>(
-      &vocabData, _SPO, _SOP, PerformUnique::False, _usePatterns);
-  createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _OSP, _OPS);
+
+  if (_loadAllPermutations) {
+    // After the SPO permutation, create patterns if so desired.
+    createPermutationPair<IndexMetaDataMmapDispatcher>(
+        &vocabData, _SPO, _SOP, PerformUnique::False, _usePatterns);
+    createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _OSP, _OPS);
+    _configurationJson["has-all-permutations"] = true;
+  } else {
+    if (_usePatterns) {
+      // The first argument means that the triples are not yet sorted according
+      // to SPO.
+      createPatterns(false, &vocabData);
+    }
+    _configurationJson["has-all-permutations"] = false;
+  }
   LOG(INFO) << "Finished writing permutations" << std::endl;
 
   // Dump the configuration again in case the permutations have added some
@@ -586,11 +597,14 @@ void Index::addPatternsToExistingIndex() {
 }
 
 // _____________________________________________________________________________
-void Index::createPatterns(bool vecAlreadySorted, VocabularyData* vocabData) {
-  if (vecAlreadySorted) {
-    LOG(INFO) << "Vector already sorted for pattern creation." << std::endl;
+void Index::createPatterns(bool isSortedSPO, VocabularyData* vocabData) {
+  // The first argument means that the triples are not yet sorted according
+  // to SPO.
+  if (isSortedSPO) {
+    LOG(INFO) << "Triples are already sorted by SPO for pattern creation."
+              << std::endl;
   } else {
-    LOG(INFO) << "Sorting for pattern creation..." << std::endl;
+    LOG(INFO) << "Sorting triples by SPO for pattern creation..." << std::endl;
     stxxl::sort(begin(*vocabData->idTriples), end(*vocabData->idTriples),
                 SortBySPO(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
@@ -1277,6 +1291,13 @@ void Index::readConfiguration() {
       _configurationJson.end()) {
     _vocab.initializeInternalizedLangs(
         _configurationJson["languages-internal"]);
+  }
+
+  if (_configurationJson.find("has-all-permutations") !=
+          _configurationJson.end() &&
+      _configurationJson["has-all-permutations"] == false) {
+    // If the permutations simply don't exist, then we can never load them.
+    _loadAllPermutations = false;
   }
 }
 
