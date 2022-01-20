@@ -54,12 +54,13 @@ class VocabularyMerger {
   // Literals
   // Returns the number of total Words merged and via the parameters
   // the lower and upper bound of language tagged predicates
-  // Argument comp gives the way to order strings (case-sensitive or not)
+  // Argument comparator gives the way to order strings (case-sensitive or not)
   // This automatically resets the inner members after finishing, to leave the
   // external interface stateless
-  template <class Comp>
+  template <typename Comp, typename InternalVocabularyAction>
   VocMergeRes mergeVocabulary(const std::string& basename, size_t numFiles,
-                              Comp comp);
+                              Comp comparator,
+                              InternalVocabularyAction& action);
 
  private:
   // helper struct used in the priority queue for merging.
@@ -77,13 +78,15 @@ class VocabularyMerger {
   // write the queu words in the buffer to their corresponding idPairVecs.
   // Requires that all the QueueWords that are ever passed are ordered
   // alphabetically (Also across multiple calls)
-  void writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer);
+  template <typename InternalVocabularyAction>
+  void writeQueueWordsToIdVec(
+      const std::vector<QueueWord>& buffer,
+      InternalVocabularyAction& internalVocabularyAction);
 
   // close all associated files and MmapVectors and reset all internal variables
   void clear() {
     _totalWritten = 0;
     _lastWritten = "";
-    _outfile = std::ofstream();
     _outfileExternal = std::ofstream();
     _idVecs.clear();
     _firstLangPredSeen = false;
@@ -98,7 +101,6 @@ class VocabularyMerger {
   size_t _totalWritten = 0;
   // keep track of the last seen word to correctly handle duplicates
   std::string _lastWritten;
-  std::ofstream _outfile;
   std::ofstream _outfileExternal;
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> _idVecs;

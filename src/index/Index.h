@@ -171,8 +171,8 @@ class Index {
   }
 
   const vector<PatternID>& getHasPattern() const;
-  const CompactStringVector<Id, Id>& getHasPredicate() const;
-  const CompactStringVector<size_t, Id>& getPatterns() const;
+  const CompactVectorOfStrings<Id>& getHasPredicate() const;
+  const CompactVectorOfStrings<Id>& getPatterns() const;
   /**
    * @return The multiplicity of the Entites column (0) of the full has-relation
    *         relation after unrolling the patterns.
@@ -194,7 +194,7 @@ class Index {
   // --------------------------------------------------------------------------
   // TEXT RETRIEVAL
   // --------------------------------------------------------------------------
-  const string& wordIdToString(Id id) const;
+  std::string_view wordIdToString(Id id) const;
 
   size_t getSizeEstimate(const string& words) const;
 
@@ -456,7 +456,7 @@ class Index {
   /**
    * @brief Maps pattern ids to sets of predicate ids.
    */
-  CompactStringVector<size_t, Id> _patterns;
+  CompactVectorOfStrings<Id> _patterns;
   /**
    * @brief Maps entity ids to pattern ids.
    */
@@ -464,7 +464,7 @@ class Index {
   /**
    * @brief Maps entity ids to sets of predicate ids
    */
-  CompactStringVector<Id, Id> _hasPredicate;
+  CompactVectorOfStrings<Id> _hasPredicate;
 
   // Create Vocabulary and directly write it to disk. Create TripleVec with all
   // the triples converted to id space. This Vec can be used for creating
@@ -576,17 +576,14 @@ class Index {
    *             using args.
    */
   template <typename VecReaderType, typename... Args>
-  void createPatternsImpl(const string& fileName,
-                          CompactStringVector<Id, Id>& hasPredicate,
-                          std::vector<PatternID>& hasPattern,
-                          CompactStringVector<size_t, Id>& patterns,
-                          double& fullHasPredicateMultiplicityEntities,
-                          double& fullHasPredicateMultiplicityPredicates,
-                          size_t& fullHasPredicateSize,
-                          const size_t maxNumPatterns,
-                          const Id langPredLowerBound,
-                          const Id langPredUpperBound,
-                          const Args&... vecReaderArgs);
+  void createPatternsImpl(
+      const string& fileName, CompactVectorOfStrings<Id>& hasPredicate,
+      std::vector<PatternID>& hasPattern, CompactVectorOfStrings<Id>& patterns,
+      double& fullHasPredicateMultiplicityEntities,
+      double& fullHasPredicateMultiplicityPredicates,
+      size_t& fullHasPredicateSize, const size_t maxNumPatterns,
+      const Id langPredLowerBound, const Id langPredUpperBound,
+      const Args&... vecReaderArgs);
 
   // wrap the static function using the internal member variables
   // the bool indicates wether the TripleVec has to be sorted before the pattern

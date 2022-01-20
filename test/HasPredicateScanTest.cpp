@@ -81,8 +81,8 @@ TEST(HasPredicateScan, freeS) {
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
-  CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
-  CompactStringVector<size_t, Id> patterns(patternsSrc);
+  CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
+  CompactVectorOfStrings<Id> patterns(patternsSrc);
 
   // Find all entities that are in a triple with predicate 3
   HasPredicateScan::computeFreeS(&resultTable, 3, hasPattern, hasRelation,
@@ -121,8 +121,8 @@ TEST(HasPredicateScan, freeO) {
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
-  CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
-  CompactStringVector<size_t, Id> patterns(patternsSrc);
+  CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
+  CompactVectorOfStrings<Id> patterns(patternsSrc);
 
   // Find all predicates for entity 3 (pattern 1)
   HasPredicateScan::computeFreeO(&resultTable, 3, hasPattern, hasRelation,
@@ -162,8 +162,8 @@ TEST(HasPredicateScan, fullScan) {
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
-  CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
-  CompactStringVector<size_t, Id> patterns(patternsSrc);
+  CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
+  CompactVectorOfStrings<Id> patterns(patternsSrc);
 
   // Query for all relations
   HasPredicateScan::computeFullScan(&resultTable, hasPattern, hasRelation,
@@ -225,8 +225,8 @@ TEST(HasPredicateScan, subtreeS) {
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
-  CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
-  CompactStringVector<size_t, Id> patterns(patternsSrc);
+  CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
+  CompactVectorOfStrings<Id> patterns(patternsSrc);
 
   Index index;
   Engine engine;
@@ -313,8 +313,8 @@ TEST(CountAvailablePredicates, patternTrickTest) {
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
-  CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
-  CompactStringVector<size_t, Id> patterns(patternsSrc);
+  CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
+  CompactVectorOfStrings<Id> patterns(patternsSrc);
 
   RuntimeInformation runtimeInfo;
   try {

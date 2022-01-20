@@ -143,9 +143,9 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
 
   const std::vector<PatternID>& hasPattern =
       _executionContext->getIndex().getHasPattern();
-  const CompactStringVector<Id, Id>& hasPredicate =
+  const CompactVectorOfStrings<Id>& hasPredicate =
       _executionContext->getIndex().getHasPredicate();
-  const CompactStringVector<size_t, Id>& patterns =
+  const CompactVectorOfStrings<Id>& patterns =
       _executionContext->getIndex().getPatterns();
 
   if (_subjectEntityName) {
@@ -182,8 +182,8 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
 
 void CountAvailablePredicates::computePatternTrickAllEntities(
     IdTable* dynResult, const vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, Id>& hasPredicate,
-    const CompactStringVector<size_t, Id>& patterns) {
+    const CompactVectorOfStrings<Id>& hasPredicate,
+    const CompactVectorOfStrings<Id>& patterns) {
   IdTableStatic<2> result = dynResult->moveToStatic<2>();
   LOG(DEBUG) << "For all entities." << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
@@ -194,17 +194,13 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
     if (i < hasPattern.size() && hasPattern[i] != NO_PATTERN) {
       patternCounts[hasPattern[i]]++;
     } else if (i < hasPredicate.size()) {
-      size_t numPredicates;
-      const Id* predicateData;
-      std::tie(predicateData, numPredicates) = hasPredicate[i];
-      if (numPredicates > 0) {
-        for (size_t i = 0; i < numPredicates; i++) {
-          auto it = predicateCounts.find(predicateData[i]);
-          if (it == predicateCounts.end()) {
-            predicateCounts[predicateData[i]] = 1;
-          } else {
-            it->second++;
-          }
+      auto predicates = hasPredicate[i];
+      for (const auto& predicate : predicates) {
+        auto it = predicateCounts.find(predicate);
+        if (it == predicateCounts.end()) {
+          predicateCounts[predicate] = 1;
+        } else {
+          it->second++;
         }
       }
     }
@@ -213,9 +209,8 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   LOG(DEBUG) << "Using " << patternCounts.size()
              << " patterns for computing the result." << std::endl;
   for (const auto& it : patternCounts) {
-    const auto& pattern = patterns[it.first];
-    for (size_t i = 0; i < pattern.second; i++) {
-      predicateCounts[pattern.first[i]] += it.second;
+    for (const auto& predicate : patterns[it.first]) {
+      predicateCounts[predicate] += it.second;
     }
   }
   result.reserve(predicateCounts.size());
@@ -249,8 +244,8 @@ template <int WIDTH>
 void CountAvailablePredicates::computePatternTrick(
     const IdTable& dynInput, IdTable* dynResult,
     const vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, Id>& hasPredicate,
-    const CompactStringVector<size_t, Id>& patterns, const size_t subjectColumn,
+    const CompactVectorOfStrings<Id>& hasPredicate,
+    const CompactVectorOfStrings<Id>& patterns, const size_t subjectColumn,
     RuntimeInformation* runtimeInfo) {
   const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
   IdTableStatic<2> result = dynResult->moveToStatic<2>();
@@ -292,13 +287,11 @@ void CountAvailablePredicates::computePatternTrick(
         numEntitiesWithPatterns++;
       } else if (subject < hasPredicate.size()) {
         // The subject does not match a pattern
-        size_t numPredicates;
-        const Id* predicateData;
-        std::tie(predicateData, numPredicates) = hasPredicate[subject];
-        numListPredicates += numPredicates;
-        if (numPredicates > 0) {
-          for (size_t i = 0; i < numPredicates; i++) {
-            predicateCounts[predicateData[i]]++;
+        const auto& pattern = hasPredicate[subject];
+        numListPredicates += pattern.size();
+        if (!pattern.empty()) {
+          for (const auto& predicate : pattern) {
+            predicateCounts[predicate]++;
           }
         } else {
           LOG(TRACE) << "No pattern or has-relation entry found for entity "
@@ -336,9 +329,9 @@ void CountAvailablePredicates::computePatternTrick(
                                        reduction(+ : numEntitiesWithPatterns) reduction(+: numPatternPredicates) reduction(+: numListPredicates) shared( patternVec, patterns)
     for (auto it = patternVec.begin(); it != patternVec.end(); ++it) {
       const auto& pattern = patterns[it->first];
-      numPatternPredicates += pattern.second;
-      for (size_t i = 0; i < pattern.second; i++) {
-        predicateCounts[pattern.first[i]] += it->second;
+      numPatternPredicates += pattern.size();
+      for (const auto& predicate : pattern) {
+        predicateCounts[predicate] += it->second;
         numPredicatesSubsumedInPatterns += it->second;
       }
     }

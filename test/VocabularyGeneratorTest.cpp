@@ -195,7 +195,13 @@ TEST_F(MergeVocabularyTest, bla) {
   VocabularyMerger::VocMergeRes res;
   {
     VocabularyMerger m;
-    res = m.mergeVocabulary(_basePath, 2, TripleComponentComparator());
+    std::ofstream file(_basePath + ".vocabulary");
+    AD_CHECK(file.is_open());
+    auto internalVocabularyAction = [&file](const auto& word) {
+      file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
+    };
+    res = m.mergeVocabulary(_basePath, 2, TripleComponentComparator(),
+                            internalVocabularyAction);
   }
 
   // No language tags in text file
@@ -234,7 +240,13 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
 
     {
       VocabularyMerger m;
-      m.mergeVocabulary(basename, 1, v.getCaseComparator());
+      std::ofstream file(basename + ".vocabulary");
+      AD_CHECK(file.is_open());
+      auto internalVocabularyAction = [&file](const auto& word) {
+        file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
+      };
+      m.mergeVocabulary(basename, 1, v.getCaseComparator(),
+                        internalVocabularyAction);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
     ASSERT_EQ(0u, idMap[5]);
@@ -272,7 +284,13 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
 
     {
       VocabularyMerger m;
-      m.mergeVocabulary(basename, 1, v.getCaseComparator());
+      std::ofstream file(basename + ".vocabulary");
+      AD_CHECK(file.is_open());
+      auto internalVocabularyAction = [&file](const auto& word) {
+        file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
+      };
+      m.mergeVocabulary(basename, 1, v.getCaseComparator(),
+                        internalVocabularyAction);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
     EXPECT_EQ(0u, idMap[6]);

@@ -14,6 +14,7 @@
 #include "../util/File.h"
 #include "../util/HashMap.h"
 #include "../util/HashSet.h"
+#include "../util/Serializer/FileSerializer.h"
 #include "../util/json.h"
 #include "./ConstantsIndexBuilding.h"
 
@@ -25,70 +26,8 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
                                     const string& extLitsFileName) {
   LOG(INFO) << "Reading vocabulary from file " << fileName << "\n";
   _words.clear();
-  std::fstream in(fileName.c_str(), std::ios_base::in);
-  string line;
-  [[maybe_unused]] bool first = true;
-  if constexpr (_isCompressed) {
-    // return a std::optional<string> with the next word and nullopt in case of
-    // exhaustion.
-    auto creator = [&]() -> std::optional<std::string> {
-      if (std::getline(in, line)) {
-        return std::optional(std::move(line));
-      } else {
-        return std::nullopt;
-      }
-    };
-
-    auto expand = [this](std::string&& s) {
-      return expandPrefix(CompressedString::fromString(s));
-    };
-
-    auto normalize = [](std::string&& s) {
-      return RdfEscaping::unescapeNewlinesAndBackslashes(s);
-    };
-
-    auto compress = [this](std::string&& s) { return compressPrefix(s); };
-
-    auto push = [this](CompressedString&& s) {
-      _words.push_back(std::move(s));
-      if (_words.size() % 50'000'000 == 0) {
-        LOG(INFO) << "Read " << _words.size() << " words." << std::endl;
-      }
-      return std::move(s);
-    };
-
-    auto check = [&, lastExpandedString = std::string{},
-                  first = true](std::string&& s) mutable {
-      if (!first) {
-        if (!(_caseComparator.compare(lastExpandedString, s,
-                                      SortLevel::TOTAL))) {
-          LOG(ERROR) << "Vocabulary is not sorted in ascending order for words "
-                     << lastExpandedString << " and " << s << std::endl;
-          // AD_CHECK(false);
-        }
-      } else {
-        first = false;
-      }
-      lastExpandedString = std::move(s);
-      return lastExpandedString;
-    };
-
-    auto pipeline = ad_pipeline::setupParallelPipeline<2, 3, 1, 2, 1>(
-        100000, creator, expand, normalize, check, compress, push);
-    while ([[maybe_unused]] auto opt = pipeline.getNextValue()) {
-      // run to exhaustion
-    }
-    LOG(INFO) << "WaitTimes for Pipeline in msecs\n";
-    for (const auto& t : pipeline.getWaitingTime()) {
-      LOG(INFO) << t << " msecs\n";
-    }
-
-  } else {
-    while (std::getline(in, line)) {
-      _words.push_back(line);
-    }
-  }
-  in.close();
+  ad_utility::serialization::FileReadSerializer file(fileName);
+  file >> _words;
   LOG(INFO) << "Done reading vocabulary from file.\n";
   LOG(INFO) << "It contains " << _words.size() << " elements\n";
   if (extLitsFileName.size() > 0) {
@@ -110,19 +49,13 @@ template <class S, class C>
 template <typename, typename>
 void Vocabulary<S, C>::writeToFile(const string& fileName) const {
   LOG(INFO) << "Writing vocabulary to file " << fileName << "\n";
-  std::ofstream out(fileName.c_str(), std::ios_base::out);
-  // on disk we save the compressed version, so do not  expand prefixes
-  for (size_t i = 0; i + 1 < _words.size(); ++i) {
-    out << _words[i] << '\n';
-  }
-  if (_words.size() > 0) {
-    out << _words[_words.size() - 1];
-  }
-  out.close();
+  ad_utility::serialization::FileWriteSerializer file{fileName};
+  file << _words;
   LOG(INFO) << "Done writing vocabulary to file.\n";
 }
 
 // _____________________________________________________________________________
+/*
 template <class S, class C>
 template <typename, typename>
 void Vocabulary<S, C>::writeToBinaryFileForMerging(
@@ -143,20 +76,27 @@ void Vocabulary<S, C>::writeToBinaryFileForMerging(
   out.close();
   LOG(INFO) << "Done writing vocabulary to file.\n";
 }
+ */
 
 // _____________________________________________________________________________
 template <class S, class C>
-template <typename, typename>
-void Vocabulary<S, C>::createFromSet(const ad_utility::HashSet<S>& set) {
+void Vocabulary<S, C>::createFromSet(
+    const ad_utility::HashSet<std::string>& set) {
   LOG(INFO) << "Creating vocabulary from set ...\n";
   _words.clear();
-  _words.reserve(set.size());
-  _words.insert(begin(_words), begin(set), end(set));
+  std::vector<std::vector<char>> words;
+  words.reserve(set.size());
+  for (const auto& word : set) {
+    words.emplace_back(word.begin(), word.end());
+  }
   LOG(INFO) << "... sorting ...\n";
   auto totalComparison = [this](const auto& a, const auto& b) {
-    return _caseComparator(a, b, SortLevel::TOTAL);
+    return _caseComparator(std::string_view(a.begin(), a.end()),
+                           std::string_view(b.begin(), b.end()),
+                           SortLevel::TOTAL);
   };
-  std::sort(begin(_words), end(_words), totalComparison);
+  std::sort(begin(words), end(words), totalComparison);
+  _words.build(words);
   LOG(INFO) << "Done creating vocabulary.\n";
 }
 
@@ -173,6 +113,7 @@ ad_utility::HashMap<string, Id> Vocabulary<S, C>::asMap() {
   return map;
 }
 
+/*
 // _____________________________________________________________________________
 template <class S, class C>
 template <typename, typename>
@@ -189,6 +130,7 @@ void Vocabulary<S, C>::externalizeLiterals(const string& fileName) {
   _externalLiterals.buildFromVector(extVocab, fileName);
   LOG(INFO) << "Done externalizing literals." << std::endl;
 }
+ */
 
 // _____________________________________________________________________________
 template <class S, class C>
@@ -268,13 +210,13 @@ string Vocabulary<S, C>::getLanguage(const string& literal) {
 // ____________________________________________________________________________
 template <class S, class C>
 template <typename, typename>
-string Vocabulary<S, C>::expandPrefix(const CompressedString& word) const {
+string Vocabulary<S, C>::expandPrefix(std::string_view word) const {
   assert(!word.empty());
   auto idx = static_cast<uint8_t>(word[0]) - MIN_COMPRESSION_PREFIX;
   if (idx >= 0 && idx < NUM_COMPRESSION_PREFIXES) {
-    return _prefixMap[idx] + word.toStringView().substr(1);
+    return _prefixMap[idx] + word.substr(1);
   } else {
-    return string(word.toStringView().substr(1));
+    return string(word.substr(1));
   }
 }
 
@@ -342,23 +284,6 @@ void Vocabulary<S, C>::initializeInternalizedLangs(const StringRange& s) {
   // implicit conversions, so `vector::insert` cannot be used.
   for (const auto& el : s) {
     _internalizedLangs.emplace_back(el);
-  }
-}
-
-// _____________________________________________________
-template <class S, class C>
-template <typename, typename>
-void Vocabulary<S, C>::prefixCompressFile(const string& infile,
-                                          const string& outfile,
-                                          const vector<string>& prefixes) {
-  std::ifstream in(infile);
-  std::ofstream out(outfile);
-  AD_CHECK(in.is_open() && out.is_open());
-  Vocabulary v;
-  v.initializePrefixes(prefixes);
-  std::string word;
-  while (std::getline(in, word)) {
-    out << v.compressPrefix(word).toStringView() << '\n';
   }
 }
 
@@ -453,26 +378,16 @@ std::pair<Id, Id> Vocabulary<S, C>::prefix_range(const string& prefix) const {
 
 // _____________________________________________________________________________
 template <typename S, typename C>
-void Vocabulary<S, C>::push_back(const string& word) {
-  if constexpr (_isCompressed) {
-    _words.push_back(compressPrefix(word));
-  } else {
-    _words.push_back(word);
-  }
-}
-
-// _____________________________________________________________________________
-template <typename S, typename C>
 template <typename, typename>
-const std::optional<std::reference_wrapper<const string>>
-Vocabulary<S, C>::operator[](Id id) const {
+const std::optional<std::string_view> Vocabulary<S, C>::operator[](
+    Id id) const {
   if (id < _words.size()) {
     return _words[static_cast<size_t>(id)];
   } else {
     return std::nullopt;
   }
 }
-template const std::optional<std::reference_wrapper<const string>>
+template const std::optional<std::string_view>
 TextVocabulary::operator[]<std::string, void>(Id id) const;
 
 template <typename S, typename C>
@@ -542,13 +457,11 @@ template void RdfsVocabulary::initializeInternalizedLangs<nlohmann::json>(
     const nlohmann::json&);
 template void RdfsVocabulary::initializeExternalizePrefixes<nlohmann::json>(
     const nlohmann::json& prefixes);
-template void RdfsVocabulary::prefixCompressFile<CompressedString, void>(
-    const string& infile, const string& outfile,
-    const vector<string>& prefixes);
+
+template CompressedString RdfsVocabulary::compressPrefix(
+    const string& word) const;
 
 template void RdfsVocabulary::printRangesForDatatypes();
 
-template void TextVocabulary::createFromSet<std::string, void>(
-    const ad_utility::HashSet<std::string>& set);
 template void TextVocabulary::writeToFile<std::string, void>(
     const string& fileName) const;
