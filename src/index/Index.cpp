@@ -125,6 +125,7 @@ void Index::createFromFile(const string& filename) {
   // For the first permutation, perform a unique.
   createPermutationPair<IndexMetaDataHmapDispatcher>(&vocabData, _PSO, _POS,
                                                      PerformUnique::True);
+
   if (_loadAllPermutations) {
     // After the SPO permutation, create patterns if so desired.
     createPermutationPair<IndexMetaDataMmapDispatcher>(
@@ -132,6 +133,11 @@ void Index::createFromFile(const string& filename) {
     createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _OSP, _OPS);
     _configurationJson["has-all-permutations"] = true;
   } else {
+    if (_usePatterns) {
+      // The first argument means that the triples are not yet sorted according
+      // to SPO.
+      createPatterns(false, &vocabData);
+    }
     _configurationJson["has-all-permutations"] = false;
   }
   LOG(INFO) << "Finished writing permutations" << std::endl;
@@ -574,6 +580,8 @@ void Index::addPatternsToExistingIndex() {
 
 // _____________________________________________________________________________
 void Index::createPatterns(bool vecAlreadySorted, VocabularyData* vocabData) {
+  // The first argument means that the triples are not yet sorted according
+  // to SPO.
   if (vecAlreadySorted) {
     LOG(INFO) << "Vector already sorted for pattern creation." << std::endl;
   } else {
