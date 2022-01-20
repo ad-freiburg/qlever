@@ -11,9 +11,10 @@
 #include "./util/json.h"
 
 int main(int argc, char** argv) {
-  std::locale loc;
+  // Make sure that large integers are properly formatted
+  std::locale locale;
   ad_utility::ReadableNumberFacet facet(1);
-  std::locale locWithNumberGrouping(loc, &facet);
+  std::locale locWithNumberGrouping(locale, &facet);
   ad_utility::Log::imbue(locWithNumberGrouping);
 
   if (argc != 2) {

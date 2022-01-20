@@ -134,7 +134,7 @@ class CompactVectorOfStrings {
       _offsets.push_back(dataSize);
       dataSize += element.size();
     }
-    // Add the offset right after the last element.
+    // The last offset is the offset right after the last element.
     _offsets.push_back(dataSize);
 
     _data.reserve(dataSize);

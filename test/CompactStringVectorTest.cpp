@@ -10,7 +10,7 @@
 
 std::vector<std::string> strings{"alpha", "b", "3920193",
                                  "<Qlever-internal-langtag>"};
-std::vector<std::vector<int>> ints{{1, 2, 3}, {42}, {6, 5, -4, 96}};
+std::vector<std::vector<int>> ints{{1, 2, 3}, {42}, {6, 5, -4, 96}, {-38, 0}};
 
 auto iterablesEqual(const auto& a, const auto& b) {
   ASSERT_EQ(a.size(), b.size());
@@ -43,34 +43,53 @@ TEST(CompactVectorOfStrings, Build) {
   vectorsEqual(s, strings);
 }
 
+// Necessary for the test below.
+namespace std {
+bool operator==(const std::vector<int>& a, const std::span<const int>& b) {
+  if (a.size() != b.size()) {
+    return false;
+  }
+  for (size_t i = 0; i < a.size(); ++i) {
+    if (a[i] != b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+}  // namespace std
+
 TEST(CompactVectorOfStrings, Iterator) {
-  CompactVectorChar s;
-  s.build(strings);
+  auto testIterator = []<typename V>(const V&, const auto& input) {
+    V s;
+    s.build(input);
 
-  auto it = s.begin();
-  ASSERT_EQ(strings[0], *it);
-  ASSERT_EQ(strings[0], *it++);
-  ASSERT_EQ(strings[1], *it);
-  ASSERT_EQ(strings[2], *++it);
-  ASSERT_EQ(strings[2], *it);
-  ASSERT_EQ(strings[2], *it--);
-  ASSERT_EQ(strings[1], *it);
-  ASSERT_EQ(strings[0], *--it);
+    auto it = s.begin();
+    ASSERT_EQ(input[0], *it);
+    ASSERT_EQ(input[0], *it++);
+    ASSERT_EQ(input[1], *it);
+    ASSERT_EQ(input[2], *++it);
+    ASSERT_EQ(input[2], *it);
+    ASSERT_EQ(input[2], *it--);
+    ASSERT_EQ(input[1], *it);
+    ASSERT_EQ(input[0], *--it);
 
-  ASSERT_EQ(strings[2], it[2]);
-  ASSERT_EQ(strings[2], *(it + 2));
-  ASSERT_EQ(strings[2], *(2 + it));
-  ASSERT_EQ(strings[3], *(it += 3));
-  ASSERT_EQ(strings[2], *(it += -1));
-  ASSERT_EQ(strings[2], *(it));
-  ASSERT_EQ(strings[0], *(it -= 2));
-  ASSERT_EQ(strings[2], *(it -= -2));
-  ASSERT_EQ(strings[2], *(it));
+    ASSERT_EQ(input[2], it[2]);
+    ASSERT_EQ(input[2], *(it + 2));
+    ASSERT_EQ(input[2], *(2 + it));
+    ASSERT_EQ(input[3], *(it += 3));
+    ASSERT_EQ(input[2], *(it += -1));
+    ASSERT_EQ(input[2], *(it));
+    ASSERT_EQ(input[0], *(it -= 2));
+    ASSERT_EQ(input[2], *(it -= -2));
+    ASSERT_EQ(input[2], *(it));
 
-  it = s.end() + (-1);
-  ASSERT_EQ(strings.back(), *it);
+    it = s.end() + (-1);
+    ASSERT_EQ(input.back(), *it);
 
-  ASSERT_EQ(static_cast<int64_t>(s.size()), s.end() - s.begin());
+    ASSERT_EQ(static_cast<int64_t>(s.size()), s.end() - s.begin());
+  };
+  testIterator(CompactVectorChar{}, strings);
+  testIterator(CompactVectorInt{}, ints);
 }
 
 TEST(CompactVectorOfStrings, IteratorCategory) {
@@ -79,7 +98,7 @@ TEST(CompactVectorOfStrings, IteratorCategory) {
 }
 
 TEST(CompactVectorOfStrings, Serialization) {
-  auto testSerializationForVector = []<typename V>(const V&, auto& input) {
+  auto testSerialization = []<typename V>(const V&, auto& input) {
     {
       V vector;
       vector.build(input);
@@ -96,12 +115,12 @@ TEST(CompactVectorOfStrings, Serialization) {
     ad_utility::deleteFile("_writerTest.dat");
   };
 
-  testSerializationForVector(CompactVectorChar{}, strings);
-  testSerializationForVector(CompactVectorInt{}, ints);
+  testSerialization(CompactVectorChar{}, strings);
+  testSerialization(CompactVectorInt{}, ints);
 }
 
 TEST(CompactVectorOfStrings, SerializationWithPush) {
-  auto testSerialization = []<typename V>(const V&, auto& input) {
+  auto testSerializationWithPush = []<typename V>(const V&, auto& input) {
     {
       typename V::Writer w{"_writerTest.dat"};
       for (const auto& s : input) {
@@ -117,8 +136,8 @@ TEST(CompactVectorOfStrings, SerializationWithPush) {
 
     ad_utility::deleteFile("_writerTest.dat");
   };
-  testSerialization(CompactVectorChar{}, strings);
-  testSerialization(CompactVectorInt{}, ints);
+  testSerializationWithPush(CompactVectorChar{}, strings);
+  testSerializationWithPush(CompactVectorInt{}, ints);
 }
 
 TEST(CompactVectorOfStrings, DiskIterator) {
