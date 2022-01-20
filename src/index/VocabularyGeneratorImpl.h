@@ -33,6 +33,9 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
     // if p1 is smaller (alphabetically)
     // _comp will return false if called like this
     // and the priority queue will thus emit p1 first
+    if (p1._value == p2._value) {
+      return p1._isExternal && !p2._isExternal;
+    }
     return comp(p2._value, p1._value);
   };
 
@@ -158,43 +161,25 @@ void VocabularyMerger::writeQueueWordsToIdVec(
   writeBuf.reserve(bufSize);
   // avoid duplicates
   for (auto& top : buffer) {
-    if (top._value != _lastWritten) {
-      _lastWritten = top._value;
+    if (top._value != _lastWritten._lastWrittenWord) {
+      _lastWritten._lastWrittenWord = top._value;
+      _lastWritten._wasExternalized = top._isExternal;
 
       // TODO<optimization> If we aim to further speed this up, we could
       // order all the write requests to _outfile _externalOutfile and all the
       // idVecs to have a more useful external access pattern.
 
       // write the new word to the vocabulary
-      if (_lastWritten < EXTERNALIZED_LITERALS_PREFIX) {
-        _outfile << RdfEscaping::escapeNewlinesAndBackslashes(_lastWritten)
+      if (!_lastWritten._wasExternalized) {
+        _outfile << RdfEscaping::escapeNewlinesAndBackslashes(_lastWritten._lastWrittenWord)
                  << '\n';
       } else {
-        // we have to strip the externalization character again
-        auto& c = _lastWritten[0];
-        // Keep a copy of the first character to later restore it.
-        auto originalFirstChar = c;
-        switch (c) {
-          case EXTERNALIZED_LITERALS_PREFIX_CHAR:
-            c = '"';
-            break;
-          case EXTERNALIZED_ENTITIES_PREFIX_CHAR:
-            c = '<';
-            break;
-          default:
-            LOG(ERROR) << "Illegal Externalization character met in vocabulary "
-                          "merging. This "
-                          "should never happen\n";
-            AD_CHECK(false)
-        }
         _outfileExternal << RdfEscaping::escapeNewlinesAndBackslashes(
-                                _lastWritten)
+                                _lastWritten._lastWrittenWord)
                          << '\n';
-        // restore the original value, so that the check _lastWritten ==
-        // top.value above works again.
-        c = originalFirstChar;
       }
 
+      // TODO<joka921> Get the correct Ids once the other PR is merged.
       // write id to corresponding vec
       writeBuf.emplace_back(top._partialFileId,
                             std::make_pair(top._partialWordId, _totalWritten));

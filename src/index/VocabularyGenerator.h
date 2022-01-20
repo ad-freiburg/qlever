@@ -67,11 +67,22 @@ class VocabularyMerger {
   struct QueueWord {
     QueueWord() = default;
     QueueWord(string&& v, size_t file, Id word)
-        : _value(std::move(v)), _partialFileId(file), _partialWordId(word) {}
+        : _value(std::move(v)), _partialFileId(file), _partialWordId(word) {
+      if (ad_utility::startsWith(_value, EXTERNALIZED_LITERALS_PREFIX)) {
+        _isExternal = true;
+        _value[0] = '"';
+      }
+      else if (ad_utility::startsWith(_value, EXTERNALIZED_ENTITIES_PREFIX)) {
+        _isExternal = true;
+        _value[0] = '<';
+      }
+    }
     string _value;          // the word
     size_t _partialFileId;  // from which partial vocabulary did this word come
     Id _partialWordId;  // which partial id did the word have in this partial
+    bool _isExternal = false;
     // vocabulary
+
   };
 
   // write the queu words in the buffer to their corresponding idPairVecs.
@@ -82,7 +93,7 @@ class VocabularyMerger {
   // close all associated files and MmapVectors and reset all internal variables
   void clear() {
     _totalWritten = 0;
-    _lastWritten = "";
+    _lastWritten = LastWritten{};
     _outfile = std::ofstream();
     _outfileExternal = std::ofstream();
     _idVecs.clear();
@@ -97,7 +108,12 @@ class VocabularyMerger {
   // word we see, unless it is is equal to the previous word
   size_t _totalWritten = 0;
   // keep track of the last seen word to correctly handle duplicates
-  std::string _lastWritten;
+
+  struct LastWritten {
+    std::string _lastWrittenWord;
+    bool _wasExternalized = false;
+  };
+  LastWritten _lastWritten;
   std::ofstream _outfile;
   std::ofstream _outfileExternal;
   // we will store pairs of <partialId, globalId>

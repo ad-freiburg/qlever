@@ -567,8 +567,19 @@ class TripleComponentComparator {
   [[nodiscard]] int compare(const SplitValBase<A, B>& a,
                             const SplitValBase<A, B>& b,
                             const Level level) const {
+
+    auto isLiteral = [](const auto& splitVal) {
+      return splitVal.firstOriginalChar == '"' || splitVal.firstOriginalChar == EXTERNALIZED_LITERALS_PREFIX_CHAR;
+    };
+
+    auto isEntity = [](const auto& splitVal) {
+      return splitVal.firstOriginalChar == '<' || splitVal.firstOriginalChar == EXTERNALIZED_ENTITIES_PREFIX_CHAR;
+    };
+
+    bool sameTypeWhenIgnoringExternalization = (isLiteral(a) && isLiteral(b)) || (isEntity(a) && isEntity(b));
+
     if (auto res = std::strncmp(&a.firstOriginalChar, &b.firstOriginalChar, 1);
-        res != 0) {
+        !sameTypeWhenIgnoringExternalization && res != 0) {
       return res;  // different data types, decide on the datatype
     }
 
@@ -586,8 +597,18 @@ class TripleComponentComparator {
       return res;
     }
 
-    // TOTAL level and even the langtags match, sort by bytes
-    return a.transformedVal.compare(b.transformedVal);
+
+    // TOTAL level and even the langtags match, sort by bytes.
+   if (int res = a.transformedVal.compare(b.transformedVal); res != 0) {
+     return res;
+   }
+
+   // If even the bytes match, the only difference might be, that one
+   // of the (identical) inputs is being externalized, and the other one isn't
+
+   // Additionally, we then want the external words to come before the
+   // internal words, so that we can merge them again.
+   return -std::strncmp(&a.firstOriginalChar, &b.firstOriginalChar, 1);
   }
 
   /**
@@ -676,6 +697,12 @@ class TripleComponentComparator {
       } else {
         langtag = "";
       }
+    } else if (ad_utility::startsWith(res, "<") ||
+          ad_utility::startsWith(res,
+                                 std::string{EXTERNALIZED_ENTITIES_PREFIX})) {
+      // We want to sort external and internal iris with the same content directly
+      // next to each other to make the order in the external vocabulary consistent.
+      res.remove_prefix(1);
     }
     if constexpr (std::is_same_v<SplitValType, SplitVal>) {
       return {first, _locManager.getSortKey(res, level), std::string(langtag)};
