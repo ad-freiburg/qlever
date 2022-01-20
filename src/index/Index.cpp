@@ -579,13 +579,14 @@ void Index::addPatternsToExistingIndex() {
 }
 
 // _____________________________________________________________________________
-void Index::createPatterns(bool vecAlreadySorted, VocabularyData* vocabData) {
+void Index::createPatterns(bool isSortedSPO, VocabularyData* vocabData) {
   // The first argument means that the triples are not yet sorted according
   // to SPO.
-  if (vecAlreadySorted) {
-    LOG(INFO) << "Vector already sorted for pattern creation." << std::endl;
+  if (isSortedSPO) {
+    LOG(INFO) << "Triples are already sorted by SPO for pattern creation."
+              << std::endl;
   } else {
-    LOG(INFO) << "Sorting for pattern creation..." << std::endl;
+    LOG(INFO) << "Sorting triples by SPO for pattern creation..." << std::endl;
     stxxl::sort(begin(*vocabData->idTriples), end(*vocabData->idTriples),
                 SortBySPO(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
