@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <iterator>
 
 #include "../src/global/Pattern.h"
@@ -43,48 +44,34 @@ TEST(CompactVectorOfStrings, Build) {
   vectorsEqual(s, strings);
 }
 
-// Necessary for the test below.
-namespace std {
-bool operator==(const std::vector<int>& a, const std::span<const int>& b) {
-  if (a.size() != b.size()) {
-    return false;
-  }
-  for (size_t i = 0; i < a.size(); ++i) {
-    if (a[i] != b[i]) {
-      return false;
-    }
-  }
-  return true;
-}
-}  // namespace std
-
 TEST(CompactVectorOfStrings, Iterator) {
   auto testIterator = []<typename V>(const V&, const auto& input) {
     V s;
     s.build(input);
 
     auto it = s.begin();
-    ASSERT_EQ(input[0], *it);
-    ASSERT_EQ(input[0], *it++);
-    ASSERT_EQ(input[1], *it);
-    ASSERT_EQ(input[2], *++it);
-    ASSERT_EQ(input[2], *it);
-    ASSERT_EQ(input[2], *it--);
-    ASSERT_EQ(input[1], *it);
-    ASSERT_EQ(input[0], *--it);
+    using std::ranges::equal;
+    ASSERT_TRUE(equal(input[0], *it));
+    ASSERT_TRUE(equal(input[0], *it++));
+    ASSERT_TRUE(equal(input[1], *it));
+    ASSERT_TRUE(equal(input[2], *++it));
+    ASSERT_TRUE(equal(input[2], *it));
+    ASSERT_TRUE(equal(input[2], *it--));
+    ASSERT_TRUE(equal(input[1], *it));
+    ASSERT_TRUE(equal(input[0], *--it));
 
-    ASSERT_EQ(input[2], it[2]);
-    ASSERT_EQ(input[2], *(it + 2));
-    ASSERT_EQ(input[2], *(2 + it));
-    ASSERT_EQ(input[3], *(it += 3));
-    ASSERT_EQ(input[2], *(it += -1));
-    ASSERT_EQ(input[2], *(it));
-    ASSERT_EQ(input[0], *(it -= 2));
-    ASSERT_EQ(input[2], *(it -= -2));
-    ASSERT_EQ(input[2], *(it));
+    ASSERT_TRUE(equal(input[2], it[2]));
+    ASSERT_TRUE(equal(input[2], *(it + 2)));
+    ASSERT_TRUE(equal(input[2], *(2 + it)));
+    ASSERT_TRUE(equal(input[3], *(it += 3)));
+    ASSERT_TRUE(equal(input[2], *(it += -1)));
+    ASSERT_TRUE(equal(input[2], *(it)));
+    ASSERT_TRUE(equal(input[0], *(it -= 2)));
+    ASSERT_TRUE(equal(input[2], *(it -= -2)));
+    ASSERT_TRUE(equal(input[2], *(it)));
 
     it = s.end() + (-1);
-    ASSERT_EQ(input.back(), *it);
+    ASSERT_TRUE(equal(input.back(), *it));
 
     ASSERT_EQ(static_cast<int64_t>(s.size()), s.end() - s.begin());
   };
