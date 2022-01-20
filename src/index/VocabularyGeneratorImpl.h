@@ -21,6 +21,7 @@
 #include "./ConstantsIndexBuilding.h"
 #include "./Vocabulary.h"
 #include "./VocabularyGenerator.h"
+#include "../util/Serializer/FileSerializer.h"
 
 // ___________________________________________________________________
 template <class Comp>
@@ -39,7 +40,9 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
     return comp(p2._value, p1._value);
   };
 
-  std::vector<std::ifstream> infiles;
+  std::vector<ad_utility::serialization::FileReadSerializer> infiles;
+  std::vector<uint64_t> numWordsLeftInPartialVocabulary;
+
 
   _outfile.open(basename + ".vocabulary");
   AD_CHECK(_outfile.is_open());
@@ -47,33 +50,37 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
     _outfileExternal.open(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
     AD_CHECK(_outfileExternal.is_open());
   }
-  std::vector<bool> endOfFile(numFiles, false);
 
   // Priority queue for the k-way merge
   std::priority_queue<QueueWord, std::vector<QueueWord>, decltype(queueCompare)>
       queue(queueCompare);
 
+
+  auto pushWordFromPartialVocabularyToQueue = [&](size_t i) {
+    if (numWordsLeftInPartialVocabulary[i] > 0) {
+      std::string word;
+      Id id;
+      bool isExternal;
+      infiles[i] >> word;
+      infiles[i] >> id;
+      infiles[i] >> isExternal;
+      queue.push(QueueWord(std::move(word), i, id, isExternal));
+      numWordsLeftInPartialVocabulary[i]--;
+    }
+
+  };
   // open and prepare all infiles and mmap output vectors
   for (size_t i = 0; i < numFiles; i++) {
     infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME +
                          std::to_string(i));
+    numWordsLeftInPartialVocabulary.emplace_back();
+    // read the number of words in the partial vocabulary;
+    infiles.back() >> numWordsLeftInPartialVocabulary.back();
     if (!_noIdMapsAndIgnoreExternalVocab) {
       _idVecs.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
     }
-    AD_CHECK(infiles.back().is_open());
 
-    // read the first entry of the vocabulary and add it to the queue
-    endOfFile[i] = true;
-
-    size_t len;
-    if (infiles[i].read((char*)&len, sizeof(len))) {
-      std::string word(len, '\0');
-      infiles[i].read(&(word[0]), len);
-      Id id;
-      infiles[i].read((char*)&id, sizeof(id));
-      queue.push(QueueWord(std::move(word), i, id));
-      endOfFile[i] = false;
-    }
+    pushWordFromPartialVocabularyToQueue(i);
   }
 
   std::vector<QueueWord> sortedBuffer;
@@ -114,20 +121,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
     }
 
     // add next word from the same infile to the priority queue
-    if (endOfFile[i]) {
-      continue;
-    }  // file is exhausted, nothing to add
-
-    endOfFile[i] = true;
-    size_t len;
-    if (infiles[i].read((char*)&len, sizeof(len))) {
-      std::string word(len, '\0');
-      infiles[i].read(&(word[0]), len);
-      Id id;
-      infiles[i].read((char*)&id, sizeof(id));
-      queue.push(QueueWord(std::move(word), i, id));
-      endOfFile[i] = false;
-    }
+    pushWordFromPartialVocabularyToQueue(i);
   }
 
   // wait for the active write tasks to finish
@@ -288,18 +282,17 @@ void writeMappedIdsToExtVec(const TripleVec& input,
 // _________________________________________________________________________________________________________
 void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
-  std::ofstream out(fileName.c_str(),
-                    std::ios_base::out | std::ios_base::binary);
-  AD_CHECK(out.is_open());
-  for (const auto& el : els) {
-    std::string_view word = el.first;
-    size_t len = word.size();
-    out.write((char*)&len, sizeof(len));
-    out.write(word.data(), len);
-    Id id = el.second.m_id;
-    out.write((char*)&id, sizeof(id));
+  ad_utility::serialization::FileWriteSerializer serializer{fileName};
+  uint64_t size = els.size();  // really make sure that this has 64bits;
+  serializer << size;
+  for (const auto& [word, idAndSplitVal] : els) {
+    // When merging the vocabulary, we need the actual word, the (internal) id
+    // we have given this word, and the information, whether this word belongs
+    // into the internal or external vocabulary.
+    serializer << word;
+    serializer << idAndSplitVal.m_id;
+    serializer << idAndSplitVal.m_splitVal.isExternal;
   }
-  out.close();
   LOG(INFO) << "Done writing vocabulary to file.\n";
 }
 

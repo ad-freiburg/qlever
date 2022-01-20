@@ -14,7 +14,17 @@
 #ifndef QLEVER_INDEXBUILDERTYPES_H
 #define QLEVER_INDEXBUILDERTYPES_H
 
-using Triple = std::array<std::string, 3>;
+
+struct PossiblyExternalizedTripleEntry{
+  std::string _entry;
+  bool _isExternal = false;
+};
+using Triple = std::array<PossiblyExternalizedTripleEntry, 3>;
+
+inline Triple stringsToInternalTriple(std::array<std::string, 3>&&t) {
+  using P = PossiblyExternalizedTripleEntry;
+  return {P{t[0], false}, P{t[1], false}, P{t[2], false}};
+}
 
 /// named value type for the ItemMap
 struct IdAndSplitVal {
@@ -45,14 +55,14 @@ struct alignas(256) ItemMapManager {
 
   /// If the key was seen before, return its preassigned Id. Else assign the
   /// Next free Id to the string, store and return it.
-  Id assignNextId(const string& key) {
-    if (!_map.count(key)) {
+  Id assignNextId(const PossiblyExternalizedTripleEntry& key) {
+    if (!_map.count(key._entry)) {
       Id res = _map.size() + _minId;
-      _map[key] = {res, m_comp->extractAndTransformComparable(
-                            key, TripleComponentComparator::Level::IDENTICAL)};
+      _map[key._entry] = {res, m_comp->extractAndTransformComparable(
+                            key._entry, TripleComponentComparator::Level::IDENTICAL, key._isExternal)};
       return res;
     } else {
-      return _map[key].m_id;
+      return _map[key._entry].m_id;
     }
   }
 
@@ -109,7 +119,7 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
   for (size_t j = 0; j < Parallelism; ++j) {
     itemArray[j] = ItemMapManager(j * 100 * maxNumberOfTriples, comp);
     itemArray[j].assignNextId(
-        LANGUAGE_PREDICATE);  // not really needed here, but also not harmful
+        PossiblyExternalizedTripleEntry{LANGUAGE_PREDICATE, false});  // not really needed here, but also not harmful
                               // and needed to make some completely unrelated
                               // unit tests pass.
     itemArray[j]._map.reserve(2 * maxNumberOfTriples);
@@ -133,17 +143,17 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
                                    // with a language tag
         // get the Id for the corresponding langtag Entity
         auto langTagId = map.assignNextId(
-            ad_utility::convertLangtagToEntityUri(lt._langtag));
+            PossiblyExternalizedTripleEntry{ad_utility::convertLangtagToEntityUri(lt._langtag), false});
         // get the Id for the tagged predicate, e.g. @en@rdfs:label
         auto langTaggedPredId =
-            map.assignNextId(ad_utility::convertToLanguageTaggedPredicate(
-                lt._triple[1], lt._langtag));
+            map.assignNextId(PossiblyExternalizedTripleEntry{ad_utility::convertToLanguageTaggedPredicate(
+                lt._triple[1]._entry, lt._langtag), false});
         auto& spoIds = *(res[0]);  // ids of original triple
         // extra triple <subject> @language@<predicate> <object>
         res[1].emplace(array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]});
         // extra triple <object> ql:language-tag <@language>
         res[2].emplace(array<Id, 3>{
-            spoIds[2], map.assignNextId(LANGUAGE_PREDICATE), langTagId});
+            spoIds[2], map.assignNextId(PossiblyExternalizedTripleEntry{LANGUAGE_PREDICATE, false}), langTagId});
       }
       return res;
     };

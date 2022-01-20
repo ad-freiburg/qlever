@@ -185,7 +185,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
                         [&]() { parserExhausted = true; }),
           // convert each triple to the internal representation (e.g. special
           // values for Numbers, externalized literals, etc.)
-          [this](Triple&& t) {
+          [this](std::array<std::string, 3>&& t) -> LangtagAndTriple {
             return tripleToInternalRepresentation(std::move(t));
           },
 
@@ -1260,28 +1260,25 @@ void Index::readConfiguration() {
 }
 
 // ___________________________________________________________________________
-LangtagAndTriple Index::tripleToInternalRepresentation(Triple&& tripleIn) {
-  LangtagAndTriple res{"", std::move(tripleIn)};
+LangtagAndTriple Index::tripleToInternalRepresentation(
+    array<string, 3>&& tripleIn) {
+  LangtagAndTriple res{"", stringsToInternalTriple(std::move(tripleIn))};
   auto& spo = res._triple;
   for (auto& el : spo) {
-    el = _vocab.getLocaleManager().normalizeUtf8(el);
+    el._entry = _vocab.getLocaleManager().normalizeUtf8(el._entry);
   }
   size_t upperBound = 3;
-  if (ad_utility::isXsdValue(spo[2])) {
-    spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
+  auto& object = spo[2]._entry;
+  if (ad_utility::isXsdValue(object)) {
+    object = ad_utility::convertValueLiteralToIndexWord(object);
     upperBound = 2;
-  } else if (isLiteral(spo[2])) {
-    res._langtag = decltype(_vocab)::getLanguage(spo[2]);
+  } else if (isLiteral(object)) {
+    res._langtag = decltype(_vocab)::getLanguage(object);
   }
 
   for (size_t k = 0; k < upperBound; ++k) {
-    if (_onDiskLiterals && _vocab.shouldBeExternalized(spo[k])) {
-      if (isLiteral(spo[k])) {
-        spo[k][0] = EXTERNALIZED_LITERALS_PREFIX_CHAR;
-      } else {
-        AD_CHECK(spo[k][0] == '<');
-        spo[k][0] = EXTERNALIZED_ENTITIES_PREFIX_CHAR;
-      }
+    if (_onDiskLiterals && _vocab.shouldBeExternalized(spo[k]._entry)) {
+      spo[k]._isExternal = true;
     }
   }
   return res;

@@ -66,16 +66,8 @@ class VocabularyMerger {
   // represents tokens/words in a certain partial vocabulary
   struct QueueWord {
     QueueWord() = default;
-    QueueWord(string&& v, size_t file, Id word)
-        : _value(std::move(v)), _partialFileId(file), _partialWordId(word) {
-      if (ad_utility::startsWith(_value, EXTERNALIZED_LITERALS_PREFIX)) {
-        _isExternal = true;
-        _value[0] = '"';
-      }
-      else if (ad_utility::startsWith(_value, EXTERNALIZED_ENTITIES_PREFIX)) {
-        _isExternal = true;
-        _value[0] = '<';
-      }
+    QueueWord(string&& v, size_t file, Id word, bool isExternal)
+        : _value(std::move(v)), _partialFileId(file), _partialWordId(word), _isExternal{isExternal} {
     }
     string _value;          // the word
     size_t _partialFileId;  // from which partial vocabulary did this word come

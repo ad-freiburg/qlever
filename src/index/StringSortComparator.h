@@ -479,10 +479,11 @@ class TripleComponentComparator {
   template <class InnerString, class LanguageTag>
   struct SplitValBase {
     SplitValBase() = default;
-    SplitValBase(char fst, InnerString trans, LanguageTag l)
+    SplitValBase(char fst, InnerString trans, LanguageTag l, bool p_isExternal)
         : firstOriginalChar(fst),
           transformedVal(std::move(trans)),
-          langtag(std::move(l)) {}
+          langtag(std::move(l)),
+          isExternal{p_isExternal}{}
 
     /// The first char of the original value, used to distinguish between
     /// different datatypes
@@ -490,6 +491,7 @@ class TripleComponentComparator {
     InnerString transformedVal;  /// The original inner value, possibly
                                  /// transformed by a locale().
     LanguageTag langtag;         /// the language tag, possibly empty
+    bool isExternal; // is this word in the external vocabulary
   };
 
   /**
@@ -526,7 +528,7 @@ class TripleComponentComparator {
    */
   bool operator()(std::string_view a, const SplitVal& spB,
                   const Level level) const {
-    auto spA = extractAndTransformComparable(a, level);
+    auto spA = extractAndTransformComparable(a, level, false);
     return compare(spA, spB, level) < 0;
   }
 
@@ -539,8 +541,8 @@ class TripleComponentComparator {
   /// std::strcmp
   [[nodiscard]] int compare(std::string_view a, std::string_view b,
                             const Level level = Level::QUARTERNARY) const {
-    auto splitA = extractComparable<SplitValNonOwning>(a, level);
-    auto splitB = extractComparable<SplitValNonOwning>(b, level);
+    auto splitA = extractComparable<SplitValNonOwning>(a, level, false);
+    auto splitB = extractComparable<SplitValNonOwning>(b, level, false);
     // We have to have a total ordering of unique elements in the vocabulary,
     // so if they compare equal according to the locale, use strcmp
     auto cmp = compare(splitA, splitB, level);
@@ -552,8 +554,8 @@ class TripleComponentComparator {
    * value according to the held locale
    */
   [[nodiscard]] SplitVal extractAndTransformComparable(
-      std::string_view a, const Level level) const {
-    return extractComparable<SplitVal>(a, level);
+      std::string_view a, const Level level, bool isExternal) const {
+    return extractComparable<SplitVal>(a, level, isExternal);
   }
 
   /**
@@ -568,18 +570,8 @@ class TripleComponentComparator {
                             const SplitValBase<A, B>& b,
                             const Level level) const {
 
-    auto isLiteral = [](const auto& splitVal) {
-      return splitVal.firstOriginalChar == '"' || splitVal.firstOriginalChar == EXTERNALIZED_LITERALS_PREFIX_CHAR;
-    };
-
-    auto isEntity = [](const auto& splitVal) {
-      return splitVal.firstOriginalChar == '<' || splitVal.firstOriginalChar == EXTERNALIZED_ENTITIES_PREFIX_CHAR;
-    };
-
-    bool sameTypeWhenIgnoringExternalization = (isLiteral(a) && isLiteral(b)) || (isEntity(a) && isEntity(b));
-
     if (auto res = std::strncmp(&a.firstOriginalChar, &b.firstOriginalChar, 1);
-        !sameTypeWhenIgnoringExternalization && res != 0) {
+        res != 0) {
       return res;  // different data types, decide on the datatype
     }
 
@@ -604,11 +596,17 @@ class TripleComponentComparator {
    }
 
    // If even the bytes match, the only difference might be, that one
-   // of the (identical) inputs is being externalized, and the other one isn't
+   // of the (identical) inputs is being externalized, and the other one isn't.
 
    // Additionally, we then want the external words to come before the
    // internal words, so that we can merge them again.
-   return -std::strncmp(&a.firstOriginalChar, &b.firstOriginalChar, 1);
+   if (a.isExternal == b.isExternal) {
+     return 0;  // words are equal
+   }
+
+   // if the first word is External, but the second one not, return -1;
+   return a.isExternal ? -1 : 1;
+
   }
 
   /**
@@ -631,7 +629,7 @@ class TripleComponentComparator {
   [[nodiscard]] SplitVal transformToFirstPossibleBiggerValue(
       std::string_view s, const Level level) const {
     AD_CHECK(level == Level::PRIMARY)
-    auto transformed = extractAndTransformComparable(s, Level::PRIMARY);
+    auto transformed = extractAndTransformComparable(s, Level::PRIMARY, false);
     // The `firstOriginalChar` is either " or < or @
     AD_CHECK(static_cast<unsigned char>(transformed.firstOriginalChar) <
              std::numeric_limits<unsigned char>::max())
@@ -675,13 +673,11 @@ class TripleComponentComparator {
    */
   template <class SplitValType>
   [[nodiscard]] SplitValType extractComparable(
-      std::string_view a, [[maybe_unused]] const Level level) const {
+      std::string_view a, [[maybe_unused]] const Level level, bool isExternal) const {
     std::string_view res = a;
     const char first = a.empty() ? char(0) : a[0];
     std::string_view langtag;
-    if (ad_utility::startsWith(res, "\"") ||
-        ad_utility::startsWith(res,
-                               std::string{EXTERNALIZED_LITERALS_PREFIX})) {
+    if (ad_utility::startsWith(res, "\"")) {
       // only remove the first character in case of literals that always start
       // with a quotation mark. For all other types we need this. <TODO> rework
       // the vocabulary's data type to remove ALL of those hacks
@@ -697,17 +693,11 @@ class TripleComponentComparator {
       } else {
         langtag = "";
       }
-    } else if (ad_utility::startsWith(res, "<") ||
-          ad_utility::startsWith(res,
-                                 std::string{EXTERNALIZED_ENTITIES_PREFIX})) {
-      // We want to sort external and internal iris with the same content directly
-      // next to each other to make the order in the external vocabulary consistent.
-      res.remove_prefix(1);
     }
     if constexpr (std::is_same_v<SplitValType, SplitVal>) {
-      return {first, _locManager.getSortKey(res, level), std::string(langtag)};
+      return {first, _locManager.getSortKey(res, level), std::string(langtag), isExternal};
     } else if constexpr (std::is_same_v<SplitValType, SplitValNonOwning>) {
-      return {first, res, langtag};
+      return {first, res, langtag, isExternal};
     } else {
       SplitValType().ThisShouldNotCompile();
     }
