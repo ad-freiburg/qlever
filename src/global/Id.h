@@ -12,3 +12,13 @@ typedef uint16_t Score;
 // A value to use when the result should be empty (e.g. due to an optional join)
 // The highest two values are used as sentinels.
 static const Id ID_NO_VALUE = std::numeric_limits<Id>::max() - 2;
+
+namespace ad_utility {
+template<size_t numBytesInternal, size_t numBytesPerBlockExternal> requires (numBytesInternal + numBytesPerBlockExternal <= 8)
+class InternalExternalIdManager {
+  using T = uint64_t;
+  static T toInternalId(T id) {
+    return
+  }
+};
+}
