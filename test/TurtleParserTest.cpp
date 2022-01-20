@@ -8,6 +8,7 @@
 #include <string>
 
 #include "../src/parser/TurtleParser.h"
+#include "../src/util/Conversions.h"
 
 using std::string;
 TEST(TurtleParserTest, prefixedName) {
@@ -270,4 +271,46 @@ TEST(TurtleParserTest, predicateObjectList) {
   ASSERT_TRUE(p.predicateObjectList());
   ASSERT_EQ(p._triples, exp);
   ASSERT_EQ(p.getPosition(), predL.size());
+}
+
+TEST(TurtleParserTest, numericLiteral) {
+  std::vector<std::string> literals{"2", "-2", "42.209", "-42.239", ".74"};
+
+  TurtleStringParser<Tokenizer> p;
+  for (const auto& literal : literals) {
+    p.setInputStream(literal);
+    ASSERT_TRUE(p.numericLiteral());
+    ASSERT_EQ(p._lastParseResult, literal);
+    LOG(INFO) << literal << std::endl;
+    ASSERT_TRUE(ad_utility::isNumeric(literal));
+    ASSERT_FLOAT_EQ(ad_utility::convertIndexWordToFloat(
+                        ad_utility::convertNumericToIndexWord(literal)),
+                    std::strtod(literal.c_str(), nullptr));
+  }
+
+  std::vector<std::string> nonWorkingLiterals{"2.3e12", "2.34e-14", "-0.3e2"};
+
+  for (const auto& literal : nonWorkingLiterals) {
+    p.setInputStream(literal);
+    ASSERT_TRUE(p.numericLiteral());
+    ASSERT_EQ(p._lastParseResult, literal);
+    LOG(INFO) << literal << std::endl;
+    ASSERT_THROW(ad_utility::isNumeric(literal), std::out_of_range);
+  }
+}
+
+TEST(TurtleParserTest, booleanLiteral) {
+  TurtleStringParser<Tokenizer> p;
+  p.setInputStream("true");
+  ASSERT_TRUE(p.booleanLiteral());
+  ASSERT_EQ("\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
+            p._lastParseResult);
+
+  p.setInputStream("false");
+  ASSERT_TRUE(p.booleanLiteral());
+  ASSERT_EQ("\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
+            p._lastParseResult);
+
+  p.setInputStream("maybe");
+  ASSERT_FALSE(p.booleanLiteral());
 }

@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "../global/Constants.h"
+#include "../parser/TokenizerCtre.h"
 #include "./Exception.h"
 #include "./StringUtils.h"
 
@@ -642,17 +643,18 @@ bool isXsdValue(const string& val) {
 
 // _____________________________________________________________________________
 bool isNumeric(const string& val) {
-  if (val.empty()) {
-    return false;
+  if (ctre::match<TurtleTokenCtre::Double>(val)) {
+    throw std::out_of_range{
+        "Decimal numbers with an explicit exponent are currently not supported "
+        "by qlever, but the following number was encountered: " +
+        val};
   }
-  size_t start = (val[0] == '-' || val[0] == '+') ? 1 : 0;
-  size_t posNonDigit = val.find_first_not_of("0123456789", start);
-  if (posNonDigit == string::npos) {
+
+  if (ctre::match<TurtleTokenCtre::Integer>(val)) {
     return true;
   }
-  if (val[posNonDigit] == '.') {
-    return posNonDigit + 1 < val.size() &&
-           val.find_first_not_of("0123456789", posNonDigit + 1) == string::npos;
+  if (ctre::match<TurtleTokenCtre::Decimal>(val)) {
+    return true;
   }
   return false;
 }

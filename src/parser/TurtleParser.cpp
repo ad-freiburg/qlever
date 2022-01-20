@@ -265,7 +265,8 @@ template <class T>
 bool TurtleParser<T>::booleanLiteral() {
   if (parseTerminal<TurtleTokenId::True>() ||
       parseTerminal<TurtleTokenId::False>()) {
-    _lastParseResult = '"' + _lastParseResult + "\"^^xsd::boolean";
+    _lastParseResult =
+        '"' + _lastParseResult + "\"^^<" + XSD_BOOLEAN_TYPE + '>';
     return true;
   } else {
     return false;
