@@ -1262,6 +1262,13 @@ void Index::readConfiguration() {
     _vocab.initializeInternalizedLangs(
         _configurationJson["languages-internal"]);
   }
+
+  if (_configurationJson.find("has-all-permutations") !=
+          _configurationJson.end() &&
+      _configurationJson["has-all-permutations"] == false) {
+    // If the permutations simply don't exist, then we can never load them.
+    _loadAllPermutations = false;
+  }
 }
 
 // ___________________________________________________________________________
