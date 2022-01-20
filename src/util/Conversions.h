@@ -642,18 +642,18 @@ bool isXsdValue(const string& val) {
 }
 
 // _____________________________________________________________________________
-bool isNumeric(const string& val) {
-  if (ctre::match<TurtleTokenCtre::Double>(val)) {
+bool isNumeric(const string& value) {
+  if (ctre::match<TurtleTokenCtre::Double>(value)) {
     throw std::out_of_range{
         "Decimal numbers with an explicit exponent are currently not supported "
-        "by qlever, but the following number was encountered: " +
-        val};
+        "by QLever, but the following number was encountered: " +
+        value};
   }
 
-  if (ctre::match<TurtleTokenCtre::Integer>(val)) {
+  if (ctre::match<TurtleTokenCtre::Integer>(value)) {
     return true;
   }
-  if (ctre::match<TurtleTokenCtre::Decimal>(val)) {
+  if (ctre::match<TurtleTokenCtre::Decimal>(value)) {
     return true;
   }
   return false;
