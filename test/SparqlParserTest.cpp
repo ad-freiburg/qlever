@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
+#include <variant>
 
 #include "../src/global/Constants.h"
 #include "../src/parser/PropertyPathParser.h"
@@ -17,7 +18,7 @@ TEST(ParserTest, testParse) {
       const auto& selectClause = pq.selectClause();
       ASSERT_GT(pq.asString().size(), 0u);
       ASSERT_EQ(0u, pq._prefixes.size());
-      ASSERT_EQ(1u, selectClause._selectedVariables.size());
+      ASSERT_EQ(1u, std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).size());
       ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
       ASSERT_EQ(1u, pq._rootGraphPattern._children[0]
                         .getBasic()
@@ -34,7 +35,7 @@ TEST(ParserTest, testParse) {
       ASSERT_TRUE(pq.hasSelectClause());
       const auto& selectClause2 = pq.selectClause();
       ASSERT_EQ(3u, pq._prefixes.size());
-      ASSERT_EQ(2u, selectClause2._selectedVariables.size());
+      ASSERT_EQ(2u, std::get<ParsedQuery::_selectedVariables>(selectClause2._varsOrAsterisk).size());
       ASSERT_EQ(1u, pq.children().size());
       const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
       ASSERT_EQ(3u, triples.size());
@@ -43,8 +44,8 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ("<http://rdf.myprefix.com/>", pq._prefixes[0]._uri);
       ASSERT_EQ("ns", pq._prefixes[1]._prefix);
       ASSERT_EQ("<http://rdf.myprefix.com/ns/>", pq._prefixes[1]._uri);
-      ASSERT_EQ("?x", selectClause2._selectedVariables[0]);
-      ASSERT_EQ("?z", selectClause2._selectedVariables[1]);
+      ASSERT_EQ("?x", std::get<ParsedQuery::_selectedVariables>(selectClause2._varsOrAsterisk)[0]);
+      ASSERT_EQ("?z", std::get<ParsedQuery::_selectedVariables>(selectClause2._varsOrAsterisk)[1]);
       ASSERT_EQ("?x", triples[0]._s);
       ASSERT_EQ(":myrel", triples[0]._p._iri);
       ASSERT_EQ("?y", triples[0]._o);
@@ -70,7 +71,7 @@ TEST(ParserTest, testParse) {
       ASSERT_TRUE(pq.hasSelectClause());
       const auto& selectClause = pq.selectClause();
       ASSERT_EQ(3u, pq._prefixes.size());
-      ASSERT_EQ(2u, selectClause._selectedVariables.size());
+      ASSERT_EQ(2u, std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).size());
       ASSERT_EQ(1u, pq.children().size());
       const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
       ASSERT_EQ(3u, triples.size());
@@ -79,8 +80,8 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ("<http://rdf.myprefix.com/>", pq._prefixes[0]._uri);
       ASSERT_EQ("ns", pq._prefixes[1]._prefix);
       ASSERT_EQ("<http://rdf.myprefix.com/ns/>", pq._prefixes[1]._uri);
-      ASSERT_EQ("?x", selectClause._selectedVariables[0]);
-      ASSERT_EQ("?z", selectClause._selectedVariables[1]);
+      ASSERT_EQ("?x", std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)[0]);
+      ASSERT_EQ("?z", std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)[1]);
       ASSERT_EQ("?x", triples[0]._s);
       ASSERT_EQ(":myrel", triples[0]._p._iri);
       ASSERT_EQ("?y", triples[0]._o);
@@ -104,15 +105,15 @@ TEST(ParserTest, testParse) {
       ASSERT_TRUE(pq.hasSelectClause());
       const auto& selectClause = pq.selectClause();
       ASSERT_EQ(1u, pq._prefixes.size());
-      ASSERT_EQ(2u, selectClause._selectedVariables.size());
+      ASSERT_EQ(2u, std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).size());
       ASSERT_EQ(1u, pq.children().size());
       const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
       ASSERT_EQ(3u, triples.size());
 
       pq.expandPrefixes();
 
-      ASSERT_EQ("?x", selectClause._selectedVariables[0]);
-      ASSERT_EQ("?z", selectClause._selectedVariables[1]);
+      ASSERT_EQ("?x", std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)[0]);
+      ASSERT_EQ("?z", std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)[1]);
       ASSERT_EQ("?x", triples[0]._s);
       ASSERT_EQ("<Directed_by>", triples[0]._p._iri);
       ASSERT_EQ("?y", triples[0]._o);
@@ -373,7 +374,7 @@ TEST(ParserTest, testFilterWithoutDot) {
   ASSERT_TRUE(pq.hasSelectClause());
   const auto& selectClause = pq.selectClause();
   ASSERT_EQ(1u, pq._prefixes.size());
-  ASSERT_EQ(1u, selectClause._selectedVariables.size());
+  ASSERT_EQ(1u, std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).size());
   ASSERT_EQ(1u, pq.children().size());
   const auto& c = pq.children()[0].getBasic();
   ASSERT_EQ(3u, c._whereClauseTriples.size());
@@ -405,14 +406,14 @@ TEST(ParserTest, testExpandPrefixes) {
   ASSERT_EQ(1u, pq.children().size());
   const auto& c = pq.children()[0].getBasic();
   ASSERT_EQ(3u, pq._prefixes.size());
-  ASSERT_EQ(2u, selectClause._selectedVariables.size());
+  ASSERT_EQ(2u, std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).size());
   ASSERT_EQ(3u, c._whereClauseTriples.size());
   ASSERT_EQ("", pq._prefixes[0]._prefix);
   ASSERT_EQ("<http://rdf.myprefix.com/>", pq._prefixes[0]._uri);
   ASSERT_EQ("ns", pq._prefixes[1]._prefix);
   ASSERT_EQ("<http://rdf.myprefix.com/ns/>", pq._prefixes[1]._uri);
-  ASSERT_EQ("?x", selectClause._selectedVariables[0]);
-  ASSERT_EQ("?z", selectClause._selectedVariables[1]);
+  ASSERT_EQ("?x", std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)[0]);
+  ASSERT_EQ("?z", std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)[1]);
   ASSERT_EQ("?x", c._whereClauseTriples[0]._s);
   ASSERT_EQ("<http://rdf.myprefix.com/myrel>",
             c._whereClauseTriples[0]._p._iri);
@@ -437,7 +438,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(1u, selectClause._selectedVariables.size());
+    ASSERT_EQ(1u, std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(std::nullopt, pq._limit);
     ASSERT_EQ(std::nullopt, pq._offset);
@@ -453,7 +454,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_TRUE(pq.hasSelectClause());
     const auto& selectClause = pq.selectClause();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(1u, selectClause._selectedVariables.size());
+    ASSERT_EQ(1u, std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).size());
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(1u, c._whereClauseTriples.size());
@@ -475,7 +476,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(1u, selectClause._selectedVariables.size());
+    ASSERT_EQ(1u, std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(10u, pq._limit.value_or(0));
     ASSERT_EQ(15u, pq._offset.value_or(0));
@@ -495,7 +496,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(2u, selectClause._selectedVariables.size());
+    ASSERT_EQ(2u, std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(10u, pq._limit.value_or(0));
     ASSERT_EQ(15u, pq._offset.value_or(0));
@@ -517,8 +518,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(3u, selectClause._selectedVariables.size());
-    ASSERT_EQ("SCORE(?x)", selectClause._selectedVariables[1]);
+    ASSERT_EQ(3u, std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).size());
+    ASSERT_EQ("SCORE(?x)", std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)[1]);
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(10u, pq._limit.value_or(0));
     ASSERT_EQ(15u, pq._offset.value_or(0));
@@ -542,7 +543,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(2u, selectClause._selectedVariables.size());
+    ASSERT_EQ(2u, std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(10u, pq._limit.value_or(0));
     ASSERT_EQ(15u, pq._offset.value_or(0));
@@ -576,8 +577,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(1u, selectClause._selectedVariables.size());
-    ASSERT_EQ("?movie", selectClause._selectedVariables[0]);
+    ASSERT_EQ(1u, std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).size());
+    ASSERT_EQ("?movie", std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)[0]);
     ASSERT_EQ(2u, c._whereClauseTriples.size());
     ASSERT_EQ("?movie", c._whereClauseTriples[0]._s);
     ASSERT_EQ("<from-year>", c._whereClauseTriples[0]._p._iri);
@@ -602,8 +603,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(1u, pq._prefixes.size());
-    ASSERT_EQ(1u, selectClause._selectedVariables.size());
-    ASSERT_EQ("?movie", selectClause._selectedVariables[0]);
+    ASSERT_EQ(1u, std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).size());
+    ASSERT_EQ("?movie", std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)[0]);
     ASSERT_EQ(2u, c._whereClauseTriples.size());
     ASSERT_EQ("?movie", c._whereClauseTriples[0]._s);
     ASSERT_EQ("<from-year>", c._whereClauseTriples[0]._p._iri);
@@ -673,7 +674,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(2u, selectClause._selectedVariables.size());
+    ASSERT_EQ(2u, std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(10u, pq._limit.value_or(0));
     ASSERT_EQ(15u, pq._offset.value_or(0));
@@ -696,8 +697,8 @@ TEST(ParserTest, testGroupByAndAlias) {
           .parse();
   ASSERT_TRUE(pq.hasSelectClause());
   const auto& selectClause = pq.selectClause();
-  ASSERT_EQ(1u, selectClause._selectedVariables.size());
-  ASSERT_EQ("?count", selectClause._selectedVariables[0]);
+  ASSERT_EQ(1u, std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).size());
+  ASSERT_EQ("?count", std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)[0]);
   ASSERT_EQ(1u, selectClause._aliases.size());
   ASSERT_TRUE(selectClause._aliases[0]._expression.isAggregate({}));
   ASSERT_EQ("(count(?a) as ?count)", selectClause._aliases[0].getDescriptor());
