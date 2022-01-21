@@ -33,28 +33,39 @@ string ParsedQuery::asString() const {
   os << "\n}";
 
   bool usesSelect = hasSelectClause();
+  bool usesAsterisk = (usesSelect) &&
+      std::holds_alternative<Asterisk>(this->selectClause()._varsOrAsterisk);
+
   if (usesSelect) {
     const auto& selectClause = this->selectClause();
     // SELECT
     os << "\nSELECT: {\n\t";
-    for (size_t i = 0; i < selectClause._selectedVariables.size(); ++i) {
-      os << selectClause._selectedVariables[i];
-      if (i + 1 < selectClause._selectedVariables.size()) {
-        os << ", ";
+    if(usesAsterisk) {
+      os << std::get<Asterisk>(selectClause._varsOrAsterisk);
+    }
+    else {
+      const auto& SelectedVariables = std::get<_selectedVariables>(selectClause._varsOrAsterisk);
+      for (size_t i = 0; i < SelectedVariables.size(); ++i) {
+        os << SelectedVariables[i];
+        if (i + 1 < SelectedVariables.size()) {
+          os << ", ";
+        }
       }
     }
     os << "\n}";
 
     // ALIASES
     os << "\nALIASES: {\n\t";
-    for (size_t i = 0; i < selectClause._aliases.size(); ++i) {
-      const Alias& alias = selectClause._aliases[i];
-      os << alias._expression.getDescriptor();
-      if (i + 1 < selectClause._aliases.size()) {
-        os << "\n\t";
+    if(!usesAsterisk) {
+      for (size_t i = 0; i < selectClause._aliases.size(); ++i) {
+        const Alias& alias = selectClause._aliases[i];
+        os << alias._expression.getDescriptor();
+        if (i + 1 < selectClause._aliases.size()) {
+          os << "\n\t";
+        }
       }
+      os << "{";
     }
-    os << "{";
   } else if (hasConstructClause()) {
     const auto& constructClause = this->constructClause();
     os << "\n CONSTRUCT {\n\t";

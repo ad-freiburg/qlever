@@ -106,12 +106,12 @@ class QueryExecutionTree {
   // Returns a vector where the i-th element contains the column index and
   // `ResultType` of the i-th `selectVariable` in the `resultTable`
   ColumnIndicesAndTypes selectedVariablesToColumnIndices(
-      const std::vector<string>& selectVariables,
+      const std::variant<vector<string>,char> & selectVarsOrAsterisk,
       const ResultTable& resultTable) const;
 
   template <ExportSubFormat format>
   ad_utility::stream_generator::stream_generator generateResults(
-      const vector<string>& selectVars, size_t limit = MAX_NOF_ROWS_IN_RESULT,
+      const std::variant<vector<string>,char> & selectVarsOrAsterisk, size_t limit = MAX_NOF_ROWS_IN_RESULT,
       size_t offset = 0) const;
 
   // Generate an RDF graph in turtle format for a CONSTRUCT query.
@@ -131,11 +131,11 @@ class QueryExecutionTree {
       size_t offset, std::shared_ptr<const ResultTable> res) const;
 
   nlohmann::json writeResultAsQLeverJson(
-      const vector<string>& selectVars, size_t limit, size_t offset,
+      const std::variant<vector<string>,char> & selectVarsOrAsterisk, size_t limit, size_t offset,
       shared_ptr<const ResultTable> resultTable = nullptr) const;
 
   nlohmann::json writeResultAsSparqlJson(
-      const vector<string>& selectVars, size_t limit, size_t offset,
+      const std::variant<vector<string>,char> & selectVarsOrAsterisk, size_t limit, size_t offset,
       shared_ptr<const ResultTable> preComputedResult = nullptr) const;
 
   const std::vector<size_t>& resultSortedOn() const {

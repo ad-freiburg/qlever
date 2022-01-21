@@ -170,9 +170,11 @@ Awaitable<json> Server::composeResponseQleverJson(
     j["status"] = "OK";
     j["warnings"] = qet.collectWarnings();
     j["selected"] =
-        query.hasSelectClause()
-            ? query.selectClause()._selectedVariables
-            : std::vector<std::string>{"?subject", "?predicate", "?object"};
+        query.hasSelectClause() ?
+            ((std::holds_alternative<ParsedQuery::Asterisk>(query.selectClause()._varsOrAsterisk)) ?
+              std::vector<std::string>{"*"}
+            : std::get<ParsedQuery::_selectedVariables>(query.selectClause()._varsOrAsterisk))
+        : std::vector<std::string>{"?subject", "?predicate", "?object"};
 
     j["runtimeInformation"] = RuntimeInformation::ordered_json(
         qet.getRootOperation()->getRuntimeInfo());
@@ -184,7 +186,7 @@ Awaitable<json> Server::composeResponseQleverJson(
       requestTimer.cont();
       j["res"] = query.hasSelectClause()
                      ? qet.writeResultAsQLeverJson(
-                           query.selectClause()._selectedVariables, limit,
+                           query.selectClause()._varsOrAsterisk, limit,
                            offset, std::move(resultTable))
                      : qet.writeRdfGraphJson(query.constructClause(), limit,
                                              offset, std::move(resultTable));
@@ -220,7 +222,7 @@ Awaitable<json> Server::composeResponseSparqlJson(
         std::min(query._limit.value_or(MAX_NOF_ROWS_IN_RESULT), maxSend);
     size_t offset = query._offset.value_or(0);
     requestTimer.cont();
-    j = qet.writeResultAsSparqlJson(query.selectClause()._selectedVariables,
+    j = qet.writeResultAsSparqlJson(query.selectClause()._varsOrAsterisk,
                                     limit, offset, std::move(resultTable));
     requestTimer.stop();
     return j;
@@ -238,7 +240,7 @@ Server::composeResponseSepValues(const ParsedQuery& query,
     size_t offset = query._offset.value_or(0);
     return query.hasSelectClause()
                ? qet.generateResults<format>(
-                     query.selectClause()._selectedVariables, limit, offset)
+                     query.selectClause()._varsOrAsterisk, limit, offset)
                : qet.writeRdfGraphSeparatedValues<format>(
                      query.constructClause(), limit, offset, qet.getResult());
   };

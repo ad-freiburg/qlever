@@ -7,7 +7,6 @@
 #include <iostream>
 #include <memory>
 #include <string>
-#include <set>
 
 struct SparqlToken {
   enum class Type {
@@ -85,8 +84,6 @@ class SparqlLexer {
         _next.raw.empty() || _re_string.ToString().empty() ? "" : " ";
     return _next.raw + delimiter + _re_string.ToString();
   }
-
-  std::set<std::string> readVarsForAsterisk();
 
  private:
   void readNext();

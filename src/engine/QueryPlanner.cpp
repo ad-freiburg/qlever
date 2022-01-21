@@ -499,7 +499,7 @@ bool QueryPlanner::checkUsePatternTrick(
 
       // check that all selected variables are outputs of
       // CountAvailablePredicates
-      for (const std::string& s : selectClause._selectedVariables) {
+      for (const std::string& s : std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)) {
         if (s != t._o && s != count_var_name) {
           usePatternTrick = false;
           break;
@@ -568,7 +568,7 @@ bool QueryPlanner::checkUsePatternTrick(
               return;
             }
             const auto& selectClause = arg._subquery.selectClause();
-            for (const auto& v : selectClause._selectedVariables) {
+            for (const auto& v : std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)) {
               if (v == t._o) {
                 usePatternTrick = false;
                 break;
@@ -620,7 +620,7 @@ bool QueryPlanner::checkUsePatternTrick(
                 return;
               }
               const auto& selectClause = arg._subquery.selectClause();
-              for (const auto& v : selectClause._selectedVariables) {
+              for (const auto& v : std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)) {
                 if (v == t._o) {
                   usePatternTrick = false;
                   break;
@@ -828,7 +828,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
     vector<size_t> keepIndices;
     ad_utility::HashSet<size_t> indDone;
     const auto& colMap = parent._qet->getVariableColumns();
-    for (const auto& var : selectClause._selectedVariables) {
+    for (const auto& var : std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)) {
       const auto it = colMap.find(var);
       if (it != colMap.end()) {
         auto ind = it->second;

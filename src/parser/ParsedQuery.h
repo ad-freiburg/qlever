@@ -307,12 +307,24 @@ class ParsedQuery {
     }
   };
 
-  struct SelectClause {
-    vector<string> _selectedVariables;
-    std::vector<Alias> _aliases;
+  using Asterisk = char;
+  using _selectedVariables = vector<string>;
+  /*
+    struct SelectAsterisk {
+    char _asterisk = '*';
     bool _reduced = false;
     bool _distinct = false;
   };
+  */
+
+  struct SelectClause {
+    std::vector<Alias> _aliases;
+    std::variant<_selectedVariables,Asterisk> _varsOrAsterisk;
+    bool _reduced = false;
+    bool _distinct = false;
+  };
+
+  SelectClause _selectedVarsOrAsterisk {SelectClause{}};
 
   using ConstructClause = ad_utility::sparql_types::Triples;
 
@@ -328,9 +340,10 @@ class ParsedQuery {
   string _textLimit;
   std::optional<size_t> _offset = std::nullopt;
   string _originalString;
+
   // explicit default initialisation because the constructor
   // of SelectClause is private
-  std::variant<SelectClause, ConstructClause> _clause{SelectClause{}};
+  std::variant<SelectClause,ConstructClause> _clause{_selectedVarsOrAsterisk};
 
   [[nodiscard]] bool hasSelectClause() const {
     return std::holds_alternative<SelectClause>(_clause);

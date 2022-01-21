@@ -153,66 +153,6 @@ void SparqlLexer::readNext() {
   _next.raw = raw;
 }
 
-/*
-#Example 1
-
- SELECT ?x ?y WHERE {
-VALUES ?x { 1 2 3 4 }
-{
-  SELECT ?y WHERE { VALUES ?y { 5 6 7 8 }  }
-}  # \subQuery
-} # \mainQuery
-
- -------------------------------------------------------------------
-
-#Example 2
- SELECT ?p ?pt ?pLabel ?d ?aliases WHERE {
- {
-   SELECT ?p ?pt ?d
-             (GROUP_CONCAT(DISTINCT ?alias; separator="|") as ?aliases)
-   WHERE {
-     ?p wikibase:propertyType ?pt .
-     OPTIONAL {?p skos:altLabel ?alias FILTER (LANG (?alias) = "en")}
-     OPTIONAL {?p schema:description ?d FILTER (LANG (?d) = "en") .}
-   } GROUP BY ?p ?pt ?d
- }
- SERVICE wikibase:label {
-   bd:serviceParam wikibase:language "[AUTO_LANGUAGE],en".
- }
-}
-*/
-
-std::set<std::string> SparqlLexer::readVarsForAsterisk(){
-  std::set<std::string> foundVars;
-  std::string raw_curr_backup = _current.raw;
-  size_t pos_curr_backup = _current.pos;
-  SparqlToken::Type type_curr_backup = _current.type;
-  std::string raw_next_backup = _next.raw;
-  size_t pos_next_backup = _next.pos;
-  SparqlToken::Type type_next_backup = _next.type;
-  re2::StringPiece _backup_re_string = _re_string;
-
-  while(!empty()) {
-    readNext();
-    // ignore the alias cases
-    if(ad_utility::getLowercaseUtf8(_next.raw) == "as") {
-      readNext();
-      readNext();
-    }
-    if(_next.type == SparqlToken::Type::VARIABLE) {
-      foundVars.insert(_next.raw);
-    }
-  }
-  _current.raw = raw_curr_backup;
-  _current.pos = pos_curr_backup;
-  _current.type = type_curr_backup;
-  _next.raw = raw_next_backup;
-  _next.pos = pos_next_backup;
-  _next.type = type_next_backup;
-  _re_string = _backup_re_string;
-  return foundVars;
-}
-
 void SparqlLexer::expandNextUntilWhitespace() {
   std::ostringstream s;
   while (_re_string.size() > 0 && !std::isspace(*_re_string.begin())) {
