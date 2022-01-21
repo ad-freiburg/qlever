@@ -16,7 +16,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        dockerfile: [ Dockerfile, Dockerfiles/Dockerfile.Ubuntu18.04, Dockerfiles/Dockerfile.Ubuntu20.04]
+        #dockerfile: [ Dockerfile, Dockerfiles/Dockerfile.Ubuntu18.04, Dockerfiles/Dockerfile.Ubuntu20.04]
+        dockerfile: [ Dockerfile]
         os: [ ubuntu-latest ]
 
     steps:
