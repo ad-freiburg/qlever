@@ -33,18 +33,17 @@ string ParsedQuery::asString() const {
   os << "\n}";
 
   bool usesSelect = hasSelectClause();
-  bool usesAsterisk = (usesSelect) &&
-      std::holds_alternative<Asterisk>(this->selectClause()._varsOrAsterisk);
+  bool usesAsterisk = usesSelect && selectClause()._varsOrAsterisk.isAsterisk();
 
   if (usesSelect) {
     const auto& selectClause = this->selectClause();
     // SELECT
     os << "\nSELECT: {\n\t";
     if(usesAsterisk) {
-      os << std::get<Asterisk>(selectClause._varsOrAsterisk);
+      os << selectClause._varsOrAsterisk.getAsterisk();
     }
     else {
-      const auto& SelectedVariables = std::get<_selectedVariables>(selectClause._varsOrAsterisk);
+      const auto& SelectedVariables = selectClause._varsOrAsterisk.getSelectVariables();
       for (size_t i = 0; i < SelectedVariables.size(); ++i) {
         os << SelectedVariables[i];
         if (i + 1 < SelectedVariables.size()) {

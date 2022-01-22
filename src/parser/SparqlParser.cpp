@@ -66,10 +66,10 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
   parseSolutionModifiers(query);
 
   if (!query->_groupByVariables.empty()) {
-    if (query->hasSelectClause()) {
+    if (query->hasSelectClause() && query->selectClause()._varsOrAsterisk.isVariables()) {
       const auto& selectClause = query->selectClause();
       // Check if all selected variables are either aggregated or
-      for (const string& var : std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)) {
+      for (const string& var : selectClause._varsOrAsterisk.getSelectVariables()) {
         if (var[0] == '?') {
           bool is_alias = false;
           for (const ParsedQuery::Alias& a : selectClause._aliases) {
@@ -121,9 +121,12 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
   const auto& selectClause = query->selectClause();
 
   ad_utility::HashMap<std::string, size_t> variable_counts;
-  for (const std::string& s : std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)) {
-    variable_counts[s]++;
+  if(selectClause._varsOrAsterisk.isVariables()) {
+    for (const std::string& s : selectClause._varsOrAsterisk.getSelectVariables()) {
+      variable_counts[s]++;
+    }
   }
+
   for (const ParsedQuery::Alias& a : selectClause._aliases) {
     // The variable was already added to the selected variables while
     // parsing the alias, thus it should appear exactly once
@@ -165,11 +168,12 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
     selectClause._reduced = true;
   }
   if (_lexer.accept("*")) {
-    selectClause._varsOrAsterisk = '*';
+    selectClause._varsOrAsterisk.setsAsterisk();
   }
   while (!_lexer.accept("where")) {
     if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-      std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).push_back(_lexer.current().raw);
+        // Exception avoided due to previous Syntax Check of Selector '*'
+        selectClause._varsOrAsterisk.getSelectVariables().push_back(_lexer.current().raw);
     } else if (_lexer.accept("text")) {
       _lexer.expect("(");
       std::ostringstream s;
@@ -178,7 +182,7 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       s << _lexer.current().raw;
       _lexer.expect(")");
       s << ")";
-      std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).push_back(s.str());
+      selectClause._varsOrAsterisk.getSelectVariables().push_back(s.str());
     } else if (_lexer.accept("score")) {
       _lexer.expect("(");
       std::ostringstream s;
@@ -187,12 +191,12 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       s << _lexer.current().raw;
       _lexer.expect(")");
       s << ")";
-      std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).push_back(s.str());
+      selectClause._varsOrAsterisk.getSelectVariables().push_back(s.str());
     } else if (_lexer.accept("(")) {
       // expect an alias
       ParsedQuery::Alias a = parseAliasWithAntlr();
       selectClause._aliases.push_back(a);
-      std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk).emplace_back(a._outVarName);
+      selectClause._varsOrAsterisk.getSelectVariables().emplace_back(a._outVarName);
       _lexer.expect(")");
     } else {
       _lexer.accept();
@@ -218,13 +222,13 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
     s << _lexer.current().raw;
     _lexer.expect(")");
     s << ")";
-  } else if (query->hasSelectClause() && _lexer.accept("(")) {
+  } else if (query->hasSelectClause() && query->selectClause()._varsOrAsterisk.isVariables() && _lexer.accept("(")) {
     // TODO This assumes that aliases can stand in the ORDER BY
     // This is not true, only expression may stand there
     ParsedQuery::Alias a = parseAliasWithAntlr();
     auto& selectClause = query->selectClause();
 
-    for (const auto& selectedVariable : std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)) {
+    for (const auto& selectedVariable : selectClause._varsOrAsterisk.getSelectVariables()) {
       if (selectedVariable == a._outVarName) {
         throw ParseException("A variable with name " + selectedVariable +
                              " is already used, but the ORDER BY with alias " +

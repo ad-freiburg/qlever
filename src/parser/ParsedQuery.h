@@ -302,24 +302,68 @@ class ParsedQuery {
   struct Alias {
     sparqlExpression::SparqlExpressionPimpl _expression;
     string _outVarName;
-    std::string getDescriptor() const {
+    [[nodiscard]] std::string getDescriptor() const {
       return "(" + _expression.getDescriptor() + " as " + _outVarName + ")";
     }
   };
 
-  using Asterisk = char;
-  using _selectedVariables = vector<string>;
-  /*
-    struct SelectAsterisk {
-    char _asterisk = '*';
-    bool _reduced = false;
-    bool _distinct = false;
-  };
-  */
+  typedef std::variant<vector<string>,char> SelectVarsOrAsterisk;
+  // Representation of the 'Selector: All (*)' xor 'Selector: (VarName)+'
+  struct SelectedVarsOrAsterisk {
+   private:
+    SelectVarsOrAsterisk _varsOrAsterisk;
 
+    void setAsterisk() {
+      _varsOrAsterisk = '*';
+    }
+
+    [[nodiscard]] SelectVarsOrAsterisk clone() const {
+      return SelectVarsOrAsterisk{_varsOrAsterisk};
+    }
+
+   public:
+    // Clone of the private variable typed 'variant' (vector)
+    [[nodiscard]] SelectVarsOrAsterisk get() const {
+        // return clone();
+        return SelectVarsOrAsterisk{_varsOrAsterisk};
+    }
+
+    [[nodiscard]] bool isAsterisk() const {
+      return std::holds_alternative<char>(_varsOrAsterisk);
+    }
+
+    [[nodiscard]] bool isVariables() const {
+      return std::holds_alternative<std::vector<string>>(_varsOrAsterisk);
+    }
+
+    // Sets the Selector to 'All' (*) only if the Selector is still undefined
+    // Returned value maybe unused due to Syntax Check
+    [[maybe_unused]] bool setsAsterisk() {
+      // if (!isAsterisk() && !isVariables()) {
+        setAsterisk();
+        return true;
+      // }
+      // else return false;
+    }
+
+    [[nodiscard]] char getAsterisk() const {
+      return std::get<char>(_varsOrAsterisk);;
+    }
+
+    [[nodiscard]] const auto& getSelectVariables() const {
+      return std::get<std::vector<string>>(_varsOrAsterisk);
+    }
+
+    [[nodiscard]] auto& getSelectVariables()  {
+      return std::get<std::vector<string>>(_varsOrAsterisk);
+    }
+  };
+
+  // Represents the Select Clause with all the possible outcomes
   struct SelectClause {
+    // Aliases will be empty if Selector '*' is set
     std::vector<Alias> _aliases;
-    std::variant<_selectedVariables,Asterisk> _varsOrAsterisk;
+    SelectedVarsOrAsterisk _varsOrAsterisk;
     bool _reduced = false;
     bool _distinct = false;
   };

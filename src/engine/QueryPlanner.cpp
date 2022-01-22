@@ -499,15 +499,23 @@ bool QueryPlanner::checkUsePatternTrick(
 
       // check that all selected variables are outputs of
       // CountAvailablePredicates
-      for (const std::string& s : std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)) {
-        if (s != t._o && s != count_var_name) {
-          usePatternTrick = false;
-          break;
+      /*
+      if(selectClause._varsOrAsterisk.isAsterisk()) {
+        return false;
+      }
+      */
+      if(selectClause._varsOrAsterisk.isVariables()) {
+        for (const std::string& s : selectClause._varsOrAsterisk.getSelectVariables()) {
+          if (s != t._o && s != count_var_name) {
+            usePatternTrick = false;
+            break;
+          }
+        }
+        if (!usePatternTrick) {
+          continue;
         }
       }
-      if (!usePatternTrick) {
-        continue;
-      }
+
 
       // Check for triples containing the ql:has-predicate triple's
       // object.
@@ -568,10 +576,12 @@ bool QueryPlanner::checkUsePatternTrick(
               return;
             }
             const auto& selectClause = arg._subquery.selectClause();
-            for (const auto& v : std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)) {
-              if (v == t._o) {
-                usePatternTrick = false;
-                break;
+            if(selectClause._varsOrAsterisk.isVariables()) {
+              for (const auto& v : selectClause._varsOrAsterisk.getSelectVariables()) {
+                if (v == t._o) {
+                  usePatternTrick = false;
+                  break;
+                }
               }
             }
           } else if constexpr (std::is_same_v<T, GraphPatternOperation::Bind>) {
@@ -620,10 +630,12 @@ bool QueryPlanner::checkUsePatternTrick(
                 return;
               }
               const auto& selectClause = arg._subquery.selectClause();
-              for (const auto& v : std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)) {
-                if (v == t._o) {
-                  usePatternTrick = false;
-                  break;
+              if(selectClause._varsOrAsterisk.isVariables()) {
+                for (const auto& v : selectClause._varsOrAsterisk.getSelectVariables()) {
+                  if (v == t._o) {
+                    usePatternTrick = false;
+                    break;
+                  }
                 }
               }
             } else if constexpr (std::is_same_v<T, GraphPatternOperation::
@@ -828,24 +840,26 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
     vector<size_t> keepIndices;
     ad_utility::HashSet<size_t> indDone;
     const auto& colMap = parent._qet->getVariableColumns();
-    for (const auto& var : std::get<ParsedQuery::_selectedVariables>(selectClause._varsOrAsterisk)) {
-      const auto it = colMap.find(var);
-      if (it != colMap.end()) {
-        auto ind = it->second;
-        if (indDone.count(ind) == 0) {
-          keepIndices.push_back(ind);
-          indDone.insert(ind);
-        }
-      } else if (ad_utility::startsWith(var, "SCORE(") ||
-                 ad_utility::startsWith(var, "TEXT(")) {
-        auto varInd = var.find('?');
-        auto cVar = var.substr(varInd, var.rfind(')') - varInd);
-        const auto it = colMap.find(cVar);
+    if(selectClause._varsOrAsterisk.isVariables()){
+      for (const auto& var : selectClause._varsOrAsterisk.getSelectVariables()) {
+        const auto it = colMap.find(var);
         if (it != colMap.end()) {
           auto ind = it->second;
           if (indDone.count(ind) == 0) {
             keepIndices.push_back(ind);
             indDone.insert(ind);
+          }
+        } else if (ad_utility::startsWith(var, "SCORE(") ||
+                   ad_utility::startsWith(var, "TEXT(")) {
+          auto varInd = var.find('?');
+          auto cVar = var.substr(varInd, var.rfind(')') - varInd);
+          const auto it = colMap.find(cVar);
+          if (it != colMap.end()) {
+            auto ind = it->second;
+            if (indDone.count(ind) == 0) {
+              keepIndices.push_back(ind);
+              indDone.insert(ind);
+            }
           }
         }
       }

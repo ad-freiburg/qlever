@@ -169,12 +169,19 @@ Awaitable<json> Server::composeResponseQleverJson(
     j["query"] = query._originalString;
     j["status"] = "OK";
     j["warnings"] = qet.collectWarnings();
-    j["selected"] =
-        query.hasSelectClause() ?
-            ((std::holds_alternative<ParsedQuery::Asterisk>(query.selectClause()._varsOrAsterisk)) ?
-              std::vector<std::string>{"*"}
-            : std::get<ParsedQuery::_selectedVariables>(query.selectClause()._varsOrAsterisk))
-        : std::vector<std::string>{"?subject", "?predicate", "?object"};
+    if(query.hasSelectClause()){
+      if(query.selectClause()._varsOrAsterisk.isAsterisk()) {
+        string str;
+        str+=(query.selectClause()._varsOrAsterisk.getAsterisk());
+        j["selected"] = std::vector<std::string>{str};
+      }
+      else {
+        j["selected"] = query.selectClause()._varsOrAsterisk.getSelectVariables();
+      }
+    }
+    else {
+      j["selected"] = std::vector<std::string>{"?subject", "?predicate", "?object"};
+    }
 
     j["runtimeInformation"] = RuntimeInformation::ordered_json(
         qet.getRootOperation()->getRuntimeInfo());
@@ -224,6 +231,7 @@ Awaitable<json> Server::composeResponseSparqlJson(
     requestTimer.cont();
     j = qet.writeResultAsSparqlJson(query.selectClause()._varsOrAsterisk,
                                     limit, offset, std::move(resultTable));
+
     requestTimer.stop();
     return j;
   };
