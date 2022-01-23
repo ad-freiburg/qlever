@@ -6,6 +6,8 @@
 
 #include "../src/parser/data/VarOrTerm.h"
 
+using namespace std::string_literals;
+
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
@@ -14,12 +16,12 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
 }
 
 struct ContextWrapper {
-  Index index{};
-  ResultTable resultTable{allocator()};
-  ad_utility::HashMap<std::string, size_t> hashMap{};
+  Index _index{};
+  ResultTable _resultTable{allocator()};
+  ad_utility::HashMap<std::string, size_t> _hashMap{};
 
-  Context createContextForRow(size_t row) {
-    return {row, resultTable, hashMap, index};
+  Context createContextForRow(size_t row) const {
+    return {row, _resultTable, _hashMap, _index};
   }
 };
 
@@ -36,7 +38,6 @@ TEST(SparqlDataTypesTest, BlankNodeInvalidLabelsThrowException) {
 
 TEST(SparqlDataTypesTest, BlankNodeEvaluatesCorrectlyBasedOnContext) {
   using ::testing::Optional;
-  using namespace std::string_literals;
   auto wrapper = prepareContext();
 
   BlankNode blankNodeA{false, "a"};
@@ -61,7 +62,6 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluatesCorrectlyBasedOnContext) {
 }
 
 TEST(SparqlDataTypesTest, BlankNodeEvaluateIsPropagatedCorrectly) {
-  using namespace std::string_literals;
   auto wrapper = prepareContext();
 
   BlankNode blankNode{false, "label"};
@@ -102,7 +102,6 @@ TEST(SparqlDataTypesTest, IriValidIriIsPreserved) {
 
 TEST(SparqlDataTypesTest, IriEvaluatesCorrectlyBasedOnContext) {
   using ::testing::Optional;
-  using namespace std::string_literals;
   auto wrapper = prepareContext();
 
   std::string iriString{"<http://some-iri>"};
@@ -121,7 +120,6 @@ TEST(SparqlDataTypesTest, IriEvaluatesCorrectlyBasedOnContext) {
 }
 
 TEST(SparqlDataTypesTest, IriEvaluateIsPropagatedCorrectly) {
-  using namespace std::string_literals;
   auto wrapper = prepareContext();
 
   Iri iri{"<http://some-iri>"};
@@ -154,7 +152,6 @@ TEST(SparqlDataTypesTest, LiteralNumberIsCorrectlyFormatted) {
 
 TEST(SparqlDataTypesTest, LiteralEvaluatesCorrectlyBasedOnContext) {
   using ::testing::Optional;
-  using namespace std::string_literals;
   auto wrapper = prepareContext();
 
   std::string literalString{"true"};
@@ -173,7 +170,6 @@ TEST(SparqlDataTypesTest, LiteralEvaluatesCorrectlyBasedOnContext) {
 }
 
 TEST(SparqlDataTypesTest, LiteralEvaluateIsPropagatedCorrectly) {
-  using namespace std::string_literals;
   auto wrapper = prepareContext();
 
   Literal literal{"some literal"};
@@ -206,4 +202,72 @@ TEST(SparqlDataTypesTest, VariableInvalidNamesThrowException) {
   EXPECT_THROW(Variable{"? var with space"}, ad_semsearch::Exception);
   EXPECT_THROW(Variable{"?"}, ad_semsearch::Exception);
   EXPECT_THROW(Variable{"$"}, ad_semsearch::Exception);
+}
+
+TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
+  using ::testing::Optional;
+  auto wrapper = prepareContext();
+
+  wrapper._hashMap["?var"] = 0;
+  wrapper._resultTable._resultTypes.push_back(qlever::ResultType::VERBATIM);
+  wrapper._resultTable._idTable.setCols(1);
+  Id value1 = 69;
+  Id value2 = 420;
+  wrapper._resultTable._idTable.push_back({value1});
+  wrapper._resultTable._idTable.push_back({value2});
+
+  Variable variable{"?var"};
+  Context context0 = wrapper.createContextForRow(0);
+
+  EXPECT_THAT(variable.evaluate(context0, SUBJECT), Optional("69"s));
+  EXPECT_THAT(variable.evaluate(context0, PREDICATE), Optional("69"s));
+  EXPECT_THAT(variable.evaluate(context0, OBJECT), Optional("69"s));
+
+  Context context1 = wrapper.createContextForRow(1);
+
+  EXPECT_THAT(variable.evaluate(context1, SUBJECT), Optional("420"s));
+  EXPECT_THAT(variable.evaluate(context1, PREDICATE), Optional("420"s));
+  EXPECT_THAT(variable.evaluate(context1, OBJECT), Optional("420"s));
+}
+
+TEST(SparqlDataTypesTest, VariableEvaluatesNothingForUnusedName) {
+  using ::testing::Optional;
+  auto wrapper = prepareContext();
+
+  Variable variable{"?var"};
+  Context context0 = wrapper.createContextForRow(0);
+
+  EXPECT_EQ(variable.evaluate(context0, SUBJECT), std::nullopt);
+  EXPECT_EQ(variable.evaluate(context0, PREDICATE), std::nullopt);
+  EXPECT_EQ(variable.evaluate(context0, OBJECT), std::nullopt);
+
+  Context context10 = wrapper.createContextForRow(1337);
+
+  EXPECT_EQ(variable.evaluate(context10, SUBJECT), std::nullopt);
+  EXPECT_EQ(variable.evaluate(context10, PREDICATE), std::nullopt);
+  EXPECT_EQ(variable.evaluate(context10, OBJECT), std::nullopt);
+}
+
+TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
+  using ::testing::Optional;
+  auto wrapper = prepareContext();
+
+  wrapper._hashMap["?var"] = 0;
+  wrapper._resultTable._resultTypes.push_back(qlever::ResultType::VERBATIM);
+  wrapper._resultTable._idTable.setCols(1);
+  Id value = 69;
+  wrapper._resultTable._idTable.push_back({value});
+
+  Variable variableKnown{"?var"};
+  Context context = wrapper.createContextForRow(0);
+
+  EXPECT_THAT(variableKnown.evaluate(context, SUBJECT), Optional("69"s));
+  EXPECT_THAT(VarOrTerm{variableKnown}.evaluate(context, SUBJECT),
+              Optional("69"s));
+
+  Variable variableUnknown{"?unknownVar"};
+
+  EXPECT_EQ(variableUnknown.evaluate(context, SUBJECT), std::nullopt);
+  EXPECT_EQ(VarOrTerm{variableUnknown}.evaluate(context, SUBJECT),
+            std::nullopt);
 }
