@@ -7,10 +7,21 @@
 #include <sstream>
 #include <string>
 
+namespace {
+/**
+ * A concept to ensure objects can be formatted by std::ostream.
+ * @tparam T The Type to be formatted
+ */
+template <typename T>
+concept Streamable = requires(T x, std::ostream& os) {
+  os << x;
+};
+};  // namespace
+
 class Literal {
   std::string _stringRepresentation;
 
-  template <typename T>
+  template <Streamable T>
   static std::string toString(const T& t) {
     std::ostringstream stream;
     stream << t;
@@ -22,8 +33,13 @@ class Literal {
   }
 
  public:
-  explicit Literal(auto&& t)
-      : _stringRepresentation(toString(std::forward<decltype(t)>(t))) {}
+  template <Streamable T>
+  explicit Literal(T&& t)
+      : _stringRepresentation(toString(std::forward<T>(t))) {}
+
+  static_assert(!Streamable<Literal>,
+                "If Literal satisfies the Streamable concept, copy and move "
+                "constructors are hidden, leading to unexpected behaviour");
 
   // ___________________________________________________________________________
   // Used for testing

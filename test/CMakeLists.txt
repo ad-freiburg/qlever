@@ -222,5 +222,5 @@ target_link_libraries(CompactStringVectorTest gtest_main ${CMAKE_THREAD_LIBS_INI
 add_test(CompactStringVectorTest CompactStringVectorTest)
 
 add_executable(SparqlDataTypesTest SparqlDataTypesTest.cpp)
-target_link_libraries(SparqlDataTypesTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(SparqlDataTypesTest gmock_main engine ${CMAKE_THREAD_LIBS_INIT})
 add_test(SparqlDataTypesTest SparqlDataTypesTest)

@@ -2,12 +2,28 @@
 // Chair of Algorithms and Data Structures.
 // Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
-#include "../src/parser/data/BlankNode.h"
-#include "../src/parser/data/Iri.h"
-#include "../src/parser/data/Literal.h"
-#include "../src/parser/data/Variable.h"
+#include "../src/parser/data/VarOrTerm.h"
+
+ad_utility::AllocatorWithLimit<Id>& allocator() {
+  static ad_utility::AllocatorWithLimit<Id> a{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          std::numeric_limits<size_t>::max())};
+  return a;
+}
+
+struct ContextWrapper {
+  Index index{};
+  ResultTable resultTable{allocator()};
+  ad_utility::HashMap<std::string, size_t> hashMap{};
+
+  Context createContextForRow(size_t row) {
+    return {row, resultTable, hashMap, index};
+  }
+};
+
+ContextWrapper prepareContext() { return {}; }
 
 TEST(SparqlDataTypesTest, BlankNodeInvalidLabelsThrowException) {
   EXPECT_THROW(BlankNode(false, ""), ad_semsearch::Exception);
@@ -16,6 +32,47 @@ TEST(SparqlDataTypesTest, BlankNodeInvalidLabelsThrowException) {
   EXPECT_THROW(BlankNode(false, "-leading-dash"), ad_semsearch::Exception);
   EXPECT_THROW(BlankNode(false, "trailing.dots."), ad_semsearch::Exception);
   EXPECT_THROW(BlankNode(false, ".leading.dots"), ad_semsearch::Exception);
+}
+
+TEST(SparqlDataTypesTest, BlankNodeEvaluatesCorrectlyBasedOnContext) {
+  using ::testing::Optional;
+  using namespace std::string_literals;
+  auto wrapper = prepareContext();
+
+  BlankNode blankNodeA{false, "a"};
+  BlankNode blankNodeB{true, "b"};
+  Context context0 = wrapper.createContextForRow(0);
+
+  EXPECT_THAT(blankNodeA.evaluate(context0, SUBJECT), Optional("_:u0_a"s));
+  EXPECT_THAT(blankNodeA.evaluate(context0, PREDICATE), Optional("_:u0_a"s));
+  EXPECT_THAT(blankNodeA.evaluate(context0, OBJECT), Optional("_:u0_a"s));
+  EXPECT_THAT(blankNodeB.evaluate(context0, SUBJECT), Optional("_:g0_b"s));
+  EXPECT_THAT(blankNodeB.evaluate(context0, PREDICATE), Optional("_:g0_b"s));
+  EXPECT_THAT(blankNodeB.evaluate(context0, SUBJECT), Optional("_:g0_b"s));
+
+  Context context10 = wrapper.createContextForRow(10);
+
+  EXPECT_THAT(blankNodeA.evaluate(context10, SUBJECT), Optional("_:u10_a"s));
+  EXPECT_THAT(blankNodeA.evaluate(context10, PREDICATE), Optional("_:u10_a"s));
+  EXPECT_THAT(blankNodeA.evaluate(context10, OBJECT), Optional("_:u10_a"s));
+  EXPECT_THAT(blankNodeB.evaluate(context10, SUBJECT), Optional("_:g10_b"s));
+  EXPECT_THAT(blankNodeB.evaluate(context10, PREDICATE), Optional("_:g10_b"s));
+  EXPECT_THAT(blankNodeB.evaluate(context10, SUBJECT), Optional("_:g10_b"s));
+}
+
+TEST(SparqlDataTypesTest, BlankNodeEvaluateIsPropagatedCorrectly) {
+  using namespace std::string_literals;
+  auto wrapper = prepareContext();
+
+  BlankNode blankNode{false, "label"};
+  Context context = wrapper.createContextForRow(42);
+
+  auto expectedLabel = ::testing::Optional("_:u42_label"s);
+
+  EXPECT_THAT(blankNode.evaluate(context, SUBJECT), expectedLabel);
+  EXPECT_THAT(GraphTerm{blankNode}.evaluate(context, SUBJECT), expectedLabel);
+  EXPECT_THAT(VarOrTerm{GraphTerm{blankNode}}.evaluate(context, SUBJECT),
+              expectedLabel);
 }
 
 TEST(SparqlDataTypesTest, IriInvalidSyntaxThrowsException) {
@@ -43,6 +100,41 @@ TEST(SparqlDataTypesTest, IriValidIriIsPreserved) {
   ASSERT_EQ(Iri{"<http://valid-iri>"}.iri(), "<http://valid-iri>");
 }
 
+TEST(SparqlDataTypesTest, IriEvaluatesCorrectlyBasedOnContext) {
+  using ::testing::Optional;
+  using namespace std::string_literals;
+  auto wrapper = prepareContext();
+
+  std::string iriString{"<http://some-iri>"};
+  Iri iri{iriString};
+  Context context0 = wrapper.createContextForRow(0);
+
+  EXPECT_THAT(iri.evaluate(context0, SUBJECT), Optional(iriString));
+  EXPECT_THAT(iri.evaluate(context0, PREDICATE), Optional(iriString));
+  EXPECT_THAT(iri.evaluate(context0, OBJECT), Optional(iriString));
+
+  Context context10 = wrapper.createContextForRow(1337);
+
+  EXPECT_THAT(iri.evaluate(context10, SUBJECT), Optional(iriString));
+  EXPECT_THAT(iri.evaluate(context10, PREDICATE), Optional(iriString));
+  EXPECT_THAT(iri.evaluate(context10, OBJECT), Optional(iriString));
+}
+
+TEST(SparqlDataTypesTest, IriEvaluateIsPropagatedCorrectly) {
+  using namespace std::string_literals;
+  auto wrapper = prepareContext();
+
+  Iri iri{"<http://some-iri>"};
+  Context context = wrapper.createContextForRow(42);
+
+  auto expectedString = ::testing::Optional("<http://some-iri>"s);
+
+  EXPECT_THAT(iri.evaluate(context, SUBJECT), expectedString);
+  EXPECT_THAT(GraphTerm{iri}.evaluate(context, SUBJECT), expectedString);
+  EXPECT_THAT(VarOrTerm{GraphTerm{iri}}.evaluate(context, SUBJECT),
+              expectedString);
+}
+
 TEST(SparqlDataTypesTest, LiteralBooleanIsCorrectlyFormatted) {
   EXPECT_EQ(Literal{true}.literal(), "true");
   EXPECT_EQ(Literal{false}.literal(), "false");
@@ -58,6 +150,46 @@ TEST(SparqlDataTypesTest, LiteralNumberIsCorrectlyFormatted) {
   EXPECT_EQ(Literal{1234567890}.literal(), "1234567890");
   EXPECT_EQ(Literal{-1337}.literal(), "-1337");
   EXPECT_EQ(Literal{1.3}.literal(), "1.3");
+}
+
+TEST(SparqlDataTypesTest, LiteralEvaluatesCorrectlyBasedOnContext) {
+  using ::testing::Optional;
+  using namespace std::string_literals;
+  auto wrapper = prepareContext();
+
+  std::string literalString{"true"};
+  Literal literal{literalString};
+  Context context0 = wrapper.createContextForRow(0);
+
+  EXPECT_EQ(literal.evaluate(context0, SUBJECT), std::nullopt);
+  EXPECT_EQ(literal.evaluate(context0, PREDICATE), std::nullopt);
+  EXPECT_THAT(literal.evaluate(context0, OBJECT), Optional(literalString));
+
+  Context context10 = wrapper.createContextForRow(1337);
+
+  EXPECT_EQ(literal.evaluate(context10, SUBJECT), std::nullopt);
+  EXPECT_EQ(literal.evaluate(context10, PREDICATE), std::nullopt);
+  EXPECT_THAT(literal.evaluate(context10, OBJECT), Optional(literalString));
+}
+
+TEST(SparqlDataTypesTest, LiteralEvaluateIsPropagatedCorrectly) {
+  using namespace std::string_literals;
+  auto wrapper = prepareContext();
+
+  Literal literal{"some literal"};
+  Context context = wrapper.createContextForRow(42);
+
+  EXPECT_EQ(literal.evaluate(context, SUBJECT), std::nullopt);
+  EXPECT_EQ(GraphTerm{literal}.evaluate(context, SUBJECT), std::nullopt);
+  EXPECT_EQ(VarOrTerm{GraphTerm{literal}}.evaluate(context, SUBJECT),
+            std::nullopt);
+
+  auto expectedString = ::testing::Optional("some literal"s);
+
+  EXPECT_THAT(literal.evaluate(context, OBJECT), expectedString);
+  EXPECT_THAT(GraphTerm{literal}.evaluate(context, OBJECT), expectedString);
+  EXPECT_THAT(VarOrTerm{GraphTerm{literal}}.evaluate(context, OBJECT),
+              expectedString);
 }
 
 TEST(SparqlDataTypesTest, VariableNormalizesDollarSign) {
