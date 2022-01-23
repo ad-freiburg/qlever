@@ -42,7 +42,7 @@ VocabularyData Index::createIdTriplesAndVocab(const string& ntFile) {
   // first save the total number of words, this is needed to initialize the
   // dense IndexMetaData variants
   _totalVocabularySize = vocabData.nofWords;
-  LOG(INFO) << "total size of vocabulary (internal and external) is "
+  LOG(INFO) << "Total size of vocabulary (internal and external): "
             << _totalVocabularySize << std::endl;
 
   if (_onDiskLiterals) {
@@ -72,11 +72,12 @@ void Index::createFromFile(const string& filename) {
   VocabularyData vocabData;
   if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
     if (_onlyAsciiTurtlePrefixes) {
-      LOG(INFO) << "Using the CTRE library for Tokenization\n";
+      LOG(DEBUG) << "Using the CTRE library for tokenization" << std::endl;
       vocabData = createIdTriplesAndVocab<TurtleParallelParser<TokenizerCtre>>(
           filename);
     } else {
-      LOG(INFO) << "Using the Google Re2 library for Tokenization\n";
+      LOG(DEBUG) << "Using the Google RE2 library for tokenization"
+	         << std::endl;
       vocabData =
           createIdTriplesAndVocab<TurtleParallelParser<Tokenizer>>(filename);
     }
@@ -106,7 +107,7 @@ void Index::createFromFile(const string& filename) {
     }
   }
   _configurationJson["prefixes"] = _vocabPrefixCompressed;
-  LOG(INFO) << "Writing compressed vocabulary to disk" << std::endl;
+  LOG(INFO) << "Writing compressed vocabulary to disk ..." << std::endl;
   decltype(_vocab)::WordWriter wordWriter{vocabFileTmp};
   auto internalVocabularyAction = [&wordWriter](const auto& word) {
     wordWriter.push(word.data(), word.size());
@@ -114,9 +115,9 @@ void Index::createFromFile(const string& filename) {
   auto wordReader = decltype(_vocab)::makeWordDiskIterator(vocabFile);
   Vocabulary<CompressedString, TripleComponentComparator>::prefixCompressFile(
       std::move(wordReader), prefixes, internalVocabularyAction);
-  LOG(INFO) << "Finished writing compressed vocabulary" << std::endl;
+  LOG(DEBUG) << "Finished writing compressed vocabulary" << std::endl;
 
-  // TODO<joka921> maybe move this to its own function
+  // TODO<joka921> maybe move this to its own function.
   if (std::rename(vocabFileTmp.c_str(), vocabFile.c_str())) {
     LOG(INFO) << "Error: Rename the prefixed vocab file " << vocabFileTmp
               << " to " << vocabFile << " set errno to " << errno
@@ -220,8 +221,8 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
             localWriter << innerOpt.value();
           }
         }
-        if (i % 10'000'000 == 0) {
-          LOG(INFO) << "Lines (from KB-file) processed: " << i << std::endl;
+        if (i % 50'000'000 == 0) {
+          LOG(INFO) << "Input triples read: " << i << std::endl;
         }
       }
       LOG(TIMING) << "WaitTimes for Pipeline in msecs\n";
@@ -273,11 +274,10 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     }
   }
   writer.wlock()->finish();
-  LOG(INFO) << "Pass done." << endl;
+  LOG(INFO) << "DONE reading input, total number of triples read: " << i << endl;
 
   if (_vocabPrefixCompressed) {
-    LOG(INFO) << "Merging temporary vocabulary for prefix compression"
-              << std::endl;
+    LOG(INFO) << "Merging internal vocabulary ..." << std::endl;
     {
       VocabularyMerger m;
       std::ofstream compressionOutfile(_onDiskBase + TMP_BASENAME_COMPRESSION +
@@ -291,11 +291,11 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
       m._noIdMapsAndIgnoreExternalVocab = true;
       m.mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles,
                         std::less<>(), internalVocabularyActionCompression);
-      LOG(INFO) << "Finished merging additional vocabulary" << std::endl;
+      LOG(DEBUG) << "Finished merging internal vocabulary" << std::endl;
     }
   }
 
-  LOG(INFO) << "Merging vocabulary\n";
+  LOG(INFO) << "Merging complete vocabulary ..." << std::endl;
   const VocabularyMerger::VocMergeRes mergeRes = [&]() {
     VocabularyMerger v;
     auto sortPred = [cmp = &(_vocab.getCaseComparator())](std::string_view a,
@@ -309,7 +309,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     return v.mergeVocabulary(_onDiskBase, numFiles, sortPred,
                              internalVocabularyAction);
   }();
-  LOG(INFO) << "Finished merging vocabulary\n";
+  LOG(DEBUG) << "Finished merging complete vocabulary ...";
   VocabularyData res;
   res.nofWords = mergeRes._numWordsTotal;
   res.langPredLowerBound = mergeRes._langPredLowerBound;
@@ -336,17 +336,19 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
 void Index::convertPartialToGlobalIds(
     TripleVec& data, const vector<size_t>& actualLinesPerPartial,
     size_t linesPerPartial) {
-  LOG(INFO) << "Updating Ids in stxxl vector to global Ids.\n";
+  LOG(INFO) << "Converting local IDs (from partial vocabularies) to global "
+            << "IDs ..." << std::endl;
+  LOG(DEBUG) << "Triples per partial vocabulary: "
+             << linesPerPartial << std::endl;
 
   size_t i = 0;
-  // iterate over all partial vocabularies
+  // Iterate over all partial vocabularies.
   for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();
        partialNum++) {
     std::string mmapFilename(_onDiskBase + PARTIAL_MMAP_IDS +
                              std::to_string(partialNum));
-    LOG(INFO) << "Reading IdMap from " << mmapFilename << " ...\n";
+    LOG(DEBUG) << "Reading ID map from: " << mmapFilename << std::endl;
     ad_utility::HashMap<Id, Id> idMap = IdMapFromPartialIdMapFile(mmapFilename);
-    LOG(INFO) << "Done reading idMap\n";
     // Delete the temporary file in which we stored this map
     deleteTemporaryFile(mmapFilename);
 
@@ -360,7 +362,8 @@ void Index::convertPartialToGlobalIds(
       for (size_t k = 0; k < 3; ++k) {
         iterators[k] = idMap.find(curTriple[k]);
         if (iterators[k] == idMap.end()) {
-          LOG(INFO) << "not found in partial Vocab: " << curTriple[k] << '\n';
+          LOG(INFO) << "Not found in partial vocabulary: "
+	            << curTriple[k] << std::endl;
           AD_CHECK(false);
         }
       }
@@ -371,15 +374,12 @@ void Index::convertPartialToGlobalIds(
 
       ++i;
       if (i % 100'000'000 == 0) {
-        LOG(INFO) << "Lines processed: " << i << '\n';
+        LOG(INFO) << "Triples converted: " << i << std::endl;
       }
     }
-    LOG(INFO) << "Lines processed: " << i << '\n';
-    LOG(DEBUG)
-        << "Corresponding number of statements in original knowledge base: "
-        << linesPerPartial * (partialNum + 1) << '\n';
   }
-  LOG(INFO) << "Pass done\n";
+  LOG(INFO) << "DONE converting IDs, total number of triples converted: "
+            << i << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -461,16 +461,13 @@ Index::createPermutationPairImpl(const string& fileName1,
   metaData1.blockData() = writer1.getFinishedBlocks();
   metaData2.blockData() = writer2.getFinishedBlocks();
 
-  LOG(INFO) << "Done creating index permutation." << std::endl;
-  LOG(INFO) << "Calculating statistics for these permutation.\n";
+  LOG(INFO) << "Done creating pair of index permutations, statistics are "
+            << "(one for each): " << std::endl;
   // metaData1.calculateExpensiveStatistics();
   // metaData2.calculateExpensiveStatistics();
-  LOG(INFO) << "Writing statistics for this permutation:\n"
-            << metaData1.statistics() << std::endl;
-  LOG(INFO) << "Writing statistics for this permutation:\n"
-            << metaData2.statistics() << std::endl;
+  LOG(INFO) << metaData1.statistics() << std::endl;
+  LOG(INFO) << metaData2.statistics() << std::endl;
 
-  LOG(INFO) << "Permutation done." << std::endl;
   return std::make_pair(std::move(metaData1), std::move(metaData2));
 }
 
@@ -514,7 +511,7 @@ Index::createPermutations(
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
     PerformUnique performUnique) {
-  LOG(INFO) << "Sorting for " << p1._readableName << " permutation"
+  LOG(INFO) << "Sorting for " << p1._readableName << " permutation ..."
             << std::endl;
   stxxl::sort(begin(*vec), end(*vec), p1._comp, STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;
@@ -950,10 +947,8 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
     _SOP.loadFromDisk(_onDiskBase);
   } else {
     LOG(INFO)
-        << "Only the PSO and POS permutation were loaded. Queries that contain "
-           "predicate variables will therefore not work on this QLever "
-           "instance."
-        << std::endl;
+        << "Only the PSO and POS permutation were loaded, SPARQL queries "
+	   " with predicate variables will therefore not work" << std::endl;
   }
 
   if (_usePatterns) {
@@ -1374,8 +1369,9 @@ void Index::initializeVocabularySettingsBuild() {
       LOG(INFO) << "locale was not specified by the settings JSON, defaulting "
                    "to en US\n";
     }
-    LOG(INFO) << "Using Locale " << lang << " " << country
-              << " with ignore-punctuation: " << ignorePunctuation << '\n';
+    LOG(INFO) << "Using locale " << lang << "_" << country
+              << " with ignore-punctuation: " << ignorePunctuation
+	      << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       LOG(WARN) << "You are using Locale settings that differ from the default "
@@ -1418,10 +1414,11 @@ void Index::initializeVocabularySettingsBuild() {
 
   if (j.count("num-triples-per-partial-vocab")) {
     _numTriplesPerPartialVocab = size_t{j["num-triples-per-partial-vocab"]};
-    LOG(INFO) << "Overriding setting num-triples-per-partial-vocab to "
+    LOG(INFO) << "You specified \"num-triples-per-partial-vocab = "
               << _numTriplesPerPartialVocab
-              << " This might influence performance / memory usage during "
-                 "index build."
+              << "\", which sets QLever's indexing batch size. Multiple "
+	         "batches are processed in parallel. If the indexing crashes, there "
+		 "was maybe insufficient RAM; try a smaller batch size"
               << std::endl;
   }
 
@@ -1438,10 +1435,10 @@ std::future<void> Index::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
     std::unique_ptr<ItemMapArray> items, std::unique_ptr<TripleVec> localIds,
     ad_utility::Synchronized<TripleVec::bufwriter_type>* globalWritePtr) {
-  LOG(INFO) << "Lines (from KB-file) processed: " << numLines << '\n';
-  LOG(INFO) << "Actual number of Triples in this section (include "
-               "langfilter triples): "
-            << actualCurrentPartialSize << '\n';
+  LOG(DEBUG) << "Input triples read in this section: "
+             << numLines << std::endl;
+  LOG(DEBUG) << "Triples processed, also counting internal triples added by QLever: "
+             << actualCurrentPartialSize << std::endl;
   std::future<void> resultFuture;
   string partialFilename =
       _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
