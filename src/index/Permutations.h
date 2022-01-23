@@ -16,9 +16,9 @@ namespace Permutation {
 using std::array;
 using std::string;
 
-// helper class to store static properties of the different permutations
-// to avoid code duplication
-// The template Parameter is a STXXL search functor
+// Helper class to store static properties of the different permutations to
+// avoid code duplication. The first template parameter is a search functor for
+// STXXL.
 template <class Comparator, class MetaDataT>
 class PermutationImpl {
  public:

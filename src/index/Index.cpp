@@ -221,7 +221,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
             localWriter << innerOpt.value();
           }
         }
-        if (i % 50'000'000 == 0) {
+        if (i % 100'000'000 == 0) {
           LOG(INFO) << "Input triples read: " << i << std::endl;
         }
       }
@@ -336,8 +336,8 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
 void Index::convertPartialToGlobalIds(
     TripleVec& data, const vector<size_t>& actualLinesPerPartial,
     size_t linesPerPartial) {
-  LOG(INFO) << "Converting local IDs (from partial vocabularies) to global "
-            << "IDs ..." << std::endl;
+  LOG(INFO) << "Converting triples from local IDs to global IDs ..."
+            << std::endl;
   LOG(DEBUG) << "Triples per partial vocabulary: "
              << linesPerPartial << std::endl;
 
@@ -378,7 +378,7 @@ void Index::convertPartialToGlobalIds(
       }
     }
   }
-  LOG(INFO) << "DONE converting IDs, total number of triples converted: "
+  LOG(INFO) << "DONE converting, total number of triples converted: "
             << i << std::endl;
 }
 
@@ -388,8 +388,8 @@ std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                         typename MetaDataDispatcher::WriteType>>
 Index::createPermutationPairImpl(const string& fileName1,
                                  const string& fileName2,
-                                 const Index::TripleVec& vec, size_t c0,
-                                 size_t c1, size_t c2) {
+                                 const Index::TripleVec& triples,
+				 size_t c0, size_t c1, size_t c2) {
   using MetaData = typename MetaDataDispatcher::WriteType;
   MetaData metaData1, metaData2;
   if constexpr (metaData1._isMmapBased) {
@@ -401,26 +401,28 @@ Index::createPermutationPairImpl(const string& fileName1,
                     fileName2 + MMAP_FILE_SUFFIX);
   }
 
-  if (vec.size() == 0) {
-    LOG(WARN) << "Attempt to write an empty index!" << std::endl;
+  if (triples.size() == 0) {
+    LOG(WARN) << "Creating pair of index permutations from empty vector of "
+                 "triples, probably something went wrong" << std::endl;
     return std::nullopt;
   }
 
   CompressedRelationWriter writer1{ad_utility::File(fileName1, "w")};
   CompressedRelationWriter writer2{ad_utility::File(fileName2, "w")};
 
-  LOG(INFO) << "Creating a pair of on-disk index permutation of " << vec.size()
-            << " elements / facts." << std::endl;
-  // Iterate over the vector and identify relation boundaries
+  // Iterate over the vector and identify "relation" boundaries, where a
+  // "relation" is the sequence of triples equal first component. For PSO and
+  // POS, this is a predicate (of which "relation" is a synonym).
+  LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
   size_t from = 0;
-  Id currentRel = vec[0][c0];
+  Id currentRel = triples[0][c0];
   ad_utility::BufferedVector<array<Id, 2>> buffer(
-      THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.MmapBuffer");
+      THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.mmap-buffer");
   bool functional = true;
   size_t distinctCol1 = 0;
   size_t sizeOfRelation = 0;
   Id lastLhs = std::numeric_limits<Id>::max();
-  for (TripleVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
+  for (TripleVec::bufreader_type reader(triples); !reader.empty(); ++reader) {
     if ((*reader)[c0] != currentRel) {
       writer1.addRelation(currentRel, buffer, distinctCol1, functional);
       writeSwitchedRel(&writer2, currentRel, &buffer);
@@ -445,7 +447,7 @@ Index::createPermutationPairImpl(const string& fileName1,
     buffer.push_back(array<Id, 2>{{(*reader)[c1], (*reader)[c2]}});
     lastLhs = (*reader)[c1];
   }
-  if (from < vec.size()) {
+  if (from < triples.size()) {
     writer1.addRelation(currentRel, buffer, distinctCol1, functional);
     writeSwitchedRel(&writer2, currentRel, &buffer);
   }
@@ -460,13 +462,6 @@ Index::createPermutationPairImpl(const string& fileName1,
   }
   metaData1.blockData() = writer1.getFinishedBlocks();
   metaData2.blockData() = writer2.getFinishedBlocks();
-
-  LOG(INFO) << "Done creating pair of index permutations, statistics are "
-            << "(one for each): " << std::endl;
-  // metaData1.calculateExpensiveStatistics();
-  // metaData2.calculateExpensiveStatistics();
-  LOG(INFO) << metaData1.statistics() << std::endl;
-  LOG(INFO) << metaData2.statistics() << std::endl;
 
   return std::make_pair(std::move(metaData1), std::move(metaData2));
 }
@@ -514,23 +509,34 @@ Index::createPermutations(
   LOG(INFO) << "Sorting for " << p1._readableName << " permutation ..."
             << std::endl;
   stxxl::sort(begin(*vec), end(*vec), p1._comp, STXXL_MEMORY_TO_USE);
-  LOG(INFO) << "Sort done." << std::endl;
+  LOG(DEBUG) << "Sort done" << std::endl;
 
   if (performUnique == PerformUnique::True) {
     // this only has to be done for the first permutation (PSO)
-    LOG(INFO) << "Removing duplicate triples as these are not supported in RDF"
+    LOG(INFO) << "Removing duplicate triples, size before: " << vec->size()
               << std::endl;
-    LOG(INFO) << "Size before: " << vec->size() << std::endl;
     auto last = std::unique(begin(*vec), end(*vec));
     vec->resize(size_t(last - vec->begin()));
-    LOG(INFO) << "Done: unique." << std::endl;
-    LOG(INFO) << "Size after: " << vec->size() << std::endl;
+    LOG(INFO) << "Done removing duplicates, size after   : " << vec->size()
+              << std::endl;
   }
 
-  return createPermutationPairImpl<MetaDataDispatcher>(
+  auto metaData = createPermutationPairImpl<MetaDataDispatcher>(
       _onDiskBase + ".index" + p1._fileSuffix,
       _onDiskBase + ".index" + p2._fileSuffix, *vec, p1._keyOrder[0],
       p1._keyOrder[1], p1._keyOrder[2]);
+
+  // metaData1.calculateExpensiveStatistics();
+  // metaData2.calculateExpensiveStatistics();
+  if (metaData.has_value()) {
+    auto& mdv = metaData.value();
+    LOG(INFO) << "Statistics for " << p1._readableName << ": "
+              << mdv.first.statistics() << std::endl;
+    LOG(INFO) << "Statistics for " << p2._readableName << ": "
+              << mdv.second.statistics() << std::endl;
+  }
+
+  return metaData;
 }
 
 // ________________________________________________________________________
@@ -550,18 +556,17 @@ void Index::createPermutationPair(
     createPatterns(true, vocabularyData);
   }
   if (metaData) {
-    LOG(INFO) << "Exchanging Multiplicities for " << p1._readableName << " and "
-              << p2._readableName << '\n';
+    LOG(INFO) << "Exchanging multiplicities for " << p1._readableName << " and "
+              << p2._readableName << " ..." << std::endl;
     exchangeMultiplicities(&(metaData.value().first),
                            &(metaData.value().second));
-    LOG(INFO) << "Done" << '\n';
-    LOG(INFO) << "Writing MetaData for " << p1._readableName << " and "
-              << p2._readableName << std::endl;
+    LOG(INFO) << "Writing meta data for " << p1._readableName << " and "
+              << p2._readableName << " ..." << std::endl;
     ad_utility::File f1(_onDiskBase + ".index" + p1._fileSuffix, "r+");
     metaData.value().first.appendToFile(&f1);
     ad_utility::File f2(_onDiskBase + ".index" + p2._fileSuffix, "r+");
     metaData.value().second.appendToFile(&f2);
-    LOG(INFO) << "Done" << std::endl;
+    LOG(DEBUG) << "Done" << std::endl;
   }
 }
 
@@ -598,13 +603,14 @@ void Index::createPatterns(bool isSortedSPO, VocabularyData* vocabData) {
   // The first argument means that the triples are not yet sorted according
   // to SPO.
   if (isSortedSPO) {
-    LOG(INFO) << "Triples are already sorted by SPO for pattern creation."
+    LOG(DEBUG) << "Triples are already sorted by SPO for pattern creation"
               << std::endl;
   } else {
-    LOG(INFO) << "Sorting triples by SPO for pattern creation..." << std::endl;
+    LOG(INFO) << "Sorting triples by SPO for computing predicate patterns ..."
+              << std::endl;
     stxxl::sort(begin(*vocabData->idTriples), end(*vocabData->idTriples),
                 SortBySPO(), STXXL_MEMORY_TO_USE);
-    LOG(INFO) << "Sort done." << std::endl;
+    LOG(DEBUG) << "Sort done" << std::endl;
   }
   createPatternsImpl<TripleVec::bufreader_type>(
       _onDiskBase + ".index.patterns", _hasPredicate, _hasPattern, _patterns,
@@ -627,7 +633,7 @@ void Index::createPatternsImpl(
   IndexMetaDataHmap meta;
   using PatternsCountMap = ad_utility::HashMap<Pattern, size_t>;
 
-  LOG(INFO) << "Creating patterns file..." << std::endl;
+  LOG(INFO) << "Computing predicate patterns ..." << std::endl;
   VecReaderType reader(vecReaderArgs...);
   if (reader.empty()) {
     LOG(WARN) << "Triple vector was empty, no patterns created" << std::endl;
@@ -657,20 +663,23 @@ void Index::createPatternsImpl(
       }
     }
   }
-  // process the last entry
+  // Don't forget to process the last entry.
   patternCounts[pattern]++;
-  LOG(INFO) << "Counted patterns and found " << patternCounts.size()
-            << " distinct patterns." << std::endl;
-  LOG(INFO) << "Patterns were found for " << numValidPatterns << " entities."
-            << std::endl;
 
-  // stores patterns sorted by their number of occurences
+  LOG(DEBUG) << "Number of distinct pattens: " << patternCounts.size()
+            << std::endl;
+  LOG(DEBUG) << "Number of entities for which a pattern was found: "
+            << numValidPatterns << std::endl;
+
+  // Stores patterns sorted by their number of occurences.
   size_t actualNumPatterns = patternCounts.size() < maxNumPatterns
                                  ? patternCounts.size()
                                  : maxNumPatterns;
-  LOG(INFO) << "Using " << actualNumPatterns << " of the "
-            << patternCounts.size() << " patterns that were found in the data."
-            << std::endl;
+  if (actualNumPatterns < patternCounts.size()) {
+    LOG(DEBUG) << "Using " << actualNumPatterns << " of the "
+              << patternCounts.size() 
+	      << " patterns that were found in the data" << std::endl;
+  }
   std::vector<std::pair<Pattern, size_t>> sortedPatterns;
   sortedPatterns.reserve(actualNumPatterns);
   auto comparePatternCounts =
@@ -842,26 +851,25 @@ void Index::createPatternsImpl(
   LOG(DEBUG) << "Number of entity-has-relation entries: "
              << entityHasPredicate.size() << std::endl;
 
-  LOG(INFO) << "Found " << patterns.size() << " distinct patterns."
+  LOG(INFO) << "Number of patterns: " << patterns.size()
             << std::endl;
-  LOG(INFO) << numEntitiesWithPatterns
-            << " of the databases entities have been assigned a pattern."
-            << std::endl;
-  LOG(INFO) << numEntitiesWithoutPatterns
-            << " of the databases entities have not been assigned a pattern."
-            << std::endl;
-  LOG(INFO) << "Of these " << numInvalidEntities
-            << " would have to large a pattern." << std::endl;
+  LOG(INFO) << "Number of entities with pattern: " << numEntitiesWithPatterns
+            << (numEntitiesWithoutPatterns == 0 ? " [all]" : "") << std::endl;
+  if (numEntitiesWithoutPatterns > 0) {
+    LOG(INFO) << "Number of entities without pattern: "
+              << numEntitiesWithoutPatterns << std::endl;
+    LOG(INFO) << "Of these " << numInvalidEntities
+              << " would have to large a pattern." << std::endl;
+  }
 
-  LOG(DEBUG) << "Total number of entities: "
-             << (numEntitiesWithoutPatterns + numEntitiesWithPatterns)
-             << std::endl;
-
-  LOG(DEBUG) << "Full has relation size: " << fullHasPredicateSize << std::endl;
-  LOG(DEBUG) << "Full has relation entity multiplicity: "
-             << fullHasPredicateMultiplicityEntities << std::endl;
-  LOG(DEBUG) << "Full has relation predicate multiplicity: "
-             << fullHasPredicateMultiplicityPredicates << std::endl;
+  LOG(INFO) << "Total number of distinct subject-predicate pairs: "
+            << fullHasPredicateSize << std::endl;
+  LOG(INFO) << "Average number of predicates per subject: "
+            << std::fixed << std::setprecision(1)
+            << fullHasPredicateMultiplicityEntities << std::endl;
+  LOG(INFO) << "Average number of subjects per predicate: "
+            << std::fixed << std::setprecision(0)
+            << fullHasPredicateMultiplicityPredicates << std::endl;
 
   // Store all data in the file
   ad_utility::File file(fileName, "w");
@@ -891,8 +899,6 @@ void Index::createPatternsImpl(
   // TODO<joka921> Also use the serializer interface for the patterns.
   ad_utility::serialization::FileWriteSerializer patternWriter{std::move(file)};
   patternWriter << patterns;
-
-  LOG(INFO) << "Done creating patterns file." << std::endl;
 
   // create the has-relation and has-pattern lookup vectors
   if (entityHasPattern.size() > 0) {

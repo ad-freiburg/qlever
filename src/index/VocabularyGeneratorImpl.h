@@ -210,7 +210,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
         _langPredUpperBound = _totalWritten + 1;
       }
       _totalWritten++;
-      if (_totalWritten % _bufferSize == 0) {
+      if (_totalWritten % 100'000'000 == 0) {
         LOG(INFO) << "Words merged: " << _totalWritten << std::endl;
       }
     } else {
