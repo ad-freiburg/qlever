@@ -281,7 +281,7 @@ int main(int argc, char** argv) {
       }
 
       if (!filetype.empty()) {
-	LOG(INFO) << "You specified the file type: "
+	LOG(INFO) << "You specified the input format: "
 	          << ad_utility::getUppercase(filetype) << std::endl;
       } else {
         bool filetypeDeduced = false;
