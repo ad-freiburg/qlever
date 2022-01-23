@@ -50,6 +50,8 @@ auto rest = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>";
 auto type = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
 
 using ::testing::ElementsAre;
+using ::testing::IsEmpty;
+using ::testing::SizeIs;
 
 TEST(SparqlParser, NumericLiterals) {
   testNumericLiteral("3.0", 3.0);
@@ -160,7 +162,7 @@ TEST(SparqlParser, ComplexConstructQuery) {
   auto triples = p.parser.constructQuery()
                      ->accept(&p.visitor)
                      .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, ::testing::SizeIs(11));
+  ASSERT_THAT(triples, SizeIs(11));
   auto something =
       "<http://wallscope.co.uk/resource/olympics/medal/#something>";
   auto somethingElse =
@@ -269,9 +271,7 @@ TEST(SparqlParser, RdfCollectionSingleVar) {
   EXPECT_THAT(node.first, IsBlankNode(true, "0"));
 
   const auto& triples = node.second;
-  ASSERT_THAT(triples, ::testing::SizeIs(2));
-
-  using ::testing::ElementsAre;
+  ASSERT_THAT(triples, SizeIs(2));
 
   EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
                                       IsIri(first),            //
@@ -292,9 +292,7 @@ TEST(SparqlParser, RdfCollectionTripleVar) {
   EXPECT_THAT(node.first, IsBlankNode(true, "2"));
 
   const auto& triples = node.second;
-  ASSERT_THAT(triples, ::testing::SizeIs(6));
-
-  using ::testing::ElementsAre;
+  ASSERT_THAT(triples, SizeIs(6));
 
   EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
                                       IsIri(first),            //
@@ -344,7 +342,7 @@ TEST(SparqlParser, ConstructTemplateEmpty) {
   auto triples = p.parser.constructTemplate()
                      ->accept(&p.visitor)
                      .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, ::testing::IsEmpty());
+  ASSERT_THAT(triples, IsEmpty());
 }
 
 TEST(SparqlParser, ConstructTriplesSingletonWithTerminator) {
@@ -354,9 +352,8 @@ TEST(SparqlParser, ConstructTriplesSingletonWithTerminator) {
   auto triples = p.parser.constructTriples()
                      ->accept(&p.visitor)
                      .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, ::testing::SizeIs(1));
+  ASSERT_THAT(triples, SizeIs(1));
 
-  using ::testing::ElementsAre;
   EXPECT_THAT(triples[0], ElementsAre(IsVariable("?a"),  //
                                       IsVariable("?a"),  //
                                       IsVariable("?a")));
@@ -369,9 +366,8 @@ TEST(SparqlParser, ConstructTriplesWithTerminator) {
   auto triples = p.parser.constructTriples()
                      ->accept(&p.visitor)
                      .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, ::testing::SizeIs(3));
+  ASSERT_THAT(triples, SizeIs(3));
 
-  using ::testing::ElementsAre;
   EXPECT_THAT(triples[0], ElementsAre(IsVariable("?a"),  //
                                       IsVariable("?a"),  //
                                       IsVariable("?a")));
@@ -392,9 +388,8 @@ TEST(SparqlParser, TriplesSameSubjectVarOrTerm) {
   auto triples = p.parser.constructTriples()
                      ->accept(&p.visitor)
                      .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, ::testing::SizeIs(1));
+  ASSERT_THAT(triples, SizeIs(1));
 
-  using ::testing::ElementsAre;
   EXPECT_THAT(triples[0], ElementsAre(IsVariable("?a"),  //
                                       IsVariable("?a"),  //
                                       IsVariable("?a")));
@@ -407,9 +402,8 @@ TEST(SparqlParser, TriplesSameSubjectTriplesNodeWithPropertyList) {
   auto triples = p.parser.triplesSameSubject()
                      ->accept(&p.visitor)
                      .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, ::testing::SizeIs(3));
+  ASSERT_THAT(triples, SizeIs(3));
 
-  using ::testing::ElementsAre;
   EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
                                       IsIri(first),            //
                                       IsVariable("?a")));
@@ -430,9 +424,8 @@ TEST(SparqlParser, TriplesSameSubjectTriplesNodeEmptyPropertyList) {
   auto triples = p.parser.triplesSameSubject()
                      ->accept(&p.visitor)
                      .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, ::testing::SizeIs(2));
+  ASSERT_THAT(triples, SizeIs(2));
 
-  using ::testing::ElementsAre;
   EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
                                       IsIri(first),            //
                                       IsVariable("?a")));
@@ -449,12 +442,11 @@ TEST(SparqlParser, PropertyList) {
   auto propertyList = p.parser.propertyList()
                           ->accept(&p.visitor)
                           .as<ad_utility::sparql_types::PropertyList>();
-  EXPECT_THAT(propertyList.second, ::testing::IsEmpty());
+  EXPECT_THAT(propertyList.second, IsEmpty());
 
   const auto& tuples = propertyList.first;
-  ASSERT_THAT(tuples, ::testing::SizeIs(1));
+  ASSERT_THAT(tuples, SizeIs(1));
 
-  using ::testing::ElementsAre;
   EXPECT_THAT(tuples[0], ElementsAre(IsIri(type), IsVariable("?a")));
 }
 
@@ -464,8 +456,8 @@ TEST(SparqlParser, EmptyPropertyList) {
   auto propertyList = p.parser.propertyList()
                           ->accept(&p.visitor)
                           .as<ad_utility::sparql_types::PropertyList>();
-  ASSERT_THAT(propertyList.first, ::testing::IsEmpty());
-  ASSERT_THAT(propertyList.second, ::testing::IsEmpty());
+  ASSERT_THAT(propertyList.first, IsEmpty());
+  ASSERT_THAT(propertyList.second, IsEmpty());
 }
 
 TEST(SparqlParser, PropertyListNotEmptySingletonWithTerminator) {
@@ -475,12 +467,11 @@ TEST(SparqlParser, PropertyListNotEmptySingletonWithTerminator) {
   auto propertyList = p.parser.propertyListNotEmpty()
                           ->accept(&p.visitor)
                           .as<ad_utility::sparql_types::PropertyList>();
-  EXPECT_THAT(propertyList.second, ::testing::IsEmpty());
+  EXPECT_THAT(propertyList.second, IsEmpty());
 
   const auto& tuples = propertyList.first;
-  ASSERT_THAT(tuples, ::testing::SizeIs(1));
+  ASSERT_THAT(tuples, SizeIs(1));
 
-  using ::testing::ElementsAre;
   EXPECT_THAT(tuples[0], ElementsAre(IsIri(type), IsVariable("?a")));
 }
 
@@ -491,12 +482,11 @@ TEST(SparqlParser, PropertyListNotEmptyWithTerminator) {
   auto propertyList = p.parser.propertyListNotEmpty()
                           ->accept(&p.visitor)
                           .as<ad_utility::sparql_types::PropertyList>();
-  EXPECT_THAT(propertyList.second, ::testing::IsEmpty());
+  EXPECT_THAT(propertyList.second, IsEmpty());
 
   const auto& tuples = propertyList.first;
-  ASSERT_THAT(tuples, ::testing::SizeIs(3));
+  ASSERT_THAT(tuples, SizeIs(3));
 
-  using ::testing::ElementsAre;
   EXPECT_THAT(tuples[0], ElementsAre(IsIri(type), IsVariable("?a")));
   EXPECT_THAT(tuples[1], ElementsAre(IsIri(type), IsVariable("?b")));
   EXPECT_THAT(tuples[2], ElementsAre(IsIri(type), IsVariable("?c")));
@@ -525,10 +515,10 @@ TEST(SparqlParser, ObjectListSingleton) {
   auto objectList = p.parser.objectList()
                         ->accept(&p.visitor)
                         .as<ad_utility::sparql_types::ObjectList>();
-  EXPECT_THAT(objectList.second, ::testing::IsEmpty());
+  EXPECT_THAT(objectList.second, IsEmpty());
 
   const auto& objects = objectList.first;
-  ASSERT_THAT(objects, ::testing::SizeIs(1));
+  ASSERT_THAT(objects, SizeIs(1));
   ASSERT_THAT(objects[0], IsVariable("?a"));
 }
 
@@ -539,10 +529,10 @@ TEST(SparqlParser, ObjectList) {
   auto objectList = p.parser.objectList()
                         ->accept(&p.visitor)
                         .as<ad_utility::sparql_types::ObjectList>();
-  EXPECT_THAT(objectList.second, ::testing::IsEmpty());
+  EXPECT_THAT(objectList.second, IsEmpty());
 
   const auto& objects = objectList.first;
-  ASSERT_THAT(objects, ::testing::SizeIs(3));
+  ASSERT_THAT(objects, SizeIs(3));
   ASSERT_THAT(objects[0], IsVariable("?a"));
   ASSERT_THAT(objects[1], IsVariable("?b"));
   ASSERT_THAT(objects[2], IsVariable("?c"));
@@ -558,9 +548,8 @@ TEST(SparqlParser, BlankNodePropertyList) {
   EXPECT_THAT(node.first, IsBlankNode(true, "0"));
 
   const auto& triples = node.second;
-  ASSERT_THAT(triples, ::testing::SizeIs(3));
+  ASSERT_THAT(triples, SizeIs(3));
 
-  using ::testing::ElementsAre;
   EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
                                       IsIri(type),             //
                                       IsVariable("?a")));
@@ -582,7 +571,7 @@ TEST(SparqlParser, GraphNodeVarOrTerm) {
                   ->accept(&p.visitor)
                   .as<ad_utility::sparql_types::Node>();
   EXPECT_THAT(node.first, IsVariable("?a"));
-  EXPECT_THAT(node.second, ::testing::IsEmpty());
+  EXPECT_THAT(node.second, IsEmpty());
 }
 
 TEST(SparqlParser, GraphNodeTriplesNode) {
@@ -595,9 +584,8 @@ TEST(SparqlParser, GraphNodeTriplesNode) {
   EXPECT_THAT(node.first, IsBlankNode(true, "0"));
 
   const auto& triples = node.second;
-  ASSERT_THAT(triples, ::testing::SizeIs(2));
+  ASSERT_THAT(triples, SizeIs(2));
 
-  using ::testing::ElementsAre;
   EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
                                       IsIri(first),            //
                                       IsVariable("?a")));

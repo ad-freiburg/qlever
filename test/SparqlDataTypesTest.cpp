@@ -7,6 +7,7 @@
 #include "../src/parser/data/VarOrTerm.h"
 
 using namespace std::string_literals;
+using ::testing::Optional;
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
@@ -37,7 +38,6 @@ TEST(SparqlDataTypesTest, BlankNodeInvalidLabelsThrowException) {
 }
 
 TEST(SparqlDataTypesTest, BlankNodeEvaluatesCorrectlyBasedOnContext) {
-  using ::testing::Optional;
   auto wrapper = prepareContext();
 
   BlankNode blankNodeA{false, "a"};
@@ -67,7 +67,7 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluateIsPropagatedCorrectly) {
   BlankNode blankNode{false, "label"};
   Context context = wrapper.createContextForRow(42);
 
-  auto expectedLabel = ::testing::Optional("_:u42_label"s);
+  auto expectedLabel = Optional("_:u42_label"s);
 
   EXPECT_THAT(blankNode.evaluate(context, SUBJECT), expectedLabel);
   EXPECT_THAT(GraphTerm{blankNode}.evaluate(context, SUBJECT), expectedLabel);
@@ -101,7 +101,6 @@ TEST(SparqlDataTypesTest, IriValidIriIsPreserved) {
 }
 
 TEST(SparqlDataTypesTest, IriEvaluatesCorrectlyBasedOnContext) {
-  using ::testing::Optional;
   auto wrapper = prepareContext();
 
   std::string iriString{"<http://some-iri>"};
@@ -125,7 +124,7 @@ TEST(SparqlDataTypesTest, IriEvaluateIsPropagatedCorrectly) {
   Iri iri{"<http://some-iri>"};
   Context context = wrapper.createContextForRow(42);
 
-  auto expectedString = ::testing::Optional("<http://some-iri>"s);
+  auto expectedString = Optional("<http://some-iri>"s);
 
   EXPECT_THAT(iri.evaluate(context, SUBJECT), expectedString);
   EXPECT_THAT(GraphTerm{iri}.evaluate(context, SUBJECT), expectedString);
@@ -151,7 +150,6 @@ TEST(SparqlDataTypesTest, LiteralNumberIsCorrectlyFormatted) {
 }
 
 TEST(SparqlDataTypesTest, LiteralEvaluatesCorrectlyBasedOnContext) {
-  using ::testing::Optional;
   auto wrapper = prepareContext();
 
   std::string literalString{"true"};
@@ -180,7 +178,7 @@ TEST(SparqlDataTypesTest, LiteralEvaluateIsPropagatedCorrectly) {
   EXPECT_EQ(VarOrTerm{GraphTerm{literal}}.evaluate(context, SUBJECT),
             std::nullopt);
 
-  auto expectedString = ::testing::Optional("some literal"s);
+  auto expectedString = Optional("some literal"s);
 
   EXPECT_THAT(literal.evaluate(context, OBJECT), expectedString);
   EXPECT_THAT(GraphTerm{literal}.evaluate(context, OBJECT), expectedString);
@@ -205,7 +203,6 @@ TEST(SparqlDataTypesTest, VariableInvalidNamesThrowException) {
 }
 
 TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
-  using ::testing::Optional;
   auto wrapper = prepareContext();
 
   wrapper._hashMap["?var"] = 0;
@@ -231,7 +228,6 @@ TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
 }
 
 TEST(SparqlDataTypesTest, VariableEvaluatesNothingForUnusedName) {
-  using ::testing::Optional;
   auto wrapper = prepareContext();
 
   Variable variable{"?var"};
@@ -249,7 +245,6 @@ TEST(SparqlDataTypesTest, VariableEvaluatesNothingForUnusedName) {
 }
 
 TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
-  using ::testing::Optional;
   auto wrapper = prepareContext();
 
   wrapper._hashMap["?var"] = 0;
