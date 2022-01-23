@@ -220,3 +220,7 @@ add_test(RdfEscapingTest RdfEscapingTest)
 add_executable(CompactStringVectorTest CompactStringVectorTest.cpp)
 target_link_libraries(CompactStringVectorTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 add_test(CompactStringVectorTest CompactStringVectorTest)
+
+add_executable(SparqlDataTypesTest SparqlDataTypesTest.cpp)
+target_link_libraries(SparqlDataTypesTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+add_test(SparqlDataTypesTest SparqlDataTypesTest)

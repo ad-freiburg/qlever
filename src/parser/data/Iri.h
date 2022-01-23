@@ -14,9 +14,8 @@ class Iri {
 
  public:
   explicit Iri(std::string str) : _string{std::move(str)} {
-    AD_CHECK(ctre::match<
-             "(?:@[a-zA-Z]+(?:-(?:[a-zA-Z]|\\d)+)*@)?(?:<.+>|[^:]+:[^:]+)">(
-        _string));
+    AD_CHECK(ctre::match<"(?:@[a-zA-Z]+(?:-(?:[a-zA-Z]|\\d)+)*@)?"
+                         "<[^<>\"{}|^\\\\`\\0- ]*>">(_string));
   }
 
   // ___________________________________________________________________________
