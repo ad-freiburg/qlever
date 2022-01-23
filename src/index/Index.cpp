@@ -314,7 +314,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     return v.mergeVocabulary(_onDiskBase, numFiles, sortPred,
                              internalVocabularyAction);
   }();
-  LOG(DEBUG) << "Finished merging partial vocabularies";
+  LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   VocabularyData res;
   res.nofWords = mergeRes._numWordsTotal;
   res.langPredLowerBound = mergeRes._langPredLowerBound;
@@ -699,7 +699,7 @@ void Index::createPatternsImpl(
     if (sortedPatterns.size() < maxNumPatterns) {
       sortedPatterns.push_back(it);
       if (sortedPatterns.size() == maxNumPatterns) {
-        LOG(DEBUG) << "Sorting patterns after initial insertions." << std::endl;
+        LOG(DEBUG) << "Sorting patterns after initial insertions" << std::endl;
         // actuall sort the sorted patterns
         std::sort(sortedPatterns.begin(), sortedPatterns.end(),
                   comparePatternCounts);
@@ -718,7 +718,7 @@ void Index::createPatternsImpl(
     }
   }
   if (sortedPatterns.size() < maxNumPatterns) {
-    LOG(DEBUG) << "Sorting patterns after all insertions." << std::endl;
+    LOG(DEBUG) << "Sorting patterns after all insertions" << std::endl;
     // actuall sort the sorted patterns
     std::sort(sortedPatterns.begin(), sortedPatterns.end(),
               comparePatternCounts);
