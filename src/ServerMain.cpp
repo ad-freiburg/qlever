@@ -186,11 +186,9 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
-  cout << endl
-       << EMPH_ON << "ServerMain, version " << __DATE__ << " " << __TIME__
-       << EMPH_OFF << endl
-       << endl;
-  cout << "Set locale LC_CTYPE to: " << locale << endl;
+  LOG(INFO) << EMPH_ON << "QLever Server, compiled on "
+            << __DATE__ << " " << __TIME__ << EMPH_OFF << std::endl;
+  LOG(DEBUG) << "Set locale LC_CTYPE to: " << locale << endl;
 
   try {
     Server server(port, numThreads, memLimit);

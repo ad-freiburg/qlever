@@ -201,7 +201,7 @@ std::vector<string> calculatePrefixes(const string& filename,
     lastWord = std::move(nextWord);
 
     numWords++;
-    if (numWords % 50'000'000 == 0) {
+    if (numWords % 100'000'000 == 0) {
       LOG(INFO) << "Words processed: " << numWords << std::endl;
     }
   }
