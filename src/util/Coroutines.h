@@ -1,6 +1,6 @@
-//  Copyright 2022, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 // Clang up to version 13 does not link again libstdc++,
 // because coroutines are still expected in the std::experimental
@@ -17,7 +17,7 @@
 #if defined(__clang__) && defined(__GLIBCXX__) && !__cpp_impl_coroutine
 // This is the constant that is defined by g++ when using the
 // -fcoroutines flag. We have to specify it manually for clang
-// before including the coroutine header
+// before including the coroutine header.
 #define __cpp_impl_coroutine 1
 
 #include <coroutine>
@@ -32,7 +32,7 @@ struct coroutine_handle : std::coroutine_handle<T> {};
 
 #else
 // Simply include the coroutine header, no special treatment
-// necessary
+// necessary.
 #include <coroutine>
 #endif
 

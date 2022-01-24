@@ -136,22 +136,15 @@ TEST(CompactVectorOfStrings, DiskIterator) {
       }
     }  // The constructor finishes writing the file.
 
-    LOG(INFO) << "Trying to open disk Iterator" << std::endl;
     auto iterator = V::diskIterator("_writerTest.dat");
-    LOG(INFO) << "Finished opening disk Iterator" << std::endl;
 
     size_t i = 0;
     for (const auto& el : iterator) {
       ASSERT_EQ(el, input[i++]);
     }
     ASSERT_EQ(i, input.size());
-    LOG(INFO) << "Trying to delete file" << std::endl;
     ad_utility::deleteFile("_writerTest.dat");
-    LOG(INFO) << "Deleted file" << std::endl;
   };
-  LOG(INFO) << "testing strings" << std::endl;
   testDiskIterator(CompactVectorChar{}, strings);
-  LOG(INFO) << "testing ints" << std::endl;
   testDiskIterator(CompactVectorInt{}, ints);
-  LOG(INFO) << "testing done" << std::endl;
 };

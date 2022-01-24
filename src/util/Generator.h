@@ -11,8 +11,8 @@
 #include <type_traits>
 #include <utility>
 
-// coroutines are still experimental in clang libcpp,
-// adapt the appropriate namespacesi by including the convenience header
+// Coroutines are still experimental in clang libcpp, therefore adapt the
+// appropriate namespaces by including the convenience header.
 #include "./Coroutines.h"
 
 namespace cppcoro {
