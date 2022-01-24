@@ -265,7 +265,7 @@ TEST(SparqlParser, RdfCollectionSingleVar) {
   string input = "( ?a )";
   ParserAndVisitor p{input};
 
-  const auto& [node, triples] = p.parser.collection()
+  const auto [node, triples] = p.parser.collection()
                                     ->accept(&p.visitor)
                                     .as<ad_utility::sparql_types::Node>();
 
@@ -286,7 +286,7 @@ TEST(SparqlParser, RdfCollectionTripleVar) {
   string input = "( ?a ?b ?c )";
   ParserAndVisitor p{input};
 
-  const auto& [node, triples] = p.parser.collection()
+  const auto [node, triples] = p.parser.collection()
                                     ->accept(&p.visitor)
                                     .as<ad_utility::sparql_types::Node>();
 
@@ -439,7 +439,7 @@ TEST(SparqlParser, PropertyList) {
   string input = "a ?a";
   ParserAndVisitor p{input};
 
-  const auto& [tuples, triples] =
+  const auto [tuples, triples] =
       p.parser.propertyList()
           ->accept(&p.visitor)
           .as<ad_utility::sparql_types::PropertyList>();
@@ -454,7 +454,7 @@ TEST(SparqlParser, PropertyList) {
 TEST(SparqlParser, EmptyPropertyList) {
   ParserAndVisitor p{""};
 
-  const auto& [tuples, triples] =
+  const auto [tuples, triples] =
       p.parser.propertyList()
           ->accept(&p.visitor)
           .as<ad_utility::sparql_types::PropertyList>();
@@ -466,7 +466,7 @@ TEST(SparqlParser, PropertyListNotEmptySingletonWithTerminator) {
   string input = "a ?a ;";
   ParserAndVisitor p{input};
 
-  const auto& [tuples, triples] =
+  const auto [tuples, triples] =
       p.parser.propertyListNotEmpty()
           ->accept(&p.visitor)
           .as<ad_utility::sparql_types::PropertyList>();
@@ -481,7 +481,7 @@ TEST(SparqlParser, PropertyListNotEmptyWithTerminator) {
   string input = "a ?a ; a ?b ; a ?c ;";
   ParserAndVisitor p{input};
 
-  const auto& [tuples, triples] =
+  const auto [tuples, triples] =
       p.parser.propertyListNotEmpty()
           ->accept(&p.visitor)
           .as<ad_utility::sparql_types::PropertyList>();
@@ -514,7 +514,7 @@ TEST(SparqlParser, ObjectListSingleton) {
   string input = "?a";
   ParserAndVisitor p{input};
 
-  const auto& [objects, triples] =
+  const auto [objects, triples] =
       p.parser.objectList()
           ->accept(&p.visitor)
           .as<ad_utility::sparql_types::ObjectList>();
@@ -528,7 +528,7 @@ TEST(SparqlParser, ObjectList) {
   string input = "?a , ?b , ?c";
   ParserAndVisitor p{input};
 
-  const auto& [objects, triples] =
+  const auto [objects, triples] =
       p.parser.objectList()
           ->accept(&p.visitor)
           .as<ad_utility::sparql_types::ObjectList>();
@@ -544,7 +544,7 @@ TEST(SparqlParser, BlankNodePropertyList) {
   string input = "[ a ?a ; a ?b ; a ?c ]";
   ParserAndVisitor p{input};
 
-  const auto& [node, triples] = p.parser.blankNodePropertyList()
+  const auto [node, triples] = p.parser.blankNodePropertyList()
                                     ->accept(&p.visitor)
                                     .as<ad_utility::sparql_types::Node>();
   EXPECT_THAT(node, IsBlankNode(true, "0"));
@@ -568,7 +568,7 @@ TEST(SparqlParser, GraphNodeVarOrTerm) {
   string input = "?a";
   ParserAndVisitor p{input};
 
-  const auto& [node, triples] = p.parser.graphNode()
+  const auto [node, triples] = p.parser.graphNode()
                                     ->accept(&p.visitor)
                                     .as<ad_utility::sparql_types::Node>();
   EXPECT_THAT(node, IsVariable("?a"));
@@ -579,7 +579,7 @@ TEST(SparqlParser, GraphNodeTriplesNode) {
   string input = "(?a)";
   ParserAndVisitor p{input};
 
-  const auto& [node, triples] = p.parser.graphNode()
+  const auto [node, triples] = p.parser.graphNode()
                                     ->accept(&p.visitor)
                                     .as<ad_utility::sparql_types::Node>();
   EXPECT_THAT(node, IsBlankNode(true, "0"));
