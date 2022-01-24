@@ -52,6 +52,15 @@ struct TupleToVariantImpl<std::tuple<Ts...>> {
   using type = std::variant<Ts...>;
 };
 
+template <typename, typename... Ts>
+struct LastT : LastT<Ts...> {};
+
+template <typename T>
+struct LastT<T> : public std::type_identity<T> {};
+
+template <typename T, typename...>
+struct FirstWrapper : public std::type_identity<T> {};
+
 }  // namespace detail
 
 /// isInstantiation<SomeTemplate, SomeType> is true iff `SomeType` is an
@@ -158,5 +167,11 @@ auto applyFunctionToEachElementOfTuple(Function&& f, Tuple&& tuple) {
   };
   return std::apply(transformer, std::forward<Tuple>(tuple));
 }
+
+template <typename... Ts>
+using Last = typename detail::LastT<Ts...>::type;
+
+template <typename... Ts>
+using First = typename detail::FirstWrapper<Ts...>::type;
 
 }  // namespace ad_utility

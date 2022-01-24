@@ -48,33 +48,15 @@ std::ostream& operator<<(std::ostream& out, const VarOrTerm& varOrTerm) {
 
 // _____________________________________________________________________________
 
-template <typename, typename... Ts>
-struct LastT : LastT<Ts...> {};
-
-template <typename T>
-struct LastT<T> {
-  using type = T;
-};
-
-template <typename... Ts>
-using Last = typename LastT<Ts...>::type;
-
-template <typename T, typename...>
-struct FirstWrapper {
-  using type = T;
-};
-
-template <typename... Ts>
-using First = typename FirstWrapper<Ts...>::type;
-
 // Recursively unwrap a std::variant object, or return a pointer
 // to the argument directly if it is already unwrapped.
 
 template <typename Current, typename... Others>
-constexpr const Last<Current, Others...>* unwrapVariant(const auto& arg) {
+constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
+    const auto& arg) {
   if constexpr (sizeof...(Others) > 0) {
     if constexpr (ad_utility::isSimilar<decltype(arg), Current>) {
-      if (const auto ptr = std::get_if<First<Others...>>(&arg)) {
+      if (const auto ptr = std::get_if<ad_utility::First<Others...>>(&arg)) {
         return unwrapVariant<Others...>(*ptr);
       }
       return nullptr;
