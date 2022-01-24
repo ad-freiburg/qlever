@@ -96,13 +96,6 @@ string IndexMetaData<MapType>::statistics() const {
   os.imbue(locWithNumberGrouping);
   os << "#relations = " << _data.size() << ", #blocks = " << _blockData.size()
      << ", #triples = " << _totalElements;
-  // os << "# Blocks:    " << _totalBlocks << "\n\n";
-  // os << "Theoretical size (3 * 8 bytes per triple) : "
-  //    << _totalElements * 3 * sizeof(Id) << std::endl;
-  // os << "Actual size (2 * 8 bytes per triple)      : "
-  //    << _totalElements * 2 * sizeof(Id) << std::endl;
-  // os << "Total Size (does not work anymore)        : "
-  //    << _totalBytes << std::endl;
   return os.str();
 }
 

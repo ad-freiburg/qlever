@@ -147,7 +147,7 @@ void printUsage(char* execName) {
 
 // Main function.
 int main(int argc, char** argv) {
-  char* locale = setlocale(LC_CTYPE, "");
+  setlocale(LC_CTYPE, "");
 
   std::locale loc;
   ad_utility::ReadableNumberFacet facet(1);
@@ -251,7 +251,6 @@ int main(int argc, char** argv) {
 
   LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on " << __DATE__ << " "
             << __TIME__ << EMPH_OFF << std::endl;
-  LOG(DEBUG) << "Set locale LC_CTYPE to: " << locale << endl;
 
   try {
     LOG(TRACE) << "Configuring STXXL..." << std::endl;
@@ -323,7 +322,7 @@ int main(int argc, char** argv) {
       } else if (filetype == "mmap") {
         LOG(DEBUG) << "Parsing uncompressed TTL from from: " << inputFile
                    << " (using mmap, which only works for files, not for "
-                   << "stream)" << std::endl;
+                   << "streams)" << std::endl;
         index.createFromFile<TurtleMmapParser<Tokenizer>>(inputFile);
       } else {
         LOG(ERROR) << "File format must be one of: tsv nt ttl mmap"

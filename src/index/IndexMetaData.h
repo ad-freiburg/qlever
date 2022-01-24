@@ -42,12 +42,12 @@ struct VersionInfo {
   size_t _nOfBytes;
 };
 
-// Read element from given address and advance it. This is a
-// helper function for `IndexMetaData::createFromByteBuffer`.
+// Read element at given pointer and advance the pointer. This is a helper
+// function for `IndexMetaData::createFromByteBuffer`.
 template <class T>
-T readFromBuf(unsigned char** buf) {
-  T res = *reinterpret_cast<T*>(*buf);
-  *buf += sizeof(T);
+T readFromBuf(unsigned char** ptr) {
+  T res = *reinterpret_cast<T*>(*ptr);
+  *ptr += sizeof(T);
   return res;
 }
 
@@ -71,8 +71,8 @@ constexpr uint64_t V_CURRENT = V_SERIALIZATION_LIBRARY;
 
 // The meta data for an index permutation.
 //
-// TODO<joka921>: The datatype wrappers defined in MetaDataHandler.h all meet
-// the requirements of MapType. Write this down using a C++20 concept.
+// TODO<C++20>: The datatype wrappers defined in MetaDataHandler.h all meet the
+// requirements of MapType. Write this down using a C++20 concept.
 template <class M>
 class IndexMetaData {
   // Type definitions.
@@ -83,7 +83,7 @@ class IndexMetaData {
   using GetType = const CompressedRelationMetaData&;
   using BlocksType = std::vector<CompressedBlockMetaData>;
 
-  // Private members.
+ // Private member variables.
  private:
   off_t _offsetAfter = 0;
 
@@ -103,16 +103,7 @@ class IndexMetaData {
   size_t _totalBlocks = 0;
   uint64_t _version = V_CURRENT;
 
-  // Symmetric serialization function for the ad_utility::serialization module.
-  template <class Serializer, typename MapType>
-  friend void serialize(Serializer& serializer,
-                        IndexMetaData<MapType>& metaData);
-
-  size_t getNofBlocksForRelation(const Id col0Id) const;
-
-  size_t getTotalBytesForRelation(Id col0Id) const;
-
-  // Public members.
+ // Public methods.
  public:
   // Some instantiations of `MapType` (the dense ones using stxxl or mmap)
   // require additional calls to setup() before being fully initialized.
@@ -163,8 +154,8 @@ class IndexMetaData {
   // file exists).
   void writeToFile(const std::string& filename) const;
 
-  // Write to the end of an already existing file. This will move file pointer
-  // to the end of that file.
+  // Write to the end of an already existing file. This will move the file
+  // pointer to the end of that file.
   void appendToFile(ad_utility::File* file) const;
 
   // Read from file with the given name.
@@ -196,6 +187,18 @@ class IndexMetaData {
 
   BlocksType& blockData() { return _blockData; }
   const BlocksType& blockData() const { return _blockData; }
+
+ // Private methods.
+ private:
+  // Symmetric serialization function for the ad_utility::serialization module.
+  template <class Serializer, typename MapType>
+  friend void serialize(Serializer& serializer,
+                        IndexMetaData<MapType>& metaData);
+
+  size_t getNofBlocksForRelation(const Id col0Id) const;
+
+  size_t getTotalBytesForRelation(Id col0Id) const;
+
 };
 
 // ____________________________________________________________________________
