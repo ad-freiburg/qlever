@@ -210,8 +210,8 @@ void VocabularyMerger::writeQueueWordsToIdVec(
         _langPredUpperBound = _totalWritten + 1;
       }
       _totalWritten++;
-      if (_totalWritten % _bufferSize == 0) {
-        LOG(INFO) << "Merged " << _totalWritten << "Words" << std::endl;
+      if (_totalWritten % 100'000'000 == 0) {
+        LOG(INFO) << "Words merged: " << _totalWritten << std::endl;
       }
     } else {
       // this is a duplicate which already occured in another partial vocabulary
@@ -243,7 +243,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
     doActualWrite(writeBuf);
   }
 
-  LOG(INFO) << "Finished writing batch of merged words\n";
+  LOG(DEBUG) << "Finished writing batch of merged words" << std::endl;
 }
 
 // ____________________________________________________________________________________________________________
@@ -302,7 +302,7 @@ void writeMappedIdsToExtVec(const TripleVec& input,
 
 // _________________________________________________________________________________________________________
 void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
-  LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
+  LOG(DEBUG) << "Writing partial vocabulary to: " << fileName << "\n";
   std::ofstream out(fileName.c_str(),
                     std::ios_base::out | std::ios_base::binary);
   AD_CHECK(out.is_open());
@@ -315,7 +315,7 @@ void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
     out.write((char*)&id, sizeof(id));
   }
   out.close();
-  LOG(INFO) << "Done writing vocabulary to file.\n";
+  LOG(DEBUG) << "Done writing partial vocabulary\n";
 }
 
 // ______________________________________________________________________________________________

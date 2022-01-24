@@ -409,8 +409,8 @@ bool TurtleParser<T>::pnameLnRelaxed() {
     // make tests work
     posEnd = view.size();
   }
-  // TODO: is it allowed to have no space between triples and the dots? in
-  // this case we have to check something here
+  // TODO<joka921>: Is it allowed to have no space between triples and the
+  // dots? In this case we have to check something here.
   _activePrefix = view.substr(0, pos);
   _lastParseResult = view.substr(pos + 1, posEnd - (pos + 1));
   // we do not remove the whitespace or the ,; since they are needed

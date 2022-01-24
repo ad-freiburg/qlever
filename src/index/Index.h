@@ -43,7 +43,7 @@ using std::vector;
 
 using json = nlohmann::json;
 
-// a simple struct for better naming
+// A simple struct for better naming.
 struct VocabularyData {
   using TripleVec = stxxl::vector<array<Id, 3>>;
   // The total number of distinct words in the complete Vocabulary

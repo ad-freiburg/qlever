@@ -24,12 +24,12 @@ using std::string;
 template <class S, class C>
 void Vocabulary<S, C>::readFromFile(const string& fileName,
                                     const string& extLitsFileName) {
-  LOG(INFO) << "Reading vocabulary from file " << fileName << "\n";
+  LOG(INFO) << "Reading internal vocabulary from file " << fileName << " ..."
+            << std::endl;
   _words.clear();
   ad_utility::serialization::FileReadSerializer file(fileName);
   file >> _words;
-  LOG(INFO) << "Done reading vocabulary from file.\n";
-  LOG(INFO) << "It contains " << _words.size() << " elements\n";
+  LOG(INFO) << "Done, number of words: " << _words.size() << std::endl;
   if (extLitsFileName.size() > 0) {
     if (!_isCompressed) {
       LOG(INFO) << "ERROR: trying to load externalized literals to an "
@@ -38,9 +38,10 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
       AD_CHECK(false);
     }
 
-    LOG(INFO) << "Registering external vocabulary for literals.\n";
+    LOG(DEBUG) << "Registering external vocabulary" << std::endl;
     _externalLiterals.initFromFile(extLitsFileName);
-    LOG(INFO) << "Done registering external vocabulary for literals.\n";
+    LOG(INFO) << "Number of words in external vocabulary: "
+              << _externalLiterals.size() << std::endl;
   }
 }
 

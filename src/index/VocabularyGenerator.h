@@ -22,8 +22,8 @@ using std::string;
 using TripleVec = stxxl::vector<array<Id, 3>>;
 
 /**
- * class for merging the partial vocabularies. The main function is still in the
- * mergeVocabulary function but the parallel pipeline is easier when this is
+ * Class for merging the partial vocabularies. The main function is still in the
+ * `mergeVocabulary` function, but the parallel pipeline is easier when this is
  * encapsulated within a class.
  */
 class VocabularyMerger {

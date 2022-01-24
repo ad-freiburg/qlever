@@ -147,7 +147,7 @@ void printUsage(char* execName) {
 
 // Main function.
 int main(int argc, char** argv) {
-  char* locale = setlocale(LC_CTYPE, "");
+  setlocale(LC_CTYPE, "");
 
   std::locale loc;
   ad_utility::ReadableNumberFacet facet(1);
@@ -249,9 +249,8 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
-  LOG(INFO) << EMPH_ON << "IndexBuilderMain, version " << __DATE__ << " "
+  LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on " << __DATE__ << " "
             << __TIME__ << EMPH_OFF << std::endl;
-  LOG(TRACE) << "Set locale LC_CTYPE to: " << locale << endl;
 
   try {
     LOG(TRACE) << "Configuring STXXL..." << std::endl;
@@ -272,20 +271,18 @@ int main(int argc, char** argv) {
     index.setSettingsFile(settingsFile);
     index.setPrefixCompression(useCompression);
     index.setLoadAllPermutations(loadAllPermutations);
+    // NOTE: If `onlyAddTextIndex` is true, we do not want to construct an
+    // index, but we assume that it already exists. In particular, we then need
+    // the vocabulary from the KB index for building the text index.
     if (!onlyAddTextIndex) {
-      // if onlyAddTextIndex is true, we do not want to construct an index,
-      // but assume that it  already exists (especially we need a valid
-      // vocabulary for  text  index  creation)
-      if (inputFile.empty()) {
-        LOG(INFO)
-            << "No input knowledge-base-file specified. Parsing from stdin\n";
-        inputFile = "/dev/stdin";
-      } else if (inputFile == "-") {
-        LOG(INFO) << "Parsing from stdin.\n";
+      if (inputFile.empty() || inputFile == "-") {
         inputFile = "/dev/stdin";
       }
 
-      if (filetype.empty()) {
+      if (!filetype.empty()) {
+        LOG(INFO) << "You specified the input format: "
+                  << ad_utility::getUppercase(filetype) << std::endl;
+      } else {
         bool filetypeDeduced = false;
         if (ad_utility::endsWith(inputFile, ".tsv")) {
           filetype = "tsv";
@@ -297,46 +294,39 @@ int main(int argc, char** argv) {
           filetype = "ttl";
           filetypeDeduced = true;
         } else {
-          LOG(WARN) << " Could not deduce the type of the input "
-                       "knowledge-base-file by "
-                       "its extension. Assuming the input to be turtle. Please "
-                       "specify "
-                       "--file-format (-F)\n";
-          LOG(WARN) << "In case this is not correct \n";
+          LOG(INFO) << "Unknown or missing extension of input file, assuming: "
+                       "TTL"
+                    << std::endl;
         }
         if (filetypeDeduced) {
-          LOG(INFO) << "Assuming input file format to be " << filetype
-                    << " due to the input file's extension.\n";
-          LOG(INFO)
-              << "If this is wrong, please manually specify the --file-format "
-                 "(-F) flag.\n";
+          LOG(INFO) << "Format of input file deduced from extension: "
+                    << ad_utility::getUppercase(filetype) << "\n";
         }
+        LOG(INFO) << "If this is not correct, start again using the option "
+                     "--file-format (-F)"
+                  << std::endl;
       }
 
       if (filetype == "ttl") {
-        LOG(INFO) << "Reading from uncompressed turtle file or stream "
-                  << inputFile << std::endl;
+        LOG(DEBUG) << "Parsing uncompressed TTL from: " << inputFile
+                   << std::endl;
         index.createFromFile<TurtleParserAuto>(inputFile);
       } else if (filetype == "tsv") {
-        LOG(INFO) << "Reading from uncompressed tsv file" << inputFile
-                  << std::endl;
+        LOG(DEBUG) << "Parsing uncompressed TSV from: " << inputFile
+                   << std::endl;
         index.createFromFile<TsvParser>(inputFile);
       } else if (filetype == "nt") {
-        LOG(INFO) << "Reading from uncompressed N-Triples file or stream "
-                  << inputFile << ", using the Turtle parser." << std::endl;
+        LOG(DEBUG) << "Parsing uncompressed N-Triples from: " << inputFile
+                   << " (using the Turtle parser)" << std::endl;
         index.createFromFile<TurtleParserAuto>(inputFile);
       } else if (filetype == "mmap") {
-        LOG(INFO) << "Reading from uncompressed turtle file" << inputFile
-                  << std::endl;
-        LOG(WARN) << "We will load this file using mmap. This will only work "
-                     "for files on hard disk and fail for streams.\n";
-        LOG(WARN) << "For Turtle streams please use --file-format ttl\n";
+        LOG(DEBUG) << "Parsing uncompressed TTL from from: " << inputFile
+                   << " (using mmap, which only works for files, not for "
+                   << "streams)" << std::endl;
         index.createFromFile<TurtleMmapParser<Tokenizer>>(inputFile);
       } else {
-        LOG(ERROR)
-            << "Argument to --file-format (-F) must be one of [tsv|nt|ttl|mmap]"
-               "(mmap assumes an on-disk turtle file that can be completely "
-               "mmaped to memory. \n";
+        LOG(ERROR) << "File format must be one of: tsv nt ttl mmap"
+                   << std::endl;
         printUsage(argv[0]);
         exit(1);
       }

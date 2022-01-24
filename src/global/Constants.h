@@ -79,16 +79,13 @@ static const std::string ERROR_IGNORE_CASE_UNSUPPORTED =
     "your settings.json and rebuild your index. You can optionally specify the "
     "\"locale\" key, otherwise \"en.US\" will be used as default";
 static const std::string WARNING_ASCII_ONLY_PREFIXES =
-    "You requested the CTRE parser for tokenization (either via "
-    "ascii-prefixes-only = true in the settings.json or by requesting it "
-    "explicitly in TurtleParserMain). This means that the input Turtle data "
-    "may only use characters from the ASCII range and that no escape sequences "
-    "may be used in prefixed names (e.g., rdfs:label\\,el is not allowed). "
-    " Additionally, multiline literals are not allowed and triples have to end "
-    "at line boundaries (The regex \". *\\n\" must safely identify the end of "
-    "a triple)."
-    "This is stricter than the SPARQL standard but makes parsing faster. It "
-    "works for many Turtle dumps, e.g. that from Wikidata.";
+    "You specified \"ascii-prefixes-only = true\", which enables faster "
+    "parsing for well-behaved TTL files (see qlever/docs on GitHub)";
+// " but only works correctly if there are no escape sequences in "
+// "prefixed names (e.g., rdfs:label\\,el is not allowed), no multiline "
+// "literals, and the regex \". *\\n\" only matches at the end of a triple. "
+// "Most Turtle files fulfill these properties (e.g. that from Wikidata), "
+// "but not all";
 static const std::string LOCALE_DEFAULT_LANG = "en";
 static const std::string LOCALE_DEFAULT_COUNTRY = "US";
 static constexpr bool LOCALE_DEFAULT_IGNORE_PUNCTUATION = false;
