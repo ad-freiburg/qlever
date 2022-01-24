@@ -278,7 +278,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     }
   }
   writer.wlock()->finish();
-  LOG(INFO) << "Done processing input, total number of triples read: " << i
+  LOG(INFO) << "Done, total number of triples read: " << i
             << " [may contain duplicates]" << std::endl;
   LOG(INFO) << "Number of QLever-internal triples created: "
             << (idTriples->size() - i) << " [may contain duplicates]"
@@ -393,7 +393,7 @@ void Index::convertPartialToGlobalIds(
       }
     }
   }
-  LOG(INFO) << "DONE converting, total number of triples converted: " << i
+  LOG(INFO) << "Done, total number of triples converted: " << i
             << std::endl;
 }
 
@@ -416,7 +416,7 @@ Index::createPermutationPairImpl(const string& fileName1,
                     fileName2 + MMAP_FILE_SUFFIX);
   }
 
-  if (triples.size() == 0) {
+  if (triples.empty()) {
     LOG(WARN) << "Creating pair of index permutations from empty vector of "
                  "triples, probably something went wrong"
               << std::endl;
@@ -532,7 +532,7 @@ Index::createPermutations(
     LOG(INFO) << "Removing duplicate triples ..." << std::endl;
     auto last = std::unique(begin(*vec), end(*vec));
     vec->resize(size_t(last - vec->begin()));
-    LOG(INFO) << "Done removing duplicates, number of distinct triples is: "
+    LOG(INFO) << "Done, number of distinct triples is: "
               << vec->size() << std::endl;
   }
 
@@ -581,7 +581,6 @@ void Index::createPermutationPair(
     metaData.value().first.appendToFile(&f1);
     ad_utility::File f2(_onDiskBase + ".index" + p2._fileSuffix, "r+");
     metaData.value().second.appendToFile(&f2);
-    LOG(DEBUG) << "Done" << std::endl;
   }
 }
 

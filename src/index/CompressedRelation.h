@@ -52,12 +52,12 @@ struct CompressedRelationMetaData {
   size_t _numRows;
   float _multiplicityCol1;  // E.g., in PSO this is the multiplicity of "S".
   float _multiplicityCol2;  // E.g., in PSO this is the multiplicity of "O".
-  // If this "relation" is contained in a block together with other "relations"
-  // (e.g., this can happen for SPO or OSP), then all of these relations are
-  // contained only in this block and `_offsetInBlock` stores the offset in this
-  // block (referring to the index in the uncompressed sequence of triples).
-  // Otherwise, this "relation" is stored in one or several blocks of its own,
-  // and we set `_offsetInBlock` to `Id(-1)`.
+  // If this "relation" is contained in a block together with other "relations",
+  // then all of these relations are contained only in this block and
+  // `_offsetInBlock` stores the offset in this block (referring to the index in
+  // the uncompressed sequence of triples).  Otherwise, this "relation" is
+  // stored in one or several blocks of its own, and we set `_offsetInBlock` to
+  // `Id(-1)`.
   Id _offsetInBlock = Id(-1);
 
   size_t getNofElements() const { return _numRows; }
@@ -199,7 +199,7 @@ class CompressedRelationWriter {
   /// Get all the CompressedBlockMetaData that were created by the calls to
   /// addRelation. This meta data is then deleted from the
   /// CompressedRelationWriter. The typical workflow is: add all relations,
-  /// then call `finish()` and then call this method
+  /// then call `finish()` and then call this method.
   auto getFinishedBlocks() {
     return std::move(_blockBuffer);
     _blockBuffer.clear();
