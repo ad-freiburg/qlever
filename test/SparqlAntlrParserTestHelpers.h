@@ -17,7 +17,7 @@ std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
         if constexpr (ad_utility::isSimilar<T, Literal>) {
           out << "Literal " << object.literal();
         } else if constexpr (ad_utility::isSimilar<T, BlankNode>) {
-          out << "BlankNode generated: " << object.generated()
+          out << "BlankNode generated: " << object.isGenerated()
               << ", label: " << object.label();
         } else if constexpr (ad_utility::isSimilar<T, Iri>) {
           out << "Iri " << object.iri();
@@ -99,7 +99,7 @@ MATCHER_P(IsIri, value, "") {
 MATCHER_P2(IsBlankNode, generated, label, "") {
   if (const auto blankNode =
           unwrapVariant<VarOrTerm, GraphTerm, BlankNode>(arg)) {
-    return blankNode->generated() == generated && blankNode->label() == label;
+    return blankNode->isGenerated() == generated && blankNode->label() == label;
   }
   return false;
 }

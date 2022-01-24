@@ -27,7 +27,7 @@ class BlankNode {
 
   // ___________________________________________________________________________
   // Used for testing
-  [[nodiscard]] bool generated() const { return _generated; }
+  [[nodiscard]] bool isGenerated() const { return _generated; }
 
   // ___________________________________________________________________________
   // Used for testing
