@@ -83,7 +83,7 @@ class IndexMetaData {
   using GetType = const CompressedRelationMetaData&;
   using BlocksType = std::vector<CompressedBlockMetaData>;
 
- // Private member variables.
+  // Private member variables.
  private:
   off_t _offsetAfter = 0;
 
@@ -103,7 +103,7 @@ class IndexMetaData {
   size_t _totalBlocks = 0;
   uint64_t _version = V_CURRENT;
 
- // Public methods.
+  // Public methods.
  public:
   // Some instantiations of `MapType` (the dense ones using stxxl or mmap)
   // require additional calls to setup() before being fully initialized.
@@ -188,7 +188,7 @@ class IndexMetaData {
   BlocksType& blockData() { return _blockData; }
   const BlocksType& blockData() const { return _blockData; }
 
- // Private methods.
+  // Private methods.
  private:
   // Symmetric serialization function for the ad_utility::serialization module.
   template <class Serializer, typename MapType>
@@ -198,7 +198,6 @@ class IndexMetaData {
   size_t getNofBlocksForRelation(const Id col0Id) const;
 
   size_t getTotalBytesForRelation(Id col0Id) const;
-
 };
 
 // ____________________________________________________________________________

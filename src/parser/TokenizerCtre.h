@@ -252,7 +252,7 @@ class TokenizerCtre {
 
     auto innerResult = getNextTokenRecurse<0, fst, ids...>();
 
-    // Advance for the length of the longest match.
+    // Advance by the length of the longest match.
     auto maxMatchSize = std::get<1>(innerResult);
     reset(beg + maxMatchSize, dataSize - maxMatchSize);
     return innerResult;

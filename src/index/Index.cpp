@@ -393,8 +393,7 @@ void Index::convertPartialToGlobalIds(
       }
     }
   }
-  LOG(INFO) << "Done, total number of triples converted: " << i
-            << std::endl;
+  LOG(INFO) << "Done, total number of triples converted: " << i << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -532,8 +531,8 @@ Index::createPermutations(
     LOG(INFO) << "Removing duplicate triples ..." << std::endl;
     auto last = std::unique(begin(*vec), end(*vec));
     vec->resize(size_t(last - vec->begin()));
-    LOG(INFO) << "Done, number of distinct triples is: "
-              << vec->size() << std::endl;
+    LOG(INFO) << "Done, number of distinct triples is: " << vec->size()
+              << std::endl;
   }
 
   auto metaData = createPermutationPairImpl<MetaDataDispatcher>(
