@@ -111,11 +111,11 @@ TEST(SparqlDataTypesTest, IriEvaluatesCorrectlyBasedOnContext) {
   EXPECT_THAT(iri.evaluate(context0, PREDICATE), Optional(iriString));
   EXPECT_THAT(iri.evaluate(context0, OBJECT), Optional(iriString));
 
-  Context context10 = wrapper.createContextForRow(1337);
+  Context context1337 = wrapper.createContextForRow(1337);
 
-  EXPECT_THAT(iri.evaluate(context10, SUBJECT), Optional(iriString));
-  EXPECT_THAT(iri.evaluate(context10, PREDICATE), Optional(iriString));
-  EXPECT_THAT(iri.evaluate(context10, OBJECT), Optional(iriString));
+  EXPECT_THAT(iri.evaluate(context1337, SUBJECT), Optional(iriString));
+  EXPECT_THAT(iri.evaluate(context1337, PREDICATE), Optional(iriString));
+  EXPECT_THAT(iri.evaluate(context1337, OBJECT), Optional(iriString));
 }
 
 TEST(SparqlDataTypesTest, IriEvaluateIsPropagatedCorrectly) {
@@ -160,11 +160,11 @@ TEST(SparqlDataTypesTest, LiteralEvaluatesCorrectlyBasedOnContext) {
   EXPECT_EQ(literal.evaluate(context0, PREDICATE), std::nullopt);
   EXPECT_THAT(literal.evaluate(context0, OBJECT), Optional(literalString));
 
-  Context context10 = wrapper.createContextForRow(1337);
+  Context context1337 = wrapper.createContextForRow(1337);
 
-  EXPECT_EQ(literal.evaluate(context10, SUBJECT), std::nullopt);
-  EXPECT_EQ(literal.evaluate(context10, PREDICATE), std::nullopt);
-  EXPECT_THAT(literal.evaluate(context10, OBJECT), Optional(literalString));
+  EXPECT_EQ(literal.evaluate(context1337, SUBJECT), std::nullopt);
+  EXPECT_EQ(literal.evaluate(context1337, PREDICATE), std::nullopt);
+  EXPECT_THAT(literal.evaluate(context1337, OBJECT), Optional(literalString));
 }
 
 TEST(SparqlDataTypesTest, LiteralEvaluateIsPropagatedCorrectly) {
@@ -237,11 +237,11 @@ TEST(SparqlDataTypesTest, VariableEvaluatesNothingForUnusedName) {
   EXPECT_EQ(variable.evaluate(context0, PREDICATE), std::nullopt);
   EXPECT_EQ(variable.evaluate(context0, OBJECT), std::nullopt);
 
-  Context context10 = wrapper.createContextForRow(1337);
+  Context context1337 = wrapper.createContextForRow(1337);
 
-  EXPECT_EQ(variable.evaluate(context10, SUBJECT), std::nullopt);
-  EXPECT_EQ(variable.evaluate(context10, PREDICATE), std::nullopt);
-  EXPECT_EQ(variable.evaluate(context10, OBJECT), std::nullopt);
+  EXPECT_EQ(variable.evaluate(context1337, SUBJECT), std::nullopt);
+  EXPECT_EQ(variable.evaluate(context1337, PREDICATE), std::nullopt);
+  EXPECT_EQ(variable.evaluate(context1337, OBJECT), std::nullopt);
 }
 
 TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
