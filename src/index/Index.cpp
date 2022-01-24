@@ -278,7 +278,10 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     }
   }
   writer.wlock()->finish();
-  LOG(INFO) << "DONE processing input, total number of triples read: " << i
+  LOG(INFO) << "Done processing input, total number of triples read: " << i
+            << " [may contain duplicates]" << std::endl;
+  LOG(INFO) << "Number of QLever-internal triples created: "
+            << (idTriples->size() - i) << " [may contain duplicates]"
             << std::endl;
 
   size_t sizeInternalVocabulary = 0;
@@ -970,8 +973,10 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   }
 
   if (_usePatterns) {
-    // Read the pattern info from the patterns file
+    // Read the pattern info from the patterns file.
     std::string patternsFilePath = _onDiskBase + ".index.patterns";
+    LOG(INFO) << "Reading patterns from file " << patternsFilePath << " ..."
+              << std::endl;
     ad_utility::File patternsFile;
     patternsFile.open(patternsFilePath, "r");
     AD_CHECK(patternsFile.isOpen());
