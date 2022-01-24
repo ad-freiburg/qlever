@@ -346,7 +346,7 @@ TEST(SparqlParser, ConstructTemplateEmpty) {
 }
 
 TEST(SparqlParser, ConstructTriplesSingletonWithTerminator) {
-  string input = "?a ?a ?a .";
+  string input = "?a ?b ?c .";
   ParserAndVisitor p{input};
 
   auto triples = p.parser.constructTriples()
@@ -355,12 +355,12 @@ TEST(SparqlParser, ConstructTriplesSingletonWithTerminator) {
   ASSERT_THAT(triples, SizeIs(1));
 
   EXPECT_THAT(triples[0], ElementsAre(IsVariable("?a"),  //
-                                      IsVariable("?a"),  //
-                                      IsVariable("?a")));
+                                      IsVariable("?b"),  //
+                                      IsVariable("?c")));
 }
 
 TEST(SparqlParser, ConstructTriplesWithTerminator) {
-  string input = "?a ?a ?a . ?b ?b ?b . ?c ?c ?c .";
+  string input = "?a ?b ?c . ?d ?e ?f . ?g ?h ?i .";
   ParserAndVisitor p{input};
 
   auto triples = p.parser.constructTriples()
@@ -369,20 +369,20 @@ TEST(SparqlParser, ConstructTriplesWithTerminator) {
   ASSERT_THAT(triples, SizeIs(3));
 
   EXPECT_THAT(triples[0], ElementsAre(IsVariable("?a"),  //
-                                      IsVariable("?a"),  //
-                                      IsVariable("?a")));
-
-  EXPECT_THAT(triples[1], ElementsAre(IsVariable("?b"),  //
                                       IsVariable("?b"),  //
-                                      IsVariable("?b")));
-
-  EXPECT_THAT(triples[2], ElementsAre(IsVariable("?c"),  //
-                                      IsVariable("?c"),  //
                                       IsVariable("?c")));
+
+  EXPECT_THAT(triples[1], ElementsAre(IsVariable("?d"),  //
+                                      IsVariable("?e"),  //
+                                      IsVariable("?f")));
+
+  EXPECT_THAT(triples[2], ElementsAre(IsVariable("?g"),  //
+                                      IsVariable("?h"),  //
+                                      IsVariable("?i")));
 }
 
 TEST(SparqlParser, TriplesSameSubjectVarOrTerm) {
-  string input = "?a ?a ?a";
+  string input = "?a ?b ?c";
   ParserAndVisitor p{input};
 
   auto triples = p.parser.constructTriples()
@@ -391,8 +391,8 @@ TEST(SparqlParser, TriplesSameSubjectVarOrTerm) {
   ASSERT_THAT(triples, SizeIs(1));
 
   EXPECT_THAT(triples[0], ElementsAre(IsVariable("?a"),  //
-                                      IsVariable("?a"),  //
-                                      IsVariable("?a")));
+                                      IsVariable("?b"),  //
+                                      IsVariable("?c")));
 }
 
 TEST(SparqlParser, TriplesSameSubjectTriplesNodeWithPropertyList) {
