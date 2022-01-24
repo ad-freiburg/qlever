@@ -17,18 +17,10 @@ namespace qlever_stdOrExp = std::experimental;
 namespace qlever_stdOrExp = std;
 #endif
 
+#include "./Concepts.h"
 #include "./ostringstream.h"
 
 namespace ad_utility::stream_generator {
-
-/**
- * A concept to ensure objects can be formatted by std::ostream.
- * @tparam T The Type to be formatted
- */
-template <typename T>
-concept Streamable = requires(T x, std::ostream& os) {
-  os << x;
-};
 
 template <size_t MIN_BUFFER_SIZE>
 class basic_stream_generator;
