@@ -9,8 +9,8 @@
 
 // Coroutines are still experimental in clang libcpp, therefore
 // adapt the appropriate namespaces using the convenience header.
-#include "./Coroutines.h"
 #include "./Concepts.h"
+#include "./Coroutines.h"
 #include "./ostringstream.h"
 
 namespace ad_utility::stream_generator {

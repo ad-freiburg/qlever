@@ -266,8 +266,8 @@ TEST(SparqlParser, RdfCollectionSingleVar) {
   ParserAndVisitor p{input};
 
   const auto [node, triples] = p.parser.collection()
-                                    ->accept(&p.visitor)
-                                    .as<ad_utility::sparql_types::Node>();
+                                   ->accept(&p.visitor)
+                                   .as<ad_utility::sparql_types::Node>();
 
   EXPECT_THAT(node, IsBlankNode(true, "0"));
 
@@ -287,8 +287,8 @@ TEST(SparqlParser, RdfCollectionTripleVar) {
   ParserAndVisitor p{input};
 
   const auto [node, triples] = p.parser.collection()
-                                    ->accept(&p.visitor)
-                                    .as<ad_utility::sparql_types::Node>();
+                                   ->accept(&p.visitor)
+                                   .as<ad_utility::sparql_types::Node>();
 
   EXPECT_THAT(node, IsBlankNode(true, "2"));
 
@@ -545,8 +545,8 @@ TEST(SparqlParser, BlankNodePropertyList) {
   ParserAndVisitor p{input};
 
   const auto [node, triples] = p.parser.blankNodePropertyList()
-                                    ->accept(&p.visitor)
-                                    .as<ad_utility::sparql_types::Node>();
+                                   ->accept(&p.visitor)
+                                   .as<ad_utility::sparql_types::Node>();
   EXPECT_THAT(node, IsBlankNode(true, "0"));
 
   ASSERT_THAT(triples, SizeIs(3));
@@ -569,8 +569,8 @@ TEST(SparqlParser, GraphNodeVarOrTerm) {
   ParserAndVisitor p{input};
 
   const auto [node, triples] = p.parser.graphNode()
-                                    ->accept(&p.visitor)
-                                    .as<ad_utility::sparql_types::Node>();
+                                   ->accept(&p.visitor)
+                                   .as<ad_utility::sparql_types::Node>();
   EXPECT_THAT(node, IsVariable("?a"));
   EXPECT_THAT(triples, IsEmpty());
 }
@@ -580,8 +580,8 @@ TEST(SparqlParser, GraphNodeTriplesNode) {
   ParserAndVisitor p{input};
 
   const auto [node, triples] = p.parser.graphNode()
-                                    ->accept(&p.visitor)
-                                    .as<ad_utility::sparql_types::Node>();
+                                   ->accept(&p.visitor)
+                                   .as<ad_utility::sparql_types::Node>();
   EXPECT_THAT(node, IsBlankNode(true, "0"));
 
   ASSERT_THAT(triples, SizeIs(2));
