@@ -29,8 +29,7 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
   _words.clear();
   ad_utility::serialization::FileReadSerializer file(fileName);
   file >> _words;
-  LOG(INFO) << "Done reading internal vocabulary, number of words: "
-            << _words.size() << std::endl;
+  LOG(INFO) << "Done, number of words: " << _words.size() << std::endl;
   if (extLitsFileName.size() > 0) {
     if (!_isCompressed) {
       LOG(INFO) << "ERROR: trying to load externalized literals to an "
