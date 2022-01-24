@@ -52,7 +52,8 @@ static const std::string PARTIAL_VOCAB_FILE_NAME = ".tmp.partial-vocabulary.";
 static const std::string PARTIAL_MMAP_IDS = ".tmp.partial-ids-mmap.";
 
 // ________________________________________________________________
-static const std::string TMP_BASENAME_COMPRESSION = ".tmp.compressed.";
+static const std::string TMP_BASENAME_COMPRESSION =
+    ".tmp.for-prefix-compression.";
 
 // _________________________________________________________________
 // The degree of parallelism that is used for the index building step, where the

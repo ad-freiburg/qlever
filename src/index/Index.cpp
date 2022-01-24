@@ -45,6 +45,8 @@ VocabularyData Index::createIdTriplesAndVocab(const string& ntFile) {
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << _totalVocabularySize << std::endl;
 
+  LOG(INFO) << "Converting external vocabulary to binary format ..."
+            << std::endl;
   if (_onDiskLiterals) {
     _vocab.externalizeLiteralsFromTextFile(
         _onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME,
@@ -281,7 +283,8 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
 
   size_t sizeInternalVocabulary = 0;
   if (_vocabPrefixCompressed) {
-    LOG(INFO) << "Merging partial vocabularies (internal) ..." << std::endl;
+    LOG(INFO) << "Merging partial vocabularies in byte order "
+              << "(internal only) ..." << std::endl;
     VocabularyMerger m;
     std::ofstream compressionOutfile(_onDiskBase + TMP_BASENAME_COMPRESSION +
                                      ".vocabulary");
@@ -300,7 +303,8 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
               << sizeInternalVocabulary << std::endl;
   }
 
-  LOG(INFO) << "Merging partial vocabularies (external) ..." << std::endl;
+  LOG(INFO) << "Merging partial vocabularies in Unicode order "
+            << "(internal and external) ..." << std::endl;
   const VocabularyMerger::VocMergeRes mergeRes = [&]() {
     VocabularyMerger v;
     auto sortPred = [cmp = &(_vocab.getCaseComparator())](std::string_view a,
