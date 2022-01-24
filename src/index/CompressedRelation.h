@@ -168,7 +168,7 @@ class CompressedRelationWriter {
    *
    * \param col0Id The ID of the relation, that is, the value of X for a
    * permutation XYZ.
-   * 
+   *
    * \param data The sorted data of the relation, that is, the sequence of all
    * pairs of Y and Z for the given X.
    *

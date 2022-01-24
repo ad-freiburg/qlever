@@ -42,7 +42,7 @@ struct VersionInfo {
   size_t _nOfBytes;
 };
 
-// Read element from given address and advance it. This is a 
+// Read element from given address and advance it. This is a
 // helper function for `IndexMetaData::createFromByteBuffer`.
 template <class T>
 T readFromBuf(unsigned char** buf) {
@@ -69,13 +69,13 @@ constexpr uint64_t V_SERIALIZATION_LIBRARY = 2;
 // Constant for the current version.
 constexpr uint64_t V_CURRENT = V_SERIALIZATION_LIBRARY;
 
-// The meta data for an index permutation. 
+// The meta data for an index permutation.
 //
 // TODO<joka921>: The datatype wrappers defined in MetaDataHandler.h all meet
 // the requirements of MapType. Write this down using a C++20 concept.
 template <class M>
 class IndexMetaData {
- // Type definitions.
+  // Type definitions.
  public:
   typedef M MapType;
   using value_type = typename MapType::value_type;
@@ -83,7 +83,7 @@ class IndexMetaData {
   using GetType = const CompressedRelationMetaData&;
   using BlocksType = std::vector<CompressedBlockMetaData>;
 
- // Private members.
+  // Private members.
  private:
   off_t _offsetAfter = 0;
 
@@ -112,7 +112,7 @@ class IndexMetaData {
 
   size_t getTotalBytesForRelation(Id col0Id) const;
 
- // Public members.
+  // Public members.
  public:
   // Some instantiations of `MapType` (the dense ones using stxxl or mmap)
   // require additional calls to setup() before being fully initialized.

@@ -391,7 +391,7 @@ class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
   TurtleStreamParser() = default;
   explicit TurtleStreamParser(const string& filename) {
     LOG(DEBUG) << "Initialize turtle parsing from uncompressed file or stream "
-              << filename << std::endl;
+               << filename << std::endl;
     initialize(filename);
   }
 
@@ -450,7 +450,8 @@ class TurtleMmapParser : public TurtleParser<Tokenizer_T> {
     LOG(DEBUG) << "Initialize turtle parsing from uncompressed file "
                << filename << std::endl;
     LOG(DEBUG) << "This must be a file on disk since it will be loaded "
-                  "using the mmap system call" << std::endl;
+                  "using the mmap system call"
+               << std::endl;
     initialize(filename);
   }
 
@@ -502,8 +503,10 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   // Default construction needed for tests
   TurtleParallelParser() = default;
   explicit TurtleParallelParser(const string& filename) {
-    LOG(DEBUG) << "Initialize parallel Turtle Parsing from uncompressed file or "
-                  "stream " << filename << std::endl;
+    LOG(DEBUG)
+        << "Initialize parallel Turtle Parsing from uncompressed file or "
+           "stream "
+        << filename << std::endl;
     initialize(filename);
   }
 

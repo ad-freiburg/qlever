@@ -249,8 +249,8 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
-  LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on "
-            << __DATE__ << " " << __TIME__ << EMPH_OFF << std::endl;
+  LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on " << __DATE__ << " "
+            << __TIME__ << EMPH_OFF << std::endl;
   LOG(DEBUG) << "Set locale LC_CTYPE to: " << locale << endl;
 
   try {
@@ -272,17 +272,17 @@ int main(int argc, char** argv) {
     index.setSettingsFile(settingsFile);
     index.setPrefixCompression(useCompression);
     index.setLoadAllPermutations(loadAllPermutations);
-    // NOTE: If `onlyAddTextIndex` is true, we do not want to construct an index,
-    // but we assume that it already exists. In particular, we then need the
-    // vocabulary from the KB index for building the text index.
+    // NOTE: If `onlyAddTextIndex` is true, we do not want to construct an
+    // index, but we assume that it already exists. In particular, we then need
+    // the vocabulary from the KB index for building the text index.
     if (!onlyAddTextIndex) {
       if (inputFile.empty() || inputFile == "-") {
         inputFile = "/dev/stdin";
       }
 
       if (!filetype.empty()) {
-	LOG(INFO) << "You specified the input format: "
-	          << ad_utility::getUppercase(filetype) << std::endl;
+        LOG(INFO) << "You specified the input format: "
+                  << ad_utility::getUppercase(filetype) << std::endl;
       } else {
         bool filetypeDeduced = false;
         if (ad_utility::endsWith(inputFile, ".tsv")) {
@@ -296,36 +296,38 @@ int main(int argc, char** argv) {
           filetypeDeduced = true;
         } else {
           LOG(INFO) << "Unknown or missing extension of input file, assuming: "
-	               "TTL" << std::endl;
+                       "TTL"
+                    << std::endl;
         }
         if (filetypeDeduced) {
-          LOG(INFO) << "Format of input file deduced from extension: " 
-	            << ad_utility::getUppercase(filetype) << "\n";
+          LOG(INFO) << "Format of input file deduced from extension: "
+                    << ad_utility::getUppercase(filetype) << "\n";
         }
         LOG(INFO) << "If this is not correct, start again using the option "
-	             "--file-format (-F)" << std::endl;
+                     "--file-format (-F)"
+                  << std::endl;
       }
 
       if (filetype == "ttl") {
-        LOG(DEBUG) << "Parsing uncompressed TTL from: "
-	           << inputFile << std::endl;
+        LOG(DEBUG) << "Parsing uncompressed TTL from: " << inputFile
+                   << std::endl;
         index.createFromFile<TurtleParserAuto>(inputFile);
       } else if (filetype == "tsv") {
-        LOG(DEBUG) << "Parsing uncompressed TSV from: "
-	           << inputFile << std::endl;
+        LOG(DEBUG) << "Parsing uncompressed TSV from: " << inputFile
+                   << std::endl;
         index.createFromFile<TsvParser>(inputFile);
       } else if (filetype == "nt") {
-        LOG(DEBUG) << "Parsing uncompressed N-Triples from: "
-                   << inputFile << " (using the Turtle parser)" << std::endl;
+        LOG(DEBUG) << "Parsing uncompressed N-Triples from: " << inputFile
+                   << " (using the Turtle parser)" << std::endl;
         index.createFromFile<TurtleParserAuto>(inputFile);
       } else if (filetype == "mmap") {
         LOG(DEBUG) << "Parsing uncompressed TTL from from: " << inputFile
                    << " (using mmap, which only works for files, not for "
-		   << "stream)" << std::endl;
+                   << "stream)" << std::endl;
         index.createFromFile<TurtleMmapParser<Tokenizer>>(inputFile);
       } else {
         LOG(ERROR) << "File format must be one of: tsv nt ttl mmap"
-	           << std::endl;
+                   << std::endl;
         printUsage(argv[0]);
         exit(1);
       }

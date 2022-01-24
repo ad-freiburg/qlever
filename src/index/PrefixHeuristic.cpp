@@ -182,8 +182,7 @@ std::vector<string> calculatePrefixes(const string& filename,
   size_t totalSavings = 0;
   size_t numWords = 0;
 
-  LOG(INFO) << "Building prefix tree from internal vocabulary ..."
-            << std::endl;
+  LOG(INFO) << "Building prefix tree from internal vocabulary ..." << std::endl;
   // Insert all prefix candidates into  the tree.
   while (std::getline(ifs, nextWord)) {
     nextWord = RdfEscaping::unescapeNewlinesAndBackslashes(nextWord);
@@ -207,7 +206,8 @@ std::vector<string> calculatePrefixes(const string& filename,
   }
 
   LOG(INFO) << "Computing maximally compressing prefixes (greedy algorithm) "
-               "..." << std::endl;
+               "..."
+            << std::endl;
   std::vector<string> res;
   res.reserve(numPrefixes);
   for (size_t i = 0; i < numPrefixes; ++i) {

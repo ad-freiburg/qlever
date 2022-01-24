@@ -186,8 +186,8 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
-  LOG(INFO) << EMPH_ON << "QLever Server, compiled on "
-            << __DATE__ << " " << __TIME__ << EMPH_OFF << std::endl;
+  LOG(INFO) << EMPH_ON << "QLever Server, compiled on " << __DATE__ << " "
+            << __TIME__ << EMPH_OFF << std::endl;
   LOG(DEBUG) << "Set locale LC_CTYPE to: " << locale << endl;
 
   try {

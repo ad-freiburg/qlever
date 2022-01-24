@@ -94,8 +94,7 @@ string IndexMetaData<MapType>::statistics() const {
   ad_utility::ReadableNumberFacet facet(1);
   std::locale locWithNumberGrouping(loc, &facet);
   os.imbue(locWithNumberGrouping);
-  os << "#relations = " << _data.size()
-     << ", #blocks = " << _blockData.size()
+  os << "#relations = " << _data.size() << ", #blocks = " << _blockData.size()
      << ", #triples = " << _totalElements;
   // os << "# Blocks:    " << _totalBlocks << "\n\n";
   // os << "Theoretical size (3 * 8 bytes per triple) : "

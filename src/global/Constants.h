@@ -81,11 +81,11 @@ static const std::string ERROR_IGNORE_CASE_UNSUPPORTED =
 static const std::string WARNING_ASCII_ONLY_PREFIXES =
     "You specified \"ascii-prefixes-only = true\", which enables faster "
     "parsing for well-behaved TTL files (see qlever/docs on GitHub)";
-    // " but only works correctly if there are no escape sequences in "
-    // "prefixed names (e.g., rdfs:label\\,el is not allowed), no multiline "
-    // "literals, and the regex \". *\\n\" only matches at the end of a triple. "
-    // "Most Turtle files fulfill these properties (e.g. that from Wikidata), "
-    // "but not all";
+// " but only works correctly if there are no escape sequences in "
+// "prefixed names (e.g., rdfs:label\\,el is not allowed), no multiline "
+// "literals, and the regex \". *\\n\" only matches at the end of a triple. "
+// "Most Turtle files fulfill these properties (e.g. that from Wikidata), "
+// "but not all";
 static const std::string LOCALE_DEFAULT_LANG = "en";
 static const std::string LOCALE_DEFAULT_COUNTRY = "US";
 static constexpr bool LOCALE_DEFAULT_IGNORE_PUNCTUATION = false;

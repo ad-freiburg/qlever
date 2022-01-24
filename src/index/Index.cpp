@@ -77,7 +77,7 @@ void Index::createFromFile(const string& filename) {
           filename);
     } else {
       LOG(DEBUG) << "Using the Google RE2 library for tokenization"
-	         << std::endl;
+                 << std::endl;
       vocabData =
           createIdTriplesAndVocab<TurtleParallelParser<Tokenizer>>(filename);
     }
@@ -276,8 +276,8 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     }
   }
   writer.wlock()->finish();
-  LOG(INFO) << "DONE processing input, total number of triples read: "
-            << i << std::endl;
+  LOG(INFO) << "DONE processing input, total number of triples read: " << i
+            << std::endl;
 
   size_t sizeInternalVocabulary = 0;
   if (_vocabPrefixCompressed) {
@@ -288,13 +288,13 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     AD_CHECK(compressionOutfile.is_open());
     auto internalVocabularyActionCompression =
         [&compressionOutfile](const auto& word) {
-          compressionOutfile
-              << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
+          compressionOutfile << RdfEscaping::escapeNewlinesAndBackslashes(word)
+                             << '\n';
         };
     m._noIdMapsAndIgnoreExternalVocab = true;
-    auto mergeResult = m.mergeVocabulary(
-	_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles,
-        std::less<>(), internalVocabularyActionCompression);
+    auto mergeResult =
+        m.mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles,
+                          std::less<>(), internalVocabularyActionCompression);
     sizeInternalVocabulary = mergeResult._numWordsTotal;
     LOG(INFO) << "Number of words in internal vocabulary: "
               << sizeInternalVocabulary << std::endl;
@@ -346,8 +346,8 @@ void Index::convertPartialToGlobalIds(
     size_t linesPerPartial) {
   LOG(INFO) << "Converting triples from local IDs to global IDs ..."
             << std::endl;
-  LOG(DEBUG) << "Triples per partial vocabulary: "
-             << linesPerPartial << std::endl;
+  LOG(DEBUG) << "Triples per partial vocabulary: " << linesPerPartial
+             << std::endl;
 
   size_t i = 0;
   // Iterate over all partial vocabularies.
@@ -370,8 +370,8 @@ void Index::convertPartialToGlobalIds(
       for (size_t k = 0; k < 3; ++k) {
         iterators[k] = idMap.find(curTriple[k]);
         if (iterators[k] == idMap.end()) {
-          LOG(INFO) << "Not found in partial vocabulary: "
-	            << curTriple[k] << std::endl;
+          LOG(INFO) << "Not found in partial vocabulary: " << curTriple[k]
+                    << std::endl;
           AD_CHECK(false);
         }
       }
@@ -386,8 +386,8 @@ void Index::convertPartialToGlobalIds(
       }
     }
   }
-  LOG(INFO) << "DONE converting, total number of triples converted: "
-            << i << std::endl;
+  LOG(INFO) << "DONE converting, total number of triples converted: " << i
+            << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -396,8 +396,8 @@ std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                         typename MetaDataDispatcher::WriteType>>
 Index::createPermutationPairImpl(const string& fileName1,
                                  const string& fileName2,
-                                 const Index::TripleVec& triples,
-				 size_t c0, size_t c1, size_t c2) {
+                                 const Index::TripleVec& triples, size_t c0,
+                                 size_t c1, size_t c2) {
   using MetaData = typename MetaDataDispatcher::WriteType;
   MetaData metaData1, metaData2;
   if constexpr (metaData1._isMmapBased) {
@@ -411,7 +411,8 @@ Index::createPermutationPairImpl(const string& fileName1,
 
   if (triples.size() == 0) {
     LOG(WARN) << "Creating pair of index permutations from empty vector of "
-                 "triples, probably something went wrong" << std::endl;
+                 "triples, probably something went wrong"
+              << std::endl;
     return std::nullopt;
   }
 
@@ -611,7 +612,7 @@ void Index::createPatterns(bool isSortedSPO, VocabularyData* vocabData) {
   // to SPO.
   if (isSortedSPO) {
     LOG(DEBUG) << "Triples are already sorted by SPO for pattern creation"
-              << std::endl;
+               << std::endl;
   } else {
     LOG(INFO) << "Sorting triples by SPO for computing predicate patterns ..."
               << std::endl;
@@ -674,9 +675,9 @@ void Index::createPatternsImpl(
   patternCounts[pattern]++;
 
   LOG(DEBUG) << "Number of distinct pattens: " << patternCounts.size()
-            << std::endl;
+             << std::endl;
   LOG(DEBUG) << "Number of entities for which a pattern was found: "
-            << numValidPatterns << std::endl;
+             << numValidPatterns << std::endl;
 
   // Stores patterns sorted by their number of occurences.
   size_t actualNumPatterns = patternCounts.size() < maxNumPatterns
@@ -684,8 +685,8 @@ void Index::createPatternsImpl(
                                  : maxNumPatterns;
   if (actualNumPatterns < patternCounts.size()) {
     LOG(DEBUG) << "Using " << actualNumPatterns << " of the "
-              << patternCounts.size() 
-	      << " patterns that were found in the data" << std::endl;
+               << patternCounts.size()
+               << " patterns that were found in the data" << std::endl;
   }
   std::vector<std::pair<Pattern, size_t>> sortedPatterns;
   sortedPatterns.reserve(actualNumPatterns);
@@ -858,8 +859,7 @@ void Index::createPatternsImpl(
   LOG(DEBUG) << "Number of entity-has-relation entries: "
              << entityHasPredicate.size() << std::endl;
 
-  LOG(INFO) << "Number of patterns: " << patterns.size()
-            << std::endl;
+  LOG(INFO) << "Number of patterns: " << patterns.size() << std::endl;
   LOG(INFO) << "Number of subjects with pattern: " << numEntitiesWithPatterns
             << (numEntitiesWithoutPatterns == 0 ? " [all]" : "") << std::endl;
   if (numEntitiesWithoutPatterns > 0) {
@@ -871,12 +871,12 @@ void Index::createPatternsImpl(
 
   LOG(INFO) << "Total number of distinct subject-predicate pairs: "
             << fullHasPredicateSize << std::endl;
-  LOG(INFO) << "Average number of predicates per subject: "
-            << std::fixed << std::setprecision(1)
-            << fullHasPredicateMultiplicityEntities << std::endl;
-  LOG(INFO) << "Average number of subjects per predicate: "
-            << std::fixed << std::setprecision(0)
-            << fullHasPredicateMultiplicityPredicates << std::endl;
+  LOG(INFO) << "Average number of predicates per subject: " << std::fixed
+            << std::setprecision(1) << fullHasPredicateMultiplicityEntities
+            << std::endl;
+  LOG(INFO) << "Average number of subjects per predicate: " << std::fixed
+            << std::setprecision(0) << fullHasPredicateMultiplicityPredicates
+            << std::endl;
 
   // Store all data in the file
   ad_utility::File file(fileName, "w");
@@ -960,9 +960,9 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
     _SPO.loadFromDisk(_onDiskBase);
     _SOP.loadFromDisk(_onDiskBase);
   } else {
-    LOG(INFO)
-        << "Only the PSO and POS permutation were loaded, SPARQL queries "
-	   "with predicate variables will therefore not work" << std::endl;
+    LOG(INFO) << "Only the PSO and POS permutation were loaded, SPARQL queries "
+                 "with predicate variables will therefore not work"
+              << std::endl;
   }
 
   if (_usePatterns) {
@@ -1381,11 +1381,12 @@ void Index::initializeVocabularySettingsBuild() {
       ignorePunctuation = bool{j["locale"]["ignore-punctuation"]};
     } else {
       LOG(INFO) << "Locale was not specified in settings file, default is "
-                   "en_US" << std::endl;
+                   "en_US"
+                << std::endl;
     }
     LOG(INFO) << "You specified \"locale = " << lang << "_" << country << "\" "
               << "and \"ignore-punctuation = " << ignorePunctuation << "\""
-	      << std::endl;
+              << std::endl;
 
     if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
       LOG(WARN) << "You are using Locale settings that differ from the default "
@@ -1428,10 +1429,11 @@ void Index::initializeVocabularySettingsBuild() {
 
   if (j.count("num-triples-per-partial-vocab")) {
     _numTriplesPerPartialVocab = size_t{j["num-triples-per-partial-vocab"]};
-    LOG(INFO) << "You specified \"num-triples-per-partial-vocab = "
-              << _numTriplesPerPartialVocab
-              << "\", choose a lower value if the index builder runs out of memory"
-              << std::endl;
+    LOG(INFO)
+        << "You specified \"num-triples-per-partial-vocab = "
+        << _numTriplesPerPartialVocab
+        << "\", choose a lower value if the index builder runs out of memory"
+        << std::endl;
   }
 
   if (j.count("parser-batch-size")) {
@@ -1447,10 +1449,10 @@ std::future<void> Index::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
     std::unique_ptr<ItemMapArray> items, std::unique_ptr<TripleVec> localIds,
     ad_utility::Synchronized<TripleVec::bufwriter_type>* globalWritePtr) {
-  LOG(DEBUG) << "Input triples read in this section: "
-             << numLines << std::endl;
-  LOG(DEBUG) << "Triples processed, also counting internal triples added by QLever: "
-             << actualCurrentPartialSize << std::endl;
+  LOG(DEBUG) << "Input triples read in this section: " << numLines << std::endl;
+  LOG(DEBUG)
+      << "Triples processed, also counting internal triples added by QLever: "
+      << actualCurrentPartialSize << std::endl;
   std::future<void> resultFuture;
   string partialFilename =
       _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
