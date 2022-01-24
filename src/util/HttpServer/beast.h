@@ -11,11 +11,11 @@
 // (TODO<joka921> Figure out, why Boost currently is not able, to deduce
 // these automatically.
 
+#include "../../util/Coroutines.h"
+
 // libc++ needs <experimental/coroutine>, libstdc++ needs <coroutine>
 #define BOOST_ASIO_HAS_CO_AWAIT
-#ifndef __clang__
 #define BOOST_ASIO_HAS_STD_COROUTINE
-#endif
 
 // Needed for libc++ in C++20 mode, because std::result_of was removed.
 #define BOOST_ASIO_HAS_STD_INVOKE_RESULT
