@@ -206,7 +206,7 @@ TEST(LocaleManager, PrefixSortKey) {
     for (size_t i = 0; i < s.size(); ++i) {
       auto [numCodepoints, partial] = loc.getPrefixSortKey(s, i);
       (void)numCodepoints;
-      ASSERT_TRUE(ad_utility::startsWith(complete, partial.get()));
+      ASSERT_TRUE(complete.starts_with(partial.get()));
       print(partial.get());
     }
     std::cout << std::endl;
@@ -236,7 +236,7 @@ TEST(LocaleManager, PrefixSortKey) {
   auto b = locIgnorePunct.getPrefixSortKey("vivae", 4).second.get();
 
   ASSERT_GT(a.size(), b.size());
-  ASSERT_TRUE(ad_utility::startsWith(a, b));
+  ASSERT_TRUE(a.starts_with(b));
   ASSERT_FALSE(comp("vivæ", "vivae", LocaleManager::Level::PRIMARY));
   ASSERT_FALSE(comp("vivæ", "vivae", LocaleManager::Level::PRIMARY));
 }

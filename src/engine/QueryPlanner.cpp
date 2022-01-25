@@ -836,8 +836,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
           keepIndices.push_back(ind);
           indDone.insert(ind);
         }
-      } else if (ad_utility::startsWith(var, "SCORE(") ||
-                 ad_utility::startsWith(var, "TEXT(")) {
+      } else if (var.starts_with("SCORE(") || var.starts_with("TEXT(")) {
         auto varInd = var.find('?');
         auto cVar = var.substr(varInd, var.rfind(')') - varInd);
         const auto it = colMap.find(cVar);
