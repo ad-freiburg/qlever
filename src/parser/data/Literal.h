@@ -7,19 +7,36 @@
 #include <sstream>
 #include <string>
 
+#include "../../util/Concepts.h"
+
 class Literal {
   std::string _stringRepresentation;
 
-  template <typename T>
+  template <ad_utility::Streamable T>
   static std::string toString(const T& t) {
     std::ostringstream stream;
     stream << t;
     return stream.str();
   }
 
+  static std::string toString(bool boolean) {
+    return boolean ? "true" : "false";
+  }
+
  public:
-  explicit Literal(auto&& t)
-      : _stringRepresentation(toString(std::forward<decltype(t)>(t))) {}
+  template <ad_utility::Streamable T>
+  explicit Literal(T&& t)
+      : _stringRepresentation(toString(std::forward<T>(t))) {}
+
+  static_assert(!ad_utility::Streamable<Literal>,
+                "If Literal satisfies the Streamable concept, copy and move "
+                "constructors are hidden, leading to unexpected behaviour");
+
+  // ___________________________________________________________________________
+  // Used for testing
+  [[nodiscard]] const std::string& literal() const {
+    return _stringRepresentation;
+  }
 
   // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> evaluate(

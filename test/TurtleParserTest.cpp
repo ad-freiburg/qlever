@@ -8,6 +8,7 @@
 #include <string>
 
 #include "../src/parser/TurtleParser.h"
+#include "../src/util/Conversions.h"
 
 using std::string;
 TEST(TurtleParserTest, prefixedName) {
@@ -238,36 +239,77 @@ TEST(TurtleParserTest, object) {
 }
 
 TEST(TurtleParserTest, objectList) {
-  TurtleStringParser<Tokenizer> p;
-  p._activeSubject = "<s>";
-  p._activePredicate = "<p>";
+  TurtleStringParser<Tokenizer> parser;
+  parser._activeSubject = "<s>";
+  parser._activePredicate = "<p>";
   string objectL = " <ob1>, <ob2>, <ob3>";
   std::vector<std::array<string, 3>> exp;
   exp.push_back({"<s>", "<p>", "<ob1>"});
   exp.push_back({"<s>", "<p>", "<ob2>"});
   exp.push_back({"<s>", "<p>", "<ob3>"});
-  p.setInputStream(objectL);
-  ASSERT_TRUE(p.objectList());
-  ASSERT_EQ(p._triples, exp);
-  ASSERT_EQ(p.getPosition(), objectL.size());
+  parser.setInputStream(objectL);
+  ASSERT_TRUE(parser.objectList());
+  ASSERT_EQ(parser._triples, exp);
+  ASSERT_EQ(parser.getPosition(), objectL.size());
 
-  p.setInputStream("@noObject");
-  ASSERT_FALSE(p.objectList());
+  parser.setInputStream("@noObject");
+  ASSERT_FALSE(parser.objectList());
 
-  p.setInputStream("<obj1>, @illFormed");
-  ASSERT_THROW(p.objectList(), TurtleParser<Tokenizer>::ParseException);
+  parser.setInputStream("<obj1>, @illFormed");
+  ASSERT_THROW(parser.objectList(), TurtleParser<Tokenizer>::ParseException);
 }
 
 TEST(TurtleParserTest, predicateObjectList) {
-  TurtleStringParser<Tokenizer> p;
-  p._activeSubject = "<s>";
+  TurtleStringParser<Tokenizer> parser;
+  parser._activeSubject = "<s>";
   string predL = "\n <p1> <ob1>;<p2> \"ob2\",\n <ob3>";
   std::vector<std::array<string, 3>> exp;
   exp.push_back({"<s>", "<p1>", "<ob1>"});
   exp.push_back({"<s>", "<p2>", "\"ob2\""});
   exp.push_back({"<s>", "<p2>", "<ob3>"});
-  p.setInputStream(predL);
-  ASSERT_TRUE(p.predicateObjectList());
-  ASSERT_EQ(p._triples, exp);
-  ASSERT_EQ(p.getPosition(), predL.size());
+  parser.setInputStream(predL);
+  ASSERT_TRUE(parser.predicateObjectList());
+  ASSERT_EQ(parser._triples, exp);
+  ASSERT_EQ(parser.getPosition(), predL.size());
+}
+
+TEST(TurtleParserTest, numericLiteral) {
+  std::vector<std::string> literals{"2", "-2", "42.209", "-42.239", ".74"};
+
+  TurtleStringParser<Tokenizer> parser;
+  for (const auto& literal : literals) {
+    parser.setInputStream(literal);
+    ASSERT_TRUE(parser.numericLiteral());
+    ASSERT_EQ(parser._lastParseResult, literal);
+    LOG(INFO) << literal << std::endl;
+    ASSERT_TRUE(ad_utility::isNumeric(literal));
+    ASSERT_FLOAT_EQ(ad_utility::convertIndexWordToFloat(
+                        ad_utility::convertNumericToIndexWord(literal)),
+                    std::strtod(literal.c_str(), nullptr));
+  }
+
+  std::vector<std::string> nonWorkingLiterals{"2.3e12", "2.34e-14", "-0.3e2"};
+
+  for (const auto& literal : nonWorkingLiterals) {
+    parser.setInputStream(literal);
+    ASSERT_TRUE(parser.numericLiteral());
+    ASSERT_EQ(parser._lastParseResult, literal);
+    ASSERT_THROW(ad_utility::isNumeric(literal), std::out_of_range);
+  }
+}
+
+TEST(TurtleParserTest, booleanLiteral) {
+  TurtleStringParser<Tokenizer> parser;
+  parser.setInputStream("true");
+  ASSERT_TRUE(parser.booleanLiteral());
+  ASSERT_EQ("\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
+            parser._lastParseResult);
+
+  parser.setInputStream("false");
+  ASSERT_TRUE(parser.booleanLiteral());
+  ASSERT_EQ("\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
+            parser._lastParseResult);
+
+  parser.setInputStream("maybe");
+  ASSERT_FALSE(parser.booleanLiteral());
 }

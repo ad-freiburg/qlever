@@ -63,26 +63,26 @@ class HasPredicateScan : public Operation {
   // These are made static and public mainly for easier testing
   static void computeFreeS(ResultTable* result, size_t objectId,
                            const std::vector<PatternID>& hasPattern,
-                           const CompactStringVector<Id, Id>& hasPredicate,
-                           const CompactStringVector<size_t, Id>& patterns);
+                           const CompactVectorOfStrings<Id>& hasPredicate,
+                           const CompactVectorOfStrings<Id>& patterns);
 
   static void computeFreeO(ResultTable* result, size_t subjectId,
                            const std::vector<PatternID>& hasPattern,
-                           const CompactStringVector<Id, Id>& hasPredicate,
-                           const CompactStringVector<size_t, Id>& patterns);
+                           const CompactVectorOfStrings<Id>& hasPredicate,
+                           const CompactVectorOfStrings<Id>& patterns);
 
   static void computeFullScan(ResultTable* result,
                               const std::vector<PatternID>& hasPattern,
-                              const CompactStringVector<Id, Id>& hasPredicate,
-                              const CompactStringVector<size_t, Id>& patterns,
+                              const CompactVectorOfStrings<Id>& hasPredicate,
+                              const CompactVectorOfStrings<Id>& patterns,
                               size_t resultSize);
 
   template <int IN_WIDTH, int OUT_WIDTH>
   static void computeSubqueryS(IdTable* result, const IdTable& _subtree,
-                               const size_t subtreeColIndex,
+                               size_t subtreeColIndex,
                                const std::vector<PatternID>& hasPattern,
-                               const CompactStringVector<Id, Id>& hasPredicate,
-                               const CompactStringVector<size_t, Id>& patterns);
+                               const CompactVectorOfStrings<Id>& hasPredicate,
+                               const CompactVectorOfStrings<Id>& patterns);
 
  private:
   ScanType _type;
@@ -92,5 +92,5 @@ class HasPredicateScan : public Operation {
   std::string _subject;
   std::string _object;
 
-  virtual void computeResult(ResultTable* result) override;
+  void computeResult(ResultTable* result) override;
 };

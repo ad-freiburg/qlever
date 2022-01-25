@@ -15,14 +15,12 @@ class Variable {
 
  public:
   explicit Variable(std::string name) : _name{std::move(name)} {
-    // Verify variable name is not empty
-    AD_CHECK(_name.length() > 1);
+    // verify variable name starts with ? or $ and continues without any
+    // special characters. This is weaker than the SPARQL grammar,
+    // but it is close enough so that it will likely never cause issues.
+    AD_CHECK(ctre::match<"[$?]\\w+">(_name));
     // normalise notation for consistency
-    if (_name[0] == '$') {
-      _name[0] = '?';
-    }
-    // variables have to start with ?
-    AD_CHECK(_name[0] == '?');
+    _name[0] = '?';
   }
 
   // ___________________________________________________________________________
@@ -77,5 +75,5 @@ class Variable {
   [[nodiscard]] std::string toSparql() const { return _name; }
 
   // ___________________________________________________________________________
-  [[nodiscard]] const std::string& getName() const { return _name; }
+  [[nodiscard]] const std::string& name() const { return _name; }
 };

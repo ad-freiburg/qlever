@@ -28,18 +28,12 @@ namespace po = boost::program_options;
 
 // Main function.
 int main(int argc, char** argv) {
-  char* locale = setlocale(LC_CTYPE, "");
+  setlocale(LC_CTYPE, "");
 
   std::locale loc;
   ad_utility::ReadableNumberFacet facet(1);
   std::locale locWithNumberGrouping(loc, &facet);
   ad_utility::Log::imbue(locWithNumberGrouping);
-
-  cout << endl
-       << EMPH_ON << "ServerMain, version " << __DATE__ << " " << __TIME__
-       << EMPH_OFF << endl
-       << endl;
-  cout << "Set locale LC_CTYPE to: " << locale << endl;
 
   // Init variables that may or may not be
   // filled / set depending on the options.
@@ -51,6 +45,7 @@ int main(int argc, char** argv) {
   NonNegative numSimultaneousQueries = 1;
   bool noPatterns;
   bool noPatternTrick;
+  bool onlyPsoAndPosPermutations;
 
   NonNegative memoryMaxSizeGb = DEFAULT_MEM_FOR_QUERIES_IN_GB;
 
@@ -101,6 +96,7 @@ int main(int argc, char** argv) {
       "this condition and the size limit specified via --cache-max-size-gb "
       "both have to hold (logical AND).");
   add("text,t", po::bool_switch(&text), "Enables the usage of text.");
+  add("only-pso-and-pos-permutations,o", po::bool_switch(&onlyPsoAndPosPermutations), "Only load PSO and POS permutations");
   po::variables_map optionsMap;
 
   try {
@@ -118,10 +114,13 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
+  LOG(INFO) << EMPH_ON << "QLever Server, compiled on " << __DATE__ << " "
+            << __TIME__ << EMPH_OFF << std::endl;
+
   try {
     Server server(port, static_cast<int>(numSimultaneousQueries),
                   memoryMaxSizeGb);
-    server.run(indexBasename, text, !noPatterns, !noPatternTrick);
+    server.run(indexBasename, text, !noPatterns, !noPatternTrick, !onlyPsoAndPosPermutations);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
     // within server.run()

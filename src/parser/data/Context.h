@@ -9,7 +9,7 @@
 #include "../../engine/ResultTable.h"
 #include "../../index/Index.h"
 
-enum ContextRole { SUBJECT, VERB, OBJECT };
+enum ContextRole { SUBJECT, PREDICATE, OBJECT };
 
 struct Context {
   const size_t _row;

@@ -15,6 +15,7 @@
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
 #include "ParseException.h"
+#include "data/Types.h"
 #include "data/VarOrTerm.h"
 
 using std::string;
@@ -313,7 +314,7 @@ class ParsedQuery {
     bool _distinct = false;
   };
 
-  using ConstructClause = std::vector<std::array<VarOrTerm, 3>>;
+  using ConstructClause = ad_utility::sparql_types::Triples;
 
   ParsedQuery() = default;
 

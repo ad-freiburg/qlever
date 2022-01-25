@@ -22,13 +22,16 @@ using std::string;
 using TripleVec = stxxl::vector<array<Id, 3>>;
 
 /**
- * class for merging the partial vocabularies. The main function is still in the
- * mergeVocabulary function but the parallel pipeline is easier when this is
+ * Class for merging the partial vocabularies. The main function is still in the
+ * `mergeVocabulary` function, but the parallel pipeline is easier when this is
  * encapsulated within a class.
  */
 class VocabularyMerger {
  public:
-  bool _ignoreExternalVocabulary = false;
+  // If this is set, then we will only output the internal vocabulary.
+  // This is useful for the prefix compression, where we don't need the
+  // external part of the vocabulary and the mapping from local to global IDs.
+  bool _noIdMapsAndIgnoreExternalVocab = false;
   // result of a call to mergeVocabulary
   struct VocMergeRes {
     size_t _numWordsTotal;   // that many distinct words were found (size of the
@@ -51,12 +54,13 @@ class VocabularyMerger {
   // Literals
   // Returns the number of total Words merged and via the parameters
   // the lower and upper bound of language tagged predicates
-  // Argument comp gives the way to order strings (case-sensitive or not)
+  // Argument comparator gives the way to order strings (case-sensitive or not)
   // This automatically resets the inner members after finishing, to leave the
   // external interface stateless
-  template <class Comp>
+  template <typename Comp, typename InternalVocabularyAction>
   VocMergeRes mergeVocabulary(const std::string& basename, size_t numFiles,
-                              Comp comp);
+                              Comp comparator,
+                              InternalVocabularyAction& action);
 
  private:
   // helper struct used in the priority queue for merging.
@@ -74,13 +78,15 @@ class VocabularyMerger {
   // write the queu words in the buffer to their corresponding idPairVecs.
   // Requires that all the QueueWords that are ever passed are ordered
   // alphabetically (Also across multiple calls)
-  void writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer);
+  template <typename InternalVocabularyAction>
+  void writeQueueWordsToIdVec(
+      const std::vector<QueueWord>& buffer,
+      InternalVocabularyAction& internalVocabularyAction);
 
   // close all associated files and MmapVectors and reset all internal variables
   void clear() {
     _totalWritten = 0;
     _lastWritten = "";
-    _outfile = std::ofstream();
     _outfileExternal = std::ofstream();
     _idVecs.clear();
     _firstLangPredSeen = false;
@@ -95,7 +101,6 @@ class VocabularyMerger {
   size_t _totalWritten = 0;
   // keep track of the last seen word to correctly handle duplicates
   std::string _lastWritten;
-  std::ofstream _outfile;
   std::ofstream _outfileExternal;
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> _idVecs;

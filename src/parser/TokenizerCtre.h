@@ -127,27 +127,28 @@ struct TurtleTokenCtre {
 
   /*
   // TODO<joka921: Currently CTRE does not really support UTF-8. I tried to hack
-  the UTF-8 byte patterns
-  for this regex, see the file Utf8RegexTest.cpp, but this did increase
-  compile time by an infeasible amount ( more than 20 minutes for this file
-  alone which made debugging impossible) Thus we will currently only allow
-  simple prefixes and emit proper warnings.
-            "A-Za-z\\x{00C0}-\\x{00D6}\\x{00D8}-\\x{00F6}\\x{00F8}-"
-            "\\x{02FF}"
-            "\\x{0370}-"
-            "\\x{037D}\\x{037F}-\\x{1FFF}\\x{200C}-\\x{200D}\\x{2070}-\\x{"
-            "218F}"
-            "\\x{2C00}-"
-            "\\x{2FEF}"
-            "\\x{3001}-\\x{D7FF}\\x{F900}-\\x{FDCF}\\x{FDF0}-\\x{FFFD}"
-            "\\x{00010000}-"
-            "\\x{000EFFFF}");
-            */
+  the UTF-8 byte patterns for this regex, see the file Utf8RegexTest.cpp, but
+  this did increase compile time by an infeasible amount ( more than 20 minutes
+  for this file alone which made debugging impossible) Thus we will currently
+  only allow simple prefixes and emit proper warnings.
+
+    "A-Za-z\\x{00C0}-\\x{00D6}\\x{00D8}-\\x{00F6}\\x{00F8}-"
+    "\\x{02FF}"
+    "\\x{0370}-"
+    "\\x{037D}\\x{037F}-\\x{1FFF}\\x{200C}-\\x{200D}\\x{2070}-\\x{"
+    "218F}"
+    "\\x{2C00}-"
+    "\\x{2FEF}"
+    "\\x{3001}-\\x{D7FF}\\x{F900}-\\x{FDCF}\\x{FDF0}-\\x{FFFD}"
+    "\\x{00010000}-"
+    "\\x{000EFFFF}");
+
+  */
   static constexpr auto PnCharsBaseString = fixed_string("A-Za-z");
 
   static constexpr auto PnCharsUString = PnCharsBaseString + "_";
 
-  // TODO<joka921>:  here we have the same issue with UTF-8 in CTRE as above
+  // TODO<joka921>: Here we have the same issue with UTF-8 in CTRE as above
   /*
   static constexpr auto PnCharsString =
             PnCharsUString +
@@ -219,10 +220,10 @@ class TokenizerCtre {
   [[nodiscard]] auto begin() const { return _data.begin(); }
 
   /**
-   * if a prefix of the input stream matches the regex argument,
-   * return true and that prefix and move the input stream forward
-   * by the length of the match. If no match is found,
-   * false is returned and the input stream remains the same
+   * If a prefix of the input stream matches the regex argument, return true
+   * and that prefix and move the input stream forward by the length of the
+   * match. If no match is found, false is returned and the input stream
+   * remains the same.
    */
   template <TurtleTokenId id>
   std::pair<bool, std::string_view> getNextToken() noexcept {
@@ -251,20 +252,21 @@ class TokenizerCtre {
 
     auto innerResult = getNextTokenRecurse<0, fst, ids...>();
 
-    // advance for the length of the longest match
+    // Advance by the length of the longest match.
     auto maxMatchSize = std::get<1>(innerResult);
     reset(beg + maxMatchSize, dataSize - maxMatchSize);
     return innerResult;
   }
 
-  /// skip any whitespace or comments at the beginning of the held characters
+  /// Skip any whitespace or comments at the beginning of the held characters
   void skipWhitespaceAndComments() {
     skipWhitespace();
     skipComments();
     skipWhitespace();
   }
 
-  /** If there is a prefix match with the argument, move forward the beginning
+  /**
+   * If there is a prefix match with the argument, move forward the beginning
    * of _data and return true. Else return false.Can be used if we are not
    * interested in the actual value of the match
    */
@@ -273,17 +275,17 @@ class TokenizerCtre {
     return getNextToken<id>().first;
   }
 
-  /// reinitialize with a new byte pointer and size pair
+  /// Reinitialize with a new byte pointer and size pair.
   void reset(const char* ptr, size_t sz) { _data = std::string_view(ptr, sz); }
-  /// reinitialize with a string_view
+  /// Reinitialize with a string_view.
   void reset(std::string_view s) { _data = s; }
 
-  /// Access to input stream as std::string_view
+  /// Access to input stream as std::string_view.
   [[nodiscard]] std::string_view view() const { return _data; }
-  /// Access to input stream as std::string_view
+  /// Access to input stream as std::string_view.
   [[nodiscard]] const std::string_view data() const { return _data; }
-  /// remove the first n characters from our input stream (e.g. if they have
-  /// been dealt with externally)
+  /// Remove the first n characters from our input stream (e.g. if they have
+  /// been dealt with externally).
   void remove_prefix(size_t n) { _data.remove_prefix(n); }
 
  private:
@@ -300,13 +302,11 @@ class TokenizerCtre {
 
   // ___________________________________________________________________________________
   void skipComments() {
-    // if not successful, then there was no comment, but this does not matter to
-    // us
     auto v = view();
     if (ad_utility::startsWith(v, "#")) {
       auto pos = v.find("\n");
       if (pos == string::npos) {
-        // TODO: this actually should yield a n error
+        // TODO<joka921>: This should rather yield an error.
         LOG(INFO) << "Warning, unfinished comment found while parsing";
       } else {
         _data.remove_prefix(pos + 1);
@@ -387,8 +387,8 @@ class TokenizerCtre {
     }
   }
 
-  // base case for the recursion on longest match for multiple regexes. No regex
-  // left, so there's no match
+  // Base case for the recursion on longest match for multiple regexes. No regex
+  // left, so there's no match.
   template <size_t idx>
   std::tuple<bool, size_t, std::string_view> getNextTokenRecurse() {
     return std::tuple(false, idx, "");

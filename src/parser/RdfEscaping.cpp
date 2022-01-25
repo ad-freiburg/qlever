@@ -11,6 +11,7 @@
 #include "../util/HashSet.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
+#include "ctre/ctre.h"
 
 namespace RdfEscaping {
 using namespace std::string_literals;
@@ -251,5 +252,30 @@ std::string unescapePrefixedIri(std::string_view literal) {
   // the remainder
   res.append(literal);
   return res;
+}
+
+std::string replaceAll(std::string str, const std::string_view from,
+                       const std::string_view to) {
+  size_t start_pos = 0;
+  while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
+    str.replace(start_pos, from.length(), to);
+    start_pos += to.length();
+  }
+  return str;
+}
+
+std::string escapeForCsv(std::string input) {
+  if (!ctre::search<"[\r\n\",]">(input)) {
+    return input;
+  }
+  return '"' + replaceAll(std::move(input), "\"", "\"\"") + '"';
+}
+
+std::string escapeForTsv(std::string input) {
+  if (!ctre::search<"[\n\t]">(input)) {
+    return input;
+  }
+  auto stage1 = replaceAll(std::move(input), "\t", " ");
+  return replaceAll(std::move(stage1), "\n", "\\n");
 }
 }  // namespace RdfEscaping

@@ -48,11 +48,12 @@ static const size_t BZIP2_MAX_TOTAL_BUFFER_SIZE = 1 << 30;
 static const size_t THRESHOLD_RELATION_CREATION = 2 << 20;
 
 // ________________________________________________________________
-static const std::string PARTIAL_VOCAB_FILE_NAME = ".partial-vocabulary";
-static const std::string PARTIAL_MMAP_IDS = ".partial-ids-mmap";
+static const std::string PARTIAL_VOCAB_FILE_NAME = ".tmp.partial-vocabulary.";
+static const std::string PARTIAL_MMAP_IDS = ".tmp.partial-ids-mmap.";
 
 // ________________________________________________________________
-static const std::string TMP_BASENAME_COMPRESSION = ".tmp.compression_index";
+static const std::string TMP_BASENAME_COMPRESSION =
+    ".tmp.for-prefix-compression.";
 
 // _________________________________________________________________
 // The degree of parallelism that is used for the index building step, where the

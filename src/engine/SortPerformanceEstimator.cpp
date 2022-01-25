@@ -120,7 +120,7 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
   static_assert(isSorted(sampleValuesRows));
 
   LOG(INFO) << "Sorting random result tables to estimate the sorting "
-               "performance of this machine"
+               "performance of this machine ..."
             << std::endl;
 
   _samples.fill({});
@@ -183,6 +183,6 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
       }
     }
   }
-  LOG(INFO) << "Done creating sort estimates." << std::endl;
+  LOG(DEBUG) << "Done computing sort estimates" << std::endl;
   _estimatesWereCalculated = true;
 }
