@@ -164,7 +164,7 @@ target_link_libraries(SortPerformanceEstimatorTest gtest_main SortPerformanceEst
 #add_test(SortPerformanceEstimatorTest SortPerformanceEstimatorTest)
 
 add_executable(SparqlAntlrParserTest SparqlAntlrParserTest.cpp)
-target_link_libraries(SparqlAntlrParserTest gtest_main parser sparqlExpressions ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(SparqlAntlrParserTest gmock_main parser sparqlExpressions ${CMAKE_THREAD_LIBS_INIT})
 add_test(SparqlAntlrParserTest SparqlAntlrParserTest)
 
 add_executable(SerializerTest SerializerTest.cpp)
@@ -220,3 +220,7 @@ add_test(RdfEscapingTest RdfEscapingTest)
 add_executable(CompactStringVectorTest CompactStringVectorTest.cpp)
 target_link_libraries(CompactStringVectorTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 add_test(CompactStringVectorTest CompactStringVectorTest)
+
+add_executable(SparqlDataTypesTest SparqlDataTypesTest.cpp)
+target_link_libraries(SparqlDataTypesTest gmock_main engine ${CMAKE_THREAD_LIBS_INIT})
+add_test(SparqlDataTypesTest SparqlDataTypesTest)

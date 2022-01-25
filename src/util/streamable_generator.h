@@ -9,19 +9,11 @@
 
 // Coroutines are still experimental in clang libcpp, therefore
 // adapt the appropriate namespaces using the convenience header.
+#include "./Concepts.h"
 #include "./Coroutines.h"
 #include "./ostringstream.h"
 
 namespace ad_utility::stream_generator {
-
-/**
- * A concept to ensure objects can be formatted by std::ostream.
- * @tparam T The Type to be formatted
- */
-template <typename T>
-concept Streamable = requires(T x, std::ostream& os) {
-  os << x;
-};
 
 template <size_t MIN_BUFFER_SIZE>
 class basic_stream_generator;
@@ -72,7 +64,8 @@ class stream_generator_promise {
    * @return Whether or not the coroutine should get suspended (currently based
    * on isBufferLargeEnough()), wrapped inside a suspend_sometimes class.
    */
-  suspend_sometimes yield_value(const Streamable auto& value) noexcept {
+  suspend_sometimes yield_value(
+      const ad_utility::Streamable auto& value) noexcept {
     // whenever the buffer size exceeds the threshold the coroutine
     // is suspended, thus we can safely assume the value is read
     // before resuming

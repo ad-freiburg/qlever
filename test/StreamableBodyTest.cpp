@@ -35,7 +35,7 @@ TEST(StreamableBodyTest, TestGeneratorExceptionResultsInErrorCode) {
 
   auto result = writer.get(errorCode);
   ASSERT_NE(errorCode, boost::system::error_code());
-  ASSERT_EQ(result, boost::none);
+  ASSERT_TRUE(result == boost::none);
 }
 
 stream_generator generateNothing() { co_return; }
@@ -48,7 +48,7 @@ TEST(StreamableBodyTest, TestEmptyGeneratorReturnsEmptyResult) {
 
   auto result = writer.get(errorCode);
   ASSERT_EQ(errorCode, boost::system::error_code());
-  ASSERT_NE(result, boost::none);
+  ASSERT_TRUE(result != boost::none);
   ASSERT_EQ(result->first.size(), 0u);
   ASSERT_FALSE(result->second);
 }
@@ -72,13 +72,13 @@ TEST(StreamableBodyTest, TestGeneratorReturnsBufferedResults) {
 
   auto result = writer.get(errorCode);
   ASSERT_EQ(errorCode, boost::system::error_code());
-  ASSERT_NE(result, boost::none);
+  ASSERT_TRUE(result != boost::none);
   ASSERT_EQ(toStringView(result->first), std::string(BUFFER_SIZE, 'A'));
   ASSERT_TRUE(result->second);
 
   auto result2 = writer.get(errorCode);
   ASSERT_EQ(errorCode, boost::system::error_code());
-  ASSERT_NE(result, boost::none);
+  ASSERT_TRUE(result2 != boost::none);
   ASSERT_EQ(toStringView(result2->first), std::string("1Abc"));
   ASSERT_FALSE(result2->second);
 }

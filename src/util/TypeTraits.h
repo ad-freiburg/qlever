@@ -52,6 +52,17 @@ struct TupleToVariantImpl<std::tuple<Ts...>> {
   using type = std::variant<Ts...>;
 };
 
+// Implementation for Last
+template <typename, typename... Ts>
+struct LastT : LastT<Ts...> {};
+
+template <typename T>
+struct LastT<T> : public std::type_identity<T> {};
+
+// Implementation for First
+template <typename T, typename...>
+struct FirstWrapper : public std::type_identity<T> {};
+
 }  // namespace detail
 
 /// isInstantiation<SomeTemplate, SomeType> is true iff `SomeType` is an
@@ -97,9 +108,9 @@ constexpr static bool isTypeContainedIn<T, std::variant<Ts...>> = (... || isSimi
 template <typename T, typename... Ts>
 constexpr static bool isTypeContainedIn<T, std::pair<Ts...>> = (... || isSimilar<T, Ts>);
 
-/// A templated bool that is always false, independent of the template parameter
-/// T.
-template <typename T>
+/// A templated bool that is always false,
+/// independent of the template parameter.
+template <typename>
 constexpr static bool alwaysFalse = false;
 
 /// From the type Tuple (std::tuple<A, B, C....>) creates the type
@@ -158,5 +169,13 @@ auto applyFunctionToEachElementOfTuple(Function&& f, Tuple&& tuple) {
   };
   return std::apply(transformer, std::forward<Tuple>(tuple));
 }
+
+// Return the last type of variadic template arguments.
+template <typename... Ts>
+requires(sizeof...(Ts) > 0) using Last = typename detail::LastT<Ts...>::type;
+
+// Return the first type of variadic template arguments.
+template <typename... Ts>
+requires(sizeof...(Ts) > 0) using First = typename detail::FirstWrapper<Ts...>::type;
 
 }  // namespace ad_utility
