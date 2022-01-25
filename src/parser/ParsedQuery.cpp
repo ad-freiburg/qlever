@@ -375,8 +375,7 @@ void ParsedQuery::expandPrefix(
 // _____________________________________________________________________________
 void ParsedQuery::expandPrefix(
     string& item, const ad_utility::HashMap<string, string>& prefixMap) {
-  if (!item.starts_with("?") &&
-      !item.starts_with("<")) {
+  if (!item.starts_with("?") && !item.starts_with("<")) {
     std::optional<string> langtag = std::nullopt;
     if (item.starts_with("@")) {
       auto secondPos = item.find('@', 1);

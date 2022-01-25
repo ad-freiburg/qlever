@@ -658,8 +658,7 @@ class TripleComponentComparator {
     std::string_view res = a;
     const char first = a.empty() ? char(0) : a[0];
     std::string_view langtag;
-    if (res.starts_with('"') ||
-        res.starts_with(EXTERNALIZED_LITERALS_PREFIX)) {
+    if (res.starts_with('"') || res.starts_with(EXTERNALIZED_LITERALS_PREFIX)) {
       // only remove the first character in case of literals that always start
       // with a quotation mark. For all other types we need this. <TODO> rework
       // the vocabulary's data type to remove ALL of those hacks

@@ -83,9 +83,7 @@ class PropertyPath {
   bool _can_be_null;
 };
 
-inline bool isVariable(const string& elem) {
-  return elem.starts_with("?");
-}
+inline bool isVariable(const string& elem) { return elem.starts_with("?"); }
 
 inline bool isVariable(const PropertyPath& elem) {
   return elem._operation == PropertyPath::Operation::IRI &&

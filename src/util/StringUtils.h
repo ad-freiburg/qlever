@@ -4,16 +4,16 @@
 
 #pragma once
 
-#include <cassert>
-#include <cctype>
 #include <grp.h>
-#include <cstdint>
-#include <cstdlib>
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
 
 #include <array>
+#include <cassert>
+#include <cctype>
 #include <clocale>
+#include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <cwchar>
 #include <iostream>
@@ -112,7 +112,6 @@ inline vector<string> splitAny(const string& orig, const T& separators);
 //! accepts a value of type S as the right hand side
 template <typename J, typename S>
 J join(const vector<J>& to_join, const S& joiner);
-
 
 /**
  * @brief Return the last position where <literalEnd> was found in the <input>

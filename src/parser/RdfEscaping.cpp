@@ -186,14 +186,12 @@ std::string normalizeRDFLiteral(const std::string_view origLiteral) {
 
   // Find out, which of the forms "literal", 'literal', """literal""" or
   // '''literal''' the input has, and strip all the quotes.
-  if (literal.starts_with("\"\"\"") ||
-      literal.starts_with("'''")) {
+  if (literal.starts_with("\"\"\"") || literal.starts_with("'''")) {
     AD_CHECK(literal.ends_with(literal.substr(0, 3)));
     literal.remove_prefix(3);
     literal.remove_suffix(3);
   } else {
-    AD_CHECK(literal.starts_with("\"") ||
-             literal.starts_with('\''));
+    AD_CHECK(literal.starts_with("\"") || literal.starts_with('\''));
     AD_CHECK(literal.ends_with(literal.substr(0, 1)));
     literal.remove_prefix(1);
     literal.remove_suffix(1);
