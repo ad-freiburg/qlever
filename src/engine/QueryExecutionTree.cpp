@@ -355,6 +355,29 @@ nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
 }
 
 // _____________________________________________________________________________
+
+vector<std::optional<pair<size_t, ResultTable::ResultType>>>
+QueryExecutionTree::buildValidIndices(const vector<string>& selectVars,
+                                      const ResultTable& resultTable) const {
+  vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices;
+  for (auto var : selectVars) {
+    constexpr std::string_view prefix = "TEXT(";
+    constexpr size_t prefixLength = prefix.length();
+    if (var.starts_with(prefix)) {
+      var = var.substr(prefixLength, var.rfind(')') - prefixLength);
+    }
+    auto it = getVariableColumns().find(var);
+    if (it != getVariableColumns().end()) {
+      validIndices.emplace_back(pair<size_t, ResultTable::ResultType>(
+          it->second, resultTable.getResultType(it->second)));
+    } else {
+      validIndices.emplace_back(std::nullopt);
+    }
+  }
+  return validIndices;
+}
+
+// _____________________________________________________________________________
 template <QueryExecutionTree::ExportSubFormat format>
 ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
     const vector<string>& selectVars, size_t limit, size_t offset) const {
@@ -365,19 +388,7 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> resultTable = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices;
-  for (auto var : selectVars) {
-    if (var.starts_with( "TEXT(")) {
-      var = var.substr(5, var.rfind(')') - 5);
-    }
-    auto it = getVariableColumns().find(var);
-    if (it != getVariableColumns().end()) {
-      validIndices.emplace_back(pair<size_t, ResultTable::ResultType>(
-          it->second, resultTable->getResultType(it->second)));
-    } else {
-      validIndices.emplace_back(std::nullopt);
-    }
-  }
+  auto validIndices = buildValidIndices(selectVars, *resultTable);
 
   const auto& idTable = resultTable->_idTable;
   size_t upperBound = std::min<size_t>(offset + limit, idTable.size());
@@ -385,11 +396,10 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
   // special case : binary export of IdTable
   if constexpr (format == ExportSubFormat::BINARY) {
     for (size_t i = offset; i < upperBound; ++i) {
-      for (size_t j = 0; j < validIndices.size(); ++j) {
-        if (validIndices[j]) {
-          const auto& val = *validIndices[j];
+      for (const auto& validIndex : validIndices) {
+        if (validIndex) {
           co_yield std::string_view{
-              reinterpret_cast<const char*>(&idTable(i, val.first)),
+              reinterpret_cast<const char*>(&idTable(i, validIndex->first)),
               sizeof(Id)};
         }
       }

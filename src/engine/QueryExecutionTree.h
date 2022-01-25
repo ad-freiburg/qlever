@@ -265,4 +265,8 @@ class QueryExecutionTree {
   cppcoro::generator<StringTriple> generateRdfGraph(
       const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
       size_t offset, std::shared_ptr<const ResultTable> res) const;
+
+  vector<std::optional<pair<size_t, ResultTable::ResultType>>>
+  buildValidIndices(const vector<string>& selectVars,
+                    const ResultTable& resultTable) const;
 };
