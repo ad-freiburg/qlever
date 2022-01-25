@@ -120,8 +120,17 @@ popd
 # Setup the kill switch so it gets called whatever way we exit
 trap cleanup_server EXIT
 echo "Waiting for ServerMain to launch and open port"
-while ! curl --max-time 1 --output /dev/null --silent http://localhost:9099/; do
-	sleep 1
+i=0
+until [ $i -eq 60 ] || curl --max-time 1 --output /dev/null --silent http://localhost:9099/; do
+	sleep 1;
+  i=$((i+1));
 done
+
+if [ $i -ge 60 ]; then
+  echo "ServerMain could not be reached after waiting for 60 seconds, exiting";
+  exit 1
+fi
+
+echo "ServerMain was succesfully started, running queries ..."
 $PYTHON_BINARY "$PROJECT_DIR/e2e/queryit.py" "$PROJECT_DIR/e2e/scientists_queries.yaml" "http://localhost:9099" &> $BINARY_DIR/query_log.txt || bail "Querying Server failed"
 popd
