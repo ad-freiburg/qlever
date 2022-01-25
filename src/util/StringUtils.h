@@ -40,32 +40,35 @@ namespace ad_utility {
 //! Safe startWith function. Returns true iff prefix is a
 //! prefix of text. Using a larger pattern than text.size()
 //! will return false. Case sensitive.
-inline bool startsWith(string_view text, string_view prefix);
+[[deprecated("Use std::string_view::starts_with instead")]]
+constexpr bool startsWith(string_view text, string_view prefix);
 
 //! Safe startWith function. Returns true iff prefix is a
 //! prefix of text. Using a larger pattern than text.size()
 //! will return false. Case sensitive.
 //! if prefixSize < prefix.size() we will only use the first prefisSize chars of
 //! prefix.
-inline bool startsWith(string_view text, string_view prefix, size_t prefixSize);
+constexpr bool startsWith(string_view text, string_view prefix, size_t prefixSize);
 
 //! Safe endsWith function. Returns true iff suffix is a
 //! prefix of text. Using a larger pattern than text.size()
 //! will return false. Case sensitive.
-inline bool endsWith(string_view text, const char* suffix, size_t patternSize);
+constexpr bool endsWith(string_view text, const char* suffix, size_t patternSize);
 
 //! Safe endsWith function. Returns true iff suffix is a
 //! prefix of text. Using a larger pattern than text.size()
 //! will return false. Case sensitive.
-inline bool endsWith(string_view text, string_view suffix);
+[[deprecated("Use std::string_view::ends_with instead")]]
+constexpr bool endsWith(string_view text, string_view suffix);
 
 //! Safe endsWith function. Returns true iff suffix is a
 //! prefix of text. Using a larger pattern than text.size()
 //! will return false. Case sensitive.
-inline bool endsWith(string_view text, const char* suffix);
+[[deprecated("Use std::string_view::ends_with instead")]]
+constexpr bool endsWith(string_view text, const char* suffix);
 
 //! Returns the longest prefix that the two arguments have in common
-inline string_view commonPrefix(string_view a, const string_view b);
+inline string_view commonPrefix(string_view a, string_view b);
 
 //! Case transformations. Should be thread safe.
 inline string getLowercase(const string& orig);
@@ -154,45 +157,28 @@ inline size_t findLiteralEnd(std::string_view input,
 // *****************************************************************************
 
 // ____________________________________________________________________________
-bool startsWith(string_view text, string_view prefix) {
-  if (prefix.size() > text.size()) {
-    return false;
-  }
-  for (size_t i = 0; i < prefix.size(); ++i) {
-    if (text[i] != prefix[i]) {
-      return false;
-    }
-  }
-  return true;
+constexpr bool startsWith(string_view text, string_view prefix) {
+  return text.starts_with(prefix);
 }
 
 // _______________________________________________________________________
-bool startsWith(string_view text, string_view prefix, size_t prefixSize) {
-  return startsWith(text,
-                    prefix.substr(0, std::min(prefix.size(), prefixSize)));
+constexpr bool startsWith(string_view text, string_view prefix, size_t prefixSize) {
+  return text.starts_with(prefix.substr(0, std::min(prefix.size(), prefixSize)));
 }
 
 // ____________________________________________________________________________
-bool endsWith(string_view text, const char* suffix, size_t suffixSize) {
-  if (suffixSize > text.size()) {
-    return false;
-  }
-  for (size_t i = 0; i < suffixSize; ++i) {
-    if (text[text.size() - (i + 1)] != suffix[suffixSize - (i + 1)]) {
-      return false;
-    }
-  }
-  return true;
+constexpr bool endsWith(string_view text, const char* suffix, size_t suffixSize) {
+  return text.ends_with(std::string_view{suffix, suffixSize});
 }
 
 // ____________________________________________________________________________
-bool endsWith(string_view text, std::string_view suffix) {
-  return endsWith(text, suffix.data(), suffix.size());
+constexpr bool endsWith(string_view text, std::string_view suffix) {
+  return text.ends_with(suffix);
 }
 
 // ____________________________________________________________________________
-bool endsWith(string_view text, const char* suffix) {
-  return endsWith(text, suffix, std::char_traits<char>::length(suffix));
+constexpr bool endsWith(string_view text, const char* suffix) {
+  return text.ends_with(suffix);
 }
 
 // ____________________________________________________________________________
