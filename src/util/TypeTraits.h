@@ -176,7 +176,6 @@ requires(sizeof...(Ts) > 0) using Last = typename detail::LastT<Ts...>::type;
 
 // Return the first type of variadic template arguments.
 template <typename... Ts>
-requires(sizeof...(Ts) >
-         0) using First = typename detail::FirstWrapper<Ts...>::type;
+requires(sizeof...(Ts) > 0) using First = typename detail::FirstWrapper<Ts...>::type;
 
 }  // namespace ad_utility
