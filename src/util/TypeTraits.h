@@ -52,12 +52,14 @@ struct TupleToVariantImpl<std::tuple<Ts...>> {
   using type = std::variant<Ts...>;
 };
 
+// Implementation for Last
 template <typename, typename... Ts>
 struct LastT : LastT<Ts...> {};
 
 template <typename T>
 struct LastT<T> : public std::type_identity<T> {};
 
+// Implementation for First
 template <typename T, typename...>
 struct FirstWrapper : public std::type_identity<T> {};
 
@@ -168,10 +170,13 @@ auto applyFunctionToEachElementOfTuple(Function&& f, Tuple&& tuple) {
   return std::apply(transformer, std::forward<Tuple>(tuple));
 }
 
+// Return the last type of variadic template arguments.
 template <typename... Ts>
-using Last = typename detail::LastT<Ts...>::type;
+requires(sizeof...(Ts) > 0) using Last = typename detail::LastT<Ts...>::type;
 
+// Return the first type of variadic template arguments.
 template <typename... Ts>
-using First = typename detail::FirstWrapper<Ts...>::type;
+requires(sizeof...(Ts) >
+         0) using First = typename detail::FirstWrapper<Ts...>::type;
 
 }  // namespace ad_utility
