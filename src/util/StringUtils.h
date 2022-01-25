@@ -37,36 +37,6 @@ namespace ad_utility {
 //! a templated version using std::basic_string<T> instead of
 //! std::string. However, it is not required so far.
 
-//! Safe startWith function. Returns true iff prefix is a
-//! prefix of text. Using a larger pattern than text.size()
-//! will return false. Case sensitive.
-[[deprecated("Use std::string_view::starts_with instead")]]
-constexpr bool startsWith(string_view text, string_view prefix);
-
-//! Safe startWith function. Returns true iff prefix is a
-//! prefix of text. Using a larger pattern than text.size()
-//! will return false. Case sensitive.
-//! if prefixSize < prefix.size() we will only use the first prefisSize chars of
-//! prefix.
-constexpr bool startsWith(string_view text, string_view prefix, size_t prefixSize);
-
-//! Safe endsWith function. Returns true iff suffix is a
-//! prefix of text. Using a larger pattern than text.size()
-//! will return false. Case sensitive.
-constexpr bool endsWith(string_view text, const char* suffix, size_t patternSize);
-
-//! Safe endsWith function. Returns true iff suffix is a
-//! prefix of text. Using a larger pattern than text.size()
-//! will return false. Case sensitive.
-[[deprecated("Use std::string_view::ends_with instead")]]
-constexpr bool endsWith(string_view text, string_view suffix);
-
-//! Safe endsWith function. Returns true iff suffix is a
-//! prefix of text. Using a larger pattern than text.size()
-//! will return false. Case sensitive.
-[[deprecated("Use std::string_view::ends_with instead")]]
-constexpr bool endsWith(string_view text, const char* suffix);
-
 //! Returns the longest prefix that the two arguments have in common
 inline string_view commonPrefix(string_view a, string_view b);
 
@@ -155,31 +125,6 @@ inline size_t findLiteralEnd(std::string_view input,
 // *****************************************************************************
 // Definitions:
 // *****************************************************************************
-
-// ____________________________________________________________________________
-constexpr bool startsWith(string_view text, string_view prefix) {
-  return text.starts_with(prefix);
-}
-
-// _______________________________________________________________________
-constexpr bool startsWith(string_view text, string_view prefix, size_t prefixSize) {
-  return text.starts_with(prefix.substr(0, std::min(prefix.size(), prefixSize)));
-}
-
-// ____________________________________________________________________________
-constexpr bool endsWith(string_view text, const char* suffix, size_t suffixSize) {
-  return text.ends_with(std::string_view{suffix, suffixSize});
-}
-
-// ____________________________________________________________________________
-constexpr bool endsWith(string_view text, std::string_view suffix) {
-  return text.ends_with(suffix);
-}
-
-// ____________________________________________________________________________
-constexpr bool endsWith(string_view text, const char* suffix) {
-  return text.ends_with(suffix);
-}
 
 // ____________________________________________________________________________
 string_view commonPrefix(string_view a, const string_view b) {
