@@ -4,11 +4,11 @@
 
 #pragma once
 
-#include <assert.h>
-#include <ctype.h>
+#include <cassert>
+#include <cctype>
 #include <grp.h>
-#include <stdint.h>
-#include <stdlib.h>
+#include <cstdint>
+#include <cstdlib>
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
 
@@ -84,11 +84,7 @@ inline std::pair<size_t, std::string> getUTF8Prefix(std::string_view s,
 //! Gets the last part of a string that is somehow split by the given separator.
 inline string getLastPartOfString(const string& text, const char separator);
 
-inline string getSecondLastPartOfString(const string& text, const char sep);
-
 inline string removeSpaces(const string& orig);
-
-inline string normalizeSpaces(const string& orig);
 
 //! Converts an optional string to a JSON string value.
 //! I.e. it escapes illegal characters and adss quotes around the string.
@@ -144,14 +140,6 @@ inline vector<string> splitAny(const string& orig, const T& separators);
 template <typename J, typename S>
 J join(const vector<J>& to_join, const S& joiner);
 
-//! This scans the haystack from start onward until it finds a closing bracket
-//! at the same bracket depth as the opening bracket.
-//! This throws a Parse exception, if haystack[start] != openingBracket, or if
-//! the end of teh haystack is reached before a bracket at the right depth was
-//! found.
-inline size_t findClosingBracket(const string& haystack, size_t start = 0,
-                                 char openingBracket = '{',
-                                 char closingBracket = '}');
 
 /**
  * @brief Return the last position where <literalEnd> was found in the <input>
@@ -183,12 +171,6 @@ bool startsWith(string_view text, string_view prefix, size_t prefixSize) {
   return startsWith(text,
                     prefix.substr(0, std::min(prefix.size(), prefixSize)));
 }
-
-/* ____________________________________________________________________________
-bool startsWith(const string& text, const char* prefix) {
-  return startsWith(text, prefix, std::char_traits<char>::length(prefix));
-}
-*/
 
 // ____________________________________________________________________________
 bool endsWith(string_view text, const char* suffix, size_t suffixSize) {
@@ -332,42 +314,12 @@ string getLastPartOfString(const string& text, const char separator) {
 }
 
 // ____________________________________________________________________________
-string getSecondLastPartOfString(const string& text, const char separator) {
-  size_t pos = text.rfind(separator);
-  size_t pos2 = text.rfind(separator, pos - 1);
-  if (pos2 != text.npos) {
-    return text.substr(pos2 + 1, pos - (pos2 + 1));
-  } else {
-    return text;
-  }
-}
-
-// ____________________________________________________________________________
 string removeSpaces(const string& orig) {
   string ret;
   ret.reserve(orig.size());
   for (size_t i = 0; i < orig.size(); ++i) {
     if (orig[i] != ' ') {
       ret += orig[i];
-    }
-  }
-  return ret;
-}
-
-// ____________________________________________________________________________
-string normalizeSpaces(const string& orig) {
-  string ret;
-  ret.reserve(orig.size());
-  bool lastSpace = false;
-  for (size_t i = 0; i < orig.size(); ++i) {
-    if (orig[i] == ' ' || orig[i] == '\t') {
-      if (!lastSpace) {
-        ret += ' ';
-      }
-      lastSpace = true;
-    } else {
-      ret += orig[i];
-      lastSpace = false;
     }
   }
   return ret;
@@ -595,35 +547,6 @@ inline string strip(const string& text, const T& s) {
   }
   auto length = text.find_last_not_of(s) - pos + 1;
   return text.substr(pos, length);
-}
-
-inline size_t findClosingBracket(const string& haystack, size_t start,
-                                 char openingBracket, char closingBracket) {
-  if (haystack[start] != openingBracket) {
-    throw ParseException(
-        "The string " + haystack + " does not have a opening bracket " +
-        string(1, openingBracket) + " at position " + std::to_string(start));
-  }
-  int depth = 0;
-  size_t i;
-  for (i = start + 1; i < haystack.size(); i++) {
-    if (haystack[i] == openingBracket) {
-      depth++;
-    }
-    if (haystack[i] == closingBracket) {
-      if (depth == 0) {
-        return i;
-      } else {
-        depth--;
-      }
-    }
-  }
-  if (depth == 0) {
-    throw ParseException("Need curly braces in string " + haystack + "clause.");
-  } else {
-    throw ParseException("Unbalanced curly braces.");
-  }
-  return -1;
 }
 
 // _________________________________________________________________________
