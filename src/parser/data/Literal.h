@@ -12,7 +12,7 @@
 class Literal {
   std::string _stringRepresentation;
 
-  template <Streamable T>
+  template <ad_utility::Streamable T>
   static std::string toString(const T& t) {
     std::ostringstream stream;
     stream << t;
@@ -24,11 +24,11 @@ class Literal {
   }
 
  public:
-  template <Streamable T>
+  template <ad_utility::Streamable T>
   explicit Literal(T&& t)
       : _stringRepresentation(toString(std::forward<T>(t))) {}
 
-  static_assert(!Streamable<Literal>,
+  static_assert(!ad_utility::Streamable<Literal>,
                 "If Literal satisfies the Streamable concept, copy and move "
                 "constructors are hidden, leading to unexpected behaviour");
 
