@@ -5,6 +5,7 @@
 #include "./QueryExecutionTree.h"
 
 #include <algorithm>
+#include <boost/algorithm/string/join.hpp>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -407,7 +408,11 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
     co_return;
   }
 
-  constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
+  static constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
+  constexpr std::string_view sepView{&sep, 1};
+  // Print header line
+  co_yield boost::algorithm::join(selectVars, sepView);
+  co_yield '\n';
 
   for (size_t i = offset; i < upperBound; ++i) {
     for (size_t j = 0; j < validIndices.size(); ++j) {
