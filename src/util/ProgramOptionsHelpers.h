@@ -62,7 +62,8 @@ void validate(boost::any& v, const std::vector<std::string>& values,
 template <ParameterName name, typename Parameters>
 class ParameterToProgramOption {
  public:
-  using Type = std::decay_t<decltype(std::declval<Parameters&>().template get<name>())>;
+  using Type =
+      std::decay_t<decltype(std::declval<Parameters&>().template get<name>())>;
 
  private:
   Parameters* _parameters = nullptr;

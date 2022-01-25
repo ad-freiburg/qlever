@@ -75,13 +75,15 @@ class Server {
  private:
   //! Initialize the server.
   void initialize(const string& ontologyBaseName, bool useText,
-                  bool usePatterns = true, bool usePatternTrick = true);
+                  bool usePatterns = true, bool usePatternTrick = true,
+                  bool loadAllPermutations = true);
 
  public:
   //! First initialize the server. Then loop, wait for requests and trigger
   //! processing. This method never returns except when throwing an exception.
   void run(const string& ontologyBaseName, bool useText,
-           bool usePatterns = true, bool usePatternTrick = true);
+           bool usePatterns = true, bool usePatternTrick = true,
+           bool loadAllPermutations = true);
 
   Index& index() { return _index; }
   const Index& index() const { return _index; }

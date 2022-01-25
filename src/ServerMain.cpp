@@ -96,7 +96,9 @@ int main(int argc, char** argv) {
       "this condition and the size limit specified via --cache-max-size-gb "
       "both have to hold (logical AND).");
   add("text,t", po::bool_switch(&text), "Enables the usage of text.");
-  add("only-pso-and-pos-permutations,o", po::bool_switch(&onlyPsoAndPosPermutations), "Only load PSO and POS permutations");
+  add("only-pso-and-pos-permutations,o",
+      po::bool_switch(&onlyPsoAndPosPermutations),
+      "Only load PSO and POS permutations");
   po::variables_map optionsMap;
 
   try {
@@ -120,7 +122,8 @@ int main(int argc, char** argv) {
   try {
     Server server(port, static_cast<int>(numSimultaneousQueries),
                   memoryMaxSizeGb);
-    server.run(indexBasename, text, !noPatterns, !noPatternTrick, !onlyPsoAndPosPermutations);
+    server.run(indexBasename, text, !noPatterns, !noPatternTrick,
+               !onlyPsoAndPosPermutations);
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled
     // within server.run()

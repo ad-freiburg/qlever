@@ -26,11 +26,13 @@ using Awaitable = Server::Awaitable<T>;
 
 // __________________________________________________________________________
 void Server::initialize(const string& ontologyBaseName, bool useText,
-                        bool usePatterns, bool usePatternTrick) {
+                        bool usePatterns, bool usePatternTrick,
+                        bool loadAllPermutations) {
   LOG(INFO) << "Initializing server ..." << std::endl;
 
   _enablePatternTrick = usePatternTrick;
   _index.setUsePatterns(usePatterns);
+  _index.setLoadAllPermutations(loadAllPermutations);
 
   // Init the index.
   _index.createFromOnDiskIndex(ontologyBaseName);
@@ -49,7 +51,7 @@ void Server::initialize(const string& ontologyBaseName, bool useText,
 
 // _____________________________________________________________________________
 void Server::run(const string& ontologyBaseName, bool useText, bool usePatterns,
-                 bool usePatternTrick) {
+                 bool usePatternTrick, bool loadAllPermutations) {
   // First set up the HTTP server, so that it binds to the socket, and
   // the "socket already in use" error appears quickly.
   auto httpSessionHandler =
@@ -60,7 +62,8 @@ void Server::run(const string& ontologyBaseName, bool useText, bool usePatterns,
                                _numThreads, std::move(httpSessionHandler)};
 
   // Initialize the index
-  initialize(ontologyBaseName, useText, usePatterns, usePatternTrick);
+  initialize(ontologyBaseName, useText, usePatterns, usePatternTrick,
+             loadAllPermutations);
 
   // Start listening for connections on the server.
   httpServer.run();
