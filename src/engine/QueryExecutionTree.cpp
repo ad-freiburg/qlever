@@ -88,51 +88,6 @@ void QueryExecutionTree::setVariableColumns(
   _variableColumnMap = map;
 }
 
-// _____________________________________________________________________________
-template <QueryExecutionTree::ExportSubFormat format>
-ad_utility::stream_generator::stream_generator
-QueryExecutionTree::generateResults(const vector<string>& selectVars,
-                                    size_t limit, size_t offset) const {
-  // They may trigger computation (but does not have to).
-  shared_ptr<const ResultTable> resultTable = getResult();
-  LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices;
-  for (auto var : selectVars) {
-    if (ad_utility::startsWith(var, "TEXT(")) {
-      var = var.substr(5, var.rfind(')') - 5);
-    }
-    auto it = getVariableColumns().find(var);
-    if (it != getVariableColumns().end()) {
-      validIndices.push_back(pair<size_t, ResultTable::ResultType>(
-          it->second, resultTable->getResultType(it->second)));
-    } else {
-      validIndices.push_back(std::nullopt);
-    }
-  }
-  if (validIndices.empty()) {
-    return {};
-  }
-
-  const IdTable& data = resultTable->_idTable;
-  size_t upperBound = std::min<size_t>(offset + limit, data.size());
-  return writeTable<format>(offset, upperBound, std::move(validIndices),
-                            std::move(resultTable));
-}
-
-// Instantiate template function for all enum types
-
-template ad_utility::stream_generator::stream_generator
-QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::CSV>(
-    const vector<string>& selectVars, size_t limit, size_t offset) const;
-
-template ad_utility::stream_generator::stream_generator
-QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::TSV>(
-    const vector<string>& selectVars, size_t limit, size_t offset) const;
-
-template ad_utility::stream_generator::stream_generator QueryExecutionTree::
-    generateResults<QueryExecutionTree::ExportSubFormat::BINARY>(
-        const vector<string>& selectVars, size_t limit, size_t offset) const;
-
 // ___________________________________________________________________________
 QueryExecutionTree::ColumnIndicesAndTypes
 QueryExecutionTree::selectedVariablesToColumnIndices(
@@ -402,20 +357,34 @@ nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
 // _____________________________________________________________________________
 template <QueryExecutionTree::ExportSubFormat format>
 ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
-    size_t from, size_t upperBound,
-    const vector<std::optional<pair<size_t, ResultTable::ResultType>>>
-        validIndices,
-    std::shared_ptr<const ResultTable> resultTable) const {
+    const vector<string>& selectVars, size_t limit, size_t offset) const {
   static_assert(format == ExportSubFormat::BINARY ||
                 format == ExportSubFormat::CSV ||
                 format == ExportSubFormat::TSV);
-  if (!resultTable) {
-    resultTable = getResult();
+
+  // They may trigger computation (but does not have to).
+  shared_ptr<const ResultTable> resultTable = getResult();
+  LOG(DEBUG) << "Resolving strings for finished binary result...\n";
+  vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices;
+  for (auto var : selectVars) {
+    if (var.starts_with( "TEXT(")) {
+      var = var.substr(5, var.rfind(')') - 5);
+    }
+    auto it = getVariableColumns().find(var);
+    if (it != getVariableColumns().end()) {
+      validIndices.emplace_back(pair<size_t, ResultTable::ResultType>(
+          it->second, resultTable->getResultType(it->second)));
+    } else {
+      validIndices.emplace_back(std::nullopt);
+    }
   }
+
   const auto& idTable = resultTable->_idTable;
+  size_t upperBound = std::min<size_t>(offset + limit, idTable.size());
+
   // special case : binary export of IdTable
   if constexpr (format == ExportSubFormat::BINARY) {
-    for (size_t i = from; i < upperBound; ++i) {
+    for (size_t i = offset; i < upperBound; ++i) {
       for (size_t j = 0; j < validIndices.size(); ++j) {
         if (validIndices[j]) {
           const auto& val = *validIndices[j];
@@ -430,7 +399,7 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
 
   constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
 
-  for (size_t i = from; i < upperBound; ++i) {
+  for (size_t i = offset; i < upperBound; ++i) {
     for (size_t j = 0; j < validIndices.size(); ++j) {
       if (validIndices[j]) {
         const auto& val = *validIndices[j];
@@ -473,6 +442,20 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
   }
   LOG(DEBUG) << "Done creating readable result.\n";
 }
+
+// Instantiate template function for all enum types
+
+template ad_utility::stream_generator::stream_generator
+QueryExecutionTree::writeTable<QueryExecutionTree::ExportSubFormat::CSV>(
+    const vector<string>& selectVars, size_t limit, size_t offset) const;
+
+template ad_utility::stream_generator::stream_generator
+QueryExecutionTree::writeTable<QueryExecutionTree::ExportSubFormat::TSV>(
+    const vector<string>& selectVars, size_t limit, size_t offset) const;
+
+template ad_utility::stream_generator::stream_generator
+QueryExecutionTree::writeTable<QueryExecutionTree::ExportSubFormat::BINARY>(
+    const vector<string>& selectVars, size_t limit, size_t offset) const;
 
 // _____________________________________________________________________________
 
