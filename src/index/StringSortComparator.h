@@ -70,8 +70,8 @@ class LocaleManager {
       return get().starts_with(rhs.get());
     }
 
-    // _____________________________________________________________________
-    size_t size() const noexcept { return get().size(); }
+    /// Return the number of bytes in the `SortKey`
+    std::string::size_type size() const noexcept { return get().size(); }
 
    private:
     std::string _sortKey;
