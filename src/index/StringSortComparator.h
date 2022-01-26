@@ -51,9 +51,19 @@ class LocaleManager {
     [[nodiscard]] const std::string& get() const { return _content; }
     std::string& get() { return _content; }
 
-    // compare according to the byte value
+    // Comparison of sort key is done lexicographically on the byte values
+    // of member `_content`
     [[nodiscard]] int compare(const SortKey& rhs) const {
       return _content.compare(rhs._content);
+    }
+
+    auto operator<=>(const SortKey&) const = default;
+    bool operator==(const SortKey&) const = default;
+
+    /// Is this sort key a prefix of another sort key. Note: This does not imply
+    /// any guarantees on the relation of the underlying strings.
+    bool starts_with(const SortKey& rhs) {
+      return get().starts_with(rhs.get());
     }
 
    private:
