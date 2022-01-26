@@ -278,18 +278,19 @@ inline size_t findLiteralEnd(const std::string_view input,
 }  // namespace ad_utility
 
 // these overloads are missing in the STL
+// they can be constexpr once the compiler completely supports C++20
 inline std::string operator+(const std::string& a, std::string_view b) {
   std::string res;
-  res.resize(a.size() + b.size());
-  std::memcpy(res.data(), a.data(), a.size());
-  std::memcpy(res.data() + a.size(), b.data(), b.size());
+  res.reserve(a.size() + b.size());
+  res += a;
+  res += b;
   return res;
 }
 
 inline std::string operator+(char c, std::string_view b) {
   std::string res;
-  res.resize(1 + b.size());
-  res[0] = c;
-  std::memcpy(res.data() + 1, b.data(), b.size());
+  res.reserve(1 + b.size());
+  res += c;
+  res += b;
   return res;
 }
