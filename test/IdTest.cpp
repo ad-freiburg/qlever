@@ -16,6 +16,8 @@ TEST(Id, toInternalId) {
   for (int i : views::iota(0, 256)) {
     auto id = m.getNextInternalId();
     ASSERT_EQ(i * 256, id);
+    ASSERT_TRUE(i.isInternalId());
+    ASSERT_EQ(i, m.toInternalId());
   }
 
 }
