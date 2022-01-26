@@ -238,7 +238,7 @@ TEST(LocaleManager, PrefixSortKey) {
   ASSERT_GT(a.get().size(), b.get().size());
   ASSERT_TRUE(a.starts_with(b));
   // Also test the defaulted consistent comparison.
-  ASSERT_LT(a, b);
+  ASSERT_GT(a, b);
   ASSERT_EQ(a, a);
   ASSERT_NE(a, b);
   ASSERT_FALSE(comp("vivæ", "vivae", LocaleManager::Level::PRIMARY));
