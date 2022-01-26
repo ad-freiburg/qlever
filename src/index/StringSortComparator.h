@@ -44,12 +44,16 @@ class LocaleManager {
    * Wraps a string that contains unicode collation weights for another string
    * Only needed for making interfaces explicit and less errorProne
    */
+  // TODO<GCC12> As soon as we have constexpr std::string, this class can
+  //  become constexpr.
   class SortKey {
    public:
     SortKey() = default;
     explicit SortKey(std::string_view contents) : _content(contents) {}
-    [[nodiscard]] const std::string& get() const { return _content; }
-    std::string& get() { return _content; }
+    [[nodiscard]] constexpr const std::string& get() const noexcept {
+      return _content;
+    }
+    constexpr std::string& get() noexcept { return _content; }
 
     // Comparison of sort key is done lexicographically on the byte values
     // of member `_content`
@@ -62,7 +66,7 @@ class LocaleManager {
 
     /// Is this sort key a prefix of another sort key. Note: This does not imply
     /// any guarantees on the relation of the underlying strings.
-    bool starts_with(const SortKey& rhs) {
+    bool starts_with(const SortKey& rhs) const noexcept {
       return get().starts_with(rhs.get());
     }
 
