@@ -57,7 +57,7 @@ class LocaleManager {
 
     // Comparison of sort key is done lexicographically on the byte values
     // of member `_content`
-    [[nodiscard]] int compare(const SortKey& rhs) const {
+    [[nodiscard]] int compare(const SortKey& rhs) const noexcept {
       return _content.compare(rhs._content);
     }
 
