@@ -7,28 +7,13 @@
 #include <exception>
 #include <sstream>
 
-// coroutines are still experimental in clang libcpp,
-// adapt the appropriate namespaces.
-#ifdef _LIBCPP_VERSION
-#include <experimental/coroutine>
-namespace qlever_stdOrExp = std::experimental;
-#else
-#include <coroutine>
-namespace qlever_stdOrExp = std;
-#endif
-
+// Coroutines are still experimental in clang libcpp, therefore
+// adapt the appropriate namespaces using the convenience header.
+#include "./Concepts.h"
+#include "./Coroutines.h"
 #include "./ostringstream.h"
 
 namespace ad_utility::stream_generator {
-
-/**
- * A concept to ensure objects can be formatted by std::ostream.
- * @tparam T The Type to be formatted
- */
-template <typename T>
-concept Streamable = requires(T x, std::ostream& os) {
-  os << x;
-};
 
 template <size_t MIN_BUFFER_SIZE>
 class basic_stream_generator;
@@ -49,8 +34,7 @@ class suspend_sometimes {
  public:
   explicit suspend_sometimes(const bool suspend) : _suspend{suspend} {}
   bool await_ready() const noexcept { return !_suspend; }
-  constexpr void await_suspend(
-      qlever_stdOrExp::coroutine_handle<>) const noexcept {}
+  constexpr void await_suspend(std::coroutine_handle<>) const noexcept {}
   constexpr void await_resume() const noexcept {}
 };
 
@@ -68,12 +52,8 @@ class stream_generator_promise {
 
   basic_stream_generator<MIN_BUFFER_SIZE> get_return_object() noexcept;
 
-  constexpr qlever_stdOrExp::suspend_always initial_suspend() const noexcept {
-    return {};
-  }
-  constexpr qlever_stdOrExp::suspend_always final_suspend() const noexcept {
-    return {};
-  }
+  constexpr std::suspend_always initial_suspend() const noexcept { return {}; }
+  constexpr std::suspend_always final_suspend() const noexcept { return {}; }
 
   /**
    * Handles values passed using co_yield and stores their respective
@@ -84,7 +64,8 @@ class stream_generator_promise {
    * @return Whether or not the coroutine should get suspended (currently based
    * on isBufferLargeEnough()), wrapped inside a suspend_sometimes class.
    */
-  suspend_sometimes yield_value(const Streamable auto& value) noexcept {
+  suspend_sometimes yield_value(
+      const ad_utility::Streamable auto& value) noexcept {
     // whenever the buffer size exceeds the threshold the coroutine
     // is suspended, thus we can safely assume the value is read
     // before resuming
@@ -106,7 +87,7 @@ class stream_generator_promise {
 
   // Don't allow any use of 'co_await' inside the generator coroutine.
   template <typename U>
-  qlever_stdOrExp::suspend_never await_transform(U&& value) = delete;
+  std::suspend_never await_transform(U&& value) = delete;
 
   void rethrow_if_exception() {
     if (_exception) {
@@ -137,7 +118,7 @@ class [[nodiscard]] basic_stream_generator {
   using promise_type = detail::stream_generator_promise<MIN_BUFFER_SIZE>;
 
  private:
-  qlever_stdOrExp::coroutine_handle<promise_type> _coroutine = nullptr;
+  std::coroutine_handle<promise_type> _coroutine = nullptr;
 
   static basic_stream_generator noOpGenerator() { co_return; }
 
@@ -186,7 +167,7 @@ class [[nodiscard]] basic_stream_generator {
  private:
   friend class detail::stream_generator_promise<MIN_BUFFER_SIZE>;
   explicit basic_stream_generator(
-      qlever_stdOrExp::coroutine_handle<promise_type> coroutine) noexcept
+      std::coroutine_handle<promise_type> coroutine) noexcept
       : _coroutine{coroutine} {}
 };
 
@@ -194,8 +175,8 @@ namespace detail {
 template <size_t MIN_BUFFER_SIZE>
 inline basic_stream_generator<MIN_BUFFER_SIZE>
 stream_generator_promise<MIN_BUFFER_SIZE>::get_return_object() noexcept {
-  using coroutine_handle = qlever_stdOrExp::coroutine_handle<
-      stream_generator_promise<MIN_BUFFER_SIZE>>;
+  using coroutine_handle =
+      std::coroutine_handle<stream_generator_promise<MIN_BUFFER_SIZE>>;
   return basic_stream_generator{coroutine_handle::from_promise(*this)};
 }
 }  // namespace detail

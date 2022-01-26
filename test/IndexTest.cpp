@@ -257,8 +257,8 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     p.push_back(3);
     p.push_back(6);
     const auto& ip = index._patterns[0];
-    for (size_t i = 0; i < ip.second; i++) {
-      ASSERT_EQ(p[i], ip.first[i]);
+    for (size_t i = 0; i < ip.size(); i++) {
+      ASSERT_EQ(p[i], ip[i]);
     }
     ASSERT_EQ(0u, index.getHasPattern()[1]);
     ASSERT_EQ(NO_PATTERN, index.getHasPattern()[0]);
@@ -280,8 +280,8 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     p.push_back(3);
     p.push_back(6);
     const auto& ip = index._patterns[0];
-    for (size_t i = 0; i < ip.second; i++) {
-      ASSERT_EQ(p[i], ip.first[i]);
+    for (size_t i = 0; i < ip.size(); i++) {
+      ASSERT_EQ(p[i], ip[i]);
     }
     ASSERT_EQ(0u, index.getHasPattern()[1]);
     ASSERT_EQ(NO_PATTERN, index.getHasPattern()[0]);

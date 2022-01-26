@@ -483,7 +483,7 @@ class TripleComponentComparator {
         : firstOriginalChar(fst),
           transformedVal(std::move(trans)),
           langtag(std::move(l)),
-          isExternal{p_isExternal}{}
+          isExternal{p_isExternal} {}
 
     /// The first char of the original value, used to distinguish between
     /// different datatypes
@@ -491,7 +491,7 @@ class TripleComponentComparator {
     InnerString transformedVal;  /// The original inner value, possibly
                                  /// transformed by a locale().
     LanguageTag langtag;         /// the language tag, possibly empty
-    bool isExternal; // is this word in the external vocabulary
+    bool isExternal;             // is this word in the external vocabulary
   };
 
   /**
@@ -553,8 +553,9 @@ class TripleComponentComparator {
    * @brief Split a literal or iri into its components and convert the inner
    * value according to the held locale
    */
-  [[nodiscard]] SplitVal extractAndTransformComparable(
-      std::string_view a, const Level level, bool isExternal) const {
+  [[nodiscard]] SplitVal extractAndTransformComparable(std::string_view a,
+                                                       const Level level,
+                                                       bool isExternal) const {
     return extractComparable<SplitVal>(a, level, isExternal);
   }
 
@@ -569,7 +570,6 @@ class TripleComponentComparator {
   [[nodiscard]] int compare(const SplitValBase<A, B>& a,
                             const SplitValBase<A, B>& b,
                             const Level level) const {
-
     if (auto res = std::strncmp(&a.firstOriginalChar, &b.firstOriginalChar, 1);
         res != 0) {
       return res;  // different data types, decide on the datatype
@@ -589,24 +589,22 @@ class TripleComponentComparator {
       return res;
     }
 
-
     // TOTAL level and even the langtags match, sort by bytes.
-   if (int res = a.transformedVal.compare(b.transformedVal); res != 0) {
-     return res;
-   }
+    if (int res = a.transformedVal.compare(b.transformedVal); res != 0) {
+      return res;
+    }
 
-   // If even the bytes match, the only difference might be, that one
-   // of the (identical) inputs is being externalized, and the other one isn't.
+    // If even the bytes match, the only difference might be, that one
+    // of the (identical) inputs is being externalized, and the other one isn't.
 
-   // Additionally, we then want the external words to come before the
-   // internal words, so that we can merge them again.
-   if (a.isExternal == b.isExternal) {
-     return 0;  // words are equal
-   }
+    // Additionally, we then want the external words to come before the
+    // internal words, so that we can merge them again.
+    if (a.isExternal == b.isExternal) {
+      return 0;  // words are equal
+    }
 
-   // if the first word is External, but the second one not, return -1;
-   return a.isExternal ? -1 : 1;
-
+    // if the first word is External, but the second one not, return -1;
+    return a.isExternal ? -1 : 1;
   }
 
   /**
@@ -673,7 +671,8 @@ class TripleComponentComparator {
    */
   template <class SplitValType>
   [[nodiscard]] SplitValType extractComparable(
-      std::string_view a, [[maybe_unused]] const Level level, bool isExternal) const {
+      std::string_view a, [[maybe_unused]] const Level level,
+      bool isExternal) const {
     std::string_view res = a;
     const char first = a.empty() ? char(0) : a[0];
     std::string_view langtag;
@@ -695,7 +694,8 @@ class TripleComponentComparator {
       }
     }
     if constexpr (std::is_same_v<SplitValType, SplitVal>) {
-      return {first, _locManager.getSortKey(res, level), std::string(langtag), isExternal};
+      return {first, _locManager.getSortKey(res, level), std::string(langtag),
+              isExternal};
     } else if constexpr (std::is_same_v<SplitValType, SplitValNonOwning>) {
       return {first, res, langtag, isExternal};
     } else {

@@ -22,10 +22,10 @@ jobs:
       matrix:
         compiler: [ gcc11, clang13 ]
         os: [ ubuntu-latest ]
-        warnings: [ "", -Werror ]
-        exclude:
-          - compiler: gcc11
-            warnings: -Werror
+        warnings: [  "-Wall -Wextra -Werror" ]
+        #exclude:
+        #  - compiler: gcc11
+        #    warnings: -Werror
 
 
     steps:
@@ -65,5 +65,5 @@ jobs:
 
     - name: E2E
       run: ${{github.workspace}}/e2e/e2e.sh
-      if: ${{matrix.warnings != '-Werror'}}
+      #if: ${{matrix.warnings != '-Werror'}}
 

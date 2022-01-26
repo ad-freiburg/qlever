@@ -25,8 +25,8 @@ using std::array;
 using std::pair;
 using std::vector;
 
-// an exception thrown when we want to construct Mmap meta data from Hmap meta
-// data and vice versa
+// An exception is thrown when we want to construct mmap meta data from hmap
+// meta data or vice versa.
 class WrongFormatException : public std::exception {
  public:
   WrongFormatException(std::string msg) : _msg(std::move(msg)) {}
@@ -36,22 +36,22 @@ class WrongFormatException : public std::exception {
   std::string _msg;
 };
 
-// simple ReturnValue struct
+// Struct so that we can return this in a single variable.
 struct VersionInfo {
   uint64_t _version;
   size_t _nOfBytes;
 };
 
-// read from a buffer and advance it
-// helper function for IndexMetaData::createFromByteBuffer
+// Read element at given pointer and advance the pointer. This is a helper
+// function for `IndexMetaData::createFromByteBuffer`.
 template <class T>
-T readFromBuf(unsigned char** buf) {
-  T res = *reinterpret_cast<T*>(*buf);
-  *buf += sizeof(T);
+T readFromBuf(unsigned char** ptr) {
+  T res = *reinterpret_cast<T*>(*ptr);
+  *ptr += sizeof(T);
   return res;
 }
 
-// constants for Magic Numbers to separate different types of MetaData;
+// Magic numbers to separate different types of meta data.
 const uint64_t MAGIC_NUMBER_MMAP_META_DATA =
     std::numeric_limits<uint64_t>::max();
 const uint64_t MAGIC_NUMBER_SPARSE_META_DATA =
@@ -61,48 +61,66 @@ const uint64_t MAGIC_NUMBER_MMAP_META_DATA_VERSION =
 const uint64_t MAGIC_NUMBER_SPARSE_META_DATA_VERSION =
     std::numeric_limits<uint64_t>::max() - 3;
 
-// constants for meta data versions in case the format is changed again
+// Constants for meta data version to keep the different versions apart.
 constexpr uint64_t V_NO_VERSION = 0;  // this is  a dummy
 constexpr uint64_t V_BLOCK_LIST_AND_STATISTICS = 1;
 constexpr uint64_t V_SERIALIZATION_LIBRARY = 2;
 
-// this always tags the current version
+// Constant for the current version.
 constexpr uint64_t V_CURRENT = V_SERIALIZATION_LIBRARY;
 
-// Check index_layout.md for explanations (expected comments).
-// Removed comments here so that not two places had to be kept up-to-date.
-
-// Templated MetaData. The datatype wrappers defined in MetaDataHandler.h
-// all meet the requirements of MapType
-// TODO(C++20): When concepts are available, MapType is a Concept!
+// The meta data for an index permutation.
+//
+// TODO<C++20>: The datatype wrappers defined in MetaDataHandler.h all meet the
+// requirements of MapType. Write this down using a C++20 concept.
 template <class M>
 class IndexMetaData {
+  // Type definitions.
  public:
-  // This allows access to MapType given the type of IndexMetaData
   typedef M MapType;
   using value_type = typename MapType::value_type;
-
   using AddType = CompressedRelationMetaData;
   using GetType = const CompressedRelationMetaData&;
   using BlocksType = std::vector<CompressedBlockMetaData>;
-  ;
 
-  // some MapTypes (the dense ones using stxxl or mmap) require additional calls
-  // to setup() before being fully initialized
+  // Private member variables.
+ private:
+  off_t _offsetAfter = 0;
+
+  string _name;
+  string _filename;
+
+  // TODO: For each of the following two (_data and _blockData), both the type
+  // name and the variable name are terrible.
+
+  // For each relation, its meta data.
+  MapType _data;
+  // For each compressed block, its meta data.
+  BlocksType _blockData;
+
+  size_t _totalElements = 0;
+  size_t _totalBytes = 0;
+  size_t _totalBlocks = 0;
+  uint64_t _version = V_CURRENT;
+
+  // Public methods.
+ public:
+  // Some instantiations of `MapType` (the dense ones using stxxl or mmap)
+  // require additional calls to setup() before being fully initialized.
   IndexMetaData() = default;
 
-  // pass all arguments that are needed for initialization to the underlying
-  // implementation of MapType _data
+  // Pass all arguments that are needed for initialization to the underlying
+  // implementation of `_data` (which is of type `MapType`).
   template <typename... dataArgs>
   void setup(dataArgs&&... args) {
     _data.setup(std::forward<dataArgs>(args)...);
   }
 
-  // isPersistentMetaData == true means we do not need to add rmd to _data
-  // but assume that it is already contained in _data (for persistent
-  // metaData implementations. Must be a compile time parameter because we have
-  // to avoid instantation of member function set() for readonly MapTypes (e.g.
-  // based on MmapVectorView
+  // `isPersistentMetaData` is true when we do not need to add relation meta
+  // data to _data, but assume that it is already contained in _data. This must
+  // be a compile time parameter because we have to avoid instantation of member
+  // function set() when `MapType` is read only  (e.g., when based on
+  // MmapVectorView).
   template <bool isPersistentMetaData = false>
   void add(AddType addedValue);
 
@@ -112,7 +130,7 @@ class IndexMetaData {
 
   // Persistent meta data MapTypes (called MmapBased here) have to be separated
   // from RAM-based (e.g. hashMap based sparse) ones at compile time, this is
-  // done in the following block
+  // done in the following block.
   using MetaWrapperMmap =
       MetaDataWrapperDense<ad_utility::MmapVector<CompressedRelationMetaData>>;
   using MetaWrapperMmapView = MetaDataWrapperDense<
@@ -126,31 +144,31 @@ class IndexMetaData {
   static constexpr bool _isMmapBased = IsMmapBased<MapType>::value;
 
   // This magic number is written when serializing the IndexMetaData to a file.
-  // It is used to check, whether this is a really old index that requires
+  // This is used to check whether this is a really old index that requires
   // rebuilding.
   static constexpr uint64_t MAGIC_NUMBER_FOR_SERIALIZATION =
       _isMmapBased ? MAGIC_NUMBER_MMAP_META_DATA_VERSION
                    : MAGIC_NUMBER_SPARSE_META_DATA_VERSION;
 
-  // Write to a file that will be overwritten/created
+  // Write meta data to file with given name (contents will be overwritten if
+  // file exists).
   void writeToFile(const std::string& filename) const;
 
-  // Write to the end of an already existing file.
-  // Will move file pointer to the end of the file
+  // Write to the end of an already existing file. This will move the file
+  // pointer to the end of that file.
   void appendToFile(ad_utility::File* file) const;
 
-  // read from a file at path specified by filename
+  // Read from file with the given name.
   void readFromFile(const std::string& filename);
 
-  // read from file that already must opened and has
-  // valid metadata at its end. Will move the seek pointer
-  // of file.
+  // Read from file, assuming that it is already open and has valid meta data at
+  // the end. The call will change the position in the file.
   void readFromFile(ad_utility::File* file);
 
   bool col0IdExists(Id col0Id) const;
 
-  // calculate and save statistics that are expensive to calculate so we only
-  // have to do this during the index build and not at server startup
+  // Calculate and save statistics that are expensive to calculate so we only
+  // have to do this once during the index build and not at server start.
   void calculateExpensiveStatistics();
   string statistics() const;
 
@@ -170,19 +188,8 @@ class IndexMetaData {
   BlocksType& blockData() { return _blockData; }
   const BlocksType& blockData() const { return _blockData; }
 
+  // Private methods.
  private:
-  off_t _offsetAfter = 0;
-
-  string _name;
-  string _filename;
-
-  MapType _data;
-  BlocksType _blockData;
-  size_t _totalElements = 0;
-  size_t _totalBytes = 0;
-  size_t _totalBlocks = 0;
-  uint64_t _version = V_CURRENT;
-
   // Symmetric serialization function for the ad_utility::serialization module.
   template <class Serializer, typename MapType>
   friend void serialize(Serializer& serializer,

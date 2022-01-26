@@ -14,14 +14,13 @@
 #ifndef QLEVER_INDEXBUILDERTYPES_H
 #define QLEVER_INDEXBUILDERTYPES_H
 
-
-struct PossiblyExternalizedTripleEntry{
+struct PossiblyExternalizedTripleEntry {
   std::string _entry;
   bool _isExternal = false;
 };
 using Triple = std::array<PossiblyExternalizedTripleEntry, 3>;
 
-inline Triple stringsToInternalTriple(std::array<std::string, 3>&&t) {
+inline Triple stringsToInternalTriple(std::array<std::string, 3>&& t) {
   using P = PossiblyExternalizedTripleEntry;
   return {P{t[0], false}, P{t[1], false}, P{t[2], false}};
 }
@@ -58,8 +57,10 @@ struct alignas(256) ItemMapManager {
   Id assignNextId(const PossiblyExternalizedTripleEntry& key) {
     if (!_map.count(key._entry)) {
       Id res = _map.size() + _minId;
-      _map[key._entry] = {res, m_comp->extractAndTransformComparable(
-                            key._entry, TripleComponentComparator::Level::IDENTICAL, key._isExternal)};
+      _map[key._entry] = {
+          res, m_comp->extractAndTransformComparable(
+                   key._entry, TripleComponentComparator::Level::IDENTICAL,
+                   key._isExternal)};
       return res;
     } else {
       return _map[key._entry].m_id;
@@ -118,10 +119,10 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
   auto& itemArray = *itemArrayPtr;
   for (size_t j = 0; j < Parallelism; ++j) {
     itemArray[j] = ItemMapManager(j * 100 * maxNumberOfTriples, comp);
-    itemArray[j].assignNextId(
-        PossiblyExternalizedTripleEntry{LANGUAGE_PREDICATE, false});  // not really needed here, but also not harmful
-                              // and needed to make some completely unrelated
-                              // unit tests pass.
+    itemArray[j].assignNextId(PossiblyExternalizedTripleEntry{
+        LANGUAGE_PREDICATE, false});  // not really needed here, but also not
+                                      // harmful and needed to make some
+                                      // completely unrelated unit tests pass.
     itemArray[j]._map.reserve(2 * maxNumberOfTriples);
   }
   using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
@@ -142,18 +143,23 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
       if (!lt._langtag.empty()) {  // the object of the triple was a literal
                                    // with a language tag
         // get the Id for the corresponding langtag Entity
-        auto langTagId = map.assignNextId(
-            PossiblyExternalizedTripleEntry{ad_utility::convertLangtagToEntityUri(lt._langtag), false});
+        auto langTagId = map.assignNextId(PossiblyExternalizedTripleEntry{
+            ad_utility::convertLangtagToEntityUri(lt._langtag), false});
         // get the Id for the tagged predicate, e.g. @en@rdfs:label
         auto langTaggedPredId =
-            map.assignNextId(PossiblyExternalizedTripleEntry{ad_utility::convertToLanguageTaggedPredicate(
-                lt._triple[1]._entry, lt._langtag), false});
+            map.assignNextId(PossiblyExternalizedTripleEntry{
+                ad_utility::convertToLanguageTaggedPredicate(
+                    lt._triple[1]._entry, lt._langtag),
+                false});
         auto& spoIds = *(res[0]);  // ids of original triple
         // extra triple <subject> @language@<predicate> <object>
         res[1].emplace(array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]});
         // extra triple <object> ql:language-tag <@language>
-        res[2].emplace(array<Id, 3>{
-            spoIds[2], map.assignNextId(PossiblyExternalizedTripleEntry{LANGUAGE_PREDICATE, false}), langTagId});
+        res[2].emplace(
+            array<Id, 3>{spoIds[2],
+                         map.assignNextId(PossiblyExternalizedTripleEntry{
+                             LANGUAGE_PREDICATE, false}),
+                         langTagId});
       }
       return res;
     };

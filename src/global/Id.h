@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <limits>
+
 #include "../util/Exception.h"
 
 typedef uint64_t Id;
@@ -15,19 +16,22 @@ typedef uint16_t Score;
 static const Id ID_NO_VALUE = std::numeric_limits<Id>::max() - 2;
 
 namespace ad_utility {
-template<size_t numBytesInternal, size_t numBytesPerBlockExternal> requires (numBytesInternal + numBytesPerBlockExternal <= 8 && numBytesPerBlockExternal > 0)
-class InternalExternalIdManager {
+template <size_t numBytesInternal, size_t numBytesPerBlockExternal>
+requires(numBytesInternal + numBytesPerBlockExternal <= 8 &&
+         numBytesPerBlockExternal > 0) class InternalExternalIdManager {
  public:
   using T = uint64_t;
- private:
 
+ private:
   T nextId = 0;
 
  public:
   InternalExternalIdManager() = default;
   constexpr static T maxInternalId = (T{1} << (numBytesInternal * 8)) - 1;
-  constexpr static T maxExternalIdPerBlock = (T{1} << (numBytesPerBlockExternal * 8)) - 1;
-  constexpr static T maxId = (T{1} << ((numBytesPerBlockExternal + numBytesInternal) * 8)) - 1;
+  constexpr static T maxExternalIdPerBlock =
+      (T{1} << (numBytesPerBlockExternal * 8)) - 1;
+  constexpr static T maxId =
+      (T{1} << ((numBytesPerBlockExternal + numBytesInternal) * 8)) - 1;
 
   T getNextInternalId() {
     if (!isInternalId(nextId)) {
@@ -41,6 +45,12 @@ class InternalExternalIdManager {
     return nextId++;
   }
 
+  T getNextExternalIdWithoutIncrement() const {
+    AD_CHECK(nextId <= maxId);
+    return nextId;
+  }
+
+
   constexpr static T toInternalId(T id) {
     return id >> (numBytesPerBlockExternal * 8);
   }
@@ -50,8 +60,11 @@ class InternalExternalIdManager {
   }
   constexpr static bool isInternalId(T id) {
     // Bits set to one in the range where the external part is stored.
-    constexpr uint64_t mask = (~uint64_t(0)) >> (64 - numBytesPerBlockExternal * 8);
+    constexpr uint64_t mask =
+        (~uint64_t(0)) >> (64 - numBytesPerBlockExternal * 8);
     return !(mask & id);
   }
 };
-}
+
+using DefaultIdManager = InternalExternalIdManager<4, 3>;
+}  // namespace ad_utility

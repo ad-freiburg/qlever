@@ -30,7 +30,7 @@ class CountAvailablePredicates : public Operation {
    * @brief Creates a new CountAvailablePredicates operation that returns
    * predicates and their counts for all entities.
    */
-  CountAvailablePredicates(QueryExecutionContext* qec);
+  explicit CountAvailablePredicates(QueryExecutionContext* qec);
 
   /**
    * @brief Creates a new CountAvailablePredicates operation that returns
@@ -47,39 +47,40 @@ class CountAvailablePredicates : public Operation {
    */
   CountAvailablePredicates(QueryExecutionContext* qec, std::string entityName);
 
-  virtual string asString(size_t indent = 0) const override;
+  [[nodiscard]] string asString(size_t indent) const override;
 
-  virtual string getDescriptor() const override;
+  [[nodiscard]] string getDescriptor() const override;
 
-  virtual size_t getResultWidth() const override;
+  [[nodiscard]] size_t getResultWidth() const override;
 
-  virtual vector<size_t> resultSortedOn() const override;
+  [[nodiscard]] vector<size_t> resultSortedOn() const override;
 
   vector<QueryExecutionTree*> getChildren() override {
     using R = vector<QueryExecutionTree*>;
     return _subtree != nullptr ? R{_subtree.get()} : R{};
   }
 
-  ad_utility::HashMap<string, size_t> getVariableColumns() const override;
+  [[nodiscard]] ad_utility::HashMap<string, size_t> getVariableColumns()
+      const override;
 
-  virtual void setTextLimit(size_t limit) override {
+  void setTextLimit(size_t limit) override {
     if (_subtree != nullptr) {
       _subtree->setTextLimit(limit);
     }
   }
 
-  virtual bool knownEmptyResult() override {
+  bool knownEmptyResult() override {
     if (_subtree != nullptr) {
       return _subtree->knownEmptyResult();
     }
     return false;
   }
 
-  virtual float getMultiplicity(size_t col) override;
+  float getMultiplicity(size_t col) override;
 
-  virtual size_t getSizeEstimate() override;
+  size_t getSizeEstimate() override;
 
-  virtual size_t getCostEstimate() override;
+  size_t getCostEstimate() override;
 
   void setVarNames(const std::string& predicateVarName,
                    const std::string& countVarName);
@@ -101,14 +102,14 @@ class CountAvailablePredicates : public Operation {
   static void computePatternTrick(
       const IdTable& input, IdTable* result,
       const vector<PatternID>& hasPattern,
-      const CompactStringVector<Id, Id>& hasPredicate,
-      const CompactStringVector<size_t, Id>& patterns,
-      const size_t subjectColumn, RuntimeInformation* runtimeInfo);
+      const CompactVectorOfStrings<Id>& hasPredicate,
+      const CompactVectorOfStrings<size_t>& patterns, size_t subjectColumn,
+      RuntimeInformation* runtimeInfo);
 
   static void computePatternTrickAllEntities(
       IdTable* result, const vector<PatternID>& hasPattern,
-      const CompactStringVector<Id, Id>& hasPredicate,
-      const CompactStringVector<size_t, Id>& patterns);
+      const CompactVectorOfStrings<Id>& hasPredicate,
+      const CompactVectorOfStrings<size_t>& patterns);
 
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
@@ -118,5 +119,5 @@ class CountAvailablePredicates : public Operation {
   std::string _predicateVarName;
   std::string _countVarName;
 
-  virtual void computeResult(ResultTable* result) override;
+  void computeResult(ResultTable* result) override;
 };

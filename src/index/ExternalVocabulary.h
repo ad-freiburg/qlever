@@ -20,9 +20,7 @@ struct IdAndOffset {
   uint64_t _offset;
 
   // Compare only by the ids, since they are unique
-  auto operator<=>(const IdAndOffset& rhs) const {
-    return _id <=> rhs._id;
-  }
+  auto operator<=>(const IdAndOffset& rhs) const { return _id <=> rhs._id; }
 };
 
 struct OffsetAndSize {
@@ -75,7 +73,7 @@ class ExternalVocabulary {
   mutable ad_utility::File _file;
   ad_utility::MmapVectorView<IdAndOffset> _idsAndOffsets;
 
-  const auto& idsAndOffsets() const {return _idsAndOffsets;}
+  const auto& idsAndOffsets() const { return _idsAndOffsets; }
 
   StringComparator _caseComparator;
 
@@ -83,7 +81,7 @@ class ExternalVocabulary {
 
   std::optional<OffsetAndSize> getOffsetAndSize(Id id) const;
 
-  template<class Iterable>
+  template <class Iterable>
   void buildFromIterable(Iterable&& iterable, const string& filename);
 
   inline static const std::string _offsetSuffix = ".idsAndOffsets.mmap";

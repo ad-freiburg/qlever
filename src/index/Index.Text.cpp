@@ -493,7 +493,7 @@ void Index::calculateBlockBoundariesImpl(
   };
 
   auto getLengthAndPrefixSortKey = [&](size_t i) {
-    auto word = index._textVocab[i].value().get();
+    auto word = index._textVocab[i].value();
     auto [len, prefixSortKey] =
         locManager.getPrefixSortKey(word, MIN_WORD_PREFIX_SIZE);
     if (len > MIN_WORD_PREFIX_SIZE) {
@@ -548,9 +548,9 @@ void Index::printBlockBoundariesToFile(const string& filename) const {
   of << "Printing block boundaries ot text vocabulary\n"
      << "Format: <Last word of Block> <First word of next Block>\n";
   auto printBlockToFile = [this, &of](size_t i) {
-    of << _textVocab[i].value().get() << " ";
+    of << _textVocab[i].value() << " ";
     if (i + 1 < _textVocab.size()) {
-      of << _textVocab[i + 1].value().get() << '\n';
+      of << _textVocab[i + 1].value() << '\n';
     }
   };
   return calculateBlockBoundariesImpl(*this, printBlockToFile);
@@ -657,7 +657,7 @@ void Index::openTextFileHandle() {
 }
 
 // _____________________________________________________________________________
-const string& Index::wordIdToString(Id id) const {
+std::string_view Index::wordIdToString(Id id) const {
   return _textVocab[id].value();
 }
 

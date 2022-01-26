@@ -109,10 +109,11 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 
 ################################
-# GTEST
+# GTEST AND GMOCK
 ################################
-add_subdirectory(third_party/googletest/googletest EXCLUDE_FROM_ALL)
+add_subdirectory(third_party/googletest EXCLUDE_FROM_ALL)
 include_directories(third_party/googletest/googletest/include)
+include_directories(third_party/googletest/googlemock/include)
 
 ################################
 # NLOHNMANN-JSON
@@ -241,6 +242,9 @@ target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PermutationExporterMain src/index/PermutationExporterMain.cpp)
 target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(VocabularyConverterMain src/VocabularyConverterMain.cpp)
+target_link_libraries(VocabularyConverterMain index ${CMAKE_THREAD_LIBS_INIT})
 
 #add_executable(TextFilterComparison src/experiments/TextFilterComparison.cpp)
 #target_link_libraries (TextFilterComparison experiments)

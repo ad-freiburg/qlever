@@ -11,15 +11,9 @@
 #include <type_traits>
 #include <utility>
 
-// coroutines are still experimental in clang libcpp,
-// adapt the appropriate namespaces.
-#ifdef _LIBCPP_VERSION
-#include <experimental/coroutine>
-namespace qlever_stdOrExp = std::experimental;
-#else
-#include <coroutine>
-namespace qlever_stdOrExp = std;
-#endif
+// Coroutines are still experimental in clang libcpp, therefore adapt the
+// appropriate namespaces by including the convenience header.
+#include "./Coroutines.h"
 
 namespace cppcoro {
 template <typename T>
@@ -37,23 +31,17 @@ class generator_promise {
 
   generator<T> get_return_object() noexcept;
 
-  constexpr qlever_stdOrExp::suspend_always initial_suspend() const noexcept {
-    return {};
-  }
-  constexpr qlever_stdOrExp::suspend_always final_suspend() const noexcept {
-    return {};
-  }
+  constexpr std::suspend_always initial_suspend() const noexcept { return {}; }
+  constexpr std::suspend_always final_suspend() const noexcept { return {}; }
 
   template <typename U = T,
             std::enable_if_t<!std::is_rvalue_reference<U>::value, int> = 0>
-  qlever_stdOrExp::suspend_always yield_value(
-      std::remove_reference_t<T>& value) noexcept {
+  std::suspend_always yield_value(std::remove_reference_t<T>& value) noexcept {
     m_value = std::addressof(value);
     return {};
   }
 
-  qlever_stdOrExp::suspend_always yield_value(
-      std::remove_reference_t<T>&& value) noexcept {
+  std::suspend_always yield_value(std::remove_reference_t<T>&& value) noexcept {
     m_value = std::addressof(value);
     return {};
   }
@@ -68,7 +56,7 @@ class generator_promise {
 
   // Don't allow any use of 'co_await' inside the generator coroutine.
   template <typename U>
-  qlever_stdOrExp::suspend_never await_transform(U&& value) = delete;
+  std::suspend_never await_transform(U&& value) = delete;
 
   void rethrow_if_exception() {
     if (m_exception) {
@@ -85,8 +73,7 @@ struct generator_sentinel {};
 
 template <typename T>
 class generator_iterator {
-  using coroutine_handle =
-      qlever_stdOrExp::coroutine_handle<generator_promise<T>>;
+  using coroutine_handle = std::coroutine_handle<generator_promise<T>>;
 
  public:
   using iterator_category = std::input_iterator_tag;
@@ -192,11 +179,10 @@ class [[nodiscard]] generator {
  private:
   friend class detail::generator_promise<T>;
 
-  explicit generator(
-      qlever_stdOrExp::coroutine_handle<promise_type> coroutine) noexcept
+  explicit generator(std::coroutine_handle<promise_type> coroutine) noexcept
       : m_coroutine(coroutine) {}
 
-  qlever_stdOrExp::coroutine_handle<promise_type> m_coroutine;
+  std::coroutine_handle<promise_type> m_coroutine;
 };
 
 template <typename T>
@@ -207,8 +193,7 @@ void swap(generator<T>& a, generator<T>& b) {
 namespace detail {
 template <typename T>
 generator<T> generator_promise<T>::get_return_object() noexcept {
-  using coroutine_handle =
-      qlever_stdOrExp::coroutine_handle<generator_promise<T>>;
+  using coroutine_handle = std::coroutine_handle<generator_promise<T>>;
   return generator<T>{coroutine_handle::from_promise(*this)};
 }
 }  // namespace detail

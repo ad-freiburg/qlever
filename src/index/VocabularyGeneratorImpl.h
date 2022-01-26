@@ -18,43 +18,42 @@
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
 #include "../util/Log.h"
+#include "../util/Serializer/FileSerializer.h"
 #include "./ConstantsIndexBuilding.h"
 #include "./Vocabulary.h"
 #include "./VocabularyGenerator.h"
-#include "../util/Serializer/FileSerializer.h"
 
 // ___________________________________________________________________
-template <class Comp>
+template <typename Comparator, typename InternalVocabularyAction>
 VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
-    const std::string& basename, size_t numFiles, Comp comp) {
+    const std::string& basename, size_t numFiles, Comparator comparator,
+    InternalVocabularyAction& internalVocabularyAction) {
   // we sort alphabetically by the token according to the comparator that was
   // given to us
 
-  auto queueCompare = [&comp](const QueueWord& p1, const QueueWord& p2) {
+  auto queueCompare = [&comparator](const QueueWord& p1, const QueueWord& p2) {
     // if p1 is smaller (alphabetically)
     // _comp will return false if called like this
     // and the priority queue will thus emit p1 first
     if (p1._value == p2._value) {
       return p1._isExternal && !p2._isExternal;
     }
-    return comp(p2._value, p1._value);
+    return comparator(p2._value, p1._value);
   };
 
   std::vector<ad_utility::serialization::FileReadSerializer> infiles;
   std::vector<uint64_t> numWordsLeftInPartialVocabulary;
 
-
-  _outfile.open(basename + ".vocabulary");
-  AD_CHECK(_outfile.is_open());
   if (!_noIdMapsAndIgnoreExternalVocab) {
     _outfileExternal.open(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
     AD_CHECK(_outfileExternal.is_open());
   }
 
+  ad_utility::DefaultIdManager idManager;
+
   // Priority queue for the k-way merge
   std::priority_queue<QueueWord, std::vector<QueueWord>, decltype(queueCompare)>
       queue(queueCompare);
-
 
   auto pushWordFromPartialVocabularyToQueue = [&](size_t i) {
     if (numWordsLeftInPartialVocabulary[i] > 0) {
@@ -67,7 +66,6 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
       queue.push(QueueWord(std::move(word), i, id, isExternal));
       numWordsLeftInPartialVocabulary[i]--;
     }
-
   };
   // open and prepare all infiles and mmap output vectors
   for (size_t i = 0; i < numFiles; i++) {
@@ -105,8 +103,9 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
     if (sortedBuffer.size() >= _bufferSize) {
       // asynchronously write the next batch of sorted
       // queue words
-      auto writeTask = [this, buf = std::move(sortedBuffer)]() {
-        this->writeQueueWordsToIdVec(buf);
+      auto writeTask = [this, buf = std::move(sortedBuffer),
+                        &internalVocabularyAction]() {
+        this->writeQueueWordsToIdVec(buf, internalVocabularyAction);
       };
       sortedBuffer.clear();
       sortedBuffer.reserve(_bufferSize);
@@ -131,7 +130,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
 
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
-    writeQueueWordsToIdVec(sortedBuffer);
+    writeQueueWordsToIdVec(sortedBuffer, internalVocabularyAction);
   }
   VocMergeRes result;
   result._numWordsTotal = _totalWritten;
@@ -144,8 +143,10 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
 }
 
 // ________________________________________________________________________________
+template <typename InternalVocabularyAction>
 void VocabularyMerger::writeQueueWordsToIdVec(
-    const std::vector<QueueWord>& buffer) {
+    const std::vector<QueueWord>& buffer,
+    InternalVocabularyAction& internalVocabularyAction) {
   LOG(TIMING) << "Start writing a batch of merged words\n";
 
   // smaller grained buffer for the actual inner write
@@ -158,6 +159,14 @@ void VocabularyMerger::writeQueueWordsToIdVec(
     if (top._value != _lastWritten._lastWrittenWord) {
       _lastWritten._lastWrittenWord = top._value;
       _lastWritten._wasExternalized = top._isExternal;
+      _lastWritten._id = top._isExternal ? _idManager.getNextExternalId()
+                                         : _idManager.getNextInternalId();
+
+      // It might be that the word actually should be externalized, but it has
+      // to be internal because of its Id;
+      if (_idManager.isInternalId(_lastWritten._id)) {
+        _lastWritten._wasExternalized = false;
+      }
 
       // TODO<optimization> If we aim to further speed this up, we could
       // order all the write requests to _outfile _externalOutfile and all the
@@ -165,41 +174,31 @@ void VocabularyMerger::writeQueueWordsToIdVec(
 
       // write the new word to the vocabulary
       if (!_lastWritten._wasExternalized) {
-        _outfile << RdfEscaping::escapeNewlinesAndBackslashes(_lastWritten._lastWrittenWord)
-                 << '\n';
+        internalVocabularyAction(_lastWritten._lastWrittenWord);
       } else {
         _outfileExternal << RdfEscaping::escapeNewlinesAndBackslashes(
                                 _lastWritten._lastWrittenWord)
                          << '\n';
       }
 
-      // TODO<joka921> Get the correct Ids once the other PR is merged.
-      // write id to corresponding vec
-      writeBuf.emplace_back(top._partialFileId,
-                            std::make_pair(top._partialWordId, _totalWritten));
-
       if (top._value.size() > 0 && top._value[0] == '@') {
         if (!_firstLangPredSeen) {
           // inclusive
-          _langPredLowerBound = _totalWritten;
+          _langPredLowerBound = _lastWritten._id;
           _firstLangPredSeen = true;
         }
         // exclusive
-        _langPredUpperBound = _totalWritten + 1;
+        _langPredUpperBound = _idManager.getNextExternalIdWithoutIncrement();
       }
       _totalWritten++;
-      if (_totalWritten % _bufferSize == 0) {
-        LOG(INFO) << "Merged " << _totalWritten << "Words" << std::endl;
+      if (_totalWritten % 100'000'000 == 0) {
+        LOG(INFO) << "Words merged: " << _totalWritten << std::endl;
       }
-    } else {
-      // this is a duplicate which already occured in another partial vocabulary
-      // in the last step.
-      // we already have increased total written, so for the duplicate
-      // we have to subtract one again
-      size_t minusOne = _totalWritten - 1;
-      writeBuf.emplace_back(top._partialFileId,
-                            std::make_pair(top._partialWordId, minusOne));
     }
+
+    // Write the mapping from local to global Ids for this word.
+    writeBuf.emplace_back(top._partialFileId,
+                          std::make_pair(top._partialWordId, _lastWritten._id));
 
     if (writeBuf.size() >= bufSize) {
       auto task = [this, buf = std::move(writeBuf)]() {
@@ -222,7 +221,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
     doActualWrite(writeBuf);
   }
 
-  LOG(INFO) << "Finished writing batch of merged words\n";
+  LOG(DEBUG) << "Finished writing batch of merged words" << std::endl;
 }
 
 // ____________________________________________________________________________________________________________
@@ -281,7 +280,7 @@ void writeMappedIdsToExtVec(const TripleVec& input,
 
 // _________________________________________________________________________________________________________
 void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
-  LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
+  LOG(DEBUG) << "Writing partial vocabulary to: " << fileName << "\n";
   ad_utility::serialization::FileWriteSerializer serializer{fileName};
   uint64_t size = els.size();  // really make sure that this has 64bits;
   serializer << size;
@@ -293,7 +292,7 @@ void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
     serializer << idAndSplitVal.m_id;
     serializer << idAndSplitVal.m_splitVal.isExternal;
   }
-  LOG(INFO) << "Done writing vocabulary to file.\n";
+  LOG(DEBUG) << "Done writing partial vocabulary" << std::endl;
 }
 
 // ______________________________________________________________________________________________

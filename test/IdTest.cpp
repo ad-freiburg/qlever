@@ -2,12 +2,12 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-
 #include <gtest/gtest.h>
-#include "../src/global/Id.h"
-#include "../src/util/Log.h"
 
 #include <ranges>
+
+#include "../src/global/Id.h"
+#include "../src/util/Log.h"
 
 namespace views = std::views;
 
@@ -19,7 +19,6 @@ TEST(Id, toInternalId) {
     ASSERT_TRUE(i.isInternalId());
     ASSERT_EQ(i, m.toInternalId());
   }
-
 }
 
 TEST(Id, FirstTest) {
@@ -32,6 +31,4 @@ TEST(Id, FirstTest) {
     ASSERT_EQ(i, id);
   }
   ASSERT_THROW(m.getNextExternalId(), ad_semsearch::Exception);
-
 }
-
