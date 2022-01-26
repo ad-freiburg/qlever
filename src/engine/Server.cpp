@@ -171,9 +171,9 @@ Awaitable<json> Server::composeResponseQleverJson(
     j["warnings"] = qet.collectWarnings();
     if(query.hasSelectClause()){
       if(query.selectClause()._varsOrAsterisk.isAsterisk()) {
-        string str;
-        str+=(query.selectClause()._varsOrAsterisk.getAsterisk());
-        j["selected"] = std::vector<std::string>{str};
+        auto list = query.selectClause()._varsOrAsterisk.retrieveOrder();
+        std::vector<string> result{ list.begin(),list.end() };
+        j["selected"] = result;
       }
       else {
         j["selected"] = query.selectClause()._varsOrAsterisk.getSelectVariables();

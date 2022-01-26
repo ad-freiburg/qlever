@@ -497,25 +497,22 @@ bool QueryPlanner::checkUsePatternTrick(
         continue;
       }
 
-      // check that all selected variables are outputs of
+      // Check that all selected variables are outputs of
       // CountAvailablePredicates
-      /*
       if(selectClause._varsOrAsterisk.isAsterisk()) {
         return false;
       }
-      */
-      if(selectClause._varsOrAsterisk.isVariables()) {
-        for (const std::string& s : selectClause._varsOrAsterisk.getSelectVariables()) {
-          if (s != t._o && s != count_var_name) {
-            usePatternTrick = false;
-            break;
-          }
-        }
-        if (!usePatternTrick) {
-          continue;
+
+      const auto& selectedVariables = selectClause._varsOrAsterisk.getSelectVariables();
+      for (const std::string& s : selectedVariables) {
+        if (s != t._o && s != count_var_name) {
+          usePatternTrick = false;
+          break;
         }
       }
-
+      if (!usePatternTrick) {
+        continue;
+      }
 
       // Check for triples containing the ql:has-predicate triple's
       // object.

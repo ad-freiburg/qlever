@@ -309,16 +309,14 @@ class ParsedQuery {
 
   typedef std::variant<vector<string>,char> SelectVarsOrAsterisk;
   // Representation of the 'Selector: All (*)' xor 'Selector: (VarName)+'
+  // template <typename T>
   struct SelectedVarsOrAsterisk {
    private:
     SelectVarsOrAsterisk _varsOrAsterisk;
+    std::list<string> _variablesOrder;
 
     void setAsterisk() {
       _varsOrAsterisk = '*';
-    }
-
-    [[nodiscard]] SelectVarsOrAsterisk clone() const {
-      return SelectVarsOrAsterisk{_varsOrAsterisk};
     }
 
    public:
@@ -339,6 +337,9 @@ class ParsedQuery {
     // Sets the Selector to 'All' (*) only if the Selector is still undefined
     // Returned value maybe unused due to Syntax Check
     [[maybe_unused]] bool setsAsterisk() {
+      /*
+       * Needs (std::monostate_t) but unnecessary due to Syntax Check
+       */
       // if (!isAsterisk() && !isVariables()) {
         setAsterisk();
         return true;
@@ -357,11 +358,28 @@ class ParsedQuery {
     [[nodiscard]] auto& getSelectVariables()  {
       return std::get<std::vector<string>>(_varsOrAsterisk);
     }
+
+    void pushVariablesOrder(const string& variable) {
+      _variablesOrder.emplace_back(variable);
+    }
+
+    void cleanVarOrder() {
+      _variablesOrder.unique();
+    }
+
+    [[nodiscard]] std::list<string>& retrieveOrder() {
+      return _variablesOrder;
+    }
+
+    [[nodiscard]] std::list<string> retrieveOrder() const {
+      return _variablesOrder;
+    }
   };
 
   // Represents the Select Clause with all the possible outcomes
   struct SelectClause {
-    // Aliases will be empty if Selector '*' is set
+    // `_aliases` will be empty if Selector '*' is present.
+    // Essentially, there is a `SELECT *` clause in the query.
     std::vector<Alias> _aliases;
     SelectedVarsOrAsterisk _varsOrAsterisk;
     bool _reduced = false;

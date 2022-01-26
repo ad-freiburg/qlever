@@ -37,6 +37,11 @@ ParsedQuery SparqlParser::parse() {
   }
   _lexer.expectEmpty();
 
+  if(result.hasSelectClause() &&
+      result.selectClause()._varsOrAsterisk.isAsterisk()) {
+    result.selectClause()._varsOrAsterisk.cleanVarOrder();
+  }
+
   return result;
 }
 
@@ -174,6 +179,7 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
     if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
         // Exception avoided due to previous Syntax Check of Selector '*'
         selectClause._varsOrAsterisk.getSelectVariables().push_back(_lexer.current().raw);
+        selectClause._varsOrAsterisk.pushVariablesOrder(_lexer.current().raw);
     } else if (_lexer.accept("text")) {
       _lexer.expect("(");
       std::ostringstream s;
@@ -197,6 +203,7 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       ParsedQuery::Alias a = parseAliasWithAntlr();
       selectClause._aliases.push_back(a);
       selectClause._varsOrAsterisk.getSelectVariables().emplace_back(a._outVarName);
+      selectClause._varsOrAsterisk.pushVariablesOrder(a._outVarName);
       _lexer.expect(")");
     } else {
       _lexer.accept();
@@ -285,6 +292,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       GraphPatternOperation::Bind bind{parseExpressionWithAntlr()};
       _lexer.expect("as");
       _lexer.expect(SparqlToken::Type::VARIABLE);
+      query->selectClause()._varsOrAsterisk.pushVariablesOrder(_lexer.current().raw);
       bind._target = _lexer.current().raw;
       _lexer.expect(")");
       currentPattern->_children.emplace_back(std::move(bind));
@@ -343,6 +351,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         // values with several variables
         while (_lexer.accept(SparqlToken::Type::VARIABLE)) {
           values._variables.push_back(_lexer.current().raw);
+          query->selectClause()._varsOrAsterisk.pushVariablesOrder(_lexer.current().raw);
         }
         _lexer.expect(")");
         _lexer.expect("{");
@@ -360,6 +369,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       } else if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
         // values with a single variable
         values._variables.push_back(_lexer.current().raw);
+        query->selectClause()._varsOrAsterisk.pushVariablesOrder(_lexer.current().raw);
         _lexer.expect("{");
         while (_lexer.accept(SparqlToken::Type::IRI) ||
                _lexer.accept(SparqlToken::Type::RDFLITERAL)) {
@@ -380,6 +390,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       if (lastSubject.empty()) {
         if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
           subject = _lexer.current().raw;
+          query->selectClause()._varsOrAsterisk.pushVariablesOrder(_lexer.current().raw);
         } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
           subject = parseLiteral(_lexer.current().raw, true);
         } else {
@@ -395,6 +406,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       if (lastPredicate.empty()) {
         if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
           predicate = _lexer.current().raw;
+          query->selectClause()._varsOrAsterisk.pushVariablesOrder(_lexer.current().raw);
         } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
           predicate = parseLiteral(_lexer.current().raw, true);
         } else {
@@ -412,6 +424,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       std::string object;
       if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
         object = _lexer.current().raw;
+        query->selectClause()._varsOrAsterisk.pushVariablesOrder(_lexer.current().raw);
       } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
         object = parseLiteral(_lexer.current().raw, true);
       } else {
