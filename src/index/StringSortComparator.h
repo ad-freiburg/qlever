@@ -49,16 +49,16 @@ class LocaleManager {
   class SortKey {
    public:
     SortKey() = default;
-    explicit SortKey(std::string_view contents) : _content(contents) {}
+    explicit SortKey(std::string_view sortKey) : _sortKey(sortKey) {}
     [[nodiscard]] constexpr const std::string& get() const noexcept {
-      return _content;
+      return _sortKey;
     }
-    constexpr std::string& get() noexcept { return _content; }
+    constexpr std::string& get() noexcept { return _sortKey; }
 
     // Comparison of sort key is done lexicographically on the byte values
-    // of member `_content`
+    // of member `_sortKey`
     [[nodiscard]] int compare(const SortKey& rhs) const noexcept {
-      return _content.compare(rhs._content);
+      return _sortKey.compare(rhs._sortKey);
     }
 
     auto operator<=>(const SortKey&) const = default;
@@ -70,8 +70,11 @@ class LocaleManager {
       return get().starts_with(rhs.get());
     }
 
+    // _____________________________________________________________________
+    size_t size() const noexcept { return get().size(); }
+
    private:
-    std::string _content;
+    std::string _sortKey;
   };
 
   /// Copy constructor

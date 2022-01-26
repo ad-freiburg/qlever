@@ -235,7 +235,7 @@ TEST(LocaleManager, PrefixSortKey) {
   auto a = locIgnorePunct.getPrefixSortKey("vivæ", 4).second;
   auto b = locIgnorePunct.getPrefixSortKey("vivae", 4).second;
 
-  ASSERT_GT(a.get().size(), b.get().size());
+  ASSERT_GT(a.size(), b.size());
   ASSERT_TRUE(a.starts_with(b));
   // Also test the defaulted consistent comparison.
   ASSERT_GT(a, b);
