@@ -237,8 +237,8 @@ Server::composeResponseSepValues(const ParsedQuery& query,
     size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
     size_t offset = query._offset.value_or(0);
     return query.hasSelectClause()
-               ? qet.writeTable<format>(
-                     query.selectClause()._selectedVariables, limit, offset)
+               ? qet.writeTable<format>(query.selectClause()._selectedVariables,
+                                        limit, offset)
                : qet.writeRdfGraphSeparatedValues<format>(
                      query.constructClause(), limit, offset, qet.getResult());
   };
