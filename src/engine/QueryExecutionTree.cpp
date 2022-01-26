@@ -96,8 +96,10 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     const ResultTable& resultTable) const {
   ColumnIndicesAndTypes exportColumns;
   for (auto var : selectVariables) {
-    if (ad_utility::startsWith(var, "TEXT(")) {
-      var = var.substr(5, var.rfind(')') - 5);
+    constexpr std::string_view prefix = "TEXT(";
+    constexpr size_t prefixLength = prefix.length();
+    if (var.starts_with(prefix)) {
+      var = var.substr(prefixLength, var.rfind(')') - prefixLength);
     }
     if (getVariableColumns().contains(var)) {
       auto columnIndex = getVariableColumns().at(var);
@@ -356,29 +358,6 @@ nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
 }
 
 // _____________________________________________________________________________
-
-vector<std::optional<pair<size_t, ResultTable::ResultType>>>
-QueryExecutionTree::buildValidIndices(const vector<string>& selectVars,
-                                      const ResultTable& resultTable) const {
-  vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices;
-  for (auto var : selectVars) {
-    constexpr std::string_view prefix = "TEXT(";
-    constexpr size_t prefixLength = prefix.length();
-    if (var.starts_with(prefix)) {
-      var = var.substr(prefixLength, var.rfind(')') - prefixLength);
-    }
-    auto it = getVariableColumns().find(var);
-    if (it != getVariableColumns().end()) {
-      validIndices.emplace_back(pair<size_t, ResultTable::ResultType>(
-          it->second, resultTable.getResultType(it->second)));
-    } else {
-      validIndices.emplace_back(std::nullopt);
-    }
-  }
-  return validIndices;
-}
-
-// _____________________________________________________________________________
 template <QueryExecutionTree::ExportSubFormat format>
 ad_utility::stream_generator::stream_generator
 QueryExecutionTree::generateResults(const vector<string>& selectVars,
@@ -390,7 +369,8 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> resultTable = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  auto validIndices = buildValidIndices(selectVars, *resultTable);
+  auto validIndices =
+      selectedVariablesToColumnIndices(selectVars, *resultTable);
 
   const auto& idTable = resultTable->_idTable;
   size_t upperBound = std::min<size_t>(offset + limit, idTable.size());
@@ -399,10 +379,10 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
   if constexpr (format == ExportSubFormat::BINARY) {
     for (size_t i = offset; i < upperBound; ++i) {
       for (const auto& validIndex : validIndices) {
-        if (validIndex) {
-          co_yield std::string_view{
-              reinterpret_cast<const char*>(&idTable(i, validIndex->first)),
-              sizeof(Id)};
+        if (validIndex.has_value()) {
+          co_yield std::string_view{reinterpret_cast<const char*>(&idTable(
+                                        i, validIndex.value()._columnIndex)),
+                                    sizeof(Id)};
         }
       }
     }
@@ -417,13 +397,14 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
 
   for (size_t i = offset; i < upperBound; ++i) {
     for (size_t j = 0; j < validIndices.size(); ++j) {
-      if (validIndices[j]) {
-        const auto& val = *validIndices[j];
-        switch (val.second) {
+      if (validIndices[j].has_value()) {
+        const auto& val = validIndices[j].value();
+        switch (val._resultType) {
           case ResultTable::ResultType::KB: {
-            string entity = _qec->getIndex()
-                                .idToOptionalString(idTable(i, val.first))
-                                .value_or("");
+            string entity =
+                _qec->getIndex()
+                    .idToOptionalString(idTable(i, val._columnIndex))
+                    .value_or("");
             if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
               co_yield ad_utility::convertIndexWordToValueLiteral(entity);
             } else {
@@ -432,19 +413,21 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
             break;
           }
           case ResultTable::ResultType::VERBATIM:
-            co_yield idTable(i, val.first);
+            co_yield idTable(i, val._columnIndex);
             break;
           case ResultTable::ResultType::TEXT:
-            co_yield _qec->getIndex().getTextExcerpt(idTable(i, val.first));
+            co_yield _qec->getIndex().getTextExcerpt(
+                idTable(i, val._columnIndex));
             break;
           case ResultTable::ResultType::FLOAT: {
             float f;
-            std::memcpy(&f, &idTable(i, val.first), sizeof(float));
+            std::memcpy(&f, &idTable(i, val._columnIndex), sizeof(float));
             co_yield f;
             break;
           }
           case ResultTable::ResultType::LOCAL_VOCAB: {
-            co_yield resultTable->idToOptionalString(idTable(i, val.first))
+            co_yield resultTable
+                ->idToOptionalString(idTable(i, val._columnIndex))
                 .value_or("");
             break;
           }
