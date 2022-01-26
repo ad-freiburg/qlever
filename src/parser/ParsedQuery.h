@@ -313,18 +313,19 @@ class ParsedQuery {
   struct SelectedVarsOrAsterisk {
    private:
     SelectVarsOrAsterisk _varsOrAsterisk;
-    std::set<string> _variablesOrder;
+    std::list<string> _variablesOrder;
 
     void setAsterisk() {
       _varsOrAsterisk = '*';
     }
 
    public:
+    /*
     // Clone of the private variable typed 'variant' (vector)
     [[nodiscard]] SelectVarsOrAsterisk get() const {
-        // return clone();
         return SelectVarsOrAsterisk{_varsOrAsterisk};
     }
+    */
 
     [[nodiscard]] bool isAsterisk() const {
       return std::holds_alternative<char>(_varsOrAsterisk);
@@ -360,15 +361,19 @@ class ParsedQuery {
     }
 
     void pushVariablesOrder(const string& variable) {
-      _variablesOrder.emplace(variable);
+      if(!(std::find(_variablesOrder.begin(),
+                    _variablesOrder.end(),
+                    variable) != _variablesOrder.end())) {
+        _variablesOrder.emplace_back(variable);
+      }
     }
 
 
-    [[nodiscard]] std::set<string>& retrieveOrder() {
+    [[nodiscard]] std::list<string>& retrieveOrder() {
       return _variablesOrder;
     }
 
-    [[nodiscard]] std::set<string> retrieveOrder() const {
+    [[nodiscard]] std::list<string> retrieveOrder() const {
       return _variablesOrder;
     }
   };
