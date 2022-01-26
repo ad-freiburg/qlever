@@ -313,7 +313,7 @@ class ParsedQuery {
   struct SelectedVarsOrAsterisk {
    private:
     SelectVarsOrAsterisk _varsOrAsterisk;
-    std::list<string> _variablesOrder;
+    std::set<string> _variablesOrder;
 
     void setAsterisk() {
       _varsOrAsterisk = '*';
@@ -360,18 +360,15 @@ class ParsedQuery {
     }
 
     void pushVariablesOrder(const string& variable) {
-      _variablesOrder.emplace_back(variable);
+      _variablesOrder.emplace(variable);
     }
 
-    void cleanVarOrder() {
-      _variablesOrder.unique();
-    }
 
-    [[nodiscard]] std::list<string>& retrieveOrder() {
+    [[nodiscard]] std::set<string>& retrieveOrder() {
       return _variablesOrder;
     }
 
-    [[nodiscard]] std::list<string> retrieveOrder() const {
+    [[nodiscard]] std::set<string> retrieveOrder() const {
       return _variablesOrder;
     }
   };

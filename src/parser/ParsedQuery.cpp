@@ -40,7 +40,14 @@ string ParsedQuery::asString() const {
     // SELECT
     os << "\nSELECT: {\n\t";
     if(usesAsterisk) {
-      os << selectClause._varsOrAsterisk.getAsterisk();
+      auto list = selectClause._varsOrAsterisk.retrieveOrder();
+      std::set<string>::iterator it;
+      for (it = list.begin(); it != list.end(); ){
+        os << it->c_str();
+        if (++it != list.end()) {
+          os << ", ";
+        }
+      }
     }
     else {
       const auto& SelectedVariables = selectClause._varsOrAsterisk.getSelectVariables();

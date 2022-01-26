@@ -37,11 +37,6 @@ ParsedQuery SparqlParser::parse() {
   }
   _lexer.expectEmpty();
 
-  if(result.hasSelectClause() &&
-      result.selectClause()._varsOrAsterisk.isAsterisk()) {
-    result.selectClause()._varsOrAsterisk.cleanVarOrder();
-  }
-
   return result;
 }
 
