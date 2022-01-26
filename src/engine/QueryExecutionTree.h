@@ -109,6 +109,10 @@ class QueryExecutionTree {
       const std::vector<string>& selectVariables,
       const ResultTable& resultTable) const;
 
+  template <ExportSubFormat format>
+  ad_utility::stream_generator::stream_generator generateResults(
+      const vector<string>& selectVars, size_t limit, size_t offset) const;
+
   // Generate an RDF graph in turtle format for a CONSTRUCT query.
   ad_utility::stream_generator::stream_generator writeRdfGraphTurtle(
       const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
@@ -132,10 +136,6 @@ class QueryExecutionTree {
   nlohmann::json writeResultAsSparqlJson(
       const vector<string>& selectVars, size_t limit, size_t offset,
       shared_ptr<const ResultTable> preComputedResult = nullptr) const;
-
-  template <ExportSubFormat format>
-  ad_utility::stream_generator::stream_generator writeTable(
-      const vector<string>& selectVars, size_t limit, size_t offset) const;
 
   const std::vector<size_t>& resultSortedOn() const {
     return _rootOperation->getResultSortedOn();

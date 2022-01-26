@@ -380,8 +380,9 @@ QueryExecutionTree::buildValidIndices(const vector<string>& selectVars,
 
 // _____________________________________________________________________________
 template <QueryExecutionTree::ExportSubFormat format>
-ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
-    const vector<string>& selectVars, size_t limit, size_t offset) const {
+ad_utility::stream_generator::stream_generator
+QueryExecutionTree::generateResults(const vector<string>& selectVars,
+                                    size_t limit, size_t offset) const {
   static_assert(format == ExportSubFormat::BINARY ||
                 format == ExportSubFormat::CSV ||
                 format == ExportSubFormat::TSV);
@@ -461,16 +462,16 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
 // Instantiate template function for all enum types
 
 template ad_utility::stream_generator::stream_generator
-QueryExecutionTree::writeTable<QueryExecutionTree::ExportSubFormat::CSV>(
+QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::CSV>(
     const vector<string>& selectVars, size_t limit, size_t offset) const;
 
 template ad_utility::stream_generator::stream_generator
-QueryExecutionTree::writeTable<QueryExecutionTree::ExportSubFormat::TSV>(
+QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::TSV>(
     const vector<string>& selectVars, size_t limit, size_t offset) const;
 
-template ad_utility::stream_generator::stream_generator
-QueryExecutionTree::writeTable<QueryExecutionTree::ExportSubFormat::BINARY>(
-    const vector<string>& selectVars, size_t limit, size_t offset) const;
+template ad_utility::stream_generator::stream_generator QueryExecutionTree::
+    generateResults<QueryExecutionTree::ExportSubFormat::BINARY>(
+        const vector<string>& selectVars, size_t limit, size_t offset) const;
 
 // _____________________________________________________________________________
 
