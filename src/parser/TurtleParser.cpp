@@ -427,7 +427,7 @@ bool TurtleParser<T>::iriref() {
     // complete regexes
     _tok.skipWhitespaceAndComments();
     auto view = _tok.view();
-    if (view.starts_with("<")) {
+    if (view.starts_with('<')) {
       auto endPos = view.find_first_of("> \n");
       if (endPos == string::npos || view[endPos] != '>') {
         raise("Iriref");
