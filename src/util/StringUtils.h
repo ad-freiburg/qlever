@@ -4,30 +4,15 @@
 
 #pragma once
 
-#include <grp.h>
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
 
-#include <array>
-#include <cassert>
 #include <cctype>
-#include <clocale>
 #include <cstdint>
-#include <cstdlib>
-#include <cstring>
-#include <cwchar>
-#include <iostream>
-#include <limits>
-#include <numeric>
-#include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
 
-#include "../parser/ParseException.h"
-
-using std::array;
 using std::string;
 using std::string_view;
 using std::vector;

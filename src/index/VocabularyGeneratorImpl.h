@@ -295,7 +295,7 @@ void writeMappedIdsToExtVec(const TripleVec& input,
     }
 
     // update the Element
-    writer << array<Id, 3>{
+    writer << std::array<Id, 3>{
         {iterators[0]->second, iterators[1]->second, iterators[2]->second}};
   }
 }

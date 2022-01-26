@@ -333,7 +333,7 @@ class Vocabulary {
 
   // maps (numeric) keys to the prefix they encode.
   // currently only 128 prefixes are supported.
-  array<std::string, NUM_COMPRESSION_PREFIXES> _prefixMap{""};
+  std::array<std::string, NUM_COMPRESSION_PREFIXES> _prefixMap{""};
 
   // If a word starts with one of those prefixes it will be externalized
   vector<std::string> _externalizedPrefixes;
