@@ -2,8 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./Index.h"
-
 #include <absl/strings/str_split.h>
 
 #include <stxxl/algorithm>
@@ -14,6 +12,7 @@
 #include "../parser/ContextFileParser.h"
 #include "../util/Simple8bCode.h"
 #include "./FTSAlgorithms.h"
+#include "./Index.h"
 
 // _____________________________________________________________________________
 void Index::addTextFromContextFile(const string& contextFile) {

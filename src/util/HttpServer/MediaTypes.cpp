@@ -2,9 +2,9 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include <absl/strings/str_join.h>
-
 #include "MediaTypes.h"
+
+#include <absl/strings/str_join.h>
 
 #include "../Exception.h"
 #include "../StringUtils.h"
