@@ -214,7 +214,7 @@ class LocaleManager {
     size_t prefixLengthSoFar = 1;
     SortKey completeSortKey = getSortKey(s, Level::PRIMARY);
     while (numContributingCodepoints < prefixLength ||
-           !completeSortKey.get().starts_with(sortKey.get())) {
+           !completeSortKey.starts_with(sortKey)) {
       auto [numCodepoints, prefix] =
           ad_utility::getUTF8Prefix(s, prefixLengthSoFar);
       auto nextLongerSortKey = getSortKey(prefix, Level::PRIMARY);

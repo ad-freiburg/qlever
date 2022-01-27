@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "./Index.h"
+
 #include <stxxl/algorithm>
 #include <tuple>
 #include <utility>
@@ -11,7 +13,6 @@
 #include "../util/Generator.h"
 #include "../util/Simple8bCode.h"
 #include "./FTSAlgorithms.h"
-#include "./Index.h"
 
 // _____________________________________________________________________________
 void Index::addTextFromContextFile(const string& contextFile) {
@@ -482,7 +483,7 @@ void Index::calculateBlockBoundariesImpl(
       if (forcedBlockStartSortKey.get() >= prefixSortKey.get()) {
         break;
       }
-      if (prefixSortKey.get().starts_with(forcedBlockStartSortKey.get())) {
+      if (prefixSortKey.starts_with(forcedBlockStartSortKey)) {
         prefixSortKey = std::move(forcedBlockStartSortKey);
         prefixLength = MIN_WORD_PREFIX_SIZE;
         return;
@@ -518,7 +519,7 @@ void Index::calculateBlockBoundariesImpl(
     // The `startsWith` also correctly handles the case where
     // `nextPrefixSortKey` is "longer" than `MIN_WORD_PREFIX_SIZE`, e.g. because
     // of unicode ligatures.
-    bool samePrefix = nextPrefixSortKey.get().starts_with(prefixSortKey.get());
+    bool samePrefix = nextPrefixSortKey.starts_with(prefixSortKey);
     if (tooShortButNotEqual || !samePrefix) {
       blockBoundaryAction(i);
       numBlocks++;
