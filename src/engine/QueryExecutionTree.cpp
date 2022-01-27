@@ -385,7 +385,7 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
       if (!entity.has_value()) {
         return std::nullopt;
       }
-      if (ad_utility::startsWith(entity.value(), VALUE_PREFIX)) {
+      if (entity.value().starts_with(VALUE_PREFIX)) {
         return ad_utility::convertIndexWordToLiteralAndType(entity.value());
       }
       return std::pair{std::move(entity.value()), nullptr};
@@ -492,7 +492,7 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
             string entity = _qec->getIndex()
                                 .idToOptionalString(idTable(i, val.first))
                                 .value_or("");
-            if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
+            if (entity.starts_with(VALUE_PREFIX)) {
               co_yield ad_utility::convertIndexWordToValueLiteral(entity);
             } else {
               co_yield entity;

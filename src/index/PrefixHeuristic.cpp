@@ -39,7 +39,7 @@ TreeNode* TreeNode::insertAfter(string_view value) {
   // we now know that _value is a real prefix of value
   // check if one of the children also is a prefix of value
   for (auto& c : _children) {
-    if (startsWith(value, c->_value)) {
+    if (value.starts_with(c->_value)) {
       return c->insertAfter(value);
     }
   }
@@ -52,7 +52,7 @@ TreeNode* TreeNode::insertAfter(string_view value) {
 
   // find children of current node which have to become children of the new node
   auto pred = [&value](const NodePtr& s) {
-    return startsWith(s->_value, value);
+    return s->_value.starts_with(value);
   };
   auto itChildren = std::remove_if(_children.begin(), _children.end(), pred);
 
@@ -71,7 +71,7 @@ TreeNode* TreeNode::insertAfter(string_view value) {
 
 // ______________________________________________________________________
 TreeNode* TreeNode::insert(string_view value) {
-  if (startsWith(value, _value)) {
+  if (value.starts_with(_value)) {
     // this node is a prefix of value, insert in subtree
     return insertAfter(value);
   }
@@ -182,8 +182,8 @@ std::vector<string> calculatePrefixes(const string& filename,
   size_t totalSavings = 0;
   size_t numWords = 0;
 
-  LOG(INFO) << "Start reading words and building prefix tree" << std::endl;
-  // insert all prefix candidates into  the tree
+  LOG(INFO) << "Building prefix tree from internal vocabulary ..." << std::endl;
+  // Insert all prefix candidates into  the tree.
   while (std::getline(ifs, nextWord)) {
     nextWord = RdfEscaping::unescapeNewlinesAndBackslashes(nextWord);
     totalChars += nextWord.size();
@@ -200,13 +200,14 @@ std::vector<string> calculatePrefixes(const string& filename,
     lastWord = std::move(nextWord);
 
     numWords++;
-    if (numWords % 10000000 == 0) {
-      LOG(INFO) << "words read: " << numWords << std::endl;
+    if (numWords % 100'000'000 == 0) {
+      LOG(INFO) << "Words processed: " << numWords << std::endl;
     }
   }
 
-  LOG(INFO) << "Finished building prefix tree" << std::endl;
-  LOG(INFO) << "Start searching for maximal compressing prefixes" << std::endl;
+  LOG(INFO) << "Computing maximally compressing prefixes (greedy algorithm) "
+               "..."
+            << std::endl;
   std::vector<string> res;
   res.reserve(numPrefixes);
   for (size_t i = 0; i < numPrefixes; ++i) {
@@ -224,10 +225,12 @@ std::vector<string> calculatePrefixes(const string& filename,
   if (alwaysAddCode) {
     totalSavings -= codelength * numWords;
   }
-  double efficiency = static_cast<double>(totalSavings) / totalChars;
-  LOG(INFO) << "Total number of bytes : " << totalChars << std::endl;
-  LOG(INFO) << "Total chars compressed : " << totalSavings << '\n';
-  LOG(INFO) << "Percentage of chars compressed : " << efficiency << std::endl;
+  int reductionInPercent =
+      static_cast<int>(0.5 + 100.0 * totalSavings / totalChars);
+  LOG(DEBUG) << "Total number of bytes : " << totalChars << std::endl;
+  LOG(DEBUG) << "Total chars compressed : " << totalSavings << '\n';
+  LOG(INFO) << "Reduction of size of internal vocabulary: "
+            << reductionInPercent << "%" << std::endl;
   return res;
 }
 

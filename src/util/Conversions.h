@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "../global/Constants.h"
+#include "../parser/TokenizerCtre.h"
 #include "./Exception.h"
 #include "./StringUtils.h"
 
@@ -176,14 +177,14 @@ string convertValueLiteralToIndexWord(const string& orig) {
 // ____________________________________________________________________________
 inline std::pair<string, const char*> convertIndexWordToLiteralAndType(
     const string& indexWord) {
-  if (startsWith(indexWord, VALUE_DATE_PREFIX)) {
+  if (indexWord.starts_with(VALUE_DATE_PREFIX)) {
     string date = removeLeadingZeros(convertIndexWordToDate(indexWord));
-    if (date.empty() || startsWith(date, VALUE_DATE_TIME_SEPARATOR)) {
+    if (date.empty() || date.starts_with(VALUE_DATE_TIME_SEPARATOR)) {
       date = string("0") + date;
     }
     return std::make_pair(std::move(date), XSD_DATETIME_TYPE);
   }
-  if (startsWith(indexWord, VALUE_FLOAT_PREFIX)) {
+  if (indexWord.starts_with(VALUE_FLOAT_PREFIX)) {
     auto type = NumericType{indexWord.back()};
     switch (type) {
       case NumericType::FLOAT:
@@ -641,18 +642,19 @@ bool isXsdValue(const string& val) {
 }
 
 // _____________________________________________________________________________
-bool isNumeric(const string& val) {
-  if (val.empty()) {
-    return false;
+bool isNumeric(const string& value) {
+  if (ctre::match<TurtleTokenCtre::Double>(value)) {
+    throw std::out_of_range{
+        "Decimal numbers with an explicit exponent are currently not supported "
+        "by QLever, but the following number was encountered: " +
+        value};
   }
-  size_t start = (val[0] == '-' || val[0] == '+') ? 1 : 0;
-  size_t posNonDigit = val.find_first_not_of("0123456789", start);
-  if (posNonDigit == string::npos) {
+
+  if (ctre::match<TurtleTokenCtre::Integer>(value)) {
     return true;
   }
-  if (val[posNonDigit] == '.') {
-    return posNonDigit + 1 < val.size() &&
-           val.find_first_not_of("0123456789", posNonDigit + 1) == string::npos;
+  if (ctre::match<TurtleTokenCtre::Decimal>(value)) {
+    return true;
   }
   return false;
 }
@@ -676,7 +678,7 @@ string convertLangtagToEntityUri(const string& tag) {
 // _________________________________________________________
 std::optional<string> convertEntityUriToLangtag(const string& word) {
   static const string prefix = URI_PREFIX + "@";
-  if (ad_utility::startsWith(word, prefix)) {
+  if (word.starts_with(prefix)) {
     return word.substr(prefix.size(), word.size() - prefix.size() - 1);
   } else {
     return std::nullopt;

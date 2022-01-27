@@ -54,7 +54,7 @@ void writeLabel(const std::string& filename) {
     }
   }
   for (const auto& t : entities) {
-    if (ad_utility::startsWith(t, "<")) {
+    if (t.starts_with('<')) {
       std::cout << t << " <qlever_label> \"" << t.substr(1, t.size() - 2)
                 << ".\n";
     }
@@ -179,13 +179,13 @@ int main(int argc, char** argv) {
 
   if (fileFormat.empty()) {
     bool filetypeDeduced = false;
-    if (ad_utility::endsWith(inputFile, ".tsv")) {
+    if (inputFile.ends_with(".tsv")) {
       fileFormat = "tsv";
       filetypeDeduced = true;
-    } else if (ad_utility::endsWith(inputFile, ".nt")) {
+    } else if (inputFile.ends_with(".nt")) {
       fileFormat = "nt";
       filetypeDeduced = true;
-    } else if (ad_utility::endsWith(inputFile, ".ttl")) {
+    } else if (inputFile.ends_with(".ttl")) {
       fileFormat = "ttl";
       filetypeDeduced = true;
     } else {

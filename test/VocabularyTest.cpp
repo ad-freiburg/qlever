@@ -16,11 +16,9 @@ using std::string;
 TEST(VocabularyTest, getIdForWordTest) {
   std::vector<TextVocabulary> vec(2);
 
+  ad_utility::HashSet<std::string> s{"a", "ab", "ba", "car"};
   for (auto& v : vec) {
-    v.push_back("a");
-    v.push_back("ab");
-    v.push_back("ba");
-    v.push_back("car");
+    v.createFromSet(s);
     Id id;
     ASSERT_TRUE(v.getId("ba", &id));
     ASSERT_EQ(Id(2), id);
@@ -32,10 +30,8 @@ TEST(VocabularyTest, getIdForWordTest) {
   // with case insensitive ordering
   TextVocabulary voc;
   voc.setLocale("en", "US", false);
-  voc.push_back("a");
-  voc.push_back("A");
-  voc.push_back("Ba");
-  voc.push_back("car");
+  ad_utility::HashSet<string> s2{"a", "A", "Ba", "car"};
+  voc.createFromSet(s2);
   Id id;
   ASSERT_TRUE(voc.getId("Ba", &id));
   ASSERT_EQ(Id(2), id);
@@ -47,11 +43,9 @@ TEST(VocabularyTest, getIdForWordTest) {
 
 TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
   TextVocabulary v;
-  v.push_back("wordA0");
-  v.push_back("wordA1");
-  v.push_back("wordB2");
-  v.push_back("wordB3");
-  v.push_back("wordB4");
+  ad_utility::HashSet<string> s{"wordA0", "wordA1", "wordB2", "wordB3",
+                                "wordB4"};
+  v.createFromSet(s);
 
   Id word0 = 0;
   IdRange retVal;
@@ -79,19 +73,19 @@ TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
 }
 
 TEST(VocabularyTest, readWriteTest) {
-  TextVocabulary v;
-  v.push_back("wordA0");
-  v.push_back("wordA1");
-  v.push_back("wordB2");
-  v.push_back("wordB3");
-  v.push_back("wordB4");
-  ASSERT_EQ(size_t(5), v.size());
+  {
+    TextVocabulary v;
+    ad_utility::HashSet<string> s{"wordA0", "wordA1", "wordB2", "wordB3",
+                                  "wordB4"};
+    v.createFromSet(s);
+    ASSERT_EQ(size_t(5), v.size());
 
-  v.writeToFile("_testtmp_vocfile");
-  v.push_back("foo");
-  ASSERT_EQ(size_t(6), v.size());
-  v.readFromFile("_testtmp_vocfile");
-  ASSERT_EQ(size_t(5), v.size());
+    v.writeToFile("_testtmp_vocfile");
+  }
+
+  TextVocabulary v2;
+  v2.readFromFile("_testtmp_vocfile");
+  ASSERT_EQ(size_t(5), v2.size());
   remove("_testtmp_vocfile");
 }
 
@@ -119,10 +113,16 @@ TEST(VocabularyTest, IncompleteLiterals) {
 
 TEST(Vocabulary, PrefixFilter) {
   RdfsVocabulary voc;
-  voc.push_back("\"exa\"");
-  voc.push_back("\"exp\"");
-  voc.push_back("\"ext\"");
-  voc.push_back("\"[\"Ex-vivo\" renal artery revascularization]\"@en");
+  voc.setLocale("en", "US", true);
+  ad_utility::HashSet<string> s;
+
+  auto n = std::string(1, NO_PREFIX_CHAR);
+
+  s.insert(n + "\"exa\"");
+  s.insert(n + "\"exp\"");
+  s.insert(n + "\"ext\"");
+  s.insert(n + R"("["Ex-vivo" renal artery revascularization]"@en)");
+  voc.createFromSet(s);
 
   auto x = voc.prefix_range("\"exp");
   ASSERT_EQ(x.first, 1u);

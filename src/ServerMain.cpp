@@ -97,7 +97,7 @@ void printUsage(char* execName) {
 
 // Main function.
 int main(int argc, char** argv) {
-  char* locale = setlocale(LC_CTYPE, "");
+  setlocale(LC_CTYPE, "");
 
   std::locale loc;
   ad_utility::ReadableNumberFacet facet(1);
@@ -186,11 +186,8 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
-  cout << endl
-       << EMPH_ON << "ServerMain, version " << __DATE__ << " " << __TIME__
-       << EMPH_OFF << endl
-       << endl;
-  cout << "Set locale LC_CTYPE to: " << locale << endl;
+  LOG(INFO) << EMPH_ON << "QLever Server, compiled on " << __DATE__ << " "
+            << __TIME__ << EMPH_OFF << std::endl;
 
   try {
     Server server(port, numThreads, memLimit);

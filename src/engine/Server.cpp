@@ -27,7 +27,7 @@ using Awaitable = Server::Awaitable<T>;
 // __________________________________________________________________________
 void Server::initialize(const string& ontologyBaseName, bool useText,
                         bool usePatterns, bool usePatternTrick) {
-  LOG(INFO) << "Initializing and running server..." << std::endl;
+  LOG(INFO) << "Initializing server ..." << std::endl;
 
   _enablePatternTrick = usePatternTrick;
   _index.setUsePatterns(usePatterns);
@@ -44,7 +44,7 @@ void Server::initialize(const string& ontologyBaseName, bool useText,
 
   // Set flag.
   _initialized = true;
-  LOG(INFO) << "Done initializing server." << std::endl;
+  LOG(INFO) << "The server is ready" << std::endl;
 }
 
 // _____________________________________________________________________________

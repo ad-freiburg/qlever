@@ -466,7 +466,7 @@ void Filter::computeFilterFixedValue(
             if (!entity) {
               return true;
             }
-            return ad_utility::endsWith(entity.value(), _rhs);
+            return entity.value().ends_with(_rhs);
           },
           res);
       break;

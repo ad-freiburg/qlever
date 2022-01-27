@@ -23,23 +23,22 @@
 #include "./VocabularyGenerator.h"
 
 // ___________________________________________________________________
-template <class Comp>
+template <typename Comparator, typename InternalVocabularyAction>
 VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
-    const std::string& basename, size_t numFiles, Comp comp) {
+    const std::string& basename, size_t numFiles, Comparator comparator,
+    InternalVocabularyAction& internalVocabularyAction) {
   // we sort alphabetically by the token according to the comparator that was
   // given to us
 
-  auto queueCompare = [&comp](const QueueWord& p1, const QueueWord& p2) {
+  auto queueCompare = [&comparator](const QueueWord& p1, const QueueWord& p2) {
     // if p1 is smaller (alphabetically)
     // _comp will return false if called like this
     // and the priority queue will thus emit p1 first
-    return comp(p2._value, p1._value);
+    return comparator(p2._value, p1._value);
   };
 
   std::vector<std::ifstream> infiles;
 
-  _outfile.open(basename + ".vocabulary");
-  AD_CHECK(_outfile.is_open());
   if (!_noIdMapsAndIgnoreExternalVocab) {
     _outfileExternal.open(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
     AD_CHECK(_outfileExternal.is_open());
@@ -95,8 +94,9 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
     if (sortedBuffer.size() >= _bufferSize) {
       // asynchronously write the next batch of sorted
       // queue words
-      auto writeTask = [this, buf = std::move(sortedBuffer)]() {
-        this->writeQueueWordsToIdVec(buf);
+      auto writeTask = [this, buf = std::move(sortedBuffer),
+                        &internalVocabularyAction]() {
+        this->writeQueueWordsToIdVec(buf, internalVocabularyAction);
       };
       sortedBuffer.clear();
       sortedBuffer.reserve(_bufferSize);
@@ -134,7 +134,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
 
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
-    writeQueueWordsToIdVec(sortedBuffer);
+    writeQueueWordsToIdVec(sortedBuffer, internalVocabularyAction);
   }
   VocMergeRes result;
   result._numWordsTotal = _totalWritten;
@@ -147,8 +147,10 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
 }
 
 // ________________________________________________________________________________
+template <typename InternalVocabularyAction>
 void VocabularyMerger::writeQueueWordsToIdVec(
-    const std::vector<QueueWord>& buffer) {
+    const std::vector<QueueWord>& buffer,
+    InternalVocabularyAction& internalVocabularyAction) {
   LOG(TIMING) << "Start writing a batch of merged words\n";
 
   // smaller grained buffer for the actual inner write
@@ -167,8 +169,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
 
       // write the new word to the vocabulary
       if (_lastWritten < EXTERNALIZED_LITERALS_PREFIX) {
-        _outfile << RdfEscaping::escapeNewlinesAndBackslashes(_lastWritten)
-                 << '\n';
+        internalVocabularyAction(_lastWritten);
       } else {
         // we have to strip the externalization character again
         auto& c = _lastWritten[0];
@@ -209,17 +210,16 @@ void VocabularyMerger::writeQueueWordsToIdVec(
         _langPredUpperBound = _totalWritten + 1;
       }
       _totalWritten++;
-      if (_totalWritten % _bufferSize == 0) {
-        LOG(INFO) << "Merged " << _totalWritten << "Words" << std::endl;
+      if (_totalWritten % 100'000'000 == 0) {
+        LOG(INFO) << "Words merged: " << _totalWritten << std::endl;
       }
     } else {
       // this is a duplicate which already occured in another partial vocabulary
       // in the last step.
-      // we already have increased total written, so for the duplicate
-      // we have to subtract one again
-      size_t minusOne = _totalWritten - 1;
+      // We have already incremented _totalWritten for the next round, hence the
+      // -1 here.
       writeBuf.emplace_back(top._partialFileId,
-                            std::make_pair(top._partialWordId, minusOne));
+                            std::pair{top._partialWordId, _totalWritten - 1});
     }
 
     if (writeBuf.size() >= bufSize) {
@@ -243,7 +243,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
     doActualWrite(writeBuf);
   }
 
-  LOG(INFO) << "Finished writing batch of merged words\n";
+  LOG(DEBUG) << "Finished writing batch of merged words" << std::endl;
 }
 
 // ____________________________________________________________________________________________________________
@@ -295,14 +295,14 @@ void writeMappedIdsToExtVec(const TripleVec& input,
     }
 
     // update the Element
-    writer << array<Id, 3>{
+    writer << std::array<Id, 3>{
         {iterators[0]->second, iterators[1]->second, iterators[2]->second}};
   }
 }
 
 // _________________________________________________________________________________________________________
 void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
-  LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
+  LOG(DEBUG) << "Writing partial vocabulary to: " << fileName << "\n";
   std::ofstream out(fileName.c_str(),
                     std::ios_base::out | std::ios_base::binary);
   AD_CHECK(out.is_open());
@@ -315,7 +315,7 @@ void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
     out.write((char*)&id, sizeof(id));
   }
   out.close();
-  LOG(INFO) << "Done writing vocabulary to file.\n";
+  LOG(DEBUG) << "Done writing partial vocabulary\n";
 }
 
 // ______________________________________________________________________________________________

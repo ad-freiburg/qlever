@@ -103,8 +103,6 @@ void ExternalVocabulary<Comp>::initFromFile(const string& file) {
     off_t posLastOfft = _file.getLastOffset(&_startOfOffsets);
     _size = (posLastOfft - _startOfOffsets) / sizeof(off_t);
   }
-  LOG(INFO) << "Initialized external vocabulary. It contains " << _size
-            << " elements." << std::endl;
 }
 
 template class ExternalVocabulary<TripleComponentComparator>;

@@ -94,24 +94,8 @@ string IndexMetaData<MapType>::statistics() const {
   ad_utility::ReadableNumberFacet facet(1);
   std::locale locWithNumberGrouping(loc, &facet);
   os.imbue(locWithNumberGrouping);
-  os << '\n';
-  os << "-------------------------------------------------------------------\n";
-  os << "----------------------------------\n";
-  os << "Index Statistics:\n";
-  os << "----------------------------------\n\n";
-  os << "# Relations (_data.size()): " << _data.size() << '\n';
-  os << "# Block Data: " << _blockData.size() << '\n';
-
-  size_t totalPairIndexBytes = _totalElements * 2 * sizeof(Id);
-
-  os << "# Elements:  " << _totalElements << '\n';
-  os << "# Blocks:    " << _totalBlocks << "\n\n";
-  os << "Theoretical size of Id triples: " << _totalElements * 3 * sizeof(Id)
-     << " bytes \n";
-  os << "Size of pair index:             " << totalPairIndexBytes
-     << " bytes \n";
-  os << "Total Size:                     " << _totalBytes << " bytes \n";
-  os << "-------------------------------------------------------------------\n";
+  os << "#relations = " << _data.size() << ", #blocks = " << _blockData.size()
+     << ", #triples = " << _totalElements;
   return os.str();
 }
 
