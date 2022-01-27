@@ -232,11 +232,15 @@ TEST(LocaleManager, PrefixSortKey) {
   // The words vivæ and vivae compare equal on the primary level, but they
   // get different prefixSortKeys for prefix length 4, because "ae" are two
   // codepoints, whereas "æ" is one.
-  auto a = locIgnorePunct.getPrefixSortKey("vivæ", 4).second.get();
-  auto b = locIgnorePunct.getPrefixSortKey("vivae", 4).second.get();
+  auto a = locIgnorePunct.getPrefixSortKey("vivæ", 4).second;
+  auto b = locIgnorePunct.getPrefixSortKey("vivae", 4).second;
 
   ASSERT_GT(a.size(), b.size());
-  ASSERT_TRUE(ad_utility::startsWith(a, b));
+  ASSERT_TRUE(a.starts_with(b));
+  // Also test the defaulted consistent comparison.
+  ASSERT_GT(a, b);
+  ASSERT_EQ(a, a);
+  ASSERT_NE(a, b);
   ASSERT_FALSE(comp("vivæ", "vivae", LocaleManager::Level::PRIMARY));
   ASSERT_FALSE(comp("vivæ", "vivae", LocaleManager::Level::PRIMARY));
 }
