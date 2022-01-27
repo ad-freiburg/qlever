@@ -5,7 +5,6 @@
 #ifndef QLEVER_PROGRAMOPTIONSHELPERS_H
 #define QLEVER_PROGRAMOPTIONSHELPERS_H
 
-#include <any>
 #include <boost/program_options.hpp>
 #include <vector>
 
@@ -67,8 +66,6 @@ class ParameterToProgramOptionFactory {
  private:
   Parameters* _parameters;
 
-  std::vector<std::any> _notifiers;
-
  public:
   // Construct from a pointer to `ad_utility::Parameters`
   explicit ParameterToProgramOptionFactory(Parameters* parameters)
@@ -77,15 +74,15 @@ class ParameterToProgramOptionFactory {
   }
 
   /**
-   * Return a boost program option that is connected to the parameter with the
-   * `name`
+   * Return a `boost::program_option::value` that is connected to the parameter
+   * with the `name`
    * @tparam name The name of a parameter that is contained in the `Parameters`
-   * @return A boost::program_options::value with the parameter's current value
-   * as the default value. When that value is parsed, the parameter is set
+   * @return A `boost::program_options::value` with the parameter's current
+   * value as the default value. When that value is parsed, the parameter is set
    * to the parsed value.
    */
   template <ad_utility::ParameterName name>
-  auto makeParameterOption() {
+  auto getProgramOption() {
     // Get the current value of the parameter, it will become the default
     // value of the command-line option.
     auto defaultValue = _parameters->template get<name>();
@@ -93,14 +90,14 @@ class ParameterToProgramOptionFactory {
     // The underlying type for the parameter.
     using Type = decltype(defaultValue);
 
-    // The function that is called, when the command-line-option is called,
-    // it sets the parameter to the parsed value.
-    auto notifier{
+    // The function that is called when the command-line option is called.
+    // It sets the parameter to the parsed value.
+    auto setParameterToValue{
         [this](const Type& value) { _parameters->template set<name>(value); }};
 
     return boost::program_options::value<Type>()
         ->default_value(defaultValue)
-        ->notifier(notifier);
+        ->notifier(setParameterToValue);
   }
 };
 
