@@ -75,7 +75,7 @@ class ParameterToProgramOptionFactory {
 
   /**
    * Return a `boost::program_option::value` that is connected to the parameter
-   * with the `name`
+   * with the given `name`.
    * @tparam name The name of a parameter that is contained in the `Parameters`
    * @return A `boost::program_options::value` with the parameter's current
    * value as the default value. When that value is parsed, the parameter is set
