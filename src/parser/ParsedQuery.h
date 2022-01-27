@@ -83,9 +83,7 @@ class PropertyPath {
   bool _can_be_null;
 };
 
-inline bool isVariable(const string& elem) {
-  return ad_utility::startsWith(elem, "?");
-}
+inline bool isVariable(const string& elem) { return elem.starts_with("?"); }
 
 inline bool isVariable(const PropertyPath& elem) {
   return elem._operation == PropertyPath::Operation::IRI &&
@@ -119,7 +117,7 @@ class OrderKey {
   explicit OrderKey(const string& textual) {
     std::string lower = ad_utility::getLowercaseUtf8(textual);
     size_t pos = 0;
-    _desc = ad_utility::startsWith(lower, "desc(");
+    _desc = lower.starts_with("desc(");
     // skip the 'desc('
     if (_desc) {
       pos += 5;
@@ -130,7 +128,7 @@ class OrderKey {
       }
     }
     // skip 'asc('
-    if (ad_utility::startsWith(lower, "asc(")) {
+    if (lower.starts_with("asc(")) {
       pos += 4;
       // skip any whitespace after the opening bracket
       while (pos < textual.size() &&
@@ -157,7 +155,7 @@ class OrderKey {
       _key = textual.substr(pos, end - pos);
     } else if (lower[pos] == 's') {
       // key is a text score
-      if (!ad_utility::startsWith(lower.substr(pos), "score(")) {
+      if (!lower.substr(pos).starts_with("score(")) {
         throw ParseException("Expected keyword score in order by key: " +
                              textual);
       }

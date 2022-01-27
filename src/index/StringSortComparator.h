@@ -214,11 +214,11 @@ class LocaleManager {
     size_t prefixLengthSoFar = 1;
     SortKey completeSortKey = getSortKey(s, Level::PRIMARY);
     while (numContributingCodepoints < prefixLength ||
-           !ad_utility::startsWith(completeSortKey.get(), sortKey.get())) {
+           !completeSortKey.starts_with(sortKey)) {
       auto [numCodepoints, prefix] =
           ad_utility::getUTF8Prefix(s, prefixLengthSoFar);
       auto nextLongerSortKey = getSortKey(prefix, Level::PRIMARY);
-      if (nextLongerSortKey.get() != sortKey.get()) {
+      if (nextLongerSortKey != sortKey) {
         // The `SortKey` changed by adding a codepoint, so that codepoint
         // was contributing.
         numContributingCodepoints++;
@@ -675,9 +675,7 @@ class TripleComponentComparator {
     std::string_view res = a;
     const char first = a.empty() ? char(0) : a[0];
     std::string_view langtag;
-    if (ad_utility::startsWith(res, "\"") ||
-        ad_utility::startsWith(res,
-                               std::string{EXTERNALIZED_LITERALS_PREFIX})) {
+    if (res.starts_with('"') || res.starts_with(EXTERNALIZED_LITERALS_PREFIX)) {
       // only remove the first character in case of literals that always start
       // with a quotation mark. For all other types we need this. <TODO> rework
       // the vocabulary's data type to remove ALL of those hacks

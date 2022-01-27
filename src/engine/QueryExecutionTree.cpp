@@ -98,7 +98,7 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices;
   for (auto var : selectVars) {
-    if (ad_utility::startsWith(var, "TEXT(")) {
+    if (var.starts_with("TEXT(")) {
       var = var.substr(5, var.rfind(')') - 5);
     }
     auto it = getVariableColumns().find(var);
@@ -140,7 +140,7 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     const ResultTable& resultTable) const {
   ColumnIndicesAndTypes exportColumns;
   for (auto var : selectVariables) {
-    if (ad_utility::startsWith(var, "TEXT(")) {
+    if (var.starts_with("TEXT(")) {
       var = var.substr(5, var.rfind(')') - 5);
     }
     if (getVariableColumns().contains(var)) {
@@ -332,7 +332,7 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
       if (!entity.has_value()) {
         return std::nullopt;
       }
-      if (ad_utility::startsWith(entity.value(), VALUE_PREFIX)) {
+      if (entity.value().starts_with(VALUE_PREFIX)) {
         return ad_utility::convertIndexWordToLiteralAndType(entity.value());
       }
       return std::pair{std::move(entity.value()), nullptr};
@@ -439,7 +439,7 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
             string entity = _qec->getIndex()
                                 .idToOptionalString(idTable(i, val.first))
                                 .value_or("");
-            if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
+            if (entity.starts_with(VALUE_PREFIX)) {
               co_yield ad_utility::convertIndexWordToValueLiteral(entity);
             } else {
               co_yield entity;

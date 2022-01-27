@@ -206,7 +206,7 @@ TEST(LocaleManager, PrefixSortKey) {
     for (size_t i = 0; i < s.size(); ++i) {
       auto [numCodepoints, partial] = loc.getPrefixSortKey(s, i);
       (void)numCodepoints;
-      ASSERT_TRUE(ad_utility::startsWith(complete, partial.get()));
+      ASSERT_TRUE(complete.starts_with(partial.get()));
       print(partial.get());
     }
     std::cout << std::endl;

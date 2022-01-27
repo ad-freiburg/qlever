@@ -72,7 +72,7 @@ class RuntimeInformation {
       } else {
         out << el.value();
       }
-      if (ad_utility::endsWith(el.key(), "Time")) {
+      if (el.key().ends_with("Time")) {
         out << " ms";
       }
       out << '\n';

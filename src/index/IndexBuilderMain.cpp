@@ -284,13 +284,13 @@ int main(int argc, char** argv) {
                   << ad_utility::getUppercase(filetype) << std::endl;
       } else {
         bool filetypeDeduced = false;
-        if (ad_utility::endsWith(inputFile, ".tsv")) {
+        if (inputFile.ends_with(".tsv")) {
           filetype = "tsv";
           filetypeDeduced = true;
-        } else if (ad_utility::endsWith(inputFile, ".nt")) {
+        } else if (inputFile.ends_with(".nt")) {
           filetype = "nt";
           filetypeDeduced = true;
-        } else if (ad_utility::endsWith(inputFile, ".ttl")) {
+        } else if (inputFile.ends_with(".ttl")) {
           filetype = "ttl";
           filetypeDeduced = true;
         } else {

@@ -39,7 +39,7 @@ class Variable {
         case ResultTable::ResultType::KB: {
           string entity =
               qecIndex.idToOptionalString(idTable(row, index)).value_or("");
-          if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
+          if (entity.starts_with(VALUE_PREFIX)) {
             stream << ad_utility::convertIndexWordToValueLiteral(entity);
           } else {
             stream << entity;

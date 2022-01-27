@@ -479,11 +479,10 @@ void Index::calculateBlockBoundariesImpl(
       }
       auto forcedBlockStartSortKey = locManager.getSortKey(
           *forcedBlockStartsIt, LocaleManager::Level::PRIMARY);
-      if (forcedBlockStartSortKey.get() >= prefixSortKey.get()) {
+      if (forcedBlockStartSortKey >= prefixSortKey) {
         break;
       }
-      if (ad_utility::startsWith(prefixSortKey.get(),
-                                 forcedBlockStartSortKey.get())) {
+      if (prefixSortKey.starts_with(forcedBlockStartSortKey)) {
         prefixSortKey = std::move(forcedBlockStartSortKey);
         prefixLength = MIN_WORD_PREFIX_SIZE;
         return;
@@ -515,12 +514,11 @@ void Index::calculateBlockBoundariesImpl(
 
     bool tooShortButNotEqual =
         (currentLen < MIN_WORD_PREFIX_SIZE || nextLen < MIN_WORD_PREFIX_SIZE) &&
-        (prefixSortKey.get() != nextPrefixSortKey.get());
+        (prefixSortKey != nextPrefixSortKey);
     // The `startsWith` also correctly handles the case where
     // `nextPrefixSortKey` is "longer" than `MIN_WORD_PREFIX_SIZE`, e.g. because
     // of unicode ligatures.
-    bool samePrefix =
-        ad_utility::startsWith(nextPrefixSortKey.get(), prefixSortKey.get());
+    bool samePrefix = nextPrefixSortKey.starts_with(prefixSortKey);
     if (tooShortButNotEqual || !samePrefix) {
       blockBoundaryAction(i);
       numBlocks++;

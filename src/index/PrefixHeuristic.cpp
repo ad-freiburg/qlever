@@ -39,7 +39,7 @@ TreeNode* TreeNode::insertAfter(string_view value) {
   // we now know that _value is a real prefix of value
   // check if one of the children also is a prefix of value
   for (auto& c : _children) {
-    if (startsWith(value, c->_value)) {
+    if (value.starts_with(c->_value)) {
       return c->insertAfter(value);
     }
   }
@@ -52,7 +52,7 @@ TreeNode* TreeNode::insertAfter(string_view value) {
 
   // find children of current node which have to become children of the new node
   auto pred = [&value](const NodePtr& s) {
-    return startsWith(s->_value, value);
+    return s->_value.starts_with(value);
   };
   auto itChildren = std::remove_if(_children.begin(), _children.end(), pred);
 
@@ -71,7 +71,7 @@ TreeNode* TreeNode::insertAfter(string_view value) {
 
 // ______________________________________________________________________
 TreeNode* TreeNode::insert(string_view value) {
-  if (startsWith(value, _value)) {
+  if (value.starts_with(_value)) {
     // this node is a prefix of value, insert in subtree
     return insertAfter(value);
   }

@@ -180,7 +180,7 @@ class CompressedRelationWriter {
    * have a function from the occurring Ys to the Zs).
    */
   void addRelation(Id col0Id,
-                   const ad_utility::BufferedVector<array<Id, 2>>& data,
+                   const ad_utility::BufferedVector<std::array<Id, 2>>& data,
                    size_t numDistinctCol1, bool functional);
 
   /// Finish writing all relations which have previously been added, but might
@@ -215,7 +215,7 @@ class CompressedRelationWriter {
   // its size. Write the blocks to `_outfile` and append all the created
   // block meta data to `_blockBuffer`.
   void writeRelationToExclusiveBlocks(
-      Id col0Id, const ad_utility::BufferedVector<array<Id, 2>>& data);
+      Id col0Id, const ad_utility::BufferedVector<std::array<Id, 2>>& data);
 };
 
 #endif  // QLEVER_COMPRESSEDRELATION_H
