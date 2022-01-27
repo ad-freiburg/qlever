@@ -38,19 +38,6 @@ inline std::pair<size_t, std::string> getUTF8Prefix(std::string_view s,
 //! Gets the last part of a string that is somehow split by the given separator.
 inline string getLastPartOfString(const string& text, const char separator);
 
-//! Strips any sequence of characters in s from the left and right of the text.
-//! The type T can be anything convertible to a std::string_view<char> so in
-//! particular s can be a string literal, std::string, std::string_view.
-//! Additionally it can also be a single char as in ' '
-template <class T>
-inline string strip(const string& text, const T& s);
-//! Strips any sequence of characters from s from the right of the text.
-//! The type T can be anything convertible to a std::string_view<char> so in
-//! particular s can be a string literal, std::string, std::string_view.
-//! Additionally it can also be a single char as in ' '
-template <class T>
-inline string rstrip(const string& text, const T& s);
-
 //! Splits a string at the separator, kinda like python.
 inline vector<string> split(const string& orig, const char sep);
 
@@ -200,28 +187,6 @@ J join(const vector<J>& to_join, const S& joiner) {
     res += *it;
   }
   return res;
-}
-
-// _____________________________________________________________________________
-template <class T>
-inline string rstrip(const string& text, const T& s) {
-  auto pos = text.find_last_not_of(s);
-  if (pos == string::npos) {
-    return string{};
-  }
-  auto length = pos + 1;
-  return text.substr(0, length);
-}
-
-// _____________________________________________________________________________
-template <class T>
-inline string strip(const string& text, const T& s) {
-  auto pos = text.find_first_not_of(s);
-  if (pos == string::npos) {
-    return string{};
-  }
-  auto length = text.find_last_not_of(s) - pos + 1;
-  return text.substr(pos, length);
 }
 
 // _________________________________________________________________________

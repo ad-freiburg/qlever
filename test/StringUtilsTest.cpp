@@ -4,7 +4,6 @@
 
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -77,42 +76,4 @@ TEST(StringUtilsTest, join) {
   ASSERT_EQ((3 + 2 + 4 + 2 + 5 + 2 + 6), joined3);
 }
 
-TEST(StringUtilsTest, strip) {
-  string s1("   abc  ");
-  string s2("abc");
-  string s3("abc  ");
-  string s4("   abc");
-  string s5("xxabcxx");
-  string s6(" ");
-  string s7("    ");
-  string s8("");
-
-  ASSERT_EQ("abc", strip(s1, ' '));
-  ASSERT_EQ("abc", strip(s2, ' '));
-
-  ASSERT_EQ("abc", rstrip(s3, ' '));
-  ASSERT_NE("abc", rstrip(s4, ' '));
-
-  ASSERT_NE("abc", strip(s5, ' '));
-  ASSERT_EQ("abc", strip(s5, 'x'));
-
-  ASSERT_EQ("", strip(s6, ' '));
-  ASSERT_EQ("", strip(s7, ' '));
-  ASSERT_EQ("", strip(s8, ' '));
-
-  ASSERT_EQ("", rstrip(s6, ' '));
-  ASSERT_EQ("", rstrip(s7, ' '));
-  ASSERT_EQ("", rstrip(s8, ' '));
-
-  ASSERT_EQ("bc", strip("xxaxaxaxabcaaaxxx", "xa"));
-  // And with unicode
-  ASSERT_EQ("äö", strip("xxaxaxaxaäöaaaxxx", "xa"));
-  ASSERT_EQ("xxaxaxaxa♥", rstrip("xxaxaxaxa♥aaaxxx", "xa"));
-}
-
 }  // namespace ad_utility
-
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
