@@ -382,6 +382,8 @@ template <typename S, typename C>
 template <typename, typename>
 const std::optional<std::string_view> Vocabulary<S, C>::operator[](
     Id id) const {
+  AD_CHECK(isInternalId(id));
+  id = toInternalId(id);
   if (id < _words.size()) {
     return _words[static_cast<size_t>(id)];
   } else {
@@ -394,16 +396,19 @@ TextVocabulary::operator[]<std::string, void>(Id id) const;
 template <typename S, typename C>
 template <typename, typename>
 const std::optional<string> Vocabulary<S, C>::idToOptionalString(Id id) const {
-  if (id < _words.size()) {
+  if (id == ID_NO_VALUE) {
+    return std::nullopt;
+  }
+  if (isInternalId(id)) {
+    id = toInternalId(id);
+    AD_CHECK(id < _words.size())
     // internal, prefixCompressed word
     return expandPrefix(_words[static_cast<size_t>(id)]);
-  } else if (id == ID_NO_VALUE) {
-    return std::nullopt;
   } else {
     // this word must be externalized
-    id -= _words.size();
-    AD_CHECK(id < _externalLiterals.size());
-    return _externalLiterals[id];
+    auto result = _externalLiterals[id];
+    AD_CHECK(result.has_value());
+    return result;
   }
 }
 

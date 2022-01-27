@@ -87,6 +87,8 @@ class Vocabulary {
   using enable_if_uncompressed =
       std::enable_if_t<!std::is_same_v<T, CompressedString>>;
 
+  using IdManager = ad_utility::DefaultIdManager;
+
  public:
   using SortLevel = typename ComparatorType::Level;
   template <
@@ -322,6 +324,18 @@ class Vocabulary {
     } else {
       return getLowerBoundLambda(level);
     }
+  }
+
+  // Is an id an internal id (has lower bits set to 0)
+  static bool isInternalId(Id id) {
+    return IdManager::isInternalId(id);
+  }
+
+  // Cast an internal id (with lower bits set to 0) to its actual value
+  // Note: This function does not check, whether this actually is an Internal
+  // or External id.
+  static uint64_t toInternalId(Id id) {
+    return IdManager::toInternalId(id);
   }
 
   // TODO<joka921> these following two members are only used with the
