@@ -1,6 +1,9 @@
 //  Copyright 2021, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+
+#include <absl/strings/str_join.h>
+
 #include "MediaTypes.h"
 
 #include "../Exception.h"
@@ -216,7 +219,7 @@ std::string getErrorMessageForSupportedMediaTypes(
     asString.push_back(toString(type));
   }
   return "Currently the following media types are supported: " +
-         ad_utility::join(asString, ", ");
+         absl::StrJoin(asString, ", ");
 }
 
 }  // namespace ad_utility

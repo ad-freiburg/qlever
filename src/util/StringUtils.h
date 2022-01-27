@@ -41,13 +41,6 @@ inline string getLastPartOfString(const string& text, const char separator);
 //! Splits a string at the separator, kinda like python.
 inline vector<string> split(const string& orig, const char sep);
 
-//! Similar to Python's ",".join(somelist) this joins elements of the given
-//! vector to_join, separating them by joiner.
-//! In order for this to work the type J needs an operator+= implementation that
-//! accepts a value of type S as the right hand side
-template <typename J, typename S>
-J join(const vector<J>& to_join, const S& joiner);
-
 /**
  * @brief Return the last position where <literalEnd> was found in the <input>
  * without being escaped by backslashes. If it is not found at all, string::npos
@@ -171,22 +164,6 @@ vector<string> split(const string& orig, const char sep) {
     result.emplace_back(orig.substr(from));
   }
   return result;
-}
-
-// _____________________________________________________________________________
-template <typename J, typename S>
-J join(const vector<J>& to_join, const S& joiner) {
-  J res{};  // {} does zero initialization
-  auto it = to_join.begin();
-  if (it == to_join.end()) {
-    return res;
-  }
-  res += *it++;
-  for (; it != to_join.end(); it++) {
-    res += joiner;
-    res += *it;
-  }
-  return res;
 }
 
 // _________________________________________________________________________

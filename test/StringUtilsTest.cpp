@@ -51,29 +51,4 @@ TEST(StringUtilsTest, split) {
   ASSERT_EQ("❤", v6[1]);
   ASSERT_EQ("漢字", v6[2]);
 }
-
-TEST(StringUtilsTest, join) {
-  string s1 = "this\tis\tit";
-
-  // With char
-  auto v1 = split(s1, '\t');
-  auto joined1 = join(v1, '|');
-  ASSERT_EQ("this|is|it", joined1);
-
-  // With string
-  auto v2 = split(s1, '\t');
-  auto joined2 = join(v2, "<SEP>");
-  ASSERT_EQ("this<SEP>is<SEP>it", joined2);
-
-  // Empty list
-  std::vector<std::string> v_empty = {};
-  auto joined_empty = join(v_empty, "<SEP>");
-  ASSERT_EQ("", joined_empty);
-
-  // Yay for templates, it also does (somewhat useless) math
-  vector<uint16_t> v3 = {3, 4, 5, 6};
-  auto joined3 = join(v3, 2);
-  ASSERT_EQ((3 + 2 + 4 + 2 + 5 + 2 + 6), joined3);
-}
-
 }  // namespace ad_utility
