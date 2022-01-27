@@ -212,6 +212,7 @@ void SparqlLexer::expect(const std::string& raw, bool match_case) {
   }
   readNext();
 }
+
 void SparqlLexer::expectEmpty() {
   if (!empty()) {
     std::ostringstream s;

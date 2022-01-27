@@ -497,9 +497,15 @@ bool QueryPlanner::checkUsePatternTrick(
         continue;
       }
 
-      // check that all selected variables are outputs of
+      // Check that all selected variables are outputs of
       // CountAvailablePredicates
-      for (const std::string& s : selectClause._selectedVariables) {
+      if (selectClause._varsOrAsterisk.isAsterisk()) {
+        return false;
+      }
+
+      const auto& selectedVariables =
+          selectClause._varsOrAsterisk.getSelectVariables();
+      for (const std::string& s : selectedVariables) {
         if (s != t._o && s != count_var_name) {
           usePatternTrick = false;
           break;
@@ -568,10 +574,13 @@ bool QueryPlanner::checkUsePatternTrick(
               return;
             }
             const auto& selectClause = arg._subquery.selectClause();
-            for (const auto& v : selectClause._selectedVariables) {
-              if (v == t._o) {
-                usePatternTrick = false;
-                break;
+            if (selectClause._varsOrAsterisk.isVariables()) {
+              for (const auto& v :
+                   selectClause._varsOrAsterisk.getSelectVariables()) {
+                if (v == t._o) {
+                  usePatternTrick = false;
+                  break;
+                }
               }
             }
           } else if constexpr (std::is_same_v<T, GraphPatternOperation::Bind>) {
@@ -620,10 +629,13 @@ bool QueryPlanner::checkUsePatternTrick(
                 return;
               }
               const auto& selectClause = arg._subquery.selectClause();
-              for (const auto& v : selectClause._selectedVariables) {
-                if (v == t._o) {
-                  usePatternTrick = false;
-                  break;
+              if (selectClause._varsOrAsterisk.isVariables()) {
+                for (const auto& v :
+                     selectClause._varsOrAsterisk.getSelectVariables()) {
+                  if (v == t._o) {
+                    usePatternTrick = false;
+                    break;
+                  }
                 }
               }
             } else if constexpr (std::is_same_v<T, GraphPatternOperation::
@@ -828,23 +840,26 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
     vector<size_t> keepIndices;
     ad_utility::HashSet<size_t> indDone;
     const auto& colMap = parent._qet->getVariableColumns();
-    for (const auto& var : selectClause._selectedVariables) {
-      const auto it = colMap.find(var);
-      if (it != colMap.end()) {
-        auto ind = it->second;
-        if (indDone.count(ind) == 0) {
-          keepIndices.push_back(ind);
-          indDone.insert(ind);
-        }
-      } else if (var.starts_with("SCORE(") || var.starts_with("TEXT(")) {
-        auto varInd = var.find('?');
-        auto cVar = var.substr(varInd, var.rfind(')') - varInd);
-        const auto it = colMap.find(cVar);
+    if (selectClause._varsOrAsterisk.isVariables()) {
+      for (const auto& var :
+           selectClause._varsOrAsterisk.getSelectVariables()) {
+        const auto it = colMap.find(var);
         if (it != colMap.end()) {
           auto ind = it->second;
           if (indDone.count(ind) == 0) {
             keepIndices.push_back(ind);
             indDone.insert(ind);
+          }
+        } else if (var.starts_with("SCORE(") || var.starts_with("TEXT(")) {
+          auto varInd = var.find('?');
+          auto cVar = var.substr(varInd, var.rfind(')') - varInd);
+          const auto it = colMap.find(cVar);
+          if (it != colMap.end()) {
+            auto ind = it->second;
+            if (indDone.count(ind) == 0) {
+              keepIndices.push_back(ind);
+              indDone.insert(ind);
+            }
           }
         }
       }

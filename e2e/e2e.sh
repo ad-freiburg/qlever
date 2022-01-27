@@ -60,9 +60,9 @@ PROJECT_DIR=$(readlink -f -- "$(dirname ${BASH_SOURCE[0]})/..")
 
 # Change to the project directory so we can use simple relative paths
 echo "Changing to project directory: $PROJECT_DIR"
-pushd $PROJECT_DIR
+pushd "$PROJECT_DIR"
 BINARY_DIR=$(readlink -f -- ./build)
-if [ ! -e $BINARY_DIR ]; then
+if [ ! -e "$BINARY_DIR" ]; then
 	BINARY_DIR=$(readlink -f -- .)
 fi
 echo "Binary dir is $BINARY_DIR"
@@ -88,7 +88,7 @@ mkdir -p "$INDEX_DIR"
 # Travis' caching creates it
 if [ ! -e "$INPUT.nt" ]; then
 	# Why the hell is this a ZIP that can't easily be decompressed from stdin?!?
-	unzip -j $ZIPPED_INPUT -d "$INPUT_DIR/"
+	unzip -j "$ZIPPED_INPUT" -d "$INPUT_DIR/"
 fi;
 
 
@@ -132,5 +132,5 @@ if [ $i -ge 60 ]; then
 fi
 
 echo "ServerMain was succesfully started, running queries ..."
-$PYTHON_BINARY "$PROJECT_DIR/e2e/queryit.py" "$PROJECT_DIR/e2e/scientists_queries.yaml" "http://localhost:9099" &> $BINARY_DIR/query_log.txt || bail "Querying Server failed"
+$PYTHON_BINARY "$PROJECT_DIR/e2e/queryit.py" "$PROJECT_DIR/e2e/scientists_queries.yaml" "http://localhost:9099" &> "$BINARY_DIR/query_log.txt" || bail "Querying Server failed"
 popd
