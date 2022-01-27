@@ -361,8 +361,10 @@ string convertIndexWordToFloatString(const string& indexWord) {
 
     // Skip leading and trailing zeros of the mantissa
     size_t start = mantissa.find_first_not_of('0');
-    size_t end = mantissa.find_last_not_of('0') + 1;
-    os << string_view{mantissa}.substr(start, end - start);
+    if (start != std::string::npos) {
+      size_t end = mantissa.find_last_not_of('0') + 1;
+      os << string_view{mantissa}.substr(start, end - start);
+    }
   } else {
     // Skip leading zeros of the mantissa
     size_t i = 0;
