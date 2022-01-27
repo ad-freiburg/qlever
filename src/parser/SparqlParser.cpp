@@ -736,12 +736,12 @@ void SparqlParser::addLangFilter(const std::string& lhs, const std::string& rhs,
 }
 
 // _____________________________________________________________________________
-string SparqlParser::stripAndLowercaseKeywordLiteral(const string& lit) {
+string SparqlParser::stripAndLowercaseKeywordLiteral(std::string_view lit) {
   if (lit.size() > 2 && lit[0] == '"' && lit.back() == '"') {
-    auto stripped = std::string_view{lit}.substr(1, lit.size() - 2);
+    auto stripped = lit.substr(1, lit.size() - 2);
     return ad_utility::getLowercaseUtf8(stripped);
   }
-  return lit;
+  return std::string{lit};
 }
 
 // _____________________________________________________________________________
