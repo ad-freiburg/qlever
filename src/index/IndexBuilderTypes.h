@@ -139,6 +139,8 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
             map.assignNextId(ad_utility::convertToLanguageTaggedPredicate(
                 lt._triple[1], lt._langtag));
         auto& spoIds = *(res[0]);  // ids of original triple
+        // TODO replace the std::array by an explicit IdTriple class,
+        //  then the emplace calls don't need the explicit type.
         // extra triple <subject> @language@<predicate> <object>
         res[1].emplace(
             std::array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]});
