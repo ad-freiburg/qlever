@@ -42,15 +42,6 @@ struct VersionInfo {
   size_t _nOfBytes;
 };
 
-// Read element at given pointer and advance the pointer. This is a helper
-// function for `IndexMetaData::createFromByteBuffer`.
-template <class T>
-T readFromBuf(unsigned char** ptr) {
-  T res = *reinterpret_cast<T*>(*ptr);
-  *ptr += sizeof(T);
-  return res;
-}
-
 // Magic numbers to separate different types of meta data.
 const uint64_t MAGIC_NUMBER_MMAP_META_DATA =
     std::numeric_limits<uint64_t>::max();
