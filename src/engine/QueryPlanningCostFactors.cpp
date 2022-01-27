@@ -4,11 +4,13 @@
 
 #include "./QueryPlanningCostFactors.h"
 
+#include <absl/strings/str_split.h>
+
+#include <charconv>
 #include <fstream>
 
 #include "../util/Exception.h"
 #include "../util/Log.h"
-#include "../util/StringUtils.h"
 
 // _____________________________________________________________________________
 QueryPlanningCostFactors::QueryPlanningCostFactors() : _factors() {
@@ -24,14 +26,16 @@ QueryPlanningCostFactors::QueryPlanningCostFactors() : _factors() {
 
 // _____________________________________________________________________________
 void QueryPlanningCostFactors::readFromFile(const string& fileName) {
-  std::ifstream in(fileName.c_str());
+  std::ifstream in(fileName);
   string line;
   while (std::getline(in, line)) {
-    auto v = ad_utility::split(line, '\t');
+    std::vector<std::string_view> v = absl::StrSplit(line, '\t');
     AD_CHECK_EQ(v.size(), 2);
+    float factor;
+    std::from_chars(v[1].data(), v[1].data() + v[1].size(), factor);
     LOG(INFO) << "Setting cost factor: " << v[0] << " from " << _factors[v[0]]
-              << " to " << atof(v[1].c_str()) << '\n';
-    _factors[v[0]] = atof(v[1].c_str());
+              << " to " << factor << '\n';
+    _factors[v[0]] = factor;
   }
 }
 

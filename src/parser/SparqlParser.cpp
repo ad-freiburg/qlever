@@ -6,13 +6,6 @@
 
 #include <unordered_set>
 
-#include "../global/Constants.h"
-#include "../util/Conversions.h"
-#include "../util/Exception.h"
-#include "../util/HashSet.h"
-#include "../util/Log.h"
-#include "../util/StringUtils.h"
-#include "./ParseException.h"
 #include "./SparqlParserHelpers.h"
 #include "PropertyPathParser.h"
 

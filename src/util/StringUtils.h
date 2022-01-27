@@ -11,11 +11,9 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
-#include <vector>
 
 using std::string;
 using std::string_view;
-using std::vector;
 
 namespace ad_utility {
 //! Utility functions for string. Can possibly be changed to
@@ -37,9 +35,6 @@ inline std::pair<size_t, std::string> getUTF8Prefix(std::string_view s,
 
 //! Gets the last part of a string that is somehow split by the given separator.
 inline string getLastPartOfString(const string& text, const char separator);
-
-//! Splits a string at the separator, kinda like python.
-inline vector<string> split(const string& orig, const char sep);
 
 /**
  * @brief Return the last position where <literalEnd> was found in the <input>
@@ -148,22 +143,6 @@ string getLastPartOfString(const string& text, const char separator) {
   } else {
     return text;
   }
-}
-
-// _____________________________________________________________________________
-vector<string> split(const string& orig, const char sep) {
-  vector<string> result;
-  if (orig.size() > 0) {
-    size_t from = 0;
-    size_t sepIndex = orig.find(sep);
-    while (sepIndex != string::npos) {
-      result.emplace_back(orig.substr(from, sepIndex - from));
-      from = sepIndex + 1;
-      sepIndex = orig.find(sep, from);
-    }
-    result.emplace_back(orig.substr(from));
-  }
-  return result;
 }
 
 // _________________________________________________________________________
