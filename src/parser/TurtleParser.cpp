@@ -283,7 +283,7 @@ bool TurtleParser<T>::stringParse() {
   std::array<string, 4> quotes{R"(""")", R"(''')", "\"", "\'"};
   bool foundString = false;
   for (const auto& q : quotes) {
-    if (ad_utility::startsWith(view, q)) {
+    if (view.starts_with(q)) {
       foundString = true;
       startPos = q.size();
       endPos = view.find(q, startPos);
@@ -427,7 +427,7 @@ bool TurtleParser<T>::iriref() {
     // complete regexes
     _tok.skipWhitespaceAndComments();
     auto view = _tok.view();
-    if (ad_utility::startsWith(view, "<")) {
+    if (view.starts_with('<')) {
       auto endPos = view.find_first_of("> \n");
       if (endPos == string::npos || view[endPos] != '>') {
         raise("Iriref");

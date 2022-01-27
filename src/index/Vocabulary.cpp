@@ -143,7 +143,7 @@ bool Vocabulary<S, C>::isLiteral(const string& word) {
 template <class S, class C>
 bool Vocabulary<S, C>::isExternalizedLiteral(const string& word) {
   return word.size() > 1 &&
-         ad_utility::startsWith(word, EXTERNALIZED_LITERALS_PREFIX + '\"');
+         word.starts_with(EXTERNALIZED_LITERALS_PREFIX + '\"');
 }
 
 // _____________________________________________________________________________
@@ -169,7 +169,7 @@ bool Vocabulary<S, C>::shouldBeExternalized(const string& word) const {
 template <class S, class C>
 bool Vocabulary<S, C>::shouldEntityBeExternalized(const string& word) const {
   for (const auto& p : _externalizedPrefixes) {
-    if (ad_utility::startsWith(word, p)) {
+    if (word.starts_with(p)) {
       return true;
     }
   }
@@ -226,7 +226,7 @@ template <class S, class C>
 template <typename, typename>
 CompressedString Vocabulary<S, C>::compressPrefix(const string& word) const {
   for (const auto& p : _prefixVec) {
-    if (ad_utility::startsWith(word, p._fulltext)) {
+    if (word.starts_with(p._fulltext)) {
       auto res = CompressedString::fromString(
           p._prefix + std::string_view(word).substr(p._fulltext.size()));
       return res;

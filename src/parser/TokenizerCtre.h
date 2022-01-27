@@ -303,8 +303,8 @@ class TokenizerCtre {
   // ___________________________________________________________________________________
   void skipComments() {
     auto v = view();
-    if (ad_utility::startsWith(v, "#")) {
-      auto pos = v.find("\n");
+    if (v.starts_with('#')) {
+      auto pos = v.find('\n');
       if (pos == string::npos) {
         // TODO<joka921>: This should rather yield an error.
         LOG(INFO) << "Warning, unfinished comment found while parsing";

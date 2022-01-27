@@ -375,11 +375,10 @@ void ParsedQuery::expandPrefix(
 // _____________________________________________________________________________
 void ParsedQuery::expandPrefix(
     string& item, const ad_utility::HashMap<string, string>& prefixMap) {
-  if (!ad_utility::startsWith(item, "?") &&
-      !ad_utility::startsWith(item, "<")) {
+  if (!item.starts_with("?") && !item.starts_with("<")) {
     std::optional<string> langtag = std::nullopt;
-    if (ad_utility::startsWith(item, "@")) {
-      auto secondPos = item.find("@", 1);
+    if (item.starts_with("@")) {
+      auto secondPos = item.find('@', 1);
       if (secondPos == string::npos) {
         throw ParseException(
             "langtaged predicates must have form @lang@ActualPredicate. Second "
