@@ -99,19 +99,20 @@ QueryExecutionTree::generateResults(const SelectedVarsOrAsterisk & selectedVarsO
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices;
   if(selectedVarsOrAsterisk.isAsterisk()) {
-    /*
-    for(const auto& [variable, columnIndex] : getVariableColumns())
-      validIndices.emplace_back(pair<size_t, ResultTable::ResultType>(
-          columnIndex, resultTable->getResultType(columnIndex)));
-    */
-    for (const auto& var : selectedVarsOrAsterisk.retrieveOrder()) {
-      auto it = getVariableColumns().find(var);
-      if (it != getVariableColumns().end()) {
+    list<string> orderedVariables = selectedVarsOrAsterisk.retrieveOrder();
+    auto allVars = getVariableColumns();
+    for (const auto& var : orderedVariables) {
+      auto it = allVars.find(var);
+      if (it != allVars.end()) {
         validIndices.emplace_back(pair<size_t, ResultTable::ResultType>(
             it->second, resultTable->getResultType(it->second)));
+        allVars.erase(it);
       } else {
         validIndices.emplace_back(std::nullopt);
       }
+    }
+    for(const auto& var : allVars){
+      LOG(DEBUG) << "Variable " << var.first << " was not parsed!! \n";
     }
   }
   else {
@@ -159,12 +160,6 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     const ResultTable& resultTable) const {
   ColumnIndicesAndTypes exportColumns;
   if(selectedVarsOrAsterisk.isAsterisk()) {
-    /*
-    for(const auto & [variable, columnIndex]: getVariableColumns()) {
-      exportColumns.push_back(VariableAndColumnIndex{
-          variable, columnIndex, resultTable.getResultType(columnIndex)});
-    }
-    */
     for(auto var: selectedVarsOrAsterisk.retrieveOrder()){
       if (getVariableColumns().contains(var)) {
         auto columnIndex = getVariableColumns().at(var);
@@ -290,6 +285,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   };
 
   for (size_t rowIndex = offset; rowIndex < upperBound; ++rowIndex) {
+    // Due to be an 'nlohmann' object, object keys are alphabetically sorted!
     nlohmann::ordered_json binding;
     for (const auto& column : columns) {
       const auto& currentId = idTable(rowIndex, column->_columnIndex);
