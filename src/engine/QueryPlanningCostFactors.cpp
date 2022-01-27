@@ -25,14 +25,22 @@ QueryPlanningCostFactors::QueryPlanningCostFactors() : _factors() {
 }
 
 // _____________________________________________________________________________
+
+float toFloat(std::string_view view) {
+  float factor;
+  auto result = std::from_chars(view.data(), view.data() + view.size(), factor);
+  AD_CHECK(!static_cast<int>(result.ec));
+  return factor;
+}
+
+// _____________________________________________________________________________
 void QueryPlanningCostFactors::readFromFile(const string& fileName) {
   std::ifstream in(fileName);
   string line;
   while (std::getline(in, line)) {
     std::vector<std::string_view> v = absl::StrSplit(line, '\t');
     AD_CHECK_EQ(v.size(), 2);
-    float factor;
-    std::from_chars(v[1].data(), v[1].data() + v[1].size(), factor);
+    float factor = toFloat(v[1]);
     LOG(INFO) << "Setting cost factor: " << v[0] << " from " << _factors[v[0]]
               << " to " << factor << '\n';
     _factors[v[0]] = factor;
