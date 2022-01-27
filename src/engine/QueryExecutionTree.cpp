@@ -92,14 +92,16 @@ void QueryExecutionTree::setVariableColumns(
 // _____________________________________________________________________________
 template <QueryExecutionTree::ExportSubFormat format>
 ad_utility::stream_generator::stream_generator
-QueryExecutionTree::generateResults(const SelectedVarsOrAsterisk & selectedVarsOrAsterisk,
-                                    size_t limit, size_t offset) const {
+QueryExecutionTree::generateResults(
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    size_t offset) const {
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> resultTable = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices;
-  if(selectedVarsOrAsterisk.isAsterisk()) {
-    auto orderedVariablesFromQuery = selectedVarsOrAsterisk.orderedVariablesFromQueryBody();
+  if (selectedVarsOrAsterisk.isAsterisk()) {
+    auto orderedVariablesFromQuery =
+        selectedVarsOrAsterisk.orderedVariablesFromQueryBody();
     auto variablesFromExecutionTree = getVariableColumns();
     for (const auto& variableFromQuery : orderedVariablesFromQuery) {
       auto it = variablesFromExecutionTree.find(variableFromQuery);
@@ -111,16 +113,17 @@ QueryExecutionTree::generateResults(const SelectedVarsOrAsterisk & selectedVarsO
         validIndices.emplace_back(std::nullopt);
       }
     }
-    for(const auto& variableFromQuery : variablesFromExecutionTree){
-      LOG(WARN) << "The variable \"" << variableFromQuery.first <<
-          "\" was found in the execution tree, but not in the original query. "
-          "This is likely a bug\n";
+    for (const auto& variableFromQuery : variablesFromExecutionTree) {
+      LOG(WARN) << "The variable \"" << variableFromQuery.first
+                << "\" was found in the execution tree, but not in the "
+                   "original query. "
+                   "This is likely a bug\n";
     }
-  }
-  else {
+  } else {
     for (auto variableFromQuery : selectedVarsOrAsterisk.getSelectVariables()) {
       if (variableFromQuery.starts_with("TEXT(")) {
-        variableFromQuery = variableFromQuery.substr(5, variableFromQuery.rfind(')') - 5);
+        variableFromQuery =
+            variableFromQuery.substr(5, variableFromQuery.rfind(')') - 5);
       }
       auto it = getVariableColumns().find(variableFromQuery);
       if (it != getVariableColumns().end()) {
@@ -145,44 +148,50 @@ QueryExecutionTree::generateResults(const SelectedVarsOrAsterisk & selectedVarsO
 
 template ad_utility::stream_generator::stream_generator
 QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::CSV>(
-    const SelectedVarsOrAsterisk & selectedVarsOrAsterisk, size_t limit, size_t offset) const;
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    size_t offset) const;
 
 template ad_utility::stream_generator::stream_generator
 QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::TSV>(
-    const SelectedVarsOrAsterisk & selectedVarsOrAsterisk, size_t limit, size_t offset) const;
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    size_t offset) const;
 
 template ad_utility::stream_generator::stream_generator QueryExecutionTree::
     generateResults<QueryExecutionTree::ExportSubFormat::BINARY>(
-        const SelectedVarsOrAsterisk & selectedVarsOrAsterisk, size_t limit, size_t offset) const;
+        const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+        size_t offset) const;
 
 // ___________________________________________________________________________
 QueryExecutionTree::ColumnIndicesAndTypes
 QueryExecutionTree::selectedVariablesToColumnIndices(
-    const SelectedVarsOrAsterisk & selectedVarsOrAsterisk,
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk,
     const ResultTable& resultTable) const {
   ColumnIndicesAndTypes exportColumns;
-  if(selectedVarsOrAsterisk.isAsterisk()) {
+  if (selectedVarsOrAsterisk.isAsterisk()) {
     auto variablesFromExecutionTree = getVariableColumns();
-    for(auto variableFromQuery: selectedVarsOrAsterisk.orderedVariablesFromQueryBody()){
+    for (auto variableFromQuery :
+         selectedVarsOrAsterisk.orderedVariablesFromQueryBody()) {
       if (getVariableColumns().contains(variableFromQuery)) {
         auto columnIndex = getVariableColumns().at(variableFromQuery);
-        exportColumns.push_back(VariableAndColumnIndex{
-            variableFromQuery, columnIndex, resultTable.getResultType(columnIndex)});
+        exportColumns.push_back(
+            VariableAndColumnIndex{variableFromQuery, columnIndex,
+                                   resultTable.getResultType(columnIndex)});
         variablesFromExecutionTree.erase(variableFromQuery);
       } else {
         exportColumns.emplace_back(std::nullopt);
-        LOG(WARN) << "The variable \"" << variableFromQuery <<
-            "\" was found in the original query, but not in the execution tree. "
-            "This is likely a bug\n";
+        LOG(WARN) << "The variable \"" << variableFromQuery
+                  << "\" was found in the original query, but not in the "
+                     "execution tree. "
+                     "This is likely a bug\n";
       }
     }
-    for(const auto& variableFromQuery : variablesFromExecutionTree){
-      LOG(WARN) << "The variable \"" << variableFromQuery.first <<
-          "\" was found in the execution tree, but not in the original query. "
-          "This is likely a bug\n";
+    for (const auto& variableFromQuery : variablesFromExecutionTree) {
+      LOG(WARN) << "The variable \"" << variableFromQuery.first
+                << "\" was found in the execution tree, but not in the "
+                   "original query. "
+                   "This is likely a bug\n";
     }
-  }
-  else {
+  } else {
     for (auto var : selectedVarsOrAsterisk.getSelectVariables()) {
       if (var.starts_with("TEXT(")) {
         var = var.substr(5, var.rfind(')') - 5);
@@ -193,9 +202,10 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
             var, columnIndex, resultTable.getResultType(columnIndex)});
       } else {
         exportColumns.emplace_back(std::nullopt);
-        LOG(WARN) << "The variable \"" << var <<
-            "\" was found in the original query, but not in the execution tree. "
-            "This is likely a bug\n";
+        LOG(WARN) << "The variable \"" << var
+                  << "\" was found in the original query, but not in the "
+                     "execution tree. "
+                     "This is likely a bug\n";
       }
     }
   }
@@ -204,8 +214,8 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
 
 // _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeResultAsQLeverJson(
-    const SelectedVarsOrAsterisk & selectedVarsOrAsterisk, size_t limit, size_t offset,
-    shared_ptr<const ResultTable> resultTable) const {
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    size_t offset, shared_ptr<const ResultTable> resultTable) const {
   // They may trigger computation (but does not have to).
   if (!resultTable) {
     resultTable = getResult();
@@ -223,8 +233,8 @@ nlohmann::json QueryExecutionTree::writeResultAsQLeverJson(
 
 // _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
-    const SelectedVarsOrAsterisk & selectedVarsOrAsterisk, size_t limit, size_t offset,
-    shared_ptr<const ResultTable> resultTable) const {
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    size_t offset, shared_ptr<const ResultTable> resultTable) const {
   using nlohmann::json;
 
   // This might trigger the actual query processing.
@@ -246,14 +256,14 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
 
   json result;
 
-  if(selectedVarsOrAsterisk.isAsterisk()) {
+  if (selectedVarsOrAsterisk.isAsterisk()) {
     vector<string> vars_names;
-    for(auto const & variable: selectedVarsOrAsterisk.orderedVariablesFromQueryBody()) {
+    for (auto const& variable :
+         selectedVarsOrAsterisk.orderedVariablesFromQueryBody()) {
       vars_names.push_back(variable);
     }
     result["head"]["vars"] = vars_names;
-  }
-  else {
+  } else {
     result["head"]["vars"] = selectedVarsOrAsterisk.getSelectVariables();
   }
 
@@ -300,7 +310,8 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   };
 
   for (size_t rowIndex = offset; rowIndex < upperBound; ++rowIndex) {
-    // TODO: ordered_json` entries are ordered alphabetically, but insertion order would be preferable.
+    // TODO: ordered_json` entries are ordered alphabetically, but insertion
+    // order would be preferable.
     nlohmann::ordered_json binding;
     for (const auto& column : columns) {
       const auto& currentId = idTable(rowIndex, column->_columnIndex);

@@ -39,17 +39,17 @@ string ParsedQuery::asString() const {
     const auto& selectClause = this->selectClause();
     // SELECT
     os << "\nSELECT: {\n\t";
-    if(usesAsterisk) {
+    if (usesAsterisk) {
       auto list = selectClause._varsOrAsterisk.orderedVariablesFromQueryBody();
-      for (auto it = list.begin(); it != list.end(); ){
+      for (auto it = list.begin(); it != list.end();) {
         os << it->c_str();
         if (++it != list.end()) {
           os << ", ";
         }
       }
-    }
-    else {
-      const auto& SelectedVariables = selectClause._varsOrAsterisk.getSelectVariables();
+    } else {
+      const auto& SelectedVariables =
+          selectClause._varsOrAsterisk.getSelectVariables();
       for (size_t i = 0; i < SelectedVariables.size(); ++i) {
         os << SelectedVariables[i];
         if (i + 1 < SelectedVariables.size()) {
@@ -61,7 +61,7 @@ string ParsedQuery::asString() const {
 
     // ALIASES
     os << "\nALIASES: {\n\t";
-    if(!usesAsterisk) {
+    if (!usesAsterisk) {
       for (size_t i = 0; i < selectClause._aliases.size(); ++i) {
         const Alias& alias = selectClause._aliases[i];
         os << alias._expression.getDescriptor();

@@ -11,7 +11,7 @@
 struct SparqlToken {
   enum class Type {
     IRI, /* Internationalized Resource Identifiers */
-    WS, /* White Space */
+    WS,  /* White Space */
     KEYWORD,
     GROUP_BY,
     ORDER_BY,

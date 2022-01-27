@@ -169,16 +169,17 @@ Awaitable<json> Server::composeResponseQleverJson(
     j["query"] = query._originalString;
     j["status"] = "OK";
     j["warnings"] = qet.collectWarnings();
-    if(query.hasSelectClause()){
-      if(query.selectClause()._varsOrAsterisk.isAsterisk()) {
-        j["selected"] = query.selectClause()._varsOrAsterisk.orderedVariablesFromQueryBody();
+    if (query.hasSelectClause()) {
+      if (query.selectClause()._varsOrAsterisk.isAsterisk()) {
+        j["selected"] = query.selectClause()
+                            ._varsOrAsterisk.orderedVariablesFromQueryBody();
+      } else {
+        j["selected"] =
+            query.selectClause()._varsOrAsterisk.getSelectVariables();
       }
-      else {
-        j["selected"] = query.selectClause()._varsOrAsterisk.getSelectVariables();
-      }
-    }
-    else {
-      j["selected"] = std::vector<std::string>{"?subject", "?predicate", "?object"};
+    } else {
+      j["selected"] =
+          std::vector<std::string>{"?subject", "?predicate", "?object"};
     }
 
     j["runtimeInformation"] = RuntimeInformation::ordered_json(
@@ -191,8 +192,8 @@ Awaitable<json> Server::composeResponseQleverJson(
       requestTimer.cont();
       j["res"] = query.hasSelectClause()
                      ? qet.writeResultAsQLeverJson(
-                           query.selectClause()._varsOrAsterisk, limit,
-                           offset, std::move(resultTable))
+                           query.selectClause()._varsOrAsterisk, limit, offset,
+                           std::move(resultTable))
                      : qet.writeRdfGraphJson(query.constructClause(), limit,
                                              offset, std::move(resultTable));
       requestTimer.stop();
@@ -227,8 +228,8 @@ Awaitable<json> Server::composeResponseSparqlJson(
         std::min(query._limit.value_or(MAX_NOF_ROWS_IN_RESULT), maxSend);
     size_t offset = query._offset.value_or(0);
     requestTimer.cont();
-    j = qet.writeResultAsSparqlJson(query.selectClause()._varsOrAsterisk,
-                                    limit, offset, std::move(resultTable));
+    j = qet.writeResultAsSparqlJson(query.selectClause()._varsOrAsterisk, limit,
+                                    offset, std::move(resultTable));
 
     requestTimer.stop();
     return j;

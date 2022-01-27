@@ -499,11 +499,12 @@ bool QueryPlanner::checkUsePatternTrick(
 
       // Check that all selected variables are outputs of
       // CountAvailablePredicates
-      if(selectClause._varsOrAsterisk.isAsterisk()) {
+      if (selectClause._varsOrAsterisk.isAsterisk()) {
         return false;
       }
 
-      const auto& selectedVariables = selectClause._varsOrAsterisk.getSelectVariables();
+      const auto& selectedVariables =
+          selectClause._varsOrAsterisk.getSelectVariables();
       for (const std::string& s : selectedVariables) {
         if (s != t._o && s != count_var_name) {
           usePatternTrick = false;
@@ -573,8 +574,9 @@ bool QueryPlanner::checkUsePatternTrick(
               return;
             }
             const auto& selectClause = arg._subquery.selectClause();
-            if(selectClause._varsOrAsterisk.isVariables()) {
-              for (const auto& v : selectClause._varsOrAsterisk.getSelectVariables()) {
+            if (selectClause._varsOrAsterisk.isVariables()) {
+              for (const auto& v :
+                   selectClause._varsOrAsterisk.getSelectVariables()) {
                 if (v == t._o) {
                   usePatternTrick = false;
                   break;
@@ -627,8 +629,9 @@ bool QueryPlanner::checkUsePatternTrick(
                 return;
               }
               const auto& selectClause = arg._subquery.selectClause();
-              if(selectClause._varsOrAsterisk.isVariables()) {
-                for (const auto& v : selectClause._varsOrAsterisk.getSelectVariables()) {
+              if (selectClause._varsOrAsterisk.isVariables()) {
+                for (const auto& v :
+                     selectClause._varsOrAsterisk.getSelectVariables()) {
                   if (v == t._o) {
                     usePatternTrick = false;
                     break;
@@ -837,8 +840,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
     vector<size_t> keepIndices;
     ad_utility::HashSet<size_t> indDone;
     const auto& colMap = parent._qet->getVariableColumns();
-    if(selectClause._varsOrAsterisk.isVariables()){
-      for (const auto& var : selectClause._varsOrAsterisk.getSelectVariables()) {
+    if (selectClause._varsOrAsterisk.isVariables()) {
+      for (const auto& var :
+           selectClause._varsOrAsterisk.getSelectVariables()) {
         const auto it = colMap.find(var);
         if (it != colMap.end()) {
           auto ind = it->second;
@@ -846,8 +850,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
             keepIndices.push_back(ind);
             indDone.insert(ind);
           }
-        } else if (var.starts_with("SCORE(") ||
-                   var.starts_with("TEXT(")) {
+        } else if (var.starts_with("SCORE(") || var.starts_with("TEXT(")) {
           auto varInd = var.find('?');
           auto cVar = var.substr(varInd, var.rfind(')') - varInd);
           const auto it = colMap.find(cVar);

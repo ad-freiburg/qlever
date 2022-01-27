@@ -305,7 +305,7 @@ class ParsedQuery {
     }
   };
 
-  typedef std::variant<vector<string>,char> SelectVarsOrAsterisk;
+  typedef std::variant<vector<string>, char> SelectVarsOrAsterisk;
   // Represents either "all Variables" (Select *) or a list of explicitly
   // selected Variables (Select ?a ?b).
   struct SelectedVarsOrAsterisk {
@@ -314,7 +314,6 @@ class ParsedQuery {
     std::vector<string> _variablesFromQueryBody;
 
    public:
-
     [[nodiscard]] bool isAsterisk() const {
       return std::holds_alternative<char>(_varsOrAsterisk);
     }
@@ -325,24 +324,22 @@ class ParsedQuery {
 
     // Sets the Selector to 'All' (*) only if the Selector is still undefined
     // Returned value maybe unused due to Syntax Check
-    void setsAsterisk() {
-      _varsOrAsterisk = '*';
-    }
+    void setsAsterisk() { _varsOrAsterisk = '*'; }
 
     [[nodiscard]] const auto& getSelectVariables() const {
       return std::get<std::vector<string>>(_varsOrAsterisk);
     }
 
-    [[nodiscard]] auto& getSelectVariables()  {
+    [[nodiscard]] auto& getSelectVariables() {
       return std::get<std::vector<string>>(_varsOrAsterisk);
     }
 
     // Add a variable, that was found in the query body. The added variables
     // will only be used if `isAsterisk` is true.
-    void addVariableFromQueryBody (const string& variable) {
-      if(!(std::find(_variablesFromQueryBody.begin(),
+    void addVariableFromQueryBody(const string& variable) {
+      if (!(std::find(_variablesFromQueryBody.begin(),
                       _variablesFromQueryBody.end(),
-                    variable) != _variablesFromQueryBody.end())) {
+                      variable) != _variablesFromQueryBody.end())) {
         _variablesFromQueryBody.emplace_back(variable);
       }
     }
@@ -365,7 +362,7 @@ class ParsedQuery {
     bool _distinct = false;
   };
 
-  SelectClause _selectedVarsOrAsterisk {SelectClause{}};
+  SelectClause _selectedVarsOrAsterisk{SelectClause{}};
 
   using ConstructClause = ad_utility::sparql_types::Triples;
 
@@ -384,7 +381,7 @@ class ParsedQuery {
 
   // explicit default initialisation because the constructor
   // of SelectClause is private
-  std::variant<SelectClause,ConstructClause> _clause{_selectedVarsOrAsterisk};
+  std::variant<SelectClause, ConstructClause> _clause{_selectedVarsOrAsterisk};
 
   [[nodiscard]] bool hasSelectClause() const {
     return std::holds_alternative<SelectClause>(_clause);

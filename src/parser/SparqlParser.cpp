@@ -17,7 +17,6 @@
 #include "./SparqlParserHelpers.h"
 #include "PropertyPathParser.h"
 
-
 using namespace std::literals::string_literals;
 
 SparqlParser::SparqlParser(const string& query) : _lexer(query), _query(query) {
@@ -66,10 +65,12 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
   parseSolutionModifiers(query);
 
   if (!query->_groupByVariables.empty()) {
-    if (query->hasSelectClause() && query->selectClause()._varsOrAsterisk.isVariables()) {
+    if (query->hasSelectClause() &&
+        query->selectClause()._varsOrAsterisk.isVariables()) {
       const auto& selectClause = query->selectClause();
       // Check if all selected variables are either aggregated or
-      for (const string& var : selectClause._varsOrAsterisk.getSelectVariables()) {
+      for (const string& var :
+           selectClause._varsOrAsterisk.getSelectVariables()) {
         if (var[0] == '?') {
           bool is_alias = false;
           for (const ParsedQuery::Alias& a : selectClause._aliases) {
@@ -121,8 +122,9 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
   const auto& selectClause = query->selectClause();
 
   ad_utility::HashMap<std::string, size_t> variable_counts;
-  if(selectClause._varsOrAsterisk.isVariables()) {
-    for (const std::string& s : selectClause._varsOrAsterisk.getSelectVariables()) {
+  if (selectClause._varsOrAsterisk.isVariables()) {
+    for (const std::string& s :
+         selectClause._varsOrAsterisk.getSelectVariables()) {
       variable_counts[s]++;
     }
   }
@@ -172,9 +174,11 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
   }
   while (!_lexer.accept("where")) {
     if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-        // Exception avoided due to previous Syntax Check of Selector '*'
-        selectClause._varsOrAsterisk.getSelectVariables().push_back(_lexer.current().raw);
-        selectClause._varsOrAsterisk.addVariableFromQueryBody(_lexer.current().raw);
+      // Exception avoided due to previous Syntax Check of Selector '*'
+      selectClause._varsOrAsterisk.getSelectVariables().push_back(
+          _lexer.current().raw);
+      selectClause._varsOrAsterisk.addVariableFromQueryBody(
+          _lexer.current().raw);
     } else if (_lexer.accept("text")) {
       _lexer.expect("(");
       std::ostringstream s;
@@ -197,7 +201,8 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       // expect an alias
       ParsedQuery::Alias a = parseAliasWithAntlr();
       selectClause._aliases.push_back(a);
-      selectClause._varsOrAsterisk.getSelectVariables().emplace_back(a._outVarName);
+      selectClause._varsOrAsterisk.getSelectVariables().emplace_back(
+          a._outVarName);
       selectClause._varsOrAsterisk.addVariableFromQueryBody(a._outVarName);
       _lexer.expect(")");
     } else {
@@ -224,13 +229,16 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
     s << _lexer.current().raw;
     _lexer.expect(")");
     s << ")";
-  } else if (query->hasSelectClause() && query->selectClause()._varsOrAsterisk.isVariables() && _lexer.accept("(")) {
+  } else if (query->hasSelectClause() &&
+             query->selectClause()._varsOrAsterisk.isVariables() &&
+             _lexer.accept("(")) {
     // TODO This assumes that aliases can stand in the ORDER BY
     // This is not true, only expression may stand there
     ParsedQuery::Alias a = parseAliasWithAntlr();
     auto& selectClause = query->selectClause();
 
-    for (const auto& selectedVariable : selectClause._varsOrAsterisk.getSelectVariables()) {
+    for (const auto& selectedVariable :
+         selectClause._varsOrAsterisk.getSelectVariables()) {
       if (selectedVariable == a._outVarName) {
         throw ParseException("A variable with name " + selectedVariable +
                              " is already used, but the ORDER BY with alias " +
@@ -287,7 +295,8 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       GraphPatternOperation::Bind bind{parseExpressionWithAntlr()};
       _lexer.expect("as");
       _lexer.expect(SparqlToken::Type::VARIABLE);
-      query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(_lexer.current().raw);
+      query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
+          _lexer.current().raw);
       bind._target = _lexer.current().raw;
       _lexer.expect(")");
       currentPattern->_children.emplace_back(std::move(bind));
@@ -346,7 +355,8 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         // values with several variables
         while (_lexer.accept(SparqlToken::Type::VARIABLE)) {
           values._variables.push_back(_lexer.current().raw);
-          query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(_lexer.current().raw);
+          query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
+              _lexer.current().raw);
         }
         _lexer.expect(")");
         _lexer.expect("{");
@@ -364,7 +374,8 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       } else if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
         // values with a single variable
         values._variables.push_back(_lexer.current().raw);
-        query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(_lexer.current().raw);
+        query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
+            _lexer.current().raw);
         _lexer.expect("{");
         while (_lexer.accept(SparqlToken::Type::IRI) ||
                _lexer.accept(SparqlToken::Type::RDFLITERAL)) {
@@ -385,7 +396,8 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       if (lastSubject.empty()) {
         if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
           subject = _lexer.current().raw;
-          query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(_lexer.current().raw);
+          query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
+              _lexer.current().raw);
         } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
           subject = parseLiteral(_lexer.current().raw, true);
         } else {
@@ -401,7 +413,8 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       if (lastPredicate.empty()) {
         if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
           predicate = _lexer.current().raw;
-          query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(_lexer.current().raw);
+          query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
+              _lexer.current().raw);
         } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
           predicate = parseLiteral(_lexer.current().raw, true);
         } else {
@@ -419,7 +432,8 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       std::string object;
       if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
         object = _lexer.current().raw;
-        query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(_lexer.current().raw);
+        query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
+            _lexer.current().raw);
       } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
         object = parseLiteral(_lexer.current().raw, true);
       } else {

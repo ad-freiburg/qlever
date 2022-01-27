@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
+
 #include <variant>
 
 #include "../src/global/Constants.h"
@@ -519,7 +520,8 @@ TEST(ParserTest, testSolutionModifiers) {
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
     ASSERT_EQ(3u, selectClause._varsOrAsterisk.getSelectVariables().size());
-    ASSERT_EQ("SCORE(?x)", selectClause._varsOrAsterisk.getSelectVariables()[1]);
+    ASSERT_EQ("SCORE(?x)",
+              selectClause._varsOrAsterisk.getSelectVariables()[1]);
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(10u, pq._limit.value_or(0));
     ASSERT_EQ(15u, pq._offset.value_or(0));
