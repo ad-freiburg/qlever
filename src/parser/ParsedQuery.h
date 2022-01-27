@@ -308,24 +308,14 @@ class ParsedQuery {
   };
 
   typedef std::variant<vector<string>,char> SelectVarsOrAsterisk;
-  // Representation of the 'Selector: All (*)' xor 'Selector: (VarName)+'
-  // template <typename T>
+  // Represents either "all Variables" (Select *) or a list of explicitly
+  // selected Variables (Select ?a ?b).
   struct SelectedVarsOrAsterisk {
    private:
     SelectVarsOrAsterisk _varsOrAsterisk;
-    std::list<string> _variablesOrder;
-
-    void setAsterisk() {
-      _varsOrAsterisk = '*';
-    }
+    std::vector<string> _variablesOrder;
 
    public:
-    /*
-    // Clone of the private variable typed 'variant' (vector)
-    [[nodiscard]] SelectVarsOrAsterisk get() const {
-        return SelectVarsOrAsterisk{_varsOrAsterisk};
-    }
-    */
 
     [[nodiscard]] bool isAsterisk() const {
       return std::holds_alternative<char>(_varsOrAsterisk);
@@ -337,15 +327,8 @@ class ParsedQuery {
 
     // Sets the Selector to 'All' (*) only if the Selector is still undefined
     // Returned value maybe unused due to Syntax Check
-    [[maybe_unused]] bool setsAsterisk() {
-      /*
-       * Needs (std::monostate_t) but unnecessary due to Syntax Check
-       */
-      // if (!isAsterisk() && !isVariables()) {
-        setAsterisk();
-        return true;
-      // }
-      // else return false;
+    void setsAsterisk() {
+      _varsOrAsterisk = '*';
     }
 
     [[nodiscard]] char getAsterisk() const {
@@ -360,7 +343,9 @@ class ParsedQuery {
       return std::get<std::vector<string>>(_varsOrAsterisk);
     }
 
-    void pushVariablesOrder(const string& variable) {
+    // Add a variable, that was found in the query body. The added variables
+    // will only be used if `isAsterisk` is true.
+    void addVariableFromQueryBody (const string& variable) {
       if(!(std::find(_variablesOrder.begin(),
                     _variablesOrder.end(),
                     variable) != _variablesOrder.end())) {
@@ -368,12 +353,7 @@ class ParsedQuery {
       }
     }
 
-
-    [[nodiscard]] std::list<string>& retrieveOrder() {
-      return _variablesOrder;
-    }
-
-    [[nodiscard]] std::list<string> retrieveOrder() const {
+    [[nodiscard]] auto retrieveOrder() const {
       return _variablesOrder;
     }
   };
@@ -381,7 +361,7 @@ class ParsedQuery {
   // Represents the Select Clause with all the possible outcomes
   struct SelectClause {
     // `_aliases` will be empty if Selector '*' is present.
-    // Essentially, there is a `SELECT *` clause in the query.
+    // This means, that there is a `SELECT *` clause in the query.
     std::vector<Alias> _aliases;
     SelectedVarsOrAsterisk _varsOrAsterisk;
     bool _reduced = false;

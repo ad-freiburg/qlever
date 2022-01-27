@@ -109,7 +109,7 @@ class QueryExecutionTree {
   // Returns a vector where the i-th element contains the column index and
   // `ResultType` of the i-th `selectVariable` in the `resultTable`
   ColumnIndicesAndTypes selectedVariablesToColumnIndices(
-      SelectedVarsOrAsterisk selectedVarsOrAsterisk,
+      const SelectedVarsOrAsterisk & selectedVarsOrAsterisk,
       const ResultTable& resultTable) const;
 
   template <ExportSubFormat format>

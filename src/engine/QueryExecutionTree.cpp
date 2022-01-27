@@ -99,28 +99,30 @@ QueryExecutionTree::generateResults(const SelectedVarsOrAsterisk & selectedVarsO
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices;
   if(selectedVarsOrAsterisk.isAsterisk()) {
-    list<string> orderedVariables = selectedVarsOrAsterisk.retrieveOrder();
-    auto allVars = getVariableColumns();
-    for (const auto& var : orderedVariables) {
-      auto it = allVars.find(var);
-      if (it != allVars.end()) {
+    auto orderedVariablesFromQuery = selectedVarsOrAsterisk.retrieveOrder();
+    auto variablesFromExecutionTree = getVariableColumns();
+    for (const auto& variableFromQuery : orderedVariablesFromQuery) {
+      auto it = variablesFromExecutionTree.find(variableFromQuery);
+      if (it != variablesFromExecutionTree.end()) {
         validIndices.emplace_back(pair<size_t, ResultTable::ResultType>(
             it->second, resultTable->getResultType(it->second)));
-        allVars.erase(it);
+        variablesFromExecutionTree.erase(it);
       } else {
         validIndices.emplace_back(std::nullopt);
       }
     }
-    for(const auto& var : allVars){
-      LOG(DEBUG) << "Variable " << var.first << " was not parsed!! \n";
+    for(const auto& variableFromQuery : variablesFromExecutionTree){
+      LOG(WARN) << "The variable \"" << variableFromQuery.first <<
+          "\" was found in the execution tree, but not in the original query. "
+          "This is likely a bug\n";
     }
   }
   else {
-    for (auto var : selectedVarsOrAsterisk.getSelectVariables()) {
-      if (ad_utility::startsWith(var, "TEXT(")) {
-        var = var.substr(5, var.rfind(')') - 5);
+    for (auto variableFromQuery : selectedVarsOrAsterisk.getSelectVariables()) {
+      if (ad_utility::startsWith(variableFromQuery, "TEXT(")) {
+        variableFromQuery = variableFromQuery.substr(5, variableFromQuery.rfind(')') - 5);
       }
-      auto it = getVariableColumns().find(var);
+      auto it = getVariableColumns().find(variableFromQuery);
       if (it != getVariableColumns().end()) {
         validIndices.emplace_back(pair<size_t, ResultTable::ResultType>(
             it->second, resultTable->getResultType(it->second)));
@@ -156,18 +158,25 @@ template ad_utility::stream_generator::stream_generator QueryExecutionTree::
 // ___________________________________________________________________________
 QueryExecutionTree::ColumnIndicesAndTypes
 QueryExecutionTree::selectedVariablesToColumnIndices(
-    SelectedVarsOrAsterisk selectedVarsOrAsterisk,
+    const SelectedVarsOrAsterisk & selectedVarsOrAsterisk,
     const ResultTable& resultTable) const {
   ColumnIndicesAndTypes exportColumns;
   if(selectedVarsOrAsterisk.isAsterisk()) {
-    for(auto var: selectedVarsOrAsterisk.retrieveOrder()){
-      if (getVariableColumns().contains(var)) {
-        auto columnIndex = getVariableColumns().at(var);
+    auto variablesFromExecutionTree = getVariableColumns();
+    for(auto variableFromQuery: selectedVarsOrAsterisk.retrieveOrder()){
+      if (getVariableColumns().contains(variableFromQuery)) {
+        auto columnIndex = getVariableColumns().at(variableFromQuery);
         exportColumns.push_back(VariableAndColumnIndex{
-            var, columnIndex, resultTable.getResultType(columnIndex)});
+            variableFromQuery, columnIndex, resultTable.getResultType(columnIndex)});
+        variablesFromExecutionTree.erase(variableFromQuery);
       } else {
         exportColumns.emplace_back(std::nullopt);
       }
+    }
+    for(const auto& variableFromQuery : variablesFromExecutionTree){
+      LOG(WARN) << "The variable \"" << variableFromQuery.first <<
+          "\" was found in the execution tree, but not in the original query. "
+          "This is likely a bug\n";
     }
   }
   else {
@@ -285,7 +294,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   };
 
   for (size_t rowIndex = offset; rowIndex < upperBound; ++rowIndex) {
-    // Due to be an 'nlohmann' object, object keys are alphabetically sorted!
+    // TODO: ordered_json` entries are ordered alphabetically, but insertion order would be preferable.
     nlohmann::ordered_json binding;
     for (const auto& column : columns) {
       const auto& currentId = idTable(rowIndex, column->_columnIndex);

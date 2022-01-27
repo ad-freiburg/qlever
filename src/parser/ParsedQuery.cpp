@@ -41,7 +41,7 @@ string ParsedQuery::asString() const {
     os << "\nSELECT: {\n\t";
     if(usesAsterisk) {
       auto list = selectClause._varsOrAsterisk.retrieveOrder();
-      std::list<string>::iterator it;
+      std::vector<string>::iterator it;
       for (it = list.begin(); it != list.end(); ){
         os << it->c_str();
         if (++it != list.end()) {
