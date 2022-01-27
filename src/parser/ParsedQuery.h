@@ -311,7 +311,7 @@ class ParsedQuery {
   struct SelectedVarsOrAsterisk {
    private:
     SelectVarsOrAsterisk _varsOrAsterisk;
-    std::vector<string> _variablesOrder;
+    std::vector<string> _variablesFromQueryBody;
 
    public:
 
@@ -329,10 +329,6 @@ class ParsedQuery {
       _varsOrAsterisk = '*';
     }
 
-    [[nodiscard]] char getAsterisk() const {
-      return std::get<char>(_varsOrAsterisk);;
-    }
-
     [[nodiscard]] const auto& getSelectVariables() const {
       return std::get<std::vector<string>>(_varsOrAsterisk);
     }
@@ -344,15 +340,18 @@ class ParsedQuery {
     // Add a variable, that was found in the query body. The added variables
     // will only be used if `isAsterisk` is true.
     void addVariableFromQueryBody (const string& variable) {
-      if(!(std::find(_variablesOrder.begin(),
-                    _variablesOrder.end(),
-                    variable) != _variablesOrder.end())) {
-        _variablesOrder.emplace_back(variable);
+      if(!(std::find(_variablesFromQueryBody.begin(),
+                      _variablesFromQueryBody.end(),
+                    variable) != _variablesFromQueryBody.end())) {
+        _variablesFromQueryBody.emplace_back(variable);
       }
     }
 
-    [[nodiscard]] auto retrieveOrder() const {
-      return _variablesOrder;
+    // Gets the variables which addVariableFromQueryBody` was previously called.
+    // The result contains no duplicates and is ordered by the first appearance
+    // in the query body.
+    [[nodiscard]] auto orderedVariablesFromQueryBody() const {
+      return _variablesFromQueryBody;
     }
   };
 

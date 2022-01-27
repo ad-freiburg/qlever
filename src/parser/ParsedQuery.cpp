@@ -40,9 +40,8 @@ string ParsedQuery::asString() const {
     // SELECT
     os << "\nSELECT: {\n\t";
     if(usesAsterisk) {
-      auto list = selectClause._varsOrAsterisk.retrieveOrder();
-      std::vector<string>::iterator it;
-      for (it = list.begin(); it != list.end(); ){
+      auto list = selectClause._varsOrAsterisk.orderedVariablesFromQueryBody();
+      for (auto it = list.begin(); it != list.end(); ){
         os << it->c_str();
         if (++it != list.end()) {
           os << ", ";

@@ -171,7 +171,7 @@ Awaitable<json> Server::composeResponseQleverJson(
     j["warnings"] = qet.collectWarnings();
     if(query.hasSelectClause()){
       if(query.selectClause()._varsOrAsterisk.isAsterisk()) {
-        j["selected"] = query.selectClause()._varsOrAsterisk.retrieveOrder();
+        j["selected"] = query.selectClause()._varsOrAsterisk.orderedVariablesFromQueryBody();
       }
       else {
         j["selected"] = query.selectClause()._varsOrAsterisk.getSelectVariables();
