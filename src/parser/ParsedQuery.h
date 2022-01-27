@@ -300,17 +300,69 @@ class ParsedQuery {
   struct Alias {
     sparqlExpression::SparqlExpressionPimpl _expression;
     string _outVarName;
-    std::string getDescriptor() const {
+    [[nodiscard]] std::string getDescriptor() const {
       return "(" + _expression.getDescriptor() + " as " + _outVarName + ")";
     }
   };
 
+  typedef std::variant<vector<string>, char> SelectVarsOrAsterisk;
+  // Represents either "all Variables" (Select *) or a list of explicitly
+  // selected Variables (Select ?a ?b).
+  struct SelectedVarsOrAsterisk {
+   private:
+    SelectVarsOrAsterisk _varsOrAsterisk;
+    std::vector<string> _variablesFromQueryBody;
+
+   public:
+    [[nodiscard]] bool isAsterisk() const {
+      return std::holds_alternative<char>(_varsOrAsterisk);
+    }
+
+    [[nodiscard]] bool isVariables() const {
+      return std::holds_alternative<std::vector<string>>(_varsOrAsterisk);
+    }
+
+    // Sets the Selector to 'All' (*) only if the Selector is still undefined
+    // Returned value maybe unused due to Syntax Check
+    void setsAsterisk() { _varsOrAsterisk = '*'; }
+
+    [[nodiscard]] const auto& getSelectVariables() const {
+      return std::get<std::vector<string>>(_varsOrAsterisk);
+    }
+
+    [[nodiscard]] auto& getSelectVariables() {
+      return std::get<std::vector<string>>(_varsOrAsterisk);
+    }
+
+    // Add a variable, that was found in the query body. The added variables
+    // will only be used if `isAsterisk` is true.
+    void addVariableFromQueryBody(const string& variable) {
+      if (!(std::find(_variablesFromQueryBody.begin(),
+                      _variablesFromQueryBody.end(),
+                      variable) != _variablesFromQueryBody.end())) {
+        _variablesFromQueryBody.emplace_back(variable);
+      }
+    }
+
+    // Gets the variables which addVariableFromQueryBody` was previously called.
+    // The result contains no duplicates and is ordered by the first appearance
+    // in the query body.
+    [[nodiscard]] auto orderedVariablesFromQueryBody() const {
+      return _variablesFromQueryBody;
+    }
+  };
+
+  // Represents the Select Clause with all the possible outcomes
   struct SelectClause {
-    vector<string> _selectedVariables;
+    // `_aliases` will be empty if Selector '*' is present.
+    // This means, that there is a `SELECT *` clause in the query.
     std::vector<Alias> _aliases;
+    SelectedVarsOrAsterisk _varsOrAsterisk;
     bool _reduced = false;
     bool _distinct = false;
   };
+
+  SelectClause _selectedVarsOrAsterisk{SelectClause{}};
 
   using ConstructClause = ad_utility::sparql_types::Triples;
 
@@ -326,9 +378,10 @@ class ParsedQuery {
   string _textLimit;
   std::optional<size_t> _offset = std::nullopt;
   string _originalString;
+
   // explicit default initialisation because the constructor
   // of SelectClause is private
-  std::variant<SelectClause, ConstructClause> _clause{SelectClause{}};
+  std::variant<SelectClause, ConstructClause> _clause{_selectedVarsOrAsterisk};
 
   [[nodiscard]] bool hasSelectClause() const {
     return std::holds_alternative<SelectClause>(_clause);

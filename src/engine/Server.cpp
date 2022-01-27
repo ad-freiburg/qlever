@@ -25,15 +25,17 @@ template <typename T>
 using Awaitable = Server::Awaitable<T>;
 
 // __________________________________________________________________________
-void Server::initialize(const string& ontologyBaseName, bool useText,
-                        bool usePatterns, bool usePatternTrick) {
+void Server::initialize(const string& indexBaseName, bool useText,
+                        bool usePatterns, bool usePatternTrick,
+                        bool loadAllPermutations) {
   LOG(INFO) << "Initializing server ..." << std::endl;
 
   _enablePatternTrick = usePatternTrick;
   _index.setUsePatterns(usePatterns);
+  _index.setLoadAllPermutations(loadAllPermutations);
 
   // Init the index.
-  _index.createFromOnDiskIndex(ontologyBaseName);
+  _index.createFromOnDiskIndex(indexBaseName);
   if (useText) {
     _index.addTextFromOnDiskIndex();
   }
@@ -48,8 +50,8 @@ void Server::initialize(const string& ontologyBaseName, bool useText,
 }
 
 // _____________________________________________________________________________
-void Server::run(const string& ontologyBaseName, bool useText, bool usePatterns,
-                 bool usePatternTrick) {
+void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
+                 bool usePatternTrick, bool loadAllPermutations) {
   // First set up the HTTP server, so that it binds to the socket, and
   // the "socket already in use" error appears quickly.
   auto httpSessionHandler =
@@ -60,7 +62,8 @@ void Server::run(const string& ontologyBaseName, bool useText, bool usePatterns,
                                _numThreads, std::move(httpSessionHandler)};
 
   // Initialize the index
-  initialize(ontologyBaseName, useText, usePatterns, usePatternTrick);
+  initialize(indexBaseName, useText, usePatterns, usePatternTrick,
+             loadAllPermutations);
 
   // Start listening for connections on the server.
   httpServer.run();
@@ -169,10 +172,18 @@ Awaitable<json> Server::composeResponseQleverJson(
     j["query"] = query._originalString;
     j["status"] = "OK";
     j["warnings"] = qet.collectWarnings();
-    j["selected"] =
-        query.hasSelectClause()
-            ? query.selectClause()._selectedVariables
-            : std::vector<std::string>{"?subject", "?predicate", "?object"};
+    if (query.hasSelectClause()) {
+      if (query.selectClause()._varsOrAsterisk.isAsterisk()) {
+        j["selected"] = query.selectClause()
+                            ._varsOrAsterisk.orderedVariablesFromQueryBody();
+      } else {
+        j["selected"] =
+            query.selectClause()._varsOrAsterisk.getSelectVariables();
+      }
+    } else {
+      j["selected"] =
+          std::vector<std::string>{"?subject", "?predicate", "?object"};
+    }
 
     j["runtimeInformation"] = RuntimeInformation::ordered_json(
         qet.getRootOperation()->getRuntimeInfo());
@@ -184,8 +195,8 @@ Awaitable<json> Server::composeResponseQleverJson(
       requestTimer.cont();
       j["res"] = query.hasSelectClause()
                      ? qet.writeResultAsQLeverJson(
-                           query.selectClause()._selectedVariables, limit,
-                           offset, std::move(resultTable))
+                           query.selectClause()._varsOrAsterisk, limit, offset,
+                           std::move(resultTable))
                      : qet.writeRdfGraphJson(query.constructClause(), limit,
                                              offset, std::move(resultTable));
       requestTimer.stop();
@@ -220,8 +231,9 @@ Awaitable<json> Server::composeResponseSparqlJson(
         std::min(query._limit.value_or(MAX_NOF_ROWS_IN_RESULT), maxSend);
     size_t offset = query._offset.value_or(0);
     requestTimer.cont();
-    j = qet.writeResultAsSparqlJson(query.selectClause()._selectedVariables,
-                                    limit, offset, std::move(resultTable));
+    j = qet.writeResultAsSparqlJson(query.selectClause()._varsOrAsterisk, limit,
+                                    offset, std::move(resultTable));
+
     requestTimer.stop();
     return j;
   };
@@ -238,7 +250,7 @@ Server::composeResponseSepValues(const ParsedQuery& query,
     size_t offset = query._offset.value_or(0);
     return query.hasSelectClause()
                ? qet.generateResults<format>(
-                     query.selectClause()._selectedVariables, limit, offset)
+                     query.selectClause()._varsOrAsterisk, limit, offset)
                : qet.writeRdfGraphSeparatedValues<format>(
                      query.constructClause(), limit, offset, qet.getResult());
   };

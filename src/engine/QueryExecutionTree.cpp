@@ -4,11 +4,13 @@
 
 #include "./QueryExecutionTree.h"
 
+#include <absl/strings/str_join.h>
+
 #include <algorithm>
-#include <boost/algorithm/string/join.hpp>
 #include <sstream>
 #include <string>
 #include <utility>
+#include <variant>
 
 #include "../parser/RdfEscaping.h"
 #include "./Distinct.h"
@@ -92,21 +94,51 @@ void QueryExecutionTree::setVariableColumns(
 // ___________________________________________________________________________
 QueryExecutionTree::ColumnIndicesAndTypes
 QueryExecutionTree::selectedVariablesToColumnIndices(
-    const std::vector<string>& selectVariables,
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk,
     const ResultTable& resultTable) const {
   ColumnIndicesAndTypes exportColumns;
-  for (auto var : selectVariables) {
-    constexpr std::string_view prefix = "TEXT(";
-    constexpr size_t prefixLength = prefix.length();
-    if (var.starts_with(prefix)) {
-      var = var.substr(prefixLength, var.rfind(')') - prefixLength);
+  if (selectedVarsOrAsterisk.isAsterisk()) {
+    auto variablesFromExecutionTree = getVariableColumns();
+    for (const auto& variableFromQuery :
+         selectedVarsOrAsterisk.orderedVariablesFromQueryBody()) {
+      if (getVariableColumns().contains(variableFromQuery)) {
+        auto columnIndex = getVariableColumns().at(variableFromQuery);
+        exportColumns.push_back(
+            VariableAndColumnIndex{variableFromQuery, columnIndex,
+                                   resultTable.getResultType(columnIndex)});
+        variablesFromExecutionTree.erase(variableFromQuery);
+      } else {
+        exportColumns.emplace_back(std::nullopt);
+        LOG(WARN) << "The variable \"" << variableFromQuery
+                  << "\" was found in the original query, but not in the "
+                     "execution tree. "
+                     "This is likely a bug\n";
+      }
     }
-    if (getVariableColumns().contains(var)) {
-      auto columnIndex = getVariableColumns().at(var);
-      exportColumns.push_back(VariableAndColumnIndex{
-          var, columnIndex, resultTable.getResultType(columnIndex)});
-    } else {
-      exportColumns.emplace_back(std::nullopt);
+    for (const auto& variableFromQuery : variablesFromExecutionTree) {
+      LOG(WARN) << "The variable \"" << variableFromQuery.first
+                << "\" was found in the execution tree, but not in the "
+                   "original query. "
+                   "This is likely a bug\n";
+    }
+  } else {
+    for (auto var : selectedVarsOrAsterisk.getSelectVariables()) {
+      constexpr std::string_view prefix = "TEXT(";
+      constexpr size_t prefixLength = prefix.length();
+      if (var.starts_with(prefix)) {
+        var = var.substr(prefixLength, var.rfind(')') - prefixLength);
+      }
+      if (getVariableColumns().contains(var)) {
+        auto columnIndex = getVariableColumns().at(var);
+        exportColumns.push_back(VariableAndColumnIndex{
+            var, columnIndex, resultTable.getResultType(columnIndex)});
+      } else {
+        exportColumns.emplace_back(std::nullopt);
+        LOG(WARN) << "The variable \"" << var
+                  << "\" was found in the original query, but not in the "
+                     "execution tree. "
+                     "This is likely a bug\n";
+      }
     }
   }
   return exportColumns;
@@ -114,15 +146,15 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
 
 // _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeResultAsQLeverJson(
-    const vector<string>& selectVars, size_t limit, size_t offset,
-    shared_ptr<const ResultTable> resultTable) const {
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    size_t offset, shared_ptr<const ResultTable> resultTable) const {
   // They may trigger computation (but does not have to).
   if (!resultTable) {
     resultTable = getResult();
   }
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   ColumnIndicesAndTypes validIndices =
-      selectedVariablesToColumnIndices(selectVars, *resultTable);
+      selectedVariablesToColumnIndices(selectedVarsOrAsterisk, *resultTable);
   if (validIndices.empty()) {
     return {std::vector<std::string>()};
   }
@@ -133,8 +165,8 @@ nlohmann::json QueryExecutionTree::writeResultAsQLeverJson(
 
 // _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
-    const vector<string>& selectVars, size_t limit, size_t offset,
-    shared_ptr<const ResultTable> resultTable) const {
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    size_t offset, shared_ptr<const ResultTable> resultTable) const {
   using nlohmann::json;
 
   // This might trigger the actual query processing.
@@ -144,7 +176,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   LOG(DEBUG) << "Finished computing the query result in the ID space. "
                 "Resolving strings in result...\n";
   ColumnIndicesAndTypes columns =
-      selectedVariablesToColumnIndices(selectVars, *resultTable);
+      selectedVariablesToColumnIndices(selectedVarsOrAsterisk, *resultTable);
 
   std::erase(columns, std::nullopt);
 
@@ -155,7 +187,17 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   const IdTable& idTable = resultTable->_idTable;
 
   json result;
-  result["head"]["vars"] = selectVars;
+
+  if (selectedVarsOrAsterisk.isAsterisk()) {
+    vector<string> vars_names;
+    for (auto const& variable :
+         selectedVarsOrAsterisk.orderedVariablesFromQueryBody()) {
+      vars_names.push_back(variable);
+    }
+    result["head"]["vars"] = vars_names;
+  } else {
+    result["head"]["vars"] = selectedVarsOrAsterisk.getSelectVariables();
+  }
 
   json bindings = json::array();
 
@@ -200,6 +242,8 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   };
 
   for (size_t rowIndex = offset; rowIndex < upperBound; ++rowIndex) {
+    // TODO: ordered_json` entries are ordered alphabetically, but insertion
+    // order would be preferable.
     nlohmann::ordered_json binding;
     for (const auto& column : columns) {
       const auto& currentId = idTable(rowIndex, column->_columnIndex);
@@ -360,8 +404,9 @@ nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
 // _____________________________________________________________________________
 template <QueryExecutionTree::ExportSubFormat format>
 ad_utility::stream_generator::stream_generator
-QueryExecutionTree::generateResults(const vector<string>& selectVars,
-                                    size_t limit, size_t offset) const {
+QueryExecutionTree::generateResults(
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    size_t offset) const {
   static_assert(format == ExportSubFormat::BINARY ||
                 format == ExportSubFormat::CSV ||
                 format == ExportSubFormat::TSV);
@@ -370,7 +415,7 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
   shared_ptr<const ResultTable> resultTable = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   auto validIndices =
-      selectedVariablesToColumnIndices(selectVars, *resultTable);
+      selectedVariablesToColumnIndices(selectedVarsOrAsterisk, *resultTable);
 
   const auto& idTable = resultTable->_idTable;
   size_t upperBound = std::min<size_t>(offset + limit, idTable.size());
@@ -392,7 +437,11 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
   static constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
   constexpr std::string_view sepView{&sep, 1};
   // Print header line
-  co_yield boost::algorithm::join(selectVars, sepView);
+  co_yield absl::StrJoin(
+      selectedVarsOrAsterisk.isVariables()
+          ? selectedVarsOrAsterisk.getSelectVariables()
+          : selectedVarsOrAsterisk.orderedVariablesFromQueryBody(),
+      sepView);
   co_yield '\n';
 
   for (size_t i = offset; i < upperBound; ++i) {
@@ -446,15 +495,18 @@ QueryExecutionTree::generateResults(const vector<string>& selectVars,
 
 template ad_utility::stream_generator::stream_generator
 QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::CSV>(
-    const vector<string>& selectVars, size_t limit, size_t offset) const;
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    size_t offset) const;
 
 template ad_utility::stream_generator::stream_generator
 QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::TSV>(
-    const vector<string>& selectVars, size_t limit, size_t offset) const;
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    size_t offset) const;
 
 template ad_utility::stream_generator::stream_generator QueryExecutionTree::
     generateResults<QueryExecutionTree::ExportSubFormat::BINARY>(
-        const vector<string>& selectVars, size_t limit, size_t offset) const;
+        const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+        size_t offset) const;
 
 // _____________________________________________________________________________
 
