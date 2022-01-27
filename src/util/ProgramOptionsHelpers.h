@@ -5,6 +5,7 @@
 #ifndef QLEVER_PROGRAMOPTIONSHELPERS_H
 #define QLEVER_PROGRAMOPTIONSHELPERS_H
 
+#include <any>
 #include <boost/program_options.hpp>
 #include <vector>
 
@@ -59,90 +60,47 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   v = std::optional<T>(boost::any_cast<T>(v));
 }
 
-template <ParameterName name, typename Parameters>
-class ParameterToProgramOption {
- public:
-  using Type =
-      std::decay_t<decltype(std::declval<Parameters&>().template get<name>())>;
-
- private:
-  Parameters* _parameters = nullptr;
-  std::optional<Type> _value;
-
- public:
-  explicit ParameterToProgramOption(Parameters* parameters)
-      : _parameters(parameters) {}
-  explicit ParameterToProgramOption(Type value) : _value{std::move(value)} {}
-  ParameterToProgramOption() = default;
-
-  ParameterToProgramOption(const ParameterToProgramOption&) = default;
-
-  ParameterToProgramOption& operator=(const ParameterToProgramOption& rhs) {
-    if (this == &rhs) {
-      return *this;
-    }
-    if (rhs._parameters) {
-      _parameters = rhs._parameters;
-    } else if (_parameters && rhs._value.has_value()) {
-      set(rhs._value.value());
-    } else {
-      _value = rhs._value;
-    }
-    return *this;
-  }
-
-  void set(Type value) {
-    AD_CHECK(_parameters);
-    _parameters->template set<name>(std::move(value));
-  }
-  Type get() const {
-    AD_CHECK(_parameters);
-    return _parameters->template get<name>();
-  }
-
-  friend std::ostream& operator<<(std::ostream& stream,
-                                  const ParameterToProgramOption& param) {
-    return stream << param.get();
-  }
-};
-// This function is required  to use `ParameterToProgramOption` in
-// `boost::program_options`.
-template <ParameterName name, typename Parameters>
-void validate(boost::any& v, const std::vector<std::string>& values,
-              ParameterToProgramOption<name, Parameters>*, int) {
-  // First parse as a T
-  using Param = ParameterToProgramOption<name, Parameters>;
-  using Type = typename Param::Type;
-  Type* dummy = nullptr;
-  using boost::program_options::validate;
-  validate(v, values, dummy, 0);
-
-  // Wrap the T inside ParameterToProgramOption
-  AD_CHECK(!v.empty());
-  v = Param{boost::any_cast<Type>(v)};
-}
-
-template <typename ParametersT>
+/// Create `boost::program_options::value`s (command-line options) from
+/// `ad_utility::Parameters`
+template <typename Parameters>
 class ParameterToProgramOptionFactory {
  private:
-  using Parameters = std::decay_t<ParametersT>;
   Parameters* _parameters;
 
+  std::vector<std::any> _notifiers;
+
  public:
-  explicit ParameterToProgramOptionFactory(ParametersT* parameters)
+  // Construct from a pointer to `ad_utility::Parameters`
+  explicit ParameterToProgramOptionFactory(Parameters* parameters)
       : _parameters{parameters} {
-    AD_CHECK(_parameters);
+    AD_CHECK(_parameters != nullptr);
   }
 
+  /**
+   * Return a boost program option that is connected to the parameter with the
+   * `name`
+   * @tparam name The name of a parameter that is contained in the `Parameters`
+   * @return A boost::program_options::value with the parameter's current value
+   * as the default value. When that value is parsed, the parameter is set
+   * to the parsed value.
+   */
   template <ad_utility::ParameterName name>
   auto makeParameterOption() {
-    return ad_utility::ParameterToProgramOption<name, Parameters>{_parameters};
-  }
+    // Get the current value of the parameter, it will become the default
+    // value of the command-line option.
+    auto defaultValue = _parameters->template get<name>();
 
-  static auto makePoValue(auto* parameterOption) {
-    using P = std::decay_t<decltype(*parameterOption)>;
-    return boost::program_options::value<P>(parameterOption)
-        ->default_value(*parameterOption);
+    // The underlying type for the parameter.
+    using Type = decltype(defaultValue);
+
+    // The function that is called, when the command-line-option is called,
+    // it sets the parameter to the parsed value.
+    auto notifier{
+        [this](const Type& value) { _parameters->template set<name>(value); }};
+
+    return boost::program_options::value<Type>()
+        ->default_value(defaultValue)
+        ->notifier(notifier);
   }
 };
 

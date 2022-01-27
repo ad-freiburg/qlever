@@ -47,58 +47,60 @@ int main(int argc, char** argv) {
   bool noPatternTrick;
   bool onlyPsoAndPosPermutations;
 
-  NonNegative memoryMaxSizeGb = DEFAULT_MEM_FOR_QUERIES_IN_GB;
+  NonNegative memoryMaxSizeGb;
 
   ad_utility::ParameterToProgramOptionFactory optionFactory{
       &RuntimeParameters()};
-  auto cacheMaxSizeGbSingleEntry =
-      optionFactory.makeParameterOption<"cache-max-size-gb-single-entry">();
-  auto cacheMaxNumEntries =
-      optionFactory.makeParameterOption<"cache-max-num-entries">();
-  auto cacheMaxSizeGb =
-      optionFactory.makeParameterOption<"cache-max-size-gb">();
 
   po::options_description options("Options for ServerMain");
   auto add = [&options]<typename... Args>(Args && ... args) {
     options.add_options()(std::forward<Args>(args)...);
   };
-  add("help,h", "Produce help message");
+  add("help,h", "Produce this help message.");
+  // TODO<joka921> Can we output the "required" automatically?
   add("index-basename,i", po::value<std::string>(&indexBasename)->required(),
-      "The location of the indexBasename files");
+      "The basename of the index files (required).");
+  add("port,p", po::value<int>(&port)->required(),
+      "The port on which HTTP requests are served (required).");
   add("num-simultaneous-queries,j",
       po::value<NonNegative>(&numSimultaneousQueries)->default_value(1),
       "The number of queries that can be processed simultaneously.");
-  add("memory-max-size-gb,m", po::value<NonNegative>(&memoryMaxSizeGb),
+  add("memory-max-size-gb,m",
+      po::value<NonNegative>(&memoryMaxSizeGb)
+          ->default_value(DEFAULT_MEM_FOR_QUERIES_IN_GB),
       "Limit on the total amount of memory (in GB) that can be used for "
       "query processing and caching. If exceeded, query will return with "
       "an error, but the engine will not crash.");
-  add("cache-max-size-gb,c", optionFactory.makePoValue(&cacheMaxSizeGb),
+  add("cache-max-size-gb,c",
+      optionFactory.makeParameterOption<"cache-max-size-gb">(),
       "Maximum memory size in GB for all cache entries (pinned and "
-      "non-pinned). Note that the cache is part of the amount of memory "
+      "not pinned). Note that the cache is part of the total memory "
       "limited by --memory-max-size-gb.");
   add("cache-max-size-gb-single-entry,e",
-      optionFactory.makePoValue(&cacheMaxSizeGbSingleEntry),
-
-      "Maximum size in GB for a single cache entry. In other words, "
-      "results larger than this will never be cached.");
-  add("cache-max-num-entries,k", optionFactory.makePoValue(&cacheMaxNumEntries),
+      optionFactory.makeParameterOption<"cache-max-size-gb-single-entry">(),
+      "Maximum size in GB for a single cache entry. That is, "
+      "results larger than this will not be cached unless pinned.");
+  add("cache-max-num-entries,k",
+      optionFactory.makeParameterOption<"cache-max-num-entries">(),
       "Maximum number of entries in the cache. If exceeded, remove "
-      "least-recently used entries from the cache if possible. Note that "
+      "least-recently used non-pinned entries from the cache. Note that "
       "this condition and the size limit specified via --cache-max-size-gb "
       "both have to hold (logical AND).");
-  add("port,p", po::value<int>(&port)->required(),
-      "The port on which the http server runs.");
   add("no-patterns,P", po::bool_switch(&noPatterns),
-      "Disable the use of patterns. This disables ql:has-predicate.");
+      "Disable the use of patterns. If disabled, the special predicate "
+      "`ql:has-predicate` is not available.");
   add("no-pattern-trick,T", po::bool_switch(&noPatternTrick),
       "Maximum number of entries in the cache. If exceeded, remove "
       "least-recently used entries from the cache if possible. Note that "
       "this condition and the size limit specified via --cache-max-size-gb "
       "both have to hold (logical AND).");
-  add("text,t", po::bool_switch(&text), "Enables the usage of text.");
+  add("text,t", po::bool_switch(&text),
+      "Also load the text index. The text index must have been built before "
+      "using `IndexBuilderMain` with options `-d` and `-w`.");
   add("only-pso-and-pos-permutations,o",
       po::bool_switch(&onlyPsoAndPosPermutations),
-      "Only load PSO and POS permutations");
+      "Only load the PSO and POS permutations. This disables queries with "
+      "predicate variables.");
   po::variables_map optionsMap;
 
   try {
