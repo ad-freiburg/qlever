@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "./Index.h"
+
 #include <stxxl/algorithm>
 #include <tuple>
 #include <utility>
@@ -11,7 +13,6 @@
 #include "../util/Generator.h"
 #include "../util/Simple8bCode.h"
 #include "./FTSAlgorithms.h"
-#include "./Index.h"
 
 // _____________________________________________________________________________
 void Index::addTextFromContextFile(const string& contextFile) {
@@ -479,7 +480,7 @@ void Index::calculateBlockBoundariesImpl(
       }
       auto forcedBlockStartSortKey = locManager.getSortKey(
           *forcedBlockStartsIt, LocaleManager::Level::PRIMARY);
-      if (forcedBlockStartSortKey.get() >= prefixSortKey.get()) {
+      if (forcedBlockStartSortKey >= prefixSortKey) {
         break;
       }
       if (prefixSortKey.starts_with(forcedBlockStartSortKey)) {
@@ -514,7 +515,7 @@ void Index::calculateBlockBoundariesImpl(
 
     bool tooShortButNotEqual =
         (currentLen < MIN_WORD_PREFIX_SIZE || nextLen < MIN_WORD_PREFIX_SIZE) &&
-        (prefixSortKey.get() != nextPrefixSortKey.get());
+        (prefixSortKey != nextPrefixSortKey);
     // The `startsWith` also correctly handles the case where
     // `nextPrefixSortKey` is "longer" than `MIN_WORD_PREFIX_SIZE`, e.g. because
     // of unicode ligatures.

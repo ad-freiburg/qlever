@@ -218,7 +218,7 @@ class LocaleManager {
       auto [numCodepoints, prefix] =
           ad_utility::getUTF8Prefix(s, prefixLengthSoFar);
       auto nextLongerSortKey = getSortKey(prefix, Level::PRIMARY);
-      if (nextLongerSortKey.get() != sortKey.get()) {
+      if (nextLongerSortKey != sortKey) {
         // The `SortKey` changed by adding a codepoint, so that codepoint
         // was contributing.
         numContributingCodepoints++;
