@@ -11,11 +11,9 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
-#include <vector>
 
 using std::string;
 using std::string_view;
-using std::vector;
 
 namespace ad_utility {
 //! Utility functions for string. Can possibly be changed to
@@ -37,29 +35,6 @@ inline std::pair<size_t, std::string> getUTF8Prefix(std::string_view s,
 
 //! Gets the last part of a string that is somehow split by the given separator.
 inline string getLastPartOfString(const string& text, const char separator);
-
-//! Strips any sequence of characters in s from the left and right of the text.
-//! The type T can be anything convertible to a std::string_view<char> so in
-//! particular s can be a string literal, std::string, std::string_view.
-//! Additionally it can also be a single char as in ' '
-template <class T>
-inline string strip(const string& text, const T& s);
-//! Strips any sequence of characters from s from the right of the text.
-//! The type T can be anything convertible to a std::string_view<char> so in
-//! particular s can be a string literal, std::string, std::string_view.
-//! Additionally it can also be a single char as in ' '
-template <class T>
-inline string rstrip(const string& text, const T& s);
-
-//! Splits a string at the separator, kinda like python.
-inline vector<string> split(const string& orig, const char sep);
-
-//! Similar to Python's ",".join(somelist) this joins elements of the given
-//! vector to_join, separating them by joiner.
-//! In order for this to work the type J needs an operator+= implementation that
-//! accepts a value of type S as the right hand side
-template <typename J, typename S>
-J join(const vector<J>& to_join, const S& joiner);
 
 /**
  * @brief Return the last position where <literalEnd> was found in the <input>
@@ -168,60 +143,6 @@ string getLastPartOfString(const string& text, const char separator) {
   } else {
     return text;
   }
-}
-
-// _____________________________________________________________________________
-vector<string> split(const string& orig, const char sep) {
-  vector<string> result;
-  if (orig.size() > 0) {
-    size_t from = 0;
-    size_t sepIndex = orig.find(sep);
-    while (sepIndex != string::npos) {
-      result.emplace_back(orig.substr(from, sepIndex - from));
-      from = sepIndex + 1;
-      sepIndex = orig.find(sep, from);
-    }
-    result.emplace_back(orig.substr(from));
-  }
-  return result;
-}
-
-// _____________________________________________________________________________
-template <typename J, typename S>
-J join(const vector<J>& to_join, const S& joiner) {
-  J res{};  // {} does zero initialization
-  auto it = to_join.begin();
-  if (it == to_join.end()) {
-    return res;
-  }
-  res += *it++;
-  for (; it != to_join.end(); it++) {
-    res += joiner;
-    res += *it;
-  }
-  return res;
-}
-
-// _____________________________________________________________________________
-template <class T>
-inline string rstrip(const string& text, const T& s) {
-  auto pos = text.find_last_not_of(s);
-  if (pos == string::npos) {
-    return string{};
-  }
-  auto length = pos + 1;
-  return text.substr(0, length);
-}
-
-// _____________________________________________________________________________
-template <class T>
-inline string strip(const string& text, const T& s) {
-  auto pos = text.find_first_not_of(s);
-  if (pos == string::npos) {
-    return string{};
-  }
-  auto length = text.find_last_not_of(s) - pos + 1;
-  return text.substr(pos, length);
 }
 
 // _________________________________________________________________________
