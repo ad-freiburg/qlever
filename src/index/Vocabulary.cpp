@@ -30,7 +30,7 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
   ad_utility::serialization::FileReadSerializer file(fileName);
   file >> _words;
   LOG(INFO) << "Done, number of words: " << _words.size() << std::endl;
-  if (extLitsFileName.size() > 0) {
+  if (!extLitsFileName.empty()) {
     if (!_isCompressed) {
       LOG(INFO) << "ERROR: trying to load externalized literals to an "
                    "uncompressed vocabulary. This is not valid and a "
@@ -56,30 +56,6 @@ void Vocabulary<S, C>::writeToFile(const string& fileName) const {
 }
 
 // _____________________________________________________________________________
-/*
-template <class S, class C>
-template <typename, typename>
-void Vocabulary<S, C>::writeToBinaryFileForMerging(
-    const string& fileName) const {
-  LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
-  std::ofstream out(fileName.c_str(),
-                    std::ios_base::out | std::ios_base::binary);
-  AD_CHECK(out.is_open());
-  for (size_t i = 0; i < _words.size(); ++i) {
-    // 32 bits should be enough for len of string
-    std::string_view word = _words[i];
-    uint32_t len = word.size();
-    size_t zeros = 0;
-    out.write((char*)&len, sizeof(len));
-    out.write(word.data(), len);
-    out.write((char*)&zeros, sizeof(zeros));
-  }
-  out.close();
-  LOG(INFO) << "Done writing vocabulary to file.\n";
-}
- */
-
-// _____________________________________________________________________________
 template <class S, class C>
 void Vocabulary<S, C>::createFromSet(
     const ad_utility::HashSet<std::string>& set) {
@@ -102,41 +78,9 @@ void Vocabulary<S, C>::createFromSet(
 }
 
 // _____________________________________________________________________________
-// TODO<joka921> is this used? if no, throw out, if yes, transform to
-// compressedString as key type
-template <class S, class C>
-template <typename, typename>
-ad_utility::HashMap<string, Id> Vocabulary<S, C>::asMap() {
-  ad_utility::HashMap<string, Id> map;
-  for (size_t i = 0; i < _words.size(); ++i) {
-    map[_words[i]] = i;
-  }
-  return map;
-}
-
-/*
-// _____________________________________________________________________________
-template <class S, class C>
-template <typename, typename>
-void Vocabulary<S, C>::externalizeLiterals(const string& fileName) {
-  LOG(INFO) << "Externalizing literals..." << std::endl;
-  auto ext = std::lower_bound(_words.begin(), _words.end(),
-                              EXTERNALIZED_LITERALS_PREFIX, _caseComparator);
-  size_t nofInternal = ext - _words.begin();
-  vector<string> extVocab;
-  while (ext != _words.end()) {
-    extVocab.push_back((*ext++).substr(1));
-  }
-  _words.resize(nofInternal);
-  _externalLiterals.buildFromVector(extVocab, fileName);
-  LOG(INFO) << "Done externalizing literals." << std::endl;
-}
- */
-
-// _____________________________________________________________________________
 template <class S, class C>
 bool Vocabulary<S, C>::isLiteral(const string& word) {
-  return word.size() > 0 && word[0] == '\"';
+  return word.starts_with('"');
 }
 
 // _____________________________________________________________________________
