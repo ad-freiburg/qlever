@@ -437,11 +437,11 @@ QueryExecutionTree::generateResults(
   static constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
   constexpr std::string_view sepView{&sep, 1};
   // Print header line
-  co_yield absl::StrJoin(
-      selectedVarsOrAsterisk.isVariables()
-          ? selectedVarsOrAsterisk.getSelectVariables()
-          : selectedVarsOrAsterisk.orderedVariablesFromQueryBody(),
-      sepView);
+  const auto& variables =
+      selectedVarsOrAsterisk.isAsterisk()
+          ? selectedVarsOrAsterisk.orderedVariablesFromQueryBody()
+          : selectedVarsOrAsterisk.getSelectVariables();
+  co_yield absl::StrJoin(variables, sepView);
   co_yield '\n';
 
   for (size_t i = offset; i < upperBound; ++i) {
