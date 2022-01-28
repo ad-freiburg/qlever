@@ -347,7 +347,7 @@ class ParsedQuery {
     // Gets the variables which addVariableFromQueryBody` was previously called.
     // The result contains no duplicates and is ordered by the first appearance
     // in the query body.
-    [[nodiscard]] auto orderedVariablesFromQueryBody() const {
+    [[nodiscard]] const auto& orderedVariablesFromQueryBody() const {
       return _variablesFromQueryBody;
     }
   };
