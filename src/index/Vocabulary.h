@@ -61,9 +61,8 @@ inline std::ostream& operator<<(std::ostream& stream, const IdRange& idRange) {
 
 // simple class for members of a prefix compression codebook
 struct Prefix {
-  Prefix() = default;
-  Prefix(char prefix, const string& fulltext)
-      : _prefix(prefix), _fulltext(fulltext) {}
+  Prefix(char prefix, string fulltext)
+      : _prefix(prefix), _fulltext(std::move(fulltext)) {}
 
   char _prefix;
   string _fulltext;
@@ -74,7 +73,7 @@ struct Prefix {
 //! Template parameters that are supported are:
 //! std::string -> no compression is applied
 //! CompressedString -> prefix compression is applied
-template <class StringType, class ComparatorType>
+template <class StringType, class ComparatorType> requires (std::is_same_v<StringType, string> || std::is_same_v<StringType, CompressedString>)
 class Vocabulary {
   // The different type of data that is stored in the vocabulary
   enum class Datatypes { Literal, Iri, Float, Date };
@@ -89,11 +88,7 @@ class Vocabulary {
 
  public:
   using SortLevel = typename ComparatorType::Level;
-  template <
-      typename = std::enable_if_t<std::is_same_v<StringType, string> ||
-                                  std::is_same_v<StringType, CompressedString>>>
-
-  Vocabulary(){};
+  Vocabulary() = default;
   Vocabulary& operator=(Vocabulary&&) noexcept = default;
 
   // variable for dispatching
@@ -184,15 +179,11 @@ class Vocabulary {
   static bool isLiteral(const string& word);
   static bool isExternalizedLiteral(const string& word);
 
-  bool shouldBeExternalized(const string& word) const;
+  [[nodiscard]] bool shouldBeExternalized(const string& word) const;
 
-  bool shouldEntityBeExternalized(const string& word) const;
+  [[nodiscard]] bool shouldEntityBeExternalized(const string& word) const;
 
-  bool shouldLiteralBeExternalized(const string& word) const;
-
-  // only still needed for text vocabulary
-  template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  void externalizeLiterals(const string& fileName);
+  [[nodiscard]] bool shouldLiteralBeExternalized(const string& word) const;
 
   void externalizeLiteralsFromTextFile(const string& textFileName,
                                        const string& outFileName) {
@@ -212,7 +203,7 @@ class Vocabulary {
 
   // _____________________________________________
   template <typename U = StringType, typename = enable_if_compressed<U>>
-  CompressedString compressPrefix(const string& word) const;
+  [[nodiscard]] CompressedString compressPrefix(const string& word) const;
 
   // initialize compression with a list of prefixes
   // The prefixes do not have to be in any specific order
@@ -271,7 +262,7 @@ class Vocabulary {
   /// prefix according to the collation level the first Id is included in the
   /// range, the last one not. Currently only supports the Primary collation
   /// level, due to limitations in the StringSortComparators
-  std::pair<Id, Id> prefix_range(const string& prefix) const;
+  [[nodiscard]] std::pair<Id, Id> prefix_range(const string& prefix) const;
 
   [[nodiscard]] const LocaleManager& getLocaleManager() const {
     return _caseComparator.getLocaleManager();
@@ -279,10 +270,10 @@ class Vocabulary {
 
   // Wraps std::lower_bound and returns an index instead of an iterator
   Id lower_bound(const string& word,
-                 const SortLevel level = SortLevel::QUARTERNARY) const;
+                 SortLevel level = SortLevel::QUARTERNARY) const;
 
   // _______________________________________________________________
-  Id upper_bound(const string& word, const SortLevel level) const;
+  Id upper_bound(const string& word, SortLevel level) const;
 
  private:
   template <class R = std::string>
