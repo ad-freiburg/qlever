@@ -298,10 +298,6 @@ bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
   range->_first = prefixRange.first;
   range->_last = prefixRange.second - 1;
 
-  if (success) {
-    AD_CHECK_LT(range->_first, _words.size());
-    AD_CHECK_LT(range->_last, _words.size());
-  }
   return success;
 }
 

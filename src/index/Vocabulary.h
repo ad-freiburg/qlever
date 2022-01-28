@@ -116,14 +116,6 @@ class Vocabulary {
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
   void writeToFile(const string& fileName) const;
 
-  //! Write to binary file to prepare the merging. Format:
-  // 4 Bytes strlen, then character bytes, then 8 bytes zeros for global id
-  template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  void writeToBinaryFileForMerging(const string& fileName) const;
-
-  //! Append a word to the vocabulary. Wraps the std::vector method.
-  void push_back(const string& word);
-
   //! Get the word with the given id or an empty optional if the
   //! word is not in the vocabulary.
   //! Only enabled when uncompressed which also means no externalization
@@ -134,21 +126,14 @@ class Vocabulary {
   //! word is not in the vocabulary. Returns an lvalue because compressed or
   //! externalized words don't allow references
   template <typename U = StringType, typename = enable_if_compressed<U>>
-  const std::optional<string> idToOptionalString(Id id) const;
+  [[nodiscard]] const std::optional<string> idToOptionalString(Id id) const;
 
   //! Get the word with the given id.
   //! lvalue for compressedString and const& for string-based vocabulary
   AccessReturnType_t<StringType> at(Id id) const;
 
-  // AccessReturnType_t<StringType> at(Id id) const { return operator[](id); }
-
   //! Get the number of words in the vocabulary.
-  size_t size() const { return _words.size(); }
-
-  //! Reserve space for the given number of words.
-  void reserve([[maybe_unused]] unsigned int n) { /* TODO<joka921> where is this
-                                                     used? _words.reserve(n);*/
-  }
+  [[nodiscard]] size_t size() const { return _words.size(); }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
