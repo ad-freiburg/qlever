@@ -123,6 +123,8 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     }
   } else {
     for (auto var : selectedVarsOrAsterisk.getSelectVariables()) {
+      // TODO: The TEXT(?variable) syntax is redundant and will probably removed
+      //  when we have a proper SPARQL parser.
       constexpr std::string_view prefix = "TEXT(";
       constexpr size_t prefixLength = prefix.length();
       if (var.starts_with(prefix)) {
@@ -411,10 +413,11 @@ QueryExecutionTree::generateResults(
                 format == ExportSubFormat::CSV ||
                 format == ExportSubFormat::TSV);
 
-  // They may trigger computation (but does not have to).
+  // This call triggers the possibly expensive computation of the query result
+  // unless the result is already cached.
   shared_ptr<const ResultTable> resultTable = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  auto validIndices =
+  auto selectedColumnIndices =
       selectedVariablesToColumnIndices(selectedVarsOrAsterisk, *resultTable);
 
   const auto& idTable = resultTable->_idTable;
@@ -423,10 +426,10 @@ QueryExecutionTree::generateResults(
   // special case : binary export of IdTable
   if constexpr (format == ExportSubFormat::BINARY) {
     for (size_t i = offset; i < upperBound; ++i) {
-      for (const auto& validIndex : validIndices) {
-        if (validIndex.has_value()) {
+      for (const auto& columnIndex : selectedColumnIndices) {
+        if (columnIndex.has_value()) {
           co_yield std::string_view{reinterpret_cast<const char*>(&idTable(
-                                        i, validIndex.value()._columnIndex)),
+                                        i, columnIndex.value()._columnIndex)),
                                     sizeof(Id)};
         }
       }
@@ -445,9 +448,9 @@ QueryExecutionTree::generateResults(
   co_yield '\n';
 
   for (size_t i = offset; i < upperBound; ++i) {
-    for (size_t j = 0; j < validIndices.size(); ++j) {
-      if (validIndices[j].has_value()) {
-        const auto& val = validIndices[j].value();
+    for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
+      if (selectedColumnIndices[j].has_value()) {
+        const auto& val = selectedColumnIndices[j].value();
         switch (val._resultType) {
           case ResultTable::ResultType::KB: {
             string entity =
@@ -485,7 +488,7 @@ QueryExecutionTree::generateResults(
                      "Cannot deduce output type.");
         }
       }
-      co_yield(j + 1 < validIndices.size() ? sep : '\n');
+      co_yield(j + 1 < selectedColumnIndices.size() ? sep : '\n');
     }
   }
   LOG(DEBUG) << "Done creating readable result.\n";
