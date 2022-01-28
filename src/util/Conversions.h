@@ -177,14 +177,14 @@ string convertValueLiteralToIndexWord(const string& orig) {
 // ____________________________________________________________________________
 inline std::pair<string, const char*> convertIndexWordToLiteralAndType(
     const string& indexWord) {
-  if (startsWith(indexWord, VALUE_DATE_PREFIX)) {
+  if (indexWord.starts_with(VALUE_DATE_PREFIX)) {
     string date = removeLeadingZeros(convertIndexWordToDate(indexWord));
-    if (date.empty() || startsWith(date, VALUE_DATE_TIME_SEPARATOR)) {
+    if (date.empty() || date.starts_with(VALUE_DATE_TIME_SEPARATOR)) {
       date = string("0") + date;
     }
     return std::make_pair(std::move(date), XSD_DATETIME_TYPE);
   }
-  if (startsWith(indexWord, VALUE_FLOAT_PREFIX)) {
+  if (indexWord.starts_with(VALUE_FLOAT_PREFIX)) {
     auto type = NumericType{indexWord.back()};
     switch (type) {
       case NumericType::FLOAT:
@@ -359,12 +359,12 @@ string convertIndexWordToFloatString(const string& indexWord) {
       --absExponent;
     }
 
-    // Skip leading zeros of the mantissa
-    size_t i = 0;
-    while (mantissa[i] == '0') {
-      ++i;
+    // Skip leading and trailing zeros of the mantissa
+    size_t start = mantissa.find_first_not_of('0');
+    if (start != std::string::npos) {
+      size_t end = mantissa.find_last_not_of('0') + 1;
+      os << string_view{mantissa}.substr(start, end - start);
     }
-    os << ad_utility::rstrip(mantissa.substr(i), '0');
   } else {
     // Skip leading zeros of the mantissa
     size_t i = 0;
@@ -678,7 +678,7 @@ string convertLangtagToEntityUri(const string& tag) {
 // _________________________________________________________
 std::optional<string> convertEntityUriToLangtag(const string& word) {
   static const string prefix = URI_PREFIX + "@";
-  if (ad_utility::startsWith(word, prefix)) {
+  if (word.starts_with(prefix)) {
     return word.substr(prefix.size(), word.size() - prefix.size() - 1);
   } else {
     return std::nullopt;

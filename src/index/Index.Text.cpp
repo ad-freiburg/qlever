@@ -2,13 +2,14 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include <absl/strings/str_split.h>
+
 #include <stxxl/algorithm>
 #include <tuple>
 #include <utility>
 
 #include "../engine/CallFixedSize.h"
 #include "../parser/ContextFileParser.h"
-#include "../util/Generator.h"
 #include "../util/Simple8bCode.h"
 #include "./FTSAlgorithms.h"
 #include "./Index.h"
@@ -479,11 +480,10 @@ void Index::calculateBlockBoundariesImpl(
       }
       auto forcedBlockStartSortKey = locManager.getSortKey(
           *forcedBlockStartsIt, LocaleManager::Level::PRIMARY);
-      if (forcedBlockStartSortKey.get() >= prefixSortKey.get()) {
+      if (forcedBlockStartSortKey >= prefixSortKey) {
         break;
       }
-      if (ad_utility::startsWith(prefixSortKey.get(),
-                                 forcedBlockStartSortKey.get())) {
+      if (prefixSortKey.starts_with(forcedBlockStartSortKey)) {
         prefixSortKey = std::move(forcedBlockStartSortKey);
         prefixLength = MIN_WORD_PREFIX_SIZE;
         return;
@@ -515,12 +515,11 @@ void Index::calculateBlockBoundariesImpl(
 
     bool tooShortButNotEqual =
         (currentLen < MIN_WORD_PREFIX_SIZE || nextLen < MIN_WORD_PREFIX_SIZE) &&
-        (prefixSortKey.get() != nextPrefixSortKey.get());
+        (prefixSortKey != nextPrefixSortKey);
     // The `startsWith` also correctly handles the case where
     // `nextPrefixSortKey` is "longer" than `MIN_WORD_PREFIX_SIZE`, e.g. because
     // of unicode ligatures.
-    bool samePrefix =
-        ad_utility::startsWith(nextPrefixSortKey.get(), prefixSortKey.get());
+    bool samePrefix = nextPrefixSortKey.starts_with(prefixSortKey);
     if (tooShortButNotEqual || !samePrefix) {
       blockBoundaryAction(i);
       numBlocks++;
@@ -665,7 +664,9 @@ std::string_view Index::wordIdToString(Id id) const {
 void Index::getContextListForWords(const string& words,
                                    IdTable* dynResult) const {
   LOG(DEBUG) << "In getContextListForWords...\n";
-  auto terms = ad_utility::split(words, ' ');
+  // TODO vector can be of type std::string_view if called functions
+  //  are updated to accept std::string_view instead of const std::string&
+  std::vector<std::string> terms = absl::StrSplit(words, ' ');
   AD_CHECK(terms.size() > 0);
 
   vector<Id> cids;
@@ -674,8 +675,8 @@ void Index::getContextListForWords(const string& words,
     vector<vector<Id>> cidVecs;
     vector<vector<Score>> scoreVecs;
     for (auto& term : terms) {
-      cidVecs.push_back(vector<Id>());
-      scoreVecs.push_back(vector<Score>());
+      cidVecs.emplace_back();
+      scoreVecs.emplace_back();
       getWordPostingsForTerm(term, cidVecs.back(), scoreVecs.back());
     }
     if (cidVecs.size() == 2) {
@@ -772,7 +773,9 @@ void Index::getContextEntityScoreListsForWords(const string& words,
                                                vector<Id>& eids,
                                                vector<Score>& scores) const {
   LOG(DEBUG) << "In getEntityContextScoreListsForWords...\n";
-  auto terms = ad_utility::split(words, ' ');
+  // TODO vector can be of type std::string_view if called functions
+  //  are updated to accept std::string_view instead of const std::string&
+  std::vector<std::string> terms = absl::StrSplit(words, ' ');
   AD_CHECK(terms.size() > 0);
   if (terms.size() > 1) {
     // Find the term with the smallest block and/or one where no filtering
@@ -1503,7 +1506,9 @@ void Index::getECListForWordsAndSubtrees(
 // _____________________________________________________________________________
 size_t Index::getSizeEstimate(const string& words) const {
   size_t minElLength = std::numeric_limits<size_t>::max();
-  auto terms = ad_utility::split(words, ' ');
+  // TODO vector can be of type std::string_view if called functions
+  //  are updated to accept std::string_view instead of const std::string&
+  std::vector<std::string> terms = absl::StrSplit(words, ' ');
   for (size_t i = 0; i < terms.size(); ++i) {
     IdRange range;
     bool entityTerm = (terms[i][0] == '<' && terms[i].back() == '>');

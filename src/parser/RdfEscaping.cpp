@@ -186,15 +186,13 @@ std::string normalizeRDFLiteral(const std::string_view origLiteral) {
 
   // Find out, which of the forms "literal", 'literal', """literal""" or
   // '''literal''' the input has, and strip all the quotes.
-  if (ad_utility::startsWith(literal, "\"\"\"") ||
-      ad_utility::startsWith(literal, "'''")) {
-    AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 3)));
+  if (literal.starts_with(R"(""")") || literal.starts_with("'''")) {
+    AD_CHECK(literal.ends_with(literal.substr(0, 3)));
     literal.remove_prefix(3);
     literal.remove_suffix(3);
   } else {
-    AD_CHECK(ad_utility::startsWith(literal, "\"") ||
-             ad_utility::startsWith(literal, "'"));
-    AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 1)));
+    AD_CHECK(literal.starts_with('"') || literal.starts_with('\''));
+    AD_CHECK(literal.ends_with(literal[0]));
     literal.remove_prefix(1);
     literal.remove_suffix(1);
   }
@@ -215,8 +213,8 @@ std::string normalizeRDFLiteral(const std::string_view origLiteral) {
  * actual value
  */
 std::string unescapeIriref(std::string_view iriref) {
-  AD_CHECK(ad_utility::startsWith(iriref, "<"));
-  AD_CHECK(ad_utility::endsWith(iriref, ">"));
+  AD_CHECK(iriref.starts_with('<'));
+  AD_CHECK(iriref.ends_with('>'));
   iriref.remove_prefix(1);
   iriref.remove_suffix(1);
   std::string result = "<";

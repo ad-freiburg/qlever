@@ -4,16 +4,15 @@
 
 #include "ParsedQuery.h"
 
+#include <absl/strings/str_split.h>
+
 #include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
 
-#include "../util/Conversions.h"
-#include "../util/StringUtils.h"
+#include "./ParseException.h"
 #include "./RdfEscaping.h"
-#include "ParseException.h"
-#include "Tokenizer.h"
 
 using std::string;
 using std::vector;
@@ -33,28 +32,44 @@ string ParsedQuery::asString() const {
   os << "\n}";
 
   bool usesSelect = hasSelectClause();
+  bool usesAsterisk = usesSelect && selectClause()._varsOrAsterisk.isAsterisk();
+
   if (usesSelect) {
     const auto& selectClause = this->selectClause();
     // SELECT
     os << "\nSELECT: {\n\t";
-    for (size_t i = 0; i < selectClause._selectedVariables.size(); ++i) {
-      os << selectClause._selectedVariables[i];
-      if (i + 1 < selectClause._selectedVariables.size()) {
-        os << ", ";
+    if (usesAsterisk) {
+      auto list = selectClause._varsOrAsterisk.orderedVariablesFromQueryBody();
+      for (auto it = list.begin(); it != list.end();) {
+        os << it->c_str();
+        if (++it != list.end()) {
+          os << ", ";
+        }
+      }
+    } else {
+      const auto& SelectedVariables =
+          selectClause._varsOrAsterisk.getSelectVariables();
+      for (size_t i = 0; i < SelectedVariables.size(); ++i) {
+        os << SelectedVariables[i];
+        if (i + 1 < SelectedVariables.size()) {
+          os << ", ";
+        }
       }
     }
     os << "\n}";
 
     // ALIASES
     os << "\nALIASES: {\n\t";
-    for (size_t i = 0; i < selectClause._aliases.size(); ++i) {
-      const Alias& alias = selectClause._aliases[i];
-      os << alias._expression.getDescriptor();
-      if (i + 1 < selectClause._aliases.size()) {
-        os << "\n\t";
+    if (!usesAsterisk) {
+      for (size_t i = 0; i < selectClause._aliases.size(); ++i) {
+        const Alias& alias = selectClause._aliases[i];
+        os << alias._expression.getDescriptor();
+        if (i + 1 < selectClause._aliases.size()) {
+          os << "\n\t";
+        }
       }
+      os << "{";
     }
-    os << "{";
   } else if (hasConstructClause()) {
     const auto& constructClause = this->constructClause();
     os << "\n CONSTRUCT {\n\t";
@@ -334,7 +349,7 @@ void ParsedQuery::expandPrefixes() {
             expandPrefix(trip._p, prefixMap);
             if (trip._p._operation == PropertyPath::Operation::IRI &&
                 trip._p._iri.find("in-context") != string::npos) {
-              auto tokens = ad_utility::split(trip._o, ' ');
+              std::vector<std::string> tokens = absl::StrSplit(trip._o, ' ');
               trip._o = "";
               for (size_t i = 0; i < tokens.size(); ++i) {
                 expandPrefix(tokens[i], prefixMap);
@@ -375,11 +390,10 @@ void ParsedQuery::expandPrefix(
 // _____________________________________________________________________________
 void ParsedQuery::expandPrefix(
     string& item, const ad_utility::HashMap<string, string>& prefixMap) {
-  if (!ad_utility::startsWith(item, "?") &&
-      !ad_utility::startsWith(item, "<")) {
+  if (!item.starts_with("?") && !item.starts_with("<")) {
     std::optional<string> langtag = std::nullopt;
-    if (ad_utility::startsWith(item, "@")) {
-      auto secondPos = item.find("@", 1);
+    if (item.starts_with("@")) {
+      auto secondPos = item.find('@', 1);
       if (secondPos == string::npos) {
         throw ParseException(
             "langtaged predicates must have form @lang@ActualPredicate. Second "

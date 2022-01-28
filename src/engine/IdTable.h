@@ -879,19 +879,6 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA, Allocator> {
   /**
    * @brief Read cols() elements from init and stores them in a new row
    **/
-  template <bool ManagesStorage = DATA::ManagesStorage,
-            typename = std::enable_if_t<ManagesStorage>>
-  void push_back(const Id* init) {
-    if (_size + 1 >= _capacity) {
-      grow();
-    }
-    std::memcpy(_data + _size * _cols, init, sizeof(Id) * _cols);
-    _size++;
-  }
-
-  /**
-   * @brief Read cols() elements from init and stores them in a new row
-   **/
   template <
       typename T,
       typename = std::enable_if_t<

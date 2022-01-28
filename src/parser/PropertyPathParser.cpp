@@ -241,8 +241,7 @@ bool PropertyPathParser::accept(const std::string& token) {
 // _____________________________________________________________________________
 bool PropertyPathParser::acceptPrefix(const std::string& tokenPrefix,
                                       std::string_view* token) {
-  if (_position != _end &&
-      ad_utility::startsWith(_position->text, tokenPrefix)) {
+  if (_position != _end && _position->text.starts_with(tokenPrefix)) {
     if (token != nullptr) {
       *token = _position->text;
     }
