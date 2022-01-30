@@ -4,16 +4,15 @@
 
 #include "ParsedQuery.h"
 
+#include <absl/strings/str_split.h>
+
 #include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
 
-#include "../util/Conversions.h"
-#include "../util/StringUtils.h"
+#include "./ParseException.h"
 #include "./RdfEscaping.h"
-#include "ParseException.h"
-#include "Tokenizer.h"
 
 using std::string;
 using std::vector;
@@ -350,7 +349,7 @@ void ParsedQuery::expandPrefixes() {
             expandPrefix(trip._p, prefixMap);
             if (trip._p._operation == PropertyPath::Operation::IRI &&
                 trip._p._iri.find("in-context") != string::npos) {
-              auto tokens = ad_utility::split(trip._o, ' ');
+              std::vector<std::string> tokens = absl::StrSplit(trip._o, ' ');
               trip._o = "";
               for (size_t i = 0; i < tokens.size(); ++i) {
                 expandPrefix(tokens[i], prefixMap);

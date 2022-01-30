@@ -4,6 +4,8 @@
 //
 #pragma once
 
+#include <absl/strings/str_join.h>
+
 #include <iostream>
 #include <string>
 #include <vector>
@@ -51,8 +53,8 @@ class RuntimeInformation {
     out << indentStr(indent - 1) << "├─ " << _descriptor << '\n';
     out << indentStr(indent) << "result_size: " << _rows << " x " << _cols
         << '\n';
-    out << indentStr(indent)
-        << "columns: " << ad_utility::join(_columnNames, ", ") << '\n';
+    out << indentStr(indent) << "columns: " << absl::StrJoin(_columnNames, ", ")
+        << '\n';
     out << indentStr(indent) << "total_time: " << _time << " ms" << '\n';
     out << indentStr(indent) << "operation_time: " << getOperationTime()
         << " ms" << '\n';

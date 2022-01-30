@@ -7,13 +7,6 @@
 #include <unordered_set>
 #include <variant>
 
-#include "../global/Constants.h"
-#include "../util/Conversions.h"
-#include "../util/Exception.h"
-#include "../util/HashSet.h"
-#include "../util/Log.h"
-#include "../util/StringUtils.h"
-#include "./ParseException.h"
 #include "./SparqlParserHelpers.h"
 #include "PropertyPathParser.h"
 
@@ -774,14 +767,12 @@ void SparqlParser::addLangFilter(const std::string& lhs, const std::string& rhs,
 }
 
 // _____________________________________________________________________________
-string SparqlParser::stripAndLowercaseKeywordLiteral(const string& lit) {
+string SparqlParser::stripAndLowercaseKeywordLiteral(std::string_view lit) {
   if (lit.size() > 2 && lit[0] == '"' && lit.back() == '"') {
-    string stripped = ad_utility::strip(lit, '"');
-    // stripped.erase(std::remove(stripped.begin(), stripped.end(), '\''),
-    //               stripped.end());
+    auto stripped = lit.substr(1, lit.size() - 2);
     return ad_utility::getLowercaseUtf8(stripped);
   }
-  return lit;
+  return std::string{lit};
 }
 
 // _____________________________________________________________________________

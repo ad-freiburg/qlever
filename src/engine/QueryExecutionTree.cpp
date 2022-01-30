@@ -4,6 +4,8 @@
 
 #include "./QueryExecutionTree.h"
 
+#include <absl/strings/str_join.h>
+
 #include <algorithm>
 #include <sstream>
 #include <string>
@@ -89,78 +91,6 @@ void QueryExecutionTree::setVariableColumns(
   _variableColumnMap = map;
 }
 
-// _____________________________________________________________________________
-template <QueryExecutionTree::ExportSubFormat format>
-ad_utility::stream_generator::stream_generator
-QueryExecutionTree::generateResults(
-    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
-    size_t offset) const {
-  // They may trigger computation (but does not have to).
-  shared_ptr<const ResultTable> resultTable = getResult();
-  LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices;
-  if (selectedVarsOrAsterisk.isAsterisk()) {
-    auto orderedVariablesFromQuery =
-        selectedVarsOrAsterisk.orderedVariablesFromQueryBody();
-    auto variablesFromExecutionTree = getVariableColumns();
-    for (const auto& variableFromQuery : orderedVariablesFromQuery) {
-      auto it = variablesFromExecutionTree.find(variableFromQuery);
-      if (it != variablesFromExecutionTree.end()) {
-        validIndices.emplace_back(pair<size_t, ResultTable::ResultType>(
-            it->second, resultTable->getResultType(it->second)));
-        variablesFromExecutionTree.erase(it);
-      } else {
-        validIndices.emplace_back(std::nullopt);
-      }
-    }
-    for (const auto& variableFromQuery : variablesFromExecutionTree) {
-      LOG(WARN) << "The variable \"" << variableFromQuery.first
-                << "\" was found in the execution tree, but not in the "
-                   "original query. "
-                   "This is likely a bug\n";
-    }
-  } else {
-    for (auto variableFromQuery : selectedVarsOrAsterisk.getSelectVariables()) {
-      if (variableFromQuery.starts_with("TEXT(")) {
-        variableFromQuery =
-            variableFromQuery.substr(5, variableFromQuery.rfind(')') - 5);
-      }
-      auto it = getVariableColumns().find(variableFromQuery);
-      if (it != getVariableColumns().end()) {
-        validIndices.emplace_back(pair<size_t, ResultTable::ResultType>(
-            it->second, resultTable->getResultType(it->second)));
-      } else {
-        validIndices.emplace_back(std::nullopt);
-      }
-    }
-  }
-  if (validIndices.empty()) {
-    return {};
-  }
-
-  const IdTable& data = resultTable->_idTable;
-  size_t upperBound = std::min<size_t>(offset + limit, data.size());
-  return writeTable<format>(offset, upperBound, std::move(validIndices),
-                            std::move(resultTable));
-}
-
-// Instantiate template function for all enum types
-
-template ad_utility::stream_generator::stream_generator
-QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::CSV>(
-    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
-    size_t offset) const;
-
-template ad_utility::stream_generator::stream_generator
-QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::TSV>(
-    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
-    size_t offset) const;
-
-template ad_utility::stream_generator::stream_generator QueryExecutionTree::
-    generateResults<QueryExecutionTree::ExportSubFormat::BINARY>(
-        const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
-        size_t offset) const;
-
 // ___________________________________________________________________________
 QueryExecutionTree::ColumnIndicesAndTypes
 QueryExecutionTree::selectedVariablesToColumnIndices(
@@ -169,7 +99,7 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
   ColumnIndicesAndTypes exportColumns;
   if (selectedVarsOrAsterisk.isAsterisk()) {
     auto variablesFromExecutionTree = getVariableColumns();
-    for (auto variableFromQuery :
+    for (const auto& variableFromQuery :
          selectedVarsOrAsterisk.orderedVariablesFromQueryBody()) {
       if (getVariableColumns().contains(variableFromQuery)) {
         auto columnIndex = getVariableColumns().at(variableFromQuery);
@@ -193,8 +123,12 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     }
   } else {
     for (auto var : selectedVarsOrAsterisk.getSelectVariables()) {
-      if (var.starts_with("TEXT(")) {
-        var = var.substr(5, var.rfind(')') - 5);
+      // TODO: The TEXT(?variable) syntax is redundant and will probably removed
+      //  when we have a proper SPARQL parser.
+      constexpr std::string_view prefix = "TEXT(";
+      constexpr size_t prefixLength = prefix.length();
+      if (var.starts_with(prefix)) {
+        var = var.substr(prefixLength, var.rfind(')') - prefixLength);
       }
       if (getVariableColumns().contains(var)) {
         auto columnIndex = getVariableColumns().at(var);
@@ -471,44 +405,58 @@ nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
 
 // _____________________________________________________________________________
 template <QueryExecutionTree::ExportSubFormat format>
-ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
-    size_t from, size_t upperBound,
-    const vector<std::optional<pair<size_t, ResultTable::ResultType>>>
-        validIndices,
-    std::shared_ptr<const ResultTable> resultTable) const {
+ad_utility::stream_generator::stream_generator
+QueryExecutionTree::generateResults(
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    size_t offset) const {
   static_assert(format == ExportSubFormat::BINARY ||
                 format == ExportSubFormat::CSV ||
                 format == ExportSubFormat::TSV);
-  if (!resultTable) {
-    resultTable = getResult();
-  }
+
+  // This call triggers the possibly expensive computation of the query result
+  // unless the result is already cached.
+  shared_ptr<const ResultTable> resultTable = getResult();
+  LOG(DEBUG) << "Resolving strings for finished binary result...\n";
+  auto selectedColumnIndices =
+      selectedVariablesToColumnIndices(selectedVarsOrAsterisk, *resultTable);
+
   const auto& idTable = resultTable->_idTable;
+  size_t upperBound = std::min<size_t>(offset + limit, idTable.size());
+
   // special case : binary export of IdTable
   if constexpr (format == ExportSubFormat::BINARY) {
-    for (size_t i = from; i < upperBound; ++i) {
-      for (size_t j = 0; j < validIndices.size(); ++j) {
-        if (validIndices[j]) {
-          const auto& val = *validIndices[j];
-          co_yield std::string_view{
-              reinterpret_cast<const char*>(&idTable(i, val.first)),
-              sizeof(Id)};
+    for (size_t i = offset; i < upperBound; ++i) {
+      for (const auto& columnIndex : selectedColumnIndices) {
+        if (columnIndex.has_value()) {
+          co_yield std::string_view{reinterpret_cast<const char*>(&idTable(
+                                        i, columnIndex.value()._columnIndex)),
+                                    sizeof(Id)};
         }
       }
     }
     co_return;
   }
 
-  constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
+  static constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
+  constexpr std::string_view sepView{&sep, 1};
+  // Print header line
+  const auto& variables =
+      selectedVarsOrAsterisk.isAsterisk()
+          ? selectedVarsOrAsterisk.orderedVariablesFromQueryBody()
+          : selectedVarsOrAsterisk.getSelectVariables();
+  co_yield absl::StrJoin(variables, sepView);
+  co_yield '\n';
 
-  for (size_t i = from; i < upperBound; ++i) {
-    for (size_t j = 0; j < validIndices.size(); ++j) {
-      if (validIndices[j]) {
-        const auto& val = *validIndices[j];
-        switch (val.second) {
+  for (size_t i = offset; i < upperBound; ++i) {
+    for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
+      if (selectedColumnIndices[j].has_value()) {
+        const auto& val = selectedColumnIndices[j].value();
+        switch (val._resultType) {
           case ResultTable::ResultType::KB: {
-            string entity = _qec->getIndex()
-                                .idToOptionalString(idTable(i, val.first))
-                                .value_or("");
+            string entity =
+                _qec->getIndex()
+                    .idToOptionalString(idTable(i, val._columnIndex))
+                    .value_or("");
             if (entity.starts_with(VALUE_PREFIX)) {
               co_yield ad_utility::convertIndexWordToValueLiteral(entity);
             } else {
@@ -517,19 +465,21 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
             break;
           }
           case ResultTable::ResultType::VERBATIM:
-            co_yield idTable(i, val.first);
+            co_yield idTable(i, val._columnIndex);
             break;
           case ResultTable::ResultType::TEXT:
-            co_yield _qec->getIndex().getTextExcerpt(idTable(i, val.first));
+            co_yield _qec->getIndex().getTextExcerpt(
+                idTable(i, val._columnIndex));
             break;
           case ResultTable::ResultType::FLOAT: {
             float f;
-            std::memcpy(&f, &idTable(i, val.first), sizeof(float));
+            std::memcpy(&f, &idTable(i, val._columnIndex), sizeof(float));
             co_yield f;
             break;
           }
           case ResultTable::ResultType::LOCAL_VOCAB: {
-            co_yield resultTable->idToOptionalString(idTable(i, val.first))
+            co_yield resultTable
+                ->idToOptionalString(idTable(i, val._columnIndex))
                 .value_or("");
             break;
           }
@@ -538,11 +488,28 @@ ad_utility::stream_generator::stream_generator QueryExecutionTree::writeTable(
                      "Cannot deduce output type.");
         }
       }
-      co_yield(j + 1 < validIndices.size() ? sep : '\n');
+      co_yield(j + 1 < selectedColumnIndices.size() ? sep : '\n');
     }
   }
   LOG(DEBUG) << "Done creating readable result.\n";
 }
+
+// Instantiate template function for all enum types
+
+template ad_utility::stream_generator::stream_generator
+QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::CSV>(
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    size_t offset) const;
+
+template ad_utility::stream_generator::stream_generator
+QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::TSV>(
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    size_t offset) const;
+
+template ad_utility::stream_generator::stream_generator QueryExecutionTree::
+    generateResults<QueryExecutionTree::ExportSubFormat::BINARY>(
+        const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+        size_t offset) const;
 
 // _____________________________________________________________________________
 
