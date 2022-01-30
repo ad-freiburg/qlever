@@ -24,9 +24,9 @@ class DummyOperation : public Operation {
   virtual void computeResult(ResultTable* result) override {
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
-    result->_data.setCols(2);
+    result->_idTable.setCols(2);
     for (size_t i = 0; i < 10; i++) {
-      result->_data.push_back({10 - i, 2 * i});
+      result->_idTable.push_back({10 - i, 2 * i});
     }
   }
 
@@ -68,7 +68,7 @@ class DummyOperation : public Operation {
 TEST(HasPredicateScan, freeS) {
   // Used to store the result.
   ResultTable resultTable{allocator()};
-  resultTable._data.setCols(1);
+  resultTable._idTable.setCols(1);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
@@ -81,13 +81,13 @@ TEST(HasPredicateScan, freeS) {
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
-  CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
-  CompactStringVector<size_t, Id> patterns(patternsSrc);
+  CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
+  CompactVectorOfStrings<Id> patterns(patternsSrc);
 
   // Find all entities that are in a triple with predicate 3
   HasPredicateScan::computeFreeS(&resultTable, 3, hasPattern, hasRelation,
                                  patterns);
-  IdTable& result = resultTable._data;
+  IdTable& result = resultTable._idTable;
 
   // the result set does not guarantee any sorting so we have to sort manually
   std::sort(result.begin(), result.end(),
@@ -108,7 +108,7 @@ TEST(HasPredicateScan, freeS) {
 TEST(HasPredicateScan, freeO) {
   // Used to store the result.
   ResultTable resultTable{allocator()};
-  resultTable._data.setCols(1);
+  resultTable._idTable.setCols(1);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
@@ -121,13 +121,13 @@ TEST(HasPredicateScan, freeO) {
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
-  CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
-  CompactStringVector<size_t, Id> patterns(patternsSrc);
+  CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
+  CompactVectorOfStrings<Id> patterns(patternsSrc);
 
   // Find all predicates for entity 3 (pattern 1)
   HasPredicateScan::computeFreeO(&resultTable, 3, hasPattern, hasRelation,
                                  patterns);
-  IdTable& result = resultTable._data;
+  IdTable& result = resultTable._idTable;
 
   ASSERT_EQ(5u, result.size());
   ASSERT_EQ(1u, result[0][0]);
@@ -136,7 +136,7 @@ TEST(HasPredicateScan, freeO) {
   ASSERT_EQ(2u, result[3][0]);
   ASSERT_EQ(0u, result[4][0]);
 
-  resultTable._data.clear();
+  resultTable._idTable.clear();
 
   // Find all predicates for entity 6 (has-relation entry 6)
   HasPredicateScan::computeFreeO(&resultTable, 6, hasPattern, hasRelation,
@@ -150,7 +150,7 @@ TEST(HasPredicateScan, freeO) {
 TEST(HasPredicateScan, fullScan) {
   // Used to store the result.
   ResultTable resultTable{allocator()};
-  resultTable._data.setCols(2);
+  resultTable._idTable.setCols(2);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
@@ -162,13 +162,13 @@ TEST(HasPredicateScan, fullScan) {
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
-  CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
-  CompactStringVector<size_t, Id> patterns(patternsSrc);
+  CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
+  CompactVectorOfStrings<Id> patterns(patternsSrc);
 
   // Query for all relations
   HasPredicateScan::computeFullScan(&resultTable, hasPattern, hasRelation,
                                     patterns, 16);
-  IdTable& result = resultTable._data;
+  IdTable& result = resultTable._idTable;
 
   ASSERT_EQ(16u, result.size());
 
@@ -212,7 +212,7 @@ TEST(HasPredicateScan, fullScan) {
 TEST(HasPredicateScan, subtreeS) {
   // Used to store the result.
   ResultTable resultTable{allocator()};
-  resultTable._data.setCols(3);
+  resultTable._idTable.setCols(3);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
@@ -225,12 +225,12 @@ TEST(HasPredicateScan, subtreeS) {
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
-  CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
-  CompactStringVector<size_t, Id> patterns(patternsSrc);
+  CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
+  CompactVectorOfStrings<Id> patterns(patternsSrc);
 
   Index index;
   Engine engine;
-  QueryResultCache cache{DEFAULT_CACHE_MAX_NUM_ENTRIES};
+  QueryResultCache cache{};
   QueryExecutionContext ctx(index, engine, &cache, allocator(),
                             SortPerformanceEstimator{});
 
@@ -246,10 +246,10 @@ TEST(HasPredicateScan, subtreeS) {
   int in_width = 2;
   int out_width = 3;
   CALL_FIXED_SIZE_2(in_width, out_width, HasPredicateScan::computeSubqueryS,
-                    &resultTable._data, subresult->_data, 1, hasPattern,
+                    &resultTable._idTable, subresult->_idTable, 1, hasPattern,
                     hasRelation, patterns);
 
-  IdTable& result = resultTable._data;
+  IdTable& result = resultTable._idTable;
 
   // the sum of the count of every second entities relations
   ASSERT_EQ(10u, result.size());
@@ -313,8 +313,8 @@ TEST(CountAvailablePredicates, patternTrickTest) {
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
-  CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
-  CompactStringVector<size_t, Id> patterns(patternsSrc);
+  CompactVectorOfStrings<Id> hasRelation(hasRelationSrc);
+  CompactVectorOfStrings<Id> patterns(patternsSrc);
 
   RuntimeInformation runtimeInfo;
   try {

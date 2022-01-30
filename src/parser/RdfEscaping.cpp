@@ -11,6 +11,7 @@
 #include "../util/HashSet.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
+#include "ctre/ctre.h"
 
 namespace RdfEscaping {
 using namespace std::string_literals;
@@ -185,15 +186,13 @@ std::string normalizeRDFLiteral(const std::string_view origLiteral) {
 
   // Find out, which of the forms "literal", 'literal', """literal""" or
   // '''literal''' the input has, and strip all the quotes.
-  if (ad_utility::startsWith(literal, "\"\"\"") ||
-      ad_utility::startsWith(literal, "'''")) {
-    AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 3)));
+  if (literal.starts_with(R"(""")") || literal.starts_with("'''")) {
+    AD_CHECK(literal.ends_with(literal.substr(0, 3)));
     literal.remove_prefix(3);
     literal.remove_suffix(3);
   } else {
-    AD_CHECK(ad_utility::startsWith(literal, "\"") ||
-             ad_utility::startsWith(literal, "'"));
-    AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 1)));
+    AD_CHECK(literal.starts_with('"') || literal.starts_with('\''));
+    AD_CHECK(literal.ends_with(literal[0]));
     literal.remove_prefix(1);
     literal.remove_suffix(1);
   }
@@ -214,8 +213,8 @@ std::string normalizeRDFLiteral(const std::string_view origLiteral) {
  * actual value
  */
 std::string unescapeIriref(std::string_view iriref) {
-  AD_CHECK(ad_utility::startsWith(iriref, "<"));
-  AD_CHECK(ad_utility::endsWith(iriref, ">"));
+  AD_CHECK(iriref.starts_with('<'));
+  AD_CHECK(iriref.ends_with('>'));
   iriref.remove_prefix(1);
   iriref.remove_suffix(1);
   std::string result = "<";
@@ -251,5 +250,30 @@ std::string unescapePrefixedIri(std::string_view literal) {
   // the remainder
   res.append(literal);
   return res;
+}
+
+std::string replaceAll(std::string str, const std::string_view from,
+                       const std::string_view to) {
+  size_t start_pos = 0;
+  while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
+    str.replace(start_pos, from.length(), to);
+    start_pos += to.length();
+  }
+  return str;
+}
+
+std::string escapeForCsv(std::string input) {
+  if (!ctre::search<"[\r\n\",]">(input)) {
+    return input;
+  }
+  return '"' + replaceAll(std::move(input), "\"", "\"\"") + '"';
+}
+
+std::string escapeForTsv(std::string input) {
+  if (!ctre::search<"[\n\t]">(input)) {
+    return input;
+  }
+  auto stage1 = replaceAll(std::move(input), "\t", " ");
+  return replaceAll(std::move(stage1), "\n", "\\n");
 }
 }  // namespace RdfEscaping

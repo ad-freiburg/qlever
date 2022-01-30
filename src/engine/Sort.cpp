@@ -58,31 +58,33 @@ void Sort::computeResult(ResultTable* result) {
   double remainingSecs =
       static_cast<double>(_timeoutTimer->wlock()->remainingMicroseconds()) /
       1'000'000;
+  auto sortEstimateCancellationFactor =
+      RuntimeParameters().get<"sort-estimate-cancellation-factor">();
   if (getExecutionContext()
           ->getSortPerformanceEstimator()
           .estimatedSortTimeInSeconds(subRes->size(), subRes->width()) >
-      remainingSecs * SORT_ESTIMATE_CANCELLATION_FACTOR) {
+      remainingSecs * sortEstimateCancellationFactor) {
     // The estimated time for this sort is much larger than the actually
     // remaining time, cancel this operation
     throw ad_utility::TimeoutException(
         "Sort operation was canceled, because time estimate exceeded "
         "remaining time by a factor of " +
-        std::to_string(SORT_ESTIMATE_CANCELLATION_FACTOR));
+        std::to_string(sortEstimateCancellationFactor));
   }
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
 
   LOG(DEBUG) << "Sort result computation..." << endl;
-  result->_data.setCols(subRes->_data.cols());
+  result->_idTable.setCols(subRes->_idTable.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
   result->_localVocab = subRes->_localVocab;
-  result->_data.insert(result->_data.end(), subRes->_data.begin(),
-                       subRes->_data.end());
-  int width = result->_data.cols();
-  CALL_FIXED_SIZE_1(width, Engine::sort, &result->_data, _sortCol);
+  result->_idTable.insert(result->_idTable.end(), subRes->_idTable.begin(),
+                          subRes->_idTable.end());
+  int width = result->_idTable.cols();
+  CALL_FIXED_SIZE_1(width, Engine::sort, &result->_idTable, _sortCol);
   result->_sortedBy = resultSortedOn();
 
   LOG(DEBUG) << "Sort result computation done." << endl;

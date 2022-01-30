@@ -32,7 +32,7 @@ double NumericValueGetter::operator()(StrongIdWithResultType strongId,
       // load the string, parse it as an xsd::int or float
       std::string entity =
           context->_qec.getIndex().idToOptionalString(id).value_or("");
-      if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+      if (!entity.starts_with(VALUE_FLOAT_PREFIX)) {
         return std::numeric_limits<float>::quiet_NaN();
       } else {
         return ad_utility::convertIndexWordToFloat(entity);
@@ -67,7 +67,7 @@ bool EffectiveBooleanValueGetter::operator()(StrongIdWithResultType strongId,
         return false;
       }
       // Non-numeric non-empty values are always true
-      if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+      if (!entity.starts_with(VALUE_FLOAT_PREFIX)) {
         return true;
       } else {
         // 0 and nan values are considered false.
@@ -99,9 +99,9 @@ string StringValueGetter::operator()(StrongIdWithResultType strongId,
       // load the string, parse it as an xsd::int or float
       std::string entity =
           context->_qec.getIndex().idToOptionalString(id).value_or("");
-      if (ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+      if (entity.starts_with(VALUE_FLOAT_PREFIX)) {
         return std::to_string(ad_utility::convertIndexWordToFloat(entity));
-      } else if (ad_utility::startsWith(entity, VALUE_DATE_PREFIX)) {
+      } else if (entity.starts_with(VALUE_DATE_PREFIX)) {
         return ad_utility::convertDateToIndexWord(entity);
       } else {
         return entity;

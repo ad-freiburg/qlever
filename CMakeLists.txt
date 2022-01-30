@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 2.8.4)
+cmake_minimum_required(VERSION 3.8.4)
 project(QLever C CXX)
 
 # C/C++ Versions
@@ -62,12 +62,31 @@ include_directories(${ICU_INCLUDE_DIR})
 ###################################
 # JEMALLOC
 ###################################
-find_package(PkgConfig REQUIRED)
-pkg_check_modules (JEMALLOC jemalloc)
+if (${JEMALLOC_MANUALLY_INSTALLED})
+  link_libraries(jemalloc)
+else()
+  find_package(PkgConfig)
+  pkg_check_modules (JEMALLOC jemalloc)
 
-pkg_search_module(JEMALLOC REQUIRED jemalloc)
-include_directories(${JEMALLOC_INCLUDE_DIRS})
-link_libraries(${JEMALLOC_LIBRARIES})
+  pkg_search_module(JEMALLOC jemalloc)
+  if (${JEMALLOC_FOUND})
+    include_directories(${JEMALLOC_INCLUDE_DIRS})
+    link_libraries(${JEMALLOC_LIBRARIES})
+  else ()
+    message(FATAL_ERROR "Jemalloc is required, but could not be found via
+    pkg-config. If you are sure that you have installed jemalloc on your system
+    (e.g. via `apt install libjemalloc-dev` on Ubuntu), you might try rerunning
+    cmake with `-DJEMALLOC_MANUALLY_INSTALLED=True`. This is currently necessary
+    on Ubuntu 18.04, where pkg-config does not find jemalloc.")
+  endif()
+endif()
+
+
+######################################
+# BOOST
+######################################
+find_package(Boost 1.74 COMPONENTS program_options REQUIRED)
+include_directories(${Boost_INCLUDE_DIR})
 
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -97,10 +116,11 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 
 ################################
-# GTEST
+# GTEST AND GMOCK
 ################################
-add_subdirectory(third_party/googletest/googletest EXCLUDE_FROM_ALL)
+add_subdirectory(third_party/googletest EXCLUDE_FROM_ALL)
 include_directories(third_party/googletest/googletest/include)
+include_directories(third_party/googletest/googlemock/include)
 
 ################################
 # NLOHNMANN-JSON
@@ -212,17 +232,11 @@ configure_file(src/web/script.js script.js)
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
 target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(CreatePatternsMain src/index/CreatePatternsMain.cpp)
+add_executable(CreatePatternsMain src/index/CreatePatternsMain.cpp src/util/ConstexprSmallString.h)
 target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(SparqlEngineMain src/SparqlEngineMain.cpp)
-target_link_libraries (SparqlEngineMain engine ${CMAKE_THREAD_LIBS_INIT})
-
 add_executable(ServerMain src/ServerMain.cpp)
-target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT})
-
-add_executable(WriteIndexListsMain src/WriteIndexListsMain.cpp)
-target_link_libraries (WriteIndexListsMain engine ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES})
 
 add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
 target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
@@ -235,6 +249,9 @@ target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PermutationExporterMain src/index/PermutationExporterMain.cpp)
 target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(VocabularyConverterMain src/VocabularyConverterMain.cpp)
+target_link_libraries(VocabularyConverterMain index ${CMAKE_THREAD_LIBS_INIT})
 
 #add_executable(TextFilterComparison src/experiments/TextFilterComparison.cpp)
 #target_link_libraries (TextFilterComparison experiments)

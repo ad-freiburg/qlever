@@ -9,7 +9,12 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "../parser/ParsedQuery.h"
+#include "../parser/data/Context.h"
+#include "../parser/data/Types.h"
+#include "../parser/data/VarOrTerm.h"
 #include "../util/Conversions.h"
+#include "../util/Generator.h"
 #include "../util/HashSet.h"
 #include "../util/streamable_generator.h"
 #include "./Operation.h"
@@ -49,6 +54,8 @@ class QueryExecutionTree {
     MINUS = 20
   };
 
+  enum class ExportSubFormat { CSV, TSV, BINARY };
+
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
 
   string asString(size_t indent = 0);
@@ -87,16 +94,53 @@ class QueryExecutionTree {
     return _rootOperation->getResult(isRoot());
   }
 
-  void writeResultToStream(std::ostream& out, const vector<string>& selectVars,
-                           size_t limit = MAX_NOF_ROWS_IN_RESULT,
-                           size_t offset = 0, char sep = '\t') const;
+  // A variable, its column index in the Id space result, and the `ResultType`
+  // of this column.
+  struct VariableAndColumnIndex {
+    std::string _variable;
+    size_t _columnIndex;
+    ResultTable::ResultType _resultType;
+  };
 
+  using SelectedVarsOrAsterisk = ParsedQuery::SelectedVarsOrAsterisk;
+
+  using ColumnIndicesAndTypes = vector<std::optional<VariableAndColumnIndex>>;
+
+  // Returns a vector where the i-th element contains the column index and
+  // `ResultType` of the i-th `selectVariable` in the `resultTable`
+  ColumnIndicesAndTypes selectedVariablesToColumnIndices(
+      const SelectedVarsOrAsterisk& selectedVarsOrAsterisk,
+      const ResultTable& resultTable) const;
+
+  template <ExportSubFormat format>
   ad_utility::stream_generator::stream_generator generateResults(
-      const vector<string>& selectVars, size_t limit = MAX_NOF_ROWS_IN_RESULT,
-      size_t offset = 0, char sep = '\t') const;
+      const SelectedVarsOrAsterisk& selectedVarsOrAsterisk,
+      size_t limit = MAX_NOF_ROWS_IN_RESULT, size_t offset = 0) const;
 
-  nlohmann::json writeResultAsJson(const vector<string>& selectVars,
-                                   size_t limit, size_t offset) const;
+  // Generate an RDF graph in turtle format for a CONSTRUCT query.
+  ad_utility::stream_generator::stream_generator writeRdfGraphTurtle(
+      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+      size_t offset, std::shared_ptr<const ResultTable> res) const;
+
+  // Generate an RDF graph in csv/tsv format for a CONSTRUCT query.
+  template <ExportSubFormat format>
+  ad_utility::stream_generator::stream_generator writeRdfGraphSeparatedValues(
+      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+      size_t offset, std::shared_ptr<const ResultTable> res) const;
+
+  // Generate an RDF graph in json format for a CONSTRUCT query.
+  nlohmann::json writeRdfGraphJson(
+      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+      size_t offset, std::shared_ptr<const ResultTable> res) const;
+
+  nlohmann::json writeResultAsQLeverJson(
+      const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+      size_t offset, shared_ptr<const ResultTable> resultTable = nullptr) const;
+
+  nlohmann::json writeResultAsSparqlJson(
+      const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+      size_t offset,
+      shared_ptr<const ResultTable> preComputedResult = nullptr) const;
 
   const std::vector<size_t>& resultSortedOn() const {
     return _rootOperation->getResultSortedOn();
@@ -191,22 +235,45 @@ class QueryExecutionTree {
 
   std::shared_ptr<const ResultTable> _cachedResult = nullptr;
 
+  // Helper class to avoid bug in g++ that leads to memory corruption when
+  // used inside of coroutines when using srd::array<std::string, 3> instead
+  // see https://gcc.gnu.org/bugzilla/show_bug.cgi?id=103909 for more
+  // information
+  struct StringTriple {
+    std::string _subject;
+    std::string _predicate;
+    std::string _object;
+    StringTriple(std::string subject, std::string predicate, std::string object)
+        : _subject{std::move(subject)},
+          _predicate{std::move(predicate)},
+          _object{std::move(object)} {}
+  };
+
   /**
    * @brief Convert an IdTable (typically from a query result) to a json array
    * @param data the IdTable from which we read
    * @param from the first <from> entries of the idTable are skipped
    * @param limit at most <limit> entries are written, starting at <from>
-   * @param validIndices each pair of <columnInIdTable, correspondingType> tells
+   * @param columns each pair of <columnInIdTable, correspondingType> tells
    * us which columns are to be serialized in which order
    * @return a 2D-Json array corresponding to the IdTable given the arguments
    */
-  nlohmann::json writeJsonTable(
-      const IdTable& data, size_t from, size_t limit,
-      const vector<std::optional<pair<size_t, ResultTable::ResultType>>>&
-          validIndices) const;
+  nlohmann::json writeQLeverJsonTable(
+      size_t from, size_t limit, const ColumnIndicesAndTypes& columns,
+      std::shared_ptr<const ResultTable> resultTable = nullptr) const;
 
+  [[nodiscard]] std::optional<std::pair<std::string, const char*>>
+  toStringAndXsdType(Id id, ResultTable::ResultType type,
+                     const ResultTable& resultTable) const;
+
+  template <ExportSubFormat format>
   ad_utility::stream_generator::stream_generator writeTable(
-      const IdTable& data, char sep, size_t from, size_t upperBound,
-      const vector<std::optional<pair<size_t, ResultTable::ResultType>>>
-          validIndices) const;
+      size_t from, size_t upperBound,
+      vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices,
+      shared_ptr<const ResultTable> resultTable = nullptr) const;
+
+  // Generate an RDF graph for a CONSTRUCT query.
+  cppcoro::generator<StringTriple> generateRdfGraph(
+      const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+      size_t offset, std::shared_ptr<const ResultTable> res) const;
 };

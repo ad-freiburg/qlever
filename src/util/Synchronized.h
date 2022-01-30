@@ -15,6 +15,9 @@
 
 namespace ad_utility {
 
+// An empty tag-type
+struct ConstructWithMutex {};
+
 /// Does type M have a lock() and unlock() member function (behaves like a
 /// mutex)
 template <typename M, typename = void>
@@ -71,7 +74,7 @@ template <typename T, typename Mutex = std::shared_mutex,
           typename = std::enable_if_t<AllowsLocking<Mutex>::value>>
 class Synchronized {
  public:
-  using value_type = T;
+  using value_type = std::remove_reference_t<T>;
 
   /// is this a shared_mutex?
   constexpr static bool isShared = AllowsSharedLocking<Mutex>::value;
@@ -80,14 +83,19 @@ class Synchronized {
   Synchronized(const Synchronized&) = delete;
   Synchronized& operator=(const Synchronized&) = delete;
   /// default Movable
-  Synchronized(Synchronized&&) = default;
-  Synchronized& operator=(Synchronized&&) = default;
+  Synchronized(Synchronized&&) noexcept = default;
+  Synchronized& operator=(Synchronized&&) noexcept = default;
   ~Synchronized() = default;
 
   /// Constructor that is not copy or move, tries to instantiate the underlying
   /// type via perfect forwarding (this includes the default constructor)
   template <typename... Args>
-  Synchronized(Args&&... args) : data_{std::forward<Args>(args)...}, m_{} {}
+  explicit Synchronized(Args&&... args)
+      : data_{std::forward<Args>(args)...}, m_{} {}
+
+  template <typename... Args>
+  Synchronized(ConstructWithMutex, Mutex mutex, Args&&... args)
+      : data_{std::forward<Args>(args)...}, m_{mutex} {}
 
   /** @brief Obtain an exclusive lock and then call f() on the underlying data
    * type, return the result.
@@ -105,7 +113,7 @@ class Synchronized {
   /// const overload of with WriteLock
   template <typename F>
   auto withWriteLock(F f) const {
-    std::lock_guard l(m_);
+    std::lock_guard l(mutex());
     return f(data_);
   }
 
@@ -140,7 +148,7 @@ class Synchronized {
   template <typename F, bool s = isShared,
             typename Res = std::invoke_result_t<F, const T&>>
   std::enable_if_t<s, Res> withReadLock(F f) const {
-    std::shared_lock l(m_);
+    std::shared_lock l(mutex());
     return f(data_);
   }
 
@@ -200,9 +208,18 @@ class Synchronized {
     return LockPtr<Synchronized, true, true>{this};
   };
 
+  // Return a `Synchronized` that uses a reference to this `Synchronized`'s
+  // `_data` and `mutext_`. The reference is a reference of the Base class U.
+  template <typename U>
+  requires std::is_base_of_v<U, T> Synchronized<U&, Mutex&> toBaseReference() {
+    return {ConstructWithMutex{}, mutex(), data_};
+  }
+
  private:
-  T data_;           // The data to which we synchronize the access.
-  mutable Mutex m_;  // The used mutex
+  T data_;   // The data to which we synchronize the access.
+  Mutex m_;  // The used mutex
+
+  Mutex& mutex() const { return const_cast<Mutex&>(m_); }
 
   // These are used for the withWriteLockAndOrdered function
   size_t nextOrderedRequest_ = 0;
@@ -230,9 +247,9 @@ class LockPtr {
                   !isSharedLock);  // if we only have a shared lock, we may only
                                    // perform const operations
     if constexpr (isSharedLock) {
-      s_->m_.lock_shared();
+      s_->mutex().lock_shared();
     } else {
-      s_->m_.lock();
+      s_->mutex().lock();
     }
   }
 
@@ -240,9 +257,9 @@ class LockPtr {
   // destructor releases the lock
   ~LockPtr() {
     if constexpr (isSharedLock) {
-      s_->m_.unlock_shared();
+      s_->mutex().unlock_shared();
     } else {
-      s_->m_.unlock();
+      s_->mutex().unlock();
     }
   }
 

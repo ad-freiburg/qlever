@@ -104,7 +104,7 @@ class Join : public Operation {
   }
 
  private:
-  void computeResultForJoinWithFullScanDummy(ResultTable* result) const;
+  void computeResultForJoinWithFullScanDummy(ResultTable* result);
 
   using ScanMethodType = std::function<void(Id, IdTable*)>;
 

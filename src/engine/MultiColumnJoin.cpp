@@ -77,9 +77,9 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
   result->_sortedBy = resultSortedOn();
-  result->_data.setCols(getResultWidth());
+  result->_idTable.setCols(getResultWidth());
 
-  AD_CHECK_GE(result->_data.cols(), _joinColumns.size());
+  AD_CHECK_GE(result->_idTable.cols(), _joinColumns.size());
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
@@ -90,11 +90,11 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
   LOG(DEBUG) << "MultiColumnJoin subresult computation done." << std::endl;
 
   // compute the result types
-  result->_resultTypes.reserve(result->_data.cols());
+  result->_resultTypes.reserve(result->_idTable.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               leftResult->_resultTypes.begin(),
                               leftResult->_resultTypes.end());
-  for (size_t col = 0; col < rightResult->_data.cols(); col++) {
+  for (size_t col = 0; col < rightResult->_idTable.cols(); col++) {
     bool isJoinColumn = false;
     for (const std::array<Id, 2>& a : _joinColumns) {
       if (a[1] == col) {
@@ -110,12 +110,12 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Computing a multi column join between results of size "
              << leftResult->size() << " and " << rightResult->size() << endl;
 
-  int leftWidth = leftResult->_data.cols();
-  int rightWidth = rightResult->_data.cols();
-  int resWidth = result->_data.cols();
+  int leftWidth = leftResult->_idTable.cols();
+  int rightWidth = rightResult->_idTable.cols();
+  int resWidth = result->_idTable.cols();
   CALL_FIXED_SIZE_3(leftWidth, rightWidth, resWidth, computeMultiColumnJoin,
-                    leftResult->_data, rightResult->_data, _joinColumns,
-                    &result->_data);
+                    leftResult->_idTable, rightResult->_idTable, _joinColumns,
+                    &result->_idTable);
   LOG(DEBUG) << "MultiColumnJoin result computation done." << endl;
 }
 

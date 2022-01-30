@@ -128,12 +128,12 @@ void Values::computeResult(ResultTable* result) {
   const Index& index = getIndex();
 
   result->_sortedBy = resultSortedOn();
-  result->_data.setCols(getResultWidth());
+  result->_idTable.setCols(getResultWidth());
   result->_resultTypes.resize(_values._variables.size(),
                               ResultTable::ResultType::KB);
 
   size_t resWidth = getResultWidth();
-  CALL_FIXED_SIZE_1(resWidth, writeValues, &result->_data, index, _values);
+  CALL_FIXED_SIZE_1(resWidth, writeValues, &result->_idTable, index, _values);
 }
 
 SparqlValues Values::sanitizeValues(SparqlValues&& values) {

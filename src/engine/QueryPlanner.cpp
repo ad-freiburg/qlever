@@ -44,10 +44,10 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
       _enablePatternTrick && checkUsePatternTrick(&pq, &patternTrickTriple);
 
   bool doGrouping = !pq._groupByVariables.empty() || usePatternTrick;
-  if (!doGrouping) {
+  if (!doGrouping && pq.hasSelectClause()) {
     // if there is no group by statement, but an aggregate alias is used
     // somewhere do grouping anyways.
-    for (const ParsedQuery::Alias& alias : pq._selectClause._aliases) {
+    for (const ParsedQuery::Alias& alias : pq.selectClause()._aliases) {
       if (alias._expression.isAggregate({})) {
         doGrouping = true;
         break;
@@ -65,7 +65,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   if (doGrouping && !usePatternTrick) {
     plans.emplace_back(getGroupByRow(pq, plans));
   } else if (usePatternTrick) {
-    plans.emplace_back(getPatternTrickRow(pq, plans, patternTrickTriple));
+    plans.emplace_back(
+        getPatternTrickRow(pq.selectClause(), plans, patternTrickTriple));
   }
 
   // HAVING
@@ -74,8 +75,11 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   }
 
   // DISTINCT
-  if (pq._selectClause._distinct) {
-    plans.emplace_back(getDistinctRow(pq, plans));
+  if (pq.hasSelectClause()) {
+    const auto& selectClause = pq.selectClause();
+    if (selectClause._distinct) {
+      plans.emplace_back(getDistinctRow(selectClause, plans));
+    }
   }
 
   // ORDER BY
@@ -440,12 +444,15 @@ bool QueryPlanner::checkUsePatternTrick(
   //   appear in a value clause?
   // Check if the query has the right number of variables for aliases and
   // group by.
-  if (pq->_groupByVariables.size() != 1 ||
-      pq->_selectClause._aliases.size() > 1) {
+  if (!pq->hasSelectClause()) {
+    return false;
+  }
+  const auto& selectClause = pq->selectClause();
+  if (pq->_groupByVariables.size() != 1 || selectClause._aliases.size() > 1) {
     return false;
   }
 
-  bool returns_counts = pq->_selectClause._aliases.size() == 1;
+  bool returns_counts = selectClause._aliases.size() == 1;
 
   // These will only be set if the query returns the count of predicates
   // The varialbe the COUNT alias counts
@@ -455,7 +462,7 @@ bool QueryPlanner::checkUsePatternTrick(
 
   if (returns_counts) {
     // There has to be a single count alias
-    const ParsedQuery::Alias& alias = pq->_selectClause._aliases.back();
+    const ParsedQuery::Alias& alias = selectClause._aliases.back();
     auto countVariable =
         alias._expression.getVariableForNonDistinctCountOrNullopt();
     if (!countVariable.has_value()) {
@@ -490,9 +497,15 @@ bool QueryPlanner::checkUsePatternTrick(
         continue;
       }
 
-      // check that all selected variables are outputs of
+      // Check that all selected variables are outputs of
       // CountAvailablePredicates
-      for (const std::string& s : pq->_selectClause._selectedVariables) {
+      if (selectClause._varsOrAsterisk.isAsterisk()) {
+        return false;
+      }
+
+      const auto& selectedVariables =
+          selectClause._varsOrAsterisk.getSelectVariables();
+      for (const std::string& s : selectedVariables) {
         if (s != t._o && s != count_var_name) {
           usePatternTrick = false;
           break;
@@ -556,11 +569,18 @@ bool QueryPlanner::checkUsePatternTrick(
             graphsToProcess.push_back(&arg._child2);
           } else if constexpr (std::is_same_v<
                                    T, GraphPatternOperation::Subquery>) {
-            for (const std::string& v :
-                 arg._subquery._selectClause._selectedVariables) {
-              if (v == t._o) {
-                usePatternTrick = false;
-                break;
+            if (!arg._subquery.hasSelectClause()) {
+              usePatternTrick = false;
+              return;
+            }
+            const auto& selectClause = arg._subquery.selectClause();
+            if (selectClause._varsOrAsterisk.isVariables()) {
+              for (const auto& v :
+                   selectClause._varsOrAsterisk.getSelectVariables()) {
+                if (v == t._o) {
+                  usePatternTrick = false;
+                  break;
+                }
               }
             }
           } else if constexpr (std::is_same_v<T, GraphPatternOperation::Bind>) {
@@ -604,11 +624,18 @@ bool QueryPlanner::checkUsePatternTrick(
               graphsToProcess.push_back(&arg._child2);
             } else if constexpr (std::is_same_v<
                                      T, GraphPatternOperation::Subquery>) {
-              for (const std::string& v :
-                   arg._subquery._selectClause._selectedVariables) {
-                if (v == t._o) {
-                  usePatternTrick = false;
-                  break;
+              if (!arg._subquery.hasSelectClause()) {
+                usePatternTrick = false;
+                return;
+              }
+              const auto& selectClause = arg._subquery.selectClause();
+              if (selectClause._varsOrAsterisk.isVariables()) {
+                for (const auto& v :
+                     selectClause._varsOrAsterisk.getSelectVariables()) {
+                  if (v == t._o) {
+                    usePatternTrick = false;
+                    break;
+                  }
                 }
               }
             } else if constexpr (std::is_same_v<T, GraphPatternOperation::
@@ -802,7 +829,8 @@ bool QueryPlanner::checkUsePatternTrick(
 
 // _____________________________________________________________________________
 vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
-    const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const {
+    const ParsedQuery::SelectClause& selectClause,
+    const vector<vector<SubtreePlan>>& dpTab) const {
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
   added.reserve(previous.size());
@@ -812,24 +840,26 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
     vector<size_t> keepIndices;
     ad_utility::HashSet<size_t> indDone;
     const auto& colMap = parent._qet->getVariableColumns();
-    for (const auto& var : pq._selectClause._selectedVariables) {
-      const auto it = colMap.find(var);
-      if (it != colMap.end()) {
-        auto ind = it->second;
-        if (indDone.count(ind) == 0) {
-          keepIndices.push_back(ind);
-          indDone.insert(ind);
-        }
-      } else if (ad_utility::startsWith(var, "SCORE(") ||
-                 ad_utility::startsWith(var, "TEXT(")) {
-        auto varInd = var.find('?');
-        auto cVar = var.substr(varInd, var.rfind(')') - varInd);
-        const auto it = colMap.find(cVar);
+    if (selectClause._varsOrAsterisk.isVariables()) {
+      for (const auto& var :
+           selectClause._varsOrAsterisk.getSelectVariables()) {
+        const auto it = colMap.find(var);
         if (it != colMap.end()) {
           auto ind = it->second;
           if (indDone.count(ind) == 0) {
             keepIndices.push_back(ind);
             indDone.insert(ind);
+          }
+        } else if (var.starts_with("SCORE(") || var.starts_with("TEXT(")) {
+          auto varInd = var.find('?');
+          auto cVar = var.substr(varInd, var.rfind(')') - varInd);
+          const auto it = colMap.find(cVar);
+          if (it != colMap.end()) {
+            auto ind = it->second;
+            if (indDone.count(ind) == 0) {
+              keepIndices.push_back(ind);
+              indDone.insert(ind);
+            }
           }
         }
       }
@@ -882,7 +912,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
 
 // _____________________________________________________________________________
 vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
-    const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab,
+    const ParsedQuery::SelectClause& selectClause,
+    const vector<vector<SubtreePlan>>& dpTab,
     const SparqlTriple& patternTrickTriple) {
   const vector<SubtreePlan>* previous = nullptr;
   if (!dpTab.empty()) {
@@ -927,7 +958,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
           _qec, isSorted ? parent._qet : orderByPlan._qet, subjectColumn);
 
       countPred->setVarNames(patternTrickTriple._o,
-                             pq._selectClause._aliases[0]._outVarName);
+                             selectClause._aliases[0]._outVarName);
       QueryExecutionTree& tree = *patternTrickPlan._qet;
       tree.setVariableColumns(countPred->getVariableColumns());
       tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
@@ -941,7 +972,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
         std::make_shared<CountAvailablePredicates>(_qec, patternTrickTriple._s);
 
     countPred->setVarNames(patternTrickTriple._o,
-                           pq._selectClause._aliases[0]._outVarName);
+                           selectClause._aliases[0]._outVarName);
     QueryExecutionTree& tree = *patternTrickPlan._qet;
     tree.setVariableColumns(countPred->getVariableColumns());
     tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
@@ -952,9 +983,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     SubtreePlan patternTrickPlan(_qec);
     auto countPred = std::make_shared<CountAvailablePredicates>(_qec);
 
-    if (pq._selectClause._aliases.size() > 0) {
+    if (selectClause._aliases.size() > 0) {
       countPred->setVarNames(patternTrickTriple._o,
-                             pq._selectClause._aliases[0]._outVarName);
+                             selectClause._aliases[0]._outVarName);
     } else {
       countPred->setVarNames(patternTrickTriple._o, generateUniqueVarName());
     }
@@ -1003,8 +1034,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
     SubtreePlan groupByPlan(_qec);
     groupByPlan._idsOfIncludedNodes = parent->_idsOfIncludedNodes;
     groupByPlan._idsOfIncludedFilters = parent->_idsOfIncludedFilters;
+    std::vector<ParsedQuery::Alias> aliases;
+    if (pq.hasSelectClause()) {
+      aliases = pq.selectClause()._aliases;
+    }
     auto groupBy = std::make_shared<GroupBy>(_qec, pq._groupByVariables,
-                                             pq._selectClause._aliases);
+                                             std::move(aliases));
     QueryExecutionTree& groupByTree = *groupByPlan._qet;
 
     // Then compute the sort columns
@@ -1181,6 +1216,14 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
       }
       // Simple iris can be resolved directly.
       if (node._triple._p._operation == PropertyPath::Operation::IRI) {
+        if (_qec && !_qec->getIndex().hasAllPermutations() &&
+            isVariable(node._triple._p._iri)) {
+          AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+                   "The query contains a predicate variable, but only the PSO "
+                   "and POS permutations were loaded. Rerun the server without "
+                   "the option --only-pso-and-pos-permutations and if "
+                   "necessary also rebuild the index.");
+        }
         if (node._variables.size() == 1) {
           // Just pick one direction, they should be equivalent.
           SubtreePlan plan(_qec);
@@ -1218,6 +1261,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             auto scan = std::make_shared<IndexScan>(
                 _qec, IndexScan::ScanType::PSO_FREE_S);
             scan->setSubject(node._triple._s);
+
             scan->setPredicate(node._triple._p._iri);
             scan->setObject(filterVar);
             scan->precomputeSizeEstimate();

@@ -211,7 +211,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   }
 
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), columnMap, inTable->_data,
+      *getExecutionContext(), columnMap, inTable->_idTable,
       getExecutionContext()->getAllocator(), *outTable->_localVocab);
 
   auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {
@@ -267,7 +267,7 @@ void GroupBy::computeResult(ResultTable* result) {
   std::vector<size_t> groupByColumns;
 
   result->_sortedBy = resultSortedOn();
-  result->_data.setCols(getResultWidth());
+  result->_idTable.setCols(getResultWidth());
 
   std::vector<Aggregate> aggregates;
   aggregates.reserve(_aliases.size() + _groupByVariables.size());
@@ -300,7 +300,7 @@ void GroupBy::computeResult(ResultTable* result) {
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
 
   // populate the result type vector
-  result->_resultTypes.resize(result->_data.cols());
+  result->_resultTypes.resize(result->_idTable.cols());
 
   // The `_groupByVariables` are simply copied, so their result type is
   // also copied. The result type of the other columns is set when the
@@ -317,15 +317,16 @@ void GroupBy::computeResult(ResultTable* result) {
   }
 
   std::vector<ResultTable::ResultType> inputResultTypes;
-  inputResultTypes.reserve(subresult->_data.cols());
-  for (size_t i = 0; i < subresult->_data.cols(); i++) {
+  inputResultTypes.reserve(subresult->_idTable.cols());
+  for (size_t i = 0; i < subresult->_idTable.cols(); i++) {
     inputResultTypes.push_back(subresult->getResultType(i));
   }
 
-  int inWidth = subresult->_data.cols();
-  int outWidth = result->_data.cols();
+  int inWidth = subresult->_idTable.cols();
+  int outWidth = result->_idTable.cols();
 
-  CALL_FIXED_SIZE_2(inWidth, outWidth, doGroupBy, subresult->_data, groupByCols,
-                    aggregates, &result->_data, subresult.get(), result);
+  CALL_FIXED_SIZE_2(inWidth, outWidth, doGroupBy, subresult->_idTable,
+                    groupByCols, aggregates, &result->_idTable, subresult.get(),
+                    result);
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
 }

@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "../global/Constants.h"
+#include "../parser/TokenizerCtre.h"
 #include "./Exception.h"
 #include "./StringUtils.h"
 
@@ -49,6 +50,22 @@ enum class NumericType : char {
   DOUBLE = 'D',
   DECIMAL = 'T'
 };
+
+inline const char* toTypeIri(NumericType type) {
+  switch (type) {
+    case NumericType::INTEGER:
+      return XSD_INT_TYPE;
+    case NumericType::FLOAT:
+      return XSD_FLOAT_TYPE;
+    case NumericType::DECIMAL:
+      return XSD_DECIMAL_TYPE;
+    case NumericType::DOUBLE:
+      return XSD_DOUBLE_TYPE;
+    default:
+      // This should never happen
+      AD_CHECK(false);
+  }
+}
 
 //! Converts strings like "12.34" to :v:float:PP0*2E0*1234F and -0.123 to
 //! :v:float:M-0*1E9*876F with the last F used to indicate that the value was
@@ -157,45 +174,42 @@ string convertValueLiteralToIndexWord(const string& orig) {
   return orig;
 }
 
-// _____________________________________________________________________________
-string convertIndexWordToValueLiteral(const string& indexWord) {
-  if (startsWith(indexWord, VALUE_DATE_PREFIX)) {
-    std::ostringstream os;
+// ____________________________________________________________________________
+inline std::pair<string, const char*> convertIndexWordToLiteralAndType(
+    const string& indexWord) {
+  if (indexWord.starts_with(VALUE_DATE_PREFIX)) {
     string date = removeLeadingZeros(convertIndexWordToDate(indexWord));
-    if (date.size() == 0 || startsWith(date, VALUE_DATE_TIME_SEPARATOR)) {
+    if (date.empty() || date.starts_with(VALUE_DATE_TIME_SEPARATOR)) {
       date = string("0") + date;
     }
-    os << "\"" << date << "\"" << XSD_DATETIME_SUFFIX;
-    return os.str();
+    return std::make_pair(std::move(date), XSD_DATETIME_TYPE);
   }
-  if (startsWith(indexWord, VALUE_FLOAT_PREFIX)) {
-    if (NumericType(indexWord.back()) == NumericType::FLOAT) {
-      std::ostringstream os;
-      os << "\"" << convertIndexWordToFloatString(indexWord) << "\""
-         << XSD_FLOAT_SUFFIX;
-      return os.str();
-    }
-    if (NumericType(indexWord.back()) == NumericType::DOUBLE) {
-      std::ostringstream os;
-      os << "\"" << convertIndexWordToFloatString(indexWord) << "\""
-         << XSD_DOUBLE_SUFFIX;
-      return os.str();
-    }
-    if (NumericType(indexWord.back()) == NumericType::DECIMAL) {
-      std::ostringstream os;
-      os << "\"" << convertIndexWordToFloatString(indexWord) << "\""
-         << XSD_DECIMAL_SUFFIX;
-      return os.str();
-    }
-    if (NumericType(indexWord.back()) == NumericType::INTEGER) {
-      std::ostringstream os;
-      string asFloat = convertIndexWordToFloatString(indexWord);
-      os << "\"" << asFloat.substr(0, asFloat.find('.')) << "\""
-         << XSD_INT_SUFFIX;
-      return os.str();
+  if (indexWord.starts_with(VALUE_FLOAT_PREFIX)) {
+    auto type = NumericType{indexWord.back()};
+    switch (type) {
+      case NumericType::FLOAT:
+      case NumericType::DOUBLE:
+      case NumericType::DECIMAL:
+        return std::make_pair(convertIndexWordToFloatString(indexWord),
+                              toTypeIri(type));
+      case NumericType::INTEGER:
+        string asFloat = convertIndexWordToFloatString(indexWord);
+        return std::make_pair(asFloat.substr(0, asFloat.find('.')),
+                              toTypeIri(type));
     }
   }
-  return indexWord;
+  return std::make_pair(indexWord, nullptr);
+}
+
+// _____________________________________________________________________________
+string convertIndexWordToValueLiteral(const string& indexWord) {
+  auto [literal, typeIri] = convertIndexWordToLiteralAndType(indexWord);
+  if (!typeIri) {
+    return std::move(literal);
+  }
+  std::ostringstream os;
+  os << "\"" << literal << "\"^^<" << typeIri << '>';
+  return os.str();
 }
 
 // _____________________________________________________________________________
@@ -628,18 +642,19 @@ bool isXsdValue(const string& val) {
 }
 
 // _____________________________________________________________________________
-bool isNumeric(const string& val) {
-  if (val.empty()) {
-    return false;
+bool isNumeric(const string& value) {
+  if (ctre::match<TurtleTokenCtre::Double>(value)) {
+    throw std::out_of_range{
+        "Decimal numbers with an explicit exponent are currently not supported "
+        "by QLever, but the following number was encountered: " +
+        value};
   }
-  size_t start = (val[0] == '-' || val[0] == '+') ? 1 : 0;
-  size_t posNonDigit = val.find_first_not_of("0123456789", start);
-  if (posNonDigit == string::npos) {
+
+  if (ctre::match<TurtleTokenCtre::Integer>(value)) {
     return true;
   }
-  if (val[posNonDigit] == '.') {
-    return posNonDigit + 1 < val.size() &&
-           val.find_first_not_of("0123456789", posNonDigit + 1) == string::npos;
+  if (ctre::match<TurtleTokenCtre::Decimal>(value)) {
+    return true;
   }
   return false;
 }
@@ -663,7 +678,7 @@ string convertLangtagToEntityUri(const string& tag) {
 // _________________________________________________________
 std::optional<string> convertEntityUriToLangtag(const string& word) {
   static const string prefix = URI_PREFIX + "@";
-  if (ad_utility::startsWith(word, prefix)) {
+  if (word.starts_with(prefix)) {
     return word.substr(prefix.size(), word.size() - prefix.size() - 1);
   } else {
     return std::nullopt;

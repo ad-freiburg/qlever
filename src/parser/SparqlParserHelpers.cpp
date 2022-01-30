@@ -4,7 +4,7 @@
 
 #include "SparqlParserHelpers.h"
 
-#include "sparqlParser/SparqlQleverVisitor.h"
+#include "../util/antlr/ThrowingErrorStrategy.h"
 #include "sparqlParser/generated/SparqlAutomaticLexer.h"
 
 namespace sparqlParserHelpers {
@@ -20,34 +20,37 @@ struct ParserAndVisitor {
  public:
   SparqlAutomaticParser _parser{&_tokens};
   SparqlQleverVisitor _visitor;
-  explicit ParserAndVisitor(string input) : _input{std::move(input)} {}
   explicit ParserAndVisitor(string input,
-                            SparqlQleverVisitor::PrefixMap prefixMap)
-      : _input{std::move(input)}, _visitor{std::move(prefixMap)} {}
+                            SparqlQleverVisitor::PrefixMap prefixes)
+      : _input{std::move(input)}, _visitor{std::move(prefixes)} {
+    _parser.setErrorHandler(std::make_shared<ThrowingErrorStrategy>());
+  }
 
   template <typename ResultType, typename ContextType>
-  auto parse(const std::string& input,
-             ContextType* (SparqlAutomaticParser::*F)(void))
+  auto parse(const std::string_view input, const std::string_view name,
+             ContextType* (SparqlAutomaticParser::*F)(void)) {
+    try {
+      auto context = (_parser.*F)();
+      auto resultOfParse =
+          std::move(context->accept(&(_visitor)).template as<ResultType>());
 
-  {
-    auto context = (_parser.*F)();
-    auto resultOfParse =
-        std::move(context->accept(&(_visitor)).template as<ResultType>());
-
-    auto remainingString =
-        input.substr(_parser.getCurrentToken()->getStartIndex());
-    return ResultOfParseAndRemainingText{std::move(resultOfParse),
-                                         std::move(remainingString)};
+      auto remainingString =
+          input.substr(_parser.getCurrentToken()->getStartIndex());
+      return ResultOfParseAndRemainingText{std::move(resultOfParse),
+                                           std::string{remainingString}};
+    } catch (const antlr4::ParseCancellationException& e) {
+      throw std::runtime_error{"Failed to parse " + name + ": " + e.what()};
+    }
   }
 };
 
 // ____________________________________________________________________________
 ResultOfParseAndRemainingText<sparqlExpression::SparqlExpressionPimpl>
 parseExpression(const std::string& input) {
-  ParserAndVisitor p{input};
+  ParserAndVisitor p{input, {}};
   auto resultOfParseAndRemainingText =
       p.parse<sparqlExpression::SparqlExpression::Ptr>(
-          input, &SparqlAutomaticParser::expression);
+          input, "expression", &SparqlAutomaticParser::expression);
 
   return ResultOfParseAndRemainingText{
       sparqlExpression::SparqlExpressionPimpl{
@@ -58,32 +61,17 @@ parseExpression(const std::string& input) {
 // ____________________________________________________________________________
 ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
     const std::string& input) {
-  ParserAndVisitor p{input};
+  ParserAndVisitor p{input, {}};
   return p.parse<ParsedQuery::Alias>(
-      input, &SparqlAutomaticParser::aliasWithouBrackes);
+      input, "alias", &SparqlAutomaticParser::aliasWithouBrackes);
 }
+// _____________________________________________________________________________
 
-// ______________________________________________________________________________
-std::pair<SparqlQleverVisitor::PrefixMap, size_t> parsePrologue(
-    const string& input) {
-  ParserAndVisitor p{input};
-  auto prologueContext = p._parser.prologue();
-  auto prologueSize = prologueContext->getText().size();
-  p._visitor.visitPrologue(prologueContext);
-  const auto& constVisitor = p._visitor;
-  return {constVisitor.prefixMap(), prologueSize};
+ResultOfParseAndRemainingText<ad_utility::sparql_types::Triples>
+parseConstructTemplate(const std::string& input,
+                       SparqlQleverVisitor::PrefixMap prefixes) {
+  ParserAndVisitor p{input, std::move(prefixes)};
+  return p.parse<ad_utility::sparql_types::Triples>(
+      input, "construct template", &SparqlAutomaticParser::constructTemplate);
 }
-
-// Parse a prefix of `input` as an iri, return the iri and the number of bytes
-// that were consumed from the `input`.
-std::pair<string, size_t> parseIri(const string& input,
-                                   SparqlQleverVisitor::PrefixMap prefixMap) {
-  ParserAndVisitor p{input, std::move(prefixMap)};
-  auto iriContext = p._parser.iri();
-  auto iriSize = iriContext->getText().size();
-  auto resultString = p._visitor.visitIri(iriContext).as<string>();
-  // const auto& constVisitor = p.visitor;
-  return {std::move(resultString), iriSize};
-}
-
 }  // namespace sparqlParserHelpers

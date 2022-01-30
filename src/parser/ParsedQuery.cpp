@@ -32,26 +32,58 @@ string ParsedQuery::asString() const {
   }
   os << "\n}";
 
-  // SELECT
-  os << "\nSELECT: {\n\t";
-  for (size_t i = 0; i < _selectClause._selectedVariables.size(); ++i) {
-    os << _selectClause._selectedVariables[i];
-    if (i + 1 < _selectClause._selectedVariables.size()) {
-      os << ", ";
-    }
-  }
-  os << "\n}";
+  bool usesSelect = hasSelectClause();
+  bool usesAsterisk = usesSelect && selectClause()._varsOrAsterisk.isAsterisk();
 
-  // ALIASES
-  os << "\nALIASES: {\n\t";
-  for (size_t i = 0; i < _selectClause._aliases.size(); ++i) {
-    const Alias& alias = _selectClause._aliases[i];
-    os << alias._expression.getDescriptor();
-    if (i + 1 < _selectClause._aliases.size()) {
-      os << "\n\t";
+  if (usesSelect) {
+    const auto& selectClause = this->selectClause();
+    // SELECT
+    os << "\nSELECT: {\n\t";
+    if (usesAsterisk) {
+      auto list = selectClause._varsOrAsterisk.orderedVariablesFromQueryBody();
+      for (auto it = list.begin(); it != list.end();) {
+        os << it->c_str();
+        if (++it != list.end()) {
+          os << ", ";
+        }
+      }
+    } else {
+      const auto& SelectedVariables =
+          selectClause._varsOrAsterisk.getSelectVariables();
+      for (size_t i = 0; i < SelectedVariables.size(); ++i) {
+        os << SelectedVariables[i];
+        if (i + 1 < SelectedVariables.size()) {
+          os << ", ";
+        }
+      }
     }
+    os << "\n}";
+
+    // ALIASES
+    os << "\nALIASES: {\n\t";
+    if (!usesAsterisk) {
+      for (size_t i = 0; i < selectClause._aliases.size(); ++i) {
+        const Alias& alias = selectClause._aliases[i];
+        os << alias._expression.getDescriptor();
+        if (i + 1 < selectClause._aliases.size()) {
+          os << "\n\t";
+        }
+      }
+      os << "{";
+    }
+  } else if (hasConstructClause()) {
+    const auto& constructClause = this->constructClause();
+    os << "\n CONSTRUCT {\n\t";
+    for (const auto& triple : constructClause) {
+      os << triple[0].toSparql();
+      os << ' ';
+      os << triple[1].toSparql();
+      os << ' ';
+      os << triple[2].toSparql();
+      os << " .\n";
+    }
+    os << "}";
   }
-  os << "{";
 
   // WHERE
   os << "\nWHERE: \n";
@@ -65,10 +97,13 @@ string ParsedQuery::asString() const {
   os << "\nOFFSET: "
      << (_offset.has_value() ? std::to_string(_offset.value())
                              : "no offset specified");
-  os << "\nDISTINCT modifier is " << (_selectClause._distinct ? "" : "not ")
-     << "present.";
-  os << "\nREDUCED modifier is " << (_selectClause._reduced ? "" : "not ")
-     << "present.";
+  if (usesSelect) {
+    const auto& selectClause = this->selectClause();
+    os << "\nDISTINCT modifier is " << (selectClause._distinct ? "" : "not ")
+       << "present.";
+    os << "\nREDUCED modifier is " << (selectClause._reduced ? "" : "not ")
+       << "present.";
+  }
   os << "\nORDER BY: ";
   if (_orderBy.size() == 0) {
     os << "not specified";
@@ -356,11 +391,10 @@ void ParsedQuery::expandPrefix(
 // _____________________________________________________________________________
 void ParsedQuery::expandPrefix(
     string& item, const ad_utility::HashMap<string, string>& prefixMap) {
-  if (!ad_utility::startsWith(item, "?") &&
-      !ad_utility::startsWith(item, "<")) {
+  if (!item.starts_with("?") && !item.starts_with("<")) {
     std::optional<string> langtag = std::nullopt;
-    if (ad_utility::startsWith(item, "@")) {
-      auto secondPos = item.find("@", 1);
+    if (item.starts_with("@")) {
+      auto secondPos = item.find('@', 1);
       if (secondPos == string::npos) {
         throw ParseException(
             "langtaged predicates must have form @lang@ActualPredicate. Second "
@@ -392,30 +426,6 @@ void ParsedQuery::expandPrefix(
     }
   }
 }
-
-/*
-void ParsedQuery::parseAliases() {
-  for (size_t i = 0; i < _selectClause._selectedVariables.size(); i++) {
-    const std::string& var = _selectClause._selectedVariables[i];
-    if (var[0] == '(') {
-      // remove the leading and trailing bracket
-      std::string inner = var.substr(1, var.size() - 2);
-      // Replace the variable in the selected variables array with the aliased
-      // name.
-      _selectClause._selectedVariables[i] = parseAlias(inner);
-    }
-  }
-  for (size_t i = 0; i < _orderBy.size(); i++) {
-    OrderKey& key = _orderBy[i];
-    if (key._key[0] == '(') {
-      // remove the leading and trailing bracket
-      std::string inner = key._key.substr(1, key._key.size() - 2);
-      // Preserve the descending or ascending order but change the key name.
-      key._key = parseAlias(inner);
-    }
-  }
-}
- */
 
 void ParsedQuery::merge(const ParsedQuery& p) {
   _prefixes.insert(_prefixes.begin(), p._prefixes.begin(), p._prefixes.end());

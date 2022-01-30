@@ -9,7 +9,6 @@
 #include <iostream>
 #include <string>
 
-#include "./parser/NTriplesParser.h"
 #include "./parser/TsvParser.h"
 #include "./parser/TurtleParser.h"
 #include "./util/Log.h"
@@ -55,7 +54,7 @@ void writeLabel(const std::string& filename) {
     }
   }
   for (const auto& t : entities) {
-    if (ad_utility::startsWith(t, "<")) {
+    if (t.starts_with('<')) {
       std::cout << t << " <qlever_label> \"" << t.substr(1, t.size() - 2)
                 << ".\n";
     }
@@ -72,13 +71,11 @@ void writeLabel(const std::string& filename) {
 template <class Tokenizer_T>
 void writeNT(std::ostream& out, const string& fileFormat,
              const std::string& filename) {
-  if (fileFormat == "ttl") {
+  if (fileFormat == "ttl" || fileFormat == "nt") {
     // writeLabel<TurtleStreamParser<Tokenizer_T>>(out, filename);
     writeNTImpl<TurtleStreamParser<Tokenizer_T>>(out, filename);
   } else if (fileFormat == "tsv") {
     writeNTImpl<TsvParser>(out, filename);
-  } else if (fileFormat == "nt") {
-    writeNTImpl<NTriplesParser>(out, filename);
   } else if (fileFormat == "mmap") {
     writeNTImpl<TurtleMmapParser<Tokenizer_T>>(out, filename);
   } else {
@@ -95,7 +92,7 @@ void writeNTDispatch(std::ostream& out, const string& fileFormat,
   if (regexEngine == "re2") {
     writeNT<Tokenizer>(out, fileFormat, filename);
   } else if (regexEngine == "ctre") {
-    LOG(WARN) << WARNING_ASCII_ONLY_PREFIXES;
+    LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
     writeNT<TokenizerCtre>(out, fileFormat, filename);
   } else {
     LOG(ERROR)
@@ -182,13 +179,13 @@ int main(int argc, char** argv) {
 
   if (fileFormat.empty()) {
     bool filetypeDeduced = false;
-    if (ad_utility::endsWith(inputFile, ".tsv")) {
+    if (inputFile.ends_with(".tsv")) {
       fileFormat = "tsv";
       filetypeDeduced = true;
-    } else if (ad_utility::endsWith(inputFile, ".nt")) {
+    } else if (inputFile.ends_with(".nt")) {
       fileFormat = "nt";
       filetypeDeduced = true;
-    } else if (ad_utility::endsWith(inputFile, ".ttl")) {
+    } else if (inputFile.ends_with(".ttl")) {
       fileFormat = "ttl";
       filetypeDeduced = true;
     } else {

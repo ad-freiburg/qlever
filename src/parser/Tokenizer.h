@@ -318,8 +318,8 @@ class Tokenizer {
     // if not successful, then there was no comment, but this does not matter to
     // us
     auto v = view();
-    if (ad_utility::startsWith(v, "#")) {
-      auto pos = v.find("\n");
+    if (v.starts_with('#')) {
+      auto pos = v.find('\n');
       if (pos == string::npos) {
         // TODO: this actually should yield a n error
         LOG(INFO) << "Warning, unfinished comment found while parsing";

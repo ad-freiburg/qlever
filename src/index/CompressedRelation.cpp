@@ -31,6 +31,11 @@ template <class Permutation, typename IdTableImpl>
 void CompressedRelationMetaData::scan(
     Id col0Id, IdTableImpl* result, const Permutation& permutation,
     ad_utility::SharedConcurrentTimeoutTimer timer) {
+  if (!permutation._isLoaded) {
+    throw std::runtime_error("This query requires the permutation " +
+                             permutation._readableName +
+                             ", which was not loaded");
+  }
   if constexpr (!ad_utility::isVector<IdTableImpl>) {
     AD_CHECK(result->cols() == 2);
   }
@@ -362,7 +367,7 @@ template void CompressedRelationMetaData::scan<Permutation::OSP_T, IdTable>(
 
 // ___________________________________________________________________________
 void CompressedRelationWriter::addRelation(
-    Id col0Id, const ad_utility::BufferedVector<array<Id, 2>>& data,
+    Id col0Id, const ad_utility::BufferedVector<std::array<Id, 2>>& data,
     size_t numDistinctCol1, bool functional) {
   LOG(TRACE) << "Writing a relation ...\n";
   AD_CHECK_GT(data.size(), 0);
@@ -408,7 +413,7 @@ void CompressedRelationWriter::addRelation(
 
 // _____________________________________________________________________________
 void CompressedRelationWriter::writeRelationToExclusiveBlocks(
-    Id col0Id, const ad_utility::BufferedVector<array<Id, 2>>& data) {
+    Id col0Id, const ad_utility::BufferedVector<std::array<Id, 2>>& data) {
   constexpr size_t NUM_ROWS_PER_BLOCK =
       BLOCKSIZE_COMPRESSED_METADATA / (2 * sizeof(Id));
   for (size_t i = 0; i < data.size(); i += NUM_ROWS_PER_BLOCK) {

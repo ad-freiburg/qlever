@@ -10,6 +10,7 @@
 
 #include "../engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "./ParsedQuery.h"
+#include "sparqlParser/SparqlQleverVisitor.h"
 
 namespace sparqlParserHelpers {
 
@@ -30,6 +31,10 @@ parseExpression(const std::string& input);
 // An `alias` in Sparql have the form (<expression> as ?variable).
 ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
     const std::string& input);
+
+ResultOfParseAndRemainingText<ad_utility::sparql_types::Triples>
+parseConstructTemplate(const std::string& input,
+                       SparqlQleverVisitor::PrefixMap prefixes);
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H

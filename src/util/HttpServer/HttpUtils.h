@@ -93,15 +93,18 @@ static auto createOkResponse(
 /// Create a HttpResponse from a string with status 200 OK and mime type
 /// "application/json". Otherwise behaves the same as
 /// createHttpResponseFromString.
-static auto createJsonResponse(std::string text, const auto& request) {
-  return createOkResponse(std::move(text), request, MediaType::json);
+static auto createJsonResponse(std::string text, const auto& request,
+                               http::status status = http::status::ok) {
+  return createHttpResponseFromString(std::move(text), status, request,
+                                      MediaType::json);
 }
 
 /// Create a HttpResponse from a json object with status 200 OK and mime type
 /// "application/json".
-static auto createJsonResponse(const json& j, const auto& request) {
+static auto createJsonResponse(const json& j, const auto& request,
+                               http::status status = http::status::ok) {
   // Argument `4` leads to a human-readable indentation.
-  return createJsonResponse(j.dump(4), request);
+  return createJsonResponse(j.dump(4), request, status);
 }
 
 /// Create a HttpResponse with status 404 Not Found. The string body will be a

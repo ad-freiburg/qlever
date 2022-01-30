@@ -81,9 +81,9 @@ void OptionalJoin::computeResult(ResultTable* result) {
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
 
   result->_sortedBy = resultSortedOn();
-  result->_data.setCols(getResultWidth());
+  result->_idTable.setCols(getResultWidth());
 
-  AD_CHECK_GE(result->_data.cols(), _joinColumns.size());
+  AD_CHECK_GE(result->_idTable.cols(), _joinColumns.size());
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
@@ -93,11 +93,11 @@ void OptionalJoin::computeResult(ResultTable* result) {
   LOG(DEBUG) << "OptionalJoin subresult computation done." << std::endl;
 
   // compute the result types
-  result->_resultTypes.reserve(result->_data.cols());
+  result->_resultTypes.reserve(result->_idTable.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               leftResult->_resultTypes.begin(),
                               leftResult->_resultTypes.end());
-  for (size_t col = 0; col < rightResult->_data.cols(); col++) {
+  for (size_t col = 0; col < rightResult->_idTable.cols(); col++) {
     bool isJoinColumn = false;
     for (const std::array<Id, 2>& a : _joinColumns) {
       if (a[1] == col) {
@@ -115,12 +115,12 @@ void OptionalJoin::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Left side optional: " << _leftOptional
              << " right side optional: " << _rightOptional << endl;
 
-  int leftWidth = leftResult->_data.cols();
-  int rightWidth = rightResult->_data.cols();
-  int resWidth = result->_data.cols();
+  int leftWidth = leftResult->_idTable.cols();
+  int rightWidth = rightResult->_idTable.cols();
+  int resWidth = result->_idTable.cols();
   CALL_FIXED_SIZE_3(leftWidth, rightWidth, resWidth, optionalJoin,
-                    leftResult->_data, rightResult->_data, _leftOptional,
-                    _rightOptional, _joinColumns, &result->_data);
+                    leftResult->_idTable, rightResult->_idTable, _leftOptional,
+                    _rightOptional, _joinColumns, &result->_idTable);
   LOG(DEBUG) << "OptionalJoin result computation done." << endl;
 }
 

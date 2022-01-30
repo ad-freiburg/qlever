@@ -35,10 +35,6 @@ add_executable(TsvParserTest TsvParserTest.cpp)
 add_test(TsvParserTest TsvParserTest)
 target_link_libraries(TsvParserTest gtest_main parser ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(NTriplesParserTest NTriplesParserTest.cpp)
-add_test(NTriplesParserTest NTriplesParserTest)
-target_link_libraries(NTriplesParserTest gtest_main parser ${CMAKE_THREAD_LIBS_INIT})
-
 add_executable(ContextFileParserTest ContextFileParserTest.cpp)
 add_test(ContextFileParserTest ContextFileParserTest)
 target_link_libraries(ContextFileParserTest gtest_main parser ${CMAKE_THREAD_LIBS_INIT} ${ICU_LIBRARIES})
@@ -168,12 +164,17 @@ target_link_libraries(SortPerformanceEstimatorTest gtest_main SortPerformanceEst
 #add_test(SortPerformanceEstimatorTest SortPerformanceEstimatorTest)
 
 add_executable(SparqlAntlrParserTest SparqlAntlrParserTest.cpp)
-target_link_libraries(SparqlAntlrParserTest gtest_main parser sparqlExpressions ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(SparqlAntlrParserTest gmock_main parser sparqlExpressions ${CMAKE_THREAD_LIBS_INIT})
 add_test(SparqlAntlrParserTest SparqlAntlrParserTest)
 
 add_executable(SerializerTest SerializerTest.cpp)
 target_link_libraries(SerializerTest gtest_main absl::flat_hash_map ${CMAKE_THREAD_LIBS_INIT})
 add_test(SerializerTest SerializerTest)
+
+add_executable(ParametersTest ParametersTest.cpp)
+add_test(ParametersTest ParametersTest)
+target_link_libraries(ParametersTest gtest_main absl::flat_hash_map  ${CMAKE_THREAD_LIBS_INIT})
+
 
 add_executable(ZstdCompressionTest ZstdCompressionTest.cpp)
 target_link_libraries(ZstdCompressionTest gtest_main absl::flat_hash_map zstd ${cmake_thread_libs_init})
@@ -207,3 +208,19 @@ target_link_libraries(StreamableBodyTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 add_executable(StreamableGeneratorTest StreamableGeneratorTest.cpp)
 add_test(StreamableGeneratorTest StreamableGeneratorTest)
 target_link_libraries(StreamableGeneratorTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(AcceptHeaderTest AcceptHeaderTest.cpp)
+target_link_libraries(AcceptHeaderTest gtest_main mediaTypes httpParser ${CMAKE_THREAD_LIBS_INIT})
+add_test(AcceptHeaderTest AcceptHeaderTest)
+
+add_executable(RdfEscapingTest RdfEscapingTest.cpp)
+target_link_libraries(RdfEscapingTest gtest_main parser ${CMAKE_THREAD_LIBS_INIT})
+add_test(RdfEscapingTest RdfEscapingTest)
+
+add_executable(CompactStringVectorTest CompactStringVectorTest.cpp)
+target_link_libraries(CompactStringVectorTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+add_test(CompactStringVectorTest CompactStringVectorTest)
+
+add_executable(SparqlDataTypesTest SparqlDataTypesTest.cpp)
+target_link_libraries(SparqlDataTypesTest gmock_main engine ${CMAKE_THREAD_LIBS_INIT})
+add_test(SparqlDataTypesTest SparqlDataTypesTest)

@@ -199,6 +199,17 @@ class ConcurrentCache {
     return _cacheAndInProgressMap.wlock()->_cache[k];
   }
 
+  // These functions set the different capacity/size settings of the cache
+  void setMaxSize(size_t maxSize) {
+    _cacheAndInProgressMap.wlock()->_cache.setMaxSize(maxSize);
+  }
+  void setMaxNumEntries(size_t maxNumEntries) {
+    _cacheAndInProgressMap.wlock()->_cache.setMaxNumEntries(maxNumEntries);
+  }
+  void setMaxSizeSingleEntry(size_t maxSize) {
+    _cacheAndInProgressMap.wlock()->_cache.setMaxSizeSingleEntry(maxSize);
+  }
+
  private:
   using ResultInProgress = ConcurrentCacheDetail::ResultInProgress<Value>;
 
