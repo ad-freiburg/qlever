@@ -14,7 +14,7 @@
 TEST(ParserTest, testParse) {
   try {
     {
-      ParsedQuery pq = SparqlParser("SELECT ?x WHERE {?x ?y ?z}").parse();
+      auto pq = SparqlParser("SELECT ?x WHERE {?x ?y ?z}").parse();
       ASSERT_TRUE(pq.hasSelectClause());
       const auto& selectClause = pq.selectClause();
       ASSERT_GT(pq.asString().size(), 0u);
@@ -24,15 +24,17 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(1u, pq._rootGraphPattern._children[0]
                         .getBasic()
                         ._whereClauseTriples.size());
+    }
 
-      pq = SparqlParser(
-               "PREFIX : <http://rdf.myprefix.com/>\n"
-               "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
-               "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
-               "SELECT ?x ?z \n "
-               "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y nsx:rel2 "
-               "<http://abc.de>}")
-               .parse();
+    {
+      auto pq = SparqlParser(
+                    "PREFIX : <http://rdf.myprefix.com/>\n"
+                    "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
+                    "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
+                    "SELECT ?x ?z \n "
+                    "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y nsx:rel2 "
+                    "<http://abc.de>}")
+                    .parse();
       ASSERT_TRUE(pq.hasSelectClause());
       const auto& selectClause2 = pq.selectClause();
       ASSERT_EQ(3u, pq._prefixes.size());
@@ -200,6 +202,8 @@ TEST(ParserTest, testParse) {
                     .parse();
       pq.expandPrefixes();
       ASSERT_EQ(1u, pq._rootGraphPattern._filters.size());
+
+      // shouldn't have more checks??
     }
 
     {
@@ -295,12 +299,13 @@ TEST(ParserTest, testParse) {
     }
 
     {
-      auto pq = SparqlParser(R"(
-SELECT ?a ?b ?c WHERE {
-  VALUES ?a { <Albert_Einstein>}
-  VALUES (?b ?c) { (<Marie_Curie> <Joseph_Jacobson>) (<Freiherr> <Lord_of_the_Isles>) }
-}
-        )")
+      auto pq = SparqlParser(
+                    R"(SELECT ?a ?b ?c WHERE {
+                        VALUES ?a { <Albert_Einstein>}
+                        VALUES (?b ?c) {
+        (<Marie_Curie> <Joseph_Jacobson>) (<Freiherr> <Lord_of_the_Isles>) }
+                        }
+                    )")
                     .parse();
 
       ASSERT_EQ(2u, pq.children().size());
@@ -335,20 +340,243 @@ SELECT ?a ?b ?c WHERE {
 
       ASSERT_EQ(2u, pq.children().size());
       const auto& c = pq.children()[1].getBasic();
-      const auto& values1 =
-          pq.children()[0].get<GraphPatternOperation::Values>()._inlineValues;
       ASSERT_EQ(1u, c._whereClauseTriples.size());
       ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
 
       ASSERT_EQ(c._whereClauseTriples[0]._s, "?city");
       ASSERT_EQ(c._whereClauseTriples[0]._p._iri, "wdt:P31");
-      ASSERT_EQ(c._whereClauseTriples[0]._s, "?city");
+      ASSERT_EQ(c._whereClauseTriples[0]._o, "?citytype");
 
+      const auto& values1 =
+          pq.children()[0].get<GraphPatternOperation::Values>()._inlineValues;
       vector<string> vvars = {"?citytype"};
       ASSERT_EQ(vvars, values1._variables);
       vector<vector<string>> vvals = {{"wd:Q515"}, {"wd:Q262166"}};
       ASSERT_EQ(vvals, values1._values);
     }
+
+    // TODO @joaomarques90: Finish when the required functionalities are implemented
+    /*
+    {
+      auto pq = SparqlParser(
+                    "SELECT DISTINCT * WHERE { \n"
+                    "  ?movie <directed-by> <Scott%2C%20Ridley> .\n"
+                    "\t{ \n"
+                    "\t SELECT ?movie WHERE { \n"
+                    "\t\t\t ?movie <directed-by> ?director .\n"
+                    "\t\t\t ?movie <from-year> ?year .\n"
+                    "\t\t\t FILTER(regex(?title, \"^the\", \"i\" )) ."
+                    "\t\t } \n"
+                    "\t\t GROUP BY (YEAR(?year)) \n"
+                    "\t} \n"
+                    "} \n"
+                    "LIMIT 10 \n"
+                    "ORDER BY DESC(?movie) ASC(?year) \n")
+                    .parse();
+    }
+
+    {
+      auto pq = SparqlParser(
+                "SELECT * WHERE { \n"
+                "  VALUES ?x { 1 2 3 4 } .\n"
+                "\t{ \n"
+                "\t SELECT ?y ?concat WHERE { \n"
+                "\t\t\t VALUES ?y { \"5\" \"6\" \"7\" \"8\" } .\n"
+                "\t\t\t BIND(CONCAT(STR(?y),STR(?y)) AS ?concat) .\n"
+                "\t\t } \n"
+                "\t\t LIMIT 2 \n"
+                "\t} \n"
+                "\t BIND((?x * ?y) AS ?xy) ."
+                "} \n"
+                "LIMIT 5 \n"
+                "OFFSET 2 \n"
+                "ORDER BY DESC(?x) ASC(?concat) \n")
+                .parse();
+    }
+
+     {
+        auto pq = SparqlParser(
+               "SELECT REDUCED * WHERE { \n"
+               "  ?movie <directed-by> <Scott%2C%20Ridley> .\n"
+               "\t{ \n"
+               "\t SELECT ?movie WHERE { \n"
+               "\t\t\t ?movie <directed-by> ?director .\n"
+               "\t\t\t ?movie <from-year> ?year .\n"
+               "\t\t\t FILTER(regex(?title, \"^the\", \"i\" )) ."
+               "\t\t } \n"
+               "\t\t GROUP BY (YEAR(?year)) \n"
+               "\t\t ORDER BY DESC(?year) \n"
+               "\t\t OFFSET 2 \n"
+               "\t} \n"
+               "} \n"
+               "LIMIT 10 \n"
+               "ORDER BY DESC(?movie) ASC(?year) \n")
+               .parse();
+    }
+
+    {
+        auto pq = SparqlParser(
+               "SELECT DISTINCT * WHERE { \n"
+               "  ?movie <directed-by> <Scott%2C%20Ridley> .\n"
+               "\t{ \n"
+               "\t SELECT * WHERE { \n"
+               "\t\t\t ?movie <directed-by> ?director .\n"
+               "\t\t\t ?movie <from-year> ?year .\n"
+               "\t\t\t FILTER(YEAR(?year) > 2000) ."
+               "\t\t } \n"
+               "\t\t ORDER BY DESC(?director) \n"
+               "\t} \n"
+               "} \n"
+               "LIMIT 20 \n"
+               "OFFSET 3 \n"
+               "ORDER BY DESC(?movie)\n")
+               .parse();
+    }
+    */
+
+    {
+      auto pq = SparqlParser(
+                    "SELECT REDUCED * WHERE { \n"
+                    "  ?movie <directed-by> ?director .\n"
+                    "} \n"
+                    "LIMIT 10 \n"
+                    "ORDER BY ASC(?movie)\n")
+                    .parse();
+      ASSERT_EQ(0u, pq._prefixes.size());
+      ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
+
+      const auto& c = pq.children()[0].getBasic();
+      ASSERT_EQ(1u, c._whereClauseTriples.size());
+      ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
+
+      ASSERT_EQ(c._whereClauseTriples[0]._s, "?movie");
+      ASSERT_EQ(c._whereClauseTriples[0]._p._iri, "<directed-by>");
+      ASSERT_EQ(c._whereClauseTriples[0]._o, "?director");
+
+      ASSERT_EQ(10u, pq._limit);
+      ASSERT_EQ(false, pq._orderBy[0]._desc);
+      ASSERT_EQ("?movie", pq._orderBy[0]._key);
+
+      auto sc = get<ParsedQuery::SelectClause>(pq._clause);
+      ASSERT_EQ(true, sc._reduced);
+      ASSERT_EQ(true, sc._varsOrAsterisk.isAsterisk());
+
+      vector<string> vvars = {"?movie", "?director"};
+      ASSERT_EQ(vvars, sc._varsOrAsterisk.orderedVariablesFromQueryBody());
+
+    }
+
+    {
+      auto pq = SparqlParser(
+                    "SELECT DISTINCT * WHERE { \n"
+                    "  ?movie <directed-by> ?director .\n"
+                    "} \n"
+                    "LIMIT 10 \n"
+                    "ORDER BY DESC(?movie)\n")
+                    .parse();
+
+      ASSERT_EQ(0u, pq._prefixes.size());
+      ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
+
+      const auto& c = pq.children()[0].getBasic();
+      ASSERT_EQ(1u, c._whereClauseTriples.size());
+      ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
+
+      ASSERT_EQ(c._whereClauseTriples[0]._s, "?movie");
+      ASSERT_EQ(c._whereClauseTriples[0]._p._iri, "<directed-by>");
+      ASSERT_EQ(c._whereClauseTriples[0]._o, "?director");
+
+      ASSERT_EQ(10u, pq._limit);
+      ASSERT_EQ(true, pq._orderBy[0]._desc);
+      ASSERT_EQ("?movie", pq._orderBy[0]._key);
+
+      auto sc = get<ParsedQuery::SelectClause>(pq._clause);
+      ASSERT_EQ(true, sc._distinct);
+      ASSERT_EQ(true, sc._varsOrAsterisk.isAsterisk());
+
+      vector<string> vvars = {"?movie", "?director"};
+      ASSERT_EQ(vvars, sc._varsOrAsterisk.orderedVariablesFromQueryBody());
+    }
+
+    {
+      auto pq = SparqlParser(
+                    "SELECT DISTINCT * WHERE { \n"
+                    "  ?movie <directed-by> <Scott%2C%20Ridley> .\n"
+                    "\t{ \n"
+                    "\t SELECT * WHERE { \n"
+                    "\t\t\t ?movie <directed-by> ?director .\n"
+                    "\t\t\t ?movie <from-year> ?year .\n"
+                    "\t\t\t FILTER(?year > \"00-00-2000\") ."
+                    "\t\t } \n"
+                    "\t\t ORDER BY DESC(?director) \n"
+                    "\t} \n"
+                    "} \n"
+                    "LIMIT 20 \n"
+                    "OFFSET 3 \n"
+                    "ORDER BY DESC(?movie)\n")
+                    .parse();
+
+      ASSERT_EQ(0u, pq._prefixes.size());
+      ASSERT_EQ(2u, pq._rootGraphPattern._children.size());
+
+      const auto& c = pq.children()[0].getBasic();
+      ASSERT_EQ(1u, c._whereClauseTriples.size());
+      ASSERT_EQ(0, pq._rootGraphPattern._filters.size());
+      ASSERT_EQ(3u, pq._offset);
+
+      ASSERT_EQ(c._whereClauseTriples[0]._s, "?movie");
+      ASSERT_EQ(c._whereClauseTriples[0]._p._iri, "<directed-by>");
+      ASSERT_EQ(c._whereClauseTriples[0]._o, "<Scott%2C%20Ridley>");
+
+      ASSERT_EQ(20u, pq._limit);
+      ASSERT_EQ(true, pq._orderBy[0]._desc);
+      ASSERT_EQ("?movie", pq._orderBy[0]._key);
+
+      auto sc = get<ParsedQuery::SelectClause>(pq._clause);
+      ASSERT_EQ(true, sc._distinct);
+      ASSERT_EQ(true, sc._varsOrAsterisk.isAsterisk());
+
+
+      vector<string> vvars = {"?movie", "?director", "?year"};
+      // TODO: ASSERT_ERROR
+      // ASSERT_EQ(vvars, sc._varsOrAsterisk.orderedVariablesFromQueryBody());
+
+      // -- SubQuery
+      // const auto& c_subquery = pq._rootGraphPattern._children[1].getBasic();
+      auto parsed_sub_query = get<GraphPatternOperation::Subquery>(pq._rootGraphPattern._children[1].variant_);
+      const auto& c_subquery = get<GraphPatternOperation::BasicGraphPattern>(parsed_sub_query._subquery._rootGraphPattern._children[0].variant_);
+      ASSERT_EQ(2u, c_subquery._whereClauseTriples.size());
+      ASSERT_EQ(1u, parsed_sub_query._subquery._rootGraphPattern._filters.size());
+      ASSERT_EQ("?year", parsed_sub_query._subquery._rootGraphPattern._filters[0]._lhs);
+      ASSERT_EQ("\"00-00-2000\"", parsed_sub_query._subquery._rootGraphPattern._filters[0]._rhs);
+      ASSERT_EQ(SparqlFilter::GT, parsed_sub_query._subquery._rootGraphPattern._filters[0]._type);
+      ASSERT_EQ(std::nullopt, parsed_sub_query._subquery._offset);
+
+      ASSERT_EQ(c_subquery._whereClauseTriples[0]._s, "?movie");
+      ASSERT_EQ(c_subquery._whereClauseTriples[0]._p._iri, "<directed-by>");
+      ASSERT_EQ(c_subquery._whereClauseTriples[0]._o, "?director");
+
+      ASSERT_EQ(c_subquery._whereClauseTriples[1]._s, "?movie");
+      ASSERT_EQ(c_subquery._whereClauseTriples[1]._p._iri, "<from-year>");
+      ASSERT_EQ(c_subquery._whereClauseTriples[1]._o, "?year");
+
+      ASSERT_EQ(std::nullopt, parsed_sub_query._subquery._limit);
+      ASSERT_EQ(true, parsed_sub_query._subquery._orderBy[0]._desc);
+      ASSERT_EQ("?director", parsed_sub_query._subquery._orderBy[0]._key);
+
+      auto sc_subquery = get<ParsedQuery::SelectClause>(parsed_sub_query._subquery._clause);
+      ASSERT_EQ(false, sc_subquery._distinct);
+      ASSERT_EQ(false, sc_subquery._reduced);
+      ASSERT_EQ(true, sc_subquery._varsOrAsterisk.isAsterisk());
+
+
+      vector<string> vvars_subquery = {"?movie", "?director", "?year"};
+      ASSERT_EQ(vvars_subquery, sc_subquery._varsOrAsterisk.orderedVariablesFromQueryBody());
+
+    }
+
+
+
   } catch (const ad_semsearch::Exception& e) {
     FAIL() << e.getFullErrorMessage();
   }
@@ -717,12 +945,12 @@ TEST(ParserTest, testParseLiteral) {
 
   // Test parsing without the isEntireString check and with escaped quotation
   // marks.
-  inp = "?a ?b \"The \\\"Moon\\\"\"@en .";
+  inp = R"(?a ?b "The \"Moon\""@en .)";
   ret = SparqlParser::parseLiteral(inp, false);
   ASSERT_EQ("\"The \"Moon\"\"@en", ret);
 
   // Do a negative test for the isEntireString check
-  inp = "?a ?b \"The \\\"Moon\\\"\"@en .";
+  inp = R"(?a ?b "The \"Moon\""@en .)";
   bool caught_exception = false;
   try {
     ret = SparqlParser::parseLiteral(inp, true);
@@ -732,12 +960,12 @@ TEST(ParserTest, testParseLiteral) {
   ASSERT_TRUE(caught_exception);
 
   // check if specifying the correct offset works
-  inp = "?a ?b \"The \\\"Moon\\\"\"@en";
+  inp = R"(?a ?b "The \"Moon\""@en)";
   ret = SparqlParser::parseLiteral(inp, true, 6);
   ASSERT_EQ("\"The \"Moon\"\"@en", ret);
 
   // Do not escape qutation marks with the isEntireString check
-  inp = "?a ?b \"The \\\"Moon\"\"@en";
+  inp = R"(?a ?b "The \"Moon""@en)";
   caught_exception = false;
   try {
     ret = SparqlParser::parseLiteral(inp, true, 6);

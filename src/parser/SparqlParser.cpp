@@ -315,6 +315,12 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         // create the subquery operation
         GraphPatternOperation::Subquery subq;
         parseQuery(&subq._subquery, SELECT_QUERY);
+        for(auto subSelectVariables: subq._subquery.selectClause()
+                                           ._varsOrAsterisk.orderedVariablesFromQueryBody()) {
+          query->selectClause()._varsOrAsterisk
+              .addVariableFromQueryBody(subSelectVariables);
+        }
+
         currentPattern->_children.emplace_back(std::move(subq));
         // The closing bracked } is consumed by the subquery
         _lexer.accept(".");
@@ -384,7 +390,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       currentPattern->_children.emplace_back(
           GraphPatternOperation::Values{std::move(values)});
       _lexer.accept(".");
-    } else {
+    } else { // else (?) Which is/are the remaining conditions
       std::string subject;
       if (lastSubject.empty()) {
         if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
