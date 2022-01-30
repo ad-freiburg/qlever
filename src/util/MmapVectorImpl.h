@@ -31,9 +31,11 @@ constexpr uint32_t MmapVector<T>::Version;
 template <class T>
 void MmapVector<T>::writeMetaDataToEnd() {
   // does  this not matter
+  /*
   if (truncate(_filename.c_str(), _bytesize)) {
     throw TruncateException(_filename, _bytesize, errno);
   }
+  */
 
   // open file and seek to end of array space
   // additionally specifying ios::in avoids truncation of file
