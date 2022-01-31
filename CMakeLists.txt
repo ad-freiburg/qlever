@@ -88,6 +88,12 @@ endif()
 find_package(Boost 1.74 COMPONENTS program_options REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
+#######################################
+# NAMED_TYPE
+#######################################
+include_directories(third_party/NamedType/include)
+
+
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
