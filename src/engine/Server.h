@@ -145,9 +145,8 @@ class Server {
   static json composeExceptionJson(const string& query, const std::exception& e,
                                    ad_utility::Timer& requestTimer);
 
-  static ad_utility::stream_generator::stream_generator
-  composeTurtleResponse(const ParsedQuery& query,
-                        const QueryExecutionTree& qet);
+  static ad_utility::stream_generator::stream_generator composeTurtleResponse(
+      const ParsedQuery& query, const QueryExecutionTree& qet);
 
   json composeStatsJson() const;
 

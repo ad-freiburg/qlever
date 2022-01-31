@@ -53,9 +53,7 @@ class stream_generator_promise {
   std::exception_ptr _exception;
 
  public:
-  stream_generator_promise() {
-    setContentEncoding(CompressionMethod::NONE);
-  }
+  stream_generator_promise() { setContentEncoding(CompressionMethod::NONE); }
 
   basic_stream_generator<MIN_BUFFER_SIZE> get_return_object() noexcept;
 
@@ -177,7 +175,8 @@ class [[nodiscard]] basic_stream_generator {
    */
   bool hasNext() { return _coroutine && !_coroutine.done(); }
 
-  void setContentEncoding(ad_utility::content_encoding::CompressionMethod method) {
+  void setContentEncoding(
+      ad_utility::content_encoding::CompressionMethod method) {
     AD_CHECK(_coroutine);
     _coroutine.promise().setContentEncoding(method);
   }
@@ -191,8 +190,10 @@ class [[nodiscard]] basic_stream_generator {
 
 namespace detail {
 template <size_t MIN_BUFFER_SIZE>
-inline basic_stream_generator<MIN_BUFFER_SIZE> stream_generator_promise<MIN_BUFFER_SIZE>::get_return_object() noexcept {
-  using coroutine_handle = std::coroutine_handle<stream_generator_promise<MIN_BUFFER_SIZE>>;
+inline basic_stream_generator<MIN_BUFFER_SIZE>
+stream_generator_promise<MIN_BUFFER_SIZE>::get_return_object() noexcept {
+  using coroutine_handle =
+      std::coroutine_handle<stream_generator_promise<MIN_BUFFER_SIZE>>;
   return basic_stream_generator{coroutine_handle::from_promise(*this)};
 }
 }  // namespace detail

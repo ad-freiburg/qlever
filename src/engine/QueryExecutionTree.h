@@ -124,8 +124,7 @@ class QueryExecutionTree {
 
   // Generate an RDF graph in csv/tsv format for a CONSTRUCT query.
   template <ExportSubFormat format>
-  ad_utility::stream_generator::stream_generator
-  writeRdfGraphSeparatedValues(
+  ad_utility::stream_generator::stream_generator writeRdfGraphSeparatedValues(
       const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
       size_t offset, std::shared_ptr<const ResultTable> res) const;
 
