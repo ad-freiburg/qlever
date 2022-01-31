@@ -95,7 +95,6 @@ fi;
 
 INDEX_PREFIX="scientists-index"
 INDEX="$INDEX_DIR/$INDEX_PREFIX"
-echo "index $INDEX"
 
 
 # Delete and rebuild the index
