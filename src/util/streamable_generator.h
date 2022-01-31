@@ -129,6 +129,7 @@ class [[nodiscard]] basic_stream_generator {
   using promise_type = detail::stream_generator_promise<MIN_BUFFER_SIZE>;
 
  private:
+  CompressionMethod _method = CompressionMethod::NONE;
   std::coroutine_handle<promise_type> _coroutine = nullptr;
 
   static basic_stream_generator noOpGenerator() { co_return; }
@@ -137,7 +138,7 @@ class [[nodiscard]] basic_stream_generator {
   basic_stream_generator() : basic_stream_generator(noOpGenerator()){};
 
   basic_stream_generator(basic_stream_generator&& other) noexcept
-      : _coroutine{other._coroutine} {
+      : _method{other._method}, _coroutine{other._coroutine} {
     other._coroutine = nullptr;
   }
 
@@ -151,6 +152,7 @@ class [[nodiscard]] basic_stream_generator {
 
   basic_stream_generator& operator=(basic_stream_generator&& other) noexcept {
     std::swap(_coroutine, other._coroutine);
+    _method = other._method;
     return *this;
   }
 
@@ -179,6 +181,11 @@ class [[nodiscard]] basic_stream_generator {
       ad_utility::content_encoding::CompressionMethod method) {
     AD_CHECK(_coroutine);
     _coroutine.promise().setContentEncoding(method);
+    _method = method;
+  }
+
+  [[nodiscard]] CompressionMethod getContentEncoding() const noexcept {
+    return _method;
   }
 
  private:

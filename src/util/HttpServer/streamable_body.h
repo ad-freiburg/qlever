@@ -22,13 +22,12 @@ namespace ad_utility::httpUtils::httpStreams {
  * response.body() = generatorFunction();
  * response.prepare_payload();
  */
-template <ad_utility::content_encoding::CompressionMethod METHOD>
 struct streamable_body {
   // Algorithm for retrieving buffers when serializing.
   class writer;
 
   // The type of the message::body member. This determines
-  // which type response<streamable_body<METHOD>>::body() returns
+  // which type response<streamable_body>::body() returns
   using value_type = ad_utility::stream_generator::stream_generator;
 };
 
@@ -38,8 +37,7 @@ struct streamable_body {
  * Objects of this type are created during serialization
  * to extract the buffers representing the body.
  */
-template <ad_utility::content_encoding::CompressionMethod METHOD>
-class streamable_body<METHOD>::writer {
+class streamable_body::writer {
   value_type& _body;
 
  public:
@@ -69,9 +67,8 @@ class streamable_body<METHOD>::writer {
   template <bool isRequest, class Fields>
   writer(boost::beast::http::header<isRequest, Fields>& h, value_type& b)
       : _body{b} {
-    _body.setContentEncoding(METHOD);
-    if constexpr (METHOD ==
-                  ad_utility::content_encoding::CompressionMethod::DEFLATE) {
+    if (_body.getContentEncoding() ==
+        ad_utility::content_encoding::CompressionMethod::DEFLATE) {
       h.set(boost::beast::http::field::content_encoding, "deflate");
     }
   }
@@ -124,14 +121,7 @@ class streamable_body<METHOD>::writer {
   }
 };
 
-static_assert(
-    boost::beast::http::is_body<streamable_body<
-        ad_utility::content_encoding::CompressionMethod::DEFLATE>>::value,
-    "Body type requirements not met");
-
-static_assert(
-    boost::beast::http::is_body<streamable_body<
-        ad_utility::content_encoding::CompressionMethod::NONE>>::value,
-    "Body type requirements not met");
+static_assert(boost::beast::http::is_body<streamable_body>::value,
+              "Body type requirements not met");
 
 }  // namespace ad_utility::httpUtils::httpStreams

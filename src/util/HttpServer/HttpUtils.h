@@ -74,14 +74,15 @@ static auto createOkResponse(std::string text, const HttpRequest auto& request,
 }
 
 /// Create a HttpResponse from a stream_generator with status 200 OK.
-template <ad_utility::content_encoding::CompressionMethod method>
 static auto createOkResponse(
     ad_utility::stream_generator::stream_generator&& generator,
-    const HttpRequest auto& request, MediaType mimeType) {
-  http::response<ad_utility::httpUtils::httpStreams::streamable_body<method>>
-      response{http::status::ok, request.version()};
+    const HttpRequest auto& request, MediaType mimeType,
+    ad_utility::content_encoding::CompressionMethod method) {
+  http::response<ad_utility::httpUtils::httpStreams::streamable_body> response{
+      http::status::ok, request.version()};
   response.set(http::field::content_type, toString(mimeType));
   response.keep_alive(request.keep_alive());
+  generator.setContentEncoding(method);
   response.body() = std::move(generator);
   // Set Content-Length and Transfer-Encoding.
   // Because ad_utility::httpUtils::httpStreams::streamable_body::size

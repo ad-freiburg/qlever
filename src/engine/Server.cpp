@@ -430,50 +430,27 @@ boost::asio::awaitable<void> Server::processQuery(
         auto responseGenerator = co_await composeResponseSepValues<
             QueryExecutionTree::ExportSubFormat::CSV>(pq, qet);
 
-        if (method == CompressionMethod::DEFLATE) {
-          auto response = createOkResponse<CompressionMethod::DEFLATE>(
-              std::move(responseGenerator), request,
-              ad_utility::MediaType::csv);
-          co_await send(std::move(response));
-        } else {
-          auto response = createOkResponse<CompressionMethod::NONE>(
-              std::move(responseGenerator), request,
-              ad_utility::MediaType::csv);
-          co_await send(std::move(response));
-        }
+        auto response = createOkResponse(std::move(responseGenerator), request,
+                                         ad_utility::MediaType::csv, method);
+        co_await send(std::move(response));
 
       } break;
       case ad_utility::MediaType::tsv: {
         auto responseGenerator = co_await composeResponseSepValues<
             QueryExecutionTree::ExportSubFormat::TSV>(pq, qet);
 
-        if (method == CompressionMethod::DEFLATE) {
-          auto response = createOkResponse<CompressionMethod::DEFLATE>(
-              std::move(responseGenerator), request,
-              ad_utility::MediaType::tsv);
-          co_await send(std::move(response));
-        } else {
-          auto response = createOkResponse<CompressionMethod::NONE>(
-              std::move(responseGenerator), request,
-              ad_utility::MediaType::tsv);
-          co_await send(std::move(response));
-        }
+        auto response = createOkResponse(std::move(responseGenerator), request,
+                                         ad_utility::MediaType::tsv, method);
+        co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::octetStream: {
         auto responseGenerator = co_await composeResponseSepValues<
             QueryExecutionTree::ExportSubFormat::BINARY>(pq, qet);
 
-        if (method == CompressionMethod::DEFLATE) {
-          auto response = createOkResponse<CompressionMethod::DEFLATE>(
-              std::move(responseGenerator), request,
-              ad_utility::MediaType::octetStream);
-          co_await send(std::move(response));
-        } else {
-          auto response = createOkResponse<CompressionMethod::NONE>(
-              std::move(responseGenerator), request,
-              ad_utility::MediaType::octetStream);
-          co_await send(std::move(response));
-        }
+        auto response =
+            createOkResponse(std::move(responseGenerator), request,
+                             ad_utility::MediaType::octetStream, method);
+        co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::qleverJson: {
         // Normal case: JSON response
@@ -484,17 +461,9 @@ boost::asio::awaitable<void> Server::processQuery(
       case ad_utility::MediaType::turtle: {
         auto responseGenerator = composeTurtleResponse(pq, qet);
 
-        if (method == CompressionMethod::DEFLATE) {
-          auto response = createOkResponse<CompressionMethod::DEFLATE>(
-              std::move(responseGenerator), request,
-              ad_utility::MediaType::turtle);
-          co_await send(std::move(response));
-        } else {
-          auto response = createOkResponse<CompressionMethod::NONE>(
-              std::move(responseGenerator), request,
-              ad_utility::MediaType::turtle);
-          co_await send(std::move(response));
-        }
+        auto response = createOkResponse(std::move(responseGenerator), request,
+                                         ad_utility::MediaType::turtle, method);
+        co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::sparqlJson: {
         auto responseString =
