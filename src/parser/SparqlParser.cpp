@@ -390,7 +390,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       currentPattern->_children.emplace_back(
           GraphPatternOperation::Values{std::move(values)});
       _lexer.accept(".");
-    } else { // else (?) Which is/are the remaining conditions
+    } else { 
       std::string subject;
       if (lastSubject.empty()) {
         if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
