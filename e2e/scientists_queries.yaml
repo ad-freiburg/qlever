@@ -1096,5 +1096,5 @@ queries:
     checks:
       - num_rows: 156
       - num_cols: 2
-      - selected: ["?r", "?count", "?o"]
+      - selected: ["?a", "?r"]
       - contains_row: ["<Religion>", 1185]

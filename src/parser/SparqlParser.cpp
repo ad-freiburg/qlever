@@ -318,12 +318,18 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         ParsedQuery::SelectedVarsOrAsterisk subQ_sel_vars =
             subq._subquery.selectClause()._varsOrAsterisk;
 
-        auto subQ_ordVars = subQ_sel_vars.orderedVariablesFromQueryBody();
+        if (subQ_sel_vars.isAsterisk()) {
+          auto subQ_ordVars = subQ_sel_vars.orderedVariablesFromQueryBody();
 
-        for (const auto& subSelectVariables : subQ_ordVars) {
-          ParsedQuery::SelectedVarsOrAsterisk up_sel_vars =
-              query->selectClause()._varsOrAsterisk;
-          up_sel_vars.addVariableFromQueryBody(subSelectVariables);
+          for (const auto& subSelectVariables : subQ_ordVars) {
+            ParsedQuery::SelectedVarsOrAsterisk up_sel_vars =
+                query->selectClause()._varsOrAsterisk;
+            up_sel_vars.addVariableFromQueryBody(subSelectVariables);
+          }
+        } else {
+          for (const auto& var : subQ_sel_vars.getSelectVariables()) {
+            query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(var);
+          }
         }
 
         currentPattern->_children.emplace_back(std::move(subq));
