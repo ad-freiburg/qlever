@@ -128,7 +128,7 @@ class Vocabulary {
   //! word is not in the vocabulary. Returns an lvalue because compressed or
   //! externalized words don't allow references
   template <typename U = StringType, typename = enable_if_compressed<U>>
-  [[nodiscard]] std::optional<string> idToOptionalString(Id id) const;
+  [[nodiscard]] const std::optional<string> idToOptionalString(Id id) const;
 
   //! Get the word with the given id.
   //! lvalue for compressedString and const& for string-based vocabulary
