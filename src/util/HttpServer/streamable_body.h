@@ -29,7 +29,7 @@ struct streamable_body {
 
   // The type of the message::body member. This determines
   // which type response<streamable_body<METHOD>>::body() returns
-  using value_type = ad_utility::stream_generator::stream_generator<METHOD>;
+  using value_type = ad_utility::stream_generator::stream_generator;
 };
 
 /**
@@ -69,6 +69,7 @@ class streamable_body<METHOD>::writer {
   template <bool isRequest, class Fields>
   writer(boost::beast::http::header<isRequest, Fields>& h, value_type& b)
       : _body{b} {
+    _body.setContentEncoding(METHOD);
     if constexpr (METHOD ==
                   ad_utility::content_encoding::CompressionMethod::DEFLATE) {
       h.set(boost::beast::http::field::content_encoding, "deflate");

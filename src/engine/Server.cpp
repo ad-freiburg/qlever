@@ -231,18 +231,17 @@ Awaitable<json> Server::composeResponseSparqlJson(
 }
 
 // _____________________________________________________________________________
-template <QueryExecutionTree::ExportSubFormat format,
-          ad_utility::content_encoding::CompressionMethod method>
-Awaitable<ad_utility::stream_generator::stream_generator<method>>
+template <QueryExecutionTree::ExportSubFormat format>
+Awaitable<ad_utility::stream_generator::stream_generator>
 Server::composeResponseSepValues(const ParsedQuery& query,
                                  const QueryExecutionTree& qet) const {
   auto compute = [&] {
     size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
     size_t offset = query._offset.value_or(0);
     return query.hasSelectClause()
-               ? qet.generateResults<format, method>(
+               ? qet.generateResults<format>(
                      query.selectClause()._varsOrAsterisk, limit, offset)
-               : qet.writeRdfGraphSeparatedValues<format, method>(
+               : qet.writeRdfGraphSeparatedValues<format>(
                      query.constructClause(), limit, offset, qet.getResult());
   };
   return computeInNewThread(compute);
@@ -250,10 +249,8 @@ Server::composeResponseSepValues(const ParsedQuery& query,
 
 // _____________________________________________________________________________
 
-template <ad_utility::content_encoding::CompressionMethod method>
-ad_utility::stream_generator::stream_generator<method>
-Server::composeTurtleResponse(const ParsedQuery& query,
-                              const QueryExecutionTree& qet) {
+ad_utility::stream_generator::stream_generator Server::composeTurtleResponse(
+    const ParsedQuery& query, const QueryExecutionTree& qet) {
   if (!query.hasConstructClause()) {
     throw std::runtime_error{
         "RDF Turtle as an export format is only supported for CONSTRUCT "
@@ -261,8 +258,8 @@ Server::composeTurtleResponse(const ParsedQuery& query,
   }
   size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
   size_t offset = query._offset.value_or(0);
-  return qet.writeRdfGraphTurtle<method>(query.constructClause(), limit, offset,
-                                         qet.getResult());
+  return qet.writeRdfGraphTurtle(query.constructClause(), limit, offset,
+                                 qet.getResult());
 }
 
 // _____________________________________________________________________________
@@ -430,55 +427,51 @@ boost::asio::awaitable<void> Server::processQuery(
     AD_CHECK(mediaType.has_value());
     switch (mediaType.value()) {
       case ad_utility::MediaType::csv: {
+        auto responseGenerator = co_await composeResponseSepValues<
+            QueryExecutionTree::ExportSubFormat::CSV>(pq, qet);
+
         if (method == CompressionMethod::DEFLATE) {
-          auto responseGenerator = co_await composeResponseSepValues<
-              QueryExecutionTree::ExportSubFormat::CSV,
-              CompressionMethod::DEFLATE>(pq, qet);
-          auto response = createOkResponse(std::move(responseGenerator),
-                                           request, ad_utility::MediaType::csv);
+          auto response = createOkResponse<CompressionMethod::DEFLATE>(
+              std::move(responseGenerator), request,
+              ad_utility::MediaType::csv);
           co_await send(std::move(response));
         } else {
-          auto responseGenerator = co_await composeResponseSepValues<
-              QueryExecutionTree::ExportSubFormat::CSV,
-              CompressionMethod::NONE>(pq, qet);
-          auto response = createOkResponse(std::move(responseGenerator),
-                                           request, ad_utility::MediaType::csv);
+          auto response = createOkResponse<CompressionMethod::NONE>(
+              std::move(responseGenerator), request,
+              ad_utility::MediaType::csv);
           co_await send(std::move(response));
         }
+
       } break;
       case ad_utility::MediaType::tsv: {
+        auto responseGenerator = co_await composeResponseSepValues<
+            QueryExecutionTree::ExportSubFormat::TSV>(pq, qet);
+
         if (method == CompressionMethod::DEFLATE) {
-          auto responseGenerator = co_await composeResponseSepValues<
-              QueryExecutionTree::ExportSubFormat::TSV,
-              CompressionMethod::DEFLATE>(pq, qet);
-          auto response = createOkResponse(std::move(responseGenerator),
-                                           request, ad_utility::MediaType::tsv);
+          auto response = createOkResponse<CompressionMethod::DEFLATE>(
+              std::move(responseGenerator), request,
+              ad_utility::MediaType::tsv);
           co_await send(std::move(response));
         } else {
-          auto responseGenerator = co_await composeResponseSepValues<
-              QueryExecutionTree::ExportSubFormat::TSV,
-              CompressionMethod::NONE>(pq, qet);
-          auto response = createOkResponse(std::move(responseGenerator),
-                                           request, ad_utility::MediaType::tsv);
+          auto response = createOkResponse<CompressionMethod::NONE>(
+              std::move(responseGenerator), request,
+              ad_utility::MediaType::tsv);
           co_await send(std::move(response));
         }
       } break;
       case ad_utility::MediaType::octetStream: {
+        auto responseGenerator = co_await composeResponseSepValues<
+            QueryExecutionTree::ExportSubFormat::BINARY>(pq, qet);
+
         if (method == CompressionMethod::DEFLATE) {
-          auto responseGenerator = co_await composeResponseSepValues<
-              QueryExecutionTree::ExportSubFormat::BINARY,
-              CompressionMethod::DEFLATE>(pq, qet);
-          auto response =
-              createOkResponse(std::move(responseGenerator), request,
-                               ad_utility::MediaType::octetStream);
+          auto response = createOkResponse<CompressionMethod::DEFLATE>(
+              std::move(responseGenerator), request,
+              ad_utility::MediaType::octetStream);
           co_await send(std::move(response));
         } else {
-          auto responseGenerator = co_await composeResponseSepValues<
-              QueryExecutionTree::ExportSubFormat::BINARY,
-              CompressionMethod::NONE>(pq, qet);
-          auto response =
-              createOkResponse(std::move(responseGenerator), request,
-                               ad_utility::MediaType::octetStream);
+          auto response = createOkResponse<CompressionMethod::NONE>(
+              std::move(responseGenerator), request,
+              ad_utility::MediaType::octetStream);
           co_await send(std::move(response));
         }
       } break;
@@ -489,19 +482,17 @@ boost::asio::awaitable<void> Server::processQuery(
         co_await sendJson(std::move(responseString));
       } break;
       case ad_utility::MediaType::turtle: {
+        auto responseGenerator = composeTurtleResponse(pq, qet);
+
         if (method == CompressionMethod::DEFLATE) {
-          auto responseGenerator =
-              composeTurtleResponse<CompressionMethod::DEFLATE>(pq, qet);
-          auto response =
-              createOkResponse(std::move(responseGenerator), request,
-                               ad_utility::MediaType::turtle);
+          auto response = createOkResponse<CompressionMethod::DEFLATE>(
+              std::move(responseGenerator), request,
+              ad_utility::MediaType::turtle);
           co_await send(std::move(response));
         } else {
-          auto responseGenerator =
-              composeTurtleResponse<CompressionMethod::NONE>(pq, qet);
-          auto response =
-              createOkResponse(std::move(responseGenerator), request,
-                               ad_utility::MediaType::turtle);
+          auto response = createOkResponse<CompressionMethod::NONE>(
+              std::move(responseGenerator), request,
+              ad_utility::MediaType::turtle);
           co_await send(std::move(response));
         }
       } break;

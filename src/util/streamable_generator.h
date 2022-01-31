@@ -18,7 +18,7 @@
 namespace ad_utility::stream_generator {
 using ad_utility::content_encoding::CompressionMethod;
 
-template <size_t MIN_BUFFER_SIZE, CompressionMethod METHOD>
+template <size_t MIN_BUFFER_SIZE>
 class basic_stream_generator;
 
 namespace detail {
@@ -46,7 +46,7 @@ class suspend_sometimes {
  * The promise type that backs the generator type and handles storage and
  * suspension-related decisions.
  */
-template <size_t MIN_BUFFER_SIZE, CompressionMethod METHOD>
+template <size_t MIN_BUFFER_SIZE>
 class stream_generator_promise {
   std::string _value;
   io::filtering_ostream _filterStream;
@@ -54,13 +54,10 @@ class stream_generator_promise {
 
  public:
   stream_generator_promise() {
-    if constexpr (METHOD == CompressionMethod::DEFLATE) {
-      _filterStream.push(io::zlib_compressor(io::zlib::best_compression));
-    }
-    _filterStream.push(io::back_inserter(_value));
+    setContentEncoding(CompressionMethod::NONE);
   }
 
-  basic_stream_generator<MIN_BUFFER_SIZE, METHOD> get_return_object() noexcept;
+  basic_stream_generator<MIN_BUFFER_SIZE> get_return_object() noexcept;
 
   constexpr std::suspend_always initial_suspend() const noexcept { return {}; }
   std::suspend_always final_suspend() noexcept {
@@ -95,6 +92,14 @@ class stream_generator_promise {
 
   std::string_view value() const noexcept { return _value; }
 
+  void setContentEncoding(CompressionMethod method) {
+    _filterStream.reset();
+    if (method == CompressionMethod::DEFLATE) {
+      _filterStream.push(io::zlib_compressor(io::zlib::best_compression));
+    }
+    _filterStream.push(io::back_inserter(_value));
+  }
+
   // Don't allow any use of 'co_await' inside the generator coroutine.
   template <typename U>
   std::suspend_never await_transform(U&& value) = delete;
@@ -120,11 +125,10 @@ class stream_generator_promise {
  *   co_yield "Hello World";
  * }
  */
-template <size_t MIN_BUFFER_SIZE, CompressionMethod METHOD>
+template <size_t MIN_BUFFER_SIZE>
 class [[nodiscard]] basic_stream_generator {
  public:
-  using promise_type =
-      detail::stream_generator_promise<MIN_BUFFER_SIZE, METHOD>;
+  using promise_type = detail::stream_generator_promise<MIN_BUFFER_SIZE>;
 
  private:
   std::coroutine_handle<promise_type> _coroutine = nullptr;
@@ -173,24 +177,26 @@ class [[nodiscard]] basic_stream_generator {
    */
   bool hasNext() { return _coroutine && !_coroutine.done(); }
 
+  void setContentEncoding(ad_utility::content_encoding::CompressionMethod method) {
+    AD_CHECK(_coroutine);
+    _coroutine.promise().setContentEncoding(method);
+  }
+
  private:
-  friend class detail::stream_generator_promise<MIN_BUFFER_SIZE, METHOD>;
+  friend class detail::stream_generator_promise<MIN_BUFFER_SIZE>;
   explicit basic_stream_generator(
       std::coroutine_handle<promise_type> coroutine) noexcept
       : _coroutine{coroutine} {}
 };
 
 namespace detail {
-template <size_t MIN_BUFFER_SIZE, CompressionMethod METHOD>
-inline basic_stream_generator<MIN_BUFFER_SIZE, METHOD> stream_generator_promise<
-    MIN_BUFFER_SIZE, METHOD>::get_return_object() noexcept {
-  using coroutine_handle =
-      std::coroutine_handle<stream_generator_promise<MIN_BUFFER_SIZE, METHOD>>;
+template <size_t MIN_BUFFER_SIZE>
+inline basic_stream_generator<MIN_BUFFER_SIZE> stream_generator_promise<MIN_BUFFER_SIZE>::get_return_object() noexcept {
+  using coroutine_handle = std::coroutine_handle<stream_generator_promise<MIN_BUFFER_SIZE>>;
   return basic_stream_generator{coroutine_handle::from_promise(*this)};
 }
 }  // namespace detail
 
 // Use 1MB buffer size by default
-template <CompressionMethod METHOD = CompressionMethod::NONE>
-using stream_generator = basic_stream_generator<1u << 20, METHOD>;
+using stream_generator = basic_stream_generator<1u << 20>;
 }  // namespace ad_utility::stream_generator
