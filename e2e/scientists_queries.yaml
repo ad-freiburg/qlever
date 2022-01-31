@@ -1093,12 +1093,8 @@ queries:
           }
         }
       }
-      ORDER BY DESC(?count)
     checks:
       - num_rows: 156
       - num_cols: 2
       - selected: ["?r", "?count", "?o"]
       - contains_row: ["<Religion>", 1185]
-      - order_numeric: {"dir": "DESC", "var": "?count"}
-
-
