@@ -95,7 +95,7 @@ class stream_generator_promise {
     if (method == CompressionMethod::DEFLATE) {
       _filterStream.push(io::zlib_compressor(io::zlib::best_compression));
     }
-    _filterStream.push(io::back_inserter(_value));
+    _filterStream.push(io::back_inserter(_value), 0);
   }
 
   // Don't allow any use of 'co_await' inside the generator coroutine.

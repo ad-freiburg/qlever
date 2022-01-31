@@ -53,11 +53,11 @@ target_link_libraries(FTSAlgorithmsTest gtest_main index ${CMAKE_THREAD_LIBS_INI
 
 add_executable(EngineTest EngineTest.cpp)
 add_test(EngineTest EngineTest)
-target_link_libraries(EngineTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(EngineTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT} boost_iostreams)
 
 add_executable(QueryPlannerTest QueryPlannerTest.cpp)
 add_test(QueryPlannerTest QueryPlannerTest)
-target_link_libraries(QueryPlannerTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(QueryPlannerTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT} boost_iostreams)
 
 add_executable(ConversionsTest ConversionsTest.cpp)
 add_test(ConversionsTest ConversionsTest)
@@ -81,7 +81,7 @@ target_link_libraries(VocabularyGeneratorTest gtest_main index ${CMAKE_THREAD_LI
 
 add_executable(HasPredicateScanTest HasPredicateScanTest.cpp)
 add_test(HasPredicateScanTest HasPredicateScanTest)
-target_link_libraries(HasPredicateScanTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(HasPredicateScanTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT} boost_iostreams)
 
 add_executable(MmapVectorTest MmapVectorTest.cpp)
 add_test(MmapVectorTest MmapVectorTest)
@@ -93,7 +93,7 @@ target_link_libraries(BufferedVectorTest gtest_main -pthread)
 
 add_executable(UnionTest UnionTest.cpp)
 add_test(UnionTest UnionTest)
-target_link_libraries(UnionTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(UnionTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT} boost_iostreams)
 
 add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
 add_test(TokenTest TokenTest)
@@ -113,7 +113,7 @@ target_link_libraries(IdTableTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(TransitivePathTest TransitivePathTest.cpp)
 add_test(TransitivePathTest TransitivePathTest)
-target_link_libraries(TransitivePathTest engine gtest_main ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(TransitivePathTest engine gtest_main ${CMAKE_THREAD_LIBS_INIT} boost_iostreams)
 
 add_executable(SparqlLexerTest SparqlLexerTest.cpp)
 add_test(SparqlLexerTest SparqlLexerTest)
@@ -156,7 +156,7 @@ target_link_libraries(LimitedAllocatorTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(MinusTest MinusTest.cpp)
 add_test(MinusTest MinusTest)
-target_link_libraries(MinusTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(MinusTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT} boost_iostreams)
 
 add_executable(SortPerformanceEstimatorTest SortPerformanceEstimatorTest.cpp)
 target_link_libraries(SortPerformanceEstimatorTest gtest_main SortPerformanceEstimator ${CMAKE_THREAD_LIBS_INIT})
@@ -199,11 +199,11 @@ target_link_libraries(SparqlExpressionTest gtest_main sparqlExpressions index ${
 
 add_executable(StreamableBodyTest StreamableBodyTest.cpp)
 add_test(StreamableBodyTest StreamableBodyTest)
-target_link_libraries(StreamableBodyTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(StreamableBodyTest gtest_main ${CMAKE_THREAD_LIBS_INIT} boost_iostreams)
 
 add_executable(StreamableGeneratorTest StreamableGeneratorTest.cpp)
 add_test(StreamableGeneratorTest StreamableGeneratorTest)
-target_link_libraries(StreamableGeneratorTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(StreamableGeneratorTest gtest_main ${CMAKE_THREAD_LIBS_INIT} boost_iostreams)
 
 add_executable(AcceptHeaderTest AcceptHeaderTest.cpp)
 target_link_libraries(AcceptHeaderTest gtest_main mediaTypes httpParser ${CMAKE_THREAD_LIBS_INIT})
