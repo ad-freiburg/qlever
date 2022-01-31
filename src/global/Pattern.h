@@ -95,7 +95,7 @@ struct CompactStringVectorWriter;
  *        c-style strings). The data is stored in a single contiguous block
  *        of memory.
  */
-template <typename data_type>
+template <typename data_type, typename index_type = uint64_t, typename difference_type = int64_t>
 class CompactVectorOfStrings {
  public:
   using offset_type = uint64_t;
@@ -128,11 +128,11 @@ class CompactVectorOfStrings {
   }
   void build(const T& input) {
     // Also make room for the end offset of the last element.
-    _offsets.reserve(input.size() + 1);
+    _offsets.reserve(input.internalSize() + 1);
     size_t dataSize = 0;
     for (const auto& element : input) {
       _offsets.push_back(dataSize);
-      dataSize += element.size();
+      dataSize += element.internalSize();
     }
     // The last offset is the offset right after the last element.
     _offsets.push_back(dataSize);
@@ -152,7 +152,7 @@ class CompactVectorOfStrings {
   CompactVectorOfStrings(CompactVectorOfStrings&&) noexcept = default;
 
   // There is one more offset than the number of elements.
-  size_t size() const { return _offsets.size() - 1; }
+  index_type size() const { return index_type{_offsets.size() - 1}; }
 
   bool ready() const { return _data != nullptr; }
 
@@ -162,7 +162,7 @@ class CompactVectorOfStrings {
    * @return A std::pair containing a pointer to the data, and the number of
    *         elements stored at the pointers target.
    */
-  const value_type operator[](size_t i) const {
+  const value_type operator[](index_type i) const {
     offset_type offset = _offsets[i];
     const data_type* ptr = _data.data() + offset;
     size_t size = _offsets[i + 1] - offset;
@@ -176,14 +176,13 @@ class CompactVectorOfStrings {
   class Iterator {
    private:
     const CompactVectorOfStrings* _vector = nullptr;
-    size_t _index = 0;
+    index_type _index{0};
 
    public:
     using iterator_category = std::random_access_iterator_tag;
-    using difference_type = int64_t;
     using value_type = CompactVectorOfStrings::value_type;
 
-    Iterator(const CompactVectorOfStrings* vec, size_t index)
+    Iterator(const CompactVectorOfStrings* vec, index_type index)
         : _vector{vec}, _index{index} {}
     Iterator() = default;
 
@@ -247,7 +246,7 @@ class CompactVectorOfStrings {
     auto operator[](difference_type n) const { return (*_vector)[_index + n]; }
   };
 
-  Iterator begin() const { return {this, 0}; }
+  Iterator begin() const { return {this, index_type{0}}; }
   Iterator end() const { return {this, size()}; }
 
   using const_iterator = Iterator;
@@ -310,9 +309,9 @@ struct CompactStringVectorWriter {
 
 // Forward iterator for a `CompactVectorOfStrings` that reads directly from
 // disk without buffering the whole `Vector`.
-template <typename DataT>
-cppcoro::generator<typename CompactVectorOfStrings<DataT>::vector_type>
-CompactVectorOfStrings<DataT>::diskIterator(string filename) {
+template <typename DataT, typename IndexT, typename DifferenceT>
+cppcoro::generator<typename CompactVectorOfStrings<DataT, IndexT, DifferenceT>::vector_type>
+CompactVectorOfStrings<DataT, IndexT, DifferenceT>::diskIterator(string filename) {
   ad_utility::File dataFile{filename, "r"};
   ad_utility::File indexFile{filename, "r"};
   AD_CHECK(dataFile.isOpen());

@@ -137,7 +137,7 @@ class Vocabulary {
   // AccessReturnType_t<StringType> at(Id id) const { return operator[](id); }
 
   //! Get the number of words in the vocabulary.
-  [[nodiscard]] size_t size() const { return _words.size(); }
+  [[nodiscard]] size_t internalSize() const { return _words.size().get(); }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
@@ -305,17 +305,6 @@ class Vocabulary {
     }
   }
 
-  // Is an id an internal id (has lower bits set to 0)
-  static bool isInternalId(Id id) {
-    return IdManager::isInternalId(id);
-  }
-
-  // Cast an internal id (with lower bits set to 0) to its actual value
-  // Note: This function does not check, whether this actually is an Internal
-  // or External id.
-  static uint64_t toInternalId(Id id) {
-    return IdManager::toInternalId(id);
-  }
 
   // TODO<joka921> these following two members are only used with the
   // compressed vocabulary. They don't use much space if empty, but still it
@@ -337,7 +326,7 @@ class Vocabulary {
   vector<std::string> _internalizedLangs{"en"};
 
   // vector<StringType> _words;
-  CompactVectorOfStrings<char> _words;
+  CompactVectorOfStrings<char, ad_utility::InternalId, ad_utility::InternalUnsignedId> _words;
   ExternalVocabulary<ComparatorType> _externalLiterals;
   ComparatorType _caseComparator;
 
