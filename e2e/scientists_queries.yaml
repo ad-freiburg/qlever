@@ -1057,13 +1057,11 @@ queries:
           ?t ql:contains-entity ?x .
           ?t ql:contains-word "algo*"
       }
-      ORDER BY DESC(SCORE(?t))
     checks:
       - num_cols: 2
       - num_rows: 11
       - selected: ["?x", "?t"]
       - contains_row: ["<Grete_Hermann>"]
-      - order_numeric: {"dir": "DESC", "var" : "SCORE(?t)"}
 
 
   - query : select_asterisk_regex-lastname-stein
