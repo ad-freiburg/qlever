@@ -526,6 +526,8 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
       while (!reached_end) {
         if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
           query->_orderBy.emplace_back(OrderKey(_lexer.current().raw));
+          query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
+              _lexer.current().raw);
         } else if (_lexer.accept("asc")) {
           query->_orderBy.emplace_back(parseOrderKey("ASC", query));
         } else if (_lexer.accept("desc")) {

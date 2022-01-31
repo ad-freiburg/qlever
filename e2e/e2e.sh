@@ -48,22 +48,24 @@ while true; do
 done
 
 if ! [ "$#" -eq 0 ] ; then
+  # shellcheck disable=SC2145
   echo "Unexepected command line arguments '$@'"
   print_usage
   exit 1
 fi
 
-# Fail on unset varibles and any non zero returncodes
+# Fail on unset variables and any non zero return-codes
 set -Eeuo pipefail
 
-PROJECT_DIR=$(readlink -f -- "$(dirname ${BASH_SOURCE[0]})/..")
+PROJECT_DIR=$(readlink -f -- "$(dirname "${BASH_SOURCE[0]}")/..")
+
 
 # Change to the project directory so we can use simple relative paths
 echo "Changing to project directory: $PROJECT_DIR"
 pushd "$PROJECT_DIR"
-BINARY_DIR=$(readlink -f -- ./build)
+BINARY_DIR="$(readlink -f -- ./build)"
 if [ ! -e "$BINARY_DIR" ]; then
-	BINARY_DIR=$(readlink -f -- .)
+	BINARY_DIR="$(readlink -f -- .)"
 fi
 echo "Binary dir is $BINARY_DIR"
 
@@ -73,9 +75,11 @@ echo "Binary dir is $BINARY_DIR"
 if [ -f "/usr/bin/python3.6" ]; then
 	export PYTHON_BINARY="/usr/bin/python3.6"
 else
+	# shellcheck disable=SC2155
 	export PYTHON_BINARY=`which python3`
 fi
 
+# shellcheck disable=SC2155
 export PYTHON_BINARY=`which python3`
 
 INDEX_DIR="$PROJECT_DIR/e2e_data"
@@ -83,6 +87,7 @@ INPUT_DIR="$PROJECT_DIR/e2e_data/scientist-collection"
 ZIPPED_INPUT="$PROJECT_DIR/e2e/scientist-collection.zip"
 INPUT_PREFIX="scientists"
 INPUT="$INPUT_DIR/$INPUT_PREFIX"
+
 mkdir -p "$INDEX_DIR"
 # Can't check for the scientist-collection directory because
 # Travis' caching creates it
@@ -93,10 +98,14 @@ fi;
 
 
 INDEX_PREFIX="scientists-index"
+# INDEX_PREFIX="scientist-collection"
 INDEX="$INDEX_DIR/$INDEX_PREFIX"
+echo "index $INDEX"
+
 
 # Delete and rebuild the index
 if [ ${REBUILD_THE_INDEX} == "YES" ] || ! [ -f "${INDEX}.vocabulary" ]; then
+	# shellcheck disable=SC2027
 	rm -f "$INDEX.*"
 	pushd "$BINARY_DIR"
 	echo "Building index $INDEX"
