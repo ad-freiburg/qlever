@@ -1094,7 +1094,10 @@ queries:
         }
       }
     checks:
-      - num_rows: 156
+      #The query returns to many rows, the current limit is 4096
       - num_cols: 2
       - selected: ["?a", "?r"]
-      - contains_row: ["<Religion>", 1185]
+      - contains_row: ["<Aafia_Siddiqui>","<Religion>"]
+      - contains_row: ["<Aban_Marker_Kabraji>","<Religion>"]
+      - contains_row: ["<Abd_al-Rahman_al-Sufi>","<Religion>"]
+      - contains_row: ["<Aaldert_Wapstra>","<Place_of_birth>"]
