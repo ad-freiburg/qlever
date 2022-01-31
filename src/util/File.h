@@ -267,7 +267,7 @@ class File {
 
   // Static method to check if a file exists.
   static bool exists(const string& path) {
-    struct stat buffer{};
+    struct stat buffer;
     return (stat(path.c_str(), &buffer) == 0);
   }
 };

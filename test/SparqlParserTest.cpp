@@ -355,7 +355,8 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(vvals, values1._values);
     }
 
-    // TODO @joaomarques90: Finish when the required functionalities are implemented
+    // TODO @joaomarques90: Finish when the required functionalities
+    // are implemented
     /*
     {
       auto pq = SparqlParser(
@@ -463,7 +464,6 @@ TEST(ParserTest, testParse) {
 
       vector<string> vvars = {"?movie", "?director"};
       ASSERT_EQ(vvars, sc._varsOrAsterisk.orderedVariablesFromQueryBody());
-
     }
 
     {
@@ -536,20 +536,25 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(true, sc._distinct);
       ASSERT_EQ(true, sc._varsOrAsterisk.isAsterisk());
 
-
       vector<string> vvars = {"?movie", "?director", "?year"};
       // TODO: ASSERT_ERROR
       // ASSERT_EQ(vvars, sc._varsOrAsterisk.orderedVariablesFromQueryBody());
 
       // -- SubQuery
       // const auto& c_subquery = pq._rootGraphPattern._children[1].getBasic();
-      auto parsed_sub_query = get<GraphPatternOperation::Subquery>(pq._rootGraphPattern._children[1].variant_);
-      const auto& c_subquery = get<GraphPatternOperation::BasicGraphPattern>(parsed_sub_query._subquery._rootGraphPattern._children[0].variant_);
+      auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
+          pq._rootGraphPattern._children[1].variant_);
+      const auto& c_subquery = get<GraphPatternOperation::BasicGraphPattern>(
+          parsed_sub_query._subquery._rootGraphPattern._children[0].variant_);
       ASSERT_EQ(2u, c_subquery._whereClauseTriples.size());
-      ASSERT_EQ(1u, parsed_sub_query._subquery._rootGraphPattern._filters.size());
-      ASSERT_EQ("?year", parsed_sub_query._subquery._rootGraphPattern._filters[0]._lhs);
-      ASSERT_EQ("\"00-00-2000\"", parsed_sub_query._subquery._rootGraphPattern._filters[0]._rhs);
-      ASSERT_EQ(SparqlFilter::GT, parsed_sub_query._subquery._rootGraphPattern._filters[0]._type);
+      ASSERT_EQ(1u,
+                parsed_sub_query._subquery._rootGraphPattern._filters.size());
+      ASSERT_EQ("?year",
+                parsed_sub_query._subquery._rootGraphPattern._filters[0]._lhs);
+      ASSERT_EQ("\"00-00-2000\"",
+                parsed_sub_query._subquery._rootGraphPattern._filters[0]._rhs);
+      ASSERT_EQ(SparqlFilter::GT,
+                parsed_sub_query._subquery._rootGraphPattern._filters[0]._type);
       ASSERT_EQ(std::nullopt, parsed_sub_query._subquery._offset);
 
       ASSERT_EQ(c_subquery._whereClauseTriples[0]._s, "?movie");
@@ -564,18 +569,15 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(true, parsed_sub_query._subquery._orderBy[0]._desc);
       ASSERT_EQ("?director", parsed_sub_query._subquery._orderBy[0]._key);
 
-      auto sc_subquery = get<ParsedQuery::SelectClause>(parsed_sub_query._subquery._clause);
+      auto sc_subquery =
+          get<ParsedQuery::SelectClause>(parsed_sub_query._subquery._clause);
       ASSERT_EQ(false, sc_subquery._distinct);
       ASSERT_EQ(false, sc_subquery._reduced);
       ASSERT_EQ(true, sc_subquery._varsOrAsterisk.isAsterisk());
-
-
       vector<string> vvars_subquery = {"?movie", "?director", "?year"};
-      ASSERT_EQ(vvars_subquery, sc_subquery._varsOrAsterisk.orderedVariablesFromQueryBody());
-
+      ASSERT_EQ(vvars_subquery,
+                sc_subquery._varsOrAsterisk.orderedVariablesFromQueryBody());
     }
-
-
 
   } catch (const ad_semsearch::Exception& e) {
     FAIL() << e.getFullErrorMessage();

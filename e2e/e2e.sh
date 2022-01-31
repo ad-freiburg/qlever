@@ -48,8 +48,7 @@ while true; do
 done
 
 if ! [ "$#" -eq 0 ] ; then
-  # shellcheck disable=SC2145
-  echo "Unexepected command line arguments '$@'"
+  echo "Unexpected command line arguments '$@'"
   print_usage
   exit 1
 fi
@@ -95,14 +94,12 @@ fi;
 
 
 INDEX_PREFIX="scientists-index"
-# INDEX_PREFIX="scientist-collection"
 INDEX="$INDEX_DIR/$INDEX_PREFIX"
 echo "index $INDEX"
 
 
 # Delete and rebuild the index
 if [ ${REBUILD_THE_INDEX} == "YES" ] || ! [ -f "${INDEX}.vocabulary" ]; then
-	# shellcheck disable=SC2027
 	rm -f "$INDEX.*"
 	pushd "$BINARY_DIR"
 	echo "Building index $INDEX"
