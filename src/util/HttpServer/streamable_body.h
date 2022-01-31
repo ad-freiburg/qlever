@@ -26,8 +26,8 @@ struct streamable_body {
   // Algorithm for retrieving buffers when serializing.
   class writer;
 
-  // The type of the message::body member. This determines
-  // which type response<streamable_body>::body() returns
+  // The type of the message::body member.
+  // This determines which type response<streamable_body>::body() returns
   using value_type = ad_utility::stream_generator::stream_generator;
 };
 
@@ -65,12 +65,10 @@ class streamable_body::writer {
    * conceptually can't allow const access.
    */
   template <bool isRequest, class Fields>
-  writer(boost::beast::http::header<isRequest, Fields>& h, value_type& b)
+  writer(boost::beast::http::header<isRequest, Fields>& header, value_type& b)
       : _body{b} {
-    if (_body.getContentEncoding() ==
-        ad_utility::content_encoding::CompressionMethod::DEFLATE) {
-      h.set(boost::beast::http::field::content_encoding, "deflate");
-    }
+    ad_utility::content_encoding::setContentEncodingHeaderForCompressionMethod(
+        _body.getContentEncoding(), header);
   }
 
   /**

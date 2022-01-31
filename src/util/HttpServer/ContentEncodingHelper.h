@@ -30,4 +30,13 @@ inline CompressionMethod getCompressionMethodForRequest(
   return detail::getCompressionMethodAcceptEncodingHeader(acceptEncodingHeader);
 }
 
+template <bool isRequest, typename Fields>
+inline void setContentEncodingHeaderForCompressionMethod(
+    CompressionMethod method,
+    boost::beast::http::header<isRequest, Fields>& header) {
+  if (method == ad_utility::content_encoding::CompressionMethod::DEFLATE) {
+    header.set(boost::beast::http::field::content_encoding, "deflate");
+  }
+}
+
 }  // namespace ad_utility::content_encoding

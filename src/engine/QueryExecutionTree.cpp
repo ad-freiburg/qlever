@@ -495,7 +495,6 @@ QueryExecutionTree::generateResults(
 }
 
 // Instantiate template function for all enum types
-using ad_utility::content_encoding::CompressionMethod;
 
 template ad_utility::stream_generator::stream_generator
 QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::CSV>(
