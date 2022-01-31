@@ -61,9 +61,8 @@ inline std::ostream& operator<<(std::ostream& stream, const IdRange& idRange) {
 
 // simple class for members of a prefix compression codebook
 struct Prefix {
-  Prefix() = default;
-  Prefix(char prefix, const string& fulltext)
-      : _prefix(prefix), _fulltext(fulltext) {}
+  Prefix(char prefix, string fulltext)
+      : _prefix(prefix), _fulltext(std::move(fulltext)) {}
 
   char _prefix;
   string _fulltext;
@@ -119,14 +118,6 @@ class Vocabulary {
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
   void writeToFile(const string& fileName) const;
 
-  //! Write to binary file to prepare the merging. Format:
-  // 4 Bytes strlen, then character bytes, then 8 bytes zeros for global id
-  template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  void writeToBinaryFileForMerging(const string& fileName) const;
-
-  //! Append a word to the vocabulary. Wraps the std::vector method.
-  void push_back(const string& word);
-
   //! Get the word with the given id or an empty optional if the
   //! word is not in the vocabulary.
   //! Only enabled when uncompressed which also means no externalization
@@ -137,7 +128,7 @@ class Vocabulary {
   //! word is not in the vocabulary. Returns an lvalue because compressed or
   //! externalized words don't allow references
   template <typename U = StringType, typename = enable_if_compressed<U>>
-  const std::optional<string> idToOptionalString(Id id) const;
+  [[nodiscard]] std::optional<string> idToOptionalString(Id id) const;
 
   //! Get the word with the given id.
   //! lvalue for compressedString and const& for string-based vocabulary
@@ -146,12 +137,7 @@ class Vocabulary {
   // AccessReturnType_t<StringType> at(Id id) const { return operator[](id); }
 
   //! Get the number of words in the vocabulary.
-  size_t size() const { return _words.size(); }
-
-  //! Reserve space for the given number of words.
-  void reserve([[maybe_unused]] unsigned int n) { /* TODO<joka921> where is this
-                                                     used? _words.reserve(n);*/
-  }
+  [[nodiscard]] size_t size() const { return _words.size(); }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
@@ -196,21 +182,14 @@ class Vocabulary {
   // only used during Index building, not needed for compressed vocabulary
   void createFromSet(const ad_utility::HashSet<std::string>& set);
 
-  template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  ad_utility::HashMap<string, Id> asMap();
-
   static bool isLiteral(const string& word);
   static bool isExternalizedLiteral(const string& word);
 
-  bool shouldBeExternalized(const string& word) const;
+  [[nodiscard]] bool shouldBeExternalized(const string& word) const;
 
-  bool shouldEntityBeExternalized(const string& word) const;
+  [[nodiscard]] bool shouldEntityBeExternalized(const string& word) const;
 
-  bool shouldLiteralBeExternalized(const string& word) const;
-
-  // only still needed for text vocabulary
-  template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  void externalizeLiterals(const string& fileName);
+  [[nodiscard]] bool shouldLiteralBeExternalized(const string& word) const;
 
   void externalizeLiteralsFromTextFile(const string& textFileName,
                                        const string& outFileName) {
@@ -230,7 +209,7 @@ class Vocabulary {
 
   // _____________________________________________
   template <typename U = StringType, typename = enable_if_compressed<U>>
-  CompressedString compressPrefix(const string& word) const;
+  [[nodiscard]] CompressedString compressPrefix(const string& word) const;
 
   // initialize compression with a list of prefixes
   // The prefixes do not have to be in any specific order
@@ -289,7 +268,7 @@ class Vocabulary {
   /// prefix according to the collation level the first Id is included in the
   /// range, the last one not. Currently only supports the Primary collation
   /// level, due to limitations in the StringSortComparators
-  std::pair<Id, Id> prefix_range(const string& prefix) const;
+  [[nodiscard]] std::pair<Id, Id> prefix_range(const string& prefix) const;
 
   [[nodiscard]] const LocaleManager& getLocaleManager() const {
     return _caseComparator.getLocaleManager();
@@ -297,10 +276,10 @@ class Vocabulary {
 
   // Wraps std::lower_bound and returns an index instead of an iterator
   Id lower_bound(const string& word,
-                 const SortLevel level = SortLevel::QUARTERNARY) const;
+                 SortLevel level = SortLevel::QUARTERNARY) const;
 
   // _______________________________________________________________
-  Id upper_bound(const string& word, const SortLevel level) const;
+  Id upper_bound(const string& word, SortLevel level) const;
 
  private:
   template <class R = std::string>

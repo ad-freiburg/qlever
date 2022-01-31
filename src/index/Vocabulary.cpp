@@ -83,6 +83,7 @@ bool Vocabulary<S, C>::isLiteral(const string& word) {
   return word.starts_with('"');
 }
 
+// TODO<joka921> Can this be removed once we are done with this PR?
 // _____________________________________________________________________________
 template <class S, class C>
 bool Vocabulary<S, C>::isExternalizedLiteral(const string& word) {
@@ -112,12 +113,7 @@ bool Vocabulary<S, C>::shouldBeExternalized(const string& word) const {
 // ___________________________________________________________________
 template <class S, class C>
 bool Vocabulary<S, C>::shouldEntityBeExternalized(const string& word) const {
-  for (const auto& p : _externalizedPrefixes) {
-    if (word.starts_with(p)) {
-      return true;
-    }
-  }
-  return false;
+  return std::ranges::any_of(_externalizedPrefixes, [&](const auto& prefix) {return word.starts_with(prefix);});
 }
 
 // ___________________________________________________________________
@@ -253,7 +249,8 @@ bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
 template <typename S, typename C>
 Id Vocabulary<S, C>::upper_bound(const string& word,
                                  const SortLevel level) const {
-  return static_cast<Id>(std::upper_bound(_words.begin(), _words.end(), word,
+  // TODO<joka921>: Also search in the external vocabulary.
+  return IdManager::toInternalId(std::upper_bound(_words.begin(), _words.end(), word,
                                           getUpperBoundLambda(level)) -
                          _words.begin());
 }
@@ -262,7 +259,8 @@ Id Vocabulary<S, C>::upper_bound(const string& word,
 template <typename S, typename C>
 Id Vocabulary<S, C>::lower_bound(const string& word,
                                  const SortLevel level) const {
-  return static_cast<Id>(std::lower_bound(_words.begin(), _words.end(), word,
+  // TODO<joka921>: Also search in the external vocabulary.
+  return IdManager::toInternalId(std::lower_bound(_words.begin(), _words.end(), word,
                                           getLowerBoundLambda(level)) -
                          _words.begin());
 }
@@ -281,6 +279,8 @@ template <typename StringType, typename C>
 //! Get the word with the given id.
 //! lvalue for compressedString and const& for string-based vocabulary
 AccessReturnType_t<StringType> Vocabulary<StringType, C>::at(Id id) const {
+  AD_CHECK(IdManager::isInternalId(id));
+  id = IdManager::toInternalId(id);
   if constexpr (_isCompressed) {
     return expandPrefix(_words[static_cast<size_t>(id)]);
   } else {
@@ -289,6 +289,7 @@ AccessReturnType_t<StringType> Vocabulary<StringType, C>::at(Id id) const {
 }
 
 // _____________________________________________________________________________
+// TODO<joka921> return here;
 template <typename S, typename C>
 bool Vocabulary<S, C>::getId(const string& word, Id* id) const {
   if (!shouldBeExternalized(word)) {
