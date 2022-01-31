@@ -56,7 +56,7 @@ fi
 # Fail on unset variables and any non zero return-codes
 set -Eeuo pipefail
 
-PROJECT_DIR=$(readlink -f -- "$(dirname "${BASH_SOURCE[0]}")/..")
+PROJECT_DIR="$(readlink -f -- "$(dirname "${BASH_SOURCE[0]}")/..")"
 
 
 # Change to the project directory so we can use simple relative paths
