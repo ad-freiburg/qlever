@@ -75,11 +75,8 @@ echo "Binary dir is $BINARY_DIR"
 if [ -f "/usr/bin/python3.6" ]; then
 	export PYTHON_BINARY="/usr/bin/python3.6"
 else
-	# shellcheck disable=SC2155
 	export PYTHON_BINARY=`which python3`
 fi
-
-# shellcheck disable=SC2155
 export PYTHON_BINARY=`which python3`
 
 INDEX_DIR="$PROJECT_DIR/e2e_data"
