@@ -94,6 +94,8 @@ class stream_generator_promise {
     _filterStream.reset();
     if (method == CompressionMethod::DEFLATE) {
       _filterStream.push(io::zlib_compressor(io::zlib::best_compression));
+    } else if (method == CompressionMethod::GZIP) {
+      _filterStream.push(io::gzip_compressor(io::gzip::best_compression));
     }
     _filterStream.push(io::back_inserter(_value), 0);
   }

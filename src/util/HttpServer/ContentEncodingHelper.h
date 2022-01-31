@@ -8,7 +8,7 @@
 
 namespace ad_utility::content_encoding {
 
-enum class CompressionMethod { NONE, DEFLATE };
+enum class CompressionMethod { NONE, DEFLATE, GZIP };
 
 namespace detail {
 
@@ -17,6 +17,8 @@ constexpr CompressionMethod getCompressionMethodAcceptEncodingHeader(
   // TODO evaluate if gzip can be supported using boost
   if (acceptEncodingHeader.find("deflate") != std::string::npos) {
     return CompressionMethod::DEFLATE;
+  } else if (acceptEncodingHeader.find("gzip") != std::string::npos) {
+    return CompressionMethod::GZIP;
   }
   return CompressionMethod::NONE;
 }
@@ -36,6 +38,8 @@ inline void setContentEncodingHeaderForCompressionMethod(
     boost::beast::http::header<isRequest, Fields>& header) {
   if (method == ad_utility::content_encoding::CompressionMethod::DEFLATE) {
     header.set(boost::beast::http::field::content_encoding, "deflate");
+  } else if (method == ad_utility::content_encoding::CompressionMethod::GZIP) {
+    header.set(boost::beast::http::field::content_encoding, "gzip");
   }
 }
 
