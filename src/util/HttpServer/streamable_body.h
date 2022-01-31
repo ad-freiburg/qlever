@@ -8,6 +8,7 @@
 
 #include "../Log.h"
 #include "../streamable_generator.h"
+#include "./ContentEncodingHelper.h"
 #include "./beast.h"
 
 namespace ad_utility::httpUtils::httpStreams {
@@ -21,13 +22,14 @@ namespace ad_utility::httpUtils::httpStreams {
  * response.body() = generatorFunction();
  * response.prepare_payload();
  */
+template <ad_utility::content_encoding::CompressionMethod METHOD>
 struct streamable_body {
   // Algorithm for retrieving buffers when serializing.
   class writer;
 
-  // The type of the message::body member.
-  // This determines which type response<streamable_body>::body() returns
-  using value_type = ad_utility::stream_generator::stream_generator;
+  // The type of the message::body member. This determines
+  // which type response<streamable_body<METHOD>>::body() returns
+  using value_type = ad_utility::stream_generator::stream_generator<METHOD>;
 };
 
 /**
@@ -36,7 +38,8 @@ struct streamable_body {
  * Objects of this type are created during serialization
  * to extract the buffers representing the body.
  */
-class streamable_body::writer {
+template <ad_utility::content_encoding::CompressionMethod METHOD>
+class streamable_body<METHOD>::writer {
   value_type& _body;
 
  public:
@@ -64,9 +67,13 @@ class streamable_body::writer {
    * conceptually can't allow const access.
    */
   template <bool isRequest, class Fields>
-  writer([[maybe_unused]] boost::beast::http::header<isRequest, Fields>& h,
-         value_type& b)
-      : _body{b} {}
+  writer(boost::beast::http::header<isRequest, Fields>& h, value_type& b)
+      : _body{b} {
+    if constexpr (METHOD ==
+                  ad_utility::content_encoding::CompressionMethod::DEFLATE) {
+      h.set(boost::beast::http::field::content_encoding, "deflate");
+    }
+  }
 
   /**
    * This is called before the body is serialized and
@@ -116,7 +123,14 @@ class streamable_body::writer {
   }
 };
 
-static_assert(boost::beast::http::is_body<streamable_body>::value,
-              "Body type requirements not met");
+static_assert(
+    boost::beast::http::is_body<streamable_body<
+        ad_utility::content_encoding::CompressionMethod::DEFLATE>>::value,
+    "Body type requirements not met");
+
+static_assert(
+    boost::beast::http::is_body<streamable_body<
+        ad_utility::content_encoding::CompressionMethod::NONE>>::value,
+    "Body type requirements not met");
 
 }  // namespace ad_utility::httpUtils::httpStreams

@@ -85,7 +85,7 @@ endif()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.74 COMPONENTS program_options REQUIRED)
+find_package(Boost 1.74 COMPONENTS iostreams program_options REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
 

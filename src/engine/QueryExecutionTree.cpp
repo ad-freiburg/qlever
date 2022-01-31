@@ -404,8 +404,9 @@ nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
 }
 
 // _____________________________________________________________________________
-template <QueryExecutionTree::ExportSubFormat format>
-ad_utility::stream_generator::stream_generator
+template <QueryExecutionTree::ExportSubFormat format,
+          ad_utility::content_encoding::CompressionMethod method>
+ad_utility::stream_generator::stream_generator<method>
 QueryExecutionTree::generateResults(
     const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
     size_t offset) const {
@@ -495,21 +496,42 @@ QueryExecutionTree::generateResults(
 }
 
 // Instantiate template function for all enum types
+using ad_utility::content_encoding::CompressionMethod;
 
-template ad_utility::stream_generator::stream_generator
+template ad_utility::stream_generator::stream_generator<
+    CompressionMethod::DEFLATE>
 QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::CSV>(
     const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
     size_t offset) const;
 
-template ad_utility::stream_generator::stream_generator
+template ad_utility::stream_generator::stream_generator<
+    CompressionMethod::DEFLATE>
 QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::TSV>(
     const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
     size_t offset) const;
 
-template ad_utility::stream_generator::stream_generator QueryExecutionTree::
-    generateResults<QueryExecutionTree::ExportSubFormat::BINARY>(
-        const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
-        size_t offset) const;
+template ad_utility::stream_generator::stream_generator<
+    CompressionMethod::DEFLATE>
+QueryExecutionTree::generateResults<
+    QueryExecutionTree::ExportSubFormat::BINARY>(
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    size_t offset) const;
+
+template ad_utility::stream_generator::stream_generator<CompressionMethod::NONE>
+QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::CSV>(
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    size_t offset) const;
+
+template ad_utility::stream_generator::stream_generator<CompressionMethod::NONE>
+QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::TSV>(
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    size_t offset) const;
+
+template ad_utility::stream_generator::stream_generator<CompressionMethod::NONE>
+QueryExecutionTree::generateResults<
+    QueryExecutionTree::ExportSubFormat::BINARY>(
+    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    size_t offset) const;
 
 // _____________________________________________________________________________
 
@@ -536,7 +558,8 @@ QueryExecutionTree::generateRdfGraph(
 }
 
 // _____________________________________________________________________________
-ad_utility::stream_generator::stream_generator
+template <ad_utility::content_encoding::CompressionMethod method>
+ad_utility::stream_generator::stream_generator<method>
 QueryExecutionTree::writeRdfGraphTurtle(
     const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
     size_t offset, std::shared_ptr<const ResultTable> res) const {
@@ -551,9 +574,21 @@ QueryExecutionTree::writeRdfGraphTurtle(
   }
 }
 
+template ad_utility::stream_generator::stream_generator<
+    CompressionMethod::DEFLATE>
+QueryExecutionTree::writeRdfGraphTurtle(
+    const ad_utility::sparql_types::Triples&, size_t, size_t offset,
+    std::shared_ptr<const ResultTable>) const;
+
+template ad_utility::stream_generator::stream_generator<CompressionMethod::NONE>
+QueryExecutionTree::writeRdfGraphTurtle(
+    const ad_utility::sparql_types::Triples&, size_t, size_t offset,
+    std::shared_ptr<const ResultTable>) const;
+
 // _____________________________________________________________________________
-template <QueryExecutionTree::ExportSubFormat format>
-ad_utility::stream_generator::stream_generator
+template <QueryExecutionTree::ExportSubFormat format,
+          ad_utility::content_encoding::CompressionMethod method>
+ad_utility::stream_generator::stream_generator<method>
 QueryExecutionTree::writeRdfGraphSeparatedValues(
     const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
     size_t offset, std::shared_ptr<const ResultTable> res) const {
@@ -581,20 +616,44 @@ QueryExecutionTree::writeRdfGraphSeparatedValues(
 
 // Instantiate template function for all enum types
 
-template ad_utility::stream_generator::stream_generator QueryExecutionTree::
-    writeRdfGraphSeparatedValues<QueryExecutionTree::ExportSubFormat::CSV>(
-        const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-        size_t offset, std::shared_ptr<const ResultTable> res) const;
+template ad_utility::stream_generator::stream_generator<
+    CompressionMethod::DEFLATE>
+QueryExecutionTree::writeRdfGraphSeparatedValues<
+    QueryExecutionTree::ExportSubFormat::CSV>(
+    const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+    size_t offset, std::shared_ptr<const ResultTable> res) const;
 
-template ad_utility::stream_generator::stream_generator QueryExecutionTree::
-    writeRdfGraphSeparatedValues<QueryExecutionTree::ExportSubFormat::TSV>(
-        const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-        size_t offset, std::shared_ptr<const ResultTable> res) const;
+template ad_utility::stream_generator::stream_generator<
+    CompressionMethod::DEFLATE>
+QueryExecutionTree::writeRdfGraphSeparatedValues<
+    QueryExecutionTree::ExportSubFormat::TSV>(
+    const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+    size_t offset, std::shared_ptr<const ResultTable> res) const;
 
-template ad_utility::stream_generator::stream_generator QueryExecutionTree::
-    writeRdfGraphSeparatedValues<QueryExecutionTree::ExportSubFormat::BINARY>(
-        const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-        size_t offset, std::shared_ptr<const ResultTable> res) const;
+template ad_utility::stream_generator::stream_generator<
+    CompressionMethod::DEFLATE>
+QueryExecutionTree::writeRdfGraphSeparatedValues<
+    QueryExecutionTree::ExportSubFormat::BINARY>(
+    const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+    size_t offset, std::shared_ptr<const ResultTable> res) const;
+
+template ad_utility::stream_generator::stream_generator<CompressionMethod::NONE>
+QueryExecutionTree::writeRdfGraphSeparatedValues<
+    QueryExecutionTree::ExportSubFormat::CSV>(
+    const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+    size_t offset, std::shared_ptr<const ResultTable> res) const;
+
+template ad_utility::stream_generator::stream_generator<CompressionMethod::NONE>
+QueryExecutionTree::writeRdfGraphSeparatedValues<
+    QueryExecutionTree::ExportSubFormat::TSV>(
+    const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+    size_t offset, std::shared_ptr<const ResultTable> res) const;
+
+template ad_utility::stream_generator::stream_generator<CompressionMethod::NONE>
+QueryExecutionTree::writeRdfGraphSeparatedValues<
+    QueryExecutionTree::ExportSubFormat::BINARY>(
+    const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
+    size_t offset, std::shared_ptr<const ResultTable> res) const;
 
 // _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeRdfGraphJson(

@@ -112,19 +112,23 @@ class QueryExecutionTree {
       const SelectedVarsOrAsterisk& selectedVarsOrAsterisk,
       const ResultTable& resultTable) const;
 
-  template <ExportSubFormat format>
-  ad_utility::stream_generator::stream_generator generateResults(
+  template <ExportSubFormat format,
+            ad_utility::content_encoding::CompressionMethod method>
+  ad_utility::stream_generator::stream_generator<method> generateResults(
       const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
       size_t offset) const;
 
   // Generate an RDF graph in turtle format for a CONSTRUCT query.
-  ad_utility::stream_generator::stream_generator writeRdfGraphTurtle(
+  template <ad_utility::content_encoding::CompressionMethod method>
+  ad_utility::stream_generator::stream_generator<method> writeRdfGraphTurtle(
       const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
       size_t offset, std::shared_ptr<const ResultTable> res) const;
 
   // Generate an RDF graph in csv/tsv format for a CONSTRUCT query.
-  template <ExportSubFormat format>
-  ad_utility::stream_generator::stream_generator writeRdfGraphSeparatedValues(
+  template <ExportSubFormat format,
+            ad_utility::content_encoding::CompressionMethod method>
+  ad_utility::stream_generator::stream_generator<method>
+  writeRdfGraphSeparatedValues(
       const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
       size_t offset, std::shared_ptr<const ResultTable> res) const;
 
