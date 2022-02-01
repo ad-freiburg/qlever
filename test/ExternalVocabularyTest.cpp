@@ -62,8 +62,3 @@ TEST(VocabularyTest, readWriteTest) {
   }
   remove("__tmp.evtest");
 }
-
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

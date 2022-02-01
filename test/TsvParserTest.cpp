@@ -48,9 +48,3 @@ remove("_testtmp.tsv");
   remove("_testtmp.tsv");
 }
 }
-;
-
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

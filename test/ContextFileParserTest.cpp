@@ -57,8 +57,3 @@ TEST(ContextFileParserTest, getLineTest) {
   ASSERT_FALSE(p.getLine(a));
   remove("_testtmp.contexts.tsv");
 };
-
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
