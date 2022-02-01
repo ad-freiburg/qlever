@@ -28,7 +28,7 @@ std::optional<OffsetAndSize> ExternalVocabulary<Comp>::getOffsetAndSize(
 
 // _____________________________________________________________________________
 template <class Comp>
-std::optional<string> ExternalVocabulary<Comp>::operator[](Id id) const {
+std::optional<string> ExternalVocabulary<Comp>::idToOptionalString(Id id) const {
   auto optionalOffsetAndSize = getOffsetAndSize(id);
   if (!optionalOffsetAndSize.has_value()) {
     return std::nullopt;
@@ -47,7 +47,7 @@ Id ExternalVocabulary<Comp>::binarySearchInVocab(const string& word) const {
   Id upper = size();
   while (lower < upper) {
     Id i = lower + (upper - lower) / 2;
-    string w = std::move((*this)[i].value());
+    string w = std::move(idToOptionalString(i).value());
     int cmp = _caseComparator.compare(w, word, Comp::Level::TOTAL);
     if (cmp < 0) {
       lower = i + 1;

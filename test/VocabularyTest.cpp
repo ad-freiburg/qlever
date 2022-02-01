@@ -78,14 +78,14 @@ TEST(VocabularyTest, readWriteTest) {
     ad_utility::HashSet<string> s{"wordA0", "wordA1", "wordB2", "wordB3",
                                   "wordB4"};
     v.createFromSet(s);
-    ASSERT_EQ(size_t(5), v.size());
+    ASSERT_EQ(size_t(5), v.internalSize());
 
     v.writeToFile("_testtmp_vocfile");
   }
 
   TextVocabulary v2;
   v2.readFromFile("_testtmp_vocfile");
-  ASSERT_EQ(size_t(5), v2.size());
+  ASSERT_EQ(size_t(5), v2.internalSize());
   remove("_testtmp_vocfile");
 }
 

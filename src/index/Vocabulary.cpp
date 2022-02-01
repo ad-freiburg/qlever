@@ -60,21 +60,26 @@ template <class S, class C>
 void Vocabulary<S, C>::createFromSet(
     const ad_utility::HashSet<std::string>& set) {
   LOG(INFO) << "Creating vocabulary from set ...\n";
-  _words.clear();
-  std::vector<std::vector<char>> words;
-  words.reserve(set.size());
-  for (const auto& word : set) {
-    words.emplace_back(word.begin(), word.end());
-  }
-  LOG(INFO) << "... sorting ...\n";
-  auto totalComparison = [this](const auto& a, const auto& b) {
-    return _caseComparator(std::string_view(a.begin(), a.end()),
-                           std::string_view(b.begin(), b.end()),
-                           SortLevel::TOTAL);
-  };
-  std::sort(begin(words), end(words), totalComparison);
-  _words.build(words);
-  LOG(INFO) << "Done creating vocabulary.\n";
+  if constexpr (_isCompressed) {
+    // TODO<instate something for testing>
+    AD_CHECK(false);
+  } else {
+    _words.clear();
+    std::vector<S> words;
+    words.reserve(set.size());
+    for (const auto& word : set) {
+      words.push_back(word);
+    }
+    LOG(INFO) << "... sorting ...\n";
+    auto totalComparison = [this](const auto& a, const auto& b) {
+      return _caseComparator(std::string_view(a.begin(), a.end()),
+                             std::string_view(b.begin(), b.end()),
+                             SortLevel::TOTAL);
+    };
+    std::sort(begin(words), end(words), totalComparison);
+    _words.build(words);
+    }
+    LOG(INFO) << "Done creating vocabulary.\n";
 }
 
 // _____________________________________________________________________________
@@ -239,8 +244,8 @@ bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
   range->_last = prefixRange.second - 1;
 
   if (success) {
-    AD_CHECK_LT(range->_first, _words.size());
-    AD_CHECK_LT(range->_last, _words.size());
+    AD_CHECK_LT(range->_first, internalSize());
+    AD_CHECK_LT(range->_last, internalSize());
   }
   return success;
 }
@@ -260,9 +265,12 @@ template <typename S, typename C>
 Id Vocabulary<S, C>::lower_bound(const string& word,
                                  const SortLevel level) const {
   // TODO<joka921>: Also search in the external vocabulary.
-  return IdManager::toInternalId(std::lower_bound(_words.begin(), _words.end(), word,
+  auto internalIdFromInternalVocab = std::lower_bound(_words.begin(), _words.end(), word,
                                           getLowerBoundLambda(level)) -
-                         _words.begin());
+                         _words.begin();
+
+  auto externalId = std::lower_bound(_externalLiterals.begin(), _externalLiterals.end(), word, getLowerBoundLambda(level));
+  return std::max(externalId, IdManager::fromInternalId(internalIdFromInternalVocab));
 }
 
 // _____________________________________________________________________________
@@ -275,6 +283,7 @@ void Vocabulary<S, ComparatorType>::setLocale(const std::string& language,
       ComparatorType(language, country, ignorePunctuation);
 }
 
+/*
 template <typename StringType, typename C>
 //! Get the word with the given id.
 //! lvalue for compressedString and const& for string-based vocabulary
@@ -287,21 +296,25 @@ AccessReturnType_t<StringType> Vocabulary<StringType, C>::at(Id id) const {
     return _words[static_cast<size_t>(id)];
   }
 }
+ */
 
 // _____________________________________________________________________________
 // TODO<joka921> return here;
 template <typename S, typename C>
 bool Vocabulary<S, C>::getId(const string& word, Id* id) const {
-  if (!shouldBeExternalized(word)) {
-    // need the TOTAL level because we want the unique word.
-    *id = lower_bound(word, SortLevel::TOTAL);
-    // works for the case insensitive version because
-    // of the strict ordering.
-    return *id < _words.size() && at(*id) == word;
+  ad_utility::CompleteId extId;
+  bool success = _externalLiterals.getId(word, &extId);
+  if (success) {
+    *id = extId.get();
+    return true;
   }
-  bool success = _externalLiterals.getId(word, id);
-  *id += _words.size();
-  return success;
+  // need the TOTAL level because we want the unique word.
+  auto internalId = lower_bound(word, SortLevel::TOTAL));
+
+  *id = internalToCompleteId(internalId).get();
+  // works for the case insensitive version because
+  // of the strict ordering.
+  return internalId < _words.size() && at(internalId) == word;
 }
 
 // ___________________________________________________________________________

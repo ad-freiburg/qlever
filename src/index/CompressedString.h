@@ -6,6 +6,7 @@
 
 #include <functional>
 #include <string>
+#include <NamedType/named_type.hpp>
 
 using std::string;
 
@@ -14,6 +15,7 @@ using std::string;
 // "ordinary" strings to avoid bugs.
 // only implements/inherits functionality from std::string that is actually used
 // TODO<niklas> is there a better way to do this?
+/*
 class CompressedString : private string {
  public:
   CompressedString() : string() {}
@@ -56,5 +58,22 @@ class CompressedString : private string {
   CompressedString& operator=(const string& other) {
     *this = CompressedString(other);
     return *this;
+  }
+
+};
+*/
+using CompressedChar = fluent::NamedType<char, struct CompressedCharTag>;
+using CompressedStringView = std::basic_string_view<CompressedChar>;
+class CompressedString : public std::basic_string<CompressedChar> {
+ public:
+  // TODO<joka921>:: is this used in a performance-critical loop?
+  // Then we should optimize it again.
+  static CompressedString fromString(const std::string &s) {
+    CompressedString result;
+    result.reserve(s.size());
+    for (const char c : s) {
+      result.push_back(CompressedChar{c});
+    }
+    return result;
   }
 };

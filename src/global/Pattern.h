@@ -19,6 +19,7 @@
 #include "../util/TypeTraits.h"
 #include "../util/UninitializedAllocator.h"
 #include "Id.h"
+#include "../util/Iterators.h"
 
 typedef uint32_t PatternID;
 
@@ -128,11 +129,11 @@ class CompactVectorOfStrings {
   }
   void build(const T& input) {
     // Also make room for the end offset of the last element.
-    _offsets.reserve(input.internalSize() + 1);
+    _offsets.reserve(input.size() + 1);
     size_t dataSize = 0;
     for (const auto& element : input) {
       _offsets.push_back(dataSize);
-      dataSize += element.internalSize();
+      dataSize += element.size();
     }
     // The last offset is the offset right after the last element.
     _offsets.push_back(dataSize);
@@ -173,78 +174,7 @@ class CompactVectorOfStrings {
   // disk without buffering the whole `Vector`.
   static cppcoro::generator<vector_type> diskIterator(string filename);
 
-  class Iterator {
-   private:
-    const CompactVectorOfStrings* _vector = nullptr;
-    index_type _index{0};
-
-   public:
-    using iterator_category = std::random_access_iterator_tag;
-    using value_type = CompactVectorOfStrings::value_type;
-
-    Iterator(const CompactVectorOfStrings* vec, index_type index)
-        : _vector{vec}, _index{index} {}
-    Iterator() = default;
-
-    auto operator<=>(const Iterator& rhs) const {
-      return (_index <=> rhs._index);
-    }
-
-    bool operator==(const Iterator& rhs) const { return _index == rhs._index; }
-
-    Iterator& operator+=(difference_type n) {
-      _index += n;
-      return *this;
-    }
-    Iterator operator+(difference_type n) const {
-      Iterator result{*this};
-      result += n;
-      return result;
-    }
-
-    Iterator& operator++() {
-      ++_index;
-      return *this;
-    }
-    Iterator operator++(int) & {
-      Iterator result{*this};
-      ++_index;
-      return result;
-    }
-
-    Iterator& operator--() {
-      --_index;
-      return *this;
-    }
-    Iterator operator--(int) & {
-      Iterator result{*this};
-      --_index;
-      return result;
-    }
-
-    friend Iterator operator+(difference_type n, const Iterator& it) {
-      return it + n;
-    }
-
-    Iterator& operator-=(difference_type n) {
-      _index -= n;
-      return *this;
-    }
-
-    Iterator operator-(difference_type n) const {
-      Iterator result{*this};
-      result -= n;
-      return result;
-    }
-
-    difference_type operator-(const Iterator& rhs) const {
-      return static_cast<difference_type>(_index) - rhs._index;
-    }
-
-    auto operator*() const { return (*_vector)[_index]; }
-
-    auto operator[](difference_type n) const { return (*_vector)[_index + n]; }
-  };
+  using Iterator = ad_utility::IteratorForAccessOperator<CompactVectorOfStrings, ad_utility::AccessViaBracketOperator, index_type, difference_type>;
 
   Iterator begin() const { return {this, index_type{0}}; }
   Iterator end() const { return {this, size()}; }

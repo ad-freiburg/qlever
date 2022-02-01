@@ -326,7 +326,7 @@ class Vocabulary {
   vector<std::string> _internalizedLangs{"en"};
 
   // vector<StringType> _words;
-  CompactVectorOfStrings<char, ad_utility::InternalId, ad_utility::InternalUnsignedId> _words;
+  CompactVectorOfStrings<CompressedChar, ad_utility::InternalId, ad_utility::InternalUnsignedId> _words;
   ExternalVocabulary<ComparatorType> _externalLiterals;
   ComparatorType _caseComparator;
 
