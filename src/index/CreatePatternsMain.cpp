@@ -84,8 +84,9 @@ int main(int argc, char** argv) {
   string baseName;
   optind = 1;
   // Process command line arguments.
+
   while (true) {
-    int c = getopt_long(argc, argv, "i:", options, NULL);
+    int c = getopt_long(argc, argv, "i:", options, nullptr);
     if (c == -1) {
       break;
     }

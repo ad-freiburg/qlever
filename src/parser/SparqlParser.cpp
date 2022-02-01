@@ -86,6 +86,11 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
           }
         }
       }
+    } else if (query->hasSelectClause() &&
+               query->selectClause()._varsOrAsterisk.isAsterisk()) {
+      throw ParseException(
+          "GROUP BY is not allowed when all variables are selected via SELECT "
+          "*");
     } else if (query->hasConstructClause()) {
       auto& constructClause = query->constructClause();
       for (const auto& triple : constructClause) {
@@ -315,6 +320,26 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         // create the subquery operation
         GraphPatternOperation::Subquery subq;
         parseQuery(&subq._subquery, SELECT_QUERY);
+        ParsedQuery::SelectedVarsOrAsterisk subQ_sel_vars =
+            subq._subquery.selectClause()._varsOrAsterisk;
+
+        // Add the variables from the subquery that are visible to the outside
+        // (because they were selected, or because of a SELECT *) to the outer
+        // query.
+        if (subQ_sel_vars.isAsterisk()) {
+          auto subQ_ordVars = subQ_sel_vars.orderedVariablesFromQueryBody();
+
+          for (const auto& subSelectVariables : subQ_ordVars) {
+            ParsedQuery::SelectedVarsOrAsterisk* up_sel_vars =
+                &query->selectClause()._varsOrAsterisk;
+            up_sel_vars->addVariableFromQueryBody(subSelectVariables);
+          }
+        } else {
+          for (const auto& var : subQ_sel_vars.getSelectVariables()) {
+            query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(var);
+          }
+        }
+
         currentPattern->_children.emplace_back(std::move(subq));
         // The closing bracked } is consumed by the subquery
         _lexer.accept(".");
@@ -520,6 +545,8 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
       while (!reached_end) {
         if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
           query->_orderBy.emplace_back(OrderKey(_lexer.current().raw));
+          query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
+              _lexer.current().raw);
         } else if (_lexer.accept("asc")) {
           query->_orderBy.emplace_back(parseOrderKey("ASC", query));
         } else if (_lexer.accept("desc")) {

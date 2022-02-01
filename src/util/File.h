@@ -103,7 +103,7 @@ class File {
   }
 
   //! checks if the file is open.
-  bool isOpen() const { return (_file != NULL); }
+  [[nodiscard]] bool isOpen() const { return (_file != NULL); }
 
   //! Close file.
   bool close() {
@@ -212,7 +212,7 @@ class File {
     assert(_file);
     const int fd = fileno(_file);
     size_t bytesRead = 0;
-    uint8_t* to = static_cast<uint8_t*>(targetBuffer);
+    auto* to = static_cast<uint8_t*>(targetBuffer);
     size_t batchSize =
         timer ? 1024 * 1024 * 64 : std::numeric_limits<size_t>::max();
     while (bytesRead < nofBytesToRead) {
@@ -232,12 +232,12 @@ class File {
   }
 
   //! get the underlying file descriptor
-  int getFileDescriptor() const { return fileno(_file); }
+  [[nodiscard]] int getFileDescriptor() const { return fileno(_file); }
 
   //! Returns the number of bytes from the beginning
   //! is 0 on opening. Later equal the number of bytes written.
   //! -1 is returned when an error occurs
-  off_t tell() const {
+  [[nodiscard]] off_t tell() const {
     assert(_file);
     off_t returnValue = ftello(_file);
     if (returnValue == (off_t)-1) {
@@ -279,7 +279,13 @@ class File {
  */
 inline void deleteFile(const string& path) {
   // TODO<all>: As soon as we have GCC 8, we can use std::filesystem
-  string command = "rm -- " + path;
+  std::string path_raw = path;
+  // Adding escape char for paths with space chars
+  auto p = path_raw.find(' ');
+  if (p != std::string::npos) {
+    path_raw.replace(p, 1, "\\ ");
+  }
+  string command = "rm -- " + path_raw;
   if (system(command.c_str())) {
     LOG(WARN) << "Deletion of file " << path << " was probably not successful"
               << std::endl;
