@@ -208,3 +208,7 @@ gtest_discover_tests(CompactStringVectorTest)
 add_executable(SparqlDataTypesTest SparqlDataTypesTest.cpp)
 target_link_libraries(SparqlDataTypesTest gmock_main engine ${CMAKE_THREAD_LIBS_INIT})
 gtest_discover_tests(SparqlDataTypesTest)
+
+add_executable(ContentEncodingHelperTest ContentEncodingHelperTest.cpp)
+target_link_libraries(ContentEncodingHelperTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+gtest_discover_tests(ContentEncodingHelperTest)
