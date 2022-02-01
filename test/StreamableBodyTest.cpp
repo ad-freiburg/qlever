@@ -82,3 +82,23 @@ TEST(StreamableBodyTest, TestGeneratorReturnsBufferedResults) {
   ASSERT_EQ(toStringView(result2->first), std::string("1Abc"));
   ASSERT_FALSE(result2->second);
 }
+
+
+TEST(StreamableBodyTest, TestHeadersAreSetCorrectlyForCompressingGenerator) {
+  namespace http = boost::beast::http;
+  using ad_utility::content_encoding::CompressionMethod;
+
+  auto generator = generateNothing();
+  http::header<false, http::fields> headerGzip;
+  streamable_body::writer{headerGzip, generator};
+
+  generator.setCompressionMethod(CompressionMethod::NONE);
+  // empty string_view means no such header is present
+  ASSERT_EQ(headerGzip[http::field::content_encoding], std::string_view{});
+
+  generator.setCompressionMethod(CompressionMethod::DEFLATE);
+  ASSERT_EQ(headerGzip[http::field::content_encoding], "deflate");
+
+  generator.setCompressionMethod(CompressionMethod::GZIP);
+  ASSERT_EQ(headerGzip[http::field::content_encoding], "gzip");
+}

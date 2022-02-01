@@ -13,6 +13,7 @@
 // adapt the appropriate namespaces using the convenience header.
 #include "./Concepts.h"
 #include "./Coroutines.h"
+#include "./Exception.h"
 #include "./HttpServer/ContentEncodingHelper.h"
 
 namespace ad_utility::stream_generator {

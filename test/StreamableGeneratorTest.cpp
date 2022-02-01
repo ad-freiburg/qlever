@@ -7,6 +7,7 @@
 #include "../src/util/streamable_generator.h"
 
 using namespace ad_utility::stream_generator;
+namespace io = boost::iostreams;
 
 constexpr size_t TEST_BUFFER_SIZE = 10;
 
@@ -73,4 +74,50 @@ TEST(StreamableGeneratorTest, TestGeneratorNextThrowsExceptionWhenDone) {
   } catch (const std::exception& e) {
     ASSERT_STREQ(e.what(), "Coroutine is not active");
   }
+}
+
+std::string decompressData(std::string_view compressedData,
+                           auto&& decompressionFilter) {
+  std::string result;
+  io::filtering_ostream filterStream;
+  filterStream.push(decompressionFilter);
+  filterStream.push(io::back_inserter(result));
+
+  filterStream.write(compressedData.data(),
+                     static_cast<std::streamsize>(compressedData.size()));
+  return result;
+}
+
+TEST(StreamableGeneratorTest, TestGeneratorAppliesDeflateCompression) {
+  auto generator = generateMultipleElements();
+  generator.setCompressionMethod(
+      ad_utility::content_encoding::CompressionMethod::DEFLATE);
+
+  ASSERT_TRUE(generator.hasNext());
+  auto compressedData = generator.next();
+
+  // compression should cause bytes to drop below the TEST_BUFFER_SIZE
+  // causing all co_yields to be executed without suspension at once
+  // for this test case
+  ASSERT_EQ(decompressData(compressedData, io::zlib_decompressor()),
+            std::string(TEST_BUFFER_SIZE, 'A') + "1Abc");
+
+  ASSERT_FALSE(generator.hasNext());
+}
+
+TEST(StreamableGeneratorTest, TestGeneratorAppliesGzipCompression) {
+  auto generator = generateMultipleElements();
+  generator.setCompressionMethod(
+      ad_utility::content_encoding::CompressionMethod::GZIP);
+
+  ASSERT_TRUE(generator.hasNext());
+  auto compressedData = generator.next();
+
+  // compression should cause bytes to drop below the TEST_BUFFER_SIZE
+  // causing all co_yields to be executed without suspension at once
+  // for this test case
+  ASSERT_EQ(decompressData(compressedData, io::gzip_decompressor()),
+            std::string(TEST_BUFFER_SIZE, 'A') + "1Abc");
+
+  ASSERT_FALSE(generator.hasNext());
 }
