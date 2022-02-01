@@ -86,6 +86,11 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
           }
         }
       }
+    } else if (query->hasSelectClause() &&
+               query->selectClause()._varsOrAsterisk.isAsterisk()) {
+      throw ParseException(
+          "GROUP BY is not allowed when all variables are selected via SELECT "
+          "*");
     } else if (query->hasConstructClause()) {
       auto& constructClause = query->constructClause();
       for (const auto& triple : constructClause) {
@@ -318,13 +323,16 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         ParsedQuery::SelectedVarsOrAsterisk subQ_sel_vars =
             subq._subquery.selectClause()._varsOrAsterisk;
 
+        // Add the variables from the subquery that are visible to the outside
+        // (because they were selected, or because of a SELECT *) to the outer
+        // query.
         if (subQ_sel_vars.isAsterisk()) {
           auto subQ_ordVars = subQ_sel_vars.orderedVariablesFromQueryBody();
 
           for (const auto& subSelectVariables : subQ_ordVars) {
-            ParsedQuery::SelectedVarsOrAsterisk up_sel_vars =
-                query->selectClause()._varsOrAsterisk;
-            up_sel_vars.addVariableFromQueryBody(subSelectVariables);
+            ParsedQuery::SelectedVarsOrAsterisk* up_sel_vars =
+                &query->selectClause()._varsOrAsterisk;
+            up_sel_vars->addVariableFromQueryBody(subSelectVariables);
           }
         } else {
           for (const auto& var : subQ_sel_vars.getSelectVariables()) {

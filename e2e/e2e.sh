@@ -11,7 +11,7 @@ function cleanup_server {
 	cat "$BINARY_DIR/query_log.txt"
 	# Killing 0 sends the signal to all processes in the current
 	# process group
-	kill $SERVER_PID
+	kill "$SERVER_PID"
 }
 
 function print_usage {

@@ -9,7 +9,6 @@
 #include "../src/global/Constants.h"
 #include "../src/parser/PropertyPathParser.h"
 #include "../src/parser/SparqlParser.h"
-#include "../src/util/Exception.h"
 
 TEST(ParserTest, testParse) {
   try {
@@ -359,6 +358,9 @@ TEST(ParserTest, testParse) {
     // are implemented
     /*
     {
+     // C++ exception with description "ParseException, cause:
+     // Expected a token of type AGGREGATE but got a token of
+     // type RDFLITERAL (() in the input at pos 373 : (YEAR(?year))
       auto pq = SparqlParser(
                     "SELECT DISTINCT * WHERE { \n"
                     "  ?movie <directed-by> <Scott%2C%20Ridley> .\n"
@@ -537,11 +539,9 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(true, sc._varsOrAsterisk.isAsterisk());
 
       vector<string> vvars = {"?movie", "?director", "?year"};
-      // TODO: ASSERT_ERROR
-      // ASSERT_EQ(vvars, sc._varsOrAsterisk.orderedVariablesFromQueryBody());
+      ASSERT_EQ(vvars, sc._varsOrAsterisk.orderedVariablesFromQueryBody());
 
       // -- SubQuery
-      // const auto& c_subquery = pq._rootGraphPattern._children[1].getBasic();
       auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
           pq._rootGraphPattern._children[1].variant_);
       const auto& c_subquery = get<GraphPatternOperation::BasicGraphPattern>(
@@ -577,6 +577,131 @@ TEST(ParserTest, testParse) {
       vector<string> vvars_subquery = {"?movie", "?director", "?year"};
       ASSERT_EQ(vvars_subquery,
                 sc_subquery._varsOrAsterisk.orderedVariablesFromQueryBody());
+    }
+
+    {
+      // Query proving Select * working for n-subQuery
+      auto pq = SparqlParser(
+                    "SELECT DISTINCT * WHERE { \n"
+                    "  ?movie <directed-by> <Scott%2C%20Ridley> .\n"
+                    "\t{ \n"
+                    "\t SELECT * WHERE { \n"
+                    "\t\t\t ?movie <directed-by> ?director .\n"
+                    "\t\t\t { \n"
+                    "\t\t\t\t SELECT ?year WHERE { \n"
+                    "\t\t\t\t\t ?movie <from-year> ?year . \n"
+                    "\t\t\t\t\t } \n"
+                    "\t\t\t } \n"
+                    "\t\t\t FILTER(?year > \"00-00-2000\") ."
+                    "\t\t } \n"
+                    "\t\t ORDER BY DESC(?director) \n"
+                    "\t} \n"
+                    "} \n"
+                    "LIMIT 20 \n"
+                    "OFFSET 3 \n"
+                    "ORDER BY DESC(?movie)\n")
+                    .parse();
+
+      ASSERT_EQ(0u, pq._prefixes.size());
+      ASSERT_EQ(2u, pq._rootGraphPattern._children.size());
+
+      const auto& c = pq.children()[0].getBasic();
+      ASSERT_EQ(1u, c._whereClauseTriples.size());
+      ASSERT_EQ(0, pq._rootGraphPattern._filters.size());
+      ASSERT_EQ(3u, pq._offset);
+
+      ASSERT_EQ(c._whereClauseTriples[0]._s, "?movie");
+      ASSERT_EQ(c._whereClauseTriples[0]._p._iri, "<directed-by>");
+      ASSERT_EQ(c._whereClauseTriples[0]._o, "<Scott%2C%20Ridley>");
+
+      ASSERT_EQ(20u, pq._limit);
+      ASSERT_EQ(true, pq._orderBy[0]._desc);
+      ASSERT_EQ("?movie", pq._orderBy[0]._key);
+
+      auto sc = get<ParsedQuery::SelectClause>(pq._clause);
+      ASSERT_EQ(true, sc._distinct);
+      ASSERT_EQ(true, sc._varsOrAsterisk.isAsterisk());
+
+      vector<string> vvars = {"?movie", "?director", "?year"};
+      ASSERT_EQ(vvars, sc._varsOrAsterisk.orderedVariablesFromQueryBody());
+
+      // -- SubQuery (level 1)
+      auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
+          pq._rootGraphPattern._children[1].variant_);
+      const auto& c_subquery = get<GraphPatternOperation::BasicGraphPattern>(
+          parsed_sub_query._subquery._rootGraphPattern._children[0].variant_);
+      ASSERT_EQ(1u, c_subquery._whereClauseTriples.size());
+      ASSERT_EQ(1u,
+                parsed_sub_query._subquery._rootGraphPattern._filters.size());
+      ASSERT_EQ("?year",
+                parsed_sub_query._subquery._rootGraphPattern._filters[0]._lhs);
+      ASSERT_EQ("\"00-00-2000\"",
+                parsed_sub_query._subquery._rootGraphPattern._filters[0]._rhs);
+      ASSERT_EQ(SparqlFilter::GT,
+                parsed_sub_query._subquery._rootGraphPattern._filters[0]._type);
+      ASSERT_EQ(std::nullopt, parsed_sub_query._subquery._offset);
+
+      ASSERT_EQ(c_subquery._whereClauseTriples[0]._s, "?movie");
+      ASSERT_EQ(c_subquery._whereClauseTriples[0]._p._iri, "<directed-by>");
+      ASSERT_EQ(c_subquery._whereClauseTriples[0]._o, "?director");
+
+      ASSERT_EQ(std::nullopt, parsed_sub_query._subquery._limit);
+      ASSERT_EQ(true, parsed_sub_query._subquery._orderBy[0]._desc);
+      ASSERT_EQ("?director", parsed_sub_query._subquery._orderBy[0]._key);
+
+      auto sc_subquery =
+          get<ParsedQuery::SelectClause>(parsed_sub_query._subquery._clause);
+      ASSERT_EQ(false, sc_subquery._distinct);
+      ASSERT_EQ(false, sc_subquery._reduced);
+      ASSERT_EQ(true, sc_subquery._varsOrAsterisk.isAsterisk());
+      vector<string> vvars_subquery = {"?movie", "?director", "?year"};
+      ASSERT_EQ(vvars_subquery,
+                sc_subquery._varsOrAsterisk.orderedVariablesFromQueryBody());
+
+      // -- SubQuery (level 2)
+      auto parsed_sub_sub_query = get<GraphPatternOperation::Subquery>(
+          pq._rootGraphPattern._children[1].variant_);
+      const auto& c_sub_subquery =
+          get<GraphPatternOperation::BasicGraphPattern>(
+              get<GraphPatternOperation::Subquery>(
+                  parsed_sub_sub_query._subquery._rootGraphPattern._children[1]
+                      .variant_)
+                  ._subquery._rootGraphPattern._children[0]
+                  .variant_);
+      auto aux_parsed_sub_sub_query =
+          get<GraphPatternOperation::Subquery>(
+              parsed_sub_sub_query._subquery._rootGraphPattern._children[1]
+                  .variant_)
+              ._subquery;
+      ASSERT_EQ(1u, c_sub_subquery._whereClauseTriples.size());
+      ASSERT_EQ(0u, aux_parsed_sub_sub_query._rootGraphPattern._filters.size());
+      ASSERT_EQ(std::nullopt, aux_parsed_sub_sub_query._offset);
+
+      ASSERT_EQ(c_sub_subquery._whereClauseTriples[0]._s, "?movie");
+      ASSERT_EQ(c_sub_subquery._whereClauseTriples[0]._p._iri, "<from-year>");
+      ASSERT_EQ(c_sub_subquery._whereClauseTriples[0]._o, "?year");
+
+      ASSERT_EQ(std::nullopt, aux_parsed_sub_sub_query._limit);
+      ASSERT_EQ(0u, aux_parsed_sub_sub_query._orderBy.size());
+
+      auto sc_sub_subquery =
+          get<ParsedQuery::SelectClause>(aux_parsed_sub_sub_query._clause);
+      ASSERT_EQ(false, sc_sub_subquery._distinct);
+      ASSERT_EQ(false, sc_sub_subquery._reduced);
+      ASSERT_EQ(true, sc_sub_subquery._varsOrAsterisk.isVariables());
+      vector<string> vvars_sub_subquery = {"?year"};
+      ASSERT_EQ(vvars_sub_subquery,
+                sc_sub_subquery._varsOrAsterisk.getSelectVariables());
+    }
+
+    {
+      // Check if ParseException is thrown after GroupBy with Select *
+      auto pq = SparqlParser(
+          "SELECT DISTINCT * WHERE { \n"
+          "  ?a <b> ?c .\n"
+          "} \n"
+          "GROUP BY ?a ?c \n");
+      ASSERT_THROW(pq.parse(), ParseException);
     }
 
   } catch (const ad_semsearch::Exception& e) {

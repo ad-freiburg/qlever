@@ -9,9 +9,9 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "./ParseException.h"
 #include "./RdfEscaping.h"
 
 using std::string;
@@ -92,7 +92,7 @@ string ParsedQuery::asString() const {
      << (_limit.has_value() ? std::to_string(_limit.value())
                             : "no limit specified");
   os << "\nTEXTLIMIT: "
-     << (_textLimit.size() > 0 ? _textLimit : "no limit specified");
+     << (!_textLimit.empty() ? _textLimit : "no limit specified");
   os << "\nOFFSET: "
      << (_offset.has_value() ? std::to_string(_offset.value())
                              : "no offset specified");
@@ -104,7 +104,7 @@ string ParsedQuery::asString() const {
        << "present.";
   }
   os << "\nORDER BY: ";
-  if (_orderBy.size() == 0) {
+  if (_orderBy.empty()) {
     os << "not specified";
   } else {
     for (auto& key : _orderBy) {
@@ -123,11 +123,11 @@ string SparqlPrefix::asString() const {
 }
 
 // _____________________________________________________________________________
-PropertyPath::PropertyPath(Operation op, uint16_t limit, const std::string& iri,
+PropertyPath::PropertyPath(Operation op, uint16_t limit, std::string iri,
                            std::initializer_list<PropertyPath> children)
     : _operation(op),
       _limit(limit),
-      _iri(iri),
+      _iri(std::move(iri)),
       _children(children),
       _can_be_null(false) {}
 
@@ -136,7 +136,7 @@ void PropertyPath::writeToStream(std::ostream& out) const {
   switch (_operation) {
     case Operation::ALTERNATIVE:
       out << "(";
-      if (_children.size() > 0) {
+      if (!_children.empty()) {
         _children[0].writeToStream(out);
       } else {
         out << "missing" << std::endl;
@@ -151,7 +151,7 @@ void PropertyPath::writeToStream(std::ostream& out) const {
       break;
     case Operation::INVERSE:
       out << "^(";
-      if (_children.size() > 0) {
+      if (!_children.empty()) {
         _children[0].writeToStream(out);
       } else {
         out << "missing" << std::endl;
@@ -163,7 +163,7 @@ void PropertyPath::writeToStream(std::ostream& out) const {
       break;
     case Operation::SEQUENCE:
       out << "(";
-      if (_children.size() > 0) {
+      if (!_children.empty()) {
         _children[0].writeToStream(out);
       } else {
         out << "missing" << std::endl;
@@ -178,7 +178,7 @@ void PropertyPath::writeToStream(std::ostream& out) const {
       break;
     case Operation::TRANSITIVE:
       out << "(";
-      if (_children.size() > 0) {
+      if (!_children.empty()) {
         _children[0].writeToStream(out);
       } else {
         out << "missing" << std::endl;
@@ -187,7 +187,7 @@ void PropertyPath::writeToStream(std::ostream& out) const {
       break;
     case Operation::TRANSITIVE_MAX:
       out << "(";
-      if (_children.size() > 0) {
+      if (!_children.empty()) {
         _children[0].writeToStream(out);
       } else {
         out << "missing" << std::endl;
@@ -201,7 +201,7 @@ void PropertyPath::writeToStream(std::ostream& out) const {
       break;
     case Operation::TRANSITIVE_MIN:
       out << "(";
-      if (_children.size() > 0) {
+      if (!_children.empty()) {
         _children[0].writeToStream(out);
       } else {
         out << "missing" << std::endl;
@@ -220,7 +220,7 @@ std::string PropertyPath::asString() const {
 
 // _____________________________________________________________________________
 void PropertyPath::computeCanBeNull() {
-  _can_be_null = _children.size() > 0;
+  _can_be_null = !_children.empty();
   for (PropertyPath& p : _children) {
     p.computeCanBeNull();
     _can_be_null &= p._can_be_null;

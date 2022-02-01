@@ -280,6 +280,7 @@ class File {
 inline void deleteFile(const string& path) {
   // TODO<all>: As soon as we have GCC 8, we can use std::filesystem
   std::string path_raw = path;
+  // Adding escape char for paths with space chars
   auto p = path_raw.find(' ');
   if (p != std::string::npos) {
     path_raw.replace(p, 1, "\\ ");
