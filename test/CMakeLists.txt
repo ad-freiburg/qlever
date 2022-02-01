@@ -148,10 +148,6 @@ add_executable(SynchronizedTest SynchronizedTest.cpp)
 target_link_libraries(SynchronizedTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 gtest_discover_tests(SynchronizedTest)
 
-add_executable(BindTest BindTest.cpp)
-target_link_libraries(BindTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
-gtest_discover_tests(BindTest)
-
 add_executable(LimitedAllocatorTest LimitedAllocatorTest.cpp)
 target_link_libraries(LimitedAllocatorTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 gtest_discover_tests(LimitedAllocatorTest)
