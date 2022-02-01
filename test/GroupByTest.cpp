@@ -6,9 +6,7 @@
 
 #include <cstdio>
 
-#include "../src/engine/CallFixedSize.h"
 #include "../src/engine/GroupBy.h"
-//#include "../src/parser/SparqlExpression.h"
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
