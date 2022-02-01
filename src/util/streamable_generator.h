@@ -143,7 +143,8 @@ class [[nodiscard]] basic_stream_generator {
   basic_stream_generator() : basic_stream_generator(noOpGenerator()){};
 
   basic_stream_generator(basic_stream_generator&& other) noexcept
-      : _compressionMethod{other._compressionMethod}, _coroutine{other._coroutine} {
+      : _compressionMethod{other._compressionMethod},
+        _coroutine{other._coroutine} {
     other._coroutine = nullptr;
   }
 
