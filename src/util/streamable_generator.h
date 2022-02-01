@@ -82,7 +82,7 @@ class stream_generator_promise {
     if (isBufferLargeEnough()) {
       _value.clear();
     }
-    // _filterStream uses _value as its final backing buffer
+    // _filterStream appends its result to _value
     _filterStream << value;
     return suspend_sometimes{isBufferLargeEnough()};
   }
