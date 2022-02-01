@@ -174,7 +174,7 @@ gtest_discover_tests(ParametersTest)
 
 add_executable(ZstdCompressionTest ZstdCompressionTest.cpp)
 target_link_libraries(ZstdCompressionTest gtest_main absl::flat_hash_map zstd ${cmake_thread_libs_init})
-add_test(ZstdCompressionTest ZstdCompressionTest )
+gtest_discover_tests(ZstdCompressionTest)
 
 add_executable(TaskQueueTest TaskQueueTest.cpp)
 target_link_libraries(TaskQueueTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
