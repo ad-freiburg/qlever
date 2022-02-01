@@ -24,13 +24,13 @@ using std::vector;
 // Data container for prefixes
 class SparqlPrefix {
  public:
-  SparqlPrefix(const string& prefix, const string& uri)
-      : _prefix(prefix), _uri(uri) {}
+  SparqlPrefix(string prefix, string uri)
+      : _prefix(std::move(prefix)), _uri(std::move(uri)) {}
 
   string _prefix;
   string _uri;
 
-  string asString() const;
+  [[nodiscard]] string asString() const;
 };
 
 class PropertyPath {
@@ -53,7 +53,7 @@ class PropertyPath {
         _can_be_null(false) {}
   explicit PropertyPath(Operation op)
       : _operation(op), _limit(0), _iri(), _children(), _can_be_null(false) {}
-  PropertyPath(Operation op, uint16_t limit, const std::string& iri,
+  PropertyPath(Operation op, uint16_t limit, std::string iri,
                std::initializer_list<PropertyPath> children);
 
   bool operator==(const PropertyPath& other) const {
@@ -63,7 +63,7 @@ class PropertyPath {
   }
 
   void writeToStream(std::ostream& out) const;
-  std::string asString() const;
+  [[nodiscard]] std::string asString() const;
 
   void computeCanBeNull();
 
@@ -95,11 +95,13 @@ std::ostream& operator<<(std::ostream& out, const PropertyPath& p);
 // Data container for parsed triples from the where clause
 class SparqlTriple {
  public:
-  SparqlTriple(const string& s, const PropertyPath& p, const string& o)
-      : _s(s), _p(p), _o(o) {}
+  SparqlTriple(string s, PropertyPath p, string o)
+      : _s(std::move(s)), _p(std::move(p)), _o(std::move(o)) {}
 
-  SparqlTriple(const string& s, const std::string& p_iri, const string& o)
-      : _s(s), _p(PropertyPath::Operation::IRI, 0, p_iri, {}), _o(o) {}
+  SparqlTriple(string s, const std::string& p_iri, string o)
+      : _s(std::move(s)),
+        _p(PropertyPath::Operation::IRI, 0, p_iri, {}),
+        _o(std::move(o)) {}
 
   bool operator==(const SparqlTriple& other) const {
     return _s == other._s && _p == other._p && _o == other._o;
@@ -108,12 +110,12 @@ class SparqlTriple {
   PropertyPath _p;
   string _o;
 
-  string asString() const;
+  [[nodiscard]] string asString() const;
 };
 
 class OrderKey {
  public:
-  OrderKey(const string& key, bool desc) : _key(key), _desc(desc) {}
+  OrderKey(string key, bool desc) : _key(std::move(key)), _desc(desc) {}
   explicit OrderKey(const string& textual) {
     std::string lower = ad_utility::getLowercaseUtf8(textual);
     size_t pos = 0;
@@ -196,7 +198,7 @@ class SparqlFilter {
     PREFIX = 9
   };
 
-  string asString() const;
+  [[nodiscard]] string asString() const;
 
   FilterType _type;
   string _lhs;
@@ -408,10 +410,13 @@ class ParsedQuery {
   }
 
   void expandPrefixes();
+  // unused function ? not implemented
   void parseAliases();
 
   auto& children() { return _rootGraphPattern._children; }
-  const auto& children() const { return _rootGraphPattern._children; }
+  [[nodiscard]] const auto& children() const {
+    return _rootGraphPattern._children;
+  }
 
   /**
    * @brief Adds all elements from p's rootGraphPattern to this parsed query's
@@ -419,7 +424,7 @@ class ParsedQuery {
    */
   void merge(const ParsedQuery& p);
 
-  string asString() const;
+  [[nodiscard]] string asString() const;
 
  private:
   static void expandPrefix(

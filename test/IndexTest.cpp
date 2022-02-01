@@ -538,8 +538,3 @@ TEST(IndexTest, scanTest) {
   remove("_testindex.index.pso");
   remove("_testindex.index.pos");
 };
-
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
