@@ -56,8 +56,3 @@ TEST(HashSetTest, erase) {
   set.erase(41);
   ASSERT_EQ(set.size(), 1u);
 };
-
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
