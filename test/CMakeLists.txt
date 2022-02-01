@@ -120,13 +120,6 @@ add_executable(SparqlLexerTest SparqlLexerTest.cpp)
 target_link_libraries(SparqlLexerTest parser gtest_main ${CMAKE_THREAD_LIBS_INIT} ${ICU_LIBRARIES})
 gtest_discover_tests(SparqlLexerTest)
 
-set(TEST_COMPILE_TIME_REGEXES OFF CACHE BOOL "Include the tests for the Utf8Regex.")
-if (TEST_COMPILE_TIME_REGEXES)
-  add_executable(Utf8RegexTest Utf8RegexTest.cpp)
-  target_link_libraries(Utf8RegexTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
-  gtest_discover_tests(Utf8RegexTest)
-endif (TEST_COMPILE_TIME_REGEXES)
-
 add_executable(BatchedPipelineTest BatchedPipelineTest.cpp)
 target_link_libraries(BatchedPipelineTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 gtest_discover_tests(BatchedPipelineTest)

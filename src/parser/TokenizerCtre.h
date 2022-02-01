@@ -125,25 +125,6 @@ struct TurtleTokenCtre {
 
   static constexpr auto PercentString = "%" + cls(HexString) + "{2}";
 
-  /*
-  // TODO<joka921: Currently CTRE does not really support UTF-8. I tried to hack
-  the UTF-8 byte patterns for this regex, see the file Utf8RegexTest.cpp, but
-  this did increase compile time by an infeasible amount ( more than 20 minutes
-  for this file alone which made debugging impossible) Thus we will currently
-  only allow simple prefixes and emit proper warnings.
-
-    "A-Za-z\\x{00C0}-\\x{00D6}\\x{00D8}-\\x{00F6}\\x{00F8}-"
-    "\\x{02FF}"
-    "\\x{0370}-"
-    "\\x{037D}\\x{037F}-\\x{1FFF}\\x{200C}-\\x{200D}\\x{2070}-\\x{"
-    "218F}"
-    "\\x{2C00}-"
-    "\\x{2FEF}"
-    "\\x{3001}-\\x{D7FF}\\x{F900}-\\x{FDCF}\\x{FDF0}-\\x{FFFD}"
-    "\\x{00010000}-"
-    "\\x{000EFFFF}");
-
-  */
   static constexpr auto PnCharsBaseString = fixed_string("A-Za-z");
 
   static constexpr auto PnCharsUString = PnCharsBaseString + "_";
