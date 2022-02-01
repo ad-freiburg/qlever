@@ -53,12 +53,14 @@ class stream_generator_promise {
   std::exception_ptr _exception;
 
  public:
-  stream_generator_promise() { setContentEncoding(CompressionMethod::NONE); }
+  stream_generator_promise() { setCompressionMethod(CompressionMethod::NONE); }
 
   basic_stream_generator<MIN_BUFFER_SIZE> get_return_object() noexcept;
 
   constexpr std::suspend_always initial_suspend() const noexcept { return {}; }
   std::suspend_always final_suspend() noexcept {
+    // reset() flushes the stream and puts the remaining bytes into _value
+    // to be read by a final call to value()
     _filterStream.reset();
     return {};
   }
@@ -80,6 +82,7 @@ class stream_generator_promise {
     if (isBufferLargeEnough()) {
       _value.clear();
     }
+    // _filterStream uses _value as its final backing buffer
     _filterStream << value;
     return suspend_sometimes{isBufferLargeEnough()};
   }
@@ -90,11 +93,11 @@ class stream_generator_promise {
 
   std::string_view value() const noexcept { return _value; }
 
-  void setContentEncoding(CompressionMethod method) {
+  void setCompressionMethod(CompressionMethod compressionMethod) {
     _filterStream.reset();
-    if (method == CompressionMethod::DEFLATE) {
+    if (compressionMethod == CompressionMethod::DEFLATE) {
       _filterStream.push(io::zlib_compressor(io::zlib::best_compression));
-    } else if (method == CompressionMethod::GZIP) {
+    } else if (compressionMethod == CompressionMethod::GZIP) {
       _filterStream.push(io::gzip_compressor(io::gzip::best_compression));
     }
     _filterStream.push(io::back_inserter(_value), 0);
@@ -131,7 +134,7 @@ class [[nodiscard]] basic_stream_generator {
   using promise_type = detail::stream_generator_promise<MIN_BUFFER_SIZE>;
 
  private:
-  CompressionMethod _method = CompressionMethod::NONE;
+  CompressionMethod _compressionMethod = CompressionMethod::NONE;
   std::coroutine_handle<promise_type> _coroutine = nullptr;
 
   static basic_stream_generator noOpGenerator() { co_return; }
@@ -140,7 +143,7 @@ class [[nodiscard]] basic_stream_generator {
   basic_stream_generator() : basic_stream_generator(noOpGenerator()){};
 
   basic_stream_generator(basic_stream_generator&& other) noexcept
-      : _method{other._method}, _coroutine{other._coroutine} {
+      : _compressionMethod{other._compressionMethod}, _coroutine{other._coroutine} {
     other._coroutine = nullptr;
   }
 
@@ -154,7 +157,7 @@ class [[nodiscard]] basic_stream_generator {
 
   basic_stream_generator& operator=(basic_stream_generator&& other) noexcept {
     std::swap(_coroutine, other._coroutine);
-    _method = other._method;
+    _compressionMethod = other._compressionMethod;
     return *this;
   }
 
@@ -179,15 +182,15 @@ class [[nodiscard]] basic_stream_generator {
    */
   bool hasNext() { return _coroutine && !_coroutine.done(); }
 
-  void setContentEncoding(
-      ad_utility::content_encoding::CompressionMethod method) {
+  void setCompressionMethod(
+      ad_utility::content_encoding::CompressionMethod compressionMethod) {
     AD_CHECK(_coroutine);
-    _coroutine.promise().setContentEncoding(method);
-    _method = method;
+    _coroutine.promise().setCompressionMethod(compressionMethod);
+    _compressionMethod = compressionMethod;
   }
 
-  [[nodiscard]] CompressionMethod getContentEncoding() const noexcept {
-    return _method;
+  [[nodiscard]] CompressionMethod getCompressionMethod() const noexcept {
+    return _compressionMethod;
   }
 
  private:

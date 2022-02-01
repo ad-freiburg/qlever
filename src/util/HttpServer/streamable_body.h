@@ -38,7 +38,7 @@ struct streamable_body {
  * to extract the buffers representing the body.
  */
 class streamable_body::writer {
-  value_type& _body;
+  value_type& _streamableGenerator;
 
  public:
   // The type of buffer sequence returned by `get`.
@@ -65,10 +65,11 @@ class streamable_body::writer {
    * conceptually can't allow const access.
    */
   template <bool isRequest, class Fields>
-  writer(boost::beast::http::header<isRequest, Fields>& header, value_type& b)
-      : _body{b} {
+  writer(boost::beast::http::header<isRequest, Fields>& header,
+         value_type& streamableGenerator)
+      : _streamableGenerator{streamableGenerator} {
     ad_utility::content_encoding::setContentEncodingHeaderForCompressionMethod(
-        _body.getContentEncoding(), header);
+        _streamableGenerator.getCompressionMethod(), header);
   }
 
   /**
@@ -102,14 +103,14 @@ class streamable_body::writer {
     // again.
     //
     try {
-      std::string_view view = _body.next();
+      std::string_view view = _streamableGenerator.next();
       ec = {};
       // we can safely pass away the data() pointer because
       // it's just referencing the memory inside the generator's promise
-      // it won't be modified until the next call to _body.next()
+      // it won't be modified until the next call to _streamableGenerator.next()
       return {{
           const_buffers_type{view.data(), view.size()},
-          _body.hasNext()  // `true` if there are more buffers.
+          _streamableGenerator.hasNext()  // `true` if there are more buffers.
       }};
     } catch (const std::exception& e) {
       ec = {EPIPE, boost::system::generic_category()};
