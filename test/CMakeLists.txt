@@ -16,7 +16,6 @@ add_executable(ConcurrentCacheTest ConcurrentCacheTest.cpp)
 target_link_libraries(ConcurrentCacheTest gtest_main ${CMAKE_THREAD_LIBS_INIT} absl::flat_hash_map)
 gtest_discover_tests(ConcurrentCacheTest)
 
-
 add_executable(FileTest FileTest.cpp)
 target_link_libraries(FileTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 gtest_discover_tests(FileTest)
@@ -173,7 +172,6 @@ add_executable(ParametersTest ParametersTest.cpp)
 target_link_libraries(ParametersTest gtest_main absl::flat_hash_map  ${CMAKE_THREAD_LIBS_INIT})
 gtest_discover_tests(ParametersTest)
 
-
 add_executable(ZstdCompressionTest ZstdCompressionTest.cpp)
 target_link_libraries(ZstdCompressionTest gtest_main absl::flat_hash_map zstd ${cmake_thread_libs_init})
 add_test(ZstdCompressionTest ZstdCompressionTest )
@@ -181,7 +179,6 @@ add_test(ZstdCompressionTest ZstdCompressionTest )
 add_executable(TaskQueueTest TaskQueueTest.cpp)
 target_link_libraries(TaskQueueTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 gtest_discover_tests(TaskQueueTest)
-
 
 add_executable(SetOfIntervalsTest SetOfIntervalsTest.cpp)
 target_link_libraries(SetOfIntervalsTest gtest_main sparqlExpressions ${CMAKE_THREAD_LIBS_INIT})
