@@ -12,34 +12,39 @@ enum class CompressionMethod { NONE, DEFLATE, GZIP };
 
 namespace detail {
 
-constexpr CompressionMethod getCompressionMethodAcceptEncodingHeader(
+constexpr std::string_view DEFLATE = "deflate";
+constexpr std::string_view GZIP = "gzip";
+
+constexpr CompressionMethod getCompressionMethodFromAcceptEncodingHeader(
     const std::string_view acceptEncodingHeader) {
-  // TODO evaluate if gzip can be supported using boost
-  if (acceptEncodingHeader.find("deflate") != std::string::npos) {
+  if (acceptEncodingHeader.find(DEFLATE) != std::string::npos) {
     return CompressionMethod::DEFLATE;
-  } else if (acceptEncodingHeader.find("gzip") != std::string::npos) {
+  } else if (acceptEncodingHeader.find(GZIP) != std::string::npos) {
     return CompressionMethod::GZIP;
   }
   return CompressionMethod::NONE;
 }
 }  // namespace detail
 
+using boost::beast::http::field;
+
 template <typename Body>
-inline CompressionMethod getCompressionMethodForRequest(
+CompressionMethod getCompressionMethodForRequest(
     const boost::beast::http::request<Body>& request) {
   std::string_view acceptEncodingHeader =
-      request.base()[boost::beast::http::field::accept_encoding];
-  return detail::getCompressionMethodAcceptEncodingHeader(acceptEncodingHeader);
+      request.base()[field::accept_encoding];
+  return detail::getCompressionMethodFromAcceptEncodingHeader(
+      acceptEncodingHeader);
 }
 
 template <bool isRequest, typename Fields>
 inline void setContentEncodingHeaderForCompressionMethod(
     CompressionMethod method,
     boost::beast::http::header<isRequest, Fields>& header) {
-  if (method == ad_utility::content_encoding::CompressionMethod::DEFLATE) {
-    header.set(boost::beast::http::field::content_encoding, "deflate");
-  } else if (method == ad_utility::content_encoding::CompressionMethod::GZIP) {
-    header.set(boost::beast::http::field::content_encoding, "gzip");
+  if (method == CompressionMethod::DEFLATE) {
+    header.set(field::content_encoding, detail::DEFLATE);
+  } else if (method == CompressionMethod::GZIP) {
+    header.set(field::content_encoding, detail::GZIP);
   }
 }
 
