@@ -91,9 +91,9 @@ struct InternalSignedId : fluent::NamedType<int64_t, struct InternalSignedIdTag,
                                  fluent::Arithmetic>;
   // Inherit constructors
   using Base::Base;
-  InternalSignedId(InternalId id) : Base{id.get()} {}
+  InternalSignedId(InternalId id) : Base{static_cast<int64_t>(id.get())} {}
   InternalSignedId(Base b) : Base{b} {}
-  operator InternalId() const { return InternalId{get()}; }
+  operator InternalId() const { return InternalId{static_cast<uint64_t>(get())}; }
 };
 
 using CompleteId =

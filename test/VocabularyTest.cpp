@@ -13,6 +13,10 @@
 using json = nlohmann::json;
 using std::string;
 
+auto internalId = [](const uint64_t id) {
+  return ad_utility::DefaultIdManager::fromInternalId(ad_utility::InternalId{id}).get();
+};
+
 TEST(VocabularyTest, getIdForWordTest) {
   std::vector<TextVocabulary> vec(2);
 
@@ -21,9 +25,9 @@ TEST(VocabularyTest, getIdForWordTest) {
     v.createFromSet(s);
     Id id;
     ASSERT_TRUE(v.getId("ba", &id));
-    ASSERT_EQ(Id(2), id);
+    ASSERT_EQ(internalId(2), id);
     ASSERT_TRUE(v.getId("a", &id));
-    ASSERT_EQ(Id(0), id);
+    ASSERT_EQ(internalId(0), id);
     ASSERT_FALSE(v.getId("foo", &id));
   }
 
@@ -34,9 +38,9 @@ TEST(VocabularyTest, getIdForWordTest) {
   voc.createFromSet(s2);
   Id id;
   ASSERT_TRUE(voc.getId("Ba", &id));
-  ASSERT_EQ(Id(2), id);
+  ASSERT_EQ(internalId(2), id);
   ASSERT_TRUE(voc.getId("a", &id));
-  ASSERT_EQ(Id(0), id);
+  ASSERT_EQ(internalId(0), id);
   // getId only gets exact matches;
   ASSERT_FALSE(voc.getId("ba", &id));
 };
@@ -51,12 +55,12 @@ TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
   IdRange retVal;
   // Match exactly one
   ASSERT_TRUE(v.getIdRangeForFullTextPrefix("wordA1*", &retVal));
-  ASSERT_EQ(word0 + 1, retVal._first);
-  ASSERT_EQ(word0 + 1, retVal._last);
+  ASSERT_EQ(internalId(word0 + 1), retVal._first);
+  ASSERT_EQ(internalId(word0 + 1), retVal._last);
 
   // Match all
   ASSERT_TRUE(v.getIdRangeForFullTextPrefix("word*", &retVal));
-  ASSERT_EQ(word0, retVal._first);
+  ASSERT_EQ(internalId(word0), retVal._first);
   ASSERT_EQ(word0 + 4, retVal._last);
 
   // Match first two

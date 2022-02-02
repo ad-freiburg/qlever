@@ -59,7 +59,7 @@ class ExternalVocabulary {
   IdAndString getNthElement(size_t n) const;
 
   //! Get the number of words in the vocabulary.
-  size_t size() const { return idsAndOffsets().size() - 1; }
+  size_t size() const { return _size; }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
@@ -120,6 +120,7 @@ class ExternalVocabulary {
 
   StringComparator _caseComparator;
   Id _highestId = 0;
+  size_t _size = 0;
 
   auto getComparatorForSortLevel(const SortLevel level) const {
     auto getString = [&](const auto& input) {

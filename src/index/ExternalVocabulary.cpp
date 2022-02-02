@@ -128,7 +128,8 @@ template <class Comp>
 void ExternalVocabulary<Comp>::initFromFile(const string& file) {
   _file.open(file.c_str(), "r");
   _idsAndOffsets.open(file + _offsetSuffix);
-  AD_CHECK(size() > 0);
+  AD_CHECK(_idsAndOffsets.size() > 0);
+  _size = _idsAndOffsets.size() - 1;
   _highestId = (*(end() - 1))._id;
 }
 
