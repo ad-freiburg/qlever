@@ -209,9 +209,3 @@ TEST(Simple8bTest, testEncodeDecode242times0) {
   delete[] decoded;
 }
 }  // namespace ad_utility
-
-// _____________________________________________________________________________
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
