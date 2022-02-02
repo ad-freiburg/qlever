@@ -19,6 +19,7 @@
 #include "../util/HashMap.h"
 #include "../util/Log.h"
 #include "../util/Serializer/FileSerializer.h"
+#include "../util/Serializer/SerializeString.h"
 #include "./ConstantsIndexBuilding.h"
 #include "./Vocabulary.h"
 #include "./VocabularyGenerator.h"
@@ -188,7 +189,8 @@ void VocabularyMerger::writeQueueWordsToIdVec(
           _firstLangPredSeen = true;
         }
         // exclusive
-        _langPredUpperBound = _idManager.getNextExternalIdWithoutIncrement().get();
+        _langPredUpperBound =
+            _idManager.getNextExternalIdWithoutIncrement().get();
       }
       _totalWritten++;
       if (_totalWritten % 100'000'000 == 0) {
@@ -197,8 +199,9 @@ void VocabularyMerger::writeQueueWordsToIdVec(
     }
 
     // Write the mapping from local to global Ids for this word.
-    writeBuf.emplace_back(top._partialFileId,
-                          std::make_pair(top._partialWordId, _lastWritten._id.get()));
+    writeBuf.emplace_back(
+        top._partialFileId,
+        std::make_pair(top._partialWordId, _lastWritten._id.get()));
 
     if (writeBuf.size() >= bufSize) {
       auto task = [this, buf = std::move(writeBuf)]() {

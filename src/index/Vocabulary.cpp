@@ -78,8 +78,8 @@ void Vocabulary<S, C>::createFromSet(
     };
     std::sort(begin(words), end(words), totalComparison);
     _words.build(words);
-    }
-    LOG(INFO) << "Done creating vocabulary.\n";
+  }
+  LOG(INFO) << "Done creating vocabulary.\n";
 }
 
 // _____________________________________________________________________________
@@ -118,7 +118,9 @@ bool Vocabulary<S, C>::shouldBeExternalized(const string& word) const {
 // ___________________________________________________________________
 template <class S, class C>
 bool Vocabulary<S, C>::shouldEntityBeExternalized(const string& word) const {
-  return std::ranges::any_of(_externalizedPrefixes, [&](const auto& prefix) {return word.starts_with(prefix);});
+  return std::ranges::any_of(_externalizedPrefixes, [&](const auto& prefix) {
+    return word.starts_with(prefix);
+  });
 }
 
 // ___________________________________________________________________
@@ -252,12 +254,13 @@ bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
 
 // _____________________________________________________________________________
 template <typename S, typename C>
-template<typename StringType>
-Vocabulary<S, C>::SearchResult Vocabulary<S, C>::lower_bound(const StringType& word,
-                                 const SortLevel level) const {
-  auto internalSignedIdFromInternalVocab = _words.lower_bound( word,
-                                          getComparatorForSortLevel(level));
-  auto internalIdFromInternalVocab = ad_utility::InternalId{internalSignedIdFromInternalVocab.get()};
+template <typename StringType>
+Vocabulary<S, C>::SearchResult Vocabulary<S, C>::lower_bound(
+    const StringType& word, const SortLevel level) const {
+  auto internalSignedIdFromInternalVocab =
+      _words.lower_bound(word, getComparatorForSortLevel(level));
+  auto internalIdFromInternalVocab =
+      ad_utility::InternalId{internalSignedIdFromInternalVocab.get()};
   SearchResult resultInternal;
   resultInternal._id = IdManager::fromInternalId(internalIdFromInternalVocab);
   if (internalIdFromInternalVocab < _words.size()) {
@@ -276,12 +279,14 @@ Vocabulary<S, C>::SearchResult Vocabulary<S, C>::lower_bound(const StringType& w
 
 // _____________________________________________________________________________
 template <typename S, typename C>
-Vocabulary<S, C>::SearchResult Vocabulary<S, C>::upper_bound(const string& word,
-                                           const SortLevel level) const {
-  static_assert(std::random_access_iterator<typename decltype(_words)::StlConformingIterator>);
-  auto internalSignedIdFromInternalVocab = _words.upper_bound(word,
-                                                      getComparatorForSortLevel(level));
-  auto internalIdFromInternalVocab = ad_utility::InternalId{internalSignedIdFromInternalVocab.get()};
+Vocabulary<S, C>::SearchResult Vocabulary<S, C>::upper_bound(
+    const string& word, const SortLevel level) const {
+  static_assert(std::random_access_iterator<typename decltype(
+                    _words)::StlConformingIterator>);
+  auto internalSignedIdFromInternalVocab =
+      _words.upper_bound(word, getComparatorForSortLevel(level));
+  auto internalIdFromInternalVocab =
+      ad_utility::InternalId{internalSignedIdFromInternalVocab.get()};
   SearchResult resultInternal;
   resultInternal._id = IdManager::fromInternalId(internalIdFromInternalVocab);
   if (internalIdFromInternalVocab < _words.size()) {
@@ -314,12 +319,15 @@ void Vocabulary<S, ComparatorType>::setLocale(const std::string& language,
 template <typename StringType, typename C>
 //! Get the word with the given id.
 //! lvalue for compressedString and const& for string-based vocabulary
-AccessReturnType_t<StringType> Vocabulary<StringType, C>::getInternalWordFromId(ad_utility::InternalId id) const {
+AccessReturnType_t<StringType> Vocabulary<StringType, C>::getInternalWordFromId(
+    ad_utility::InternalId id) const {
   if constexpr (_isCompressed) {
     return expandPrefix(_words[id]);
   } else {
-    // TODO<joka921> Make the uncompressed vocabulary use "ordinary" chars again.
-    return {reinterpret_cast<const char*>(_words[id].data()), _words[id].size()};
+    // TODO<joka921> Make the uncompressed vocabulary use "ordinary" chars
+    // again.
+    return {reinterpret_cast<const char*>(_words[id].data()),
+            _words[id].size()};
   }
 }
 
@@ -336,11 +344,13 @@ bool Vocabulary<S, C>::getId(const string& word, Id* id) const {
 
 // ___________________________________________________________________________
 template <typename S, typename C>
-std::pair<typename Vocabulary<S, C>::SearchResult, typename Vocabulary<S, C>::SearchResult> Vocabulary<S, C>::prefix_range(const string& prefix) const {
+std::pair<typename Vocabulary<S, C>::SearchResult,
+          typename Vocabulary<S, C>::SearchResult>
+Vocabulary<S, C>::prefix_range(const string& prefix) const {
   // TODO<joka921> fix this
   if (prefix.empty()) {
     throw std::runtime_error("Empty prefix filters are currently disabled");
-    //return {0, _words.size()};
+    // return {0, _words.size()};
   }
 
   auto lb = lower_bound(prefix, SortLevel::PRIMARY);

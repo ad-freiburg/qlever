@@ -486,7 +486,8 @@ void Filter::computeFilterFixedValue(
         for (const auto& [l, r] : lhsRhsMap) {
           for (const auto& pref : r) {
             auto prefixRange = getIndex().getVocab().prefix_range(pref);
-            prefixRanges[l].emplace_back(prefixRange.first._id.get(), prefixRange.second._id.get());
+            prefixRanges[l].emplace_back(prefixRange.first._id.get(),
+                                         prefixRange.second._id.get());
           }
         }
         // remove overlap in the ranges

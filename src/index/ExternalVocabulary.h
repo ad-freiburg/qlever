@@ -9,9 +9,9 @@
 
 #include "../global/Id.h"
 #include "../util/File.h"
+#include "../util/Iterators.h"
 #include "../util/MmapVector.h"
 #include "StringSortComparator.h"
-#include "../util/Iterators.h"
 
 using std::string;
 using std::vector;
@@ -78,26 +78,22 @@ class ExternalVocabulary {
     return vocabulary.getNthElement(index);
   });
 
-  using const_iterator = ad_utility::IteratorForAccessOperator<ExternalVocabulary, Accessor>;
+  using const_iterator =
+      ad_utility::IteratorForAccessOperator<ExternalVocabulary, Accessor>;
 
-  const_iterator begin() const {
-    return {this, 0};
-  }
+  const_iterator begin() const { return {this, 0}; }
 
-  const_iterator end() const {
-    return {this, size()};
-  }
+  const_iterator end() const { return {this, size()}; }
 
   // Get the id that is the largest id contained in this external vocabulary + 1
-  Id getUpperBoundForIds () const {
-    return _highestId + 1;
-  }
+  Id getUpperBoundForIds() const { return _highestId + 1; }
 
   using SortLevel = typename StringComparator::Level;
 
   // __________________________________________________________________________
   IdAndString upper_bound(const auto& word, const SortLevel level) const {
-    auto it = std::upper_bound(begin(), end(), word, getComparatorForSortLevel(level));
+    auto it = std::upper_bound(begin(), end(), word,
+                               getComparatorForSortLevel(level));
     if (it == end()) {
       return {getUpperBoundForIds(), std::nullopt};
     } else {
@@ -107,7 +103,8 @@ class ExternalVocabulary {
 
   // _________________________________________________________________________
   IdAndString lower_bound(const auto& word, const SortLevel level) const {
-    auto it = std::lower_bound(begin(), end(), word, getComparatorForSortLevel(level));
+    auto it = std::lower_bound(begin(), end(), word,
+                               getComparatorForSortLevel(level));
     if (it == end()) {
       return {getUpperBoundForIds(), std::nullopt};
     } else {
@@ -124,10 +121,9 @@ class ExternalVocabulary {
   StringComparator _caseComparator;
   Id _highestId = 0;
 
-
   auto getComparatorForSortLevel(const SortLevel level) const {
     auto getString = [&](const auto& input) {
-      if constexpr( ad_utility::isSimilar<decltype(input), IdAndString>) {
+      if constexpr (ad_utility::isSimilar<decltype(input), IdAndString>) {
         AD_CHECK(input._string.has_value());
         return input._string.value();
       } else {
@@ -135,7 +131,8 @@ class ExternalVocabulary {
       }
     };
     return [this, level, getString](auto&& a, auto&& b) {
-      return this->_caseComparator(getString(a), getString(b), level); };
+      return this->_caseComparator(getString(a), getString(b), level);
+    };
   }
 
   Id binarySearchInVocab(const string& word) const;

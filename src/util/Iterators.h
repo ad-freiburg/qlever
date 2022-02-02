@@ -12,7 +12,8 @@ inline auto accessViaBracketOperator = [](auto&& dataStructure, auto index) {
 };
 using AccessViaBracketOperator = decltype(accessViaBracketOperator);
 
-template <typename DataStructure, typename Accessor = AccessViaBracketOperator , typename index_type = uint64_t, typename DifferenceType = int64_t>
+template <typename DataStructure, typename Accessor = AccessViaBracketOperator,
+          typename index_type = uint64_t, typename DifferenceType = int64_t>
 struct IteratorForAccessOperator {
  private:
   const DataStructure* _vector = nullptr;
@@ -21,7 +22,8 @@ struct IteratorForAccessOperator {
 
  public:
   using iterator_category = std::random_access_iterator_tag;
-  using value_type = std::remove_reference_t<std::invoke_result_t<Accessor, const DataStructure&, index_type>>;
+  using value_type = std::remove_reference_t<
+      std::invoke_result_t<Accessor, const DataStructure&, index_type>>;
   using difference_type = DifferenceType;
 
   IteratorForAccessOperator(const DataStructure* vec, index_type index)
@@ -32,7 +34,9 @@ struct IteratorForAccessOperator {
     return (_index <=> rhs._index);
   }
 
-  bool operator==(const IteratorForAccessOperator& rhs) const { return _index == rhs._index; }
+  bool operator==(const IteratorForAccessOperator& rhs) const {
+    return _index == rhs._index;
+  }
 
   IteratorForAccessOperator& operator+=(difference_type n) {
     _index += n;
@@ -64,7 +68,8 @@ struct IteratorForAccessOperator {
     return result;
   }
 
-  friend IteratorForAccessOperator operator+(difference_type n, const IteratorForAccessOperator& it) {
+  friend IteratorForAccessOperator operator+(
+      difference_type n, const IteratorForAccessOperator& it) {
     return it + n;
   }
 
@@ -80,14 +85,17 @@ struct IteratorForAccessOperator {
   }
 
   difference_type operator-(const IteratorForAccessOperator& rhs) const {
-    return static_cast<difference_type>(_index) - static_cast<difference_type>(rhs._index);
+    return static_cast<difference_type>(_index) -
+           static_cast<difference_type>(rhs._index);
   }
 
   decltype(auto) operator*() const { return _accessor(*_vector, _index); }
 
-  decltype(auto) operator[](difference_type n) const { return _accessor(*_vector, _index + n); }
+  decltype(auto) operator[](difference_type n) const {
+    return _accessor(*_vector, _index + n);
+  }
 };
 
-}
+}  // namespace ad_utility
 
 #endif  // QLEVER_ITERATORS_H

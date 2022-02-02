@@ -125,8 +125,8 @@ TEST(Vocabulary, PrefixFilter) {
   voc.createFromSet(s);
 
   auto x = voc.prefix_range("\"exp");
-  ASSERT_EQ(x.first, 1u);
-  ASSERT_EQ(x.second, 2u);
+  ASSERT_EQ(x.first._id.get(), 1u);
+  ASSERT_EQ(x.second._id.get(), 2u);
 }
 
 int main(int argc, char** argv) {

@@ -14,12 +14,12 @@
 
 #include "../util/File.h"
 #include "../util/Generator.h"
+#include "../util/Iterators.h"
 #include "../util/Serializer/FileSerializer.h"
 #include "../util/Serializer/SerializeVector.h"
 #include "../util/TypeTraits.h"
 #include "../util/UninitializedAllocator.h"
 #include "Id.h"
-#include "../util/Iterators.h"
 
 typedef uint32_t PatternID;
 
@@ -96,7 +96,8 @@ struct CompactStringVectorWriter;
  *        c-style strings). The data is stored in a single contiguous block
  *        of memory.
  */
-template <typename data_type, typename index_type = uint64_t, typename difference_type = int64_t>
+template <typename data_type, typename index_type = uint64_t,
+          typename difference_type = int64_t>
 class CompactVectorOfStrings {
  public:
   using offset_type = uint64_t;
@@ -175,21 +176,21 @@ class CompactVectorOfStrings {
   // disk without buffering the whole `Vector`.
   static cppcoro::generator<vector_type> diskIterator(string filename);
 
-  using Iterator = ad_utility::IteratorForAccessOperator<CompactVectorOfStrings, ad_utility::AccessViaBracketOperator, index_type, difference_type>;
+  using Iterator = ad_utility::IteratorForAccessOperator<
+      CompactVectorOfStrings, ad_utility::AccessViaBracketOperator, index_type,
+      difference_type>;
 
   Iterator begin() const { return {this, index_type{0}}; }
   Iterator end() const { return {this, size()}; }
 
   using const_iterator = Iterator;
 
-
   using Accessor = decltype([](auto&& compactVector, auto index) {
     return compactVector[index_type{index}];
-      });
-  using StlConformingIterator = ad_utility::IteratorForAccessOperator<CompactVectorOfStrings, Accessor>;
-  StlConformingIterator stlBegin() const {
-    return {this, 0};
-  }
+  });
+  using StlConformingIterator =
+      ad_utility::IteratorForAccessOperator<CompactVectorOfStrings, Accessor>;
+  StlConformingIterator stlBegin() const { return {this, 0}; }
 
   StlConformingIterator stlEnd() const {
     return {this, indexTypeToInt(size())};
@@ -216,7 +217,7 @@ class CompactVectorOfStrings {
  private:
   static auto indexTypeToInt(index_type t) {
     // TODO<joka921> proper requirements.
-    if constexpr (requires(index_type tt) {t.get();}) {
+    if constexpr (requires(index_type tt) { t.get(); }) {
       return t.get();
     } else {
       return t;
@@ -272,8 +273,10 @@ struct CompactStringVectorWriter {
 // Forward iterator for a `CompactVectorOfStrings` that reads directly from
 // disk without buffering the whole `Vector`.
 template <typename DataT, typename IndexT, typename DifferenceT>
-cppcoro::generator<typename CompactVectorOfStrings<DataT, IndexT, DifferenceT>::vector_type>
-CompactVectorOfStrings<DataT, IndexT, DifferenceT>::diskIterator(string filename) {
+cppcoro::generator<
+    typename CompactVectorOfStrings<DataT, IndexT, DifferenceT>::vector_type>
+CompactVectorOfStrings<DataT, IndexT, DifferenceT>::diskIterator(
+    string filename) {
   ad_utility::File dataFile{filename, "r"};
   ad_utility::File indexFile{filename, "r"};
   AD_CHECK(dataFile.isOpen());

@@ -86,10 +86,10 @@ TEST(CompactVectorOfStrings, IteratorCategory) {
   static_assert(std::random_access_iterator<It>);
 }
 
-
 TEST(ExternalVocabulary, IteratorCategory) {
-  //using It = ExternalVocabulary<SimpleStringComparator>::StlConformingIterator;
-  //static_assert(std::random_access_iterator<It>);
+  // using It =
+  // ExternalVocabulary<SimpleStringComparator>::StlConformingIterator;
+  // static_assert(std::random_access_iterator<It>);
 }
 
 TEST(CompactVectorOfStrings, Serialization) {

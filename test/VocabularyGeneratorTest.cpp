@@ -263,9 +263,13 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     v.setLocale("en", "US", false);
     ItemMapArray arr;
     auto& s = arr[0];
-    auto assign = [&](std::string_view str, size_t id) {
-      s[str] = {id, v.getCaseComparator().extractAndTransformComparable(
-                        str, TripleComponentComparator::Level::IDENTICAL)};
+    // TODO<joka921> Also test externalization
+    auto assign = [&](std::string_view str, size_t id,
+                      bool isExternal = false) {
+      s[str] = IdAndSplitVal{
+          id,
+          v.getCaseComparator().extractAndTransformComparable(
+              str, TripleComponentComparator::Level::IDENTICAL, isExternal)};
     };
     assign("\"A\"", 5);
     assign("\"a\"", 6);

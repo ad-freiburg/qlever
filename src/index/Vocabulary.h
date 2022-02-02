@@ -78,18 +78,16 @@ class Vocabulary {
   // The different type of data that is stored in the vocabulary
   enum class Datatypes { Literal, Iri, Float, Date };
 
-  // The result of methods like `lower_bound`, `upper_bound`, `prefix_range`. `_word` is nullopt if the Id does is out of range (e.g. "not found" in connection with `lower_bound`).
+  // The result of methods like `lower_bound`, `upper_bound`, `prefix_range`.
+  // `_word` is nullopt if the Id does is out of range (e.g. "not found" in
+  // connection with `lower_bound`).
   struct SearchResult {
     ad_utility::CompleteId _id;
     std::optional<std::string> _word;
 
     // TODO<joka921> Add operator <=> to NamedTypes
-    bool operator<(const SearchResult& res) const {
-      return _id < res._id;
-    }
-    bool operator>(const SearchResult& res) const {
-      return _id > res._id;
-    }
+    bool operator<(const SearchResult& res) const { return _id < res._id; }
+    bool operator>(const SearchResult& res) const { return _id > res._id; }
   };
 
   template <typename T, typename R = void>
@@ -149,7 +147,8 @@ class Vocabulary {
 
   //! Get the word with the given id.
   //! lvalue for compressedString and const& for string-based vocabulary
-  AccessReturnType_t<StringType> getInternalWordFromId(ad_utility::InternalId id) const;
+  AccessReturnType_t<StringType> getInternalWordFromId(
+      ad_utility::InternalId id) const;
 
   // AccessReturnType_t<StringType> at(Id id) const { return operator[](id); }
 
@@ -157,8 +156,9 @@ class Vocabulary {
   [[nodiscard]] size_t internalSize() const { return _words.size().get(); }
 
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  [[nodiscard]] size_t size() const { return internalSize(); }
-
+  [[nodiscard]] size_t size() const {
+    return internalSize();
+  }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
@@ -231,13 +231,16 @@ class Vocabulary {
   [[nodiscard]] string expandPrefix(std::string_view word) const;
 
   template <typename U = StringType, typename = enable_if_compressed<U>>
-  [[nodiscard]] string expandPrefix(std::span<const CompressedChar> input) const {
-    return expandPrefix(std::string_view{reinterpret_cast<const char*>(input.data()), input.size()});
+  [[nodiscard]] string expandPrefix(
+      std::span<const CompressedChar> input) const {
+    return expandPrefix(std::string_view{
+        reinterpret_cast<const char*>(input.data()), input.size()});
   }
 
   template <typename U = StringType, typename = enable_if_compressed<U>>
   [[nodiscard]] string expandPrefix(std::vector<CompressedChar> input) const {
-    return expandPrefix(std::string_view{reinterpret_cast<const char*>(input.data()), input.size()});
+    return expandPrefix(std::string_view{
+        reinterpret_cast<const char*>(input.data()), input.size()});
   }
 
   // _____________________________________________
@@ -301,32 +304,37 @@ class Vocabulary {
   /// prefix according to the collation level the first Id is included in the
   /// range, the last one not. Currently only supports the Primary collation
   /// level, due to limitations in the StringSortComparators
-  [[nodiscard]] std::pair<SearchResult, SearchResult> prefix_range(const string& prefix) const;
+  [[nodiscard]] std::pair<SearchResult, SearchResult> prefix_range(
+      const string& prefix) const;
 
   [[nodiscard]] const LocaleManager& getLocaleManager() const {
     return _caseComparator.getLocaleManager();
   }
 
-  template<typename InternalStringType>
+  template <typename InternalStringType>
   // Wraps std::lower_bound and returns an index instead of an iterator
   SearchResult lower_bound(const InternalStringType& word,
-                 SortLevel level = SortLevel::QUARTERNARY) const;
+                           SortLevel level = SortLevel::QUARTERNARY) const;
 
   // _______________________________________________________________
   SearchResult upper_bound(const string& word, SortLevel level) const;
 
  private:
-
   auto getComparatorForSortLevel(const SortLevel level) const {
     auto expandIfCompressed = [&](const auto& input) {
-      if constexpr( requires() {{input.front()} -> ad_utility::SimilarTo<CompressedChar>;}) {
+      if constexpr (requires() {
+                      { input.front() }
+                      ->ad_utility::SimilarTo<CompressedChar>;
+                    }) {
         return this->expandPrefix(input);
       } else {
         return input;
       }
     };
-      return [this, level, expandIfCompressed](auto&& a, auto&& b) {
-        return this->_caseComparator(expandIfCompressed(a), expandIfCompressed(b), level); };
+    return [this, level, expandIfCompressed](auto&& a, auto&& b) {
+      return this->_caseComparator(expandIfCompressed(a), expandIfCompressed(b),
+                                   level);
+    };
   }
 
   /*
@@ -354,7 +362,6 @@ class Vocabulary {
   }
    */
 
-
   // TODO<joka921> these following two members are only used with the
   // compressed vocabulary. They don't use much space if empty, but still it
   // would be cleaner to throw them out when using the uncompressed version
@@ -375,7 +382,9 @@ class Vocabulary {
   vector<std::string> _internalizedLangs{"en"};
 
   // vector<StringType> _words;
-  CompactVectorOfStrings<CharType, ad_utility::InternalId, ad_utility::InternalSignedId> _words;
+  CompactVectorOfStrings<CharType, ad_utility::InternalId,
+                         ad_utility::InternalSignedId>
+      _words;
   using UncompressedVector = CompactVectorOfStrings<char>;
   ExternalVocabulary<ComparatorType> _externalLiterals;
   ComparatorType _caseComparator;

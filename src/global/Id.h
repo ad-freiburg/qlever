@@ -3,11 +3,11 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <NamedType/named_type.hpp>
 #include <cstdint>
 #include <limits>
 
 #include "../util/Exception.h"
-#include <NamedType/named_type.hpp>
 
 typedef uint64_t Id;
 typedef uint16_t Score;
@@ -19,21 +19,24 @@ static const Id ID_NO_VALUE = std::numeric_limits<Id>::max() - 2;
 namespace ad_utility {
 namespace detail {
 template <typename T>
-concept trivial8Bytes = std::is_trivially_copyable_v<T> && sizeof(T)  == 8;
+concept trivial8Bytes = std::is_trivially_copyable_v<T> && sizeof(T) == 8;
 }
-template <size_t numBytesInternal, size_t numBytesPerBlockExternal, typename CompleteId = uint64_t, typename InternalId = uint64_t>
+template <size_t numBytesInternal, size_t numBytesPerBlockExternal,
+          typename CompleteId = uint64_t, typename InternalId = uint64_t>
 requires(numBytesInternal + numBytesPerBlockExternal <= 8 &&
-         numBytesPerBlockExternal > 0 && detail::trivial8Bytes<CompleteId> && detail::trivial8Bytes<InternalId>) class InternalExternalIdManager {
+         numBytesPerBlockExternal > 0 && detail::trivial8Bytes<CompleteId> &&
+         detail::trivial8Bytes<InternalId>) class InternalExternalIdManager {
  private:
   CompleteId nextId = CompleteId{0};
 
  public:
   InternalExternalIdManager() = default;
-  constexpr static CompleteId maxInternalId = CompleteId{(1ull << (numBytesInternal * 8)) - 1};
+  constexpr static CompleteId maxInternalId =
+      CompleteId{(1ull << (numBytesInternal * 8)) - 1};
   constexpr static CompleteId maxExternalIdPerBlock{
       (1ull << (numBytesPerBlockExternal * 8)) - 1};
-  constexpr static CompleteId maxId  {
-    (1ull << (numBytesPerBlockExternal + numBytesInternal) * 8) - 1};
+  constexpr static CompleteId maxId{
+      (1ull << (numBytesPerBlockExternal + numBytesInternal) * 8) - 1};
 
   CompleteId getNextInternalId() {
     if (!isInternalId(nextId)) {
@@ -55,9 +58,8 @@ requires(numBytesInternal + numBytesPerBlockExternal <= 8 &&
     return nextId;
   }
 
-
-  constexpr static InternalId  toInternalId(CompleteId id) {
-    return InternalId{id.get() >> (numBytesPerBlockExternal * 8)};
+  constexpr static InternalId toInternalId(CompleteId id) {
+    return InternalId{get(id) >> (numBytesPerBlockExternal * 8)};
   }
 
   constexpr static CompleteId fromInternalId(InternalId id) {
@@ -67,13 +69,13 @@ requires(numBytesInternal + numBytesPerBlockExternal <= 8 &&
     // Bits set to one in the range where the external part is stored.
     constexpr CompleteId mask =
         CompleteId((~uint64_t(0)) >> (64 - numBytesPerBlockExternal * 8));
-    return ! get(mask & id);
+    return !get(mask & id);
   }
 
  private:
   static auto get(auto t) {
     // TODO<joka921> proper requirements.
-    if constexpr (requires() {t.get();}) {
+    if constexpr (requires() { t.get(); }) {
       return t.get();
     } else {
       return t;
@@ -81,21 +83,21 @@ requires(numBytesInternal + numBytesPerBlockExternal <= 8 &&
   }
 };
 
-using InternalId = fluent::NamedType<uint64_t, struct InternalIdTag, fluent::Arithmetic>;
-struct InternalSignedId : fluent::NamedType<int64_t, struct InternalSignedIdTag, fluent::Arithmetic> {
-  using Base = fluent::NamedType<int64_t, struct InternalSignedIdTag, fluent::Arithmetic>;
+using InternalId =
+    fluent::NamedType<uint64_t, struct InternalIdTag, fluent::Arithmetic>;
+struct InternalSignedId : fluent::NamedType<int64_t, struct InternalSignedIdTag,
+                                            fluent::Arithmetic> {
+  using Base = fluent::NamedType<int64_t, struct InternalSignedIdTag,
+                                 fluent::Arithmetic>;
   // Inherit constructors
   using Base::Base;
-  InternalSignedId(InternalId id) : Base{id.get()} {
-
-
-  }
+  InternalSignedId(InternalId id) : Base{id.get()} {}
   InternalSignedId(Base b) : Base{b} {}
-  operator InternalId() const {
-    return InternalId{get()};
-  }
+  operator InternalId() const { return InternalId{get()}; }
 };
 
-using CompleteId = fluent::NamedType<uint64_t, struct CompleteIdTag, fluent::Arithmetic>;
-using DefaultIdManager = InternalExternalIdManager<4, 3, CompleteId, InternalId>;
+using CompleteId =
+    fluent::NamedType<uint64_t, struct CompleteIdTag, fluent::Arithmetic>;
+using DefaultIdManager =
+    InternalExternalIdManager<4, 3, CompleteId, InternalId>;
 }  // namespace ad_utility

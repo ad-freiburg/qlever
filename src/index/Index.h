@@ -730,7 +730,7 @@ class Index {
     for (const auto& [keyPlain, value] : PSO()._meta.data()) {
       auto key = ad_utility::CompleteId(keyPlain);
       auto numTriples = value.getNofElements();
-      if (keyPlain== qleverLangtag || (key >= begin._id && key < end._id)) {
+      if (keyPlain == qleverLangtag || (key >= begin._id && key < end._id)) {
         addedTriples += numTriples;
       } else {
         actualTriples += numTriples;

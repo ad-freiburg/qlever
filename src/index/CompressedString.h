@@ -4,9 +4,9 @@
 
 #pragma once
 
+#include <NamedType/named_type.hpp>
 #include <functional>
 #include <string>
-#include <NamedType/named_type.hpp>
 
 using std::string;
 
@@ -68,7 +68,7 @@ class CompressedString : public std::basic_string<CompressedChar> {
  public:
   // TODO<joka921>:: is this used in a performance-critical loop?
   // Then we should optimize it again.
-  static CompressedString fromString(const std::string &s) {
+  static CompressedString fromString(const std::string& s) {
     CompressedString result;
     result.reserve(s.size());
     for (const char c : s) {

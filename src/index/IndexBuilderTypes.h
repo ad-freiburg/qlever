@@ -160,9 +160,9 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
         // extra triple <object> ql:language-tag <@language>
         res[2].emplace(
             std::array<Id, 3>{spoIds[2],
-                         map.assignNextId(PossiblyExternalizedTripleEntry{
-                             LANGUAGE_PREDICATE, false}),
-                         langTagId});
+                              map.assignNextId(PossiblyExternalizedTripleEntry{
+                                  LANGUAGE_PREDICATE, false}),
+                              langTagId});
       }
       return res;
     };

@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
     };
 
     auto push = [&writer, i = 0ul](CompressedString&& s) mutable {
-      auto sv = s.toStringView();
+      auto sv = string_view{reinterpret_cast<const char*>(s.data(), s.size())};
       writer.push(sv.data(), sv.size());
       i++;
       if (i % 50'000'000 == 0) {
