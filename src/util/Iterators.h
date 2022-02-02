@@ -7,12 +7,12 @@
 
 namespace ad_utility {
 
-auto accessViaBracketOperator = [](auto&& dataStructure, auto index) {
+inline auto accessViaBracketOperator = [](auto&& dataStructure, auto index) {
   return dataStructure[index];
 };
 using AccessViaBracketOperator = decltype(accessViaBracketOperator);
 
-template <typename DataStructure, typename Accessor = AccessViaBracketOperator , typename index_type = uint64_t, typename difference_type = uint64_t>
+template <typename DataStructure, typename Accessor = AccessViaBracketOperator , typename index_type = uint64_t, typename DifferenceType = int64_t>
 struct IteratorForAccessOperator {
  private:
   const DataStructure* _vector = nullptr;
@@ -22,6 +22,7 @@ struct IteratorForAccessOperator {
  public:
   using iterator_category = std::random_access_iterator_tag;
   using value_type = std::remove_reference_t<std::invoke_result_t<Accessor, const DataStructure&, index_type>>;
+  using difference_type = DifferenceType;
 
   IteratorForAccessOperator(const DataStructure* vec, index_type index)
       : _vector{vec}, _index{index} {}
@@ -79,7 +80,7 @@ struct IteratorForAccessOperator {
   }
 
   difference_type operator-(const IteratorForAccessOperator& rhs) const {
-    return static_cast<difference_type>(_index) - rhs._index;
+    return static_cast<difference_type>(_index) - static_cast<difference_type>(rhs._index);
   }
 
   decltype(auto) operator*() const { return _accessor(*_vector, _index); }

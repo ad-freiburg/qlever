@@ -240,8 +240,8 @@ bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
   AD_CHECK_EQ(word[word.size() - 1], PREFIX_CHAR);
   auto prefixRange = prefix_range(word.substr(0, word.size() - 1));
   bool success = prefixRange.second > prefixRange.first;
-  range->_first = prefixRange.first;
-  range->_last = prefixRange.second - 1;
+  range->_first = prefixRange.first._id.get();
+  range->_last = prefixRange.second._id.get() - 1;
 
   if (success) {
     AD_CHECK_LT(range->_first, internalSize());
@@ -250,27 +250,53 @@ bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
   return success;
 }
 
-// _______________________________________________________________
+// _____________________________________________________________________________
 template <typename S, typename C>
-Id Vocabulary<S, C>::upper_bound(const string& word,
+template<typename StringType>
+Vocabulary<S, C>::SearchResult Vocabulary<S, C>::lower_bound(const StringType& word,
                                  const SortLevel level) const {
-  // TODO<joka921>: Also search in the external vocabulary.
-  return IdManager::toInternalId(std::upper_bound(_words.begin(), _words.end(), word,
-                                          getUpperBoundLambda(level)) -
-                         _words.begin());
+  auto internalSignedIdFromInternalVocab = _words.lower_bound( word,
+                                          getComparatorForSortLevel(level));
+  auto internalIdFromInternalVocab = ad_utility::InternalId{internalSignedIdFromInternalVocab.get()};
+  SearchResult resultInternal;
+  resultInternal._id = IdManager::fromInternalId(internalIdFromInternalVocab);
+  if (internalIdFromInternalVocab < _words.size()) {
+    resultInternal._word = getInternalWordFromId(internalIdFromInternalVocab);
+  }
+  if (_externalLiterals.size() == 0) {
+    return resultInternal;
+  }
+
+  SearchResult resultExternal;
+  auto [id, wordFromExternal] = _externalLiterals.lower_bound(word, level);
+  resultExternal._id = ad_utility::CompleteId{id};
+  resultExternal._word = std::move(wordFromExternal);
+  return std::max(resultInternal, resultExternal);
 }
 
 // _____________________________________________________________________________
 template <typename S, typename C>
-Id Vocabulary<S, C>::lower_bound(const string& word,
-                                 const SortLevel level) const {
-  // TODO<joka921>: Also search in the external vocabulary.
-  auto internalIdFromInternalVocab = std::lower_bound(_words.begin(), _words.end(), word,
-                                          getLowerBoundLambda(level)) -
-                         _words.begin();
+Vocabulary<S, C>::SearchResult Vocabulary<S, C>::upper_bound(const string& word,
+                                           const SortLevel level) const {
+  static_assert(std::random_access_iterator<typename decltype(_words)::StlConformingIterator>);
+  auto internalSignedIdFromInternalVocab = _words.upper_bound(word,
+                                                      getComparatorForSortLevel(level));
+  auto internalIdFromInternalVocab = ad_utility::InternalId{internalSignedIdFromInternalVocab.get()};
+  SearchResult resultInternal;
+  resultInternal._id = IdManager::fromInternalId(internalIdFromInternalVocab);
+  if (internalIdFromInternalVocab < _words.size()) {
+    resultInternal._word = getInternalWordFromId(internalIdFromInternalVocab);
+  }
+  if (_externalLiterals.size() == 0) {
+    return resultInternal;
+  }
 
-  auto externalId = std::lower_bound(_externalLiterals.begin(), _externalLiterals.end(), word, getLowerBoundLambda(level));
-  return std::max(externalId, IdManager::fromInternalId(internalIdFromInternalVocab));
+  SearchResult resultExternal;
+  // TODO<joka921> also support sortLevels for the external vocabulary
+  auto [id, wordFromExternal] = _externalLiterals.upper_bound(word, level);
+  resultExternal._id = ad_utility::CompleteId{id};
+  resultExternal._word = std::move(wordFromExternal);
+  return std::min(resultInternal, resultExternal);
 }
 
 // _____________________________________________________________________________
@@ -283,67 +309,60 @@ void Vocabulary<S, ComparatorType>::setLocale(const std::string& language,
       ComparatorType(language, country, ignorePunctuation);
 }
 
-/*
+// TODO<joka921> we need at() and we need to use it in upper_bound and
+// lower_bound.
 template <typename StringType, typename C>
 //! Get the word with the given id.
 //! lvalue for compressedString and const& for string-based vocabulary
-AccessReturnType_t<StringType> Vocabulary<StringType, C>::at(Id id) const {
-  AD_CHECK(IdManager::isInternalId(id));
-  id = IdManager::toInternalId(id);
+AccessReturnType_t<StringType> Vocabulary<StringType, C>::getInternalWordFromId(ad_utility::InternalId id) const {
   if constexpr (_isCompressed) {
-    return expandPrefix(_words[static_cast<size_t>(id)]);
+    return expandPrefix(_words[id]);
   } else {
-    return _words[static_cast<size_t>(id)];
+    // TODO<joka921> Make the uncompressed vocabulary use "ordinary" chars again.
+    return {reinterpret_cast<const char*>(_words[id].data()), _words[id].size()};
   }
 }
- */
 
 // _____________________________________________________________________________
 // TODO<joka921> return here;
 template <typename S, typename C>
 bool Vocabulary<S, C>::getId(const string& word, Id* id) const {
-  ad_utility::CompleteId extId;
-  bool success = _externalLiterals.getId(word, &extId);
-  if (success) {
-    *id = extId.get();
-    return true;
-  }
   // need the TOTAL level because we want the unique word.
-  auto internalId = lower_bound(word, SortLevel::TOTAL));
+  auto [completeId, actualWord] = lower_bound(word, SortLevel::TOTAL);
 
-  *id = internalToCompleteId(internalId).get();
-  // works for the case insensitive version because
-  // of the strict ordering.
-  return internalId < _words.size() && at(internalId) == word;
+  *id = completeId.get();
+  return actualWord == word;
 }
 
 // ___________________________________________________________________________
 template <typename S, typename C>
-std::pair<Id, Id> Vocabulary<S, C>::prefix_range(const string& prefix) const {
+std::pair<typename Vocabulary<S, C>::SearchResult, typename Vocabulary<S, C>::SearchResult> Vocabulary<S, C>::prefix_range(const string& prefix) const {
+  // TODO<joka921> fix this
   if (prefix.empty()) {
-    return {0, _words.size()};
+    throw std::runtime_error("Empty prefix filters are currently disabled");
+    //return {0, _words.size()};
   }
-  Id lb = lower_bound(prefix, SortLevel::PRIMARY);
+
+  auto lb = lower_bound(prefix, SortLevel::PRIMARY);
   auto transformed = _caseComparator.transformToFirstPossibleBiggerValue(
       prefix, SortLevel::PRIMARY);
 
-  auto pred = getLowerBoundLambda<decltype(transformed)>(SortLevel::PRIMARY);
-  auto ub = static_cast<Id>(
-      std::lower_bound(_words.begin(), _words.end(), transformed, pred) -
-      _words.begin());
+  auto ub = lower_bound(transformed, SortLevel::PRIMARY);
 
-  return {lb, ub};
+  return {std::move(lb), std::move(ub)};
 }
 
+// TODO<joka921> is this needed, if yes, fix it
 // _____________________________________________________________________________
 template <typename S, typename C>
 template <typename, typename>
 const std::optional<std::string_view> Vocabulary<S, C>::operator[](
-    Id id) const {
-  AD_CHECK(isInternalId(id));
-  id = toInternalId(id);
+    Id idExternal) const {
+  ad_utility::CompleteId idComplete{idExternal};
+  AD_CHECK(IdManager::isInternalId(idComplete));
+  auto id = IdManager::toInternalId(idComplete);
   if (id < _words.size()) {
-    return _words[static_cast<size_t>(id)];
+    return _words[id];
   } else {
     return std::nullopt;
   }
@@ -357,14 +376,17 @@ const std::optional<string> Vocabulary<S, C>::idToOptionalString(Id id) const {
   if (id == ID_NO_VALUE) {
     return std::nullopt;
   }
-  if (isInternalId(id)) {
-    id = toInternalId(id);
-    AD_CHECK(id < _words.size())
+
+  auto completeId = ad_utility::CompleteId(id);
+  if (IdManager::isInternalId(completeId)) {
+    auto internalId = IdManager::toInternalId(completeId);
+    AD_CHECK(internalId < _words.size())
     // internal, prefixCompressed word
-    return expandPrefix(_words[static_cast<size_t>(id)]);
+    // TODO<joka921> use `at` here again.
+    return expandPrefix(_words[internalId]);
   } else {
     // this word must be externalized
-    auto result = _externalLiterals[id];
+    auto result = _externalLiterals.idToOptionalString(id);
     AD_CHECK(result.has_value());
     return result;
   }
@@ -375,10 +397,14 @@ template <typename S, typename C>
 ad_utility::HashMap<typename Vocabulary<S, C>::Datatypes, std::pair<Id, Id>>
 Vocabulary<S, C>::getRangesForDatatypes() const {
   ad_utility::HashMap<Datatypes, std::pair<Id, Id>> result;
-  result[Datatypes::Float] = prefix_range(VALUE_FLOAT_PREFIX);
-  result[Datatypes::Date] = prefix_range(VALUE_DATE_PREFIX);
-  result[Datatypes::Literal] = prefix_range("\"");
-  result[Datatypes::Iri] = prefix_range("<");
+
+  auto convert = [](const auto& p) {
+    return std::pair{p.first._id.get(), p.second._id.get()};
+  };
+  result[Datatypes::Float] = convert(prefix_range(VALUE_FLOAT_PREFIX));
+  result[Datatypes::Date] = convert(prefix_range(VALUE_DATE_PREFIX));
+  result[Datatypes::Literal] = convert(prefix_range("\""));
+  result[Datatypes::Iri] = convert(prefix_range("<"));
 
   return result;
 };
@@ -393,8 +419,9 @@ void Vocabulary<S, C>::printRangesForDatatypes() {
       LOG(INFO) << idToOptionalString(range.first).value() << '\n';
       LOG(INFO) << idToOptionalString(range.second - 1).value() << '\n';
     }
-    if (range.second < _words.size()) {
-      LOG(INFO) << idToOptionalString(range.second).value() << '\n';
+    auto opt = idToOptionalString(range.second);
+    if (opt.has_value()) {
+      LOG(INFO) << opt.value() << '\n';
     }
 
     if (range.first > 0) {

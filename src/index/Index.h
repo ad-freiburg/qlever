@@ -727,9 +727,10 @@ class Index {
     AD_CHECK(foundQleverLangtag);
     // Use the PSO index to get the number of triples for each predicate and add
     // to the respective counter.
-    for (const auto& [key, value] : PSO()._meta.data()) {
+    for (const auto& [keyPlain, value] : PSO()._meta.data()) {
+      auto key = ad_utility::CompleteId(keyPlain);
       auto numTriples = value.getNofElements();
-      if (key == qleverLangtag || (key >= begin && key < end)) {
+      if (keyPlain== qleverLangtag || (key >= begin._id && key < end._id)) {
         addedTriples += numTriples;
       } else {
         actualTriples += numTriples;

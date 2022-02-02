@@ -456,7 +456,7 @@ void Index::calculateBlockBoundariesImpl(
     AD_CHECK(false);
   }
 
-  if (index._textVocab.size() == 0) {
+  if (index._textVocab.internalSize() == 0) {
     LOG(WARN) << "You are trying to call calculateBlockBoundaries on an empty "
                  "text vocabulary\n";
     return;
@@ -527,10 +527,10 @@ void Index::calculateBlockBoundariesImpl(
       prefixSortKey = nextPrefixSortKey;
     }
   }
-  blockBoundaryAction(index._textVocab.size() - 1);
+  blockBoundaryAction(index._textVocab.internalSize() - 1);
   numBlocks++;
   LOG(INFO) << "Done. #blocks = " << numBlocks
-            << ", #words = " << index._textVocab.size() << ".\n";
+            << ", #words = " << index._textVocab.internalSize() << ".\n";
 }
 // _____________________________________________________________________________
 void Index::calculateBlockBoundaries() {
@@ -548,7 +548,7 @@ void Index::printBlockBoundariesToFile(const string& filename) const {
      << "Format: <Last word of Block> <First word of next Block>\n";
   auto printBlockToFile = [this, &of](size_t i) {
     of << _textVocab[i].value() << " ";
-    if (i + 1 < _textVocab.size()) {
+    if (i + 1 < _textVocab.internalSize()) {
       of << _textVocab[i + 1].value() << '\n';
     }
   };
@@ -1079,7 +1079,7 @@ void Index::dumpAsciiLists(const vector<string>& lists,
       LOG(INFO) << "At block: " << i << std::endl;
       auto nofWordElems = tbmd._cl._nofElements;
       if (nofWordElems < 1000000) continue;
-      if (tbmd._firstWordId > _textVocab.size()) return;
+      if (tbmd._firstWordId > _textVocab.internalSize()) return;
       if (decGapsFreq) {
         AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "not yet impl.");
       } else {

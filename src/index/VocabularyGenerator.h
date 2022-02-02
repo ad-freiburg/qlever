@@ -112,7 +112,7 @@ class VocabularyMerger {
   struct LastWritten {
     std::string _lastWrittenWord;
     bool _wasExternalized = false;
-    uint64_t _id = 0;
+    ad_utility::CompleteId _id{0};
   };
   LastWritten _lastWritten;
   std::ofstream _outfile;

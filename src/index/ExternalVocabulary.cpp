@@ -26,6 +26,15 @@ std::optional<OffsetAndSize> ExternalVocabulary<Comp>::getOffsetAndSize(
   return OffsetAndSize{offset, nextOffset - offset};
 }
 
+template <class Comp>
+OffsetAndSize ExternalVocabulary<Comp>::getOffsetAndSizeForNthElement(size_t n) const {
+  AD_CHECK(n < size());
+  // TODO<joka921> :: This is duplicated code
+  const auto offset =_idsAndOffsets[n]._offset;
+  const auto nextOffset =_idsAndOffsets[n+1]._offset;
+  return OffsetAndSize {offset, nextOffset - offset};
+}
+
 // _____________________________________________________________________________
 template <class Comp>
 std::optional<string> ExternalVocabulary<Comp>::idToOptionalString(Id id) const {
@@ -43,6 +52,7 @@ std::optional<string> ExternalVocabulary<Comp>::idToOptionalString(Id id) const 
 // _____________________________________________________________________________
 template <class Comp>
 Id ExternalVocabulary<Comp>::binarySearchInVocab(const string& word) const {
+  // TODO<joka921> get rid of this.
   Id lower = 0;
   Id upper = size();
   while (lower < upper) {
@@ -116,6 +126,24 @@ template <class Comp>
 void ExternalVocabulary<Comp>::initFromFile(const string& file) {
   _file.open(file.c_str(), "r");
   _idsAndOffsets.open(file + _offsetSuffix);
+  AD_CHECK(size() > 0);
+  _highestId = (*(end() - 1))._id;
+}
+
+template <class Comp>
+ExternalVocabulary<Comp>::IdAndString ExternalVocabulary<Comp>::getNthElement(
+    size_t n) const {
+  AD_CHECK(n < idsAndOffsets().size());
+  auto offsetAndSize = getOffsetAndSizeForNthElement(n);
+
+  string result(offsetAndSize._size, '\0');
+  _file.read(result.data(), offsetAndSize._size,
+             offsetAndSize._offset);
+
+  // TODO<joka921> we can get the id by a single read above
+  auto id = idsAndOffsets()[n]._id;
+  return {id, std::move(result)};
+
 }
 
 template class ExternalVocabulary<TripleComponentComparator>;

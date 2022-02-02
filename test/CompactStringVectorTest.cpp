@@ -8,6 +8,8 @@
 #include <iterator>
 
 #include "../src/global/Pattern.h"
+#include "../src/index/ExternalVocabulary.h"
+#include "../src/index/StringSortComparator.h"
 
 std::vector<std::string> strings{"alpha", "b", "3920193",
                                  "<Qlever-internal-langtag>"};
@@ -82,6 +84,12 @@ TEST(CompactVectorOfStrings, Iterator) {
 TEST(CompactVectorOfStrings, IteratorCategory) {
   using It = CompactVectorOfStrings<char>::Iterator;
   static_assert(std::random_access_iterator<It>);
+}
+
+
+TEST(ExternalVocabulary, IteratorCategory) {
+  //using It = ExternalVocabulary<SimpleStringComparator>::StlConformingIterator;
+  //static_assert(std::random_access_iterator<It>);
 }
 
 TEST(CompactVectorOfStrings, Serialization) {

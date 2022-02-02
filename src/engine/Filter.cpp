@@ -485,7 +485,8 @@ void Filter::computeFilterFixedValue(
         // TODO<joka921>: handle Levels correctly;
         for (const auto& [l, r] : lhsRhsMap) {
           for (const auto& pref : r) {
-            prefixRanges[l].push_back(getIndex().getVocab().prefix_range(pref));
+            auto prefixRange = getIndex().getVocab().prefix_range(pref);
+            prefixRanges[l].emplace_back(prefixRange.first._id.get(), prefixRange.second._id.get());
           }
         }
         // remove overlap in the ranges
@@ -665,9 +666,9 @@ void Filter::computeResultFixedValue(
       // TODO<joka921> which level do we want for these filters
       auto level = TripleComponentComparator::Level::QUARTERNARY;
       if (_type == SparqlFilter::EQ || _type == SparqlFilter::NE) {
-        rhs = getIndex().getVocab().lower_bound(rhs_string, level);
+        rhs = getIndex().getVocab().lower_bound(rhs_string, level)._id.get();
         rhs_upper_for_range =
-            getIndex().getVocab().upper_bound(rhs_string, level);
+            getIndex().getVocab().upper_bound(rhs_string, level)._id.get();
         apply_range_filter = true;
         range_filter_inverse = _type == SparqlFilter::NE;
       } else if (_type == SparqlFilter::GE) {

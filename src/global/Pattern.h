@@ -163,7 +163,8 @@ class CompactVectorOfStrings {
    * @return A std::pair containing a pointer to the data, and the number of
    *         elements stored at the pointers target.
    */
-  const value_type operator[](index_type i) const {
+  const value_type operator[](index_type index) const {
+    auto i = indexTypeToInt(index);
     offset_type offset = _offsets[i];
     const data_type* ptr = _data.data() + offset;
     size_t size = _offsets[i + 1] - offset;
@@ -181,6 +182,29 @@ class CompactVectorOfStrings {
 
   using const_iterator = Iterator;
 
+
+  using Accessor = decltype([](auto&& compactVector, auto index) {
+    return compactVector[index_type{index}];
+      });
+  using StlConformingIterator = ad_utility::IteratorForAccessOperator<CompactVectorOfStrings, Accessor>;
+  StlConformingIterator stlBegin() const {
+    return {this, 0};
+  }
+
+  StlConformingIterator stlEnd() const {
+    return {this, indexTypeToInt(size())};
+  }
+
+  index_type upper_bound(auto&& needle, auto&& comparator) const {
+    auto it = std::upper_bound(stlBegin(), stlEnd(), needle, comparator);
+    return index_type(it - stlBegin());
+  }
+
+  index_type lower_bound(auto&& needle, auto&& comparator) const {
+    auto it = std::lower_bound(stlBegin(), stlEnd(), needle, comparator);
+    return index_type(it - stlBegin());
+  }
+
   // Allow serialization via the ad_utility::serialization interface.
   template <typename Serializer>
   friend void serialize(Serializer& s, CompactVectorOfStrings& c) {
@@ -190,6 +214,14 @@ class CompactVectorOfStrings {
   }
 
  private:
+  static auto indexTypeToInt(index_type t) {
+    // TODO<joka921> proper requirements.
+    if constexpr (requires(index_type tt) {t.get();}) {
+      return t.get();
+    } else {
+      return t;
+    }
+  }
   std::vector<data_type> _data;
   std::vector<offset_type> _offsets;
 };

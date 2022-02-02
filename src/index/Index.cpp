@@ -114,7 +114,7 @@ void Index::createFromFile(const string& filename) {
   auto internalVocabularyAction = [&wordWriter](const auto& word) {
     wordWriter.push(word.data(), word.size());
   };
-  auto wordReader = decltype(_vocab)::makeWordDiskIterator(vocabFile);
+  auto wordReader = decltype(_vocab)::makeUncompressedWordDiskIterator(vocabFile);
   Vocabulary<CompressedString, TripleComponentComparator>::prefixCompressFile(
       std::move(wordReader), prefixes, internalVocabularyAction);
   LOG(DEBUG) << "Finished writing compressed vocabulary" << std::endl;
@@ -314,7 +314,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
                                                           std::string_view b) {
       return (*cmp)(a, b, decltype(_vocab)::SortLevel::TOTAL);
     };
-    decltype(_vocab)::WordWriter wordWriter{_onDiskBase + ".vocabulary"};
+    decltype(_vocab)::UncompressedWordWriter wordWriter{_onDiskBase + ".vocabulary"};
     auto internalVocabularyAction = [&wordWriter](const auto& word) {
       wordWriter.push(word.data(), word.size());
     };
@@ -608,7 +608,7 @@ void Index::addPatternsToExistingIndex() {
       _onDiskBase + ".index.patterns", _hasPredicate, _hasPattern, _patterns,
       _fullHasPredicateMultiplicityEntities,
       _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
-      _maxNumPatterns, langPredLowerBound, langPredUpperBound, _SPO);
+      _maxNumPatterns, langPredLowerBound._id.get(), langPredUpperBound._id.get(), _SPO);
 }
 
 // _____________________________________________________________________________
@@ -953,7 +953,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   _vocab.readFromFile(_onDiskBase + ".vocabulary",
                       _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
 
-  _totalVocabularySize = _vocab.size() + _vocab.getExternalVocab().size();
+  _totalVocabularySize = _vocab.internalSize() + _vocab.getExternalVocab().size();
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << _totalVocabularySize << std::endl;
   _PSO.loadFromDisk(_onDiskBase);

@@ -37,7 +37,7 @@ requires(numBytesInternal + numBytesPerBlockExternal <= 8 &&
 
   CompleteId getNextInternalId() {
     if (!isInternalId(nextId)) {
-      nextId = (fromInternalId(toInternalId(nextId) + 1));
+      nextId = (fromInternalId(toInternalId(nextId) + InternalId{1}));
     }
     return getNextExternalId();
   }
@@ -57,22 +57,45 @@ requires(numBytesInternal + numBytesPerBlockExternal <= 8 &&
 
 
   constexpr static InternalId  toInternalId(CompleteId id) {
-    return id >> (numBytesPerBlockExternal * 8);
+    return InternalId{id.get() >> (numBytesPerBlockExternal * 8)};
   }
 
   constexpr static CompleteId fromInternalId(InternalId id) {
-    return id << (numBytesPerBlockExternal * 8);
+    return CompleteId{get(id) << (numBytesPerBlockExternal * 8)};
   }
   constexpr static bool isInternalId(CompleteId id) {
     // Bits set to one in the range where the external part is stored.
-    constexpr uint64_t mask =
-        (~uint64_t(0)) >> (64 - numBytesPerBlockExternal * 8);
-    return !(mask & id);
+    constexpr CompleteId mask =
+        CompleteId((~uint64_t(0)) >> (64 - numBytesPerBlockExternal * 8));
+    return ! get(mask & id);
+  }
+
+ private:
+  static auto get(auto t) {
+    // TODO<joka921> proper requirements.
+    if constexpr (requires() {t.get();}) {
+      return t.get();
+    } else {
+      return t;
+    }
   }
 };
 
 using InternalId = fluent::NamedType<uint64_t, struct InternalIdTag, fluent::Arithmetic>;
-using InternalUnsignedId = fluent::NamedType<int64_t, struct InternalUnsignedIdTag, fluent::Arithmetic>;
+struct InternalSignedId : fluent::NamedType<int64_t, struct InternalSignedIdTag, fluent::Arithmetic> {
+  using Base = fluent::NamedType<int64_t, struct InternalSignedIdTag, fluent::Arithmetic>;
+  // Inherit constructors
+  using Base::Base;
+  InternalSignedId(InternalId id) : Base{id.get()} {
+
+
+  }
+  InternalSignedId(Base b) : Base{b} {}
+  operator InternalId() const {
+    return InternalId{get()};
+  }
+};
+
 using CompleteId = fluent::NamedType<uint64_t, struct CompleteIdTag, fluent::Arithmetic>;
 using DefaultIdManager = InternalExternalIdManager<4, 3, CompleteId, InternalId>;
 }  // namespace ad_utility

@@ -42,7 +42,7 @@ class ExternalVocabulary {
  public:
   struct IdAndString {
     Id _id;
-    std::string _string;
+    std::optional<std::string> _string;
   };
   void buildFromVector(const vector<string>& v, const string& fileName);
   void buildFromTextFile(const string& textFileName, const string& outFileName);
@@ -88,6 +88,33 @@ class ExternalVocabulary {
     return {this, size()};
   }
 
+  // Get the id that is the largest id contained in this external vocabulary + 1
+  Id getUpperBoundForIds () const {
+    return _highestId + 1;
+  }
+
+  using SortLevel = typename StringComparator::Level;
+
+  // __________________________________________________________________________
+  IdAndString upper_bound(const auto& word, const SortLevel level) const {
+    auto it = std::upper_bound(begin(), end(), word, getComparatorForSortLevel(level));
+    if (it == end()) {
+      return {getUpperBoundForIds(), std::nullopt};
+    } else {
+      return *it;
+    }
+  }
+
+  // _________________________________________________________________________
+  IdAndString lower_bound(const auto& word, const SortLevel level) const {
+    auto it = std::lower_bound(begin(), end(), word, getComparatorForSortLevel(level));
+    if (it == end()) {
+      return {getUpperBoundForIds(), std::nullopt};
+    } else {
+      return *it;
+    }
+  }
+
  private:
   mutable ad_utility::File _file;
   ad_utility::MmapVectorView<IdAndOffset> _idsAndOffsets;
@@ -95,10 +122,26 @@ class ExternalVocabulary {
   const auto& idsAndOffsets() const { return _idsAndOffsets; }
 
   StringComparator _caseComparator;
+  Id _highestId = 0;
+
+
+  auto getComparatorForSortLevel(const SortLevel level) const {
+    auto getString = [&](const auto& input) {
+      if constexpr( ad_utility::isSimilar<decltype(input), IdAndString>) {
+        AD_CHECK(input._string.has_value());
+        return input._string.value();
+      } else {
+        return input;
+      }
+    };
+    return [this, level, getString](auto&& a, auto&& b) {
+      return this->_caseComparator(getString(a), getString(b), level); };
+  }
 
   Id binarySearchInVocab(const string& word) const;
 
   std::optional<OffsetAndSize> getOffsetAndSize(Id id) const;
+  OffsetAndSize getOffsetAndSizeForNthElement(Id id) const;
 
   template <class Iterable>
   void buildFromIterable(Iterable&& iterable, const string& filename);
