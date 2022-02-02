@@ -1,6 +1,7 @@
 ---
 name: scientists
 queries:
+
   - query: relativ-star-scientists
     type: text
     sparql: |
@@ -23,6 +24,8 @@ queries:
       - contains_row: ["<Albert_Einstein>", null, null] # null cells are ignored
       - contains_row: ["<Luís_Lindley_Cintra>", null, null] # Test Unicode
       - order_numeric: {"dir" : "DESC", "var": "SCORE(?t)"}
+
+
   - query: relativ-star-scientists-from-ulm  # should use TextOperationWithFilter
     type: text
     sparql: |
@@ -43,6 +46,8 @@ queries:
         - "He realized, however, that the principle of relativity could also be extended
           to gravitational fields, and with his subsequent theory of gravitation in 1916,
           he published a paper on general relativity."
+
+
   - query: algo-star-female-scientists
     type: text
     sparql: |
@@ -59,6 +64,8 @@ queries:
       - selected: ["?x", "SCORE(?t)"]
       - contains_row: ["<Grete_Hermann>"]
       - order_numeric: {"dir": "DESC", "var" : "SCORE(?t)"}
+
+
   - query: algor-start-female-born-before-1940
     type: text
     sparql: |
@@ -80,6 +87,8 @@ queries:
         - "1901-03-02T00:00:00"
         - 1
         - "Hermann's algorithm for primary decomposition is still in use now."
+
+
   - query: scientists-from-new-york
     type: no-text
     sparql: |
@@ -92,6 +101,8 @@ queries:
       - num_rows: 280
       - selected: ["?x"]
       - contains_row: ["<Andrew_S._Tanenbaum>"]
+
+
   - query: scientists-married-to-scientists
     type: no-text
     sparql: |
@@ -107,6 +118,8 @@ queries:
       - selected: ["?x", "?y"]
       - contains_row: ["<Albert_Einstein>", "<Mileva_Marić>"]
       - order_string: {"dir": "ASC", "var": "?x"}
+
+
   - query: scientists-count-group-by-place-of-birth
     type: no-text
     sparql: |
@@ -122,6 +135,8 @@ queries:
       - selected: ["?count", "?place"]
       - contains_row: [280, "<New_York_City>"]
       - order_numeric: {"dir": "DESC", "var": "?count"}
+
+
   - query: scientists-order-by-aggregate-count
     type: no-text
     sparql: |
@@ -137,6 +152,8 @@ queries:
 #- num_rows : 5295
       - selected: ["?place", "?count2"]
       - order_numeric: {"dir": "DESC", "var": "?count2"}
+
+
   - query: scientists-order-by-aggregate-avg
     type: no-text
     sparql: |
@@ -152,6 +169,8 @@ queries:
       - num_rows: 209
       - selected: ["?profession", "?avg2"]
       - order_numeric: {"dir": "ASC", "var": "?avg2"}
+
+
   - query: group-by-profession-average-height
     type: no-text
     sparql: |
@@ -167,6 +186,8 @@ queries:
       - selected: ["?avg", "?profession"]
       - contains_row: [null, "<Architect>"]
       - order_numeric: {"dir": "DESC", "var": "?avg"}
+
+
   - query: person-order-by-height
     type: no-text
     sparql: |
@@ -177,6 +198,8 @@ queries:
       ORDER BY DESC(?height)
     checks:
       - order_numeric: {"dir": "DESC", "var": "?height"}
+
+
   - query: group-by-gender-average-height
     type: no-text
     sparql: |
@@ -194,6 +217,8 @@ queries:
 #Float values are only compared to limited precision
       - res: [[1.8, "<Male>"], [1.7, "<Female>"]]
       - order_numeric: {"dir": "DESC", "var": "?avg"}
+
+
   - query : pattern-trick
     type: no-text
     sparql: |
@@ -209,6 +234,8 @@ queries:
       - selected: ["?r", "?count"]
       - contains_row: ["<Religion>", 1185]
       - order_numeric: {"dir": "DESC", "var": "?count"}
+
+
   - query : pattern-trick-without-has-predicate
     type: no-text
     sparql: |
@@ -228,6 +255,7 @@ queries:
       - selected: ["?r", "?count"]
       - contains_row: ["<Religion>", 1185]
       - order_numeric: {"dir": "DESC", "var": "?count"}
+
   - query : has-predicate-full
     type: no-text
     sparql: |
@@ -240,6 +268,8 @@ queries:
       - num_cols: 2
       - selected: ["?entity", "?relation"]
       - contains_row: ["<Alan_Fersht>", "<Leader_of>"]
+
+
   - query : has-predicate-subquery-subject
     type: no-text
     sparql: |
@@ -252,6 +282,8 @@ queries:
       - num_cols: 2
       - selected: ["?entity", "?r"]
       - contains_row: ["<Geographer>", "<Profession>"]
+
+
   - query : full-osp-scan
     type: no-text
     sparql: |
@@ -268,6 +300,8 @@ queries:
       - contains_row: ["<Named_after>"]
       - contains_row: ["<Influenced_By>"]
       - contains_row: ["<Production_staff>"]
+
+
   - query : optional-spouse
     type: no-text
     sparql: |
@@ -282,6 +316,8 @@ queries:
       - selected: ["?x", "?y"]
       - contains_row: ["<Aaron_Antonovsky>","<Helen_Antonovsky>"]
       - contains_row: ["<Abraham_Zelmanov>", null]
+
+
   - query : optional-spouse-group-concat
     type: no-text
     sparql: |
@@ -299,6 +335,8 @@ queries:
       - contains_row: ["<Abraham_Zelmanov>", ""]
       - contains_row: ["<Abraham_Pais>","<Ida_Nicolaisen>;<Lila_Lee_Pais>"]
       - contains_row: ["<Aafia_Siddiqui>","<Amjad_Mohammed_Khan>;<Ammar_al-Baluchi>"]
+
+
   - query: giant-int-scientists
     type: no-text
     sparql: |
@@ -310,6 +348,8 @@ queries:
     checks:
       - res: [["<Granville_Woods>", 2.134]]
       - num_rows: 1
+
+
   - query: tall-float-scientists
     type: no-text
     sparql: |
@@ -323,6 +363,8 @@ queries:
       - contains_row: ["<Andrew_Hogue>", 1.956]
       - num_rows: 52
       - num_cols: 2
+
+
   - query: dwarf-float-scientists
     type: no-text
     sparql: |
@@ -334,6 +376,8 @@ queries:
     checks:
       - res: [["<Zelda_Rubinstein>", 1.29]]
       - num_rows: 1
+
+
   - query : regex-initials-a-e
     type: no-text
     sparql: |
@@ -349,6 +393,8 @@ queries:
       - contains_row: ["<Abraham_Esau>"]
       - contains_row: ["<Albert_Einstein>"]
       - contains_row: ["<Alfred_Einhorn>"]
+
+
   - query : regex-lastname-stein
     type: no-text
     sparql: |
@@ -365,6 +411,8 @@ queries:
       - contains_row: ["<Albert_Einstein>"]
       - contains_row: ["<Albert_Zylberstein>"]
       - contains_row: ["<Greg_Stein>"]
+
+
   - query : regex-albert-physics-award
     type: no-text
     sparql: |
@@ -381,6 +429,8 @@ queries:
       - contains_row: ["<Albert_Einstein>", "<Nobel_Prize_in_Physics>"]
       - contains_row: ["<Albert_Fert>", "<Wolf_Prize_in_Physics>"]
       - contains_row: ["<Albert_Overhauser>", "<National_Medal_of_Science_for_Physical_Science>"]
+
+
   - query : having-height
     type: no-text
     sparql: |
@@ -395,6 +445,8 @@ queries:
       - num_cols: 2
       - selected: ["?count", "?height"]
       - contains_row: ["5", "1.803"]
+
+
   - query : having-predicate-religion
     type: no-text
     sparql: |
@@ -409,6 +461,8 @@ queries:
       - num_cols: 2
       - selected: ["?predicate", "?count"]
       - contains_row: ["<Religion>", "5"]
+
+
   - query : pattern-trick-automatic-having
     type: no-text
     sparql: |
@@ -423,6 +477,8 @@ queries:
       - num_cols: 2
       - selected: ["?predicate", "?count"]
       - contains_row: ["<Gender>", "18589"]
+
+
   - query : distinct-order-by-check
     type: no-text
     sparql: |
@@ -438,6 +494,8 @@ queries:
       - selected: ["?scientist", "?height"]
       - contains_row: ["<Granville_Woods>", '2.1336']
       - contains_row: ["<Charles_Bradley_(Chemist)>", '1.98']
+
+
   - query : having-avg-height
     type: no-text
     sparql: |
@@ -454,6 +512,8 @@ queries:
       - selected: ["?profession", "?avg"]
       - contains_row: ["<Anatomist>", '1.94']
       - contains_row: ["<Peace_activist>", '1.91']
+
+
   - query : having-number-of-awards
     type: no-text
     sparql: |
@@ -470,6 +530,8 @@ queries:
       - selected: ["?profession", "?count"]
       - contains_row: ["<Chemist>", '603']
       - contains_row: ["<Professor>", '352']
+
+
   - query : having-group-concat
     type: no-text
     sparql: |
@@ -484,6 +546,8 @@ queries:
       - num_cols: 2
       - selected: ["?profession", "?awards"]
       - contains_row: ["<Apothecary>", '<Victoria_Cross>']
+
+
   - query : prefix-filter-on-group-concat
     type: no-text
     sparql: |
@@ -499,6 +563,8 @@ queries:
       - selected: ["?s", "?awards"]
       - contains_row: ['<Eric_Betzig>', '<Nobel_Prize_in_Chemistry>']
       - contains_row: ['<Alan_MacDiarmid>', '<Nobel_Prize_in_Chemistry> <Rutherford_Medal>']
+
+
   - query : union-partial-merge
     type: no-text
     sparql: |
@@ -514,6 +580,8 @@ queries:
       - selected: ["?a", "?h"]
       - contains_row: ['<Sophie_Hosking>', '1.65']
       - contains_row: ['<Stuart_Kornfeld>', null]
+
+
   - query : union-full-merge
     type: no-text
     sparql: |
@@ -528,7 +596,9 @@ queries:
       - selected: ["?a", "?t"]
       - contains_row: ['<Carl_Sagan>', '1.8']
       - contains_row: ['<Noreena_Hertz>', '<Judaism>']
-  - query : duplicate-alias 
+
+
+  - query : duplicate-alias
     type: no-text
     sparql: |
       SELECT ?object (COUNT(?object) AS ?count) WHERE {
@@ -542,7 +612,9 @@ queries:
       - selected: ["?object", "?count"]
       - contains_row: ['<Inventor>', '1616']
       - contains_row: ['<Astrologer>', '43']
-  - query : simple-subquery 
+
+
+  - query : simple-subquery
     type: no-text
     sparql: |
       SELECT ?a ?h WHERE {
@@ -560,7 +632,9 @@ queries:
       - selected: ["?a", "?h"]
       - contains_row: ['<Daryl_Hannah>', 1.78]
       - contains_row: ['<Marissa_Mayer>', 1.73]
-  - query : subquery-profession-avg-height 
+
+
+  - query : subquery-profession-avg-height
     type: no-text
     sparql: |
       SELECT ?a ?o ?h ?avg WHERE {
@@ -580,7 +654,9 @@ queries:
       - selected: ["?a", "?o", "?h", "?avg"]
       - contains_row: ['<Steve_Backshall>', '<Actor>', 1.8, 1.76627]
       - contains_row: ['<Carl_Sagan>', '<Astrobiologist>', 1.8, 1.8]
-  - query : filter-on-variable-columns 
+
+
+  - query : filter-on-variable-columns
     type: no-text
     # The inner subquery is for making the SAMPLE() deterministic
     sparql: |
@@ -599,7 +675,9 @@ queries:
       - selected: ["?p", "?a1", "?a2", "?a3", "?a4", "?avg"]
       - contains_row: ['<Cameraman>', '<Chris_Packham>', '<Chris_Packham>', '<Chris_Packham>', '<Chris_Packham>', 1.83]
       - contains_row: ['<Lawyer>', '<Thomas_Jefferson>', '<Thomas_Jefferson>', '<Thomas_Jefferson>', '<Thomas_Jefferson>', 1.8056]
-  - query : count-available-predicates-on-variable-columns 
+
+
+  - query : count-available-predicates-on-variable-columns
     type: no-text
     sparql: |
       SELECT ?p (COUNT(?p) as ?count) WHERE {
@@ -618,6 +696,8 @@ queries:
       - selected: ["?p", "?count"]
       - contains_row: ["<Film_appeared_in>", 56] 
       - contains_row: ["<Patent>", 2]
+
+
   - query : count-available-predicates-on-single-entity
     type: no-text
     sparql: |
@@ -631,7 +711,9 @@ queries:
       - selected: ["?p", "?count"]
       - contains_row: ["<Hall_of_fame_induction>", 1] 
       - contains_row: ["<Weight>", 1]
-  - query : property_path_trans_and_or 
+
+
+  - query : property_path_trans_and_or
     type: no-text
     sparql: |
       SELECT ?b WHERE {
@@ -644,6 +726,8 @@ queries:
       - contains_row: ["<Politician>"] 
       - contains_row: ["<Character_Occupation>"] 
       - contains_row: ["1.87"]
+
+
   - query : property_path_inverse
     type: no-text
     sparql: |
@@ -656,6 +740,8 @@ queries:
       - selected: ["?b"]
       - contains_row: ["<Albert_Heim>"] 
       - contains_row: ["<Walter_Alvarez>"] 
+
+
   - query: birth-place-group-count-order
     type: no-text
     sparql: |
@@ -673,7 +759,9 @@ queries:
       - contains_row: ["<Aachen>", 8]
       - contains_row: ["<Aarhus>", 6]
       - order_numeric: {"dir" : "ASC", "var": "?count"}
-  - query: simple-values 
+
+
+  - query: simple-values
     type: no-text
     sparql: |
       SELECT ?a WHERE {
@@ -684,31 +772,8 @@ queries:
       - num_rows: 1
       - selected: ["?a"]
       - contains_row: ["<Albert_Einstein>"]
-  - query: values-empty-join 
-    type: no-text
-    sparql: |
-      SELECT ?a ?b ?c WHERE {
-        VALUES ?a { <Albert_Einstein>}
-        VALUES (?a ?b) {
-          (<Marie_Curie> <Joseph_Jacobson>) (<Freiherr> <Lord_of_the_Isles>)
-        }
-      }
-    checks:
-      - num_cols: 3
-      - num_rows: 0
-      - selected: ["?a", "?b", "?c"]
-  - query: nonexisting-values
-    type: no-text
-    sparql: |
-      SELECT ?a WHERE {
-        VALUES ?a {"obscure Literal"@xf <Albert_Einstein> <Non_Exisiting_Scientist>}
-      }
-    checks:
-      - num_cols: 1
-      - num_rows: 1
-      - selected: ["?a"]
-      - contains_row: ["<Albert_Einstein>"]
-      - contains_warning: ["The word \"obscure Literal\"@xf", "The word <Non_Exisiting", "Ignored 2 rows"]
+
+
   - query: values-empty-join
     type: no-text
     sparql: |
@@ -722,6 +787,37 @@ queries:
       - num_cols: 3
       - num_rows: 0
       - selected: ["?a", "?b", "?c"]
+
+
+  - query: nonexisting-values
+    type: no-text
+    sparql: |
+      SELECT ?a WHERE {
+        VALUES ?a {"obscure Literal"@xf <Albert_Einstein> <Non_Exisiting_Scientist>}
+      }
+    checks:
+      - num_cols: 1
+      - num_rows: 1
+      - selected: ["?a"]
+      - contains_row: ["<Albert_Einstein>"]
+      - contains_warning: ["The word \"obscure Literal\"@xf", "The word <Non_Exisiting", "Ignored 2 rows"]
+
+
+  - query: values-empty-join
+    type: no-text
+    sparql: |
+      SELECT ?a ?b ?c WHERE {
+        VALUES ?a { <Albert_Einstein>}
+        VALUES (?a ?b) {
+          (<Marie_Curie> <Joseph_Jacobson>) (<Freiherr> <Lord_of_the_Isles>)
+        }
+      }
+    checks:
+      - num_cols: 3
+      - num_rows: 0
+      - selected: ["?a", "?b", "?c"]
+
+
   - query: values-join
     type: no-text
     sparql: |
@@ -738,6 +834,8 @@ queries:
       - num_rows: 1
       - selected: ["?a", "?b"]
       - contains_row: ["<Charles,_Prince_of_Wales>", "<Lord_of_the_Isles>"]
+
+
   - query : filter-depending-on-last-optional
     type: no-text
     sparql: |
@@ -753,6 +851,8 @@ queries:
       - contains_row: ["<Albert_Einstein>", "<Nobel_Prize_in_Physics>"]
       - contains_row: ["<Al_Gore>", "<Nobel_Peace_Prize>"]
       - contains_row: ["<Dennis_Gabor>", "<Nobel_Prize_in_Physics>"]
+
+
   - query : filter-depending-on-last-optional-reordered
     type: no-text
     sparql: |
@@ -768,7 +868,9 @@ queries:
       - contains_row: ["<Albert_Einstein>", "<Nobel_Prize_in_Physics>"]
       - contains_row: ["<Al_Gore>", "<Nobel_Peace_Prize>"]
       - contains_row: ["<Dennis_Gabor>", "<Nobel_Prize_in_Physics>"]
-  - query : minus-biologists 
+
+
+  - query : minus-biologists
     type: no-text
     sparql: |
       SELECT ?a WHERE {
@@ -783,6 +885,9 @@ queries:
       - selected: ["?a"]
       - contains_row: ["<Barney_Pell>"]
       - contains_row: ["<Duc_Pham>"]
+
+
+
   - query : prefix-filter-disjunction
     type: no-text
     sparql: |
@@ -798,6 +903,8 @@ queries:
       - contains_row: ["<Albert_Fert>"]
       - contains_row: ["<Albert_Overhauser>"]
       - contains_row: ["<Marie_Curie>"]
+
+
   - query : prefix-filter-disjunction-different-lhs
     type: no-text
     sparql: |
@@ -815,6 +922,7 @@ queries:
       - contains_row: [ "<Albert_Overhauser>", "<National_Medal_of_Science_for_Physical_Science>" ]
       - contains_row: [ "<Andre_Geim>", "<Nobel_Prize_in_Physics>" ]
 
+
   - query: bind-rename
     type: no-text
     sparql: |
@@ -831,6 +939,8 @@ queries:
       - selected: [ "?x", "?z" ]
       - contains_row: [ "<Albert_Einstein>", "<Mileva_Marić>" ]
       - order_string: { "dir": "ASC", "var": "?x" }
+
+
   - query: bind-integer-constant
     type: no-text
     sparql: |
@@ -848,6 +958,25 @@ queries:
       - contains_row: [ "<Albert_Einstein>", "<Mileva_Marić>", 42 ]
       - order_string: { "dir": "ASC", "var": "?x" }
 
+
+  - query: bind-integer-constant
+    type: no-text
+    sparql: |
+      SELECT * WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Spouse_(or_domestic_partner)> ?y .
+          ?y <is-a> <Scientist> .
+          FILTER(?x < ?y) .
+          BIND(42 AS ?z)
+      } ORDER BY ASC(?x)
+    checks:
+      - num_cols: 3
+      - num_rows: 97
+      - selected: [ "?x", "?y", "?z" ]
+      - contains_row: [ "<Albert_Einstein>", "<Mileva_Marić>", 42 ]
+      - order_string: { "dir": "ASC", "var": "?x" }
+
+
   - query: bind-entity-constant
     type: no-text
     sparql: |
@@ -864,6 +993,8 @@ queries:
       - selected: [ "?x", "?y", "?z" ]
       - contains_row: [ "<Albert_Einstein>", "<Mileva_Marić>", "<Al_Gore>" ]
       - order_string: { "dir": "ASC", "var": "?x" }
+
+
   - query: bind-entity-constant
     type: no-text
     sparql: |
@@ -882,3 +1013,91 @@ queries:
       - selected: [ "?x", "?y", "?sum" ]
       - contains_row: [ "<Albert_Einstein>", "<Mileva_Marić>", 42.0 ]
       - order_string: { "dir": "ASC", "var": "?x" }
+
+
+  - query : select_asterisk_prefix-filter-disjunction
+    type: no-text
+    sparql: |
+      SELECT *  WHERE {
+                ?s <is-a> <Scientist> .
+                FILTER ((regex(?s, "^<Albert") || regex(?s, "^<Marie"))) .
+            }
+    checks:
+      - num_rows: 106
+      - num_cols: 1
+      - selected: ["?s"]
+      - contains_row: ["<Albert_Einstein>"]
+      - contains_row: ["<Albert_Fert>"]
+      - contains_row: ["<Albert_Overhauser>"]
+      - contains_row: ["<Marie_Curie>"]
+
+
+  - query : select_asterisk_union-full-merge
+    type: no-text
+    sparql: |
+      SELECT * WHERE {
+        {?a <Height> ?t .}
+        UNION 
+        {?a <Religion> ?t .}
+      }
+    checks:
+      - num_rows: 1488
+      - num_cols: 2
+      - selected: ["?a", "?t"]
+      - contains_row: ['<Carl_Sagan>', '1.8']
+      - contains_row: ['<Noreena_Hertz>', '<Judaism>']
+
+
+  - query: select_asterisk_algo-star-female-scientists
+    type: text
+    sparql: |
+      SELECT * WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Gender> <Female> .
+          ?t ql:contains-entity ?x .
+          ?t ql:contains-word "algo*"
+      }
+    checks:
+      - num_cols: 2
+      - num_rows: 11
+      - selected: ["?x", "?t"]
+      - contains_row: ["<Grete_Hermann>"]
+
+
+  - query : select_asterisk_regex-lastname-stein
+    type: no-text
+    sparql: |
+      SELECT * WHERE {
+          ?s <Profession> <Scientist> .
+          ?s <is-a> <Person> .
+          FILTER regex(?s, "^<[a-z]*_[a-z]*stein[a-z]*>$", "i")
+      }
+    checks:
+      - num_rows: 68
+      - num_cols: 1
+      - selected: ["?s"]
+      - contains_row: ["<Adin_Steinsaltz>"]
+      - contains_row: ["<Albert_Einstein>"]
+      - contains_row: ["<Albert_Zylberstein>"]
+      - contains_row: ["<Greg_Stein>"]
+
+
+  - query : select_asterisk_pattern-trick-without-has-predicate
+    type: no-text
+    sparql: |
+      SELECT * WHERE {
+        {
+          SELECT DISTINCT ?a ?r WHERE {
+            ?a <is-a> <Scientist> .
+            ?a ?r ?o .
+          }
+        }
+      }
+    checks:
+      #The query returns to many rows, the current limit is 4096
+      - num_cols: 2
+      - selected: ["?a", "?r"]
+      - contains_row: ["<Aafia_Siddiqui>","<Religion>"]
+      - contains_row: ["<Aban_Marker_Kabraji>","<Religion>"]
+      - contains_row: ["<Abd_al-Rahman_al-Sufi>","<Religion>"]
+      - contains_row: ["<Aaldert_Wapstra>","<Place_of_birth>"]

@@ -128,8 +128,3 @@ TEST(LRUCacheTest, testDecreasingCapacity) {
   ASSERT_FALSE(cache["4"]);
 }
 }  // namespace ad_utility
-
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

@@ -128,8 +128,3 @@ TEST(Vocabulary, PrefixFilter) {
   ASSERT_EQ(x.first._id.get(), 1u);
   ASSERT_EQ(x.second._id.get(), 2u);
 }
-
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

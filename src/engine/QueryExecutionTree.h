@@ -114,8 +114,8 @@ class QueryExecutionTree {
 
   template <ExportSubFormat format>
   ad_utility::stream_generator::stream_generator generateResults(
-      const SelectedVarsOrAsterisk& selectedVarsOrAsterisk,
-      size_t limit = MAX_NOF_ROWS_IN_RESULT, size_t offset = 0) const;
+      const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+      size_t offset) const;
 
   // Generate an RDF graph in turtle format for a CONSTRUCT query.
   ad_utility::stream_generator::stream_generator writeRdfGraphTurtle(
@@ -265,12 +265,6 @@ class QueryExecutionTree {
   [[nodiscard]] std::optional<std::pair<std::string, const char*>>
   toStringAndXsdType(Id id, ResultTable::ResultType type,
                      const ResultTable& resultTable) const;
-
-  template <ExportSubFormat format>
-  ad_utility::stream_generator::stream_generator writeTable(
-      size_t from, size_t upperBound,
-      vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices,
-      shared_ptr<const ResultTable> resultTable = nullptr) const;
 
   // Generate an RDF graph for a CONSTRUCT query.
   cppcoro::generator<StringTriple> generateRdfGraph(

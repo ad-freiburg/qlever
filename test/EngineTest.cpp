@@ -233,8 +233,3 @@ TEST(EngineTest, distinctTest) {
   ASSERT_EQ(inp[2], res[1]);
   ASSERT_EQ(inp[3], res[2]);
 }
-
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
