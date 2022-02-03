@@ -51,6 +51,8 @@ include_directories(third_party/antlr4/runtime/Cpp/runtime/src)
 ################################
 # Threading
 ################################
+set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+set(THREADS_PREFER_PTHREAD_FLAG TRUE)
 find_package(Threads REQUIRED)
 
 #################################
@@ -219,8 +221,8 @@ add_subdirectory(src/parser)
 add_subdirectory(src/engine)
 add_subdirectory(src/index)
 add_subdirectory(src/util)
-enable_testing()
-add_subdirectory(test)
+#enable_testing()
+#add_subdirectory(test)
 
 
 
