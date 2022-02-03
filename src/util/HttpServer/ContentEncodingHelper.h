@@ -49,7 +49,7 @@ void setContentEncodingHeaderForCompressionMethod(
 }
 
 inline std::ostream& operator<<(std::ostream& out,
-                         CompressionMethod compressionMethod) {
+                                CompressionMethod compressionMethod) {
   switch (compressionMethod) {
     case CompressionMethod::NONE:
       out << "CompressionMethod::NONE";
