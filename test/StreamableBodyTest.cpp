@@ -121,7 +121,6 @@ TEST_P(StreamableBodyTestFixture,
   http::header<false, http::fields> header;
   streamable_body::writer{header, generator};
 
-  // empty string_view means no such header is present
   ASSERT_EQ(header[http::field::content_encoding], headerValue);
 }
 
