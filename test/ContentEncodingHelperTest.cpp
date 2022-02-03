@@ -31,7 +31,8 @@ auto getValuePairsForHeaderTest() {
       std::pair{CompressionMethod::GZIP, "gzip"});
 }
 
-INSTANTIATE_TEST_SUITE_P(CompressionMethodParameters, ContentEncodingHelperFixture,
+INSTANTIATE_TEST_SUITE_P(CompressionMethodParameters,
+                         ContentEncodingHelperFixture,
                          getValuePairsForHeaderTest());
 
 TEST(ContentEncodingHelper, NoneHeaderIsIndentifiedCorrectly) {
