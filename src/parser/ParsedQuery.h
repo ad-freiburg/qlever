@@ -325,7 +325,6 @@ class ParsedQuery {
     }
 
     // Sets the Selector to 'All' (*) only if the Selector is still undefined
-    // Returned value maybe unused due to Syntax Check
     void setsAsterisk() { _varsOrAsterisk = '*'; }
 
     [[nodiscard]] const auto& getSelectVariables() const {
@@ -411,11 +410,10 @@ class ParsedQuery {
 
   // Add a variable, that was found in the SubQuery body, when query has a
   // Select Clause
-  [[nodiscard]] bool addVariableFromSubQueryBody(ParsedQuery* query,
-                                                 const string& variable) const {
-    if (!query->hasSelectClause()) return false;
-    if (query->selectClause()._varsOrAsterisk.isAsterisk()) {
-      query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(variable);
+  [[maybe_unused]] bool addVariableFromSubQueryBody(const string& variable) {
+    if (!this->hasSelectClause()) return false;
+    if (this->selectClause()._varsOrAsterisk.isAsterisk()) {
+      this->selectClause()._varsOrAsterisk.addVariableFromQueryBody(variable);
     }
     return true;
   }

@@ -694,24 +694,25 @@ TEST(ParserTest, testParse) {
                 sc_sub_subquery._varsOrAsterisk.getSelectVariables());
     }
 
+    // We currently only check, that the following two queries don't throw an
+    // exception.
+    // TODO<RobinTF>  Also add checks for the correct semantics.
     {
       // Check Parse Construct (1)
-      auto pq = SparqlParser(
+      auto pq_1 = SparqlParser(
           "PREFIX foaf:   <http://xmlns.com/foaf/0.1/> \n"
           "PREFIX org:    <http://example.com/ns#> \n"
           "CONSTRUCT { ?x foaf:name ?name } \n"
           "WHERE  { ?x org:employeeName ?name }");
-      pq.parse();
-    }
+      pq_1.parse();
 
-    {
       // Check Parse Construct (2)
-      auto pq = SparqlParser(
+      auto pq_2 = SparqlParser(
           "PREFIX foaf:    <http://xmlns.com/foaf/0.1/>\n"
           "PREFIX vcard:   <http://www.w3.org/2001/vcard-rdf/3.0#>\n"
           "CONSTRUCT   { <http://example.org/person#Alice> vcard:FN ?name }\n"
           "WHERE       { ?x foaf:name ?name } ");
-      pq.parse();
+      pq_2.parse();
     }
 
     {
