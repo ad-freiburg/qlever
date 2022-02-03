@@ -119,6 +119,4 @@ addAndLinkTest(CompactStringVectorTest)
 
 addAndLinkTest(SparqlDataTypesTest engine)
 
-addAndLinkTest(IdTest)
-
 addAndLinkTest(SimpleVocabularyTest)
