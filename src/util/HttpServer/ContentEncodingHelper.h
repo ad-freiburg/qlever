@@ -38,7 +38,7 @@ CompressionMethod getCompressionMethodForRequest(
 }
 
 template <bool isRequest, typename Fields>
-inline void setContentEncodingHeaderForCompressionMethod(
+void setContentEncodingHeaderForCompressionMethod(
     CompressionMethod method,
     boost::beast::http::header<isRequest, Fields>& header) {
   if (method == CompressionMethod::DEFLATE) {
@@ -48,7 +48,7 @@ inline void setContentEncodingHeaderForCompressionMethod(
   }
 }
 
-std::ostream& operator<<(std::ostream& out,
+inline std::ostream& operator<<(std::ostream& out,
                          CompressionMethod compressionMethod) {
   switch (compressionMethod) {
     case CompressionMethod::NONE:
