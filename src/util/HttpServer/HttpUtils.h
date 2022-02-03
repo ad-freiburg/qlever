@@ -68,19 +68,21 @@ auto createHttpResponseFromString(std::string body, http::status status,
 /// Create a HttpResponse from a string with status 200 OK. Otherwise behaves
 /// the same as createHttpResponseFromString.
 static auto createOkResponse(std::string text, const HttpRequest auto& request,
-                             MediaType mimeType) {
+                             MediaType mediaType) {
   return createHttpResponseFromString(std::move(text), http::status::ok,
-                                      request, mimeType);
+                                      request, mediaType);
 }
 
 /// Create a HttpResponse from a stream_generator with status 200 OK.
 static auto createOkResponse(
     ad_utility::stream_generator::stream_generator&& generator,
-    const HttpRequest auto& request, MediaType mimeType) {
+    const HttpRequest auto& request, MediaType mediaType,
+    ad_utility::content_encoding::CompressionMethod method) {
   http::response<ad_utility::httpUtils::httpStreams::streamable_body> response{
       http::status::ok, request.version()};
-  response.set(http::field::content_type, toString(mimeType));
+  response.set(http::field::content_type, toString(mediaType));
   response.keep_alive(request.keep_alive());
+  generator.setCompressionMethod(method);
   response.body() = std::move(generator);
   // Set Content-Length and Transfer-Encoding.
   // Because ad_utility::httpUtils::httpStreams::streamable_body::size
