@@ -21,27 +21,14 @@ using std::string;
 
 // _____________________________________________________________________________
 template <class S, class C>
-void Vocabulary<S, C>::readFromFile(const string& fileName,
-                                    const string& extLitsFileName) {
-  LOG(INFO) << "Reading internal vocabulary from file " << fileName << " ..."
+void SimpleVocabulary<S, C>::readFromFile(const string& fileName
+                                    ) {
+  LOG(INFO) << "Reading vocabulary from file " << fileName << " ..."
             << std::endl;
   _words.clear();
   ad_utility::serialization::FileReadSerializer file(fileName);
   file >> _words;
   LOG(INFO) << "Done, number of words: " << _words.size() << std::endl;
-  if (!extLitsFileName.empty()) {
-    if (!_isCompressed) {
-      LOG(INFO) << "ERROR: trying to load externalized literals to an "
-                   "uncompressed vocabulary. This is not valid and a "
-                   "programming error. Terminating\n";
-      AD_CHECK(false);
-    }
-
-    LOG(DEBUG) << "Registering external vocabulary" << std::endl;
-    _externalLiterals.initFromFile(extLitsFileName);
-    LOG(INFO) << "Number of words in external vocabulary: "
-              << _externalLiterals.size() << std::endl;
-  }
 }
 
 // _____________________________________________________________________________
@@ -55,225 +42,59 @@ void Vocabulary<S, C>::writeToFile(const string& fileName) const {
 }
 
 // _____________________________________________________________________________
-template <class S, class C>
-void Vocabulary<S, C>::createFromSet(
-    const ad_utility::HashSet<std::string>& set) {
-  LOG(INFO) << "Creating vocabulary from set ...\n";
-  if constexpr (_isCompressed) {
-    // TODO<instate something for testing>
-    AD_CHECK(false);
-  } else {
-    _words.clear();
-    std::vector<S> words;
-    words.reserve(set.size());
-    for (const auto& word : set) {
-      words.push_back(word);
-    }
-    LOG(INFO) << "... sorting ...\n";
-    auto totalComparison = [this](const auto& a, const auto& b) {
-      return _caseComparator(std::string_view(a.begin(), a.end()),
-                             std::string_view(b.begin(), b.end()),
-                             SortLevel::TOTAL);
-    };
-    std::sort(begin(words), end(words), totalComparison);
-    _words.build(words);
-  }
-  LOG(INFO) << "Done creating vocabulary.\n";
-}
-
-// _____________________________________________________________________________
-template <class S, class C>
-bool Vocabulary<S, C>::isLiteral(const string& word) {
-  return word.starts_with('"');
-}
-
-// TODO<joka921> Can this be removed once we are done with this PR?
-// _____________________________________________________________________________
-template <class S, class C>
-bool Vocabulary<S, C>::isExternalizedLiteral(const string& word) {
-  return word.size() > 1 &&
-         word.starts_with(EXTERNALIZED_LITERALS_PREFIX + '\"');
-}
-
-// _____________________________________________________________________________
-template <class S, class C>
-bool Vocabulary<S, C>::shouldBeExternalized(const string& word) const {
-  // TODO<joka921> Completely refactor the Vocabulary on the different
-  // Types, it is a mess.
-
-  // If the string is not compressed, this means that this is a text vocabulary
-  // and thus doesn't support externalization.
-  if constexpr (std::is_same_v<S, CompressedString>) {
-    if (!isLiteral(word)) {
-      return shouldEntityBeExternalized(word);
-    } else {
-      return shouldLiteralBeExternalized(word);
-    }
-  } else {
-    return false;
-  }
-}
-
-// ___________________________________________________________________
-template <class S, class C>
-bool Vocabulary<S, C>::shouldEntityBeExternalized(const string& word) const {
-  return std::ranges::any_of(_externalizedPrefixes, [&](const auto& prefix) {
-    return word.starts_with(prefix);
-  });
-}
-
-// ___________________________________________________________________
-template <class S, class C>
-bool Vocabulary<S, C>::shouldLiteralBeExternalized(const string& word) const {
-  if (word.size() > MAX_INTERNAL_LITERAL_BYTES) {
-    return true;
-  }
-
-  const string lang = getLanguage(word);
-  if (lang == "") {
-    return false;
-  }
-
-  for (const auto& p : _internalizedLangs) {
-    if (lang == p) {
-      return false;
-    }
-  }
-  return true;
-}
-// _____________________________________________________________________________
-template <class S, class C>
-string Vocabulary<S, C>::getLanguage(const string& literal) {
-  auto lioAt = literal.rfind('@');
-  if (lioAt != string::npos) {
-    auto lioQ = literal.rfind('\"');
-    if (lioQ != string::npos && lioQ < lioAt) {
-      return literal.substr(lioAt + 1);
-    }
-  }
-  return "";
-}
-
-// ____________________________________________________________________________
-template <class S, class C>
-template <typename, typename>
-string Vocabulary<S, C>::expandPrefix(std::string_view word) const {
-  assert(!word.empty());
-  auto idx = static_cast<uint8_t>(word[0]) - MIN_COMPRESSION_PREFIX;
-  if (idx >= 0 && idx < NUM_COMPRESSION_PREFIXES) {
-    return _prefixMap[idx] + word.substr(1);
-  } else {
-    return string(word.substr(1));
-  }
-}
-
-// _____________________________________________________________________________
-template <class S, class C>
-template <typename, typename>
-CompressedString Vocabulary<S, C>::compressPrefix(const string& word) const {
-  for (const auto& p : _prefixVec) {
-    if (word.starts_with(p._fulltext)) {
-      auto res = CompressedString::fromString(
-          p._prefix + std::string_view(word).substr(p._fulltext.size()));
-      return res;
-    }
-  }
-  auto res = CompressedString::fromString(NO_PREFIX_CHAR + word);
-  return res;
-}
-
-// _____________________________________________________________________________
-template <class S, class C>
-template <class StringRange, typename, typename>
-void Vocabulary<S, C>::initializePrefixes(const StringRange& prefixes) {
-  for (auto& el : _prefixMap) {
-    el = "";
-  }
-  _prefixVec.clear();
-  unsigned char prefixIdx = 0;
-  for (const auto& fulltext : prefixes) {
-    if (prefixIdx >= NUM_COMPRESSION_PREFIXES) {
-      LOG(INFO) << "More than " << NUM_COMPRESSION_PREFIXES
-                << " prefixes have been specified. Skipping the rest\n";
-      break;
-    }
-    _prefixMap[prefixIdx] = fulltext;
-    _prefixVec.emplace_back(prefixIdx + MIN_COMPRESSION_PREFIX, fulltext);
-    prefixIdx++;
-  }
-  if (prefixIdx != NUM_COMPRESSION_PREFIXES) {
-    LOG(WARN) << "less than " << NUM_COMPRESSION_PREFIXES
-              << " prefixes specified.";
-  }
-  // if longest strings come first we correctly handle overlapping prefixes
-  auto pred = [](const Prefix& a, const Prefix& b) {
-    return a._fulltext.size() > b._fulltext.size();
-  };
-  std::sort(_prefixVec.begin(), _prefixVec.end(), pred);
-}
-
-// ______________________________________________________________________________
-template <class S, class C>
-template <class StringRange>
-void Vocabulary<S, C>::initializeExternalizePrefixes(const StringRange& s) {
-  _externalizedPrefixes.clear();
-  for (const auto& el : s) {
-    _externalizedPrefixes.emplace_back(el);
-  }
-}
-
-// ______________________________________________________________________________
-template <class S, class C>
-template <class StringRange>
-void Vocabulary<S, C>::initializeInternalizedLangs(const StringRange& s) {
-  _internalizedLangs.clear();
-  // `StringRange` might be nlohmann::json, for which we have disabled
-  // implicit conversions, so `vector::insert` cannot be used.
-  for (const auto& el : s) {
-    _internalizedLangs.emplace_back(el);
-  }
-}
-
-// ___________________________________________________________________________
 template <typename S, typename C>
-bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
-                                                   IdRange* range) const {
-  AD_CHECK_EQ(word[word.size() - 1], PREFIX_CHAR);
-  auto prefixRange = prefix_range(word.substr(0, word.size() - 1));
-  bool success = prefixRange.second > prefixRange.first;
-  range->_first = prefixRange.first._id.get();
-  range->_last = prefixRange.second._id.get() - 1;
-
-  if (success) {
-    AD_CHECK_LT(range->_first, internalSize());
-    AD_CHECK_LT(range->_last, internalSize());
-  }
-  return success;
-}
-
-// _____________________________________________________________________________
-template <typename S, typename C>
-template <typename StringType>
 Vocabulary<S, C>::SearchResult Vocabulary<S, C>::lower_bound(
-    const StringType& word, const SortLevel level) const {
-  auto internalSignedIdFromInternalVocab =
-      _words.lower_bound(word, getComparatorForSortLevel(level));
-  auto internalIdFromInternalVocab =
-      ad_utility::InternalId{internalSignedIdFromInternalVocab.get()};
-  SearchResult resultInternal;
-  resultInternal._id = IdManager::fromInternalId(internalIdFromInternalVocab);
-  if (internalIdFromInternalVocab < _words.size()) {
-    resultInternal._word = getInternalWordFromId(internalIdFromInternalVocab);
+    Vocabulary<S, C>::StringView word, const SortLevel level) const {
+  SearchResult result;
+      // TODO<joka921> do we still need the lower_bound in the _words?
+  // Todo<joka921> can be implemented in terms of the other lower_bound.
+      result._id = _words.lower_bound(word, getComparatorForSortLevel(level));
+  if (result._id < _words.size()) {
+    resultInternal._word = _words[result._id];
   }
-  if (_externalLiterals.size() == 0) {
-    return resultInternal;
-  }
+  return result;
+}
 
-  SearchResult resultExternal;
-  auto [id, wordFromExternal] = _externalLiterals.lower_bound(word, level);
-  resultExternal._id = ad_utility::CompleteId{id};
-  resultExternal._word = std::move(wordFromExternal);
-  return std::max(resultInternal, resultExternal);
+// _____________________________________________________________________________
+template <typename S, typename C>
+template <typename StringType, typename Comparator>
+Vocabulary<S, C>::SearchResult Vocabulary<S, C>::lower_bound(
+    const StringType& word, Comparator comparator) const {
+  SearchResult result;
+  // TODO<joka921> do we still need the lower_bound in the _words?
+  result._id = _words.lower_bound(word, comparator);
+  if (result._id < _words.size()) {
+    resultInternal._word = _words[result._id];
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C>
+Vocabulary<S, C>::SearchResult Vocabulary<S, C>::upper_bound(
+    Vocabulary<S, C>::StringView word, const SortLevel level) const {
+  SearchResult result;
+  // TODO<joka921> do we still need the lower_bound in the _words?
+  // Todo<joka921> can be implemented in terms of the other lower_bound.
+  result._id = _words.upper_bound(word, getComparatorForSortLevel(level));
+  if (result._id < _words.size()) {
+    resultInternal._word = _words[result._id];
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C>
+template <typename StringType, typename Comparator>
+Vocabulary<S, C>::SearchResult Vocabulary<S, C>::upper_bound(
+    const StringType& word, Comparator comparator) const {
+  SearchResult result;
+  // TODO<joka921> do we still need the lower_bound in the _words?
+  result._id = _words.upper_bound(word, comparator);
+  if (result._id < _words.size()) {
+    resultInternal._word = _words[result._id];
+  }
+  return result;
 }
 
 // _____________________________________________________________________________
