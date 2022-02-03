@@ -175,8 +175,6 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       // Exception avoided due to previous Syntax Check of Selector '*'
       selectClause._varsOrAsterisk.getSelectVariables().push_back(
           _lexer.current().raw);
-      selectClause._varsOrAsterisk.addVariableFromQueryBody(
-          _lexer.current().raw);
     } else if (_lexer.accept("text")) {
       _lexer.expect("(");
       std::ostringstream s;
@@ -201,7 +199,6 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       selectClause._aliases.push_back(a);
       selectClause._varsOrAsterisk.getSelectVariables().emplace_back(
           a._outVarName);
-      selectClause._varsOrAsterisk.addVariableFromQueryBody(a._outVarName);
       _lexer.expect(")");
     } else {
       _lexer.accept();
@@ -293,8 +290,10 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       GraphPatternOperation::Bind bind{parseExpressionWithAntlr()};
       _lexer.expect("as");
       _lexer.expect(SparqlToken::Type::VARIABLE);
-      query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
-          _lexer.current().raw);
+      if (!query->addVariableFromSubQueryBody(query, _lexer.current().raw)) {
+        LOG(DEBUG) << "Cannot add variable " + _lexer.current().raw +
+                          " because there is not a Select Clause in the query";
+      }
       bind._target = _lexer.current().raw;
       _lexer.expect(")");
       currentPattern->_children.emplace_back(std::move(bind));
@@ -329,14 +328,24 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         if (subQ_sel_vars.isAsterisk()) {
           auto subQ_ordVars = subQ_sel_vars.orderedVariablesFromQueryBody();
 
-          for (const auto& subSelectVariables : subQ_ordVars) {
-            ParsedQuery::SelectedVarsOrAsterisk* up_sel_vars =
-                &query->selectClause()._varsOrAsterisk;
-            up_sel_vars->addVariableFromQueryBody(subSelectVariables);
+          for (const auto& subSelectALLVariables : subQ_ordVars) {
+            if (!query->addVariableFromSubQueryBody(query,
+                                                    subSelectALLVariables)) {
+              LOG(DEBUG) << "Variable " + subSelectALLVariables +
+                                " not added upstream because there is not a "
+                                " Select Clause in the upstream query";
+            }
           }
         } else {
-          for (const auto& var : subQ_sel_vars.getSelectVariables()) {
-            query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(var);
+          for (const auto& subSelectVariables :
+               subQ_sel_vars.getSelectVariables()) {
+            if (!query->addVariableFromSubQueryBody(query,
+                                                    subSelectVariables)) {
+              LOG(DEBUG) << "Variable not added upstream " +
+                                subSelectVariables +
+                                " because there is not a Select Clause in the "
+                                "upstream query";
+            }
           }
         }
 
@@ -373,8 +382,13 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         // values with several variables
         while (_lexer.accept(SparqlToken::Type::VARIABLE)) {
           values._variables.push_back(_lexer.current().raw);
-          query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
-              _lexer.current().raw);
+          if (!query->addVariableFromSubQueryBody(query,
+                                                  _lexer.current().raw)) {
+            LOG(DEBUG) << "Variable not added upstream " +
+                              _lexer.current().raw +
+                              " because there is not a Select Clause in the "
+                              "upstream query";
+          }
         }
         _lexer.expect(")");
         _lexer.expect("{");
@@ -392,8 +406,11 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       } else if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
         // values with a single variable
         values._variables.push_back(_lexer.current().raw);
-        query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
-            _lexer.current().raw);
+        if (!query->addVariableFromSubQueryBody(query, _lexer.current().raw)) {
+          LOG(DEBUG) << "Variable not added upstream " + _lexer.current().raw +
+                            " because there is not a Select Clause in the "
+                            "upstream query";
+        }
         _lexer.expect("{");
         while (_lexer.accept(SparqlToken::Type::IRI) ||
                _lexer.accept(SparqlToken::Type::RDFLITERAL)) {
@@ -414,8 +431,13 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       if (lastSubject.empty()) {
         if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
           subject = _lexer.current().raw;
-          query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
-              _lexer.current().raw);
+          if (!query->addVariableFromSubQueryBody(query,
+                                                  _lexer.current().raw)) {
+            LOG(DEBUG) << "Variable not added upstream " +
+                              _lexer.current().raw +
+                              " because there is not a Select Clause in the "
+                              "upstream query";
+          }
         } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
           subject = parseLiteral(_lexer.current().raw, true);
         } else {
@@ -431,8 +453,13 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       if (lastPredicate.empty()) {
         if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
           predicate = _lexer.current().raw;
-          query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
-              _lexer.current().raw);
+          if (!query->addVariableFromSubQueryBody(query,
+                                                  _lexer.current().raw)) {
+            LOG(DEBUG) << "Variable not added upstream " +
+                              _lexer.current().raw +
+                              " because there is not a Select Clause in the "
+                              "upstream query";
+          }
         } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
           predicate = parseLiteral(_lexer.current().raw, true);
         } else {
@@ -450,8 +477,11 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       std::string object;
       if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
         object = _lexer.current().raw;
-        query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
-            _lexer.current().raw);
+        if (!query->addVariableFromSubQueryBody(query, _lexer.current().raw)) {
+          LOG(DEBUG) << "Variable not added upstream " + _lexer.current().raw +
+                            " because there is not a Select Clause in the "
+                            "upstream query";
+        }
       } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
         object = parseLiteral(_lexer.current().raw, true);
       } else {
@@ -545,8 +575,6 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
       while (!reached_end) {
         if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
           query->_orderBy.emplace_back(OrderKey(_lexer.current().raw));
-          query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
-              _lexer.current().raw);
         } else if (_lexer.accept("asc")) {
           query->_orderBy.emplace_back(parseOrderKey("ASC", query));
         } else if (_lexer.accept("desc")) {

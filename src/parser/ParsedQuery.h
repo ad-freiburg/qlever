@@ -409,9 +409,18 @@ class ParsedQuery {
     return std::get<ConstructClause>(_clause);
   }
 
+  // Add a variable, that was found in the SubQuery body, when query has a
+  // Select Clause
+  [[nodiscard]] bool addVariableFromSubQueryBody(ParsedQuery* query,
+                                                 const string& variable) const {
+    if (!query->hasSelectClause()) return false;
+    if (query->selectClause()._varsOrAsterisk.isAsterisk()) {
+      query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(variable);
+    }
+    return true;
+  }
+
   void expandPrefixes();
-  // unused function ? not implemented
-  void parseAliases();
 
   auto& children() { return _rootGraphPattern._children; }
   [[nodiscard]] const auto& children() const {
