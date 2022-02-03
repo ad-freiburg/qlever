@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 
 #include "../src/util/HttpServer/ContentEncodingHelper.h"
-#include "../src/util/HttpServer/beast.h"
 
 using namespace ad_utility::content_encoding;
 namespace http = boost::beast::http;

@@ -10,6 +10,33 @@
 using namespace ad_utility::httpUtils::httpStreams;
 using ad_utility::stream_generator::stream_generator;
 
+std::string_view toStringView(
+    const streamable_body::writer::const_buffers_type& buffer) {
+  return {static_cast<const char*>(buffer.data()), buffer.size()};
+}
+
+namespace boost {
+// For some reason those functions are required for the ASSERT_EQ/ASSERT_NE
+// macros to compile with boost::optional
+std::ostream& operator<<(std::ostream& out, none_t) {
+  out << "boost::none";
+  return out;
+}
+std::ostream& operator<<(
+    std::ostream& out,
+    const optional<std::pair<asio::const_buffer, bool>>& optionalBuffer) {
+  if (!optionalBuffer.has_value()) {
+    return out << boost::none;
+  }
+  const auto& [buffer, hasNext] = optionalBuffer.value();
+  out << "Value: \"";
+  out << toStringView(buffer);
+  out << "\", hasNext: ";
+  out << hasNext;
+  return out;
+}
+}  // namespace boost
+
 constexpr size_t BUFFER_SIZE = 1u << 20;
 
 TEST(StreamableBodyTest, TestInitReturnsNoErrorCode) {
@@ -35,7 +62,7 @@ TEST(StreamableBodyTest, TestGeneratorExceptionResultsInErrorCode) {
 
   auto result = writer.get(errorCode);
   ASSERT_NE(errorCode, boost::system::error_code());
-  ASSERT_TRUE(result == boost::none);
+  ASSERT_EQ(result, boost::none);
 }
 
 stream_generator generateNothing() { co_return; }
@@ -48,7 +75,7 @@ TEST(StreamableBodyTest, TestEmptyGeneratorReturnsEmptyResult) {
 
   auto result = writer.get(errorCode);
   ASSERT_EQ(errorCode, boost::system::error_code());
-  ASSERT_TRUE(result != boost::none);
+  ASSERT_NE(result, boost::none);
   ASSERT_EQ(result->first.size(), 0u);
   ASSERT_FALSE(result->second);
 }
@@ -59,11 +86,6 @@ stream_generator generateMultipleElements() {
   co_yield "Abc";
 }
 
-std::string_view toStringView(
-    const streamable_body::writer::const_buffers_type& buffer) {
-  return {static_cast<const char*>(buffer.data()), buffer.size()};
-}
-
 TEST(StreamableBodyTest, TestGeneratorReturnsBufferedResults) {
   auto generator = generateMultipleElements();
   boost::beast::http::header<false, boost::beast::http::fields> header;
@@ -72,13 +94,13 @@ TEST(StreamableBodyTest, TestGeneratorReturnsBufferedResults) {
 
   auto result = writer.get(errorCode);
   ASSERT_EQ(errorCode, boost::system::error_code());
-  ASSERT_TRUE(result != boost::none);
+  ASSERT_NE(result, boost::none);
   ASSERT_EQ(toStringView(result->first), std::string(BUFFER_SIZE, 'A'));
   ASSERT_TRUE(result->second);
 
   auto result2 = writer.get(errorCode);
   ASSERT_EQ(errorCode, boost::system::error_code());
-  ASSERT_TRUE(result2 != boost::none);
+  ASSERT_NE(result2, boost::none);
   ASSERT_EQ(toStringView(result2->first), std::string("1Abc"));
   ASSERT_FALSE(result2->second);
 }
@@ -112,4 +134,4 @@ auto getValuePairsForHeaderTest() {
 }
 
 INSTANTIATE_TEST_SUITE_P(CompressionMethodParameters, StreamableBodyTestFixture,
-                        getValuePairsForHeaderTest());
+                         getValuePairsForHeaderTest());
