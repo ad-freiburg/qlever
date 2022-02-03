@@ -10,6 +10,7 @@
 
 #include <string>
 #include <vector>
+#include <compare>
 
 #include "../HashMap.h"
 #include "../HashSet.h"
