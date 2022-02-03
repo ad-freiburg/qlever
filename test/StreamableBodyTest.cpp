@@ -83,29 +83,33 @@ TEST(StreamableBodyTest, TestGeneratorReturnsBufferedResults) {
   ASSERT_FALSE(result2->second);
 }
 
-TEST(StreamableBodyTest, TestHeadersAreSetCorrectlyForCompressingGenerator) {
-  namespace http = boost::beast::http;
-  using ad_utility::content_encoding::CompressionMethod;
+namespace http = boost::beast::http;
+using ad_utility::content_encoding::CompressionMethod;
 
-  auto generatorNone = generateNothing();
-  generatorNone.setCompressionMethod(CompressionMethod::NONE);
-  http::header<false, http::fields> headerNone;
-  streamable_body::writer{headerNone, generatorNone};
+class StreamableBodyTestFixture
+    : public ::testing::TestWithParam<
+          std::pair<CompressionMethod, std::string_view>> {};
+
+TEST_P(StreamableBodyTestFixture,
+       TestHeadersAreSetCorrectlyForCompressingGenerator) {
+  const auto& [compressionMethod, headerValue] = GetParam();
+
+  auto generator = generateNothing();
+  generator.setCompressionMethod(compressionMethod);
+  http::header<false, http::fields> header;
+  streamable_body::writer{header, generator};
 
   // empty string_view means no such header is present
-  ASSERT_EQ(headerNone[http::field::content_encoding], std::string_view{});
-
-  auto generatorDeflate = generateNothing();
-  generatorDeflate.setCompressionMethod(CompressionMethod::DEFLATE);
-  http::header<false, http::fields> headerDeflate;
-  streamable_body::writer{headerDeflate, generatorDeflate};
-
-  ASSERT_EQ(headerDeflate[http::field::content_encoding], "deflate");
-
-  auto generatorGzip = generateNothing();
-  generatorGzip.setCompressionMethod(CompressionMethod::GZIP);
-  http::header<false, http::fields> headerGzip;
-  streamable_body::writer{headerGzip, generatorGzip};
-
-  ASSERT_EQ(headerGzip[http::field::content_encoding], "gzip");
+  ASSERT_EQ(header[http::field::content_encoding], headerValue);
 }
+
+auto getValuePairsForHeaderTest() {
+  return ::testing::Values(
+      // empty string_view means no such header is present
+      std::pair{CompressionMethod::NONE, std::string_view{}},
+      std::pair{CompressionMethod::DEFLATE, "deflate"},
+      std::pair{CompressionMethod::GZIP, "gzip"});
+}
+
+INSTANTIATE_TEST_SUITE_P(CompressionMethodParameters, StreamableBodyTestFixture,
+                        getValuePairsForHeaderTest());

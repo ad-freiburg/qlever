@@ -11,37 +11,38 @@ using namespace ad_utility::content_encoding;
 namespace http = boost::beast::http;
 using ad_utility::content_encoding::CompressionMethod;
 
-TEST(ContentEncodingHelperTest, TestNoneHeaderIsNotSetCorrectly) {
-  http::header<false, http::fields> header;
-  setContentEncodingHeaderForCompressionMethod(CompressionMethod::NONE, header);
+class ContentEncodingHelperFixture
+    : public ::testing::TestWithParam<
+          std::pair<CompressionMethod, std::string_view>> {};
 
-  // empty string_view means no such header is present
-  ASSERT_EQ(header[http::field::content_encoding], std::string_view{});
+TEST_P(ContentEncodingHelperFixture, HeaderIsNotSetCorrectly) {
+  const auto& [compressionMethod, headerValue] = GetParam();
+
+  http::header<false, http::fields> header;
+  setContentEncodingHeaderForCompressionMethod(compressionMethod, header);
+
+  ASSERT_EQ(header[http::field::content_encoding], headerValue);
 }
 
-TEST(ContentEncodingHelperTest, TestDeflateHeaderIsSetCorrectly) {
-  http::header<false, http::fields> header;
-  setContentEncodingHeaderForCompressionMethod(CompressionMethod::DEFLATE,
-                                               header);
-
-  ASSERT_EQ(header[http::field::content_encoding], "deflate");
+auto getValuePairsForHeaderTest() {
+  return ::testing::Values(
+      // empty string_view means no such header is present
+      std::pair{CompressionMethod::NONE, std::string_view{}},
+      std::pair{CompressionMethod::DEFLATE, "deflate"},
+      std::pair{CompressionMethod::GZIP, "gzip"});
 }
 
-TEST(ContentEncodingHelperTest, TestGzipHeaderIsSetCorrectly) {
-  http::header<false, http::fields> header;
-  setContentEncodingHeaderForCompressionMethod(CompressionMethod::GZIP, header);
+INSTANTIATE_TEST_SUITE_P(CompressionMethodParameters, ContentEncodingHelperFixture,
+                         getValuePairsForHeaderTest());
 
-  ASSERT_EQ(header[http::field::content_encoding], "gzip");
-}
-
-TEST(ContentEncodingHelperTest, TestNoHeaderIsIndentifiedCorrectly) {
+TEST(ContentEncodingHelper, NoneHeaderIsIndentifiedCorrectly) {
   http::request<http::string_body> request;
   auto result = getCompressionMethodForRequest(request);
 
   ASSERT_EQ(result, CompressionMethod::NONE);
 }
 
-TEST(ContentEncodingHelperTest, TestGzipHeaderIsIndentifiedCorrectly) {
+TEST(ContentEncodingHelper, GzipHeaderIsIndentifiedCorrectly) {
   http::request<http::string_body> request;
   request.set(http::field::accept_encoding, "gzip");
   auto result = getCompressionMethodForRequest(request);
@@ -49,7 +50,7 @@ TEST(ContentEncodingHelperTest, TestGzipHeaderIsIndentifiedCorrectly) {
   ASSERT_EQ(result, CompressionMethod::GZIP);
 }
 
-TEST(ContentEncodingHelperTest, TestDeflateHeaderIsIndentifiedCorrectly) {
+TEST(ContentEncodingHelper, DeflateHeaderIsIndentifiedCorrectly) {
   http::request<http::string_body> request;
   request.set(http::field::accept_encoding, "deflate");
   auto result = getCompressionMethodForRequest(request);
@@ -57,7 +58,7 @@ TEST(ContentEncodingHelperTest, TestDeflateHeaderIsIndentifiedCorrectly) {
   ASSERT_EQ(result, CompressionMethod::DEFLATE);
 }
 
-TEST(ContentEncodingHelperTest, TestDeflateHeaderIsPreferredOverGzip) {
+TEST(ContentEncodingHelper, DeflateHeaderIsPreferredOverGzip) {
   http::request<http::string_body> request;
   request.set(http::field::accept_encoding, "gzip, deflate");
   auto result = getCompressionMethodForRequest(request);

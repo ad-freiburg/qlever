@@ -48,4 +48,20 @@ inline void setContentEncodingHeaderForCompressionMethod(
   }
 }
 
+std::ostream& operator<<(std::ostream& out,
+                         CompressionMethod compressionMethod) {
+  switch (compressionMethod) {
+    case CompressionMethod::NONE:
+      out << "CompressionMethod::NONE";
+      break;
+    case CompressionMethod::DEFLATE:
+      out << "CompressionMethod::DEFLATE";
+      break;
+    case CompressionMethod::GZIP:
+      out << "CompressionMethod::GZIP";
+      break;
+  }
+  return out;
+}
+
 }  // namespace ad_utility::content_encoding

@@ -37,8 +37,10 @@ TEST(StreamableGeneratorTest, TestEmptyGeneratorReturnsEmptyResult) {
   ASSERT_FALSE(generator.hasNext());
 }
 
+const std::string MAX_TEST_BUFFER_STRING(TEST_BUFFER_SIZE, 'A');
+
 basic_stream_generator<TEST_BUFFER_SIZE> generateMultipleElements() {
-  co_yield std::string(TEST_BUFFER_SIZE, 'A');
+  co_yield MAX_TEST_BUFFER_STRING;
   co_yield 1;
   co_yield "Abc";
 }
@@ -47,7 +49,7 @@ TEST(StreamableGeneratorTest, TestGeneratorReturnsBufferedResults) {
   auto generator = generateMultipleElements();
 
   ASSERT_TRUE(generator.hasNext());
-  ASSERT_EQ(generator.next(), std::string(TEST_BUFFER_SIZE, 'A'));
+  ASSERT_EQ(generator.next(), MAX_TEST_BUFFER_STRING);
 
   ASSERT_TRUE(generator.hasNext());
   ASSERT_EQ(generator.next(), std::string("1Abc"));
@@ -76,48 +78,46 @@ TEST(StreamableGeneratorTest, TestGeneratorNextThrowsExceptionWhenDone) {
   }
 }
 
-std::string decompressData(std::string_view compressedData,
-                           auto&& decompressionFilter) {
-  std::string result;
-  io::filtering_ostream filterStream;
-  filterStream.push(decompressionFilter);
-  filterStream.push(io::back_inserter(result));
+class StreamableGeneratorTestFixture
+    : public ::testing::TestWithParam<CompressionMethod> {
+ public:
+  [[nodiscard]] static std::string decompressData(
+      std::string_view compressedData) {
+    std::string result;
+    io::filtering_ostream filterStream;
+    if (GetParam() == CompressionMethod::GZIP) {
+      filterStream.push(io::gzip_decompressor());
+    } else if (GetParam() == CompressionMethod::DEFLATE) {
+      filterStream.push(io::zlib_decompressor());
+    } else {
+      // Unsupported decompression
+      AD_CHECK(false);
+    }
+    filterStream.push(io::back_inserter(result));
 
-  filterStream.write(compressedData.data(),
-                     static_cast<std::streamsize>(compressedData.size()));
-  return result;
-}
+    filterStream.write(compressedData.data(),
+                       static_cast<std::streamsize>(compressedData.size()));
+    return result;
+  }
+};
 
-TEST(StreamableGeneratorTest, TestGeneratorAppliesDeflateCompression) {
+TEST_P(StreamableGeneratorTestFixture, TestGeneratorAppliesCompression) {
   auto generator = generateMultipleElements();
-  generator.setCompressionMethod(
-      ad_utility::content_encoding::CompressionMethod::DEFLATE);
+  generator.setCompressionMethod(GetParam());
 
   ASSERT_TRUE(generator.hasNext());
   auto compressedData = generator.next();
 
-  // compression should cause bytes to drop below the TEST_BUFFER_SIZE
-  // causing all co_yields to be executed without suspension at once
-  // for this test case
-  ASSERT_EQ(decompressData(compressedData, io::zlib_decompressor()),
-            std::string(TEST_BUFFER_SIZE, 'A') + "1Abc");
+  // compression introduces another buffer, which is why co_yield
+  // is not suspended after TEST_BUFFER_SIZE bytes
+  ASSERT_EQ(decompressData(compressedData), MAX_TEST_BUFFER_STRING + "1Abc");
 
   ASSERT_FALSE(generator.hasNext());
 }
 
-TEST(StreamableGeneratorTest, TestGeneratorAppliesGzipCompression) {
-  auto generator = generateMultipleElements();
-  generator.setCompressionMethod(
-      ad_utility::content_encoding::CompressionMethod::GZIP);
+using ad_utility::content_encoding::CompressionMethod;
 
-  ASSERT_TRUE(generator.hasNext());
-  auto compressedData = generator.next();
-
-  // compression should cause bytes to drop below the TEST_BUFFER_SIZE
-  // causing all co_yields to be executed without suspension at once
-  // for this test case
-  ASSERT_EQ(decompressData(compressedData, io::gzip_decompressor()),
-            std::string(TEST_BUFFER_SIZE, 'A') + "1Abc");
-
-  ASSERT_FALSE(generator.hasNext());
-}
+INSTANTIATE_TEST_SUITE_P(CompressionMethodParameters,
+                         StreamableGeneratorTestFixture,
+                         ::testing::Values(CompressionMethod::DEFLATE,
+                                           CompressionMethod::GZIP));
