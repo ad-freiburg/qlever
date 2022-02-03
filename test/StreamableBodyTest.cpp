@@ -16,8 +16,9 @@ std::string_view toStringView(
 }
 
 namespace boost {
-// For some reason those functions are required for the ASSERT_EQ/ASSERT_NE
-// macros to compile with boost::optional
+// When using ASSERT_EQ/ASSERT_NE GTest always needs operator<< to print the
+// arguments in case of a mismatch, which are not provided by default for
+// the following boost parameters:
 std::ostream& operator<<(std::ostream& out, none_t) {
   out << "boost::none";
   return out;
