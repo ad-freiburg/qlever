@@ -337,7 +337,7 @@ class ParsedQuery {
 
     // Add a variable, that was found in the query body. The added variables
     // will only be used if `isAsterisk` is true.
-    void addVariableFromQueryBody(const string& variable) {
+    void registerVariableVisibleInQueryBody(const string& variable) {
       if (!(std::find(_variablesFromQueryBody.begin(),
                       _variablesFromQueryBody.end(),
                       variable) != _variablesFromQueryBody.end())) {
@@ -345,7 +345,8 @@ class ParsedQuery {
       }
     }
 
-    // Gets the variables which addVariableFromQueryBody` was previously called.
+    // Gets the variables which registerVariableVisibleInQueryBody` was
+    // previously called.
     // The result contains no duplicates and is ordered by the first appearance
     // in the query body.
     [[nodiscard]] const auto& orderedVariablesFromQueryBody() const {
@@ -410,10 +411,12 @@ class ParsedQuery {
 
   // Add a variable, that was found in the SubQuery body, when query has a
   // Select Clause
-  [[maybe_unused]] bool addVariableFromSubQueryBody(const string& variable) {
+  [[maybe_unused]] bool registerVariableVisibleInQueryBody(
+      const string& variable) {
     if (!this->hasSelectClause()) return false;
     if (this->selectClause()._varsOrAsterisk.isAsterisk()) {
-      this->selectClause()._varsOrAsterisk.addVariableFromQueryBody(variable);
+      this->selectClause()._varsOrAsterisk.registerVariableVisibleInQueryBody(
+          variable);
     }
     return true;
   }
