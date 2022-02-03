@@ -6,37 +6,23 @@
 
 #pragma once
 
-#include <algorithm>
-#include <cassert>
-#include <fstream>
-#include <functional>
-#include <optional>
 #include <string>
 #include <string_view>
-#include <vector>
 
-#include "../global/Constants.h"
-#include "../global/Id.h"
-#include "../global/Pattern.h"
-#include "../util/Exception.h"
-#include "../util/HashMap.h"
-#include "../util/HashSet.h"
-#include "../util/Log.h"
-#include "../util/StringUtils.h"
-#include "./StringSortComparator.h"
+#include "../../global/Pattern.h"
+#include "../StringSortComparator.h"
+#include "../CompressedString.h"
+
 
 
 //! A vocabulary. Wraps a vector of strings
 //! and provides additional methods for retrieval.
-template <class CharTypeT, class ComparatorType>
+template <class CharTypeT>
 class SimpleVocabulary {
 
  public:
 
-
-
-  using SortLevel = typename ComparatorType::Level;
-  SimpleVocabulary(){} = default;
+  SimpleVocabulary() = default;
   SimpleVocabulary& operator=(SimpleVocabulary&&) noexcept = default;
   SimpleVocabulary(SimpleVocabulary&&) noexcept = default;
 
@@ -50,7 +36,7 @@ class SimpleVocabulary {
   struct SearchResult {
     uint64_t _id;
     std::optional<StringView> _word;
-    bool operator<=>(const SearchResult& res) const { return _id <=> res._id; }
+    auto operator<=>(const SearchResult& res) const { return _id <=> res._id; }
   };
 
   virtual ~SimpleVocabulary() = default;
@@ -68,46 +54,23 @@ class SimpleVocabulary {
   void writeToFile(const string& fileName) const;
   //! Get the word with the given id or an empty optional if the
   //! word is not in the vocabulary.
-  const std::optional<String_view> operator[](Id id) const;
+  const std::optional<StringView> operator[](Id id) const;
 
   [[nodiscard]] size_t size() const {
     return _words.size();
   }
 
-  void setLocale(const std::string& language, const std::string& country,
-                 bool ignorePunctuation);
-
-  // _____________________________________________________________________
-  const ComparatorType& getCaseComparator() const { return _caseComparator; }
-
-  [[nodiscard]] const LocaleManager& getLocaleManager() const {
-    return _caseComparator.getLocaleManager();
-  }
-
-  // Wraps std::lower_bound and returns an index instead of an iterator
-  SearchResult lower_bound(StringView word,
-                           SortLevel level = SortLevel::QUARTERNARY) const;
-
   template <typename InternalStringType, typename Comparator >
   // Wraps std::lower_bound and returns an index instead of an iterator
   SearchResult lower_bound(const InternalStringType& word, Comparator comparator) const;
 
-  // _______________________________________________________________
-  SearchResult upper_bound(const string& word, SortLevel level) const;
+  template <typename InternalStringType, typename Comparator >
   SearchResult upper_bound(const InternalStringType& word, Comparator comparator) const;
-
-  auto getComparatorForSortLevel(const SortLevel level) const {
-    return [this, level](auto&& a, auto&& b) {
-      return this->_caseComparator(a, b,
-                                   level);
-    };
-  }
 
  private:
   // vector<StringType> _words;
   CompactVectorOfStrings<char>
       _words;
-  ComparatorType _caseComparator;
 
  public:
   using WordWriter = decltype(_words)::Writer;
@@ -115,3 +78,6 @@ class SimpleVocabulary {
     return decltype(_words)::diskIterator(filename);
   }
 };
+
+using InternalCharVocabulary = SimpleVocabulary<char>;
+using InternalCompressedCharVocabulary = SimpleVocabulary<CompressedChar>;

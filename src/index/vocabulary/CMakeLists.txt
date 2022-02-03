@@ -1,0 +1,1 @@
+add_library(vocabulary SimpleVocabulary.h SimpleVocabulary.cpp)

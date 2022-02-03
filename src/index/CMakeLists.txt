@@ -1,4 +1,4 @@
-
+add_subdirectory(vocabulary)
 add_library(index
         Index.h Index.cpp Index.Text.cpp
         Vocabulary.h Vocabulary.cpp
