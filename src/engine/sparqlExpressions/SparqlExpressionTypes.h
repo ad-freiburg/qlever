@@ -6,6 +6,8 @@
 #ifndef QLEVER_SPARQLEXPRESSIONTYPES_H
 #define QLEVER_SPARQLEXPRESSIONTYPES_H
 
+#include <compare>
+
 #include "../../global/Id.h"
 #include "../../util/AllocatorWithLimit.h"
 #include "../../util/ConstexprSmallString.h"
@@ -15,7 +17,6 @@
 #include "../QueryExecutionContext.h"
 #include "../ResultTable.h"
 #include "SetOfIntervals.h"
-#include <compare>
 
 namespace sparqlExpression {
 

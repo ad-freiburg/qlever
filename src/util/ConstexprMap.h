@@ -19,7 +19,11 @@ constexpr void constexprBubbleSort(T& t, Compare compare) {
   for (size_t i = 0; i < t.size(); ++i) {
     for (size_t j = 0; j < t.size() - 1; ++j) {
       if (compare(t[j + 1], t[j])) {
-        std::swap(t[j], t[j + 1]);
+        auto tmp = t[j];
+        t[j] = t[j+1];
+        t[j+1] = tmp;
+        // swap also is not constexpr
+        //std::swap(t[j], t[j + 1]);
       }
     }
   }

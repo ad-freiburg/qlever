@@ -61,11 +61,9 @@ class LocaleManager {
       return _sortKey.compare(rhs._sortKey);
     }
 
-    //auto operator<=>(const SortKey&) const = default;
+    // auto operator<=>(const SortKey&) const = default;
     bool operator==(const SortKey&) const = default;
-    bool operator<(const SortKey& rhs) const {
-      return _sortKey < rhs._sortKey;
-    }
+    bool operator<(const SortKey& rhs) const { return _sortKey < rhs._sortKey; }
     bool operator<=(const SortKey& rhs) const {
       return _sortKey <= rhs._sortKey;
     }

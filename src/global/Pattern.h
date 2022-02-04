@@ -271,9 +271,9 @@ struct iterator_traits<CompactVectorOfStrings<char>::Iterator> {
   using difference_type =
       typename CompactVectorOfStrings<char>::Iterator::difference_type;
   using iterator_category =
-  typename CompactVectorOfStrings<char>::Iterator::iterator_category ;
+      typename CompactVectorOfStrings<char>::Iterator::iterator_category;
 };
-}
+}  // namespace std
 
 namespace detail {
 // Allows the incremental writing of a `CompactVectorOfStrings` directly to a

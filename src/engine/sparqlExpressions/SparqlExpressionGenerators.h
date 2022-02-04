@@ -164,13 +164,13 @@ auto applyOperation(size_t numElements, Operation&&, EvaluationContext* context,
 
   // TODO<joka921> use proper compatibility, LLVM12 doesn't have bind_front
   auto bind_front = [](auto comparator, auto&&... argsOuter) mutable {
-    return [comparator, ... arg = std::forward<decltype(argsOuter)>(
-                            argsOuter)](auto&&... args) mutable {
+    return [comparator, ... arg = std::forward<decltype(argsOuter)>(argsOuter)](
+               auto&&... args) mutable {
       return comparator(std::forward<decltype(arg)>(arg)...,
                         std::forward<decltype(args)>(args)...);
     };
   };
-    // Function that takes a single operand and a single value getter and computes
+  // Function that takes a single operand and a single value getter and computes
   // the corresponding generator.
   auto getValue = bind_front(valueGetterGenerator, numElements, context);
 

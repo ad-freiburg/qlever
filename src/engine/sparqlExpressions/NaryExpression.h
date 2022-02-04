@@ -53,16 +53,17 @@ requires(isOperation<NaryOperation>) class NaryExpression
 
     // TODO<joka921> use proper compatibility, LLVM12 doesn't have bind_front
     auto bind_front = [](auto comparator, auto&&... argsOuter) mutable {
-      return [comparator, ...arg = std::forward<decltype(argsOuter)>(argsOuter)](auto&&... args)  mutable {
-        return comparator(std::forward<decltype(arg)>(arg)..., std::forward<decltype(args)>(args)...);
+      return [comparator, ... arg = std::forward<decltype(argsOuter)>(
+                              argsOuter)](auto&&... args) mutable {
+        return comparator(std::forward<decltype(arg)>(arg)...,
+                          std::forward<decltype(args)>(args)...);
       };
-
     };
     // A function that only takes several `ExpressionResult`s,
     // and evaluates the expression.
     auto evaluateOnChildrenResults =
         bind_front(ad_utility::visitWithVariantsAndParameters,
-                        evaluateOnChildrenOperands, NaryOperation{}, context);
+                   evaluateOnChildrenOperands, NaryOperation{}, context);
 
     return std::apply(evaluateOnChildrenResults, std::move(resultsOfChildren));
   }
