@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
+
 #include "./Server.h"
 
 #include <cstring>
@@ -414,27 +415,37 @@ boost::asio::awaitable<void> Server::processQuery(
           request));
     }
 
+    using ad_utility::content_encoding::CompressionMethod;
+
+    CompressionMethod method =
+        ad_utility::content_encoding::getCompressionMethodForRequest(request);
+
     AD_CHECK(mediaType.has_value());
     switch (mediaType.value()) {
       case ad_utility::MediaType::csv: {
         auto responseGenerator = co_await composeResponseSepValues<
             QueryExecutionTree::ExportSubFormat::CSV>(pq, qet);
+
         auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::csv);
+                                         ad_utility::MediaType::csv, method);
         co_await send(std::move(response));
+
       } break;
       case ad_utility::MediaType::tsv: {
         auto responseGenerator = co_await composeResponseSepValues<
             QueryExecutionTree::ExportSubFormat::TSV>(pq, qet);
+
         auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::tsv);
+                                         ad_utility::MediaType::tsv, method);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::octetStream: {
         auto responseGenerator = co_await composeResponseSepValues<
             QueryExecutionTree::ExportSubFormat::BINARY>(pq, qet);
-        auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::octetStream);
+
+        auto response =
+            createOkResponse(std::move(responseGenerator), request,
+                             ad_utility::MediaType::octetStream, method);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::qleverJson: {
@@ -445,8 +456,9 @@ boost::asio::awaitable<void> Server::processQuery(
       } break;
       case ad_utility::MediaType::turtle: {
         auto responseGenerator = composeTurtleResponse(pq, qet);
+
         auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::turtle);
+                                         ad_utility::MediaType::turtle, method);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::sparqlJson: {
