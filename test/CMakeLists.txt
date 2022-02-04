@@ -1,5 +1,16 @@
 include(GoogleTest)
 
+# Usage: `linkAndDiscoverTest(basename, [additionalLibraries...]`
+# Link the executable `basename` against `gmock_main`,threading library,
+# and all `additionLibraries` which are passed as arguments.
+# Then run `gtest_discover_tests` to add the tests cases from the executable.
+# Typically you should use `addAndLinkTest` (below) but this function can be used,
+# if a test binary requires multiple sources
+function(linkAndDiscoverTest basename )
+    target_link_libraries(${basename} ${ARGN} gmock_main ${CMAKE_THREAD_LIBS_INIT})
+    gtest_discover_tests(${basename} ${basename})
+endfunction()
+
 # Usage: `addAndLinkTest(basename, [additionalLibraries...]`
 # Add a GTest/GMock test case that is called `basename` and compiled from a file called
 # `basename.cpp`. All tests are linked against `gmock_main` and the threading library.
@@ -7,8 +18,7 @@ include(GoogleTest)
 # additional arguments after the `basename`
 function(addAndLinkTest basename)
     add_executable(${basename} "${basename}.cpp")
-    target_link_libraries(${basename} ${ARGN} gmock_main ${CMAKE_THREAD_LIBS_INIT})
-    gtest_discover_tests(${basename} ${basename})
+    linkAndDiscoverTest(${basename} ${ARGN})
 endfunction()
 
 addAndLinkTest(SparqlParserTest parser sparqlExpressions ${ICU_LIBRARIES})
@@ -53,15 +63,16 @@ addAndLinkTest(VocabularyGeneratorTest index)
 
 addAndLinkTest(HasPredicateScanTest engine)
 
-addAndLinkTest(MmapVectorTest -pthread)
+addAndLinkTest(MmapVectorTest)
 
-addAndLinkTest(BufferedVectorTest -pthread)
+addAndLinkTest(BufferedVectorTest)
 
 addAndLinkTest(UnionTest engine)
 
-addAndLinkTest(TokenTest parser re2 -pthread ${ICU_LIBRARIES})
+add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
+linkAndDiscoverTest(TokenTest parser re2 ${ICU_LIBRARIES})
 
-addAndLinkTest(TurtleParserTest parser absl::flat_hash_map re2 -pthread)
+addAndLinkTest(TurtleParserTest parser absl::flat_hash_map re2)
 
 addAndLinkTest(MultiColumnJoinTest engine)
 
@@ -105,11 +116,9 @@ addAndLinkTest(TypeTraitsTest)
 
 addAndLinkTest(SparqlExpressionTest sparqlExpressions index)
 
-addAndLinkTest(OStringStreamTest)
+addAndLinkTest(StreamableBodyTest engine)
 
-addAndLinkTest(StreamableBodyTest)
-
-addAndLinkTest(StreamableGeneratorTest)
+addAndLinkTest(StreamableGeneratorTest engine)
 
 addAndLinkTest(AcceptHeaderTest mediaTypes httpParser)
 
@@ -118,3 +127,5 @@ addAndLinkTest(RdfEscapingTest parser)
 addAndLinkTest(CompactStringVectorTest)
 
 addAndLinkTest(SparqlDataTypesTest engine)
+
+addAndLinkTest(ContentEncodingHelperTest)
