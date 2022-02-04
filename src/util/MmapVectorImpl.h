@@ -111,8 +111,9 @@ void MmapVector<T>::mapForWriting() {
 // ________________________________________________________________
 template <class T>
 void MmapVector<T>::remapLinux(size_t oldBytesize) {
+  // 1 is MREMAP_MAYMOVE but is this portable?
   void* ptr =
-      mremap(static_cast<void*>(_ptr), oldBytesize, _bytesize, MREMAP_MAYMOVE);
+      mremap(static_cast<void*>(_ptr), oldBytesize, _bytesize, 1);
   AD_CHECK(ptr != MAP_FAILED);
   // the filedescriptor and thus our mapping will still be valid
   // after closing, because mmap increases the count by one
