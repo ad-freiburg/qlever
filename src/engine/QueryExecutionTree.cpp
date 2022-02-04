@@ -90,55 +90,24 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     const ResultTable& resultTable) const {
   ColumnIndicesAndTypes exportColumns;
 
-  // Should we merge this if-else-clause into less code ?
-  // Assuming the second warning shouldn't exist (*) ?
-  // (meaning: the tests have proven it works properly)
-  if (selectedVarsOrAsterisk.isAsterisk()) {
-    auto variablesFromExecutionTree = getVariableColumns();
-    for (const auto& variableFromQuery :
-         selectedVarsOrAsterisk.orderedVariablesFromQueryBody()) {
-      if (getVariableColumns().contains(variableFromQuery)) {
-        auto columnIndex = getVariableColumns().at(variableFromQuery);
-        exportColumns.push_back(
-            VariableAndColumnIndex{variableFromQuery, columnIndex,
-                                   resultTable.getResultType(columnIndex)});
-        variablesFromExecutionTree.erase(variableFromQuery);
-      } else {
-        exportColumns.emplace_back(std::nullopt);
-        LOG(WARN) << "The variable \"" << variableFromQuery
-                  << "\" was found in the original query, but not in the "
-                     "execution tree. "
-                     "This is likely a bug\n";
-      }
+  for (auto var : selectedVarsOrAsterisk.getSelectedVariable()) {
+    // TODO: The TEXT(?variable) syntax is redundant and will probably removed
+    //  when we have a proper SPARQL parser.
+    constexpr std::string_view prefix = "TEXT(";
+    constexpr size_t prefixLength = prefix.length();
+    if (var.starts_with(prefix)) {
+      var = var.substr(prefixLength, var.rfind(')') - prefixLength);
     }
-    // (*) this warning
-    for (const auto& [variableFromExecTree, index] :
-         variablesFromExecutionTree) {
-      LOG(WARN) << "The variable \"" << variableFromExecTree
-                << "\" was found in the execution tree, but not in the "
-                   "original query. "
+    if (getVariableColumns().contains(var)) {
+      auto columnIndex = getVariableColumns().at(var);
+      exportColumns.push_back(VariableAndColumnIndex{
+          var, columnIndex, resultTable.getResultType(columnIndex)});
+    } else {
+      exportColumns.emplace_back(std::nullopt);
+      LOG(WARN) << "The variable \"" << var
+                << "\" was found in the original query, but not in the "
+                   "execution tree. "
                    "This is likely a bug\n";
-    }
-  } else {
-    for (auto var : selectedVarsOrAsterisk.getSelectVariables()) {
-      // TODO: The TEXT(?variable) syntax is redundant and will probably removed
-      //  when we have a proper SPARQL parser.
-      constexpr std::string_view prefix = "TEXT(";
-      constexpr size_t prefixLength = prefix.length();
-      if (var.starts_with(prefix)) {
-        var = var.substr(prefixLength, var.rfind(')') - prefixLength);
-      }
-      if (getVariableColumns().contains(var)) {
-        auto columnIndex = getVariableColumns().at(var);
-        exportColumns.push_back(VariableAndColumnIndex{
-            var, columnIndex, resultTable.getResultType(columnIndex)});
-      } else {
-        exportColumns.emplace_back(std::nullopt);
-        LOG(WARN) << "The variable \"" << var
-                  << "\" was found in the original query, but not in the "
-                     "execution tree. "
-                     "This is likely a bug\n";
-      }
     }
   }
   return exportColumns;
@@ -187,8 +156,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   const IdTable& idTable = resultTable->_idTable;
 
   json result;
-  result["head"]["vars"] =
-      selectedVarsOrAsterisk.getAccordinglySelectVariables();
+  result["head"]["vars"] = selectedVarsOrAsterisk.getSelectedVariable();
 
   json bindings = json::array();
 
@@ -429,8 +397,7 @@ QueryExecutionTree::generateResults(
   static constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
   constexpr std::string_view sepView{&sep, 1};
   // Print header line
-  const auto& variables =
-      selectedVarsOrAsterisk.getAccordinglySelectVariables();
+  const auto& variables = selectedVarsOrAsterisk.getSelectedVariable();
   co_yield absl::StrJoin(variables, sepView);
   co_yield '\n';
 

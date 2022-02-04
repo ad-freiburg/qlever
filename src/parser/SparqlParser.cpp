@@ -316,14 +316,14 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         // create the subquery operation
         GraphPatternOperation::Subquery subq;
         parseQuery(&subq._subquery, SELECT_QUERY);
-        ParsedQuery::SelectedVarsOrAsterisk subQ_sel_vars =
-            subq._subquery.selectClause()._varsOrAsterisk;
 
         // Add the variables from the subquery that are visible to the outside
         // (because they were selected, or because of a SELECT *) to the outer
         // query.
+        ParsedQuery::SelectedVarsOrAsterisk varsOrAsteriskFromSubquery =
+            subq._subquery.selectClause()._varsOrAsterisk;
         auto selectedVariablesFromSubquery =
-            subQ_sel_vars.getAccordinglySelectVariables();
+            varsOrAsteriskFromSubquery.getSelectedVariable();
         for (const auto& variable : selectedVariablesFromSubquery) {
           query->registerVariableVisibleInQueryBody(variable);
         }

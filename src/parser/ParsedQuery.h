@@ -337,7 +337,7 @@ class ParsedQuery {
 
     // Add a variable, that was found in the query body. The added variables
     // will only be used if `isAsterisk` is true.
-    void aux_registerVariableVisibleInQueryBody(const string& variable) {
+    void registerVariableVisibleInQueryBody(const string& variable) {
       if (!(std::find(_variablesFromQueryBody.begin(),
                       _variablesFromQueryBody.end(),
                       variable) != _variablesFromQueryBody.end())) {
@@ -357,16 +357,7 @@ class ParsedQuery {
     // Select All (Select '*')
     // or
     // explicit variables selection (Select 'var_1' ... 'var_n')
-    [[nodiscard]] auto& getAccordinglySelectVariables() {
-      return isAsterisk() ? _variablesFromQueryBody
-                          : std::get<std::vector<string>>(_varsOrAsterisk);
-    }
-
-    // Get the variables accordingly to established Selector:
-    // Select All (Select '*')
-    // or
-    // explicit variables selection (Select 'var_1' ... 'var_n')
-    [[nodiscard]] const auto& getAccordinglySelectVariables() const {
+    [[nodiscard]] const auto& getSelectedVariable() const {
       return isAsterisk() ? _variablesFromQueryBody
                           : std::get<std::vector<string>>(_varsOrAsterisk);
     }
@@ -432,8 +423,7 @@ class ParsedQuery {
   [[maybe_unused]] bool registerVariableVisibleInQueryBody(
       const string& variable) {
     if (!hasSelectClause()) return false;
-    selectClause()._varsOrAsterisk.aux_registerVariableVisibleInQueryBody(
-        variable);
+    selectClause()._varsOrAsterisk.registerVariableVisibleInQueryBody(variable);
     return true;
   }
 

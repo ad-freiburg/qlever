@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "./RdfEscaping.h"
+#include "absl/strings/str_join.h"
 
 using std::string;
 using std::vector;
@@ -38,14 +39,8 @@ string ParsedQuery::asString() const {
     const auto& selectClause = this->selectClause();
     // SELECT
     os << "\nSELECT: {\n\t";
-    const auto& SelectedVariables =
-        selectClause._varsOrAsterisk.getAccordinglySelectVariables();
-    for (size_t i = 0; i < SelectedVariables.size(); ++i) {
-      os << SelectedVariables[i];
-      if (i + 1 < SelectedVariables.size()) {
-        os << ", ";
-      }
-    }
+    os << absl::StrJoin(selectClause._varsOrAsterisk.getSelectedVariable(),
+                        ",");
     os << "\n}";
 
     // ALIASES
