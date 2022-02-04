@@ -2,11 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
+#include "./Server.h"
+
 #include <cstring>
 #include <sstream>
 #include <string>
 #include <vector>
-#include "./Server.h"
+
 #include "QueryPlanner.h"
 
 template <typename T>
