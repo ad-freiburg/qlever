@@ -16,7 +16,6 @@
 #include "../util/BoostHelpers/AsyncWaitForFuture.h"
 #include "../util/HttpServer/HttpServer.h"
 #include "../util/HttpServer/streamable_body.h"
-#include "../util/Socket.h"
 #include "../util/Timer.h"
 #include "./QueryExecutionContext.h"
 #include "./QueryExecutionTree.h"
@@ -25,7 +24,6 @@
 using std::string;
 using std::vector;
 
-using ad_utility::Socket;
 
 //! The HTTP Server used.
 class Server {

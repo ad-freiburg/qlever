@@ -7,7 +7,6 @@ add_library(engine
         Operation.h Operation.cpp
         ../global/Id.h
         ../global/Constants.h
-        ../util/Socket.h
         Comparators.h
         ResultTable.h ResultTable.cpp
         QueryExecutionContext.h
