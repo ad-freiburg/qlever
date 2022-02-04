@@ -23,7 +23,7 @@ addAndLinkTest(FileTest)
 
 addAndLinkTest(Simple8bTest)
 
-addAndLinkTest(VocabularyTest index )
+addAndLinkTest(VocabularyTest index)
 
 addAndLinkTest(ExternalVocabularyTest index)
 
