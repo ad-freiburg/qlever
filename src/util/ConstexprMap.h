@@ -29,10 +29,17 @@ constexpr void constexprBubbleSort(T& t, Compare compare) {
   }
 }
 
+template<typename First, typename Second>
+struct PairImpl {
+  First first;
+  Second second;
+  constexpr PairImpl(First f, Second s): first{f}, second(s) {}
+};
+
 /// A const and constexpr map from `Key`s to `Value`s.
 template <typename Key, typename Value, size_t numEntries>
 class ConstexprMap {
-  using Pair = std::pair<Key, Value>;
+  using Pair = PairImpl<Key, Value>;
   using Arr = std::array<Pair, numEntries>;
 
  private:
