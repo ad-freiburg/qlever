@@ -2,7 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
-
 #include "./Server.h"
 
 #include <cstring>
