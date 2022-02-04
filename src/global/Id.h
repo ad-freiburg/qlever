@@ -4,9 +4,11 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 #include <limits>
 
-typedef uint64_t Id;
+//typedef uint64_t Id;
+typedef std::size_t Id;
 typedef uint16_t Score;
 
 // A value to use when the result should be empty (e.g. due to an optional join)

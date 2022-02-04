@@ -16,7 +16,7 @@ namespace detail {
  */
 template <class F, size_t... I>
 auto setupTupleFromCallableImpl(F&& f, std::index_sequence<I...>) {
-  return std::tuple(f(I)...);
+  return std::make_tuple(f(I)...);
 }
 }  // namespace detail
 
@@ -51,7 +51,7 @@ auto setupTupleFromCallable(F&& f) {
  */
 template <typename... Rest>
 auto toUniquePtrTuple(Rest&&... rem) {
-  return std::tuple(
+  return std::make_tuple(
       std::make_unique<std::decay_t<Rest>>(std::forward<Rest>(rem))...);
 }
 
@@ -80,7 +80,7 @@ auto toRawPtrTuple(Tuple&& tuple) {
         "You can't pass an rvalue reference to toRawPtrTuple, because "
         "the argument preserves the ownership to the pointers");
   }
-  auto f = [](auto&&... args) { return std::tuple(args.get()...); };
+  auto f = [](auto&&... args) { return std::make_tuple(args.get()...); };
   return std::apply(f, tuple);  // std::forward<Tuple>(tuple));
 }
 
