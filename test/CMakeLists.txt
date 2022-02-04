@@ -61,7 +61,7 @@ target_link_libraries(QueryPlannerTest gtest_main engine ${CMAKE_THREAD_LIBS_INI
 gtest_discover_tests(QueryPlannerTest)
 
 add_executable(ConversionsTest ConversionsTest.cpp)
-target_link_libraries(ConversionsTest gtest_main  ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(ConversionsTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 gtest_discover_tests(ConversionsTest)
 
 add_executable(HashMapTest HashMapTest.cpp)
@@ -162,7 +162,7 @@ target_link_libraries(SerializerTest gtest_main absl::flat_hash_map ${CMAKE_THRE
 gtest_discover_tests(SerializerTest)
 
 add_executable(ParametersTest ParametersTest.cpp)
-target_link_libraries(ParametersTest gtest_main absl::flat_hash_map  ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(ParametersTest gtest_main absl::flat_hash_map ${CMAKE_THREAD_LIBS_INIT})
 gtest_discover_tests(ParametersTest)
 
 add_executable(ZstdCompressionTest ZstdCompressionTest.cpp)
@@ -185,16 +185,12 @@ add_executable(SparqlExpressionTest SparqlExpressionTest.cpp)
 target_link_libraries(SparqlExpressionTest gtest_main sparqlExpressions index ${CMAKE_THREAD_LIBS_INIT})
 gtest_discover_tests(SparqlExpressionTest)
 
-add_executable(OStringStreamTest OStringStreamTest.cpp)
-target_link_libraries(OStringStreamTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
-gtest_discover_tests(OStringStreamTest)
-
 add_executable(StreamableBodyTest StreamableBodyTest.cpp)
-target_link_libraries(StreamableBodyTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(StreamableBodyTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
 gtest_discover_tests(StreamableBodyTest)
 
 add_executable(StreamableGeneratorTest StreamableGeneratorTest.cpp)
-target_link_libraries(StreamableGeneratorTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(StreamableGeneratorTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
 gtest_discover_tests(StreamableGeneratorTest)
 
 add_executable(AcceptHeaderTest AcceptHeaderTest.cpp)
@@ -212,3 +208,7 @@ gtest_discover_tests(CompactStringVectorTest)
 add_executable(SparqlDataTypesTest SparqlDataTypesTest.cpp)
 target_link_libraries(SparqlDataTypesTest gmock_main engine ${CMAKE_THREAD_LIBS_INIT})
 gtest_discover_tests(SparqlDataTypesTest)
+
+add_executable(ContentEncodingHelperTest ContentEncodingHelperTest.cpp)
+target_link_libraries(ContentEncodingHelperTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+gtest_discover_tests(ContentEncodingHelperTest)

@@ -85,7 +85,7 @@ endif()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.74 COMPONENTS program_options REQUIRED)
+find_package(Boost 1.74 COMPONENTS iostreams program_options REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
 
@@ -236,7 +236,7 @@ add_executable(CreatePatternsMain src/index/CreatePatternsMain.cpp src/util/Cons
 target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(ServerMain src/ServerMain.cpp)
-target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} ${Boost_LIBRARIES})
+target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
 
 add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
 target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
@@ -252,7 +252,3 @@ target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(VocabularyConverterMain src/VocabularyConverterMain.cpp)
 target_link_libraries(VocabularyConverterMain index ${CMAKE_THREAD_LIBS_INIT})
-
-#add_executable(TextFilterComparison src/experiments/TextFilterComparison.cpp)
-#target_link_libraries (TextFilterComparison experiments)
-
