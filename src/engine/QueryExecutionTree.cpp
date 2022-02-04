@@ -10,18 +10,10 @@
 #include <sstream>
 #include <string>
 #include <utility>
-#include <variant>
 
 #include "../parser/RdfEscaping.h"
-#include "./Distinct.h"
-#include "./Filter.h"
-#include "./IndexScan.h"
-#include "./Join.h"
 #include "./OrderBy.h"
 #include "./Sort.h"
-#include "TextOperationWithFilter.h"
-#include "TextOperationWithoutFilter.h"
-#include "TwoColumnJoin.h"
 
 using std::string;
 
@@ -97,6 +89,10 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     const SelectedVarsOrAsterisk& selectedVarsOrAsterisk,
     const ResultTable& resultTable) const {
   ColumnIndicesAndTypes exportColumns;
+
+  // Should we merge this if-else-clause into less code ?
+  // Assuming the second warning shouldn't exist (*) ?
+  // (meaning: the tests have proven it works properly)
   if (selectedVarsOrAsterisk.isAsterisk()) {
     auto variablesFromExecutionTree = getVariableColumns();
     for (const auto& variableFromQuery :
@@ -115,8 +111,10 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
                      "This is likely a bug\n";
       }
     }
-    for (const auto& variableFromQuery : variablesFromExecutionTree) {
-      LOG(WARN) << "The variable \"" << variableFromQuery.first
+    // (*) this warning
+    for (const auto& [variableFromExecTree, index] :
+         variablesFromExecutionTree) {
+      LOG(WARN) << "The variable \"" << variableFromExecTree
                 << "\" was found in the execution tree, but not in the "
                    "original query. "
                    "This is likely a bug\n";
@@ -189,17 +187,8 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   const IdTable& idTable = resultTable->_idTable;
 
   json result;
-
-  if (selectedVarsOrAsterisk.isAsterisk()) {
-    vector<string> vars_names;
-    for (auto const& variable :
-         selectedVarsOrAsterisk.orderedVariablesFromQueryBody()) {
-      vars_names.push_back(variable);
-    }
-    result["head"]["vars"] = vars_names;
-  } else {
-    result["head"]["vars"] = selectedVarsOrAsterisk.getSelectVariables();
-  }
+  result["head"]["vars"] =
+      selectedVarsOrAsterisk.getAccordinglySelectVariables();
 
   json bindings = json::array();
 
@@ -441,9 +430,7 @@ QueryExecutionTree::generateResults(
   constexpr std::string_view sepView{&sep, 1};
   // Print header line
   const auto& variables =
-      selectedVarsOrAsterisk.isAsterisk()
-          ? selectedVarsOrAsterisk.orderedVariablesFromQueryBody()
-          : selectedVarsOrAsterisk.getSelectVariables();
+      selectedVarsOrAsterisk.getAccordinglySelectVariables();
   co_yield absl::StrJoin(variables, sepView);
   co_yield '\n';
 

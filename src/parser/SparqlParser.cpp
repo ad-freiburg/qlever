@@ -322,18 +322,10 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         // Add the variables from the subquery that are visible to the outside
         // (because they were selected, or because of a SELECT *) to the outer
         // query.
-        if (subQ_sel_vars.isAsterisk()) {
-          auto selectedVariablesFromSubquery =
-              subQ_sel_vars.orderedVariablesFromQueryBody();
-          for (const auto& variable : selectedVariablesFromSubquery) {
-            query->registerVariableVisibleInQueryBody(variable);
-          }
-        } else {
-          auto selectedVariablesFromSubquery =
-              subQ_sel_vars.getSelectVariables();
-          for (const auto& variable : selectedVariablesFromSubquery) {
-            query->registerVariableVisibleInQueryBody(variable);
-          }
+        auto selectedVariablesFromSubquery =
+            subQ_sel_vars.getAccordinglySelectVariables();
+        for (const auto& variable : selectedVariablesFromSubquery) {
+          query->registerVariableVisibleInQueryBody(variable);
         }
 
         currentPattern->_children.emplace_back(std::move(subq));

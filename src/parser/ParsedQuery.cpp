@@ -38,22 +38,12 @@ string ParsedQuery::asString() const {
     const auto& selectClause = this->selectClause();
     // SELECT
     os << "\nSELECT: {\n\t";
-    if (usesAsterisk) {
-      auto list = selectClause._varsOrAsterisk.orderedVariablesFromQueryBody();
-      for (auto it = list.begin(); it != list.end();) {
-        os << it->c_str();
-        if (++it != list.end()) {
-          os << ", ";
-        }
-      }
-    } else {
-      const auto& SelectedVariables =
-          selectClause._varsOrAsterisk.getSelectVariables();
-      for (size_t i = 0; i < SelectedVariables.size(); ++i) {
-        os << SelectedVariables[i];
-        if (i + 1 < SelectedVariables.size()) {
-          os << ", ";
-        }
+    const auto& SelectedVariables =
+        selectClause._varsOrAsterisk.getAccordinglySelectVariables();
+    for (size_t i = 0; i < SelectedVariables.size(); ++i) {
+      os << SelectedVariables[i];
+      if (i + 1 < SelectedVariables.size()) {
+        os << ", ";
       }
     }
     os << "\n}";

@@ -337,7 +337,7 @@ class ParsedQuery {
 
     // Add a variable, that was found in the query body. The added variables
     // will only be used if `isAsterisk` is true.
-    void registerVariableVisibleInQueryBody(const string& variable) {
+    void aux_registerVariableVisibleInQueryBody(const string& variable) {
       if (!(std::find(_variablesFromQueryBody.begin(),
                       _variablesFromQueryBody.end(),
                       variable) != _variablesFromQueryBody.end())) {
@@ -345,12 +345,30 @@ class ParsedQuery {
       }
     }
 
-    // Gets the variables which registerVariableVisibleInQueryBody` was
+    // Get the variables for which `registerVariableVisibleInQueryBody` was
     // previously called.
     // The result contains no duplicates and is ordered by the first appearance
     // in the query body.
     [[nodiscard]] const auto& orderedVariablesFromQueryBody() const {
       return _variablesFromQueryBody;
+    }
+
+    // Get the variables accordingly to established Selector:
+    // Select All (Select '*')
+    // or
+    // explicit variables selection (Select 'var_1' ... 'var_n')
+    [[nodiscard]] auto& getAccordinglySelectVariables() {
+      return isAsterisk() ? _variablesFromQueryBody
+                          : std::get<std::vector<string>>(_varsOrAsterisk);
+    }
+
+    // Get the variables accordingly to established Selector:
+    // Select All (Select '*')
+    // or
+    // explicit variables selection (Select 'var_1' ... 'var_n')
+    [[nodiscard]] const auto& getAccordinglySelectVariables() const {
+      return isAsterisk() ? _variablesFromQueryBody
+                          : std::get<std::vector<string>>(_varsOrAsterisk);
     }
   };
 
@@ -413,11 +431,9 @@ class ParsedQuery {
   // Select Clause
   [[maybe_unused]] bool registerVariableVisibleInQueryBody(
       const string& variable) {
-    if (!this->hasSelectClause()) return false;
-    if (this->selectClause()._varsOrAsterisk.isAsterisk()) {
-      this->selectClause()._varsOrAsterisk.registerVariableVisibleInQueryBody(
-          variable);
-    }
+    if (!hasSelectClause()) return false;
+    selectClause()._varsOrAsterisk.aux_registerVariableVisibleInQueryBody(
+        variable);
     return true;
   }
 

@@ -2,23 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
-#include "./Server.h"
-
-#include <re2/re2.h>
-
-#include <algorithm>
 #include <cstring>
 #include <sstream>
 #include <string>
-#include <thread>
 #include <vector>
-
-#include "../parser/ParseException.h"
-#include "../util/BoostHelpers/AsyncWaitForFuture.h"
-#include "../util/HttpServer/UrlParser.h"
-#include "../util/Log.h"
-#include "../util/StringUtils.h"
-#include "../util/json.h"
+#include "./Server.h"
 #include "QueryPlanner.h"
 
 template <typename T>
@@ -173,13 +161,8 @@ Awaitable<json> Server::composeResponseQleverJson(
     j["status"] = "OK";
     j["warnings"] = qet.collectWarnings();
     if (query.hasSelectClause()) {
-      if (query.selectClause()._varsOrAsterisk.isAsterisk()) {
-        j["selected"] = query.selectClause()
-                            ._varsOrAsterisk.orderedVariablesFromQueryBody();
-      } else {
-        j["selected"] =
-            query.selectClause()._varsOrAsterisk.getSelectVariables();
-      }
+      j["selected"] =
+          query.selectClause()._varsOrAsterisk.getAccordinglySelectVariables();
     } else {
       j["selected"] =
           std::vector<std::string>{"?subject", "?predicate", "?object"};

@@ -10,7 +10,6 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-// #include <re2/re2.h>
 
 #include <iostream>
 #include <string>
@@ -280,20 +279,17 @@ class File {
  */
 inline void deleteFile(const string& path) {
   // TODO<all>: As soon as we have GCC 8, we can use std::filesystem
-  std::string path_raw = path;
-  // Adding escape char for paths with space chars
-  auto p = path_raw.find(' ');
-  if (p != std::string::npos) {
-    path_raw.replace(p, 1, "\\ ");
-  }
 
-  // Adding escape char for paths with space chars using RE2
-  // < Currently generates undefined reference when building (CMakeLists) >
-  /*
-   string replace = "\\ ";
-   RE2 space = "( )";
-   re2::RE2::Replace(&replace,space,path_raw);
-  */
+  // Adding escape char for paths with space chars
+  // Optimized solution
+  std::string path_raw = path;
+  size_t pos = 0;
+  const string replace_str = "\\ ";
+  auto length = replace_str.length();
+  while ((pos = path_raw.find(' ', pos)) != std::string::npos) {
+    path_raw.replace(pos, 1, replace_str);
+    pos += length;
+  }
 
   string command = "rm -- " + path_raw;
   if (system(command.c_str())) {
