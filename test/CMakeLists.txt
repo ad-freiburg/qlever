@@ -93,7 +93,7 @@ addAndLinkTest(SparqlAntlrParserTest parser sparqlExpressions)
 
 addAndLinkTest(SerializerTest absl::flat_hash_map)
 
-addAndLinkTest(ParametersTest absl::flat_hash_map )
+addAndLinkTest(ParametersTest absl::flat_hash_map)
 
 addAndLinkTest(ZstdCompressionTest absl::flat_hash_map zstd ${cmake_thread_libs_init})
 
