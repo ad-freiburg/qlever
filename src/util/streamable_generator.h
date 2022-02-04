@@ -169,6 +169,9 @@ class [[nodiscard]] basic_stream_generator {
   explicit basic_stream_generator(
       std::coroutine_handle<promise_type> coroutine) noexcept
       : _coroutine{coroutine} {}
+  explicit basic_stream_generator(
+      std::experimental::coroutine_handle<promise_type> coroutine) noexcept
+      : _coroutine{coroutine} {}
 };
 
 namespace detail {

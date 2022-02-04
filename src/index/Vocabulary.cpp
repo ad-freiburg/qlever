@@ -92,8 +92,8 @@ void Vocabulary<S, C>::createFromSet(
   }
   LOG(INFO) << "... sorting ...\n";
   auto totalComparison = [this](const auto& a, const auto& b) {
-    return _caseComparator(std::string_view(a.begin(), a.end()),
-                           std::string_view(b.begin(), b.end()),
+    return _caseComparator(std::string_view(a.data(), a.size()),
+                           std::string_view(b.data(), b.size()),
                            SortLevel::TOTAL);
   };
   std::sort(begin(words), end(words), totalComparison);

@@ -50,7 +50,20 @@ TEST(CompactVectorOfStrings, Iterator) {
     s.build(input);
 
     auto it = s.begin();
-    using std::ranges::equal;
+
+    // TODO<joka921> compatibility
+    auto equal = [](const auto& a, const auto&b) -> bool {
+      if (a.size() != b.size()) {
+        return false;
+      }
+      for (size_t i = 0; i < a.size(); ++i) {
+        if (a[i] != b[i]) {
+          return false;
+        }
+      }
+      return true;
+    };
+    //using std::ranges::equal;
 
     ASSERT_TRUE(equal(input[0], *it));
     ASSERT_TRUE(equal(input[0], *it++));
@@ -80,12 +93,15 @@ TEST(CompactVectorOfStrings, Iterator) {
   testIterator(CompactVectorInt{}, ints);
 }
 
+}
 TEST(CompactVectorOfStrings, IteratorCategory) {
   using It = CompactVectorOfStrings<char>::Iterator;
-  static_assert(std::random_access_iterator<It>);
+  //static_assert(std::random_access_iterator<It>);
 
   static_assert(
       std::is_same_v<std::iterator_traits<It>::difference_type, int64_t>);
+  static_assert(
+      std::is_same_v<It::difference_type, int64_t>);
 }
 
 TEST(CompactVectorOfStrings, Serialization) {

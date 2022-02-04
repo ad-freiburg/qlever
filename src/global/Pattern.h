@@ -265,6 +265,16 @@ class CompactVectorOfStrings {
   std::vector<offset_type> _offsets;
 };
 
+namespace std {
+template <>
+struct iterator_traits<CompactVectorOfStrings<char>::Iterator> {
+  using difference_type =
+      typename CompactVectorOfStrings<char>::Iterator::difference_type;
+  using iterator_category =
+  typename CompactVectorOfStrings<char>::Iterator::iterator_category ;
+};
+}
+
 namespace detail {
 // Allows the incremental writing of a `CompactVectorOfStrings` directly to a
 // file.

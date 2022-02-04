@@ -48,6 +48,7 @@ struct coroutine_traits : experimental::coroutine_traits<T, Ts...> {
 template <typename T = void>
 struct coroutine_handle : experimental::coroutine_handle<T> {
   using Base = experimental::coroutine_handle<T>;
+  using Base::operator=;
   constexpr coroutine_handle(Base b) : Base{b} {}
 };
 

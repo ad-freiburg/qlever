@@ -162,14 +162,22 @@ auto applyOperation(size_t numElements, Operation&&, EvaluationContext* context,
   using Function = typename std::decay_t<Operation>::Function;
   static_assert(std::tuple_size_v<ValueGetters> == sizeof...(Operands));
 
-  // Function that takes a single operand and a single value getter and computes
+  // TODO<joka921> use proper compatibility, LLVM12 doesn't have bind_front
+  auto bind_front = [](auto comparator, auto&&... argsOuter) mutable {
+    return [comparator, ... arg = std::forward<decltype(argsOuter)>(
+                            argsOuter)](auto&&... args) mutable {
+      return comparator(std::forward<decltype(arg)>(arg)...,
+                        std::forward<decltype(args)>(args)...);
+    };
+  };
+    // Function that takes a single operand and a single value getter and computes
   // the corresponding generator.
-  auto getValue = std::bind_front(valueGetterGenerator, numElements, context);
+  auto getValue = bind_front(valueGetterGenerator, numElements, context);
 
   // Function that takes all the generators as a parameter pack and computes the
   // generator for the operation result;
   auto getResultFromGenerators =
-      std::bind_front(applyFunction, Function{}, numElements);
+      bind_front(applyFunction, Function{}, numElements);
 
   /// The `ValueGetters` are stored in a `std::tuple`, so we have to extract
   /// them via `std::apply`. First set up a lambda that performs the actual

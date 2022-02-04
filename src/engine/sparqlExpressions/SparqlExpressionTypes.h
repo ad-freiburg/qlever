@@ -15,6 +15,7 @@
 #include "../QueryExecutionContext.h"
 #include "../ResultTable.h"
 #include "SetOfIntervals.h"
+#include <compare>
 
 namespace sparqlExpression {
 
