@@ -82,6 +82,9 @@ TEST(CompactVectorOfStrings, Iterator) {
 TEST(CompactVectorOfStrings, IteratorCategory) {
   using It = CompactVectorOfStrings<char>::Iterator;
   static_assert(std::random_access_iterator<It>);
+
+  static_assert(
+      std::is_same_v<std::iterator_traits<It>::difference_type, int64_t>);
 }
 
 TEST(CompactVectorOfStrings, Serialization) {

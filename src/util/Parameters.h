@@ -6,6 +6,7 @@
 #define QLEVER_PARAMETERS_H
 
 #include <atomic>
+#include <functional>
 #include <tuple>
 
 #include "./ConstexprMap.h"
@@ -102,11 +103,24 @@ namespace detail::parameterShortNames {
 
 // TODO<joka921> Replace these by versions that actually parse the whole
 // string.
-using fl = decltype([](const auto& s) { return std::stof(s); });
-using dbl = decltype([](const auto& s) { return std::stod(s); });
-using szt = decltype([](const auto& s) { return std::stoull(s); });
+namespace innerDetail {
+// TODO<LLVM13> Lambdas in unevaluated context are not supported by LLVM12
+inline auto fl = [](const auto& s) { return std::stof(s); };
+inline auto dbl = [](const auto& s) { return std::stod(s); };
+inline auto szt = [](const auto& s) { return std::stoull(s); };
 
-using toString = decltype([](const auto& s) { return std::to_string(s); });
+inline auto toString = [](const auto& s) { return std::to_string(s); };
+
+// TODO<LLVM13/14> this is `std::identity`
+auto identity = [](auto&& t) { return std::forward<decltype(t)>(t); };
+
+}  // namespace innerDetail
+using fl = decltype(innerDetail::fl);
+using dbl = decltype(innerDetail::dbl);
+using szt = decltype(innerDetail::szt);
+
+using toString = decltype(innerDetail::toString);
+using identity = decltype(innerDetail::identity);
 
 /// Partial template specialization for Parameters with common types (numeric
 /// types and strings)
@@ -120,7 +134,7 @@ template <ParameterName Name>
 using SizeT = Parameter<size_t, szt, toString, Name>;
 
 template <ParameterName Name>
-using String = Parameter<std::string, std::identity, std::identity, Name>;
+using String = Parameter<std::string, identity, identity, Name>;
 
 }  // namespace detail::parameterShortNames
 

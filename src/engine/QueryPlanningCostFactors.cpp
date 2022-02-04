@@ -27,6 +27,11 @@ QueryPlanningCostFactors::QueryPlanningCostFactors() : _factors() {
 // _____________________________________________________________________________
 
 float toFloat(std::string_view view) {
+  // TODO<joka921>
+  // Even LLVM14 does not have std::from_chars for floating points,
+  // But we don't need it here.
+  return std::stof(std::string{view});
+  /*
   float factor;
   auto last = view.data() + view.size();
   auto [ptr, ec] = std::from_chars(view.data(), last, factor);
@@ -34,6 +39,7 @@ float toFloat(std::string_view view) {
     throw std::runtime_error{std::string{"Invalid float: "} + view};
   }
   return factor;
+   */
 }
 
 // _____________________________________________________________________________

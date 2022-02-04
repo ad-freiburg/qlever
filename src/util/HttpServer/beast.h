@@ -15,7 +15,10 @@
 
 // libc++ needs <experimental/coroutine>, libstdc++ needs <coroutine>
 #define BOOST_ASIO_HAS_CO_AWAIT
+
+#ifndef AD_FREIBURG_COROUTINES_EXPERIMENTAL
 #define BOOST_ASIO_HAS_STD_COROUTINE
+#endif
 
 // Needed for libc++ in C++20 mode, because std::result_of was removed.
 #define BOOST_ASIO_HAS_STD_INVOKE_RESULT

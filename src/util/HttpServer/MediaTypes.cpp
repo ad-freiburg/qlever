@@ -28,7 +28,7 @@ const ad_utility::HashMap<MediaType, MediaTypeImpl>& getAllMediaTypes() {
           type, MediaTypeImpl(type, std::move(typeString),
                               std::move(subtypeString), std::move(v))));
     };
-    //using enum MediaType;
+    // using enum MediaType;
     add(MediaType::html, "text", "html", {".htm", ".html", ".php"});
     add(MediaType::css, "text", "css", {".css"});
     add(MediaType::textPlain, "text", "plain", {".txt"});

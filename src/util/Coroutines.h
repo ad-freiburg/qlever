@@ -31,9 +31,36 @@ struct coroutine_handle : std::coroutine_handle<T> {};
 }  // namespace std::experimental
 
 #else
+
+#ifdef __clang__
+#include <experimental/coroutine>
+// This is technically not allowed, but it works.
+namespace std {
+struct suspend_always : experimental::suspend_always {};
+struct suspend_never : experimental::suspend_never {};
+
+template <typename T, typename... Ts>
+struct coroutine_traits : experimental::coroutine_traits<T, Ts...> {
+  using Base = experimental::coroutine_traits<T>;
+  constexpr coroutine_traits(Base b) : Base{b} {}
+};
+
+template <typename T = void>
+struct coroutine_handle : experimental::coroutine_handle<T> {
+  using Base = experimental::coroutine_handle<T>;
+  constexpr coroutine_handle(Base b) : Base{b} {}
+};
+
+}  // namespace std
+#define AD_FREIBURG_COROUTINES_EXPERIMENTAL
+#else
 // Simply include the coroutine header, no special treatment
 // necessary.
 #include <coroutine>
+#endif
+#endif
+
+#ifdef __clang__
 #endif
 
 #endif  // QLEVER_COROUTINES_H

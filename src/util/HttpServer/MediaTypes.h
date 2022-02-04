@@ -8,9 +8,9 @@
 #ifndef QLEVER_MEDIATYPES_H
 #define QLEVER_MEDIATYPES_H
 
+#include <compare>
 #include <string>
 #include <vector>
-#include <compare>
 
 #include "../HashMap.h"
 #include "../HashSet.h"

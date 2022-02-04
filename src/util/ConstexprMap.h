@@ -10,6 +10,21 @@
 
 namespace ad_utility {
 
+// TODO<joka921> move all the strange compatibility stuff into a proper header
+template <typename T, typename Compare>
+constexpr void constexprBubbleSort(T& t, Compare compare) {
+  if (t.size() == 0) {
+    return;
+  }
+  for (size_t i = 0; i < t.size(); ++i) {
+    for (size_t j = 0; j < t.size() - 1; ++j) {
+      if (compare(t[j + 1], t[j])) {
+        std::swap(t[j], t[j + 1]);
+      }
+    }
+  }
+}
+
 /// A const and constexpr map from `Key`s to `Value`s.
 template <typename Key, typename Value, size_t numEntries>
 class ConstexprMap {
@@ -23,7 +38,9 @@ class ConstexprMap {
  public:
   // Create from an Array of key-value pairs. The keys have to be unique.
   explicit constexpr ConstexprMap(Arr values) : _values{std::move(values)} {
-    std::sort(_values.begin(), _values.end(), compare);
+    // TODO<joka921, LLVM 13> this needs constexpr sort/unique
+    constexprBubbleSort(_values, compare);
+    // std::sort(_values.begin(), _values.end(), compare);
     if (std::unique(_values.begin(), _values.end(),
                     [](const Pair& a, const Pair& b) {
                       return a.first == b.first;
