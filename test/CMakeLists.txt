@@ -41,7 +41,7 @@ addAndLinkTest(EngineTest engine)
 
 addAndLinkTest(QueryPlannerTest engine)
 
-addAndLinkTest(ConversionsTest )
+addAndLinkTest(ConversionsTest)
 
 addAndLinkTest(HashMapTest absl::flat_hash_map)
 
