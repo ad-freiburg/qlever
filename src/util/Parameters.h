@@ -112,7 +112,7 @@ inline auto szt = [](const auto& s) { return std::stoull(s); };
 inline auto toString = [](const auto& s) { return std::to_string(s); };
 
 // TODO<LLVM13/14> this is `std::identity`
-auto identity = [](auto&& t) { return std::forward<decltype(t)>(t); };
+inline auto identity = [](auto&& t) { return std::forward<decltype(t)>(t); };
 
 }  // namespace innerDetail
 using fl = decltype(innerDetail::fl);

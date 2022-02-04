@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compiler: [ gcc11, clang13 ]
+        compiler: [ gcc11, clang13, clang12libcpp]
         os: [ ubuntu-latest ]
         warnings: [  "-Wall -Wextra -Werror" ]
         #exclude:
