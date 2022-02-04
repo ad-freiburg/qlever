@@ -41,6 +41,10 @@ jobs:
       run: wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 13
     - name: Install libc++-13
       run : sudo apt install -y libunwind-13-dev libc++abi-13-dev libc++-13-dev
+    - name: Install clang 12
+      run: wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 12
+    - name: Install libc++-12
+      run : sudo apt install -y libunwind-12-dev libc++abi-12-dev libc++-12-dev
 
     - name: Python dependencies
       run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
