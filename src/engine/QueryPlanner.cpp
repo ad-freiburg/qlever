@@ -3154,13 +3154,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
       size_t otherCol;
       if (a._qet->getType() ==
           QueryExecutionTree::OperationType::TRANSITIVE_PATH) {
-        srcpath = std::reinterpret_pointer_cast<TransitivePath>(
+        srcpath = ad::reinterpret_pointer_cast<TransitivePath>(
             a._qet->getRootOperation());
         other = b._qet;
         otherCol = jcs[0][1];
       } else {
         other = a._qet;
-        srcpath = std::reinterpret_pointer_cast<TransitivePath>(
+        srcpath = ad::reinterpret_pointer_cast<TransitivePath>(
             b._qet->getRootOperation());
         otherCol = jcs[0][0];
       }

@@ -157,6 +157,7 @@ void MmapVector<T>::adaptCapacity(size_t newCapacity) {
   writeMetaDataToEnd();
   remapLinux(oldBytesize);
 #else
+  (void) oldBytesize;
   unmap();
   writeMetaDataToEnd();
   // renew the mapping because the file has changed

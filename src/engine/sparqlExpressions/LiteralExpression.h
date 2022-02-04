@@ -34,6 +34,8 @@ class LiteralExpression : public SparqlExpression {
         return _value;
       }
       return StrongIdWithResultType{{id}, ResultTable::ResultType::KB};
+    } else if constexpr(std::is_same_v<bool, T>) {
+      return Bool{_value};
     } else {
       return _value;
     }
