@@ -43,10 +43,11 @@ class Server {
         _sortPerformanceEstimator(),
         _index(),
         _engine(),
-        _initialized(false),
+        _initialized(false)
         // The number of server threads currently also is the number of queries
         // that can be processed simultaneously.
-        _queryProcessingSemaphore(numThreads) {
+        //_queryProcessingSemaphore(numThreads)
+        {
     // TODO<joka921> Write a strong type for KB, MB, GB etc and use it
     // in the cache and the memory limit
     // Convert a number of gigabytes to the number of Ids that find in that
@@ -100,8 +101,11 @@ class Server {
   bool _enablePatternTrick;
 
   // Semaphore for the number of queries that can be processed at once.
+  // TODO<joka921> Implement a fallback for the semaphore
+  /*
   mutable std::counting_semaphore<std::numeric_limits<int>::max()>
       _queryProcessingSemaphore;
+      */
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
@@ -160,10 +164,10 @@ class Server {
   Awaitable<T> computeInNewThread(Function function) const {
     auto acquireComputeRelease = [this, function = std::move(function)] {
       LOG(DEBUG) << "Acquiring new thread for query processing\n";
-      _queryProcessingSemaphore.acquire();
+      //_queryProcessingSemaphore.acquire();
       ad_utility::OnDestruction f{[this]() noexcept {
         try {
-          _queryProcessingSemaphore.release();
+          //_queryProcessingSemaphore.release();
         } catch (...) {
         }
       }};

@@ -69,7 +69,8 @@ requires(isOperation<NaryOperation>) class NaryExpression
   }
   // _________________________________________________________________________
   std::span<SparqlExpression::Ptr> children() override {
-    return {_children.data(), _children.size()};
+    // TODO<joka921> Narrowing on clang12 cross-compiler.
+    return std::span<SparqlExpression::Ptr>(_children.data(), _children.size());
   }
 
   [[nodiscard]] string getCacheKey(

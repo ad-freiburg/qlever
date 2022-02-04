@@ -29,6 +29,17 @@
 #include "Union.h"
 #include "Values.h"
 
+namespace ad {
+// TODO<joka921> compatibility library
+template <class T, class U>
+std::shared_ptr<T> reinterpret_pointer_cast(
+    const std::shared_ptr<U>& r) noexcept {
+  auto p =
+      reinterpret_cast<typename std::shared_ptr<T>::element_type*>(r.get());
+  return std::shared_ptr<T>{r, p};
+}
+}
+
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext* qec)
     : _qec(qec), _internalVarCount(0), _enablePatternTrick(true) {}
@@ -3086,13 +3097,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
       size_t otherCol;
       if (a._qet->getType() ==
           QueryExecutionTree::OperationType::TRANSITIVE_PATH) {
-        srcpath = std::reinterpret_pointer_cast<TransitivePath>(
+        srcpath = ad::reinterpret_pointer_cast<TransitivePath>(
             a._qet->getRootOperation());
         other = b._qet;
         otherCol = jcs[0][1];
       } else {
         other = a._qet;
-        srcpath = std::reinterpret_pointer_cast<TransitivePath>(
+        srcpath = ad::reinterpret_pointer_cast<TransitivePath>(
             b._qet->getRootOperation());
         otherCol = jcs[0][0];
       }

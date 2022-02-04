@@ -120,6 +120,8 @@ void MmapVector<T>::remapLinux(size_t oldBytesize) {
   // after closing, because mmap increases the count by one
   _ptr = static_cast<T*>(ptr);
   advise(_pattern);
+#else
+  (void) oldBytesize
 #endif
 }
 

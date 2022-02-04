@@ -166,7 +166,8 @@ class CompactVectorOfStrings {
     offset_type offset = _offsets[i];
     const data_type* ptr = _data.data() + offset;
     size_t size = _offsets[i + 1] - offset;
-    return {ptr, size};
+    // TODO<joka921> narrowing on clang12-cross-compiler.
+    return value_type(ptr, size);
   }
 
   // Forward iterator for a `CompactVectorOfStrings` that reads directly from

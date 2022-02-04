@@ -6,7 +6,6 @@
 #define QLEVER_HTTPSERVER_H
 
 #include <cstdlib>
-#include <semaphore>
 
 #include "../Exception.h"
 #include "../Log.h"
