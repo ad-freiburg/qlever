@@ -111,6 +111,7 @@ void MmapVector<T>::mapForWriting() {
 // ________________________________________________________________
 template <class T>
 void MmapVector<T>::remapLinux(size_t oldBytesize) {
+#ifdef __linux__
   // 1 is MREMAP_MAYMOVE but is this portable?
   void* ptr =
       mremap(static_cast<void*>(_ptr), oldBytesize, _bytesize, 1);
@@ -119,6 +120,7 @@ void MmapVector<T>::remapLinux(size_t oldBytesize) {
   // after closing, because mmap increases the count by one
   _ptr = static_cast<T*>(ptr);
   advise(_pattern);
+#endif
 }
 
 // __________________________________________________________________
