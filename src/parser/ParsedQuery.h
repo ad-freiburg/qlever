@@ -325,13 +325,15 @@ class ParsedQuery {
     }
 
     // Sets the Selector to 'All' (*) only if the Selector is still undefined
-    void setsAsterisk() { _varsOrAsterisk = '*'; }
+    void setAllVariablesSelected() { _varsOrAsterisk = '*'; }
 
-    [[nodiscard]] const auto& getSelectVariables() const {
-      return std::get<std::vector<string>>(_varsOrAsterisk);
+    // Sets the Selector with the variables manually defined
+    // Ex: Select var_1 (...) var_n
+    void setManuallySelected(std::vector<string> variables) {
+      _varsOrAsterisk = std::move(variables);
     }
 
-    [[nodiscard]] auto& getSelectVariables() {
+    [[nodiscard]] const auto& getManuallySelectedVariables() const {
       return std::get<std::vector<string>>(_varsOrAsterisk);
     }
 
@@ -357,9 +359,9 @@ class ParsedQuery {
     // Select All (Select '*')
     // or
     // explicit variables selection (Select 'var_1' ... 'var_n')
-    [[nodiscard]] const auto& getSelectedVariable() const {
-      return isAsterisk() ? _variablesFromQueryBody
-                          : std::get<std::vector<string>>(_varsOrAsterisk);
+    [[nodiscard]] const auto& getSelectedVariables() const {
+      return isAsterisk() ? orderedVariablesFromQueryBody()
+                          : getManuallySelectedVariables();
     }
   };
 
