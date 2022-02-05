@@ -39,8 +39,8 @@ string ParsedQuery::asString() const {
     const auto& selectClause = this->selectClause();
     // SELECT
     os << "\nSELECT: {\n\t";
-    os << absl::StrJoin(selectClause._varsOrAsterisk.getSelectedVariable(),
-                        ",");
+    os << absl::StrJoin(selectClause._varsOrAsterisk.getSelectedVariables(),
+                        ", ");
     os << "\n}";
 
     // ALIASES

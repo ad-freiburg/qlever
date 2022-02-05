@@ -63,7 +63,7 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
       const auto& selectClause = query->selectClause();
       // Check if all selected variables are either aggregated or
       for (const string& var :
-           selectClause._varsOrAsterisk.getSelectVariables()) {
+           selectClause._varsOrAsterisk.getManuallySelectedVariables()) {
         if (var[0] == '?') {
           bool is_alias = false;
           for (const ParsedQuery::Alias& a : selectClause._aliases) {
@@ -122,7 +122,7 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
   ad_utility::HashMap<std::string, size_t> variable_counts;
   if (selectClause._varsOrAsterisk.isVariables()) {
     for (const std::string& s :
-         selectClause._varsOrAsterisk.getSelectVariables()) {
+         selectClause._varsOrAsterisk.getManuallySelectedVariables()) {
       variable_counts[s]++;
     }
   }
@@ -168,46 +168,53 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
     selectClause._reduced = true;
   }
   if (_lexer.accept("*")) {
-    selectClause._varsOrAsterisk.setsAsterisk();
+    selectClause._varsOrAsterisk.setAllVariablesSelected();
   }
+  std::vector<std::string> manuallySelectedVariables;
   while (!_lexer.accept("where")) {
-    if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-      // Exception avoided due to previous Syntax Check of Selector '*'
-      selectClause._varsOrAsterisk.getSelectVariables().push_back(
-          _lexer.current().raw);
-    } else if (_lexer.accept("text")) {
-      _lexer.expect("(");
-      std::ostringstream s;
-      s << "TEXT(";
-      _lexer.expect(SparqlToken::Type::VARIABLE);
-      s << _lexer.current().raw;
-      _lexer.expect(")");
-      s << ")";
-      selectClause._varsOrAsterisk.getSelectVariables().push_back(s.str());
-    } else if (_lexer.accept("score")) {
-      _lexer.expect("(");
-      std::ostringstream s;
-      s << "SCORE(";
-      _lexer.expect(SparqlToken::Type::VARIABLE);
-      s << _lexer.current().raw;
-      _lexer.expect(")");
-      s << ")";
-      selectClause._varsOrAsterisk.getSelectVariables().push_back(s.str());
-    } else if (_lexer.accept("(")) {
-      // expect an alias
-      ParsedQuery::Alias a = parseAliasWithAntlr();
-      selectClause._aliases.push_back(a);
-      selectClause._varsOrAsterisk.getSelectVariables().emplace_back(
-          a._outVarName);
-      _lexer.expect(")");
+    if (selectClause._varsOrAsterisk.isAsterisk()) {
+      if (!_lexer.empty()) {
+        throw ParseException("Keyword WHERE expected after SELECT '*' ");
+      }
     } else {
-      _lexer.accept();
-      throw ParseException("Error in SELECT: unexpected token: " +
-                           _lexer.current().raw);
+      if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
+        manuallySelectedVariables.push_back(_lexer.current().raw);
+      } else if (_lexer.accept("text")) {
+        _lexer.expect("(");
+        std::ostringstream s;
+        s << "TEXT(";
+        _lexer.expect(SparqlToken::Type::VARIABLE);
+        s << _lexer.current().raw;
+        _lexer.expect(")");
+        s << ")";
+        manuallySelectedVariables.push_back(s.str());
+      } else if (_lexer.accept("score")) {
+        _lexer.expect("(");
+        std::ostringstream s;
+        s << "SCORE(";
+        _lexer.expect(SparqlToken::Type::VARIABLE);
+        s << _lexer.current().raw;
+        _lexer.expect(")");
+        s << ")";
+        manuallySelectedVariables.push_back(s.str());
+      } else if (_lexer.accept("(")) {
+        // expect an alias
+        ParsedQuery::Alias a = parseAliasWithAntlr();
+        selectClause._aliases.push_back(a);
+        manuallySelectedVariables.push_back(a._outVarName);
+        _lexer.expect(")");
+      } else {
+        _lexer.accept();
+        throw ParseException("Error in SELECT: unexpected token: " +
+                             _lexer.current().raw);
+      }
+      if (_lexer.empty()) {
+        throw ParseException("Keyword WHERE expected after SELECT.");
+      }
     }
-    if (_lexer.empty()) {
-      throw ParseException("Keyword WHERE expected after SELECT.");
-    }
+  }
+  if (!selectClause._varsOrAsterisk.isAsterisk()) {
+    selectClause._varsOrAsterisk.setManuallySelected(manuallySelectedVariables);
   }
 }
 
@@ -233,7 +240,7 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
     auto& selectClause = query->selectClause();
 
     for (const auto& selectedVariable :
-         selectClause._varsOrAsterisk.getSelectVariables()) {
+         selectClause._varsOrAsterisk.getManuallySelectedVariables()) {
       if (selectedVariable == a._outVarName) {
         throw ParseException("A variable with name " + selectedVariable +
                              " is already used, but the ORDER BY with alias " +
@@ -323,7 +330,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         ParsedQuery::SelectedVarsOrAsterisk varsOrAsteriskFromSubquery =
             subq._subquery.selectClause()._varsOrAsterisk;
         auto selectedVariablesFromSubquery =
-            varsOrAsteriskFromSubquery.getSelectedVariable();
+            varsOrAsteriskFromSubquery.getSelectedVariables();
         for (const auto& variable : selectedVariablesFromSubquery) {
           query->registerVariableVisibleInQueryBody(variable);
         }

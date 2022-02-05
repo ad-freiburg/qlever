@@ -164,7 +164,7 @@ Awaitable<json> Server::composeResponseQleverJson(
     j["warnings"] = qet.collectWarnings();
     if (query.hasSelectClause()) {
       j["selected"] =
-          query.selectClause()._varsOrAsterisk.getSelectedVariable();
+          query.selectClause()._varsOrAsterisk.getSelectedVariables();
     } else {
       j["selected"] =
           std::vector<std::string>{"?subject", "?predicate", "?object"};

@@ -90,7 +90,7 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     const ResultTable& resultTable) const {
   ColumnIndicesAndTypes exportColumns;
 
-  for (auto var : selectedVarsOrAsterisk.getSelectedVariable()) {
+  for (auto var : selectedVarsOrAsterisk.getSelectedVariables()) {
     // TODO: The TEXT(?variable) syntax is redundant and will probably removed
     //  when we have a proper SPARQL parser.
     constexpr std::string_view prefix = "TEXT(";
@@ -156,7 +156,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   const IdTable& idTable = resultTable->_idTable;
 
   json result;
-  result["head"]["vars"] = selectedVarsOrAsterisk.getSelectedVariable();
+  result["head"]["vars"] = selectedVarsOrAsterisk.getSelectedVariables();
 
   json bindings = json::array();
 
@@ -397,7 +397,7 @@ QueryExecutionTree::generateResults(
   static constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
   constexpr std::string_view sepView{&sep, 1};
   // Print header line
-  const auto& variables = selectedVarsOrAsterisk.getSelectedVariable();
+  const auto& variables = selectedVarsOrAsterisk.getSelectedVariables();
   co_yield absl::StrJoin(variables, sepView);
   co_yield '\n';
 
