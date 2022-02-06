@@ -102,38 +102,6 @@ void Vocabulary<S, C>::createFromSet(
 }
 
 // _____________________________________________________________________________
-// TODO<joka921> is this used? if no, throw out, if yes, transform to
-// compressedString as key type
-template <class S, class C>
-template <typename, typename>
-ad_utility::HashMap<string, Id> Vocabulary<S, C>::asMap() {
-  ad_utility::HashMap<string, Id> map;
-  for (size_t i = 0; i < _words.size(); ++i) {
-    map[_words[i]] = i;
-  }
-  return map;
-}
-
-/*
-// _____________________________________________________________________________
-template <class S, class C>
-template <typename, typename>
-void Vocabulary<S, C>::externalizeLiterals(const string& fileName) {
-  LOG(INFO) << "Externalizing literals..." << std::endl;
-  auto ext = std::lower_bound(_words.begin(), _words.end(),
-                              EXTERNALIZED_LITERALS_PREFIX, _caseComparator);
-  size_t nofInternal = ext - _words.begin();
-  vector<string> extVocab;
-  while (ext != _words.end()) {
-    extVocab.push_back((*ext++).substr(1));
-  }
-  _words.resize(nofInternal);
-  _externalLiterals.buildFromVector(extVocab, fileName);
-  LOG(INFO) << "Done externalizing literals." << std::endl;
-}
- */
-
-// _____________________________________________________________________________
 template <class S, class C>
 bool Vocabulary<S, C>::isLiteral(const string& word) {
   return word.size() > 0 && word[0] == '\"';
