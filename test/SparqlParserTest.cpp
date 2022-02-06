@@ -463,10 +463,10 @@ TEST(ParserTest, testParse) {
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(true, sc._reduced);
-      ASSERT_EQ(true, sc._varsOrAsterisk.isAsterisk());
+      ASSERT_EQ(true, sc._varsOrAsterisk.isAllVariablesSelected());
 
       vector<string> vvars = {"?movie", "?director"};
-      ASSERT_EQ(vvars, sc._varsOrAsterisk.orderedVariablesFromQueryBody());
+      ASSERT_EQ(vvars, sc._varsOrAsterisk.getSelectedVariables());
     }
 
     {
@@ -495,10 +495,10 @@ TEST(ParserTest, testParse) {
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(true, sc._distinct);
-      ASSERT_EQ(true, sc._varsOrAsterisk.isAsterisk());
+      ASSERT_EQ(true, sc._varsOrAsterisk.isAllVariablesSelected());
 
       vector<string> vvars = {"?movie", "?director"};
-      ASSERT_EQ(vvars, sc._varsOrAsterisk.orderedVariablesFromQueryBody());
+      ASSERT_EQ(vvars, sc._varsOrAsterisk.getSelectedVariables());
     }
 
     {
@@ -537,10 +537,10 @@ TEST(ParserTest, testParse) {
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(true, sc._distinct);
-      ASSERT_EQ(true, sc._varsOrAsterisk.isAsterisk());
+      ASSERT_EQ(true, sc._varsOrAsterisk.isAllVariablesSelected());
 
       vector<string> vvars = {"?movie", "?director", "?year"};
-      ASSERT_EQ(vvars, sc._varsOrAsterisk.orderedVariablesFromQueryBody());
+      ASSERT_EQ(vvars, sc._varsOrAsterisk.getSelectedVariables());
 
       // -- SubQuery
       auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
@@ -574,10 +574,10 @@ TEST(ParserTest, testParse) {
           get<ParsedQuery::SelectClause>(parsed_sub_query._subquery._clause);
       ASSERT_EQ(false, sc_subquery._distinct);
       ASSERT_EQ(false, sc_subquery._reduced);
-      ASSERT_EQ(true, sc_subquery._varsOrAsterisk.isAsterisk());
+      ASSERT_EQ(true, sc_subquery._varsOrAsterisk.isAllVariablesSelected());
       vector<string> vvars_subquery = {"?movie", "?director", "?year"};
       ASSERT_EQ(vvars_subquery,
-                sc_subquery._varsOrAsterisk.orderedVariablesFromQueryBody());
+                sc_subquery._varsOrAsterisk.getSelectedVariables());
     }
 
     {
@@ -621,10 +621,10 @@ TEST(ParserTest, testParse) {
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(true, sc._distinct);
-      ASSERT_EQ(true, sc._varsOrAsterisk.isAsterisk());
+      ASSERT_EQ(true, sc._varsOrAsterisk.isAllVariablesSelected());
 
       vector<string> vvars = {"?movie", "?director", "?year"};
-      ASSERT_EQ(vvars, sc._varsOrAsterisk.orderedVariablesFromQueryBody());
+      ASSERT_EQ(vvars, sc._varsOrAsterisk.getSelectedVariables());
 
       // -- SubQuery (level 1)
       auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
@@ -654,10 +654,10 @@ TEST(ParserTest, testParse) {
           get<ParsedQuery::SelectClause>(parsed_sub_query._subquery._clause);
       ASSERT_EQ(false, sc_subquery._distinct);
       ASSERT_EQ(false, sc_subquery._reduced);
-      ASSERT_EQ(true, sc_subquery._varsOrAsterisk.isAsterisk());
+      ASSERT_EQ(true, sc_subquery._varsOrAsterisk.isAllVariablesSelected());
       vector<string> vvars_subquery = {"?movie", "?director", "?year"};
       ASSERT_EQ(vvars_subquery,
-                sc_subquery._varsOrAsterisk.orderedVariablesFromQueryBody());
+                sc_subquery._varsOrAsterisk.getSelectedVariables());
 
       // -- SubQuery (level 2)
       auto parsed_sub_sub_query = get<GraphPatternOperation::Subquery>(
@@ -689,7 +689,8 @@ TEST(ParserTest, testParse) {
           get<ParsedQuery::SelectClause>(aux_parsed_sub_sub_query._clause);
       ASSERT_EQ(false, sc_sub_subquery._distinct);
       ASSERT_EQ(false, sc_sub_subquery._reduced);
-      ASSERT_EQ(true, sc_sub_subquery._varsOrAsterisk.isVariables());
+      ASSERT_EQ(true,
+                sc_sub_subquery._varsOrAsterisk.isManuallySelectedVariables());
       vector<string> vvars_sub_subquery = {"?year"};
       ASSERT_EQ(vvars_sub_subquery,
                 sc_sub_subquery._varsOrAsterisk.getSelectedVariables());
@@ -719,70 +720,41 @@ TEST(ParserTest, testParse) {
     {
       // Check if the correct ParseException is thrown after
       // GroupBy with Select '*'
-      try {
-        auto pq = SparqlParser(
-                      "SELECT DISTINCT * WHERE { \n"
-                      "  ?a <b> ?c .\n"
-                      "} \n"
-                      "GROUP BY ?a ?c \n")
-                      .parse();
-      } catch (ParseException const& e) {
-        // check exception cause
-        ASSERT_STREQ(
-            "ParseException, cause: GROUP BY is not allowed when all variables "
-            "are selected via SELECT *",
-            e.what());
-      }
+      auto pq = SparqlParser(
+          "SELECT DISTINCT * WHERE { \n"
+          "  ?a <b> ?c .\n"
+          "} \n"
+          "GROUP BY ?a ?c \n");
+      ASSERT_THROW(pq.parse(), ParseException);
     }
 
     {
       // Check if the correct ParseException is thrown after:
       // Select [var_name]+ '*'
-      try {
-        auto pq = SparqlParser(
-                      "SELECT DISTINCT ?a * WHERE { \n"
-                      "  ?a <b> ?c .\n"
-                      "} \n")
-                      .parse();
-      } catch (ParseException const& e) {
-        // check exception cause
-        ASSERT_STREQ(
-            "ParseException, cause: Error in SELECT: unexpected token: *",
-            e.what());
-      }
+      auto pq = SparqlParser(
+          "SELECT DISTINCT ?a * WHERE { \n"
+          "  ?a <b> ?c .\n"
+          "} \n");
+      ASSERT_THROW(pq.parse(), ParseException);
     }
 
     {
       // Check if the correct ParseException is thrown after:
       // Select '*' [var_name]+
-      try {
-        auto pq = SparqlParser(
-                      "SELECT DISTINCT * ?a WHERE { \n"
-                      "  ?a <b> ?c .\n"
-                      "} \n")
-                      .parse();
-      } catch (ParseException const& e) {
-        // check exception cause
-        ASSERT_STREQ(
-            "ParseException, cause: Keyword WHERE expected after SELECT '*' ",
-            e.what());
-      }
+      auto pq = SparqlParser(
+          "SELECT DISTINCT * ?a WHERE { \n"
+          "  ?a <b> ?c .\n"
+          "} \n");
+      ASSERT_THROW(pq.parse(), ParseException);
     }
 
     {
       // Check if the correct ParseException is thrown after: Select ['*']{2,}
-      try {
-        auto pq = SparqlParser(
-                      "SELECT DISTINCT * * WHERE { \n"
-                      "  ?a <b> ?c .\n"
-                      "} \n")
-                      .parse();
-      } catch (ParseException const& e) {
-        // check exception cause
-        ASSERT_STREQ(
-            "ParseException, cause: Keyword WHERE expected after SELECT '*' ",
-            e.what());
-      }
+      auto pq = SparqlParser(
+          "SELECT DISTINCT * * WHERE { \n"
+          "  ?a <b> ?c .\n"
+          "} \n");
+      ASSERT_THROW(pq.parse(), ParseException);
     }
 
   } catch (const ad_semsearch::Exception& e) {

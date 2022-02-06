@@ -307,20 +307,19 @@ class ParsedQuery {
     }
   };
 
-  typedef std::variant<vector<string>, char> SelectVarsOrAsterisk;
   // Represents either "all Variables" (Select *) or a list of explicitly
   // selected Variables (Select ?a ?b).
   struct SelectedVarsOrAsterisk {
    private:
-    SelectVarsOrAsterisk _varsOrAsterisk;
+    std::variant<vector<string>, char> _varsOrAsterisk;
     std::vector<string> _variablesFromQueryBody;
 
    public:
-    [[nodiscard]] bool isAsterisk() const {
+    [[nodiscard]] bool isAllVariablesSelected() const {
       return std::holds_alternative<char>(_varsOrAsterisk);
     }
 
-    [[nodiscard]] bool isVariables() const {
+    [[nodiscard]] bool isManuallySelectedVariables() const {
       return std::holds_alternative<std::vector<string>>(_varsOrAsterisk);
     }
 
@@ -333,10 +332,6 @@ class ParsedQuery {
       _varsOrAsterisk = std::move(variables);
     }
 
-    [[nodiscard]] const auto& getManuallySelectedVariables() const {
-      return std::get<std::vector<string>>(_varsOrAsterisk);
-    }
-
     // Add a variable, that was found in the query body. The added variables
     // will only be used if `isAsterisk` is true.
     void registerVariableVisibleInQueryBody(const string& variable) {
@@ -347,21 +342,15 @@ class ParsedQuery {
       }
     }
 
-    // Get the variables for which `registerVariableVisibleInQueryBody` was
-    // previously called.
-    // The result contains no duplicates and is ordered by the first appearance
-    // in the query body.
-    [[nodiscard]] const auto& orderedVariablesFromQueryBody() const {
-      return _variablesFromQueryBody;
-    }
-
     // Get the variables accordingly to established Selector:
     // Select All (Select '*')
     // or
     // explicit variables selection (Select 'var_1' ... 'var_n')
     [[nodiscard]] const auto& getSelectedVariables() const {
-      return isAsterisk() ? orderedVariablesFromQueryBody()
-                          : getManuallySelectedVariables();
+      return isAllVariablesSelected()
+                 ? _variablesFromQueryBody
+                 : std::get<std::vector<string>>(_varsOrAsterisk);
+      ;
     }
   };
 

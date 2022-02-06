@@ -497,12 +497,12 @@ bool QueryPlanner::checkUsePatternTrick(
 
       // Check that all selected variables are outputs of
       // CountAvailablePredicates
-      if (selectClause._varsOrAsterisk.isAsterisk()) {
+      if (selectClause._varsOrAsterisk.isAllVariablesSelected()) {
         return false;
       }
 
       const auto& selectedVariables =
-          selectClause._varsOrAsterisk.getManuallySelectedVariables();
+          selectClause._varsOrAsterisk.getSelectedVariables();
       for (const std::string& s : selectedVariables) {
         if (s != t._o && s != count_var_name) {
           usePatternTrick = false;
@@ -572,9 +572,9 @@ bool QueryPlanner::checkUsePatternTrick(
               return;
             }
             const auto& selectClause = arg._subquery.selectClause();
-            if (selectClause._varsOrAsterisk.isVariables()) {
-              for (const auto& v : selectClause._varsOrAsterisk
-                                       .getManuallySelectedVariables()) {
+            if (selectClause._varsOrAsterisk.isManuallySelectedVariables()) {
+              for (const auto& v :
+                   selectClause._varsOrAsterisk.getSelectedVariables()) {
                 if (v == t._o) {
                   usePatternTrick = false;
                   break;
@@ -627,9 +627,9 @@ bool QueryPlanner::checkUsePatternTrick(
                 return;
               }
               const auto& selectClause = arg._subquery.selectClause();
-              if (selectClause._varsOrAsterisk.isVariables()) {
-                for (const auto& v : selectClause._varsOrAsterisk
-                                         .getManuallySelectedVariables()) {
+              if (selectClause._varsOrAsterisk.isManuallySelectedVariables()) {
+                for (const auto& v :
+                     selectClause._varsOrAsterisk.getSelectedVariables()) {
                   if (v == t._o) {
                     usePatternTrick = false;
                     break;
@@ -690,12 +690,12 @@ bool QueryPlanner::checkUsePatternTrick(
       // Filters are only scoped within a GraphPattern, so we only
       // have to  check curPattern
       auto& filters = pq->_rootGraphPattern._filters;
-      for (size_t ii = 0; ii < filters.size(); ii++) {
-        const SparqlFilter& filter = filters[ii];
+      for (size_t k = 0; k < filters.size(); k++) {
+        const SparqlFilter& filter = filters[k];
         if (filter._lhs == t._o && filter._rhs[0] != '?') {
           pq->_havingClauses.push_back(filter);
-          filters.erase(filters.begin() + ii);
-          ii--;
+          filters.erase(filters.begin() + k);
+          k--;
         }
       }
       return true;
@@ -832,14 +832,14 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
   added.reserve(previous.size());
-  for (const auto& i : previous) {
+  for (const auto& parent : previous) {
     SubtreePlan distinctPlan(_qec);
     vector<size_t> keepIndices;
     ad_utility::HashSet<size_t> indDone;
-    const auto& colMap = i._qet->getVariableColumns();
-    if (selectClause._varsOrAsterisk.isVariables()) {
+    const auto& colMap = parent._qet->getVariableColumns();
+    if (selectClause._varsOrAsterisk.isManuallySelectedVariables()) {
       for (const auto& var :
-           selectClause._varsOrAsterisk.getManuallySelectedVariables()) {
+           selectClause._varsOrAsterisk.getSelectedVariables()) {
         const auto it = colMap.find(var);
         if (it != colMap.end()) {
           auto ind = it->second;
@@ -862,43 +862,44 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
       }
     }
     const std::vector<size_t>& resultSortedOn =
-        i._qet->getRootOperation()->getResultSortedOn();
+        parent._qet->getRootOperation()->getResultSortedOn();
     // check if the current result is sorted on all columns of the distinct
     // with the order of the sorting
     bool isSorted = resultSortedOn.size() >= keepIndices.size();
-    for (size_t ii = 0; isSorted && ii < keepIndices.size(); ii++) {
-      isSorted = isSorted && resultSortedOn[ii] == keepIndices[ii];
+    for (size_t j = 0; isSorted && j < keepIndices.size(); j++) {
+      isSorted = isSorted && resultSortedOn[j] == keepIndices[j];
     }
     if (isSorted) {
-      auto distinct = std::make_shared<Distinct>(_qec, i._qet, keepIndices);
+      auto distinct =
+          std::make_shared<Distinct>(_qec, parent._qet, keepIndices);
       distinctPlan._qet->setOperation(QueryExecutionTree::DISTINCT, distinct);
       distinctPlan._qet->setVariableColumns(distinct->getVariableColumns());
-      distinctPlan._qet->setContextVars(i._qet->getContextVars());
+      distinctPlan._qet->setContextVars(parent._qet->getContextVars());
     } else {
       if (keepIndices.size() == 1) {
         auto tree = std::make_shared<QueryExecutionTree>(_qec);
-        auto sort = std::make_shared<Sort>(_qec, i._qet, keepIndices[0]);
-        tree->setVariableColumns(i._qet->getVariableColumns());
+        auto sort = std::make_shared<Sort>(_qec, parent._qet, keepIndices[0]);
+        tree->setVariableColumns(parent._qet->getVariableColumns());
         tree->setOperation(QueryExecutionTree::SORT, sort);
-        tree->setContextVars(i._qet->getContextVars());
+        tree->setContextVars(parent._qet->getContextVars());
         auto distinct = std::make_shared<Distinct>(_qec, tree, keepIndices);
         distinctPlan._qet->setOperation(QueryExecutionTree::DISTINCT, distinct);
         distinctPlan._qet->setVariableColumns(distinct->getVariableColumns());
-        distinctPlan._qet->setContextVars(i._qet->getContextVars());
+        distinctPlan._qet->setContextVars(parent._qet->getContextVars());
       } else {
         auto tree = std::make_shared<QueryExecutionTree>(_qec);
         vector<pair<size_t, bool>> obCols;
-        for (auto& ii : keepIndices) {
-          obCols.emplace_back(std::make_pair(ii, false));
+        for (auto& j : keepIndices) {
+          obCols.emplace_back(std::make_pair(j, false));
         }
-        auto ob = std::make_shared<OrderBy>(_qec, i._qet, obCols);
-        tree->setVariableColumns(i._qet->getVariableColumns());
+        auto ob = std::make_shared<OrderBy>(_qec, parent._qet, obCols);
+        tree->setVariableColumns(parent._qet->getVariableColumns());
         tree->setOperation(QueryExecutionTree::ORDER_BY, ob);
-        tree->setContextVars(i._qet->getContextVars());
+        tree->setContextVars(parent._qet->getContextVars());
         auto distinct = std::make_shared<Distinct>(_qec, tree, keepIndices);
         distinctPlan._qet->setOperation(QueryExecutionTree::DISTINCT, distinct);
         distinctPlan._qet->setVariableColumns(distinct->getVariableColumns());
-        distinctPlan._qet->setContextVars(i._qet->getContextVars());
+        distinctPlan._qet->setContextVars(parent._qet->getContextVars());
       }
     }
     added.push_back(distinctPlan);
@@ -1020,13 +1021,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
   added.reserve(previous.size());
-  for (const auto& i : previous) {
-    const SubtreePlan* parent = &i;
+  for (auto& parent : previous) {
     // Create a group by operation to determine on which columns the input
     // needs to be sorted
     SubtreePlan groupByPlan(_qec);
-    groupByPlan._idsOfIncludedNodes = parent->_idsOfIncludedNodes;
-    groupByPlan._idsOfIncludedFilters = parent->_idsOfIncludedFilters;
+    groupByPlan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
+    groupByPlan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
     std::vector<ParsedQuery::Alias> aliases;
     if (pq.hasSelectClause()) {
       aliases = pq.selectClause()._aliases;
@@ -1037,27 +1037,27 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
 
     // Then compute the sort columns
     std::vector<std::pair<size_t, bool>> sortColumns =
-        groupBy->computeSortColumns(parent->_qet.get());
+        groupBy->computeSortColumns(parent._qet.get());
 
     const std::vector<size_t>& inputSortedOn =
-        parent->_qet->getRootOperation()->getResultSortedOn();
+        parent._qet->getRootOperation()->getResultSortedOn();
 
     bool inputSorted = sortColumns.size() <= inputSortedOn.size();
-    for (size_t ii = 0; inputSorted && ii < sortColumns.size(); ii++) {
-      inputSorted = sortColumns[ii].first == inputSortedOn[ii];
+    for (size_t i = 0; inputSorted && i < sortColumns.size(); i++) {
+      inputSorted = sortColumns[i].first == inputSortedOn[i];
     }
     // Create the plan here to avoid it falling out of context early
     SubtreePlan orderByPlan(_qec);
     if (!sortColumns.empty() && !inputSorted) {
       // Create an order by operation as required by the group by
-      auto orderBy = std::make_shared<OrderBy>(_qec, parent->_qet, sortColumns);
+      auto orderBy = std::make_shared<OrderBy>(_qec, parent._qet, sortColumns);
       QueryExecutionTree& orderByTree = *orderByPlan._qet;
-      orderByTree.setVariableColumns(parent->_qet->getVariableColumns());
+      orderByTree.setVariableColumns(parent._qet->getVariableColumns());
       orderByTree.setOperation(QueryExecutionTree::ORDER_BY, orderBy);
-      parent = &orderByPlan;
-    }
+      groupBy->setSubtree(orderByPlan._qet);
+    } else
+      groupBy->setSubtree(parent._qet);
 
-    groupBy->setSubtree(parent->_qet);
     groupByTree.setVariableColumns(groupBy->getVariableColumns());
     groupByTree.setOperation(QueryExecutionTree::GROUP_BY, groupBy);
     added.push_back(groupByPlan);
@@ -1071,44 +1071,46 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
   added.reserve(previous.size());
-  for (const auto& i : previous) {
+  for (const auto& parent : previous) {
     SubtreePlan plan(_qec);
     auto& tree = *plan._qet;
-    plan._idsOfIncludedNodes = i._idsOfIncludedNodes;
-    plan._idsOfIncludedFilters = i._idsOfIncludedFilters;
+    plan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
+    plan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
     if (pq._orderBy.size() == 1 && !pq._orderBy[0]._desc) {
-      size_t col = i._qet->getVariableColumn(pq._orderBy[0]._key);
-      const std::vector<size_t>& previousSortedOn = i._qet->resultSortedOn();
+      size_t col = parent._qet->getVariableColumn(pq._orderBy[0]._key);
+      const std::vector<size_t>& previousSortedOn =
+          parent._qet->resultSortedOn();
       if (!previousSortedOn.empty() && col == previousSortedOn[0]) {
         // Already sorted perfectly
-        added.push_back(i);
+        added.push_back(parent);
       } else {
-        auto sort = std::make_shared<Sort>(_qec, i._qet, col);
-        tree.setVariableColumns(i._qet->getVariableColumns());
+        auto sort = std::make_shared<Sort>(_qec, parent._qet, col);
+        tree.setVariableColumns(parent._qet->getVariableColumns());
         tree.setOperation(QueryExecutionTree::SORT, sort);
-        tree.setContextVars(i._qet->getContextVars());
+        tree.setContextVars(parent._qet->getContextVars());
         added.push_back(plan);
       }
     } else {
       vector<pair<size_t, bool>> sortIndices;
       for (auto& ord : pq._orderBy) {
-        sortIndices.emplace_back(
-            pair<size_t, bool>{i._qet->getVariableColumn(ord._key), ord._desc});
+        sortIndices.emplace_back(parent._qet->getVariableColumn(ord._key),
+                                 ord._desc);
       }
-      const std::vector<size_t>& previousSortedOn = i._qet->resultSortedOn();
+      const std::vector<size_t>& previousSortedOn =
+          parent._qet->resultSortedOn();
       bool alreadySorted = previousSortedOn.size() >= sortIndices.size();
-      for (size_t ii = 0; alreadySorted && ii < sortIndices.size(); ii++) {
-        alreadySorted = alreadySorted && !sortIndices[ii].second &&
-                        sortIndices[ii].first == previousSortedOn[ii];
+      for (size_t j = 0; alreadySorted && j < sortIndices.size(); j++) {
+        alreadySorted = alreadySorted && !sortIndices[j].second &&
+                        sortIndices[j].first == previousSortedOn[j];
       }
       if (alreadySorted) {
         // Already sorted perfectly
-        added.push_back(i);
+        added.push_back(parent);
       } else {
-        auto ob = std::make_shared<OrderBy>(_qec, i._qet, sortIndices);
-        tree.setVariableColumns(i._qet->getVariableColumns());
+        auto ob = std::make_shared<OrderBy>(_qec, parent._qet, sortIndices);
+        tree.setVariableColumns(parent._qet->getVariableColumns());
         tree.setOperation(QueryExecutionTree::ORDER_BY, ob);
-        tree.setContextVars(i._qet->getContextVars());
+        tree.setContextVars(parent._qet->getContextVars());
 
         added.push_back(plan);
       }
@@ -1735,8 +1737,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
 
   std::vector<std::shared_ptr<ParsedQuery::GraphPattern>> childPlans;
   childPlans.reserve(path._children.size());
-  for (const auto& i : path._children) {
-    childPlans.push_back(seedFromPropertyPath(left, i, right));
+  for (const auto& child : path._children) {
+    childPlans.push_back(seedFromPropertyPath(left, child, right));
   }
   // todo<joka921> refactor this nonsense recursively by getting rid of the
   // shared_ptrs everywhere
