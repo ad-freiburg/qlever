@@ -16,7 +16,7 @@ class Literal {
   static std::string toString(const T& t) {
     std::ostringstream stream;
     stream << t;
-    return stream.str();
+    return std::move(stream).str();
   }
 
   static std::string toString(bool boolean) {
