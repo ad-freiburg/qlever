@@ -690,12 +690,12 @@ bool QueryPlanner::checkUsePatternTrick(
       // Filters are only scoped within a GraphPattern, so we only
       // have to  check curPattern
       auto& filters = pq->_rootGraphPattern._filters;
-      for (size_t k = 0; k < filters.size(); k++) {
-        const SparqlFilter& filter = filters[k];
+      for (size_t j = 0; j < filters.size(); j++) {
+        const SparqlFilter& filter = filters[j];
         if (filter._lhs == t._o && filter._rhs[0] != '?') {
           pq->_havingClauses.push_back(filter);
-          filters.erase(filters.begin() + k);
-          k--;
+          filters.erase(filters.begin() + j);
+          j--;
         }
       }
       return true;
@@ -866,8 +866,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
     // check if the current result is sorted on all columns of the distinct
     // with the order of the sorting
     bool isSorted = resultSortedOn.size() >= keepIndices.size();
-    for (size_t j = 0; isSorted && j < keepIndices.size(); j++) {
-      isSorted = isSorted && resultSortedOn[j] == keepIndices[j];
+    for (size_t i = 0; isSorted && i < keepIndices.size(); i++) {
+      isSorted = isSorted && resultSortedOn[i] == keepIndices[i];
     }
     if (isSorted) {
       auto distinct =
@@ -889,8 +889,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
       } else {
         auto tree = std::make_shared<QueryExecutionTree>(_qec);
         vector<pair<size_t, bool>> obCols;
-        for (auto& j : keepIndices) {
-          obCols.emplace_back(std::make_pair(j, false));
+        for (auto& i : keepIndices) {
+          obCols.emplace_back(std::make_pair(i, false));
         }
         auto ob = std::make_shared<OrderBy>(_qec, parent._qet, obCols);
         tree->setVariableColumns(parent._qet->getVariableColumns());
@@ -919,11 +919,11 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
   vector<SubtreePlan> added;
   if (previous != nullptr && !previous->empty()) {
     added.reserve(previous->size());
-    for (const auto& i : *previous) {
+    for (const auto& parent : *previous) {
       // Determine the column containing the subjects for which we are
       // interested in their predicates.
-      auto it = i._qet->getVariableColumns().find(patternTrickTriple._s);
-      if (it == i._qet->getVariableColumns().end()) {
+      auto it = parent._qet->getVariableColumns().find(patternTrickTriple._s);
+      if (it == parent._qet->getVariableColumns().end()) {
         AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                  "The root operation of the "
                  "query excecution tree does "
@@ -935,7 +935,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
       }
       size_t subjectColumn = it->second;
       const std::vector<size_t>& resultSortedOn =
-          i._qet->getRootOperation()->getResultSortedOn();
+          parent._qet->getRootOperation()->getResultSortedOn();
       bool isSorted =
           resultSortedOn.size() > 0 && resultSortedOn[0] == subjectColumn;
       // a and b need to be ordered properly first
@@ -944,13 +944,14 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
 
       SubtreePlan orderByPlan(_qec);
       if (!isSorted) {
-        auto orderByOp = std::make_shared<OrderBy>(_qec, i._qet, sortIndices);
-        orderByPlan._qet->setVariableColumns(i._qet->getVariableColumns());
+        auto orderByOp =
+            std::make_shared<OrderBy>(_qec, parent._qet, sortIndices);
+        orderByPlan._qet->setVariableColumns(parent._qet->getVariableColumns());
         orderByPlan._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByOp);
       }
       SubtreePlan patternTrickPlan(_qec);
       auto countPred = std::make_shared<CountAvailablePredicates>(
-          _qec, isSorted ? i._qet : orderByPlan._qet, subjectColumn);
+          _qec, isSorted ? parent._qet : orderByPlan._qet, subjectColumn);
 
       countPred->setVarNames(patternTrickTriple._o,
                              selectClause._aliases[0]._outVarName);
@@ -999,15 +1000,15 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getHavingRow(
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
   added.reserve(previous.size());
-  for (const auto& i : previous) {
-    SubtreePlan filtered = i;
+  for (const auto& parent : previous) {
+    SubtreePlan filtered = parent;
     for (const SparqlFilter& filter : pq._havingClauses) {
       SubtreePlan plan(_qec);
       auto& tree = *plan._qet;
-      tree.setVariableColumns(i._qet->getVariableColumns());
+      tree.setVariableColumns(parent._qet->getVariableColumns());
       tree.setOperation(QueryExecutionTree::FILTER,
-                        createFilterOperation(filter, i));
-      tree.setContextVars(i._qet->getContextVars());
+                        createFilterOperation(filter, parent));
+      tree.setContextVars(parent._qet->getContextVars());
       filtered = plan;
     }
     added.push_back(filtered);
