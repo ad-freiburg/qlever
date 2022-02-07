@@ -7,8 +7,6 @@
 #include <algorithm>
 #include <ctime>
 
-#include "../parser/ParseException.h"
-#include "../parser/ParsedQuery.h"
 #include "Bind.h"
 #include "CountAvailablePredicates.h"
 #include "Distinct.h"
@@ -499,12 +497,12 @@ bool QueryPlanner::checkUsePatternTrick(
 
       // Check that all selected variables are outputs of
       // CountAvailablePredicates
-      if (selectClause._varsOrAsterisk.isAsterisk()) {
+      if (selectClause._varsOrAsterisk.isAllVariablesSelected()) {
         return false;
       }
 
       const auto& selectedVariables =
-          selectClause._varsOrAsterisk.getSelectVariables();
+          selectClause._varsOrAsterisk.getSelectedVariables();
       for (const std::string& s : selectedVariables) {
         if (s != t._o && s != count_var_name) {
           usePatternTrick = false;
@@ -574,9 +572,9 @@ bool QueryPlanner::checkUsePatternTrick(
               return;
             }
             const auto& selectClause = arg._subquery.selectClause();
-            if (selectClause._varsOrAsterisk.isVariables()) {
+            if (selectClause._varsOrAsterisk.isManuallySelectedVariables()) {
               for (const auto& v :
-                   selectClause._varsOrAsterisk.getSelectVariables()) {
+                   selectClause._varsOrAsterisk.getSelectedVariables()) {
                 if (v == t._o) {
                   usePatternTrick = false;
                   break;
@@ -629,9 +627,9 @@ bool QueryPlanner::checkUsePatternTrick(
                 return;
               }
               const auto& selectClause = arg._subquery.selectClause();
-              if (selectClause._varsOrAsterisk.isVariables()) {
+              if (selectClause._varsOrAsterisk.isManuallySelectedVariables()) {
                 for (const auto& v :
-                     selectClause._varsOrAsterisk.getSelectVariables()) {
+                     selectClause._varsOrAsterisk.getSelectedVariables()) {
                   if (v == t._o) {
                     usePatternTrick = false;
                     break;
@@ -692,12 +690,12 @@ bool QueryPlanner::checkUsePatternTrick(
       // Filters are only scoped within a GraphPattern, so we only
       // have to  check curPattern
       auto& filters = pq->_rootGraphPattern._filters;
-      for (size_t i = 0; i < filters.size(); i++) {
-        const SparqlFilter& filter = filters[i];
+      for (size_t j = 0; j < filters.size(); j++) {
+        const SparqlFilter& filter = filters[j];
         if (filter._lhs == t._o && filter._rhs[0] != '?') {
           pq->_havingClauses.push_back(filter);
-          filters.erase(filters.begin() + i);
-          i--;
+          filters.erase(filters.begin() + j);
+          j--;
         }
       }
       return true;
@@ -834,15 +832,14 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
   added.reserve(previous.size());
-  for (size_t i = 0; i < previous.size(); ++i) {
-    const SubtreePlan& parent = previous[i];
+  for (const auto& parent : previous) {
     SubtreePlan distinctPlan(_qec);
     vector<size_t> keepIndices;
     ad_utility::HashSet<size_t> indDone;
     const auto& colMap = parent._qet->getVariableColumns();
-    if (selectClause._varsOrAsterisk.isVariables()) {
+    if (selectClause._varsOrAsterisk.isManuallySelectedVariables()) {
       for (const auto& var :
-           selectClause._varsOrAsterisk.getSelectVariables()) {
+           selectClause._varsOrAsterisk.getSelectedVariables()) {
         const auto it = colMap.find(var);
         if (it != colMap.end()) {
           auto ind = it->second;
@@ -853,9 +850,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
         } else if (var.starts_with("SCORE(") || var.starts_with("TEXT(")) {
           auto varInd = var.find('?');
           auto cVar = var.substr(varInd, var.rfind(')') - varInd);
-          const auto it = colMap.find(cVar);
-          if (it != colMap.end()) {
-            auto ind = it->second;
+          const auto itt = colMap.find(cVar);
+          if (itt != colMap.end()) {
+            auto ind = itt->second;
             if (indDone.count(ind) == 0) {
               keepIndices.push_back(ind);
               indDone.insert(ind);
@@ -922,8 +919,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
   vector<SubtreePlan> added;
   if (previous != nullptr && !previous->empty()) {
     added.reserve(previous->size());
-    for (size_t i = 0; i < previous->size(); ++i) {
-      const SubtreePlan& parent = (*previous)[i];
+    for (const auto& parent : *previous) {
       // Determine the column containing the subjects for which we are
       // interested in their predicates.
       auto it = parent._qet->getVariableColumns().find(patternTrickTriple._s);
@@ -983,7 +979,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     SubtreePlan patternTrickPlan(_qec);
     auto countPred = std::make_shared<CountAvailablePredicates>(_qec);
 
-    if (selectClause._aliases.size() > 0) {
+    if (!selectClause._aliases.empty()) {
       countPred->setVarNames(patternTrickTriple._o,
                              selectClause._aliases[0]._outVarName);
     } else {
@@ -1004,8 +1000,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getHavingRow(
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
   added.reserve(previous.size());
-  for (size_t i = 0; i < previous.size(); ++i) {
-    const SubtreePlan& parent = previous[i];
+  for (const auto& parent : previous) {
     SubtreePlan filtered = parent;
     for (const SparqlFilter& filter : pq._havingClauses) {
       SubtreePlan plan(_qec);
@@ -1027,13 +1022,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
   added.reserve(previous.size());
-  for (size_t i = 0; i < previous.size(); ++i) {
-    const SubtreePlan* parent = &previous[i];
+  for (auto& parent : previous) {
     // Create a group by operation to determine on which columns the input
     // needs to be sorted
     SubtreePlan groupByPlan(_qec);
-    groupByPlan._idsOfIncludedNodes = parent->_idsOfIncludedNodes;
-    groupByPlan._idsOfIncludedFilters = parent->_idsOfIncludedFilters;
+    groupByPlan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
+    groupByPlan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
     std::vector<ParsedQuery::Alias> aliases;
     if (pq.hasSelectClause()) {
       aliases = pq.selectClause()._aliases;
@@ -1044,10 +1038,10 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
 
     // Then compute the sort columns
     std::vector<std::pair<size_t, bool>> sortColumns =
-        groupBy->computeSortColumns(parent->_qet.get());
+        groupBy->computeSortColumns(parent._qet.get());
 
     const std::vector<size_t>& inputSortedOn =
-        parent->_qet->getRootOperation()->getResultSortedOn();
+        parent._qet->getRootOperation()->getResultSortedOn();
 
     bool inputSorted = sortColumns.size() <= inputSortedOn.size();
     for (size_t i = 0; inputSorted && i < sortColumns.size(); i++) {
@@ -1057,14 +1051,14 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
     SubtreePlan orderByPlan(_qec);
     if (!sortColumns.empty() && !inputSorted) {
       // Create an order by operation as required by the group by
-      auto orderBy = std::make_shared<OrderBy>(_qec, parent->_qet, sortColumns);
+      auto orderBy = std::make_shared<OrderBy>(_qec, parent._qet, sortColumns);
       QueryExecutionTree& orderByTree = *orderByPlan._qet;
-      orderByTree.setVariableColumns(parent->_qet->getVariableColumns());
+      orderByTree.setVariableColumns(parent._qet->getVariableColumns());
       orderByTree.setOperation(QueryExecutionTree::ORDER_BY, orderBy);
-      parent = &orderByPlan;
-    }
+      groupBy->setSubtree(orderByPlan._qet);
+    } else
+      groupBy->setSubtree(parent._qet);
 
-    groupBy->setSubtree(parent->_qet);
     groupByTree.setVariableColumns(groupBy->getVariableColumns());
     groupByTree.setOperation(QueryExecutionTree::GROUP_BY, groupBy);
     added.push_back(groupByPlan);
@@ -1078,47 +1072,46 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
   added.reserve(previous.size());
-  for (size_t i = 0; i < previous.size(); ++i) {
+  for (const auto& parent : previous) {
     SubtreePlan plan(_qec);
     auto& tree = *plan._qet;
-    plan._idsOfIncludedNodes = previous[i]._idsOfIncludedNodes;
-    plan._idsOfIncludedFilters = previous[i]._idsOfIncludedFilters;
+    plan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
+    plan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
     if (pq._orderBy.size() == 1 && !pq._orderBy[0]._desc) {
-      size_t col = previous[i]._qet->getVariableColumn(pq._orderBy[0]._key);
+      size_t col = parent._qet->getVariableColumn(pq._orderBy[0]._key);
       const std::vector<size_t>& previousSortedOn =
-          previous[i]._qet->resultSortedOn();
-      if (previousSortedOn.size() > 0 && col == previousSortedOn[0]) {
+          parent._qet->resultSortedOn();
+      if (!previousSortedOn.empty() && col == previousSortedOn[0]) {
         // Already sorted perfectly
-        added.push_back(previous[i]);
+        added.push_back(parent);
       } else {
-        auto sort = std::make_shared<Sort>(_qec, previous[i]._qet, col);
-        tree.setVariableColumns(previous[i]._qet->getVariableColumns());
+        auto sort = std::make_shared<Sort>(_qec, parent._qet, col);
+        tree.setVariableColumns(parent._qet->getVariableColumns());
         tree.setOperation(QueryExecutionTree::SORT, sort);
-        tree.setContextVars(previous[i]._qet->getContextVars());
+        tree.setContextVars(parent._qet->getContextVars());
         added.push_back(plan);
       }
     } else {
       vector<pair<size_t, bool>> sortIndices;
       for (auto& ord : pq._orderBy) {
-        sortIndices.emplace_back(pair<size_t, bool>{
-            previous[i]._qet->getVariableColumn(ord._key), ord._desc});
+        sortIndices.emplace_back(parent._qet->getVariableColumn(ord._key),
+                                 ord._desc);
       }
       const std::vector<size_t>& previousSortedOn =
-          previous[i]._qet->resultSortedOn();
+          parent._qet->resultSortedOn();
       bool alreadySorted = previousSortedOn.size() >= sortIndices.size();
-      for (size_t i = 0; alreadySorted && i < sortIndices.size(); i++) {
-        alreadySorted = alreadySorted && !sortIndices[i].second &&
-                        sortIndices[i].first == previousSortedOn[i];
+      for (size_t j = 0; alreadySorted && j < sortIndices.size(); j++) {
+        alreadySorted = alreadySorted && !sortIndices[j].second &&
+                        sortIndices[j].first == previousSortedOn[j];
       }
       if (alreadySorted) {
         // Already sorted perfectly
-        added.push_back(previous[i]);
+        added.push_back(parent);
       } else {
-        auto ob =
-            std::make_shared<OrderBy>(_qec, previous[i]._qet, sortIndices);
-        tree.setVariableColumns(previous[i]._qet->getVariableColumns());
+        auto ob = std::make_shared<OrderBy>(_qec, parent._qet, sortIndices);
+        tree.setVariableColumns(parent._qet->getVariableColumns());
         tree.setOperation(QueryExecutionTree::ORDER_BY, ob);
-        tree.setContextVars(previous[i]._qet->getContextVars());
+        tree.setContextVars(parent._qet->getContextVars());
 
         added.push_back(plan);
       }
@@ -1208,7 +1201,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
     if (node._cvar.size() > 0) {
       seeds.push_back(getTextLeafPlan(node));
     } else {
-      if (node._variables.size() == 0) {
+      if (node._variables.empty()) {
         AD_THROW(
             ad_semsearch::Exception::BAD_QUERY,
             "Triples should have at least one variable. Not the case in: " +
@@ -1571,7 +1564,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
-  if (path._children.size() == 0) {
+  if (path._children.empty()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Tried processing a sequence property path node without any "
              "children.");
@@ -1732,7 +1725,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
-  if (path._children.size() == 0) {
+  if (path._children.empty()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Tried processing an alternative property path node without any "
              "children.");
@@ -1745,8 +1738,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
 
   std::vector<std::shared_ptr<ParsedQuery::GraphPattern>> childPlans;
   childPlans.reserve(path._children.size());
-  for (size_t i = 0; i < path._children.size(); i++) {
-    childPlans.push_back(seedFromPropertyPath(left, path._children[i], right));
+  for (const auto& child : path._children) {
+    childPlans.push_back(seedFromPropertyPath(left, child, right));
   }
   // todo<joka921> refactor this nonsense recursively by getting rid of the
   // shared_ptrs everywhere
@@ -2341,7 +2334,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
 
 // _____________________________________________________________________________
 size_t QueryPlanner::getTextLimit(const string& textLimitString) const {
-  if (textLimitString.size() == 0) {
+  if (textLimitString.empty()) {
     return 1;
   } else {
     return static_cast<size_t>(atol(textLimitString.c_str()));
@@ -2538,9 +2531,9 @@ QueryPlanner::TripleGraph::TripleGraph(const QueryPlanner::TripleGraph& other,
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph::TripleGraph(const TripleGraph& other)
     : _adjLists(other._adjLists), _nodeMap(), _nodeStorage() {
-  for (auto it = other._nodeMap.begin(); it != other._nodeMap.end(); ++it) {
-    _nodeStorage.push_back(*it->second);
-    _nodeMap[it->first] = &_nodeStorage.back();
+  for (auto it : other._nodeMap) {
+    _nodeStorage.push_back(*it.second);
+    _nodeMap[it.first] = &_nodeStorage.back();
   }
 }
 
@@ -2548,9 +2541,9 @@ QueryPlanner::TripleGraph::TripleGraph(const TripleGraph& other)
 QueryPlanner::TripleGraph& QueryPlanner::TripleGraph::operator=(
     const TripleGraph& other) {
   _adjLists = other._adjLists;
-  for (auto it = other._nodeMap.begin(); it != other._nodeMap.end(); ++it) {
-    _nodeStorage.push_back(*it->second);
-    _nodeMap[it->first] = &_nodeStorage.back();
+  for (auto it : other._nodeMap) {
+    _nodeStorage.push_back(*it.second);
+    _nodeMap[it.first] = &_nodeStorage.back();
   }
   return *this;
 }
@@ -2569,7 +2562,7 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
   // Create a map from context var to triples it occurs in (the cliques).
   ad_utility::HashMap<string, vector<size_t>> cvarsToTextNodes(
       identifyTextCliques());
-  if (cvarsToTextNodes.size() == 0) {
+  if (cvarsToTextNodes.empty()) {
     return;
   }
   // Now turn each such clique into a new node the represents that whole
@@ -2578,25 +2571,25 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
   vector<Node> textNodes;
   ad_utility::HashMap<size_t, size_t> removedNodeIds;
   vector<std::set<size_t>> tnAdjSetsToOldIds;
-  for (auto it = cvarsToTextNodes.begin(); it != cvarsToTextNodes.end(); ++it) {
-    auto& cvar = it->first;
+  for (auto& cvarsToTextNode : cvarsToTextNodes) {
+    auto& cvar = cvarsToTextNode.first;
     string wordPart;
     vector<SparqlTriple> trips;
     tnAdjSetsToOldIds.push_back(std::set<size_t>());
     auto& adjNodes = tnAdjSetsToOldIds.back();
-    for (auto nid : it->second) {
+    for (auto nid : cvarsToTextNode.second) {
       removedNodeIds[nid] = id;
       adjNodes.insert(_adjLists[nid].begin(), _adjLists[nid].end());
       auto& triple = _nodeMap[nid]->_triple;
       trips.push_back(triple);
       if (triple._s == cvar && !isVariable(triple._o)) {
-        if (wordPart.size() > 0) {
+        if (!wordPart.empty()) {
           wordPart += " ";
         }
         wordPart += triple._o;
       }
       if (triple._o == cvar && !isVariable(triple._s)) {
-        if (wordPart.size() > 0) {
+        if (!wordPart.empty()) {
           wordPart += " ";
         }
         wordPart += triple._s;
@@ -2757,10 +2750,10 @@ QueryPlanner::createVariableColumnsMapForTextOperation(
     const string& contextVar, const string& entityVar,
     const ad_utility::HashSet<string>& freeVars,
     const vector<pair<QueryExecutionTree, size_t>>& subtrees) {
-  AD_CHECK(contextVar.size() > 0);
+  AD_CHECK(!contextVar.empty());
   ad_utility::HashMap<string, size_t> map;
   size_t n = 0;
-  if (entityVar.size() > 0) {
+  if (!entityVar.empty()) {
     map[entityVar] = n++;
     map[string("SCORE(") + contextVar + ")"] = n++;
     map[contextVar] = n++;
@@ -2773,11 +2766,10 @@ QueryPlanner::createVariableColumnsMapForTextOperation(
     map[v] = n++;
   }
 
-  for (size_t i = 0; i < subtrees.size(); ++i) {
+  for (const auto& subtree : subtrees) {
     size_t offset = n;
-    for (auto it = subtrees[i].first.getVariableColumns().begin();
-         it != subtrees[i].first.getVariableColumns().end(); ++it) {
-      map[it->first] = offset + it->second;
+    for (const auto& [variable, index] : subtree.first.getVariableColumns()) {
+      map[variable] = offset + index;
       ++n;
     }
   }

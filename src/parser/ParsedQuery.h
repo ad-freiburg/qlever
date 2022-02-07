@@ -307,38 +307,34 @@ class ParsedQuery {
     }
   };
 
-  typedef std::variant<vector<string>, char> SelectVarsOrAsterisk;
   // Represents either "all Variables" (Select *) or a list of explicitly
   // selected Variables (Select ?a ?b).
   struct SelectedVarsOrAsterisk {
    private:
-    SelectVarsOrAsterisk _varsOrAsterisk;
+    std::variant<vector<string>, char> _varsOrAsterisk;
     std::vector<string> _variablesFromQueryBody;
 
    public:
-    [[nodiscard]] bool isAsterisk() const {
+    [[nodiscard]] bool isAllVariablesSelected() const {
       return std::holds_alternative<char>(_varsOrAsterisk);
     }
 
-    [[nodiscard]] bool isVariables() const {
+    [[nodiscard]] bool isManuallySelectedVariables() const {
       return std::holds_alternative<std::vector<string>>(_varsOrAsterisk);
     }
 
     // Sets the Selector to 'All' (*) only if the Selector is still undefined
-    // Returned value maybe unused due to Syntax Check
-    void setsAsterisk() { _varsOrAsterisk = '*'; }
+    void setAllVariablesSelected() { _varsOrAsterisk = '*'; }
 
-    [[nodiscard]] const auto& getSelectVariables() const {
-      return std::get<std::vector<string>>(_varsOrAsterisk);
-    }
-
-    [[nodiscard]] auto& getSelectVariables() {
-      return std::get<std::vector<string>>(_varsOrAsterisk);
+    // Sets the Selector with the variables manually defined
+    // Ex: Select var_1 (...) var_n
+    void setManuallySelected(std::vector<string> variables) {
+      _varsOrAsterisk = std::move(variables);
     }
 
     // Add a variable, that was found in the query body. The added variables
     // will only be used if `isAsterisk` is true.
-    void addVariableFromQueryBody(const string& variable) {
+    void registerVariableVisibleInQueryBody(const string& variable) {
       if (!(std::find(_variablesFromQueryBody.begin(),
                       _variablesFromQueryBody.end(),
                       variable) != _variablesFromQueryBody.end())) {
@@ -346,11 +342,15 @@ class ParsedQuery {
       }
     }
 
-    // Gets the variables which addVariableFromQueryBody` was previously called.
-    // The result contains no duplicates and is ordered by the first appearance
-    // in the query body.
-    [[nodiscard]] const auto& orderedVariablesFromQueryBody() const {
-      return _variablesFromQueryBody;
+    // Get the variables accordingly to established Selector:
+    // Select All (Select '*')
+    // or
+    // explicit variables selection (Select 'var_1' ... 'var_n')
+    [[nodiscard]] const auto& getSelectedVariables() const {
+      return isAllVariablesSelected()
+                 ? _variablesFromQueryBody
+                 : std::get<std::vector<string>>(_varsOrAsterisk);
+      ;
     }
   };
 
@@ -409,9 +409,16 @@ class ParsedQuery {
     return std::get<ConstructClause>(_clause);
   }
 
+  // Add a variable, that was found in the SubQuery body, when query has a
+  // Select Clause
+  [[maybe_unused]] bool registerVariableVisibleInQueryBody(
+      const string& variable) {
+    if (!hasSelectClause()) return false;
+    selectClause()._varsOrAsterisk.registerVariableVisibleInQueryBody(variable);
+    return true;
+  }
+
   void expandPrefixes();
-  // unused function ? not implemented
-  void parseAliases();
 
   auto& children() { return _rootGraphPattern._children; }
   [[nodiscard]] const auto& children() const {

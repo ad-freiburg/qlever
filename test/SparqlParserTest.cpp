@@ -18,7 +18,7 @@ TEST(ParserTest, testParse) {
       const auto& selectClause = pq.selectClause();
       ASSERT_GT(pq.asString().size(), 0u);
       ASSERT_EQ(0u, pq._prefixes.size());
-      ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectVariables().size());
+      ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectedVariables().size());
       ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
       ASSERT_EQ(1u, pq._rootGraphPattern._children[0]
                         .getBasic()
@@ -37,7 +37,8 @@ TEST(ParserTest, testParse) {
       ASSERT_TRUE(pq.hasSelectClause());
       const auto& selectClause2 = pq.selectClause();
       ASSERT_EQ(3u, pq._prefixes.size());
-      ASSERT_EQ(2u, selectClause2._varsOrAsterisk.getSelectVariables().size());
+      ASSERT_EQ(2u,
+                selectClause2._varsOrAsterisk.getSelectedVariables().size());
       ASSERT_EQ(1u, pq.children().size());
       const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
       ASSERT_EQ(3u, triples.size());
@@ -46,8 +47,8 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ("<http://rdf.myprefix.com/>", pq._prefixes[0]._uri);
       ASSERT_EQ("ns", pq._prefixes[1]._prefix);
       ASSERT_EQ("<http://rdf.myprefix.com/ns/>", pq._prefixes[1]._uri);
-      ASSERT_EQ("?x", selectClause2._varsOrAsterisk.getSelectVariables()[0]);
-      ASSERT_EQ("?z", selectClause2._varsOrAsterisk.getSelectVariables()[1]);
+      ASSERT_EQ("?x", selectClause2._varsOrAsterisk.getSelectedVariables()[0]);
+      ASSERT_EQ("?z", selectClause2._varsOrAsterisk.getSelectedVariables()[1]);
       ASSERT_EQ("?x", triples[0]._s);
       ASSERT_EQ(":myrel", triples[0]._p._iri);
       ASSERT_EQ("?y", triples[0]._o);
@@ -73,7 +74,7 @@ TEST(ParserTest, testParse) {
       ASSERT_TRUE(pq.hasSelectClause());
       const auto& selectClause = pq.selectClause();
       ASSERT_EQ(3u, pq._prefixes.size());
-      ASSERT_EQ(2u, selectClause._varsOrAsterisk.getSelectVariables().size());
+      ASSERT_EQ(2u, selectClause._varsOrAsterisk.getSelectedVariables().size());
       ASSERT_EQ(1u, pq.children().size());
       const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
       ASSERT_EQ(3u, triples.size());
@@ -82,8 +83,8 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ("<http://rdf.myprefix.com/>", pq._prefixes[0]._uri);
       ASSERT_EQ("ns", pq._prefixes[1]._prefix);
       ASSERT_EQ("<http://rdf.myprefix.com/ns/>", pq._prefixes[1]._uri);
-      ASSERT_EQ("?x", selectClause._varsOrAsterisk.getSelectVariables()[0]);
-      ASSERT_EQ("?z", selectClause._varsOrAsterisk.getSelectVariables()[1]);
+      ASSERT_EQ("?x", selectClause._varsOrAsterisk.getSelectedVariables()[0]);
+      ASSERT_EQ("?z", selectClause._varsOrAsterisk.getSelectedVariables()[1]);
       ASSERT_EQ("?x", triples[0]._s);
       ASSERT_EQ(":myrel", triples[0]._p._iri);
       ASSERT_EQ("?y", triples[0]._o);
@@ -107,15 +108,15 @@ TEST(ParserTest, testParse) {
       ASSERT_TRUE(pq.hasSelectClause());
       const auto& selectClause = pq.selectClause();
       ASSERT_EQ(1u, pq._prefixes.size());
-      ASSERT_EQ(2u, selectClause._varsOrAsterisk.getSelectVariables().size());
+      ASSERT_EQ(2u, selectClause._varsOrAsterisk.getSelectedVariables().size());
       ASSERT_EQ(1u, pq.children().size());
       const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
       ASSERT_EQ(3u, triples.size());
 
       pq.expandPrefixes();
 
-      ASSERT_EQ("?x", selectClause._varsOrAsterisk.getSelectVariables()[0]);
-      ASSERT_EQ("?z", selectClause._varsOrAsterisk.getSelectVariables()[1]);
+      ASSERT_EQ("?x", selectClause._varsOrAsterisk.getSelectedVariables()[0]);
+      ASSERT_EQ("?z", selectClause._varsOrAsterisk.getSelectedVariables()[1]);
       ASSERT_EQ("?x", triples[0]._s);
       ASSERT_EQ("<Directed_by>", triples[0]._p._iri);
       ASSERT_EQ("?y", triples[0]._o);
@@ -462,10 +463,10 @@ TEST(ParserTest, testParse) {
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(true, sc._reduced);
-      ASSERT_EQ(true, sc._varsOrAsterisk.isAsterisk());
+      ASSERT_EQ(true, sc._varsOrAsterisk.isAllVariablesSelected());
 
       vector<string> vvars = {"?movie", "?director"};
-      ASSERT_EQ(vvars, sc._varsOrAsterisk.orderedVariablesFromQueryBody());
+      ASSERT_EQ(vvars, sc._varsOrAsterisk.getSelectedVariables());
     }
 
     {
@@ -494,10 +495,10 @@ TEST(ParserTest, testParse) {
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(true, sc._distinct);
-      ASSERT_EQ(true, sc._varsOrAsterisk.isAsterisk());
+      ASSERT_EQ(true, sc._varsOrAsterisk.isAllVariablesSelected());
 
       vector<string> vvars = {"?movie", "?director"};
-      ASSERT_EQ(vvars, sc._varsOrAsterisk.orderedVariablesFromQueryBody());
+      ASSERT_EQ(vvars, sc._varsOrAsterisk.getSelectedVariables());
     }
 
     {
@@ -536,10 +537,10 @@ TEST(ParserTest, testParse) {
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(true, sc._distinct);
-      ASSERT_EQ(true, sc._varsOrAsterisk.isAsterisk());
+      ASSERT_EQ(true, sc._varsOrAsterisk.isAllVariablesSelected());
 
       vector<string> vvars = {"?movie", "?director", "?year"};
-      ASSERT_EQ(vvars, sc._varsOrAsterisk.orderedVariablesFromQueryBody());
+      ASSERT_EQ(vvars, sc._varsOrAsterisk.getSelectedVariables());
 
       // -- SubQuery
       auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
@@ -573,10 +574,10 @@ TEST(ParserTest, testParse) {
           get<ParsedQuery::SelectClause>(parsed_sub_query._subquery._clause);
       ASSERT_EQ(false, sc_subquery._distinct);
       ASSERT_EQ(false, sc_subquery._reduced);
-      ASSERT_EQ(true, sc_subquery._varsOrAsterisk.isAsterisk());
+      ASSERT_EQ(true, sc_subquery._varsOrAsterisk.isAllVariablesSelected());
       vector<string> vvars_subquery = {"?movie", "?director", "?year"};
       ASSERT_EQ(vvars_subquery,
-                sc_subquery._varsOrAsterisk.orderedVariablesFromQueryBody());
+                sc_subquery._varsOrAsterisk.getSelectedVariables());
     }
 
     {
@@ -620,10 +621,10 @@ TEST(ParserTest, testParse) {
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(true, sc._distinct);
-      ASSERT_EQ(true, sc._varsOrAsterisk.isAsterisk());
+      ASSERT_EQ(true, sc._varsOrAsterisk.isAllVariablesSelected());
 
       vector<string> vvars = {"?movie", "?director", "?year"};
-      ASSERT_EQ(vvars, sc._varsOrAsterisk.orderedVariablesFromQueryBody());
+      ASSERT_EQ(vvars, sc._varsOrAsterisk.getSelectedVariables());
 
       // -- SubQuery (level 1)
       auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
@@ -653,10 +654,10 @@ TEST(ParserTest, testParse) {
           get<ParsedQuery::SelectClause>(parsed_sub_query._subquery._clause);
       ASSERT_EQ(false, sc_subquery._distinct);
       ASSERT_EQ(false, sc_subquery._reduced);
-      ASSERT_EQ(true, sc_subquery._varsOrAsterisk.isAsterisk());
+      ASSERT_EQ(true, sc_subquery._varsOrAsterisk.isAllVariablesSelected());
       vector<string> vvars_subquery = {"?movie", "?director", "?year"};
       ASSERT_EQ(vvars_subquery,
-                sc_subquery._varsOrAsterisk.orderedVariablesFromQueryBody());
+                sc_subquery._varsOrAsterisk.getSelectedVariables());
 
       // -- SubQuery (level 2)
       auto parsed_sub_sub_query = get<GraphPatternOperation::Subquery>(
@@ -688,19 +689,71 @@ TEST(ParserTest, testParse) {
           get<ParsedQuery::SelectClause>(aux_parsed_sub_sub_query._clause);
       ASSERT_EQ(false, sc_sub_subquery._distinct);
       ASSERT_EQ(false, sc_sub_subquery._reduced);
-      ASSERT_EQ(true, sc_sub_subquery._varsOrAsterisk.isVariables());
+      ASSERT_EQ(true,
+                sc_sub_subquery._varsOrAsterisk.isManuallySelectedVariables());
       vector<string> vvars_sub_subquery = {"?year"};
       ASSERT_EQ(vvars_sub_subquery,
-                sc_sub_subquery._varsOrAsterisk.getSelectVariables());
+                sc_sub_subquery._varsOrAsterisk.getSelectedVariables());
+    }
+
+    // We currently only check, that the following two queries don't throw an
+    // exception.
+    // TODO<RobinTF>  Also add checks for the correct semantics.
+    {
+      // Check Parse Construct (1)
+      auto pq_1 = SparqlParser(
+          "PREFIX foaf:   <http://xmlns.com/foaf/0.1/> \n"
+          "PREFIX org:    <http://example.com/ns#> \n"
+          "CONSTRUCT { ?x foaf:name ?name } \n"
+          "WHERE  { ?x org:employeeName ?name }");
+      pq_1.parse();
+
+      // Check Parse Construct (2)
+      auto pq_2 = SparqlParser(
+          "PREFIX foaf:    <http://xmlns.com/foaf/0.1/>\n"
+          "PREFIX vcard:   <http://www.w3.org/2001/vcard-rdf/3.0#>\n"
+          "CONSTRUCT   { <http://example.org/person#Alice> vcard:FN ?name }\n"
+          "WHERE       { ?x foaf:name ?name } ");
+      pq_2.parse();
     }
 
     {
-      // Check if ParseException is thrown after GroupBy with Select *
+      // Check if the correct ParseException is thrown after
+      // GroupBy with Select '*'
       auto pq = SparqlParser(
           "SELECT DISTINCT * WHERE { \n"
           "  ?a <b> ?c .\n"
           "} \n"
           "GROUP BY ?a ?c \n");
+      ASSERT_THROW(pq.parse(), ParseException);
+    }
+
+    {
+      // Check if the correct ParseException is thrown after:
+      // Select [var_name]+ '*'
+      auto pq = SparqlParser(
+          "SELECT DISTINCT ?a * WHERE { \n"
+          "  ?a <b> ?c .\n"
+          "} \n");
+      ASSERT_THROW(pq.parse(), ParseException);
+    }
+
+    {
+      // Check if the correct ParseException is thrown after:
+      // Select '*' [var_name]+
+      auto pq = SparqlParser(
+          "SELECT DISTINCT * ?a WHERE { \n"
+          "  ?a <b> ?c .\n"
+          "} \n");
+      ASSERT_THROW(pq.parse(), ParseException);
+    }
+
+    {
+      // Check if the correct ParseException is thrown after: Select ['*']{2,}
+      auto pq = SparqlParser(
+          "SELECT DISTINCT * * WHERE { \n"
+          "  ?a <b> ?c .\n"
+          "} \n");
       ASSERT_THROW(pq.parse(), ParseException);
     }
 
@@ -730,7 +783,7 @@ TEST(ParserTest, testFilterWithoutDot) {
   ASSERT_TRUE(pq.hasSelectClause());
   const auto& selectClause = pq.selectClause();
   ASSERT_EQ(1u, pq._prefixes.size());
-  ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectVariables().size());
+  ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectedVariables().size());
   ASSERT_EQ(1u, pq.children().size());
   const auto& c = pq.children()[0].getBasic();
   ASSERT_EQ(3u, c._whereClauseTriples.size());
@@ -762,14 +815,14 @@ TEST(ParserTest, testExpandPrefixes) {
   ASSERT_EQ(1u, pq.children().size());
   const auto& c = pq.children()[0].getBasic();
   ASSERT_EQ(3u, pq._prefixes.size());
-  ASSERT_EQ(2u, selectClause._varsOrAsterisk.getSelectVariables().size());
+  ASSERT_EQ(2u, selectClause._varsOrAsterisk.getSelectedVariables().size());
   ASSERT_EQ(3u, c._whereClauseTriples.size());
   ASSERT_EQ("", pq._prefixes[0]._prefix);
   ASSERT_EQ("<http://rdf.myprefix.com/>", pq._prefixes[0]._uri);
   ASSERT_EQ("ns", pq._prefixes[1]._prefix);
   ASSERT_EQ("<http://rdf.myprefix.com/ns/>", pq._prefixes[1]._uri);
-  ASSERT_EQ("?x", selectClause._varsOrAsterisk.getSelectVariables()[0]);
-  ASSERT_EQ("?z", selectClause._varsOrAsterisk.getSelectVariables()[1]);
+  ASSERT_EQ("?x", selectClause._varsOrAsterisk.getSelectedVariables()[0]);
+  ASSERT_EQ("?z", selectClause._varsOrAsterisk.getSelectedVariables()[1]);
   ASSERT_EQ("?x", c._whereClauseTriples[0]._s);
   ASSERT_EQ("<http://rdf.myprefix.com/myrel>",
             c._whereClauseTriples[0]._p._iri);
@@ -794,7 +847,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectVariables().size());
+    ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectedVariables().size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(std::nullopt, pq._limit);
     ASSERT_EQ(std::nullopt, pq._offset);
@@ -810,7 +863,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_TRUE(pq.hasSelectClause());
     const auto& selectClause = pq.selectClause();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectVariables().size());
+    ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectedVariables().size());
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(1u, c._whereClauseTriples.size());
@@ -832,7 +885,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectVariables().size());
+    ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectedVariables().size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(10u, pq._limit.value_or(0));
     ASSERT_EQ(15u, pq._offset.value_or(0));
@@ -852,7 +905,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(2u, selectClause._varsOrAsterisk.getSelectVariables().size());
+    ASSERT_EQ(2u, selectClause._varsOrAsterisk.getSelectedVariables().size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(10u, pq._limit.value_or(0));
     ASSERT_EQ(15u, pq._offset.value_or(0));
@@ -874,9 +927,9 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(3u, selectClause._varsOrAsterisk.getSelectVariables().size());
+    ASSERT_EQ(3u, selectClause._varsOrAsterisk.getSelectedVariables().size());
     ASSERT_EQ("SCORE(?x)",
-              selectClause._varsOrAsterisk.getSelectVariables()[1]);
+              selectClause._varsOrAsterisk.getSelectedVariables()[1]);
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(10u, pq._limit.value_or(0));
     ASSERT_EQ(15u, pq._offset.value_or(0));
@@ -900,7 +953,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(2u, selectClause._varsOrAsterisk.getSelectVariables().size());
+    ASSERT_EQ(2u, selectClause._varsOrAsterisk.getSelectedVariables().size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(10u, pq._limit.value_or(0));
     ASSERT_EQ(15u, pq._offset.value_or(0));
@@ -934,8 +987,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectVariables().size());
-    ASSERT_EQ("?movie", selectClause._varsOrAsterisk.getSelectVariables()[0]);
+    ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectedVariables().size());
+    ASSERT_EQ("?movie", selectClause._varsOrAsterisk.getSelectedVariables()[0]);
     ASSERT_EQ(2u, c._whereClauseTriples.size());
     ASSERT_EQ("?movie", c._whereClauseTriples[0]._s);
     ASSERT_EQ("<from-year>", c._whereClauseTriples[0]._p._iri);
@@ -960,8 +1013,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(1u, pq._prefixes.size());
-    ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectVariables().size());
-    ASSERT_EQ("?movie", selectClause._varsOrAsterisk.getSelectVariables()[0]);
+    ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectedVariables().size());
+    ASSERT_EQ("?movie", selectClause._varsOrAsterisk.getSelectedVariables()[0]);
     ASSERT_EQ(2u, c._whereClauseTriples.size());
     ASSERT_EQ("?movie", c._whereClauseTriples[0]._s);
     ASSERT_EQ("<from-year>", c._whereClauseTriples[0]._p._iri);
@@ -1031,7 +1084,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(2u, selectClause._varsOrAsterisk.getSelectVariables().size());
+    ASSERT_EQ(2u, selectClause._varsOrAsterisk.getSelectedVariables().size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(10u, pq._limit.value_or(0));
     ASSERT_EQ(15u, pq._offset.value_or(0));
@@ -1054,8 +1107,8 @@ TEST(ParserTest, testGroupByAndAlias) {
           .parse();
   ASSERT_TRUE(pq.hasSelectClause());
   const auto& selectClause = pq.selectClause();
-  ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectVariables().size());
-  ASSERT_EQ("?count", selectClause._varsOrAsterisk.getSelectVariables()[0]);
+  ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectedVariables().size());
+  ASSERT_EQ("?count", selectClause._varsOrAsterisk.getSelectedVariables()[0]);
   ASSERT_EQ(1u, selectClause._aliases.size());
   ASSERT_TRUE(selectClause._aliases[0]._expression.isAggregate({}));
   ASSERT_EQ("(count(?a) as ?count)", selectClause._aliases[0].getDescriptor());
