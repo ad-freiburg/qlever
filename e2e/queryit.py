@@ -7,10 +7,10 @@ import sys
 import urllib.parse
 import urllib.request
 from typing import Dict, Any, List
-from enum import Enum
 import json
 import yaml
 import icu
+
 
 class Color:
     """
@@ -31,32 +31,36 @@ def eprint(*args, color=Color.FAIL, **kwargs):
     print(*args, **kwargs)
     print(Color.ENDC)
 
+
 def exec_query(endpoint_url: str, sparql: str, action,
-               max_send: int = 4096) -> Dict[str, Any]:
+               max_send: int = 4096) -> [None, Dict[str, Any]]:
     """
     Execute a single SPARQL query against the given endpoint
     """
     params = urllib.parse.urlencode({'query': sparql, 'send': max_send, 'action': action})
-    url_suffix = '/?'+params
-    request = urllib.request.Request(endpoint_url+url_suffix)
+    url_suffix = '/?' + params
+    request = urllib.request.Request(endpoint_url + url_suffix)
     conn = urllib.request.urlopen(request)
     if conn.status != 200:
         eprint("Error executing SPARQL Query: ", sparql)
         return None
     return json.load(conn)
 
-def check_keys_in_result(result: Dict[str, Any], required_keys: List[str]) ->bool :
+
+def check_keys_in_result(result: Dict[str, Any], required_keys: List[str]) -> bool:
     for key in required_keys:
         if key not in result:
             eprint('QLever Result is missing "%s" field' % key)
             return False
     return True
 
+
 def check_structure_qlever_json(result: Dict[str, Any]) -> bool:
     """
     Checks a QLever Result object for sanity
     """
     return check_keys_in_result(result, ['query', 'status', 'resultsize', 'selected', 'res'])
+
 
 def check_structure_sparql_json(result: Dict[str, Any]) -> bool:
     """
@@ -70,6 +74,7 @@ def check_structure_sparql_json(result: Dict[str, Any]) -> bool:
         return False
     return True
 
+
 def check_row_sparql_json(variables: List[str], gold_row: List[Any],
                           actual_row: Dict[str, any], epsilon=0.1) -> bool:
     """
@@ -81,9 +86,9 @@ def check_row_sparql_json(variables: List[str], gold_row: List[Any],
         if gold is None:
             continue
         var = variables[i]
-        if not var in actual_row and var.startswith("TEXT("):
+        if var not in actual_row and var.startswith("TEXT("):
             var = var[5:-1]
-        if not var in actual_row:
+        if var not in actual_row:
             eprint("{} not contained in row {}".format(var, actual_row))
             return False
         actual = actual_row[var]
@@ -94,12 +99,11 @@ def check_row_sparql_json(variables: List[str], gold_row: List[Any],
         if isinstance(gold, str) and gold.startswith('<'):
             target_type = "iri"
             gold = gold[1:-1]
-        matches = False
-        if (not actual["type"] == target_type):
+        if not actual["type"] == target_type:
             return False
         if isinstance(gold, int):
             matches = int(actual["value"]) == gold
-            #TODO<joka921> should we also check the datatypes? this is also not done for the qlever_json
+            # TODO<joka921> should we also check the datatypes? this is also not done for the qlever_json
         elif isinstance(gold, float):
             matches = abs(gold - float(actual["value"])) <= epsilon
         else:
@@ -109,6 +113,7 @@ def check_row_sparql_json(variables: List[str], gold_row: List[Any],
             return False
     return True
 
+
 def check_row_qlever_json(gold_row: List[Any],
                           actual_row: List[Any], epsilon=0.1) -> bool:
     """
@@ -116,6 +121,8 @@ def check_row_qlever_json(gold_row: List[Any],
     difference. If a gold_row cell is None it is ignored.
     Returns True if they match
     """
+    if len(gold_row) != len(actual_row):
+        return False
     for i, gold in enumerate(gold_row):
         if gold is None:
             continue
@@ -137,6 +144,7 @@ def check_row_qlever_json(gold_row: List[Any],
             return False
     return True
 
+
 def quotes_inner(quoted: str) -> str:
     """
     For a string containing a quoted part returns the inner part
@@ -145,7 +153,8 @@ def quotes_inner(quoted: str) -> str:
     right_quote = quoted.rfind('"')
     if right_quote < 0:
         right_quote = len(quoted)
-    return quoted[left_quote+1:right_quote]
+    return quoted[left_quote + 1:right_quote]
+
 
 def test_check(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
     """
@@ -177,7 +186,7 @@ def test_check(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
         elif check == 'res':
             gold_res = value
             if len(gold_res) != len(res):
-                eprint("res check failed:\n"+
+                eprint("res check failed:\n" +
                        "\texpected number of rows: %r" % len(gold_res) +
                        "\tdoes not match actual: %r" % len(value))
                 return False
@@ -227,18 +236,19 @@ def test_check(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
                         previous_value = collator.getSortKey(previous)
                         current_value = collator.getSortKey(current)
                     if direction.lower() == 'asc' and previous_value > current_value:
-                        eprint('order_numeric check failed:\n\tnot ascending for {} and {}'.format(previous_value, current_value))
+                        eprint('order_numeric check failed:\n\tnot ascending for {} and {}'.format(previous_value,
+                                                                                                   current_value))
                         return False
                     if direction.lower() == 'desc' and previous_value < current_value:
-                        eprint('order_numeric check failed:\n\tnot ascending for {} and {}'.format(previous_value, current_value))
+                        eprint('order_numeric check failed:\n\tnot ascending for {} and {}'.format(previous_value,
+                                                                                                   current_value))
                         return False
             except ValueError as ex:
                 eprint('order_numeric check failed:\n\t' + str(ex))
                 return False
 
-
-
     return True
+
 
 def test_check_sparql_json(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
     """
@@ -268,7 +278,7 @@ def test_check_sparql_json(check_dict: Dict[str, Any], result: Dict[str, Any]) -
         elif check == 'res':
             gold_res = value
             if len(gold_res) != len(res):
-                eprint("res check failed:\n"+
+                eprint("res check failed:\n" +
                        "\texpected number of rows: %r" % len(gold_res) +
                        "\tdoes not match actual: %r" % len(value))
                 return False
@@ -293,14 +303,13 @@ def test_check_sparql_json(check_dict: Dict[str, Any], result: Dict[str, Any]) -
                 return False
         elif check == 'contains_warning':
             # currently the sparql_json contains no warnings
-            #TODO<joka921> is there any harm in adding them?
+            # TODO<joka921> is there any harm in adding them?
             pass
         elif check.startswith('order_'):
             # The order is already checked with the qlever_json checks.
             pass
 
     return True
-
 
 
 def query_checks(query: Dict[str, Any],
@@ -316,6 +325,7 @@ def query_checks(query: Dict[str, Any],
         if not test_check_method(check, result):
             passed = False
     return passed
+
 
 def print_qlever_result(result: Dict[str, Any]) -> None:
     """
@@ -342,7 +352,7 @@ def main() -> None:
             query_name = query['query']
             query_type = query['type']
             query_sparql = query['sparql']
-            print(Color.HEADER+'Trying: ', query_name,
+            print(Color.HEADER + 'Trying: ', query_name,
                   '(%s)' % query_type + Color.ENDC)
             print('SPARQL:')
             print(query_sparql)
@@ -386,11 +396,10 @@ def main() -> None:
                 continue
 
     if error_detected:
-        print(Color.FAIL+'Query tool found errors!'+Color.ENDC)
+        print(Color.FAIL + 'Query tool found errors!' + Color.ENDC)
         sys.exit(2)
 
-    print(Color.OKGREEN+'Query tool did not find errors, search harder!'+Color.ENDC)
-
+    print(Color.OKGREEN + 'Query tool did not find errors, search harder!' + Color.ENDC)
 
 
 if __name__ == '__main__':
