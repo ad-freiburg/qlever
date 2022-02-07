@@ -1,122 +1,152 @@
 include(GoogleTest)
 
+# Link binary ${basename} against `gmock_main`, the threading library,
+# and all libraries that are specified as additional arguments.
+function (linkTest basename)
+    target_link_libraries(${basename} ${ARGN} gmock_main ${CMAKE_THREAD_LIBS_INIT})
+endfunction()
+
+# Add the exectutable ${basename} that is compiled from the source file
+# "${basename}".cpp
+function (addTest basename)
+    add_executable(${basename} "${basename}.cpp")
+endfunction()
+
+# Usage: `linkAndDiscoverTest(basename, [additionalLibraries...]`
+# Link the executable `basename` against `gmock_main`,threading library,
+# and all `additionLibraries` which are passed as arguments.
+# Then run `gtest_discover_tests` to add the tests cases from the executable.
+# Typically you should use `addAndLinkTest` (below) but this function can be used,
+# if a test binary requires multiple sources
+function(linkAndDiscoverTest basename )
+    linkTest(${basename} ${ARGN})
+    gtest_discover_tests(${basename} ${basename})
+endfunction()
+
 # Usage: `addAndLinkTest(basename, [additionalLibraries...]`
 # Add a GTest/GMock test case that is called `basename` and compiled from a file called
 # `basename.cpp`. All tests are linked against `gmock_main` and the threading library.
 # additional libraries against which the test case has to be linked can be specified as
 # additional arguments after the `basename`
-function(addAndLinkTest basename)
-    add_executable(${basename} "${basename}.cpp")
-    target_link_libraries(${basename} ${ARGN} gmock_main ${CMAKE_THREAD_LIBS_INIT})
-    gtest_discover_tests(${basename} ${basename})
+function(addLinkAndDiscoverTest basename)
+    addTest(${basename})
+    linkAndDiscoverTest(${basename} ${ARGN})
 endfunction()
 
-addAndLinkTest(SparqlParserTest parser sparqlExpressions ${ICU_LIBRARIES})
+# Only compile and link the test, but do not run it.
+# Usage: Same as for the two functions above.
+function(addAndLinkTest basename)
+    addTest(${basename})
+    linkTest(${basename} ${ARGN})
+endfunction()
 
-addAndLinkTest(StringUtilsTest ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(SparqlParserTest parser sparqlExpressions ${ICU_LIBRARIES})
 
-addAndLinkTest(CacheTest absl::flat_hash_map)
+addLinkAndDiscoverTest(StringUtilsTest ${ICU_LIBRARIES})
 
-addAndLinkTest(ConcurrentCacheTest absl::flat_hash_map)
+addLinkAndDiscoverTest(CacheTest absl::flat_hash_map)
 
-addAndLinkTest(FileTest)
+addLinkAndDiscoverTest(ConcurrentCacheTest absl::flat_hash_map)
 
-addAndLinkTest(Simple8bTest)
+addLinkAndDiscoverTest(FileTest)
 
-addAndLinkTest(VocabularyTest index )
+addLinkAndDiscoverTest(Simple8bTest)
 
-addAndLinkTest(ExternalVocabularyTest index)
+addLinkAndDiscoverTest(VocabularyTest index)
 
-addAndLinkTest(TsvParserTest parser)
+addLinkAndDiscoverTest(ExternalVocabularyTest index)
 
-addAndLinkTest(ContextFileParserTest parser ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(TsvParserTest parser)
 
-addAndLinkTest(IndexMetaDataTest index)
+addLinkAndDiscoverTest(ContextFileParserTest parser ${ICU_LIBRARIES})
 
-addAndLinkTest(IndexTest index)
+addLinkAndDiscoverTest(IndexMetaDataTest index)
 
-addAndLinkTest(FTSAlgorithmsTest index)
+addLinkAndDiscoverTest(IndexTest index)
 
-addAndLinkTest(EngineTest engine)
+addLinkAndDiscoverTest(FTSAlgorithmsTest index)
 
-addAndLinkTest(QueryPlannerTest engine)
+addLinkAndDiscoverTest(EngineTest engine)
 
-addAndLinkTest(ConversionsTest )
+addLinkAndDiscoverTest(QueryPlannerTest engine)
 
-addAndLinkTest(HashMapTest absl::flat_hash_map)
+addLinkAndDiscoverTest(ConversionsTest)
 
-addAndLinkTest(HashSetTest absl::flat_hash_set)
+addLinkAndDiscoverTest(HashMapTest absl::flat_hash_map)
 
-addAndLinkTest(GroupByTest engine)
+addLinkAndDiscoverTest(HashSetTest absl::flat_hash_set)
 
-addAndLinkTest(VocabularyGeneratorTest index)
+addLinkAndDiscoverTest(GroupByTest engine)
 
-addAndLinkTest(HasPredicateScanTest engine)
+addLinkAndDiscoverTest(VocabularyGeneratorTest index)
 
-addAndLinkTest(MmapVectorTest -pthread)
+addLinkAndDiscoverTest(HasPredicateScanTest engine)
 
-addAndLinkTest(BufferedVectorTest -pthread)
+addLinkAndDiscoverTest(MmapVectorTest)
 
-addAndLinkTest(UnionTest engine)
+addLinkAndDiscoverTest(BufferedVectorTest)
 
-addAndLinkTest(TokenTest parser re2 -pthread ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(UnionTest engine)
 
-addAndLinkTest(TurtleParserTest parser absl::flat_hash_map re2 -pthread)
+add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
+linkAndDiscoverTest(TokenTest parser re2 ${ICU_LIBRARIES})
 
-addAndLinkTest(MultiColumnJoinTest engine)
+addLinkAndDiscoverTest(TurtleParserTest parser absl::flat_hash_map re2)
 
-addAndLinkTest(IdTableTest)
+addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
-addAndLinkTest(TransitivePathTest engine)
+addLinkAndDiscoverTest(IdTableTest)
 
-addAndLinkTest(SparqlLexerTest parser ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(TransitivePathTest engine)
 
-addAndLinkTest(BatchedPipelineTest)
+addLinkAndDiscoverTest(SparqlLexerTest parser ${ICU_LIBRARIES})
 
-addAndLinkTest(TupleHelpersTest)
+addLinkAndDiscoverTest(BatchedPipelineTest)
 
-addAndLinkTest(StringSortComparatorTest ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(TupleHelpersTest)
 
-addAndLinkTest(PriorityQueueTest absl::flat_hash_map ${ICU_LIBRARIES})
+addLinkAndDiscoverTest(StringSortComparatorTest ${ICU_LIBRARIES})
 
-addAndLinkTest(SynchronizedTest)
+addLinkAndDiscoverTest(PriorityQueueTest absl::flat_hash_map ${ICU_LIBRARIES})
 
-addAndLinkTest(LimitedAllocatorTest)
+addLinkAndDiscoverTest(SynchronizedTest)
 
-addAndLinkTest(MinusTest engine)
+addLinkAndDiscoverTest(LimitedAllocatorTest)
+
+addLinkAndDiscoverTest(MinusTest engine)
 
 # this test runs for quite some time and might have spurious failures!
-#If this is undesired, comment it out
-#addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
+# Therefore it is compiled, but not run. If you want to run it,
+# change the following two lines.
+addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
+#addLinkAndDiscoverTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 
-addAndLinkTest(SparqlAntlrParserTest parser sparqlExpressions)
+addLinkAndDiscoverTest(SparqlAntlrParserTest parser sparqlExpressions)
 
-addAndLinkTest(SerializerTest absl::flat_hash_map)
+addLinkAndDiscoverTest(SerializerTest absl::flat_hash_map)
 
-addAndLinkTest(ParametersTest absl::flat_hash_map )
+addLinkAndDiscoverTest(ParametersTest absl::flat_hash_map)
 
-addAndLinkTest(ZstdCompressionTest absl::flat_hash_map zstd ${cmake_thread_libs_init})
+addLinkAndDiscoverTest(ZstdCompressionTest absl::flat_hash_map zstd ${cmake_thread_libs_init})
 
-addAndLinkTest(TaskQueueTest)
+addLinkAndDiscoverTest(TaskQueueTest)
 
-addAndLinkTest(SetOfIntervalsTest sparqlExpressions)
+addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
-addAndLinkTest(TypeTraitsTest)
+addLinkAndDiscoverTest(TypeTraitsTest)
 
-addAndLinkTest(SparqlExpressionTest sparqlExpressions index)
+addLinkAndDiscoverTest(SparqlExpressionTest sparqlExpressions index)
 
-addAndLinkTest(OStringStreamTest)
+addLinkAndDiscoverTest(StreamableBodyTest engine)
 
-addAndLinkTest(StreamableBodyTest)
+addLinkAndDiscoverTest(StreamableGeneratorTest engine)
 
-addAndLinkTest(StreamableGeneratorTest)
+addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
-addAndLinkTest(AcceptHeaderTest mediaTypes httpParser)
+addLinkAndDiscoverTest(RdfEscapingTest parser)
 
-addAndLinkTest(RdfEscapingTest parser)
+addLinkAndDiscoverTest(CompactStringVectorTest)
 
-addAndLinkTest(CompactStringVectorTest)
+addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
-addAndLinkTest(SparqlDataTypesTest engine)
-
-addAndLinkTest(SimpleVocabularyTest)
+addLinkAndDiscoverTest(ContentEncodingHelperTest)
