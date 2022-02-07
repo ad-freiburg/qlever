@@ -4,8 +4,29 @@
 
 #include <gtest/gtest.h>
 
+#include "../src/index/vocabulary/CompressedVocabulary.h"
+#include "../src/index/vocabulary/PrefixCompressor.h"
 #include "../src/index/vocabulary/SimpleVocabulary.h"
-using Vocab = SimpleVocabulary;
+
+// A stateless "compressor" that applies a trivial transormation to a string
+struct DummyCompressor {
+  static std::string compress(std::string_view uncompressed) {
+    std::string result{uncompressed};
+    for (auto& c : result) {
+      c += 2;
+    }
+    return result;
+  }
+
+  static std::string decompress(std::string_view compressed) {
+    std::string result{compressed};
+    for (auto& c : result) {
+      c -= 2;
+    }
+    return result;
+  }
+};
+using Vocab = UnicodeVocabulary<SimpleVocabulary, DummyCompressor>;
 
 std::ostream& operator<<(std::ostream& o, const Vocab::SearchResult& w) {
   o << w._id << ", ";
@@ -27,14 +48,20 @@ auto vocabsEqual = [](const auto& a, const auto& b) {
   }
 };
 
-using SearchResult = SimpleVocabulary::SearchResult;
+using SearchResult = Vocab::SearchResult;
 
 TEST(SimpleVocabulary, Compiles) { Vocab c; }
 
 auto createVocabulary(const std::vector<std::string>& words) {
-  Vocab::Words w;
-  w.build(words);
-  return Vocab(std::move(w));
+  Vocab v;
+  auto writer = v.makeDiskWriter("vocabtmp.txt");
+  for (const auto& word : words) {
+    writer.push(word);
+  }
+  writer.finish();
+  v.readFromFile("vocabtmp.txt");
+  ad_utility::deleteFile("vocabtmp.txt");
+  return v;
 }
 
 TEST(SimpleVocabulary, LowerBound) {
@@ -144,15 +171,25 @@ TEST(SimpleVocabulary, AccessOperator) {
   vocabsEqual(vocab, words);
 }
 
-TEST(SimpleVocabulary, ReadAndWriteFromFile) {
+TEST(UnicodeVocabulary, CompressionIsActuallyApplied) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42",
                                        "31",    "0",     "al"};
-  const auto vocab = createVocabulary(words);
-  vocab.writeToFile("testvocab.dat");
 
-  Vocab readVocab;
-  readVocab.readFromFile("testvocab.dat");
-  vocabsEqual(vocab, readVocab);
-  ad_utility::deleteFile("testvocab.dat");
+  Vocab v;
+  auto writer = v.makeDiskWriter("vocabtmp.txt");
+  for (const auto& word : words) {
+    writer.push(word);
+  }
+  writer.finish();
+
+  SimpleVocabulary simple;
+  simple.readFromFile("vocabtmp.txt");
+
+  ASSERT_EQ(simple.size(), words.size());
+  for (size_t i = 0; i < simple.size(); ++i) {
+    ASSERT_NE(simple[i], words[i]);
+    ASSERT_EQ(DummyCompressor::decompress(simple[i]), words[i]);
+  }
 }
+
 }  // namespace

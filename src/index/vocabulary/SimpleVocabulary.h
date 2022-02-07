@@ -1,8 +1,6 @@
-// Copyright 2011, University of Freiburg,
+// Copyright 2022, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Authors: Björn Buchhold <buchholb>,
-//          Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
-//
+// Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
 #pragma once
 
@@ -10,74 +8,102 @@
 #include <string_view>
 
 #include "../../global/Pattern.h"
-#include "../StringSortComparator.h"
 #include "../CompressedString.h"
+#include "../StringSortComparator.h"
 
-
-
-//! A vocabulary. Wraps a vector of strings
-//! and provides additional methods for retrieval.
-template <class CharTypeT>
+//! A vocabulary. Wraps a `CompactVectorOfStrings<char>`
+//! and provides additional methods for reading and writing to/from file,
+//! and retrieval via binary search.
 class SimpleVocabulary {
-
  public:
-
-  SimpleVocabulary() = default;
-  SimpleVocabulary& operator=(SimpleVocabulary&&) noexcept = default;
-  SimpleVocabulary(SimpleVocabulary&&) noexcept = default;
-
-  using CharType = CharTypeT;
+  using CharType = char;
   using StringView = std::basic_string_view<CharType>;
   using String = std::basic_string<CharType>;
+  using Words = CompactVectorOfStrings<CharType>;
 
-  // The result of methods like `lower_bound`, `upper_bound`, `prefix_range`.
-  // `_word` is nullopt if the Id does is out of range (e.g. "not found" in
-  // connection with `lower_bound`).
+  /// The result of `lower_bound` and `upper_bound`. Return the index of the
+  /// result as well as the word that this index points to. The `_word` is
+  /// `std::nullopt` iff `_id == size()`, which means that the searched word is
+  /// larger than the largest word in the vocabulary.
   struct SearchResult {
     uint64_t _id;
     std::optional<StringView> _word;
     auto operator<=>(const SearchResult& res) const { return _id <=> res._id; }
+    bool operator==(const SearchResult&) const = default;
   };
 
-  virtual ~SimpleVocabulary() = default;
-
-  //! clear all the contents
-  // TODO<joka921> is this needed.
-  void clear() {
-    _words.clear();
-  }
-
-  //! Read the vocabulary from file.
-  void readFromFile(const string& fileName);
-
-  //! Write the vocabulary to a file.
-  void writeToFile(const string& fileName) const;
-  //! Get the word with the given id or an empty optional if the
-  //! word is not in the vocabulary.
-  const std::optional<StringView> operator[](Id id) const;
-
-  [[nodiscard]] size_t size() const {
-    return _words.size();
-  }
-
-  template <typename InternalStringType, typename Comparator >
-  // Wraps std::lower_bound and returns an index instead of an iterator
-  SearchResult lower_bound(const InternalStringType& word, Comparator comparator) const;
-
-  template <typename InternalStringType, typename Comparator >
-  SearchResult upper_bound(const InternalStringType& word, Comparator comparator) const;
-
  private:
-  // vector<StringType> _words;
-  CompactVectorOfStrings<char>
-      _words;
+  // The actual storage
+  Words _words;
 
  public:
-  using WordWriter = decltype(_words)::Writer;
+  /// Construct an empty vocabulary
+  SimpleVocabulary() = default;
+
+  /// Construct the vocabulary from `Words`
+  explicit SimpleVocabulary(Words words) : _words{std::move(words)} {}
+
+  // Vocabularies are movable
+  SimpleVocabulary& operator=(SimpleVocabulary&&) noexcept = default;
+  SimpleVocabulary(SimpleVocabulary&&) noexcept = default;
+
+  /// Read the vocabulary from a file. The file must have been created by a call
+  /// to `writeToFile` or using a `WordWriter`.
+  void readFromFile(const string& fileName);
+
+  /// Write the vocabulary to a file.
+  void writeToFile(const string& fileName) const;
+
+  /// Return the total number of words
+  [[nodiscard]] size_t size() const { return _words.size(); }
+
+  /// Return the `i-th` word. The behavior is undefined if `i >= size()`
+  auto operator[](uint64_t i) const { return _words[i]; }
+
+  /// Return a `SearchResult` that points to the first entry that is equal or
+  /// greater than `word` wrt. to the `comparator`. Only works correctly if the
+  /// `_words` are sorted according to the comparator (exactly like in
+  /// `std::lower_bound`, which is used internally).
+  template <typename InternalStringType, typename Comparator>
+  SearchResult lower_bound(const InternalStringType& word,
+                           Comparator comparator) const {
+    SearchResult result;
+    result._id =
+        std::lower_bound(_words.begin(), _words.end(), word, comparator) -
+        _words.begin();
+    if (result._id < _words.size()) {
+      result._word = _words[result._id];
+    }
+    return result;
+  }
+
+  /// Return a `SearchResult` that points to the first entry that is greater
+  /// than `word` wrt. to the `comparator`. Only works correctly if the `_words`
+  /// are sorted according to the comparator (exactly like in
+  /// `std::upper_bound`, which is used internally).
+  template <typename InternalStringType, typename Comparator>
+  SearchResult upper_bound(const InternalStringType& word,
+                           Comparator comparator) const {
+    SearchResult result;
+    result._id =
+        std::upper_bound(_words.begin(), _words.end(), word, comparator) -
+        _words.begin();
+    if (result._id < _words.size()) {
+      result._word = _words[result._id];
+    }
+    return result;
+  }
+
+ public:
+  /// A helper type which can be used to directly write a vocabulary to disk
+  /// word-by-word, without having to materialize it in RAM first. See the
+  /// documentation of `CompactVectorOfStrings` for details.
+  using WordWriter = typename Words::Writer;
+
+  /// Create an iterable generator, that yields the `SimpleVocabulary` from the
+  /// file, without materializing the whole vocabulary in RAM. See the
+  /// documentaion of `CompactVectorOfStrings` for details.
   static auto makeWordDiskIterator(const string& filename) {
-    return decltype(_words)::diskIterator(filename);
+    return Words::diskIterator(filename);
   }
 };
-
-using InternalCharVocabulary = SimpleVocabulary<char>;
-using InternalCompressedCharVocabulary = SimpleVocabulary<CompressedChar>;
