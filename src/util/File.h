@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -266,33 +267,19 @@ class File {
   }
 
   // Static method to check if a file exists.
-  static bool exists(const string& path) {
-    struct stat buffer;
-    return (stat(path.c_str(), &buffer) == 0);
+  static bool exists(const std::filesystem::path& path) {
+    return std::filesystem::exists(path);
   }
 };
 
 /**
  * @brief Delete the file at a given path
- * Currently uses the linux rm command until we support std::filesystem
  * @param path
  */
-inline void deleteFile(const string& path) {
-  // TODO<all>: As soon as we have GCC 8, we can use std::filesystem
+inline void deleteFile(const std::filesystem::path& path) {
+  if (!std::filesystem::remove(path)) {
+    LOG(WARN) << "Deletion of file '" << path << "' was not successful"
 
-  // Adding escape char for paths with space chars
-  std::string path_raw = path;
-  size_t pos = 0;
-  const string replace_str = "\\ ";
-  auto length = replace_str.length();
-  while ((pos = path_raw.find(' ', pos)) != std::string::npos) {
-    path_raw.replace(pos, 1, replace_str);
-    pos += length;
-  }
-
-  string command = "rm -- " + path_raw;
-  if (system(command.c_str())) {
-    LOG(WARN) << "Deletion of file " << path << " was probably not successful"
               << std::endl;
   }
 }

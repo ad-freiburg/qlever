@@ -193,9 +193,6 @@ class Vocabulary {
   // only used during Index building, not needed for compressed vocabulary
   void createFromSet(const ad_utility::HashSet<std::string>& set);
 
-  template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  ad_utility::HashMap<string, Id> asMap();
-
   static bool isLiteral(const string& word);
   static bool isExternalizedLiteral(const string& word);
 
