@@ -10,18 +10,10 @@
 #include <sstream>
 #include <string>
 #include <utility>
-#include <variant>
 
 #include "../parser/RdfEscaping.h"
-#include "./Distinct.h"
-#include "./Filter.h"
-#include "./IndexScan.h"
-#include "./Join.h"
 #include "./OrderBy.h"
 #include "./Sort.h"
-#include "TextOperationWithFilter.h"
-#include "TextOperationWithoutFilter.h"
-#include "TwoColumnJoin.h"
 
 using std::string;
 
@@ -97,50 +89,25 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     const SelectedVarsOrAsterisk& selectedVarsOrAsterisk,
     const ResultTable& resultTable) const {
   ColumnIndicesAndTypes exportColumns;
-  if (selectedVarsOrAsterisk.isAsterisk()) {
-    auto variablesFromExecutionTree = getVariableColumns();
-    for (const auto& variableFromQuery :
-         selectedVarsOrAsterisk.orderedVariablesFromQueryBody()) {
-      if (getVariableColumns().contains(variableFromQuery)) {
-        auto columnIndex = getVariableColumns().at(variableFromQuery);
-        exportColumns.push_back(
-            VariableAndColumnIndex{variableFromQuery, columnIndex,
-                                   resultTable.getResultType(columnIndex)});
-        variablesFromExecutionTree.erase(variableFromQuery);
-      } else {
-        exportColumns.emplace_back(std::nullopt);
-        LOG(WARN) << "The variable \"" << variableFromQuery
-                  << "\" was found in the original query, but not in the "
-                     "execution tree. "
-                     "This is likely a bug\n";
-      }
+
+  for (auto var : selectedVarsOrAsterisk.getSelectedVariables()) {
+    // TODO: The TEXT(?variable) syntax is redundant and will probably removed
+    //  when we have a proper SPARQL parser.
+    constexpr std::string_view prefix = "TEXT(";
+    constexpr size_t prefixLength = prefix.length();
+    if (var.starts_with(prefix)) {
+      var = var.substr(prefixLength, var.rfind(')') - prefixLength);
     }
-    for (const auto& variableFromQuery : variablesFromExecutionTree) {
-      LOG(WARN) << "The variable \"" << variableFromQuery.first
-                << "\" was found in the execution tree, but not in the "
-                   "original query. "
+    if (getVariableColumns().contains(var)) {
+      auto columnIndex = getVariableColumns().at(var);
+      exportColumns.push_back(VariableAndColumnIndex{
+          var, columnIndex, resultTable.getResultType(columnIndex)});
+    } else {
+      exportColumns.emplace_back(std::nullopt);
+      LOG(WARN) << "The variable \"" << var
+                << "\" was found in the original query, but not in the "
+                   "execution tree. "
                    "This is likely a bug\n";
-    }
-  } else {
-    for (auto var : selectedVarsOrAsterisk.getSelectVariables()) {
-      // TODO: The TEXT(?variable) syntax is redundant and will probably removed
-      //  when we have a proper SPARQL parser.
-      constexpr std::string_view prefix = "TEXT(";
-      constexpr size_t prefixLength = prefix.length();
-      if (var.starts_with(prefix)) {
-        var = var.substr(prefixLength, var.rfind(')') - prefixLength);
-      }
-      if (getVariableColumns().contains(var)) {
-        auto columnIndex = getVariableColumns().at(var);
-        exportColumns.push_back(VariableAndColumnIndex{
-            var, columnIndex, resultTable.getResultType(columnIndex)});
-      } else {
-        exportColumns.emplace_back(std::nullopt);
-        LOG(WARN) << "The variable \"" << var
-                  << "\" was found in the original query, but not in the "
-                     "execution tree. "
-                     "This is likely a bug\n";
-      }
     }
   }
   return exportColumns;
@@ -189,17 +156,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   const IdTable& idTable = resultTable->_idTable;
 
   json result;
-
-  if (selectedVarsOrAsterisk.isAsterisk()) {
-    vector<string> vars_names;
-    for (auto const& variable :
-         selectedVarsOrAsterisk.orderedVariablesFromQueryBody()) {
-      vars_names.push_back(variable);
-    }
-    result["head"]["vars"] = vars_names;
-  } else {
-    result["head"]["vars"] = selectedVarsOrAsterisk.getSelectVariables();
-  }
+  result["head"]["vars"] = selectedVarsOrAsterisk.getSelectedVariables();
 
   json bindings = json::array();
 
@@ -440,10 +397,7 @@ QueryExecutionTree::generateResults(
   static constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
   constexpr std::string_view sepView{&sep, 1};
   // Print header line
-  const auto& variables =
-      selectedVarsOrAsterisk.isAsterisk()
-          ? selectedVarsOrAsterisk.orderedVariablesFromQueryBody()
-          : selectedVarsOrAsterisk.getSelectVariables();
+  const auto& variables = selectedVarsOrAsterisk.getSelectedVariables();
   co_yield absl::StrJoin(variables, sepView);
   co_yield '\n';
 

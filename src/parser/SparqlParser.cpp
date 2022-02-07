@@ -59,11 +59,11 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
 
   if (!query->_groupByVariables.empty()) {
     if (query->hasSelectClause() &&
-        query->selectClause()._varsOrAsterisk.isVariables()) {
+        query->selectClause()._varsOrAsterisk.isManuallySelectedVariables()) {
       const auto& selectClause = query->selectClause();
       // Check if all selected variables are either aggregated or
       for (const string& var :
-           selectClause._varsOrAsterisk.getSelectVariables()) {
+           selectClause._varsOrAsterisk.getSelectedVariables()) {
         if (var[0] == '?') {
           bool is_alias = false;
           for (const ParsedQuery::Alias& a : selectClause._aliases) {
@@ -87,7 +87,7 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
         }
       }
     } else if (query->hasSelectClause() &&
-               query->selectClause()._varsOrAsterisk.isAsterisk()) {
+               query->selectClause()._varsOrAsterisk.isAllVariablesSelected()) {
       throw ParseException(
           "GROUP BY is not allowed when all variables are selected via SELECT "
           "*");
@@ -120,9 +120,9 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
   const auto& selectClause = query->selectClause();
 
   ad_utility::HashMap<std::string, size_t> variable_counts;
-  if (selectClause._varsOrAsterisk.isVariables()) {
+  if (selectClause._varsOrAsterisk.isManuallySelectedVariables()) {
     for (const std::string& s :
-         selectClause._varsOrAsterisk.getSelectVariables()) {
+         selectClause._varsOrAsterisk.getSelectedVariables()) {
       variable_counts[s]++;
     }
   }
@@ -168,15 +168,15 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
     selectClause._reduced = true;
   }
   if (_lexer.accept("*")) {
-    selectClause._varsOrAsterisk.setsAsterisk();
+    selectClause._varsOrAsterisk.setAllVariablesSelected();
   }
+  std::vector<std::string> manuallySelectedVariables;
   while (!_lexer.accept("where")) {
+    if (selectClause._varsOrAsterisk.isAllVariablesSelected()) {
+      throw ParseException("Keyword WHERE expected after SELECT '*'");
+    }
     if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-      // Exception avoided due to previous Syntax Check of Selector '*'
-      selectClause._varsOrAsterisk.getSelectVariables().push_back(
-          _lexer.current().raw);
-      selectClause._varsOrAsterisk.addVariableFromQueryBody(
-          _lexer.current().raw);
+      manuallySelectedVariables.push_back(_lexer.current().raw);
     } else if (_lexer.accept("text")) {
       _lexer.expect("(");
       std::ostringstream s;
@@ -185,7 +185,7 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       s << _lexer.current().raw;
       _lexer.expect(")");
       s << ")";
-      selectClause._varsOrAsterisk.getSelectVariables().push_back(s.str());
+      manuallySelectedVariables.push_back(s.str());
     } else if (_lexer.accept("score")) {
       _lexer.expect("(");
       std::ostringstream s;
@@ -194,14 +194,12 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       s << _lexer.current().raw;
       _lexer.expect(")");
       s << ")";
-      selectClause._varsOrAsterisk.getSelectVariables().push_back(s.str());
+      manuallySelectedVariables.push_back(s.str());
     } else if (_lexer.accept("(")) {
       // expect an alias
       ParsedQuery::Alias a = parseAliasWithAntlr();
       selectClause._aliases.push_back(a);
-      selectClause._varsOrAsterisk.getSelectVariables().emplace_back(
-          a._outVarName);
-      selectClause._varsOrAsterisk.addVariableFromQueryBody(a._outVarName);
+      manuallySelectedVariables.push_back(a._outVarName);
       _lexer.expect(")");
     } else {
       _lexer.accept();
@@ -211,6 +209,9 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
     if (_lexer.empty()) {
       throw ParseException("Keyword WHERE expected after SELECT.");
     }
+  }
+  if (selectClause._varsOrAsterisk.isManuallySelectedVariables()) {
+    selectClause._varsOrAsterisk.setManuallySelected(manuallySelectedVariables);
   }
 }
 
@@ -228,7 +229,8 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
     _lexer.expect(")");
     s << ")";
   } else if (query->hasSelectClause() &&
-             query->selectClause()._varsOrAsterisk.isVariables() &&
+             query->selectClause()
+                 ._varsOrAsterisk.isManuallySelectedVariables() &&
              _lexer.accept("(")) {
     // TODO This assumes that aliases can stand in the ORDER BY
     // This is not true, only expression may stand there
@@ -236,7 +238,7 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
     auto& selectClause = query->selectClause();
 
     for (const auto& selectedVariable :
-         selectClause._varsOrAsterisk.getSelectVariables()) {
+         selectClause._varsOrAsterisk.getSelectedVariables()) {
       if (selectedVariable == a._outVarName) {
         throw ParseException("A variable with name " + selectedVariable +
                              " is already used, but the ORDER BY with alias " +
@@ -293,8 +295,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       GraphPatternOperation::Bind bind{parseExpressionWithAntlr()};
       _lexer.expect("as");
       _lexer.expect(SparqlToken::Type::VARIABLE);
-      query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
-          _lexer.current().raw);
+      query->registerVariableVisibleInQueryBody(_lexer.current().raw);
       bind._target = _lexer.current().raw;
       _lexer.expect(")");
       currentPattern->_children.emplace_back(std::move(bind));
@@ -320,24 +321,16 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         // create the subquery operation
         GraphPatternOperation::Subquery subq;
         parseQuery(&subq._subquery, SELECT_QUERY);
-        ParsedQuery::SelectedVarsOrAsterisk subQ_sel_vars =
-            subq._subquery.selectClause()._varsOrAsterisk;
 
         // Add the variables from the subquery that are visible to the outside
         // (because they were selected, or because of a SELECT *) to the outer
         // query.
-        if (subQ_sel_vars.isAsterisk()) {
-          auto subQ_ordVars = subQ_sel_vars.orderedVariablesFromQueryBody();
-
-          for (const auto& subSelectVariables : subQ_ordVars) {
-            ParsedQuery::SelectedVarsOrAsterisk* up_sel_vars =
-                &query->selectClause()._varsOrAsterisk;
-            up_sel_vars->addVariableFromQueryBody(subSelectVariables);
-          }
-        } else {
-          for (const auto& var : subQ_sel_vars.getSelectVariables()) {
-            query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(var);
-          }
+        ParsedQuery::SelectedVarsOrAsterisk varsOrAsteriskFromSubquery =
+            subq._subquery.selectClause()._varsOrAsterisk;
+        auto selectedVariablesFromSubquery =
+            varsOrAsteriskFromSubquery.getSelectedVariables();
+        for (const auto& variable : selectedVariablesFromSubquery) {
+          query->registerVariableVisibleInQueryBody(variable);
         }
 
         currentPattern->_children.emplace_back(std::move(subq));
@@ -373,8 +366,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         // values with several variables
         while (_lexer.accept(SparqlToken::Type::VARIABLE)) {
           values._variables.push_back(_lexer.current().raw);
-          query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
-              _lexer.current().raw);
+          query->registerVariableVisibleInQueryBody(_lexer.current().raw);
         }
         _lexer.expect(")");
         _lexer.expect("{");
@@ -392,8 +384,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       } else if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
         // values with a single variable
         values._variables.push_back(_lexer.current().raw);
-        query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
-            _lexer.current().raw);
+        query->registerVariableVisibleInQueryBody(_lexer.current().raw);
         _lexer.expect("{");
         while (_lexer.accept(SparqlToken::Type::IRI) ||
                _lexer.accept(SparqlToken::Type::RDFLITERAL)) {
@@ -414,8 +405,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       if (lastSubject.empty()) {
         if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
           subject = _lexer.current().raw;
-          query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
-              _lexer.current().raw);
+          query->registerVariableVisibleInQueryBody(_lexer.current().raw);
         } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
           subject = parseLiteral(_lexer.current().raw, true);
         } else {
@@ -431,8 +421,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       if (lastPredicate.empty()) {
         if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
           predicate = _lexer.current().raw;
-          query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
-              _lexer.current().raw);
+          query->registerVariableVisibleInQueryBody(_lexer.current().raw);
         } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
           predicate = parseLiteral(_lexer.current().raw, true);
         } else {
@@ -450,8 +439,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       std::string object;
       if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
         object = _lexer.current().raw;
-        query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
-            _lexer.current().raw);
+        query->registerVariableVisibleInQueryBody(_lexer.current().raw);
       } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
         object = parseLiteral(_lexer.current().raw, true);
       } else {
@@ -545,8 +533,6 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
       while (!reached_end) {
         if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
           query->_orderBy.emplace_back(OrderKey(_lexer.current().raw));
-          query->selectClause()._varsOrAsterisk.addVariableFromQueryBody(
-              _lexer.current().raw);
         } else if (_lexer.accept("asc")) {
           query->_orderBy.emplace_back(parseOrderKey("ASC", query));
         } else if (_lexer.accept("desc")) {
