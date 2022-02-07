@@ -103,7 +103,7 @@ class UnicodeVocabulary {
     void finish() { _underlyingWriter.finish(); }
   };
 
-  DiskWriterFromUncompressedWords makeDiskWriter(const string& filename) {
+  DiskWriterFromUncompressedWords makeDiskWriter(const std::string& filename) {
     return DiskWriterFromUncompressedWords{_compressor, filename};
   }
 };
