@@ -15,10 +15,10 @@
 template <class Comp>
 string ExternalVocabulary<Comp>::operator[](Id id) const {
   off_t ft[2];
+  off_t at = _startOfOffsets + id * sizeof(off_t);
+  _file.read(ft, sizeof(ft), at);
   off_t& from = ft[0];
   off_t& to = ft[1];
-  off_t at = _startOfOffsets + id * sizeof(off_t);
-  at += _file.read(ft, sizeof(ft), at);
   assert(to > from);
   size_t nofBytes = static_cast<size_t>(to - from);
   string word(nofBytes, '\0');
