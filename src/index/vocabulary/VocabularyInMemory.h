@@ -8,6 +8,7 @@
 #include <string_view>
 
 #include "../../global/Pattern.h"
+#include "../../util/Exception.h"
 #include "../CompressedString.h"
 #include "../StringSortComparator.h"
 
@@ -58,6 +59,12 @@ class VocabularyInMemory {
 
   /// Return the total number of words
   [[nodiscard]] size_t size() const { return _words.size(); }
+
+  ///
+  [[nodiscard]] uint64_t getHighestIndex() const {
+    AD_CHECK(size() > 0);
+    return size() - 1;
+  }
 
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
   auto operator[](uint64_t i) const { return _words[i]; }
