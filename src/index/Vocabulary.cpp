@@ -371,7 +371,7 @@ const std::optional<string> Vocabulary<S, C>::idToOptionalString(Id id) const {
     // this word must be externalized
     id -= _words.size();
     AD_CHECK(id < _externalLiterals.size());
-    return _externalLiterals[id];
+    return _externalLiterals.idToOptionalString(id);
   }
 }
 

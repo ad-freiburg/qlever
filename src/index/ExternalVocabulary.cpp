@@ -9,31 +9,57 @@
 #include "../parser/RdfEscaping.h"
 #include "../parser/Tokenizer.h"
 #include "../util/BufferedVector.h"
+#include "../util/Generator.h"
 #include "../util/Log.h"
+
+template <class Comp>
+std::optional<OffsetAndSize> ExternalVocabulary<Comp>::getOffsetAndSize(
+    Id id) const {
+  IdAndOffset dummy{id, 0};
+  auto it =
+      std::lower_bound(idsAndOffsets().begin(), idsAndOffsets().end(), dummy);
+  if (it >= idsAndOffsets().end() - 1 || it->_id != id) {
+    return std::nullopt;
+  }
+  auto offset = it->_offset;
+  auto nextOffset = (it + 1)->_offset;
+  return OffsetAndSize{offset, nextOffset - offset};
+}
+
+template <class Comp>
+OffsetAndSize ExternalVocabulary<Comp>::getOffsetAndSizeForNthElement(
+    size_t n) const {
+  AD_CHECK(n < size());
+  // TODO<joka921> :: This is duplicated code
+  const auto offset = _idsAndOffsets[n]._offset;
+  const auto nextOffset = _idsAndOffsets[n + 1]._offset;
+  return OffsetAndSize{offset, nextOffset - offset};
+}
 
 // _____________________________________________________________________________
 template <class Comp>
-string ExternalVocabulary<Comp>::operator[](Id id) const {
-  off_t ft[2];
-  off_t at = _startOfOffsets + id * sizeof(off_t);
-  _file.read(ft, sizeof(ft), at);
-  off_t& from = ft[0];
-  off_t& to = ft[1];
-  assert(to > from);
-  size_t nofBytes = static_cast<size_t>(to - from);
-  string word(nofBytes, '\0');
-  _file.read(word.data(), nofBytes, from);
-  return word;
+std::optional<string> ExternalVocabulary<Comp>::idToOptionalString(
+    Id id) const {
+  auto optionalOffsetAndSize = getOffsetAndSize(id);
+  if (!optionalOffsetAndSize.has_value()) {
+    return std::nullopt;
+  }
+
+  string result(optionalOffsetAndSize->_size, '\0');
+  _file.read(result.data(), optionalOffsetAndSize->_size,
+             optionalOffsetAndSize->_offset);
+  return result;
 }
 
 // _____________________________________________________________________________
 template <class Comp>
 Id ExternalVocabulary<Comp>::binarySearchInVocab(const string& word) const {
+  // TODO<joka921> get rid of this.
   Id lower = 0;
-  Id upper = _size;
+  Id upper = size();
   while (lower < upper) {
-    Id i = (lower + upper) / 2;
-    string w = (*this)[i];
+    Id i = lower + (upper - lower) / 2;
+    string w = std::move(idToOptionalString(i).value());
     int cmp = _caseComparator.compare(w, word, Comp::Level::TOTAL);
     if (cmp < 0) {
       lower = i + 1;
@@ -48,61 +74,77 @@ Id ExternalVocabulary<Comp>::binarySearchInVocab(const string& word) const {
 
 // _____________________________________________________________________________
 template <class Comp>
+template <typename Iterable>
+void ExternalVocabulary<Comp>::buildFromIterable(Iterable&& it,
+                                                 const string& fileName) {
+  {
+    _file.open(fileName.c_str(), "w");
+    ad_utility::MmapVector<IdAndOffset> idsAndOffsets(fileName + _offsetSuffix,
+                                                      ad_utility::CreateTag{});
+    uint64_t currentOffset = 0;
+    uint64_t index = 0;
+    for (const std::string& word : it) {
+      idsAndOffsets.push_back(IdAndOffset{index, currentOffset});
+      currentOffset += _file.write(word.data(), word.size());
+      index++;
+    }
+
+    // End offset of last entry
+    idsAndOffsets.push_back(IdAndOffset{index, currentOffset});
+    _file.close();
+  }  // Run destructor of MmapVector to dump everything to disk.
+  initFromFile(fileName);
+}
+
+// _____________________________________________________________________________
+template <class Comp>
 void ExternalVocabulary<Comp>::buildFromVector(const vector<string>& v,
                                                const string& fileName) {
-  _file.open(fileName.c_str(), "w");
-  vector<off_t> offsets;
-  off_t currentOffset = 0;
-  _size = v.size();
-  for (size_t i = 0; i < v.size(); ++i) {
-    offsets.push_back(currentOffset);
-    currentOffset += _file.write(v[i].data(), v[i].size());
-  }
-  _startOfOffsets = currentOffset;
-  offsets.push_back(_startOfOffsets);
-  _file.write(offsets.data(), offsets.size() * sizeof(off_t));
-  _file.close();
-  initFromFile(fileName);
+  buildFromIterable(v, fileName);
 }
 
 // _____________________________________________________________________________
 template <class Comp>
 void ExternalVocabulary<Comp>::buildFromTextFile(const string& textFileName,
                                                  const string& outFileName) {
-  _file.open(outFileName.c_str(), "w");
   std::ifstream infile(textFileName);
   AD_CHECK(infile.is_open());
-  ad_utility::BufferedVector<off_t> offsets(
-      1'000'000'000, textFileName + ".offset.tmp.buffer");
-  off_t currentOffset = 0;
-  _size = 0;
-  std::string word;
-  while (std::getline(infile, word)) {
-    // The temporary file for the to-be-externalized vocabulary strings is
-    // line-based, just like the normal vocabulary file. Therefore, \n and \ are
-    // escaped there. When we read from this file, we have to unescape these.
-    word = RdfEscaping::unescapeNewlinesAndBackslashes(word);
-    offsets.push_back(currentOffset);
-    currentOffset += _file.write(word.data(), word.size());
-    _size++;
-  }
-  _startOfOffsets = currentOffset;
-  offsets.push_back(_startOfOffsets);
-  _file.write(offsets.data(), offsets.size() * sizeof(off_t));
-  _file.close();
-  initFromFile(outFileName);
+  auto lineGenerator = [&infile]() -> cppcoro::generator<string> {
+    std::string word;
+    while (std::getline(infile, word)) {
+      // The temporary file for the to-be-externalized vocabulary strings is
+      // line-based, just like the normal vocabulary file. Therefore, \n and \
+      // are escaped there. When we read from this file, we have to unescape
+      // these.
+      word = RdfEscaping::unescapeNewlinesAndBackslashes(word);
+      co_yield word;
+    }
+  }();
+  buildFromIterable(lineGenerator, outFileName);
 }
 
 // _____________________________________________________________________________
 template <class Comp>
 void ExternalVocabulary<Comp>::initFromFile(const string& file) {
   _file.open(file.c_str(), "r");
-  if (_file.empty()) {
-    _size = 0;
-  } else {
-    off_t posLastOfft = _file.getLastOffset(&_startOfOffsets);
-    _size = (posLastOfft - _startOfOffsets) / sizeof(off_t);
-  }
+  _idsAndOffsets.open(file + _offsetSuffix);
+  AD_CHECK(_idsAndOffsets.size() > 0);
+  _size = _idsAndOffsets.size() - 1;
+  _highestId = (*(end() - 1))._id;
+}
+
+template <class Comp>
+ExternalVocabulary<Comp>::WordAndId ExternalVocabulary<Comp>::getNthElement(
+    size_t n) const {
+  AD_CHECK(n < idsAndOffsets().size());
+  auto offsetAndSize = getOffsetAndSizeForNthElement(n);
+
+  string result(offsetAndSize._size, '\0');
+  _file.read(result.data(), offsetAndSize._size, offsetAndSize._offset);
+
+  // TODO<joka921> we can get the id by a single read above
+  auto id = idsAndOffsets()[n]._id;
+  return {id, std::move(result)};
 }
 
 template class ExternalVocabulary<TripleComponentComparator>;
