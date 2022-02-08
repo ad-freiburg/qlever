@@ -1049,7 +1049,7 @@ queries:
 
 
   - query: select_asterisk_algo-star-female-scientists
-    type: no-text
+    type: text
     sparql: |
       SELECT * WHERE {
           ?x <is-a> <Scientist> .
