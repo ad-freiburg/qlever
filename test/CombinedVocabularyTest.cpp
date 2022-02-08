@@ -11,19 +11,27 @@
 using namespace vocabulary_test;
 
 // TODO<joka921> Also test a scenario, where the first Ids have to be modified.
+
+// This class fulfills the `IndexConverterConcept` for any combined vocabulary.
+// It refers to the following situation: The private indices in both
+// underlying vocabularies are [0 .. n) and [0 .. m), the words in the
+// first vocabulary all stand before the words in the second vocabulary.
+// For ids in the second vocabulary we thus have to add/subtract `n` (the size)
+// of the first vocabulary, to transform private to public indices and vice
+// versa.
 struct FirstAThenB {
   static bool isInFirst(uint64_t index, const auto& vocab) {
-    return index < vocab.sizeVocabA();
+    return index < vocab.sizeFirstVocab();
   }
 
   static uint64_t fromFirst(uint64_t index, const auto&) { return index; }
 
   static uint64_t toFirst(uint64_t index, const auto&) { return index; }
   static uint64_t fromSecond(uint64_t index, const auto& vocab) {
-    return index + vocab.sizeVocabA();
+    return index + vocab.sizeFirstVocab();
   }
   static uint64_t toSecond(uint64_t index, const auto& vocab) {
-    return index - vocab.sizeVocabA();
+    return index - vocab.sizeFirstVocab();
   }
 };
 
@@ -33,6 +41,8 @@ auto createVocabularyInMemory(const std::vector<std::string>& words) {
   return VocabularyInMemory(std::move(w));
 }
 
+/// The first half of the words go to the first vocabulary, the second
+/// half of the words go to the second vocabulary.
 auto createCombinedVocabulary(const std::vector<std::string>& words) {
   std::vector<std::string> a, b;
   for (size_t i = 0; i < words.size(); ++i) {
