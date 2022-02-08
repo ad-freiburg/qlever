@@ -5,40 +5,47 @@
 #ifndef QLEVER_COMPRESSEDVOCABULARY_H
 #define QLEVER_COMPRESSEDVOCABULARY_H
 
+/// Vocabulary with multi-level `UnicodeComparator` that allows comparison
+/// according to different Levels. Groups of words that are adjacent on a
+/// stricter level can be all equal on a weaker level. The
+/// `UnderlyingVocabulary` has to be sorted according to the strictest level.
 template <typename UnderlyingVocabulary, typename UnicodeComparator>
 class UnicodeVocabulary {
  public:
-  using SearchResult = typename UnderlyingVocabulary::SearchResult;
+  using WordAndIndex = typename UnderlyingVocabulary::WordAndIndex;
   using SortLevel = typename UnicodeComparator::Level;
 
  private:
-  UnderlyingVocabulary _underlyingVocabulary;
   UnicodeComparator _comparator;
+  UnderlyingVocabulary _underlyingVocabulary;
 
  public:
-  explicit UnicodeVocabulary(UnicodeComparator comparator = UnicodeComparator())
-      : _comparator{std::move(comparator)} {}
+  /// The additional `Args...` are used to construct the `UnderlyingVocabulary`
+  template <typename... Args>
+  explicit UnicodeVocabulary(UnicodeComparator comparator, Args&&... args)
+      : _comparator{std::move(comparator)},
+        _underlyingVocabulary{std::forward<Args>(args)...} {}
 
   auto operator[](uint64_t id) const { return _underlyingVocabulary[id]; }
 
   [[nodiscard]] uint64_t size() const { return _underlyingVocabulary.size(); }
 
-  /// Return a `SearchResult` that points to the first entry that is equal or
+  /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt. to the `comparator`. Only works correctly if the
   /// `_words` are sorted according to the comparator (exactly like in
   /// `std::lower_bound`, which is used internally).
-  SearchResult lower_bound(std::string_view word, SortLevel level) const {
+  WordAndIndex lower_bound(std::string_view word, SortLevel level) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
       return _comparator(a, b, level);
     };
     return _underlyingVocabulary.lower_bound(word, actualComparator);
   }
 
-  /// Return a `SearchResult` that points to the first entry that is greater
+  /// Return a `WordAndIndex` that points to the first entry that is greater
   /// than `word` wrt. to the `comparator`. Only works correctly if the `_words`
   /// are sorted according to the comparator (exactly like in
   /// `std::upper_bound`, which is used internally).
-  SearchResult upper_bound(std::string_view word, SortLevel level) const {
+  WordAndIndex upper_bound(std::string_view word, SortLevel level) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
       return _comparator(a, b, level);
     };

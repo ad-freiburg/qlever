@@ -151,10 +151,12 @@ addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
 addLinkAndDiscoverTest(ContentEncodingHelperTest)
 
-addLinkAndDiscoverTest(SimpleVocabularyTest vocabulary)
+addLinkAndDiscoverTest(VocabularyInMemoryTest vocabulary)
 
 addLinkAndDiscoverTest(CompressedVocabularyTest vocabulary)
 
-addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary)
+addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary ${ICU_LIBRARIES})
+
+addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
 
 addLinkAndDiscoverTest(PrefixCompressorTest)

@@ -14,7 +14,7 @@
 //! A vocabulary. Wraps a `CompactVectorOfStrings<char>`
 //! and provides additional methods for reading and writing to/from file,
 //! and retrieval via binary search.
-class SimpleVocabulary {
+class VocabularyInMemory {
  public:
   using CharType = char;
   using StringView = std::basic_string_view<CharType>;
@@ -23,29 +23,31 @@ class SimpleVocabulary {
 
   /// The result of `lower_bound` and `upper_bound`. Return the index of the
   /// result as well as the word that this index points to. The `_word` is
-  /// `std::nullopt` iff `_id == size()`, which means that the searched word is
-  /// larger than the largest word in the vocabulary.
-  struct SearchResult {
-    uint64_t _id;
+  /// `std::nullopt` iff `_index == size()`, which means that the searched word
+  /// is larger than the largest word in the vocabulary.
+  struct WordAndIndex {
     std::optional<StringView> _word;
-    auto operator<=>(const SearchResult& res) const { return _id <=> res._id; }
-    bool operator==(const SearchResult&) const = default;
+    uint64_t _index;
+    auto operator<=>(const WordAndIndex& res) const {
+      return _index <=> res._index;
+    }
+    bool operator==(const WordAndIndex&) const = default;
   };
 
  private:
-  // The actual storage
+  // The actual storage.
   Words _words;
 
  public:
   /// Construct an empty vocabulary
-  SimpleVocabulary() = default;
+  VocabularyInMemory() = default;
 
   /// Construct the vocabulary from `Words`
-  explicit SimpleVocabulary(Words words) : _words{std::move(words)} {}
+  explicit VocabularyInMemory(Words words) : _words{std::move(words)} {}
 
   // Vocabularies are movable
-  SimpleVocabulary& operator=(SimpleVocabulary&&) noexcept = default;
-  SimpleVocabulary(SimpleVocabulary&&) noexcept = default;
+  VocabularyInMemory& operator=(VocabularyInMemory&&) noexcept = default;
+  VocabularyInMemory(VocabularyInMemory&&) noexcept = default;
 
   /// Read the vocabulary from a file. The file must have been created by a call
   /// to `writeToFile` or using a `WordWriter`.
@@ -60,47 +62,47 @@ class SimpleVocabulary {
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
   auto operator[](uint64_t i) const { return _words[i]; }
 
-  /// Return a `SearchResult` that points to the first entry that is equal or
+  /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt. to the `comparator`. Only works correctly if the
   /// `_words` are sorted according to the comparator (exactly like in
   /// `std::lower_bound`, which is used internally).
   template <typename InternalStringType, typename Comparator>
-  SearchResult lower_bound(const InternalStringType& word,
+  WordAndIndex lower_bound(const InternalStringType& word,
                            Comparator comparator) const {
-    SearchResult result;
-    result._id =
+    WordAndIndex result;
+    result._index =
         std::lower_bound(_words.begin(), _words.end(), word, comparator) -
         _words.begin();
-    if (result._id < _words.size()) {
-      result._word = _words[result._id];
-    }
+    result._word = result._index < _words.size()
+                       ? std::optional{_words[result._index]}
+                       : std::nullopt;
     return result;
   }
 
-  /// Return a `SearchResult` that points to the first entry that is greater
+  /// Return a `WordAndIndex` that points to the first entry that is greater
   /// than `word` wrt. to the `comparator`. Only works correctly if the `_words`
   /// are sorted according to the comparator (exactly like in
   /// `std::upper_bound`, which is used internally).
   template <typename InternalStringType, typename Comparator>
-  SearchResult upper_bound(const InternalStringType& word,
+  WordAndIndex upper_bound(const InternalStringType& word,
                            Comparator comparator) const {
-    SearchResult result;
-    result._id =
+    WordAndIndex result;
+    result._index =
         std::upper_bound(_words.begin(), _words.end(), word, comparator) -
         _words.begin();
-    if (result._id < _words.size()) {
-      result._word = _words[result._id];
-    }
+    result._word = result._index < _words.size()
+                       ? std::optional{_words[result._index]}
+                       : std::nullopt;
     return result;
   }
 
  public:
-  /// A helper type which can be used to directly write a vocabulary to disk
+  /// A helper type that can be used to directly write a vocabulary to disk
   /// word-by-word, without having to materialize it in RAM first. See the
   /// documentation of `CompactVectorOfStrings` for details.
   using WordWriter = typename Words::Writer;
 
-  /// Create an iterable generator, that yields the `SimpleVocabulary` from the
+  /// Create an iterable generator that yields the `VocabularyInMemory` from the
   /// file, without materializing the whole vocabulary in RAM. See the
   /// documentaion of `CompactVectorOfStrings` for details.
   static auto makeWordDiskIterator(const string& filename) {

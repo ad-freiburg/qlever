@@ -7,13 +7,17 @@
 
 /// TODO<joka921> Currently the settings of the compressor are not directly
 /// serialized but have to be manually stored and initialized.
+
+/// TODO<joka921> Make "Compressor" and "Vocabulary" a concept.
+
+/// A vocabulary in which compression is performed per word via the `Compressor`
 template <typename UnderlyingVocabulary, typename Compressor>
-class UnicodeVocabulary {
+class CompressedVocabulary {
  public:
-  struct SearchResult {
-    uint64_t _id;
+  struct WordAndIndex {
     std::optional<std::string> _word;
-    bool operator==(const SearchResult& result) const = default;
+    uint64_t _index;
+    bool operator==(const WordAndIndex& result) const = default;
   };
 
  private:
@@ -21,41 +25,41 @@ class UnicodeVocabulary {
   Compressor _compressor;
 
  public:
-  UnicodeVocabulary(Compressor compressor = Compressor())
+  CompressedVocabulary(Compressor compressor = Compressor())
       : _compressor{std::move(compressor)} {}
 
   auto operator[](uint64_t id) const {
     return _compressor.decompress(_underlyingVocabulary[id]);
   }
 
-  uint64_t size() const { return _underlyingVocabulary.size(); }
+  [[nodiscard]] uint64_t size() const { return _underlyingVocabulary.size(); }
 
-  /// Return a `SearchResult` that points to the first entry that is equal or
-  /// greater than `word` wrt. to the `comparator`. Only works correctly if the
+  /// Return a `WordAndIndex` that points to the first entry that is equal or
+  /// greater than `word` wrt the `comparator`. Only works correctly if the
   /// `_words` are sorted according to the comparator (exactly like in
   /// `std::lower_bound`, which is used internally).
   template <typename InternalStringType, typename Comparator>
-  SearchResult lower_bound(const InternalStringType& word,
+  WordAndIndex lower_bound(const InternalStringType& word,
                            Comparator comparator) const {
     auto actualComparator = [this, &comparator](const auto& a, const auto& b) {
       return comparator(_compressor.decompress(a), b);
     };
     auto underlyingResult =
         _underlyingVocabulary.lower_bound(word, actualComparator);
-    SearchResult result;
-    result._id = underlyingResult._id;
+    WordAndIndex result;
+    result._index = underlyingResult._index;
     if (underlyingResult._word.has_value()) {
       result._word = _compressor.decompress(underlyingResult._word.value());
     }
     return result;
   }
 
-  /// Return a `SearchResult` that points to the first entry that is greater
+  /// Return a `WordAndIndex` that points to the first entry that is greater
   /// than `word` wrt. to the `comparator`. Only works correctly if the `_words`
   /// are sorted according to the comparator (exactly like in
   /// `std::upper_bound`, which is used internally).
   template <typename InternalStringType, typename Comparator>
-  SearchResult upper_bound(const InternalStringType& word,
+  WordAndIndex upper_bound(const InternalStringType& word,
                            Comparator comparator) const {
     auto actualComparator = [this, &comparator](const auto& a, const auto& b) {
       return comparator(a, _compressor.decompress(b));
@@ -63,8 +67,8 @@ class UnicodeVocabulary {
     auto underlyingResult =
         _underlyingVocabulary.upper_bound(word, actualComparator);
     // TODO:: make this a private helper function.
-    SearchResult result;
-    result._id = underlyingResult._id;
+    WordAndIndex result;
+    result._index = underlyingResult._index;
     if (underlyingResult._word.has_value()) {
       result._word = _compressor.decompress(underlyingResult._word.value());
     }
@@ -79,9 +83,9 @@ class UnicodeVocabulary {
     _underlyingVocabulary.readFromFile(filename);
   }
 
-  // Allows the incremental writing of a `CompactVectorOfStrings` directly to a
-  // file.
-  struct DiskWriterFromUncompressedWords {
+  /// Allows the incremental writing of the words. Uses `WordWriter` of the
+  /// underlying vocabulary.
+  class DiskWriterFromUncompressedWords {
    private:
     const Compressor& _compressor;
     typename UnderlyingVocabulary::WordWriter _underlyingWriter;

@@ -1,17 +1,13 @@
-// Copyright 2011, University of Freiburg,
+// Copyright 2022, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Authors: Björn Buchhold <buchholb>,
-//          Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+// Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#include "./SimpleVocabulary.h"
-
-#include <fstream>
-#include <iostream>
+#include "./VocabularyInMemory.h"
 
 using std::string;
 
 // _____________________________________________________________________________
-void SimpleVocabulary::readFromFile(const string& fileName) {
+void VocabularyInMemory::readFromFile(const string& fileName) {
   LOG(INFO) << "Reading vocabulary from file " << fileName << " ..."
             << std::endl;
   _words.clear();
@@ -21,9 +17,9 @@ void SimpleVocabulary::readFromFile(const string& fileName) {
 }
 
 // _____________________________________________________________________________
-void SimpleVocabulary::writeToFile(const string& fileName) const {
-  LOG(INFO) << "Writing vocabulary to file " << fileName << "\n";
+void VocabularyInMemory::writeToFile(const string& fileName) const {
+  LOG(INFO) << "Writing vocabulary to file " << fileName << " ..." << std::endl;
   ad_utility::serialization::FileWriteSerializer file{fileName};
   file << _words;
-  LOG(INFO) << "Done writing vocabulary to file.\n";
+  LOG(INFO) << "Done, number of words: " << _words.size() << std::endl;
 }

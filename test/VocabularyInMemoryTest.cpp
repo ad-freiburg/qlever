@@ -4,36 +4,14 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/index/vocabulary/CompressedVocabulary.h"
-#include "../src/index/vocabulary/PrefixCompressor.h"
 #include "../src/index/vocabulary/VocabularyInMemory.h"
 #include "./VocabularyTestHelpers.h"
+using Vocab = VocabularyInMemory;
 
-// A stateless "compressor" that applies a trivial transormation to a string
-struct DummyCompressor {
-  static std::string compress(std::string_view uncompressed) {
-    std::string result{uncompressed};
-    for (auto& c : result) {
-      c += 2;
-    }
-    return result;
-  }
-
-  static std::string decompress(std::string_view compressed) {
-    std::string result{compressed};
-    for (char& c : result) {
-      c -= 2;
-    }
-    return result;
-  }
-};
-
-using Vocab = CompressedVocabulary<VocabularyInMemory, DummyCompressor>;
-
-// Human readable output for `WordAndIndex`.
+// This operator provides human-readable output.
 std::ostream& operator<<(std::ostream& o, const Vocab::WordAndIndex& w) {
   o << w._index << ", ";
-  o << w._word.value_or("nullopt");
+  o << (w._word.value_or("nullopt"));
   return o;
 }
 
@@ -41,22 +19,15 @@ namespace {
 
 using namespace vocabulary_test;
 
-using WordAndIndex = Vocab::WordAndIndex;
+using WordAndIndex = VocabularyInMemory::WordAndIndex;
 
 auto createVocabulary(const std::vector<std::string>& words) {
-  Vocab v;
-  std::string filename = "vocab.test.dat";
-  auto writer = v.makeDiskWriter(filename);
-  for (const auto& word : words) {
-    writer.push(word);
-  }
-  writer.finish();
-  v.readFromFile(filename);
-  ad_utility::deleteFile(filename);
-  return v;
+  Vocab::Words w;
+  w.build(words);
+  return Vocab(std::move(w));
 }
 
-TEST(CompressedVocabulary, UpperLowerBound) {
+TEST(VocabularyInMemory, UpperLowerBound) {
   const std::vector<string> words{"alpha", "beta",    "camma",
                                   "delta", "epsilon", "frikadelle"};
   auto comparator = std::less<>{};
@@ -73,7 +44,7 @@ TEST(CompressedVocabulary, UpperLowerBound) {
                          comparator, words);
 }
 
-TEST(CompressedVocabulary, UpperLowerBoundAlternativeComparator) {
+TEST(VocabularyInMemory, UpperLowerBoundAlternativeComparator) {
   const std::vector<string> words{"4", "33", "222", "1111"};
   auto comparator = [](const auto& a, const auto& b) {
     return std::stoi(std::string{a}) < std::stoi(std::string{b});
@@ -93,25 +64,15 @@ TEST(VocabularyInMemory, AccessOperator) {
   testAccessOperatorForUnorderedVocabulary(createVocabulary);
 }
 
-TEST(UnicodeVocabulary, CompressionIsActuallyApplied) {
+TEST(VocabularyInMemory, ReadAndWriteFromFile) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42",
                                        "31",    "0",     "al"};
+  const auto vocab = createVocabulary(words);
+  vocab.writeToFile("testvocab.dat");
 
-  Vocab v;
-  auto writer = v.makeDiskWriter("vocabtmp.txt");
-  for (const auto& word : words) {
-    writer.push(word);
-  }
-  writer.finish();
-
-  VocabularyInMemory simple;
-  simple.readFromFile("vocabtmp.txt");
-
-  ASSERT_EQ(simple.size(), words.size());
-  for (size_t i = 0; i < simple.size(); ++i) {
-    ASSERT_NE(simple[i], words[i]);
-    ASSERT_EQ(DummyCompressor::decompress(simple[i]), words[i]);
-  }
+  Vocab readVocab;
+  readVocab.readFromFile("testvocab.dat");
+  assertThatRangesAreEqual(vocab, readVocab);
+  ad_utility::deleteFile("testvocab.dat");
 }
-
 }  // namespace
