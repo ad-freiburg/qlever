@@ -279,7 +279,6 @@ class File {
 inline void deleteFile(const std::filesystem::path& path) {
   if (!std::filesystem::remove(path)) {
     LOG(WARN) << "Deletion of file '" << path << "' was not successful"
-
               << std::endl;
   }
 }
