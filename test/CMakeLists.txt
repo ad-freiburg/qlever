@@ -150,3 +150,13 @@ addLinkAndDiscoverTest(CompactStringVectorTest)
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
 addLinkAndDiscoverTest(ContentEncodingHelperTest)
+
+addLinkAndDiscoverTest(VocabularyInMemoryTest vocabulary)
+
+addLinkAndDiscoverTest(CompressedVocabularyTest vocabulary)
+
+addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary ${ICU_LIBRARIES})
+
+addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
+
+addLinkAndDiscoverTest(PrefixCompressorTest)

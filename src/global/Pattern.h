@@ -291,6 +291,9 @@ struct CompactStringVectorWriter {
   }
 
   void finish() {
+    if (_finished) {
+      return;
+    }
     _offsets.push_back(_nextOffset);
     _file.seek(0, SEEK_SET);
     _file.write(&_nextOffset, sizeof(size_t));

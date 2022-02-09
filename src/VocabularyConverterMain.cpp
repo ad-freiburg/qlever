@@ -38,6 +38,7 @@ int main(int argc, char** argv) {
     std::string outFileName = basename + ".vocabulary.binary";
 
     RdfsVocabulary vocab;
+    PrefixCompressor compressor;
     std::ifstream f(basename + CONFIGURATION_FILE);
     AD_CHECK(f.is_open());
     nlohmann::json j;
@@ -51,9 +52,11 @@ int main(int argc, char** argv) {
         for (string prefix; std::getline(prefixFile, prefix);) {
           prefixes.emplace_back(std::move(prefix));
         }
-        vocab.initializePrefixes(prefixes);
+        vocab.buildCodebookForPrefixCompression(prefixes);
+        compressor.buildCodebook(prefixes);
       } else {
-        vocab.initializePrefixes(std::vector<std::string>());
+        vocab.buildCodebookForPrefixCompression(std::vector<std::string>());
+        compressor.buildCodebook(std::vector<std::string>());
       }
     }
 
@@ -72,19 +75,20 @@ int main(int argc, char** argv) {
       }
     };
 
-    auto expand = [&vocab](std::string&& s) { return vocab.expandPrefix(s); };
+    auto expand = [&compressor](std::string&& s) {
+      return compressor.decompress(s);
+    };
 
     auto normalize = [](std::string&& s) {
       return RdfEscaping::unescapeNewlinesAndBackslashes(s);
     };
 
-    auto compress = [&vocab](std::string&& s) {
-      return vocab.compressPrefix(s);
+    auto compress = [&compressor](std::string&& s) {
+      return compressor.compress(s);
     };
 
-    auto push = [&writer, i = 0ul](CompressedString&& s) mutable {
-      auto sv = s.toStringView();
-      writer.push(sv.data(), sv.size());
+    auto push = [&writer, i = 0ul](std::string&& s) mutable {
+      writer.push(s.data(), s.size());
       i++;
       if (i % 50'000'000 == 0) {
         LOG(INFO) << "Read " << i << " words." << std::endl;
