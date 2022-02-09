@@ -209,7 +209,7 @@ string convertIndexWordToValueLiteral(const string& indexWord) {
   }
   std::ostringstream os;
   os << "\"" << literal << "\"^^<" << typeIri << '>';
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
