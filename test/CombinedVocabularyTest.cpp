@@ -10,8 +10,6 @@
 
 using namespace vocabulary_test;
 
-// TODO<joka921> Also test a scenario, where the first Ids have to be modified.
-
 // This class fulfills the `IndexConverterConcept` for any combined vocabulary.
 // It refers to the following situation: The private indices in both
 // underlying vocabularies are [0 .. n) and [0 .. m), the words in the
@@ -24,14 +22,39 @@ struct FirstAThenB {
     return index < vocab.sizeFirstVocab();
   }
 
-  static uint64_t fromFirst(uint64_t index, const auto&) { return index; }
+  static uint64_t toGlobalFirst(uint64_t index, const auto&) { return index; }
 
-  static uint64_t toFirst(uint64_t index, const auto&) { return index; }
-  static uint64_t fromSecond(uint64_t index, const auto& vocab) {
+  static uint64_t toLocalFirst(uint64_t index, const auto&) { return index; }
+  static uint64_t toGlobalSecond(uint64_t index, const auto& vocab) {
     return index + vocab.sizeFirstVocab();
   }
-  static uint64_t toSecond(uint64_t index, const auto& vocab) {
+  static uint64_t toLocalSecond(uint64_t index, const auto& vocab) {
     return index - vocab.sizeFirstVocab();
+  }
+};
+
+// This class fulfills the `IndexConverterConcept` for any combined vocabulary.
+// It refers to the following situation: The words with even global indices
+// stand in the first vocabulary, and the words with odd global indices in the
+// second vocabulary. Within each of the vocabularies, the local inidices are
+// contiguous and start at 0.
+struct EvenAndOdd {
+  static bool isInFirst(uint64_t index, const auto&) {
+    return (index % 2) == 0;
+  }
+
+  static uint64_t toGlobalFirst(uint64_t index, const auto&) {
+    return 2 * index;
+  }
+
+  static uint64_t toLocalFirst(uint64_t index, const auto&) {
+    return index / 2;
+  }
+  static uint64_t toGlobalSecond(uint64_t index, const auto&) {
+    return 2 * index + 1;
+  }
+  static uint64_t toLocalSecond(uint64_t index, const auto&) {
+    return index / 2;
   }
 };
 
@@ -43,7 +66,7 @@ auto createVocabularyInMemory(const std::vector<std::string>& words) {
 
 /// The first half of the words go to the first vocabulary, the second
 /// half of the words go to the second vocabulary.
-auto createCombinedVocabulary(const std::vector<std::string>& words) {
+auto createFirstAThenBVocabulary(const std::vector<std::string>& words) {
   std::vector<std::string> a, b;
   for (size_t i = 0; i < words.size(); ++i) {
     if (i < words.size() / 2) {
@@ -55,6 +78,22 @@ auto createCombinedVocabulary(const std::vector<std::string>& words) {
 
   return CombinedVocabulary{createVocabularyInMemory(a),
                             createVocabularyInMemory(b), FirstAThenB{}};
+}
+
+/// The words with even index go to the first vocabulary, the words with the odd
+/// index go to the second vocabulary
+auto createEvenOddVocabulary(const std::vector<std::string>& words) {
+  std::vector<std::string> a, b;
+  for (size_t i = 0; i < words.size(); ++i) {
+    if (i % 2 == 0) {
+      a.push_back(words[i]);
+    } else {
+      b.push_back(words[i]);
+    }
+  }
+
+  return CombinedVocabulary{createVocabularyInMemory(a),
+                            createVocabularyInMemory(b), EvenAndOdd{}};
 }
 
 TEST(VocabularyInMemory, UpperLowerBound) {
@@ -70,7 +109,10 @@ TEST(VocabularyInMemory, UpperLowerBound) {
     return word;
   };
 
-  testUpperAndLowerBound(createCombinedVocabulary, makeWordLarger,
+  testUpperAndLowerBound(createFirstAThenBVocabulary, makeWordLarger,
+                         makeWordSmaller, comparator, words);
+
+  testUpperAndLowerBound(createEvenOddVocabulary, makeWordLarger,
                          makeWordSmaller, comparator, words);
 }
 
@@ -86,10 +128,10 @@ TEST(VocabularyInMemory, UpperLowerBoundAlternativeComparator) {
     return std::to_string(std::stoi(word) + 1);
   };
 
-  testUpperAndLowerBound(createCombinedVocabulary, makeWordLarger,
+  testUpperAndLowerBound(createFirstAThenBVocabulary, makeWordLarger,
                          makeWordSmaller, comparator, words);
 }
 
 TEST(VocabularyInMemory, AccessOperator) {
-  testAccessOperatorForUnorderedVocabulary(createCombinedVocabulary);
+  testAccessOperatorForUnorderedVocabulary(createFirstAThenBVocabulary);
 }

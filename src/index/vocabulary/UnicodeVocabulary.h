@@ -2,8 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_COMPRESSEDVOCABULARY_H
-#define QLEVER_COMPRESSEDVOCABULARY_H
+#ifndef QLEVER_UNICODEVOCABULARY_H
+#define QLEVER_UNICODEVOCABULARY_H
 
 /// Vocabulary with multi-level `UnicodeComparator` that allows comparison
 /// according to different Levels. Groups of words that are adjacent on a
@@ -22,7 +22,8 @@ class UnicodeVocabulary {
  public:
   /// The additional `Args...` are used to construct the `UnderlyingVocabulary`
   template <typename... Args>
-  explicit UnicodeVocabulary(UnicodeComparator comparator, Args&&... args)
+  explicit UnicodeVocabulary(UnicodeComparator comparator = UnicodeComparator{},
+                             Args&&... args)
       : _comparator{std::move(comparator)},
         _underlyingVocabulary{std::forward<Args>(args)...} {}
 
@@ -34,7 +35,9 @@ class UnicodeVocabulary {
   /// greater than `word` wrt. to the `comparator`. Only works correctly if the
   /// `_words` are sorted according to the comparator (exactly like in
   /// `std::lower_bound`, which is used internally).
-  WordAndIndex lower_bound(std::string_view word, SortLevel level) const {
+  /// T might be string_view or SortKey, TODO comment.
+  template <typename T>
+  WordAndIndex lower_bound(const T& word, SortLevel level) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
       return _comparator(a, b, level);
     };
@@ -45,7 +48,9 @@ class UnicodeVocabulary {
   /// than `word` wrt. to the `comparator`. Only works correctly if the `_words`
   /// are sorted according to the comparator (exactly like in
   /// `std::upper_bound`, which is used internally).
-  WordAndIndex upper_bound(std::string_view word, SortLevel level) const {
+  /// T might be string_view or SortKey, TODO comment.
+  template <typename T>
+  WordAndIndex upper_bound(const T& word, SortLevel level) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
       return _comparator(a, b, level);
     };
@@ -57,6 +62,22 @@ class UnicodeVocabulary {
   void readFromFile(const std::string& filename) {
     _underlyingVocabulary.readFromFile(filename);
   }
+
+  UnderlyingVocabulary& getUnderlyingVocabulary() {
+    return _underlyingVocabulary;
+  }
+  const UnderlyingVocabulary& getUnderlyingVocabulary() const {
+    return _underlyingVocabulary;
+  }
+
+  UnicodeComparator& getComparator() { return _comparator; }
+  const UnicodeComparator& getComparator() const { return _comparator; }
+
+  void clear() { _underlyingVocabulary.clear(); }
+
+  void build(const std::vector<std::string>& v) {
+    _underlyingVocabulary.build(v);
+  }
 };
 
-#endif  // QLEVER_COMPRESSEDVOCABULARY_H
+#endif  // QLEVER_UNICODEVOCABULARY_H

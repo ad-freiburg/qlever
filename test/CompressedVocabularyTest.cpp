@@ -45,14 +45,14 @@ using WordAndIndex = Vocab::WordAndIndex;
 
 auto createVocabulary(const std::vector<std::string>& words) {
   Vocab v;
-  std::string filename = "vocab.test.dat";
-  auto writer = v.makeDiskWriter(filename);
+  std::string vocabularyFilename = "vocab.test.dat";
+  auto writer = v.makeDiskWriter(vocabularyFilename);
   for (const auto& word : words) {
     writer.push(word);
   }
   writer.finish();
-  v.readFromFile(filename);
-  ad_utility::deleteFile(filename);
+  v.readFromFile(vocabularyFilename);
+  ad_utility::deleteFile(vocabularyFilename);
   return v;
 }
 

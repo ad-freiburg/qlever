@@ -8,7 +8,7 @@
 #include "./VocabularyTestHelpers.h"
 using Vocab = VocabularyInMemory;
 
-// This operator provides human-readable output.
+// This operator provides human-readable output for a `WordAndIndex`.
 std::ostream& operator<<(std::ostream& o, const Vocab::WordAndIndex& w) {
   o << w._index << ", ";
   o << (w._word.value_or("nullopt"));
@@ -68,11 +68,12 @@ TEST(VocabularyInMemory, ReadAndWriteFromFile) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42",
                                        "31",    "0",     "al"};
   const auto vocab = createVocabulary(words);
-  vocab.writeToFile("testvocab.dat");
+  const std::string vocabularyFilename = "testvocab.dat";
+  vocab.writeToFile(vocabularyFilename);
 
   Vocab readVocab;
-  readVocab.readFromFile("testvocab.dat");
+  readVocab.readFromFile(vocabularyFilename);
   assertThatRangesAreEqual(vocab, readVocab);
-  ad_utility::deleteFile("testvocab.dat");
+  ad_utility::deleteFile(vocabularyFilename);
 }
 }  // namespace

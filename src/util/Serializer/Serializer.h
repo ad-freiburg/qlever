@@ -113,6 +113,8 @@ requires(!Serializer::IsWriteSerializer) void operator>>(Serializer& serializer,
 // writeSerializer CAREFUL: this does not enforce, that the serialization
 // functions actually preserve the constness, this has to be made sure by the
 // user.
+// TODO<joka921> This leads to infinite loops if we use the << operator and have
+// no actual serialize-function. Fix this by properly defining const overloads.
 template <typename Serializer, typename T>
 requires(Serializer::IsWriteSerializer) void serialize(Serializer& serializer,
                                                        const T& t) {

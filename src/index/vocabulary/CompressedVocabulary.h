@@ -83,8 +83,8 @@ class CompressedVocabulary {
     _underlyingVocabulary.readFromFile(filename);
   }
 
-  /// Allows the incremental writing of the words. Uses `WordWriter` of the
-  /// underlying vocabulary.
+  /// Allows the incremental writing of the words to disk. Uses `WordWriter` of
+  /// the underlying vocabulary.
   class DiskWriterFromUncompressedWords {
    private:
     const Compressor& _compressor;
@@ -109,6 +109,24 @@ class CompressedVocabulary {
 
   DiskWriterFromUncompressedWords makeDiskWriter(const std::string& filename) {
     return DiskWriterFromUncompressedWords{_compressor, filename};
+  }
+
+  UnderlyingVocabulary& getUnderlyingVocabulary() {
+    return _underlyingVocabulary;
+  }
+  const UnderlyingVocabulary& getUnderlyingVocabulary() const {
+    return _underlyingVocabulary;
+  }
+  Compressor& getCompressor() { return _compressor; }
+  const Compressor& getCompressor() const { return _compressor; }
+
+  void clear() { _underlyingVocabulary.clear(); }
+
+  void build(std::vector<std::string> v) {
+    for (auto& word : v) {
+      word = _compressor.compress(word);
+    }
+    _underlyingVocabulary.build(v);
   }
 };
 

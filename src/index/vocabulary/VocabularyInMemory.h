@@ -22,10 +22,9 @@ class VocabularyInMemory {
   using String = std::basic_string<CharType>;
   using Words = CompactVectorOfStrings<CharType>;
 
-  /// The result of `lower_bound` and `upper_bound`. Return the index of the
-  /// result as well as the word that this index points to. The `_word` is
-  /// `std::nullopt` iff `_index == size()`, which means that the searched word
-  /// is larger than the largest word in the vocabulary.
+  /// A word and its index in the underlying `CompactVectorOfStrings`. A word
+  /// that is larger than all words in the vocabulary is represented by
+  /// `{std::nullopt, size()}`
   struct WordAndIndex {
     std::optional<StringView> _word;
     uint64_t _index;
@@ -115,4 +114,8 @@ class VocabularyInMemory {
   static auto makeWordDiskIterator(const string& filename) {
     return Words::diskIterator(filename);
   }
+
+  void clear() { _words.clear(); }
+
+  void build(const std::vector<std::string>& v) { _words.build(v); }
 };

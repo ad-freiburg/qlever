@@ -25,6 +25,10 @@
 #include "../util/StringUtils.h"
 #include "./CompressedString.h"
 #include "./StringSortComparator.h"
+#include "./vocabulary/CompressedVocabulary.h"
+#include "./vocabulary/PrefixCompressor.h"
+#include "./vocabulary/UnicodeVocabulary.h"
+#include "./vocabulary/VocabularyInMemory.h"
 #include "ExternalVocabulary.h"
 
 using std::string;
@@ -79,6 +83,10 @@ class Vocabulary {
   // The different type of data that is stored in the vocabulary
   enum class Datatypes { Literal, Iri, Float, Date };
 
+  // variable for dispatching
+  static constexpr bool _isCompressed =
+      std::is_same_v<StringType, CompressedString>;
+
   template <typename T, typename R = void>
   using enable_if_compressed =
       std::enable_if_t<std::is_same_v<T, CompressedString>>;
@@ -96,10 +104,6 @@ class Vocabulary {
   Vocabulary(){};
   Vocabulary& operator=(Vocabulary&&) noexcept = default;
 
-  // variable for dispatching
-  static constexpr bool _isCompressed =
-      std::is_same_v<StringType, CompressedString>;
-
   virtual ~Vocabulary() = default;
 
   //! clear all the contents, but not the settings for prefixes etc
@@ -115,14 +119,6 @@ class Vocabulary {
   // building procedure
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
   void writeToFile(const string& fileName) const;
-
-  //! Write to binary file to prepare the merging. Format:
-  // 4 Bytes strlen, then character bytes, then 8 bytes zeros for global id
-  template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  void writeToBinaryFileForMerging(const string& fileName) const;
-
-  //! Append a word to the vocabulary. Wraps the std::vector method.
-  void push_back(const string& word);
 
   //! Get the word with the given id or an empty optional if the
   //! word is not in the vocabulary.
@@ -206,9 +202,6 @@ class Vocabulary {
   bool shouldLiteralBeExternalized(const string& word) const;
 
   // only still needed for text vocabulary
-  template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  void externalizeLiterals(const string& fileName);
-
   void externalizeLiteralsFromTextFile(const string& textFileName,
                                        const string& outFileName) {
     _externalLiterals.buildFromTextFile(textFileName, outFileName);
@@ -219,15 +212,6 @@ class Vocabulary {
   }
 
   static string getLanguage(const string& literal);
-
-  // _____________________________________________________
-  //
-  template <typename U = StringType, typename = enable_if_compressed<U>>
-  [[nodiscard]] string expandPrefix(std::string_view word) const;
-
-  // _____________________________________________
-  template <typename U = StringType, typename = enable_if_compressed<U>>
-  CompressedString compressPrefix(const string& word) const;
 
   // initialize compression with a list of prefixes
   // The prefixes do not have to be in any specific order
@@ -258,29 +242,13 @@ class Vocabulary {
   template <class StringRange>
   void initializeInternalizedLangs(const StringRange& prefixes);
 
-  // Compress the file at path infile, write to file at outfile using the
-  // specified prefixes.
-  // Arguments:
-  //   infile - path to original vocabulary, one word per line
-  //   outfile- output path. Will be overwritten by also one word per line
-  //            in the same order as the infile
-  //   prefixes - a list of prefixes which we will compress
-  template <typename U = StringType, typename = enable_if_compressed<U>>
-  static void prefixCompressFile(auto wordIterator,
-                                 const vector<string>& prefixes,
-                                 const auto& compressedWordAction) {
-    Vocabulary v;
-    v.initializePrefixes(prefixes);
-    for (const auto& word : wordIterator) {
-      compressedWordAction(v.compressPrefix(word).toStringView());
-    }
-  }
-
   void setLocale(const std::string& language, const std::string& country,
                  bool ignorePunctuation);
 
   // _____________________________________________________________________
-  const ComparatorType& getCaseComparator() const { return _caseComparator; }
+  const ComparatorType& getCaseComparator() const {
+    return _words.getComparator();
+  }
 
   /// returns the range of IDs where strings of the vocabulary start with the
   /// prefix according to the collation level the first Id is included in the
@@ -289,7 +257,7 @@ class Vocabulary {
   std::pair<Id, Id> prefix_range(const string& prefix) const;
 
   [[nodiscard]] const LocaleManager& getLocaleManager() const {
-    return _caseComparator.getLocaleManager();
+    return getCaseComparator().getLocaleManager();
   }
 
   // Wraps std::lower_bound and returns an index instead of an iterator
@@ -300,41 +268,6 @@ class Vocabulary {
   Id upper_bound(const string& word, const SortLevel level) const;
 
  private:
-  template <class R = std::string>
-  auto getLowerBoundLambda(const SortLevel level) const {
-    if constexpr (_isCompressed) {
-      return [this, level](std::string_view a, const R& b) {
-        return this->_caseComparator(this->expandPrefix(a), b, level);
-      };
-    } else {
-      return [this, level](std::string_view a, const auto& b) {
-        return this->_caseComparator(a, b, level);
-      };
-    }
-  }
-
-  auto getUpperBoundLambda(const SortLevel level) const {
-    if constexpr (_isCompressed) {
-      return [this, level](const std::string& a, std::string_view b) {
-        return this->_caseComparator(a, this->expandPrefix(b), level);
-      };
-    } else {
-      return getLowerBoundLambda(level);
-    }
-  }
-
-  // TODO<joka921> these following two members are only used with the
-  // compressed vocabulary. They don't use much space if empty, but still it
-  // would be cleaner to throw them out when using the uncompressed version
-  //
-  // list of all prefixes and their codewords, sorted descending by the length
-  // of the prefixes. Used for lookup when encoding strings
-  std::vector<Prefix> _prefixVec{};
-
-  // maps (numeric) keys to the prefix they encode.
-  // currently only 128 prefixes are supported.
-  std::array<std::string, NUM_COMPRESSION_PREFIXES> _prefixMap{""};
-
   // If a word starts with one of those prefixes it will be externalized
   vector<std::string> _externalizedPrefixes;
 
@@ -343,14 +276,29 @@ class Vocabulary {
   vector<std::string> _internalizedLangs{"en"};
 
   // vector<StringType> _words;
-  CompactVectorOfStrings<char> _words;
+  using PrefixCompressedVocabulary =
+      CompressedVocabulary<VocabularyInMemory, PrefixCompressor>;
+  using InternalCompressedVocabulary =
+      UnicodeVocabulary<PrefixCompressedVocabulary, ComparatorType>;
+  using InternalUncompressedVocabulary =
+      UnicodeVocabulary<VocabularyInMemory, ComparatorType>;
+  using InternalVocabulary =
+      std::conditional_t<_isCompressed, InternalCompressedVocabulary,
+                         InternalUncompressedVocabulary>;
+  InternalVocabulary _words;
   ExternalVocabulary<ComparatorType> _externalLiterals;
-  ComparatorType _caseComparator;
 
  public:
-  using WordWriter = decltype(_words)::Writer;
-  static auto makeWordDiskIterator(const string& filename) {
-    return decltype(_words)::diskIterator(filename);
+  auto makeUncompressingWordWriter(const std::string& filename) {
+    return VocabularyInMemory::WordWriter{filename};
+  }
+
+  auto makeCompressedWordWriter(
+      const std::string& filename) requires _isCompressed {
+    return _words.getUnderlyingVocabulary().makeDiskWriter(filename);
+  }
+  static auto makeUncompressedDiskIterator(const string& filename) {
+    return VocabularyInMemory::makeWordDiskIterator(filename);
   }
 };
 

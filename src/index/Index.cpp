@@ -110,13 +110,21 @@ void Index::createFromFile(const string& filename) {
   }
   _configurationJson["prefixes"] = _vocabPrefixCompressed;
   LOG(INFO) << "Writing compressed vocabulary to disk ..." << std::endl;
-  decltype(_vocab)::WordWriter wordWriter{vocabFileTmp};
-  auto internalVocabularyAction = [&wordWriter](const auto& word) {
-    wordWriter.push(word.data(), word.size());
-  };
-  auto wordReader = decltype(_vocab)::makeWordDiskIterator(vocabFile);
+
+  auto wordWriter = _vocab.makeCompressedWordWriter(vocabFileTmp);
+  _vocab.initializePrefixes(prefixes);
+
+  auto wordReader = decltype(_vocab)::makeUncompressedDiskIterator(vocabFile);
+
+  for (const auto& word : wordReader) {
+    wordWriter.push(word);
+  }
+
+  // TODO<remove this function>
+  /*
   Vocabulary<CompressedString, TripleComponentComparator>::prefixCompressFile(
       std::move(wordReader), prefixes, internalVocabularyAction);
+      */
   LOG(DEBUG) << "Finished writing compressed vocabulary" << std::endl;
 
   // TODO<joka921> maybe move this to its own function.
@@ -314,7 +322,8 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
                                                           std::string_view b) {
       return (*cmp)(a, b, decltype(_vocab)::SortLevel::TOTAL);
     };
-    decltype(_vocab)::WordWriter wordWriter{_onDiskBase + ".vocabulary"};
+    auto wordWriter =
+        _vocab.makeUncompressingWordWriter(_onDiskBase + ".vocabulary");
     auto internalVocabularyAction = [&wordWriter](const auto& word) {
       wordWriter.push(word.data(), word.size());
     };

@@ -20,6 +20,6 @@ void VocabularyInMemory::readFromFile(const string& fileName) {
 void VocabularyInMemory::writeToFile(const string& fileName) const {
   LOG(INFO) << "Writing vocabulary to file " << fileName << " ..." << std::endl;
   ad_utility::serialization::FileWriteSerializer file{fileName};
-  file << _words;
+  file << const_cast<Words&>(_words);
   LOG(INFO) << "Done, number of words: " << _words.size() << std::endl;
 }
