@@ -92,7 +92,7 @@ class File {
       err << "! ERROR opening file \"" << filename << "\" with mode \"" << mode
           << "\" (" << strerror(errno) << ")" << endl
           << endl;
-      throw std::runtime_error(err.str());
+      throw std::runtime_error(std::move(err).str());
     }
     _name = filename;
     return true;

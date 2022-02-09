@@ -20,7 +20,7 @@ using std::string;
   {                                                                  \
     std::ostringstream __os;                                         \
     __os << m;                                                       \
-    throw ad_semsearch::Exception(e, __os.str(), __FILE__, __LINE__, \
+    throw ad_semsearch::Exception(e, std::move(__os).str(), __FILE__, __LINE__, \
                                   __PRETTY_FUNCTION__);              \
   }  // NOLINT
 

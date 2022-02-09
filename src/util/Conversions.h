@@ -273,7 +273,7 @@ string convertFloatStringToIndexWord(const string& orig,
   // Produce a string representation of the exponent
   std::ostringstream expoOs;
   expoOs << exponent;
-  string expoString = (negaExpo ? expoOs.str().substr(1) : expoOs.str());
+  string expoString = (negaExpo ? std::move(expoOs).str().substr(1) : std::move(expoOs).str());
 
   if (negaMantissa != negaExpo) {
     expoString = getBase10ComplementOfIntegerString(expoString);
@@ -306,7 +306,7 @@ string convertFloatStringToIndexWord(const string& orig,
   os << mant.str().substr(0, DEFAULT_NOF_VALUE_MANTISSA_DIGITS);
   // Padding for mantissa. Necessary because we append something
   // to restore the original type.
-  for (size_t i = mant.str().size(); i < DEFAULT_NOF_VALUE_MANTISSA_DIGITS;
+  for (size_t i = std::move(mant).str().size(); i < DEFAULT_NOF_VALUE_MANTISSA_DIGITS;
        ++i) {
     if (!negaMantissa) {
       os << '0';
@@ -380,13 +380,13 @@ string convertIndexWordToFloatString(const string& indexWord) {
       if (mantissa[i] == '0') {
         zeros << '0';
       } else {
-        os << zeros.str();
+        os << std::move(zeros).str();
         zeros.str("");
         os << mantissa[i];
       }
       ++i;
       if (tenToThe == absExponent) {
-        os << zeros.str();
+        os << std::move(zeros).str();
         zeros.str("");
         os << ".";
       }

@@ -43,7 +43,7 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
   std::ostringstream config;
   config << "disk=" << getStxxlDiskFileName(location, tail) << ","
          << STXXL_DISK_SIZE_INDEX_TEST << ",syscall";
-  stxxlConfig.writeLine(config.str());
+  stxxlConfig.writeLine(std::move(config).str());
 }
 
 TEST(IndexTest, createFromTsvTest) {
