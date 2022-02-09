@@ -144,7 +144,7 @@ ExternalVocabulary<Comp>::WordAndId ExternalVocabulary<Comp>::getNthElement(
 
   // TODO<joka921> we can get the id by a single read above
   auto id = idsAndOffsets()[n]._id;
-  return {id, std::move(result)};
+  return {std::move(result), id};
 }
 
 template class ExternalVocabulary<TripleComponentComparator>;

@@ -105,7 +105,7 @@ class Vocabulary {
   //! clear all the contents, but not the settings for prefixes etc
   void clear() {
     _words.clear();
-    _externalLiterals.clear();
+    _externalLiterals.close();
   }
   //! Read the vocabulary from file.
   void readFromFile(const string& fileName, const string& extLitsFileName = "");

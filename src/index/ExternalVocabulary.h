@@ -31,9 +31,13 @@ struct OffsetAndSize {
 };
 
 // On-disk vocabulary of strings.
-// Each entry is a pair of <Id, String>. The Ids are ascending, but not (necessarily) contiguous. If the strings are also sorted, then binary search for strings can be performed.
-// Currently this class is coupled with a `StringSortComparator` that performs comparisons according to the Unicode standard.
-// TODO<joka921> As soon as we have merged the modular vocabulary, the comparator can be moved out of this class.
+// Each entry is a pair of <Id, String>. The Ids are ascending, but not
+// (necessarily) contiguous. If the strings are also sorted, then binary search
+// for strings can be performed. Currently this class is coupled with a
+// `StringSortComparator` that performs comparisons according to the Unicode
+// standard.
+// TODO<joka921> As soon as we have merged the modular vocabulary, the
+// comparator can be moved out of this class.
 template <class StringComparator>
 class ExternalVocabulary {
  public:
@@ -48,7 +52,8 @@ class ExternalVocabulary {
   void buildFromVector(const vector<string>& v, const string& fileName);
   void buildFromTextFile(const string& textFileName, const string& outFileName);
 
-  // Initialize from a file. The vocabulary must have been previously written to this file, for example via `buildFromVector` or `buildFromTextFile`
+  // Initialize from a file. The vocabulary must have been previously written to
+  // this file, for example via `buildFromVector` or `buildFromTextFile`
   void initFromFile(const string& file);
 
   // Close the underlying file and uninitialize this vocabulary for further use
@@ -58,7 +63,9 @@ class ExternalVocabulary {
   // the corresponding string, else `std::nullopt`
   std::optional<string> idToOptionalString(Id id) const;
 
-  // Return the `n-th` element from this vocabulary. Note that this is (in general) NOT the element with the ID `n`, because the ID space is not contiguous.
+  // Return the `n-th` element from this vocabulary. Note that this is (in
+  // general) NOT the element with the ID `n`, because the ID space is not
+  // contiguous.
   WordAndId getNthElement(size_t n) const;
 
   //! Get the number of words in the vocabulary.
