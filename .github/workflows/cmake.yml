@@ -43,7 +43,7 @@ jobs:
         run : sudo apt install -y libunwind-13-dev libc++abi-13-dev libc++-13-dev
 
       - name: Python dependencies
-        run: sudo apt-get install python3-yaml unzip pkg-config python3-icu python-dateutil
+        run: sudo apt-get install python3-yaml unzip pkg-config python3-icu python3-dateutil
 
       - name: Checkout submodules
         run: git submodule update --init --recursive
