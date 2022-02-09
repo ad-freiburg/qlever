@@ -51,13 +51,13 @@ struct option options[] = {
 string getStxxlConfigFileName(const string& location) {
   std::ostringstream os;
   os << location << ".stxxl";
-  return os.str();
+  return std::move(os).str();
 }
 
 string getStxxlDiskFileName(const string& location, const string& tail) {
   std::ostringstream os;
   os << location << tail << "-stxxl.disk";
-  return os.str();
+  return std::move(os).str();
 }
 
 // Write a .stxxl config-file.

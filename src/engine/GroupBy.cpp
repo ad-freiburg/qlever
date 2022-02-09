@@ -59,7 +59,7 @@ string GroupBy::asString(size_t indent) const {
   }
   os << std::endl;
   os << _subtree->asString(indent);
-  return os.str();
+  return std::move(os).str();
 }
 
 string GroupBy::getDescriptor() const {

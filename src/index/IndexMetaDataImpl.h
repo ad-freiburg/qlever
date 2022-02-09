@@ -96,7 +96,7 @@ string IndexMetaData<MapType>::statistics() const {
   os.imbue(locWithNumberGrouping);
   os << "#relations = " << _data.size() << ", #blocks = " << _blockData.size()
      << ", #triples = " << _totalElements;
-  return os.str();
+  return std::move(os).str();
 }
 
 // ______________________________________________

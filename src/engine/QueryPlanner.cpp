@@ -2129,7 +2129,7 @@ string QueryPlanner::TripleGraph::asString() const {
       os << '\n';
     }
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -2213,7 +2213,7 @@ string QueryPlanner::getPruningKey(
   os << " f: ";
   os << ' ' << plan._idsOfIncludedFilters;
 
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

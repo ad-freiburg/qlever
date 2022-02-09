@@ -314,7 +314,7 @@ string convertFloatStringToIndexWord(const string& orig,
       os << '9';
     }
   }
-  return os.str() + char(type);
+  return std::move(os).str() + char(type);
 }
 
 // _____________________________________________________________________________
@@ -403,7 +403,7 @@ string convertIndexWordToFloatString(const string& indexWord) {
       }
     }
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -589,7 +589,7 @@ string convertDateToIndexWord(const string& value) {
   } else {
     os << norm;
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -604,7 +604,7 @@ string convertIndexWordToDate(const string& indexWord) {
   } else {
     os << indexWord.substr(prefixLength);
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -613,7 +613,7 @@ string getBase10ComplementOfIntegerString(const string& orig) {
   for (size_t i = 0; i < orig.size(); ++i) {
     os << (9 - atoi(orig.substr(i, 1).c_str()));
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -628,7 +628,7 @@ inline string removeLeadingZeros(const string& orig) {
   for (; i < orig.size(); ++i) {
     os << orig[i];
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

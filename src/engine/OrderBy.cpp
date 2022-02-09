@@ -39,7 +39,7 @@ string OrderBy::asString(size_t indent) const {
   }
   os << "SORT / ORDER BY on columns:" << columns.str() << "\n"
      << _subtree->asString(indent);
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

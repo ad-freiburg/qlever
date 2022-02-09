@@ -98,14 +98,14 @@ string ParsedQuery::asString() const {
     }
   }
   os << "\n";
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
 string SparqlPrefix::asString() const {
   std::ostringstream os;
   os << "{" << _prefix << ": " << _uri << "}";
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -201,7 +201,7 @@ void PropertyPath::writeToStream(std::ostream& out) const {
 std::string PropertyPath::asString() const {
   std::stringstream s;
   writeToStream(s);
-  return s.str();
+  return std::move(s).str();
 }
 
 // _____________________________________________________________________________
@@ -228,7 +228,7 @@ std::ostream& operator<<(std::ostream& out, const PropertyPath& p) {
 string SparqlTriple::asString() const {
   std::ostringstream os;
   os << "{s: " << _s << ", p: " << _p << ", o: " << _o << "}";
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -268,7 +268,7 @@ string SparqlFilter::asString() const {
       break;
   }
   os << _rhs << ")";
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

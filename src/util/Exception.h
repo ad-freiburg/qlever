@@ -204,7 +204,7 @@ class Exception : public std::exception {
       default:
         std::ostringstream os;
         os << "UNKNOWN ERROR: Code is " << errorCode;
-        return os.str().c_str();
+        return std::move(os).str();
     }
   }
 

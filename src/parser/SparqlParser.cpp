@@ -864,7 +864,7 @@ string SparqlParser::parseLiteral(const string& literal, bool isEntireString,
                            " was not terminated properly.");
     }
   }
-  return out.str();
+  return std::move(out).str();
 }
 SparqlFilter SparqlParser::parseRegexFilter(bool expectKeyword) {
   if (expectKeyword) {

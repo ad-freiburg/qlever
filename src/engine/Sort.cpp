@@ -33,7 +33,7 @@ string Sort::asString(size_t indent) const {
   columns << "asc(" << _sortCol << ") ";
   os << "SORT / ORDER BY on columns:" << columns.str() << "\n"
      << _subtree->asString(indent);
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

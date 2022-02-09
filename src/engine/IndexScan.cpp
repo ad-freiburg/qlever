@@ -65,7 +65,7 @@ string IndexScan::asString(size_t indent) const {
       os << "SCAN FOR FULL INDEX OPS (DUMMY OPERATION)";
       break;
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
