@@ -22,14 +22,14 @@ struct LeftAndRight {
     return index < vocab.sizeFirstVocab();
   }
 
-  static uint64_t localToGlobalFirst(uint64_t index, const auto&) {
+  static uint64_t localFirstToGlobal(uint64_t index, const auto&) {
     return index;
   }
 
   static uint64_t globalToLocalFirst(uint64_t index, const auto&) {
     return index;
   }
-  static uint64_t localToGlobalSecond(uint64_t index, const auto& vocab) {
+  static uint64_t localSecondToGlobal(uint64_t index, const auto& vocab) {
     return index + vocab.sizeFirstVocab();
   }
   static uint64_t globalToLocalSecond(uint64_t index, const auto& vocab) {
@@ -47,14 +47,14 @@ struct EvenAndOdd {
     return (index % 2) == 0;
   }
 
-  static uint64_t localToGlobalFirst(uint64_t index, const auto&) {
+  static uint64_t localFirstToGlobal(uint64_t index, const auto&) {
     return 2 * index;
   }
 
   static uint64_t globalToLocalFirst(uint64_t index, const auto&) {
     return index / 2;
   }
-  static uint64_t localToGlobalSecond(uint64_t index, const auto&) {
+  static uint64_t localSecondToGlobal(uint64_t index, const auto&) {
     return 2 * index + 1;
   }
   static uint64_t globalToLocalSecond(uint64_t index, const auto&) {

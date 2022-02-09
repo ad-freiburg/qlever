@@ -108,8 +108,8 @@ class Vocabulary {
 
   //! clear all the contents, but not the settings for prefixes etc
   void clear() {
-    _vocabularyInMemory.clear();
-    _vocabularyOnDisk.clear();
+    _internalVocabulary.clear();
+    _externalVocabulary.clear();
   }
   //! Read the vocabulary from file.
   void readFromFile(const string& fileName, const string& extLitsFileName = "");
@@ -139,7 +139,7 @@ class Vocabulary {
   // AccessReturnType_t<StringType> at(Id id) const { return operator[](id); }
 
   //! Get the number of words in the vocabulary.
-  size_t size() const { return _vocabularyInMemory.size(); }
+  size_t size() const { return _internalVocabulary.size(); }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
@@ -199,11 +199,11 @@ class Vocabulary {
   // only still needed for text vocabulary
   void externalizeLiteralsFromTextFile(const string& textFileName,
                                        const string& outFileName) {
-    _vocabularyOnDisk.buildFromTextFile(textFileName, outFileName);
+    _externalVocabulary.buildFromTextFile(textFileName, outFileName);
   }
 
   const ExternalVocabulary<ComparatorType>& getExternalVocab() const {
-    return _vocabularyOnDisk;
+    return _externalVocabulary;
   }
 
   static string getLanguage(const string& literal);
@@ -242,7 +242,7 @@ class Vocabulary {
 
   // _____________________________________________________________________
   const ComparatorType& getCaseComparator() const {
-    return _vocabularyInMemory.getComparator();
+    return _internalVocabulary.getComparator();
   }
 
   /// returns the range of IDs where strings of the vocabulary start with the
@@ -279,8 +279,8 @@ class Vocabulary {
   using InternalVocabulary =
       std::conditional_t<_isCompressed, InternalCompressedVocabulary,
                          InternalUncompressedVocabulary>;
-  InternalVocabulary _vocabularyInMemory;
-  ExternalVocabulary<ComparatorType> _vocabularyOnDisk;
+  InternalVocabulary _internalVocabulary;
+  ExternalVocabulary<ComparatorType> _externalVocabulary;
 
  public:
   auto makeUncompressingWordWriter(const std::string& filename) {
@@ -289,7 +289,7 @@ class Vocabulary {
 
   template <typename U = StringType, typename = enable_if_compressed<U>>
   auto makeCompressedWordWriter(const std::string& filename) {
-    return _vocabularyInMemory.getUnderlyingVocabulary().makeDiskWriter(
+    return _internalVocabulary.getUnderlyingVocabulary().makeDiskWriter(
         filename);
   }
 

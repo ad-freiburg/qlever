@@ -29,10 +29,10 @@ concept IndexConverterConcept = requires(const T& t, uint64_t i,
   { t.isInFirst(i, v) }
   ->std::same_as<bool>;
   // Transform a local index from the first vocabulary to a global index.
-  { t.localToGlobalFirst(i, v) }
+  { t.localFirstToGlobal(i, v) }
   ->std::convertible_to<uint64_t>;
   // Transform a local index from the second vocabulary to a global index.
-  { t.localToGlobalSecond(i, v) }
+  { t.localSecondToGlobal(i, v) }
   ->std::convertible_to<uint64_t>;
   // Transform a global index to a local index for the first vocabulary.
   // May only be called if `t.isInFirst(i, v)` is true.
@@ -120,7 +120,7 @@ class CombinedVocabulary {
   // `WordAndIndex` by transforming the index from local to global.
   WordAndIndex fromA(WordAndIndex wi) const {
     wi._index = wi._word.has_value()
-                    ? _indexConverter.localToGlobalFirst(wi._index, *this)
+                    ? _indexConverter.localFirstToGlobal(wi._index, *this)
                     : getEndIndex();
     return wi;
   }
@@ -129,7 +129,7 @@ class CombinedVocabulary {
   // `WordAndIndex` by transforming the index from local to global.
   WordAndIndex fromB(WordAndIndex wi) const {
     wi._index = wi._word.has_value()
-                    ? _indexConverter.localToGlobalSecond(wi._index, *this)
+                    ? _indexConverter.localSecondToGlobal(wi._index, *this)
                     : getEndIndex();
     return wi;
   }
@@ -140,12 +140,12 @@ class CombinedVocabulary {
   [[nodiscard]] uint64_t getEndIndex() const {
     uint64_t endA = _firstVocab.size() == 0
                         ? 0ul
-                        : _indexConverter.localToGlobalFirst(
+                        : _indexConverter.localFirstToGlobal(
                               _firstVocab.getHighestIndex(), *this) +
                               1;
     uint64_t endB = _secondVocab.size() == 0
                         ? 0ul
-                        : _indexConverter.localToGlobalSecond(
+                        : _indexConverter.localSecondToGlobal(
                               _secondVocab.getHighestIndex(), *this) +
                               1;
 

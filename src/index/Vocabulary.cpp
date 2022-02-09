@@ -26,10 +26,10 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
                                     const string& extLitsFileName) {
   LOG(INFO) << "Reading internal vocabulary from file " << fileName << " ..."
             << std::endl;
-  _vocabularyInMemory.clear();
+  _internalVocabulary.clear();
   ad_utility::serialization::FileReadSerializer file(fileName);
-  _vocabularyInMemory.readFromFile(fileName);
-  LOG(INFO) << "Done, number of words: " << _vocabularyInMemory.size()
+  _internalVocabulary.readFromFile(fileName);
+  LOG(INFO) << "Done, number of words: " << _internalVocabulary.size()
             << std::endl;
   if (extLitsFileName.size() > 0) {
     if (!_isCompressed) {
@@ -40,9 +40,9 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
     }
 
     LOG(DEBUG) << "Registering external vocabulary" << std::endl;
-    _vocabularyOnDisk.initFromFile(extLitsFileName);
+    _externalVocabulary.initFromFile(extLitsFileName);
     LOG(INFO) << "Number of words in external vocabulary: "
-              << _vocabularyOnDisk.size() << std::endl;
+              << _externalVocabulary.size() << std::endl;
   }
 }
 
@@ -52,7 +52,7 @@ template <typename, typename>
 void Vocabulary<S, C>::writeToFile(const string& fileName) const {
   LOG(INFO) << "Writing vocabulary to file " << fileName << "\n";
   ad_utility::serialization::FileWriteSerializer file{fileName};
-  _vocabularyInMemory.getUnderlyingVocabulary().writeToFile(fileName);
+  _internalVocabulary.getUnderlyingVocabulary().writeToFile(fileName);
 
   LOG(INFO) << "Done writing vocabulary to file.\n";
 }
@@ -62,14 +62,14 @@ template <class S, class C>
 void Vocabulary<S, C>::createFromSet(
     const ad_utility::HashSet<std::string>& set) {
   LOG(INFO) << "Creating vocabulary from set ...\n";
-  _vocabularyInMemory.clear();
+  _internalVocabulary.clear();
   std::vector<std::string> words(set.begin(), set.end());
   LOG(INFO) << "... sorting ...\n";
   auto totalComparison = [this](const auto& a, const auto& b) {
     return getCaseComparator()(a, b, SortLevel::TOTAL);
   };
   std::sort(begin(words), end(words), totalComparison);
-  _vocabularyInMemory.build(words);
+  _internalVocabulary.build(words);
   LOG(INFO) << "Done creating vocabulary.\n";
 }
 
@@ -80,8 +80,8 @@ template <class S, class C>
 template <typename, typename>
 ad_utility::HashMap<string, Id> Vocabulary<S, C>::asMap() {
   ad_utility::HashMap<string, Id> map;
-  for (size_t i = 0; i < _vocabularyInMemory.size(); ++i) {
-    map[_vocabularyInMemory[i]] = i;
+  for (size_t i = 0; i < _internalVocabulary.size(); ++i) {
+    map[_internalVocabulary[i]] = i;
   }
   return map;
 }
@@ -92,15 +92,15 @@ template <class S, class C>
 template <typename, typename>
 void Vocabulary<S, C>::externalizeLiterals(const string& fileName) {
   LOG(INFO) << "Externalizing literals..." << std::endl;
-  auto ext = std::lower_bound(_vocabularyInMemory.begin(),
-_vocabularyInMemory.end(), EXTERNALIZED_LITERALS_PREFIX, _caseComparator);
-  size_t nofInternal = ext - _vocabularyInMemory.begin();
+  auto ext = std::lower_bound(_internalVocabulary.begin(),
+_internalVocabulary.end(), EXTERNALIZED_LITERALS_PREFIX, _caseComparator);
+  size_t nofInternal = ext - _internalVocabulary.begin();
   vector<string> extVocab;
-  while (ext != _vocabularyInMemory.end()) {
+  while (ext != _internalVocabulary.end()) {
     extVocab.push_back((*ext++).substr(1));
   }
-  _vocabularyInMemory.resize(nofInternal);
-  _vocabularyOnDisk.buildFromVector(extVocab, fileName);
+  _internalVocabulary.resize(nofInternal);
+  _externalVocabulary.buildFromVector(extVocab, fileName);
   LOG(INFO) << "Done externalizing literals." << std::endl;
 }
  */
@@ -185,7 +185,7 @@ template <class S, class C>
 template <class StringRange, typename, typename>
 void Vocabulary<S, C>::buildCodebookForPrefixCompression(
     const StringRange& prefixes) {
-  _vocabularyInMemory.getUnderlyingVocabulary().getCompressor().buildCodebook(
+  _internalVocabulary.getUnderlyingVocabulary().getCompressor().buildCodebook(
       prefixes);
 }
 
@@ -222,8 +222,8 @@ bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
   range->_last = prefixRange.second - 1;
 
   if (success) {
-    AD_CHECK_LT(range->_first, _vocabularyInMemory.size());
-    AD_CHECK_LT(range->_last, _vocabularyInMemory.size());
+    AD_CHECK_LT(range->_first, _internalVocabulary.size());
+    AD_CHECK_LT(range->_last, _internalVocabulary.size());
   }
   return success;
 }
@@ -232,14 +232,14 @@ bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
 template <typename S, typename C>
 Id Vocabulary<S, C>::upper_bound(const string& word,
                                  const SortLevel level) const {
-  return _vocabularyInMemory.upper_bound(word, level)._index;
+  return _internalVocabulary.upper_bound(word, level)._index;
 }
 
 // _____________________________________________________________________________
 template <typename S, typename C>
 Id Vocabulary<S, C>::lower_bound(const string& word,
                                  const SortLevel level) const {
-  return _vocabularyInMemory.lower_bound(word, level)._index;
+  return _internalVocabulary.lower_bound(word, level)._index;
 }
 
 // _____________________________________________________________________________
@@ -247,9 +247,9 @@ template <typename S, typename ComparatorType>
 void Vocabulary<S, ComparatorType>::setLocale(const std::string& language,
                                               const std::string& country,
                                               bool ignorePunctuation) {
-  _vocabularyInMemory.getComparator() =
+  _internalVocabulary.getComparator() =
       ComparatorType(language, country, ignorePunctuation);
-  _vocabularyOnDisk.getCaseComparator() =
+  _externalVocabulary.getCaseComparator() =
       ComparatorType(language, country, ignorePunctuation);
 }
 
@@ -257,7 +257,7 @@ template <typename StringType, typename C>
 //! Get the word with the given id.
 //! lvalue for compressedString and const& for string-based vocabulary
 AccessReturnType_t<StringType> Vocabulary<StringType, C>::at(Id id) const {
-  return _vocabularyInMemory[static_cast<size_t>(id)];
+  return _internalVocabulary[static_cast<size_t>(id)];
 }
 
 // _____________________________________________________________________________
@@ -268,17 +268,17 @@ bool Vocabulary<S, C>::getId(const string& word, Id* id) const {
     *id = lower_bound(word, SortLevel::TOTAL);
     // works for the case insensitive version because
     // of the strict ordering.
-    return *id < _vocabularyInMemory.size() && at(*id) == word;
+    return *id < _internalVocabulary.size() && at(*id) == word;
   }
-  bool success = _vocabularyOnDisk.getId(word, id);
-  *id += _vocabularyInMemory.size();
+  bool success = _externalVocabulary.getId(word, id);
+  *id += _internalVocabulary.size();
   return success;
 }
 
 // ___________________________________________________________________________
 template <typename S, typename C>
 std::pair<Id, Id> Vocabulary<S, C>::prefix_range(const string& prefix) const {
-  return _vocabularyInMemory.prefix_range(prefix);
+  return _internalVocabulary.prefix_range(prefix);
 }
 
 // _____________________________________________________________________________
@@ -286,8 +286,8 @@ template <typename S, typename C>
 template <typename, typename>
 const std::optional<std::string_view> Vocabulary<S, C>::operator[](
     Id id) const {
-  if (id < _vocabularyInMemory.size()) {
-    return _vocabularyInMemory[static_cast<size_t>(id)];
+  if (id < _internalVocabulary.size()) {
+    return _internalVocabulary[static_cast<size_t>(id)];
   } else {
     return std::nullopt;
   }
@@ -298,15 +298,15 @@ TextVocabulary::operator[]<std::string, void>(Id id) const;
 template <typename S, typename C>
 template <typename, typename>
 const std::optional<string> Vocabulary<S, C>::idToOptionalString(Id id) const {
-  if (id < _vocabularyInMemory.size()) {
-    return _vocabularyInMemory[static_cast<size_t>(id)];
+  if (id < _internalVocabulary.size()) {
+    return _internalVocabulary[static_cast<size_t>(id)];
   } else if (id == ID_NO_VALUE) {
     return std::nullopt;
   } else {
     // this word must be externalized
-    id -= _vocabularyInMemory.size();
-    AD_CHECK(id < _vocabularyOnDisk.size());
-    return _vocabularyOnDisk[id];
+    id -= _internalVocabulary.size();
+    AD_CHECK(id < _externalVocabulary.size());
+    return _externalVocabulary[id];
   }
 }
 
@@ -333,7 +333,7 @@ void Vocabulary<S, C>::printRangesForDatatypes() {
       LOG(INFO) << idToOptionalString(range.first).value() << '\n';
       LOG(INFO) << idToOptionalString(range.second - 1).value() << '\n';
     }
-    if (range.second < _vocabularyInMemory.size()) {
+    if (range.second < _internalVocabulary.size()) {
       LOG(INFO) << idToOptionalString(range.second).value() << '\n';
     }
 
