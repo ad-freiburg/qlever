@@ -106,6 +106,6 @@ class VocabularyInMemory {
   /// Clear the vocabulary.
   void clear() { _words.clear(); }
 
-  /// Initialize the words from
-  void build(const std::vector<std::string>& v) { _words.build(v); }
+  /// Initialize the words from the given `words`.
+  void build(const std::vector<std::string>& words) { _words.build(words); }
 };

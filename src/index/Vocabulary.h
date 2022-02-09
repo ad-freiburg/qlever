@@ -108,8 +108,8 @@ class Vocabulary {
 
   //! clear all the contents, but not the settings for prefixes etc
   void clear() {
-    _words.clear();
-    _externalLiterals.clear();
+    _vocabularyInMemory.clear();
+    _vocabularyOnDisk.clear();
   }
   //! Read the vocabulary from file.
   void readFromFile(const string& fileName, const string& extLitsFileName = "");
@@ -139,7 +139,7 @@ class Vocabulary {
   // AccessReturnType_t<StringType> at(Id id) const { return operator[](id); }
 
   //! Get the number of words in the vocabulary.
-  size_t size() const { return _words.size(); }
+  size_t size() const { return _vocabularyInMemory.size(); }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
@@ -199,11 +199,11 @@ class Vocabulary {
   // only still needed for text vocabulary
   void externalizeLiteralsFromTextFile(const string& textFileName,
                                        const string& outFileName) {
-    _externalLiterals.buildFromTextFile(textFileName, outFileName);
+    _vocabularyOnDisk.buildFromTextFile(textFileName, outFileName);
   }
 
   const ExternalVocabulary<ComparatorType>& getExternalVocab() const {
-    return _externalLiterals;
+    return _vocabularyOnDisk;
   }
 
   static string getLanguage(const string& literal);
@@ -216,7 +216,7 @@ class Vocabulary {
   // works
   template <typename StringRange, typename U = StringType,
             typename = enable_if_compressed<U>>
-  void initializePrefixes(const StringRange& prefixes);
+  void buildCodebookForPrefixCompression(const StringRange& prefixes);
 
   // set the list of prefixes for words which will become part of the
   // externalized vocabulary. Good for entity names that normally don't appear
@@ -242,7 +242,7 @@ class Vocabulary {
 
   // _____________________________________________________________________
   const ComparatorType& getCaseComparator() const {
-    return _words.getComparator();
+    return _vocabularyInMemory.getComparator();
   }
 
   /// returns the range of IDs where strings of the vocabulary start with the
@@ -279,8 +279,8 @@ class Vocabulary {
   using InternalVocabulary =
       std::conditional_t<_isCompressed, InternalCompressedVocabulary,
                          InternalUncompressedVocabulary>;
-  InternalVocabulary _words;
-  ExternalVocabulary<ComparatorType> _externalLiterals;
+  InternalVocabulary _vocabularyInMemory;
+  ExternalVocabulary<ComparatorType> _vocabularyOnDisk;
 
  public:
   auto makeUncompressingWordWriter(const std::string& filename) {
@@ -289,7 +289,8 @@ class Vocabulary {
 
   template <typename U = StringType, typename = enable_if_compressed<U>>
   auto makeCompressedWordWriter(const std::string& filename) {
-    return _words.getUnderlyingVocabulary().makeDiskWriter(filename);
+    return _vocabularyInMemory.getUnderlyingVocabulary().makeDiskWriter(
+        filename);
   }
 
   static auto makeUncompressedDiskIterator(const string& filename) {

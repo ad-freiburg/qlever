@@ -52,10 +52,10 @@ int main(int argc, char** argv) {
         for (string prefix; std::getline(prefixFile, prefix);) {
           prefixes.emplace_back(std::move(prefix));
         }
-        vocab.initializePrefixes(prefixes);
+        vocab.buildCodebookForPrefixCompression(prefixes);
         compressor.buildCodebook(prefixes);
       } else {
-        vocab.initializePrefixes(std::vector<std::string>());
+        vocab.buildCodebookForPrefixCompression(std::vector<std::string>());
         compressor.buildCodebook(std::vector<std::string>());
       }
     }

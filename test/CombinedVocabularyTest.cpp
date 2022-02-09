@@ -17,25 +17,29 @@ using namespace vocabulary_test;
 // For ids in the second vocabulary we thus have to add/subtract `n` (the size)
 // of the first vocabulary, to transform private to public indices and vice
 // versa.
-struct FirstAThenB {
+struct LeftAndRight {
   static bool isInFirst(uint64_t index, const auto& vocab) {
     return index < vocab.sizeFirstVocab();
   }
 
-  static uint64_t toGlobalFirst(uint64_t index, const auto&) { return index; }
+  static uint64_t localToGlobalFirst(uint64_t index, const auto&) {
+    return index;
+  }
 
-  static uint64_t toLocalFirst(uint64_t index, const auto&) { return index; }
-  static uint64_t toGlobalSecond(uint64_t index, const auto& vocab) {
+  static uint64_t globalToLocalFirst(uint64_t index, const auto&) {
+    return index;
+  }
+  static uint64_t localToGlobalSecond(uint64_t index, const auto& vocab) {
     return index + vocab.sizeFirstVocab();
   }
-  static uint64_t toLocalSecond(uint64_t index, const auto& vocab) {
+  static uint64_t globalToLocalSecond(uint64_t index, const auto& vocab) {
     return index - vocab.sizeFirstVocab();
   }
 };
 
 // This class fulfills the `IndexConverterConcept` for any combined vocabulary.
-// It refers to the following situation: The words with even global indices
-// stand in the first vocabulary, and the words with odd global indices in the
+// It refers to the following situation: The words with even global indices are
+// in the first vocabulary, and the words with odd global indices are in the
 // second vocabulary. Within each of the vocabularies, the local inidices are
 // contiguous and start at 0.
 struct EvenAndOdd {
@@ -43,17 +47,17 @@ struct EvenAndOdd {
     return (index % 2) == 0;
   }
 
-  static uint64_t toGlobalFirst(uint64_t index, const auto&) {
+  static uint64_t localToGlobalFirst(uint64_t index, const auto&) {
     return 2 * index;
   }
 
-  static uint64_t toLocalFirst(uint64_t index, const auto&) {
+  static uint64_t globalToLocalFirst(uint64_t index, const auto&) {
     return index / 2;
   }
-  static uint64_t toGlobalSecond(uint64_t index, const auto&) {
+  static uint64_t localToGlobalSecond(uint64_t index, const auto&) {
     return 2 * index + 1;
   }
-  static uint64_t toLocalSecond(uint64_t index, const auto&) {
+  static uint64_t globalToLocalSecond(uint64_t index, const auto&) {
     return index / 2;
   }
 };
@@ -66,46 +70,46 @@ auto createVocabularyInMemory(const std::vector<std::string>& words) {
 
 /// The first half of the words go to the first vocabulary, the second
 /// half of the words go to the second vocabulary.
-auto createFirstAThenBVocabulary(const std::vector<std::string>& words) {
-  std::vector<std::string> a, b;
+auto createLeftAndRightVocabulary(const std::vector<std::string>& words) {
+  std::vector<std::string> left, right;
   for (size_t i = 0; i < words.size(); ++i) {
     if (i < words.size() / 2) {
-      a.push_back(words[i]);
+      left.push_back(words[i]);
     } else {
-      b.push_back(words[i]);
+      right.push_back(words[i]);
     }
   }
 
-  return CombinedVocabulary{createVocabularyInMemory(a),
-                            createVocabularyInMemory(b), FirstAThenB{}};
+  return CombinedVocabulary{createVocabularyInMemory(left),
+                            createVocabularyInMemory(right), LeftAndRight{}};
 }
 
 /// The words with even index go to the first vocabulary, the words with the odd
 /// index go to the second vocabulary
 auto createEvenOddVocabulary(const std::vector<std::string>& words) {
-  std::vector<std::string> a, b;
+  std::vector<std::string> even, odd;
   for (size_t i = 0; i < words.size(); ++i) {
     if (i % 2 == 0) {
-      a.push_back(words[i]);
+      even.push_back(words[i]);
     } else {
-      b.push_back(words[i]);
+      odd.push_back(words[i]);
     }
   }
 
-  return CombinedVocabulary{createVocabularyInMemory(a),
-                            createVocabularyInMemory(b), EvenAndOdd{}};
+  return CombinedVocabulary{createVocabularyInMemory(even),
+                            createVocabularyInMemory(odd), EvenAndOdd{}};
 }
 
 TEST(CombinedVocabulary, UpperLowerBound) {
-  testUpperAndLowerBoundWithStdLess(createFirstAThenBVocabulary);
+  testUpperAndLowerBoundWithStdLess(createLeftAndRightVocabulary);
   testUpperAndLowerBoundWithStdLess(createEvenOddVocabulary);
 }
 
 TEST(CombinedVocabulary, UpperLowerBoundAlternativeComparator) {
-  testUpperAndLowerBoundWithNumericComparator(createFirstAThenBVocabulary);
+  testUpperAndLowerBoundWithNumericComparator(createLeftAndRightVocabulary);
   testUpperAndLowerBoundWithNumericComparator(createEvenOddVocabulary);
 }
 
 TEST(CombinedVocabulary, AccessOperator) {
-  testAccessOperatorForUnorderedVocabulary(createFirstAThenBVocabulary);
+  testAccessOperatorForUnorderedVocabulary(createLeftAndRightVocabulary);
 }

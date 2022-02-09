@@ -29,18 +29,18 @@ concept IndexConverterConcept = requires(const T& t, uint64_t i,
   { t.isInFirst(i, v) }
   ->std::same_as<bool>;
   // Transform a local index from the first vocabulary to a global index.
-  { t.toGlobalFirst(i, v) }
+  { t.localToGlobalFirst(i, v) }
   ->std::convertible_to<uint64_t>;
   // Transform a local index from the second vocabulary to a global index.
-  { t.toGlobalSecond(i, v) }
+  { t.localToGlobalSecond(i, v) }
   ->std::convertible_to<uint64_t>;
   // Transform a global index to a local index for the first vocabulary.
   // May only be called if `t.isInFirst(i, v)` is true.
-  { t.toLocalFirst(i, v) }
+  { t.globalToLocalFirst(i, v) }
   ->std::convertible_to<uint64_t>;
   // Transform a global index to a local index for the second vocabulary.
   // May only be called if `t.isInFirst(i, v)` is false.
-  { t.toLocalSecond(i, v) }
+  { t.globalToLocalSecond(i, v) }
   ->std::convertible_to<uint64_t>;
 };
 
@@ -74,9 +74,9 @@ class CombinedVocabulary {
   // Return the word with the global index `index`.
   auto operator[](uint64_t index) const {
     if (_indexConverter.isInFirst(index, *this)) {
-      return _firstVocab[_indexConverter.toLocalFirst(index, *this)];
+      return _firstVocab[_indexConverter.globalToLocalFirst(index, *this)];
     } else {
-      return _secondVocab[_indexConverter.toLocalSecond(index, *this)];
+      return _secondVocab[_indexConverter.globalToLocalSecond(index, *this)];
     }
   }
 
@@ -88,11 +88,10 @@ class CombinedVocabulary {
   }
 
   /// Return a `WordAndIndex` that points to the first entry that is equal or
-  /// greater than `word` wrt the `comparator`.
-  /// This requires that each of the underlying vocabularies is sorted wrt
-  /// `comparator` and that for any two words x and y (each from either
-  /// vocabulary), x < y wrt `comparator` if and only if
-  /// global id(x) < global id(y).
+  /// greater than `word` wrt the `comparator`. This requires that each of the
+  /// underlying vocabularies is sorted wrt `comparator` and that for any two
+  /// words x and y (each from either vocabulary), x < y wrt `comparator` if and
+  /// only if global id(x) < global id(y).
   template <typename InternalStringType, typename Comparator>
   WordAndIndex lower_bound(const InternalStringType& word,
                            Comparator comparator) const {
@@ -104,8 +103,8 @@ class CombinedVocabulary {
     return std::min(resultA, resultB);
   }
 
-  /// Return a `WordAndIndex` that points to the first entry that is
-  /// greater than `word` wrt the `comparator`. The same requirements as for
+  /// Return a `WordAndIndex` that points to the first entry that is greater
+  /// than `word` wrt the `comparator`. The same requirements as for
   /// `lower_bound` have to hold.
   template <typename InternalStringType, typename Comparator>
   WordAndIndex upper_bound(const InternalStringType& word,
@@ -117,37 +116,36 @@ class CombinedVocabulary {
   }
 
  private:
-  // TODO better name
-  // Tranform a `WordAndIndex` from the `FirstVocabulary` to a global
+  // Transform a `WordAndIndex` from the `FirstVocabulary` to a global
   // `WordAndIndex` by transforming the index from local to global.
   WordAndIndex fromA(WordAndIndex wi) const {
     wi._index = wi._word.has_value()
-                    ? _indexConverter.toGlobalFirst(wi._index, *this)
+                    ? _indexConverter.localToGlobalFirst(wi._index, *this)
                     : getEndIndex();
     return wi;
   }
 
-  // Tranform a `WordAndIndex` from the `SecondVocabulary` to a global
+  // Transform a `WordAndIndex` from the `SecondVocabulary` to a global
   // `WordAndIndex` by transforming the index from local to global.
   WordAndIndex fromB(WordAndIndex wi) const {
     wi._index = wi._word.has_value()
-                    ? _indexConverter.toGlobalSecond(wi._index, *this)
+                    ? _indexConverter.localToGlobalSecond(wi._index, *this)
                     : getEndIndex();
     return wi;
   }
 
   // Return a global index that is the largest global index occuring in either
   // of the underlying vocabularies plus 1. This index can be used as the "end"
-  // index to report "not found".
+  // index to indicate "not found".
   [[nodiscard]] uint64_t getEndIndex() const {
     uint64_t endA = _firstVocab.size() == 0
                         ? 0ul
-                        : _indexConverter.toGlobalFirst(
+                        : _indexConverter.localToGlobalFirst(
                               _firstVocab.getHighestIndex(), *this) +
                               1;
     uint64_t endB = _secondVocab.size() == 0
                         ? 0ul
-                        : _indexConverter.toGlobalSecond(
+                        : _indexConverter.localToGlobalSecond(
                               _secondVocab.getHighestIndex(), *this) +
                               1;
 

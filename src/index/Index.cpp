@@ -111,8 +111,8 @@ void Index::createFromFile(const string& filename) {
   _configurationJson["prefixes"] = _vocabPrefixCompressed;
   LOG(INFO) << "Writing compressed vocabulary to disk ..." << std::endl;
 
-  _vocab.initializePrefixes(prefixes);
-  auto wordReader = decltype(_vocab)::makeUncompressedDiskIterator(vocabFile);
+  _vocab.buildCodebookForPrefixCompression(prefixes);
+  auto wordReader = _vocab.makeUncompressedDiskIterator(vocabFile);
   auto wordWriter = _vocab.makeCompressedWordWriter(vocabFileTmp);
   for (const auto& word : wordReader) {
     wordWriter.push(word);
@@ -1275,9 +1275,9 @@ void Index::readConfiguration() {
       for (string prefix; std::getline(prefixFile, prefix);) {
         prefixes.emplace_back(std::move(prefix));
       }
-      _vocab.initializePrefixes(prefixes);
+      _vocab.buildCodebookForPrefixCompression(prefixes);
     } else {
-      _vocab.initializePrefixes(std::vector<std::string>());
+      _vocab.buildCodebookForPrefixCompression(std::vector<std::string>());
     }
   }
 

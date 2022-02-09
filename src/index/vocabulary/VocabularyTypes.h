@@ -13,10 +13,9 @@ struct WordAndIndex {
   uint64_t _index;
 
   WordAndIndex() = default;
-  // Constructors that are needed to construct a word and index
-  // from one of `std::string`, `std::string_view`,
-  // `std::optional<std::string>`, `std::optional<std::string_view>` and the
-  // index.
+  // Constructors that are needed to construct a word and index from one of
+  // `std::string`, `std::string_view`, `std::optional<std::string>`,
+  // `std::optional<std::string_view>` and the index.
   WordAndIndex(std::optional<std::string> word, uint64_t index)
       : _word{std::move(word)}, _index{index} {}
   WordAndIndex(const std::string& word, uint64_t index)
@@ -41,11 +40,11 @@ struct WordAndIndex {
 
   // This operator provides human-readable output for a `WordAndIndex`,
   // useful for testing.
-  friend std::ostream& operator<<(std::ostream& o, const WordAndIndex& w) {
-    o << "WordAndIndex : ";
-    o << (w._word.value_or("nullopt"));
-    o << w._index << ", ";
-    return o;
+  friend std::ostream& operator<<(std::ostream& os, const WordAndIndex& wi) {
+    os << "WordAndIndex : ";
+    os << (wi._word.value_or("nullopt"));
+    os << wi._index << ", ";
+    return os;
   }
 };
 

@@ -120,11 +120,11 @@ class CompressedVocabulary {
 
   void clear() { _underlyingVocabulary.clear(); }
 
-  void build(std::vector<std::string> v) {
-    for (auto& word : v) {
+  void build(std::vector<std::string> words) {
+    for (auto& word : words) {
       word = _compressor.compress(word);
     }
-    _underlyingVocabulary.build(v);
+    _underlyingVocabulary.build(words);
   }
 };
 

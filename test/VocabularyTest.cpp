@@ -116,8 +116,6 @@ TEST(Vocabulary, PrefixFilter) {
   voc.setLocale("en", "US", true);
   ad_utility::HashSet<string> s;
 
-  // auto n = std::string(1, NO_PREFIX_CHAR);
-
   s.insert("\"exa\"");
   s.insert("\"exp\"");
   s.insert("\"ext\"");

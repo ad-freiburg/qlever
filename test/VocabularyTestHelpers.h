@@ -23,15 +23,15 @@ auto assertThatRangesAreEqual = [](const auto& a, const auto& b) {
  * @brief Assert that `upper_bound` and `lower_bound` work as expected for a
  *        given vocabulary.
  * @param vocabularyCreator Function that takes a `std::vector<string>` and
- *           returns a vocabulary.
+ *        returns a vocabulary.
  * @param makeWordLarger Function that takes a `std::string` from the
- *           vocabulary and returns a `std::string` that is larger than the
- *           input, but smaller than the next larger word in the vocabulary.
+ *        vocabulary and returns a `std::string` that is larger than the
+ *        input, but smaller than the next larger word in the vocabulary.
  * @param makeWordSmaller The complement of `makeWordLarger`
  * @param comparator The second argument that is passed to the corresponding
- *           `upper_bound` and `lower_bound` functions.
+ *        `upper_bound` and `lower_bound` functions.
  * @param words The words that will become the vocabulary. They have to be
- *            sorted wrt `comparator`.
+ *        sorted wrt `comparator`.
  */
 void testUpperAndLowerBound(auto vocabularyCreator, auto makeWordLarger,
                             auto makeWordSmaller, auto comparator,
