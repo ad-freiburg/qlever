@@ -96,7 +96,11 @@ class ExternalVocabulary {
   const_iterator end() const { return {this, size()}; }
 
   // Get the id that is the largest id contained in this external vocabulary + 1
-  Id getUpperBoundForIds() const { return _highestId + 1; }
+  // May only be called if size() > 0;
+  Id getUpperBoundForIds() const {
+    AD_CHECK(size() > 0);
+    return _highestId + 1;
+  }
 
   using SortLevel = typename StringComparator::Level;
 

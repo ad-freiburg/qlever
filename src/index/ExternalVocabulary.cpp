@@ -130,7 +130,9 @@ void ExternalVocabulary<Comp>::initFromFile(const string& file) {
   _idsAndOffsets.open(file + _offsetSuffix);
   AD_CHECK(_idsAndOffsets.size() > 0);
   _size = _idsAndOffsets.size() - 1;
-  _highestId = (*(end() - 1))._id;
+  if (_size > 0) {
+    _highestId = (*(end() - 1))._id;
+  }
 }
 
 template <class Comp>
