@@ -4,12 +4,8 @@
 
 #include <gtest/gtest.h>
 
-#include <ranges>
-
 #include "../src/global/Id.h"
 #include "../src/util/Log.h"
-
-namespace views = std::views;
 
 TEST(Id, RoundedIds) {
   ad_utility::RoundedIdManager<1> m;
