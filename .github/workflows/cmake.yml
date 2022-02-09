@@ -43,7 +43,7 @@ jobs:
       run : sudo apt install -y libunwind-13-dev libc++abi-13-dev libc++-13-dev
 
     - name: Python dependencies
-      run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
+      run: sudo add-apt-repository ppa:deadsnakes/ppa && sudo apt update && sudo apt-get install software-properties-common python3.10 python3-yaml unzip pkg-config python3-icu python-dateutil -y
 
     - name: Checkout submodules
       run: git submodule update --init --recursive
