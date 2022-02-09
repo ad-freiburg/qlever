@@ -30,18 +30,9 @@ struct DummyCompressor {
 
 using Vocab = CompressedVocabulary<VocabularyInMemory, DummyCompressor>;
 
-// Human readable output for `WordAndIndex`.
-std::ostream& operator<<(std::ostream& o, const Vocab::WordAndIndex& w) {
-  o << w._index << ", ";
-  o << w._word.value_or("nullopt");
-  return o;
-}
-
 namespace {
 
 using namespace vocabulary_test;
-
-using WordAndIndex = Vocab::WordAndIndex;
 
 auto createVocabulary(const std::vector<std::string>& words) {
   Vocab v;
@@ -57,43 +48,18 @@ auto createVocabulary(const std::vector<std::string>& words) {
 }
 
 TEST(CompressedVocabulary, UpperLowerBound) {
-  const std::vector<string> words{"alpha", "beta",    "camma",
-                                  "delta", "epsilon", "frikadelle"};
-  auto comparator = std::less<>{};
-  auto makeWordSmaller = [](std::string word) {
-    word.back()--;
-    return word;
-  };
-  auto makeWordLarger = [](std::string word) {
-    word.back()++;
-    return word;
-  };
-
-  testUpperAndLowerBound(createVocabulary, makeWordLarger, makeWordSmaller,
-                         comparator, words);
+  testUpperAndLowerBoundWithStdLess(createVocabulary);
 }
 
 TEST(CompressedVocabulary, UpperLowerBoundAlternativeComparator) {
-  const std::vector<string> words{"4", "33", "222", "1111"};
-  auto comparator = [](const auto& a, const auto& b) {
-    return std::stoi(std::string{a}) < std::stoi(std::string{b});
-  };
-  auto makeWordSmaller = [](std::string word) {
-    return std::to_string(std::stoi(word) - 1);
-  };
-  auto makeWordLarger = [](std::string word) {
-    return std::to_string(std::stoi(word) + 1);
-  };
-
-  testUpperAndLowerBound(createVocabulary, makeWordLarger, makeWordSmaller,
-                         comparator, words);
+  testUpperAndLowerBoundWithNumericComparator(createVocabulary);
 }
 
-TEST(VocabularyInMemory, AccessOperator) {
+TEST(CompressedVocabulary, AccessOperator) {
   testAccessOperatorForUnorderedVocabulary(createVocabulary);
 }
 
-TEST(UnicodeVocabulary, CompressionIsActuallyApplied) {
+TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42",
                                        "31",    "0",     "al"};
 

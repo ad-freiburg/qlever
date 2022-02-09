@@ -83,10 +83,6 @@ class Vocabulary {
   // The different type of data that is stored in the vocabulary
   enum class Datatypes { Literal, Iri, Float, Date };
 
-  // variable for dispatching
-  static constexpr bool _isCompressed =
-      std::is_same_v<StringType, CompressedString>;
-
   template <typename T, typename R = void>
   using enable_if_compressed =
       std::enable_if_t<std::is_same_v<T, CompressedString>>;
@@ -97,12 +93,16 @@ class Vocabulary {
 
  public:
   using SortLevel = typename ComparatorType::Level;
+
   template <
       typename = std::enable_if_t<std::is_same_v<StringType, string> ||
                                   std::is_same_v<StringType, CompressedString>>>
-
   Vocabulary(){};
   Vocabulary& operator=(Vocabulary&&) noexcept = default;
+
+  // variable for dispatching
+  static constexpr bool _isCompressed =
+      std::is_same_v<StringType, CompressedString>;
 
   virtual ~Vocabulary() = default;
 
@@ -293,10 +293,11 @@ class Vocabulary {
     return VocabularyInMemory::WordWriter{filename};
   }
 
-  auto makeCompressedWordWriter(
-      const std::string& filename) requires _isCompressed {
+  template <typename U = StringType, typename = enable_if_compressed<U>>
+  auto makeCompressedWordWriter(const std::string& filename) {
     return _words.getUnderlyingVocabulary().makeDiskWriter(filename);
   }
+
   static auto makeUncompressedDiskIterator(const string& filename) {
     return VocabularyInMemory::makeWordDiskIterator(filename);
   }

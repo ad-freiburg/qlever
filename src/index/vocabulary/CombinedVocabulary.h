@@ -7,6 +7,8 @@
 
 #include <concepts>
 
+#include "./VocabularyTypes.h"
+
 /// Define a `CombinedVocabulary` that consists of two Vocabularies (called the
 /// "underlying" vocabularies). Each index that is used in the public interface
 /// (operator[], lower_bound, upper_bound) is a "global index". The
@@ -52,42 +54,6 @@ template <typename FirstVocabulary, typename SecondVocabulary,
           typename IndexConverter>
 class CombinedVocabulary {
  public:
-  // TODO<joka92> Create a global `WordAndIndex` class that is used by all the
-  // vocabularies and uses `std::optional<std::string>>` for _word`. A word and
-  // its global index in the vocabulary.
-  struct WordAndIndex {
-    std::optional<std::string> _word;
-    uint64_t _index;
-
-    WordAndIndex() = default;
-    WordAndIndex(std::optional<std::string> word, uint64_t index)
-        : _word{std::move(word)}, _index{index} {}
-    WordAndIndex(const std::string& word, uint64_t index)
-        : _word{word}, _index{index} {}
-    WordAndIndex(std::optional<std::string_view> word, uint64_t index)
-        : _index{index} {
-      if (word.has_value()) {
-        _word.emplace(word.value());
-      }
-    }
-    WordAndIndex(std::nullopt_t, uint64_t index) : _index{index} {}
-    bool operator==(const WordAndIndex& result) const = default;
-    [[nodiscard]] bool has_value() const { return _word.has_value(); }
-
-    // Comparison is only done by the `_index`, since the `_word` is redundant
-    // additional information.
-    auto operator<=>(const WordAndIndex& rhs) const {
-      return _index <=> rhs._index;
-    }
-
-    // This operator provides human-readable output for a `WordAndIndex`.
-    friend std::ostream& operator<<(std::ostream& o, const WordAndIndex& w) {
-      o << w._index << ", ";
-      o << (w._word.value_or("nullopt"));
-      return o;
-    }
-  };
-
  private:
   // The underlying vocabularies and the index converter
   FirstVocabulary _firstVocab;
@@ -154,20 +120,20 @@ class CombinedVocabulary {
   // TODO better name
   // Tranform a `WordAndIndex` from the `FirstVocabulary` to a global
   // `WordAndIndex` by transforming the index from local to global.
-  WordAndIndex fromA(typename FirstVocabulary::WordAndIndex wi) const {
-    auto index = wi._word.has_value()
-                     ? _indexConverter.toGlobalFirst(wi._index, *this)
-                     : getEndIndex();
-    return WordAndIndex{std::move(wi._word), index};
+  WordAndIndex fromA(WordAndIndex wi) const {
+    wi._index = wi._word.has_value()
+                    ? _indexConverter.toGlobalFirst(wi._index, *this)
+                    : getEndIndex();
+    return wi;
   }
 
   // Tranform a `WordAndIndex` from the `SecondVocabulary` to a global
   // `WordAndIndex` by transforming the index from local to global.
-  WordAndIndex fromB(typename SecondVocabulary::WordAndIndex wi) const {
-    auto index = wi._word.has_value()
-                     ? _indexConverter.toGlobalSecond(wi._index, *this)
-                     : getEndIndex();
-    return WordAndIndex{std::move(wi._word), index};
+  WordAndIndex fromB(WordAndIndex wi) const {
+    wi._index = wi._word.has_value()
+                    ? _indexConverter.toGlobalSecond(wi._index, *this)
+                    : getEndIndex();
+    return wi;
   }
 
   // Return a global index that is the largest global index occuring in either

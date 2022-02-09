@@ -5,6 +5,8 @@
 #ifndef QLEVER_COMPRESSEDVOCABULARY_H
 #define QLEVER_COMPRESSEDVOCABULARY_H
 
+#include "./VocabularyTypes.h"
+
 /// TODO<joka921> Currently the settings of the compressor are not directly
 /// serialized but have to be manually stored and initialized.
 
@@ -13,13 +15,6 @@
 /// A vocabulary in which compression is performed per word via the `Compressor`
 template <typename UnderlyingVocabulary, typename Compressor>
 class CompressedVocabulary {
- public:
-  struct WordAndIndex {
-    std::optional<std::string> _word;
-    uint64_t _index;
-    bool operator==(const WordAndIndex& result) const = default;
-  };
-
  private:
   UnderlyingVocabulary _underlyingVocabulary;
   Compressor _compressor;

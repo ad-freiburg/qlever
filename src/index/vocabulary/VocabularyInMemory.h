@@ -11,6 +11,7 @@
 #include "../../util/Exception.h"
 #include "../CompressedString.h"
 #include "../StringSortComparator.h"
+#include "./VocabularyTypes.h"
 
 //! A vocabulary. Wraps a `CompactVectorOfStrings<char>`
 //! and provides additional methods for reading and writing to/from file,
@@ -21,18 +22,6 @@ class VocabularyInMemory {
   using StringView = std::basic_string_view<CharType>;
   using String = std::basic_string<CharType>;
   using Words = CompactVectorOfStrings<CharType>;
-
-  /// A word and its index in the underlying `CompactVectorOfStrings`. A word
-  /// that is larger than all words in the vocabulary is represented by
-  /// `{std::nullopt, size()}`
-  struct WordAndIndex {
-    std::optional<StringView> _word;
-    uint64_t _index;
-    auto operator<=>(const WordAndIndex& res) const {
-      return _index <=> res._index;
-    }
-    bool operator==(const WordAndIndex&) const = default;
-  };
 
  private:
   // The actual storage.
@@ -102,7 +91,6 @@ class VocabularyInMemory {
     return result;
   }
 
- public:
   /// A helper type that can be used to directly write a vocabulary to disk
   /// word-by-word, without having to materialize it in RAM first. See the
   /// documentation of `CompactVectorOfStrings` for details.
@@ -115,7 +103,9 @@ class VocabularyInMemory {
     return Words::diskIterator(filename);
   }
 
+  /// Clear the vocabulary.
   void clear() { _words.clear(); }
 
+  /// Initialize the words from
   void build(const std::vector<std::string>& v) { _words.build(v); }
 };

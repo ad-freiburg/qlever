@@ -62,11 +62,7 @@ void Vocabulary<S, C>::createFromSet(
     const ad_utility::HashSet<std::string>& set) {
   LOG(INFO) << "Creating vocabulary from set ...\n";
   _words.clear();
-  std::vector<std::string> words;
-  words.reserve(set.size());
-  for (const auto& word : set) {
-    words.push_back(word);
-  }
+  std::vector<std::string> words(set.begin(), set.end());
   LOG(INFO) << "... sorting ...\n";
   auto totalComparison = [this](const auto& a, const auto& b) {
     return getCaseComparator()(a, b, SortLevel::TOTAL);

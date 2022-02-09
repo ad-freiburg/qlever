@@ -111,20 +111,14 @@ void Index::createFromFile(const string& filename) {
   _configurationJson["prefixes"] = _vocabPrefixCompressed;
   LOG(INFO) << "Writing compressed vocabulary to disk ..." << std::endl;
 
-  auto wordWriter = _vocab.makeCompressedWordWriter(vocabFileTmp);
   _vocab.initializePrefixes(prefixes);
-
   auto wordReader = decltype(_vocab)::makeUncompressedDiskIterator(vocabFile);
-
+  auto wordWriter = _vocab.makeCompressedWordWriter(vocabFileTmp);
   for (const auto& word : wordReader) {
     wordWriter.push(word);
   }
+  wordWriter.finish();
 
-  // TODO<remove this function>
-  /*
-  Vocabulary<CompressedString, TripleComponentComparator>::prefixCompressFile(
-      std::move(wordReader), prefixes, internalVocabularyAction);
-      */
   LOG(DEBUG) << "Finished writing compressed vocabulary" << std::endl;
 
   // TODO<joka921> maybe move this to its own function.

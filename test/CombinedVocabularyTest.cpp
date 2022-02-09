@@ -96,42 +96,16 @@ auto createEvenOddVocabulary(const std::vector<std::string>& words) {
                             createVocabularyInMemory(b), EvenAndOdd{}};
 }
 
-TEST(VocabularyInMemory, UpperLowerBound) {
-  const std::vector<string> words{"alpha", "beta",    "camma",
-                                  "delta", "epsilon", "frikadelle"};
-  auto comparator = std::less<>{};
-  auto makeWordSmaller = [](std::string word) {
-    word.back()--;
-    return word;
-  };
-  auto makeWordLarger = [](std::string word) {
-    word.back()++;
-    return word;
-  };
-
-  testUpperAndLowerBound(createFirstAThenBVocabulary, makeWordLarger,
-                         makeWordSmaller, comparator, words);
-
-  testUpperAndLowerBound(createEvenOddVocabulary, makeWordLarger,
-                         makeWordSmaller, comparator, words);
+TEST(CombinedVocabulary, UpperLowerBound) {
+  testUpperAndLowerBoundWithStdLess(createFirstAThenBVocabulary);
+  testUpperAndLowerBoundWithStdLess(createEvenOddVocabulary);
 }
 
-TEST(VocabularyInMemory, UpperLowerBoundAlternativeComparator) {
-  const std::vector<string> words{"4", "33", "222", "1111"};
-  auto comparator = [](const auto& a, const auto& b) {
-    return std::stoi(std::string{a}) < std::stoi(std::string{b});
-  };
-  auto makeWordSmaller = [](std::string word) {
-    return std::to_string(std::stoi(word) - 1);
-  };
-  auto makeWordLarger = [](std::string word) {
-    return std::to_string(std::stoi(word) + 1);
-  };
-
-  testUpperAndLowerBound(createFirstAThenBVocabulary, makeWordLarger,
-                         makeWordSmaller, comparator, words);
+TEST(CombinedVocabulary, UpperLowerBoundAlternativeComparator) {
+  testUpperAndLowerBoundWithNumericComparator(createFirstAThenBVocabulary);
+  testUpperAndLowerBoundWithNumericComparator(createEvenOddVocabulary);
 }
 
-TEST(VocabularyInMemory, AccessOperator) {
+TEST(CombinedVocabulary, AccessOperator) {
   testAccessOperatorForUnorderedVocabulary(createFirstAThenBVocabulary);
 }

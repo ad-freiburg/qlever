@@ -40,7 +40,6 @@ void testUpperAndLowerBound(auto vocabularyCreator, auto makeWordLarger,
   const auto vocab = vocabularyCreator(words);
   ASSERT_EQ(vocab.size(), words.size());
 
-  using WordAndIndex = typename decltype(vocab)::WordAndIndex;
   for (size_t i = 0; i < vocab.size(); ++i) {
     WordAndIndex wi{words[i], i};
     EXPECT_EQ(vocab.lower_bound(words[i], comparator), wi);
@@ -71,6 +70,52 @@ void testUpperAndLowerBound(auto vocabularyCreator, auto makeWordLarger,
     ASSERT_EQ(vocab.upper_bound(words.back(), comparator), wi);
   }
 };
+
+/**
+ * @brief Assert that `upper_bound` and `lower_bound` work as expected for a
+ *        given vocabulary when using words that are sorted by `std::less`
+ * @param createVocabulary Function that takes a `std::vector<string>` and
+ *           returns a vocabulary.
+ */
+void testUpperAndLowerBoundWithStdLess(auto createVocabulary) {
+  const std::vector<string> words{"alpha", "beta",    "camma",
+                                  "delta", "epsilon", "frikadelle"};
+  auto comparator = std::less<>{};
+  auto makeWordSmaller = [](std::string word) {
+    word.back()--;
+    return word;
+  };
+  auto makeWordLarger = [](std::string word) {
+    word.back()++;
+    return word;
+  };
+
+  testUpperAndLowerBound(createVocabulary, makeWordLarger, makeWordSmaller,
+                         comparator, words);
+}
+
+/**
+ * @brief Assert that `upper_bound` and `lower_bound` work as expected for a
+ *        given vocabulary when using numeric strings with the numeric
+ *        ordering ("4" < "11" b.c. 4 < 11).
+ * @param createVocabulary Function that takes a `std::vector<string>` and
+ *           returns a vocabulary.
+ */
+void testUpperAndLowerBoundWithNumericComparator(auto createVocabulary) {
+  const std::vector<string> words{"4", "33", "222", "1111"};
+  auto comparator = [](const auto& a, const auto& b) {
+    return std::stoi(std::string{a}) < std::stoi(std::string{b});
+  };
+  auto makeWordSmaller = [](std::string word) {
+    return std::to_string(std::stoi(word) - 1);
+  };
+  auto makeWordLarger = [](std::string word) {
+    return std::to_string(std::stoi(word) + 1);
+  };
+
+  testUpperAndLowerBound(createVocabulary, makeWordLarger, makeWordSmaller,
+                         comparator, words);
+}
 
 // Check that the `operator[]` works as expected for an unordered vocabulary,
 // created via `createVocabulary(std::vector<std::string>)`.

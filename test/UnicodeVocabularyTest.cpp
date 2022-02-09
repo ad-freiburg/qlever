@@ -12,13 +12,6 @@
 using Vocab = UnicodeVocabulary<VocabularyInMemory, SimpleStringComparator>;
 using namespace vocabulary_test;
 
-// Human readable output for `WordAndIndex`.
-std::ostream& operator<<(std::ostream& o, const Vocab::WordAndIndex& w) {
-  o << w._index << ", ";
-  o << w._word.value_or("nullopt");
-  return o;
-}
-
 auto createVocabulary(const std::vector<std::string>& words) {
   SimpleStringComparator comparator{"en", "us", false};
   Vocab v{comparator};

@@ -5,6 +5,8 @@
 #ifndef QLEVER_UNICODEVOCABULARY_H
 #define QLEVER_UNICODEVOCABULARY_H
 
+#include "./VocabularyTypes.h"
+
 /// Vocabulary with multi-level `UnicodeComparator` that allows comparison
 /// according to different Levels. Groups of words that are adjacent on a
 /// stricter level can be all equal on a weaker level. The
@@ -12,7 +14,6 @@
 template <typename UnderlyingVocabulary, typename UnicodeComparator>
 class UnicodeVocabulary {
  public:
-  using WordAndIndex = typename UnderlyingVocabulary::WordAndIndex;
   using SortLevel = typename UnicodeComparator::Level;
 
  private:
