@@ -150,3 +150,5 @@ addLinkAndDiscoverTest(CompactStringVectorTest)
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
 addLinkAndDiscoverTest(ContentEncodingHelperTest)
+
+addLinkAndDiscoverTest(IdTest)
