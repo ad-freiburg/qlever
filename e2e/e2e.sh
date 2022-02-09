@@ -73,13 +73,17 @@ echo "Binary dir is $BINARY_DIR"
 # Travis CI is super cool but also uses ancient OS images and so to get
 # a python that supports typing we need to install from the deadsnakes
 # repository which does not override the system python
-if [ -f "/usr/bin/python3.10" ]; then
-	export PYTHON_BINARY="/usr/bin/python3.10"
+if [ -f "/usr/bin/python3.6" ]; then
+	export PYTHON_BINARY="/usr/bin/python3.6"
 else
 	# shellcheck disable=SC2155
 	# shellcheck disable=SC2006
 	export PYTHON_BINARY=`which python3`
 fi
+# shellcheck disable=SC2155
+# shellcheck disable=SC2006
+export PYTHON_BINARY=`which python3`
+
 
 INDEX_DIR="$PROJECT_DIR/e2e_data"
 INPUT_DIR="$PROJECT_DIR/e2e_data/scientist-collection"

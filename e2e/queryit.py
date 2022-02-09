@@ -62,162 +62,161 @@ max_u_byte = 255
 
 
 def parse_datatype(entry: Any, datatype: str, forceCast: bool) -> Any:
-    match datatype:
-        case "string":
-            if forceCast:
-                entry = str(entry)
-            if isinstance(entry, str):
-                return entry
-        case "integer":
-            if forceCast:
-                entry = int(entry)
-            if isinstance(entry, int):  # Integers in Python 3 are of unlimited size
-                return entry
-            else:
-                return None
-        case "decimal":
-            if forceCast:
-                entry = decimal.Decimal(entry)
-            if isinstance(entry, decimal.Decimal):
-                return entry
-        # in python3 float is actually double
-        # To be completely compliant with W3C standards it is preferred to confirm it exhaustively [float: IEEE]
-        case "float":  # IEEE 754-1985
-            if forceCast:
-                entry = decimal.Decimal(entry)
-            if isinstance(entry, decimal.Decimal):
-                (sign, digits, exponent) = decimal.Decimal(entry).as_tuple()
-                exp = len(digits) + exponent - 1
-                man = decimal.Decimal(entry).scaleb(-exp).normalize()
-                if float_e_min <= exp <= float_e_max and man <= float_m_max:
-                    return entry
-                else:
-                    return None
-            else:
-                return None
-        # python3 float is actually double
-        # To be completely compliant with W3C standards it is preferred to confirm it exhaustively [double: IEEE]
-        case "double":  # IEEE 754-1985
-            if forceCast:
-                entry = decimal.Decimal(entry)
-            if isinstance(entry, decimal.Decimal):
-                (sign, digits, exponent) = decimal.Decimal(entry).as_tuple()
-                exp = len(digits) + exponent - 1
-                man = decimal.Decimal(entry).scaleb(-exp).normalize()
-                if double_e_min <= exp <= double_e_max and man <= double_m_max:
-                    return entry
-                else:
-                    return None
-            else:
-                return None
-        case "boolean":
-            if forceCast:
-                entry = bool(entry)
-            if isinstance(entry, bool):
-                return entry
-            else:
-                return None
-        case "dateTime":
-            if forceCast:
-                return dateutil.parser.parse(entry)
-            if isinstance(entry, datetime.date):
-                return entry
-            elif isinstance(entry, datetime.datetime):
-                return entry
-            elif isinstance(entry, datetime.time):
-                return entry
-            elif isinstance(entry, datetime.timedelta):
-                return entry
-            elif isinstance(entry, datetime.tzinfo):
-                return entry
-            elif isinstance(entry, datetime.timezone):
-                return entry
-            else:
-                return None
-        case "nonPositiveInteger":
-            if forceCast:
-                entry = int(entry)
-            if isinstance(entry, int) and int(entry) <= 0:
-                return entry
-            else:
-                return None
-        case "positiveInteger":
-            if forceCast:
-                entry = int(entry)
-            if isinstance(entry, int) and int(entry) > 0:
-                return entry
-        case "negativeInteger":
-            if forceCast:
-                entry = int(entry)
-            if isinstance(entry, int) and int(entry) <= 0:
-                return entry
-            else:
-                return None
-        case "nonNegativeInteger":
-            if forceCast:
-                entry = int(entry)
-            if isinstance(entry, int) and int(entry) >= 0:
-                return entry
-            else:
-                return None
-        case "long":
-            if forceCast:
-                entry = int(entry)
-            if isinstance(entry, int) and min_long <= int(entry) <= max_long:
-                return entry
-            else:
-                return None
-        case "int":
-            if forceCast:
-                entry = int(entry)
-            if isinstance(entry, int) and min_int <= int(entry) <= max_int:
-                return entry
-            else:
-                return None
-        case "short":
-            if forceCast:
-                entry = int(entry)
-            if isinstance(entry, int) and min_short <= int(entry) <= max_short:
-                return entry
-            else:
-                return None
-        case "byte":
-            if forceCast:
-                entry = int(entry)
-            if isinstance(entry, int) and min_byte <= int(entry) <= max_byte:
-                return entry
-            else:
-                return None
-        case "unsignedLong":
-            if forceCast:
-                entry = int(entry)
-            if isinstance(entry, int) and 0 <= int(entry) <= max_u_long:
-                return entry
-            else:
-                return None
-        case "unsignedInt":
-            if forceCast:
-                entry = int(entry)
-            if isinstance(entry, int) and 0 <= int(entry) <= max_u_int:
-                return entry
-            else:
-                return None
-        case "unsignedShort":
-            if forceCast:
-                entry = int(entry)
-            if isinstance(entry, int) and 0 <= int(entry) <= max_u_short:
-                return entry
-            else:
-                return None
-        case "unsignedByte":
-            if forceCast:
-                entry = int(entry)
-            if isinstance(entry, int) and 0 <= int(entry) <= max_u_byte:
-                return entry
-            else:
-                return None
-        case _:
+    if datatype == "string":
+        if forceCast:
+            entry = str(entry)
+        if isinstance(entry, str):
+            return entry
+    elif datatype == "integer":
+        if forceCast:
+            entry = int(entry)
+        if isinstance(entry, int):  # Integers in Python 3 are of unlimited size
+            return entry
+        else:
             return None
+    elif datatype == "decimal":
+        if forceCast:
+            entry = decimal.Decimal(entry)
+        if isinstance(entry, decimal.Decimal):
+            return entry
+    # in python3 float is actually double
+    # To be completely compliant with W3C standards it is preferred to confirm it exhaustively [float: IEEE]
+    elif datatype == "float":  # IEEE 754-1985
+        if forceCast:
+            entry = decimal.Decimal(entry)
+        if isinstance(entry, decimal.Decimal):
+            (sign, digits, exponent) = decimal.Decimal(entry).as_tuple()
+            exp = len(digits) + exponent - 1
+            man = decimal.Decimal(entry).scaleb(-exp).normalize()
+            if float_e_min <= exp <= float_e_max and man <= float_m_max:
+                return entry
+            else:
+                return None
+        else:
+            return None
+    # python3 float is actually double
+    # To be completely compliant with W3C standards it is preferred to confirm it exhaustively [double: IEEE]
+    elif datatype == "double":  # IEEE 754-1985
+        if forceCast:
+            entry = decimal.Decimal(entry)
+        if isinstance(entry, decimal.Decimal):
+            (sign, digits, exponent) = decimal.Decimal(entry).as_tuple()
+            exp = len(digits) + exponent - 1
+            man = decimal.Decimal(entry).scaleb(-exp).normalize()
+            if double_e_min <= exp <= double_e_max and man <= double_m_max:
+                return entry
+            else:
+                return None
+        else:
+            return None
+    elif datatype == "boolean":
+        if forceCast:
+            entry = bool(entry)
+        if isinstance(entry, bool):
+            return entry
+        else:
+            return None
+    elif datatype == "dateTime":
+        if forceCast:
+            return dateutil.parser.parse(entry)
+        if isinstance(entry, datetime.date):
+            return entry
+        elif isinstance(entry, datetime.datetime):
+            return entry
+        elif isinstance(entry, datetime.time):
+            return entry
+        elif isinstance(entry, datetime.timedelta):
+            return entry
+        elif isinstance(entry, datetime.tzinfo):
+            return entry
+        elif isinstance(entry, datetime.timezone):
+            return entry
+        else:
+            return None
+    elif datatype == "nonPositiveInteger":
+        if forceCast:
+            entry = int(entry)
+        if isinstance(entry, int) and int(entry) <= 0:
+            return entry
+        else:
+            return None
+    elif datatype == "positiveInteger":
+        if forceCast:
+            entry = int(entry)
+        if isinstance(entry, int) and int(entry) > 0:
+            return entry
+    elif datatype == "negativeInteger":
+        if forceCast:
+            entry = int(entry)
+        if isinstance(entry, int) and int(entry) <= 0:
+            return entry
+        else:
+            return None
+    elif datatype == "nonNegativeInteger":
+        if forceCast:
+            entry = int(entry)
+        if isinstance(entry, int) and int(entry) >= 0:
+            return entry
+        else:
+            return None
+    elif datatype == "long":
+        if forceCast:
+            entry = int(entry)
+        if isinstance(entry, int) and min_long <= int(entry) <= max_long:
+            return entry
+        else:
+            return None
+    elif datatype == "int":
+        if forceCast:
+            entry = int(entry)
+        if isinstance(entry, int) and min_int <= int(entry) <= max_int:
+            return entry
+        else:
+            return None
+    elif datatype == "short":
+        if forceCast:
+            entry = int(entry)
+        if isinstance(entry, int) and min_short <= int(entry) <= max_short:
+            return entry
+        else:
+            return None
+    elif datatype == "byte":
+        if forceCast:
+            entry = int(entry)
+        if isinstance(entry, int) and min_byte <= int(entry) <= max_byte:
+            return entry
+        else:
+            return None
+    elif datatype == "unsignedLong":
+        if forceCast:
+            entry = int(entry)
+        if isinstance(entry, int) and 0 <= int(entry) <= max_u_long:
+            return entry
+        else:
+            return None
+    elif datatype == "unsignedInt":
+        if forceCast:
+            entry = int(entry)
+        if isinstance(entry, int) and 0 <= int(entry) <= max_u_int:
+            return entry
+        else:
+            return None
+    elif datatype == "unsignedShort":
+        if forceCast:
+            entry = int(entry)
+        if isinstance(entry, int) and 0 <= int(entry) <= max_u_short:
+            return entry
+        else:
+            return None
+    elif datatype == "unsignedByte":
+        if forceCast:
+            entry = int(entry)
+        if isinstance(entry, int) and 0 <= int(entry) <= max_u_byte:
+            return entry
+        else:
+            return None
+    else:
+        return None
 
 
 def eprint(*args, color=Color.FAIL, **kwargs):
