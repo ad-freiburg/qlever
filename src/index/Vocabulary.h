@@ -141,11 +141,6 @@ class Vocabulary {
   //! Get the number of words in the vocabulary.
   size_t size() const { return _words.size(); }
 
-  //! Reserve space for the given number of words.
-  void reserve([[maybe_unused]] unsigned int n) { /* TODO<joka921> where is this
-                                                     used? _words.reserve(n);*/
-  }
-
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
   bool getId(const string& word, Id* id) const;
@@ -275,7 +270,6 @@ class Vocabulary {
   // defaults to English
   vector<std::string> _internalizedLangs{"en"};
 
-  // vector<StringType> _words;
   using PrefixCompressedVocabulary =
       CompressedVocabulary<VocabularyInMemory, PrefixCompressor>;
   using InternalCompressedVocabulary =

@@ -274,16 +274,7 @@ bool Vocabulary<S, C>::getId(const string& word, Id* id) const {
 // ___________________________________________________________________________
 template <typename S, typename C>
 std::pair<Id, Id> Vocabulary<S, C>::prefix_range(const string& prefix) const {
-  if (prefix.empty()) {
-    return {0, _words.size()};
-  }
-  Id lb = lower_bound(prefix, SortLevel::PRIMARY);
-  auto transformed = getCaseComparator().transformToFirstPossibleBiggerValue(
-      prefix, SortLevel::PRIMARY);
-
-  auto ub = _words.lower_bound(transformed, SortLevel::PRIMARY)._index;
-
-  return {lb, ub};
+  return _words.prefix_range(prefix);
 }
 
 // _____________________________________________________________________________

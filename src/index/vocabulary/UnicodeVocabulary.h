@@ -36,7 +36,8 @@ class UnicodeVocabulary {
   /// greater than `word` wrt. to the `comparator`. Only works correctly if the
   /// `_words` are sorted according to the comparator (exactly like in
   /// `std::lower_bound`, which is used internally).
-  /// T might be string_view or SortKey, TODO comment.
+  /// Type `T` can be a string-like type (`string, string_view`) or
+  /// `UnicodeComparator::SortKey`
   template <typename T>
   WordAndIndex lower_bound(const T& word, SortLevel level) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
@@ -49,13 +50,36 @@ class UnicodeVocabulary {
   /// than `word` wrt. to the `comparator`. Only works correctly if the `_words`
   /// are sorted according to the comparator (exactly like in
   /// `std::upper_bound`, which is used internally).
-  /// T might be string_view or SortKey, TODO comment.
+  /// Type `T` can be a string-like type (`string, string_view`) or
+  /// `UnicodeComparator::SortKey`
   template <typename T>
   WordAndIndex upper_bound(const T& word, SortLevel level) const {
     auto actualComparator = [this, level](const auto& a, const auto& b) {
       return _comparator(a, b, level);
     };
     return _underlyingVocabulary.upper_bound(word, actualComparator);
+  }
+
+  /// Return the index range [lowest, highest) of words where a prefix of the
+  /// word is equal to `prefix` on the `PRIMARY` level of the comparator.
+  /// TODO<joka921> Also support other levels, but this requires intrusive
+  /// hacking of ICU's SortKeys.
+  [[nodiscard]] std::pair<uint64_t, uint64_t> prefix_range(
+      std::string_view prefix) const {
+    if (prefix.empty()) {
+      if (size() == 0) {
+        return {0, 0};
+      }
+      return {0, _underlyingVocabulary.getHighestIndex() + 1};
+    }
+
+    auto lb = lower_bound(prefix, SortLevel::PRIMARY)._index;
+    auto transformed = _comparator.transformToFirstPossibleBiggerValue(
+        prefix, SortLevel::PRIMARY);
+
+    auto ub = lower_bound(transformed, SortLevel::PRIMARY)._index;
+
+    return {lb, ub};
   }
 
   /// Read the underlying vocabulary from a file. The file must have been

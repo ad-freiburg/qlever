@@ -28,6 +28,9 @@ class CompressedVocabulary {
   }
 
   [[nodiscard]] uint64_t size() const { return _underlyingVocabulary.size(); }
+  [[nodiscard]] uint64_t getHighestIndex() const {
+    return _underlyingVocabulary.getHighestIndex();
+  }
 
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt the `comparator`. Only works correctly if the
