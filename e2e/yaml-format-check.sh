@@ -2,7 +2,7 @@
 
 printf "Checking sources for code style\n"
 SOURCE_FILES=()
-find ./e2e/ -regextype egrep -regex '.*\.(yaml)?$' -print0 > sourcelist
+find ./e2e/ ./.github/ -regextype egrep -regex '.*\.y(a)?ml$' -print0 > sourcelist
 while IFS=  read -r -d $'\0'; do
     SOURCE_FILES+=("$REPLY")
 done <sourcelist
