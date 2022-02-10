@@ -37,7 +37,7 @@ string OrderBy::asString(size_t indent) const {
   for (auto ind : _sortIndices) {
     os << (ind.second ? "desc(" : "asc(") << ind.first << ") ";
   }
-   os << "\n" << _subtree->asString(indent);
+  os << "\n" << _subtree->asString(indent);
   return std::move(os).str();
 }
 

@@ -1521,7 +1521,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedFromPropertyPathTriple(
     buf << "The property path ";
     triple._p.writeToStream(buf);
     buf << " can evaluate to the empty path which is not yet supported.";
-    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, std::move(buf).str());
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+             std::move(buf).str());
   }
   std::shared_ptr<ParsedQuery::GraphPattern> pattern =
       seedFromPropertyPath(triple._s, triple._p, triple._o);
