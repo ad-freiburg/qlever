@@ -48,7 +48,7 @@ string Join::asString(size_t indent) const {
   }
   os << "|X|\n"
      << _right->asString(indent) << " join-column: [" << _rightJoinCol << "]";
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

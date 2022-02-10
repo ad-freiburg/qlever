@@ -20,13 +20,13 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
 string getStxxlConfigFileName(const string& location) {
   std::ostringstream os;
   os << location << ".stxxl";
-  return os.str();
+  return std::move(os).str();
 }
 
 string getStxxlDiskFileName(const string& location, const string& tail) {
   std::ostringstream os;
   os << location << tail << "-stxxl.disk";
-  return os.str();
+  return std::move(os).str();
 }
 
 // Write a .stxxl config-file.
@@ -43,7 +43,7 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
   std::ostringstream config;
   config << "disk=" << getStxxlDiskFileName(location, tail) << ","
          << STXXL_DISK_SIZE_INDEX_TEST << ",syscall";
-  stxxlConfig.writeLine(config.str());
+  stxxlConfig.writeLine(std::move(config).str());
 }
 
 TEST(IndexTest, createFromTsvTest) {

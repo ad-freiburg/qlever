@@ -42,7 +42,7 @@ string QueryExecutionTree::asString(size_t indent) {
        << _rootOperation->asString(indent + 2) << "\n"
        << indentStr << "  qet-width: " << getResultWidth() << " ";
     os << '\n' << indentStr << '}';
-    _asString = os.str();
+    _asString = std::move(os).str();
   } else {
     _asString = "<Empty QueryExecutionTree>";
   }
@@ -308,7 +308,7 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
       std::memcpy(&f, &id, sizeof(float));
       std::stringstream s;
       s << f;
-      return std::pair{s.str(), XSD_DECIMAL_TYPE};
+      return std::pair{std::move(s).str(), XSD_DECIMAL_TYPE};
     }
     case ResultTable::ResultType::LOCAL_VOCAB: {
       auto optionalString = resultTable.idToOptionalString(id);

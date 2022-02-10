@@ -273,7 +273,8 @@ string convertFloatStringToIndexWord(const string& orig,
   // Produce a string representation of the exponent
   std::ostringstream expoOs;
   expoOs << exponent;
-  string expoString = (negaExpo ? expoOs.str().substr(1) : expoOs.str());
+  string expoString =
+      (negaExpo ? std::move(expoOs).str().substr(1) : std::move(expoOs).str());
 
   if (negaMantissa != negaExpo) {
     expoString = getBase10ComplementOfIntegerString(expoString);
@@ -306,15 +307,15 @@ string convertFloatStringToIndexWord(const string& orig,
   os << mant.str().substr(0, DEFAULT_NOF_VALUE_MANTISSA_DIGITS);
   // Padding for mantissa. Necessary because we append something
   // to restore the original type.
-  for (size_t i = mant.str().size(); i < DEFAULT_NOF_VALUE_MANTISSA_DIGITS;
-       ++i) {
+  for (size_t i = std::move(mant).str().size();
+       i < DEFAULT_NOF_VALUE_MANTISSA_DIGITS; ++i) {
     if (!negaMantissa) {
       os << '0';
     } else {
       os << '9';
     }
   }
-  return os.str() + char(type);
+  return std::move(os).str() + char(type);
 }
 
 // _____________________________________________________________________________
@@ -380,13 +381,13 @@ string convertIndexWordToFloatString(const string& indexWord) {
       if (mantissa[i] == '0') {
         zeros << '0';
       } else {
-        os << zeros.str();
+        os << std::move(zeros).str();
         zeros.str("");
         os << mantissa[i];
       }
       ++i;
       if (tenToThe == absExponent) {
-        os << zeros.str();
+        os << std::move(zeros).str();
         zeros.str("");
         os << ".";
       }
@@ -403,7 +404,7 @@ string convertIndexWordToFloatString(const string& indexWord) {
       }
     }
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -589,7 +590,7 @@ string convertDateToIndexWord(const string& value) {
   } else {
     os << norm;
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -604,7 +605,7 @@ string convertIndexWordToDate(const string& indexWord) {
   } else {
     os << indexWord.substr(prefixLength);
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -613,7 +614,7 @@ string getBase10ComplementOfIntegerString(const string& orig) {
   for (size_t i = 0; i < orig.size(); ++i) {
     os << (9 - atoi(orig.substr(i, 1).c_str()));
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -628,7 +629,7 @@ inline string removeLeadingZeros(const string& orig) {
   for (; i < orig.size(); ++i) {
     os << orig[i];
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

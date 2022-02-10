@@ -161,12 +161,11 @@ void FTSAlgorithms::intersectKWay(const vector<vector<Id>>& cidVecs,
       LOG(DEBUG) << "Empty list involved, no intersect necessary.\n";
       return;
     }
-    std::ostringstream os;
+    LOG(DEBUG) << "K-way intersection of " << k << " lists of sizes: ";
     for (const auto& l : cidVecs) {
-      os << l.size() << ' ';
+      LOG(DEBUG) << l.size() << ' ';
     }
-    LOG(DEBUG) << "K-way intersection of " << k
-               << " lists of sizes: " << os.str() << '\n';
+    LOG(DEBUG) << '\n';
   }
 
   const bool entityMode = lastListEids != nullptr;
