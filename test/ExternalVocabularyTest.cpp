@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/index/ExternalVocabulary.h"
+#include "../src/index/VocabularyOnDisk.h"
 
 TEST(ExternalVocabulary, getWordbyIdTest) {
   vector<string> v;
@@ -13,7 +13,7 @@ TEST(ExternalVocabulary, getWordbyIdTest) {
   v.push_back("ba");
   v.push_back("car");
   {
-    ExternalVocabulary<SimpleStringComparator> ev;
+    VocabularyOnDisk<SimpleStringComparator> ev;
     ev.buildFromVector(v, "__tmp.evtest");
     ASSERT_EQ("a", ev.idToOptionalString(0));
     ASSERT_EQ("ba", ev.idToOptionalString(2));
@@ -29,7 +29,7 @@ TEST(ExternalVocabulary, getIdForWordTest) {
   v.push_back("ba");
   v.push_back("car");
   {
-    ExternalVocabulary<SimpleStringComparator> ev;
+    VocabularyOnDisk<SimpleStringComparator> ev;
     ev.buildFromVector(v, "__tmp.evtest");
     Id id;
     ASSERT_TRUE(ev.getId("ba", &id));
@@ -52,11 +52,11 @@ TEST(ExternalVocabulary, readWriteTest) {
   v.push_back("wordB4");
   ASSERT_EQ(size_t(5), v.size());
   {
-    ExternalVocabulary<SimpleStringComparator> ev;
+    VocabularyOnDisk<SimpleStringComparator> ev;
     ev.buildFromVector(v, "__tmp.evtest");
   }
   {
-    ExternalVocabulary<SimpleStringComparator> ev;
+    VocabularyOnDisk<SimpleStringComparator> ev;
     ev.initFromFile("__tmp.evtest");
     ASSERT_EQ(size_t(5), ev.size());
   }

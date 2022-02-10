@@ -2,7 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
-#include "./ExternalVocabulary.h"
+#include "./VocabularyOnDisk.h"
 
 #include <fstream>
 
@@ -12,8 +12,9 @@
 #include "../util/Generator.h"
 #include "../util/Log.h"
 
-template <class Comp>
-std::optional<OffsetAndSize> ExternalVocabulary<Comp>::getOffsetAndSize(
+using OffsetAndSize = VocabularyOnDisk::OffsetAndSize;
+// ____________________________________________________________________________
+std::optional<OffsetAndSize> VocabularyOnDisk::getOffsetAndSize(
     Id id) const {
   IdAndOffset dummy{id, 0};
   auto it =
@@ -26,8 +27,7 @@ std::optional<OffsetAndSize> ExternalVocabulary<Comp>::getOffsetAndSize(
   return OffsetAndSize{offset, nextOffset - offset};
 }
 
-template <class Comp>
-OffsetAndSize ExternalVocabulary<Comp>::getOffsetAndSizeForNthElement(
+OffsetAndSize VocabularyOnDisk::getOffsetAndSizeForNthElement(
     size_t n) const {
   AD_CHECK(n < size());
   // TODO<joka921> :: This is duplicated code
@@ -37,8 +37,7 @@ OffsetAndSize ExternalVocabulary<Comp>::getOffsetAndSizeForNthElement(
 }
 
 // _____________________________________________________________________________
-template <class Comp>
-std::optional<string> ExternalVocabulary<Comp>::idToOptionalString(
+std::optional<string> VocabularyOnDisk::idToOptionalString(
     Id id) const {
   auto optionalOffsetAndSize = getOffsetAndSize(id);
   if (!optionalOffsetAndSize.has_value()) {
@@ -52,30 +51,8 @@ std::optional<string> ExternalVocabulary<Comp>::idToOptionalString(
 }
 
 // _____________________________________________________________________________
-template <class Comp>
-Id ExternalVocabulary<Comp>::binarySearchInVocab(const string& word) const {
-  // TODO<joka921> get rid of this.
-  Id lower = 0;
-  Id upper = size();
-  while (lower < upper) {
-    Id i = lower + (upper - lower) / 2;
-    string w = std::move(idToOptionalString(i).value());
-    int cmp = _caseComparator.compare(w, word, Comp::Level::TOTAL);
-    if (cmp < 0) {
-      lower = i + 1;
-    } else if (cmp > 0) {
-      upper = i - 1;
-    } else if (cmp == 0) {
-      return i;
-    }
-  }
-  return lower;
-}
-
-// _____________________________________________________________________________
-template <class Comp>
 template <typename Iterable>
-void ExternalVocabulary<Comp>::buildFromIterable(Iterable&& it,
+void VocabularyOnDisk::buildFromIterable(Iterable&& it,
                                                  const string& fileName) {
   {
     _file.open(fileName.c_str(), "w");
@@ -97,15 +74,13 @@ void ExternalVocabulary<Comp>::buildFromIterable(Iterable&& it,
 }
 
 // _____________________________________________________________________________
-template <class Comp>
-void ExternalVocabulary<Comp>::buildFromVector(const vector<string>& v,
+void VocabularyOnDisk::buildFromVector(const vector<string>& v,
                                                const string& fileName) {
   buildFromIterable(v, fileName);
 }
 
 // _____________________________________________________________________________
-template <class Comp>
-void ExternalVocabulary<Comp>::buildFromTextFile(const string& textFileName,
+void VocabularyOnDisk::buildFromTextFile(const string& textFileName,
                                                  const string& outFileName) {
   std::ifstream infile(textFileName);
   AD_CHECK(infile.is_open());
@@ -124,19 +99,17 @@ void ExternalVocabulary<Comp>::buildFromTextFile(const string& textFileName,
 }
 
 // _____________________________________________________________________________
-template <class Comp>
-void ExternalVocabulary<Comp>::initFromFile(const string& file) {
+void VocabularyOnDisk::initFromFile(const string& file) {
   _file.open(file.c_str(), "r");
   _idsAndOffsets.open(file + _offsetSuffix);
   AD_CHECK(_idsAndOffsets.size() > 0);
   _size = _idsAndOffsets.size() - 1;
   if (_size > 0) {
-    _highestId = (*(end() - 1))._id;
+    _highestId = (*(end() - 1))._index;
   }
 }
 
-template <class Comp>
-ExternalVocabulary<Comp>::WordAndId ExternalVocabulary<Comp>::getNthElement(
+WordAndIndex VocabularyOnDisk::getNthElement(
     size_t n) const {
   AD_CHECK(n < idsAndOffsets().size());
   auto offsetAndSize = getOffsetAndSizeForNthElement(n);
@@ -148,6 +121,3 @@ ExternalVocabulary<Comp>::WordAndId ExternalVocabulary<Comp>::getNthElement(
   auto id = idsAndOffsets()[n]._id;
   return {std::move(result), id};
 }
-
-template class ExternalVocabulary<TripleComponentComparator>;
-template class ExternalVocabulary<SimpleStringComparator>;

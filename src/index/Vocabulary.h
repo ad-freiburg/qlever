@@ -29,7 +29,7 @@
 #include "./vocabulary/PrefixCompressor.h"
 #include "./vocabulary/UnicodeVocabulary.h"
 #include "./vocabulary/VocabularyInMemory.h"
-#include "ExternalVocabulary.h"
+#include "VocabularyOnDisk.h"
 
 using std::string;
 using std::vector;
