@@ -997,7 +997,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
           << version << " does not match the programs pattern file "
           << "version of " << PATTERNS_FILE_VERSION << ". Rebuild the index"
           << " or start the query engine without pattern support." << std::endl;
-      throw std::runtime_error(oss.str());
+      throw std::runtime_error(std::move(oss).str());
     } else {
       patternsFile.read(&_fullHasPredicateMultiplicityEntities, sizeof(double),
                         off);

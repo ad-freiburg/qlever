@@ -1521,7 +1521,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedFromPropertyPathTriple(
     buf << "The property path ";
     triple._p.writeToStream(buf);
     buf << " can evaluate to the empty path which is not yet supported.";
-    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, buf.str());
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+             std::move(buf).str());
   }
   std::shared_ptr<ParsedQuery::GraphPattern> pattern =
       seedFromPropertyPath(triple._s, triple._p, triple._o);
@@ -1529,7 +1530,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedFromPropertyPathTriple(
   std::ostringstream out;
   pattern->toString(out, 0);
   LOG(TRACE) << "Turned " << triple.asString() << " into " << std::endl;
-  LOG(TRACE) << out.str() << std::endl << std::endl;
+  LOG(TRACE) << std::move(out).str() << std::endl << std::endl;
 #endif
   pattern->recomputeIds();
   return optimize(pattern.get());
@@ -2129,7 +2130,7 @@ string QueryPlanner::TripleGraph::asString() const {
       os << '\n';
     }
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -2213,7 +2214,7 @@ string QueryPlanner::getPruningKey(
   os << " f: ";
   os << ' ' << plan._idsOfIncludedFilters;
 
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

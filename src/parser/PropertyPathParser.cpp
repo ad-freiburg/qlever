@@ -71,7 +71,7 @@ std::vector<PropertyPathParser::Token> PropertyPathParser::tokenize(
     if (!VALID_CHARS[(uint8_t)c]) {
       std::stringstream s;
       s << "Invalid character " << c << " in property path " << str;
-      throw ParseException(s.str());
+      throw ParseException(std::move(s).str());
     }
     if (c == '<') {
       inside_iri = true;
@@ -257,13 +257,13 @@ void PropertyPathParser::expect(const std::string& token) {
     std::stringstream s;
     s << "Expected " << token << " but the input was exhausted"
       << " while parsing " << _string;
-    throw ParseException(s.str());
+    throw ParseException(std::move(s).str());
   }
   if (_position->text != token) {
     std::stringstream s;
     s << "Expected " << token << " but got " << _position->text
       << " while parsing " << _string << " at pos " << _position->position;
-    throw ParseException(s.str());
+    throw ParseException(std::move(s).str());
   }
   _position++;
 }
@@ -283,7 +283,7 @@ void PropertyPathParser::expectNone() {
     std::stringstream s;
     s << "Expected no more tokens in input " << _string << " but got "
       << _position->text << " at pos " << _position->position;
-    throw ParseException(s.str());
+    throw ParseException(std::move(s).str());
   }
   _position++;
 }
