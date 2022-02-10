@@ -290,38 +290,33 @@ def check_row_sparql_json(variables: List[str], gold_row: List[Any], actual_row:
         # the quotes and any "^^xsd:type hints.
         # This allows us to ignore double quoting trouble in checks
         target_type = "literal"
-        matches_passed = False
         if isinstance(gold, str) and gold.startswith('<'):
             target_type = "iri"
             gold = gold[1:-1]
-            matches = gold == actual["value"]
-            matches_passed = True
         if not actual["type"] == target_type:
             return False
-
-        ## TODO: will not accept if no row_datatype --> possible multi-data in the same column
-        if row_datatype:
-            value_parsed = parse_datatype(gold, row_datatype[i], True)
-            if value_parsed:
-                if row_datatype[i] != "string" and "datatype" in actual:
-                    actual_value = actual["value"]
-                    actual_type = actual["datatype"][actual["datatype"].rfind('#') + 1:]
-                    parsed_actual = parse_datatype(actual_value, actual_type, True)
-                    matches = value_parsed == parsed_actual and row_datatype[i] == actual_type
-                    if not row_datatype[i] == actual_type:
-                        eprint("\trow_datatype = " + row_datatype[i] + "\n\tactual_type = " + actual_type + "\n")
+        multiple_datatype = row_datatype[i].split("|")
+        for muliple_value_parsed in multiple_datatype:
+            value_parsed = None
+            try:
+                value_parsed = parse_datatype(gold, muliple_value_parsed, True)
+            except Exception as e:
+                eprint("\tException = " + str(e))
+            finally:
+                if value_parsed:
+                    if muliple_value_parsed != "string" and "datatype" in actual:
+                        actual_value = actual["value"]
+                        actual_type = actual["datatype"][actual["datatype"].rfind('#') + 1:]
+                        parsed_actual = parse_datatype(actual_value, actual_type, True)
+                        matches = value_parsed == parsed_actual and muliple_value_parsed == actual_type
+                        if not muliple_value_parsed == actual_type:
+                            eprint("\trow_datatype = " + muliple_value_parsed + "\n\tactual_type = " + actual_type + "\n")
+                    else:
+                        matches = value_parsed == actual["value"]  # empty values or string
                 else:
-                    matches = value_parsed == actual["value"]  # empty values or string
-            else:
-                matches = gold == actual["value"]  # empty values
-        elif not matches_passed:  # temporary fix for multi-datatype in the same column
-            if isinstance(gold, int):
-                matches = int(actual["value"]) == gold
-                # TODO<joka921> should we also check the datatypes? this is also not done for the qlever_json
-            elif isinstance(gold, float):
-                matches = abs(gold - float(actual["value"])) <= epsilon
-            else:
-                matches = gold == actual["value"]
+                    matches = gold == actual["value"]  # empty values
+                if matches:
+                    break
         if not matches:
             return False
     return True
@@ -400,12 +395,13 @@ def test_check_qlever_json(check_dict: Dict[str, Any], result: Dict[str, Any], r
                 return False, row_data_type
         elif check == 'row_data_types':
             for column_data_type in value:
-                if column_data_type not in datatypes:
-                    eprint("row_data_types check failed:\n" +
-                           "\tunexpected data type \'" + column_data_type + "\'")
-                    return False, row_data_type
-                else:
-                    row_data_type.append(column_data_type)
+                multiple_datatype = column_data_type.split("|")
+                for mul_datatype in multiple_datatype:
+                    if mul_datatype not in datatypes:
+                        eprint("row_data_types check failed:\n" +
+                               "\tunexpected data type \'" + mul_datatype + "\'")
+                        return False, row_data_type
+                row_data_type.append(column_data_type)
         elif check == 'res':
             gold_res = value
             if len(gold_res) != len(res):
@@ -503,12 +499,13 @@ def test_check_sparql_json(check_dict: Dict[str, Any], result: Dict[str, Any], r
                 return False, row_data_type
         elif check == 'row_data_types':
             for column_data_type in value:
-                if column_data_type not in datatypes:
-                    eprint("row_data_types check failed:\n" +
-                           "\tunexpected data type \'" + column_data_type + "\'")
-                    return False, row_data_type
-                else:
-                    row_data_type.append(column_data_type)
+                multiple_datatype = column_data_type.split("|")
+                for mul_datatype in multiple_datatype:
+                    if mul_datatype not in datatypes:
+                        eprint("row_data_types check failed:\n" +
+                               "\tunexpected data type \'" + mul_datatype + "\'")
+                        return False, row_data_type
+                row_data_type.append(column_data_type)
         elif check == 'res':
             gold_res = value
             if len(gold_res) != len(res):

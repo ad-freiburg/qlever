@@ -663,7 +663,7 @@ queries:
       - num_rows: 1488
       - num_cols: 2
       - selected: ["?a", "?t"]
-      # row_data_types: ["float", "int|string"]
+      - row_data_types: ["string", "float|string"]
       - contains_row: ['<Carl_Sagan>', '1.8']
       - contains_row: ['<Noreena_Hertz>', '<Judaism>']
 
@@ -724,7 +724,7 @@ queries:
       - num_rows: 994
       - num_cols: 4
       - selected: ["?a", "?o", "?h", "?avg"]
-      # - row_data_types: ["string", "string", "float", "float|decimal"]
+      - row_data_types: ["string", "string", "float", "float|decimal"]
       - contains_row: ['<Steve_Backshall>', '<Actor>', "1.8", "1.76627"]
       - contains_row: ['<Carl_Sagan>', '<Astrobiologist>', "1.8", "1.8"]
 
@@ -803,7 +803,7 @@ queries:
       - num_rows: 43
       - num_cols: 1
       - selected: ["?b"]
-      ## - row_data_types: ["string|float"]
+      - row_data_types: ["string|float"]
       - contains_row: ["<Politician>"]
       - contains_row: ["<Character_Occupation>"]
       - contains_row: ["1.87"]
@@ -1159,7 +1159,7 @@ queries:
       - num_rows: 1488
       - num_cols: 2
       - selected: ["?a", "?t"]
-      ## - row_data_types: ["float", "string|float"]
+      - row_data_types: ["string", "string|float"]
       - contains_row: ['<Carl_Sagan>', '1.8']
       - contains_row: ['<Noreena_Hertz>', '<Judaism>']
 
