@@ -8,19 +8,19 @@
 #include "../src/util/Log.h"
 
 TEST(Id, RoundedIds) {
-  ad_utility::RoundedIdManager<1> m;
+  ad_utility::MilestoneIdManager<1> m;
   for (size_t i = 0; i < 256; ++i) {
-    auto id = m.getNextRoundedId();
+    auto id = m.getNextMilestoneId();
     ASSERT_EQ(i * 256, id);
     ASSERT_TRUE(m.isRoundedId(id));
-    ASSERT_EQ(i, m.toRoundedId(id));
+    ASSERT_EQ(i, m.MilestoneIdToLocal(id));
   }
 }
 
 TEST(Id, UnroundedIds) {
-  ad_utility::RoundedIdManager<1> m;
+  ad_utility::MilestoneIdManager<1> m;
   for (size_t i = 0; i < 256; ++i) {
-    auto id = m.getNextUnroundedId();
+    auto id = m.getNextId();
     ASSERT_EQ(i, id);
   }
 }

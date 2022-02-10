@@ -24,7 +24,7 @@ namespace ad_utility {
 // functionality to give out ascending Ids, and to detect and convert rounded
 // IDs
 template <size_t numBytesRounded>
-requires(numBytesRounded < 8) class RoundedIdManager {
+requires(numBytesRounded < 8) class MilestoneIdManager {
  private:
   constexpr static size_t numBitsRounded = numBytesRounded * 8;
   // The next free unrounded ID;
@@ -33,19 +33,18 @@ requires(numBytesRounded < 8) class RoundedIdManager {
   uint64_t lastId{0};
 
  public:
-  RoundedIdManager() = default;
+  MilestoneIdManager() = default;
 
-  // Get the smallest ID that is larger than all previously obtained IDs and
-  // has the lower `numBytesRounded` bytes set to zero.
-  uint64_t getNextRoundedId() {
-    if (!isRoundedId(nextId)) {
-      nextId = (fromRoundedId(toRoundedId(nextId) + 1));
+  // Get the smallest milestone ID that is larger than all (rounded and unroundec) previously obtained IDs.
+  uint64_t getNextMilestoneId() {
+    if (!isMilestoneId(nextId)) {
+      nextId = (MilestoneIdFromLocal(MilestoneIdToLocal(nextId) + 1));
     }
-    return getNextUnroundedId();
+    return getNextId();
   }
 
   // Get the smallest ID that is larger than all previously obtained IDs.
-  uint64_t getNextUnroundedId() {
+  uint64_t getNextId() {
     if (nextId < lastId) {
       // TODO<joka921> Proper exception type.
       throw std::runtime_error{"Overflow while rounding Ids"};
@@ -57,7 +56,7 @@ requires(numBytesRounded < 8) class RoundedIdManager {
 
   // Is this ID a "rounded ID", equivalently: Are the lower `numBytesRounded`
   // bytes all zero.
-  constexpr static bool isRoundedId(uint64_t id) {
+  constexpr static bool isMilestoneId(uint64_t id) {
     // Bits set to one in the range where the external part is stored.
     constexpr uint64_t mask = (~uint64_t(0)) >> (64 - numBitsRounded);
     return !(mask & id);
@@ -66,14 +65,14 @@ requires(numBytesRounded < 8) class RoundedIdManager {
   // Convert a rounded ID to its "actual value" by shifting it to the right by
   // `numBytesRounded` (The i-th rounded ID will become `i`).
   // TODO:: Naming!!!
-  constexpr static uint64_t toRoundedId(uint64_t id) {
+  constexpr static uint64_t MilestoneIdToLocal(uint64_t id) {
     return id >> numBitsRounded;
   }
 
   // TODO::Naming!
   // Convert `i` to the `i-th` rounded ID by shifting it to the left by
   // `numBytesRounded`.
-  constexpr static uint64_t fromRoundedId(uint64_t id) {
+  constexpr static uint64_t MilestoneIdFromLocal(uint64_t id) {
     return id << numBitsRounded;
   }
 };
