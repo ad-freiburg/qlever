@@ -29,17 +29,16 @@ string OrderBy::asString(size_t indent) const {
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
+  os << "SORT / ORDER BY on columns:";
 
-  std::stringstream columns;
   // TODO<joka921> This produces exactly the same format as SORT operations
   // which is crucial for caching. Please refactor those classes to one class
   // (this is only an optimization for sorts on a single column)
   for (auto ind : _sortIndices) {
-    columns << (ind.second ? "desc(" : "asc(") << ind.first << ") ";
+    os << (ind.second ? "desc(" : "asc(") << ind.first << ") ";
   }
-  os << "SORT / ORDER BY on columns:" << columns.str() << "\n"
-     << _subtree->asString(indent);
-  return os.str();
+  os << "\n" << _subtree->asString(indent);
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

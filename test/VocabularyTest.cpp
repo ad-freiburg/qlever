@@ -116,12 +116,10 @@ TEST(Vocabulary, PrefixFilter) {
   voc.setLocale("en", "US", true);
   ad_utility::HashSet<string> s;
 
-  auto n = std::string(1, NO_PREFIX_CHAR);
-
-  s.insert(n + "\"exa\"");
-  s.insert(n + "\"exp\"");
-  s.insert(n + "\"ext\"");
-  s.insert(n + R"("["Ex-vivo" renal artery revascularization]"@en)");
+  s.insert("\"exa\"");
+  s.insert("\"exp\"");
+  s.insert("\"ext\"");
+  s.insert(R"("["Ex-vivo" renal artery revascularization]"@en)");
   voc.createFromSet(s);
 
   auto x = voc.prefix_range("\"exp");

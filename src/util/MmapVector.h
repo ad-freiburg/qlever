@@ -39,7 +39,7 @@ class TruncateException : public std::exception {
     std::stringstream stream;
     stream << "truncating of file " << file << " to size " << size
            << "set errno to" << err << " terminating\n";
-    _msg = stream.str();
+    _msg = std::move(stream).str();
   }
 
   // ______________________________________________________________________________________________________

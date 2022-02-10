@@ -63,7 +63,7 @@ std::string TransitivePath::asString(size_t indent) const {
     os << "Right subtree:\n";
     os << _rightSideTree->asString(indent) << "\n";
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -99,7 +99,7 @@ std::string TransitivePath::getDescriptor() const {
               .idToOptionalString(_rightValue)
               .value_or("#" + std::to_string(_rightValue));
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

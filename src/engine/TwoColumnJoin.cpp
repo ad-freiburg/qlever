@@ -75,7 +75,7 @@ string TwoColumnJoin::asString(size_t indent) const {
     os << " ";
   }
   os << "join-columns: [" << _jc1Right << " & " << _jc2Right << "]";
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

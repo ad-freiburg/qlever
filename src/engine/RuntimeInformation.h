@@ -44,7 +44,7 @@ class RuntimeInformation {
     // So floats use fixed precision
     buffer << std::fixed << std::setprecision(2);
     writeToStream(buffer);
-    return buffer.str();
+    return std::move(buffer).str();
   }
 
   void writeToStream(std::ostream& out, size_t indent = 1) const {
