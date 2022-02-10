@@ -37,7 +37,7 @@ class MilestoneIdOverflowException : public std::exception {
 // "IDs" in the following), and milestone IDs (unsigned 64-bit integers that are
 // multiples of `distanceBetweenMilestones`. This class has the functionality to
 // find the next milestone of plain ID, to check whether an ID is amilestone ID
-// and to convert Milestone IDs from and to a local ID space.
+// and to convert milestone IDs from and to a local ID space.
 template <size_t distanceBetweenMilestones>
 class MilestoneIdManager {
  private:
@@ -89,7 +89,7 @@ class MilestoneIdManager {
     return id / distanceBetweenMilestones;
   }
 
-  // Convert "local" ID `i` to Milestone ID by multiplying it with
+  // Convert "local" ID to milestone ID by multiplying it with
   // `distanceBetweenMilestones`.
   constexpr static uint64_t milestoneIdFromLocal(uint64_t id) {
     return id * distanceBetweenMilestones;
