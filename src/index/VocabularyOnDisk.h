@@ -113,16 +113,15 @@ class VocabularyOnDisk {
   WordAndIndex getNthElement(size_t n) const;
 
   // Helper function for implementing a random access iterator iterator.
-  [[maybe_unused]] const static inline auto accessor = [](auto&& vocabulary,
+  using Accessor = decltype([](auto&& vocabulary,
                                                           auto index) {
     return vocabulary.getNthElement(index);
-  };
+  });
 
   // Const random access iterators, implemented via the
   // `IteratorForAccessOperator` template
   using const_iterator =
-      ad_utility::IteratorForAccessOperator<VocabularyOnDisk,
-                                            decltype(accessor)>;
+      ad_utility::IteratorForAccessOperator<VocabularyOnDisk, Accessor>;
   const_iterator begin() const { return {this, 0}; }
   const_iterator end() const { return {this, size()}; }
 

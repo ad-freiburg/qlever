@@ -38,7 +38,7 @@ class IteratorForAccessOperator {
  private:
   const DataStructure* _vector = nullptr;
   index_type _index{0};
-  Accessor _accessor;
+  Accessor _accessor{};
 
  public:
   IteratorForAccessOperator() = default;

@@ -5,6 +5,8 @@
 #ifndef QLEVER_VOCABULARYTYPES_H
 #define QLEVER_VOCABULARYTYPES_H
 
+#include <optional>
+
 /// A word and its index in the vocabulary from which it was obtained. A word
 /// that is larger than all words in the vocabulary is represented by
 /// `{std::nullopt, largestIndexInVocabulary + 1}`
