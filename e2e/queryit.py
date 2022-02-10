@@ -4,6 +4,7 @@ QLever Query Tool for End2End Testing
 """
 
 import sys
+import traceback
 import urllib.parse
 import urllib.request
 from typing import Dict, Any, List
@@ -275,7 +276,7 @@ def check_row_sparql_json(variables: List[str], gold_row: List[Any], actual_row:
     difference. If a gold_row cell is None it is ignored.
     Returns True if they match
     """
-    matches = None
+
     for i, gold in enumerate(gold_row):
         if gold is None:
             continue
@@ -295,24 +296,29 @@ def check_row_sparql_json(variables: List[str], gold_row: List[Any], actual_row:
             gold = gold[1:-1]
         if not actual["type"] == target_type:
             return False
+        matches = None
         multiple_datatype = row_datatype[i].split("|")
-        for muliple_value_parsed in multiple_datatype:
+        for multitype_value in multiple_datatype:
             value_parsed = None
             try:
-                value_parsed = parse_datatype(gold, muliple_value_parsed, True)
+                value_parsed = parse_datatype(gold, multitype_value, True)
             except Exception as e:
                 eprint("\tException = " + str(e))
+                # exc_info = sys.exc_info()
+                # traceback.print_exception(*exc_info)
+                # del exc_info
             finally:
                 if value_parsed:
-                    if muliple_value_parsed != "string" and "datatype" in actual:
+                    if "datatype" in actual:
                         actual_value = actual["value"]
                         actual_type = actual["datatype"][actual["datatype"].rfind('#') + 1:]
                         parsed_actual = parse_datatype(actual_value, actual_type, True)
-                        matches = value_parsed == parsed_actual and muliple_value_parsed == actual_type
-                        if not muliple_value_parsed == actual_type:
-                            eprint("\trow_datatype = " + muliple_value_parsed + "\n\tactual_type = " + actual_type + "\n")
+                        matches = value_parsed == parsed_actual and multitype_value == actual_type
+                        if not multitype_value == actual_type:
+                            eprint("\trow_datatype = " + multitype_value
+                                   + "\n\tactual_type = " + actual_type + "\n")
                     else:
-                        matches = value_parsed == actual["value"]  # empty values or string
+                        matches = value_parsed == actual["value"]  # empty datatype in result-values or empty values
                 else:
                     matches = gold == actual["value"]  # empty values
                 if matches:
@@ -341,14 +347,39 @@ def check_row_qlever_json(gold_row: List[Any], actual_row: List[Any],
         if actual and actual[0] == '"':
             actual = actual[1:actual.rfind('"')]
         matches = None
-        # '''
+        multiple_datatype = row_datatype[i].split("|")
+        for multitype_value in multiple_datatype:
+            value_parsed = None
+            try:
+                value_parsed = parse_datatype(gold, multitype_value, True)
+            except Exception as e:
+                eprint("\tException = " + str(e))
+                # exc_info = sys.exc_info()
+                # traceback.print_exception(*exc_info)
+                # del exc_info
+            finally:
+                if value_parsed:
+                    if "datatype" in actual:
+                        actual_value = actual["value"]
+                        # actual_type = actual["datatype"][actual["datatype"].rfind('#') + 1:]
+                        parsed_actual = parse_datatype(actual_value, multitype_value, True)
+                        matches = value_parsed == parsed_actual
+                    else:
+                        matches = value_parsed == actual  # empty datatype in result-values or empty values
+                else:
+                    matches = gold == actual  # empty values
+                if matches:
+                    break
+        if not matches:
+            return False
+        '''
         if isinstance(gold, int):
             matches = int(actual) == gold
         elif isinstance(gold, float):
             matches = abs(gold - float(actual)) <= epsilon
         else:
             matches = gold == actual
-        # '''
+        '''
 
         if not matches:
             return False
