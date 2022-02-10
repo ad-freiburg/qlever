@@ -434,8 +434,8 @@ Index::createPermutationPairImpl(const string& fileName1,
   LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
   size_t from = 0;
   Id currentRel = triples[0][c0];
-  ad_utility::BufferedVector<array<Id, 2>> buffer(
-      THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.mmap-buffer");
+  auto buffer = ad_utility::BufferedVector<array<Id, 2>>::create(
+      fileName1 + ".tmp.mmap-buffer");
   bool functional = true;
   size_t distinctCol1 = 0;
   size_t sizeOfRelation = 0;
@@ -753,9 +753,9 @@ void Index::createPatternsImpl(
   LOG(DEBUG) << "Pattern set size: " << patternSet.size() << std::endl;
 
   // Associate entities with patterns if possible, store has-relation otherwise
-  ad_utility::MmapVectorTmp<std::array<Id, 2>> entityHasPattern(
+  auto entityHasPattern = ad_utility::MmapVectorTmp<std::array<Id, 2>>::create(
       fileName + ".mmap.entityHasPattern.tmp");
-  ad_utility::MmapVectorTmp<std::array<Id, 2>> entityHasPredicate(
+  auto entityHasPredicate = ad_utility::MmapVectorTmp<std::array<Id, 2>>::create(
       fileName + ".mmap.entityHasPredicate.tmp");
 
   size_t numEntitiesWithPatterns = 0;
@@ -903,12 +903,18 @@ void Index::createPatternsImpl(
   // write the entityHasPatterns vector
   size_t numHasPatterns = entityHasPattern.size();
   file.write(&numHasPatterns, sizeof(size_t));
-  file.write(entityHasPattern.data(), sizeof(Id) * numHasPatterns * 2);
+  for (const auto& el : entityHasPattern) {
+    file.write(&el, sizeof(el));
+  }
+  //file.write(entityHasPattern.data(), sizeof(Id) * numHasPatterns * 2);
 
   // write the entityHasPredicate vector
   size_t numHasPredicatess = entityHasPredicate.size();
   file.write(&numHasPredicatess, sizeof(size_t));
-  file.write(entityHasPredicate.data(), sizeof(Id) * numHasPredicatess * 2);
+  //file.write(entityHasPredicate.data(), sizeof(Id) * numHasPredicatess * 2);
+  for (const auto& el : entityHasPredicate) {
+    file.write(&el, sizeof(el));
+  }
 
   // write the patterns
   // TODO<joka921> Also use the serializer interface for the patterns.

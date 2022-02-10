@@ -405,8 +405,14 @@ void CompressedRelationWriter::addRelation(
     }
     _currentBlockData._col0LastId = col0Id;
     _currentBlockData._col1LastId = data.back()[0];
+    for (const auto& entry : data) {
+      _buffer.serializeBytes(reinterpret_cast<const char*>(&entry), sizeof(entry));
+
+    }
+    /*
     _buffer.serializeBytes(reinterpret_cast<const char*>(data.data()),
                            data.size() * 2 * sizeof(Id));
+                           */
   }
   _metaDataBuffer.push_back(metaData);
 }
@@ -420,8 +426,17 @@ void CompressedRelationWriter::writeRelationToExclusiveBlocks(
     size_t actualNumRowsPerBlock =
         std::min(NUM_ROWS_PER_BLOCK, size_t(data.size() - i));
 
+    std::vector<std::array<Id, 2>> block;
+    block.reserve(actualNumRowsPerBlock);
+    for (auto it = data.begin() + i; it < data.begin() + i + actualNumRowsPerBlock; ++it) {
+      block.push_back(*it);
+    }
+    std::vector<char> compressedBlock = ZstdWrapper::compress(
+        (void*)(block.data()), actualNumRowsPerBlock * 2 * sizeof(Id));
+    /*
     std::vector<char> compressedBlock = ZstdWrapper::compress(
         (void*)(data.data() + i), actualNumRowsPerBlock * 2 * sizeof(Id));
+        */
     _blockBuffer.push_back(CompressedBlockMetaData{
         _outfile.tell(), compressedBlock.size(), actualNumRowsPerBlock, col0Id,
         col0Id, data[i][0], data[i + actualNumRowsPerBlock - 1][0]});

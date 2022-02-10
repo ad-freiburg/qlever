@@ -50,11 +50,12 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
       queue(queueCompare);
 
   // open and prepare all infiles and mmap output vectors
+  _idVecs.reserve(numFiles);
   for (size_t i = 0; i < numFiles; i++) {
     infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME +
                          std::to_string(i));
     if (!_noIdMapsAndIgnoreExternalVocab) {
-      _idVecs.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
+      _idVecs.emplace_back(basename + PARTIAL_MMAP_IDS + std::to_string(i), ad_utility::CreateTag{});
     }
     AD_CHECK(infiles.back().is_open());
 
@@ -377,7 +378,9 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
 ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
     const string& mmapFilename) {
   ad_utility::HashMap<Id, Id> res;
-  IdPairMMapVecView vec(mmapFilename);
+  //IdPairMMapVecView vec(mmapFilename);
+  auto vec = IdPairMMapVecView::reuse(mmapFilename);
+  LOG(INFO) << "Reading IdMapping from file, size is: " << vec.size() << std::endl;
   for (const auto& [partialId, globalId] : vec) {
     res[partialId] = globalId;
   }

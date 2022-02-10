@@ -16,6 +16,10 @@ namespace ad_utility {
 // only push_back and clear are supported (+ all kinds of access to existing
 // elements) Can be trivially extended to complete the interface
 // The backup file is temporary and will be deleted in the destructor
+template<class T>
+using BufferedVector = OnDiskVector<T>;
+
+/*
 template <class T>
 class BufferedVector {
  public:
@@ -25,7 +29,7 @@ class BufferedVector {
   // Constructor needs the wanted threshold (how many elements until we
   // externalize) and the filename Where we will initialize the mmapVector
   BufferedVector(size_t threshold, std::string extFilename)
-      : _threshold(threshold), _extVec(std::move(extFilename)) {}
+      : _threshold(threshold), _extVec(OnDiskVector<T>::create(extFilename)) {}
 
   // __________________________________________________________________
   size_t size() const { return _isInternal ? _vec.size() : _extVec.size(); }
@@ -117,6 +121,7 @@ class BufferedVector {
 
   // the two possible data storages
   std::vector<T> _vec;
-  ad_utility::MmapVectorTmp<T> _extVec;
+  ad_utility::OnDiskVector<T> _extVec;
 };
+ */
 }  // namespace ad_utility
