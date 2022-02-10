@@ -1,64 +1,53 @@
-// Copyright 2011, University of Freiburg,
+// Copyright 2022, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold <buchholb>
+// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
 #include <gtest/gtest.h>
 
 #include "../src/index/VocabularyOnDisk.h"
+#include "./VocabularyTestHelpers.h"
 
-TEST(ExternalVocabulary, getWordbyIdTest) {
-  vector<string> v;
-  v.push_back("a");
-  v.push_back("ab");
-  v.push_back("ba");
-  v.push_back("car");
-  {
-    VocabularyOnDisk<SimpleStringComparator> ev;
-    ev.buildFromVector(v, "__tmp.evtest");
-    ASSERT_EQ("a", ev.idToOptionalString(0));
-    ASSERT_EQ("ba", ev.idToOptionalString(2));
-    ASSERT_EQ("car", ev.idToOptionalString(3));
-  }
-  remove("__tmo.evtest");
-};
+using namespace vocabulary_test;
 
-TEST(ExternalVocabulary, getIdForWordTest) {
-  vector<string> v;
-  v.push_back("a");
-  v.push_back("ab");
-  v.push_back("ba");
-  v.push_back("car");
-  {
-    VocabularyOnDisk<SimpleStringComparator> ev;
-    ev.buildFromVector(v, "__tmp.evtest");
-    Id id;
-    ASSERT_TRUE(ev.getId("ba", &id));
-    ASSERT_EQ(Id(2), id);
-    ASSERT_TRUE(ev.getId("a", &id));
-    ASSERT_EQ(Id(0), id);
-    ASSERT_TRUE(ev.getId("car", &id));
-    ASSERT_EQ(Id(3), id);
-    ASSERT_FALSE(ev.getId("foo", &id));
-  }
-  remove("__tmo.evtest");
-};
-
-TEST(ExternalVocabulary, readWriteTest) {
-  vector<string> v;
-  v.push_back("wordA0");
-  v.push_back("wordA1");
-  v.push_back("wordB2");
-  v.push_back("wordB3");
-  v.push_back("wordB4");
-  ASSERT_EQ(size_t(5), v.size());
-  {
-    VocabularyOnDisk<SimpleStringComparator> ev;
-    ev.buildFromVector(v, "__tmp.evtest");
-  }
-  {
-    VocabularyOnDisk<SimpleStringComparator> ev;
-    ev.initFromFile("__tmp.evtest");
-    ASSERT_EQ(size_t(5), ev.size());
-  }
-  remove("__tmp.evtest");
+const std::string vocabFilename = "vocabulary.tmp.test.dat";
+auto createVocabulary(const std::vector<std::string>& words) {
+  VocabularyOnDisk vocabulary;
+  vocabulary.buildFromVector(words, vocabFilename);
+  return vocabulary;
 }
+
+auto createVocabularyFromDisk(const std::vector<std::string>& words) {
+  {
+    VocabularyOnDisk vocabulary;
+    vocabulary.buildFromVector(words, vocabFilename);
+  }
+  VocabularyOnDisk vocabulary;
+  vocabulary.readFromFile(vocabFilename);
+  return vocabulary;
+}
+
+TEST(ExternalVocabulary, LowerUpperBoundStdLess) {
+  ad_utility::deleteFile(vocabFilename);
+  testUpperAndLowerBoundWithStdLess(createVocabulary);
+  ad_utility::deleteFile(vocabFilename);
+  testUpperAndLowerBoundWithStdLess(createVocabularyFromDisk);
+  ad_utility::deleteFile(vocabFilename);
+};
+
+TEST(ExternalVocabulary, LowerUpperBoundNumeric) {
+  ad_utility::deleteFile(vocabFilename);
+  testUpperAndLowerBoundWithNumericComparator(createVocabulary);
+  ad_utility::deleteFile(vocabFilename);
+  testUpperAndLowerBoundWithNumericComparator(createVocabularyFromDisk);
+  ad_utility::deleteFile(vocabFilename);
+};
+
+TEST(ExternalVocabulary, AccessOperator) {
+  ad_utility::deleteFile(vocabFilename);
+  testAccessOperatorForUnorderedVocabulary(createVocabulary);
+  ad_utility::deleteFile(vocabFilename);
+  testAccessOperatorForUnorderedVocabulary(createVocabularyFromDisk);
+}
+
+// TODO<joka921> Also test an externalVocabulary with IDs that are NOT
+// contiguous.

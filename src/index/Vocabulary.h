@@ -109,7 +109,7 @@ class Vocabulary {
   //! clear all the contents, but not the settings for prefixes etc
   void clear() {
     _internalVocabulary.clear();
-    _externalVocabulary.close();
+    _externalVocabulary.clear();
   }
   //! Read the vocabulary from file.
   void readFromFile(const string& fileName, const string& extLitsFileName = "");
@@ -196,11 +196,8 @@ class Vocabulary {
   // only still needed for text vocabulary
   void externalizeLiteralsFromTextFile(const string& textFileName,
                                        const string& outFileName) {
-    _externalVocabulary.buildFromTextFile(textFileName, outFileName);
-  }
-
-  const ExternalVocabulary<ComparatorType>& getExternalVocab() const {
-    return _externalVocabulary;
+    _externalVocabulary.getUnderlyingVocabulary().buildFromTextFile(
+        textFileName, outFileName);
   }
 
   static string getLanguage(const string& literal);
@@ -277,9 +274,15 @@ class Vocabulary {
       std::conditional_t<_isCompressed, InternalCompressedVocabulary,
                          InternalUncompressedVocabulary>;
   InternalVocabulary _internalVocabulary;
-  ExternalVocabulary<ComparatorType> _externalVocabulary;
+
+  using ExternalVocabulary =
+      UnicodeVocabulary<VocabularyOnDisk, ComparatorType>;
+  ExternalVocabulary _externalVocabulary;
 
  public:
+  const ExternalVocabulary& getExternalVocab() const {
+    return _externalVocabulary;
+  }
   auto makeUncompressingWordWriter(const std::string& filename) {
     return VocabularyInMemory::WordWriter{filename};
   }

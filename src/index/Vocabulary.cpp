@@ -40,7 +40,7 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
     }
 
     LOG(DEBUG) << "Registering external vocabulary" << std::endl;
-    _externalVocabulary.initFromFile(extLitsFileName);
+    _externalVocabulary.readFromFile(extLitsFileName);
     LOG(INFO) << "Number of words in external vocabulary: "
               << _externalVocabulary.size() << std::endl;
   }
@@ -217,7 +217,7 @@ void Vocabulary<S, ComparatorType>::setLocale(const std::string& language,
                                               bool ignorePunctuation) {
   _internalVocabulary.getComparator() =
       ComparatorType(language, country, ignorePunctuation);
-  _externalVocabulary.getCaseComparator() =
+  _externalVocabulary.getComparator() =
       ComparatorType(language, country, ignorePunctuation);
 }
 
@@ -238,9 +238,10 @@ bool Vocabulary<S, C>::getId(const string& word, Id* id) const {
     // of the strict ordering.
     return *id < _internalVocabulary.size() && at(*id) == word;
   }
-  bool success = _externalVocabulary.getId(word, id);
+  auto wordAndIndex = _externalVocabulary.lower_bound(word, SortLevel::TOTAL);
+  *id = wordAndIndex._index;
   *id += _internalVocabulary.size();
-  return success;
+  return wordAndIndex._word == word;
 }
 
 // ___________________________________________________________________________

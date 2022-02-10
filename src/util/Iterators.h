@@ -7,33 +7,48 @@
 
 namespace ad_utility {
 
+/// A lambda that accesses the `index`-th element in a `dataStructure` using
+/// `operator[]`
 inline auto accessViaBracketOperator = [](auto&& dataStructure, auto index) {
   return dataStructure[index];
 };
 using AccessViaBracketOperator = decltype(accessViaBracketOperator);
 
-template <typename DataStructure, typename Accessor = AccessViaBracketOperator,
-          typename index_type = uint64_t, typename DifferenceType = int64_t>
-struct IteratorForAccessOperator {
+/**
+ * @brief Provide random access iterators for a data structure that allows
+ * direct access to the `i-th` element in the structure.
+ * @tparam DataStructure A data structure can be randomly accessed using
+ * consecutive indices (see below)
+ * @tparam Accessor A function s.t. `Accessor(DataStructure, uint64_t i)`
+ * returns the `i-th` element from the data structure. If iterators for indices
+ * `a` and `b` can be obtained from the data structure (typically by `begin()`
+ * and `end()` member functions, then it must be legal to call the accessor for
+ * all `i` in `[a, b)`.
+ *
+ */
+template <typename DataStructure, typename Accessor = AccessViaBracketOperator>
+class IteratorForAccessOperator {
+ public:
+  using iterator_category = std::random_access_iterator_tag;
+  using index_type = uint64_t;
+  using value_type = std::remove_reference_t<
+      std::invoke_result_t<Accessor, const DataStructure&, index_type>>;
+  using difference_type = int64_t;
+
  private:
   const DataStructure* _vector = nullptr;
   index_type _index{0};
   Accessor _accessor;
 
  public:
-  using iterator_category = std::random_access_iterator_tag;
-  using value_type = std::remove_reference_t<
-      std::invoke_result_t<Accessor, const DataStructure&, index_type>>;
-  using difference_type = DifferenceType;
-
+  IteratorForAccessOperator() = default;
   IteratorForAccessOperator(const DataStructure* vec, index_type index)
       : _vector{vec}, _index{index} {}
-  IteratorForAccessOperator() = default;
 
+  // Comparsions
   auto operator<=>(const IteratorForAccessOperator& rhs) const {
     return (_index <=> rhs._index);
   }
-
   bool operator==(const IteratorForAccessOperator& rhs) const {
     return _index == rhs._index;
   }
