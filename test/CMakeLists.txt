@@ -151,4 +151,4 @@ addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
 addLinkAndDiscoverTest(ContentEncodingHelperTest)
 
-addLinkAndDiscoverTest(IdTest)
+addLinkAndDiscoverTest(MilestoneIdTest absl::strings)

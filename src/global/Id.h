@@ -3,6 +3,8 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <absl/strings/str_cat.h>
+
 #include <cstdint>
 #include <limits>
 
@@ -17,17 +19,28 @@ static const Id ID_NO_VALUE = std::numeric_limits<Id>::max() - 2;
 
 namespace ad_utility {
 
-// Manages two kinds of IDs: unrounded IDs (unsigned 64-bit integers), and
-// rounded IDs (unsigned 64-bit integers, where the least significant
-// `numBytesRounded` bytes are all `rounded IDs` (unsigned 64-bit integers,
-// where the least significant `numBytesRounded` bytes are all 0. Has
-// functionality to give out ascending Ids, and to detect and convert rounded
-// IDs
-template <size_t numBytesRounded>
-requires(numBytesRounded < 8) class MilestoneIdManager {
+// An exception that is thrown when an integer overflow occurs in the
+// `MilestoneIdManager`
+class MilestoneOverflowException : public std::exception {
  private:
-  constexpr static size_t numBitsRounded = numBytesRounded * 8;
-  // The next free unrounded ID;
+  std::string _message;
+
+ public:
+  explicit MilestoneOverflowException(std::string message)
+      : _message{std::move(message)} {}
+  [[nodiscard]] const char* what() const noexcept override {
+    return _message.c_str();
+  }
+};
+
+// Manages two kinds of IDs: plain IDs (unsigned 64-bit integers, just called
+// "Ids" in the following), and milestone IDs (unsigned 64-bit integers that are
+// multiples of `distanceBetweenMilestones`. This class has the functionality to
+// emit ascending Ids, and to detect and convert milestone IDs.
+template <size_t distanceBetweenMilestones>
+class MilestoneIdManager {
+ private:
+  // The next free ID;
   uint64_t nextId{0};
   // The last ID that was assigned. Used for overflow detection.
   uint64_t lastId{0};
@@ -35,7 +48,12 @@ requires(numBytesRounded < 8) class MilestoneIdManager {
  public:
   MilestoneIdManager() = default;
 
-  // Get the smallest milestone ID that is larger than all (rounded and unroundec) previously obtained IDs.
+  // The maximum number of milestone Ids.
+  constexpr static uint64_t numMilestoneIds =
+      std::numeric_limits<uint64_t>::max() / distanceBetweenMilestones;
+
+  // Get the smallest milestone ID that is larger than all (milestone and
+  // non-milestone) previously obtained IDs.
   uint64_t getNextMilestoneId() {
     if (!isMilestoneId(nextId)) {
       nextId = (MilestoneIdFromLocal(MilestoneIdToLocal(nextId) + 1));
@@ -46,34 +64,33 @@ requires(numBytesRounded < 8) class MilestoneIdManager {
   // Get the smallest ID that is larger than all previously obtained IDs.
   uint64_t getNextId() {
     if (nextId < lastId) {
-      // TODO<joka921> Proper exception type.
-      throw std::runtime_error{"Overflow while rounding Ids"};
+      throw MilestoneOverflowException{absl::StrCat(
+          "Overflow while assigning Ids from a MilestoneIdManager. The last "
+          "milestone Id was ",
+          lastId, " the next id would be ", nextId,
+          ". The maximum number of milestones is ", numMilestoneIds, ".")};
     }
     lastId = nextId;
     nextId++;
     return lastId;
   }
 
-  // Is this ID a "rounded ID", equivalently: Are the lower `numBytesRounded`
-  // bytes all zero.
+  // Is this ID a milestone id, equivalently: Is this ID a multiple of
+  // `distanceBetweenMilestones`?
   constexpr static bool isMilestoneId(uint64_t id) {
-    // Bits set to one in the range where the external part is stored.
-    constexpr uint64_t mask = (~uint64_t(0)) >> (64 - numBitsRounded);
-    return !(mask & id);
+    return id % distanceBetweenMilestones == 0;
   }
 
-  // Convert a rounded ID to its "actual value" by shifting it to the right by
-  // `numBytesRounded` (The i-th rounded ID will become `i`).
-  // TODO:: Naming!!!
+  // Convert a milestone ID to its "actual value" by dividing it by
+  // `distanceBetweenMilestones` (The i-th milestone ID will become `i`).
   constexpr static uint64_t MilestoneIdToLocal(uint64_t id) {
-    return id >> numBitsRounded;
+    return id / distanceBetweenMilestones;
   }
 
-  // TODO::Naming!
-  // Convert `i` to the `i-th` rounded ID by shifting it to the left by
-  // `numBytesRounded`.
+  // Convert `i` to the `i-th` Milestone ID by multiplying it with
+  // `distanceBetweenMilestones`.
   constexpr static uint64_t MilestoneIdFromLocal(uint64_t id) {
-    return id << numBitsRounded;
+    return id * distanceBetweenMilestones;
   }
 };
 
