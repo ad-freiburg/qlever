@@ -447,8 +447,8 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
   _currentBlockData._offsetInFile = _outfile.tell();
   _currentBlockData._compressedSize = compressedBlock.size();
   _currentBlockData._numRows = numRows;
-  // firstId and lastId of _currentBlockData were already set correctly by the
-  // addRelation() function
+  // firstId and _previousId of _currentBlockData were already set correctly by
+  // the addRelation() function
   _blockBuffer.push_back(_currentBlockData);
   _outfile.write(compressedBlock.data(), compressedBlock.size());
   LOG(TRACE) << "Done writing relation.\n";
