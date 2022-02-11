@@ -5,6 +5,7 @@
 #pragma once
 
 #include <exception>
+#include <memory>
 
 #include "../Log.h"
 #include "../streamable_generator.h"
@@ -19,7 +20,8 @@ namespace ad_utility::httpUtils::httpStreams {
  * Example usage:
  * http::response<streamable_body> response;
  * // generatorFunction returns a ad_utility::stream_generator::stream_generator
- * response.body() = generatorFunction();
+ * response.body() =
+ * std::make_unique<ad_utility::stream_generator::stream_generator>(generatorFunction());
  * response.prepare_payload();
  */
 struct streamable_body {
@@ -28,7 +30,7 @@ struct streamable_body {
 
   // The type of the message::body member.
   // This determines which type response<streamable_body>::body() returns
-  using value_type = ad_utility::stream_generator::stream_generator;
+  using value_type = std::unique_ptr<ad_utility::streams::StringSupplier>;
 };
 
 /**
@@ -38,7 +40,7 @@ struct streamable_body {
  * to extract the buffers representing the body.
  */
 class streamable_body::writer {
-  value_type& _streamableGenerator;
+  value_type& _stringSupplier;
 
  public:
   // The type of buffer sequence returned by `get`.
@@ -66,10 +68,12 @@ class streamable_body::writer {
    */
   template <bool isRequest, class Fields>
   writer(boost::beast::http::header<isRequest, Fields>& header,
-         value_type& streamableGenerator)
-      : _streamableGenerator{streamableGenerator} {
-    ad_utility::content_encoding::setContentEncodingHeaderForCompressionMethod(
-        _streamableGenerator.getCompressionMethod(), header);
+         value_type& stringSupplier)
+      : _stringSupplier{stringSupplier} {
+    // TODO call in init to conform to beast interface
+    _stringSupplier->prepareHttpHeaders(header);
+    /*ad_utility::content_encoding::setContentEncodingHeaderForCompressionMethod(
+        _streamableGenerator.getCompressionMethod(), header);*/
   }
 
   /**
@@ -103,14 +107,14 @@ class streamable_body::writer {
     // again.
     //
     try {
-      std::string_view view = _streamableGenerator.next();
+      std::string_view view = _stringSupplier->next();
       ec = {};
       // we can safely pass away the data() pointer because
       // it's just referencing the memory inside the generator's promise
       // it won't be modified until the next call to _streamableGenerator.next()
       return {{
           const_buffers_type{view.data(), view.size()},
-          _streamableGenerator.hasNext()  // `true` if there are more buffers.
+          _stringSupplier->hasNext()  // `true` if there are more buffers.
       }};
     } catch (const std::exception& e) {
       ec = {EPIPE, boost::system::generic_category()};

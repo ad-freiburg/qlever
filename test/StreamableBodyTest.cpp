@@ -8,7 +8,7 @@
 #include "../src/util/HttpServer/streamable_body.h"
 
 using namespace ad_utility::httpUtils::httpStreams;
-using ad_utility::stream_generator::stream_generator;
+using ad_utility::streams::stream_generator;
 
 std::string_view toStringView(
     const streamable_body::writer::const_buffers_type& buffer) {
