@@ -889,9 +889,9 @@ queries:
       - num_rows: 1
       - selected: ["?a"]
       - row_data_types: ["string"]
-      - contains_row: ["<Albert_Einstein>"]
-      - contains_warning: ["The word \"obscure Literal\"@xf",
-                           "The word <Non_Exisiting", "Ignored 2 rows"]
+      - contains_row: [<Albert_Einstein>]
+      # - contains_warning: ["The word \"obscure Literal\"@xf",
+      #                    "The word <Non_Exisiting", "Ignored 2 rows"]
 
 
   - query: values-empty-join
@@ -1179,7 +1179,7 @@ queries:
       - selected: ["?x", "?t"]
       - row_data_types: ["string", "string"]
       - contains_row: ["<Grete_Hermann>",
-                       "Hermann's algorithm for primary decomposition is still
+        "Hermann's algorithm for primary decomposition is still
                        in use now."]
 
 
