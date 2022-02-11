@@ -160,7 +160,7 @@ def check_row_sparql_json(variables: List[str], gold_row: List[Any], actual_row:
                                   str(gold) == actual_value
                     # test the match when the expected-variable and/or result-variable are null or raw-string type
                     else:
-                        wprint("\tWarning_row_sparql_json = " + str(ex_actual_parsed))
+                        # wprint("\tWarning_row_sparql_json = " + str(ex_actual_parsed))
                         matches = value_parsed == actual["value"]  # empty datatype in result-values or empty values
                 # test the match when the expected-variable cannot be cast to the desired result due to possible multi-datatype
                 # (example: string to decimal exception) or when the expected-variable value is null
@@ -199,10 +199,12 @@ def check_row_qlever_json(gold_row: List[Any], actual_row: List[Any],
         else:
             actual_value = actual
         matches = None
+        backup_actual_type = actual_type  # backup type to restore at end of the cycle
         for multitype_value in multiple_datatype:
             if actual_type is None:
                 actual_type = multitype_value
             if not multitype_value == actual_type:
+                actual_type = backup_actual_type
                 continue  # jump incorrect type
             value_parsed = actual_parsed = None
             ex_value_parsed = ex_actual_parsed = None
@@ -222,19 +224,20 @@ def check_row_qlever_json(gold_row: List[Any], actual_row: List[Any],
                         # https://www.w3.org/TR/rdf11-concepts/#section-rdf-graph
                         matches = value_parsed == actual_parsed and str(gold) == actual_value
                     elif value_parsed and not actual_parsed:
-                        wprint("\tWarning_row_qlever_json = 1_ " + str(ex_actual_parsed))
+                        # wprint("\tWarning_row_qlever_json = " + str(ex_actual_parsed))
                         matches = False
                     # test the match when the expected-variable cannot be cast to the desired result due to possible multi-datatype
                     # (example: string to decimal exception) or when the expected-variable value is null
                     elif not value_parsed and not actual_parsed:
                         # actual_parsed
-                        wprint("\tWarning_row_qlever_json (actual) = " + str(ex_actual_parsed))
+                        # wprint("\tWarning_row_qlever_json (actual) = " + str(ex_actual_parsed))
                         # value_parsed
-                        wprint("\tWarning_row_qlever_json (gold) = " + str(ex_value_parsed))
+                        # wprint("\tWarning_row_qlever_json (gold) = " + str(ex_value_parsed))
                         matches = gold == actual_value  # empty/null values
                     else:  # not value_parsed and actual_parsed
-                        wprint("\tWarning_row_qlever_json (actual) = " + str(ex_actual_parsed))
+                        # wprint("\tWarning_row_qlever_json (actual) = " + str(ex_actual_parsed))
                         matches = False  # empty/null values
+                    actual_type = backup_actual_type
         if not matches:
             return False
     return True
