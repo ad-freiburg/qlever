@@ -22,16 +22,16 @@ auto assertThatRangesAreEqual = [](const auto& a, const auto& b) {
  *
  * @brief Assert that `upper_bound` and `lower_bound` work as expected for a
  *        given vocabulary.
- * @param vocabularyCreator Function that takes a `std::vector<string>` and
- *        returns a vocabulary.
+ * @param vocab The vocabulary that is tested.
  * @param makeWordLarger Function that takes a `std::string` from the
  *        vocabulary and returns a `std::string` that is larger than the
  *        input, but smaller than the next larger word in the vocabulary.
  * @param makeWordSmaller The complement of `makeWordLarger`
  * @param comparator The second argument that is passed to the corresponding
  *        `upper_bound` and `lower_bound` functions.
- * @param words The words that will become the vocabulary. They have to be
- *        sorted wrt `comparator`.
+ * @param words The vocabulary is expected to have the same contents as `words`.
+ * @param ids Must have the same size as `words` The tests expect that
+ * `vocab[ids[i]] == words[i]` for all i.
  */
 void testUpperAndLowerBound(const auto& vocab, auto makeWordLarger,
                             auto makeWordSmaller, auto comparator,
@@ -72,6 +72,20 @@ void testUpperAndLowerBound(const auto& vocab, auto makeWordLarger,
   }
 };
 
+/**
+ *
+ * @brief Assert that `upper_bound` and `lower_bound` work as expected for a
+ *        given vocabulary. Assume that the IDs in the vocabulary are contiguous
+ * and start at 0.
+ * @param vocab The vocabulary that will be tested.
+ * @param makeWordLarger Function that takes a `std::string` from the
+ *        vocabulary and returns a `std::string` that is larger than the
+ *        input, but smaller than the next larger word in the vocabulary.
+ * @param makeWordSmaller The complement of `makeWordLarger`
+ * @param comparator The second argument that is passed to the corresponding
+ *        `upper_bound` and `lower_bound` functions.
+ * @param words The vocabulary is expected to have the same contents as `words`.
+ */
 void testUpperAndLowerBoundContiguousIDs(const auto& vocab, auto makeWordLarger,
                                          auto makeWordSmaller, auto comparator,
                                          const auto& words) {
@@ -84,6 +98,8 @@ void testUpperAndLowerBoundContiguousIDs(const auto& vocab, auto makeWordLarger,
                          words, ids);
 }
 
+// Same as the previous function, but explictly state, which ids are expected in
+// the vocabulary
 void testUpperAndLowerBoundWithStdLessFromWordsAndIds(auto vocabulary,
                                                       const auto& words,
                                                       const auto& ids) {
@@ -120,6 +136,12 @@ void testUpperAndLowerBoundWithStdLess(auto createVocabulary) {
                                                    words, ids);
 }
 
+/**
+ * @brief Assert that `upper_bound` and `lower_bound` work as expected for a
+ *        given vocabulary when using words that are sorted by `std::less`
+ * @param createVocabulary Function that takes a `std::vector<string>` and
+ *           returns a vocabulary.
+ */
 void testUpperAndLowerBoundWithNumericComparatorFromWordsAndIds(
     auto vocabulary, const auto& words, const auto& ids) {
   auto comparator = [](const auto& a, const auto& b) {
@@ -153,6 +175,8 @@ void testUpperAndLowerBoundWithNumericComparator(auto createVocabulary) {
       createVocabulary(words), words, ids);
 }
 
+// Check that the `operator[]` works as expected for an unordered vocabulary.
+// Checks that vocabulary[ids[i]] == words[i].
 auto testAccessOperatorFromWordsAndIds(auto vocabulary, const auto& words,
                                        const auto& ids) {
   // Not in any particulary order.
@@ -175,6 +199,9 @@ auto testAccessOperatorForUnorderedVocabulary(auto createVocabulary) {
   testAccessOperatorFromWordsAndIds(createVocabulary(words), words, ids);
 }
 
+// Check that an empty vocabulary, created via
+// `createVocabulary(std::vector<std::string>{}) works as expected with the
+// given comparator.
 auto testEmptyVocabularyWithComparator(auto createVocabulary, auto comparator) {
   auto vocab = createVocabulary(std::vector<std::string>{});
   ASSERT_EQ(0u, vocab.size());

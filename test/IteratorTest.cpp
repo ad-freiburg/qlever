@@ -8,34 +8,34 @@
 
 #include "../src/util/Iterators.h"
 
-TEST(RandomAccessIterator, Iterator) {
-  auto testIterator = [](const auto& input, auto begin, auto end) {
-    auto it = begin;
-    ASSERT_EQ(input[0], *it);
-    ASSERT_EQ(input[0], *it++);
-    ASSERT_EQ(input[1], *it);
-    ASSERT_EQ(input[2], *++it);
-    ASSERT_EQ(input[2], *it);
-    ASSERT_EQ(input[2], *it--);
-    ASSERT_EQ(input[1], *it);
-    ASSERT_EQ(input[0], *--it);
+auto testIterator = [](const auto& input, auto begin, auto end) {
+  auto it = begin;
+  ASSERT_EQ(input[0], *it);
+  ASSERT_EQ(input[0], *it++);
+  ASSERT_EQ(input[1], *it);
+  ASSERT_EQ(input[2], *++it);
+  ASSERT_EQ(input[2], *it);
+  ASSERT_EQ(input[2], *it--);
+  ASSERT_EQ(input[1], *it);
+  ASSERT_EQ(input[0], *--it);
 
-    ASSERT_EQ(input[2], it[2]);
-    ASSERT_EQ(input[2], *(it + 2));
-    ASSERT_EQ(input[2], *(2 + it));
-    ASSERT_EQ(input[3], *(it += 3));
-    ASSERT_EQ(input[2], *(it += -1));
-    ASSERT_EQ(input[2], *(it));
-    ASSERT_EQ(input[0], *(it -= 2));
-    ASSERT_EQ(input[2], *(it -= -2));
-    ASSERT_EQ(input[2], *(it));
+  ASSERT_EQ(input[2], it[2]);
+  ASSERT_EQ(input[2], *(it + 2));
+  ASSERT_EQ(input[2], *(2 + it));
+  ASSERT_EQ(input[3], *(it += 3));
+  ASSERT_EQ(input[2], *(it += -1));
+  ASSERT_EQ(input[2], *(it));
+  ASSERT_EQ(input[0], *(it -= 2));
+  ASSERT_EQ(input[2], *(it -= -2));
+  ASSERT_EQ(input[2], *(it));
 
-    it = end + (-1);
-    ASSERT_EQ(input.back(), *it);
+  it = end + (-1);
+  ASSERT_EQ(input.back(), *it);
 
-    ASSERT_EQ(static_cast<int64_t>(input.size()), end - begin);
-  };
+  ASSERT_EQ(static_cast<int64_t>(input.size()), end - begin);
+};
 
+TEST(RandomAccessIterator, Vector) {
   std::vector<int> f{3, 62, 1023, -43817, 14, 42};
   using Iterator = ad_utility::IteratorForAccessOperator<
       std::vector<int>, ad_utility::AccessViaBracketOperator>;
@@ -44,4 +44,28 @@ TEST(RandomAccessIterator, Iterator) {
   Iterator end = Iterator{&f, f.size()};
 
   testIterator(f, begin, end);
+}
+
+TEST(RandomAccessIterator, Iota) {
+  struct Dummy {
+    uint64_t get(uint64_t index) const { return 42 * index; }
+
+    // required for the test lambda
+    uint64_t operator[](uint64_t index) const { return get(index); }
+
+    auto front() const { return get(0); }
+    auto back() const { return get(42); }
+    auto size() const { return 43; }
+  };
+
+  auto getFromDummy = [](const Dummy& dummy, uint64_t index) {
+    return dummy.get(index);
+  };
+
+  using Iterator =
+      ad_utility::IteratorForAccessOperator<Dummy, decltype(getFromDummy)>;
+  Dummy d;
+  Iterator begin = Iterator{&d, 0};
+  Iterator end = Iterator{&d, 43};
+  testIterator(d, begin, end);
 }
