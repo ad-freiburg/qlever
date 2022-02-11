@@ -62,6 +62,8 @@ class AsyncStream : public StringSupplier {
   std::string_view next() override {
     if (!_started.exchange(true)) {
       std::thread{[&]() { run(); }}.detach();
+    } else {
+      _extraStorage.clear();
     }
     std::unique_lock lock{_mutex};
     _conditionVariable.wait(lock, [this]() { return _ready; });

@@ -38,6 +38,7 @@ class CompressorStream : public StringSupplier {
   [[nodiscard]] bool hasNext() const override { return _supplier->hasNext(); }
 
   std::string_view next() override {
+    _value.clear();
     while (_value.empty() && _supplier->hasNext()) {
       _filteringStream << _supplier->next();
     }
