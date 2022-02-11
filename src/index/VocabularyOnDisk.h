@@ -130,7 +130,7 @@ class VocabularyOnDisk {
 
   // Helper function for implementing a random access iterator.
   using Accessor =
-      decltype([](const VocabularyOnDisk& vocabulary, uint64_t index) {
+      decltype([](const auto& vocabulary, uint64_t index) {
         return vocabulary.getNthElement(index);
       });
 
