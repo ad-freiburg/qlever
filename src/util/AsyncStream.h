@@ -34,16 +34,15 @@ class AsyncStream : public StringSupplier {
         std::unique_lock lock{_mutex};
         _stream << view;
         _ready = true;
+        _done = !_supplier->hasNext();
         lock.unlock();
         _conditionVariable.notify_one();
       }
-      _done = true;
     } catch (...) {
-      std::unique_lock lock{_mutex};
+      std::lock_guard guard{_mutex};
       _exception = std::current_exception();
       _ready = true;
-      lock.unlock();
-      _conditionVariable.notify_one();
+      _done = true;
     }
   }
 
@@ -54,7 +53,7 @@ class AsyncStream : public StringSupplier {
   }
 
  public:
-  AsyncStream(std::unique_ptr<StringSupplier> supplier)
+  explicit AsyncStream(std::unique_ptr<StringSupplier> supplier)
       : _supplier{std::move(supplier)} {}
 
   [[nodiscard]] bool hasNext() const override { return !_doneRead.load(); }
