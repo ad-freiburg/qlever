@@ -1179,8 +1179,8 @@ queries:
       - selected: ["?x", "?t"]
       - row_data_types: ["string", "string"]
       - contains_row: ["<Grete_Hermann>",
-        "Hermann's algorithm for primary decomposition is still
-                       in use now."]
+                       "Hermann's algorithm for primary decomposition
+                       is still in use now."]
 
 
   - query: select_asterisk_regex-lastname-stein
