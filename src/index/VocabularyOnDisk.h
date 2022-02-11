@@ -1,7 +1,6 @@
 // Copyright 2016, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Authors: Björn Buchhold <buchholb>
-//          Johannes Kalmbach <johannes.kalmbach@gmail.com>
+// Authors: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
 #pragma once
 
@@ -18,44 +17,47 @@
 using std::string;
 using std::vector;
 
-// On-disk vocabulary of strings.
-// Each entry is a pair of <Id, String>. The Ids are ascending, but not
-// (necessarily) contiguous. If the strings are also sorted, then binary search
-// for strings can be performed.
+// On-disk vocabulary of strings. Each entry is a pair of <ID, String>. The IDs
+// are ascending, but not (necessarily) contiguous. If the strings are sorted,
+// then binary search for a string can be performed.
 class VocabularyOnDisk {
  private:
-  // An Id and the offset of the corresponding word in the underlying file.
+  // An ID and the offset of the corresponding word in the underlying file.
   struct IdAndOffset {
     uint64_t _id;
     uint64_t _offset;
-    // Compare only by the IDs, since they are unique
+    // Compare only by the IDs.
     auto operator<=>(const IdAndOffset& rhs) const { return _id <=> rhs._id; }
   };
 
   // The file in which the words are stored.
   mutable ad_utility::File _file;
 
-  // The IdsAndOffsets
+  // The IDs and offsets of the words.
   ad_utility::MmapVectorView<IdAndOffset> _idsAndOffsets;
 
-  // The highest ID that occurs in the vocabulary. Only valid if _size > 0;
+  // The highest ID that occurs in the vocabulary. Only valid if _size > 0.
   Id _highestId = 0;
-  // The number of words stored in the vocabulary
+  // The number of words stored in the vocabulary.
   size_t _size = 0;
 
-  // This suffix is appended to the "actual" filename to get the name for the
-  // file where the ids and offsets are stored.
+  // This suffix is appended to the filename of the main file, in order to get
+  // the name for the file in which IDs and offsets are stored.
   static constexpr std::string_view _offsetSuffix = ".idsAndOffsets.mmap";
 
  public:
   /// Build from a vector of strings, or from a textFile with one word per line.
-  /// In both cases the strings have to be sorted wrt the `StringComparator`.
   /// These functions will assign the contiguous Ids [0 .. #numWords).
   void buildFromVector(const vector<string>& v, const string& fileName);
   void buildFromTextFile(const string& textFileName, const string& outFileName);
 
-  /// Initialize from a file. The vocabulary must have been previously written
-  /// to this file, for example via `buildFromVector` or `buildFromTextFile`
+  /// Build from a vector of pairs of `(string, id)`. This requires the IDs to
+  /// be contiguous.
+  void buildFromStringsAndIds(const vector<std::pair<std::string, uint64_t>>& v,
+                              const string& fileName);
+
+  /// Read vocabulary from file. It must have been previously written to this
+  /// file, for example via `buildFromVector` or `buildFromTextFile`.
   void readFromFile(const string& file);
 
   /// Close the underlying file and uninitialize this vocabulary for further
@@ -78,21 +80,16 @@ class VocabularyOnDisk {
   VocabularyOnDisk& operator=(VocabularyOnDisk&&) noexcept = default;
 
   // Get the largest ID contained in this vocabulary. May only be called if
-  // size() > 0;
+  // size() > 0.
   Id getHighestId() const {
     AD_CHECK(size() > 0);
     return _highestId;
   }
 
-  // __________________________________________________________________________
-  template <typename Comparator>
-  WordAndIndex upper_bound(const auto& word, Comparator comparator) const {
-    auto it =
-        std::upper_bound(begin(), end(), word, transformComparator(comparator));
-    return iteratorToWordAndIndex(it);
-  }
-
-  // __________________________________________________________________________
+  /// Return a `WordAndIndex` that points to the first entry that is equal or
+  /// greater than `word` wrt. to the `comparator`. Only works correctly if the
+  /// vocabulary is sorted according to the comparator (exactly like in
+  /// `std::lower_bound`, which is used internally).
   template <typename Comparator>
   WordAndIndex lower_bound(const auto& word, Comparator comparator) const {
     auto it =
@@ -100,33 +97,45 @@ class VocabularyOnDisk {
     return iteratorToWordAndIndex(it);
   }
 
-  // The offset of a word in the _file, as well as its size in number of bytes.
+  /// Return a `WordAndIndex` that points to the first entry that is greater
+  /// than `word` wrt. to the `comparator`. Only works correctly if the
+  /// vocabulary is sorted according to the comparator (exactly like in
+  /// `std::upper_bound`, which is used internally).
+  template <typename Comparator>
+  WordAndIndex upper_bound(const auto& word, Comparator comparator) const {
+    auto it =
+        std::upper_bound(begin(), end(), word, transformComparator(comparator));
+    return iteratorToWordAndIndex(it);
+  }
+
+  // The offset of a word in `_file` and its size in number of bytes.
   struct OffsetAndSize {
     uint64_t _offset;
     uint64_t _size;
   };
 
  private:
-  // Return the `n-th` element from this vocabulary. Note that this is (in
+  // Return the `n`-th element from this vocabulary. Note that this is (in
   // general) NOT the element with the ID `n`, because the ID space is not
   // contiguous.
   WordAndIndex getNthElement(size_t n) const;
 
-  // Helper function for implementing a random access iterator iterator.
-  using Accessor = decltype([](auto&& vocabulary,
-                                                          auto index) {
-    return vocabulary.getNthElement(index);
-  });
+  // Helper function for implementing a random access iterator.
+  using Accessor =
+      decltype([](const VocabularyOnDisk& vocabulary, uint64_t index) {
+        return vocabulary.getNthElement(index);
+      });
 
   // Const random access iterators, implemented via the
-  // `IteratorForAccessOperator` template
+  // `IteratorForAccessOperator` template.
   using const_iterator =
       ad_utility::IteratorForAccessOperator<VocabularyOnDisk, Accessor>;
   const_iterator begin() const { return {this, 0}; }
   const_iterator end() const { return {this, size()}; }
 
-  // Takes a lambda that compares to string-like types and returns a lambda that
-  // compares string-like types with `WordAndIndex`.
+  // Takes a lambda that compares two string-like objects and returns a lambda
+  // that compares two objects, either of which can be string-like or
+  // `WordAndIndex`.
   auto transformComparator(auto comparator) const {
     // For a `WordAndIndex`, return the word, else (for string types) just
     // return the input.
@@ -139,13 +148,13 @@ class VocabularyOnDisk {
       }
     };
 
-    return [comparator, getString](auto&& a, auto&& b) {
+    return [comparator, getString](const auto& a, const auto& b) {
       return comparator(getString(a), getString(b));
     };
   }
 
-  // Convert and iterator to the corresponding `WordAndIndex` by also correctly
-  // handling the `end()` iterator which cannot directly be dereferenced.
+  // Convert an iterator to the corresponding `WordAndIndex`. For the `end()`
+  // iterator return `{nullopt, highestID + 1}`.
   [[nodiscard]] WordAndIndex iteratorToWordAndIndex(const_iterator it) const {
     if (it == end()) {
       return {std::nullopt, getHighestId() + 1};
@@ -158,13 +167,13 @@ class VocabularyOnDisk {
   // `std::nullopt` if `id` is not contained in the vocabulary.
   std::optional<OffsetAndSize> getOffsetAndSize(Id id) const;
 
-  // Return the `OffsetAndSize` for the element with the n-th smalles ID.
-  // Requires that `n < size()`
+  // Return the `OffsetAndSize` for the element with the n-th smallest ID.
+  // Requires that n < size().
   OffsetAndSize getOffsetAndSizeForNthElement(uint64_t n) const;
 
   // Build a vocabulary from any type that is forward-iterable and yields
-  // strings or string_views. Used as the common implementation for
-  // `buildFromVector` and `buildFromTextFile`.
+  // pairs of (string-like, ID). Used as the common implementation for
+  // the `buildFrom...` methods.
   template <class Iterable>
   void buildFromIterable(Iterable&& iterable, const string& filename);
 };

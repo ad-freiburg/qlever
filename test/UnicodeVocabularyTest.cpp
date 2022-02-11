@@ -38,8 +38,8 @@ TEST(UnicodeVocabulary, LowercaseAscii) {
       return word;
     };
 
-    testUpperAndLowerBound(createVocabulary, makeWordLarger, makeWordSmaller,
-                           level, words);
+    testUpperAndLowerBoundContiguousIDs(createVocabulary(words), makeWordLarger,
+                                        makeWordSmaller, level, words);
   }
 }
 
@@ -70,8 +70,8 @@ TEST(UnicodeVocabulary, UpperAndLowercase) {
       return word;
     };
 
-    testUpperAndLowerBound(createVocabulary, makeWordLarger, makeWordSmaller,
-                           level, words);
+    testUpperAndLowerBoundContiguousIDs(createVocabulary(words), makeWordLarger,
+                                        makeWordSmaller, level, words);
   }
 }
 

@@ -48,8 +48,9 @@ class VocabularyInMemory {
   /// Return the total number of words
   [[nodiscard]] size_t size() const { return _words.size(); }
 
-  ///
-  [[nodiscard]] uint64_t getHighestIndex() const {
+  /// Return the highest ID (= index) that occurs in this vocabulary. May only
+  /// becalled if size() > 0.
+  [[nodiscard]] uint64_t getHighestId() const {
     AD_CHECK(size() > 0);
     return size() - 1;
   }

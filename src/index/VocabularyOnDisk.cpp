@@ -56,15 +56,16 @@ void VocabularyOnDisk::buildFromIterable(Iterable&& it,
     ad_utility::MmapVector<IdAndOffset> idsAndOffsets(fileName + _offsetSuffix,
                                                       ad_utility::CreateTag{});
     uint64_t currentOffset = 0;
-    uint64_t index = 0;
-    for (const std::string& word : it) {
-      idsAndOffsets.push_back(IdAndOffset{index, currentOffset});
+    std::optional<uint64_t> lastId = std::nullopt;
+    for (const auto& [word, id] : it) {
+      AD_CHECK(!lastId.has_value() || lastId.value() < id);
+      idsAndOffsets.push_back(IdAndOffset{id, currentOffset});
       currentOffset += _file.write(word.data(), word.size());
-      index++;
+      lastId = id;
     }
 
     // End offset of last entry
-    idsAndOffsets.push_back(IdAndOffset{index, currentOffset});
+    idsAndOffsets.push_back(IdAndOffset{lastId.value() + 1, currentOffset});
     _file.close();
   }  // Run destructor of MmapVector to dump everything to disk.
   readFromFile(fileName);
@@ -73,7 +74,28 @@ void VocabularyOnDisk::buildFromIterable(Iterable&& it,
 // _____________________________________________________________________________
 void VocabularyOnDisk::buildFromVector(const vector<string>& v,
                                        const string& fileName) {
-  buildFromIterable(v, fileName);
+  // Note: Using a reference-capture for `v` will segfault in GCC11.
+  // TODO<joka921> This is a bug in the compiler, report it if still unknown or
+  // post reference link here.
+  auto generator = [](const auto& words)
+      -> cppcoro::generator<std::pair<std::string_view, uint64_t>> {
+    uint64_t index = 0;
+    for (const auto& word : (words)) {
+      // Yielding the temporary directly would segfault in GCC, this is a bug
+      // in the compiler, see similar places in the `streamable_generator`
+      // class.
+      std::pair<std::string, uint64_t> tmp{word, index};
+      co_yield tmp;
+      index++;
+    }
+  }(v);
+  buildFromIterable(std::move(generator), fileName);
+}
+
+// _____________________________________________________________________________
+void VocabularyOnDisk::buildFromStringsAndIds(
+    const vector<std::pair<std::string, uint64_t>>& v, const string& fileName) {
+  return buildFromIterable(v, fileName);
 }
 
 // _____________________________________________________________________________
@@ -81,18 +103,21 @@ void VocabularyOnDisk::buildFromTextFile(const string& textFileName,
                                          const string& outFileName) {
   std::ifstream infile(textFileName);
   AD_CHECK(infile.is_open());
-  auto lineGenerator = [&infile]() -> cppcoro::generator<string> {
+  auto lineGenerator =
+      [&infile]() -> cppcoro::generator<std::pair<std::string_view, uint64_t>> {
     std::string word;
+    uint64_t index = 0;
     while (std::getline(infile, word)) {
       // The temporary file for the to-be-externalized vocabulary strings is
       // line-based, just like the normal vocabulary file. Therefore, \n and \
       // are escaped there. When we read from this file, we have to unescape
       // these.
       word = RdfEscaping::unescapeNewlinesAndBackslashes(word);
-      co_yield word;
+      co_yield std::pair{std::string_view{word}, index};
+      index++;
     }
   }();
-  buildFromIterable(lineGenerator, outFileName);
+  buildFromIterable(std::move(lineGenerator), outFileName);
 }
 
 // _____________________________________________________________________________

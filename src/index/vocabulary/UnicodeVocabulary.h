@@ -32,6 +32,10 @@ class UnicodeVocabulary {
 
   [[nodiscard]] uint64_t size() const { return _underlyingVocabulary.size(); }
 
+  [[nodiscard]] uint64_t getHighestId() const {
+    return _underlyingVocabulary.getHighestId();
+  }
+
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt. to the `comparator`. Only works correctly if the
   /// `_words` are sorted according to the comparator (exactly like in
@@ -70,7 +74,7 @@ class UnicodeVocabulary {
       if (size() == 0) {
         return {0, 0};
       }
-      return {0, _underlyingVocabulary.getHighestIndex() + 1};
+      return {0, _underlyingVocabulary.getHighestId() + 1};
     }
 
     auto lb = lower_bound(prefix, SortLevel::PRIMARY)._index;

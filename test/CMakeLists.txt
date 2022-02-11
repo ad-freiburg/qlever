@@ -52,10 +52,6 @@ addLinkAndDiscoverTest(FileTest)
 
 addLinkAndDiscoverTest(Simple8bTest)
 
-addLinkAndDiscoverTest(VocabularyTest index)
-
-addLinkAndDiscoverTest(ExternalVocabularyTest index)
-
 addLinkAndDiscoverTest(TsvParserTest parser)
 
 addLinkAndDiscoverTest(ContextFileParserTest parser ${ICU_LIBRARIES})
@@ -160,3 +156,8 @@ addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary ${ICU_LIBRARIES})
 addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
 
 addLinkAndDiscoverTest(PrefixCompressorTest)
+
+addLinkAndDiscoverTest(VocabularyOnDiskTest index)
+
+addLinkAndDiscoverTest(VocabularyTest index)
+

@@ -7,6 +7,7 @@
 
 #include <concepts>
 
+#include "../../util/Exception.h"
 #include "./VocabularyTypes.h"
 
 /// Define a `CombinedVocabulary` that consists of two Vocabularies (called the
@@ -87,6 +88,13 @@ class CombinedVocabulary {
     return sizeFirstVocab() + sizeSecondVocab();
   }
 
+  /// The highest ID (=index) that occurs in this vocabulary. May only be called
+  /// if size() > 0
+  auto getHighestId() const {
+    AD_CHECK(size() > 0);
+    return getEndIndex() - 1;
+  }
+
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt the `comparator`. This requires that each of the
   /// underlying vocabularies is sorted wrt `comparator` and that for any two
@@ -134,19 +142,19 @@ class CombinedVocabulary {
     return wi;
   }
 
-  // Return a global index that is the largest global index occuring in either
-  // of the underlying vocabularies plus 1. This index can be used as the "end"
-  // index to indicate "not found".
+  // Return a global index/ID that is the largest global index occuring in
+  // either of the underlying vocabularies plus 1. This index can be used as the
+  // "end" index to indicate "not found".
   [[nodiscard]] uint64_t getEndIndex() const {
     uint64_t endA = _firstVocab.size() == 0
                         ? 0ul
                         : _indexConverter.localFirstToGlobal(
-                              _firstVocab.getHighestIndex(), *this) +
+                              _firstVocab.getHighestId(), *this) +
                               1;
     uint64_t endB = _secondVocab.size() == 0
                         ? 0ul
                         : _indexConverter.localSecondToGlobal(
-                              _secondVocab.getHighestIndex(), *this) +
+                              _secondVocab.getHighestId(), *this) +
                               1;
 
     return std::max(endA, endB);
