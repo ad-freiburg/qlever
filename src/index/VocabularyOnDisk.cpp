@@ -13,6 +13,7 @@
 #include "../util/Log.h"
 
 using OffsetAndSize = VocabularyOnDisk::OffsetAndSize;
+
 // ____________________________________________________________________________
 std::optional<OffsetAndSize> VocabularyOnDisk::getOffsetAndSize(Id id) const {
   IdAndOffset dummy{id, 0};
@@ -21,17 +22,16 @@ std::optional<OffsetAndSize> VocabularyOnDisk::getOffsetAndSize(Id id) const {
   if (it >= _idsAndOffsets.end() - 1 || it->_id != id) {
     return std::nullopt;
   }
-  auto offset = it->_offset;
-  auto nextOffset = (it + 1)->_offset;
-  return OffsetAndSize{offset, nextOffset - offset};
+  return getOffsetAndSizeForNthElement(it - _idsAndOffsets.begin());
 }
 
-OffsetAndSize VocabularyOnDisk::getOffsetAndSizeForNthElement(size_t n) const {
+// ____________________________________________________________________________
+VocabularyOnDisk::OffsetSizeId VocabularyOnDisk::getOffsetSizeIdForNthElement(
+    size_t n) const {
   AD_CHECK(n < size());
-  // TODO<joka921> :: This is duplicated code
   const auto offset = _idsAndOffsets[n]._offset;
   const auto nextOffset = _idsAndOffsets[n + 1]._offset;
-  return OffsetAndSize{offset, nextOffset - offset};
+  return OffsetSizeId{offset, nextOffset - offset, _idsAndOffsets[n]._id};
 }
 
 // _____________________________________________________________________________
@@ -64,8 +64,12 @@ void VocabularyOnDisk::buildFromIterable(Iterable&& it,
       lastId = id;
     }
 
-    // End offset of last entry
-    idsAndOffsets.push_back(IdAndOffset{lastId.value() + 1, currentOffset});
+    // End offset of last entry, also consistent with the empty vocabulary.
+    if (lastId.has_value()) {
+      idsAndOffsets.push_back(IdAndOffset{lastId.value() + 1, currentOffset});
+    } else {
+      idsAndOffsets.push_back(IdAndOffset{_highestId + 1, currentOffset});
+    }
     _file.close();
   }  // Run destructor of MmapVector to dump everything to disk.
   readFromFile(fileName);
@@ -133,12 +137,10 @@ void VocabularyOnDisk::readFromFile(const string& file) {
 
 WordAndIndex VocabularyOnDisk::getNthElement(size_t n) const {
   AD_CHECK(n < _idsAndOffsets.size());
-  auto offsetAndSize = getOffsetAndSizeForNthElement(n);
+  auto offsetSizeId = getOffsetSizeIdForNthElement(n);
 
-  string result(offsetAndSize._size, '\0');
-  _file.read(result.data(), offsetAndSize._size, offsetAndSize._offset);
+  string result(offsetSizeId._size, '\0');
+  _file.read(result.data(), offsetSizeId._size, offsetSizeId._offset);
 
-  // TODO<joka921> we can get the id by a single read above
-  auto id = _idsAndOffsets[n]._id;
-  return {std::move(result), id};
+  return {std::move(result), offsetSizeId._id};
 }

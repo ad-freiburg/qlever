@@ -36,8 +36,9 @@ class VocabularyOnDisk {
   // The IDs and offsets of the words.
   ad_utility::MmapVectorView<IdAndOffset> _idsAndOffsets;
 
-  // The highest ID that occurs in the vocabulary. Only valid if _size > 0.
-  Id _highestId = 0;
+  // The highest ID that occurs in the vocabulary. If the vocabulary is empty,
+  // this will be Id(-1), s.t. _highestId + 1 will overflow to 0.
+  Id _highestId = std::numeric_limits<Id>::max();
   // The number of words stored in the vocabulary.
   size_t _size = 0;
 
@@ -79,12 +80,10 @@ class VocabularyOnDisk {
   VocabularyOnDisk(VocabularyOnDisk&&) noexcept = default;
   VocabularyOnDisk& operator=(VocabularyOnDisk&&) noexcept = default;
 
-  // Get the largest ID contained in this vocabulary. May only be called if
-  // size() > 0.
-  Id getHighestId() const {
-    AD_CHECK(size() > 0);
-    return _highestId;
-  }
+  // Get the largest ID contained in this vocabulary. If the vocabulary is
+  // empty, this is the highest possible Id minus 1. This behavior is consistent
+  // with the `lower_bound` and `upper_bound` methods.
+  Id getHighestId() const { return _highestId; }
 
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt. to the `comparator`. Only works correctly if the
@@ -109,9 +108,18 @@ class VocabularyOnDisk {
   }
 
   // The offset of a word in `_file` and its size in number of bytes.
+
+  struct OffsetSizeId {
+    uint64_t _offset;
+    uint64_t _size;
+    uint64_t _id;
+  };
+
   struct OffsetAndSize {
     uint64_t _offset;
     uint64_t _size;
+    OffsetAndSize(OffsetSizeId osi) : _offset{osi._offset}, _size{osi._size} {}
+    OffsetAndSize() = default;
   };
 
  private:
@@ -167,9 +175,15 @@ class VocabularyOnDisk {
   // `std::nullopt` if `id` is not contained in the vocabulary.
   std::optional<OffsetAndSize> getOffsetAndSize(Id id) const;
 
+  // Return the `OffsetSizeId` for the element with the n-th smallest ID.
+  // Requires that n < size().
+  OffsetSizeId getOffsetSizeIdForNthElement(uint64_t n) const;
+
   // Return the `OffsetAndSize` for the element with the n-th smallest ID.
   // Requires that n < size().
-  OffsetAndSize getOffsetAndSizeForNthElement(uint64_t n) const;
+  OffsetAndSize getOffsetAndSizeForNthElement(uint64_t n) const {
+    return getOffsetSizeIdForNthElement(n);
+  }
 
   // Build a vocabulary from any type that is forward-iterable and yields
   // pairs of (string-like, ID). Used as the common implementation for

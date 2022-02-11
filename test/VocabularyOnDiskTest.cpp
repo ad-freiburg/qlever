@@ -119,3 +119,7 @@ TEST(VocabularyOnDisk, ErrorOnNonAscendingIds) {
   ASSERT_THROW(createVocabularyFromDiskImpl(words, ids),
                ad_semsearch::Exception);
 }
+
+TEST(VocabularyOnDisk, EmptyVocabulary) {
+  testEmptyVocabulary(createVocabulary);
+}

@@ -42,4 +42,8 @@ TEST(VocabularyInMemory, ReadAndWriteFromFile) {
   assertThatRangesAreEqual(vocab, readVocab);
   ad_utility::deleteFile(vocabularyFilename);
 }
+
+TEST(VocabularyInMemory, EmptyVocabulary) {
+  testEmptyVocabulary(createVocabulary);
+}
 }  // namespace

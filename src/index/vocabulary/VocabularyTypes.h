@@ -20,8 +20,8 @@ struct WordAndIndex {
   // `std::optional<std::string_view>` and the index.
   WordAndIndex(std::optional<std::string> word, uint64_t index)
       : _word{std::move(word)}, _index{index} {}
-  WordAndIndex(const std::string& word, uint64_t index)
-      : _word{word}, _index{index} {}
+  WordAndIndex(std::string word, uint64_t index)
+      : _word{std::move(word)}, _index{index} {}
   WordAndIndex(std::optional<std::string_view> word, uint64_t index)
       : _index{index} {
     if (word.has_value()) {

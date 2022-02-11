@@ -116,7 +116,6 @@ void testUpperAndLowerBoundWithStdLess(auto createVocabulary) {
     ids.push_back(i);
   }
 
-  LOG(INFO) << "Adress of vector outside " << &words << std::endl;
   testUpperAndLowerBoundWithStdLessFromWordsAndIds(createVocabulary(words),
                                                    words, ids);
 }
@@ -174,6 +173,21 @@ auto testAccessOperatorForUnorderedVocabulary(auto createVocabulary) {
     ids.push_back(i);
   }
   testAccessOperatorFromWordsAndIds(createVocabulary(words), words, ids);
+}
+
+auto testEmptyVocabularyWithComparator(auto createVocabulary, auto comparator) {
+  auto vocab = createVocabulary(std::vector<std::string>{});
+  ASSERT_EQ(0u, vocab.size());
+  WordAndIndex expected{std::nullopt, 0};
+  ASSERT_EQ(expected, vocab.lower_bound("someWord", comparator));
+  ASSERT_EQ(expected, vocab.upper_bound("someWord", comparator));
+}
+
+// Check that an empty vocabulary, created via
+// `createVocabulary(std::vector<std::string>{}) works as expected.
+auto testEmptyVocabulary(auto createVocabulary) {
+  testEmptyVocabularyWithComparator(createVocabulary, std::less<>{});
+  testEmptyVocabularyWithComparator(createVocabulary, std::greater<>{});
 }
 
 }  // namespace vocabulary_test

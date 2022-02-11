@@ -161,3 +161,5 @@ addLinkAndDiscoverTest(VocabularyOnDiskTest index)
 
 addLinkAndDiscoverTest(VocabularyTest index)
 
+addLinkAndDiscoverTest(IteratorTest)
+

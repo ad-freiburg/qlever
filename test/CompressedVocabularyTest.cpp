@@ -59,6 +59,10 @@ TEST(CompressedVocabulary, AccessOperator) {
   testAccessOperatorForUnorderedVocabulary(createVocabulary);
 }
 
+TEST(CompressedVocabulary, EmptyVocabulary) {
+  testEmptyVocabulary(createVocabulary);
+}
+
 TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42",
                                        "31",    "0",     "al"};

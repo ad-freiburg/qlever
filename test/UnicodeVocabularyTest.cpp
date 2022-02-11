@@ -78,3 +78,8 @@ TEST(UnicodeVocabulary, UpperAndLowercase) {
 TEST(UnicodeVocabulary, AccessOperator) {
   testAccessOperatorForUnorderedVocabulary(createVocabulary);
 }
+
+TEST(UnicodeVocabulary, EmptyVocabulary) {
+  testEmptyVocabularyWithComparator(createVocabulary, Level::PRIMARY);
+  testEmptyVocabularyWithComparator(createVocabulary, Level::TOTAL);
+}
