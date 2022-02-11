@@ -22,7 +22,7 @@ RUN make test
 FROM base as runtime
 WORKDIR /app
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu-dev python3-icu python3-dateutil libgomp1 uuid-runtime
+RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu-dev python3-icu python3-dateutil python3-numpy libgomp1 uuid-runtime
 RUN apt install -y lbzip2 libjemalloc-dev libzstd-dev
 RUN apt install -y libboost1.74-dev libboost-program-options1.74-dev libboost-iostreams1.74-dev
 
