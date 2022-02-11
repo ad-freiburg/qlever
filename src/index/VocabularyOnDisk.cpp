@@ -16,22 +16,22 @@ using OffsetAndSize = VocabularyOnDisk::OffsetAndSize;
 
 // ____________________________________________________________________________
 std::optional<OffsetAndSize> VocabularyOnDisk::getOffsetAndSize(Id id) const {
-  IdAndOffset dummy{id, 0};
-  auto it =
-      std::lower_bound(_idsAndOffsets.begin(), _idsAndOffsets.end(), dummy);
+  IdAndOffset idAndDummyOffset{id, 0};
+  auto it = std::lower_bound(_idsAndOffsets.begin(), _idsAndOffsets.end(),
+                             idAndDummyOffset);
   if (it >= _idsAndOffsets.end() - 1 || it->_id != id) {
     return std::nullopt;
   }
-  return getOffsetAndSizeForNthElement(it - _idsAndOffsets.begin());
+  return getOffsetAndSizeForIthElement(it - _idsAndOffsets.begin());
 }
 
 // ____________________________________________________________________________
-VocabularyOnDisk::OffsetSizeId VocabularyOnDisk::getOffsetSizeIdForNthElement(
-    size_t n) const {
-  AD_CHECK(n < size());
-  const auto offset = _idsAndOffsets[n]._offset;
-  const auto nextOffset = _idsAndOffsets[n + 1]._offset;
-  return OffsetSizeId{offset, nextOffset - offset, _idsAndOffsets[n]._id};
+VocabularyOnDisk::OffsetSizeId VocabularyOnDisk::getOffsetSizeIdForIthElement(
+    size_t i) const {
+  AD_CHECK(i < size());
+  const auto offset = _idsAndOffsets[i]._offset;
+  const auto nextOffset = _idsAndOffsets[i + 1]._offset;
+  return OffsetSizeId{offset, nextOffset - offset, _idsAndOffsets[i]._id};
 }
 
 // _____________________________________________________________________________
@@ -56,50 +56,53 @@ void VocabularyOnDisk::buildFromIterable(Iterable&& it,
     ad_utility::MmapVector<IdAndOffset> idsAndOffsets(fileName + _offsetSuffix,
                                                       ad_utility::CreateTag{});
     uint64_t currentOffset = 0;
-    std::optional<uint64_t> lastId = std::nullopt;
+    std::optional<uint64_t> previousId = std::nullopt;
     for (const auto& [word, id] : it) {
-      AD_CHECK(!lastId.has_value() || lastId.value() < id);
+      AD_CHECK(!previousId.has_value() || previousId.value() < id);
       idsAndOffsets.push_back(IdAndOffset{id, currentOffset});
       currentOffset += _file.write(word.data(), word.size());
-      lastId = id;
+      previousId = id;
     }
 
-    // End offset of last entry, also consistent with the empty vocabulary.
-    if (lastId.has_value()) {
-      idsAndOffsets.push_back(IdAndOffset{lastId.value() + 1, currentOffset});
+    // End offset of last vocabulary entry, also consistent with the empty
+    // vocabulary.
+    if (previousId.has_value()) {
+      idsAndOffsets.push_back(
+          IdAndOffset{previousId.value() + 1, currentOffset});
     } else {
       idsAndOffsets.push_back(IdAndOffset{_highestId + 1, currentOffset});
     }
     _file.close();
-  }  // Run destructor of MmapVector to dump everything to disk.
+  }  // After this close, the destructor of MmapVector is called, whoch dumps
+     // everything to disk.
   readFromFile(fileName);
 }
 
 // _____________________________________________________________________________
-void VocabularyOnDisk::buildFromVector(const vector<string>& v,
+void VocabularyOnDisk::buildFromVector(const vector<string>& words,
                                        const string& fileName) {
-  // Note: Using a reference-capture for `v` will segfault in GCC11.
+  // Note: Using a reference-capture for `words` will segfault in GCC11.
   // TODO<joka921> This is a bug in the compiler, report it if still unknown or
   // post reference link here.
   auto generator = [](const auto& words)
       -> cppcoro::generator<std::pair<std::string_view, uint64_t>> {
     uint64_t index = 0;
     for (const auto& word : (words)) {
-      // Yielding the temporary directly would segfault in GCC, this is a bug
-      // in the compiler, see similar places in the `streamable_generator`
-      // class.
+      // Note: Yielding the temporary directly would segfault in GCC, this is a
+      // bug in GCC, see similar places in the `streamable_generator` class.
       std::pair<std::string, uint64_t> tmp{word, index};
       co_yield tmp;
       index++;
     }
-  }(v);
+  }(words);
   buildFromIterable(std::move(generator), fileName);
 }
 
 // _____________________________________________________________________________
 void VocabularyOnDisk::buildFromStringsAndIds(
-    const vector<std::pair<std::string, uint64_t>>& v, const string& fileName) {
-  return buildFromIterable(v, fileName);
+    const vector<std::pair<std::string, uint64_t>>& wordsAndIds,
+    const string& fileName) {
+  return buildFromIterable(wordsAndIds, fileName);
 }
 
 // _____________________________________________________________________________
@@ -125,9 +128,9 @@ void VocabularyOnDisk::buildFromTextFile(const string& textFileName,
 }
 
 // _____________________________________________________________________________
-void VocabularyOnDisk::readFromFile(const string& file) {
-  _file.open(file.c_str(), "r");
-  _idsAndOffsets.open(file + _offsetSuffix);
+void VocabularyOnDisk::readFromFile(const string& filename) {
+  _file.open(filename.c_str(), "r");
+  _idsAndOffsets.open(filename + _offsetSuffix);
   AD_CHECK(_idsAndOffsets.size() > 0);
   _size = _idsAndOffsets.size() - 1;
   if (_size > 0) {
@@ -135,9 +138,10 @@ void VocabularyOnDisk::readFromFile(const string& file) {
   }
 }
 
-WordAndIndex VocabularyOnDisk::getNthElement(size_t n) const {
+// ____________________________________________________________________________
+WordAndIndex VocabularyOnDisk::getIthElement(size_t n) const {
   AD_CHECK(n < _idsAndOffsets.size());
-  auto offsetSizeId = getOffsetSizeIdForNthElement(n);
+  auto offsetSizeId = getOffsetSizeIdForIthElement(n);
 
   string result(offsetSizeId._size, '\0');
   _file.read(result.data(), offsetSizeId._size, offsetSizeId._offset);

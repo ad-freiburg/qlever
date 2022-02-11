@@ -49,17 +49,18 @@ class VocabularyOnDisk {
  public:
   /// Build from a vector of strings, or from a textFile with one word per line.
   /// These functions will assign the contiguous Ids [0 .. #numWords).
-  void buildFromVector(const vector<string>& v, const string& fileName);
+  void buildFromVector(const vector<string>& words, const string& fileName);
   void buildFromTextFile(const string& textFileName, const string& outFileName);
 
   /// Build from a vector of pairs of `(string, id)`. This requires the IDs to
   /// be contiguous.
-  void buildFromStringsAndIds(const vector<std::pair<std::string, uint64_t>>& v,
-                              const string& fileName);
+  void buildFromStringsAndIds(
+      const vector<std::pair<std::string, uint64_t>>& wordsAndIds,
+      const string& fileName);
 
-  /// Read vocabulary from file. It must have been previously written to this
-  /// file, for example via `buildFromVector` or `buildFromTextFile`.
-  void readFromFile(const string& file);
+  /// Read vocabulary from filename. It must have been previously written to
+  /// this filename, for example via `buildFromVector` or `buildFromTextFile`.
+  void readFromFile(const string& filename);
 
   /// Close the underlying file and uninitialize this vocabulary for further
   /// use. NOTE: The name "clear" is a little misleading, but it is required to
@@ -81,12 +82,14 @@ class VocabularyOnDisk {
   VocabularyOnDisk& operator=(VocabularyOnDisk&&) noexcept = default;
 
   // Get the largest ID contained in this vocabulary. If the vocabulary is
-  // empty, this is the highest possible Id minus 1. This behavior is consistent
-  // with the `lower_bound` and `upper_bound` methods.
+  // empty, this is the highest possible ID (s.t. `getHighestId() + 1` overflows
+  // to 0). This makes the behavior of `lower_bound` and `upper_bound` for empty
+  // vocabularies consistent with other vocabulary types like
+  // `VocabularyInMemory`.
   Id getHighestId() const { return _highestId; }
 
   /// Return a `WordAndIndex` that points to the first entry that is equal or
-  /// greater than `word` wrt. to the `comparator`. Only works correctly if the
+  /// greater than `word` wrt the `comparator`. Only works correctly if the
   /// vocabulary is sorted according to the comparator (exactly like in
   /// `std::lower_bound`, which is used internally).
   template <typename Comparator>
@@ -97,7 +100,7 @@ class VocabularyOnDisk {
   }
 
   /// Return a `WordAndIndex` that points to the first entry that is greater
-  /// than `word` wrt. to the `comparator`. Only works correctly if the
+  /// than `word` wrt the `comparator`. Only works correctly if the
   /// vocabulary is sorted according to the comparator (exactly like in
   /// `std::upper_bound`, which is used internally).
   template <typename Comparator>
@@ -107,14 +110,14 @@ class VocabularyOnDisk {
     return iteratorToWordAndIndex(it);
   }
 
-  // The offset of a word in `_file` and its size in number of bytes.
-
+  // The offset of a word in `_file`, its size in number of bytes and its ID
   struct OffsetSizeId {
     uint64_t _offset;
     uint64_t _size;
     uint64_t _id;
   };
 
+  // The offset of a word in `_file` and its size in number of bytes.
   struct OffsetAndSize {
     uint64_t _offset;
     uint64_t _size;
@@ -123,16 +126,15 @@ class VocabularyOnDisk {
   };
 
  private:
-  // Return the `n`-th element from this vocabulary. Note that this is (in
-  // general) NOT the element with the ID `n`, because the ID space is not
+  // Return the `i`-th element from this vocabulary. Note that this is (in
+  // general) NOT the element with the ID `i`, because the ID space is not
   // contiguous.
-  WordAndIndex getNthElement(size_t n) const;
+  WordAndIndex getIthElement(size_t n) const;
 
   // Helper function for implementing a random access iterator.
-  using Accessor =
-      decltype([](const auto& vocabulary, uint64_t index) {
-        return vocabulary.getNthElement(index);
-      });
+  using Accessor = decltype([](const auto& vocabulary, uint64_t index) {
+    return vocabulary.getIthElement(index);
+  });
 
   // Const random access iterators, implemented via the
   // `IteratorForAccessOperator` template.
@@ -175,14 +177,14 @@ class VocabularyOnDisk {
   // `std::nullopt` if `id` is not contained in the vocabulary.
   std::optional<OffsetAndSize> getOffsetAndSize(Id id) const;
 
-  // Return the `OffsetSizeId` for the element with the n-th smallest ID.
-  // Requires that n < size().
-  OffsetSizeId getOffsetSizeIdForNthElement(uint64_t n) const;
+  // Return the `OffsetSizeId` for the element with the i-th smallest ID.
+  // Requires that i < size().
+  OffsetSizeId getOffsetSizeIdForIthElement(uint64_t i) const;
 
-  // Return the `OffsetAndSize` for the element with the n-th smallest ID.
-  // Requires that n < size().
-  OffsetAndSize getOffsetAndSizeForNthElement(uint64_t n) const {
-    return getOffsetSizeIdForNthElement(n);
+  // Return the `OffsetAndSize` for the element with the i-th smallest ID.
+  // Requires that i < size().
+  OffsetAndSize getOffsetAndSizeForIthElement(uint64_t i) const {
+    return getOffsetSizeIdForIthElement(i);
   }
 
   // Build a vocabulary from any type that is forward-iterable and yields

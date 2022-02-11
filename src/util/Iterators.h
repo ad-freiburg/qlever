@@ -7,45 +7,46 @@
 
 namespace ad_utility {
 
-/// A lambda that accesses the `index`-th element in a `dataStructure` using
-/// `operator[]`
-inline auto accessViaBracketOperator = [](auto&& dataStructure, auto index) {
-  return dataStructure[index];
+/// A lambda that accesses the `index`-th element in a `randomAccessContainer`
+/// using `operator[]`
+inline auto accessViaBracketOperator = [](auto&& randomAccessContainer,
+                                          auto index) {
+  return randomAccessContainer[index];
 };
 using AccessViaBracketOperator = decltype(accessViaBracketOperator);
 
 /**
- * @brief Provide random access iterators for a data structure that allows
- * direct access to the `i-th` element in the structure.
- * @tparam DataStructure A data structure can be randomly accessed using
- * consecutive indices (see below)
- * @tparam Accessor A function s.t. `Accessor(DataStructure, uint64_t i)`
- * returns the `i-th` element from the data structure. If iterators for indices
- * `a` and `b` can be obtained from the data structure (typically by `begin()`
- * and `end()` member functions, then it must be legal to call the accessor for
- * all `i` in `[a, b)`.
- *
+ * @brief Provide random access iterators for a random access container that
+ * allows direct access to the `i-th` element in the structure.
+ * @tparam RandomAccessContainer A random access container that can be randomly
+ * accessed using consecutive indices (see below).
+ * @tparam Accessor A function such that `Accessor(RandomAccessContainer,
+ * uint64_t i)` returns the `i`-th element from the random access container. If
+ * iterators for indices `a` and `b` can be obtained from the random access
+ * container (typically by `begin()` and `end()` member functions, then it must
+ * be legal to call the accessor for all `i` in `[a, b)`.
  */
-template <typename DataStructure, typename Accessor = AccessViaBracketOperator>
+template <typename RandomAccessContainer,
+          typename Accessor = AccessViaBracketOperator>
 class IteratorForAccessOperator {
  public:
   using iterator_category = std::random_access_iterator_tag;
   using index_type = uint64_t;
   using value_type = std::remove_reference_t<
-      std::invoke_result_t<Accessor, const DataStructure&, index_type>>;
+      std::invoke_result_t<Accessor, const RandomAccessContainer&, index_type>>;
   using difference_type = int64_t;
 
  private:
-  const DataStructure* _vector = nullptr;
+  const RandomAccessContainer* _vector = nullptr;
   index_type _index{0};
   Accessor _accessor{};
 
  public:
   IteratorForAccessOperator() = default;
-  IteratorForAccessOperator(const DataStructure* vec, index_type index)
+  IteratorForAccessOperator(const RandomAccessContainer* vec, index_type index)
       : _vector{vec}, _index{index} {}
 
-  // Comparsions
+  // Comparisons
   auto operator<=>(const IteratorForAccessOperator& rhs) const {
     return (_index <=> rhs._index);
   }

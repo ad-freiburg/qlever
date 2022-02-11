@@ -31,7 +31,7 @@ auto createVocabularyImpl(
 }
 
 // Create and return a `VocabularyOnDisk` from words and ids. `words` and `ids`
-// must have the same size. The resulting vocabulary will be closed and
+// must have the same size. Note: The resulting vocabulary will be destroyed and
 // re-initialized from disk before it is returned.
 auto createVocabularyFromDiskImpl(
     const std::vector<std::string>& words,
@@ -49,8 +49,8 @@ auto createVocabulary(const std::vector<std::string>& words) {
 }
 
 // Create and return a `VocabularyOnDisk` from words. The ids will be [0, ..
-// words.size()). The resulting vocabulary will be closed and re-initialized
-// from disk before it is returned.
+// words.size()). Note: The resulting vocabulary will be destroyed and
+// re-initialized from disk before it is returned.
 auto createVocabularyFromDisk(const std::vector<std::string>& words) {
   return createVocabularyFromDiskImpl(words);
 }

@@ -98,8 +98,8 @@ void testUpperAndLowerBoundContiguousIDs(const auto& vocab, auto makeWordLarger,
                          words, ids);
 }
 
-// Same as the previous function, but explictly state, which ids are expected in
-// the vocabulary
+// Same as the previous function, but explictly state, which IDs are expected in
+// the vocabulary.
 void testUpperAndLowerBoundWithStdLessFromWordsAndIds(auto vocabulary,
                                                       const auto& words,
                                                       const auto& ids) {
@@ -119,7 +119,7 @@ void testUpperAndLowerBoundWithStdLessFromWordsAndIds(auto vocabulary,
 
 /**
  * @brief Assert that `upper_bound` and `lower_bound` work as expected for a
- *        given vocabulary when using words that are sorted by `std::less`
+ *        given vocabulary when using words that are sorted by `std::less`.
  * @param createVocabulary Function that takes a `std::vector<string>` and
  *           returns a vocabulary.
  */
@@ -138,7 +138,7 @@ void testUpperAndLowerBoundWithStdLess(auto createVocabulary) {
 
 /**
  * @brief Assert that `upper_bound` and `lower_bound` work as expected for a
- *        given vocabulary when using words that are sorted by `std::less`
+ *        given vocabulary when using words that are sorted by `std::less`.
  * @param createVocabulary Function that takes a `std::vector<string>` and
  *           returns a vocabulary.
  */
@@ -162,7 +162,7 @@ void testUpperAndLowerBoundWithNumericComparatorFromWordsAndIds(
  *        given vocabulary when using numeric strings with the numeric
  *        ordering ("4" < "11" b.c. 4 < 11).
  * @param createVocabulary Function that takes a `std::vector<string>` and
- *           returns a vocabulary.
+ *        returns a vocabulary.
  */
 void testUpperAndLowerBoundWithNumericComparator(auto createVocabulary) {
   const std::vector<string> words{"4", "33", "222", "1111"};
@@ -200,7 +200,7 @@ auto testAccessOperatorForUnorderedVocabulary(auto createVocabulary) {
 }
 
 // Check that an empty vocabulary, created via
-// `createVocabulary(std::vector<std::string>{}) works as expected with the
+// `createVocabulary(std::vector<std::string>{})`, works as expected with the
 // given comparator.
 auto testEmptyVocabularyWithComparator(auto createVocabulary, auto comparator) {
   auto vocab = createVocabulary(std::vector<std::string>{});
@@ -211,7 +211,7 @@ auto testEmptyVocabularyWithComparator(auto createVocabulary, auto comparator) {
 }
 
 // Check that an empty vocabulary, created via
-// `createVocabulary(std::vector<std::string>{}) works as expected.
+// `createVocabulary(std::vector<std::string>{})` works as expected.
 auto testEmptyVocabulary(auto createVocabulary) {
   testEmptyVocabularyWithComparator(createVocabulary, std::less<>{});
   testEmptyVocabularyWithComparator(createVocabulary, std::greater<>{});

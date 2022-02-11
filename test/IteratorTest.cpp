@@ -46,25 +46,25 @@ TEST(RandomAccessIterator, Vector) {
   testIterator(f, begin, end);
 }
 
-TEST(RandomAccessIterator, Iota) {
-  struct Dummy {
+TEST(RandomAccessIterator, DummyRandomAccessContainer) {
+  struct TestRandomAccessContainer {
     uint64_t get(uint64_t index) const { return 42 * index; }
 
-    // required for the test lambda
+    // operator[] is required for the test lambda.
     uint64_t operator[](uint64_t index) const { return get(index); }
 
-    auto front() const { return get(0); }
-    auto back() const { return get(42); }
-    auto size() const { return 43; }
+    [[nodiscard]] auto front() const { return get(0); }
+    [[nodiscard]] auto back() const { return get(42); }
+    [[nodiscard]] auto size() const { return 43; }
   };
 
-  auto getFromDummy = [](const Dummy& dummy, uint64_t index) {
-    return dummy.get(index);
-  };
+  auto getFromTestContainer = [](const TestRandomAccessContainer& dummy,
+                                 uint64_t index) { return dummy.get(index); };
 
   using Iterator =
-      ad_utility::IteratorForAccessOperator<Dummy, decltype(getFromDummy)>;
-  Dummy d;
+      ad_utility::IteratorForAccessOperator<TestRandomAccessContainer,
+                                            decltype(getFromTestContainer)>;
+  TestRandomAccessContainer d;
   Iterator begin = Iterator{&d, 0};
   Iterator end = Iterator{&d, 43};
   testIterator(d, begin, end);
