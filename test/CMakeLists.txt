@@ -160,3 +160,5 @@ addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary ${ICU_LIBRARIES})
 addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
 
 addLinkAndDiscoverTest(PrefixCompressorTest)
+
+addLinkAndDiscoverTest(MilestoneIdTest absl::strings)
