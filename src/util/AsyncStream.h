@@ -69,7 +69,7 @@ class AsyncStream : public StringSupplier {
     }
     std::unique_lock lock{_mutex};
     if (!_done) {
-      _conditionVariable.wait(lock, [this]() { return _ready; });
+      _conditionVariable.wait(lock, [this]() { return _ready || _done; });
     }
     if (_exception) {
       std::rethrow_exception(_exception);
