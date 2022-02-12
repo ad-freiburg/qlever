@@ -10,6 +10,7 @@
 #include <string_view>
 #include <thread>
 
+#include "./Log.h"
 #include "./StringSupplier.h"
 
 namespace ad_utility::streams {
@@ -67,9 +68,18 @@ class AsyncStream : public StringSupplier {
     } else {
       _extraStorage.clear();
     }
+    std::cout << "Trying to enter mutex...";
     std::unique_lock lock{_mutex};
+    std::cout << " Success!" << std::endl;
     if (!_done) {
-      _conditionVariable.wait(lock, [this]() { return _ready; });
+      if (!_conditionVariable.wait_for(lock, std::chrono::minutes{5},
+                                       [this]() { return _ready; })) {
+        LOG(ERROR) << "TIMEOUT: ";
+        LOG(ERROR) << "_ready" << _ready;
+        LOG(ERROR) << "_done" << _done;
+        LOG(ERROR) << "_doneRead" << _doneRead;
+        LOG(ERROR) << "_supplier->hasNext()" << _supplier->hasNext();
+      }
     }
     if (_exception) {
       std::rethrow_exception(_exception);
