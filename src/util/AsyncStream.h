@@ -80,10 +80,11 @@ class AsyncStream : public StringSupplier {
       if (!_conditionVariable.wait_for(lock, std::chrono::seconds{30},
                                        [this]() { return _ready; })) {
         LOG(ERROR) << "TIMEOUT: ";
-        LOG(ERROR) << "_ready" << _ready;
-        LOG(ERROR) << "_done" << _done;
-        LOG(ERROR) << "_doneRead" << _doneRead;
-        LOG(ERROR) << "_supplier->hasNext()" << _supplier->hasNext() << std::endl;
+        LOG(ERROR) << "_ready " << _ready;
+        LOG(ERROR) << ",_done " << _done;
+        LOG(ERROR) << ",_doneRead " << _doneRead;
+        LOG(ERROR) << "_supplier->hasNext() " << _supplier->hasNext()
+                   << std::endl;
       }
       std::cout << " End!" << std::endl;
     }
@@ -96,10 +97,9 @@ class AsyncStream : public StringSupplier {
     _doneRead = _done;
 
     std::cout << "INFO: " << std::endl;
-    std::cout << "_ready" << _ready;
-    std::cout << "_done" << _done;
-    std::cout << "_doneRead" << _doneRead;
-    std::cout << "_supplier->hasNext()" << _supplier->hasNext() << std::endl;
+    std::cout << "_doneRead " << _doneRead;
+    std::cout << ",_extraStorage.size() " << _extraStorage.size();
+    std::cout << ",_supplier->hasNext() " << _supplier->hasNext() << std::endl;
     return _extraStorage;
   }
 
