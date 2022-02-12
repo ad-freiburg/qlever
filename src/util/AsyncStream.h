@@ -76,13 +76,8 @@ class AsyncStream : public StringSupplier {
     } else {
       _extraStorage.clear();
     }
-    std::cout << "Trying to enter mutex...";
     std::unique_lock lock{_mutex};
-    std::cout << " Success!" << std::endl;
-    std::cout << "Staring to wait...";
     _conditionVariable.wait(lock, [this]() { return _ready; });
-    std::cout << " End!" << std::endl;
-    std::cout << "Other stuff" << std::endl;
     if (_exception) {
       std::rethrow_exception(_exception);
     }
