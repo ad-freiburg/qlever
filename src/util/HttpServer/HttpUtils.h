@@ -84,12 +84,13 @@ static std::unique_ptr<streams::StringSupplier> compressIfPossible(
       ad_utility::content_encoding::getCompressionMethodForRequest(request);
   auto generatorPointer =
       std::make_unique<streams::stream_generator>(std::move(generator));
+  auto asyncGenerator =
+      std::make_unique<streams::AsyncStream>(std::move(generatorPointer));
   if (method != CompressionMethod::NONE) {
     return std::make_unique<streams::CompressorStream>(
-        std::make_unique<streams::AsyncStream>(std::move(generatorPointer)),
-        method);
+        std::move(asyncGenerator), method);
   }
-  return generatorPointer;
+  return asyncGenerator;
 }
 
 /// Create a HttpResponse from a stream_generator with status 200 OK.
