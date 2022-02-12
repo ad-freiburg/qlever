@@ -45,8 +45,8 @@ class AsyncStream : public StringSupplier {
       _exception = std::current_exception();
       _ready = true;
       _done = true;
-      _conditionVariable.notify_one();
     }
+    _conditionVariable.notify_one();
   }
 
   void swapStreamStorage() {
@@ -69,7 +69,7 @@ class AsyncStream : public StringSupplier {
     }
     std::unique_lock lock{_mutex};
     if (!_done) {
-      _conditionVariable.wait(lock, [this]() { return _ready || _done; });
+      _conditionVariable.wait(lock, [this]() { return _ready; });
     }
     if (_exception) {
       std::rethrow_exception(_exception);
