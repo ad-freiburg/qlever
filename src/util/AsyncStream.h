@@ -11,11 +11,13 @@
 #include <string_view>
 #include <thread>
 
-#include "./Log.h"
 #include "./StringSupplier.h"
 
 namespace ad_utility::streams {
 namespace http = boost::beast::http;
+
+// 100 MiB
+constexpr size_t BUFFER_LIMIT = (1u << 20) * 100;
 
 class AsyncStream : public StringSupplier {
   std::unique_ptr<StringSupplier> _supplier;
@@ -33,10 +35,12 @@ class AsyncStream : public StringSupplier {
     try {
       std::cout << "Loop start" << std::endl;
       while (_supplier->hasNext()) {
-        // TODO throttle to match client downloads to avoid
-        //  buffer build-ups
         auto view = _supplier->next();
         std::unique_lock lock{_mutex};
+        if (_stream.view().length() >= BUFFER_LIMIT) {
+          _conditionVariable.wait(lock,
+                                  [this]() { return _stream.view().empty(); });
+        }
         _stream << view;
         _ready = true;
         _done = !_supplier->hasNext();
@@ -75,19 +79,9 @@ class AsyncStream : public StringSupplier {
     std::cout << "Trying to enter mutex...";
     std::unique_lock lock{_mutex};
     std::cout << " Success!" << std::endl;
-    if (!_done) {
-      std::cout << "Staring to wait...";
-      if (!_conditionVariable.wait_for(lock, std::chrono::seconds{30},
-                                       [this]() { return _ready; })) {
-        LOG(ERROR) << "TIMEOUT: ";
-        LOG(ERROR) << "_ready " << _ready;
-        LOG(ERROR) << ",_done " << _done;
-        LOG(ERROR) << ",_doneRead " << _doneRead;
-        LOG(ERROR) << "_supplier->hasNext() " << _supplier->hasNext()
-                   << std::endl;
-      }
-      std::cout << " End!" << std::endl;
-    }
+    std::cout << "Staring to wait...";
+    _conditionVariable.wait(lock, [this]() { return _ready; });
+    std::cout << " End!" << std::endl;
     std::cout << "Other stuff" << std::endl;
     if (_exception) {
       std::rethrow_exception(_exception);
@@ -95,6 +89,8 @@ class AsyncStream : public StringSupplier {
     swapStreamStorage();
     _ready = false;
     _doneRead = _done;
+    lock.unlock();
+    _conditionVariable.notify_one();
 
     std::cout << "INFO: " << std::endl;
     std::cout << "_doneRead " << _doneRead;
