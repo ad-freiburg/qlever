@@ -28,9 +28,9 @@ class CompressorStream : public StringSupplier {
                    CompressionMethod compressionMethod)
       : _supplier{std::move(supplier)}, _compressionMethod{compressionMethod} {
     if (compressionMethod == CompressionMethod::DEFLATE) {
-      _filteringStream.push(io::zlib_compressor(io::zlib::best_compression));
+      _filteringStream.push(io::zlib_compressor(io::zlib::best_speed));
     } else if (compressionMethod == CompressionMethod::GZIP) {
-      _filteringStream.push(io::gzip_compressor(io::gzip::best_compression));
+      _filteringStream.push(io::gzip_compressor(io::gzip::best_speed));
     }
     _filteringStream.push(io::back_inserter(_value), 0);
   }
