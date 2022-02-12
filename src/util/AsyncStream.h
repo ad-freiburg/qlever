@@ -20,7 +20,7 @@ class AsyncStream : public StringSupplier {
   std::ostringstream _stream;
   std::string _extraStorage;
   std::atomic_bool _started = false;
-  std::atomic_bool _done = false;
+  bool _done = false;
   std::atomic_bool _doneRead = false;
   std::mutex _mutex;
   std::condition_variable _conditionVariable;
@@ -30,6 +30,8 @@ class AsyncStream : public StringSupplier {
   void run() {
     try {
       while (_supplier->hasNext()) {
+        // TODO throttle to match client downloads to avoid
+        //  buffer build-ups
         auto view = _supplier->next();
         std::unique_lock lock{_mutex};
         _stream << view;
@@ -43,6 +45,7 @@ class AsyncStream : public StringSupplier {
       _exception = std::current_exception();
       _ready = true;
       _done = true;
+      _conditionVariable.notify_one();
     }
   }
 
@@ -65,15 +68,15 @@ class AsyncStream : public StringSupplier {
       _extraStorage.clear();
     }
     std::unique_lock lock{_mutex};
-    _conditionVariable.wait(lock, [this]() { return _ready; });
+    if (!_done) {
+      _conditionVariable.wait(lock, [this]() { return _ready; });
+    }
     if (_exception) {
       std::rethrow_exception(_exception);
     }
     swapStreamStorage();
     _ready = false;
-    if (_done.load()) {
-      _doneRead = true;
-    }
+    _doneRead = _done;
     return _extraStorage;
   }
 
