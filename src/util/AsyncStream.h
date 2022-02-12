@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <iostream>
 #include <memory>
 #include <string_view>
 #include <thread>
@@ -30,24 +31,31 @@ class AsyncStream : public StringSupplier {
 
   void run() {
     try {
+      std::cout << "Loop start" << std::endl;
       while (_supplier->hasNext()) {
         // TODO throttle to match client downloads to avoid
         //  buffer build-ups
+        std::cout << "Loop 1";
         auto view = _supplier->next();
+        std::cout << " Loop 2";
         std::unique_lock lock{_mutex};
+        std::cout << " Loop 3";
         _stream << view;
         _ready = true;
         _done = !_supplier->hasNext();
         lock.unlock();
         _conditionVariable.notify_one();
+        std::cout << " Loop 4" << std::endl;
       }
     } catch (...) {
+      std::cout << "Loop Exception" << std::endl;
       std::lock_guard guard{_mutex};
       _exception = std::current_exception();
       _ready = true;
       _done = true;
     }
     _conditionVariable.notify_one();
+    std::cout << "Loop end";
   }
 
   void swapStreamStorage() {
@@ -72,7 +80,8 @@ class AsyncStream : public StringSupplier {
     std::unique_lock lock{_mutex};
     std::cout << " Success!" << std::endl;
     if (!_done) {
-      if (!_conditionVariable.wait_for(lock, std::chrono::minutes{5},
+      std::cout << "Staring to wait...";
+      if (!_conditionVariable.wait_for(lock, std::chrono::seconds{30},
                                        [this]() { return _ready; })) {
         LOG(ERROR) << "TIMEOUT: ";
         LOG(ERROR) << "_ready" << _ready;
@@ -80,6 +89,7 @@ class AsyncStream : public StringSupplier {
         LOG(ERROR) << "_doneRead" << _doneRead;
         LOG(ERROR) << "_supplier->hasNext()" << _supplier->hasNext();
       }
+      std::cout << " End!" << std::endl;
     }
     if (_exception) {
       std::rethrow_exception(_exception);
@@ -87,6 +97,12 @@ class AsyncStream : public StringSupplier {
     swapStreamStorage();
     _ready = false;
     _doneRead = _done;
+
+    std::cout << "INFO: ";
+    std::cout << "_ready" << _ready;
+    std::cout << "_done" << _done;
+    std::cout << "_doneRead" << _doneRead;
+    std::cout << "_supplier->hasNext()" << _supplier->hasNext();
     return _extraStorage;
   }
 
