@@ -6,7 +6,6 @@
 
 #include <atomic>
 #include <condition_variable>
-#include <iostream>
 #include <memory>
 #include <string_view>
 #include <thread>
@@ -33,7 +32,6 @@ class AsyncStream : public StringSupplier {
 
   void run() {
     try {
-      std::cout << "Loop start" << std::endl;
       while (_supplier->hasNext()) {
         auto view = _supplier->next();
         std::unique_lock lock{_mutex};
@@ -48,14 +46,12 @@ class AsyncStream : public StringSupplier {
         _conditionVariable.notify_one();
       }
     } catch (...) {
-      std::cout << "Loop Exception" << std::endl;
       std::lock_guard guard{_mutex};
       _exception = std::current_exception();
       _ready = true;
       _done = true;
     }
     _conditionVariable.notify_one();
-    std::cout << "Loop end" << std::endl;
   }
 
   void swapStreamStorage() {
@@ -87,10 +83,6 @@ class AsyncStream : public StringSupplier {
     lock.unlock();
     _conditionVariable.notify_one();
 
-    std::cout << "INFO: " << std::endl;
-    std::cout << "_doneRead " << _doneRead;
-    std::cout << ",_extraStorage.size() " << _extraStorage.size();
-    std::cout << ",_supplier->hasNext() " << _supplier->hasNext() << std::endl;
     return _extraStorage;
   }
 
