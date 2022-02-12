@@ -35,17 +35,13 @@ class AsyncStream : public StringSupplier {
       while (_supplier->hasNext()) {
         // TODO throttle to match client downloads to avoid
         //  buffer build-ups
-        std::cout << "Loop 1";
         auto view = _supplier->next();
-        std::cout << " Loop 2";
         std::unique_lock lock{_mutex};
-        std::cout << " Loop 3";
         _stream << view;
         _ready = true;
         _done = !_supplier->hasNext();
         lock.unlock();
         _conditionVariable.notify_one();
-        std::cout << " Loop 4" << std::endl;
       }
     } catch (...) {
       std::cout << "Loop Exception" << std::endl;
@@ -55,7 +51,7 @@ class AsyncStream : public StringSupplier {
       _done = true;
     }
     _conditionVariable.notify_one();
-    std::cout << "Loop end";
+    std::cout << "Loop end" << std::endl;
   }
 
   void swapStreamStorage() {
@@ -87,10 +83,11 @@ class AsyncStream : public StringSupplier {
         LOG(ERROR) << "_ready" << _ready;
         LOG(ERROR) << "_done" << _done;
         LOG(ERROR) << "_doneRead" << _doneRead;
-        LOG(ERROR) << "_supplier->hasNext()" << _supplier->hasNext();
+        LOG(ERROR) << "_supplier->hasNext()" << _supplier->hasNext() << std::endl;
       }
       std::cout << " End!" << std::endl;
     }
+    std::cout << "Other stuff" << std::endl;
     if (_exception) {
       std::rethrow_exception(_exception);
     }
@@ -98,11 +95,11 @@ class AsyncStream : public StringSupplier {
     _ready = false;
     _doneRead = _done;
 
-    std::cout << "INFO: ";
+    std::cout << "INFO: " << std::endl;
     std::cout << "_ready" << _ready;
     std::cout << "_done" << _done;
     std::cout << "_doneRead" << _doneRead;
-    std::cout << "_supplier->hasNext()" << _supplier->hasNext();
+    std::cout << "_supplier->hasNext()" << _supplier->hasNext() << std::endl;
     return _extraStorage;
   }
 
