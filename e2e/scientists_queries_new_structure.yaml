@@ -1677,38 +1677,6 @@ queries:
           var: "?x"
 
 
-  # Repeated query
-  - query: bind-integer-constant
-    type: no-text
-    sparql: |
-      SELECT * WHERE {
-          ?x <is-a> <Scientist> .
-          ?x <Spouse_(or_domestic_partner)> ?y .
-          ?y <is-a> <Scientist> .
-          FILTER(?x < ?y) .
-          BIND(42 AS ?z)
-      } ORDER BY ASC(?x)
-    checks:
-      - num_cols: 3
-      - num_rows: 97
-      - selected: ["?x", "?y", "?z"]
-      - row_data_types: [string, string, decimal]
-      - contains_row:
-          - column:
-              type: iri
-              value: <Albert_Einstein>
-          - column:
-              type: iri
-              value: <Mileva_Marić>
-          - column:
-              type: literal
-              value: "42"
-              datatype: decimal
-      - order_string:
-          dir: ASC
-          var: "?x"
-
-
   - query: bind-entity-constant
     type: no-text
     sparql: |
