@@ -4,6 +4,7 @@ QLever Query Tool for End2End Testing
 """
 
 import sys
+import platform
 import urllib.parse
 import urllib.request
 import json
@@ -558,5 +559,7 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    print("Python {:s} on {:s}\n".format(sys.version, sys.platform))
+    print("\nPython {:s} on {:s}\n".format(sys.version, platform.platform()))
+    print('Number of arguments:', len(sys.argv), 'arguments.')
+    print('Argument List:', str(sys.argv), '\n')
     main()
