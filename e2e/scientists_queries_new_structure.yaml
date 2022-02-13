@@ -1,0 +1,1933 @@
+---
+name: scientists
+queries:
+
+  #
+  # 'contains_row' _Column_ Structure: { type, value, datatype(optional) }
+  #               ex: column { iri, '<Albert_Einstein>' }
+  #               ex: column { literal, decimal, '169.01' }
+  #               ex: column { literal, '169' }
+  #               ex: column { literal, 'some text' }
+  #
+  #
+  # 'res' Structure: [ row {type, value, datatype(optional)} ]
+  #
+  #
+  # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  #  It is important to insert the row_data_types before the
+  #  contains_row   or   res
+  # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+  - query: relativ-star-scientists
+    type: text
+    sparql: |
+      SELECT ?x SCORE(?t) TEXT(?t) WHERE {
+          ?x <is-a> <Scientist> .
+          ?t ql:contains-entity ?x .
+          ?t ql:contains-word "relati*"
+      }
+      ORDER BY DESC(SCORE(?t))
+    checks:
+      - num_cols: 3
+      - num_rows: 1653
+      - selected: ["?x", "SCORE(?t)", "TEXT(?t)"]
+      - row_data_types: [string, int, string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+          - column:
+              type: literal
+              value: "169"
+              datatype: int
+          - column:
+              type: literal
+              value: "He realized, however, that the principle of relativity
+                      could also be extended to gravitational fields, and with
+                      his subsequent theory of gravitation in 1916, he
+                      published a paper on general relativity."
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+          # null cells are ignored but iterated
+          - column: null
+          - column: null
+      - contains_row:
+          - column:
+              type: iri
+              value: <Luís_Lindley_Cintra>
+          - column: null
+          - column: null
+      - order_numeric:
+          dir: DESC
+          var: "SCORE(?t)"
+
+
+  # should use TextOperationWithFilter
+  - query: relativ-star-scientists-from-ulm
+    type: text
+    sparql: |
+      SELECT ?x SCORE(?t) TEXT(?t) WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Place_of_birth> <Ulm> .
+          ?t ql:contains-entity ?x .
+          ?t ql:contains-word "relati*"
+      }
+      ORDER BY DESC(SCORE(?t))
+    checks:
+      - num_cols: 3
+      - num_rows: 1
+      - row_data_types: [string, int, string]
+      - selected: ["?x", "SCORE(?t)", "TEXT(?t)"]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+          - column:
+              type: literal
+              value: "169"
+              datatype: int
+          - column:
+              type: literal
+              value: "He realized, however, that the principle of relativity
+                      could also be extended to gravitational fields, and with
+                      his subsequent theory of gravitation in 1916, he
+                      published a paper on general relativity."
+
+
+  - query: algo-star-female-scientists
+    type: text
+    sparql: |
+      SELECT ?x SCORE(?t) WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Gender> <Female> .
+          ?t ql:contains-entity ?x .
+          ?t ql:contains-word "algo*"
+      }
+      ORDER BY DESC(SCORE(?t))
+    checks:
+      - num_cols: 2
+      - num_rows: 11
+      - row_data_types: [string, int]
+      - selected: ["?x", "SCORE(?t)"]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Grete_Hermann>
+          - column:
+              type: literal
+              value: "1"
+              datatype: int
+      - order_numeric:
+          dir: DESC
+          var: "SCORE(?t)"
+
+
+  - query: algor-start-female-born-before-1940
+    type: text
+    sparql: |
+      SELECT ?x ?date SCORE(?t) TEXT(?t) WHERE {
+        ?x <is-a> <Scientist> .
+        ?x <Date_of_birth> ?date .
+        ?x <Gender> <Female> .
+        ?t ql:contains-entity ?x .
+        ?t ql:contains-word "algor*" .
+
+        FILTER (?date < "1940-01-01"^^xsd:date)
+      }
+      ORDER BY DESC(SCORE(?t))
+    checks:
+      - num_cols: 4
+      - num_rows: 3
+      - row_data_types: [string, dateTime, int, string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Grete_Hermann>
+          - column:
+              type: literal
+              value: "1901-03-02T00:00:00"
+              datatype: dateTime
+          - column:
+              type: literal
+              value: "1"
+              datatype: int
+          - column:
+              type: literal
+              value: "Hermann's algorithm for primary decomposition is still
+                      in use now."
+
+
+  - query: scientists-from-new-york
+    type: no-text
+    sparql: |
+      SELECT ?x WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Place_of_birth> <New_York_City>
+      }
+    checks:
+      - num_cols: 1
+      - num_rows: 280
+      - selected: ["?x"]
+      - row_data_types: [string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Andrew_S._Tanenbaum>
+
+
+  - query: scientists-married-to-scientists
+    type: no-text
+    sparql: |
+      SELECT ?x ?y WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Spouse_(or_domestic_partner)> ?y .
+          ?y <is-a> <Scientist> .
+          FILTER(?x < ?y) .
+      } ORDER BY ASC(?x)
+    checks:
+      - num_cols: 2
+      - num_rows: 97
+      - selected: ["?x", "?y"]
+      - row_data_types: [string, string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+          - column:
+              type: iri
+              value: <Mileva_Marić>
+      - order_string:
+          dir: ASC
+          var: "?x"
+
+
+  - query: scientists-count-group-by-place-of-birth
+    type: no-text
+    sparql: |
+      SELECT (COUNT(?x) as ?count) ?place WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Place_of_birth> ?place .
+      }
+      GROUP BY ?place
+      ORDER BY DESC(?count)
+    checks:
+      - num_cols: 2
+      # The query returns to many rows, the current limit is 4096
+      # num_rows : 5295
+      - selected: ["?count", "?place"]
+      - row_data_types: [decimal, string]
+      - contains_row:
+          - column:
+              type: literal
+              value: "280"
+              datatype: decimal
+          - column:
+              type: iri
+              value: <New_York_City>
+      - order_numeric:
+          dir: DESC
+          var: "?count"
+
+
+  - query: scientists-order-by-aggregate-count
+    type: no-text
+    sparql: |
+      SELECT ?place (COUNT(?x) as ?count2) WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Place_of_birth> ?place .
+      }
+      GROUP BY ?place
+      ORDER BY DESC((COUNT(?x) as ?count))
+    checks:
+      - num_cols: 2
+      # The query returns to many rows, the current limit is 4096
+      # num_rows : 5295
+      - selected: ["?place", "?count2"]
+      - row_data_types: [string, decimal]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Budapest>
+          - column:
+              type: literal
+              value: "65"
+              datatype: decimal
+      - order_numeric:
+          dir: DESC
+          var: "?count2"
+
+
+  - query: scientists-order-by-aggregate-avg
+    type: no-text
+    sparql: |
+      SELECT ?profession (AVG(?height) as ?avg2) WHERE  {
+        ?x <is-a> <Scientist> .
+        ?x <Profession> ?profession .
+        ?x <Height> ?height .
+      }
+      GROUP BY ?profession
+      ORDER BY ASC((AVG(?height) as ?avg))
+    checks:
+      - num_cols: 2
+      - num_rows: 209
+      - selected: ["?profession", "?avg2"]
+      - row_data_types: [string, decimal]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Illusionist>
+          - column:
+              type: literal
+              value: "1.98"
+              datatype: decimal
+      - order_numeric:
+          dir: ASC
+          var: "?avg2"
+
+
+  - query: group-by-profession-average-height
+    type: no-text
+    sparql: |
+      SELECT (AVG(?height) as ?avg) ?profession WHERE {
+          ?x <is-a> ?profession .
+          ?x <Height> ?height .
+      }
+      GROUP BY ?profession
+      ORDER BY DESC(?avg)
+    checks:
+      - num_cols: 2
+      - num_rows: 312
+      - selected: ["?avg", "?profession"]
+      - row_data_types: [float, string]
+      - contains_row:
+          - column: null
+          - column:
+              type: iri
+              value: <Architect>
+      - order_numeric:
+          dir: DESC
+          var: "?avg"
+
+
+  - query: person-order-by-height
+    type: no-text
+    sparql: |
+      SELECT ?person ?height WHERE {
+          ?person <is-a> <Person> .
+          ?person <Height> ?height .
+      }
+      ORDER BY DESC(?height)
+    checks:
+      - row_data_types: [string, float]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Howard_Hughes>
+          - column:
+              type: literal
+              value: "1.92"
+              datatype: float
+      - order_numeric:
+          dir: DESC
+          var: "?height"
+
+
+  - query: group-by-gender-average-height
+    type: no-text
+    sparql: |
+      SELECT (AVG(?height) as ?avg) ?gender WHERE {
+          ?x <is-a> <Person> .
+          ?x <Gender> ?gender .
+          ?x <Height> ?height .
+      }
+      GROUP BY ?gender
+      ORDER BY DESC(?avg)
+    checks:
+      - num_rows: 2
+      - num_cols: 2
+      - selected: ["?avg", "?gender"]
+      - row_data_types: [decimal, string]
+      # Float values are only compared to limited precision
+      - res:
+          - row:
+              - column:
+                  type: literal
+                  value: "1.80475"
+                  datatype: decimal
+              - column:
+                  type: iri
+                  value: <Male>
+          - row:
+              - column:
+                  type: literal
+                  value: "1.68982"
+                  datatype: decimal
+              - column:
+                  type: iri
+                  value: <Female>
+      - order_numeric:
+          dir: DESC
+          var: "?avg"
+
+
+  - query: pattern-trick
+    type: no-text
+    sparql: |
+      SELECT ?r (COUNT(?r) as ?count) WHERE {
+        ?a <is-a> <Scientist> .
+        ?a ql:has-predicate ?r .
+      }
+      GROUP BY ?r
+      ORDER BY DESC(?count)
+    checks:
+      - num_rows: 156
+      - num_cols: 2
+      - selected: ["?r", "?count"]
+      - row_data_types: [string, int]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Religion>
+          - column:
+              type: literal
+              value: "1185"
+              datatype: int
+      - order_numeric:
+          dir: DESC
+          var: "?count"
+
+
+  - query: pattern-trick-without-has-predicate
+    type: no-text
+    sparql: |
+      SELECT ?r (COUNT(?a) as ?count) WHERE {
+        {
+          SELECT DISTINCT ?a ?r WHERE {
+            ?a <is-a> <Scientist> .
+            ?a ?r ?o .
+          }
+        }
+      }
+      GROUP BY ?r
+      ORDER BY DESC(?count)
+    checks:
+      - num_rows: 156
+      - num_cols: 2
+      - selected: ["?r", "?count"]
+      - row_data_types: [string, decimal]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Religion>
+          - column:
+              type: literal
+              value: "1185"
+              datatype: decimal
+      - order_numeric:
+          dir: DESC
+          var: "?count"
+
+
+  - query: has-predicate-full
+    type: no-text
+    sparql: |
+      SELECT ?entity ?relation WHERE {
+        ?entity ql:has-predicate ?relation .
+      }
+    checks:
+      # The number o rows is greater than the current limit of 4096.
+      # num_rows : 168444
+      - num_cols: 2
+      - selected: ["?entity", "?relation"]
+      - row_data_types: [string, string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Alan_Fersht>
+          - column:
+              type: iri
+              value: <Leader_of>
+
+
+  - query: has-predicate-subquery-subject
+    type: no-text
+    sparql: |
+      SELECT ?entity ?r WHERE {
+        ?entity <is-a> <Profession> .
+        ?entity ql:has-predicate ?r.
+      }
+    checks:
+      - num_rows: 760
+      - num_cols: 2
+      - selected: ["?entity", "?r"]
+      - row_data_types: [string, string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Geographer>
+          - column:
+              type: iri
+              value: <Profession>
+
+
+  - query: full-osp-scan
+    type: no-text
+    sparql: |
+      SELECT DISTINCT ?p WHERE {
+        ?x <is-a> <Scientist> .
+        ?y <is-a> <Scientist> .
+        ?x ?p ?y .
+      }
+    checks:
+      - num_rows: 17
+      - num_cols: 1
+      - selected: ["?p"]
+      - row_data_types: [string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Academic_advisor>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Named_after>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Influenced_By>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Production_staff>
+
+
+  - query: optional-spouse
+    type: no-text
+    sparql: |
+      SELECT ?x ?y WHERE {
+          ?x <is-a> <Scientist> .
+          FILTER (?x < <Ada_Lovelace>) .
+          OPTIONAL { ?x <Spouse_(or_domestic_partner)> ?y } .
+      }
+    checks:
+      - num_rows: 126
+      - num_cols: 2
+      - selected: ["?x", "?y"]
+      - row_data_types: [string, string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Aaron_Antonovsky>
+          - column:
+              type: iri
+              value: <Helen_Antonovsky>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Abraham_Zelmanov>
+          - column: null
+
+
+  - query: optional-spouse-group-concat
+    type: no-text
+    sparql: |
+      SELECT ?x (GROUP_CONCAT(?y; separator=";") AS ?partners) WHERE {
+          FILTER (?x < <Ada_Lovelace>)
+          ?x <is-a> <Scientist> .
+          OPTIONAL {?x <Spouse_(or_domestic_partner)> ?y .}
+      }
+      GROUP BY ?x
+    checks:
+      - num_rows: 124
+      - num_cols: 2
+      - selected: ["?x", "?partners"]
+      - row_data_types: [string, string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Aaron_Antonovsky>
+          - column:
+              type: iri
+              value: <Helen_Antonovsky>
+      - contains_row:  # [<Abraham_Zelmanov>, ""]
+          - column:
+              type: iri
+              value: <Aaron_Antonovsky>
+          - column: null
+      - contains_row:
+          - column:
+              type: iri
+              value: <Abraham_Pais>
+          - column:
+              type: iri
+              value: <Ida_Nicolaisen>;<Lila_Lee_Pais>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Aafia_Siddiqui>
+          - column:
+              type: iri
+              value: <Amjad_Mohammed_Khan>;<Ammar_al-Baluchi>
+
+
+  - query: giant-int-scientists
+    type: no-text
+    sparql: |
+      SELECT ?person ?height WHERE  {
+        ?person <is-a> <Scientist> .
+        ?person <Height> ?height .
+        FILTER(?height > 2)
+      }
+    checks:
+      - row_data_types: [string, float]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Granville_Woods>
+          - column:
+              type: literal
+              value: "2.1336"
+              datatype: float
+      - num_rows: 1
+
+
+  - query: tall-float-scientists
+    type: no-text
+    sparql: |
+      SELECT ?person ?height WHERE  {
+        ?person <is-a> <Scientist> .
+        ?person <Height> ?height .
+        FILTER(?height > 1.8)
+      }
+    checks:
+      - row_data_types: [string, float]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Granville_Woods>
+          - column:
+              type: literal
+              value: "2.1336"
+              datatype: float
+      - contains_row:
+          - column:
+              type: iri
+              value: <Andrew_Hogue>
+          - column:
+              type: literal
+              value: "1.9558"
+              datatype: float
+      - num_rows: 52
+      - num_cols: 2
+
+
+  - query: dwarf-float-scientists
+    type: no-text
+    sparql: |
+      SELECT ?person ?height WHERE  {
+        ?person <is-a> <Scientist> .
+        ?person <Height> ?height .
+        FILTER(?height < 1.47)
+      }
+    checks:
+      - row_data_types: [string, float]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Zelda_Rubinstein>
+          - column:
+              type: literal
+              value: "1.29"
+              datatype: float
+      - num_rows: 1
+
+
+  - query: regex-initials-a-e
+    type: no-text
+    sparql: |
+      SELECT ?s WHERE {
+          ?s <Profession> <Scientist> .
+          ?s <is-a> <Person> .
+          FILTER regex(?s, "^<A[a-z]*_E[a-z]*>$")
+      }
+    checks:
+      - num_rows: 22
+      - num_cols: 1
+      - selected: ["?s"]
+      - row_data_types: [string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Abraham_Esau>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Alfred_Einhorn>
+
+
+  - query: regex-lastname-stein
+    type: no-text
+    sparql: |
+      SELECT ?s WHERE {
+          ?s <Profession> <Scientist> .
+          ?s <is-a> <Person> .
+          FILTER regex(?s, "^<[a-z]*_[a-z]*stein[a-z]*>$", "i")
+      }
+    checks:
+      - num_rows: 68
+      - num_cols: 1
+      - selected: ["?s"]
+      - row_data_types: [string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Adin_Steinsaltz>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Zylberstein>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Greg_Stein>
+
+
+  - query: regex-albert-physics-award
+    type: no-text
+    sparql: |
+      SELECT ?s ?a WHERE {
+          ?s <is-a> <Scientist> .
+          FILTER regex(?s, "^<Albert") .
+          ?s <Award_Won> ?a .
+          FILTER regex(?a, "physic", "i")
+      }
+    checks:
+      - num_rows: 6
+      - num_cols: 2
+      - selected: ["?s", "?a"]
+      - row_data_types: [string, string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+          - column:
+              type: iri
+              value: <Nobel_Prize_in_Physics>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Fert>
+          - column:
+              type: iri
+              value: <Wolf_Prize_in_Physics>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Overhauser>
+          - column:
+              type: iri
+              value: <National_Medal_of_Science_for_Physical_Science>
+
+
+  - query: having-height
+    type: no-text
+    sparql: |
+      SELECT (COUNT(?profession) as ?count) ?height WHERE {
+        ?x <Profession> ?profession .
+        ?x <Height> ?height
+      }
+      GROUP BY ?height
+      HAVING (?height > 1.7)
+    checks:
+      - num_rows: 32
+      - num_cols: 2
+      - row_data_types: [decimal, float]
+      - selected: ["?count", "?height"]
+      - contains_row:
+          - column:
+              type: literal
+              value: "5"
+              datatype: decimal
+          - column:
+              type: literal
+              value: "1.803"
+              datatype: float
+
+
+  - query: having-predicate-religion
+    type: no-text
+    sparql: |
+      SELECT ?predicate (COUNT(?predicate) as ?count) WHERE {
+        ?x <is-a> <Astronaut> .
+        ?x ql:has-predicate ?predicate .
+      }
+      GROUP BY ?predicate
+      HAVING (?predicate < "<Z") (?predicate = <Religion>)
+    checks:
+      - num_rows: 1
+      - num_cols: 2
+      - row_data_types: [string, int]
+      - selected: ["?predicate", "?count"]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Religion>
+          - column:
+              type: literal
+              value: "5"
+              datatype: int
+
+
+  - query: pattern-trick-automatic-having
+    type: no-text
+    sparql: |
+      SELECT ?predicate (COUNT(?predicate) as ?count) WHERE {
+        ?x ql:has-predicate ?predicate .
+        FILTER (?predicate = <Gender>)
+      }
+      GROUP BY ?predicate
+      ORDER BY DESC(?count)
+    checks:
+      - num_rows: 1
+      - num_cols: 2
+      - row_data_types: [string, int]
+      - selected: ["?predicate", "?count"]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Gender>
+          - column:
+              type: literal
+              value: "18589"
+              datatype: int
+
+
+  - query: distinct-order-by-check
+    type: no-text
+    sparql: |
+      SELECT DISTINCT ?scientist ?height WHERE {
+        ?scientist <is-a> <Scientist> .
+        ?scientist <Height> ?height .
+      }
+      ORDER BY DESC(?height)
+      LIMIT 2
+    checks:
+      - num_rows: 2
+      - num_cols: 2
+      - selected: ["?scientist", "?height"]
+      - row_data_types: [string, float]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Granville_Woods>
+          - column:
+              type: literal
+              value: "2.1336"
+              datatype: float
+      - contains_row:
+          - column:
+              type: iri
+              value: <Charles_Bradley_(Chemist)>
+          - column:
+              type: literal
+              value: "1.98"
+              datatype: float
+
+
+  - query: having-avg-height
+    type: no-text
+    sparql: |
+      SELECT ?profession (AVG(?height) as ?avg) WHERE {
+        ?s <Profession> ?profession .
+        ?s <Height> ?height .
+      }
+      GROUP BY ?profession
+      HAVING (?avg > 1.9)
+      ORDER BY DESC(?avg)
+    checks:
+      - num_rows: 17
+      - num_cols: 2
+      - selected: ["?profession", "?avg"]
+      - row_data_types: [string, decimal]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Anatomist>
+          - column:
+              type: literal
+              value: "1.94"
+              datatype: decimal
+      - contains_row:
+          - column:
+              type: iri
+              value: <Peace_activist>
+          - column:
+              type: literal
+              value: "1.91"
+              datatype: decimal
+
+
+  - query: having-number-of-awards
+    type: no-text
+    sparql: |
+      SELECT ?profession (COUNT(DISTINCT ?s) as ?count) WHERE {
+        ?s <Profession> ?profession .
+        ?s <Award_Won> ?award .
+      }
+      GROUP BY ?profession
+      ORDER BY DESC(?count)
+      HAVING (?count > 300)
+    checks:
+      - num_rows: 6
+      - num_cols: 2
+      - selected: ["?profession", "?count"]
+      - row_data_types: [string, decimal]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Chemist>
+          - column:
+              type: literal
+              value: "603"
+              datatype: decimal
+      - contains_row:
+          - column:
+              type: iri
+              value: <Professor>
+          - column:
+              type: literal
+              value: "352"
+              datatype: decimal
+
+
+  - query: having-group-concat
+    type: no-text
+    sparql: |
+      SELECT ?profession (GROUP_CONCAT(DISTINCT ?award) as ?awards) WHERE {
+        ?s <Profession> ?profession .
+        ?s <Award_Won> ?award .
+      }
+      GROUP BY ?profession
+      HAVING (?awards = <Victoria_Cross>)
+    checks:
+      - num_rows: 1
+      - num_cols: 2
+      - selected: ["?profession", "?awards"]
+      - row_data_types: [string, string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Apothecary>
+          - column:
+              type: iri
+              value: <Victoria_Cross>
+
+  # ERROR (?) => {'?awards': {'type': 'iri',
+  #                    'value': 'Nobel_Prize_in_Chemistry> <Rutherford_Medal'},
+  #                    '?s': {'type': 'iri', 'value': 'Alan_MacDiarmid'}}
+  #
+  - query: prefix-filter-on-group-concat
+    type: no-text
+    sparql: |
+      SELECT ?s (GROUP_CONCAT(?award) as ?awards) WHERE {
+        ?s <is-a> <Scientist> .
+        ?s <Award_Won> ?award .
+      }
+      GROUP BY ?s
+      HAVING regex(?awards, "^<Nobel_Prize")
+    checks:
+      - num_rows: 139
+      - num_cols: 2
+      - selected: ["?s", "?awards"]
+      - row_data_types: [string, string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Eric_Betzig>
+          - column:
+              type: iri
+              value: <Nobel_Prize_in_Chemistry>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Alan_MacDiarmid>
+          - column:
+              type: iri
+              value: '<Nobel_Prize_in_Chemistry> <Rutherford_Medal>'
+
+
+  - query: union-partial-merge
+    type: no-text
+    sparql: |
+      SELECT ?a ?h WHERE {
+        {?a <Profession> <Biologist> .}
+        uNiON
+        {?a <Height> ?h.}
+      }
+      ORDER BY ASC(?h)
+    checks:
+      - num_rows: 737
+      - num_cols: 2
+      - selected: ["?a", "?h"]
+      - row_data_types: [string, float]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Sophie_Hosking>
+          - column:
+              type: literal
+              value: 1.65
+              datatype: float
+      - contains_row:
+          - column:
+              type: iri
+              value: <Stuart_Kornfeld>
+          - column: null
+
+
+  - query: union-full-merge
+    type: no-text
+    sparql: |
+      SELECT ?a ?t WHERE {
+        {?a <Height> ?t .}
+        UNION
+        {?a <Religion> ?t .}
+      }
+    checks:
+      - num_rows: 1488
+      - num_cols: 2
+      - selected: ["?a", "?t"]
+      - row_data_types: [string, "float|string"]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Carl_Sagan>
+          - column:
+              type: literal
+              value: "1.8"
+              datatype: float
+      - contains_row:
+          - column:
+              type: iri
+              value: <Noreena_Hertz>
+          - column:
+              type: iri
+              value: <Judaism>
+
+
+  - query: duplicate-alias
+    type: no-text
+    sparql: |
+      SELECT ?object (COUNT(?object) AS ?count) WHERE {
+              ?subject <Profession> ?object
+      }
+      GROUP BY ?object
+      ORDER BY DESC(?count)
+    checks:
+      - num_rows: 836
+      - num_cols: 2
+      - selected: ["?object", "?count"]
+      - row_data_types: [string, decimal]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Inventor>
+          - column:
+              type: literal
+              value: "1616"
+              datatype: decimal
+      - contains_row:
+          - column:
+              type: iri
+              value: <Astrologer>
+          - column:
+              type: literal
+              value: "43"
+              datatype: decimal
+
+
+  - query: simple-subquery
+    type: no-text
+    sparql: |
+      SELECT ?a ?h WHERE {
+        ?a <is-a> <Scientist> .
+        {
+          SELECT ?a WHERE {
+            ?a <Height> ?h .
+          }
+          ORDER BY DESC(?h)
+        }
+      }
+    checks:
+      - num_rows: 134
+      - num_cols: 2
+      - selected: ["?a", "?h"]
+      - row_data_types: [string, float]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Daryl_Hannah>
+          - column:
+              type: literal
+              value: "1.78"
+              datatype: float
+      - contains_row:
+          - column:
+              type: iri
+              value: <Marissa_Mayer>
+          - column:
+              type: literal
+              value: "1.73"
+              datatype: float
+
+
+  - query: subquery-profession-avg-height
+    type: no-text
+    sparql: |
+      SELECT ?a ?o ?h ?avg WHERE {
+        ?a <Profession> ?o .
+        ?a <Height> ?h .
+        {
+          SELECT ?o (AVG(?h) as ?avg) WHERE {
+            ?a <Profession> ?o .
+            ?a <Height> ?h .
+          }
+          GROUP BY ?o
+        }
+      }
+    checks:
+      - num_rows: 994
+      - num_cols: 4
+      - selected: ["?a", "?o", "?h", "?avg"]
+      - row_data_types: [string, string, float, decimal]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Steve_Backshall>
+          - column:
+              type: iri
+              value: <Actor>
+          - column:
+              type: literal
+              value: "1.8"
+              datatype: float
+          - column:
+              type: literal
+              value: "1.76627"
+              datatype: decimal
+      - contains_row:
+          - column:
+              type: iri
+              value: <Carl_Sagan>
+          - column:
+              type: iri
+              value: <Astrobiologist>
+          - column:
+              type: literal
+              value: "1.8"
+              datatype: float
+          - column:
+              type: literal
+              value: "1.8"
+              datatype: decimal
+
+
+  - query: filter-on-variable-columns
+    type: no-text
+    # The inner subquery is for making the SAMPLE() deterministic
+    sparql: |
+      SELECT ?p (SAMPLE(?a) as ?a1) (SAMPLE(?a) as ?a2) (SAMPLE(?a) as ?a3)
+             (SAMPLE(?a) as ?a4) (AVG(?h) as ?avg) WHERE {
+        { SELECT ?a ?h ?p  WHERE {
+            ?a <Height> ?h .
+            ?a <Profession> ?p .
+          } ORDER BY ASC(?p) DESC(?h)
+        }
+      }
+      GROUP BY ?p
+      HAVING (?avg > 1.8)
+    checks:
+      - num_rows: 87
+      - num_cols: 6
+      - selected: ["?p", "?a1", "?a2", "?a3", "?a4", "?avg"]
+      - row_data_types: [string, string, string,
+                         string, string, decimal]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Cameraman>
+          - column:
+              type: iri
+              value: <Chris_Packham>
+          - column:
+              type: iri
+              value: <Chris_Packham>
+          - column:
+              type: iri
+              value: <Chris_Packham>
+          - column:
+              type: iri
+              value: <Chris_Packham>
+          - column:
+              type: literal
+              value: "1.83"
+              datatype: decimal
+      - contains_row:
+          - column:
+              type: iri
+              value: <Lawyer>
+          - column:
+              type: iri
+              value: <Thomas_Jefferson>
+          - column:
+              type: iri
+              value: <Thomas_Jefferson>
+          - column:
+              type: iri
+              value: <Thomas_Jefferson>
+          - column:
+              type: iri
+              value: <Thomas_Jefferson>
+          - column:
+              type: literal
+              value: "1.8056"
+              datatype: decimal
+
+
+  - query: count-available-predicates-on-variable-columns
+    type: no-text
+    sparql: |
+      SELECT ?p (COUNT(?p) as ?count) WHERE {
+        ?a ql:has-predicate ?p .
+        ?a <Height> ?h1 .
+        ?a <Height> ?h2 .
+        ?a <Height> ?h3 .
+        ?a <Height> ?h4 .
+        ?a <Height> ?h5 .
+        ?a <Profession> ?profession .
+      }
+      GROUP BY ?p
+    checks:
+      - num_rows: 108
+      - num_cols: 2
+      - selected: ["?p", "?count"]
+      - row_data_types: [string, int]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Film_appeared_in>
+          - column:
+              type: literal
+              value: "56"
+              datatype: int
+      - contains_row:
+          - column:
+              type: iri
+              value: <Patent>
+          - column:
+              type: literal
+              value: "2"
+              datatype: int
+
+
+  - query: count-available-predicates-on-single-entity
+    type: no-text
+    sparql: |
+      SELECT ?p (COUNT(?p) as ?count) WHERE {
+       <Albert_Einstein> ql:has-predicate ?p .
+      }
+      GROUP BY ?p
+    checks:
+      - num_rows: 35
+      - num_cols: 2
+      - selected: ["?p", "?count"]
+      - row_data_types: [string, int]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Hall_of_fame_induction>
+          - column:
+              type: literal
+              value: "1"
+              datatype: int
+      - contains_row:
+          - column:
+              type: iri
+              value: <Weight>
+          - column:
+              type: literal
+              value: "1"
+              datatype: int
+
+
+  - query: property_path_trans_and_or
+    type: no-text
+    sparql: |
+      SELECT ?b WHERE {
+        <Al_Gore> <is-a>*/<is-a>|<Height> ?b .
+      }
+    checks:
+      - num_rows: 43
+      - num_cols: 1
+      - selected: ["?b"]
+      - row_data_types: ["string|float"]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Politician>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Character_Occupation>
+      - contains_row:
+          - column:
+              type: literal
+              value: "1.87"
+              datatype: float
+
+
+  - query: property_path_inverse
+    type: no-text
+    sparql: |
+      SELECT ?b WHERE {
+        <Geologist> ^<is-a> ?b .
+      }
+    checks:
+      - num_rows: 1154
+      - num_cols: 1
+      - selected: ["?b"]
+      - row_data_types: [string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Heim>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Walter_Alvarez>
+
+
+  - query: birth-place-group-count-order
+    type: no-text
+    sparql: |
+      SELECT ?place (COUNT(?person) AS ?count) WHERE {
+        ?person <is-a> <Person> .
+        ?person <Place_of_birth> ?place
+      }
+      GROUP BY ?place
+      HAVING (?count > 5)
+      ORDER BY ASC(?count)
+    checks:
+      - num_cols: 2
+      # num_rows: 5296
+      # We currently limit to 4096
+      - selected: ["?place", "?count"]
+      - row_data_types: [string, decimal]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Aachen>
+          - column:
+              type: literal
+              value: "8"
+              datatype: decimal
+      - contains_row:
+          - column:
+              type: iri
+              value: <Aarhus>
+          - column:
+              type: literal
+              value: "6"
+              datatype: decimal
+      - order_numeric:
+          dir: ASC
+          var: "?count"
+
+
+  - query: simple-values
+    type: no-text
+    sparql: |
+      SELECT ?a WHERE {
+        VALUES ?a { <Albert_Einstein>}
+      }
+    checks:
+      - num_cols: 1
+      - num_rows: 1
+      - selected: ["?a"]
+      - row_data_types: [string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+
+
+  - query: values-empty-join
+    type: no-text
+    sparql: |
+      SELECT ?a ?b ?c WHERE {
+        VALUES ?a { <Albert_Einstein>}
+        VALUES (?a ?b) {
+          (<Marie_Curie> <Joseph_Jacobson>) (<Freiherr> <Lord_of_the_Isles>)
+        }
+      }
+    checks:
+      - num_cols: 3
+      - num_rows: 0
+      - row_data_types: [string, string, string]
+      - selected: ["?a", "?b", "?c"]
+
+
+  - query: nonexisting-values
+    type: no-text
+    sparql: |
+      SELECT ?a WHERE {
+        VALUES ?a
+            {"obscure Literal"@xf <Albert_Einstein> <Non_Exisiting_Scientist>}
+      }
+    checks:
+      - num_cols: 1
+      - num_rows: 1
+      - selected: ["?a"]
+      - row_data_types: [string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+      # contains_warning: ['The word "obscure Literal"@xf',
+      #                   "The word <Non_Exisiting",
+      #                   "Ignored 2 rows"]
+
+
+  - query: values-empty-join
+    type: no-text
+    sparql: |
+      SELECT ?a ?b ?c WHERE {
+        VALUES ?a { <Albert_Einstein>}
+        VALUES (?a ?b) {
+          (<Marie_Curie> <Joseph_Jacobson>) (<Freiherr> <Lord_of_the_Isles>)
+        }
+      }
+    checks:
+      - num_cols: 3
+      - num_rows: 0
+      - row_data_types: [string, string, string]
+      - selected: ["?a", "?b", "?c"]
+
+
+  - query: values-join
+    type: no-text
+    sparql: |
+      SELECT ?a ?b WHERE {
+        VALUES (?a ?b) {
+          (<Gerard_De_Geer> <Freiherr>)
+          (<Charles,_Prince_of_Wales> <Lord_of_the_Isles>)
+        }
+        ?a <Title> ?b .
+        ?a <Country_of_nationality> <United_Kingdom>
+      }
+    checks:
+      - num_cols: 2
+      - num_rows: 1
+      - selected: ["?a", "?b"]
+      - row_data_types: [string, string]
+      - contains_row:
+          - column:
+              type: iri
+              value: "<Charles,_Prince_of_Wales>"
+          - column:
+              type: iri
+              value: <Lord_of_the_Isles>
+
+
+  - query: filter-depending-on-last-optional
+    type: no-text
+    sparql: |
+      SELECT ?s ?a WHERE {
+          ?s <is-a> <Scientist> .
+          OPTIONAL { ?s <Award_Won> ?a }
+          FILTER regex(?a, "^<Nob")
+      }
+    checks:
+      - num_rows: 543
+      - num_cols: 2
+      - selected: ["?s", "?a"]
+      - row_data_types: [string, string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+          - column:
+              type: iri
+              value: <Nobel_Prize_in_Physics>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Al_Gore>
+          - column:
+              type: iri
+              value: <Nobel_Peace_Prize>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Dennis_Gabor>
+          - column:
+              type: iri
+              value: <Nobel_Prize_in_Physics>
+
+
+  - query: filter-depending-on-last-optional-reordered
+    type: no-text
+    sparql: |
+      SELECT ?s ?a WHERE {
+          ?s <is-a> <Scientist> .
+          FILTER regex(?a, "^<Nob")
+          OPTIONAL { ?s <Award_Won> ?a }
+      }
+    checks:
+      - num_rows: 543
+      - num_cols: 2
+      - selected: ["?s", "?a"]
+      - row_data_types: [string, string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+          - column:
+              type: iri
+              value: <Nobel_Prize_in_Physics>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Al_Gore>
+          - column:
+              type: iri
+              value: <Nobel_Peace_Prize>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Dennis_Gabor>
+          - column:
+              type: iri
+              value: <Nobel_Prize_in_Physics>
+
+
+  - query: minus-biologists
+    type: no-text
+    sparql: |
+      SELECT ?a WHERE {
+        ?a <is-a> <Entrepreneur> .
+        MINUS {
+          ?a <is-a> <Engineer>
+        }
+      }
+    checks:
+      - num_rows: 152
+      - num_cols: 1
+      - selected: ["?a"]
+      - row_data_types: [string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Barney_Pell>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Duc_Pham>
+
+
+  - query: prefix-filter-disjunction
+    type: no-text
+    sparql: |
+      SELECT ?s  WHERE {
+                ?s <is-a> <Scientist> .
+                FILTER ((regex(?s, "^<Albert") || regex(?s, "^<Marie"))) .
+            }
+    checks:
+      - num_rows: 106
+      - num_cols: 1
+      - selected: ["?s"]
+      - row_data_types: [string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Fert>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Overhauser>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Marie_Curie>
+
+
+  - query: prefix-filter-disjunction-different-lhs
+    type: no-text
+    sparql: |
+      SELECT ?s ?a WHERE {
+          ?s <is-a> <Scientist> .
+          ?s <Award_Won> ?a .
+          FILTER (regex(?s, "^<Albert") || regex(?a, "^<Nobel"))
+      }
+    checks:
+      - num_rows: 579
+      - num_cols: 2
+      - selected: ["?s", "?a"]
+      - row_data_types: [string, string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+          - column:
+              type: iri
+              value: <Nobel_Prize_in_Physics>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Fert>
+          - column:
+              type: iri
+              value: <Wolf_Prize_in_Physics>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Overhauser>
+          - column:
+              type: iri
+              value: <National_Medal_of_Science_for_Physical_Science>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Andre_Geim>
+          - column:
+              type: iri
+              value: <Nobel_Prize_in_Physics>
+
+
+  - query: bind-rename
+    type: no-text
+    sparql: |
+      SELECT ?x ?z WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Spouse_(or_domestic_partner)> ?y .
+          ?y <is-a> <Scientist> .
+          FILTER(?x < ?y) .
+          BIND(?y AS ?z)
+      } ORDER BY ASC(?x)
+    checks:
+      - num_cols: 2
+      - num_rows: 97
+      - selected: ["?x", "?z"]
+      - row_data_types: [string, string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+          - column:
+              type: iri
+              value: <Mileva_Marić>
+      - order_string:
+          dir: ASC
+          var: "?x"
+
+
+  - query: bind-integer-constant
+    type: no-text
+    sparql: |
+      SELECT ?x ?y ?z WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Spouse_(or_domestic_partner)> ?y .
+          ?y <is-a> <Scientist> .
+          FILTER(?x < ?y) .
+          BIND(42 AS ?z)
+      } ORDER BY ASC(?x)
+    checks:
+      - num_cols: 3
+      - num_rows: 97
+      - selected: ["?x", "?y", "?z"]
+      - row_data_types: [string, string, decimal]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+          - column:
+              type: iri
+              value: <Mileva_Marić>
+          - column:
+              type: literal
+              value: "42"
+              datatype: decimal
+      - order_string:
+          dir: ASC
+          var: "?x"
+
+
+  # Repeated query
+  - query: bind-integer-constant
+    type: no-text
+    sparql: |
+      SELECT * WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Spouse_(or_domestic_partner)> ?y .
+          ?y <is-a> <Scientist> .
+          FILTER(?x < ?y) .
+          BIND(42 AS ?z)
+      } ORDER BY ASC(?x)
+    checks:
+      - num_cols: 3
+      - num_rows: 97
+      - selected: ["?x", "?y", "?z"]
+      - row_data_types: [string, string, decimal]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+          - column:
+              type: iri
+              value: <Mileva_Marić>
+          - column:
+              type: literal
+              value: "42"
+              datatype: decimal
+      - order_string:
+          dir: ASC
+          var: "?x"
+
+
+  - query: bind-entity-constant
+    type: no-text
+    sparql: |
+      SELECT ?x ?y ?z WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Spouse_(or_domestic_partner)> ?y .
+          ?y <is-a> <Scientist> .
+          FILTER(?x < ?y) .
+          BIND(<Al_Gore> AS ?z)
+      } ORDER BY ASC(?x)
+    checks:
+      - num_cols: 3
+      - num_rows: 97
+      - selected: ["?x", "?y", "?z"]
+      - row_data_types: [string, string, string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+          - column:
+              type: iri
+              value: <Mileva_Marić>
+          - column:
+              type: iri
+              value: <Al_Gore>
+      - order_string:
+          dir: ASC
+          var: "?x"
+
+
+  - query: bind-entity-constant
+    type: no-text
+    sparql: |
+      SELECT ?x ?y ?sum WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Spouse_(or_domestic_partner)> ?y .
+          ?y <is-a> <Scientist> .
+          FILTER(?x < ?y) .
+          BIND(38 AS ?z) .
+          BIND(4 AS ?a) .
+          BIND (?z + ?a AS ?sum)
+      } ORDER BY ASC(?x)
+    checks:
+      - num_cols: 3
+      - num_rows: 97
+      - selected: ["?x", "?y", "?sum"]
+      - row_data_types: [string, string, decimal]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+          - column:
+              type: iri
+              value: <Mileva_Marić>
+          - column:
+              type: literal
+              value: "42"
+              datatype: decimal
+      - order_string:
+          dir: ASC
+          var: "?x"
+
+
+  - query: select_asterisk_prefix-filter-disjunction
+    type: no-text
+    sparql: |
+      SELECT *  WHERE {
+                ?s <is-a> <Scientist> .
+                FILTER ((regex(?s, "^<Albert") || regex(?s, "^<Marie"))) .
+            }
+    checks:
+      - num_rows: 106
+      - num_cols: 1
+      - selected: ["?s"]
+      - row_data_types: [string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Fert>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Overhauser>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Marie_Curie>
+
+
+  - query: select_asterisk_union-full-merge
+    type: no-text
+    sparql: |
+      SELECT * WHERE {
+        {?a <Height> ?t .}
+        UNION
+        {?a <Religion> ?t .}
+      }
+    checks:
+      - num_rows: 1488
+      - num_cols: 2
+      - selected: ["?a", "?t"]
+      - row_data_types: [string, "string|float"]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Carl_Sagan>
+          - column:
+              type: literal
+              value: "1.8"
+              datatype: float
+      - contains_row:
+          - column:
+              type: iri
+              value: <Noreena_Hertz>
+          - column:
+              type: iri
+              value: <Judaism>
+
+
+  - query: select_asterisk_algo-star-female-scientists
+    type: text
+    sparql: |
+      SELECT * WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Gender> <Female> .
+          ?t ql:contains-entity ?x .
+          ?t ql:contains-word "algo*"
+      }
+    checks:
+      - num_cols: 2
+      - num_rows: 11
+      - selected: ["?x", "?t"]
+      - row_data_types: [string, string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Grete_Hermann>
+          - column:
+              type: literal
+              value: "Hermann's algorithm for primary decomposition
+                       is still in use now."
+
+
+  - query: select_asterisk_regex-lastname-stein
+    type: no-text
+    sparql: |
+      SELECT * WHERE {
+          ?s <Profession> <Scientist> .
+          ?s <is-a> <Person> .
+          FILTER regex(?s, "^<[a-z]*_[a-z]*stein[a-z]*>$", "i")
+      }
+    checks:
+      - num_rows: 68
+      - num_cols: 1
+      - selected: ["?s"]
+      - row_data_types: [string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Adin_Steinsaltz>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Einstein>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Albert_Zylberstein>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Greg_Stein>
+
+
+  - query: select_asterisk_pattern-trick-without-has-predicate
+    type: no-text
+    sparql: |
+      SELECT * WHERE {
+        {
+          SELECT DISTINCT ?a ?r WHERE {
+            ?a <is-a> <Scientist> .
+            ?a ?r ?o .
+          }
+        }
+      }
+    checks:
+      # The query returns to many rows, the current limit is 4096
+      - num_cols: 2
+      - selected: ["?a", "?r"]
+      - row_data_types: [string, string]
+      - contains_row:
+          - column:
+              type: iri
+              value: <Aafia_Siddiqui>
+          - column:
+              type: iri
+              value: <Religion>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Aban_Marker_Kabraji>
+          - column:
+              type: iri
+              value: <Religion>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Abd_al-Rahman_al-Sufi>
+          - column:
+              type: iri
+              value: <Religion>
+      - contains_row:
+          - column:
+              type: iri
+              value: <Aaldert_Wapstra>
+          - column:
+              type: iri
+              value: <Place_of_birth>

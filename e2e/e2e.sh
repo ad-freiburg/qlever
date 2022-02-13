@@ -73,8 +73,8 @@ echo "Binary dir is $BINARY_DIR"
 # Travis CI is super cool but also uses ancient OS images and so to get
 # a python that supports typing we need to install from the deadsnakes
 # repository which does not override the system python
-if [ -f "/usr/bin/python3.6" ]; then
-	export PYTHON_BINARY="/usr/bin/python3.6"
+if [ -f "/usr/bin/python3.8" ]; then
+	export PYTHON_BINARY="/usr/bin/python3.8"
 else
 	# shellcheck disable=SC2155
 	# shellcheck disable=SC2006
@@ -140,6 +140,11 @@ if [ $i -ge 60 ]; then
   exit 1
 fi
 
+popd
+
 echo "ServerMain was successfully started, running queries ..."
 $PYTHON_BINARY "$PROJECT_DIR/e2e/queryit.py" "$PROJECT_DIR/e2e/scientists_queries.yaml" "http://localhost:9099" &> "$BINARY_DIR/query_log.txt" || bail "Querying Server failed"
+
+echo "...  running new queries ..."
+$PYTHON_BINARY "$PROJECT_DIR/e2e/queryit_new.py" "$PROJECT_DIR/e2e/scientists_queries_new_structure.yaml" "http://localhost:9099" &> "$BINARY_DIR/query_new_log.txt" || bail "Querying Server failed"
 popd
