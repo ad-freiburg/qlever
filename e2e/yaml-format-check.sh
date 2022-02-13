@@ -9,7 +9,7 @@ done <sourcelist
 
 ERROR=0
 for source in "${SOURCE_FILES[@]}" ;do
-	yamllint $source | grep -E 'error|warning'  &> /dev/null
+	yamllint $source | grep -E 'error'  &> /dev/null
 	HAS_WRONG_FILES=$?
 	if [ $HAS_WRONG_FILES -ne 1 ] ; then
 		# Print an error and exit
