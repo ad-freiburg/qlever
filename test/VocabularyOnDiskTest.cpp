@@ -38,7 +38,7 @@ auto createVocabularyFromDiskImpl(
     std::optional<std::vector<uint64_t>> ids = std::nullopt) {
   { createVocabularyImpl(words, std::move(ids)); }
   VocabularyOnDisk vocabulary;
-  vocabulary.readFromFile(vocabFilename);
+  vocabulary.open(vocabFilename);
   return vocabulary;
 }
 

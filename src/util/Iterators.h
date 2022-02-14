@@ -7,11 +7,11 @@
 
 namespace ad_utility {
 
-/// A lambda that accesses the `index`-th element in a `randomAccessContainer`
+/// A lambda that accesses the `i`-th element in a `randomAccessContainer`
 /// using `operator[]`
 inline auto accessViaBracketOperator = [](auto&& randomAccessContainer,
-                                          auto index) {
-  return randomAccessContainer[index];
+                                          auto i) {
+  return randomAccessContainer[i];
 };
 using AccessViaBracketOperator = decltype(accessViaBracketOperator);
 

@@ -86,10 +86,10 @@ class UnicodeVocabulary {
     return {lb, ub};
   }
 
-  /// Read the underlying vocabulary from a file. The file must have been
+  /// Open the underlying vocabulary from a file. The file must have been
   /// written using the `UnderlyingVocabulary` class.
-  void readFromFile(const std::string& filename) {
-    _underlyingVocabulary.readFromFile(filename);
+  void open(const std::string& filename) {
+    _underlyingVocabulary.open(filename);
   }
 
   UnderlyingVocabulary& getUnderlyingVocabulary() {
@@ -102,7 +102,7 @@ class UnicodeVocabulary {
   UnicodeComparator& getComparator() { return _comparator; }
   const UnicodeComparator& getComparator() const { return _comparator; }
 
-  void clear() { _underlyingVocabulary.clear(); }
+  void close() { _underlyingVocabulary.close(); }
 
   void build(const std::vector<std::string>& v) {
     _underlyingVocabulary.build(v);

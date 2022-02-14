@@ -58,14 +58,13 @@ class VocabularyOnDisk {
       const vector<std::pair<std::string, uint64_t>>& wordsAndIds,
       const string& fileName);
 
-  /// Read vocabulary from filename. It must have been previously written to
-  /// this filename, for example via `buildFromVector` or `buildFromTextFile`.
-  void readFromFile(const string& filename);
+  /// Open the vocabulary from file. It must have been previously written to
+  /// this file, for example via `buildFromVector` or `buildFromTextFile`.
+  void open(const string& filename);
 
   /// Close the underlying file and uninitialize this vocabulary for further
-  /// use. NOTE: The name "clear" is a little misleading, but it is required to
-  /// make the interface consistent with the other vocabulary types.
-  void clear() { _file.close(); }
+  /// use.
+  void close() { _file.close(); }
 
   /// If an entry with this `id` exists, return the corresponding string, else
   /// `std::nullopt`

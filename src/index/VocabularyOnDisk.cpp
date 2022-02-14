@@ -75,7 +75,7 @@ void VocabularyOnDisk::buildFromIterable(Iterable&& it,
     _file.close();
   }  // After this close, the destructor of MmapVector is called, whoch dumps
      // everything to disk.
-  readFromFile(fileName);
+  open(fileName);
 }
 
 // _____________________________________________________________________________
@@ -128,7 +128,7 @@ void VocabularyOnDisk::buildFromTextFile(const string& textFileName,
 }
 
 // _____________________________________________________________________________
-void VocabularyOnDisk::readFromFile(const string& filename) {
+void VocabularyOnDisk::open(const string& filename) {
   _file.open(filename.c_str(), "r");
   _idsAndOffsets.open(filename + _offsetSuffix);
   AD_CHECK(_idsAndOffsets.size() > 0);

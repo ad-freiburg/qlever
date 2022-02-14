@@ -58,8 +58,8 @@ TEST(RandomAccessIterator, DummyRandomAccessContainer) {
     [[nodiscard]] auto size() const { return 43; }
   };
 
-  auto getFromTestContainer = [](const TestRandomAccessContainer& dummy,
-                                 uint64_t index) { return dummy.get(index); };
+  auto getFromTestContainer = [](const TestRandomAccessContainer& container,
+                                 uint64_t i) { return container.get(i); };
 
   using Iterator =
       ad_utility::IteratorForAccessOperator<TestRandomAccessContainer,

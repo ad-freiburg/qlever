@@ -7,7 +7,7 @@
 using std::string;
 
 // _____________________________________________________________________________
-void VocabularyInMemory::readFromFile(const string& fileName) {
+void VocabularyInMemory::open(const string& fileName) {
   LOG(INFO) << "Reading vocabulary from file " << fileName << " ..."
             << std::endl;
   _words.clear();
