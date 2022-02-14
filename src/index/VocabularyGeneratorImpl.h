@@ -30,7 +30,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
     const std::string& basename, size_t numFiles, Comparator comparator,
     InternalVocabularyAction& internalVocabularyAction) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
-  // or literal. All internal IRIs come before all external ones.
+  // or literal. All internal IRIs or literals come before all external ones.
   // TODO<joka921> Change this as soon as we have Interleaved Ids via the
   // MilestoneIdManager
   // TODO<joka921> Split up the actual comparison of QueueWords and the
