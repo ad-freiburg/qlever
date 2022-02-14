@@ -74,15 +74,13 @@ class MergeVocabularyTest : public ::testing::Test {
 
     // these will be the contents of partial vocabularies, second element of
     // pair is the correct Id which is expected from mergeVocabulary
-    std::vector<std::tuple<std::string, size_t, bool>> words0{
-        {"\"ape\"", 0, false},
-        {"\"gorilla\"", 2, false},
-        {"\"monkey\"", 3, false},
-        {"\"bla\"", 5, true}};
-    std::vector<std::tuple<std::string, size_t, bool>> words1{
-        {"\"bear\"", 1, false},
-        {"\"monkey\"", 3, false},
-        {"\"zebra\"", 4, false}};
+    std::vector<TripleComponentWithId> words0{{"\"ape\"", false, 0},
+                                              {"\"gorilla\"", false, 2},
+                                              {"\"monkey\"", false, 3},
+                                              {"\"bla\"", true, 5}};
+    std::vector<TripleComponentWithId> words1{{"\"bear\"", false, 1},
+                                              {"\"monkey\"", false, 3},
+                                              {"\"zebra\"", false, 4}};
 
     // write expected vocabulary files
     std::ofstream expVoc(_pathVocabExp);
@@ -99,12 +97,12 @@ class MergeVocabularyTest : public ::testing::Test {
           // write first partial vocabulary
           partialVocab << tripleComponents.size();
           size_t localIdx = 0;
-          for (const auto& w : tripleComponents) {
-            partialVocab << std::get<0>(w);
-            partialVocab << localIdx;
-            partialVocab << std::get<2>(w);
+          for (auto w : tripleComponents) {
+            auto globalId = w._id;
+            w._id = localIdx;
+            partialVocab << w;
             if (mapping) {
-              mapping->emplace_back(localIdx, std::get<1>(w));
+              mapping->emplace_back(localIdx, globalId);
             }
             localIdx++;
           }

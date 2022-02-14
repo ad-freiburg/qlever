@@ -57,8 +57,9 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
 
   auto pushWordFromPartialVocabularyToQueue = [&](size_t i) {
     if (numWordsLeftInPartialVocabulary[i] > 0) {
-      TripleComponentWithId entry;
-      queue.push(QueueWord(std::move(entry), i));
+      TripleComponentWithId tripleComponent;
+      infiles[i] >> tripleComponent;
+      queue.push(QueueWord(std::move(tripleComponent), i));
       numWordsLeftInPartialVocabulary[i]--;
     }
   };
@@ -153,7 +154,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
   writeBuf.reserve(bufSize);
   // avoid duplicates
   for (auto& top : buffer) {
-    if (_lastTripleComponent.has_value() &&
+    if (!_lastTripleComponent.has_value() ||
         top.iriOrLiteral() != _lastTripleComponent.value().iriOrLiteral()) {
       // TODO<joka921> Once we have interleaved IDs using the MilestoneIdManager
       // we have to compute the correct Ids here.
@@ -173,7 +174,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
                          << '\n';
       }
 
-      if (!top.iriOrLiteral().starts_with('@')) {
+      if (top.iriOrLiteral().starts_with('@')) {
         if (!_firstLangPredSeen) {
           // inclusive
           _langPredLowerBound = _lastTripleComponent.value()._id;
