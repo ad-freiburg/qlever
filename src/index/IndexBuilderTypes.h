@@ -22,11 +22,27 @@ struct TripleEntry {
   TripleEntry() = default;
   std::string _entry;
   bool _isExternal = false;
+
+  template<typename Serializer>
+  friend void serialize(Serializer& serializer, TripleEntry& entry) {
+    serializer | entry._entry;
+    serializer | entry._isExternal;
+  }
 };
 
 struct TripleEntryWithId {
   TripleEntry _tripleEntry;
-  uint64_t _id;
+  uint64_t _id = 0;
+  [[nodiscard]] const auto& isExternal() const {return _tripleEntry._isExternal;}
+  [[nodiscard]] auto& isExternal() {return _tripleEntry._isExternal;}
+  [[nodiscard]] const auto& word() const {return _tripleEntry._entry;}
+  [[nodiscard]] auto& word() {return _tripleEntry._entry;}
+
+  template<typename Serializer>
+  friend void serialize(Serializer& serializer, TripleEntryWithId& entry) {
+    serializer | entry._tripleEntry;
+    serializer | entry._id;
+  }
 };
 
 // A Rdf triple that also knows for each entry, whether this entry should be

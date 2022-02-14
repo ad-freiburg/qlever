@@ -156,9 +156,9 @@ void VocabularyMerger::writeQueueWordsToIdVec(
   writeBuf.reserve(bufSize);
   // avoid duplicates
   for (auto& top : buffer) {
-    if (top.word() != _lastWritten._lastWrittenWord) {
-      _lastWritten._lastWrittenWord = top.word();
-      _lastWritten._wasExternalized = top.isExternal();
+    if (top.word() != _lastWritten.word()) {
+      _lastWritten.word() = top.word();
+      _lastWritten.word() = top.isExternal();
       // TODO<joka921> Once we have interleaved IDs using the MilestoneIdManager
       // we have to compute the correct Ids here.
       _lastWritten._id = _totalWritten;
@@ -168,11 +168,11 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       // idVecs to have a more useful external access pattern.
 
       // write the new word to the vocabulary
-      if (!_lastWritten._wasExternalized) {
-        internalVocabularyAction(_lastWritten._lastWrittenWord);
+      if (!_lastWritten.isExternal()) {
+        internalVocabularyAction(_lastWritten.word());
       } else {
         _outfileExternal << RdfEscaping::escapeNewlinesAndBackslashes(
-                                _lastWritten._lastWrittenWord)
+                                _lastWritten.word())
                          << '\n';
       }
 
