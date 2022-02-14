@@ -1323,13 +1323,13 @@ void Index::readConfiguration() {
 // ___________________________________________________________________________
 LangtagAndTriple Index::tripleToInternalRepresentation(
     std::array<std::string, 3>&& tripleIn) {
-  LangtagAndTriple res{"", stringsToInternalTriple(std::move(tripleIn))};
+  LangtagAndTriple res{"", makeTriple(std::move(tripleIn))};
   auto& spo = res._triple;
   for (auto& el : spo) {
-    el._entry = _vocab.getLocaleManager().normalizeUtf8(el._entry);
+    el._iriOrLiteral = _vocab.getLocaleManager().normalizeUtf8(el._iriOrLiteral);
   }
   size_t upperBound = 3;
-  auto& object = spo[2]._entry;
+  auto& object = spo[2]._iriOrLiteral;
   if (ad_utility::isXsdValue(object)) {
     object = ad_utility::convertValueLiteralToIndexWord(object);
     upperBound = 2;
@@ -1341,7 +1341,7 @@ LangtagAndTriple Index::tripleToInternalRepresentation(
   }
 
   for (size_t k = 0; k < upperBound; ++k) {
-    if (_onDiskLiterals && _vocab.shouldBeExternalized(spo[k]._entry)) {
+    if (_onDiskLiterals && _vocab.shouldBeExternalized(spo[k]._iriOrLiteral)) {
       spo[k]._isExternal = true;
     }
   }

@@ -17,41 +17,45 @@
 
 // A triple entry (subject, predicate, object) together with the information,
 // whether it should be part of the external vocabulary
-struct TripleEntry {
-  TripleEntry(std::string entry, bool isExternal = false) : _entry{std::move(entry)}, _isExternal{isExternal} {}
-  TripleEntry() = default;
-  std::string _entry;
+struct TripleComponent {
+  TripleComponent(std::string iriOrLiteral, bool isExternal = false) : _iriOrLiteral{std::move(iriOrLiteral)}, _isExternal{isExternal} {}
+  TripleComponent() = default;
+  std::string _iriOrLiteral;
   bool _isExternal = false;
 
   template<typename Serializer>
-  friend void serialize(Serializer& serializer, TripleEntry& entry) {
-    serializer | entry._entry;
+  friend void serialize(Serializer& serializer, TripleComponent& entry) {
+    serializer | entry._iriOrLiteral;
     serializer | entry._isExternal;
   }
 };
 
-struct TripleEntryWithId {
-  TripleEntry _tripleEntry;
+struct TripleComponentWithId {
+  std::string _iriOrLiteral;
+  bool _isExternal = false;
   uint64_t _id = 0;
-  [[nodiscard]] const auto& isExternal() const {return _tripleEntry._isExternal;}
-  [[nodiscard]] auto& isExternal() {return _tripleEntry._isExternal;}
-  [[nodiscard]] const auto& word() const {return _tripleEntry._entry;}
-  [[nodiscard]] auto& word() {return _tripleEntry._entry;}
+
+  [[nodiscard]] const auto& isExternal() const {return _isExternal;}
+  [[nodiscard]] auto& isExternal() {return _isExternal;}
+  [[nodiscard]] const auto& iriOrLiteral() const {return _iriOrLiteral;}
+  [[nodiscard]] auto& iriOrLiteral() {return _iriOrLiteral;}
 
   template<typename Serializer>
-  friend void serialize(Serializer& serializer, TripleEntryWithId& entry) {
-    serializer | entry._tripleEntry;
+  friend void serialize(Serializer& serializer, TripleComponentWithId& entry) {
+    serializer | entry._iriOrLiteral;
+    serializer | entry._isExternal;
     serializer | entry._id;
   }
 };
 
-// A Rdf triple that also knows for each entry, whether this entry should be
+// A triple that also knows for each entry, whether this entry should be
 // part of the external vocabulary.
-using Triple = std::array<TripleEntry, 3>;
+using Triple = std::array<TripleComponent, 3>;
 
-inline Triple stringsToInternalTriple(std::array<std::string, 3>&& t) {
-  using P = TripleEntry;
-  return {P{t[0], false}, P{t[1], false}, P{t[2], false}};
+// Convert a triple of `std::string` to a triple of `TripleComponents`. All three entries will have `isExternal()==false` and an uninitialized ID.
+inline Triple makeTriple(std::array<std::string, 3>&& t) {
+  using T = TripleComponent;
+  return {T{t[0]}, T{t[1] }, T{t[2]}};
 }
 
 /// named value type for the ItemMap
@@ -71,7 +75,7 @@ using ItemVec = std::vector<std::pair<std::string, IdAndSplitVal>>;
  */
 // Align each ItemMapManager on its own cache line to avoid false sharing.
 struct alignas(256) ItemMapManager {
-  /// Construct by assigning the minimum Id that shall be returned by the map
+  /// Construct by assigning the minimum ID that shall be returned by the map
   explicit ItemMapManager(Id minId, const TripleComponentComparator* cmp)
       : _map(), _minId(minId), m_comp(cmp) {}
   /// Minimum Id is 0
@@ -81,18 +85,18 @@ struct alignas(256) ItemMapManager {
   /// the actual vocabulary
   ItemMap&& moveMap() && { return std::move(_map); }
 
-  /// If the key was seen before, return its preassigned Id. Else assign the
-  /// Next free Id to the string, store and return it.
-  Id assignNextId(const TripleEntry& key) {
-    if (!_map.count(key._entry)) {
+  /// If the key was seen before, return its preassigned ID. Else assign the
+  /// Next free ID to the string, store and return it.
+  Id assignNextId(const TripleComponent& key) {
+    if (!_map.count(key._iriOrLiteral)) {
       Id res = _map.size() + _minId;
-      _map[key._entry] = {
+      _map[key._iriOrLiteral] = {
           res, m_comp->extractAndTransformComparable(
-                   key._entry, TripleComponentComparator::Level::IDENTICAL,
+                   key._iriOrLiteral, TripleComponentComparator::Level::IDENTICAL,
                    key._isExternal)};
       return res;
     } else {
-      return _map[key._entry].m_id;
+      return _map[key._iriOrLiteral].m_id;
     }
   }
 
@@ -148,10 +152,11 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
   auto& itemArray = *itemArrayPtr;
   for (size_t j = 0; j < Parallelism; ++j) {
     itemArray[j] = ItemMapManager(j * 100 * maxNumberOfTriples, comp);
+    // The LANGUAGE_PREDICATE gets the first ID in each map. TODO<joka921>
+    // This is not necessary for the actual QLever code, but certain unit tests
+    // currently fail without it.
     itemArray[j].assignNextId(
-        LANGUAGE_PREDICATE);  // not really needed here, but also not
-                                      // harmful and needed to make some
-                                      // completely unrelated unit tests pass.
+        LANGUAGE_PREDICATE);
     itemArray[j]._map.reserve(2 * maxNumberOfTriples);
   }
   using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
@@ -178,7 +183,7 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
         auto langTaggedPredId =
             map.assignNextId(
                 ad_utility::convertToLanguageTaggedPredicate(
-                    lt._triple[1]._entry, lt._langtag));
+                    lt._triple[1]._iriOrLiteral, lt._langtag));
         auto& spoIds = *(res[0]);  // ids of original triple
         // TODO replace the std::array by an explicit IdTriple class,
         //  then the emplace calls don't need the explicit type.

@@ -60,7 +60,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
 
   auto pushWordFromPartialVocabularyToQueue = [&](size_t i) {
     if (numWordsLeftInPartialVocabulary[i] > 0) {
-      TripleEntryWithId entry;
+      TripleComponentWithId entry;
       queue.push(QueueWord(std::move(entry), i));
       numWordsLeftInPartialVocabulary[i]--;
     }
@@ -283,7 +283,7 @@ void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
     // we have given this word, and the information, whether this word belongs
     // into the internal or external vocabulary.
     const auto& [id, splitVal] = idAndSplitVal;
-    TripleEntryWithId entry {{word, splitVal.isExternalized}, id};
+    TripleComponentWithId entry {{word, splitVal.isExternalized}, id};
     serializer << entry;
   }
   serializer.close();
