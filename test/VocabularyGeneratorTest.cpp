@@ -94,21 +94,21 @@ class MergeVocabularyTest : public ::testing::Test {
     ad_utility::serialization::FileWriteSerializer partial0(_path0);
     ad_utility::serialization::FileWriteSerializer partial1(_path1);
 
-    auto writePartialVocabulary = [](auto& partialVocab, const auto& entries,
-                                     Mapping* mapping) {
-      // write first partial vocabulary
-      partialVocab << entries.size();
-      size_t localIdx = 0;
-      for (const auto& w : entries) {
-        partialVocab << std::get<0>(w);
-        partialVocab << localIdx;
-        partialVocab << std::get<2>(w);
-        if (mapping) {
-          mapping->emplace_back(localIdx, std::get<1>(w));
-        }
-        localIdx++;
-      }
-    };
+    auto writePartialVocabulary =
+        [](auto& partialVocab, const auto& tripleComponents, Mapping* mapping) {
+          // write first partial vocabulary
+          partialVocab << tripleComponents.size();
+          size_t localIdx = 0;
+          for (const auto& w : tripleComponents) {
+            partialVocab << std::get<0>(w);
+            partialVocab << localIdx;
+            partialVocab << std::get<2>(w);
+            if (mapping) {
+              mapping->emplace_back(localIdx, std::get<1>(w));
+            }
+            localIdx++;
+          }
+        };
     writePartialVocabulary(partial0, words0, &_expMapping0);
 
     writePartialVocabulary(partial1, words1, &_expMapping1);

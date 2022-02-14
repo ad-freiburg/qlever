@@ -1326,7 +1326,8 @@ LangtagAndTriple Index::tripleToInternalRepresentation(
   LangtagAndTriple res{"", makeTriple(std::move(tripleIn))};
   auto& spo = res._triple;
   for (auto& el : spo) {
-    el._iriOrLiteral = _vocab.getLocaleManager().normalizeUtf8(el._iriOrLiteral);
+    el._iriOrLiteral =
+        _vocab.getLocaleManager().normalizeUtf8(el._iriOrLiteral);
   }
   size_t upperBound = 3;
   auto& object = spo[2]._iriOrLiteral;

@@ -68,19 +68,21 @@ class VocabularyMerger {
   struct QueueWord {
     QueueWord() = default;
     QueueWord(TripleComponentWithId&& v, size_t file)
-        : _entry(std::move(v)),
-          _partialFileId(file) {}
-    TripleComponentWithId _entry;  // the word, its local ID and the information if it will be externalized
+        : _entry(std::move(v)), _partialFileId(file) {}
+    TripleComponentWithId _entry;  // the word, its local ID and the information
+                                   // if it will be externalized
     size_t _partialFileId;  // from which partial vocabulary did this word come
 
-    [[nodiscard]] const bool& isExternal() const {return _entry.isExternal();}
-    [[nodiscard]] bool& isExternal() {return _entry.isExternal();}
+    [[nodiscard]] const bool& isExternal() const { return _entry.isExternal(); }
+    [[nodiscard]] bool& isExternal() { return _entry.isExternal(); }
 
-    [[nodiscard]] const std::string& word() const {return _entry.iriOrLiteral();}
-    [[nodiscard]] std::string& word() {return _entry.iriOrLiteral();}
+    [[nodiscard]] const std::string& iriOrLiteral() const {
+      return _entry.iriOrLiteral();
+    }
+    [[nodiscard]] std::string& iriOrLiteral() { return _entry.iriOrLiteral(); }
 
-    [[nodiscard]] const auto& id() const {return _entry._id;}
-    [[nodiscard]] auto& id() {return _entry._id;}
+    [[nodiscard]] const auto& id() const { return _entry._id; }
+    [[nodiscard]] auto& id() { return _entry._id; }
   };
 
   // write the queu words in the buffer to their corresponding idPairVecs.
@@ -94,7 +96,7 @@ class VocabularyMerger {
   // close all associated files and MmapVectors and reset all internal variables
   void clear() {
     _totalWritten = 0;
-    _lastWritten = TripleComponentWithId{};
+    _lastTripleComponent = std::nullopt;
     _outfileExternal = std::ofstream();
     _idVecs.clear();
     _firstLangPredSeen = false;
@@ -109,7 +111,7 @@ class VocabularyMerger {
   size_t _totalWritten = 0;
   // keep track of the last seen word to correctly handle duplicates
 
-  TripleComponentWithId _lastWritten;
+  std::optional<TripleComponentWithId> _lastTripleComponent = std::nullopt;
   std::ofstream _outfileExternal;
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> _idVecs;

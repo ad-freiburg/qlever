@@ -18,12 +18,13 @@
 // A triple entry (subject, predicate, object) together with the information,
 // whether it should be part of the external vocabulary
 struct TripleComponent {
-  TripleComponent(std::string iriOrLiteral, bool isExternal = false) : _iriOrLiteral{std::move(iriOrLiteral)}, _isExternal{isExternal} {}
+  TripleComponent(std::string iriOrLiteral, bool isExternal = false)
+      : _iriOrLiteral{std::move(iriOrLiteral)}, _isExternal{isExternal} {}
   TripleComponent() = default;
   std::string _iriOrLiteral;
   bool _isExternal = false;
 
-  template<typename Serializer>
+  template <typename Serializer>
   friend void serialize(Serializer& serializer, TripleComponent& entry) {
     serializer | entry._iriOrLiteral;
     serializer | entry._isExternal;
@@ -35,12 +36,12 @@ struct TripleComponentWithId {
   bool _isExternal = false;
   uint64_t _id = 0;
 
-  [[nodiscard]] const auto& isExternal() const {return _isExternal;}
-  [[nodiscard]] auto& isExternal() {return _isExternal;}
-  [[nodiscard]] const auto& iriOrLiteral() const {return _iriOrLiteral;}
-  [[nodiscard]] auto& iriOrLiteral() {return _iriOrLiteral;}
+  [[nodiscard]] const auto& isExternal() const { return _isExternal; }
+  [[nodiscard]] auto& isExternal() { return _isExternal; }
+  [[nodiscard]] const auto& iriOrLiteral() const { return _iriOrLiteral; }
+  [[nodiscard]] auto& iriOrLiteral() { return _iriOrLiteral; }
 
-  template<typename Serializer>
+  template <typename Serializer>
   friend void serialize(Serializer& serializer, TripleComponentWithId& entry) {
     serializer | entry._iriOrLiteral;
     serializer | entry._isExternal;
@@ -52,10 +53,11 @@ struct TripleComponentWithId {
 // part of the external vocabulary.
 using Triple = std::array<TripleComponent, 3>;
 
-// Convert a triple of `std::string` to a triple of `TripleComponents`. All three entries will have `isExternal()==false` and an uninitialized ID.
+// Convert a triple of `std::string` to a triple of `TripleComponents`. All
+// three entries will have `isExternal()==false` and an uninitialized ID.
 inline Triple makeTriple(std::array<std::string, 3>&& t) {
   using T = TripleComponent;
-  return {T{t[0]}, T{t[1] }, T{t[2]}};
+  return {T{t[0]}, T{t[1]}, T{t[2]}};
 }
 
 /// named value type for the ItemMap
@@ -91,9 +93,10 @@ struct alignas(256) ItemMapManager {
     if (!_map.count(key._iriOrLiteral)) {
       Id res = _map.size() + _minId;
       _map[key._iriOrLiteral] = {
-          res, m_comp->extractAndTransformComparable(
-                   key._iriOrLiteral, TripleComponentComparator::Level::IDENTICAL,
-                   key._isExternal)};
+          res,
+          m_comp->extractAndTransformComparable(
+              key._iriOrLiteral, TripleComponentComparator::Level::IDENTICAL,
+              key._isExternal)};
       return res;
     } else {
       return _map[key._iriOrLiteral].m_id;
@@ -155,8 +158,7 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
     // The LANGUAGE_PREDICATE gets the first ID in each map. TODO<joka921>
     // This is not necessary for the actual QLever code, but certain unit tests
     // currently fail without it.
-    itemArray[j].assignNextId(
-        LANGUAGE_PREDICATE);
+    itemArray[j].assignNextId(LANGUAGE_PREDICATE);
     itemArray[j]._map.reserve(2 * maxNumberOfTriples);
   }
   using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
@@ -181,9 +183,8 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
             ad_utility::convertLangtagToEntityUri(lt._langtag));
         // get the Id for the tagged predicate, e.g. @en@rdfs:label
         auto langTaggedPredId =
-            map.assignNextId(
-                ad_utility::convertToLanguageTaggedPredicate(
-                    lt._triple[1]._iriOrLiteral, lt._langtag));
+            map.assignNextId(ad_utility::convertToLanguageTaggedPredicate(
+                lt._triple[1]._iriOrLiteral, lt._langtag));
         auto& spoIds = *(res[0]);  // ids of original triple
         // TODO replace the std::array by an explicit IdTriple class,
         //  then the emplace calls don't need the explicit type.
@@ -191,11 +192,8 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
         res[1].emplace(
             std::array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]});
         // extra triple <object> ql:language-tag <@language>
-        res[2].emplace(
-            std::array<Id, 3>{spoIds[2],
-                              map.assignNextId(
-                                  LANGUAGE_PREDICATE),
-                              langTagId});
+        res[2].emplace(std::array<Id, 3>{
+            spoIds[2], map.assignNextId(LANGUAGE_PREDICATE), langTagId});
       }
       return res;
     };
