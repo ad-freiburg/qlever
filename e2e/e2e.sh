@@ -147,10 +147,12 @@ echo "... running old queries ..."
 pids=()
 $PYTHON_BINARY "$PROJECT_DIR/e2e/queryit.py" "$PROJECT_DIR/e2e/scientists_queries.yaml" "http://localhost:9099" &> "$BINARY_DIR/query_log.txt" & pids+=($!) || bail "Querying Server failed" & pids+=($!)
 wait "${pids[@]}"
-popd
 pids=()
 
 echo "...  running new queries ..."
 $PYTHON_BINARY "$PROJECT_DIR/e2e/queryit_new.py" "$PROJECT_DIR/e2e/scientists_queries_new_structure.yaml" "http://localhost:9099" &> "$BINARY_DIR/query_new_log.txt" || bail "Querying Server failed"
+
+# kill -15 $SERVER_PID
 popd
+
 
