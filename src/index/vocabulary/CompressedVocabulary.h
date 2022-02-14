@@ -28,8 +28,8 @@ class CompressedVocabulary {
   }
 
   [[nodiscard]] uint64_t size() const { return _underlyingVocabulary.size(); }
-  [[nodiscard]] uint64_t getHighestIndex() const {
-    return _underlyingVocabulary.getHighestIndex();
+  [[nodiscard]] uint64_t getHighestId() const {
+    return _underlyingVocabulary.getHighestId();
   }
 
   /// Return a `WordAndIndex` that points to the first entry that is equal or
@@ -73,12 +73,12 @@ class CompressedVocabulary {
     return result;
   }
 
-  /// Read the underlying vocabulary from a file. The vocabulary must have been
+  /// Open the underlying vocabulary from a file. The vocabulary must have been
   /// created by using a `DiskWriterFromUncompressedWords`. Note that the
   /// settings of the `compressor` are not stored in the file, but currently
   /// have to be manually stored a set via the constructor.
-  void readFromFile(const std::string& filename) {
-    _underlyingVocabulary.readFromFile(filename);
+  void open(const std::string& filename) {
+    _underlyingVocabulary.open(filename);
   }
 
   /// Allows the incremental writing of the words to disk. Uses `WordWriter` of
@@ -118,7 +118,7 @@ class CompressedVocabulary {
   Compressor& getCompressor() { return _compressor; }
   const Compressor& getCompressor() const { return _compressor; }
 
-  void clear() { _underlyingVocabulary.clear(); }
+  void close() { _underlyingVocabulary.close(); }
 
   void build(std::vector<std::string> words) {
     for (auto& word : words) {

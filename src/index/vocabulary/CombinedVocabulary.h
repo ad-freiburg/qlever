@@ -7,38 +7,39 @@
 
 #include <concepts>
 
+#include "../../util/Exception.h"
 #include "./VocabularyTypes.h"
 
 /// Define a `CombinedVocabulary` that consists of two Vocabularies (called the
-/// "underlying" vocabularies). Each index that is used in the public interface
-/// (operator[], lower_bound, upper_bound) is a "global index". The
+/// "underlying" vocabularies). Each ID that is used in the public interface
+/// (operator[], lower_bound, upper_bound) is a "global ID". The
 /// `CombinedVocabulary` additionally has a type `IndexConverter` that computes,
-/// whether a global index belongs to the first or the second vocabulary, and is
+/// whether a global ID belongs to the first or the second vocabulary, and is
 /// able to perform the transformations from global indices to local indices.
 /// Private indices are the indices which the underlying vocabularies use
 /// internally.
 
 /// The `CombinedVocabulary` below needs a template parameter `IndexConverter`
-/// that fulfills this concept to decide, whether a global index belongs to the
+/// that fulfills this concept to decide, whether a global ID belongs to the
 /// first or the second vocabulary, and to convert from global indices to
 /// local indices.
 template <typename CombinedVocabulary, typename T>
 concept IndexConverterConcept = requires(const T& t, uint64_t i,
                                          const CombinedVocabulary& v) {
-  // Return true, iff a word with index `i` belongs to the first vocabulary.
+  // Return true, iff a word with ID `i` belongs to the first vocabulary.
   { t.isInFirst(i, v) }
   ->std::same_as<bool>;
-  // Transform a local index from the first vocabulary to a global index.
+  // Transform a local ID from the first vocabulary to a global ID.
   { t.localFirstToGlobal(i, v) }
   ->std::convertible_to<uint64_t>;
-  // Transform a local index from the second vocabulary to a global index.
+  // Transform a local ID from the second vocabulary to a global ID.
   { t.localSecondToGlobal(i, v) }
   ->std::convertible_to<uint64_t>;
-  // Transform a global index to a local index for the first vocabulary.
+  // Transform a global ID to a local ID for the first vocabulary.
   // May only be called if `t.isInFirst(i, v)` is true.
   { t.globalToLocalFirst(i, v) }
   ->std::convertible_to<uint64_t>;
-  // Transform a global index to a local index for the second vocabulary.
+  // Transform a global ID to a local ID for the second vocabulary.
   // May only be called if `t.isInFirst(i, v)` is false.
   { t.globalToLocalSecond(i, v) }
   ->std::convertible_to<uint64_t>;
@@ -55,7 +56,7 @@ template <typename FirstVocabulary, typename SecondVocabulary,
 class CombinedVocabulary {
  public:
  private:
-  // The underlying vocabularies and the index converter
+  // The underlying vocabularies and the ID converter
   FirstVocabulary _firstVocab;
   SecondVocabulary _secondVocab;
   IndexConverter _indexConverter;
@@ -71,12 +72,12 @@ class CombinedVocabulary {
         _secondVocab{std::move(secondVocab)},
         _indexConverter{converter} {}
 
-  // Return the word with the global index `index`.
-  auto operator[](uint64_t index) const {
-    if (_indexConverter.isInFirst(index, *this)) {
-      return _firstVocab[_indexConverter.globalToLocalFirst(index, *this)];
+  // Return the word with the global ID `id`.
+  auto operator[](uint64_t id) const {
+    if (_indexConverter.isInFirst(id, *this)) {
+      return _firstVocab[_indexConverter.globalToLocalFirst(id, *this)];
     } else {
-      return _secondVocab[_indexConverter.globalToLocalSecond(index, *this)];
+      return _secondVocab[_indexConverter.globalToLocalSecond(id, *this)];
     }
   }
 
@@ -85,6 +86,13 @@ class CombinedVocabulary {
   [[nodiscard]] uint64_t sizeSecondVocab() const { return _secondVocab.size(); }
   [[nodiscard]] uint64_t size() const {
     return sizeFirstVocab() + sizeSecondVocab();
+  }
+
+  /// The highest ID (=index) that occurs in this vocabulary. May only be called
+  /// if size() > 0
+  auto getHighestId() const {
+    AD_CHECK(size() > 0);
+    return getEndIndex() - 1;
   }
 
   /// Return a `WordAndIndex` that points to the first entry that is equal or
@@ -134,19 +142,19 @@ class CombinedVocabulary {
     return wi;
   }
 
-  // Return a global index that is the largest global index occuring in either
-  // of the underlying vocabularies plus 1. This index can be used as the "end"
-  // index to indicate "not found".
+  // Return a global ID (sometimes just an index) that is the largest global ID
+  // occuring in either of the underlying vocabularies plus 1. This ID can be
+  // used as the "end" ID to indicate "not found".
   [[nodiscard]] uint64_t getEndIndex() const {
     uint64_t endA = _firstVocab.size() == 0
                         ? 0ul
                         : _indexConverter.localFirstToGlobal(
-                              _firstVocab.getHighestIndex(), *this) +
+                              _firstVocab.getHighestId(), *this) +
                               1;
     uint64_t endB = _secondVocab.size() == 0
                         ? 0ul
                         : _indexConverter.localSecondToGlobal(
-                              _secondVocab.getHighestIndex(), *this) +
+                              _secondVocab.getHighestId(), *this) +
                               1;
 
     return std::max(endA, endB);

@@ -26,9 +26,9 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
                                     const string& extLitsFileName) {
   LOG(INFO) << "Reading internal vocabulary from file " << fileName << " ..."
             << std::endl;
-  _internalVocabulary.clear();
+  _internalVocabulary.close();
   ad_utility::serialization::FileReadSerializer file(fileName);
-  _internalVocabulary.readFromFile(fileName);
+  _internalVocabulary.open(fileName);
   LOG(INFO) << "Done, number of words: " << _internalVocabulary.size()
             << std::endl;
   if (extLitsFileName.size() > 0) {
@@ -40,7 +40,7 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
     }
 
     LOG(DEBUG) << "Registering external vocabulary" << std::endl;
-    _externalVocabulary.initFromFile(extLitsFileName);
+    _externalVocabulary.open(extLitsFileName);
     LOG(INFO) << "Number of words in external vocabulary: "
               << _externalVocabulary.size() << std::endl;
   }
@@ -62,7 +62,7 @@ template <class S, class C>
 void Vocabulary<S, C>::createFromSet(
     const ad_utility::HashSet<std::string>& set) {
   LOG(INFO) << "Creating vocabulary from set ...\n";
-  _internalVocabulary.clear();
+  _internalVocabulary.close();
   std::vector<std::string> words(set.begin(), set.end());
   LOG(INFO) << "... sorting ...\n";
   auto totalComparison = [this](const auto& a, const auto& b) {
@@ -217,7 +217,7 @@ void Vocabulary<S, ComparatorType>::setLocale(const std::string& language,
                                               bool ignorePunctuation) {
   _internalVocabulary.getComparator() =
       ComparatorType(language, country, ignorePunctuation);
-  _externalVocabulary.getCaseComparator() =
+  _externalVocabulary.getComparator() =
       ComparatorType(language, country, ignorePunctuation);
 }
 
@@ -238,9 +238,10 @@ bool Vocabulary<S, C>::getId(const string& word, Id* id) const {
     // of the strict ordering.
     return *id < _internalVocabulary.size() && at(*id) == word;
   }
-  bool success = _externalVocabulary.getId(word, id);
+  auto wordAndIndex = _externalVocabulary.lower_bound(word, SortLevel::TOTAL);
+  *id = wordAndIndex._index;
   *id += _internalVocabulary.size();
-  return success;
+  return wordAndIndex._word == word;
 }
 
 // ___________________________________________________________________________

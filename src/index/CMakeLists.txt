@@ -4,7 +4,7 @@ add_library(index
         Vocabulary.h Vocabulary.cpp
         VocabularyGenerator.h VocabularyGeneratorImpl.h
         ConstantsIndexBuilding.h
-        ExternalVocabulary.h ExternalVocabulary.cpp
+        VocabularyOnDisk.h VocabularyOnDisk.cpp
         IndexMetaData.h IndexMetaDataImpl.h
         MetaDataHandler.h
         StxxlSortFunctors.h
