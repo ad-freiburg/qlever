@@ -185,7 +185,6 @@ class Vocabulary {
   void createFromSet(const ad_utility::HashSet<std::string>& set);
 
   static bool isLiteral(const string& word);
-  static bool isExternalizedLiteral(const string& word);
 
   bool shouldBeExternalized(const string& word) const;
 
