@@ -81,13 +81,6 @@ bool Vocabulary<S, C>::isLiteral(const string& word) {
 
 // _____________________________________________________________________________
 template <class S, class C>
-bool Vocabulary<S, C>::isExternalizedLiteral(const string& word) {
-  return word.size() > 1 &&
-         word.starts_with(EXTERNALIZED_LITERALS_PREFIX + '\"');
-}
-
-// _____________________________________________________________________________
-template <class S, class C>
 bool Vocabulary<S, C>::shouldBeExternalized(const string& word) const {
   // TODO<joka921> Completely refactor the Vocabulary on the different
   // Types, it is a mess.

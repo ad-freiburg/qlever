@@ -77,7 +77,7 @@ using ItemVec = std::vector<std::pair<std::string, IdAndSplitVal>>;
  */
 // Align each ItemMapManager on its own cache line to avoid false sharing.
 struct alignas(256) ItemMapManager {
-  /// Construct by assigning the minimum ID that shall be returned by the map
+  /// Construct by assigning the minimum ID that should be returned by the map.
   explicit ItemMapManager(Id minId, const TripleComponentComparator* cmp)
       : _map(), _minId(minId), m_comp(cmp) {}
   /// Minimum Id is 0
@@ -88,8 +88,8 @@ struct alignas(256) ItemMapManager {
   ItemMap&& moveMap() && { return std::move(_map); }
 
   /// If the key was seen before, return its preassigned ID. Else assign the
-  /// Next free ID to the string, store and return it.
-  Id assignNextId(const TripleComponent& key) {
+  /// next free ID to the string, store and return it.
+  Id getId(const TripleComponent& key) {
     if (!_map.count(key._iriOrLiteral)) {
       Id res = _map.size() + _minId;
       _map[key._iriOrLiteral] = {
@@ -103,9 +103,9 @@ struct alignas(256) ItemMapManager {
     }
   }
 
-  /// call assignNextId for each of the Triple elements.
-  std::array<Id, 3> assignNextId(const Triple& t) {
-    return {assignNextId(t[0]), assignNextId(t[1]), assignNextId(t[2])};
+  /// call getId for each of the Triple elements.
+  std::array<Id, 3> getId(const Triple& t) {
+    return {getId(t[0]), getId(t[1]), getId(t[2])};
   }
   ItemMap _map;
   Id _minId = 0;
@@ -158,7 +158,7 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
     // The LANGUAGE_PREDICATE gets the first ID in each map. TODO<joka921>
     // This is not necessary for the actual QLever code, but certain unit tests
     // currently fail without it.
-    itemArray[j].assignNextId(LANGUAGE_PREDICATE);
+    itemArray[j].getId(LANGUAGE_PREDICATE);
     itemArray[j]._map.reserve(2 * maxNumberOfTriples);
   }
   using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
@@ -175,15 +175,15 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
     return [&map = itemArray[idx]](LangtagAndTriple&& lt) {
       OptionalIds res;
       // get Ids for the actual triple and store them in the result.
-      res[0] = map.assignNextId(lt._triple);
+      res[0] = map.getId(lt._triple);
       if (!lt._langtag.empty()) {  // the object of the triple was a literal
                                    // with a language tag
         // get the Id for the corresponding langtag Entity
-        auto langTagId = map.assignNextId(
-            ad_utility::convertLangtagToEntityUri(lt._langtag));
+        auto langTagId =
+            map.getId(ad_utility::convertLangtagToEntityUri(lt._langtag));
         // get the Id for the tagged predicate, e.g. @en@rdfs:label
         auto langTaggedPredId =
-            map.assignNextId(ad_utility::convertToLanguageTaggedPredicate(
+            map.getId(ad_utility::convertToLanguageTaggedPredicate(
                 lt._triple[1]._iriOrLiteral, lt._langtag));
         auto& spoIds = *(res[0]);  // ids of original triple
         // TODO replace the std::array by an explicit IdTriple class,
@@ -193,7 +193,7 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
             std::array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]});
         // extra triple <object> ql:language-tag <@language>
         res[2].emplace(std::array<Id, 3>{
-            spoIds[2], map.assignNextId(LANGUAGE_PREDICATE), langTagId});
+            spoIds[2], map.getId(LANGUAGE_PREDICATE), langTagId});
       }
       return res;
     };

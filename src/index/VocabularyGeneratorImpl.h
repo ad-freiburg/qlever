@@ -29,20 +29,17 @@ template <typename Comparator, typename InternalVocabularyAction>
 VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
     const std::string& basename, size_t numFiles, Comparator comparator,
     InternalVocabularyAction& internalVocabularyAction) {
-  // we sort alphabetically by the token according to the comparator that was
-  // given to us
-
+  // Return true iff p1 >= p2 according to the lexicographic order of the IRI
+  // or literal. Additionally return true if p1 is external and p2 is not, and
+  // false if it is the other way round.
+  // TODO<joka921> Change this as soon as we have Interleaved Ids via the
+  // MilestoneIdManager
   // TODO<joka921> Split up the actual comparison of QueueWords and the
   // "inversion" because of `std::priority_queue`
   auto queueCompare = [&comparator](const QueueWord& p1, const QueueWord& p2) {
-    // Internal words come before external words.
-    // TODO<joka921> Change this as soon as we have Interleaved Ids via the
-    // MilestoneIdManager
     if (p1.isExternal() != p2.isExternal()) {
       return p1.isExternal();
     }
-    // Return true iff p1 >= p2 according to the lexicographic order of the IRI
-    // or literal.
     return comparator(p2.iriOrLiteral(), p1.iriOrLiteral());
   };
 

@@ -17,12 +17,6 @@ static constexpr size_t DEFAULT_MEM_FOR_QUERIES_IN_GB = 4;
 static const size_t MAX_NOF_ROWS_IN_RESULT = 100000;
 static const size_t MIN_WORD_PREFIX_SIZE = 4;
 static const char PREFIX_CHAR = '*';
-static const char EXTERNALIZED_LITERALS_PREFIX_CHAR{127};
-static const std::string EXTERNALIZED_LITERALS_PREFIX{
-    EXTERNALIZED_LITERALS_PREFIX_CHAR};
-static const char EXTERNALIZED_ENTITIES_PREFIX_CHAR{static_cast<char>(128)};
-static const std::string EXTERNALIZED_ENTITIES_PREFIX{
-    EXTERNALIZED_ENTITIES_PREFIX_CHAR};
 static const size_t MAX_NOF_NODES = 64;
 static const size_t MAX_NOF_FILTERS = 64;
 
