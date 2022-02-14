@@ -67,16 +67,20 @@ class VocabularyMerger {
   // represents tokens/words in a certain partial vocabulary
   struct QueueWord {
     QueueWord() = default;
-    QueueWord(string&& v, size_t file, Id word, bool isExternal)
-        : _value(std::move(v)),
-          _partialFileId(file),
-          _partialWordId(word),
-          _isExternal{isExternal} {}
-    string _value;          // the word
+    QueueWord(TripleEntryWithId&& v, size_t file)
+        : _entry(std::move(v)),
+          _partialFileId(file) {}
+    TripleEntryWithId _entry;  // the word, its local ID and the information if it will be externalized
     size_t _partialFileId;  // from which partial vocabulary did this word come
-    Id _partialWordId;  // which partial id did the word have in this partial
-    // vocabulary
-    bool _isExternal;  // Is word part of the external vocabulary.
+
+    [[nodiscard]] const bool& isExternal() const {return _entry._tripleEntry._isExternal;}
+    [[nodiscard]] bool& isExternal() {return _entry._tripleEntry._isExternal;}
+
+    [[nodiscard]] const std::string& word() const {return _entry._tripleEntry._entry;}
+    [[nodiscard]] std::string& word() {return _entry._tripleEntry._entry;}
+
+    [[nodiscard]] const auto& id() const {return _entry._id;}
+    [[nodiscard]] auto& id() {return _entry._id;}
   };
 
   // write the queu words in the buffer to their corresponding idPairVecs.
@@ -90,7 +94,7 @@ class VocabularyMerger {
   // close all associated files and MmapVectors and reset all internal variables
   void clear() {
     _totalWritten = 0;
-    _lastWritten = LastWritten{};
+    _lastWritten = TripleEntryWithId{};
     _outfileExternal = std::ofstream();
     _idVecs.clear();
     _firstLangPredSeen = false;
@@ -104,13 +108,8 @@ class VocabularyMerger {
   // word we see, unless it is is equal to the previous word
   size_t _totalWritten = 0;
   // keep track of the last seen word to correctly handle duplicates
-  struct LastWritten {
-    std::string _lastWrittenWord;
-    bool _wasExternalized = false;
-    uint64_t _id{0};
-  };
 
-  LastWritten _lastWritten;
+  TripleEntryWithId _lastWritten;
   std::ofstream _outfileExternal;
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> _idVecs;

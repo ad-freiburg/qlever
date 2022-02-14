@@ -17,17 +17,24 @@
 
 // A triple entry (subject, predicate, object) together with the information,
 // whether it should be part of the external vocabulary
-struct PossiblyExternalizedTripleEntry {
+struct TripleEntry {
+  TripleEntry(std::string entry, bool isExternal = false) : _entry{std::move(entry)}, _isExternal{isExternal} {}
+  TripleEntry() = default;
   std::string _entry;
   bool _isExternal = false;
 };
 
+struct TripleEntryWithId {
+  TripleEntry _tripleEntry;
+  uint64_t _id;
+};
+
 // A Rdf triple that also knows for each entry, whether this entry should be
 // part of the external vocabulary.
-using Triple = std::array<PossiblyExternalizedTripleEntry, 3>;
+using Triple = std::array<TripleEntry, 3>;
 
 inline Triple stringsToInternalTriple(std::array<std::string, 3>&& t) {
-  using P = PossiblyExternalizedTripleEntry;
+  using P = TripleEntry;
   return {P{t[0], false}, P{t[1], false}, P{t[2], false}};
 }
 
@@ -60,7 +67,7 @@ struct alignas(256) ItemMapManager {
 
   /// If the key was seen before, return its preassigned Id. Else assign the
   /// Next free Id to the string, store and return it.
-  Id assignNextId(const PossiblyExternalizedTripleEntry& key) {
+  Id assignNextId(const TripleEntry& key) {
     if (!_map.count(key._entry)) {
       Id res = _map.size() + _minId;
       _map[key._entry] = {
@@ -125,8 +132,8 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
   auto& itemArray = *itemArrayPtr;
   for (size_t j = 0; j < Parallelism; ++j) {
     itemArray[j] = ItemMapManager(j * 100 * maxNumberOfTriples, comp);
-    itemArray[j].assignNextId(PossiblyExternalizedTripleEntry{
-        LANGUAGE_PREDICATE, false});  // not really needed here, but also not
+    itemArray[j].assignNextId(
+        LANGUAGE_PREDICATE);  // not really needed here, but also not
                                       // harmful and needed to make some
                                       // completely unrelated unit tests pass.
     itemArray[j]._map.reserve(2 * maxNumberOfTriples);
@@ -149,14 +156,13 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
       if (!lt._langtag.empty()) {  // the object of the triple was a literal
                                    // with a language tag
         // get the Id for the corresponding langtag Entity
-        auto langTagId = map.assignNextId(PossiblyExternalizedTripleEntry{
-            ad_utility::convertLangtagToEntityUri(lt._langtag), false});
+        auto langTagId = map.assignNextId(
+            ad_utility::convertLangtagToEntityUri(lt._langtag));
         // get the Id for the tagged predicate, e.g. @en@rdfs:label
         auto langTaggedPredId =
-            map.assignNextId(PossiblyExternalizedTripleEntry{
+            map.assignNextId(
                 ad_utility::convertToLanguageTaggedPredicate(
-                    lt._triple[1]._entry, lt._langtag),
-                false});
+                    lt._triple[1]._entry, lt._langtag));
         auto& spoIds = *(res[0]);  // ids of original triple
         // TODO replace the std::array by an explicit IdTriple class,
         //  then the emplace calls don't need the explicit type.
@@ -166,8 +172,8 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
         // extra triple <object> ql:language-tag <@language>
         res[2].emplace(
             std::array<Id, 3>{spoIds[2],
-                              map.assignNextId(PossiblyExternalizedTripleEntry{
-                                  LANGUAGE_PREDICATE, false}),
+                              map.assignNextId(
+                                  LANGUAGE_PREDICATE),
                               langTagId});
       }
       return res;

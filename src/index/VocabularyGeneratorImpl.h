@@ -36,13 +36,13 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
     // Internal words come before external words.
     // TODO<joka921> Change this as soon as we have Interleaved Ids via the
     // MilestoneIdManager
-    if (p1._isExternal != p2._isExternal) {
-      return p1._isExternal;
+    if (p1.isExternal() != p2.isExternal()) {
+      return p1.isExternal();
     }
     // if p1 is smaller (alphabetically)
     // _comp will return false if called like this
     // and the priority queue will thus emit p1 first
-    return comparator(p2._value, p1._value);
+    return comparator(p2.word(), p1.word());
   };
 
   std::vector<ad_utility::serialization::FileReadSerializer> infiles;
@@ -60,13 +60,8 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
 
   auto pushWordFromPartialVocabularyToQueue = [&](size_t i) {
     if (numWordsLeftInPartialVocabulary[i] > 0) {
-      std::string word;
-      Id id;
-      bool isExternal;
-      infiles[i] >> word;
-      infiles[i] >> id;
-      infiles[i] >> isExternal;
-      queue.push(QueueWord(std::move(word), i, id, isExternal));
+      TripleEntryWithId entry;
+      queue.push(QueueWord(std::move(entry), i));
       numWordsLeftInPartialVocabulary[i]--;
     }
   };
@@ -96,7 +91,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
     // for the prefix compression vocabulary, we don't need the external
     // vocabulary
     // TODO<joka921> Don't include external literals at all in this vocabulary.
-    if (_noIdMapsAndIgnoreExternalVocab && queue.top()._isExternal) {
+    if (_noIdMapsAndIgnoreExternalVocab && queue.top().isExternal()) {
       break;
     }
 
@@ -161,9 +156,9 @@ void VocabularyMerger::writeQueueWordsToIdVec(
   writeBuf.reserve(bufSize);
   // avoid duplicates
   for (auto& top : buffer) {
-    if (top._value != _lastWritten._lastWrittenWord) {
-      _lastWritten._lastWrittenWord = top._value;
-      _lastWritten._wasExternalized = top._isExternal;
+    if (top.word() != _lastWritten._lastWrittenWord) {
+      _lastWritten._lastWrittenWord = top.word();
+      _lastWritten._wasExternalized = top.isExternal();
       // TODO<joka921> Once we have interleaved IDs using the MilestoneIdManager
       // we have to compute the correct Ids here.
       _lastWritten._id = _totalWritten;
@@ -181,7 +176,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
                          << '\n';
       }
 
-      if (top._value.size() > 0 && top._value[0] == '@') {
+      if (!top.word().starts_with('@')) {
         if (!_firstLangPredSeen) {
           // inclusive
           _langPredLowerBound = _lastWritten._id;
@@ -197,7 +192,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
     }
     // write ID to corresponding vec.
     writeBuf.emplace_back(top._partialFileId,
-                          std::pair{top._partialWordId, _lastWritten._id});
+                          std::pair{top.id(), _lastWritten._id});
 
     if (writeBuf.size() >= bufSize) {
       auto task = [this, buf = std::move(writeBuf)]() {
@@ -287,9 +282,9 @@ void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
     // When merging the vocabulary, we need the actual word, the (internal) id
     // we have given this word, and the information, whether this word belongs
     // into the internal or external vocabulary.
-    serializer << word;
-    serializer << idAndSplitVal.m_id;
-    serializer << idAndSplitVal.m_splitVal.isExternalized;
+    const auto& [id, splitVal] = idAndSplitVal;
+    TripleEntryWithId entry {{word, splitVal.isExternalized}, id};
+    serializer << entry;
   }
   serializer.close();
   LOG(DEBUG) << "Done writing partial vocabulary\n";
