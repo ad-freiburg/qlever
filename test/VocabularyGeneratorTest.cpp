@@ -34,10 +34,6 @@ class MergeVocabularyTest : public ::testing::Test {
   // path of the 2 partial Vocabularies that are used by mergeVocabulary
   std::string _path0;
   std::string _path1;
-  // path of the 2 partial vocabularies that are the expected output of
-  // mergeVocabulary
-  std::string _pathExp0;
-  std::string _pathExp1;
   // the base directory for our test
   std::string _basePath;
   // path to expected vocabulary text file
@@ -47,24 +43,20 @@ class MergeVocabularyTest : public ::testing::Test {
 
   // two std::vectors where we store the expected mapping
   // form partial to global ids;
-  std::vector<std::pair<Id, Id>> _expMapping0;
-  std::vector<std::pair<Id, Id>> _expMapping1;
+  using Mapping = std::vector<std::pair<Id, Id>>;
+  Mapping _expMapping0;
+  Mapping _expMapping1;
 
   // Constructor. TODO: Better write Setup method because of complex logic which
   // may throw?
   MergeVocabularyTest() {
-    // name of random subdirectory
-    std::srand(std::time(nullptr));
-    _basePath = std::string("qleverVocTest-") + std::to_string(std::rand());
+    _basePath = std::string("vocabularyGeneratorTestFiles");
     // those names are required by mergeVocabulary
     _path0 = std::string(PARTIAL_VOCAB_FILE_NAME + std::to_string(0));
     _path1 = std::string(PARTIAL_VOCAB_FILE_NAME + std::to_string(1));
-    // those names can be random
-    _pathExp0 = std::string(".partial-vocabulary-expected0");
-    _pathExp1 = std::string(".partial-vocabulary-expected1");
 
     // create random subdirectory in /tmp
-    std::string tempPath = "/tmp/";
+    std::string tempPath = "";
     _basePath = tempPath + _basePath + "/";
     if (system(("mkdir -p " + _basePath).c_str())) {
       // system should return 0 on success
@@ -75,20 +67,18 @@ class MergeVocabularyTest : public ::testing::Test {
     // make paths abolute under created tmp directory
     _path0 = _basePath + _path0;
     _path1 = _basePath + _path1;
-    _pathExp0 = _basePath + _pathExp0;
-    _pathExp1 = _basePath + _pathExp1;
     _pathVocabExp = _basePath + std::string(".vocabExp");
     _pathExternalVocabExp = _basePath + std::string("externalTextFileExp");
 
     // these will be the contents of partial vocabularies, second element of
     // pair is the correct Id which is expected from mergeVocabulary
-    std::vector<std::pair<std::string, size_t>> words1{
-        {"\"ape\"", 0},
-        {"\"gorilla\"", 2},
-        {"\"monkey\"", 3},
-        {std::string{EXTERNALIZED_LITERALS_PREFIX} + "bla\"", 5}};
-    std::vector<std::pair<std::string, size_t>> words2{
-        {"\"bear\"", 1}, {"\"monkey\"", 3}, {"\"zebra\"", 4}};
+    std::vector<TripleComponentWithId> words0{{"\"ape\"", false, 0},
+                                              {"\"gorilla\"", false, 2},
+                                              {"\"monkey\"", false, 3},
+                                              {"\"bla\"", true, 5}};
+    std::vector<TripleComponentWithId> words1{{"\"bear\"", false, 1},
+                                              {"\"monkey\"", false, 3},
+                                              {"\"zebra\"", false, 4}};
 
     // write expected vocabulary files
     std::ofstream expVoc(_pathVocabExp);
@@ -97,57 +87,27 @@ class MergeVocabularyTest : public ::testing::Test {
     expExtVoc << "\"bla\"\n";
 
     // open files for partial Vocabularies
-    auto mode = std::ios_base::out | std::ios_base::binary;
-    std::ofstream partial0(_path0, mode);
-    std::ofstream partial1(_path1, mode);
-    std::ofstream partialExp0(_pathExp0, mode);
-    std::ofstream partialExp1(_pathExp1, mode);
+    ad_utility::serialization::FileWriteSerializer partial0(_path0);
+    ad_utility::serialization::FileWriteSerializer partial1(_path1);
 
-    if (!partial0.is_open())
-      std::cerr << "could not open temp file at" << _path0 << '\n';
-    if (!partial1.is_open())
-      std::cerr << "could not open temp file at" << _path1 << '\n';
-    if (!partialExp0.is_open())
-      std::cerr << "could not open temp file at" << _pathExp0 << '\n';
-    if (!partialExp1.is_open())
-      std::cerr << "could not open temp file at" << _pathExp1 << '\n';
+    auto writePartialVocabulary =
+        [](auto& partialVocab, const auto& tripleComponents, Mapping* mapping) {
+          // write first partial vocabulary
+          partialVocab << tripleComponents.size();
+          size_t localIdx = 0;
+          for (auto w : tripleComponents) {
+            auto globalId = w._id;
+            w._id = localIdx;
+            partialVocab << w;
+            if (mapping) {
+              mapping->emplace_back(localIdx, globalId);
+            }
+            localIdx++;
+          }
+        };
+    writePartialVocabulary(partial0, words0, &_expMapping0);
 
-    // write first partial vocabulary
-    size_t localIdx = 0;
-    for (const auto& w : words1) {
-      std::string word = w.first;
-      uint64_t len = word.size();
-      // write 4 Bytes of string length
-      partial0.write((char*)&len, sizeof(len));
-      partialExp0.write((char*)&len, sizeof(len));
-
-      // write the word
-      partial0.write(word.c_str(), len);
-      partialExp0.write(word.c_str(), len);
-
-      // these indices are in order and are not supposed to change ever
-      partial0.write((char*)&localIdx, sizeof(size_t));
-      partialExp0.write((char*)&localIdx, sizeof(size_t));
-      _expMapping0.emplace_back(localIdx, w.second);
-      localIdx++;
-    }
-
-    // write second partialVocabulary
-    localIdx = 0;
-    for (const auto& w : words2) {
-      std::string word = w.first;
-      uint64_t len = word.size();
-      partial1.write((char*)&len, sizeof(len));
-      partialExp1.write((char*)&len, sizeof(len));
-
-      partial1.write(word.c_str(), len);
-      partialExp1.write(word.c_str(), len);
-
-      partial1.write((char*)&localIdx, sizeof(size_t));
-      partialExp1.write((char*)&localIdx, sizeof(size_t));
-      _expMapping1.emplace_back(localIdx, w.second);
-      localIdx++;
-    }
+    writePartialVocabulary(partial1, words1, &_expMapping1);
   }
 
   // __________________________________________________________________
@@ -190,7 +150,7 @@ class MergeVocabularyTest : public ::testing::Test {
 };
 
 // Test for merge Vocabulary
-TEST_F(MergeVocabularyTest, bla) {
+TEST_F(MergeVocabularyTest, mergeVocabulary) {
   // mergeVocabulary only gets name of directory and number of files.
   VocabularyMerger::VocMergeRes res;
   {
@@ -207,9 +167,6 @@ TEST_F(MergeVocabularyTest, bla) {
   // No language tags in text file
   ASSERT_EQ(res._langPredLowerBound, 0ul);
   ASSERT_EQ(res._langPredUpperBound, 0ul);
-  // Assert that partial vocabularies have the expected ids
-  ASSERT_TRUE(areBinaryFilesEqual(_path0, _pathExp0));
-  ASSERT_TRUE(areBinaryFilesEqual(_path1, _pathExp1));
   // check that (external) vocabulary has the right form.
   ASSERT_TRUE(areBinaryFilesEqual(_pathVocabExp, _basePath + ".vocabulary"));
   ASSERT_TRUE(areBinaryFilesEqual(_pathExternalVocabExp,

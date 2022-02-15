@@ -676,7 +676,8 @@ class Index {
   // and add externalization characters if necessary.
   // Returns the language tag of spo[2] (the object) or ""
   // if there is none.
-  LangtagAndTriple tripleToInternalRepresentation(Triple&& spo);
+  LangtagAndTriple tripleToInternalRepresentation(
+      std::array<string, 3>&& stringTriple);
 
   /**
    * @brief Throws an exception if no patterns are loaded. Should be called from
