@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "./RdfEscaping.h"
+#include "absl/strings/str_join.h"
 
 using std::string;
 using std::vector;
@@ -32,30 +33,15 @@ string ParsedQuery::asString() const {
   os << "\n}";
 
   bool usesSelect = hasSelectClause();
-  bool usesAsterisk = usesSelect && selectClause()._varsOrAsterisk.isAsterisk();
+  bool usesAsterisk =
+      usesSelect && selectClause()._varsOrAsterisk.isAllVariablesSelected();
 
   if (usesSelect) {
     const auto& selectClause = this->selectClause();
     // SELECT
     os << "\nSELECT: {\n\t";
-    if (usesAsterisk) {
-      auto list = selectClause._varsOrAsterisk.orderedVariablesFromQueryBody();
-      for (auto it = list.begin(); it != list.end();) {
-        os << it->c_str();
-        if (++it != list.end()) {
-          os << ", ";
-        }
-      }
-    } else {
-      const auto& SelectedVariables =
-          selectClause._varsOrAsterisk.getSelectVariables();
-      for (size_t i = 0; i < SelectedVariables.size(); ++i) {
-        os << SelectedVariables[i];
-        if (i + 1 < SelectedVariables.size()) {
-          os << ", ";
-        }
-      }
-    }
+    os << absl::StrJoin(selectClause._varsOrAsterisk.getSelectedVariables(),
+                        ", ");
     os << "\n}";
 
     // ALIASES
@@ -112,14 +98,14 @@ string ParsedQuery::asString() const {
     }
   }
   os << "\n";
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
 string SparqlPrefix::asString() const {
   std::ostringstream os;
   os << "{" << _prefix << ": " << _uri << "}";
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -215,7 +201,7 @@ void PropertyPath::writeToStream(std::ostream& out) const {
 std::string PropertyPath::asString() const {
   std::stringstream s;
   writeToStream(s);
-  return s.str();
+  return std::move(s).str();
 }
 
 // _____________________________________________________________________________
@@ -242,7 +228,7 @@ std::ostream& operator<<(std::ostream& out, const PropertyPath& p) {
 string SparqlTriple::asString() const {
   std::ostringstream os;
   os << "{s: " << _s << ", p: " << _p << ", o: " << _o << "}";
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -282,7 +268,7 @@ string SparqlFilter::asString() const {
       break;
   }
   os << _rhs << ")";
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

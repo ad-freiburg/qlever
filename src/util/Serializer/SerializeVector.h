@@ -42,7 +42,6 @@ void serialize(Serializer& serializer, std::vector<T, Alloc>& vector) {
     }
   }
 }
-
 }  // namespace ad_utility::serialization
 
 #endif  // QLEVER_SERIALIZEVECTOR_H

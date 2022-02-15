@@ -695,13 +695,17 @@ class Index {
   // Helper function for Debugging during the index build.
   // ExtVecs are not persistent, so we dump them to a mmapVector in a file with
   // given filename
-  static void dumpExtVecToMmap(const TripleVec& vec, std::string filename) {
+  static void dumpExtVecToMmap([[maybe_unused]] const TripleVec& vec, [[maybe_unused]] std::string filename) {
     LOG(INFO) << "Dumping ext vec to mmap" << std::endl;
+    // Currently not supported.
+    AD_CHECK(false);
+    /*
     MmapVector<TripleVec::value_type> mmapVec(vec.size(), filename);
     for (size_t i = 0; i < vec.size(); ++i) {
       mmapVec[i] = vec[i];
     }
     LOG(INFO) << "Done" << std::endl;
+     */
   }
 
   /**

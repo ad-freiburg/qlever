@@ -6,7 +6,7 @@
 
 #include "../src/index/ExternalVocabulary.h"
 
-TEST(ExternalVocabularyTest, getWordbyIdTest) {
+TEST(ExternalVocabulary, getWordbyIdTest) {
   vector<string> v;
   v.push_back("a");
   v.push_back("ab");
@@ -22,7 +22,7 @@ TEST(ExternalVocabularyTest, getWordbyIdTest) {
   remove("__tmo.evtest");
 };
 
-TEST(ExternalVocabularyTest, getIdForWordTest) {
+TEST(ExternalVocabulary, getIdForWordTest) {
   vector<string> v;
   v.push_back("a");
   v.push_back("ab");
@@ -43,7 +43,7 @@ TEST(ExternalVocabularyTest, getIdForWordTest) {
   remove("__tmo.evtest");
 };
 
-TEST(VocabularyTest, readWriteTest) {
+TEST(ExternalVocabulary, readWriteTest) {
   vector<string> v;
   v.push_back("wordA0");
   v.push_back("wordA1");

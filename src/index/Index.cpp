@@ -110,13 +110,15 @@ void Index::createFromFile(const string& filename) {
   }
   _configurationJson["prefixes"] = _vocabPrefixCompressed;
   LOG(INFO) << "Writing compressed vocabulary to disk ..." << std::endl;
-  decltype(_vocab)::WordWriter wordWriter{vocabFileTmp};
-  auto internalVocabularyAction = [&wordWriter](const auto& word) {
-    wordWriter.push(word.data(), word.size());
-  };
-  auto wordReader = decltype(_vocab)::makeWordDiskIterator(vocabFile);
-  Vocabulary<CompressedString, TripleComponentComparator>::prefixCompressFile(
-      std::move(wordReader), prefixes, internalVocabularyAction);
+
+  _vocab.buildCodebookForPrefixCompression(prefixes);
+  auto wordReader = _vocab.makeUncompressedDiskIterator(vocabFile);
+  auto wordWriter = _vocab.makeCompressedWordWriter(vocabFileTmp);
+  for (const auto& word : wordReader) {
+    wordWriter.push(word);
+  }
+  wordWriter.finish();
+
   LOG(DEBUG) << "Finished writing compressed vocabulary" << std::endl;
 
   // TODO<joka921> maybe move this to its own function.
@@ -314,7 +316,8 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
                                                           std::string_view b) {
       return (*cmp)(a, b, decltype(_vocab)::SortLevel::TOTAL);
     };
-    decltype(_vocab)::WordWriter wordWriter{_onDiskBase + ".vocabulary"};
+    auto wordWriter =
+        _vocab.makeUncompressingWordWriter(_onDiskBase + ".vocabulary");
     auto internalVocabularyAction = [&wordWriter](const auto& word) {
       wordWriter.push(word.data(), word.size());
     };
@@ -431,8 +434,8 @@ Index::createPermutationPairImpl(const string& fileName1,
   LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
   size_t from = 0;
   Id currentRel = triples[0][c0];
-  ad_utility::BufferedVector<array<Id, 2>> buffer(
-      THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.mmap-buffer");
+  auto buffer = ad_utility::BufferedVector<array<Id, 2>>::create(
+      fileName1 + ".tmp.mmap-buffer");
   bool functional = true;
   size_t distinctCol1 = 0;
   size_t sizeOfRelation = 0;
@@ -750,9 +753,9 @@ void Index::createPatternsImpl(
   LOG(DEBUG) << "Pattern set size: " << patternSet.size() << std::endl;
 
   // Associate entities with patterns if possible, store has-relation otherwise
-  ad_utility::MmapVectorTmp<std::array<Id, 2>> entityHasPattern(
+  auto entityHasPattern = ad_utility::MmapVectorTmp<std::array<Id, 2>>::create(
       fileName + ".mmap.entityHasPattern.tmp");
-  ad_utility::MmapVectorTmp<std::array<Id, 2>> entityHasPredicate(
+  auto entityHasPredicate = ad_utility::MmapVectorTmp<std::array<Id, 2>>::create(
       fileName + ".mmap.entityHasPredicate.tmp");
 
   size_t numEntitiesWithPatterns = 0;
@@ -900,12 +903,18 @@ void Index::createPatternsImpl(
   // write the entityHasPatterns vector
   size_t numHasPatterns = entityHasPattern.size();
   file.write(&numHasPatterns, sizeof(size_t));
-  file.write(entityHasPattern.data(), sizeof(Id) * numHasPatterns * 2);
+  for (const auto& el : entityHasPattern) {
+    file.write(&el, sizeof(el));
+  }
+  //file.write(entityHasPattern.data(), sizeof(Id) * numHasPatterns * 2);
 
   // write the entityHasPredicate vector
   size_t numHasPredicatess = entityHasPredicate.size();
   file.write(&numHasPredicatess, sizeof(size_t));
-  file.write(entityHasPredicate.data(), sizeof(Id) * numHasPredicatess * 2);
+  //file.write(entityHasPredicate.data(), sizeof(Id) * numHasPredicatess * 2);
+  for (const auto& el : entityHasPredicate) {
+    file.write(&el, sizeof(el));
+  }
 
   // write the patterns
   // TODO<joka921> Also use the serializer interface for the patterns.
@@ -994,7 +1003,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
           << version << " does not match the programs pattern file "
           << "version of " << PATTERNS_FILE_VERSION << ". Rebuild the index"
           << " or start the query engine without pattern support." << std::endl;
-      throw std::runtime_error(oss.str());
+      throw std::runtime_error(std::move(oss).str());
     } else {
       patternsFile.read(&_fullHasPredicateMultiplicityEntities, sizeof(double),
                         off);
@@ -1272,9 +1281,9 @@ void Index::readConfiguration() {
       for (string prefix; std::getline(prefixFile, prefix);) {
         prefixes.emplace_back(std::move(prefix));
       }
-      _vocab.initializePrefixes(prefixes);
+      _vocab.buildCodebookForPrefixCompression(prefixes);
     } else {
-      _vocab.initializePrefixes(std::vector<std::string>());
+      _vocab.buildCodebookForPrefixCompression(std::vector<std::string>());
     }
   }
 

@@ -52,7 +52,7 @@ string TextOperationWithoutFilter::asString(size_t indent) const {
      << " variables";
   ;
   os << " with textLimit = " << _textLimit;
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

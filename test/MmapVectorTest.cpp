@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "../src/util/MmapVector.h"
+#include "../src/util/OnDiskVector.h"
 
 using ad_utility::MmapVector;
 using ad_utility::MmapVectorView;
@@ -18,6 +19,7 @@ using ad_utility::MmapVectorView;
 // ___________________________________________________________________
 TEST(MmapVectorTest, DefaultConstructor) {
   MmapVector<int> v;
+  OnDiskVector<int> ondDiskbim;
   ASSERT_EQ(size_t(0), v.size());
   ASSERT_EQ(nullptr, v.begin());
   ASSERT_EQ(nullptr, v.end());

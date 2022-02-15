@@ -38,4 +38,4 @@ add_library(engine
         ../util/Parameters.h)
 
 
-target_link_libraries(engine index parser sparqlExpressions httpServer SortPerformanceEstimator absl::flat_hash_set ${ICU_LIBRARIES})
+target_link_libraries(engine index parser sparqlExpressions httpServer SortPerformanceEstimator absl::flat_hash_set ${ICU_LIBRARIES} boost_iostreams)

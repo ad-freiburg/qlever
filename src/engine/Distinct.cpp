@@ -27,7 +27,7 @@ string Distinct::asString(size_t indent) const {
     os << " ";
   }
   os << "Distinct " << _subtree->asString(indent);
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

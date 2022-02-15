@@ -62,7 +62,7 @@ queries:
       - num_cols: 2
       - num_rows: 11
       - selected: ["?x", "SCORE(?t)"]
-      - contains_row: ["<Grete_Hermann>"]
+      - contains_row: ["<Grete_Hermann>", 1]
       - order_numeric: {"dir": "DESC", "var" : "SCORE(?t)"}
 
 
@@ -1061,7 +1061,7 @@ queries:
       - num_cols: 2
       - num_rows: 11
       - selected: ["?x", "?t"]
-      - contains_row: ["<Grete_Hermann>"]
+      - contains_row: ["<Grete_Hermann>","Hermann's algorithm for primary decomposition is still in use now."]
 
 
   - query : select_asterisk_regex-lastname-stein

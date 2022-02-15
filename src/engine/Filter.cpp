@@ -86,7 +86,7 @@ string Filter::asString(size_t indent) const {
     os << " || " << _additionalLhs[i] << " " << _additionalPrefixRegexes[i];
   }
   os << '\n';
-  return os.str();
+  return std::move(os).str();
 }
 
 string Filter::getDescriptor() const {
@@ -129,7 +129,7 @@ string Filter::getDescriptor() const {
   for (size_t i = 0; i < _additionalLhs.size(); ++i) {
     os << " || " << _additionalLhs[i] << " " << _additionalPrefixRegexes[i];
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

@@ -11,6 +11,7 @@
 
 #include "../util/Exception.h"
 #include "File.h"
+#include "./OnDiskVector.h"
 
 using std::string;
 
@@ -39,7 +40,7 @@ class TruncateException : public std::exception {
     std::stringstream stream;
     stream << "truncating of file " << file << " to size " << size
            << "set errno to" << err << " terminating\n";
-    _msg = stream.str();
+    _msg = std::move(stream).str();
   }
 
   // ______________________________________________________________________________________________________
@@ -57,14 +58,8 @@ struct VecInfo {
   size_t _bytesize;
 };
 
-// 2 tags to differentiate between different versions of the
-// setup / construction variants of Mmap Vector which only take a filename
-class CreateTag {};
-class ReuseTag {};
 
-// Enum that specifies access patterns to this array
-enum class AccessPattern { None, Random, Sequential };
-
+/*
 // STL-like class which implements a dynamic array (similar to std::vector)
 // whose contents are stored persistently in a file on memory and are accessed
 // using memory mapping
@@ -385,6 +380,17 @@ class MmapVectorTmp : public MmapVector<T> {
     }
   }
 };
+ */
+
+template<typename T>
+using MmapVector = OnDiskVector<T>;
+
+template<typename T>
+using MmapVectorView = OnDiskVector<T>;
+
+template<typename T>
+using MmapVectorTmp = OnDiskVector<T>;
+
 
 }  // namespace ad_utility
-#include "./MmapVectorImpl.h"
+//#include "./MmapVectorImpl.h"

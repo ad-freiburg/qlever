@@ -10,13 +10,13 @@
 #include "../global/Constants.h"
 #include "../global/Id.h"
 #include "../util/HashMap.h"
-#include "../util/MmapVector.h"
+#include "../util/OnDiskVector.h"
 #include "./ConstantsIndexBuilding.h"
 #include "./IndexBuilderTypes.h"
 #include "Vocabulary.h"
 
-using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
-using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
+using IdPairMMapVec = ad_utility::OnDiskVector<std::pair<Id, Id>>;
+using IdPairMMapVecView = ad_utility::OnDiskVector<std::pair<Id, Id>>;
 using std::string;
 
 using TripleVec = stxxl::vector<std::array<Id, 3>>;

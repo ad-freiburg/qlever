@@ -159,7 +159,7 @@ void SparqlLexer::expandNextUntilWhitespace() {
     s << *_re_string.begin();
     _re_string.remove_prefix(1);
   }
-  _next.raw += s.str();
+  _next.raw += std::move(s).str();
 }
 
 bool SparqlLexer::accept(SparqlToken::Type type) {
@@ -191,7 +191,7 @@ void SparqlLexer::expect(SparqlToken::Type type) {
       << " but got a token of type " << SparqlToken::TYPE_NAMES[(int)_next.type]
       << " (" << _next.raw << ") in the input at pos " << _next.pos << " : "
       << _sparql.substr(_next.pos, 256);
-    throw ParseException(s.str());
+    throw ParseException(std::move(s).str());
   }
   readNext();
 }
@@ -201,14 +201,14 @@ void SparqlLexer::expect(const std::string& raw, bool match_case) {
     s << "Expected '" << raw << "' but got '" << _next.raw
       << "' in the input at pos " << _next.pos << " : "
       << _sparql.substr(_next.pos, 256);
-    throw ParseException(s.str());
+    throw ParseException(std::move(s).str());
   } else if (!match_case && ad_utility::getLowercaseUtf8(_next.raw) !=
                                 ad_utility::getLowercaseUtf8(raw)) {
     std::ostringstream s;
     s << "Expected '" << raw << "' but got '" << _next.raw
       << "' in the input at pos " << _next.pos << " : "
       << _sparql.substr(_next.pos, 256);
-    throw ParseException(s.str());
+    throw ParseException(std::move(s).str());
   }
   readNext();
 }
@@ -218,7 +218,7 @@ void SparqlLexer::expectEmpty() {
     std::ostringstream s;
     s << "Expected the end of the input but found "
       << _re_string.substr(0, 256);
-    throw ParseException(s.str());
+    throw ParseException(std::move(s).str());
   }
 }
 

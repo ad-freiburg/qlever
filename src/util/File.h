@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -91,7 +92,7 @@ class File {
       err << "! ERROR opening file \"" << filename << "\" with mode \"" << mode
           << "\" (" << strerror(errno) << ")" << endl
           << endl;
-      throw std::runtime_error(err.str());
+      throw std::runtime_error(std::move(err).str());
     }
     _name = filename;
     return true;
@@ -266,28 +267,18 @@ class File {
   }
 
   // Static method to check if a file exists.
-  static bool exists(const string& path) {
-    struct stat buffer;
-    return (stat(path.c_str(), &buffer) == 0);
+  static bool exists(const std::filesystem::path& path) {
+    return std::filesystem::exists(path);
   }
 };
 
 /**
  * @brief Delete the file at a given path
- * Currently uses the linux rm command until we support std::filesystem
  * @param path
  */
-inline void deleteFile(const string& path) {
-  // TODO<all>: As soon as we have GCC 8, we can use std::filesystem
-  std::string path_raw = path;
-  // Adding escape char for paths with space chars
-  auto p = path_raw.find(' ');
-  if (p != std::string::npos) {
-    path_raw.replace(p, 1, "\\ ");
-  }
-  string command = "rm -- " + path_raw;
-  if (system(command.c_str())) {
-    LOG(WARN) << "Deletion of file " << path << " was probably not successful"
+inline void deleteFile(const std::filesystem::path& path) {
+  if (!std::filesystem::remove(path)) {
+    LOG(WARN) << "Deletion of file '" << path << "' was not successful"
               << std::endl;
   }
 }

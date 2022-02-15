@@ -15,10 +15,10 @@
 template <class Comp>
 string ExternalVocabulary<Comp>::operator[](Id id) const {
   off_t ft[2];
+  off_t at = _startOfOffsets + id * sizeof(off_t);
+  _file.read(ft, sizeof(ft), at);
   off_t& from = ft[0];
   off_t& to = ft[1];
-  off_t at = _startOfOffsets + id * sizeof(off_t);
-  at += _file.read(ft, sizeof(ft), at);
   assert(to > from);
   size_t nofBytes = static_cast<size_t>(to - from);
   string word(nofBytes, '\0');
@@ -72,8 +72,12 @@ void ExternalVocabulary<Comp>::buildFromTextFile(const string& textFileName,
   _file.open(outFileName.c_str(), "w");
   std::ifstream infile(textFileName);
   AD_CHECK(infile.is_open());
+  auto tmpName = textFileName + ".offset.tmp.buffer";
+  auto offsets = ad_utility::OnDiskVector<off_t>::create(tmpName);
+  /*
   ad_utility::BufferedVector<off_t> offsets(
       1'000'000'000, textFileName + ".offset.tmp.buffer");
+      */
   off_t currentOffset = 0;
   _size = 0;
   std::string word;
@@ -88,7 +92,10 @@ void ExternalVocabulary<Comp>::buildFromTextFile(const string& textFileName,
   }
   _startOfOffsets = currentOffset;
   offsets.push_back(_startOfOffsets);
-  _file.write(offsets.data(), offsets.size() * sizeof(off_t));
+  for (const auto& offset: offsets) {
+    _file.write(&offset, sizeof(offset));
+  }
+  //_file.write(offsets.data(), offsets.size() * sizeof(off_t));
   _file.close();
   initFromFile(outFileName);
 }

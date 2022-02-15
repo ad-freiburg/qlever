@@ -32,14 +32,9 @@ IdTable createRandomIdTable(
   return result;
 }
 
-// TODO<C++20>: use std::is_sorted which then becomes constexpr.
 template <size_t I>
 constexpr bool isSorted(const std::array<size_t, I>& array) {
-  bool isSorted = true;
-  for (size_t i = 1; i < I; ++i) {
-    isSorted = isSorted && array[i] >= array[i - 1];
-  }
-  return isSorted;
+  return std::is_sorted(array.begin(), array.end());
 }
 
 // ____________________________________________________________________

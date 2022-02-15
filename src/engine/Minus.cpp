@@ -37,7 +37,7 @@ string Minus::asString(size_t indent) const {
   }
   os << "MINUS\n" << _left->asString(indent) << "\n";
   os << _right->asString(indent) << " ";
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

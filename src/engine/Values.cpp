@@ -43,7 +43,7 @@ string Values::asString(size_t indent) const {
     }
   }
   os << "}";
-  return os.str();
+  return std::move(os).str();
 }
 
 string Values::getDescriptor() const {
@@ -70,7 +70,7 @@ string Values::getDescriptor() const {
       os << " ";
     }
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 size_t Values::getResultWidth() const { return _values._variables.size(); }

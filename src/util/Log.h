@@ -87,7 +87,7 @@ inline string to_string(double in, size_t precision) {
   std::ostringstream buffer;
   buffer.imbue(commaLocale);
   buffer << std::setprecision(precision) << std::fixed << in;
-  return buffer.str();
+  return std::move(buffer).str();
 }
 
 //! String representation of a long with thousandth separators
@@ -95,7 +95,7 @@ inline string to_string(long in) {
   std::ostringstream buffer;
   buffer.imbue(commaLocale);
   buffer << in;
-  return buffer.str();
+  return std::move(buffer).str();
 }
 
 //! Log
@@ -120,7 +120,7 @@ class Log {
 
     ss << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %X") << '.'
        << std::setw(3) << std::setfill('0') << ms.count();
-    return ss.str();
+    return std::move(ss).str();
   }
 
   template <unsigned char LEVEL>

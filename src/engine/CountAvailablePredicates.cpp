@@ -49,7 +49,7 @@ string CountAvailablePredicates::asString(size_t indent) const {
     os << "COUNT_AVAILABLE_PREDICATES (col " << _subjectColumnIndex << ")\n"
        << _subtree->asString(indent);
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
