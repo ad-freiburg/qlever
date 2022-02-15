@@ -50,8 +50,6 @@ class MergeVocabularyTest : public ::testing::Test {
   // Constructor. TODO: Better write Setup method because of complex logic which
   // may throw?
   MergeVocabularyTest() {
-    // name of random subdirectory
-    std::srand(std::time(nullptr));
     _basePath = std::string("vocabularyGeneratorTestFiles");
     // those names are required by mergeVocabulary
     _path0 = std::string(PARTIAL_VOCAB_FILE_NAME + std::to_string(0));
