@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -91,7 +92,7 @@ class File {
       err << "! ERROR opening file \"" << filename << "\" with mode \"" << mode
           << "\" (" << strerror(errno) << ")" << endl
           << endl;
-      throw std::runtime_error(err.str());
+      throw std::runtime_error(std::move(err).str());
     }
     _name = filename;
     return true;
@@ -103,7 +104,7 @@ class File {
   }
 
   //! checks if the file is open.
-  bool isOpen() const { return (_file != NULL); }
+  [[nodiscard]] bool isOpen() const { return (_file != NULL); }
 
   //! Close file.
   bool close() {
@@ -212,7 +213,7 @@ class File {
     assert(_file);
     const int fd = fileno(_file);
     size_t bytesRead = 0;
-    uint8_t* to = static_cast<uint8_t*>(targetBuffer);
+    auto* to = static_cast<uint8_t*>(targetBuffer);
     size_t batchSize =
         timer ? 1024 * 1024 * 64 : std::numeric_limits<size_t>::max();
     while (bytesRead < nofBytesToRead) {
@@ -232,12 +233,12 @@ class File {
   }
 
   //! get the underlying file descriptor
-  int getFileDescriptor() const { return fileno(_file); }
+  [[nodiscard]] int getFileDescriptor() const { return fileno(_file); }
 
   //! Returns the number of bytes from the beginning
   //! is 0 on opening. Later equal the number of bytes written.
   //! -1 is returned when an error occurs
-  off_t tell() const {
+  [[nodiscard]] off_t tell() const {
     assert(_file);
     off_t returnValue = ftello(_file);
     if (returnValue == (off_t)-1) {
@@ -266,22 +267,18 @@ class File {
   }
 
   // Static method to check if a file exists.
-  static bool exists(const string& path) {
-    struct stat buffer;
-    return (stat(path.c_str(), &buffer) == 0);
+  static bool exists(const std::filesystem::path& path) {
+    return std::filesystem::exists(path);
   }
 };
 
 /**
  * @brief Delete the file at a given path
- * Currently uses the linux rm command until we support std::filesystem
  * @param path
  */
-inline void deleteFile(const string& path) {
-  // TODO<all>: As soon as we have GCC 8, we can use std::filesystem
-  string command = "rm -- " + path;
-  if (system(command.c_str())) {
-    LOG(WARN) << "Deletion of file " << path << " was probably not successful"
+inline void deleteFile(const std::filesystem::path& path) {
+  if (!std::filesystem::remove(path)) {
+    LOG(WARN) << "Deletion of file '" << path << "' was not successful"
               << std::endl;
   }
 }

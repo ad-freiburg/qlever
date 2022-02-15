@@ -160,7 +160,7 @@ class TimeoutTimer : public Timer {
       numberStream << std::setprecision(3) << std::fixed << seconds;
       throw TimeoutException(additionalMessage +
                              "A Timeout occured. The time limit was "s +
-                             numberStream.str() + "seconds"s);
+                             std::move(numberStream).str() + "seconds"s);
     }
   }
 

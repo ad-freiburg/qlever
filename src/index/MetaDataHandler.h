@@ -1,5 +1,5 @@
 // Copyright 2018, University of Freiburg,
-// Chair of Algorithms and Data Structures.
+// Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach (johannes.kalmbach@gmail.com)
 //
 #pragma once

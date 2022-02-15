@@ -44,20 +44,37 @@ class LocaleManager {
    * Wraps a string that contains unicode collation weights for another string
    * Only needed for making interfaces explicit and less errorProne
    */
+  // TODO<GCC12> As soon as we have constexpr std::string, this class can
+  //  become constexpr.
   class SortKey {
    public:
     SortKey() = default;
-    explicit SortKey(std::string_view contents) : _content(contents) {}
-    [[nodiscard]] const std::string& get() const { return _content; }
-    std::string& get() { return _content; }
+    explicit SortKey(std::string_view sortKey) : _sortKey(sortKey) {}
+    [[nodiscard]] constexpr const std::string& get() const noexcept {
+      return _sortKey;
+    }
+    constexpr std::string& get() noexcept { return _sortKey; }
 
-    // compare according to the byte value
-    [[nodiscard]] int compare(const SortKey& rhs) const {
-      return _content.compare(rhs._content);
+    // Comparison of sort key is done lexicographically on the byte values
+    // of member `_sortKey`
+    [[nodiscard]] int compare(const SortKey& rhs) const noexcept {
+      return _sortKey.compare(rhs._sortKey);
     }
 
+    auto operator<=>(const SortKey&) const = default;
+    bool operator==(const SortKey&) const = default;
+
+    /// Is this sort key a prefix of another sort key. Note: This does not imply
+    /// any guarantees on the relation of the underlying strings.
+    bool starts_with(const SortKey& rhs) const noexcept {
+      return get().starts_with(rhs.get());
+    }
+
+    /// Return the number of bytes in the `SortKey`
+    std::string::size_type size() const noexcept { return get().size(); }
+
    private:
-    std::string _content;
+    std::string _sortKey;
   };
 
   /// Copy constructor
@@ -172,6 +189,49 @@ class LocaleManager {
       res += s;
     }
     return finalRes;
+  }
+
+  /// Get a `SortKey` for `Level::PRIMARY` that corresponds to a prefix of `s`.
+  /// \param s The input of which we want to obtain a sort key.
+  /// \param prefixLength Obtain a SortKey for `prefixLength` many relevant
+  /// characters
+  ///               (see below).
+  /// \return A `SortKey` that is a prefix of the `SortKey` for `s` w.r.t
+  ///         `Level::PRIMARY` and that also is a `SortKey` for a prefix "p"
+  ///         of `s`. "p" is the minimal prefix of `s` which consists of
+  ///         at least `prefixLength` codepoints and whose SortKey fulfills the
+  ///         first condition. Codepoints, which do not contribute to the
+  ///         `SortKey` because they are irrelevant for the `PRIMARY` level do
+  ///         not count towards `prefixLength`. The first element of the return
+  ///         value is the actual number of (contributing) codepoints in "p". If
+  ///         `s` contains less than `prefixLength` contributing codepoints,
+  ///         then {totalNumberOfContributingCodepoints, completeSortKey} is
+  ///         returned.
+  [[nodiscard]] std::pair<size_t, SortKey> getPrefixSortKey(
+      std::string_view s, size_t prefixLength) const {
+    size_t numContributingCodepoints = 0;
+    SortKey sortKey;
+    size_t prefixLengthSoFar = 1;
+    SortKey completeSortKey = getSortKey(s, Level::PRIMARY);
+    while (numContributingCodepoints < prefixLength ||
+           !completeSortKey.starts_with(sortKey)) {
+      auto [numCodepoints, prefix] =
+          ad_utility::getUTF8Prefix(s, prefixLengthSoFar);
+      auto nextLongerSortKey = getSortKey(prefix, Level::PRIMARY);
+      if (nextLongerSortKey != sortKey) {
+        // The `SortKey` changed by adding a codepoint, so that codepoint
+        // was contributing.
+        numContributingCodepoints++;
+        sortKey = std::move(nextLongerSortKey);
+      }
+      if (numCodepoints < prefixLengthSoFar) {
+        // We have checked the complete string without finding a sufficiently
+        // long contributing prefix.
+        break;
+      }
+      prefixLengthSoFar++;
+    }
+    return {numContributingCodepoints, std::move(sortKey)};
   }
 
   /**
@@ -615,9 +675,7 @@ class TripleComponentComparator {
     std::string_view res = a;
     const char first = a.empty() ? char(0) : a[0];
     std::string_view langtag;
-    if (ad_utility::startsWith(res, "\"") ||
-        ad_utility::startsWith(res,
-                               std::string{EXTERNALIZED_LITERALS_PREFIX})) {
+    if (res.starts_with('"') || res.starts_with(EXTERNALIZED_LITERALS_PREFIX)) {
       // only remove the first character in case of literals that always start
       // with a quotation mark. For all other types we need this. <TODO> rework
       // the vocabulary's data type to remove ALL of those hacks

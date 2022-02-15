@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "../global/Constants.h"
+#include "../parser/TokenizerCtre.h"
 #include "./Exception.h"
 #include "./StringUtils.h"
 
@@ -176,14 +177,14 @@ string convertValueLiteralToIndexWord(const string& orig) {
 // ____________________________________________________________________________
 inline std::pair<string, const char*> convertIndexWordToLiteralAndType(
     const string& indexWord) {
-  if (startsWith(indexWord, VALUE_DATE_PREFIX)) {
+  if (indexWord.starts_with(VALUE_DATE_PREFIX)) {
     string date = removeLeadingZeros(convertIndexWordToDate(indexWord));
-    if (date.empty() || startsWith(date, VALUE_DATE_TIME_SEPARATOR)) {
+    if (date.empty() || date.starts_with(VALUE_DATE_TIME_SEPARATOR)) {
       date = string("0") + date;
     }
     return std::make_pair(std::move(date), XSD_DATETIME_TYPE);
   }
-  if (startsWith(indexWord, VALUE_FLOAT_PREFIX)) {
+  if (indexWord.starts_with(VALUE_FLOAT_PREFIX)) {
     auto type = NumericType{indexWord.back()};
     switch (type) {
       case NumericType::FLOAT:
@@ -208,7 +209,7 @@ string convertIndexWordToValueLiteral(const string& indexWord) {
   }
   std::ostringstream os;
   os << "\"" << literal << "\"^^<" << typeIri << '>';
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -272,7 +273,8 @@ string convertFloatStringToIndexWord(const string& orig,
   // Produce a string representation of the exponent
   std::ostringstream expoOs;
   expoOs << exponent;
-  string expoString = (negaExpo ? expoOs.str().substr(1) : expoOs.str());
+  string expoString =
+      (negaExpo ? std::move(expoOs).str().substr(1) : std::move(expoOs).str());
 
   if (negaMantissa != negaExpo) {
     expoString = getBase10ComplementOfIntegerString(expoString);
@@ -305,15 +307,15 @@ string convertFloatStringToIndexWord(const string& orig,
   os << mant.str().substr(0, DEFAULT_NOF_VALUE_MANTISSA_DIGITS);
   // Padding for mantissa. Necessary because we append something
   // to restore the original type.
-  for (size_t i = mant.str().size(); i < DEFAULT_NOF_VALUE_MANTISSA_DIGITS;
-       ++i) {
+  for (size_t i = std::move(mant).str().size();
+       i < DEFAULT_NOF_VALUE_MANTISSA_DIGITS; ++i) {
     if (!negaMantissa) {
       os << '0';
     } else {
       os << '9';
     }
   }
-  return os.str() + char(type);
+  return std::move(os).str() + char(type);
 }
 
 // _____________________________________________________________________________
@@ -358,12 +360,12 @@ string convertIndexWordToFloatString(const string& indexWord) {
       --absExponent;
     }
 
-    // Skip leading zeros of the mantissa
-    size_t i = 0;
-    while (mantissa[i] == '0') {
-      ++i;
+    // Skip leading and trailing zeros of the mantissa
+    size_t start = mantissa.find_first_not_of('0');
+    if (start != std::string::npos) {
+      size_t end = mantissa.find_last_not_of('0') + 1;
+      os << string_view{mantissa}.substr(start, end - start);
     }
-    os << ad_utility::rstrip(mantissa.substr(i), '0');
   } else {
     // Skip leading zeros of the mantissa
     size_t i = 0;
@@ -379,13 +381,13 @@ string convertIndexWordToFloatString(const string& indexWord) {
       if (mantissa[i] == '0') {
         zeros << '0';
       } else {
-        os << zeros.str();
+        os << std::move(zeros).str();
         zeros.str("");
         os << mantissa[i];
       }
       ++i;
       if (tenToThe == absExponent) {
-        os << zeros.str();
+        os << std::move(zeros).str();
         zeros.str("");
         os << ".";
       }
@@ -402,7 +404,7 @@ string convertIndexWordToFloatString(const string& indexWord) {
       }
     }
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -588,7 +590,7 @@ string convertDateToIndexWord(const string& value) {
   } else {
     os << norm;
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -603,7 +605,7 @@ string convertIndexWordToDate(const string& indexWord) {
   } else {
     os << indexWord.substr(prefixLength);
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -612,7 +614,7 @@ string getBase10ComplementOfIntegerString(const string& orig) {
   for (size_t i = 0; i < orig.size(); ++i) {
     os << (9 - atoi(orig.substr(i, 1).c_str()));
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -627,7 +629,7 @@ inline string removeLeadingZeros(const string& orig) {
   for (; i < orig.size(); ++i) {
     os << orig[i];
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -641,18 +643,19 @@ bool isXsdValue(const string& val) {
 }
 
 // _____________________________________________________________________________
-bool isNumeric(const string& val) {
-  if (val.empty()) {
-    return false;
+bool isNumeric(const string& value) {
+  if (ctre::match<TurtleTokenCtre::Double>(value)) {
+    throw std::out_of_range{
+        "Decimal numbers with an explicit exponent are currently not supported "
+        "by QLever, but the following number was encountered: " +
+        value};
   }
-  size_t start = (val[0] == '-' || val[0] == '+') ? 1 : 0;
-  size_t posNonDigit = val.find_first_not_of("0123456789", start);
-  if (posNonDigit == string::npos) {
+
+  if (ctre::match<TurtleTokenCtre::Integer>(value)) {
     return true;
   }
-  if (val[posNonDigit] == '.') {
-    return posNonDigit + 1 < val.size() &&
-           val.find_first_not_of("0123456789", posNonDigit + 1) == string::npos;
+  if (ctre::match<TurtleTokenCtre::Decimal>(value)) {
+    return true;
   }
   return false;
 }
@@ -676,7 +679,7 @@ string convertLangtagToEntityUri(const string& tag) {
 // _________________________________________________________
 std::optional<string> convertEntityUriToLangtag(const string& word) {
   static const string prefix = URI_PREFIX + "@";
-  if (ad_utility::startsWith(word, prefix)) {
+  if (word.starts_with(prefix)) {
     return word.substr(prefix.size(), word.size() - prefix.size() - 1);
   } else {
     return std::nullopt;

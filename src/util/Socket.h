@@ -89,7 +89,7 @@ class Socket {
 
     std::ostringstream os;
     os << port;
-    getaddrinfo(NULL, os.str().c_str(), &hints, &res);
+    getaddrinfo(NULL, std::move(os).str().c_str(), &hints, &res);
 
     // bind it to the port we passed in to getaddrinfo():
     bool success = ::bind(_fd, res->ai_addr, res->ai_addrlen) != -1;

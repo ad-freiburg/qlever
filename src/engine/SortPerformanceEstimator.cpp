@@ -32,14 +32,9 @@ IdTable createRandomIdTable(
   return result;
 }
 
-// TODO<C++20>: use std::is_sorted which then becomes constexpr.
 template <size_t I>
 constexpr bool isSorted(const std::array<size_t, I>& array) {
-  bool isSorted = true;
-  for (size_t i = 1; i < I; ++i) {
-    isSorted = isSorted && array[i] >= array[i - 1];
-  }
-  return isSorted;
+  return std::is_sorted(array.begin(), array.end());
 }
 
 // ____________________________________________________________________
@@ -120,7 +115,7 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
   static_assert(isSorted(sampleValuesRows));
 
   LOG(INFO) << "Sorting random result tables to estimate the sorting "
-               "performance of this machine"
+               "performance of this machine ..."
             << std::endl;
 
   _samples.fill({});
@@ -183,6 +178,6 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
       }
     }
   }
-  LOG(INFO) << "Done creating sort estimates." << std::endl;
+  LOG(DEBUG) << "Done computing sort estimates" << std::endl;
   _estimatesWereCalculated = true;
 }

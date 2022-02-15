@@ -47,7 +47,7 @@ string Union::asString(size_t indent) const {
   }
   os << "UNION\n";
   os << _subtrees[1]->asString(indent) << "\n";
-  return os.str();
+  return std::move(os).str();
 }
 
 string Union::getDescriptor() const { return "Union"; }

@@ -154,7 +154,7 @@ TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
 
 // ______________________________________________________________________________________________
 TEST(StringSortComparatorTest, SimpleStringComparator) {
-  SimpleStringComparator comp("en", "US", false);
+  SimpleStringComparator comp("en", "US", true);
 
   // strange casings must not affect order
   ASSERT_TRUE(comp("ALPHA", "beta"));
@@ -177,4 +177,70 @@ TEST(StringSortComparatorTest, SimpleStringComparator) {
 
   // something is not smaller thant itself
   ASSERT_FALSE(comp("beta", "beta"));
+
+  ASSERT_TRUE(comp("\"@u2", "@u2"));
+  ASSERT_FALSE(comp("@u2", "\"@u2"));
+}
+
+TEST(LocaleManager, PrefixSortKey) {
+  SimpleStringComparator comp("en", "US", true);
+  LocaleManager locIgnorePunct = comp.getLocaleManager();
+  LocaleManager locRespectPunct("en", "US", false);
+
+  auto print = []([[maybe_unused]] std::string_view s) {
+    // The following code can be used for convenient debug output.
+    /*
+    for (const auto& ch : s) {
+      std::cout << int(ch) << ' ';
+    }
+    std::cout << std::endl;
+     */
+  };
+
+  // Assert that all possible prefix sort keys of `s` are indeed prefixes
+  // of the `SortKey` of `s`.
+  auto testSortKeysForLocale = [print](std::string_view s,
+                                       const LocaleManager& loc) {
+    auto complete = loc.getSortKey(s, LocaleManager::Level::PRIMARY).get();
+    print(complete);
+    for (size_t i = 0; i < s.size(); ++i) {
+      auto [numCodepoints, partial] = loc.getPrefixSortKey(s, i);
+      (void)numCodepoints;
+      ASSERT_TRUE(complete.starts_with(partial.get()));
+      print(partial.get());
+    }
+    std::cout << std::endl;
+  };
+
+  auto testSortKeys = [&testSortKeysForLocale, &locIgnorePunct,
+                       &locRespectPunct](std::string_view s) {
+    testSortKeysForLocale(s, locIgnorePunct);
+    testSortKeysForLocale(s, locRespectPunct);
+  };
+
+  testSortKeys("original");
+  testSortKeys("Häll!!ö.ö");
+
+  testSortKeys("vivæ");
+  testSortKeys("vivae");
+  testSortKeys("vivaret");
+
+  testSortKeys("viɡorous");
+  testSortKeys("vigorous");
+
+  // Show the current limitations:
+  // The words vivæ and vivae compare equal on the primary level, but they
+  // get different prefixSortKeys for prefix length 4, because "ae" are two
+  // codepoints, whereas "æ" is one.
+  auto a = locIgnorePunct.getPrefixSortKey("vivæ", 4).second;
+  auto b = locIgnorePunct.getPrefixSortKey("vivae", 4).second;
+
+  ASSERT_GT(a.size(), b.size());
+  ASSERT_TRUE(a.starts_with(b));
+  // Also test the defaulted consistent comparison.
+  ASSERT_GT(a, b);
+  ASSERT_EQ(a, a);
+  ASSERT_NE(a, b);
+  ASSERT_FALSE(comp("vivæ", "vivae", LocaleManager::Level::PRIMARY));
+  ASSERT_FALSE(comp("vivæ", "vivae", LocaleManager::Level::PRIMARY));
 }

@@ -60,7 +60,7 @@ string Bind::asString(size_t indent) const {
   os << "BIND ";
   os << _bind._expression.getCacheKey(getVariableColumns());
   os << "\n" << _subtree->asString(indent);
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

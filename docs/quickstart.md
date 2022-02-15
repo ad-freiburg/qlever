@@ -21,7 +21,7 @@ Building the code will take a few minutes. The --recursive is important because
 the QLever repository uses a few submodules.
 
         cd $QLEVER_HOME
-        git clone --recursive https://github.com/ad-freiburg/qlever qlever-code
+        git clone --recursive -j8 https://github.com/ad-freiburg/qlever qlever-code
         cd qlever-code
         docker build -t qlever .
 

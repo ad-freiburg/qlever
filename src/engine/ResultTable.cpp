@@ -32,7 +32,7 @@ string ResultTableTemplate::asDebugString() const {
     }
     os << '\n';
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

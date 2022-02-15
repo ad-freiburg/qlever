@@ -20,13 +20,13 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
 string getStxxlConfigFileName(const string& location) {
   std::ostringstream os;
   os << location << ".stxxl";
-  return os.str();
+  return std::move(os).str();
 }
 
 string getStxxlDiskFileName(const string& location, const string& tail) {
   std::ostringstream os;
   os << location << tail << "-stxxl.disk";
-  return os.str();
+  return std::move(os).str();
 }
 
 // Write a .stxxl config-file.
@@ -43,7 +43,7 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
   std::ostringstream config;
   config << "disk=" << getStxxlDiskFileName(location, tail) << ","
          << STXXL_DISK_SIZE_INDEX_TEST << ",syscall";
-  stxxlConfig.writeLine(config.str());
+  stxxlConfig.writeLine(std::move(config).str());
 }
 
 TEST(IndexTest, createFromTsvTest) {
@@ -257,8 +257,8 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     p.push_back(3);
     p.push_back(6);
     const auto& ip = index._patterns[0];
-    for (size_t i = 0; i < ip.second; i++) {
-      ASSERT_EQ(p[i], ip.first[i]);
+    for (size_t i = 0; i < ip.size(); i++) {
+      ASSERT_EQ(p[i], ip[i]);
     }
     ASSERT_EQ(0u, index.getHasPattern()[1]);
     ASSERT_EQ(NO_PATTERN, index.getHasPattern()[0]);
@@ -280,8 +280,8 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     p.push_back(3);
     p.push_back(6);
     const auto& ip = index._patterns[0];
-    for (size_t i = 0; i < ip.second; i++) {
-      ASSERT_EQ(p[i], ip.first[i]);
+    for (size_t i = 0; i < ip.size(); i++) {
+      ASSERT_EQ(p[i], ip[i]);
     }
     ASSERT_EQ(0u, index.getHasPattern()[1]);
     ASSERT_EQ(NO_PATTERN, index.getHasPattern()[0]);
@@ -538,8 +538,3 @@ TEST(IndexTest, scanTest) {
   remove("_testindex.index.pso");
   remove("_testindex.index.pos");
 };
-
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

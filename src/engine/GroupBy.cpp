@@ -4,6 +4,8 @@
 
 #include "GroupBy.h"
 
+#include <absl/strings/str_join.h>
+
 #include "../index/Index.h"
 #include "../util/Conversions.h"
 #include "../util/HashSet.h"
@@ -57,11 +59,11 @@ string GroupBy::asString(size_t indent) const {
   }
   os << std::endl;
   os << _subtree->asString(indent);
-  return os.str();
+  return std::move(os).str();
 }
 
 string GroupBy::getDescriptor() const {
-  return "GroupBy on " + ad_utility::join(_groupByVariables, ' ');
+  return "GroupBy on " + absl::StrJoin(_groupByVariables, " ");
 }
 
 size_t GroupBy::getResultWidth() const { return _varColMap.size(); }

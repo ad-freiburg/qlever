@@ -4,6 +4,8 @@
 //
 #pragma once
 
+#include <absl/strings/str_join.h>
+
 #include <iostream>
 #include <string>
 #include <vector>
@@ -42,7 +44,7 @@ class RuntimeInformation {
     // So floats use fixed precision
     buffer << std::fixed << std::setprecision(2);
     writeToStream(buffer);
-    return buffer.str();
+    return std::move(buffer).str();
   }
 
   void writeToStream(std::ostream& out, size_t indent = 1) const {
@@ -51,8 +53,8 @@ class RuntimeInformation {
     out << indentStr(indent - 1) << "├─ " << _descriptor << '\n';
     out << indentStr(indent) << "result_size: " << _rows << " x " << _cols
         << '\n';
-    out << indentStr(indent)
-        << "columns: " << ad_utility::join(_columnNames, ", ") << '\n';
+    out << indentStr(indent) << "columns: " << absl::StrJoin(_columnNames, ", ")
+        << '\n';
     out << indentStr(indent) << "total_time: " << _time << " ms" << '\n';
     out << indentStr(indent) << "operation_time: " << getOperationTime()
         << " ms" << '\n';
@@ -72,7 +74,7 @@ class RuntimeInformation {
       } else {
         out << el.value();
       }
-      if (ad_utility::endsWith(el.key(), "Time")) {
+      if (el.key().ends_with("Time")) {
         out << " ms";
       }
       out << '\n';

@@ -1,6 +1,6 @@
-//
-// Created by johannes on 01.05.21.
-//
+//  Copyright 2021, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
 
@@ -8,6 +8,7 @@
 #include "../src/util/Serializer/FileSerializer.h"
 #include "../src/util/Serializer/SerializeHashMap.h"
 #include "../src/util/Serializer/SerializeString.h"
+#include "../src/util/Serializer/SerializeVector.h"
 #include "../src/util/Serializer/Serializer.h"
 
 using namespace ad_utility;
@@ -105,7 +106,7 @@ TEST(Serializer, ManyTrivialDatatypes) {
   testWithAllSerializers(testmanyPrimitives);
 }
 
-TEST(Serializer, TestStringAndHashMap) {
+TEST(Serializer, StringAndHashMap) {
   auto testFunction = [](auto&& writer, auto makeReaderFromWriter) {
     ad_utility::HashMap<string, int> m;
     m["hallo"] = 42;
@@ -123,4 +124,32 @@ TEST(Serializer, TestStringAndHashMap) {
     ASSERT_EQ(m, n);
   };
   testWithAllSerializers(testFunction);
+}
+
+TEST(Serializer, Vector) {
+  auto testTriviallyCopyableDatatype = [](auto&& writer,
+                                          auto makeReaderFromWriter) {
+    std::vector<int> v{5, 6, 89, 42, -23948165, 0, 59309289, -42};
+    writer | v;
+
+    auto reader = makeReaderFromWriter();
+    std::vector<int> w;
+    reader | w;
+    ASSERT_EQ(v, w);
+  };
+
+  auto testNonTriviallyCopyableDatatype = [](auto&& writer,
+                                             auto makeReaderFromWriter) {
+    std::vector<std::string> v{"hi",          "bye",      "someone",
+                               "someoneElse", "23059178", "-42"};
+    writer | v;
+
+    auto reader = makeReaderFromWriter();
+    std::vector<std::string> w;
+    reader | w;
+    ASSERT_EQ(v, w);
+  };
+
+  testWithAllSerializers(testTriviallyCopyableDatatype);
+  testWithAllSerializers(testNonTriviallyCopyableDatatype);
 }

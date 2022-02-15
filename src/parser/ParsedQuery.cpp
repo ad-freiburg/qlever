@@ -4,16 +4,16 @@
 
 #include "ParsedQuery.h"
 
+#include <absl/strings/str_split.h>
+
 #include <optional>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
-#include "../util/Conversions.h"
-#include "../util/StringUtils.h"
 #include "./RdfEscaping.h"
-#include "ParseException.h"
-#include "Tokenizer.h"
+#include "absl/strings/str_join.h"
 
 using std::string;
 using std::vector;
@@ -33,28 +33,29 @@ string ParsedQuery::asString() const {
   os << "\n}";
 
   bool usesSelect = hasSelectClause();
+  bool usesAsterisk =
+      usesSelect && selectClause()._varsOrAsterisk.isAllVariablesSelected();
+
   if (usesSelect) {
     const auto& selectClause = this->selectClause();
     // SELECT
     os << "\nSELECT: {\n\t";
-    for (size_t i = 0; i < selectClause._selectedVariables.size(); ++i) {
-      os << selectClause._selectedVariables[i];
-      if (i + 1 < selectClause._selectedVariables.size()) {
-        os << ", ";
-      }
-    }
+    os << absl::StrJoin(selectClause._varsOrAsterisk.getSelectedVariables(),
+                        ", ");
     os << "\n}";
 
     // ALIASES
     os << "\nALIASES: {\n\t";
-    for (size_t i = 0; i < selectClause._aliases.size(); ++i) {
-      const Alias& alias = selectClause._aliases[i];
-      os << alias._expression.getDescriptor();
-      if (i + 1 < selectClause._aliases.size()) {
-        os << "\n\t";
+    if (!usesAsterisk) {
+      for (size_t i = 0; i < selectClause._aliases.size(); ++i) {
+        const Alias& alias = selectClause._aliases[i];
+        os << alias._expression.getDescriptor();
+        if (i + 1 < selectClause._aliases.size()) {
+          os << "\n\t";
+        }
       }
+      os << "{";
     }
-    os << "{";
   } else if (hasConstructClause()) {
     const auto& constructClause = this->constructClause();
     os << "\n CONSTRUCT {\n\t";
@@ -77,7 +78,7 @@ string ParsedQuery::asString() const {
      << (_limit.has_value() ? std::to_string(_limit.value())
                             : "no limit specified");
   os << "\nTEXTLIMIT: "
-     << (_textLimit.size() > 0 ? _textLimit : "no limit specified");
+     << (!_textLimit.empty() ? _textLimit : "no limit specified");
   os << "\nOFFSET: "
      << (_offset.has_value() ? std::to_string(_offset.value())
                              : "no offset specified");
@@ -89,7 +90,7 @@ string ParsedQuery::asString() const {
        << "present.";
   }
   os << "\nORDER BY: ";
-  if (_orderBy.size() == 0) {
+  if (_orderBy.empty()) {
     os << "not specified";
   } else {
     for (auto& key : _orderBy) {
@@ -97,22 +98,22 @@ string ParsedQuery::asString() const {
     }
   }
   os << "\n";
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
 string SparqlPrefix::asString() const {
   std::ostringstream os;
   os << "{" << _prefix << ": " << _uri << "}";
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
-PropertyPath::PropertyPath(Operation op, uint16_t limit, const std::string& iri,
+PropertyPath::PropertyPath(Operation op, uint16_t limit, std::string iri,
                            std::initializer_list<PropertyPath> children)
     : _operation(op),
       _limit(limit),
-      _iri(iri),
+      _iri(std::move(iri)),
       _children(children),
       _can_be_null(false) {}
 
@@ -121,7 +122,7 @@ void PropertyPath::writeToStream(std::ostream& out) const {
   switch (_operation) {
     case Operation::ALTERNATIVE:
       out << "(";
-      if (_children.size() > 0) {
+      if (!_children.empty()) {
         _children[0].writeToStream(out);
       } else {
         out << "missing" << std::endl;
@@ -136,7 +137,7 @@ void PropertyPath::writeToStream(std::ostream& out) const {
       break;
     case Operation::INVERSE:
       out << "^(";
-      if (_children.size() > 0) {
+      if (!_children.empty()) {
         _children[0].writeToStream(out);
       } else {
         out << "missing" << std::endl;
@@ -148,7 +149,7 @@ void PropertyPath::writeToStream(std::ostream& out) const {
       break;
     case Operation::SEQUENCE:
       out << "(";
-      if (_children.size() > 0) {
+      if (!_children.empty()) {
         _children[0].writeToStream(out);
       } else {
         out << "missing" << std::endl;
@@ -163,7 +164,7 @@ void PropertyPath::writeToStream(std::ostream& out) const {
       break;
     case Operation::TRANSITIVE:
       out << "(";
-      if (_children.size() > 0) {
+      if (!_children.empty()) {
         _children[0].writeToStream(out);
       } else {
         out << "missing" << std::endl;
@@ -172,7 +173,7 @@ void PropertyPath::writeToStream(std::ostream& out) const {
       break;
     case Operation::TRANSITIVE_MAX:
       out << "(";
-      if (_children.size() > 0) {
+      if (!_children.empty()) {
         _children[0].writeToStream(out);
       } else {
         out << "missing" << std::endl;
@@ -186,7 +187,7 @@ void PropertyPath::writeToStream(std::ostream& out) const {
       break;
     case Operation::TRANSITIVE_MIN:
       out << "(";
-      if (_children.size() > 0) {
+      if (!_children.empty()) {
         _children[0].writeToStream(out);
       } else {
         out << "missing" << std::endl;
@@ -200,12 +201,12 @@ void PropertyPath::writeToStream(std::ostream& out) const {
 std::string PropertyPath::asString() const {
   std::stringstream s;
   writeToStream(s);
-  return s.str();
+  return std::move(s).str();
 }
 
 // _____________________________________________________________________________
 void PropertyPath::computeCanBeNull() {
-  _can_be_null = _children.size() > 0;
+  _can_be_null = !_children.empty();
   for (PropertyPath& p : _children) {
     p.computeCanBeNull();
     _can_be_null &= p._can_be_null;
@@ -227,7 +228,7 @@ std::ostream& operator<<(std::ostream& out, const PropertyPath& p) {
 string SparqlTriple::asString() const {
   std::ostringstream os;
   os << "{s: " << _s << ", p: " << _p << ", o: " << _o << "}";
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -267,7 +268,7 @@ string SparqlFilter::asString() const {
       break;
   }
   os << _rhs << ")";
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
@@ -334,7 +335,7 @@ void ParsedQuery::expandPrefixes() {
             expandPrefix(trip._p, prefixMap);
             if (trip._p._operation == PropertyPath::Operation::IRI &&
                 trip._p._iri.find("in-context") != string::npos) {
-              auto tokens = ad_utility::split(trip._o, ' ');
+              std::vector<std::string> tokens = absl::StrSplit(trip._o, ' ');
               trip._o = "";
               for (size_t i = 0; i < tokens.size(); ++i) {
                 expandPrefix(tokens[i], prefixMap);
@@ -375,11 +376,10 @@ void ParsedQuery::expandPrefix(
 // _____________________________________________________________________________
 void ParsedQuery::expandPrefix(
     string& item, const ad_utility::HashMap<string, string>& prefixMap) {
-  if (!ad_utility::startsWith(item, "?") &&
-      !ad_utility::startsWith(item, "<")) {
+  if (!item.starts_with("?") && !item.starts_with("<")) {
     std::optional<string> langtag = std::nullopt;
-    if (ad_utility::startsWith(item, "@")) {
-      auto secondPos = item.find("@", 1);
+    if (item.starts_with("@")) {
+      auto secondPos = item.find('@', 1);
       if (secondPos == string::npos) {
         throw ParseException(
             "langtaged predicates must have form @lang@ActualPredicate. Second "

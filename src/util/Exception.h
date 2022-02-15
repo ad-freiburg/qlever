@@ -16,12 +16,12 @@ using std::string;
 // Macros for throwing exceptions comfortably.
 // -------------------------------------------
 // Throw exception with additional assert-like info
-#define AD_THROW(e, m)                                               \
-  {                                                                  \
-    std::ostringstream __os;                                         \
-    __os << m;                                                       \
-    throw ad_semsearch::Exception(e, __os.str(), __FILE__, __LINE__, \
-                                  __PRETTY_FUNCTION__);              \
+#define AD_THROW(e, m)                                                \
+  {                                                                   \
+    std::ostringstream __os;                                          \
+    __os << m;                                                        \
+    throw ad_semsearch::Exception(e, std::move(__os).str(), __FILE__, \
+                                  __LINE__, __PRETTY_FUNCTION__);     \
   }  // NOLINT
 
 // --------------------------------------------------------------------------
@@ -204,7 +204,7 @@ class Exception : public std::exception {
       default:
         std::ostringstream os;
         os << "UNKNOWN ERROR: Code is " << errorCode;
-        return os.str().c_str();
+        return std::move(os).str();
     }
   }
 

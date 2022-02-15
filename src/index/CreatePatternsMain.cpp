@@ -34,13 +34,13 @@ struct option options[] = {{"help", no_argument, NULL, 'h'},
 string getStxxlConfigFileName(const string& location) {
   std::ostringstream os;
   os << location << ".stxxl";
-  return os.str();
+  return std::move(os).str();
 }
 
 string getStxxlDiskFileName(const string& location, const string& tail) {
   std::ostringstream os;
   os << location << tail << "-stxxl.disk";
-  return os.str();
+  return std::move(os).str();
 }
 
 // Write a .stxxl config-file.
@@ -57,7 +57,7 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
   std::ostringstream config;
   config << "disk=" << getStxxlDiskFileName(location, tail) << ","
          << STXXL_DISK_SIZE_INDEX_BUILDER << ",syscall";
-  stxxlConfig.writeLine(config.str());
+  stxxlConfig.writeLine(std::move(config).str());
 }
 
 void printUsage(char* execName) {
@@ -84,8 +84,9 @@ int main(int argc, char** argv) {
   string baseName;
   optind = 1;
   // Process command line arguments.
+
   while (true) {
-    int c = getopt_long(argc, argv, "i:", options, NULL);
+    int c = getopt_long(argc, argv, "i:", options, nullptr);
     if (c == -1) {
       break;
     }

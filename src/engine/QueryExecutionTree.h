@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "../parser/ParsedQuery.h"
 #include "../parser/data/Context.h"
 #include "../parser/data/Types.h"
 #include "../parser/data/VarOrTerm.h"
@@ -101,18 +102,20 @@ class QueryExecutionTree {
     ResultTable::ResultType _resultType;
   };
 
+  using SelectedVarsOrAsterisk = ParsedQuery::SelectedVarsOrAsterisk;
+
   using ColumnIndicesAndTypes = vector<std::optional<VariableAndColumnIndex>>;
 
   // Returns a vector where the i-th element contains the column index and
   // `ResultType` of the i-th `selectVariable` in the `resultTable`
   ColumnIndicesAndTypes selectedVariablesToColumnIndices(
-      const std::vector<string>& selectVariables,
+      const SelectedVarsOrAsterisk& selectedVarsOrAsterisk,
       const ResultTable& resultTable) const;
 
   template <ExportSubFormat format>
   ad_utility::stream_generator::stream_generator generateResults(
-      const vector<string>& selectVars, size_t limit = MAX_NOF_ROWS_IN_RESULT,
-      size_t offset = 0) const;
+      const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+      size_t offset) const;
 
   // Generate an RDF graph in turtle format for a CONSTRUCT query.
   ad_utility::stream_generator::stream_generator writeRdfGraphTurtle(
@@ -131,11 +134,12 @@ class QueryExecutionTree {
       size_t offset, std::shared_ptr<const ResultTable> res) const;
 
   nlohmann::json writeResultAsQLeverJson(
-      const vector<string>& selectVars, size_t limit, size_t offset,
-      shared_ptr<const ResultTable> resultTable = nullptr) const;
+      const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+      size_t offset, shared_ptr<const ResultTable> resultTable = nullptr) const;
 
   nlohmann::json writeResultAsSparqlJson(
-      const vector<string>& selectVars, size_t limit, size_t offset,
+      const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+      size_t offset,
       shared_ptr<const ResultTable> preComputedResult = nullptr) const;
 
   const std::vector<size_t>& resultSortedOn() const {
@@ -261,12 +265,6 @@ class QueryExecutionTree {
   [[nodiscard]] std::optional<std::pair<std::string, const char*>>
   toStringAndXsdType(Id id, ResultTable::ResultType type,
                      const ResultTable& resultTable) const;
-
-  template <ExportSubFormat format>
-  ad_utility::stream_generator::stream_generator writeTable(
-      size_t from, size_t upperBound,
-      vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices,
-      shared_ptr<const ResultTable> resultTable = nullptr) const;
 
   // Generate an RDF graph for a CONSTRUCT query.
   cppcoro::generator<StringTriple> generateRdfGraph(

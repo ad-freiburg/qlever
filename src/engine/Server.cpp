@@ -4,36 +4,28 @@
 
 #include "./Server.h"
 
-#include <re2/re2.h>
-
-#include <algorithm>
 #include <cstring>
 #include <sstream>
 #include <string>
-#include <thread>
 #include <vector>
 
-#include "../parser/ParseException.h"
-#include "../util/BoostHelpers/AsyncWaitForFuture.h"
-#include "../util/HttpServer/UrlParser.h"
-#include "../util/Log.h"
-#include "../util/StringUtils.h"
-#include "../util/json.h"
 #include "QueryPlanner.h"
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
 
 // __________________________________________________________________________
-void Server::initialize(const string& ontologyBaseName, bool useText,
-                        bool usePatterns, bool usePatternTrick) {
-  LOG(INFO) << "Initializing and running server..." << std::endl;
+void Server::initialize(const string& indexBaseName, bool useText,
+                        bool usePatterns, bool usePatternTrick,
+                        bool loadAllPermutations) {
+  LOG(INFO) << "Initializing server ..." << std::endl;
 
   _enablePatternTrick = usePatternTrick;
   _index.setUsePatterns(usePatterns);
+  _index.setLoadAllPermutations(loadAllPermutations);
 
   // Init the index.
-  _index.createFromOnDiskIndex(ontologyBaseName);
+  _index.createFromOnDiskIndex(indexBaseName);
   if (useText) {
     _index.addTextFromOnDiskIndex();
   }
@@ -44,12 +36,12 @@ void Server::initialize(const string& ontologyBaseName, bool useText,
 
   // Set flag.
   _initialized = true;
-  LOG(INFO) << "Done initializing server." << std::endl;
+  LOG(INFO) << "The server is ready" << std::endl;
 }
 
 // _____________________________________________________________________________
-void Server::run(const string& ontologyBaseName, bool useText, bool usePatterns,
-                 bool usePatternTrick) {
+void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
+                 bool usePatternTrick, bool loadAllPermutations) {
   // First set up the HTTP server, so that it binds to the socket, and
   // the "socket already in use" error appears quickly.
   auto httpSessionHandler =
@@ -60,7 +52,8 @@ void Server::run(const string& ontologyBaseName, bool useText, bool usePatterns,
                                _numThreads, std::move(httpSessionHandler)};
 
   // Initialize the index
-  initialize(ontologyBaseName, useText, usePatterns, usePatternTrick);
+  initialize(indexBaseName, useText, usePatterns, usePatternTrick,
+             loadAllPermutations);
 
   // Start listening for connections on the server.
   httpServer.run();
@@ -169,10 +162,13 @@ Awaitable<json> Server::composeResponseQleverJson(
     j["query"] = query._originalString;
     j["status"] = "OK";
     j["warnings"] = qet.collectWarnings();
-    j["selected"] =
-        query.hasSelectClause()
-            ? query.selectClause()._selectedVariables
-            : std::vector<std::string>{"?subject", "?predicate", "?object"};
+    if (query.hasSelectClause()) {
+      j["selected"] =
+          query.selectClause()._varsOrAsterisk.getSelectedVariables();
+    } else {
+      j["selected"] =
+          std::vector<std::string>{"?subject", "?predicate", "?object"};
+    }
 
     j["runtimeInformation"] = RuntimeInformation::ordered_json(
         qet.getRootOperation()->getRuntimeInfo());
@@ -184,8 +180,8 @@ Awaitable<json> Server::composeResponseQleverJson(
       requestTimer.cont();
       j["res"] = query.hasSelectClause()
                      ? qet.writeResultAsQLeverJson(
-                           query.selectClause()._selectedVariables, limit,
-                           offset, std::move(resultTable))
+                           query.selectClause()._varsOrAsterisk, limit, offset,
+                           std::move(resultTable))
                      : qet.writeRdfGraphJson(query.constructClause(), limit,
                                              offset, std::move(resultTable));
       requestTimer.stop();
@@ -220,8 +216,9 @@ Awaitable<json> Server::composeResponseSparqlJson(
         std::min(query._limit.value_or(MAX_NOF_ROWS_IN_RESULT), maxSend);
     size_t offset = query._offset.value_or(0);
     requestTimer.cont();
-    j = qet.writeResultAsSparqlJson(query.selectClause()._selectedVariables,
-                                    limit, offset, std::move(resultTable));
+    j = qet.writeResultAsSparqlJson(query.selectClause()._varsOrAsterisk, limit,
+                                    offset, std::move(resultTable));
+
     requestTimer.stop();
     return j;
   };
@@ -238,7 +235,7 @@ Server::composeResponseSepValues(const ParsedQuery& query,
     size_t offset = query._offset.value_or(0);
     return query.hasSelectClause()
                ? qet.generateResults<format>(
-                     query.selectClause()._selectedVariables, limit, offset)
+                     query.selectClause()._varsOrAsterisk, limit, offset)
                : qet.writeRdfGraphSeparatedValues<format>(
                      query.constructClause(), limit, offset, qet.getResult());
   };
@@ -417,27 +414,37 @@ boost::asio::awaitable<void> Server::processQuery(
           request));
     }
 
+    using ad_utility::content_encoding::CompressionMethod;
+
+    CompressionMethod method =
+        ad_utility::content_encoding::getCompressionMethodForRequest(request);
+
     AD_CHECK(mediaType.has_value());
     switch (mediaType.value()) {
       case ad_utility::MediaType::csv: {
         auto responseGenerator = co_await composeResponseSepValues<
             QueryExecutionTree::ExportSubFormat::CSV>(pq, qet);
+
         auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::csv);
+                                         ad_utility::MediaType::csv, method);
         co_await send(std::move(response));
+
       } break;
       case ad_utility::MediaType::tsv: {
         auto responseGenerator = co_await composeResponseSepValues<
             QueryExecutionTree::ExportSubFormat::TSV>(pq, qet);
+
         auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::tsv);
+                                         ad_utility::MediaType::tsv, method);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::octetStream: {
         auto responseGenerator = co_await composeResponseSepValues<
             QueryExecutionTree::ExportSubFormat::BINARY>(pq, qet);
-        auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::octetStream);
+
+        auto response =
+            createOkResponse(std::move(responseGenerator), request,
+                             ad_utility::MediaType::octetStream, method);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::qleverJson: {
@@ -448,8 +455,9 @@ boost::asio::awaitable<void> Server::processQuery(
       } break;
       case ad_utility::MediaType::turtle: {
         auto responseGenerator = composeTurtleResponse(pq, qet);
+
         auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::turtle);
+                                         ad_utility::MediaType::turtle, method);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::sparqlJson: {

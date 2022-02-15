@@ -6,9 +6,7 @@
 
 #include <cstdio>
 
-#include "../src/engine/CallFixedSize.h"
 #include "../src/engine/GroupBy.h"
-//#include "../src/parser/SparqlExpression.h"
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
@@ -90,12 +88,14 @@ TEST_F(GroupByTest, doGroupBy) {
 
   // add some words to the index's vocabulary
   auto& vocab = const_cast<RdfsVocabulary&>(_index.getVocab());
-  vocab.push_back("<entity1>");
-  vocab.push_back("<entity2>");
-  vocab.push_back("<entity3>");
-  vocab.push_back(ad_utility::convertFloatStringToIndexWord("1.1231"));
-  vocab.push_back(ad_utility::convertFloatStringToIndexWord("-5"));
-  vocab.push_back(ad_utility::convertFloatStringToIndexWord("17"));
+  ad_utility::HashSet<std::string> s;
+  s.insert("<entity1>");
+  s.insert("<entity2>");
+  s.insert("<entity3>");
+  s.insert(ad_utility::convertFloatStringToIndexWord("1.1231"));
+  s.insert(ad_utility::convertFloatStringToIndexWord("-5"));
+  s.insert(ad_utility::convertFloatStringToIndexWord("17"));
+  vocab.createFromSet(s);
 
   // create an input result table with a local vocabulary
   ResultTable inTable{allocator()};

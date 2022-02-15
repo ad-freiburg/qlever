@@ -22,17 +22,17 @@ jobs:
       matrix:
         compiler: [ gcc11, clang13 ]
         os: [ ubuntu-latest ]
-        warnings: [ "", -Werror ]
-        exclude:
-          - compiler: gcc11
-            warnings: -Werror
+        warnings: [  "-Wall -Wextra -Werror" ]
+        #exclude:
+        #  - compiler: gcc11
+        #    warnings: -Werror
 
 
     steps:
     - uses: actions/checkout@v2
 
     - name: Install dependencies
-      run:  sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
+      run:  sudo apt update && sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
     - name: Install boost
       run : sudo add-apt-repository -y ppa:mhier/libboost-latest && sudo apt update && sudo apt install -y libboost1.74-dev
     - name: Install gcc 11
@@ -65,5 +65,5 @@ jobs:
 
     - name: E2E
       run: ${{github.workspace}}/e2e/e2e.sh
-      if: ${{matrix.warnings != '-Werror'}}
+      #if: ${{matrix.warnings != '-Werror'}}
 

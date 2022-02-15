@@ -43,7 +43,7 @@ using std::vector;
 
 using json = nlohmann::json;
 
-// a simple struct for better naming
+// A simple struct for better naming.
 struct VocabularyData {
   using TripleVec = stxxl::vector<array<Id, 3>>;
   // The total number of distinct words in the complete Vocabulary
@@ -171,8 +171,8 @@ class Index {
   }
 
   const vector<PatternID>& getHasPattern() const;
-  const CompactStringVector<Id, Id>& getHasPredicate() const;
-  const CompactStringVector<size_t, Id>& getPatterns() const;
+  const CompactVectorOfStrings<Id>& getHasPredicate() const;
+  const CompactVectorOfStrings<Id>& getPatterns() const;
   /**
    * @return The multiplicity of the Entites column (0) of the full has-relation
    *         relation after unrolling the patterns.
@@ -194,7 +194,7 @@ class Index {
   // --------------------------------------------------------------------------
   // TEXT RETRIEVAL
   // --------------------------------------------------------------------------
-  const string& wordIdToString(Id id) const;
+  std::string_view wordIdToString(Id id) const;
 
   size_t getSizeEstimate(const string& words) const;
 
@@ -270,6 +270,8 @@ class Index {
 
   void setUsePatterns(bool usePatterns);
 
+  void setLoadAllPermutations(bool loadAllPermutations);
+
   void setOnDiskLiterals(bool onDiskLiterals);
 
   void setKeepTempFiles(bool keepTempFiles);
@@ -316,7 +318,7 @@ class Index {
 
   size_t getNofPredicates() const { return _PSO.metaData().getNofDistinctC1(); }
 
-  bool hasAllPermutations() const { return SPO()._file.isOpen(); }
+  bool hasAllPermutations() const { return SPO()._isLoaded; }
 
   // _____________________________________________________________________________
   template <class PermutationImpl>
@@ -438,6 +440,9 @@ class Index {
   off_t _currentoff_t;
   mutable ad_utility::File _textIndexFile;
 
+  // If false, only PSO and POS permutations are loaded and expected.
+  bool _loadAllPermutations = true;
+
   // Pattern trick data
   static const uint32_t PATTERNS_FILE_VERSION;
   bool _usePatterns;
@@ -451,7 +456,7 @@ class Index {
   /**
    * @brief Maps pattern ids to sets of predicate ids.
    */
-  CompactStringVector<size_t, Id> _patterns;
+  CompactVectorOfStrings<Id> _patterns;
   /**
    * @brief Maps entity ids to pattern ids.
    */
@@ -459,7 +464,7 @@ class Index {
   /**
    * @brief Maps entity ids to sets of predicate ids
    */
-  CompactStringVector<Id, Id> _hasPredicate;
+  CompactVectorOfStrings<Id> _hasPredicate;
 
   // Create Vocabulary and directly write it to disk. Create TripleVec with all
   // the triples converted to id space. This Vec can be used for creating
@@ -521,14 +526,17 @@ class Index {
   // createPatternsAfterFirst is only valid when  the pair is SPO-SOP because
   // the SPO permutation is also needed for patterns (see usage in
   // Index::createFromFile function)
+
+  enum class PerformUnique { True, False };
   template <class MetaDataDispatcher, class Comparator1, class Comparator2>
   void createPermutationPair(
-      VocabularyData* vec,
+      VocabularyData* vocabularyData,
       const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
-      bool performUnique = false, bool createPatternsAfterFirst = false);
+      PerformUnique performUnique = PerformUnique::False,
+      bool createPatternsAfterFirst = false);
 
   // The pairs of permutations are PSO-POS, OSP-OPS and SPO-SOP
   // the multiplicity of column 1 in partner 1 of the pair is equal to the
@@ -556,7 +564,7 @@ class Index {
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
-      bool performUnique);
+      PerformUnique performUnique);
 
   /**
    * @brief Creates the data required for the "pattern-trick" used for fast
@@ -568,22 +576,19 @@ class Index {
    *             using args.
    */
   template <typename VecReaderType, typename... Args>
-  void createPatternsImpl(const string& fileName,
-                          CompactStringVector<Id, Id>& hasPredicate,
-                          std::vector<PatternID>& hasPattern,
-                          CompactStringVector<size_t, Id>& patterns,
-                          double& fullHasPredicateMultiplicityEntities,
-                          double& fullHasPredicateMultiplicityPredicates,
-                          size_t& fullHasPredicateSize,
-                          const size_t maxNumPatterns,
-                          const Id langPredLowerBound,
-                          const Id langPredUpperBound,
-                          const Args&... vecReaderArgs);
+  void createPatternsImpl(
+      const string& fileName, CompactVectorOfStrings<Id>& hasPredicate,
+      std::vector<PatternID>& hasPattern, CompactVectorOfStrings<Id>& patterns,
+      double& fullHasPredicateMultiplicityEntities,
+      double& fullHasPredicateMultiplicityPredicates,
+      size_t& fullHasPredicateSize, const size_t maxNumPatterns,
+      const Id langPredLowerBound, const Id langPredUpperBound,
+      const Args&... vecReaderArgs);
 
   // wrap the static function using the internal member variables
   // the bool indicates wether the TripleVec has to be sorted before the pattern
   // creation
-  void createPatterns(bool vecAlreadySorted, VocabularyData* idTriples);
+  void createPatterns(bool isSortedSPO, VocabularyData* idTriples);
 
   void createTextIndex(const string& filename, const TextVec& vec);
 
@@ -607,7 +612,26 @@ class Index {
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 
+  /// Calculate the block boundaries for the text index. The boundary of a
+  /// block is the index in the `_textVocab` of the last word that belongs
+  /// to this block.
+  /// This implementation takes a reference to an `Index` and a callable,
+  /// that is called once for each blockBoundary, with the `size_t`
+  /// blockBoundary as a parameter. Internally uses
+  /// `calculateBlockBoundariesImpl`.
+  template <typename I, typename BlockBoundaryAction>
+  static void calculateBlockBoundariesImpl(
+      I&& index, const BlockBoundaryAction& blockBoundaryAction);
+
+  /// Calculate the block boundaries for the text index, and store them in the
+  /// _blockBoundaries member.
   void calculateBlockBoundaries();
+
+  /// Calculate the block boundaries for the text index, and store the
+  /// corresponding words in a human-readable text file at `filename`.
+  /// This is for debugging the text index. Internally uses
+  /// `caluclateBlockBoundariesImpl`.
+  void printBlockBoundariesToFile(const string& filename) const;
 
   Id getWordBlockId(Id wordId) const;
 
