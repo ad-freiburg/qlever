@@ -164,7 +164,7 @@ TEST(Serializer, CopyAndMove) {
 
     // Assert that moving writers consistently writes to the same resource.
     writer | 1;
-    std::decay_t<decltype(writer)> writer2(std::move(writer));
+    Writer writer2(std::move(writer));
     writer2 | 2;
     writer = std::move(writer2);
     writer | 3;
