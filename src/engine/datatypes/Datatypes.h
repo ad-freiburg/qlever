@@ -10,7 +10,7 @@
 #include <bit>
 #include <variant>
 
-#include "./BitPacking.h"
+#include "./BitUtils.h"
 
 namespace ad_utility::datatypes {
 enum struct Datatype {

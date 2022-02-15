@@ -167,4 +167,4 @@ addLinkAndDiscoverTest(IteratorTest)
 
 addLinkAndDiscoverTest(DatatypesTest)
 
-addLinkAndDiscoverTest(BitPackingTest)
+addLinkAndDiscoverTest(BitUtilsTest)

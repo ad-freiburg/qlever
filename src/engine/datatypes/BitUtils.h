@@ -2,8 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_BITPACKING_H
-#define QLEVER_BITPACKING_H
+#ifndef QLEVER_BITUTILS_H
+#define QLEVER_BITUTILS_H
 
 #include <cmath>
 #include <exception>
@@ -42,10 +42,12 @@ constexpr inline uint64_t bitMaskForLowerBits(uint64_t numBits) {
 
 namespace detail {
 
-// A very approximate implementation of `ceil` (round up) that only works for
-// floats that fit into a 64-bit int.
+// A constexpr implementation of `ceil` (round up) on 32-bit floats.
 // TODO<C++23> Use `std::ceil` which will then become constexpr.
 constexpr float ceil(float input) {
+  if (input >= static_cast<float>(std::numeric_limits<int64_t>::max())) {
+    return input;
+  }
   auto asInt = static_cast<int64_t>(input);
   if (asInt < input) {
     return asInt + 1;
@@ -53,7 +55,7 @@ constexpr float ceil(float input) {
     return asInt;
   }
 }
-// The type of the return value is the smallest unsigned integer type that
+// Return any value, the type of which is the smallest unsigned integer type that
 // contains at least `numBits` many bits. For example, if `numBits` <= 8, then
 // an `uint8_t` will be returned.
 template <uint8_t numBits>
@@ -79,4 +81,4 @@ using unsignedTypeForNumberOfBits =
     decltype(detail::unsignedTypeForNumberOfBitsImpl<numBits>());
 }  // namespace ad_utility
 
-#endif  // QLEVER_BITPACKING_H
+#endif  // QLEVER_BITUTILS_H

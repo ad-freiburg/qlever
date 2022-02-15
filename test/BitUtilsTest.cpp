@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/engine/datatypes/BitPacking.h"
+#include "../src/engine/datatypes/BitUtils.h"
 
 using namespace ad_utility;
 
