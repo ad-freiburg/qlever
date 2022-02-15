@@ -2,54 +2,72 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_DATATYPES_H
-#define QLEVER_DATATYPES_H
+#ifndef QLEVER_DATE_H
+#define QLEVER_DATE_H
 
-#include <Exceptions.h>
-
-#include <bit>
-#include <variant>
-
-#include  "./BitPacking.h"
-
-namespace ad_utility::datatypes {
-enum struct Datatype {
-  Undefined,
-  Int,
-  Bool,
-  Decimal,
-  Double,
-  Float,
-  Date,
-  Vocab,
-  LocalVocab
+// Exception that is thrown when a value for a component of the `Date`, `Time` or `Datetime` classes below is out of range (e.g. the month 13, or the hour 26)
+class DateOutOfRangeException : public std::runtime_error {
+  using std::runtime_error::runtime_error;
 };
 
+namespace detail {
+// Check that `element` is `>=` min` and `< max`.
+inline void checkUpperBoundInclusive(const auto& element, const auto& min, const auto& max,
+                  std::string_view name) {
+  if (element < min || element >= max) {
+    std::stringstream s;
+    s << name << " " << element
+      << "is out of range.";
+    throw DateOutOfRangeException{s.str()};
+  }
+}
 
+// Check that `element` is `>=` min` and `<= max`.
+inline void checkUpperBoundExclusive(const auto& element, const auto& min, const auto& max,
+                                     std::string_view name) {
+  if (element < min || element > max) {
+    std::stringstream s;
+    s << name << " " << element
+      << "is out of range.";
+    throw DateOutOfRangeException{s.str()};
+  }
+}
+}  // namespace detail
+
+/// Represent a date, consisting of a year, month and day, as well as the functionality to pack such a date into 24 bits, and to restore a date from this packed representation.
 class Date {
  private:
+  // Year takes logical values from -9999 to 9999, which are stored shifted into the positive range from 0 to 2*9999
+  // This makes the sorting of dates easier.
   short _year;
   signed char _month;
   signed char _day;
 
+  static constexpr short minYear = -9999;
+  static constexpr short maxYear = 9999;
+
+  // Used as a tag for certain unchecked constructor that may not be called from outside.
   struct NoShiftOrCheckTag{};
 
  public:
+  // Construct a date from year, month and day, e.g. `Date(1992, 7, 3)`. Throw `DateOutOfRangeException` if one of the values is illegal.
   constexpr Date(short year, signed char month, signed char day)
       : _year{year}, _month{month}, _day{day} {
-    detail::check(year, minYear, +10000, "year");
+    detail::checkUpperBoundInclusive(year, minYear, maxYear, "year");
     // Shift the year into the positive range.
     _year -= minYear;
-    detail::check(month, 1, 13, "month");
-    detail::check(day, 1, 32, "day");
+    detail::checkUpperBoundInclusive(month, 1, 12, "month");
+    detail::checkUpperBoundInclusive(day, 1, 31, "day");
   }
 
  private:
+
+  // Construct without checking the range, and without performing the shift for the year. This constructor is just an implementation detail.
   constexpr Date(short year, signed char month, signed char day, NoShiftOrCheckTag)
       : _year{year}, _month{month}, _day{day} {}
 
 
-  static constexpr uint64_t onlyLastBits(uint64_t input, uint64_t numBytes) {
+  static constexpr uint64_t onlyLastBits(uint64_t input, uint64_t numBits) {
     return ~(std::numeric_limits<uint64_t>::max() << numBytes) & input;
   }
  public:
@@ -63,7 +81,6 @@ class Date {
   // 15 bits for the year, 4 bits for the month, 5 bits for the day
   static constexpr uint64_t numBitsRequired = 24;
 
-  static constexpr short minYear = -9999;
 
   [[nodiscard]] auto year() const {return _year + minYear;}
   [[nodiscard]] auto month() const {return _month;}
@@ -126,73 +143,4 @@ class DateTime {
   Time _time;
 };
 
-class FancyId {
-  using T = uint64_t;
-
- public:
-  // static FancyId Undefined() {return {0ul};}
-  static constexpr FancyId Double(double d) {
-    auto asBits = std::bit_cast<T>(d);
-    asBits = asBits >> MASK_SIZE;
-    asBits |= DoubleMask;
-    return FancyId{asBits};
-  }
-
-  static constexpr FancyId Integer(int64_t i) {
-    // propagate the sign.
-    constexpr int64_t signBit = 1l << MASK_SHIFT;
-    auto highestBitShifted =
-        ((signBit & i) << (MASK_SIZE - 1)) >> (MASK_SIZE - 1);
-    constexpr T mask = std::numeric_limits<T>::max() >> MASK_SIZE;
-    return {static_cast<T>((i & mask) | highestBitShifted)};
-  }
-  static constexpr FancyId MaxInteger() {
-    // propagate the sign.
-    return {std::numeric_limits<T>::max() >> MASK_SIZE};
-  }
-  static constexpr FancyId MinInteger() {
-    constexpr int64_t signBit = 1l << MASK_SHIFT;
-    auto highestBitShifted = ((signBit) << (MASK_SIZE - 1)) >> (MASK_SIZE - 1);
-    return {static_cast<T>(highestBitShifted)};
-  }
-
-  [[nodiscard]] constexpr double getDoubleUnchecked() const {
-    return std::bit_cast<double>(_data << MASK_SIZE);
-  }
-
-  [[nodiscard]] constexpr int64_t getIntegerUnchecked() const {
-    return static_cast<int64_t>(_data);
-  }
-
-  [[nodiscard]] constexpr T data() const { return _data; }
-
- private:
-  T _data;
-  static constexpr size_t MASK_SIZE = 4;
-  static constexpr size_t MASK_SHIFT = 8 * sizeof(T) - MASK_SIZE;
-  constexpr FancyId(uint64_t data) : _data{data} {};
-
-  constexpr static uint64_t DoubleMask = 1ul << MASK_SHIFT;
-  constexpr static uint64_t DecimalMask = 3ul << MASK_SHIFT;
-  constexpr static uint64_t FloatMask = 5ul << MASK_SHIFT;
-
-  constexpr static uint64_t PositiveIntMask = 0ul << MASK_SHIFT;
-  constexpr static uint64_t NegativeIntMask = 16ul << MASK_SHIFT;
-  constexpr static uint64_t BoolMask = 6ul << MASK_SHIFT;
-
-  constexpr static uint64_t VocabMask = 4ul << MASK_SHIFT;
-  constexpr static uint64_t LocalVocabMask = 8ul << MASK_SHIFT;
-  constexpr static uint64_t DateMask = 12ul << MASK_SHIFT;
-};
-
-namespace fancyIdLimits {
-
-static constexpr int64_t maxInteger =
-    FancyId::MaxInteger().getIntegerUnchecked();
-static constexpr int64_t minInteger =
-    FancyId::MinInteger().getIntegerUnchecked();
-}  // namespace fancyIdLimits
-
-}  // namespace ad_utility::datatypes
-
-#endif  // QLEVER_DATATYPES_H
+#endif  // QLEVER_DATE_H
