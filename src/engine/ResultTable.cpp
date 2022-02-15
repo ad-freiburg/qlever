@@ -7,7 +7,8 @@
 #include <cassert>
 
 // _____________________________________________________________________________
-ResultTableTemplate::ResultTableTemplate(ad_utility::AllocatorWithLimit<Id> allocator)
+ResultTableTemplate::ResultTableTemplate(
+    ad_utility::AllocatorWithLimit<Id> allocator)
     : _sortedBy(),
       _idTable(std::move(allocator)),
       _resultTypes(),

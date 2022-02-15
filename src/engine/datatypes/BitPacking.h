@@ -5,11 +5,21 @@
 #ifndef QLEVER_BITPACKING_H
 #define QLEVER_BITPACKING_H
 
+#include <cmath>
 #include <exception>
+
 #include "../../util/ConstexprSmallString.h"
 #include "../../util/Exception.h"
+#include "../../util/TypeTraits.h"
 
+namespace ad_utility {
+
+// Compute the number of bits that is required to encode the range from 0 to
+// `numDistinctValues - 1` as an unsigned integer.
 constexpr inline uint8_t numBitsRequired(size_t numDistinctValues) {
+  if (numDistinctValues == 0) {
+    return 1;
+  }
   uint8_t result = 1;
   numDistinctValues -= 1;
   while (numDistinctValues >>= 1) {
@@ -18,8 +28,9 @@ constexpr inline uint8_t numBitsRequired(size_t numDistinctValues) {
   return result;
 }
 
-// The return value has 1s for the lowest `numBits` bits, and 0 elsewhere.
-constexpr inline uint64_t bitMaskForLowerBits(uint8_t numBits) {
+// The return value has 1s for the lowest `numBits` bits, and 0 in all the
+// higher bits.
+constexpr inline uint64_t bitMaskForLowerBits(uint64_t numBits) {
   if (numBits > 64) {
     throw std::out_of_range{"mask for more than 64 bits required"};
   }
@@ -29,71 +40,43 @@ constexpr inline uint64_t bitMaskForLowerBits(uint8_t numBits) {
   return (uint64_t(1) << numBits) - 1;
 }
 
-template<uint8_t numBits>
+namespace detail {
+
+// A very approximate implementation of `ceil` (round up) that only works for
+// floats that fit into a 64-bit int.
+// TODO<C++23> Use `std::ceil` which will then become constexpr.
+constexpr float ceil(float input) {
+  auto asInt = static_cast<int64_t>(input);
+  if (asInt < input) {
+    return asInt + 1;
+  } else {
+    return asInt;
+  }
+}
+// The type of the return value is the smallest unsigned integer type that
+// contains at least `numBits` many bits. For example, if `numBits` <= 8, then
+// an `uint8_t` will be returned.
+template <uint8_t numBits>
 constexpr auto unsignedTypeForNumberOfBitsImpl() {
-  constexpr uint8_t numBytes = std::ceil(static_cast<float>(numBits) / 8);
-  if constexpr (numBytes == 1) {
+  constexpr uint8_t numBytes = ceil(static_cast<float>(numBits) / 8);
+  static_assert(numBytes <= 8);
+  if constexpr (numBytes == 0 || numBytes == 1) {
     return uint8_t{};
   } else if constexpr (numBytes == 2) {
     return uint16_t{};
   } else if constexpr (numBytes <= 4) {
-    return uint32_t {};
+    return uint32_t{};
   } else {
-    return uint64_t {};
+    return uint64_t{};
   }
 }
+}  // namespace detail
 
-
-
-
-template<uint8_t numBits>
-using unsignedTypeForNumberOfBits = decltype(unsignedTypeForNumberOfBitsImpl<numBits>());
-
-struct BoundedIntegerOutOfRangeError : public std::runtime_error{
-  using std::runtime_error::runtime_error;
-};
-
-template <int64_t Min, int64_t Max> requires(Max > Min)
-struct BoundedInteger {
-  constexpr static auto numBits = numBitsRequired(Max - Min + 1);
-  using T = unsignedTypeForNumberOfBits<numBits>;
- private:
-  T _data;
- public:
-  constexpr static auto min = Min;
-  constexpr static auto max = Max;
-
-  explicit constexpr BoundedInteger(int64_t value) : _data{value - Min} {
-    if (value < Min || value > Max) {
-      // TODO<joka921> exception message
-      throw BoundedIntegerOutOfRangeError{"value out of range"};
-    }
-  }
-
-  [[nodiscard]] constexpr int64_t get() const noexcept {
-    return static_cast<int64_t>(_data) + Min;
-  }
-
-  [[nodiscard]] constexpr uint64_t toBits() const noexcept {return _data;}
-
-  static constexpr BoundedInteger fromUncheckedBits(uint64_t bits) {
-    return {UncheckedBitsTag{}, bits};
-  }
-
-  private:
-   struct UncheckedBitsTag{};
-   BoundedInteger(UncheckedBitsTag, uint64_t bits) : _data{static_cast<T>(bits)} {}
-};
-
-// TODO<joka921> requires clause
-template<typename... Bounded>
-struct CombinedBoundedIntegers {
-  std::tuple<Bounded...> _integers;
-
-  // TODO<joka921> requires clause
-  constexpr CombinedBoundedIntegers(auto... values) {
-    ...
-  }
-};
+// The smallest unsigned integer type that contains at least `numBits` many
+// bits. For example, if `numBits` <= 8, then an `uint8_t` will be returned.
+template <uint8_t numBits>
+using unsignedTypeForNumberOfBits =
+    decltype(detail::unsignedTypeForNumberOfBitsImpl<numBits>());
+}  // namespace ad_utility
 
 #endif  // QLEVER_BITPACKING_H

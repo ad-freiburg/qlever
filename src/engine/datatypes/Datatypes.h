@@ -10,7 +10,7 @@
 #include <bit>
 #include <variant>
 
-#include  "./BitPacking.h"
+#include "./BitPacking.h"
 
 namespace ad_utility::datatypes {
 enum struct Datatype {
@@ -25,14 +25,13 @@ enum struct Datatype {
   LocalVocab
 };
 
-
 class Date {
  private:
   short _year;
   signed char _month;
   signed char _day;
 
-  struct NoShiftOrCheckTag{};
+  struct NoShiftOrCheckTag {};
 
  public:
   constexpr Date(short year, signed char month, signed char day)
@@ -45,15 +44,15 @@ class Date {
   }
 
  private:
-  constexpr Date(short year, signed char month, signed char day, NoShiftOrCheckTag)
+  constexpr Date(short year, signed char month, signed char day,
+                 NoShiftOrCheckTag)
       : _year{year}, _month{month}, _day{day} {}
-
 
   static constexpr uint64_t onlyLastBits(uint64_t input, uint64_t numBytes) {
     return ~(std::numeric_limits<uint64_t>::max() << numBytes) & input;
   }
- public:
 
+ public:
   static constexpr Date fromBytes(uint64_t bytes) {
     auto day = onlyLastBits(bytes, 5);
     auto month = onlyLastBits(bytes >> 5, 4);
@@ -65,9 +64,9 @@ class Date {
 
   static constexpr short minYear = -9999;
 
-  [[nodiscard]] auto year() const {return _year + minYear;}
-  [[nodiscard]] auto month() const {return _month;}
-  [[nodiscard]] auto day() const {return _day;}
+  [[nodiscard]] auto year() const { return _year + minYear; }
+  [[nodiscard]] auto month() const { return _month; }
+  [[nodiscard]] auto day() const { return _day; }
 };
 
 class Time {

@@ -21,7 +21,7 @@ using std::mutex;
 using std::unique_lock;
 using std::vector;
 
-template<typename ResultType>
+template <typename ResultType>
 class ResultTableTemplate {
  public:
   enum Status { IN_PROGRESS = 0, FINISHED = 1, ABORTED = 2 };

@@ -8,7 +8,6 @@
 #include <cmath>
 
 #include "../../src/engine/datatypes/Datatypes.h"
-#include <cmath>
 
 using namespace ad_utility::datatypes;
 static auto print = [](auto d) {
@@ -130,20 +129,19 @@ TEST(BitPacking, numBitsRequired) {
 }
 
 TEST(BitPacking, BitMasks) {
+  ASSERT_EQ(bitMaskForLowerBits(0), 0);
+  ASSERT_EQ(bitMaskForLowerBits(1), 1);
+  ASSERT_EQ(bitMaskForLowerBits(2), 3);
+  ASSERT_EQ(bitMaskForLowerBits(3), 7);
+  ASSERT_EQ(bitMaskForLowerBits(4), 15);
+  ASSERT_EQ(bitMaskForLowerBits(5), 31);
 
-ASSERT_EQ(bitMaskForLowerBits(0), 0);
-ASSERT_EQ(bitMaskForLowerBits(1), 1);
-ASSERT_EQ(bitMaskForLowerBits(2), 3);
-ASSERT_EQ(bitMaskForLowerBits(3), 7);
-ASSERT_EQ(bitMaskForLowerBits(4), 15);
-ASSERT_EQ(bitMaskForLowerBits(5), 31);
-
-ASSERT_EQ(bitMaskForLowerBits(64), static_cast<uint64_t>(-1));
+  ASSERT_EQ(bitMaskForLowerBits(64), static_cast<uint64_t>(-1));
 }
 
 TEST(BitPacking, Systematic) {
   auto testSingleValue = []<typename B>(int64_t value, B*) {
-    B b {value};
+    B b{value};
     ASSERT_EQ(b.get(), value);
     auto bits = b.toBits();
     ASSERT_EQ(bits, bitMaskForLowerBits(B::numBits) & bits);
@@ -172,10 +170,10 @@ TEST(BitPacking, Systematic) {
   BoundedInteger<-240'000, 0>* k;
   BoundedInteger<-24'000'000, 0>* l;
 
-  BoundedInteger<-2 *24, -24>* m;
+  BoundedInteger<-2 * 24, -24>* m;
   BoundedInteger<-2 * 2400, -2400>* n;
-  BoundedInteger<-2 *240'000, -240'000>* o;
-  BoundedInteger<-2 *24'000'000, -24'000'000>* p;
+  BoundedInteger<-2 * 240'000, -240'000>* o;
+  BoundedInteger<-2 * 24'000'000, -24'000'000>* p;
 
   testAll(a);
   testAll(b);

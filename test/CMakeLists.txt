@@ -166,3 +166,5 @@ addLinkAndDiscoverTest(VocabularyTest index)
 addLinkAndDiscoverTest(IteratorTest)
 
 addLinkAndDiscoverTest(DatatypesTest)
+
+addLinkAndDiscoverTest(BitPackingTest)
