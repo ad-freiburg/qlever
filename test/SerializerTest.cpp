@@ -153,3 +153,37 @@ TEST(Serializer, Vector) {
   testWithAllSerializers(testTriviallyCopyableDatatype);
   testWithAllSerializers(testNonTriviallyCopyableDatatype);
 }
+
+TEST(Serializer, CopyAndMove) {
+  auto testWithMove = [](auto&& writer, auto makeReaderFromWriter) {
+    using Writer = std::decay_t<decltype(writer)>;
+
+    // Assert that write serializers cannot be copied.
+    static_assert(!requires(Writer w1, Writer w2) { {w1 = w2}; });
+    static_assert(!std::constructible_from<Writer, const Writer&>);
+
+    // Assert that moving writers consistently writes to the same resource.
+    writer | 1;
+    Writer writer2(std::move(writer));
+    writer2 | 2;
+    writer = std::move(writer2);
+    writer | 3;
+
+    auto reader = makeReaderFromWriter();
+    // Assert that read serializers cannot be copied.
+    using Reader = decltype(reader);
+    static_assert(!requires(Reader r1, Reader r2) { {r1 = r2}; });
+    static_assert(!std::constructible_from<Reader, const Reader&>);
+    // Assert that moving writers consistently reads from the same resource.
+    int i;
+    reader | i;
+    ASSERT_EQ(i, 1);
+    decltype(reader) reader2{std::move(reader)};
+    reader2 | i;
+    ASSERT_EQ(i, 2);
+    reader = std::move(reader2);
+    reader | i;
+    ASSERT_EQ(i, 3);
+  };
+  testWithAllSerializers(testWithMove);
+}
