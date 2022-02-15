@@ -150,4 +150,35 @@ TEST_F(FileTest, testReadIntoVector) {
   ASSERT_EQ("line2", lines2[1]);
 }
 
+TEST(File, move) {
+  std::string filename = "_tmp_testFileMove";
+  File file1(filename, "w");
+  ASSERT_TRUE(file1.isOpen());
+  file1.write("aaa", 3);
+
+  File file2;
+  ASSERT_TRUE(file1.isOpen());
+  ASSERT_FALSE(file2.isOpen());
+  file2 = std::move(file1);
+  ASSERT_FALSE(file1.isOpen());
+  ASSERT_TRUE(file2.isOpen());
+
+  file2.write("bbb", 3);
+  File file3(std::move(file2));
+  ASSERT_FALSE(file2.isOpen());
+  ASSERT_TRUE(file3.isOpen());
+  file3.write("ccc", 3);
+  file3.close();
+
+  File fileRead(filename, "r");
+  ASSERT_TRUE(fileRead.isOpen());
+  std::string s;
+  s.resize(9);
+  auto numBytes = fileRead.read(s.data(), 9);
+  ASSERT_EQ(numBytes, 9u);
+  ASSERT_EQ(s, "aaabbbccc");
+
+  ASSERT_EQ(0u, fileRead.read(s.data(), 9));
+}
+
 }  // namespace ad_utility
