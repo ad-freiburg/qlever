@@ -17,19 +17,16 @@
 template <class M>
 class MetaDataWrapperDense {
  public:
-  struct Iterator : public M::iterator {
-    using Base = typename M::iterator;
-    using Base::Base;
-    Iterator(Base base) : Base{base} {}
+  template <typename BaseIterator>
+  struct AddGetIdIterator : BaseIterator {
+    using BaseIterator::BaseIterator;
+    AddGetIdIterator(BaseIterator base) : BaseIterator{base} {}
     uint64_t getId() const { return (*this)->_col0Id; }
   };
 
-  struct ConstIterator : public M::const_iterator {
-    using Base = typename M::const_iterator;
-    using Base::Base;
-    ConstIterator(Base base) : Base{base} {}
-    uint64_t getId() const { return (*(*this))._col0Id; }
-  };
+  using Iterator = AddGetIdIterator<typename M::iterator>;
+  using ConstIterator = AddGetIdIterator<typename M::const_iterator>;
+
   // The underlying array is sorted, so all iterators are ordered iterators
   using ConstOrderedIterator = ConstIterator;
 
@@ -133,19 +130,14 @@ class MetaDataWrapperDense {
 template <class hashMap>
 class MetaDataWrapperHashMap {
  public:
-  struct Iterator : public hashMap::iterator {
-    using Base = typename hashMap::iterator;
-    using Base::Base;
-    Iterator(Base base) : Base{base} {}
+  template <typename BaseIterator>
+  struct AddGetIdIterator : public BaseIterator {
+    using BaseIterator::BaseIterator;
+    AddGetIdIterator(BaseIterator base) : BaseIterator{base} {}
     uint64_t getId() const { return (*this)->first; }
   };
-
-  struct ConstIterator : public hashMap::const_iterator {
-    using Base = typename hashMap::const_iterator;
-    using Base::Base;
-    ConstIterator(Base base) : Base{base} {}
-    uint64_t getId() const { return (*this)->first; }
-  };
+  using Iterator = AddGetIdIterator<typename hashMap::iterator>;
+  using ConstIterator = AddGetIdIterator<typename hashMap::const_iterator>;
 
   using value_type = typename hashMap::mapped_type;
 

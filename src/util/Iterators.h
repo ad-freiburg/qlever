@@ -38,15 +38,16 @@ class IteratorForAccessOperator {
   using difference_type = int64_t;
 
  private:
-  using Pointer = std::conditional_t<IsConst, const RandomAccessContainer*,
-                                     RandomAccessContainer*>;
-  Pointer _vector = nullptr;
+  using RandomAccessContainerPtr =
+      std::conditional_t<IsConst, const RandomAccessContainer*,
+                         RandomAccessContainer*>;
+  RandomAccessContainerPtr _vector = nullptr;
   index_type _index{0};
   Accessor _accessor{};
 
  public:
   IteratorForAccessOperator() = default;
-  IteratorForAccessOperator(Pointer vec, index_type index)
+  IteratorForAccessOperator(RandomAccessContainerPtr vec, index_type index)
       : _vector{vec}, _index{index} {}
 
   // Comparisons
@@ -112,12 +113,12 @@ class IteratorForAccessOperator {
   decltype(auto) operator*() { return _accessor(*_vector, _index); }
 
   // Only allowed, if `RandomAccessContainer` yields references and not values
-  template <typename A = Accessor, typename P = Pointer>
+  template <typename A = Accessor, typename P = RandomAccessContainerPtr>
   requires requires(A a, P p, uint64_t i) {
     {&a(*p, i)};
   }
   auto operator->() { return &(*(*this)); }
-  template <typename A = Accessor, typename P = Pointer>
+  template <typename A = Accessor, typename P = RandomAccessContainerPtr>
   requires requires(A a, P p, uint64_t i) {
     {&a(*p, i)};
   }

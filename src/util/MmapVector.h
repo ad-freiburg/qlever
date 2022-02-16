@@ -77,7 +77,7 @@ class MmapVector {
                                             AccessViaBracketOperator, false>;
   using const_iterator =
       ad_utility::IteratorForAccessOperator<MmapVector,
-                                            AccessViaBracketOperator>;
+                                            AccessViaBracketOperator, true>;
   using value_type = T;
 
   // __________________________________________________________________
