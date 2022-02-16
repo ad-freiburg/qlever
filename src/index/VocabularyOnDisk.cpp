@@ -136,8 +136,6 @@ void VocabularyOnDisk::open(const string& filename) {
   if (_size > 0) {
     _highestId = (*(end() - 1))._index;
   }
-  // Comment with \
-  // Backslash
 }
 
 // ____________________________________________________________________________
