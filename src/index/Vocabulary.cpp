@@ -26,15 +26,10 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
                                     const string& extLitsFileName) {
   LOG(INFO) << "Reading internal vocabulary from file " << fileName << " ..."
             << std::endl;
-  auto comparator = _vocabulary.getComparator();
-  _vocabulary.close();
-  ad_utility::serialization::FileReadSerializer file(fileName);
-  InternalVocabulary internalVocabulary;
-  internalVocabulary.open(fileName);
-  LOG(INFO) << "Done, number of words: " << internalVocabulary.size()
+  internalVocabulary().open(fileName);
+  LOG(INFO) << "Done, number of words: " << internalVocabulary().size()
             << std::endl;
 
-  VocabularyOnDisk externalVocabulary;
   if (!extLitsFileName.empty()) {
     if (!_isCompressed) {
       LOG(INFO) << "ERROR: trying to load externalized literals to an "
@@ -43,19 +38,12 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
       AD_CHECK(false);
     }
 
-    LOG(DEBUG) << "Registering external vocabulary" << std::endl;
-    externalVocabulary.open(extLitsFileName);
-    LOG(INFO) << "Number of words in external vocabulary: "
-              << externalVocabulary.size() << std::endl;
-  }
-
-  if constexpr (_isCompressed) {
-    _vocabulary = VocabularyImpl{
-        comparator,
-        VocabularyWithoutUnicode{std::move(internalVocabulary),
-                                 std::move(externalVocabulary), IdConverter{}}};
-  } else {
-    _vocabulary = VocabularyImpl{comparator, std::move(internalVocabulary)};
+    if constexpr (_isCompressed) {
+      LOG(DEBUG) << "Registering external vocabulary" << std::endl;
+      externalVocabulary().open(extLitsFileName);
+      LOG(INFO) << "Number of words in external vocabulary: "
+                << externalVocabulary().size() << std::endl;
+    }
   }
 }
 

@@ -153,7 +153,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       auto id = top.isExternal() ? _idManager.getNextId()
                                  : _idManager.getNextMilestoneId();
       _lastTripleComponent = TripleComponentWithId{
-          top.iriOrLiteral(), _idManager.isMilestoneId(id), id};
+          top.iriOrLiteral(), !_idManager.isMilestoneId(id), id};
 
       // TODO<optimization> If we aim to further speed this up, we could
       // order all the write requests to _outfile _externalOutfile and all the

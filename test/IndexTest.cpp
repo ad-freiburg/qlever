@@ -76,37 +76,40 @@ TEST(IndexTest, createFromTsvTest) {
     Index index;
     index.createFromOnDiskIndex("_testindex");
 
-    ASSERT_TRUE(index._PSO.metaData().col0IdExists(2));
-    ASSERT_TRUE(index._PSO.metaData().col0IdExists(3));
-    ASSERT_FALSE(index._PSO.metaData().col0IdExists(1));
-    ASSERT_FALSE(index._PSO.metaData().col0IdExists(0));
-    ASSERT_FALSE(index._PSO.metaData().getMetaData(2).isFunctional());
-    ASSERT_TRUE(index._PSO.metaData().getMetaData(3).isFunctional());
+    ad_utility::MilestoneIdManager<InternalExternalIdMilestoneDistance> m;
+    auto c = [&](auto id) { return m.milestoneIdFromLocal(id); };
 
-    ASSERT_TRUE(index.POS().metaData().col0IdExists(2));
-    ASSERT_TRUE(index.POS().metaData().col0IdExists(3));
-    ASSERT_FALSE(index.POS().metaData().col0IdExists(1));
-    ASSERT_FALSE(index.POS().metaData().col0IdExists(4));
-    ASSERT_TRUE(index.POS().metaData().getMetaData(2).isFunctional());
-    ASSERT_TRUE(index.POS().metaData().getMetaData(3).isFunctional());
+    ASSERT_TRUE(index._PSO.metaData().col0IdExists(c(2)));
+    ASSERT_TRUE(index._PSO.metaData().col0IdExists(c(3)));
+    ASSERT_FALSE(index._PSO.metaData().col0IdExists(c(1)));
+    ASSERT_FALSE(index._PSO.metaData().col0IdExists(c(0)));
+    ASSERT_FALSE(index._PSO.metaData().getMetaData(c(2)).isFunctional());
+    ASSERT_TRUE(index._PSO.metaData().getMetaData(c(3)).isFunctional());
+
+    ASSERT_TRUE(index.POS().metaData().col0IdExists(c(2)));
+    ASSERT_TRUE(index.POS().metaData().col0IdExists(c(3)));
+    ASSERT_FALSE(index.POS().metaData().col0IdExists(c(1)));
+    ASSERT_FALSE(index.POS().metaData().col0IdExists(c(4)));
+    ASSERT_TRUE(index.POS().metaData().getMetaData(c(2)).isFunctional());
+    ASSERT_TRUE(index.POS().metaData().getMetaData(c(3)).isFunctional());
 
     // Relation b
     // Pair index
     std::vector<std::array<Id, 2>> buffer;
-    CompressedRelationMetaData::scan(2, &buffer, index.PSO());
+    CompressedRelationMetaData::scan(c(2), &buffer, index.PSO());
     ASSERT_EQ(2ul, buffer.size());
-    ASSERT_EQ(Id(0), buffer[0][0]);
-    ASSERT_EQ(4u, buffer[0][1]);
-    ASSERT_EQ(0u, buffer[1][0]);
-    ASSERT_EQ(5u, buffer[1][1]);
+    ASSERT_EQ(c(0), buffer[0][0]);
+    ASSERT_EQ(c(4), buffer[0][1]);
+    ASSERT_EQ(c(0), buffer[1][0]);
+    ASSERT_EQ(c(5), buffer[1][1]);
 
     // Relation b2
-    CompressedRelationMetaData::scan(3, &buffer, index.PSO());
+    CompressedRelationMetaData::scan(c(3), &buffer, index.PSO());
     ASSERT_EQ(2ul, buffer.size());
-    ASSERT_EQ(Id(0), buffer[0][0]);
-    ASSERT_EQ(4u, buffer[0][1]);
-    ASSERT_EQ(1u, buffer[1][0]);
-    ASSERT_EQ(5u, buffer[1][1]);
+    ASSERT_EQ(c(0), buffer[0][0]);
+    ASSERT_EQ(c(4), buffer[0][1]);
+    ASSERT_EQ(c(1), buffer[1][0]);
+    ASSERT_EQ(c(5), buffer[1][1]);
 
     remove("_testtmp2.tsv");
     std::remove(stxxlFileName.c_str());
@@ -150,52 +153,55 @@ TEST(IndexTest, createFromTsvTest) {
     Index index;
     index.createFromOnDiskIndex("_testindex");
 
-    ASSERT_TRUE(index._PSO.metaData().col0IdExists(7));
-    ASSERT_FALSE(index._PSO.metaData().col0IdExists(1));
+    ad_utility::MilestoneIdManager<InternalExternalIdMilestoneDistance> m;
+    auto c = [&](auto id) { return m.milestoneIdFromLocal(id); };
 
-    ASSERT_FALSE(index._PSO.metaData().getMetaData(7).isFunctional());
+    ASSERT_TRUE(index._PSO.metaData().col0IdExists(c(7)));
+    ASSERT_FALSE(index._PSO.metaData().col0IdExists(c(1)));
 
-    ASSERT_TRUE(index.POS().metaData().col0IdExists(7));
-    ASSERT_FALSE(index.POS().metaData().getMetaData(7).isFunctional());
+    ASSERT_FALSE(index._PSO.metaData().getMetaData(c(7)).isFunctional());
+
+    ASSERT_TRUE(index.POS().metaData().col0IdExists(c(7)));
+    ASSERT_FALSE(index.POS().metaData().getMetaData(c(7)).isFunctional());
 
     std::vector<std::array<Id, 2>> buffer;
     // is-a
-    CompressedRelationMetaData::scan(7, &buffer, index.PSO());
+    CompressedRelationMetaData::scan(c(7), &buffer, index.PSO());
     ASSERT_EQ(7ul, buffer.size());
     // Pair index
-    ASSERT_EQ(4u, buffer[0][0]);
-    ASSERT_EQ(0u, buffer[0][1]);
-    ASSERT_EQ(4u, buffer[1][0]);
-    ASSERT_EQ(1u, buffer[1][1]);
-    ASSERT_EQ(4u, buffer[2][0]);
-    ASSERT_EQ(2u, buffer[2][1]);
-    ASSERT_EQ(5u, buffer[3][0]);
-    ASSERT_EQ(0u, buffer[3][1]);
-    ASSERT_EQ(5u, buffer[4][0]);
-    ASSERT_EQ(3u, buffer[4][1]);
-    ASSERT_EQ(6u, buffer[5][0]);
-    ASSERT_EQ(1u, buffer[5][1]);
-    ASSERT_EQ(6u, buffer[6][0]);
-    ASSERT_EQ(2u, buffer[6][1]);
+    ASSERT_EQ(c(4), buffer[0][0]);
+    ASSERT_EQ(c(0), buffer[0][1]);
+    ASSERT_EQ(c(4), buffer[1][0]);
+    ASSERT_EQ(c(1), buffer[1][1]);
+    ASSERT_EQ(c(4), buffer[2][0]);
+    ASSERT_EQ(c(2), buffer[2][1]);
+    ASSERT_EQ(c(5), buffer[3][0]);
+    ASSERT_EQ(c(0), buffer[3][1]);
+    ASSERT_EQ(c(5), buffer[4][0]);
+    ASSERT_EQ(c(3), buffer[4][1]);
+    ASSERT_EQ(c(6), buffer[5][0]);
+    ASSERT_EQ(c(1), buffer[5][1]);
+    ASSERT_EQ(c(6), buffer[6][0]);
+    ASSERT_EQ(c(2), buffer[6][1]);
 
     // is-a for POS
-    CompressedRelationMetaData::scan(7, &buffer, index.POS());
+    CompressedRelationMetaData::scan(c(7), &buffer, index.POS());
     ASSERT_EQ(7ul, buffer.size());
     // Pair index
-    ASSERT_EQ(0u, buffer[0][0]);
-    ASSERT_EQ(4u, buffer[0][1]);
-    ASSERT_EQ(0u, buffer[1][0]);
-    ASSERT_EQ(5u, buffer[1][1]);
-    ASSERT_EQ(1u, buffer[2][0]);
-    ASSERT_EQ(4u, buffer[2][1]);
-    ASSERT_EQ(1u, buffer[3][0]);
-    ASSERT_EQ(6u, buffer[3][1]);
-    ASSERT_EQ(2u, buffer[4][0]);
-    ASSERT_EQ(4u, buffer[4][1]);
-    ASSERT_EQ(2u, buffer[5][0]);
-    ASSERT_EQ(6u, buffer[5][1]);
-    ASSERT_EQ(3u, buffer[6][0]);
-    ASSERT_EQ(5u, buffer[6][1]);
+    ASSERT_EQ(c(0), buffer[0][0]);
+    ASSERT_EQ(c(4), buffer[0][1]);
+    ASSERT_EQ(c(0), buffer[1][0]);
+    ASSERT_EQ(c(5), buffer[1][1]);
+    ASSERT_EQ(c(1), buffer[2][0]);
+    ASSERT_EQ(c(4), buffer[2][1]);
+    ASSERT_EQ(c(1), buffer[3][0]);
+    ASSERT_EQ(c(6), buffer[3][1]);
+    ASSERT_EQ(c(2), buffer[4][0]);
+    ASSERT_EQ(c(4), buffer[4][1]);
+    ASSERT_EQ(c(2), buffer[5][0]);
+    ASSERT_EQ(c(6), buffer[5][1]);
+    ASSERT_EQ(c(3), buffer[6][0]);
+    ASSERT_EQ(c(5), buffer[6][1]);
 
     remove("_testtmp2.tsv");
     std::remove(stxxlFileName.c_str());
@@ -321,19 +327,21 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   Index index;
   index.createFromOnDiskIndex("_testindex2");
 
-  ASSERT_TRUE(index.PSO().metaData().col0IdExists(2));
-  ASSERT_TRUE(index.PSO().metaData().col0IdExists(3));
-  ASSERT_FALSE(index.PSO().metaData().col0IdExists(1));
-  ASSERT_FALSE(index.PSO().metaData().col0IdExists(4));
-  ASSERT_FALSE(index.PSO().metaData().getMetaData(2).isFunctional());
-  ASSERT_TRUE(index.PSO().metaData().getMetaData(3).isFunctional());
+  ad_utility::MilestoneIdManager<InternalExternalIdMilestoneDistance> m;
+  auto c = [&](auto id) { return m.milestoneIdFromLocal(id); };
+  ASSERT_TRUE(index.PSO().metaData().col0IdExists(c(2)));
+  ASSERT_TRUE(index.PSO().metaData().col0IdExists(c(3)));
+  ASSERT_FALSE(index.PSO().metaData().col0IdExists(c(1)));
+  ASSERT_FALSE(index.PSO().metaData().col0IdExists(c(4)));
+  ASSERT_FALSE(index.PSO().metaData().getMetaData(c(2)).isFunctional());
+  ASSERT_TRUE(index.PSO().metaData().getMetaData(c(3)).isFunctional());
 
-  ASSERT_TRUE(index.POS().metaData().col0IdExists(2));
-  ASSERT_TRUE(index.POS().metaData().col0IdExists(3));
-  ASSERT_FALSE(index.POS().metaData().col0IdExists(1));
-  ASSERT_FALSE(index.POS().metaData().col0IdExists(4));
-  ASSERT_TRUE(index.POS().metaData().getMetaData(2).isFunctional());
-  ASSERT_TRUE(index.POS().metaData().getMetaData(3).isFunctional());
+  ASSERT_TRUE(index.POS().metaData().col0IdExists(c(2)));
+  ASSERT_TRUE(index.POS().metaData().col0IdExists(c(3)));
+  ASSERT_FALSE(index.POS().metaData().col0IdExists(c(1)));
+  ASSERT_FALSE(index.POS().metaData().col0IdExists(c(4)));
+  ASSERT_TRUE(index.POS().metaData().getMetaData(c(2)).isFunctional());
+  ASSERT_TRUE(index.POS().metaData().getMetaData(c(3)).isFunctional());
 
   remove("_testtmp3.tsv");
   remove("_testindex2.index.pso");
@@ -371,15 +379,18 @@ TEST(IndexTest, scanTest) {
     Index index;
     index.createFromOnDiskIndex("_testindex");
 
+    ad_utility::MilestoneIdManager<InternalExternalIdMilestoneDistance> m;
+    auto c = [&](auto id) { return m.milestoneIdFromLocal(id); };
+
     IdTable wol(1, allocator());
     IdTable wtl(2, allocator());
 
     index.scan("<b>", &wtl, index._PSO);
     ASSERT_EQ(2u, wtl.size());
-    ASSERT_EQ(0u, wtl[0][0]);
-    ASSERT_EQ(4u, wtl[0][1]);
-    ASSERT_EQ(0u, wtl[1][0]);
-    ASSERT_EQ(5u, wtl[1][1]);
+    ASSERT_EQ(c(0), wtl[0][0]);
+    ASSERT_EQ(c(4), wtl[0][1]);
+    ASSERT_EQ(c(0), wtl[1][0]);
+    ASSERT_EQ(c(5), wtl[1][1]);
     wtl.clear();
     index.scan("<x>", &wtl, index._PSO);
     ASSERT_EQ(0u, wtl.size());
@@ -389,10 +400,10 @@ TEST(IndexTest, scanTest) {
 
     index.scan("<b>", &wtl, index._POS);
     ASSERT_EQ(2u, wtl.size());
-    ASSERT_EQ(4u, wtl[0][0]);
-    ASSERT_EQ(0u, wtl[0][1]);
-    ASSERT_EQ(5u, wtl[1][0]);
-    ASSERT_EQ(0u, wtl[1][1]);
+    ASSERT_EQ(c(4), wtl[0][0]);
+    ASSERT_EQ(c(0), wtl[0][1]);
+    ASSERT_EQ(c(5), wtl[1][0]);
+    ASSERT_EQ(c(0), wtl[1][1]);
     wtl.clear();
     index.scan("<x>", &wtl, index._POS);
     ASSERT_EQ(0u, wtl.size());
@@ -402,15 +413,15 @@ TEST(IndexTest, scanTest) {
 
     index.scan("<b>", "<a>", &wol, index._PSO);
     ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(4u, wol[0][0]);
-    ASSERT_EQ(5u, wol[1][0]);
+    ASSERT_EQ(c(4), wol[0][0]);
+    ASSERT_EQ(c(5), wol[1][0]);
     wol.clear();
     index.scan("<b>", "<c>", &wol, index._PSO);
     ASSERT_EQ(0u, wol.size());
 
     index.scan("<b2>", "<c2>", &wol, index._POS);
     ASSERT_EQ(1u, wol.size());
-    ASSERT_EQ(1u, wol[0][0]);
+    ASSERT_EQ(c(1), wol[0][0]);
   }
 
   remove("_testtmp2.tsv");
@@ -455,83 +466,86 @@ TEST(IndexTest, scanTest) {
     Index index;
     index.createFromOnDiskIndex("_testindex");
 
+    ad_utility::MilestoneIdManager<InternalExternalIdMilestoneDistance> m;
+    auto c = [&](auto id) { return m.milestoneIdFromLocal(id); };
+
     IdTable wol(1, allocator());
     IdTable wtl(2, allocator());
 
     index.scan("<is-a>", &wtl, index._PSO);
     ASSERT_EQ(7u, wtl.size());
-    ASSERT_EQ(4u, wtl[0][0]);
-    ASSERT_EQ(0u, wtl[0][1]);
-    ASSERT_EQ(4u, wtl[1][0]);
-    ASSERT_EQ(1u, wtl[1][1]);
-    ASSERT_EQ(4u, wtl[2][0]);
-    ASSERT_EQ(2u, wtl[2][1]);
-    ASSERT_EQ(5u, wtl[3][0]);
-    ASSERT_EQ(0u, wtl[3][1]);
-    ASSERT_EQ(5u, wtl[4][0]);
-    ASSERT_EQ(3u, wtl[4][1]);
-    ASSERT_EQ(6u, wtl[5][0]);
-    ASSERT_EQ(1u, wtl[5][1]);
-    ASSERT_EQ(6u, wtl[6][0]);
-    ASSERT_EQ(2u, wtl[6][1]);
+    ASSERT_EQ(c(4), wtl[0][0]);
+    ASSERT_EQ(c(0), wtl[0][1]);
+    ASSERT_EQ(c(4), wtl[1][0]);
+    ASSERT_EQ(c(1), wtl[1][1]);
+    ASSERT_EQ(c(4), wtl[2][0]);
+    ASSERT_EQ(c(2), wtl[2][1]);
+    ASSERT_EQ(c(5), wtl[3][0]);
+    ASSERT_EQ(c(0), wtl[3][1]);
+    ASSERT_EQ(c(5), wtl[4][0]);
+    ASSERT_EQ(c(3), wtl[4][1]);
+    ASSERT_EQ(c(6), wtl[5][0]);
+    ASSERT_EQ(c(1), wtl[5][1]);
+    ASSERT_EQ(c(6), wtl[6][0]);
+    ASSERT_EQ(c(2), wtl[6][1]);
 
     index.scan("<is-a>", &wtl, index._POS);
     ASSERT_EQ(7u, wtl.size());
-    ASSERT_EQ(0u, wtl[0][0]);
-    ASSERT_EQ(4u, wtl[0][1]);
-    ASSERT_EQ(0u, wtl[1][0]);
-    ASSERT_EQ(5u, wtl[1][1]);
-    ASSERT_EQ(1u, wtl[2][0]);
-    ASSERT_EQ(4u, wtl[2][1]);
-    ASSERT_EQ(1u, wtl[3][0]);
-    ASSERT_EQ(6u, wtl[3][1]);
-    ASSERT_EQ(2u, wtl[4][0]);
-    ASSERT_EQ(4u, wtl[4][1]);
-    ASSERT_EQ(2u, wtl[5][0]);
-    ASSERT_EQ(6u, wtl[5][1]);
-    ASSERT_EQ(3u, wtl[6][0]);
-    ASSERT_EQ(5u, wtl[6][1]);
+    ASSERT_EQ(c(0), wtl[0][0]);
+    ASSERT_EQ(c(4), wtl[0][1]);
+    ASSERT_EQ(c(0), wtl[1][0]);
+    ASSERT_EQ(c(5), wtl[1][1]);
+    ASSERT_EQ(c(1), wtl[2][0]);
+    ASSERT_EQ(c(4), wtl[2][1]);
+    ASSERT_EQ(c(1), wtl[3][0]);
+    ASSERT_EQ(c(6), wtl[3][1]);
+    ASSERT_EQ(c(2), wtl[4][0]);
+    ASSERT_EQ(c(4), wtl[4][1]);
+    ASSERT_EQ(c(2), wtl[5][0]);
+    ASSERT_EQ(c(6), wtl[5][1]);
+    ASSERT_EQ(c(3), wtl[6][0]);
+    ASSERT_EQ(c(5), wtl[6][1]);
 
     index.scan("<is-a>", "<0>", &wol, index._POS);
     ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(4u, wol[0][0]);
-    ASSERT_EQ(5u, wol[1][0]);
+    ASSERT_EQ(c(4), wol[0][0]);
+    ASSERT_EQ(c(5), wol[1][0]);
 
     wol.clear();
     index.scan("<is-a>", "<1>", &wol, index._POS);
     ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(4u, wol[0][0]);
-    ASSERT_EQ(6u, wol[1][0]);
+    ASSERT_EQ(c(4), wol[0][0]);
+    ASSERT_EQ(c(6), wol[1][0]);
 
     wol.clear();
     index.scan("<is-a>", "<2>", &wol, index._POS);
     ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(4u, wol[0][0]);
-    ASSERT_EQ(6u, wol[1][0]);
+    ASSERT_EQ(c(4), wol[0][0]);
+    ASSERT_EQ(c(6), wol[1][0]);
 
     wol.clear();
     index.scan("<is-a>", "<3>", &wol, index._POS);
     ASSERT_EQ(1u, wol.size());
-    ASSERT_EQ(5u, wol[0][0]);
+    ASSERT_EQ(c(5), wol[0][0]);
 
     wol.clear();
     index.scan("<is-a>", "<a>", &wol, index._PSO);
     ASSERT_EQ(3u, wol.size());
-    ASSERT_EQ(0u, wol[0][0]);
-    ASSERT_EQ(1u, wol[1][0]);
-    ASSERT_EQ(2u, wol[2][0]);
+    ASSERT_EQ(c(0), wol[0][0]);
+    ASSERT_EQ(c(1), wol[1][0]);
+    ASSERT_EQ(c(2), wol[2][0]);
 
     wol.clear();
     index.scan("<is-a>", "<b>", &wol, index._PSO);
     ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(0u, wol[0][0]);
-    ASSERT_EQ(3u, wol[1][0]);
+    ASSERT_EQ(c(0), wol[0][0]);
+    ASSERT_EQ(c(3), wol[1][0]);
 
     wol.clear();
     index.scan("<is-a>", "<c>", &wol, index._PSO);
     ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(1u, wol[0][0]);
-    ASSERT_EQ(2u, wol[1][0]);
+    ASSERT_EQ(c(1), wol[0][0]);
+    ASSERT_EQ(c(2), wol[1][0]);
   }
   remove("_testtmp2.tsv");
   std::remove(stxxlFileName.c_str());
