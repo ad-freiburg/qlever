@@ -300,9 +300,13 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
                              << '\n';
         };
     m._noIdMapsAndIgnoreExternalVocab = true;
-    auto mergeResult =
-        m.mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles,
-                          std::less<>(), internalVocabularyActionCompression);
+    // Compare strings lexicographically, and ignore the "externalization"
+    auto bytewiseComparator = [](const auto& a, const auto& b, bool, bool) {
+      return a < b;
+    };
+    auto mergeResult = m.mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION,
+                                         numFiles, bytewiseComparator,
+                                         internalVocabularyActionCompression);
     sizeInternalVocabulary = mergeResult._numWordsTotal;
     LOG(INFO) << "Number of words in internal vocabulary: "
               << sizeInternalVocabulary << std::endl;
@@ -312,9 +316,11 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
             << "(internal and external) ..." << std::endl;
   const VocabularyMerger::VocMergeRes mergeRes = [&]() {
     VocabularyMerger v;
-    auto sortPred = [cmp = &(_vocab.getCaseComparator())](std::string_view a,
-                                                          std::string_view b) {
-      return (*cmp)(a, b, decltype(_vocab)::SortLevel::TOTAL);
+    auto sortPred = [cmp = &(_vocab.getCaseComparator())](
+                        std::string_view a, std::string_view b,
+                        bool aExternalized, bool bExternalized) {
+      return (*cmp)(a, b, decltype(_vocab)::SortLevel::TOTAL, aExternalized,
+                    bExternalized);
     };
     auto wordWriter =
         _vocab.makeUncompressingWordWriter(_onDiskBase + ".vocabulary");

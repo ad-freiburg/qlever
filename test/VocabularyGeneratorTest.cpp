@@ -160,8 +160,14 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
     auto internalVocabularyAction = [&file](const auto& word) {
       file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
     };
-    res = m.mergeVocabulary(_basePath, 2, TripleComponentComparator(),
-                            internalVocabularyAction);
+
+    auto sortPred = [cmp = TripleComponentComparator()](
+                        std::string_view a, std::string_view b,
+                        bool aExternalized, bool bExternalized) {
+      return cmp(a, b, TripleComponentComparator::Level::TOTAL, aExternalized,
+                 bExternalized);
+    };
+    res = m.mergeVocabulary(_basePath, 2, sortPred, internalVocabularyAction);
   }
 
   // No language tags in text file
@@ -202,8 +208,12 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
       auto internalVocabularyAction = [&file](const auto& word) {
         file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
       };
-      m.mergeVocabulary(basename, 1, v.getCaseComparator(),
-                        internalVocabularyAction);
+      auto sortPred = [&](std::string_view a, std::string_view b, bool, bool) {
+        // This test uses a TextVocabulary without externalization, so we
+        // can ignore the bool arguments.
+        return v.getCaseComparator()(a, b);
+      };
+      m.mergeVocabulary(basename, 1, sortPred, internalVocabularyAction);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
     ASSERT_EQ(0u, idMap[5]);
@@ -246,8 +256,14 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
       auto internalVocabularyAction = [&file](const auto& word) {
         file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
       };
-      m.mergeVocabulary(basename, 1, v.getCaseComparator(),
-                        internalVocabularyAction);
+
+      auto sortPred = [&v](std::string_view a, std::string_view b,
+                           bool aExternalized, bool bExternalized) {
+        return v.getCaseComparator()(a, b,
+                                     TripleComponentComparator::Level::TOTAL,
+                                     aExternalized, bExternalized);
+      };
+      m.mergeVocabulary(basename, 1, sortPred, internalVocabularyAction);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
     EXPECT_EQ(0u, idMap[6]);

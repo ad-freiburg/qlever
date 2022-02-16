@@ -80,7 +80,7 @@ TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
   ASSERT_EQ(simple.size(), words.size());
   for (size_t i = 0; i < simple.size(); ++i) {
     ASSERT_NE(simple[i], words[i]);
-    ASSERT_EQ(DummyCompressor::decompress(simple[i]), words[i]);
+    ASSERT_EQ(DummyCompressor::decompress(simple[i].value()), words[i]);
   }
 }
 

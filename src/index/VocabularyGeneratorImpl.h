@@ -30,16 +30,13 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
     const std::string& basename, size_t numFiles, Comparator comparator,
     InternalVocabularyAction& internalVocabularyAction) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
-  // or literal. All internal IRIs or literals come before all external ones.
-  // TODO<joka921> Change this as soon as we have Interleaved Ids via the
-  // MilestoneIdManager
+  // or literal. The information whether the words are externalized is passed as
+  // an additional tie break to the comparator.
   // TODO<joka921> Split up the actual comparison of QueueWords and the
   // "inversion" because of `std::priority_queue`
   auto queueCompare = [&comparator](const QueueWord& p1, const QueueWord& p2) {
-    if (p1.isExternal() != p2.isExternal()) {
-      return p1.isExternal();
-    }
-    return comparator(p2.iriOrLiteral(), p1.iriOrLiteral());
+    return comparator(p2.iriOrLiteral(), p1.iriOrLiteral(), p2.isExternal(),
+                      p1.isExternal());
   };
 
   std::vector<ad_utility::serialization::FileReadSerializer> infiles;
@@ -86,13 +83,6 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
 
   // start k-way merge
   while (!queue.empty()) {
-    // for the prefix compression vocabulary, we don't need the external
-    // vocabulary
-    // TODO<joka921> Don't include external literals at all in this vocabulary.
-    if (_noIdMapsAndIgnoreExternalVocab && queue.top().isExternal()) {
-      break;
-    }
-
     // accumulated the globally ordered queue words in a buffer.
     sortedBuffer.push_back(std::move(queue.top()));
     queue.pop();
@@ -156,10 +146,14 @@ void VocabularyMerger::writeQueueWordsToIdVec(
   for (auto& top : buffer) {
     if (!_lastTripleComponent.has_value() ||
         top.iriOrLiteral() != _lastTripleComponent.value().iriOrLiteral()) {
-      // TODO<joka921> Once we have interleaved IDs using the MilestoneIdManager
-      // we have to compute the correct Ids here.
+      // Assign milestone IDs to internal words, and plain IDs to external
+      // words. If the ID of an external word actually is a milestone ID, this
+      // word will not be externalized, s.t. the internal words have a
+      // contiguous (milestone) id space.
+      auto id = top.isExternal() ? _idManager.getNextId()
+                                 : _idManager.getNextMilestoneId();
       _lastTripleComponent = TripleComponentWithId{
-          top.iriOrLiteral(), top.isExternal(), _totalWritten};
+          top.iriOrLiteral(), _idManager.isMilestoneId(id), id};
 
       // TODO<optimization> If we aim to further speed this up, we could
       // order all the write requests to _outfile _externalOutfile and all the

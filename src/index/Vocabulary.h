@@ -25,6 +25,8 @@
 #include "../util/StringUtils.h"
 #include "./CompressedString.h"
 #include "./StringSortComparator.h"
+#include "./vocabulary/CombinedMilestoneVocabulary.h"
+#include "./vocabulary/CombinedVocabulary.h"
 #include "./vocabulary/CompressedVocabulary.h"
 #include "./vocabulary/PrefixCompressor.h"
 #include "./vocabulary/UnicodeVocabulary.h"
@@ -107,10 +109,7 @@ class Vocabulary {
   virtual ~Vocabulary() = default;
 
   //! clear all the contents, but not the settings for prefixes etc
-  void clear() {
-    _internalVocabulary.close();
-    _externalVocabulary.close();
-  }
+  void clear() { _vocabulary.close(); }
   //! Read the vocabulary from file.
   void readFromFile(const string& fileName, const string& extLitsFileName = "");
 
@@ -138,8 +137,8 @@ class Vocabulary {
 
   // AccessReturnType_t<StringType> at(Id id) const { return operator[](id); }
 
-  //! Get the number of words in the vocabulary.
-  size_t size() const { return _internalVocabulary.size(); }
+  //! Get the number of words in the internal vocabulary.
+  size_t size() const { return internalVocabulary().size(); }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
@@ -195,8 +194,10 @@ class Vocabulary {
   // only still needed for text vocabulary
   void externalizeLiteralsFromTextFile(const string& textFileName,
                                        const string& outFileName) {
-    _externalVocabulary.getUnderlyingVocabulary().buildFromTextFile(
-        textFileName, outFileName);
+    AD_CHECK(_isCompressed);
+    if constexpr (_isCompressed) {
+      externalVocabulary().buildFromTextFile(textFileName, outFileName);
+    }
   }
 
   static string getLanguage(const string& literal);
@@ -235,7 +236,7 @@ class Vocabulary {
 
   // _____________________________________________________________________
   const ComparatorType& getCaseComparator() const {
-    return _internalVocabulary.getComparator();
+    return _vocabulary.getComparator();
   }
 
   /// returns the range of IDs where strings of the vocabulary start with the
@@ -265,22 +266,52 @@ class Vocabulary {
 
   using PrefixCompressedVocabulary =
       CompressedVocabulary<VocabularyInMemory, PrefixCompressor>;
-  using InternalCompressedVocabulary =
-      UnicodeVocabulary<PrefixCompressedVocabulary, ComparatorType>;
-  using InternalUncompressedVocabulary =
-      UnicodeVocabulary<VocabularyInMemory, ComparatorType>;
   using InternalVocabulary =
-      std::conditional_t<_isCompressed, InternalCompressedVocabulary,
-                         InternalUncompressedVocabulary>;
-  InternalVocabulary _internalVocabulary;
+      std::conditional_t<_isCompressed, PrefixCompressedVocabulary,
+                         VocabularyInMemory>;
 
-  using ExternalVocabulary =
-      UnicodeVocabulary<VocabularyOnDisk, ComparatorType>;
-  ExternalVocabulary _externalVocabulary;
+  using IdConverter =
+      MilestoneIndexConverter<InternalExternalIdMilestoneDistance>;
+  using CombinedVocabularyWithoutUnicode =
+      CombinedVocabulary<InternalVocabulary, VocabularyOnDisk, IdConverter>;
+
+  using VocabularyWithoutUnicode =
+      std::conditional_t<_isCompressed, CombinedVocabularyWithoutUnicode,
+                         VocabularyInMemory>;
+  using VocabularyImpl =
+      UnicodeVocabulary<VocabularyWithoutUnicode, ComparatorType>;
+  VocabularyImpl _vocabulary;
+
+  auto& internalVocabulary() {
+    if constexpr (_isCompressed) {
+      return _vocabulary.getUnderlyingVocabulary().firstVocab();
+    } else {
+      return _vocabulary.getUnderlyingVocabulary();
+    }
+  }
+
+  const auto& internalVocabulary() const {
+    if constexpr (_isCompressed) {
+      return _vocabulary.getUnderlyingVocabulary().firstVocab();
+    } else {
+      return _vocabulary.getUnderlyingVocabulary();
+    }
+  }
+  template <typename U = StringType, typename = enable_if_compressed<U>>
+  auto& externalVocabulary() {
+    return _vocabulary.getUnderlyingVocabulary().secondVocab();
+  }
+  template <typename U = StringType, typename = enable_if_compressed<U>>
+  const auto& externalVocabulary() const {
+    return _vocabulary.getUnderlyingVocabulary().secondVocab();
+  }
 
  public:
-  const ExternalVocabulary& getExternalVocab() const {
-    return _externalVocabulary;
+  // TODO<joka921> This vocabulary does not have the unicode layer. Is it used
+  // correctly/at all
+  template <typename U = StringType, typename = enable_if_compressed<U>>
+  [[nodiscard]] const VocabularyOnDisk& getExternalVocab() const {
+    return externalVocabulary();
   }
   auto makeUncompressingWordWriter(const std::string& filename) {
     return VocabularyInMemory::WordWriter{filename};
@@ -288,8 +319,7 @@ class Vocabulary {
 
   template <typename U = StringType, typename = enable_if_compressed<U>>
   auto makeCompressedWordWriter(const std::string& filename) {
-    return _internalVocabulary.getUnderlyingVocabulary().makeDiskWriter(
-        filename);
+    return internalVocabulary().makeDiskWriter(filename);
   }
 
   static auto makeUncompressedDiskIterator(const string& filename) {

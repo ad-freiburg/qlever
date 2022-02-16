@@ -64,10 +64,11 @@ class CombinedVocabulary {
  public:
   // Construct from pre-initialized vocabularies and `IndexConverter`.
   CombinedVocabulary(
-      FirstVocabulary firstVocab, SecondVocabulary secondVocab,
-      IndexConverter
-          converter) requires IndexConverterConcept<CombinedVocabulary,
-                                                    IndexConverter>
+      FirstVocabulary firstVocab = FirstVocabulary{},
+      SecondVocabulary secondVocab = SecondVocabulary{},
+      IndexConverter converter =
+          IndexConverter{}) requires IndexConverterConcept<CombinedVocabulary,
+                                                           IndexConverter>
       : _firstVocab{std::move(firstVocab)},
         _secondVocab{std::move(secondVocab)},
         _indexConverter{converter} {}
@@ -86,6 +87,18 @@ class CombinedVocabulary {
   [[nodiscard]] uint64_t sizeSecondVocab() const { return _secondVocab.size(); }
   [[nodiscard]] uint64_t size() const {
     return sizeFirstVocab() + sizeSecondVocab();
+  }
+
+  /// Direct access to the underlying vocabularies
+  const auto& firstVocab() const { return _firstVocab; }
+  auto& firstVocab() { return _firstVocab; }
+  const auto& secondVocab() const { return _secondVocab; }
+  auto& secondVocab() { return _secondVocab; }
+
+  /// Close both underlying vocabularies
+  void close() {
+    _firstVocab.close();
+    _secondVocab.close();
   }
 
   /// The highest ID (=index) that occurs in this vocabulary. May only be called

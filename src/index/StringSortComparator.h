@@ -531,8 +531,10 @@ class TripleComponentComparator {
    * @return false iff a comes before b in the vocabulary
    */
   bool operator()(std::string_view a, std::string_view b,
-                  const Level level = Level::QUARTERNARY) const {
-    return compare(a, b, level) < 0;
+                  const Level level = Level::QUARTERNARY,
+                  bool aExternalized = false,
+                  bool bExternalized = false) const {
+    return compare(a, b, level, aExternalized, bExternalized) < 0;
   }
 
   /**
@@ -544,9 +546,9 @@ class TripleComponentComparator {
    * @param level
    * @return a comes before the original value of spB in the vocabulary
    */
-  bool operator()(std::string_view a, const SplitVal& spB,
-                  const Level level) const {
-    auto spA = extractAndTransformComparable(a, level, false);
+  bool operator()(std::string_view a, const SplitVal& spB, const Level level,
+                  bool aExternalized = false) const {
+    auto spA = extractAndTransformComparable(a, level, aExternalized);
     return compare(spA, spB, level) < 0;
   }
 
@@ -558,9 +560,11 @@ class TripleComponentComparator {
   /// Compare two string_views from the Vocabulary. Return value according to
   /// std::strcmp
   [[nodiscard]] int compare(std::string_view a, std::string_view b,
-                            const Level level = Level::QUARTERNARY) const {
-    auto splitA = extractComparable<SplitValNonOwning>(a, level, false);
-    auto splitB = extractComparable<SplitValNonOwning>(b, level, false);
+                            const Level level = Level::QUARTERNARY,
+                            bool aExternalized = false,
+                            bool bExternalized = false) const {
+    auto splitA = extractComparable<SplitValNonOwning>(a, level, aExternalized);
+    auto splitB = extractComparable<SplitValNonOwning>(b, level, bExternalized);
     // We have to have a total ordering of unique elements in the vocabulary,
     // so if they compare equal according to the locale, use strcmp
     auto cmp = compare(splitA, splitB, level);
@@ -587,13 +591,6 @@ class TripleComponentComparator {
   [[nodiscard]] int compare(const SplitValBase<A, B>& a,
                             const SplitValBase<A, B>& b,
                             const Level level) const {
-    // Currently all internal words stand before all external words.
-    // TODO<joka921> This has to be changed once we have the IDs interleaved
-    // via the MilestoneIdManager.
-    if (a.isExternalized != b.isExternalized) {
-      return a.isExternalized ? 1 : -1;
-    }
-
     if (auto res = std::strncmp(&a.firstOriginalChar, &b.firstOriginalChar, 1);
         res != 0) {
       return res;  // different data types, decide on the datatype
@@ -614,7 +611,21 @@ class TripleComponentComparator {
     }
 
     // TOTAL level and even the langtags match, sort by bytes
-    return a.transformedVal.compare(b.transformedVal);
+    // TODO<joka921> We would have to sort by the actual values of the strings,
+    // not of the SortKeys. This is probably the source of the strange
+    // "Vocabulary not sorted for *strange sequence of escape chars*
+    if (int res = a.transformedVal.compare(b.transformedVal); res != 0) {
+      return res;
+    }
+
+    // If two entries are equal, but only one of them has to be externalized,
+    // then we sort the externalized words first. This is required to correctly
+    // Detect the case where the same triple component exists "externalized"
+    // and "not externalized" (When merging, the result will be externalized).
+    if (a.isExternalized == b.isExternalized) {
+      return 0;
+    }
+    return a.isExternalized ? -1 : 1;
   }
 
   /**

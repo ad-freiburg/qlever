@@ -23,8 +23,12 @@ class CompressedVocabulary {
   CompressedVocabulary(Compressor compressor = Compressor())
       : _compressor{std::move(compressor)} {}
 
-  auto operator[](uint64_t id) const {
-    return _compressor.decompress(_underlyingVocabulary[id]);
+  std::optional<std::string> operator[](uint64_t id) const {
+    auto optionalCompressed = _underlyingVocabulary[id];
+    if (!optionalCompressed.has_value()) {
+      return std::nullopt;
+    }
+    return _compressor.decompress(optionalCompressed.value());
   }
 
   [[nodiscard]] uint64_t size() const { return _underlyingVocabulary.size(); }
