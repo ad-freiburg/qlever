@@ -19,8 +19,8 @@ using ad_utility::MmapVectorView;
 TEST(MmapVectorTest, DefaultConstructor) {
   MmapVector<int> v;
   ASSERT_EQ(size_t(0), v.size());
-  ASSERT_EQ(nullptr, v.begin());
-  ASSERT_EQ(nullptr, v.end());
+  ASSERT_EQ(nullptr, v.data());
+  ASSERT_EQ(nullptr, v.data());
   ASSERT_THROW(v[0], ad_utility::UninitializedArrayException);
   ASSERT_THROW(v.at(0), ad_utility::UninitializedArrayException);
   ASSERT_THROW(v[0] = 2, ad_utility::UninitializedArrayException);
@@ -31,7 +31,7 @@ TEST(MmapVectorTest, DefaultConstructor) {
 TEST(MmapVectorTest, NewEmptyFileConstructor) {
   MmapVector<int> v("_test.mmap", ad_utility::CreateTag());
   ASSERT_EQ(size_t(0), v.size());
-  ASSERT_NE(nullptr, v.begin());
+  ASSERT_NE(nullptr, v.data());
   ASSERT_EQ(v.begin(), v.end());
 }
 
@@ -42,7 +42,7 @@ TEST(MmapVectorTest, NewFileSizeConstructor) {
   MmapVector<int> v(s, "_test.mmap");
   ASSERT_EQ(s, v.size());
   ASSERT_LE(s, v.capacity());
-  ASSERT_NE(nullptr, v.begin());
+  ASSERT_NE(nullptr, v.data());
   ASSERT_EQ(v.begin() + s, v.end());
 }
 
@@ -62,7 +62,7 @@ TEST(MmapVectorTest, AccessOperator) {
   size_t s = 5000;
   MmapVectorView<int> v("_test.mmap");
   ASSERT_EQ(s, v.size());
-  ASSERT_NE(nullptr, v.begin());
+  ASSERT_NE(nullptr, v.data());
   ASSERT_EQ(v.begin() + s, v.end());
 
   for (int i = 0; i < 5000; i++) {
@@ -89,7 +89,7 @@ TEST(MmapVectorTest, At) {
   MmapVectorView<int> v("_test.mmap");
   size_t s = 5000;
   ASSERT_EQ(s, v.size());
-  ASSERT_NE(nullptr, v.begin());
+  ASSERT_NE(nullptr, v.data());
   ASSERT_EQ(v.begin() + s, v.end());
   for (int i = 0; i < 5000; i++) {
     ASSERT_EQ(v.at(i), 5000 - i);
@@ -104,7 +104,7 @@ TEST(MmapVectorTest, DefaultValueConstructor) {
   MmapVector<int> v(s, 42, "_test.mmap");
   ASSERT_EQ(s, v.size());
   ASSERT_LE(s, v.capacity());
-  ASSERT_NE(nullptr, v.begin());
+  ASSERT_NE(nullptr, v.data());
   ASSERT_EQ(v.begin() + s, v.end());
   for (int i = 0; i < 5000; ++i) {
     ASSERT_EQ(v[i], 42);
@@ -123,7 +123,7 @@ TEST(MmapVectorTest, IteratorConstructor) {
   MmapVector<int> v(tmpVec.begin(), tmpVec.end(), "_test.mmap");
   ASSERT_EQ(s, v.size());
   ASSERT_LE(s, v.capacity());
-  ASSERT_NE(nullptr, v.begin());
+  ASSERT_NE(nullptr, v.data());
   ASSERT_EQ(v.begin() + s, v.end());
   for (int i = 0; i < 5000; ++i) {
     ASSERT_EQ(v[i], tmpVec[i]);
@@ -178,7 +178,7 @@ TEST(MmapVectorTest, constIterators) {
     MmapVector<int> v(tmpVec.begin(), tmpVec.end(), "_test.mmap");
     ASSERT_EQ(s, v.size());
     ASSERT_LE(s, v.capacity());
-    ASSERT_NE(nullptr, v.begin());
+    ASSERT_NE(nullptr, v.data());
     ASSERT_EQ(v.begin() + s, v.end());
 
     {
@@ -221,7 +221,7 @@ TEST(MmapVectorTest, nonConstIterators) {
   MmapVector<int> v(s, 42, "_test.mmap");
   ASSERT_EQ(s, v.size());
   ASSERT_LE(s, v.capacity());
-  ASSERT_NE(nullptr, v.begin());
+  ASSERT_NE(nullptr, v.data());
   ASSERT_EQ(v.begin() + s, v.end());
 
   for (auto& x : v) {
@@ -241,21 +241,21 @@ TEST(MmapVectorTest, Close) {
   MmapVector<int> v(s, 42, "_test.mmap");
   ASSERT_EQ(s, v.size());
   ASSERT_LE(s, v.capacity());
-  ASSERT_NE(nullptr, v.begin());
+  ASSERT_NE(nullptr, v.data());
   ASSERT_EQ(v.begin() + s, v.end());
   v.close();
 
   ASSERT_EQ(size_t(0), v.size());
-  ASSERT_EQ(nullptr, v.begin());
+  ASSERT_EQ(nullptr, v.data());
 
   MmapVectorView<int> v2("_test.mmap");
   ASSERT_EQ(s, v2.size());
-  ASSERT_NE(nullptr, v2.begin());
+  ASSERT_NE(nullptr, v2.data());
   ASSERT_EQ(v2.begin() + s, v2.end());
   v2.close();
 
   ASSERT_EQ(size_t(0), v2.size());
-  ASSERT_EQ(nullptr, v2.begin());
+  ASSERT_EQ(nullptr, v2.data());
 }
 
 // ____________________________________________________________________
@@ -267,7 +267,7 @@ TEST(MmapVectorTest, Reuse) {
     MmapVector<int> v(s, "_test.mmap");
     ASSERT_EQ(s, v.size());
     ASSERT_LE(s, v.capacity());
-    ASSERT_NE(nullptr, v.begin());
+    ASSERT_NE(nullptr, v.data());
     ASSERT_EQ(v.begin() + s, v.end());
     for (int i = 0; i < 5000; ++i) {
       v[i] = i;
@@ -277,7 +277,7 @@ TEST(MmapVectorTest, Reuse) {
   MmapVector<int> v2("_test.mmap", ad_utility::ReuseTag());
   ASSERT_EQ(s, v2.size());
   ASSERT_LE(s, v2.capacity());
-  ASSERT_NE(nullptr, v2.begin());
+  ASSERT_NE(nullptr, v2.data());
   ASSERT_EQ(v2.begin() + s, v2.end());
   for (int i = 0; i < 5000; ++i) {
     ASSERT_EQ(v2[i], i);
@@ -286,7 +286,7 @@ TEST(MmapVectorTest, Reuse) {
   // v is now destroyed
   MmapVectorView<int> v3("_test.mmap");
   ASSERT_EQ(s, v3.size());
-  ASSERT_NE(nullptr, v3.begin());
+  ASSERT_NE(nullptr, v3.data());
   ASSERT_EQ(v3.begin() + s, v3.end());
   for (int i = 0; i < 5000; ++i) {
     ASSERT_EQ(v3[i], i);
@@ -303,18 +303,18 @@ TEST(MmapVectorTest, MoveConstructor) {
     MmapVector<int> v(s, "_test.mmap");
     ASSERT_EQ(s, v.size());
     ASSERT_LE(s, v.capacity());
-    ASSERT_NE(nullptr, v.begin());
+    ASSERT_NE(nullptr, v.data());
     ASSERT_EQ(v.begin() + s, v.end());
     for (int i = 0; i < 5000; ++i) {
       v[i] = i;
     }
 
     MmapVector<int> v2(std::move(v));
-    ASSERT_EQ(nullptr, v.begin());
+    ASSERT_EQ(nullptr, v.data());
 
     ASSERT_EQ(s, v2.size());
     ASSERT_LE(s, v2.capacity());
-    ASSERT_NE(nullptr, v2.begin());
+    ASSERT_NE(nullptr, v2.data());
     ASSERT_EQ(v2.begin() + s, v2.end());
     for (int i = 0; i < 5000; ++i) {
       ASSERT_EQ(v2[i], i);
@@ -322,17 +322,17 @@ TEST(MmapVectorTest, MoveConstructor) {
   }
   MmapVectorView<int> v("_test.mmap");
   ASSERT_EQ(s, v.size());
-  ASSERT_NE(nullptr, v.begin());
+  ASSERT_NE(nullptr, v.data());
   ASSERT_EQ(v.begin() + s, v.end());
   for (int i = 0; i < 5000; ++i) {
     ASSERT_EQ(v[i], i);
   }
 
   MmapVectorView<int> v2(std::move(v));
-  ASSERT_EQ(nullptr, v.begin());
+  ASSERT_EQ(nullptr, v.data());
 
   ASSERT_EQ(s, v2.size());
-  ASSERT_NE(nullptr, v2.begin());
+  ASSERT_NE(nullptr, v2.data());
   ASSERT_EQ(v2.begin() + s, v2.end());
   for (int i = 0; i < 5000; ++i) {
     ASSERT_EQ(v2[i], i);
@@ -348,18 +348,18 @@ TEST(MmapVectorTest, MoveAssignment) {
     MmapVector<int> v(s, "_test.mmap");
     ASSERT_EQ(s, v.size());
     ASSERT_LE(s, v.capacity());
-    ASSERT_NE(nullptr, v.begin());
+    ASSERT_NE(nullptr, v.data());
     ASSERT_EQ(v.begin() + s, v.end());
     for (int i = 0; i < 5000; ++i) {
       v[i] = i;
     }
 
     MmapVector<int> v2 = std::move(v);
-    ASSERT_EQ(nullptr, v.begin());
+    ASSERT_EQ(nullptr, v.data());
 
     ASSERT_EQ(s, v2.size());
     ASSERT_LE(s, v2.capacity());
-    ASSERT_NE(nullptr, v2.begin());
+    ASSERT_NE(nullptr, v2.data());
     ASSERT_EQ(v2.begin() + s, v2.end());
     for (int i = 0; i < 5000; ++i) {
       ASSERT_EQ(v2[i], i);
@@ -367,17 +367,17 @@ TEST(MmapVectorTest, MoveAssignment) {
   }
   MmapVectorView<int> v("_test.mmap");
   ASSERT_EQ(s, v.size());
-  ASSERT_NE(nullptr, v.begin());
+  ASSERT_NE(nullptr, v.data());
   ASSERT_EQ(v.begin() + s, v.end());
   for (int i = 0; i < 5000; ++i) {
     ASSERT_EQ(v[i], i);
   }
 
   MmapVectorView<int> v2 = std::move(v);
-  ASSERT_EQ(nullptr, v.begin());
+  ASSERT_EQ(nullptr, v.data());
 
   ASSERT_EQ(s, v2.size());
-  ASSERT_NE(nullptr, v2.begin());
+  ASSERT_NE(nullptr, v2.data());
   ASSERT_EQ(v2.begin() + s, v2.end());
   for (int i = 0; i < 5000; ++i) {
     ASSERT_EQ(v2[i], i);

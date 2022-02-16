@@ -76,6 +76,8 @@ TEST(IndexMetaDataTest, writeReadTest2Hmap) {
 }
 
 TEST(IndexMetaDataTest, writeReadTest2Mmap) {
+  std::string imdFilename = "_testtmp.imd";
+  std::string mmapFilename = imdFilename + ".mmap";
   try {
     vector<CompressedBlockMetaData> bs;
     bs.push_back(CompressedBlockMetaData{12, 34, 5, 0, 2, 13, 24});
@@ -86,30 +88,30 @@ TEST(IndexMetaDataTest, writeReadTest2Mmap) {
     // force destruction to close and reopen the mmap-File
     {
       IndexMetaDataMmap imd;
-      // size of 3 would suffice, but we also want to simulate the sparseness
-      imd.setup(5, CompressedRelationMetaData::emptyMetaData(),
-                "_testtmp.imd.mmap");
+      imd.setup(mmapFilename, ad_utility::CreateTag{});
       imd.add(rmdF);
       imd.add(rmdF2);
       imd.blockData() = bs;
 
-      const string filename = "_testtmp.imd";
-      imd.writeToFile(filename);
+      imd.writeToFile(imdFilename);
     }
 
-    ad_utility::File in("_testtmp.imd", "r");
-    IndexMetaDataMmap imd2;
-    imd2.setup("_testtmp.imd.mmap", ad_utility::ReuseTag());
-    imd2.readFromFile(&in);
+    {
+      ad_utility::File in(imdFilename, "r");
+      IndexMetaDataMmap imd2;
+      imd2.setup(mmapFilename, ad_utility::ReuseTag());
+      imd2.readFromFile(&in);
 
-    remove("_testtmp.rmd");
-    auto rmdFn = imd2.getMetaData(1);
-    auto rmdFn2 = imd2.getMetaData(2);
+      auto rmdFn = imd2.getMetaData(1);
+      auto rmdFn2 = imd2.getMetaData(2);
 
-    ASSERT_EQ(rmdF, rmdFn);
-    ASSERT_EQ(rmdF2, rmdFn2);
+      ASSERT_EQ(rmdF, rmdFn);
+      ASSERT_EQ(rmdF2, rmdFn2);
 
-    ASSERT_EQ(imd2.blockData(), bs);
+      ASSERT_EQ(imd2.blockData(), bs);
+    }
+    ad_utility::deleteFile(imdFilename);
+    ad_utility::deleteFile(mmapFilename);
 
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;

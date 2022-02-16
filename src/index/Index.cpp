@@ -410,12 +410,8 @@ Index::createPermutationPairImpl(const string& fileName1,
   using MetaData = typename MetaDataDispatcher::WriteType;
   MetaData metaData1, metaData2;
   if constexpr (metaData1._isMmapBased) {
-    metaData1.setup(_totalVocabularySize,
-                    CompressedRelationMetaData::emptyMetaData(),
-                    fileName1 + MMAP_FILE_SUFFIX);
-    metaData2.setup(_totalVocabularySize,
-                    CompressedRelationMetaData::emptyMetaData(),
-                    fileName2 + MMAP_FILE_SUFFIX);
+    metaData1.setup(fileName1 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
+    metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
   }
 
   if (triples.empty()) {
@@ -597,10 +593,9 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
     // permutation is inefficient. So it is fine to use const_cast here as an
     // exception: we delibarately write to a read-only data structure and are
     // knowing what we are doing
-    m2->data()[it->first].setCol2Multiplicity(
-        m1->data()[it->first].getCol1Multiplicity());
-    m1->data()[it->first].setCol2Multiplicity(
-        m2->data()[it->first].getCol1Multiplicity());
+    Id id = it.getId();
+    m2->data()[id].setCol2Multiplicity(m1->data()[id].getCol1Multiplicity());
+    m1->data()[id].setCol2Multiplicity(m2->data()[id].getCol1Multiplicity());
   }
 }
 

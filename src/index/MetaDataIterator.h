@@ -9,12 +9,22 @@
  **/
 template <typename Permutation>
 class MetaDataIterator {
+ private:
+  const Permutation& permutation_;
+  typename Permutation::MetaData::MapType::ConstOrderedIterator _iterator;
+  typename Permutation::MetaData::MapType::ConstOrderedIterator _endIterator;
+
+  // For an XYZ permutation, `_idPairs` is a vector of all YZ pairs for a fixed
+  // X and `_index` is the index of a particular YZ pair.
+  std::vector<std::array<Id, 2>> _idPairs;
+  size_t _index;
+
  public:
-  MetaDataIterator(const Permutation& permutation)
+  explicit MetaDataIterator(const Permutation& permutation)
       : permutation_{permutation},
         _iterator(permutation._meta.data().ordered_begin()),
         _endIterator(permutation._meta.data().ordered_end()),
-        _buffer_offset(0) {
+        _index(0) {
     scanCurrentPos();
   }
 
@@ -24,37 +34,28 @@ class MetaDataIterator {
       // don't do anything if we have already reached the end
       return *this;
     }
-    ++_buffer_offset;
-    if (_buffer_offset >= _buffer.size()) {
+    ++_index;
+    if (_index >= _idPairs.size()) {
       ++_iterator;
       if (empty()) {
         // don't do anything if we have already reached the end
         return *this;
       }
       scanCurrentPos();
-      _buffer_offset = 0;
+      _index = 0;
     }
     return *this;
   }
 
   std::array<Id, 3> operator*() {
-    return {_iterator->first, _buffer[_buffer_offset][0],
-            _buffer[_buffer_offset][1]};
+    return {_iterator.getId(), _idPairs[_index][0], _idPairs[_index][1]};
   }
 
-  bool empty() const { return _iterator == _endIterator; }
+  [[nodiscard]] bool empty() const { return _iterator == _endIterator; }
 
  private:
   void scanCurrentPos() {
-    auto id = _iterator->first;
-    CompressedRelationMetaData::scan(id, &_buffer, permutation_);
+    uint64_t id = _iterator.getId();
+    CompressedRelationMetaData::scan(id, &_idPairs, permutation_);
   }
-
-  const Permutation& permutation_;
-  typename Permutation::MetaData::MapType::ConstOrderedIterator _iterator;
-  typename Permutation::MetaData::MapType::ConstOrderedIterator _endIterator;
-
-  // This buffers the results of the scans we need to use to read the relations
-  std::vector<std::array<Id, 2>> _buffer;
-  size_t _buffer_offset;
 };

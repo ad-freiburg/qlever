@@ -38,12 +38,18 @@ auto testIterator = [](const auto& input, auto begin, auto end) {
 TEST(RandomAccessIterator, Vector) {
   std::vector<int> f{3, 62, 1023, -43817, 14, 42};
   using Iterator = ad_utility::IteratorForAccessOperator<
-      std::vector<int>, ad_utility::AccessViaBracketOperator>;
+      std::vector<int>, ad_utility::AccessViaBracketOperator, false>;
+
+  using ConstIterator = ad_utility::IteratorForAccessOperator<
+      std::vector<int>, ad_utility::AccessViaBracketOperator, true>;
 
   Iterator begin = Iterator{&f, 0};
   Iterator end = Iterator{&f, f.size()};
-
   testIterator(f, begin, end);
+
+  ConstIterator cbegin{&f, 0};
+  ConstIterator cend{&f, f.size()};
+  testIterator(f, cbegin, cend);
 }
 
 TEST(RandomAccessIterator, DummyRandomAccessContainer) {
