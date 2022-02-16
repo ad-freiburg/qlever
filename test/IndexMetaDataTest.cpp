@@ -96,18 +96,20 @@ TEST(IndexMetaDataTest, writeReadTest2Mmap) {
       imd.writeToFile(imdFilename);
     }
 
-    ad_utility::File in(imdFilename, "r");
-    IndexMetaDataMmap imd2;
-    imd2.setup(mmapFilename, ad_utility::ReuseTag());
-    imd2.readFromFile(&in);
+    {
+      ad_utility::File in(imdFilename, "r");
+      IndexMetaDataMmap imd2;
+      imd2.setup(mmapFilename, ad_utility::ReuseTag());
+      imd2.readFromFile(&in);
 
-    auto rmdFn = imd2.getMetaData(1);
-    auto rmdFn2 = imd2.getMetaData(2);
+      auto rmdFn = imd2.getMetaData(1);
+      auto rmdFn2 = imd2.getMetaData(2);
 
-    ASSERT_EQ(rmdF, rmdFn);
-    ASSERT_EQ(rmdF2, rmdFn2);
+      ASSERT_EQ(rmdF, rmdFn);
+      ASSERT_EQ(rmdF2, rmdFn2);
 
-    ASSERT_EQ(imd2.blockData(), bs);
+      ASSERT_EQ(imd2.blockData(), bs);
+    }
     ad_utility::deleteFile(imdFilename);
     ad_utility::deleteFile(mmapFilename);
 

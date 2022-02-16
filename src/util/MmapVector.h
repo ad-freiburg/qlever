@@ -293,6 +293,7 @@ class MmapVectorView : private MmapVector<T> {
   using iterator = typename MmapVector<T>::iterator;
   // const access and iteration methods, directly map to the MmapVector-Variants
   const_iterator begin() const { return MmapVector<T>::begin(); }
+  const T* data() const { return MmapVector<T>::data(); }
   const_iterator end() const { return MmapVector<T>::end(); }
   const_iterator cbegin() const { return MmapVector<T>::cbegin(); }
   const_iterator cend() const { return MmapVector<T>::cend(); }

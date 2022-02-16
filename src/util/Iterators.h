@@ -108,9 +108,15 @@ class IteratorForAccessOperator {
            static_cast<difference_type>(rhs._index);
   }
 
-  // TODO<joka921> Should these methods be "const"?
   decltype(auto) operator*() const { return _accessor(*_vector, _index); }
+  decltype(auto) operator*() { return _accessor(*_vector, _index); }
 
+  // Only allowed, if `RandomAccessContainer` yields references and not values
+  template <typename A = Accessor, typename P = Pointer>
+  requires requires(A a, P p, uint64_t i) {
+    {&a(*p, i)};
+  }
+  auto operator->() { return &(*(*this)); }
   template <typename A = Accessor, typename P = Pointer>
   requires requires(A a, P p, uint64_t i) {
     {&a(*p, i)};

@@ -45,10 +45,11 @@ TEST(RandomAccessIterator, Vector) {
 
   Iterator begin = Iterator{&f, 0};
   Iterator end = Iterator{&f, f.size()};
-
   testIterator(f, begin, end);
 
-  testIterator(f, begin, end);
+  ConstIterator cbegin{&f, 0};
+  ConstIterator cend{&f, f.size()};
+  testIterator(f, cbegin, cend);
 }
 
 TEST(RandomAccessIterator, DummyRandomAccessContainer) {
