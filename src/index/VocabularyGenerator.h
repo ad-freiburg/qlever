@@ -95,6 +95,7 @@ class VocabularyMerger {
 
   // close all associated files and MmapVectors and reset all internal variables
   void clear() {
+    _idManager = IdManager{};
     _totalWritten = 0;
     _lastTripleComponent = std::nullopt;
     _outfileExternal = std::ofstream();
@@ -106,8 +107,13 @@ class VocabularyMerger {
 
   // private data members
 
-  // the number of words we have written. This also is the global Id of the next
-  // word we see, unless it is is equal to the previous word
+  // Obtain the IDs for internal and external words. Internal words will get
+  // Milestone IDs, and external words will get ordinary IDs. If an external
+  // word "accidentally" gets a Milestone ID, it will be internalized.
+  using IdManager =
+      ad_utility::MilestoneIdManager<InternalExternalIdMilestoneDistance>;
+  IdManager _idManager;
+  // The number of words we have written. Only used for statistical purposes
   size_t _totalWritten = 0;
   // keep track of the last seen word to correctly handle duplicates
 

@@ -55,8 +55,11 @@ class VocabularyInMemory {
     return size() - 1;
   }
 
-  /// Return the `i-th` word. The behavior is undefined if `i >= size()`
-  auto operator[](uint64_t i) const { return _words[i]; }
+  /// Return the `i-th` word. Return `nullopt` if `i >= size()`
+  std::optional<std::string> operator[](uint64_t i) const {
+    auto view = _words[i];
+    return std::string(view.begin(), view.end());
+  }
 
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt. to the `comparator`. Only works correctly if the

@@ -123,6 +123,8 @@ TEST(Vocabulary, PrefixFilter) {
   voc.createFromSet(s);
 
   auto x = voc.prefix_range("\"exp");
-  ASSERT_EQ(x.first, 1u);
-  ASSERT_EQ(x.second, 2u);
+  auto idManager =
+      ad_utility::MilestoneIdManager<InternalExternalIdMilestoneDistance>{};
+  ASSERT_EQ(x.first, idManager.milestoneIdFromLocal(1u));
+  ASSERT_EQ(x.second, idManager.milestoneIdFromLocal(2u));
 }

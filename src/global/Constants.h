@@ -112,6 +112,10 @@ static constexpr size_t PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE = 5;
 // times this factor.
 static constexpr double MAKE_ROOM_SLACK_FACTOR = 2;
 
+// TODO<joka921> Comment, Currently this means 3 bytes for the "External part",
+// leaving 5 bytes for Internal IDs.
+static constexpr uint64_t InternalExternalIdMilestoneDistance = 256 * 256 * 256;
+
 inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::Double;
   using ad_utility::detail::parameterShortNames::SizeT;

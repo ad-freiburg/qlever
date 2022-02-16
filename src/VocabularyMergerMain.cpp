@@ -24,6 +24,11 @@ int main(int argc, char** argv) {
   auto internalVocabularyAction = [&file](const auto& word) {
     file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
   };
-  m.mergeVocabulary(basename, numFiles, TripleComponentComparator(),
-                    internalVocabularyAction);
+  auto sortPred = [cmp = TripleComponentComparator()](
+                      std::string_view a, std::string_view b,
+                      bool aExternalized, bool bExternalized) {
+    return cmp(a, b, TripleComponentComparator::Level::TOTAL, aExternalized,
+               bExternalized);
+  };
+  m.mergeVocabulary(basename, numFiles, sortPred, internalVocabularyAction);
 }

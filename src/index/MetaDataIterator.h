@@ -38,15 +38,28 @@ class MetaDataIterator {
   }
 
   std::array<Id, 3> operator*() {
-    return {_iterator->first, _buffer[_buffer_offset][0],
-            _buffer[_buffer_offset][1]};
+    if constexpr (ad_utility::isSimilar<CompressedRelationMetaData,
+                                        decltype(*_iterator)>) {
+      return {_iterator->_col0Id, _buffer[_buffer_offset][0],
+              _buffer[_buffer_offset][1]};
+
+    } else {
+      return {_iterator->first, _buffer[_buffer_offset][0],
+              _buffer[_buffer_offset][1]};
+    }
   }
 
   bool empty() const { return _iterator == _endIterator; }
 
  private:
   void scanCurrentPos() {
-    auto id = _iterator->first;
+    uint64_t id;
+    if constexpr (ad_utility::isSimilar<CompressedRelationMetaData,
+                                        decltype(*_iterator)>) {
+      id = _iterator->_col0Id;
+    } else {
+      id = _iterator->first;
+    }
     CompressedRelationMetaData::scan(id, &_buffer, permutation_);
   }
 

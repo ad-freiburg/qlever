@@ -86,9 +86,7 @@ TEST(IndexMetaDataTest, writeReadTest2Mmap) {
     // force destruction to close and reopen the mmap-File
     {
       IndexMetaDataMmap imd;
-      // size of 3 would suffice, but we also want to simulate the sparseness
-      imd.setup(5, CompressedRelationMetaData::emptyMetaData(),
-                "_testtmp.imd.mmap");
+      imd.setup("_testtmp.imd.mmap", ad_utility::CreateTag{});
       imd.add(rmdF);
       imd.add(rmdF2);
       imd.blockData() = bs;
