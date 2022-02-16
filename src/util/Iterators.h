@@ -10,9 +10,10 @@ namespace ad_utility {
 /// A lambda that accesses the `i`-th element in a `randomAccessContainer`
 /// using `operator[]`
 inline auto accessViaBracketOperator = [](auto&& randomAccessContainer,
-                                          auto i) {
+                                          auto i) -> decltype(auto) {
   return randomAccessContainer[i];
 };
+
 using AccessViaBracketOperator = decltype(accessViaBracketOperator);
 
 /**
@@ -27,7 +28,7 @@ using AccessViaBracketOperator = decltype(accessViaBracketOperator);
  * be legal to call the accessor for all `i` in `[a, b)`.
  */
 template <typename RandomAccessContainer,
-          typename Accessor = AccessViaBracketOperator>
+          typename Accessor = AccessViaBracketOperator, bool IsConst = true>
 class IteratorForAccessOperator {
  public:
   using iterator_category = std::random_access_iterator_tag;
@@ -37,13 +38,15 @@ class IteratorForAccessOperator {
   using difference_type = int64_t;
 
  private:
-  const RandomAccessContainer* _vector = nullptr;
+  using Pointer = std::conditional_t<IsConst, const RandomAccessContainer*,
+                                     RandomAccessContainer*>;
+  Pointer _vector = nullptr;
   index_type _index{0};
   Accessor _accessor{};
 
  public:
   IteratorForAccessOperator() = default;
-  IteratorForAccessOperator(const RandomAccessContainer* vec, index_type index)
+  IteratorForAccessOperator(Pointer vec, index_type index)
       : _vector{vec}, _index{index} {}
 
   // Comparisons
@@ -105,7 +108,14 @@ class IteratorForAccessOperator {
            static_cast<difference_type>(rhs._index);
   }
 
+  // TODO<joka921> Should these methods be "const"?
   decltype(auto) operator*() const { return _accessor(*_vector, _index); }
+
+  template <typename A = Accessor, typename P = Pointer>
+  requires requires(A a, P p, uint64_t i) {
+    {&a(*p, i)};
+  }
+  auto operator->() const { return &(*(*this)); }
 
   decltype(auto) operator[](difference_type n) const {
     return _accessor(*_vector, _index + n);

@@ -593,14 +593,7 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
     // permutation is inefficient. So it is fine to use const_cast here as an
     // exception: we delibarately write to a read-only data structure and are
     // knowing what we are doing
-    Id id;
-    if constexpr (ad_utility::isSimilar<CompressedRelationMetaData,
-                                        decltype(*it)>) {
-      id = it->_col0Id;
-    } else {
-      id = it->first;
-    }
-
+    Id id = it.getId();
     m2->data()[id].setCol2Multiplicity(m1->data()[id].getCol1Multiplicity());
     m1->data()[id].setCol2Multiplicity(m2->data()[id].getCol1Multiplicity());
   }

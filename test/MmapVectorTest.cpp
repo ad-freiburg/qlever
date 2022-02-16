@@ -224,7 +224,14 @@ TEST(MmapVectorTest, nonConstIterators) {
   ASSERT_NE(nullptr, v.begin());
   ASSERT_EQ(v.begin() + s, v.end());
 
+  /*
   for (auto& x : v) {
+    ++x;
+  }
+   */
+
+  for (auto it = v.begin(); it != v.end(); ++it) {
+    auto& x = *it;
     ++x;
   }
 

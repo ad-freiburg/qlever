@@ -17,8 +17,19 @@
 template <class M>
 class MetaDataWrapperDense {
  public:
-  using Iterator = typename M::iterator;
-  using ConstIterator = typename M::const_iterator;
+  struct Iterator : public M::iterator {
+    using Base = typename M::iterator;
+    using Base::Base;
+    Iterator(Base base) : Base{base} {}
+    uint64_t getId() const { return (*this)->_col0Id; }
+  };
+
+  struct ConstIterator : public M::const_iterator {
+    using Base = typename M::const_iterator;
+    using Base::Base;
+    ConstIterator(Base base) : Base{base} {}
+    uint64_t getId() const { return (*(*this))._col0Id; }
+  };
   // The underlying array is sorted, so all iterators are ordered iterators
   using ConstOrderedIterator = ConstIterator;
 
@@ -41,8 +52,8 @@ class MetaDataWrapperDense {
     _vec = M(args...);
   }
 
-  // The serialization is a noop. The
-  // external vector has to be restored via the `setup()` call.
+  // The serialization is a noop because all the data always stays on disk.
+  // The initialization is done via `setup`.
   template <typename Serializer>
   friend void serialize([[maybe_unused]] Serializer& serializer,
                         [[maybe_unused]] MetaDataWrapperDense& wrapper) {}
@@ -103,13 +114,13 @@ class MetaDataWrapperDense {
   std::string getFilename() const { return _vec.getFilename(); }
 
  private:
-  auto lower_bound(Id id) const {
+  ConstIterator lower_bound(Id id) const {
     auto cmp = [](const auto& metaData, Id id) {
       return metaData._col0Id < id;
     };
     return std::lower_bound(_vec.begin(), _vec.end(), id, cmp);
   }
-  auto lower_bound(Id id) {
+  Iterator lower_bound(Id id) {
     auto cmp = [](const auto& metaData, Id id) {
       return metaData._col0Id < id;
     };
@@ -122,8 +133,20 @@ class MetaDataWrapperDense {
 template <class hashMap>
 class MetaDataWrapperHashMap {
  public:
-  using ConstIterator = typename hashMap::const_iterator;
-  using Iterator = typename hashMap::iterator;
+  struct Iterator : public hashMap::iterator {
+    using Base = typename hashMap::iterator;
+    using Base::Base;
+    Iterator(Base base) : Base{base} {}
+    uint64_t getId() const { return (*this)->first; }
+  };
+
+  struct ConstIterator : public hashMap::const_iterator {
+    using Base = typename hashMap::const_iterator;
+    using Base::Base;
+    ConstIterator(Base base) : Base{base} {}
+    uint64_t getId() const { return (*this)->first; }
+  };
+
   using value_type = typename hashMap::mapped_type;
 
   // An iterator on the underlying hashMap that iterates over the elements
@@ -179,6 +202,9 @@ class MetaDataWrapperHashMap {
     bool operator==(const ConstOrderedIterator& rhs) const {
       return position_ == rhs.position_;
     }
+
+    // ________________________________________________________________________
+    uint64_t getId() const { return (*this)->first; }
   };
 
   // nothing to do here, since the default constructor of the hashMap does
