@@ -13,90 +13,14 @@
 #include "../util/Log.h"
 #include "./CompressedRelation.h"
 
-// _____________________________________________________________
-// hidden in implementation namespace
-namespace VecWrapperImpl {
-template <class Vec>
-// iterator class for a unordered_map interface based on an array with the size
-// of the key space. access is done by the index, and when iterating, we have
-// to skip the empty entries. Needs an empty key to work properly
-class Iterator {
- public:
-  using iterator_category = std::forward_iterator_tag;
-  using value_type = CompressedRelationMetaData;
-
-  // _________________________________________________
-  std::pair<Id, const value_type&> operator*() const {
-    // make sure that we do not conflict with the empty key
-    AD_CHECK(_id != size_t(-1));
-    return std::make_pair(_id, std::cref(*_it));
-  }
-
-  // _________________________________________________
-  std::pair<Id, std::reference_wrapper<const value_type>>* operator->() const {
-    // make sure that we do not conflict with the empty key
-    AD_CHECK(_id != size_t(-1));
-    _accessPair = **this;
-    return &_accessPair;
-  }
-
-  // _____________________________________________________________
-  Iterator(Id id, const typename Vec::const_iterator& it, const Vec* const vec)
-      : _id(id), _it(it), _accessPair(**this), _vec(vec) {}
-
-  // ________________________________________________
-  Iterator& operator++() {
-    ++_id;
-    ++_it;
-    goToNexValidEntry();
-
-    return *this;
-  }
-
-  // ___________________________________________________
-  void goToNexValidEntry() {
-    while (_it != _vec->cend() && (*_it) == emptyMetaData) {
-      ++_id;
-      ++_it;
-    }
-  }
-
-  // ________________________________________________
-  Iterator operator++(int) {
-    Iterator old(*this);
-    ++_id;
-    ++_it;
-    goToNexValidEntry();
-    return old;
-  }
-
-  // _______________________________________________
-  bool operator==(const Iterator& other) const { return _it == other._it; }
-
-  // _______________________________________________
-  bool operator!=(const Iterator& other) const { return _it != other._it; }
-
- private:
-  Id _id;
-  typename Vec::const_iterator _it;
-  // here we store the pair needed for operator->()
-  // will be updated before each access
-  mutable std::pair<Id, std::reference_wrapper<const value_type>> _accessPair;
-  const Vec* const _vec;
-
-  const value_type emptyMetaData = value_type::emptyMetaData();
-};
-}  // namespace VecWrapperImpl
-
 // _____________________________________________________________________
 template <class M>
 class MetaDataWrapperDense {
  public:
-  using Iterator = VecWrapperImpl::Iterator<M>;
-  // The VecWrapperImpl::Iterator is actually const
-  using ConstIterator = VecWrapperImpl::Iterator<M>;
-  // The VecWrapperImpl::Iterator iterates in order;
-  using ConstOrderedIterator = VecWrapperImpl::Iterator<M>;
+  using Iterator = typename M::iterator;
+  using ConstIterator = typename M::const_iterator;
+  // The underlying array is sorted, so all iterators are ordered iterators
+  using ConstOrderedIterator = ConstIterator;
 
   using value_type = typename M::value_type;
 
@@ -104,108 +28,93 @@ class MetaDataWrapperDense {
   MetaDataWrapperDense() = default;
 
   // ________________________________________________________
-  MetaDataWrapperDense(MetaDataWrapperDense<M>&& other)
-      : _size(other._size), _vec(std::move(other._vec)) {}
+  MetaDataWrapperDense(MetaDataWrapperDense<M>&& other) = default;
 
   // ______________________________________________________________
-  MetaDataWrapperDense& operator=(MetaDataWrapperDense<M>&& other) {
-    _size = other._size;
-    _vec = std::move(other._vec);
-    return *this;
-  }
+  MetaDataWrapperDense& operator=(MetaDataWrapperDense<M>&& other) = default;
 
   // Templated setup version
   // Arguments are passsed through to template argument M.
   // TODO<joka921>: enable_if  for better error messages
   template <typename... Args>
   void setup(Args... args) {
-    // size has to be set correctly by a call to setSize(), this is done
-    // via the serialization
-    _size = 0;
     _vec = M(args...);
   }
 
-  // The serialization only affects the (important!) `_size` member. The
+  // The serialization is a noop. The
   // external vector has to be restored via the `setup()` call.
   template <typename Serializer>
-  friend void serialize(Serializer& serializer, MetaDataWrapperDense& wrapper) {
-    serializer | wrapper._size;
-  }
+  friend void serialize([[maybe_unused]] Serializer& serializer,
+                        [[maybe_unused]] MetaDataWrapperDense& wrapper) {}
 
   // ___________________________________________________________
-  size_t size() const { return _size; }
-
-  // ___________________________________________________________
-  void setSize(size_t newSize) { _size = newSize; }
+  size_t size() const { return _vec.size(); }
 
   // __________________________________________________________________
-  Iterator cbegin() const {
-    Iterator it(0, _vec.cbegin(), &_vec);
-    it.goToNexValidEntry();
-    return it;
-  }
+  ConstIterator cbegin() const { return _vec.begin(); }
 
   // __________________________________________________________________
-  Iterator begin() const {
-    Iterator it(0, _vec.begin(), &_vec);
-    it.goToNexValidEntry();
-    return it;
-  }
+  Iterator begin() { return _vec.begin(); }
+
+  // __________________________________________________________________
+  ConstIterator begin() const { return _vec.begin(); }
 
   // __________________________________________________________________________
   ConstOrderedIterator ordered_begin() const { return begin(); }
 
   // __________________________________________________________________________
-  Iterator cend() const { return Iterator(_vec.size(), _vec.cend(), &_vec); }
+  ConstIterator cend() const { return _vec.end(); }
 
   // __________________________________________________________________________
-  Iterator end() const { return Iterator(_vec.size(), _vec.end(), &_vec); }
+  ConstIterator end() const { return _vec.end(); }
+  Iterator end() { return _vec.end(); }
 
   // __________________________________________________________________________
   ConstOrderedIterator ordered_end() const { return end(); }
 
   // ____________________________________________________________
   void set(Id id, const value_type& value) {
-    if (id >= _vec.size()) {
-      AD_CHECK(id < _vec.size());
-    }
-    bool previouslyEmpty = _vec[id] == emptyMetaData;
-
-    // check that we never insert the empty key
-    assert(value != emptyMetaData);
-    _vec[id] = value;
-    if (previouslyEmpty) {
-      _size++;
-    }
+    // Assert that the ids are ascending.
+    AD_CHECK(_vec.size() == 0 || _vec.back()._col0Id < id);
+    _vec.push_back(value);
   }
 
   // __________________________________________________________
   const value_type& getAsserted(Id id) const {
-    const auto& res = _vec[id];
-    AD_CHECK(res != emptyMetaData);
-    return res;
+    auto it = lower_bound(id);
+    AD_CHECK(it != _vec.end() && it->_col0Id == id);
+    return *it;
   }
 
   // _________________________________________________________
   value_type& operator[](Id id) {
-    auto& res = _vec[id];
-    AD_CHECK(res != emptyMetaData);
-    return res;
+    auto it = lower_bound(id);
+    AD_CHECK(it != _vec.end() && it->_col0Id == id);
+    return *it;
   }
 
   // ________________________________________________________
   size_t count(Id id) const {
-    // can either be 1 or 0 for map-like types
-    return _vec[id] != emptyMetaData;
+    auto it = lower_bound(id);
+    return it != _vec.end() && it->_col0Id == id;
   }
 
   // ___________________________________________________________
   std::string getFilename() const { return _vec.getFilename(); }
 
  private:
-  // the empty key, must be the first member to be initialized
-  const value_type emptyMetaData = value_type::emptyMetaData();
-  size_t _size = 0;
+  auto lower_bound(Id id) const {
+    auto cmp = [](const auto& metaData, Id id) {
+      return metaData._col0Id < id;
+    };
+    return std::lower_bound(_vec.begin(), _vec.end(), id, cmp);
+  }
+  auto lower_bound(Id id) {
+    auto cmp = [](const auto& metaData, Id id) {
+      return metaData._col0Id < id;
+    };
+    return std::lower_bound(_vec.begin(), _vec.end(), id, cmp);
+  }
   M _vec;
 };
 
