@@ -8,6 +8,8 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <stxxl/sorter>
+#include <stxxl/stream>
 #include <stxxl/vector>
 #include <vector>
 
@@ -20,6 +22,7 @@
 #include "../util/File.h"
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
+#include "../util/ParallelStxxlSorter.h"
 #include "../util/Timer.h"
 #include "../util/json.h"
 #include "./CompressedRelation.h"
@@ -27,6 +30,7 @@
 #include "./DocsDB.h"
 #include "./IndexBuilderTypes.h"
 #include "./IndexMetaData.h"
+#include "./PatternCreator.h"
 #include "./Permutations.h"
 #include "./StxxlSortFunctors.h"
 #include "./TextMetaData.h"
@@ -43,6 +47,12 @@ using std::vector;
 
 using json = nlohmann::json;
 
+template <typename Comparator>
+using StxxlSorter =
+    ad_utility::BackgroundStxxlSorter<std::array<Id, 3>, Comparator>;
+
+using PsoSorter = StxxlSorter<SortByPSO>;
+
 // A simple struct for better naming.
 struct VocabularyData {
   using TripleVec = stxxl::vector<array<Id, 3>>;
@@ -56,7 +66,9 @@ struct VocabularyData {
   // triples)
   std::vector<size_t> actualPartialSizes;
   // All the triples as Ids.
-  std::unique_ptr<TripleVec> idTriples;
+  std::variant<std::unique_ptr<TripleVec>,
+               std::unique_ptr<StxxlSorter<SortByPSO>>>
+      idTriples;
 };
 
 /**
@@ -444,7 +456,6 @@ class Index {
   bool _loadAllPermutations = true;
 
   // Pattern trick data
-  static const uint32_t PATTERNS_FILE_VERSION;
   bool _usePatterns;
   size_t _maxNumPatterns;
   double _fullHasPredicateMultiplicityEntities;
@@ -495,23 +506,24 @@ class Index {
    */
   std::future<void> writeNextPartialVocabulary(
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-      std::unique_ptr<ItemMapArray> items, std::unique_ptr<TripleVec> localIds,
+      std::unique_ptr<ItemMapArray> items, auto localIds,
       ad_utility::Synchronized<TripleVec::bufwriter_type>* globalWritePtr);
 
-  void convertPartialToGlobalIds(TripleVec& data,
-                                 const vector<size_t>& actualLinesPerPartial,
-                                 size_t linesPerPartial);
+  std::unique_ptr<StxxlSorter<SortByPSO>> convertPartialToGlobalIds(
+      TripleVec& data, const vector<size_t>& actualLinesPerPartial,
+      size_t linesPerPartial);
 
   size_t passContextFileForVocabulary(const string& contextFile);
 
   void passContextFileIntoVector(const string& contextFile, TextVec& vec);
 
-  template <class MetaDataDispatcher>
+  template <class MetaDataDispatcher, typename Sorter, typename NextSorter>
   std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                           typename MetaDataDispatcher::WriteType>>
   createPermutationPairImpl(const string& fileName1, const string& fileName2,
-                            const Index::TripleVec& vec, size_t c0, size_t c1,
-                            size_t c2);
+                            Sorter& vec, size_t c0, size_t c1, size_t c2,
+                            NextSorter* nextSorter,
+                            std::optional<PatternCreator> patternCreator);
 
   void writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
                         ad_utility::BufferedVector<array<Id, 2>>* bufPtr);
@@ -527,16 +539,15 @@ class Index {
   // the SPO permutation is also needed for patterns (see usage in
   // Index::createFromFile function)
 
-  enum class PerformUnique { True, False };
-  template <class MetaDataDispatcher, class Comparator1, class Comparator2>
+  template <class MetaDataDispatcher, class Comparator1, class Comparator2,
+            typename NextSorter>
   void createPermutationPair(
-      VocabularyData* vocabularyData,
+      auto vocabularyData,
       const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
-      PerformUnique performUnique = PerformUnique::False,
-      bool createPatternsAfterFirst = false);
+      NextSorter* nextSorter, std::optional<PatternCreator> patternCreator);
 
   // The pairs of permutations are PSO-POS, OSP-OPS and SPO-SOP
   // the multiplicity of column 1 in partner 1 of the pair is equal to the
@@ -555,35 +566,17 @@ class Index {
   // Careful: only multiplicities for first column is valid after call, need to
   // call exchangeMultiplicities as done by createPermutationPair
   // the optional is std::nullopt if vec and thus the index is empty
-  template <class MetaDataDispatcher, class Comparator1, class Comparator2>
+  template <class MetaDataDispatcher, class Comparator1, class Comparator2,
+            typename NextSorter>
   std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                           typename MetaDataDispatcher::WriteType>>
   createPermutations(
-      TripleVec* vec,
+      auto vec,
       const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
-      PerformUnique performUnique);
-
-  /**
-   * @brief Creates the data required for the "pattern-trick" used for fast
-   *        ql:has-relation evaluation when selection relation counts.
-   * @param fileName The name of the file in which the data should be stored
-   * @param args The arguments that need to be passed to the constructor of
-   *             VecReaderType. VecReaderType should allow for iterating over
-   *             the tuples of the spo permutation after having been constructed
-   *             using args.
-   */
-  template <typename VecReaderType, typename... Args>
-  void createPatternsImpl(
-      const string& fileName, CompactVectorOfStrings<Id>& hasPredicate,
-      std::vector<PatternID>& hasPattern, CompactVectorOfStrings<Id>& patterns,
-      double& fullHasPredicateMultiplicityEntities,
-      double& fullHasPredicateMultiplicityPredicates,
-      size_t& fullHasPredicateSize, const size_t maxNumPatterns,
-      const Id langPredLowerBound, const Id langPredUpperBound,
-      const Args&... vecReaderArgs);
+      NextSorter* nextSorter, std::optional<PatternCreator> patternCreator);
 
   // wrap the static function using the internal member variables
   // the bool indicates wether the TripleVec has to be sorted before the pattern

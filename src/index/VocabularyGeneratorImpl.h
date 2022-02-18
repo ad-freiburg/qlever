@@ -249,7 +249,7 @@ ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* elsPtr) {
 }
 
 // ________________________________________________________________________________________________________
-void writeMappedIdsToExtVec(const TripleVec& input,
+void writeMappedIdsToExtVec(const auto& input,
                             const ad_utility::HashMap<Id, Id>& map,
                             TripleVec::bufwriter_type* writePtr) {
   auto& writer = *writePtr;
