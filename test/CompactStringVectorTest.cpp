@@ -138,8 +138,7 @@ TEST(CompactVectorOfStrings, SerializationWithPushMiddleOfFile) {
         w.push(s.data(), s.size());
       }
       w.finish();
-      fileWriter =
-          ad_utility::serialization::FileWriteSerializer{std::move(w).file()};
+      fileWriter = ad_utility::serialization::FileWriteSerializer{filename};
       fileWriter << -3;
     }
 

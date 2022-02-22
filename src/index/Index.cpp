@@ -177,7 +177,6 @@ void Index::createFromFile(const string& filename) {
 
     // For the last pair of permutations we don't need a next sorter, so we just
     // pass in the dummy.
-    ad_utility::StxxlDummySorter dummySorter{};
     createPermutationPair<IndexMetaDataMmapDispatcher>(&ospSorter, _OSP, _OPS);
     _configurationJson["has-all-permutations"] = true;
   } else {

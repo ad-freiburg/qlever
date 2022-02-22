@@ -303,11 +303,13 @@ struct CompactStringVectorWriter {
     _file.write(data, elementSize * sizeof(data_type));
   }
 
+  /*
   // Finish writing and move the file out.
   ad_utility::File file() && {
     finish();
     return std::move(_file);
   }
+   */
 
   void finish() {
     if (_finished) {
@@ -321,8 +323,8 @@ struct CompactStringVectorWriter {
     f << _offsets;
     _finished = true;
     // Move the file back, so we can still retrieve it via the `file()` method
-    _file = std::move(f).file();
-    _file.flush();
+    //_file = std::move(f).file();
+    //_file.flush();
   }
 
   ~CompactStringVectorWriter() {

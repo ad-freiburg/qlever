@@ -94,7 +94,7 @@ class BackgroundStxxlSorter {
     if (_outputIndex >= _buffer.size()) {
       fill_output_buffer();
     }
-    return (_outputIndex < _buffer.size());
+    return (_outputIndex >= _buffer.size());
   }
 
   decltype(auto) operator*() const { return _buffer[_outputIndex]; }
@@ -114,7 +114,8 @@ class BackgroundStxxlSorter {
       }
       return buffer;
     };
-    if (!_mergeInBackgroundFuture.valid() && !_sorter.empty) {
+
+    if (!_mergeInBackgroundFuture.valid() && !_sorter.empty()) {
       // If we have reached here, this is the first time we fill the buffer,
       // Fill the buffer synchronously and immediately start the next
       // asynchronous operation.
