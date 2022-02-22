@@ -457,7 +457,6 @@ class Index {
 
   // Pattern trick data
   bool _usePatterns;
-  size_t _maxNumPatterns;
   double _fullHasPredicateMultiplicityEntities;
   double _fullHasPredicateMultiplicityPredicates;
   size_t _fullHasPredicateSize;
@@ -523,7 +522,7 @@ class Index {
   createPermutationPairImpl(const string& fileName1, const string& fileName2,
                             Sorter& vec, size_t c0, size_t c1, size_t c2,
                             NextSorter* nextSorter,
-                            std::optional<PatternCreator> patternCreator);
+                            auto&& additionalTripleAction);
 
   void writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
                         ad_utility::BufferedVector<array<Id, 2>>* bufPtr);
@@ -547,7 +546,7 @@ class Index {
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
-      NextSorter* nextSorter, std::optional<PatternCreator> patternCreator);
+      NextSorter* nextSorter, auto&& additionalTripleAction);
 
   // The pairs of permutations are PSO-POS, OSP-OPS and SPO-SOP
   // the multiplicity of column 1 in partner 1 of the pair is equal to the
@@ -576,7 +575,7 @@ class Index {
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
-      NextSorter* nextSorter, std::optional<PatternCreator> patternCreator);
+      NextSorter* nextSorter, auto&& additionalTripleAction);
 
   // wrap the static function using the internal member variables
   // the bool indicates wether the TripleVec has to be sorted before the pattern

@@ -28,9 +28,7 @@
 using std::array;
 
 // _____________________________________________________________________________
-Index::Index()
-    : _usePatterns(false),
-      _maxNumPatterns(std::numeric_limits<PatternID>::max() - 2) {}
+Index::Index() : _usePatterns(false) {}
 
 // _____________________________________________________________________________
 template <class Parser>
@@ -88,8 +86,6 @@ void Index::createFromFile(const string& filename) {
     vocabData = createIdTriplesAndVocab<Parser>(filename);
   }
 
-  /* TODO<joka921> Currently disable the prefix compression for faster
-  iterations
   // If we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
   // hurt.
@@ -134,15 +130,16 @@ void Index::createFromFile(const string& filename) {
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.
   writeConfiguration();
-   */
 
   // For the first permutation, perform a unique.
   StxxlSorter<SortBySPO> spoSorter{STXXL_MEMORY_TO_USE};
   auto& psoSorter = *std::get<1>(vocabData.idTriples);
   psoSorter.sort();
   ad_utility::StxxlUniqueSorter uniqueSorter{psoSorter};
+
+  auto doNothing = [](auto&&...) {};
   createPermutationPair<IndexMetaDataHmapDispatcher>(&uniqueSorter, _PSO, _POS,
-                                                     &spoSorter, std::nullopt);
+                                                     &spoSorter, doNothing);
   LOG(INFO) << "After createPermutation pair outside" << std::endl;
 
   if (_loadAllPermutations) {
@@ -152,25 +149,31 @@ void Index::createFromFile(const string& filename) {
     LOG(INFO) << "Created the sorter" << std::endl;
     spoSorter.sort();
     LOG(INFO) << "Sorted the sorter" << std::endl;
-    std::optional<PatternCreator> patternCreator =
-        _usePatterns ? PatternCreator{_onDiskBase + ".index.patterns",
-                                      _hasPattern,
-                                      _patterns,
-                                      _fullHasPredicateMultiplicityEntities,
-                                      _fullHasPredicateMultiplicityPredicates,
-                                      _fullHasPredicateSize,
-                                      vocabData.langPredLowerBound,
-                                      vocabData.langPredUpperBound}
-                     : std::optional<PatternCreator>{std::nullopt};
-    createPermutationPair<IndexMetaDataMmapDispatcher>(
-        &spoSorter, _SPO, _SOP, &ospSorter, std::move(patternCreator));
+    if (_usePatterns) {
+      auto ignoreLanguagePredicates =
+          [lower = vocabData.langPredLowerBound,
+           upper = vocabData.langPredUpperBound](const auto& id) {
+            return id >= lower && id < upper;
+          };
+      PatternCreator patternCreator{_onDiskBase + ".index.patterns",
+                                    ignoreLanguagePredicates};
+      auto pushTripleToPatterns = [&patternCreator](const auto& triple) {
+        patternCreator.pushTriple(triple);
+      };
+      createPermutationPair<IndexMetaDataMmapDispatcher>(
+          &spoSorter, _SPO, _SOP, &ospSorter, pushTripleToPatterns);
+      patternCreator.finish();
+    } else {
+      createPermutationPair<IndexMetaDataMmapDispatcher>(&spoSorter, _SPO, _SOP,
+                                                         &ospSorter, doNothing);
+    }
     ospSorter.sort();
 
     // For the last pair of permutations we don't need a next sorter, so we just
     // pass in the dummy.
     ad_utility::StxxlDummySorter dummySorter{};
-    createPermutationPair<IndexMetaDataMmapDispatcher>(
-        &ospSorter, _OSP, _OPS, &dummySorter, std::nullopt);
+    createPermutationPair<IndexMetaDataMmapDispatcher>(&ospSorter, _OSP, _OPS,
+                                                       &dummySorter, doNothing);
     _configurationJson["has-all-permutations"] = true;
   } else {
     if (_usePatterns) {
@@ -438,10 +441,11 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
 template <class MetaDataDispatcher, typename Sorter, typename NextSorter>
 std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                         typename MetaDataDispatcher::WriteType>>
-Index::createPermutationPairImpl(
-    const string& fileName1, const string& fileName2, Sorter& triples,
-    size_t c0, size_t c1, size_t c2, NextSorter* nextSorter,
-    std::optional<PatternCreator> patternsCreator) {
+Index::createPermutationPairImpl(const string& fileName1,
+                                 const string& fileName2, Sorter& triples,
+                                 size_t c0, size_t c1, size_t c2,
+                                 NextSorter* nextSorter,
+                                 auto&& nextTripleAction) {
   using MetaData = typename MetaDataDispatcher::WriteType;
   MetaData metaData1, metaData2;
   if constexpr (metaData1._isMmapBased) {
@@ -474,9 +478,7 @@ Index::createPermutationPairImpl(
   uint64_t totalNumTriples = 0;
   while (!triples.empty()) {
     auto triple = *triples;
-    if (patternsCreator.has_value()) {
-      patternsCreator->pushTriple(triple);
-    }
+    nextTripleAction(triple);
     ++triples;
     ++totalNumTriples;
     nextSorter->push(triple);
@@ -507,10 +509,6 @@ Index::createPermutationPairImpl(
   if (from < totalNumTriples) {
     writer1.addRelation(currentRel, buffer, distinctCol1, functional);
     writeSwitchedRel(&writer2, currentRel, &buffer);
-  }
-
-  if (patternsCreator.has_value()) {
-    patternsCreator->finish();
   }
 
   writer1.finish();
@@ -567,11 +565,12 @@ Index::createPermutations(
         p1,
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
-    NextSorter* nextSorter, std::optional<PatternCreator> createPatterns) {
+    NextSorter* nextSorter, auto&& nextTripleAction) {
   auto metaData = createPermutationPairImpl<MetaDataDispatcher>(
       _onDiskBase + ".index" + p1._fileSuffix,
       _onDiskBase + ".index" + p2._fileSuffix, *vec, p1._keyOrder[0],
-      p1._keyOrder[1], p1._keyOrder[2], nextSorter, std::move(createPatterns));
+      p1._keyOrder[1], p1._keyOrder[2], nextSorter,
+      std::forward<decltype(nextTripleAction)>(nextTripleAction));
 
   if (metaData.has_value()) {
     auto& mdv = metaData.value();
@@ -593,9 +592,10 @@ void Index::createPermutationPair(
         p1,
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
-    NextSorter* nextSorter, std::optional<PatternCreator> createPatterns) {
+    NextSorter* nextSorter, auto&& additionalTripleAction) {
   auto metaData = createPermutations<MetaDataDispatcher>(
-      vocabularyData, p1, p2, nextSorter, std::move(createPatterns));
+      vocabularyData, p1, p2, nextSorter,
+      std::forward<decltype(additionalTripleAction)>(additionalTripleAction));
   if (metaData) {
     LOG(INFO) << "Exchanging multiplicities for " << p1._readableName << " and "
               << p2._readableName << " ..." << std::endl;
@@ -629,41 +629,19 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
-  LOG(ERROR) << "Adding patterns to an existing index is currently not allowed"
-             << std::endl;
-  AD_CHECK(false);
-  /*
   auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
-  createPatternsImpl<MetaDataIterator<Permutation::SPO_T>, Permutation::SPO_T>(
-      _onDiskBase + ".index.patterns", _hasPredicate, _hasPattern, _patterns,
-      _fullHasPredicateMultiplicityEntities,
-      _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
-      _maxNumPatterns, langPredLowerBound, langPredUpperBound, _SPO);
-      */
-}
-
-// _____________________________________________________________________________
-void Index::createPatterns(bool isSortedSPO, VocabularyData* vocabData) {
-  LOG(ERROR) << "Pattern creation via this method is currently not supported"
-             << std::endl;
-  AD_CHECK(false);
-  /*
-  // The first argument means that the triples are not yet sorted according
-  // to SPO.
-  if (isSortedSPO) {
-    LOG(DEBUG) << "Triples are already sorted by SPO for pattern creation"
-               << std::endl;
-  } else {
-    LOG(ERROR) << "Pattern creation is not legal for an input that is not sorted
-  according to the SPO permutation" << std::endl; AD_CHECK(false);
+  auto ignoreLanguagePredicates = [lower = langPredLowerBound,
+                                   upper = langPredUpperBound](const auto& id) {
+    return id >= lower && id < upper;
+  };
+  PatternCreator patternCreator{_onDiskBase + ".index.patterns",
+                                ignoreLanguagePredicates};
+  auto iterator = MetaDataIterator<Permutation::SPO_T>{_SPO};
+  while (!iterator.empty()) {
+    patternCreator.pushTriple(*iterator);
+    ++iterator;
   }
-  createPatternsImpl<TripleVec::bufreader_type>(
-      _onDiskBase + ".index.patterns", _hasPredicate, _hasPattern, _patterns,
-      _fullHasPredicateMultiplicityEntities,
-      _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
-      _maxNumPatterns, vocabData->langPredLowerBound,
-      vocabData->langPredUpperBound, *vocabData->idTriples);
-      */
+  patternCreator.finish();
 }
 
 // _____________________________________________________________________________
@@ -691,99 +669,10 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   }
 
   if (_usePatterns) {
-    // Read the pattern info from the patterns file.
-    std::string patternsFilePath = _onDiskBase + ".index.patterns";
-    LOG(INFO) << "Reading patterns from file " << patternsFilePath << " ..."
-              << std::endl;
-    ad_utility::File patternsFile;
-    patternsFile.open(patternsFilePath, "r");
-    AD_CHECK(patternsFile.isOpen());
-    off_t off = 0;
-    unsigned char firstByte;
-    patternsFile.read(&firstByte, sizeof(char), off);
-    off++;
-    uint32_t version;
-    patternsFile.read(&version, sizeof(uint32_t), off);
-    off += sizeof(uint32_t);
-    if (version != PATTERNS_FILE_VERSION || firstByte != 255) {
-      version = firstByte == 255 ? version : -1;
-      _usePatterns = false;
-      patternsFile.close();
-      std::ostringstream oss;
-      oss << "The patterns file " << patternsFilePath << " version of "
-          << version << " does not match the programs pattern file "
-          << "version of " << PATTERNS_FILE_VERSION << ". Rebuild the index"
-          << " or start the query engine without pattern support." << std::endl;
-      throw std::runtime_error(std::move(oss).str());
-    } else {
-      patternsFile.read(&_fullHasPredicateMultiplicityEntities, sizeof(double),
-                        off);
-      off += sizeof(double);
-      patternsFile.read(&_fullHasPredicateMultiplicityPredicates,
-                        sizeof(double), off);
-      off += sizeof(double);
-      patternsFile.read(&_fullHasPredicateSize, sizeof(size_t), off);
-      off += sizeof(size_t);
-
-      // read the entity has patterns vector
-      size_t hasPatternSize;
-      patternsFile.read(&hasPatternSize, sizeof(size_t), off);
-      off += sizeof(size_t);
-      std::vector<array<Id, 2>> entityHasPattern(hasPatternSize);
-      patternsFile.read(entityHasPattern.data(),
-                        hasPatternSize * sizeof(Id) * 2, off);
-      off += hasPatternSize * sizeof(Id) * 2;
-
-      // read the entity has relation vector
-      size_t hasPredicateSize;
-      patternsFile.read(&hasPredicateSize, sizeof(size_t), off);
-      off += sizeof(size_t);
-      std::vector<array<Id, 2>> entityHasPredicate(hasPredicateSize);
-      patternsFile.read(entityHasPredicate.data(),
-                        hasPredicateSize * sizeof(Id) * 2, off);
-      off += hasPredicateSize * sizeof(Id) * 2;
-
-      // read the patterns
-      // TODO<joka921> Refactor the rest of the patterns into  the serializer
-      // interface.
-      patternsFile.seek(off, SEEK_SET);
-      ad_utility::serialization::FileReadSerializer patternLoader{
-          std::move(patternsFile)};
-      patternLoader >> _patterns;
-
-      // create the has-relation and has-pattern lookup vectors
-      if (entityHasPattern.size() > 0) {
-        _hasPattern.resize(entityHasPattern.back()[0] + 1);
-        size_t pos = 0;
-        for (size_t i = 0; i < entityHasPattern.size(); i++) {
-          while (entityHasPattern[i][0] > pos) {
-            _hasPattern[pos] = NO_PATTERN;
-            pos++;
-          }
-          _hasPattern[pos] = entityHasPattern[i][1];
-          pos++;
-        }
-      }
-
-      vector<vector<Id>> hasPredicateTmp;
-      if (entityHasPredicate.size() > 0) {
-        hasPredicateTmp.resize(entityHasPredicate.back()[0] + 1);
-        size_t pos = 0;
-        for (size_t i = 0; i < entityHasPredicate.size(); i++) {
-          Id current = entityHasPredicate[i][0];
-          while (current > pos) {
-            pos++;
-          }
-          while (i < entityHasPredicate.size() &&
-                 entityHasPredicate[i][0] == current) {
-            hasPredicateTmp.back().push_back(entityHasPredicate[i][1]);
-            i++;
-          }
-          pos++;
-        }
-      }
-      _hasPredicate.build(hasPredicateTmp);
-    }
+    PatternReader::readPatternsFromFile(
+        _onDiskBase + ".index.patterns", _fullHasPredicateMultiplicityEntities,
+        _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
+        _patterns, _hasPattern);
   }
 }
 

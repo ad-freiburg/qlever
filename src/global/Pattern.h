@@ -14,6 +14,7 @@
 
 #include "../util/File.h"
 #include "../util/Generator.h"
+#include "../util/Iterators.h"
 #include "../util/Serializer/FileSerializer.h"
 #include "../util/Serializer/SerializeVector.h"
 #include "../util/TypeTraits.h"
@@ -38,6 +39,13 @@ struct Pattern {
 
   ref operator[](const size_t pos) { return _data[pos]; }
   const_ref operator[](const size_t pos) const { return _data[pos]; }
+
+  using const_iterator = ad_utility::IteratorForAccessOperator<
+      Pattern, ad_utility::AccessViaBracketOperator, true>;
+
+  const_iterator begin() const { return {this, 0}; }
+
+  const_iterator end() const { return {this, size()}; }
 
   bool operator==(const Pattern& other) const {
     if (size() != other.size()) {
@@ -152,9 +160,9 @@ class CompactVectorOfStrings {
   CompactVectorOfStrings(CompactVectorOfStrings&&) noexcept = default;
 
   // There is one more offset than the number of elements.
-  size_t size() const { return _offsets.size() - 1; }
+  size_t size() const { return ready() ? _offsets.size() - 1 : 0; }
 
-  bool ready() const { return _data != nullptr; }
+  bool ready() const { return !_offsets.empty(); }
 
   /**
    * @brief operator []

@@ -7,173 +7,221 @@
 
 #include "../global/Constants.h"
 #include "../util/MmapVector.h"
+#include "../util/Serializer/SerializeVector.h"
 
+// TODO<joka921> Refactor this, s.t. this is not global.
+static constexpr const char* _subjectToPatternSuffix = ".subjectsToPatterns";
+struct PatternStatistics {
+ public:
+  uint64_t _numDistinctSubjectPredicate;
+  double _averageNumPredicatesPerSubject;
+  double _averageNumSubjectsPerPredicate;
+
+ public:
+  PatternStatistics() = default;
+  PatternStatistics(uint64_t numDistinctSubjectPredicate,
+                    uint64_t numDistinctSubjects,
+                    uint64_t numDistinctPredicates)
+      : _numDistinctSubjectPredicate{numDistinctSubjectPredicate},
+        _averageNumPredicatesPerSubject{
+            static_cast<double>(_numDistinctSubjectPredicate) /
+            numDistinctSubjects},
+        _averageNumSubjectsPerPredicate{
+            static_cast<double>(_numDistinctSubjectPredicate) /
+            numDistinctPredicates} {}
+
+  template <typename Serializer>
+  friend void serialize(Serializer& serializer, PatternStatistics& s) {
+    unsigned char firstByte = 255;
+    serializer | firstByte;
+    auto version = PATTERNS_FILE_VERSION;
+    serializer | version;
+    if (version != PATTERNS_FILE_VERSION || firstByte != 255) {
+      version = firstByte == 255 ? version : -1;
+      std::ostringstream oss;
+      oss << "The patterns file version of " << version
+          << " does not match the programs pattern file "
+          << "version of " << PATTERNS_FILE_VERSION << ". Rebuild the index"
+          << " or start the query engine without pattern support." << std::endl;
+      throw std::runtime_error(std::move(oss).str());
+    }
+
+    serializer | s._averageNumPredicatesPerSubject;
+    serializer | s._averageNumSubjectsPerPredicate;
+    serializer | s._numDistinctSubjectPredicate;
+  }
+};
+
+inline auto noPredicatesIgnored = [](const auto&&...) { return false; };
+template <typename IsPredicateIgnored = decltype(noPredicatesIgnored)>
 class PatternCreator {
  private:
   std::string _fileName;
-  std::vector<PatternID>& _hasPattern;
-  CompactVectorOfStrings<Id>& _patterns;
-  double& _fullHasPredicateMultiplicityEntities;
-  double& _fullHasPredicateMultiplicityPredicates;
-  size_t& _fullHasPredicateSize;
-  const Id _langPredLowerBound;
-  const Id _langPredUpperBound;
+  // store how many entries there are in the full has-relation relation (after
+  // resolving all patterns)
+  IsPredicateIgnored _isPredicateIgnored;
 
-  using PatternsCountMap = ad_utility::HashMap<Pattern, size_t>;
+  struct PatternIdAndCount {
+    PatternID _patternId = 0;
+    uint64_t _count = 0;
+  };
+  using PatternsCountMap = ad_utility::HashMap<Pattern, PatternIdAndCount>;
   PatternsCountMap _patternCounts;
-  Pattern _pattern;
-  size_t _numValidPatterns = 0;
-  std::optional<Id> currentSubj;
+  Pattern _currentPattern;
+
+  Id _nextUnassignedSubject = 0;
+  std::optional<Id> _currentSubject;
 
   // Associate entities with patterns.
-  ad_utility::MmapVectorTmp<std::array<Id, 2>> _entityHasPattern;
-  size_t _numEntitiesWithPatterns = 0;
-  size_t _numEntitiesWithoutPatterns = 0;
-  size_t _numInvalidEntities = 0;
+  ad_utility::serialization::VectorIncrementalSerializer<
+      PatternID, ad_utility::serialization::FileWriteSerializer>
+      _subjectToPatternSerializer;
 
-  size_t _fullHasPredicateEntitiesDistinctSize = 0;
+  ad_utility::HashSet<uint64_t> _alreadyCountedPredicates;
+  uint64_t _numberOfDistinctPredicates = 0;
+  uint64_t _numberOfDistinctSubjects = 0;
+  uint64_t _numberOfDistinctSubjectPredicate = 0;
 
  public:
-  PatternCreator(const string& fileName, std::vector<PatternID>& hasPattern,
-                 CompactVectorOfStrings<Id>& patterns,
-                 double& fullHasPredicateMultiplicityEntities,
-                 double& fullHasPredicateMultiplicityPredicates,
-                 size_t& fullHasPredicateSize, const Id langPredLowerBound,
-                 const Id langPredUpperBound)
+  PatternCreator(const string& fileName,
+                 IsPredicateIgnored isPredicateIgnored = IsPredicateIgnored{})
       : _fileName{fileName},
-        _hasPattern{hasPattern},
-        _patterns{patterns},
-        _fullHasPredicateMultiplicityEntities{
-            fullHasPredicateMultiplicityEntities},
-        _fullHasPredicateMultiplicityPredicates{
-            fullHasPredicateMultiplicityPredicates},
-        _fullHasPredicateSize{fullHasPredicateSize},
-        _langPredLowerBound{langPredLowerBound},
-        _langPredUpperBound{langPredUpperBound},
-        _entityHasPattern{fileName + ".mmap.entityHasPattern.tmp"} {
+        _isPredicateIgnored{std::move(isPredicateIgnored)},
+        _subjectToPatternSerializer{{fileName + _subjectToPatternSuffix}} {
     LOG(INFO) << "Computing predicate patterns ..." << std::endl;
-    // store how many entries there are in the full has-relation relation (after
-    // resolving all patterns) and how may distinct elements there are (for the
-    // multiplicity;
-    _fullHasPredicateSize = 0;
   }
 
   void subjectAction(const auto& pattern, const auto& subject) {
-    _numValidPatterns++;
-    _patternCounts[pattern]++;
-    _fullHasPredicateEntitiesDistinctSize++;
+    _numberOfDistinctSubjects++;
+    _numberOfDistinctSubjectPredicate += pattern.size();
+    Id patternId;
     auto it = _patternCounts.find(pattern);
-    AD_CHECK(it != _patternCounts.end());
-    // increase the haspredicate size here as every predicate is only
-    // listed once per entity (otherwise it woul always be the same as
-    // vec.size()
-    _fullHasPredicateSize += pattern.size();
-    _numEntitiesWithPatterns++;
+    if (it == _patternCounts.end()) {
+      patternId = _patternCounts.size();
+      _patternCounts[pattern] =
+          PatternIdAndCount{static_cast<PatternID>(patternId), 1ul};
+
+      // Count the total number of distinct predicates that appear in the
+      // patterns
+      for (auto predicate : pattern) {
+        if (!_alreadyCountedPredicates.contains(predicate)) {
+          _numberOfDistinctPredicates++;
+          _alreadyCountedPredicates.insert(predicate);
+        }
+      }
+    } else {
+      patternId = it->second._patternId;
+      it->second._count++;
+    }
+
     // The pattern does exist, add an entry to the has-pattern predicate
-    _entityHasPattern.push_back(std::array<Id, 2>{subject, it->second});
+    while (_nextUnassignedSubject < subject) {
+      _subjectToPatternSerializer.push(NO_PATTERN);
+      _nextUnassignedSubject++;
+    }
+    _subjectToPatternSerializer.push(patternId);
+    _nextUnassignedSubject++;
   }
 
   void pushTriple(std::array<Id, 3> triple) {
-    if (!currentSubj.has_value()) {
+    if (_isPredicateIgnored(triple[1])) {
+      return;
+    }
+
+    if (!_currentSubject.has_value()) {
       // This is the first triple
-      currentSubj = triple[0];
-    } else if (triple[0] != currentSubj) {
+      _currentSubject = triple[0];
+    } else if (triple[0] != _currentSubject) {
       // we have arrived at a new entity;
-      currentSubj = triple[0];
-      subjectAction(_pattern, *currentSubj);
-      _pattern.clear();
+      subjectAction(_currentPattern, *_currentSubject);
+      _currentSubject = triple[0];
+      _currentPattern.clear();
     }
     // don't list predicates twice
-    if (_pattern.empty() || _pattern.back() != triple[1]) {
-      // Ignore @..@ type language predicates
-      if (triple[1] < _langPredLowerBound || triple[1] >= _langPredUpperBound) {
-        _pattern.push_back(triple[1]);
-      }
+    if (_currentPattern.empty() || _currentPattern.back() != triple[1]) {
+      _currentPattern.push_back(triple[1]);
     }
   }
+
   void finish() {
     // Don't forget to process the last entry.
-    subjectAction(_pattern, *currentSubj);
+    subjectAction(_currentPattern, *_currentSubject);
 
-    LOG(DEBUG) << "Number of distinct pattens: " << _patternCounts.size()
-               << std::endl;
-    LOG(DEBUG) << "Number of entities for which a pattern was found: "
-               << _numValidPatterns << std::endl;
+    // The mapping from subjects to patterns is already written to disk at this
+    // point.
+    _subjectToPatternSerializer.finish();
 
-    // store the actual patterns
+    // store the actual patterns. They are stored in a hash map, so we have to
+    // first order them by their patternId.
+    std::vector<std::pair<Pattern, PatternIdAndCount>> orderedPatterns;
+    orderedPatterns.insert(orderedPatterns.end(), _patternCounts.begin(),
+                           _patternCounts.end());
+    std::sort(orderedPatterns.begin(), orderedPatterns.end(),
+              [](const auto& a, const auto& b) {
+                return a.second._patternId < b.second._patternId;
+              });
     std::vector<std::vector<Id>> buffer;
-    buffer.reserve(_patternCounts.size());
-    for (const auto& p : _patternCounts) {
+    buffer.reserve(orderedPatterns.size());
+    for (const auto& p : orderedPatterns) {
       buffer.push_back(p.first._data);
     }
+    CompactVectorOfStrings<Id> _patterns;
     _patterns.build(buffer);
-
-    _fullHasPredicateMultiplicityEntities =
-        _fullHasPredicateSize /
-        static_cast<double>(_fullHasPredicateEntitiesDistinctSize);
-    LOG(DEBUG) << "Number of entity-has-pattern entries: "
-               << _entityHasPattern.size() << std::endl;
-
-    LOG(INFO) << "Number of patterns: " << _patterns.size() << std::endl;
-    LOG(INFO) << "Number of subjects with pattern: " << _numEntitiesWithPatterns
-              << (_numEntitiesWithoutPatterns == 0 ? " [all]" : "")
-              << std::endl;
-    if (_numEntitiesWithoutPatterns > 0) {
-      LOG(INFO) << "Number of subjects without pattern: "
-                << _numEntitiesWithoutPatterns << std::endl;
-      LOG(INFO) << "Of these " << _numInvalidEntities
-                << " would have to large a pattern." << std::endl;
-    }
-
-    LOG(INFO) << "Total number of distinct subject-predicate pairs: "
-              << _fullHasPredicateSize << std::endl;
-    LOG(INFO) << "Average number of predicates per subject: " << std::fixed
-              << std::setprecision(1) << _fullHasPredicateMultiplicityEntities
-              << std::endl;
     // Store all data in the file
-    ad_utility::File file(_fileName, "w");
+    ad_utility::serialization::FileWriteSerializer patternWriter{_fileName};
 
-    // Write a byte of ones to make it less likely that an unversioned file is
-    // read as a versioned one (unversioned files begin with the id of the
-    // lowest entity that has a pattern). Then write the version, both
-    // multiplicitires and the full size.
-    unsigned char firstByte = 255;
-    file.write(&firstByte, sizeof(char));
-    file.write(&PATTERNS_FILE_VERSION, sizeof(uint32_t));
-    file.write(&_fullHasPredicateMultiplicityEntities, sizeof(double));
-    file.write(&_fullHasPredicateMultiplicityPredicates, sizeof(double));
-    file.write(&_fullHasPredicateSize, sizeof(size_t));
+    PatternStatistics patternStatistics(_numberOfDistinctSubjectPredicate,
+                                        _numberOfDistinctSubjects,
+                                        _numberOfDistinctPredicates);
+    patternWriter << patternStatistics;
 
-    // write the entityHasPatterns vector
-    size_t numHasPatterns = _entityHasPattern.size();
-    file.write(&numHasPatterns, sizeof(size_t));
-    file.write(_entityHasPattern.data(), sizeof(Id) * numHasPatterns * 2);
-
-    // write the entityHasPredicate vector
-    // TODO<joka921> The 0 is needed, because the reading of the pattern still
-    // expects the "hasPredicates" vector.
-    size_t numHasPredicatess = 0;
-    file.write(&numHasPredicatess, sizeof(size_t));
-
-    // write the patterns
-    // TODO<joka921> Also use the serializer interface for the patterns.
-    ad_utility::serialization::FileWriteSerializer patternWriter{
-        std::move(file)};
+    // Write the patterns
     patternWriter << _patterns;
 
-    // create the has-relation and has-pattern lookup vectors
-    if (_entityHasPattern.size() > 0) {
-      _hasPattern.resize(_entityHasPattern.back()[0] + 1);
-      size_t pos = 0;
-      for (size_t i = 0; i < _entityHasPattern.size(); i++) {
-        while (_entityHasPattern[i][0] > pos) {
-          _hasPattern[pos] = NO_PATTERN;
-          pos++;
-        }
-        _hasPattern[pos] = _entityHasPattern[i][1];
-        pos++;
-      }
-    }
+    // The rest is only statistics.
+    printStatistics(_patterns);
+  }
+
+  void printStatistics(const auto& patterns) const {
+    LOG(DEBUG) << "Number of distinct pattens: " << _patternCounts.size()
+               << std::endl;
+    uint64_t numberOfSubjects =
+        std::accumulate(_patternCounts.begin(), _patternCounts.end(), 0ul,
+                        [](auto cur, const auto& patternAndCount) {
+                          return cur + patternAndCount.second._count;
+                        });
+    LOG(DEBUG) << "Number of subjects for which a pattern was found: "
+               << numberOfSubjects << std::endl;
+
+    LOG(INFO) << "Number of patterns: " << patterns.size() << std::endl;
+
+    LOG(INFO) << "Total number of distinct subject-predicate pairs: "
+              << _numberOfDistinctSubjectPredicate << std::endl;
+  }
+};
+struct PatternReader {
+  static void readPatternsFromFile(
+      const std::string& filename, auto& _fullHasPredicateMultiplicityEntities,
+      auto& _fullHasPredicateMultiplicityPredicates,
+      auto& _fullHasPredicateSize, auto& _patterns, auto& _hasPattern) {
+    // Read the pattern info from the patterns file.
+    LOG(INFO) << "Reading patterns from file " << filename << " ..."
+              << std::endl;
+
+    ad_utility::serialization::FileReadSerializer patternReader(filename);
+    PatternStatistics statistics;
+    patternReader >> statistics;
+    patternReader >> _patterns;
+
+    _fullHasPredicateSize = statistics._numDistinctSubjectPredicate;
+    _fullHasPredicateMultiplicityEntities =
+        statistics._averageNumPredicatesPerSubject;
+    _fullHasPredicateMultiplicityPredicates =
+        statistics._averageNumSubjectsPerPredicate;
+
+    ad_utility::serialization::FileReadSerializer subjectToPatternReader(
+        filename + _subjectToPatternSuffix);
+    subjectToPatternReader >> _hasPattern;
   }
 };
 #endif  // QLEVER_PATTERNCREATOR_H

@@ -13,7 +13,7 @@
 namespace ad_utility {
 namespace serialization {
 
-using SerializationPosition = off_t;
+using SerializationPosition = uint64_t;
 
 class FileWriteSerializer {
  public:
@@ -34,7 +34,13 @@ class FileWriteSerializer {
 
   void close() { _file.close(); }
 
-  SerializationPosition getCurrentPosition() const { return _file.tell(); }
+  [[nodiscard]] SerializationPosition getSerializationPosition() const {
+    return _file.tell();
+  }
+
+  void setSerializationPosition(SerializationPosition position) {
+    _file.seek(static_cast<off_t>(position), SEEK_SET);
+  }
 
   File&& file() && { return std::move(_file); }
 
