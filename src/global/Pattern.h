@@ -89,6 +89,8 @@ struct Pattern {
   ref back() { return _data.back(); }
   bool empty() { return _data.empty(); }
 
+  const Id* data() const { return _data.data(); }
+
   std::vector<Id> _data;
 };
 
@@ -279,16 +281,20 @@ namespace detail {
 template <typename data_type>
 struct CompactStringVectorWriter {
   ad_utility::File _file;
+  off_t _startOfFile;
   using offset_type = typename CompactVectorOfStrings<data_type>::offset_type;
   std::vector<offset_type> _offsets;
   bool _finished = false;
   offset_type _nextOffset = 0;
+
   explicit CompactStringVectorWriter(const std::string& filename)
       : _file{filename, "w"} {
-    AD_CHECK(_file.isOpen());
-    // We don't known the data size yet.
-    size_t dataSizeDummy = 0;
-    _file.write(&dataSizeDummy, sizeof(dataSizeDummy));
+    commonInitialization();
+  }
+
+  explicit CompactStringVectorWriter(ad_utility::File&& file)
+      : _file{std::move(file)} {
+    commonInitialization();
   }
 
   void push(const data_type* data, size_t elementSize) {
@@ -298,12 +304,18 @@ struct CompactStringVectorWriter {
     _file.write(data, elementSize * sizeof(data_type));
   }
 
+  // Finish writing and move the file out.
+  ad_utility::File file() && {
+    finish();
+    return std::move(_file);
+  }
+
   void finish() {
     if (_finished) {
       return;
     }
     _offsets.push_back(_nextOffset);
-    _file.seek(0, SEEK_SET);
+    _file.seek(_startOfFile, SEEK_SET);
     _file.write(&_nextOffset, sizeof(size_t));
     _file.seek(0, SEEK_END);
     ad_utility::serialization::FileWriteSerializer f{std::move(_file)};
@@ -315,6 +327,16 @@ struct CompactStringVectorWriter {
     if (!_finished) {
       finish();
     }
+  }
+
+ private:
+  // Has to be run by all the constructors
+  void commonInitialization() {
+    AD_CHECK(_file.isOpen());
+    // We don't known the data size yet.
+    _startOfFile = _file.tell();
+    size_t dataSizeDummy = 0;
+    _file.write(&dataSizeDummy, sizeof(dataSizeDummy));
   }
 };
 }  // namespace detail

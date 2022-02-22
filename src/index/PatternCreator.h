@@ -2,36 +2,56 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+/**
+ * \file Contains functionality to create triples that are sorted by SPO, write
+ *       these patterns to disk, and to read them from disk.
+ */
+
 #ifndef QLEVER_PATTERNCREATOR_H
 #define QLEVER_PATTERNCREATOR_H
 
 #include "../global/Constants.h"
+#include "../global/Id.h"
+#include "../global/Pattern.h"
 #include "../util/MmapVector.h"
 #include "../util/Serializer/SerializeVector.h"
 
-// TODO<joka921> Refactor this, s.t. this is not global.
-static constexpr const char* _subjectToPatternSuffix = ".subjectsToPatterns";
+/// Several statistics for the patterns, as well as the functionality to
+/// serialize them.
 struct PatternStatistics {
  public:
+  // The number of distinct subject-predicate pairs contained in the patterns.
   uint64_t _numDistinctSubjectPredicate;
-  double _averageNumPredicatesPerSubject;
-  double _averageNumSubjectsPerPredicate;
+  // The average number of distinct predicates per subject.
+  double _avgNumPredicatesPerSubject;
+  // The average number of distinct subjects per predicate.
+  double _avgNumSubjectsPerPredicate;
 
  public:
+  /// Uninitialized default construction, necessary for the serialization to
+  /// work.
   PatternStatistics() = default;
+
+  /// Construct from the number of distinct subject-predicate pairs, the number
+  /// of distinct subjects, and the number of distinct predicates. The average
+  /// statistics are calculated inside this constructor.
   PatternStatistics(uint64_t numDistinctSubjectPredicate,
                     uint64_t numDistinctSubjects,
                     uint64_t numDistinctPredicates)
       : _numDistinctSubjectPredicate{numDistinctSubjectPredicate},
-        _averageNumPredicatesPerSubject{
+        _avgNumPredicatesPerSubject{
             static_cast<double>(_numDistinctSubjectPredicate) /
-            numDistinctSubjects},
-        _averageNumSubjectsPerPredicate{
+            static_cast<double>(numDistinctSubjects)},
+        _avgNumSubjectsPerPredicate{
             static_cast<double>(_numDistinctSubjectPredicate) /
-            numDistinctPredicates} {}
+            static_cast<double>(numDistinctPredicates)} {}
 
+  /// Serialization. Also serializes and checks a magic byte and the
+  /// `PATTERNS_FILE_VERSION` to detect old versions of the patterns files which
+  /// are not compatible anymore.
   template <typename Serializer>
   friend void serialize(Serializer& serializer, PatternStatistics& s) {
+    // First serialize and check the magic byte and the version.
     unsigned char firstByte = 255;
     serializer | firstByte;
     auto version = PATTERNS_FILE_VERSION;
@@ -46,182 +66,99 @@ struct PatternStatistics {
       throw std::runtime_error(std::move(oss).str());
     }
 
-    serializer | s._averageNumPredicatesPerSubject;
-    serializer | s._averageNumSubjectsPerPredicate;
+    // Now serialize the actual members.
+    serializer | s._avgNumPredicatesPerSubject;
+    serializer | s._avgNumSubjectsPerPredicate;
     serializer | s._numDistinctSubjectPredicate;
   }
 };
 
-inline auto noPredicatesIgnored = [](const auto&&...) { return false; };
-template <typename IsPredicateIgnored = decltype(noPredicatesIgnored)>
+/// Handle the creation and serialization of the patterns to and from disk.
+/// Reading the patterns from disk is done via the static function
+/// `readPatternsFromFile`. To create patterns, a `PatternCreator` object has to
+/// be constructed, followed by one call to `pushTriple` for each SPO triple.
+/// The final writing to disk can be done explicitly by the `finish()` function,
+/// but is also performed implicitly by the destructor.
 class PatternCreator {
  private:
-  std::string _fileName;
-  // store how many entries there are in the full has-relation relation (after
-  // resolving all patterns)
-  IsPredicateIgnored _isPredicateIgnored;
+  static constexpr const char* _subjectToPatternSuffix = ".subjectsToPatterns";
+  // The file to which the patterns will be written.
+  std::string _filename;
 
+  // Store the Id of a pattern, and the number of distinct subjects it occurs
+  // with.
   struct PatternIdAndCount {
     PatternID _patternId = 0;
     uint64_t _count = 0;
   };
   using PatternsCountMap = ad_utility::HashMap<Pattern, PatternIdAndCount>;
   PatternsCountMap _patternCounts;
+
+  // Between the calls to `pushTriple` we have to remember the current subject
+  // (the subject of the last triple for which `pushTriple` was called).
+  std::optional<Id> _currentSubject;
+  // The pattern of `_currentSubject`. This might still be incomplete, because
+  // more triples with the same subject might be pushed.
   Pattern _currentPattern;
 
+  // The lowest subject Id for which we have not yet finished and written the
+  // pattern.
   Id _nextUnassignedSubject = 0;
-  std::optional<Id> _currentSubject;
 
-  // Associate entities with patterns.
+  // Directly serialize the mapping from subjects to patterns to disk.
   ad_utility::serialization::VectorIncrementalSerializer<
       PatternID, ad_utility::serialization::FileWriteSerializer>
       _subjectToPatternSerializer;
 
-  ad_utility::HashSet<uint64_t> _alreadyCountedPredicates;
-  uint64_t _numberOfDistinctPredicates = 0;
+  // The predicates which have already occured in one of the patterns. Needed to
+  // count the number of distinct predicates.
+  ad_utility::HashSet<uint64_t> _distinctPredicates;
+
+  // The number of distinct subjects, and distinct subject-predicate pairs.
   uint64_t _numberOfDistinctSubjects = 0;
   uint64_t _numberOfDistinctSubjectPredicate = 0;
 
+  // True if `finish()` was already called.
+  bool _isFinished = false;
+
  public:
-  PatternCreator(const string& fileName,
-                 IsPredicateIgnored isPredicateIgnored = IsPredicateIgnored{})
-      : _fileName{fileName},
-        _isPredicateIgnored{std::move(isPredicateIgnored)},
-        _subjectToPatternSerializer{{fileName + _subjectToPatternSuffix}} {
+  /// The patterns will be written to `filename` as well as to other filenames
+  /// which have `filename` as a prefix.
+  explicit PatternCreator(const string& filename)
+      : _filename{filename},
+        _subjectToPatternSerializer{{filename + _subjectToPatternSuffix}} {
     LOG(INFO) << "Computing predicate patterns ..." << std::endl;
   }
 
-  void subjectAction(const auto& pattern, const auto& subject) {
-    _numberOfDistinctSubjects++;
-    _numberOfDistinctSubjectPredicate += pattern.size();
-    Id patternId;
-    auto it = _patternCounts.find(pattern);
-    if (it == _patternCounts.end()) {
-      patternId = _patternCounts.size();
-      _patternCounts[pattern] =
-          PatternIdAndCount{static_cast<PatternID>(patternId), 1ul};
+  /// This function has to be called for all the triples in the SPO permutation
+  /// \param triple Must be >= all previously pushed triples wrt the SPO
+  /// permutation.
+  void pushTriple(std::array<Id, 3> triple);
 
-      // Count the total number of distinct predicates that appear in the
-      // patterns
-      for (auto predicate : pattern) {
-        if (!_alreadyCountedPredicates.contains(predicate)) {
-          _numberOfDistinctPredicates++;
-          _alreadyCountedPredicates.insert(predicate);
-        }
-      }
-    } else {
-      patternId = it->second._patternId;
-      it->second._count++;
-    }
+  /// Write the patterns to disk after all triples have been pushed. Calls to
+  /// `pushTriple` after calling `finish` lead to undefined behavior. Note that
+  /// the constructor also calls `finish` to give the `PatternCreator` proper
+  /// RAII semantics.
+  void finish();
 
-    // The pattern does exist, add an entry to the has-pattern predicate
-    while (_nextUnassignedSubject < subject) {
-      _subjectToPatternSerializer.push(NO_PATTERN);
-      _nextUnassignedSubject++;
-    }
-    _subjectToPatternSerializer.push(patternId);
-    _nextUnassignedSubject++;
-  }
+  /// Destructor implicitly calls `finish`
+  ~PatternCreator() { finish(); }
 
-  void pushTriple(std::array<Id, 3> triple) {
-    if (_isPredicateIgnored(triple[1])) {
-      return;
-    }
+  ///  Read the patterns from `filename`. The patterns must have been written to
+  ///  this file using a `PatternCreator`. The patterns and all their statistics
+  ///  will be written to the various arguments.
+  /// TODO<joka921> The storage of the pattern will change soon, so we have
+  /// chosen an interface here that requires as little change as possible in the
+  /// `Index` class.
+  static void readPatternsFromFile(const std::string& filename,
+                                   double& averageNumSubjectsPerPredicate,
+                                   double& averageNumPredicatesPerSubject,
+                                   uint64_t& numDistinctSubjectPredicatePairs,
+                                   CompactVectorOfStrings<Id>& patterns,
+                                   std::vector<PatternID>& subjectToPattern);
 
-    if (!_currentSubject.has_value()) {
-      // This is the first triple
-      _currentSubject = triple[0];
-    } else if (triple[0] != _currentSubject) {
-      // we have arrived at a new entity;
-      subjectAction(_currentPattern, *_currentSubject);
-      _currentSubject = triple[0];
-      _currentPattern.clear();
-    }
-    // don't list predicates twice
-    if (_currentPattern.empty() || _currentPattern.back() != triple[1]) {
-      _currentPattern.push_back(triple[1]);
-    }
-  }
-
-  void finish() {
-    // Don't forget to process the last entry.
-    subjectAction(_currentPattern, *_currentSubject);
-
-    // The mapping from subjects to patterns is already written to disk at this
-    // point.
-    _subjectToPatternSerializer.finish();
-
-    // store the actual patterns. They are stored in a hash map, so we have to
-    // first order them by their patternId.
-    std::vector<std::pair<Pattern, PatternIdAndCount>> orderedPatterns;
-    orderedPatterns.insert(orderedPatterns.end(), _patternCounts.begin(),
-                           _patternCounts.end());
-    std::sort(orderedPatterns.begin(), orderedPatterns.end(),
-              [](const auto& a, const auto& b) {
-                return a.second._patternId < b.second._patternId;
-              });
-    std::vector<std::vector<Id>> buffer;
-    buffer.reserve(orderedPatterns.size());
-    for (const auto& p : orderedPatterns) {
-      buffer.push_back(p.first._data);
-    }
-    CompactVectorOfStrings<Id> _patterns;
-    _patterns.build(buffer);
-    // Store all data in the file
-    ad_utility::serialization::FileWriteSerializer patternWriter{_fileName};
-
-    PatternStatistics patternStatistics(_numberOfDistinctSubjectPredicate,
-                                        _numberOfDistinctSubjects,
-                                        _numberOfDistinctPredicates);
-    patternWriter << patternStatistics;
-
-    // Write the patterns
-    patternWriter << _patterns;
-
-    // The rest is only statistics.
-    printStatistics(_patterns);
-  }
-
-  void printStatistics(const auto& patterns) const {
-    LOG(DEBUG) << "Number of distinct pattens: " << _patternCounts.size()
-               << std::endl;
-    uint64_t numberOfSubjects =
-        std::accumulate(_patternCounts.begin(), _patternCounts.end(), 0ul,
-                        [](auto cur, const auto& patternAndCount) {
-                          return cur + patternAndCount.second._count;
-                        });
-    LOG(DEBUG) << "Number of subjects for which a pattern was found: "
-               << numberOfSubjects << std::endl;
-
-    LOG(INFO) << "Number of patterns: " << patterns.size() << std::endl;
-
-    LOG(INFO) << "Total number of distinct subject-predicate pairs: "
-              << _numberOfDistinctSubjectPredicate << std::endl;
-  }
-};
-struct PatternReader {
-  static void readPatternsFromFile(
-      const std::string& filename, auto& _fullHasPredicateMultiplicityEntities,
-      auto& _fullHasPredicateMultiplicityPredicates,
-      auto& _fullHasPredicateSize, auto& _patterns, auto& _hasPattern) {
-    // Read the pattern info from the patterns file.
-    LOG(INFO) << "Reading patterns from file " << filename << " ..."
-              << std::endl;
-
-    ad_utility::serialization::FileReadSerializer patternReader(filename);
-    PatternStatistics statistics;
-    patternReader >> statistics;
-    patternReader >> _patterns;
-
-    _fullHasPredicateSize = statistics._numDistinctSubjectPredicate;
-    _fullHasPredicateMultiplicityEntities =
-        statistics._averageNumPredicatesPerSubject;
-    _fullHasPredicateMultiplicityPredicates =
-        statistics._averageNumSubjectsPerPredicate;
-
-    ad_utility::serialization::FileReadSerializer subjectToPatternReader(
-        filename + _subjectToPatternSuffix);
-    subjectToPatternReader >> _hasPattern;
-  }
+ private:
+  void finishSubject(const Pattern& pattern, const Id& subject);
+  void printStatistics(uint64_t numPatterns) const;
 };
 #endif  // QLEVER_PATTERNCREATOR_H

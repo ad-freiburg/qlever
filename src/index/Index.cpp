@@ -150,15 +150,17 @@ void Index::createFromFile(const string& filename) {
     spoSorter.sort();
     LOG(INFO) << "Sorted the sorter" << std::endl;
     if (_usePatterns) {
-      auto ignoreLanguagePredicates =
+      auto hasLanguagePredicate =
           [lower = vocabData.langPredLowerBound,
-           upper = vocabData.langPredUpperBound](const auto& id) {
-            return id >= lower && id < upper;
+           upper = vocabData.langPredUpperBound](const auto& triple) {
+            return triple[1] >= lower && triple[1] < upper;
           };
-      PatternCreator patternCreator{_onDiskBase + ".index.patterns",
-                                    ignoreLanguagePredicates};
-      auto pushTripleToPatterns = [&patternCreator](const auto& triple) {
-        patternCreator.pushTriple(triple);
+      PatternCreator patternCreator{_onDiskBase + ".index.patterns"};
+      auto pushTripleToPatterns = [&patternCreator,
+                                   &hasLanguagePredicate](const auto& triple) {
+        if (!hasLanguagePredicate(triple)) {
+          patternCreator.pushTriple(triple);
+        }
       };
       createPermutationPair<IndexMetaDataMmapDispatcher>(
           &spoSorter, _SPO, _SOP, &ospSorter, pushTripleToPatterns);
@@ -630,15 +632,16 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
   auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
-  auto ignoreLanguagePredicates = [lower = langPredLowerBound,
-                                   upper = langPredUpperBound](const auto& id) {
-    return id >= lower && id < upper;
+  auto isLanguagePredicate = [lower = langPredLowerBound,
+                              upper = langPredUpperBound](const auto& triple) {
+    return triple[1] >= lower && triple[1] < upper;
   };
-  PatternCreator patternCreator{_onDiskBase + ".index.patterns",
-                                ignoreLanguagePredicates};
+  PatternCreator patternCreator{_onDiskBase + ".index.patterns"};
   auto iterator = MetaDataIterator<Permutation::SPO_T>{_SPO};
   while (!iterator.empty()) {
-    patternCreator.pushTriple(*iterator);
+    if (!isLanguagePredicate(*iterator)) {
+      patternCreator.pushTriple(*iterator);
+    }
     ++iterator;
   }
   patternCreator.finish();
@@ -669,7 +672,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   }
 
   if (_usePatterns) {
-    PatternReader::readPatternsFromFile(
+    PatternCreator::readPatternsFromFile(
         _onDiskBase + ".index.patterns", _fullHasPredicateMultiplicityEntities,
         _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
         _patterns, _hasPattern);

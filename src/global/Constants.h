@@ -112,7 +112,9 @@ static constexpr size_t PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE = 5;
 // times this factor.
 static constexpr double MAKE_ROOM_SLACK_FACTOR = 2;
 
-static constexpr uint32_t PATTERNS_FILE_VERSION = 0;
+// The version of the binary format of the pattern files. Has to be increased,
+// when this format is changed.
+static constexpr uint32_t PATTERNS_FILE_VERSION = 1;
 
 inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::Double;
