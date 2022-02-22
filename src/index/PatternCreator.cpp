@@ -116,8 +116,8 @@ void PatternCreator::readPatternsFromFile(
   patternReader >> patterns;
 
   numDistinctSubjectPredicatePairs = statistics._numDistinctSubjectPredicate;
-  averageNumSubjectsPerPredicate = statistics._avgNumPredicatesPerSubject;
-  averageNumPredicatesPerSubject = statistics._avgNumSubjectsPerPredicate;
+  averageNumSubjectsPerPredicate = statistics._avgNumSubjectsPerPredicate;
+  averageNumPredicatesPerSubject = statistics._avgNumPredicatesPerSubject;
 
   // Read the subjectToPatternMap
   ad_utility::serialization::FileReadSerializer subjectToPatternReader(

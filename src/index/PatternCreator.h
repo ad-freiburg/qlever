@@ -27,7 +27,6 @@ struct PatternStatistics {
   // The average number of distinct subjects per predicate.
   double _avgNumSubjectsPerPredicate;
 
- public:
   /// Uninitialized default construction, necessary for the serialization to
   /// work.
   PatternStatistics() = default;
