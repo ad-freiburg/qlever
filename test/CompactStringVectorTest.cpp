@@ -127,6 +127,39 @@ TEST(CompactVectorOfStrings, SerializationWithPush) {
   testSerializationWithPush(CompactVectorInt{}, ints);
 }
 
+TEST(CompactVectorOfStrings, SerializationWithPushMiddleOfFile) {
+  auto testSerializationWithPush = []<typename V>(const V&, auto& input) {
+    std::string filename = "_writerTest.dat";
+    {
+      ad_utility::serialization::FileWriteSerializer fileWriter{filename};
+      fileWriter << 42;
+      typename V::Writer w{std::move(fileWriter).file()};
+      for (const auto& s : input) {
+        w.push(s.data(), s.size());
+      }
+      w.finish();
+      fileWriter =
+          ad_utility::serialization::FileWriteSerializer{std::move(w).file()};
+      fileWriter << -3;
+    }
+
+    V vector;
+    ad_utility::serialization::FileReadSerializer ser{"_writerTest.dat"};
+    int i = 0;
+    ser >> i;
+    ASSERT_EQ(42, i);
+    ser >> vector;
+    ser >> i;
+    ASSERT_EQ(-3, i);
+
+    vectorsEqual(input, vector);
+
+    ad_utility::deleteFile("_writerTest.dat");
+  };
+  testSerializationWithPush(CompactVectorChar{}, strings);
+  testSerializationWithPush(CompactVectorInt{}, ints);
+}
+
 TEST(CompactVectorOfStrings, DiskIterator) {
   auto testDiskIterator = []<typename V>(const V&, auto& input) {
     {

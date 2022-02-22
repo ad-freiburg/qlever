@@ -321,6 +321,8 @@ struct CompactStringVectorWriter {
     ad_utility::serialization::FileWriteSerializer f{std::move(_file)};
     f << _offsets;
     _finished = true;
+    // Move the file back, so we can still retrieve it via the `file()` method
+    _file = std::move(f).file();
   }
 
   ~CompactStringVectorWriter() {
