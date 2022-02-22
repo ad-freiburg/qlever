@@ -267,7 +267,6 @@ class CompactVectorOfStrings {
   friend void serialize(Serializer& s, CompactVectorOfStrings& c) {
     s | c._data;
     s | c._offsets;
-    ;
   }
 
  private:
@@ -323,6 +322,7 @@ struct CompactStringVectorWriter {
     _finished = true;
     // Move the file back, so we can still retrieve it via the `file()` method
     _file = std::move(f).file();
+    _file.flush();
   }
 
   ~CompactStringVectorWriter() {

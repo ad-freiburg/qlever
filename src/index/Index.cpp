@@ -137,18 +137,21 @@ void Index::createFromFile(const string& filename) {
   psoSorter.sort();
   ad_utility::StxxlUniqueSorter uniqueSorter{psoSorter};
 
-  auto doNothing = [](auto&&...) {};
+  auto pushToSpoSorter = [&spoSorter](const auto& triple) {
+    spoSorter.push(triple);
+  };
   createPermutationPair<IndexMetaDataHmapDispatcher>(&uniqueSorter, _PSO, _POS,
-                                                     &spoSorter, doNothing);
-  LOG(INFO) << "After createPermutation pair outside" << std::endl;
+                                                     pushToSpoSorter);
+  psoSorter.clear();
 
   if (_loadAllPermutations) {
     // After the SPO permutation, create patterns if so desired.
     LOG(INFO) << "Create the sorter" << std::endl;
     StxxlSorter<SortByOSP> ospSorter{STXXL_MEMORY_TO_USE};
-    LOG(INFO) << "Created the sorter" << std::endl;
+    auto pushToOspSorter = [&ospSorter](const auto& triple) {
+      ospSorter.push(triple);
+    };
     spoSorter.sort();
-    LOG(INFO) << "Sorted the sorter" << std::endl;
     if (_usePatterns) {
       auto hasLanguagePredicate =
           [lower = vocabData.langPredLowerBound,
@@ -163,19 +166,19 @@ void Index::createFromFile(const string& filename) {
         }
       };
       createPermutationPair<IndexMetaDataMmapDispatcher>(
-          &spoSorter, _SPO, _SOP, &ospSorter, pushTripleToPatterns);
+          &spoSorter, _SPO, _SOP, pushToOspSorter, pushTripleToPatterns);
       patternCreator.finish();
     } else {
       createPermutationPair<IndexMetaDataMmapDispatcher>(&spoSorter, _SPO, _SOP,
-                                                         &ospSorter, doNothing);
+                                                         pushToOspSorter);
     }
+    spoSorter.clear();
     ospSorter.sort();
 
     // For the last pair of permutations we don't need a next sorter, so we just
     // pass in the dummy.
     ad_utility::StxxlDummySorter dummySorter{};
-    createPermutationPair<IndexMetaDataMmapDispatcher>(&ospSorter, _OSP, _OPS,
-                                                       &dummySorter, doNothing);
+    createPermutationPair<IndexMetaDataMmapDispatcher>(&ospSorter, _OSP, _OPS);
     _configurationJson["has-all-permutations"] = true;
   } else {
     if (_usePatterns) {
@@ -440,14 +443,13 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
 }
 
 // _____________________________________________________________________________
-template <class MetaDataDispatcher, typename Sorter, typename NextSorter>
+template <class MetaDataDispatcher, typename Sorter>
 std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                         typename MetaDataDispatcher::WriteType>>
 Index::createPermutationPairImpl(const string& fileName1,
                                  const string& fileName2, Sorter& triples,
                                  size_t c0, size_t c1, size_t c2,
-                                 NextSorter* nextSorter,
-                                 auto&& nextTripleAction) {
+                                 auto&&... nextTripleActions) {
   using MetaData = typename MetaDataDispatcher::WriteType;
   MetaData metaData1, metaData2;
   if constexpr (metaData1._isMmapBased) {
@@ -479,11 +481,11 @@ Index::createPermutationPairImpl(const string& fileName1,
   Id lastLhs = std::numeric_limits<Id>::max();
   uint64_t totalNumTriples = 0;
   while (!triples.empty()) {
-    auto triple = *triples;
-    nextTripleAction(triple);
+    const auto triple = *triples;
+    // Call each of the `nextTripleActions` for the current triple
+    (..., nextTripleActions(triple));
     ++triples;
     ++totalNumTriples;
-    nextSorter->push(triple);
     if (triple[c0] != currentRel) {
       writer1.addRelation(currentRel, buffer, distinctCol1, functional);
       writeSwitchedRel(&writer2, currentRel, &buffer);
@@ -557,8 +559,7 @@ void Index::writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
 }
 
 // ________________________________________________________________________
-template <class MetaDataDispatcher, class Comparator1, class Comparator2,
-          typename NextSorter>
+template <class MetaDataDispatcher, class Comparator1, class Comparator2>
 std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                         typename MetaDataDispatcher::WriteType>>
 Index::createPermutations(
@@ -567,12 +568,12 @@ Index::createPermutations(
         p1,
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
-    NextSorter* nextSorter, auto&& nextTripleAction) {
+    auto&&... nextTripleActions) {
   auto metaData = createPermutationPairImpl<MetaDataDispatcher>(
       _onDiskBase + ".index" + p1._fileSuffix,
       _onDiskBase + ".index" + p2._fileSuffix, *vec, p1._keyOrder[0],
-      p1._keyOrder[1], p1._keyOrder[2], nextSorter,
-      std::forward<decltype(nextTripleAction)>(nextTripleAction));
+      p1._keyOrder[1], p1._keyOrder[2],
+      std::forward<decltype(nextTripleActions)>(nextTripleActions)...);
 
   if (metaData.has_value()) {
     auto& mdv = metaData.value();
@@ -586,18 +587,18 @@ Index::createPermutations(
 }
 
 // ________________________________________________________________________
-template <class MetaDataDispatcher, class Comparator1, class Comparator2,
-          typename NextSorter>
+template <class MetaDataDispatcher, class Comparator1, class Comparator2>
 void Index::createPermutationPair(
     auto vocabularyData,
     const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
         p1,
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
-    NextSorter* nextSorter, auto&& additionalTripleAction) {
+    auto&&... additionalTripleActions) {
   auto metaData = createPermutations<MetaDataDispatcher>(
-      vocabularyData, p1, p2, nextSorter,
-      std::forward<decltype(additionalTripleAction)>(additionalTripleAction));
+      vocabularyData, p1, p2,
+      std::forward<decltype(additionalTripleActions)>(
+          additionalTripleActions)...);
   if (metaData) {
     LOG(INFO) << "Exchanging multiplicities for " << p1._readableName << " and "
               << p2._readableName << " ..." << std::endl;

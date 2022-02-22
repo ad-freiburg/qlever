@@ -516,13 +516,12 @@ class Index {
 
   void passContextFileIntoVector(const string& contextFile, TextVec& vec);
 
-  template <class MetaDataDispatcher, typename Sorter, typename NextSorter>
+  template <class MetaDataDispatcher, typename Sorter>
   std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                           typename MetaDataDispatcher::WriteType>>
   createPermutationPairImpl(const string& fileName1, const string& fileName2,
                             Sorter& vec, size_t c0, size_t c1, size_t c2,
-                            NextSorter* nextSorter,
-                            auto&& additionalTripleAction);
+                            auto&&... additionalTripleActions);
 
   void writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
                         ad_utility::BufferedVector<array<Id, 2>>* bufPtr);
@@ -538,15 +537,14 @@ class Index {
   // the SPO permutation is also needed for patterns (see usage in
   // Index::createFromFile function)
 
-  template <class MetaDataDispatcher, class Comparator1, class Comparator2,
-            typename NextSorter>
+  template <class MetaDataDispatcher, class Comparator1, class Comparator2>
   void createPermutationPair(
       auto vocabularyData,
       const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
-      NextSorter* nextSorter, auto&& additionalTripleAction);
+      auto&&... additionalTripleActions);
 
   // The pairs of permutations are PSO-POS, OSP-OPS and SPO-SOP
   // the multiplicity of column 1 in partner 1 of the pair is equal to the
@@ -565,8 +563,7 @@ class Index {
   // Careful: only multiplicities for first column is valid after call, need to
   // call exchangeMultiplicities as done by createPermutationPair
   // the optional is std::nullopt if vec and thus the index is empty
-  template <class MetaDataDispatcher, class Comparator1, class Comparator2,
-            typename NextSorter>
+  template <class MetaDataDispatcher, class Comparator1, class Comparator2>
   std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                           typename MetaDataDispatcher::WriteType>>
   createPermutations(
@@ -575,7 +572,7 @@ class Index {
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
-      NextSorter* nextSorter, auto&& additionalTripleAction);
+      auto&&... additionalTripleActions);
 
   // wrap the static function using the internal member variables
   // the bool indicates wether the TripleVec has to be sorted before the pattern
