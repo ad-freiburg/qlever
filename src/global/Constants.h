@@ -64,7 +64,7 @@ static const int DEFAULT_NOF_VALUE_EXPONENT_DIGITS = 20;
 static const int DEFAULT_NOF_VALUE_MANTISSA_DIGITS = 30;
 static const int DEFAULT_NOF_DATE_YEAR_DIGITS = 19;
 
-static const std::string MMAP_FILE_SUFFIX = ".meta-mmap";
+static const std::string MMAP_FILE_SUFFIX = ".meta";
 static const std::string CONFIGURATION_FILE = ".meta-data.json";
 static const std::string PREFIX_FILE = ".prefixes";
 
@@ -74,7 +74,7 @@ static const std::string ERROR_IGNORE_CASE_UNSUPPORTED =
     "\"locale\" key, otherwise \"en.US\" will be used as default";
 static const std::string WARNING_ASCII_ONLY_PREFIXES =
     "You specified \"ascii-prefixes-only = true\", which enables faster "
-    "parsing for well-behaved TTL files (see qlever/docs on GitHub)";
+    "parsing for well-behaved TTL files";
 // " but only works correctly if there are no escape sequences in "
 // "prefixed names (e.g., rdfs:label\\,el is not allowed), no multiline "
 // "literals, and the regex \". *\\n\" only matches at the end of a triple. "
@@ -111,6 +111,10 @@ static constexpr size_t PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE = 5;
 // When asked to make room for X ids in the cache, actually make room for X
 // times this factor.
 static constexpr double MAKE_ROOM_SLACK_FACTOR = 2;
+
+// The version of the binary format of the pattern files. Has to be increased,
+// when this format is changed.
+static constexpr uint32_t PATTERNS_FILE_VERSION = 1;
 
 inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::Double;

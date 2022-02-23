@@ -14,6 +14,7 @@
 
 #include "../util/File.h"
 #include "../util/Generator.h"
+#include "../util/Iterators.h"
 #include "../util/Serializer/FileSerializer.h"
 #include "../util/Serializer/SerializeVector.h"
 #include "../util/TypeTraits.h"
@@ -38,6 +39,13 @@ struct Pattern {
 
   ref operator[](const size_t pos) { return _data[pos]; }
   const_ref operator[](const size_t pos) const { return _data[pos]; }
+
+  using const_iterator = ad_utility::IteratorForAccessOperator<
+      Pattern, ad_utility::AccessViaBracketOperator, true>;
+
+  const_iterator begin() const { return {this, 0}; }
+
+  const_iterator end() const { return {this, size()}; }
 
   bool operator==(const Pattern& other) const {
     if (size() != other.size()) {
@@ -80,6 +88,8 @@ struct Pattern {
   const_ref back() const { return _data.back(); }
   ref back() { return _data.back(); }
   bool empty() { return _data.empty(); }
+
+  const Id* data() const { return _data.data(); }
 
   std::vector<Id> _data;
 };
@@ -152,9 +162,9 @@ class CompactVectorOfStrings {
   CompactVectorOfStrings(CompactVectorOfStrings&&) noexcept = default;
 
   // There is one more offset than the number of elements.
-  size_t size() const { return _offsets.size() - 1; }
+  size_t size() const { return ready() ? _offsets.size() - 1 : 0; }
 
-  bool ready() const { return _data != nullptr; }
+  bool ready() const { return !_offsets.empty(); }
 
   /**
    * @brief operator []
@@ -173,79 +183,8 @@ class CompactVectorOfStrings {
   // disk without buffering the whole `Vector`.
   static cppcoro::generator<vector_type> diskIterator(string filename);
 
-  class Iterator {
-   private:
-    const CompactVectorOfStrings* _vector = nullptr;
-    size_t _index = 0;
-
-   public:
-    using iterator_category = std::random_access_iterator_tag;
-    using difference_type = int64_t;
-    using value_type = CompactVectorOfStrings::value_type;
-
-    Iterator(const CompactVectorOfStrings* vec, size_t index)
-        : _vector{vec}, _index{index} {}
-    Iterator() = default;
-
-    auto operator<=>(const Iterator& rhs) const {
-      return (_index <=> rhs._index);
-    }
-
-    bool operator==(const Iterator& rhs) const { return _index == rhs._index; }
-
-    Iterator& operator+=(difference_type n) {
-      _index += n;
-      return *this;
-    }
-    Iterator operator+(difference_type n) const {
-      Iterator result{*this};
-      result += n;
-      return result;
-    }
-
-    Iterator& operator++() {
-      ++_index;
-      return *this;
-    }
-    Iterator operator++(int) & {
-      Iterator result{*this};
-      ++_index;
-      return result;
-    }
-
-    Iterator& operator--() {
-      --_index;
-      return *this;
-    }
-    Iterator operator--(int) & {
-      Iterator result{*this};
-      --_index;
-      return result;
-    }
-
-    friend Iterator operator+(difference_type n, const Iterator& it) {
-      return it + n;
-    }
-
-    Iterator& operator-=(difference_type n) {
-      _index -= n;
-      return *this;
-    }
-
-    Iterator operator-(difference_type n) const {
-      Iterator result{*this};
-      result -= n;
-      return result;
-    }
-
-    difference_type operator-(const Iterator& rhs) const {
-      return static_cast<difference_type>(_index) - rhs._index;
-    }
-
-    auto operator*() const { return (*_vector)[_index]; }
-
-    auto operator[](difference_type n) const { return (*_vector)[_index + n]; }
-  };
+  using Iterator = ad_utility::IteratorForAccessOperator<
+      CompactVectorOfStrings, ad_utility::AccessViaBracketOperator, true>;
 
   Iterator begin() const { return {this, 0}; }
   Iterator end() const { return {this, size()}; }
@@ -257,7 +196,6 @@ class CompactVectorOfStrings {
   friend void serialize(Serializer& s, CompactVectorOfStrings& c) {
     s | c._data;
     s | c._offsets;
-    ;
   }
 
  private:
@@ -271,16 +209,20 @@ namespace detail {
 template <typename data_type>
 struct CompactStringVectorWriter {
   ad_utility::File _file;
+  off_t _startOfFile;
   using offset_type = typename CompactVectorOfStrings<data_type>::offset_type;
   std::vector<offset_type> _offsets;
   bool _finished = false;
   offset_type _nextOffset = 0;
+
   explicit CompactStringVectorWriter(const std::string& filename)
       : _file{filename, "w"} {
-    AD_CHECK(_file.isOpen());
-    // We don't known the data size yet.
-    size_t dataSizeDummy = 0;
-    _file.write(&dataSizeDummy, sizeof(dataSizeDummy));
+    commonInitialization();
+  }
+
+  explicit CompactStringVectorWriter(ad_utility::File&& file)
+      : _file{std::move(file)} {
+    commonInitialization();
   }
 
   void push(const data_type* data, size_t elementSize) {
@@ -290,23 +232,37 @@ struct CompactStringVectorWriter {
     _file.write(data, elementSize * sizeof(data_type));
   }
 
-  void finish() {
+  // Finish writing, and return the moved file. If the return value is
+  // discarded, then the file will be closed immediately by the destructor of
+  // the `File` class.
+  ad_utility::File finish() {
     if (_finished) {
-      return;
+      return {};
     }
+    _finished = true;
     _offsets.push_back(_nextOffset);
-    _file.seek(0, SEEK_SET);
+    _file.seek(_startOfFile, SEEK_SET);
     _file.write(&_nextOffset, sizeof(size_t));
     _file.seek(0, SEEK_END);
     ad_utility::serialization::FileWriteSerializer f{std::move(_file)};
     f << _offsets;
-    _finished = true;
+    return std::move(f).file();
   }
 
   ~CompactStringVectorWriter() {
     if (!_finished) {
       finish();
     }
+  }
+
+ private:
+  // Has to be run by all the constructors
+  void commonInitialization() {
+    AD_CHECK(_file.isOpen());
+    // We don't known the data size yet.
+    _startOfFile = _file.tell();
+    size_t dataSizeDummy = 0;
+    _file.write(&dataSizeDummy, sizeof(dataSizeDummy));
   }
 };
 }  // namespace detail
