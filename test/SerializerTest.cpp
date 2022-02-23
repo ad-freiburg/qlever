@@ -187,3 +187,61 @@ TEST(Serializer, CopyAndMove) {
   };
   testWithAllSerializers(testWithMove);
 }
+
+TEST(VectorIncrementalSerializer, Serialize) {
+  std::vector<int> ints{9, 7, 5, 3, 1, -1, -3, 5, 5, 6, 67498235, 0, 42};
+  std::vector<std::string> strings{"alpha", "beta", "gamma", "Epsilon",
+                                   "kartoffelsalat"};
+  std::string filename = "vectorIncrementalTest.dat";
+
+  auto testIncrementalSerialization =
+      [filename]<typename T>(const T& inputVector) {
+        VectorIncrementalSerializer<typename T::value_type, FileWriteSerializer>
+            writer{filename};
+        for (const auto& el : inputVector) {
+          writer.push(el);
+        }
+        writer.finish();
+        FileReadSerializer reader{filename};
+        T readVector;
+        reader >> readVector;
+        ASSERT_EQ(inputVector, readVector);
+      };
+  testIncrementalSerialization(ints);
+  testIncrementalSerialization(strings);
+  ad_utility::deleteFile(filename);
+}
+TEST(VectorIncrementalSerializer, SerializeInTheMiddle) {
+  std::vector<int> ints{9, 7, 5, 3, 1, -1, -3, 5, 5, 6, 67498235, 0, 42};
+  std::vector<std::string> strings{"alpha", "beta", "gamma", "Epsilon",
+                                   "kartoffelsalat"};
+  std::string filename = "vectorIncrementalTest.dat";
+
+  auto testIncrementalSerialization =
+      [filename]<typename T>(const T& inputVector) {
+        FileWriteSerializer writeSerializer{filename};
+        double d = 42.42;
+        writeSerializer << d;
+        VectorIncrementalSerializer<typename T::value_type, FileWriteSerializer>
+            writer{std::move(writeSerializer)};
+        for (const auto& el : inputVector) {
+          writer.push(el);
+        }
+        writeSerializer = FileWriteSerializer{std::move(writer).serializer()};
+        d = -13.123;
+        writeSerializer << d;
+        writeSerializer.close();
+        FileReadSerializer reader{filename};
+        double dRead;
+        reader >> dRead;
+        ASSERT_FLOAT_EQ(dRead, 42.42);
+        T readVector;
+        reader >> readVector;
+        ASSERT_EQ(inputVector, readVector);
+        reader >> dRead;
+        ASSERT_FLOAT_EQ(dRead, -13.123);
+      };
+  testIncrementalSerialization(ints);
+  testIncrementalSerialization(strings);
+  ad_utility::deleteFile(filename);
+}

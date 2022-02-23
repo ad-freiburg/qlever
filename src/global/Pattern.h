@@ -303,28 +303,21 @@ struct CompactStringVectorWriter {
     _file.write(data, elementSize * sizeof(data_type));
   }
 
-  /*
-  // Finish writing and move the file out.
-  ad_utility::File file() && {
-    finish();
-    return std::move(_file);
-  }
-   */
-
-  void finish() {
+  // Finish writing, and return the moved file. If the return value is
+  // discarded, then the file will be closed immediately by the destructor of
+  // the `File` class.
+  ad_utility::File finish() {
     if (_finished) {
-      return;
+      return {};
     }
+    _finished = true;
     _offsets.push_back(_nextOffset);
     _file.seek(_startOfFile, SEEK_SET);
     _file.write(&_nextOffset, sizeof(size_t));
     _file.seek(0, SEEK_END);
     ad_utility::serialization::FileWriteSerializer f{std::move(_file)};
     f << _offsets;
-    _finished = true;
-    // Move the file back, so we can still retrieve it via the `file()` method
-    //_file = std::move(f).file();
-    //_file.flush();
+    return std::move(f).file();
   }
 
   ~CompactStringVectorWriter() {

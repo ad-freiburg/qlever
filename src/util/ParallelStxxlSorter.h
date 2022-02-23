@@ -14,13 +14,13 @@ namespace ad_utility {
 
 // This class has the same interface as a `stxxl::sorter` and performs the same
 // functionality, with the following difference: All expensive operations
-// (sorting or merging a block) are performed on a background thread, s.t. the
-// calls to `push()` (input state) or `operator++` (output state) return much
-// faster.
+// (sorting or merging a block) are performed on a background thread such that
+// the calls to `push()` (add triples before the sort) or `operator++` (iterate
+// over the triples after the sort) return much faster.
 template <typename ValueType, typename Comparator>
 class BackgroundStxxlSorter {
  private:
-  // The underlying sorter
+  // The underlying sorter.
   stxxl::sorter<ValueType, Comparator> _sorter;
   // Buffer for a block of elements, which will be passed to the `_sorter`
   // (respectively: were retrieved from the `_sorter`) at once and
@@ -29,29 +29,29 @@ class BackgroundStxxlSorter {
   // Wait for the asynchronous background operations.
   std::future<void> _sortInBackgroundFuture;
   std::future<std::vector<ValueType>> _mergeInBackgroundFuture;
-  // The number of elements that the `_sorter` can sort in RAM
-  size_t _numElsInRun;
+  // The number of elements that the `_sorter` can sort in RAM.
+  size_t _numElementsInRun;
 
-  // Used in the output phase as an index into the `_buffer`
+  // Used in the output phase as an index into `_buffer`.
   size_t _outputIndex = 0;
 
  public:
   using value_type = ValueType;
 
-  // The BackgroundStxxlSorter will acutally use 2 * memoryForStxxl plus some
-  // overhead.
+  // The BackgroundStxxlSorter will actually use 3 * memoryForStxxl bytes plus
+  // some overhead.
   explicit BackgroundStxxlSorter(size_t memoryForStxxl,
                                  Comparator comparator = Comparator())
       : _sorter{comparator, memoryForStxxl} {
-    _numElsInRun = _sorter.num_els_in_run();
-    _buffer.reserve(_numElsInRun);
+    _numElementsInRun = _sorter.num_els_in_run();
+    _buffer.reserve(_numElementsInRun);
   }
 
-  // While in the input phase (before calling `sort()`), add another value that
-  // is to be sorted.
+  // In the input phase (before calling `sort()`), add another value to the
+  // to-be-sorted input.
   void push(ValueType value) {
     _buffer.push_back(std::move(value));
-    if (_buffer.size() < _numElsInRun) {
+    if (_buffer.size() < _numElementsInRun) {
       return;
     }
 
@@ -70,12 +70,12 @@ class BackgroundStxxlSorter {
     _sortInBackgroundFuture =
         std::async(std::launch::async, std::move(sortRunInBackground));
     _buffer.clear();
-    _buffer.reserve(_numElsInRun);
+    _buffer.reserve(_numElementsInRun);
   }
 
   // Transition from the input phase, where new elements can be added via
-  // `push()` to the output phase, where `operator++`, `operator*` and `empty()`
-  // can be called to retrieve the sorted elements.
+  // `push()`, to the output phase, where `operator++`, `operator*` and
+  // `empty()` can be called to retrieve elements in sorted order.
   void sort() {
     // First sort all remaining elements from the input phase.
     if (_sortInBackgroundFuture.valid()) {
@@ -86,26 +86,27 @@ class BackgroundStxxlSorter {
     }
     _sorter.sort();
     _buffer.clear();
-    _buffer.reserve(_numElsInRun);
-    fill_output_buffer();
+    _buffer.reserve(_numElementsInRun);
+    refill_output_buffer();
   }
 
   bool empty() {
     if (_outputIndex >= _buffer.size()) {
-      fill_output_buffer();
+      refill_output_buffer();
     }
     return (_outputIndex >= _buffer.size());
   }
 
   decltype(auto) operator*() const { return _buffer[_outputIndex]; }
 
-  void fill_output_buffer() {
+  void refill_output_buffer() {
     _buffer.clear();
     _outputIndex = 0;
-    auto mergeNextBlock = [this] {
+
+    auto getNextBlock = [this] {
       std::vector<ValueType> buffer;
-      buffer.reserve(_numElsInRun);
-      for (size_t i = 0; i < _numElsInRun; ++i) {
+      buffer.reserve(_numElementsInRun);
+      for (size_t i = 0; i < _numElementsInRun; ++i) {
         if (_sorter.empty()) {
           break;
         }
@@ -119,7 +120,7 @@ class BackgroundStxxlSorter {
       // If we have reached here, this is the first time we fill the buffer,
       // Fill the buffer synchronously and immediately start the next
       // asynchronous operation.
-      _buffer = mergeNextBlock();
+      _buffer = getNextBlock();
     }
 
     if (_mergeInBackgroundFuture.valid()) {
@@ -129,13 +130,13 @@ class BackgroundStxxlSorter {
     if (_sorter.empty()) {
       return;
     }
-    _mergeInBackgroundFuture = std::async(std::launch::async, mergeNextBlock);
+    _mergeInBackgroundFuture = std::async(std::launch::async, getNextBlock);
   }
 
   BackgroundStxxlSorter& operator++() {
     _outputIndex++;
     if (_outputIndex >= _buffer.size()) {
-      fill_output_buffer();
+      refill_output_buffer();
     }
     return *this;
   }
@@ -151,33 +152,28 @@ class BackgroundStxxlSorter {
     }
 
     _sorter.clear();
-    _numElsInRun = _sorter.num_els_in_run();
-    _buffer.reserve(_numElsInRun);
+    _numElementsInRun = _sorter.num_els_in_run();
+    _buffer.reserve(_numElementsInRun);
     _outputIndex = 0;
     _outputIndex = 0;
   }
 };
 
+// TODO<joka921> Comment.
 template <typename InputSorter>
 class StxxlUniqueSorter {
  private:
   InputSorter& _inputSorter;
-  uint64_t _numElementsYielded = 0;
   std::optional<typename InputSorter::value_type> _previousValue;
 
  public:
+  // The `inputSorter` must be a `stxxl::sorter` or a `StxxlBackgroundSorter`
+  // for which `sort` has already been called.
   explicit StxxlUniqueSorter(InputSorter& inputSorter)
       : _inputSorter{inputSorter} {}
-  [[nodiscard]] bool empty() const {
-    if (_inputSorter.empty()) {
-      return true;
-    } else {
-      return false;
-    }
-  }
+  [[nodiscard]] bool empty() const { return _inputSorter.empty(); }
 
   StxxlUniqueSorter& operator++() {
-    _numElementsYielded++;
     _previousValue = *_inputSorter;
     ++_inputSorter;
     while (!_inputSorter.empty() && _previousValue == *_inputSorter) {

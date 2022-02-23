@@ -23,7 +23,7 @@
 #include "../util/TupleHelpers.h"
 #include "./PrefixHeuristic.h"
 #include "./VocabularyGenerator.h"
-#include "MetaDataIterator.h"
+#include "TripleIterator.h"
 
 using std::array;
 
@@ -53,11 +53,11 @@ VocabularyData Index::createIdTriplesAndVocab(const string& ntFile) {
   // used from now on). This will preserve information about externalized
   // Prefixes etc.
   _vocab.clear();
-  auto sortedByPsoPtr = convertPartialToGlobalIds(
-      *std::get<0>(vocabData.idTriples), vocabData.actualPartialSizes,
-      NUM_TRIPLES_PER_PARTIAL_VOCAB);
+  auto psoSorter = convertPartialToGlobalIds(*std::get<0>(vocabData.idTriples),
+                                             vocabData.actualPartialSizes,
+                                             NUM_TRIPLES_PER_PARTIAL_VOCAB);
 
-  vocabData.idTriples = std::move(sortedByPsoPtr);
+  vocabData.idTriples = std::move(psoSorter);
   return vocabData;
 }
 
@@ -146,7 +146,6 @@ void Index::createFromFile(const string& filename) {
 
   if (_loadAllPermutations) {
     // After the SPO permutation, create patterns if so desired.
-    LOG(INFO) << "Create the sorter" << std::endl;
     StxxlSorter<SortByOSP> ospSorter{STXXL_MEMORY_TO_USE};
     auto pushToOspSorter = [&ospSorter](const auto& triple) {
       ospSorter.push(triple);
@@ -162,7 +161,7 @@ void Index::createFromFile(const string& filename) {
       auto pushTripleToPatterns = [&patternCreator,
                                    &hasLanguagePredicate](const auto& triple) {
         if (!hasLanguagePredicate(triple)) {
-          patternCreator.pushTriple(triple);
+          patternCreator.processTriple(triple);
         }
       };
       createPermutationPair<IndexMetaDataMmapDispatcher>(
@@ -175,12 +174,13 @@ void Index::createFromFile(const string& filename) {
     spoSorter.clear();
     ospSorter.sort();
 
-    // For the last pair of permutations we don't need a next sorter, so we just
-    // pass in the dummy.
+    // For the last pair of permutations we don't need a next sorter, so we have
+    // no fourth argument.
     createPermutationPair<IndexMetaDataMmapDispatcher>(&ospSorter, _OSP, _OPS);
     _configurationJson["has-all-permutations"] = true;
   } else {
     if (_usePatterns) {
+      // TODO<joka921> Reinstate this functionality.
       // The first argument means that the triples are not yet sorted according
       // to SPO.
       LOG(ERROR)
@@ -567,12 +567,12 @@ Index::createPermutations(
         p1,
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
-    auto&&... nextTripleActions) {
+    auto&&... tripleCallbacks) {
   auto metaData = createPermutationPairImpl<MetaDataDispatcher>(
       _onDiskBase + ".index" + p1._fileSuffix,
       _onDiskBase + ".index" + p2._fileSuffix, *vec, p1._keyOrder[0],
       p1._keyOrder[1], p1._keyOrder[2],
-      std::forward<decltype(nextTripleActions)>(nextTripleActions)...);
+      std::forward<decltype(tripleCallbacks)>(tripleCallbacks)...);
 
   if (metaData.has_value()) {
     auto& mdv = metaData.value();
@@ -632,15 +632,16 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
   auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
+  // TODO<joka921> This is a duplicate, factor it out.
   auto isLanguagePredicate = [lower = langPredLowerBound,
                               upper = langPredUpperBound](const auto& triple) {
     return triple[1] >= lower && triple[1] < upper;
   };
   PatternCreator patternCreator{_onDiskBase + ".index.patterns"};
-  auto iterator = MetaDataIterator<Permutation::SPO_T>{_SPO};
+  auto iterator = TripleIterator<Permutation::SPO_T>{_SPO};
   while (!iterator.empty()) {
     if (!isLanguagePredicate(*iterator)) {
-      patternCreator.pushTriple(*iterator);
+      patternCreator.processTriple(*iterator);
     }
     ++iterator;
   }
@@ -1120,6 +1121,11 @@ std::future<void> Index::writeNextPartialVocabulary(
           false);
       LOG(TIMING) << "Finished sorting of vocabulary for prefix compression"
                   << std::endl;
+      LOG(TIMING) << "Remove externalized words from prefix compression"
+                  << std::endl;
+      std::erase_if(vec, [](const auto& a) {
+        return a.second.m_splitVal.isExternalized;
+      });
       writePartialVocabularyToFile(vec, partialCompressionFilename);
     }
     LOG(TIMING) << "Finished writing the partial vocabulary" << std::endl;

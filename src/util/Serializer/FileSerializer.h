@@ -52,9 +52,10 @@ class FileReadSerializer {
  public:
   static constexpr bool IsWriteSerializer = false;
 
-  FileReadSerializer(File&& file) : _file{std::move(file)} {};
+  explicit FileReadSerializer(File&& file) : _file{std::move(file)} {};
 
-  FileReadSerializer(std::string filename) : _file{filename, "r"} {
+  explicit FileReadSerializer(const std::string& filename)
+      : _file{filename, "r"} {
     AD_CHECK(_file.isOpen());
   }
 
@@ -69,7 +70,7 @@ class FileReadSerializer {
   bool isExhausted() { return _file.isAtEof(); }
 
   void setSerializationPosition(SerializationPosition position) {
-    _file.seek(position, SEEK_SET);
+    _file.seek(static_cast<off_t>(position), SEEK_SET);
   }
 
   File&& file() && { return std::move(_file); }

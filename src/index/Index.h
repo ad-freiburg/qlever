@@ -572,7 +572,7 @@ class Index {
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
-      auto&&... additionalTripleActions);
+      auto&&... tripleCallbacks);
 
   // wrap the static function using the internal member variables
   // the bool indicates wether the TripleVec has to be sorted before the pattern

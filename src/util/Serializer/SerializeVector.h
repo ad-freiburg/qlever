@@ -43,6 +43,8 @@ void serialize(Serializer& serializer, std::vector<T, Alloc>& vector) {
   }
 }
 
+/// Incrementally serialize a std::vector to disk without materializing it.
+/// Call `push` for each of the elements that will become part of the vector.
 template <typename T, typename Serializer>
 requires Serializer::IsWriteSerializer class VectorIncrementalSerializer {
  private:
@@ -55,7 +57,8 @@ requires Serializer::IsWriteSerializer class VectorIncrementalSerializer {
   explicit VectorIncrementalSerializer(Serializer&& serializer)
       : _serializer{std::move(serializer)},
         _startPosition{_serializer.getSerializationPosition()} {
-    // The correct size will be set in the finish() method.
+    // `_size` does not have the correct value yet. The correct size will be set
+    // in the finish() method.
     _serializer << _size;
   }
 
@@ -75,7 +78,10 @@ requires Serializer::IsWriteSerializer class VectorIncrementalSerializer {
     _serializer.setSerializationPosition(endPosition);
   }
 
-  Serializer serializer() && { return std::move(_serializer); }
+  Serializer serializer() && {
+    finish();
+    return std::move(_serializer);
+  }
 
   ~VectorIncrementalSerializer() { finish(); }
 };

@@ -2,13 +2,13 @@
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #include "./Index.h"
-#include "./MetaDataIterator.h"
+#include "./TripleIterator.h"
 
 /// Dump a  certain permutation to stdout in a human-readable way as IDs, and
 /// in deterministic order
 template <typename Permutation>
 void dumpToStdout(const Permutation& permutation) {
-  MetaDataIterator it{permutation};
+  TripleIterator it{permutation};
   size_t i = 0;
   while (!it.empty()) {
     auto triple = *it;

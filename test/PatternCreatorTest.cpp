@@ -9,7 +9,7 @@
 
 TEST(PatternStatistics, Initialization) {
   PatternStatistics patternStatistics{50, 25, 4};
-  ASSERT_EQ(patternStatistics._numDistinctSubjectPredicate, 50u);
+  ASSERT_EQ(patternStatistics._numDistinctSubjectPredicatePairs, 50u);
   ASSERT_FLOAT_EQ(patternStatistics._avgNumPredicatesPerSubject, 2.0);
   ASSERT_FLOAT_EQ(patternStatistics._avgNumSubjectsPerPredicate, 12.5);
 }
@@ -24,26 +24,27 @@ TEST(PatternStatistics, Serialization) {
   PatternStatistics statistics2;
   reader >> statistics2;
 
-  ASSERT_EQ(statistics2._numDistinctSubjectPredicate, 50u);
+  ASSERT_EQ(statistics2._numDistinctSubjectPredicatePairs, 50u);
   ASSERT_FLOAT_EQ(statistics2._avgNumPredicatesPerSubject, 2.0);
   ASSERT_FLOAT_EQ(statistics2._avgNumSubjectsPerPredicate, 12.5);
 }
 
-// Helper function: push a small spo permutation to a PatternCreator
-void pushTriples(PatternCreator& creator) {
-  creator.pushTriple({0, 10, 20});
-  creator.pushTriple({0, 10, 21});
-  creator.pushTriple({0, 11, 18});
-  creator.pushTriple({1, 12, 18});
-  creator.pushTriple({1, 13, 18});
-  creator.pushTriple({3, 10, 28});
-  creator.pushTriple({3, 10, 29});
-  creator.pushTriple({3, 11, 45});
+// Create patterns from a small SPO-sorted sequence of triples.
+void createExamplePatterns(PatternCreator& creator) {
+  creator.processTriple({0, 10, 20});
+  creator.processTriple({0, 10, 21});
+  creator.processTriple({0, 11, 18});
+  creator.processTriple({1, 10, 18});
+  creator.processTriple({1, 12, 18});
+  creator.processTriple({1, 13, 18});
+  creator.processTriple({3, 10, 28});
+  creator.processTriple({3, 11, 29});
+  creator.processTriple({3, 11, 45});
 }
 
 // Assert that the contents of patterns read from `filename` match the triples
-// from the `pushTriples` function.
-void assertPatternContents(std::string filename) {
+// from the `createExamplePatterns` function.
+void assertPatternContents(const std::string& filename) {
   double averageNumSubjectsPerPredicate;
   double averageNumPredicatesPerSubject;
   uint64_t numDistinctSubjectPredicatePairs;
@@ -54,20 +55,21 @@ void assertPatternContents(std::string filename) {
       filename, averageNumSubjectsPerPredicate, averageNumPredicatesPerSubject,
       numDistinctSubjectPredicatePairs, patterns, subjectToPattern);
 
-  ASSERT_EQ(numDistinctSubjectPredicatePairs, 6);
-  ASSERT_FLOAT_EQ(averageNumPredicatesPerSubject, 2.0);
-  ASSERT_FLOAT_EQ(averageNumSubjectsPerPredicate, 6.0 / 4.0);
+  ASSERT_EQ(numDistinctSubjectPredicatePairs, 7);
+  ASSERT_FLOAT_EQ(averageNumPredicatesPerSubject, 7.0 / 3.0);
+  ASSERT_FLOAT_EQ(averageNumSubjectsPerPredicate, 7.0 / 4.0);
 
-  // We have to patterns: (10, 11) and (12, 13)
+  // We have two patterns: (10, 11) and (10, 12, 13).
   ASSERT_EQ(patterns.size(), 2);
 
   ASSERT_EQ(patterns[0].size(), 2);
   ASSERT_EQ(patterns[0][0], 10);
   ASSERT_EQ(patterns[0][1], 11);
 
-  ASSERT_EQ(patterns[1].size(), 2);
-  ASSERT_EQ(patterns[1][0], 12);
-  ASSERT_EQ(patterns[1][1], 13);
+  ASSERT_EQ(patterns[1].size(), 3);
+  ASSERT_EQ(patterns[1][0], 10);
+  ASSERT_EQ(patterns[1][1], 12);
+  ASSERT_EQ(patterns[1][2], 13);
 
   // We have 4 subjects 0, 1, 2, 3. Subject 2 has no pattern, because
   // it has no triples. Subjects 0 and 3 have the first pattern, subject 1 has
@@ -83,7 +85,7 @@ void assertPatternContents(std::string filename) {
 TEST(PatternCreator, writeAndReadWithFinish) {
   std::string filename = "patternCreator.test.tmp";
   PatternCreator creator{filename};
-  pushTriples(creator);
+  createExamplePatterns(creator);
   creator.finish();
 
   assertPatternContents(filename);
@@ -94,8 +96,8 @@ TEST(PatternCreator, writeAndReadWithDestructor) {
   std::string filename = "patternCreator.test.tmp";
   {
     PatternCreator creator{filename};
-    pushTriples(creator);
-    // The destructor of the following } automatically runs
+    createExamplePatterns(creator);
+    // The destructor of  `creator` at the following `} automatically runs
     // `creator.finish()`
   }
 
@@ -107,10 +109,10 @@ TEST(PatternCreator, writeAndReadWithDestructorAndFinish) {
   std::string filename = "patternCreator.test.tmp";
   {
     PatternCreator creator{filename};
-    pushTriples(creator);
+    createExamplePatterns(creator);
     creator.finish();
-    // The destructor of the following } does not run `creator.finish()`,
-    // because it has already been manually called.
+    // The destructor of `creator` at the following `}` does not run
+    // `creator.finish()` because it has already been manually called.
   }
 
   assertPatternContents(filename);
