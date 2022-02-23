@@ -34,7 +34,7 @@ class TriplesView {
    private:
     TriplesView* _iterator;
     explicit Iterator(TriplesView* iterator) : _iterator{iterator} {}
-    friend class TripleIterator;
+    friend class TriplesView;
 
    public:
     decltype(auto) operator++() { return ++(*_iterator); }
