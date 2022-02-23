@@ -10,10 +10,8 @@ template <typename Permutation>
 void dumpToStdout(const Permutation& permutation) {
   TripleIterator it{permutation};
   size_t i = 0;
-  while (!it.empty()) {
-    auto triple = *it;
+  for (auto triple : it) {
     std::cout << triple[0] << " " << triple[1] << " " << triple[2] << std::endl;
-    ++it;
     ++i;
     if (i % (1ul << 20) == 0) {
       LOG(INFO) << "Exported " << i << " relations" << std::endl;

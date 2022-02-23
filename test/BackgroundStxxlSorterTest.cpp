@@ -33,12 +33,35 @@ TEST(BackgroundStxxlSorter, sortInts) {
   }
   sorter.sort();
   std::vector<int> result;
-  while (!sorter.empty()) {
-    result.push_back(*sorter);
-    ++sorter;
+  for (const auto& el : sorter) {
+    result.push_back(el);
   }
   std::sort(ints.begin(), ints.end());
   ASSERT_EQ(ints, result);
+}
+
+TEST(BackgroundStxxlSorter, InvalidState) {
+  {
+    ad_utility::BackgroundStxxlSorter<int, IntSorter> sorter{memoryForTests};
+    sorter.push(42);
+    // Missing call to sort
+    ASSERT_THROW(sorter.begin(), ad_semsearch::Exception);
+  }
+
+  {
+    ad_utility::BackgroundStxxlSorter<int, IntSorter> sorter{memoryForTests};
+    sorter.push(42);
+    // Missing call to sort
+    ASSERT_THROW(sorter.end(), ad_semsearch::Exception);
+  }
+
+  {
+    ad_utility::BackgroundStxxlSorter<int, IntSorter> sorter{memoryForTests};
+    sorter.push(42);
+    // Missing call to sort
+    ASSERT_THROW(ad_utility::StxxlUniqueSorter uniqueSorter(sorter),
+                 ad_semsearch::Exception);
+  }
 }
 
 TEST(StxxlUniqueSorter, uniqueInts) {
@@ -65,9 +88,8 @@ TEST(StxxlUniqueSorter, uniqueInts) {
   sorter.sort();
   ad_utility::StxxlUniqueSorter uniqueSorter{sorter};
   std::vector<int> result;
-  while (!uniqueSorter.empty()) {
-    result.push_back(*uniqueSorter);
-    ++uniqueSorter;
+  for (const auto& el : uniqueSorter) {
+    result.push_back(el);
   }
   std::sort(originalInts.begin(), originalInts.end());
   // Erase "accidentally" unique duplicates from the random initialization.

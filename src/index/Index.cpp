@@ -59,6 +59,31 @@ IndexBuilderDataPsoSorter Index::createIdTriplesAndVocab(const string& ntFile) {
 
   return {vocabData, std::move(psoSorter)};
 }
+namespace {
+// Return a lambda that takes a triple of IDs and returns true iff the predicate
+// `triple[1]` is in [langPredLowerBound, langPredUpperBound)
+auto predicateHasLanguage(Id langPredLowerBound, Id langPredUpperBound) {
+  return [langPredLowerBound, langPredUpperBound](const auto& triple) {
+    return triple[1] >= langPredLowerBound && triple[1] < langPredUpperBound;
+  };
+}
+
+// Compute patterns and write them to `filename`. Triples where the predicate is
+// in [langPredLowerBound, langPredUpperBound). `iterable` must be
+// input-iterable and yield SPO-sorted triples of IDs.
+void createPatternsFromIterable(auto& iterable, const std::string& filename,
+                                Id langPredLowerBound, Id langPredUpperBound) {
+  PatternCreator patternCreator{filename};
+  auto hasLanguage =
+      predicateHasLanguage(langPredLowerBound, langPredUpperBound);
+  for (const auto& triple : iterable) {
+    if (!hasLanguage(triple)) {
+      patternCreator.processTriple(triple);
+    }
+  }
+  patternCreator.finish();
+}
+}  // namespace
 
 // _____________________________________________________________________________
 template <class Parser>
@@ -140,16 +165,14 @@ void Index::createFromFile(const string& filename) {
       &uniqueSorter, _PSO, _POS, spoSorter.makePushLambda());
   psoSorter.clear();
 
+  auto hasLanguagePredicate = predicateHasLanguage(
+      vocabData.langPredLowerBound, vocabData.langPredUpperBound);
+
   if (_loadAllPermutations) {
     // After the SPO permutation, create patterns if so desired.
     StxxlSorter<SortByOSP> ospSorter{STXXL_MEMORY_TO_USE};
     spoSorter.sort();
     if (_usePatterns) {
-      auto hasLanguagePredicate =
-          [lower = vocabData.langPredLowerBound,
-           upper = vocabData.langPredUpperBound](const auto& triple) {
-            return triple[1] >= lower && triple[1] < upper;
-          };
       PatternCreator patternCreator{_onDiskBase + ".index.patterns"};
       auto pushTripleToPatterns = [&patternCreator,
                                    &hasLanguagePredicate](const auto& triple) {
@@ -174,14 +197,10 @@ void Index::createFromFile(const string& filename) {
     _configurationJson["has-all-permutations"] = true;
   } else {
     if (_usePatterns) {
-      // TODO<joka921> Reinstate this functionality.
-      // The first argument means that the triples are not yet sorted according
-      // to SPO.
-      LOG(ERROR)
-          << "Patterns without spo permutations are currently not allowed"
-          << std::endl;
-      AD_CHECK(false);
-      // createPatterns(false, &vocabData);
+      spoSorter.sort();
+      createPatternsFromIterable(spoSorter, _onDiskBase + ".index.patterns",
+                                 vocabData.langPredLowerBound,
+                                 vocabData.langPredUpperBound);
     }
     _configurationJson["has-all-permutations"] = false;
   }
@@ -450,13 +469,6 @@ Index::createPermutationPairImpl(const string& fileName1,
     metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
   }
 
-  if (triples.empty()) {
-    LOG(WARN) << "Creating pair of index permutations from empty vector of "
-                 "triples, probably something went wrong"
-              << std::endl;
-    return std::nullopt;
-  }
-
   CompressedRelationWriter writer1{ad_utility::File(fileName1, "w")};
   CompressedRelationWriter writer2{ad_utility::File(fileName2, "w")};
 
@@ -465,7 +477,7 @@ Index::createPermutationPairImpl(const string& fileName1,
   // POS, this is a predicate (of which "relation" is a synonym).
   LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
   size_t from = 0;
-  Id currentRel = (*triples)[c0];
+  std::optional<Id> currentRel;
   ad_utility::BufferedVector<array<Id, 2>> buffer(
       THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.mmap-buffer");
   bool functional = true;
@@ -473,15 +485,16 @@ Index::createPermutationPairImpl(const string& fileName1,
   size_t sizeOfRelation = 0;
   Id lastLhs = std::numeric_limits<Id>::max();
   uint64_t totalNumTriples = 0;
-  while (!triples.empty()) {
-    const auto triple = *triples;
+  for (auto triple : triples) {
+    if (!currentRel.has_value()) {
+      currentRel = triple[c0];
+    }
     // Call each of the `nextTripleActions` for the current triple
     (..., nextTripleActions(triple));
-    ++triples;
     ++totalNumTriples;
     if (triple[c0] != currentRel) {
-      writer1.addRelation(currentRel, buffer, distinctCol1, functional);
-      writeSwitchedRel(&writer2, currentRel, &buffer);
+      writer1.addRelation(currentRel.value(), buffer, distinctCol1, functional);
+      writeSwitchedRel(&writer2, currentRel.value(), &buffer);
       for (auto& md : writer1.getFinishedMetaData()) {
         metaData1.add(md);
       }
@@ -504,8 +517,8 @@ Index::createPermutationPairImpl(const string& fileName1,
     lastLhs = triple[c1];
   }
   if (from < totalNumTriples) {
-    writer1.addRelation(currentRel, buffer, distinctCol1, functional);
-    writeSwitchedRel(&writer2, currentRel, &buffer);
+    writer1.addRelation(currentRel.value(), buffer, distinctCol1, functional);
+    writeSwitchedRel(&writer2, currentRel.value(), &buffer);
   }
 
   writer1.finish();
@@ -626,20 +639,9 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
   auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
-  // TODO<joka921> This is a duplicate, factor it out.
-  auto isLanguagePredicate = [lower = langPredLowerBound,
-                              upper = langPredUpperBound](const auto& triple) {
-    return triple[1] >= lower && triple[1] < upper;
-  };
-  PatternCreator patternCreator{_onDiskBase + ".index.patterns"};
   auto iterator = TripleIterator<Permutation::SPO_T>{_SPO};
-  while (!iterator.empty()) {
-    if (!isLanguagePredicate(*iterator)) {
-      patternCreator.processTriple(*iterator);
-    }
-    ++iterator;
-  }
-  patternCreator.finish();
+  createPatternsFromIterable(iterator, _onDiskBase + ".index.patterns",
+                             langPredLowerBound, langPredUpperBound);
 }
 
 // _____________________________________________________________________________

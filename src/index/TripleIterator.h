@@ -28,6 +28,23 @@ class TripleIterator {
     scanCurrentPos();
   }
 
+  // The following Methods give this class input iterator semantics
+  struct IteratorSentinel {};
+  struct Iterator {
+   private:
+    TripleIterator* _iterator;
+    explicit Iterator(TripleIterator* iterator) : _iterator{iterator} {}
+    friend class TripleIterator;
+
+   public:
+    decltype(auto) operator++() { return ++(*_iterator); }
+    decltype(auto) operator*() { return **_iterator; }
+    bool operator==(IteratorSentinel) { return _iterator->empty(); }
+  };
+  Iterator begin() { return Iterator{this}; }
+  IteratorSentinel end() { return {}; }
+
+ private:
   // prefix increment
   TripleIterator& operator++() {
     if (empty()) {
@@ -53,7 +70,6 @@ class TripleIterator {
 
   [[nodiscard]] bool empty() const { return _iterator == _endIterator; }
 
- private:
   void scanCurrentPos() {
     uint64_t id = _iterator.getId();
     CompressedRelationMetaData::scan(id, &_idPairs, permutation_);
