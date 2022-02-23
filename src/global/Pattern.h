@@ -183,79 +183,8 @@ class CompactVectorOfStrings {
   // disk without buffering the whole `Vector`.
   static cppcoro::generator<vector_type> diskIterator(string filename);
 
-  class Iterator {
-   private:
-    const CompactVectorOfStrings* _vector = nullptr;
-    size_t _index = 0;
-
-   public:
-    using iterator_category = std::random_access_iterator_tag;
-    using difference_type = int64_t;
-    using value_type = CompactVectorOfStrings::value_type;
-
-    Iterator(const CompactVectorOfStrings* vec, size_t index)
-        : _vector{vec}, _index{index} {}
-    Iterator() = default;
-
-    auto operator<=>(const Iterator& rhs) const {
-      return (_index <=> rhs._index);
-    }
-
-    bool operator==(const Iterator& rhs) const { return _index == rhs._index; }
-
-    Iterator& operator+=(difference_type n) {
-      _index += n;
-      return *this;
-    }
-    Iterator operator+(difference_type n) const {
-      Iterator result{*this};
-      result += n;
-      return result;
-    }
-
-    Iterator& operator++() {
-      ++_index;
-      return *this;
-    }
-    Iterator operator++(int) & {
-      Iterator result{*this};
-      ++_index;
-      return result;
-    }
-
-    Iterator& operator--() {
-      --_index;
-      return *this;
-    }
-    Iterator operator--(int) & {
-      Iterator result{*this};
-      --_index;
-      return result;
-    }
-
-    friend Iterator operator+(difference_type n, const Iterator& it) {
-      return it + n;
-    }
-
-    Iterator& operator-=(difference_type n) {
-      _index -= n;
-      return *this;
-    }
-
-    Iterator operator-(difference_type n) const {
-      Iterator result{*this};
-      result -= n;
-      return result;
-    }
-
-    difference_type operator-(const Iterator& rhs) const {
-      return static_cast<difference_type>(_index) - rhs._index;
-    }
-
-    auto operator*() const { return (*_vector)[_index]; }
-
-    auto operator[](difference_type n) const { return (*_vector)[_index + n]; }
-  };
+  using Iterator = ad_utility::IteratorForAccessOperator<
+      CompactVectorOfStrings, ad_utility::AccessViaBracketOperator, true>;
 
   Iterator begin() const { return {this, 0}; }
   Iterator end() const { return {this, size()}; }
