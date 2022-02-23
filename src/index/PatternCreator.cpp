@@ -39,8 +39,8 @@ void PatternCreator::finishSubject(const Id& subjectId,
       _distinctPredicates.insert(predicate);
     }
   } else {
-    // We have already seen the same pattern for a previous subjectId, reuse the
-    // ID and increase the count.
+    // We have already seen the same pattern for a previous subject ID, reuse
+    // the ID and increase the count.
     patternId = it->second._patternId;
     it->second._count++;
   }
@@ -98,7 +98,7 @@ void PatternCreator::finish() {
   patternWriter.finish();
 
   // Print some statistics for the log of the index builder.
-  printStatistics(PatternStatistics());
+  printStatistics(patternStatistics);
 }
 
 // ____________________________________________________________________________
@@ -131,8 +131,8 @@ void PatternCreator::printStatistics(
     PatternStatistics patternStatistics) const {
   LOG(INFO) << "Number of distinct patterns: " << _patternToIdAndCount.size()
             << std::endl;
-  LOG(DEBUG) << "Number of subjects with pattern: " << _numDistinctSubjects
-             << " [all]" << std::endl;
+  LOG(INFO) << "Number of subjects with pattern: " << _numDistinctSubjects
+            << " [all]" << std::endl;
   LOG(INFO) << "Total number of distinct subject-predicate pairs: "
             << _numDistinctSubjectPredicatePairs << std::endl;
   LOG(INFO) << "Average number of predicates per subject: " << std::fixed

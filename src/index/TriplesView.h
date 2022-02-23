@@ -8,7 +8,7 @@
  * This allows iterating over one of the permutations of the index once.
  **/
 template <typename Permutation>
-class TripleIterator {
+class TriplesView {
  private:
   const Permutation& permutation_;
   typename Permutation::MetaData::MapType::ConstOrderedIterator _iterator;
@@ -20,7 +20,7 @@ class TripleIterator {
   size_t _index;
 
  public:
-  explicit TripleIterator(const Permutation& permutation)
+  explicit TriplesView(const Permutation& permutation)
       : permutation_{permutation},
         _iterator(permutation._meta.data().ordered_begin()),
         _endIterator(permutation._meta.data().ordered_end()),
@@ -29,24 +29,24 @@ class TripleIterator {
   }
 
   // The following Methods give this class input iterator semantics
-  struct IteratorSentinel {};
+  struct IteratorEnd {};
   struct Iterator {
    private:
-    TripleIterator* _iterator;
-    explicit Iterator(TripleIterator* iterator) : _iterator{iterator} {}
+    TriplesView* _iterator;
+    explicit Iterator(TriplesView* iterator) : _iterator{iterator} {}
     friend class TripleIterator;
 
    public:
     decltype(auto) operator++() { return ++(*_iterator); }
     decltype(auto) operator*() { return **_iterator; }
-    bool operator==(IteratorSentinel) { return _iterator->empty(); }
+    bool operator==(IteratorEnd) { return _iterator->empty(); }
   };
   Iterator begin() { return Iterator{this}; }
-  IteratorSentinel end() { return {}; }
+  IteratorEnd end() { return {}; }
 
  private:
   // prefix increment
-  TripleIterator& operator++() {
+  TriplesView& operator++() {
     if (empty()) {
       // don't do anything if we have already reached the end
       return *this;

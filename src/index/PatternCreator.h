@@ -107,7 +107,7 @@ class PatternCreator {
   /// which have `filename` as a prefix.
   explicit PatternCreator(const string& filename)
       : _filename{filename}, _subjectToPatternSerializer{{filename}} {
-    LOG(INFO) << "Computing predicate patterns ..." << std::endl;
+    LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
   }
 
   /// This function has to be called for all the triples in the SPO permutation

@@ -65,10 +65,10 @@ class BackgroundStxxlSorter {
       _sortInBackgroundFuture.get();
     }
     auto sortRunInBackground = [this, buffer = std::move(_buffer)]() {
-      for (const auto& el : buffer) {
+      for (const auto& element : buffer) {
         // TODO<joka921> extend the `stxxl::sorter` interface s.t. we can push a
         // whole block at once.
-        _sorter.push(el);
+        _sorter.push(element);
       }
     };
     _sortInBackgroundFuture =
@@ -93,7 +93,7 @@ class BackgroundStxxlSorter {
     _sorter.sort();
     _buffer.clear();
     _buffer.reserve(_numElementsInRun);
-    refill_output_buffer();
+    refillOutputBuffer();
   }
 
  public:
@@ -116,14 +116,14 @@ class BackgroundStxxlSorter {
 
   /// Return a lambda that takes a `ValueType` and calls `push` for that value.
   /// Note that `this` is captured by reference
-  auto makePushLambda() {
+  auto makePushCallback() {
     return [this](ValueType value) { push(std::move(value)); };
   }
 
   // Was `sort()` already called?
   [[nodiscard]] bool wasSortCalled() const { return _sortWasCalled; }
 
-  struct IteratorSentinel {};
+  struct IteratorEnd {};
   struct Iterator {
    private:
     BackgroundStxxlSorter* _sorter;
@@ -133,7 +133,7 @@ class BackgroundStxxlSorter {
    public:
     decltype(auto) operator++() { return ++(*_sorter); }
     decltype(auto) operator*() { return **_sorter; }
-    bool operator==(IteratorSentinel) { return _sorter->empty(); }
+    bool operator==(IteratorEnd) { return _sorter->empty(); }
   };
 
   /// After calling `sort()` this class is input-iterable
@@ -141,7 +141,7 @@ class BackgroundStxxlSorter {
     AD_CHECK(wasSortCalled());
     return Iterator{this};
   }
-  IteratorSentinel end() {
+  IteratorEnd end() {
     AD_CHECK(wasSortCalled());
     return {};
   }
@@ -149,14 +149,14 @@ class BackgroundStxxlSorter {
  private:
   bool empty() {
     if (_outputIndex >= _buffer.size()) {
-      refill_output_buffer();
+      refillOutputBuffer();
     }
     return (_outputIndex >= _buffer.size());
   }
 
   decltype(auto) operator*() const { return _buffer[_outputIndex]; }
 
-  void refill_output_buffer() {
+  void refillOutputBuffer() {
     _buffer.clear();
     _outputIndex = 0;
 
@@ -193,7 +193,7 @@ class BackgroundStxxlSorter {
   BackgroundStxxlSorter& operator++() {
     _outputIndex++;
     if (_outputIndex >= _buffer.size()) {
-      refill_output_buffer();
+      refillOutputBuffer();
     }
     return *this;
   }
@@ -205,7 +205,7 @@ template <typename InputSorter>
 class StxxlUniqueSorter {
  private:
   typename InputSorter::Iterator _iterator;
-  typename InputSorter::IteratorSentinel _end;
+  typename InputSorter::IteratorEnd _end;
 
  public:
   /// The `inputSorter` must be a `stxxl::sorter` or a `StxxlBackgroundSorter`
@@ -214,7 +214,7 @@ class StxxlUniqueSorter {
       : _iterator(inputSorter.begin()), _end(inputSorter.end()) {}
 
   /// This class is input-iterable, just like the underlying sorters.
-  struct IteratorSentinel {};
+  struct IteratorEnd {};
   friend class Iterator;
   class Iterator {
    private:
@@ -224,12 +224,10 @@ class StxxlUniqueSorter {
     explicit Iterator(StxxlUniqueSorter* sorter) : _sorter{sorter} {}
     decltype(auto) operator++() { return ++(*_sorter); }
     decltype(auto) operator*() { return *_sorter->_iterator; }
-    bool operator==(IteratorSentinel) {
-      return _sorter->_iterator == _sorter->_end;
-    }
+    bool operator==(IteratorEnd) { return _sorter->_iterator == _sorter->_end; }
   };
   Iterator begin() { return Iterator{this}; }
-  IteratorSentinel end() { return {}; }
+  IteratorEnd end() { return {}; }
 
  private:
   StxxlUniqueSorter& operator++() {

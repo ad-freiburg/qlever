@@ -53,34 +53,36 @@ using StxxlSorter =
 
 using PsoSorter = StxxlSorter<SortByPSO>;
 
-// Several data that passed along between different phases of the IndexBuilder
+// Several data that are passed along between different phases of the
+// IndexBuilder
 struct IndexBuilderDataBase {
   // The total number of distinct words in the complete Vocabulary
   size_t nofWords;
   // Id lower and upper bound of @lang@<predicate> predicates
   Id langPredLowerBound;
   Id langPredUpperBound;
+};
+
+// All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
+// triples
+struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
+  using TripleVec = stxxl::vector<array<Id, 3>>;
+  // All the triples as Ids.
+  std::unique_ptr<TripleVec> idTriples;
   // The number of triples for each partial vocabulary. This also depends on the
   // number of additional language filter triples.
   std::vector<size_t> actualPartialSizes;
 };
 
-// All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
-// triples
-struct IndexBuilderDataStxxlVec : IndexBuilderDataBase {
-  using TripleVec = stxxl::vector<array<Id, 3>>;
-  // All the triples as Ids.
-  std::unique_ptr<TripleVec> idTriples;
-};
-
 // All the data from IndexBuilderDataBase and a StxxlSorter that stores all ID
 // triples sorted by the PSO permutation.
-struct IndexBuilderDataPsoSorter : IndexBuilderDataBase {
+struct IndexBuilderDataAsPsoSorter : IndexBuilderDataBase {
   using SorterPtr = std::unique_ptr<StxxlSorter<SortByPSO>>;
   SorterPtr psoSorter;
-  IndexBuilderDataPsoSorter(const IndexBuilderDataBase& base, SorterPtr sorter)
+  IndexBuilderDataAsPsoSorter(const IndexBuilderDataBase& base,
+                              SorterPtr sorter)
       : IndexBuilderDataBase{base}, psoSorter{std::move(sorter)} {}
-  IndexBuilderDataPsoSorter() = default;
+  IndexBuilderDataAsPsoSorter() = default;
 };
 
 /**
@@ -494,12 +496,12 @@ class Index {
   // needed for index creation once the TripleVec is set up and it would be a
   // waste of RAM.
   template <class Parser>
-  IndexBuilderDataPsoSorter createIdTriplesAndVocab(const string& ntFile);
+  IndexBuilderDataAsPsoSorter createIdTriplesAndVocab(const string& ntFile);
 
   // ___________________________________________________________________
   template <class Parser>
-  IndexBuilderDataStxxlVec passFileForVocabulary(const string& ntFile,
-                                                 size_t linesPerPartial);
+  IndexBuilderDataAsStxxlVector passFileForVocabulary(const string& ntFile,
+                                                      size_t linesPerPartial);
 
   /**
    * @brief Everything that has to be done when we have seen all the triples
@@ -533,7 +535,7 @@ class Index {
                           typename MetaDataDispatcher::WriteType>>
   createPermutationPairImpl(const string& fileName1, const string& fileName2,
                             Sorter& vec, size_t c0, size_t c1, size_t c2,
-                            auto&&... additionalTripleActions);
+                            auto&&... nextTripleCallbacks);
 
   void writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
                         ad_utility::BufferedVector<array<Id, 2>>* bufPtr);
@@ -556,7 +558,7 @@ class Index {
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
-      auto&&... additionalTripleActions);
+      auto&&... perTripleCallbacks);
 
   // The pairs of permutations are PSO-POS, OSP-OPS and SPO-SOP
   // the multiplicity of column 1 in partner 1 of the pair is equal to the
@@ -584,12 +586,13 @@ class Index {
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
-      auto&&... tripleCallbacks);
+      auto&&... perTripleCallbacks);
 
   // wrap the static function using the internal member variables
   // the bool indicates wether the TripleVec has to be sorted before the pattern
   // creation
-  void createPatterns(bool isSortedSPO, IndexBuilderDataStxxlVec* idTriples);
+  void createPatterns(bool isSortedSPO,
+                      IndexBuilderDataAsStxxlVector* idTriples);
 
   void createTextIndex(const string& filename, const TextVec& vec);
 

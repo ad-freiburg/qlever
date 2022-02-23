@@ -23,7 +23,7 @@
 #include "../util/TupleHelpers.h"
 #include "./PrefixHeuristic.h"
 #include "./VocabularyGenerator.h"
-#include "TripleIterator.h"
+#include "TriplesView.h"
 
 using std::array;
 
@@ -32,7 +32,8 @@ Index::Index() : _usePatterns(false) {}
 
 // _____________________________________________________________________________
 template <class Parser>
-IndexBuilderDataPsoSorter Index::createIdTriplesAndVocab(const string& ntFile) {
+IndexBuilderDataAsPsoSorter Index::createIdTriplesAndVocab(
+    const string& ntFile) {
   auto vocabData =
       passFileForVocabulary<Parser>(ntFile, _numTriplesPerPartialVocab);
   // first save the total number of words, this is needed to initialize the
@@ -69,14 +70,16 @@ auto predicateHasLanguage(Id langPredLowerBound, Id langPredUpperBound) {
 }
 
 // Compute patterns and write them to `filename`. Triples where the predicate is
-// in [langPredLowerBound, langPredUpperBound). `iterable` must be
-// input-iterable and yield SPO-sorted triples of IDs.
-void createPatternsFromIterable(auto& iterable, const std::string& filename,
-                                Id langPredLowerBound, Id langPredUpperBound) {
+// in [langPredLowerBound, langPredUpperBound). `spoTriplesView` must be
+// input-spoTriplesView and yield SPO-sorted triples of IDs.
+void createPatternsFromSpoTriplesView(auto& spoTriplesView,
+                                      const std::string& filename,
+                                      Id langPredLowerBound,
+                                      Id langPredUpperBound) {
   PatternCreator patternCreator{filename};
   auto hasLanguage =
       predicateHasLanguage(langPredLowerBound, langPredUpperBound);
-  for (const auto& triple : iterable) {
+  for (const auto& triple : spoTriplesView) {
     if (!hasLanguage(triple)) {
       patternCreator.processTriple(triple);
     }
@@ -93,21 +96,22 @@ void Index::createFromFile(const string& filename) {
 
   initializeVocabularySettingsBuild<Parser>();
 
-  IndexBuilderDataPsoSorter vocabData;
+  IndexBuilderDataAsPsoSorter indexBuilderData;
   if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
     if (_onlyAsciiTurtlePrefixes) {
       LOG(DEBUG) << "Using the CTRE library for tokenization" << std::endl;
-      vocabData = createIdTriplesAndVocab<TurtleParallelParser<TokenizerCtre>>(
-          filename);
+      indexBuilderData =
+          createIdTriplesAndVocab<TurtleParallelParser<TokenizerCtre>>(
+              filename);
     } else {
       LOG(DEBUG) << "Using the Google RE2 library for tokenization"
                  << std::endl;
-      vocabData =
+      indexBuilderData =
           createIdTriplesAndVocab<TurtleParallelParser<Tokenizer>>(filename);
     }
 
   } else {
-    vocabData = createIdTriplesAndVocab<Parser>(filename);
+    indexBuilderData = createIdTriplesAndVocab<Parser>(filename);
   }
 
   // If we have no compression, this will also copy the whole vocabulary.
@@ -156,17 +160,17 @@ void Index::createFromFile(const string& filename) {
   writeConfiguration();
 
   StxxlSorter<SortBySPO> spoSorter{STXXL_MEMORY_TO_USE};
-  auto& psoSorter = *vocabData.psoSorter;
+  auto& psoSorter = *indexBuilderData.psoSorter;
   psoSorter.sort();
   // For the first permutation, perform a unique.
   ad_utility::StxxlUniqueSorter uniqueSorter{psoSorter};
 
   createPermutationPair<IndexMetaDataHmapDispatcher>(
-      &uniqueSorter, _PSO, _POS, spoSorter.makePushLambda());
+      &uniqueSorter, _PSO, _POS, spoSorter.makePushCallback());
   psoSorter.clear();
 
   auto hasLanguagePredicate = predicateHasLanguage(
-      vocabData.langPredLowerBound, vocabData.langPredUpperBound);
+      indexBuilderData.langPredLowerBound, indexBuilderData.langPredUpperBound);
 
   if (_loadAllPermutations) {
     // After the SPO permutation, create patterns if so desired.
@@ -181,12 +185,12 @@ void Index::createFromFile(const string& filename) {
         }
       };
       createPermutationPair<IndexMetaDataMmapDispatcher>(
-          &spoSorter, _SPO, _SOP, ospSorter.makePushLambda(),
+          &spoSorter, _SPO, _SOP, ospSorter.makePushCallback(),
           pushTripleToPatterns);
       patternCreator.finish();
     } else {
       createPermutationPair<IndexMetaDataMmapDispatcher>(
-          &spoSorter, _SPO, _SOP, ospSorter.makePushLambda());
+          &spoSorter, _SPO, _SOP, ospSorter.makePushCallback());
     }
     spoSorter.clear();
     ospSorter.sort();
@@ -198,13 +202,14 @@ void Index::createFromFile(const string& filename) {
   } else {
     if (_usePatterns) {
       spoSorter.sort();
-      createPatternsFromIterable(spoSorter, _onDiskBase + ".index.patterns",
-                                 vocabData.langPredLowerBound,
-                                 vocabData.langPredUpperBound);
+      createPatternsFromSpoTriplesView(spoSorter,
+                                       _onDiskBase + ".index.patterns",
+                                       indexBuilderData.langPredLowerBound,
+                                       indexBuilderData.langPredUpperBound);
     }
     _configurationJson["has-all-permutations"] = false;
   }
-  LOG(INFO) << "Finished writing permutations" << std::endl;
+  LOG(DEBUG) << "Finished writing permutations" << std::endl;
 
   // Dump the configuration again in case the permutations have added some
   // information.
@@ -222,8 +227,8 @@ template void Index::createFromFile<TurtleParserAuto>(const string& filename);
 
 // _____________________________________________________________________________
 template <class Parser>
-IndexBuilderDataStxxlVec Index::passFileForVocabulary(const string& filename,
-                                                      size_t linesPerPartial) {
+IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
+    const string& filename, size_t linesPerPartial) {
   LOG(INFO) << "Processing input triples from " << filename << " ..."
             << std::endl;
   auto parser = std::make_shared<Parser>(filename);
@@ -377,7 +382,7 @@ IndexBuilderDataStxxlVec Index::passFileForVocabulary(const string& filename,
                              internalVocabularyAction);
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
-  IndexBuilderDataStxxlVec res;
+  IndexBuilderDataAsStxxlVector res;
   res.nofWords = mergeRes._numWordsTotal;
   res.langPredLowerBound = mergeRes._langPredLowerBound;
   res.langPredUpperBound = mergeRes._langPredUpperBound;
@@ -461,7 +466,7 @@ std::optional<std::pair<typename MetaDataDispatcher::WriteType,
 Index::createPermutationPairImpl(const string& fileName1,
                                  const string& fileName2, Sorter& triples,
                                  size_t c0, size_t c1, size_t c2,
-                                 auto&&... nextTripleActions) {
+                                 auto&&... nextTripleCallbacks) {
   using MetaData = typename MetaDataDispatcher::WriteType;
   MetaData metaData1, metaData2;
   if constexpr (metaData1._isMmapBased) {
@@ -489,8 +494,8 @@ Index::createPermutationPairImpl(const string& fileName1,
     if (!currentRel.has_value()) {
       currentRel = triple[c0];
     }
-    // Call each of the `nextTripleActions` for the current triple
-    (..., nextTripleActions(triple));
+    // Call each of the `nextTripleCallbacks` for the current triple
+    (..., nextTripleCallbacks(triple));
     ++totalNumTriples;
     if (triple[c0] != currentRel) {
       writer1.addRelation(currentRel.value(), buffer, distinctCol1, functional);
@@ -574,12 +579,12 @@ Index::createPermutations(
         p1,
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
-    auto&&... tripleCallbacks) {
+    auto&&... perTripleCallbacks) {
   auto metaData = createPermutationPairImpl<MetaDataDispatcher>(
       _onDiskBase + ".index" + p1._fileSuffix,
       _onDiskBase + ".index" + p2._fileSuffix, *vec, p1._keyOrder[0],
       p1._keyOrder[1], p1._keyOrder[2],
-      std::forward<decltype(tripleCallbacks)>(tripleCallbacks)...);
+      std::forward<decltype(perTripleCallbacks)>(perTripleCallbacks)...);
 
   if (metaData.has_value()) {
     auto& mdv = metaData.value();
@@ -600,11 +605,10 @@ void Index::createPermutationPair(
         p1,
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
-    auto&&... additionalTripleActions) {
+    auto&&... perTripleCallbacks) {
   auto metaData = createPermutations<MetaDataDispatcher>(
       vocabularyData, p1, p2,
-      std::forward<decltype(additionalTripleActions)>(
-          additionalTripleActions)...);
+      std::forward<decltype(perTripleCallbacks)>(perTripleCallbacks)...);
   if (metaData) {
     LOG(INFO) << "Exchanging multiplicities for " << p1._readableName << " and "
               << p2._readableName << " ..." << std::endl;
@@ -639,9 +643,9 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
   auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
-  auto iterator = TripleIterator<Permutation::SPO_T>{_SPO};
-  createPatternsFromIterable(iterator, _onDiskBase + ".index.patterns",
-                             langPredLowerBound, langPredUpperBound);
+  auto iterator = TriplesView<Permutation::SPO_T>{_SPO};
+  createPatternsFromSpoTriplesView(iterator, _onDiskBase + ".index.patterns",
+                                   langPredLowerBound, langPredUpperBound);
 }
 
 // _____________________________________________________________________________
@@ -670,9 +674,10 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
 
   if (_usePatterns) {
     PatternCreator::readPatternsFromFile(
-        _onDiskBase + ".index.patterns", _fullHasPredicateMultiplicityEntities,
-        _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
-        _patterns, _hasPattern);
+        _onDiskBase + ".index.patterns",
+        _fullHasPredicateMultiplicityPredicates,
+        _fullHasPredicateMultiplicityEntities, _fullHasPredicateSize, _patterns,
+        _hasPattern);
   }
 }
 
