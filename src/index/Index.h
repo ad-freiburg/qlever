@@ -54,7 +54,7 @@ using StxxlSorter =
 using PsoSorter = StxxlSorter<SortByPSO>;
 
 // Several data that are passed along between different phases of the
-// IndexBuilder
+// index builder.
 struct IndexBuilderDataBase {
   // The total number of distinct words in the complete Vocabulary
   size_t nofWords;
@@ -64,7 +64,7 @@ struct IndexBuilderDataBase {
 };
 
 // All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
-// triples
+// triples.
 struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
   using TripleVec = stxxl::vector<array<Id, 3>>;
   // All the triples as Ids.
@@ -535,7 +535,7 @@ class Index {
                           typename MetaDataDispatcher::WriteType>>
   createPermutationPairImpl(const string& fileName1, const string& fileName2,
                             Sorter& vec, size_t c0, size_t c1, size_t c2,
-                            auto&&... nextTripleCallbacks);
+                            auto&&... perTripleCallbacks);
 
   void writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
                         ad_utility::BufferedVector<array<Id, 2>>* bufPtr);
@@ -587,12 +587,6 @@ class Index {
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
       auto&&... perTripleCallbacks);
-
-  // wrap the static function using the internal member variables
-  // the bool indicates wether the TripleVec has to be sorted before the pattern
-  // creation
-  void createPatterns(bool isSortedSPO,
-                      IndexBuilderDataAsStxxlVector* idTriples);
 
   void createTextIndex(const string& filename, const TextVec& vec);
 

@@ -466,7 +466,7 @@ std::optional<std::pair<typename MetaDataDispatcher::WriteType,
 Index::createPermutationPairImpl(const string& fileName1,
                                  const string& fileName2, Sorter& triples,
                                  size_t c0, size_t c1, size_t c2,
-                                 auto&&... nextTripleCallbacks) {
+                                 auto&&... perTripleCallbacks) {
   using MetaData = typename MetaDataDispatcher::WriteType;
   MetaData metaData1, metaData2;
   if constexpr (metaData1._isMmapBased) {
@@ -494,8 +494,8 @@ Index::createPermutationPairImpl(const string& fileName1,
     if (!currentRel.has_value()) {
       currentRel = triple[c0];
     }
-    // Call each of the `nextTripleCallbacks` for the current triple
-    (..., nextTripleCallbacks(triple));
+    // Call each of the `perTripleCallbacks` for the current triple
+    (..., perTripleCallbacks(triple));
     ++totalNumTriples;
     if (triple[c0] != currentRel) {
       writer1.addRelation(currentRel.value(), buffer, distinctCol1, functional);
