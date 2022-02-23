@@ -6,7 +6,7 @@
 
 #include <algorithm>
 
-#include "../src/util/ParallelStxxlSorter.h"
+#include "../src/util/BackgroundStxxlSorter.h"
 #include "../src/util/Random.h"
 
 // The combination of 100MB for Stxxl and 50M ints (which require 200MB of

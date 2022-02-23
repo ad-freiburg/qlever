@@ -2,8 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_PARALLELSTXXLSORTER_H
-#define QLEVER_PARALLELSTXXLSORTER_H
+#ifndef QLEVER_BACKGROUNDSTXXLSORTER_H
+#define QLEVER_BACKGROUNDSTXXLSORTER_H
 
 #include <future>
 #include <stxxl/sorter>
@@ -157,6 +157,12 @@ class BackgroundStxxlSorter {
     _outputIndex = 0;
     _outputIndex = 0;
   }
+
+  // Return a lambda that takes a `ValueType` and calls `push` for that value.
+  // Note that `this` is captured by reference
+  auto makePushLambda() {
+    return [this](ValueType value) { push(std::move(value)); };
+  }
 };
 
 // TODO<joka921> Comment.
@@ -186,4 +192,4 @@ class StxxlUniqueSorter {
 };
 }  // namespace ad_utility
 
-#endif  // QLEVER_PARALLELSTXXLSORTER_H
+#endif  // QLEVER_BACKGROUNDSTXXLSORTER_H

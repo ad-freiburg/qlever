@@ -17,12 +17,12 @@
 #include "../global/Pattern.h"
 #include "../parser/TsvParser.h"
 #include "../parser/TurtleParser.h"
+#include "../util/BackgroundStxxlSorter.h"
 #include "../util/BufferedVector.h"
 #include "../util/CompressionUsingZstd/ZstdWrapper.h"
 #include "../util/File.h"
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
-#include "../util/ParallelStxxlSorter.h"
 #include "../util/Timer.h"
 #include "../util/json.h"
 #include "./CompressedRelation.h"
@@ -53,22 +53,34 @@ using StxxlSorter =
 
 using PsoSorter = StxxlSorter<SortByPSO>;
 
-// A simple struct for better naming.
-struct VocabularyData {
-  using TripleVec = stxxl::vector<array<Id, 3>>;
+// Several data that passed along between different phases of the IndexBuilder
+struct IndexBuilderDataBase {
   // The total number of distinct words in the complete Vocabulary
   size_t nofWords;
   // Id lower and upper bound of @lang@<predicate> predicates
   Id langPredLowerBound;
   Id langPredUpperBound;
-  // The number of triples in the idTriples vec that each partial vocabulary is
-  // responsible for (depends on the number of additional language filter
-  // triples)
+  // The number of triples for each partial vocabulary. This also depends on the
+  // number of additional language filter triples.
   std::vector<size_t> actualPartialSizes;
+};
+
+// All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
+// triples
+struct IndexBuilderDataStxxlVec : IndexBuilderDataBase {
+  using TripleVec = stxxl::vector<array<Id, 3>>;
   // All the triples as Ids.
-  std::variant<std::unique_ptr<TripleVec>,
-               std::unique_ptr<StxxlSorter<SortByPSO>>>
-      idTriples;
+  std::unique_ptr<TripleVec> idTriples;
+};
+
+// All the data from IndexBuilderDataBase and a StxxlSorter that stores all ID
+// triples sorted by the PSO permutation.
+struct IndexBuilderDataPsoSorter : IndexBuilderDataBase {
+  using SorterPtr = std::unique_ptr<StxxlSorter<SortByPSO>>;
+  SorterPtr psoSorter;
+  IndexBuilderDataPsoSorter(const IndexBuilderDataBase& base, SorterPtr sorter)
+      : IndexBuilderDataBase{base}, psoSorter{std::move(sorter)} {}
+  IndexBuilderDataPsoSorter() = default;
 };
 
 /**
@@ -482,12 +494,12 @@ class Index {
   // needed for index creation once the TripleVec is set up and it would be a
   // waste of RAM.
   template <class Parser>
-  VocabularyData createIdTriplesAndVocab(const string& ntFile);
+  IndexBuilderDataPsoSorter createIdTriplesAndVocab(const string& ntFile);
 
   // ___________________________________________________________________
   template <class Parser>
-  VocabularyData passFileForVocabulary(const string& ntFile,
-                                       size_t linesPerPartial);
+  IndexBuilderDataStxxlVec passFileForVocabulary(const string& ntFile,
+                                                 size_t linesPerPartial);
 
   /**
    * @brief Everything that has to be done when we have seen all the triples
@@ -577,7 +589,7 @@ class Index {
   // wrap the static function using the internal member variables
   // the bool indicates wether the TripleVec has to be sorted before the pattern
   // creation
-  void createPatterns(bool isSortedSPO, VocabularyData* idTriples);
+  void createPatterns(bool isSortedSPO, IndexBuilderDataStxxlVec* idTriples);
 
   void createTextIndex(const string& filename, const TextVec& vec);
 

@@ -32,7 +32,7 @@ Index::Index() : _usePatterns(false) {}
 
 // _____________________________________________________________________________
 template <class Parser>
-VocabularyData Index::createIdTriplesAndVocab(const string& ntFile) {
+IndexBuilderDataPsoSorter Index::createIdTriplesAndVocab(const string& ntFile) {
   auto vocabData =
       passFileForVocabulary<Parser>(ntFile, _numTriplesPerPartialVocab);
   // first save the total number of words, this is needed to initialize the
@@ -53,12 +53,11 @@ VocabularyData Index::createIdTriplesAndVocab(const string& ntFile) {
   // used from now on). This will preserve information about externalized
   // Prefixes etc.
   _vocab.clear();
-  auto psoSorter = convertPartialToGlobalIds(*std::get<0>(vocabData.idTriples),
+  auto psoSorter = convertPartialToGlobalIds(*vocabData.idTriples,
                                              vocabData.actualPartialSizes,
                                              NUM_TRIPLES_PER_PARTIAL_VOCAB);
 
-  vocabData.idTriples = std::move(psoSorter);
-  return vocabData;
+  return {vocabData, std::move(psoSorter)};
 }
 
 // _____________________________________________________________________________
@@ -69,7 +68,7 @@ void Index::createFromFile(const string& filename) {
 
   initializeVocabularySettingsBuild<Parser>();
 
-  VocabularyData vocabData;
+  IndexBuilderDataPsoSorter vocabData;
   if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
     if (_onlyAsciiTurtlePrefixes) {
       LOG(DEBUG) << "Using the CTRE library for tokenization" << std::endl;
@@ -131,25 +130,19 @@ void Index::createFromFile(const string& filename) {
   // case any of the permutations fail.
   writeConfiguration();
 
-  // For the first permutation, perform a unique.
   StxxlSorter<SortBySPO> spoSorter{STXXL_MEMORY_TO_USE};
-  auto& psoSorter = *std::get<1>(vocabData.idTriples);
+  auto& psoSorter = *vocabData.psoSorter;
   psoSorter.sort();
+  // For the first permutation, perform a unique.
   ad_utility::StxxlUniqueSorter uniqueSorter{psoSorter};
 
-  auto pushToSpoSorter = [&spoSorter](const auto& triple) {
-    spoSorter.push(triple);
-  };
-  createPermutationPair<IndexMetaDataHmapDispatcher>(&uniqueSorter, _PSO, _POS,
-                                                     pushToSpoSorter);
+  createPermutationPair<IndexMetaDataHmapDispatcher>(
+      &uniqueSorter, _PSO, _POS, spoSorter.makePushLambda());
   psoSorter.clear();
 
   if (_loadAllPermutations) {
     // After the SPO permutation, create patterns if so desired.
     StxxlSorter<SortByOSP> ospSorter{STXXL_MEMORY_TO_USE};
-    auto pushToOspSorter = [&ospSorter](const auto& triple) {
-      ospSorter.push(triple);
-    };
     spoSorter.sort();
     if (_usePatterns) {
       auto hasLanguagePredicate =
@@ -165,11 +158,12 @@ void Index::createFromFile(const string& filename) {
         }
       };
       createPermutationPair<IndexMetaDataMmapDispatcher>(
-          &spoSorter, _SPO, _SOP, pushToOspSorter, pushTripleToPatterns);
+          &spoSorter, _SPO, _SOP, ospSorter.makePushLambda(),
+          pushTripleToPatterns);
       patternCreator.finish();
     } else {
-      createPermutationPair<IndexMetaDataMmapDispatcher>(&spoSorter, _SPO, _SOP,
-                                                         pushToOspSorter);
+      createPermutationPair<IndexMetaDataMmapDispatcher>(
+          &spoSorter, _SPO, _SOP, ospSorter.makePushLambda());
     }
     spoSorter.clear();
     ospSorter.sort();
@@ -209,8 +203,8 @@ template void Index::createFromFile<TurtleParserAuto>(const string& filename);
 
 // _____________________________________________________________________________
 template <class Parser>
-VocabularyData Index::passFileForVocabulary(const string& filename,
-                                            size_t linesPerPartial) {
+IndexBuilderDataStxxlVec Index::passFileForVocabulary(const string& filename,
+                                                      size_t linesPerPartial) {
   LOG(INFO) << "Processing input triples from " << filename << " ..."
             << std::endl;
   auto parser = std::make_shared<Parser>(filename);
@@ -364,7 +358,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
                              internalVocabularyAction);
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
-  VocabularyData res;
+  IndexBuilderDataStxxlVec res;
   res.nofWords = mergeRes._numWordsTotal;
   res.langPredLowerBound = mergeRes._langPredLowerBound;
   res.langPredUpperBound = mergeRes._langPredUpperBound;
