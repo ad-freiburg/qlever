@@ -3,10 +3,25 @@
 #include "../global/Id.h"
 #include "../util/File.h"
 #include "CompressedRelation.h"
+#include "../util/Generator.h"
 
 /**
  * This allows iterating over one of the permutations of the index once.
  **/
+
+cppcoro::generator<std::array<Id, 3>> TriplesView(const auto& permutation) {
+  const auto& metaData = permutation._meta.data();
+  for (auto it = metaData.ordered_begin(); it != metaData.ordered_end(); ++it) {
+    uint64_t id = it.getId();
+    std::vector<std::array<Id, 2>> buffer;
+    CompressedRelationMetaData::scan(id, &buffer, permutation);
+    for (const auto& [col1, col2] : buffer) {
+      std::array<Id, 3> triple{id, col1, col2};
+      co_yield triple;
+    }
+  }
+}
+/*
 template <typename Permutation>
 class TriplesView {
  private:
@@ -26,6 +41,19 @@ class TriplesView {
         _endIterator(permutation._meta.data().ordered_end()),
         _index(0) {
     scanCurrentPos();
+  }
+
+  cppcoro::generator<std::array<Id, 3>> generator(const auto& permutation) {
+    const auto& metaData = permutation._meta.data();
+    for (auto it = metaData.ordered_begin(); it != metaData.ordered_end; ++it) {
+      uint64_t id = it.getId();
+      std::vector<std::array<Id, 2>> buffer;
+      CompressedRelationMetaData::scan(id, &buffer, permutation);
+      for (const auto& [col1, col2] : buffer) {
+        std::array<Id, 3> triple{id, col1, col2};
+        co_yield triple;
+      }
+    }
   }
 
   // The following Methods give this class input iterator semantics
@@ -75,3 +103,4 @@ class TriplesView {
     CompressedRelationMetaData::scan(id, &_idPairs, permutation_);
   }
 };
+ */

@@ -534,7 +534,7 @@ class Index {
   std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                           typename MetaDataDispatcher::WriteType>>
   createPermutationPairImpl(const string& fileName1, const string& fileName2,
-                            Sorter& vec, size_t c0, size_t c1, size_t c2,
+                            Sorter&& vec, size_t c0, size_t c1, size_t c2,
                             auto&&... perTripleCallbacks);
 
   void writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,

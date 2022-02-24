@@ -161,12 +161,11 @@ void Index::createFromFile(const string& filename) {
 
   StxxlSorter<SortBySPO> spoSorter{STXXL_MEMORY_TO_USE};
   auto& psoSorter = *indexBuilderData.psoSorter;
-  psoSorter.sort();
   // For the first permutation, perform a unique.
-  ad_utility::StxxlUniqueSorter uniqueSorter{psoSorter};
+  auto uniqueSorter = ad_utility::uniqueView(psoSorter.sort());
 
   createPermutationPair<IndexMetaDataHmapDispatcher>(
-      &uniqueSorter, _PSO, _POS, spoSorter.makePushCallback());
+      std::move(uniqueSorter), _PSO, _POS, spoSorter.makePushCallback());
   psoSorter.clear();
 
   auto hasLanguagePredicate = predicateHasLanguage(
@@ -175,7 +174,6 @@ void Index::createFromFile(const string& filename) {
   if (_loadAllPermutations) {
     // After the SPO permutation, create patterns if so desired.
     StxxlSorter<SortByOSP> ospSorter{STXXL_MEMORY_TO_USE};
-    spoSorter.sort();
     if (_usePatterns) {
       PatternCreator patternCreator{_onDiskBase + ".index.patterns"};
       auto pushTripleToPatterns = [&patternCreator,
@@ -185,24 +183,23 @@ void Index::createFromFile(const string& filename) {
         }
       };
       createPermutationPair<IndexMetaDataMmapDispatcher>(
-          &spoSorter, _SPO, _SOP, ospSorter.makePushCallback(),
+          spoSorter.sort(), _SPO, _SOP, ospSorter.makePushCallback(),
           pushTripleToPatterns);
       patternCreator.finish();
     } else {
       createPermutationPair<IndexMetaDataMmapDispatcher>(
-          &spoSorter, _SPO, _SOP, ospSorter.makePushCallback());
+          spoSorter.sort(), _SPO, _SOP, ospSorter.makePushCallback());
     }
     spoSorter.clear();
-    ospSorter.sort();
 
     // For the last pair of permutations we don't need a next sorter, so we have
     // no fourth argument.
-    createPermutationPair<IndexMetaDataMmapDispatcher>(&ospSorter, _OSP, _OPS);
+    createPermutationPair<IndexMetaDataMmapDispatcher>(ospSorter.sort(), _OSP, _OPS);
     _configurationJson["has-all-permutations"] = true;
   } else {
     if (_usePatterns) {
-      spoSorter.sort();
-      createPatternsFromSpoTriplesView(spoSorter,
+      auto generator = spoSorter.sort();
+      createPatternsFromSpoTriplesView(generator,
                                        _onDiskBase + ".index.patterns",
                                        indexBuilderData.langPredLowerBound,
                                        indexBuilderData.langPredUpperBound);
@@ -464,7 +461,7 @@ template <class MetaDataDispatcher, typename Sorter>
 std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                         typename MetaDataDispatcher::WriteType>>
 Index::createPermutationPairImpl(const string& fileName1,
-                                 const string& fileName2, Sorter& triples,
+                                 const string& fileName2, Sorter&& triples,
                                  size_t c0, size_t c1, size_t c2,
                                  auto&&... perTripleCallbacks) {
   using MetaData = typename MetaDataDispatcher::WriteType;
@@ -582,7 +579,7 @@ Index::createPermutations(
     auto&&... perTripleCallbacks) {
   auto metaData = createPermutationPairImpl<MetaDataDispatcher>(
       _onDiskBase + ".index" + p1._fileSuffix,
-      _onDiskBase + ".index" + p2._fileSuffix, *vec, p1._keyOrder[0],
+      _onDiskBase + ".index" + p2._fileSuffix, std::move(vec), p1._keyOrder[0],
       p1._keyOrder[1], p1._keyOrder[2],
       std::forward<decltype(perTripleCallbacks)>(perTripleCallbacks)...);
 
@@ -607,7 +604,7 @@ void Index::createPermutationPair(
         p2,
     auto&&... perTripleCallbacks) {
   auto metaData = createPermutations<MetaDataDispatcher>(
-      vocabularyData, p1, p2,
+      std::move(vocabularyData), p1, p2,
       std::forward<decltype(perTripleCallbacks)>(perTripleCallbacks)...);
   if (metaData) {
     LOG(INFO) << "Exchanging multiplicities for " << p1._readableName << " and "
@@ -643,7 +640,7 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
   auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
-  auto iterator = TriplesView<Permutation::SPO_T>{_SPO};
+  auto iterator = TriplesView(_SPO);
   createPatternsFromSpoTriplesView(iterator, _onDiskBase + ".index.patterns",
                                    langPredLowerBound, langPredUpperBound);
 }
