@@ -34,11 +34,11 @@ Index::Index() : _usePatterns(false) {}
 template <class Parser>
 IndexBuilderDataAsPsoSorter Index::createIdTriplesAndVocab(
     const string& ntFile) {
-  auto vocabData =
-      passFileForVocabulary<Parser>(ntFile, _numTriplesPerPartialVocab);
+  auto indexBuilderData =
+      passFileForVocabulary<Parser>(ntFile, _numTriplesPerBatch);
   // first save the total number of words, this is needed to initialize the
   // dense IndexMetaData variants
-  _totalVocabularySize = vocabData.nofWords;
+  _totalVocabularySize = indexBuilderData.nofWords;
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << _totalVocabularySize << std::endl;
 
@@ -47,18 +47,18 @@ IndexBuilderDataAsPsoSorter Index::createIdTriplesAndVocab(
   if (_onDiskLiterals) {
     _vocab.externalizeLiteralsFromTextFile(
         _onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME,
-        _onDiskBase + ".literals-index");
+        _onDiskBase + EXTERNAL_VOCAB_SUFFIX);
   }
   deleteTemporaryFile(_onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME);
   // clear vocabulary to save ram (only information from partial binary files
   // used from now on). This will preserve information about externalized
   // Prefixes etc.
   _vocab.clear();
-  auto psoSorter = convertPartialToGlobalIds(*vocabData.idTriples,
-                                             vocabData.actualPartialSizes,
-                                             NUM_TRIPLES_PER_PARTIAL_VOCAB);
+  auto psoSorter = convertPartialToGlobalIds(
+      *indexBuilderData.idTriples, indexBuilderData.actualPartialSizes,
+      NUM_TRIPLES_PER_PARTIAL_VOCAB);
 
-  return {vocabData, std::move(psoSorter)};
+  return {indexBuilderData, std::move(psoSorter)};
 }
 namespace {
 // Return a lambda that takes a triple of IDs and returns true iff the predicate
@@ -117,14 +117,14 @@ void Index::createFromFile(const string& filename) {
   // If we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
   // hurt.
-  string vocabFile = _onDiskBase + ".vocabulary";
+  string vocabFile = _onDiskBase + INTERNAL_VOCAB_SUFFIX;
   string vocabFileTmp = _onDiskBase + ".vocabularyTmp";
   std::vector<string> prefixes;
   if (_vocabPrefixCompressed) {
     // We have to use the "normally" sorted vocabulary for the prefix
     // compression.
     std::string vocabFileForPrefixCalculation =
-        _onDiskBase + TMP_BASENAME_COMPRESSION + ".vocabulary";
+        _onDiskBase + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX;
     prefixes = calculatePrefixes(vocabFileForPrefixCalculation,
                                  NUM_COMPRESSION_PREFIXES, 1, true);
     deleteTemporaryFile(vocabFileForPrefixCalculation);
@@ -346,7 +346,7 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
               << "(internal only) ..." << std::endl;
     VocabularyMerger m;
     std::ofstream compressionOutfile(_onDiskBase + TMP_BASENAME_COMPRESSION +
-                                     ".vocabulary");
+                                     INTERNAL_VOCAB_SUFFIX);
     AD_CHECK(compressionOutfile.is_open());
     auto internalVocabularyActionCompression =
         [&compressionOutfile](const auto& word) {
@@ -371,7 +371,7 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
       return (*cmp)(a, b, decltype(_vocab)::SortLevel::TOTAL);
     };
     auto wordWriter =
-        _vocab.makeUncompressingWordWriter(_onDiskBase + ".vocabulary");
+        _vocab.makeUncompressingWordWriter(_onDiskBase + INTERNAL_VOCAB_SUFFIX);
     auto internalVocabularyAction = [&wordWriter](const auto& word) {
       wordWriter.push(word.data(), word.size());
     };
@@ -649,8 +649,9 @@ void Index::addPatternsToExistingIndex() {
 void Index::createFromOnDiskIndex(const string& onDiskBase) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
-  _vocab.readFromFile(_onDiskBase + ".vocabulary",
-                      _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
+  _vocab.readFromFile(
+      _onDiskBase + INTERNAL_VOCAB_SUFFIX,
+      _onDiskLiterals ? _onDiskBase + EXTERNAL_VOCAB_SUFFIX : "");
 
   _totalVocabularySize = _vocab.size() + _vocab.getExternalVocab().size();
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
@@ -1043,11 +1044,10 @@ void Index::initializeVocabularySettingsBuild() {
     }
   }
 
-  if (j.count("num-triples-per-partial-vocab")) {
-    _numTriplesPerPartialVocab = size_t{j["num-triples-per-partial-vocab"]};
+  if (j.count("num-triples-per-batch")) {
+    _numTriplesPerBatch = size_t{j["num-triples-per-batch"]};
     LOG(INFO)
-        << "You specified \"num-triples-per-partial-vocab = "
-        << _numTriplesPerPartialVocab
+        << "You specified \"num-triples-per-batch = " << _numTriplesPerBatch
         << "\", choose a lower value if the index builder runs out of memory"
         << std::endl;
   }

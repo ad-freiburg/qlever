@@ -155,7 +155,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   VocabularyMerger::VocMergeRes res;
   {
     VocabularyMerger m;
-    std::ofstream file(_basePath + ".vocabulary");
+    std::ofstream file(_basePath + INTERNAL_VOCAB_SUFFIX);
     AD_CHECK(file.is_open());
     auto internalVocabularyAction = [&file](const auto& word) {
       file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
@@ -168,7 +168,8 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   ASSERT_EQ(res._langPredLowerBound, 0ul);
   ASSERT_EQ(res._langPredUpperBound, 0ul);
   // check that (external) vocabulary has the right form.
-  ASSERT_TRUE(areBinaryFilesEqual(_pathVocabExp, _basePath + ".vocabulary"));
+  ASSERT_TRUE(
+      areBinaryFilesEqual(_pathVocabExp, _basePath + INTERNAL_VOCAB_SUFFIX));
   ASSERT_TRUE(areBinaryFilesEqual(_pathExternalVocabExp,
                                   _basePath + EXTERNAL_LITS_TEXT_FILE_NAME));
 
@@ -197,7 +198,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
 
     {
       VocabularyMerger m;
-      std::ofstream file(basename + ".vocabulary");
+      std::ofstream file(basename + INTERNAL_VOCAB_SUFFIX);
       AD_CHECK(file.is_open());
       auto internalVocabularyAction = [&file](const auto& word) {
         file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
@@ -241,7 +242,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
 
     {
       VocabularyMerger m;
-      std::ofstream file(basename + ".vocabulary");
+      std::ofstream file(basename + INTERNAL_VOCAB_SUFFIX);
       AD_CHECK(file.is_open());
       auto internalVocabularyAction = [&file](const auto& word) {
         file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';

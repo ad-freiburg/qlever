@@ -309,6 +309,10 @@ class Index {
 
   void setPrefixCompression(bool compressed);
 
+  void setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
+    _numTriplesPerBatch = numTriplesPerBatch;
+  }
+
   const string& getTextName() const { return _textMeta.getName(); }
 
   const string& getKbName() const { return _PSO.metaData().getName(); }
@@ -477,7 +481,7 @@ class Index {
   size_t _fullHasPredicateSize;
 
   size_t _parserBatchSize = PARSER_BATCH_SIZE;
-  size_t _numTriplesPerPartialVocab = NUM_TRIPLES_PER_PARTIAL_VOCAB;
+  size_t _numTriplesPerBatch = NUM_TRIPLES_PER_PARTIAL_VOCAB;
   /**
    * @brief Maps pattern ids to sets of predicate ids.
    */
