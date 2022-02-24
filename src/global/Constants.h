@@ -64,6 +64,8 @@ static const int DEFAULT_NOF_VALUE_EXPONENT_DIGITS = 20;
 static const int DEFAULT_NOF_VALUE_MANTISSA_DIGITS = 30;
 static const int DEFAULT_NOF_DATE_YEAR_DIGITS = 19;
 
+static const std::string INTERNAL_VOCAB_SUFFIX = ".vocabulary.internal";
+static const std::string EXTERNAL_VOCAB_SUFFIX = ".vocabulary.external";
 static const std::string MMAP_FILE_SUFFIX = ".meta";
 static const std::string CONFIGURATION_FILE = ".meta-data.json";
 static const std::string PREFIX_FILE = ".prefixes";
