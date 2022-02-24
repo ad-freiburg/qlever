@@ -8,7 +8,7 @@
 /// in deterministic order
 template <typename Permutation>
 void dumpToStdout(const Permutation& permutation) {
-  TriplesView triples{permutation};
+  auto triples = TriplesView(permutation);
   size_t i = 0;
   for (auto triple : triples) {
     std::cout << triple[0] << " " << triple[1] << " " << triple[2] << std::endl;
