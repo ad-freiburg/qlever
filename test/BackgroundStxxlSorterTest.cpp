@@ -33,7 +33,7 @@ TEST(BackgroundStxxlSorter, SortInts) {
     sorter.push(i);
   }
   std::vector<int> result;
-  for (const auto& element : sorter.sort()) {
+  for (const auto& element : sorter.sortedView()) {
     result.push_back(element);
   }
   std::sort(ints.begin(), ints.end());
@@ -61,7 +61,7 @@ TEST(StxxlUniqueSorter, uniqueInts) {
   for (auto i : duplicateInts) {
     sorter.push(i);
   }
-  auto uniqueSorter = ad_utility::uniqueView(sorter.sort());
+  auto uniqueSorter = ad_utility::uniqueView(sorter.sortedView());
   std::vector<int> result;
   for (const auto& element : uniqueSorter) {
     result.push_back(element);

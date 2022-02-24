@@ -162,7 +162,7 @@ void Index::createFromFile(const string& filename) {
   StxxlSorter<SortBySPO> spoSorter{STXXL_MEMORY_TO_USE};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
-  auto uniqueSorter = ad_utility::uniqueView(psoSorter.sort());
+  auto uniqueSorter = ad_utility::uniqueView(psoSorter.sortedView());
 
   createPermutationPair<IndexMetaDataHmapDispatcher>(
       std::move(uniqueSorter), _PSO, _POS, spoSorter.makePushCallback());
@@ -183,23 +183,23 @@ void Index::createFromFile(const string& filename) {
         }
       };
       createPermutationPair<IndexMetaDataMmapDispatcher>(
-          spoSorter.sort(), _SPO, _SOP, ospSorter.makePushCallback(),
+          spoSorter.sortedView(), _SPO, _SOP, ospSorter.makePushCallback(),
           pushTripleToPatterns);
       patternCreator.finish();
     } else {
       createPermutationPair<IndexMetaDataMmapDispatcher>(
-          spoSorter.sort(), _SPO, _SOP, ospSorter.makePushCallback());
+          spoSorter.sortedView(), _SPO, _SOP, ospSorter.makePushCallback());
     }
     spoSorter.clear();
 
     // For the last pair of permutations we don't need a next sorter, so we have
     // no fourth argument.
-    createPermutationPair<IndexMetaDataMmapDispatcher>(ospSorter.sort(), _OSP,
-                                                       _OPS);
+    createPermutationPair<IndexMetaDataMmapDispatcher>(ospSorter.sortedView(),
+                                                       _OSP, _OPS);
     _configurationJson["has-all-permutations"] = true;
   } else {
     if (_usePatterns) {
-      createPatternsFromSpoTriplesView(spoSorter.sort(),
+      createPatternsFromSpoTriplesView(spoSorter.sortedView(),
                                        _onDiskBase + ".index.patterns",
                                        indexBuilderData.langPredLowerBound,
                                        indexBuilderData.langPredUpperBound);
