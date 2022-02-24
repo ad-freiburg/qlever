@@ -194,7 +194,8 @@ void Index::createFromFile(const string& filename) {
 
     // For the last pair of permutations we don't need a next sorter, so we have
     // no fourth argument.
-    createPermutationPair<IndexMetaDataMmapDispatcher>(ospSorter.sort(), _OSP, _OPS);
+    createPermutationPair<IndexMetaDataMmapDispatcher>(ospSorter.sort(), _OSP,
+                                                       _OPS);
     _configurationJson["has-all-permutations"] = true;
   } else {
     if (_usePatterns) {

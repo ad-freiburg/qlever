@@ -2,8 +2,8 @@
 
 #include "../global/Id.h"
 #include "../util/File.h"
-#include "CompressedRelation.h"
 #include "../util/Generator.h"
+#include "CompressedRelation.h"
 
 /**
  * This allows iterating over one of the permutations of the index once.
