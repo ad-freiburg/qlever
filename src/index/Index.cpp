@@ -72,7 +72,7 @@ auto predicateHasLanguage(Id langPredLowerBound, Id langPredUpperBound) {
 // Compute patterns and write them to `filename`. Triples where the predicate is
 // in [langPredLowerBound, langPredUpperBound). `spoTriplesView` must be
 // input-spoTriplesView and yield SPO-sorted triples of IDs.
-void createPatternsFromSpoTriplesView(auto& spoTriplesView,
+void createPatternsFromSpoTriplesView(auto&& spoTriplesView,
                                       const std::string& filename,
                                       Id langPredLowerBound,
                                       Id langPredUpperBound) {
@@ -199,8 +199,7 @@ void Index::createFromFile(const string& filename) {
     _configurationJson["has-all-permutations"] = true;
   } else {
     if (_usePatterns) {
-      auto generator = spoSorter.sort();
-      createPatternsFromSpoTriplesView(generator,
+      createPatternsFromSpoTriplesView(spoSorter.sort(),
                                        _onDiskBase + ".index.patterns",
                                        indexBuilderData.langPredLowerBound,
                                        indexBuilderData.langPredUpperBound);

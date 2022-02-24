@@ -13,19 +13,19 @@ namespace ad_utility {
 
 /// Takes a input-iterable and yields the elements of that view (no visible
 /// effect). The iteration over the input view is done on a separate thread with
-/// a buffer size of `bufferSize`. This might speed up the computation when the
+/// a buffer size of `blockSize`. This might speed up the computation when the
 /// values of the input view are expensive to compute.
 template <typename View>
 cppcoro::generator<typename View::value_type> bufferedAsyncView(
-    View view, uint64_t bufferSize) {
+    View view, uint64_t blockSize) {
   using value_type = typename View::value_type;
   auto it = view.begin();
   auto end = view.end();
-  auto getNextBlock = [&it, &end, bufferSize] {
+  auto getNextBlock = [&it, &end, blockSize] {
     std::vector<value_type> buffer;
-    buffer.reserve(bufferSize);
+    buffer.reserve(blockSize);
     size_t i = 0;
-    while (i < bufferSize && it != end) {
+    while (i < blockSize && it != end) {
       buffer.push_back(*it);
       ++it;
       ++i;
@@ -33,14 +33,14 @@ cppcoro::generator<typename View::value_type> bufferedAsyncView(
     return buffer;
   };
 
-  auto buffer = getNextBlock();
+  auto block = getNextBlock();
   auto future = std::async(std::launch::async, getNextBlock);
   while (true) {
-    for (auto& element : buffer) {
+    for (auto& element : block) {
       co_yield element;
     }
-    buffer = future.get();
-    if (buffer.empty()) {
+    block = future.get();
+    if (block.empty()) {
       co_return;
     }
     future = std::async(std::launch::async, getNextBlock);

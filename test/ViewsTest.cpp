@@ -10,7 +10,7 @@
 #include "../src/util/Random.h"
 #include "../src/util/Views.h"
 
-TEST(Views, bufferedAsyncView) {
+TEST(Views, BufferedAsyncView) {
   auto testWithVector = []<typename T>(const T& inputVector) {
     auto view = ad_utility::bufferedAsyncView(inputVector, 100);
     T result;
@@ -45,32 +45,32 @@ TEST(Views, bufferedAsyncView) {
 }
 
 TEST(Views, UniqueView) {
-  std::vector<int> originalInts;
+  std::vector<int> ints;
   const uint64_t numInts = 50'000;
-  originalInts.reserve(numInts);
-  SlowRandomIntGenerator<int> r{-200'000, 200'000};
+  ints.reserve(numInts);
+  SlowRandomIntGenerator<int> r;
   for (size_t i = 0; i < numInts; ++i) {
-    originalInts.push_back(r());
+    ints.push_back(r());
   }
 
-  std::vector<int> duplicateInts;
-  duplicateInts.reserve(3 * numInts);
+  std::vector<int> intsWithDuplicates;
+  intsWithDuplicates.reserve(3 * numInts);
   for (size_t i = 0; i < 3; ++i) {
-    for (auto num : originalInts) {
-      duplicateInts.push_back(num);
+    for (auto num : ints) {
+      intsWithDuplicates.push_back(num);
     }
   }
 
-  std::sort(duplicateInts.begin(), duplicateInts.end());
-  auto unique = ad_utility::uniqueView(duplicateInts);
+  std::sort(intsWithDuplicates.begin(), intsWithDuplicates.end());
+  auto unique = ad_utility::uniqueView(intsWithDuplicates);
   std::vector<int> result;
   for (const auto& element : unique) {
     result.push_back(element);
   }
-  std::sort(originalInts.begin(), originalInts.end());
+  std::sort(ints.begin(), ints.end());
   // Erase "accidentally" unique duplicates from the random initialization.
-  auto it = std::unique(originalInts.begin(), originalInts.end());
-  originalInts.erase(it, originalInts.end());
-  ASSERT_EQ(originalInts.size(), result.size());
-  ASSERT_EQ(originalInts, result);
+  auto it = std::unique(ints.begin(), ints.end());
+  ints.erase(it, ints.end());
+  ASSERT_EQ(ints.size(), result.size());
+  ASSERT_EQ(ints, result);
 }

@@ -8,31 +8,35 @@
 
 template <typename Expected, typename T>
 void tester(T&& t) {
-  static_assert(std::is_same_v<Expected, decltype(AD_FWD(t))>);
+  static_assert(std::is_same_v<Expected, decltype(t)>);
+  auto innerTester = [](auto&& innerT) {
+    static_assert(std::is_same_v<Expected, decltype(innerT)>);
+  };
+  innerTester(AD_FWD(t));
 }
 
 TEST(Forward, ExpectedTypes) {
-  int val = 0;
-  const int cval = 0;
-  int& ref = val;
-  const int& cref = val;
-  int&& movedRef = std::move(val);
+  int intVal = 0;
+  const int constIntVal = 0;
+  int& intRef = intVal;
+  const int& constIntRef = intVal;
+  int&& movedIntRef = std::move(intVal);
 
-  tester<int&>(val);
-  tester<int&&>(std::move(val));
-  tester<int&&>(AD_FWD(val));
+  tester<int&>(intVal);
+  tester<int&&>(std::move(intVal));
+  tester<int&&>(AD_FWD(intVal));
 
-  tester<const int&>(cval);
-  tester<const int&&>(AD_FWD(cval));
-  tester<const int&&>(std::move(cval));
+  tester<const int&>(constIntVal);
+  tester<const int&&>(AD_FWD(constIntVal));
+  tester<const int&&>(std::move(constIntVal));
 
-  tester<int&>(ref);
-  tester<const int&>(cref);
+  tester<int&>(intRef);
+  tester<const int&>(constIntRef);
 
   // subtle:: rvalue references are lvalues themselves, so we also have to call
   // std::move() or forward on them if we want to move.
-  tester<int&>(movedRef);
-  tester<int&&>(std::move(movedRef));
-  tester<int&&>(AD_FWD(movedRef));
+  tester<int&>(movedIntRef);
+  tester<int&&>(std::move(movedIntRef));
+  tester<int&&>(AD_FWD(movedIntRef));
   tester<int&&>(42);
 }
