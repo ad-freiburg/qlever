@@ -34,10 +34,11 @@ Index::Index() : _usePatterns(false) {}
 template <class Parser>
 IndexBuilderDataAsPsoSorter Index::createIdTriplesAndVocab(
     const string& ntFile) {
-  auto vocabData = passFileForVocabulary<Parser>(ntFile, _numTriplesPerBatch);
+  auto indexBuilderData =
+      passFileForVocabulary<Parser>(ntFile, _numTriplesPerBatch);
   // first save the total number of words, this is needed to initialize the
   // dense IndexMetaData variants
-  _totalVocabularySize = vocabData.nofWords;
+  _totalVocabularySize = indexBuilderData.nofWords;
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << _totalVocabularySize << std::endl;
 
@@ -53,11 +54,11 @@ IndexBuilderDataAsPsoSorter Index::createIdTriplesAndVocab(
   // used from now on). This will preserve information about externalized
   // Prefixes etc.
   _vocab.clear();
-  auto psoSorter = convertPartialToGlobalIds(*vocabData.idTriples,
-                                             vocabData.actualPartialSizes,
-                                             NUM_TRIPLES_PER_PARTIAL_VOCAB);
+  auto psoSorter = convertPartialToGlobalIds(
+      *indexBuilderData.idTriples, indexBuilderData.actualPartialSizes,
+      NUM_TRIPLES_PER_PARTIAL_VOCAB);
 
-  return {vocabData, std::move(psoSorter)};
+  return {indexBuilderData, std::move(psoSorter)};
 }
 namespace {
 // Return a lambda that takes a triple of IDs and returns true iff the predicate
