@@ -71,6 +71,7 @@ TEST(IndexTest, createFromTsvTest) {
     {
       Index index;
       index.setOnDiskBase("_testindex");
+      index.setNumTriplesPerBatch(2);
       index.createFromFile<TsvParser>("_testtmp2.tsv");
     }
     Index index;
@@ -145,6 +146,7 @@ TEST(IndexTest, createFromTsvTest) {
     {
       Index index;
       index.setOnDiskBase("_testindex");
+      index.setNumTriplesPerBatch(2);
       index.createFromFile<TsvParser>("_testtmp2.tsv");
     }
     Index index;
@@ -243,6 +245,7 @@ TEST_F(CreatePatternsFixture, createPatterns) {
       Index index;
       index.setUsePatterns(true);
       index.setOnDiskBase("_testindex");
+      index.setNumTriplesPerBatch(2);
       index.createFromFile<TsvParser>("_testtmppatterns.tsv");
     }
     Index index;
@@ -307,6 +310,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   {
     Index indexPrim;
     indexPrim.setOnDiskBase("_testindex2");
+    indexPrim.setNumTriplesPerBatch(2);
     indexPrim.createFromFile<TsvParser>("_testtmp3.tsv");
   }
 
@@ -357,6 +361,7 @@ TEST(IndexTest, scanTest) {
     {
       Index index;
       index.setOnDiskBase("_testindex");
+      index.setNumTriplesPerBatch(2);
       index.createFromFile<TsvParser>("_testtmp2.tsv");
     }
 
@@ -442,6 +447,7 @@ TEST(IndexTest, scanTest) {
     {
       Index index;
       index.setOnDiskBase("_testindex");
+      index.setNumTriplesPerBatch(2);
       index.createFromFile<TsvParser>("_testtmp2.tsv");
     }
     Index index;

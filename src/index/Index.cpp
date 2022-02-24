@@ -35,7 +35,7 @@ template <class Parser>
 IndexBuilderDataAsPsoSorter Index::createIdTriplesAndVocab(
     const string& ntFile) {
   auto vocabData =
-      passFileForVocabulary<Parser>(ntFile, _numTriplesPerPartialVocab);
+      passFileForVocabulary<Parser>(ntFile, _numTriplesPerBatch);
   // first save the total number of words, this is needed to initialize the
   // dense IndexMetaData variants
   _totalVocabularySize = vocabData.nofWords;
@@ -1048,10 +1048,10 @@ void Index::initializeVocabularySettingsBuild() {
   }
 
   if (j.count("num-triples-per-batch")) {
-    _numTriplesPerPartialVocab = size_t{j["num-triples-per-batch"]};
+    _numTriplesPerBatch = size_t{j["num-triples-per-batch"]};
     LOG(INFO)
         << "You specified \"num-triples-per-batch = "
-        << _numTriplesPerPartialVocab
+        << _numTriplesPerBatch
         << "\", choose a lower value if the index builder runs out of memory"
         << std::endl;
   }
