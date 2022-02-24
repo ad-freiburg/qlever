@@ -652,8 +652,9 @@ void Index::addPatternsToExistingIndex() {
 void Index::createFromOnDiskIndex(const string& onDiskBase) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
-  _vocab.readFromFile(_onDiskBase + INTERNAL_VOCAB_SUFFIX,
-                      _onDiskLiterals ? _onDiskBase + EXTERNAL_VOCAB_SUFFIX : "");
+  _vocab.readFromFile(
+      _onDiskBase + INTERNAL_VOCAB_SUFFIX,
+      _onDiskLiterals ? _onDiskBase + EXTERNAL_VOCAB_SUFFIX : "");
 
   _totalVocabularySize = _vocab.size() + _vocab.getExternalVocab().size();
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "

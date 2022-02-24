@@ -140,8 +140,9 @@ void Index::passContextFileIntoVector(const string& contextFile,
   // initialized before
   _vocab = RdfsVocabulary{};
   readConfiguration();
-  _vocab.readFromFile(_onDiskBase + INTERNAL_VOCAB_SUFFIX,
-                      _onDiskLiterals ? _onDiskBase + EXTERNAL_VOCAB_SUFFIX : "");
+  _vocab.readFromFile(
+      _onDiskBase + INTERNAL_VOCAB_SUFFIX,
+      _onDiskLiterals ? _onDiskBase + EXTERNAL_VOCAB_SUFFIX : "");
 
   TextVec::bufwriter_type writer(vec);
   ad_utility::HashMap<Id, Score> wordsInContext;

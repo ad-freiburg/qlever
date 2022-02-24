@@ -168,7 +168,8 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   ASSERT_EQ(res._langPredLowerBound, 0ul);
   ASSERT_EQ(res._langPredUpperBound, 0ul);
   // check that (external) vocabulary has the right form.
-  ASSERT_TRUE(areBinaryFilesEqual(_pathVocabExp, _basePath + INTERNAL_VOCAB_SUFFIX));
+  ASSERT_TRUE(
+      areBinaryFilesEqual(_pathVocabExp, _basePath + INTERNAL_VOCAB_SUFFIX));
   ASSERT_TRUE(areBinaryFilesEqual(_pathExternalVocabExp,
                                   _basePath + EXTERNAL_LITS_TEXT_FILE_NAME));
 
