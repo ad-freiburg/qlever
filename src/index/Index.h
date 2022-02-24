@@ -21,6 +21,7 @@
 #include "../util/BufferedVector.h"
 #include "../util/CompressionUsingZstd/ZstdWrapper.h"
 #include "../util/File.h"
+#include "../util/Forward.h"
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
 #include "../util/Timer.h"
@@ -530,12 +531,12 @@ class Index {
 
   void passContextFileIntoVector(const string& contextFile, TextVec& vec);
 
-  template <class MetaDataDispatcher, typename Sorter>
+  template <class MetaDataDispatcher, typename SortedTriples>
   std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                           typename MetaDataDispatcher::WriteType>>
   createPermutationPairImpl(const string& fileName1, const string& fileName2,
-                            Sorter& vec, size_t c0, size_t c1, size_t c2,
-                            auto&&... perTripleCallbacks);
+                            SortedTriples&& sortedTriples, size_t c0, size_t c1,
+                            size_t c2, auto&&... perTripleCallbacks);
 
   void writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
                         ad_utility::BufferedVector<array<Id, 2>>* bufPtr);
@@ -553,7 +554,7 @@ class Index {
 
   template <class MetaDataDispatcher, class Comparator1, class Comparator2>
   void createPermutationPair(
-      auto vocabularyData,
+      auto&& sortedTriples,
       const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
@@ -581,7 +582,7 @@ class Index {
   std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                           typename MetaDataDispatcher::WriteType>>
   createPermutations(
-      auto vec,
+      auto&& sortedTriples,
       const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&

@@ -6,22 +6,24 @@
 
 #include <algorithm>
 
+#define STXXL_DEFAULT_BLOCK_SIZE(type) 512
 #include "../src/util/BackgroundStxxlSorter.h"
 #include "../src/util/Random.h"
 
 // The combination of 100MB for STXXL and 50M ints (which require 200MB of
 // memory) unfortunately is the smallest configuration for STXXL that works and
 // requires more than one block.
-uint64_t memoryForTests = 1000 * 1000 * 100;
+uint64_t memoryForTests = 1000 * 10 * 1;
 
 struct IntSorter : public std::less<> {
   int max_value() const { return std::numeric_limits<int>::max(); }
+  int min_value() const { return std::numeric_limits<int>::min(); }
 };
 
 TEST(BackgroundStxxlSorter, SortInts) {
   ad_utility::BackgroundStxxlSorter<int, IntSorter> sorter{memoryForTests};
   std::vector<int> ints;
-  const uint64_t numInts = 50'000'000;
+  const uint64_t numInts = 50'000;
   ints.reserve(numInts);
   for (size_t i = 0; i < numInts; ++i) {
     ints.push_back(numInts - i);
@@ -30,37 +32,12 @@ TEST(BackgroundStxxlSorter, SortInts) {
   for (auto i : ints) {
     sorter.push(i);
   }
-  sorter.sort();
   std::vector<int> result;
-  for (const auto& element : sorter) {
+  for (const auto& element : sorter.sortedView()) {
     result.push_back(element);
   }
   std::sort(ints.begin(), ints.end());
   ASSERT_EQ(ints, result);
-}
-
-TEST(BackgroundStxxlSorter, InvalidState) {
-  {
-    ad_utility::BackgroundStxxlSorter<int, IntSorter> sorter{memoryForTests};
-    sorter.push(42);
-    // Missing call to sort
-    ASSERT_THROW(sorter.begin(), ad_semsearch::Exception);
-  }
-
-  {
-    ad_utility::BackgroundStxxlSorter<int, IntSorter> sorter{memoryForTests};
-    sorter.push(42);
-    // Missing call to sort
-    ASSERT_THROW(sorter.end(), ad_semsearch::Exception);
-  }
-
-  {
-    ad_utility::BackgroundStxxlSorter<int, IntSorter> sorter{memoryForTests};
-    sorter.push(42);
-    // Missing call to sort
-    ASSERT_THROW(ad_utility::StxxlUniqueSorter uniqueSorter(sorter),
-                 ad_semsearch::Exception);
-  }
 }
 
 TEST(StxxlUniqueSorter, uniqueInts) {
@@ -84,8 +61,7 @@ TEST(StxxlUniqueSorter, uniqueInts) {
   for (auto i : duplicateInts) {
     sorter.push(i);
   }
-  sorter.sort();
-  ad_utility::StxxlUniqueSorter uniqueSorter{sorter};
+  auto uniqueSorter = ad_utility::uniqueView(sorter.sortedView());
   std::vector<int> result;
   for (const auto& element : uniqueSorter) {
     result.push_back(element);

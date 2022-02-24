@@ -9,33 +9,29 @@
 #include <stxxl/sorter>
 
 #include "./Exception.h"
+#include "./Generator.h"
 #include "./Log.h"
+#include "./Views.h"
 
 namespace ad_utility {
 
-// This class has the same interface as a `stxxl::sorter` and performs the same
+// This class has a similar interface to a `stxxl::sorter` and performs the same
 // functionality, with the following difference: All expensive operations
 // (sorting or merging a block) are performed on a background thread such that
-// the calls to `push()` (add triples before the sort) or `operator++` (iterate
-// over the triples after the sort) return much faster.
+// the calls to `push()` (add triples before the sort) and the usage of the
+// view of the sorted elements obtained by `sort()` become much faster.
 template <typename ValueType, typename Comparator>
 class BackgroundStxxlSorter {
  private:
   // The underlying sorter.
   stxxl::sorter<ValueType, Comparator> _sorter;
-  // Buffer for a block of elements, which will be passed to the `_iterator`
-  // (respectively: were retrieved from the `_iterator`) at once and
-  // asynchronously.
+  // Buffer for a block of elements that will be passed to the `_sorter`
+  // on a background thread .
   std::vector<ValueType> _buffer;
   // Wait for the asynchronous background operations.
   std::future<void> _sortInBackgroundFuture;
-  std::future<std::vector<ValueType>> _mergeInBackgroundFuture;
   // The number of elements that the `_iterator` can sort in RAM.
   size_t _numElementsInRun;
-
-  // Used in the output phase as an index into `_buffer`.
-  size_t _outputIndex = 0;
-
   // Was the `sort()` function already called
   bool _sortWasCalled = false;
 
@@ -77,10 +73,39 @@ class BackgroundStxxlSorter {
     _buffer.reserve(_numElementsInRun);
   }
 
-  // Transition from the input phase, where new elements can be added via
-  // `push()`, to the output phase, where `operator++`, `operator*` and
-  // `empty()` can be called to retrieve elements in sorted order.
-  void sort() {
+  size_t size() const { return _sorter.size(); }
+
+  /// Clear the underlying sorter and all buffers and reset to the input state.
+  /// If a view was obtained via `sort()`, this generator becomes invalid
+  /// and using it results in undefined behavior.
+  void clear() {
+    if (_sortInBackgroundFuture.valid()) {
+      _sortInBackgroundFuture.get();
+    }
+    _sorter.clear();
+    _numElementsInRun = _sorter.num_els_in_run();
+    // Deallocate memory.
+    _buffer = decltype(_buffer){};
+    _sortWasCalled = false;
+  }
+
+  /// Return a lambda that takes a `ValueType` and calls `push` for that value.
+  /// Note that `this` is captured by reference
+  auto makePushCallback() {
+    return [this](ValueType value) { push(std::move(value)); };
+  }
+
+  /// Transition from the input phase, where `push()` may be called, to the
+  /// output phase and return a generator that yields the sorted elements. This
+  /// function may be called exactly once.
+  [[nodiscard]] cppcoro::generator<value_type> sortedView() {
+    setupSort();
+    return bufferedAsyncView(outputGeneratorImpl(), _numElementsInRun);
+  }
+
+ private:
+  // Transition from the input to the output state.
+  void setupSort() {
     AD_CHECK(!_sortWasCalled);
     _sortWasCalled = true;
     // First sort all remaining elements from the input phase.
@@ -91,154 +116,21 @@ class BackgroundStxxlSorter {
       _sorter.push(el);
     }
     _sorter.sort();
-    _buffer.clear();
-    _buffer.reserve(_numElementsInRun);
-    refillOutputBuffer();
+    // Deallocate memory for `_buffer`, the output buffering is handled via a
+    // `bufferedAsyncView` which owns its own buffer.
+    _buffer = decltype(_buffer){};
   }
 
- public:
-  size_t size() const { return _sorter.size(); }
-
-  void clear() {
-    if (_sortInBackgroundFuture.valid()) {
-      _sortInBackgroundFuture.get();
+  // Yield all elements of the underlying sorter. Only valid after `setupSort`
+  // was called.
+  cppcoro::generator<value_type> outputGeneratorImpl() {
+    for (; !_sorter.empty(); ++_sorter) {
+      auto value = *_sorter;
+      co_yield value;
     }
-    if (_mergeInBackgroundFuture.valid()) {
-      _mergeInBackgroundFuture.get();
-    }
-
-    _sorter.clear();
-    _numElementsInRun = _sorter.num_els_in_run();
-    _buffer.reserve(_numElementsInRun);
-    _outputIndex = 0;
-    _outputIndex = 0;
-  }
-
-  /// Return a lambda that takes a `ValueType` and calls `push` for that value.
-  /// Note that `this` is captured by reference
-  auto makePushCallback() {
-    return [this](ValueType value) { push(std::move(value)); };
-  }
-
-  // Was `sort()` already called?
-  [[nodiscard]] bool wasSortCalled() const { return _sortWasCalled; }
-
-  struct IteratorEnd {};
-  struct Iterator {
-   private:
-    BackgroundStxxlSorter* _sorter;
-    explicit Iterator(BackgroundStxxlSorter* sorter) : _sorter{sorter} {}
-    friend class BackgroundStxxlSorter;
-
-   public:
-    decltype(auto) operator++() { return ++(*_sorter); }
-    decltype(auto) operator*() { return **_sorter; }
-    bool operator==(IteratorEnd) { return _sorter->empty(); }
-  };
-
-  /// After calling `sort()` this class is input-iterable
-  Iterator begin() {
-    AD_CHECK(wasSortCalled());
-    return Iterator{this};
-  }
-  IteratorEnd end() {
-    AD_CHECK(wasSortCalled());
-    return {};
-  }
-
- private:
-  bool empty() {
-    if (_outputIndex >= _buffer.size()) {
-      refillOutputBuffer();
-    }
-    return (_outputIndex >= _buffer.size());
-  }
-
-  decltype(auto) operator*() const { return _buffer[_outputIndex]; }
-
-  void refillOutputBuffer() {
-    _buffer.clear();
-    _outputIndex = 0;
-
-    auto getNextBlock = [this] {
-      std::vector<ValueType> buffer;
-      buffer.reserve(_numElementsInRun);
-      for (size_t i = 0; i < _numElementsInRun; ++i) {
-        if (_sorter.empty()) {
-          break;
-        }
-        buffer.push_back(*_sorter);
-        ++_sorter;
-      }
-      return buffer;
-    };
-
-    if (!_mergeInBackgroundFuture.valid() && !_sorter.empty()) {
-      // If we have reached here, this is the first time we fill the buffer,
-      // Fill the buffer synchronously and immediately start the next
-      // asynchronous operation.
-      _buffer = getNextBlock();
-    }
-
-    if (_mergeInBackgroundFuture.valid()) {
-      _buffer = _mergeInBackgroundFuture.get();
-    }
-
-    if (_sorter.empty()) {
-      return;
-    }
-    _mergeInBackgroundFuture = std::async(std::launch::async, getNextBlock);
-  }
-
-  BackgroundStxxlSorter& operator++() {
-    _outputIndex++;
-    if (_outputIndex >= _buffer.size()) {
-      refillOutputBuffer();
-    }
-    return *this;
   }
 };
 
-/// Takes a `stxxl::sorter` or a `StxxlBackgroundSorter` an filters out
-/// consecutive duplicates.
-template <typename InputSorter>
-class StxxlUniqueSorter {
- private:
-  typename InputSorter::Iterator _iterator;
-  typename InputSorter::IteratorEnd _end;
-
- public:
-  /// The `inputSorter` must be a `stxxl::sorter` or a `StxxlBackgroundSorter`
-  /// for which `sort` has already been called.
-  explicit StxxlUniqueSorter(InputSorter& inputSorter)
-      : _iterator(inputSorter.begin()), _end(inputSorter.end()) {}
-
-  /// This class is input-iterable, just like the underlying sorters.
-  struct IteratorEnd {};
-  friend class Iterator;
-  class Iterator {
-   private:
-    StxxlUniqueSorter* _sorter;
-
-   public:
-    explicit Iterator(StxxlUniqueSorter* sorter) : _sorter{sorter} {}
-    decltype(auto) operator++() { return ++(*_sorter); }
-    decltype(auto) operator*() { return *_sorter->_iterator; }
-    bool operator==(IteratorEnd) { return _sorter->_iterator == _sorter->_end; }
-  };
-  Iterator begin() { return Iterator{this}; }
-  IteratorEnd end() { return {}; }
-
- private:
-  StxxlUniqueSorter& operator++() {
-    auto previousValue = *_iterator;
-    ++_iterator;
-    while (_iterator != _end && previousValue == *_iterator) {
-      ++_iterator;
-    }
-    return *this;
-  }
-};
 }  // namespace ad_utility
 
 #endif  // QLEVER_BACKGROUNDSTXXLSORTER_H

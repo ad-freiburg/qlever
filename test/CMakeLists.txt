@@ -168,3 +168,7 @@ addLinkAndDiscoverTest(IteratorTest)
 addLinkAndDiscoverTest(PatternCreatorTest index)
 
 addLinkAndDiscoverTest(BackgroundStxxlSorterTest ${STXXL_LIBRARIES})
+
+addLinkAndDiscoverTest(ViewsTest)
+
+addLinkAndDiscoverTest(ForwardTest)

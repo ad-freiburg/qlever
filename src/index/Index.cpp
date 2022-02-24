@@ -72,7 +72,7 @@ auto predicateHasLanguage(Id langPredLowerBound, Id langPredUpperBound) {
 // Compute patterns and write them to `filename`. Triples where the predicate is
 // in [langPredLowerBound, langPredUpperBound). `spoTriplesView` must be
 // input-spoTriplesView and yield SPO-sorted triples of IDs.
-void createPatternsFromSpoTriplesView(auto& spoTriplesView,
+void createPatternsFromSpoTriplesView(auto&& spoTriplesView,
                                       const std::string& filename,
                                       Id langPredLowerBound,
                                       Id langPredUpperBound) {
@@ -161,12 +161,11 @@ void Index::createFromFile(const string& filename) {
 
   StxxlSorter<SortBySPO> spoSorter{STXXL_MEMORY_TO_USE};
   auto& psoSorter = *indexBuilderData.psoSorter;
-  psoSorter.sort();
   // For the first permutation, perform a unique.
-  ad_utility::StxxlUniqueSorter uniqueSorter{psoSorter};
+  auto uniqueSorter = ad_utility::uniqueView(psoSorter.sortedView());
 
   createPermutationPair<IndexMetaDataHmapDispatcher>(
-      &uniqueSorter, _PSO, _POS, spoSorter.makePushCallback());
+      std::move(uniqueSorter), _PSO, _POS, spoSorter.makePushCallback());
   psoSorter.clear();
 
   auto hasLanguagePredicate = predicateHasLanguage(
@@ -175,7 +174,6 @@ void Index::createFromFile(const string& filename) {
   if (_loadAllPermutations) {
     // After the SPO permutation, create patterns if so desired.
     StxxlSorter<SortByOSP> ospSorter{STXXL_MEMORY_TO_USE};
-    spoSorter.sort();
     if (_usePatterns) {
       PatternCreator patternCreator{_onDiskBase + ".index.patterns"};
       auto pushTripleToPatterns = [&patternCreator,
@@ -185,24 +183,23 @@ void Index::createFromFile(const string& filename) {
         }
       };
       createPermutationPair<IndexMetaDataMmapDispatcher>(
-          &spoSorter, _SPO, _SOP, ospSorter.makePushCallback(),
+          spoSorter.sortedView(), _SPO, _SOP, ospSorter.makePushCallback(),
           pushTripleToPatterns);
       patternCreator.finish();
     } else {
       createPermutationPair<IndexMetaDataMmapDispatcher>(
-          &spoSorter, _SPO, _SOP, ospSorter.makePushCallback());
+          spoSorter.sortedView(), _SPO, _SOP, ospSorter.makePushCallback());
     }
     spoSorter.clear();
-    ospSorter.sort();
 
     // For the last pair of permutations we don't need a next sorter, so we have
     // no fourth argument.
-    createPermutationPair<IndexMetaDataMmapDispatcher>(&ospSorter, _OSP, _OPS);
+    createPermutationPair<IndexMetaDataMmapDispatcher>(ospSorter.sortedView(),
+                                                       _OSP, _OPS);
     _configurationJson["has-all-permutations"] = true;
   } else {
     if (_usePatterns) {
-      spoSorter.sort();
-      createPatternsFromSpoTriplesView(spoSorter,
+      createPatternsFromSpoTriplesView(spoSorter.sortedView(),
                                        _onDiskBase + ".index.patterns",
                                        indexBuilderData.langPredLowerBound,
                                        indexBuilderData.langPredUpperBound);
@@ -460,12 +457,13 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
 }
 
 // _____________________________________________________________________________
-template <class MetaDataDispatcher, typename Sorter>
+template <class MetaDataDispatcher, typename SortedTriples>
 std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                         typename MetaDataDispatcher::WriteType>>
 Index::createPermutationPairImpl(const string& fileName1,
-                                 const string& fileName2, Sorter& triples,
-                                 size_t c0, size_t c1, size_t c2,
+                                 const string& fileName2,
+                                 SortedTriples&& sortedTriples, size_t c0,
+                                 size_t c1, size_t c2,
                                  auto&&... perTripleCallbacks) {
   using MetaData = typename MetaDataDispatcher::WriteType;
   MetaData metaData1, metaData2;
@@ -478,8 +476,8 @@ Index::createPermutationPairImpl(const string& fileName1,
   CompressedRelationWriter writer2{ad_utility::File(fileName2, "w")};
 
   // Iterate over the vector and identify "relation" boundaries, where a
-  // "relation" is the sequence of triples equal first component. For PSO and
-  // POS, this is a predicate (of which "relation" is a synonym).
+  // "relation" is the sequence of sortedTriples equal first component. For PSO
+  // and POS, this is a predicate (of which "relation" is a synonym).
   LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
   size_t from = 0;
   std::optional<Id> currentRel;
@@ -490,7 +488,7 @@ Index::createPermutationPairImpl(const string& fileName1,
   size_t sizeOfRelation = 0;
   Id lastLhs = std::numeric_limits<Id>::max();
   uint64_t totalNumTriples = 0;
-  for (auto triple : triples) {
+  for (auto triple : sortedTriples) {
     if (!currentRel.has_value()) {
       currentRel = triple[c0];
     }
@@ -574,7 +572,7 @@ template <class MetaDataDispatcher, class Comparator1, class Comparator2>
 std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                         typename MetaDataDispatcher::WriteType>>
 Index::createPermutations(
-    auto vec,
+    auto&& sortedTriples,
     const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
         p1,
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
@@ -582,9 +580,9 @@ Index::createPermutations(
     auto&&... perTripleCallbacks) {
   auto metaData = createPermutationPairImpl<MetaDataDispatcher>(
       _onDiskBase + ".index" + p1._fileSuffix,
-      _onDiskBase + ".index" + p2._fileSuffix, *vec, p1._keyOrder[0],
-      p1._keyOrder[1], p1._keyOrder[2],
-      std::forward<decltype(perTripleCallbacks)>(perTripleCallbacks)...);
+      _onDiskBase + ".index" + p2._fileSuffix, AD_FWD(sortedTriples),
+      p1._keyOrder[0], p1._keyOrder[1], p1._keyOrder[2],
+      AD_FWD(perTripleCallbacks)...);
 
   if (metaData.has_value()) {
     auto& mdv = metaData.value();
@@ -600,15 +598,14 @@ Index::createPermutations(
 // ________________________________________________________________________
 template <class MetaDataDispatcher, class Comparator1, class Comparator2>
 void Index::createPermutationPair(
-    auto vocabularyData,
+    auto&& sortedTriples,
     const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
         p1,
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
     auto&&... perTripleCallbacks) {
   auto metaData = createPermutations<MetaDataDispatcher>(
-      vocabularyData, p1, p2,
-      std::forward<decltype(perTripleCallbacks)>(perTripleCallbacks)...);
+      AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
   if (metaData) {
     LOG(INFO) << "Exchanging multiplicities for " << p1._readableName << " and "
               << p2._readableName << " ..." << std::endl;
@@ -643,7 +640,7 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
   auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
-  auto iterator = TriplesView<Permutation::SPO_T>{_SPO};
+  auto iterator = TriplesView(_SPO);
   createPatternsFromSpoTriplesView(iterator, _onDiskBase + ".index.patterns",
                                    langPredLowerBound, langPredUpperBound);
 }
