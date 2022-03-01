@@ -70,10 +70,7 @@ class streamable_body::writer {
   writer(boost::beast::http::header<isRequest, Fields>& header,
          value_type& stringSupplier)
       : _stringSupplier{stringSupplier} {
-    // TODO call in init to conform to beast interface
     _stringSupplier->prepareHttpHeaders(header);
-    /*ad_utility::content_encoding::setContentEncodingHeaderForCompressionMethod(
-        _streamableGenerator.getCompressionMethod(), header);*/
   }
 
   /**
