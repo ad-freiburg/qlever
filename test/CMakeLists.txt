@@ -52,10 +52,6 @@ addLinkAndDiscoverTest(FileTest)
 
 addLinkAndDiscoverTest(Simple8bTest)
 
-addLinkAndDiscoverTest(VocabularyTest index)
-
-addLinkAndDiscoverTest(ExternalVocabularyTest index)
-
 addLinkAndDiscoverTest(TsvParserTest parser)
 
 addLinkAndDiscoverTest(ContextFileParserTest parser ${ICU_LIBRARIES})
@@ -160,6 +156,22 @@ addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary ${ICU_LIBRARIES})
 addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
 
 addLinkAndDiscoverTest(PrefixCompressorTest)
+
+addLinkAndDiscoverTest(MilestoneIdTest absl::strings)
+
+addLinkAndDiscoverTest(VocabularyOnDiskTest index)
+
+addLinkAndDiscoverTest(VocabularyTest index)
+
+addLinkAndDiscoverTest(IteratorTest)
+
+addLinkAndDiscoverTest(PatternCreatorTest index)
+
+addLinkAndDiscoverTest(BackgroundStxxlSorterTest ${STXXL_LIBRARIES})
+
+addLinkAndDiscoverTest(ViewsTest)
+
+addLinkAndDiscoverTest(ForwardTest)
 
 addLinkAndDiscoverTest(CompressorStreamTest engine)
 

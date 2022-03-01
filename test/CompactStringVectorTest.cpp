@@ -107,19 +107,51 @@ TEST(CompactVectorOfStrings, Serialization) {
 }
 
 TEST(CompactVectorOfStrings, SerializationWithPush) {
-  auto testSerializationWithPush = []<typename V>(const V&, auto& input) {
+  auto testSerializationWithPush = []<typename V>(const V&, auto& inputVector) {
     {
-      typename V::Writer w{"_writerTest.dat"};
-      for (const auto& s : input) {
-        w.push(s.data(), s.size());
+      typename V::Writer writer{"_writerTest.dat"};
+      for (const auto& s : inputVector) {
+        writer.push(s.data(), s.size());
       }
     }  // The constructor finishes writing the file.
 
-    V vector;
+    V compactVector;
     ad_utility::serialization::FileReadSerializer ser{"_writerTest.dat"};
-    ser >> vector;
+    ser >> compactVector;
 
-    vectorsEqual(input, vector);
+    vectorsEqual(inputVector, compactVector);
+
+    ad_utility::deleteFile("_writerTest.dat");
+  };
+  testSerializationWithPush(CompactVectorChar{}, strings);
+  testSerializationWithPush(CompactVectorInt{}, ints);
+}
+
+TEST(CompactVectorOfStrings, SerializationWithPushMiddleOfFile) {
+  auto testSerializationWithPush = []<typename V>(const V&, auto& inputVector) {
+    std::string filename = "_writerTest.dat";
+    {
+      ad_utility::serialization::FileWriteSerializer fileWriter{filename};
+      fileWriter << 42;
+      typename V::Writer writer{std::move(fileWriter).file()};
+      for (const auto& s : inputVector) {
+        writer.push(s.data(), s.size());
+      }
+      fileWriter =
+          ad_utility::serialization::FileWriteSerializer{writer.finish()};
+      fileWriter << -3;
+    }
+
+    V compactVector;
+    ad_utility::serialization::FileReadSerializer ser{"_writerTest.dat"};
+    int i = 0;
+    ser >> i;
+    ASSERT_EQ(42, i);
+    ser >> compactVector;
+    ser >> i;
+    ASSERT_EQ(-3, i);
+
+    vectorsEqual(inputVector, compactVector);
 
     ad_utility::deleteFile("_writerTest.dat");
   };
@@ -128,11 +160,11 @@ TEST(CompactVectorOfStrings, SerializationWithPush) {
 }
 
 TEST(CompactVectorOfStrings, DiskIterator) {
-  auto testDiskIterator = []<typename V>(const V&, auto& input) {
+  auto testDiskIterator = []<typename V>(const V&, auto& inputVector) {
     {
-      typename V::Writer w{"_writerTest.dat"};
-      for (const auto& s : input) {
-        w.push(s.data(), s.size());
+      typename V::Writer writer{"_writerTest.dat"};
+      for (const auto& s : inputVector) {
+        writer.push(s.data(), s.size());
       }
     }  // The constructor finishes writing the file.
 
@@ -140,9 +172,9 @@ TEST(CompactVectorOfStrings, DiskIterator) {
 
     size_t i = 0;
     for (const auto& el : iterator) {
-      ASSERT_EQ(el, input[i++]);
+      ASSERT_EQ(el, inputVector[i++]);
     }
-    ASSERT_EQ(i, input.size());
+    ASSERT_EQ(i, inputVector.size());
     ad_utility::deleteFile("_writerTest.dat");
   };
   testDiskIterator(CompactVectorChar{}, strings);

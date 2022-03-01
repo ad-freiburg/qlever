@@ -40,7 +40,7 @@ class VocabularyInMemory {
 
   /// Read the vocabulary from a file. The file must have been created by a call
   /// to `writeToFile` or using a `WordWriter`.
-  void readFromFile(const string& fileName);
+  void open(const string& fileName);
 
   /// Write the vocabulary to a file.
   void writeToFile(const string& fileName) const;
@@ -48,8 +48,9 @@ class VocabularyInMemory {
   /// Return the total number of words
   [[nodiscard]] size_t size() const { return _words.size(); }
 
-  ///
-  [[nodiscard]] uint64_t getHighestIndex() const {
+  /// Return the highest ID (= index) that occurs in this vocabulary. May only
+  /// becalled if size() > 0.
+  [[nodiscard]] uint64_t getHighestId() const {
     AD_CHECK(size() > 0);
     return size() - 1;
   }
@@ -104,7 +105,7 @@ class VocabularyInMemory {
   }
 
   /// Clear the vocabulary.
-  void clear() { _words.clear(); }
+  void close() { _words.clear(); }
 
   /// Initialize the vocabulary from the given `words`.
   void build(const std::vector<std::string>& words) { _words.build(words); }

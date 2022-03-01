@@ -38,8 +38,12 @@ TEST(VocabularyInMemory, ReadAndWriteFromFile) {
   vocab.writeToFile(vocabularyFilename);
 
   Vocab readVocab;
-  readVocab.readFromFile(vocabularyFilename);
+  readVocab.open(vocabularyFilename);
   assertThatRangesAreEqual(vocab, readVocab);
   ad_utility::deleteFile(vocabularyFilename);
+}
+
+TEST(VocabularyInMemory, EmptyVocabulary) {
+  testEmptyVocabulary(createVocabulary);
 }
 }  // namespace

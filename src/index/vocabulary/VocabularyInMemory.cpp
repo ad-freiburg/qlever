@@ -7,13 +7,10 @@
 using std::string;
 
 // _____________________________________________________________________________
-void VocabularyInMemory::readFromFile(const string& fileName) {
-  LOG(INFO) << "Reading vocabulary from file " << fileName << " ..."
-            << std::endl;
+void VocabularyInMemory::open(const string& fileName) {
   _words.clear();
   ad_utility::serialization::FileReadSerializer file(fileName);
   file >> _words;
-  LOG(INFO) << "Done, number of words: " << _words.size() << std::endl;
 }
 
 // _____________________________________________________________________________

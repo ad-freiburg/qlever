@@ -71,6 +71,7 @@ TEST(IndexTest, createFromTsvTest) {
     {
       Index index;
       index.setOnDiskBase("_testindex");
+      index.setNumTriplesPerBatch(2);
       index.createFromFile<TsvParser>("_testtmp2.tsv");
     }
     Index index;
@@ -145,6 +146,7 @@ TEST(IndexTest, createFromTsvTest) {
     {
       Index index;
       index.setOnDiskBase("_testindex");
+      index.setNumTriplesPerBatch(2);
       index.createFromFile<TsvParser>("_testtmp2.tsv");
     }
     Index index;
@@ -242,8 +244,8 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     {
       Index index;
       index.setUsePatterns(true);
-      index._maxNumPatterns = 1;
       index.setOnDiskBase("_testindex");
+      index.setNumTriplesPerBatch(2);
       index.createFromFile<TsvParser>("_testtmppatterns.tsv");
     }
     Index index;
@@ -251,43 +253,36 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     index.createFromOnDiskIndex("_testindex");
 
     ASSERT_EQ(2u, index.getHasPattern().size());
-    ASSERT_EQ(1u, index.getHasPredicate().size());
-    ASSERT_EQ(1u, index._patterns.size());
-    Pattern p;
-    p.push_back(3);
-    p.push_back(6);
-    const auto& ip = index._patterns[0];
-    for (size_t i = 0; i < ip.size(); i++) {
-      ASSERT_EQ(p[i], ip[i]);
+    ASSERT_EQ(0u, index.getHasPredicate().size());
+    ASSERT_EQ(2u, index._patterns.size());
+    Pattern p0;
+    Pattern p1;
+    Id id;
+    // Pattern p0 (for subject <a>) consists of <b> and <b2)
+    ASSERT_TRUE(index.getVocab().getId("<b>", &id));
+    p0.push_back(id);
+    ASSERT_TRUE(index.getVocab().getId("<b2>", &id));
+    p0.push_back(id);
+
+    // Pattern p1 (for subject <as>) consists of <b2> and <d>)
+    p1.push_back(id);
+    ASSERT_TRUE(index.getVocab().getId("<d>", &id));
+    p1.push_back(id);
+
+    auto checkPattern = [](const auto& expected, const auto& actual) {
+      for (size_t i = 0; i < actual.size(); i++) {
+        ASSERT_EQ(expected[i], actual[i]);
+      }
+    };
+
+    ASSERT_TRUE(index.getVocab().getId("<a>", &id));
+    LOG(INFO) << id << std::endl;
+    for (size_t i = 0; i < index.getHasPattern().size(); ++i) {
+      LOG(INFO) << index.getHasPattern()[i] << std::endl;
     }
-    ASSERT_EQ(0u, index.getHasPattern()[1]);
-    ASSERT_EQ(NO_PATTERN, index.getHasPattern()[0]);
-
-    ASSERT_FLOAT_EQ(4.0 / 2, index.getHasPredicateMultiplicityEntities());
-    ASSERT_FLOAT_EQ(4.0 / 3, index.getHasPredicateMultiplicityPredicates());
-  }
-  {
-    LOG(DEBUG) << "Testing createPatterns with existing index..." << std::endl;
-    Index index;
-    index.setUsePatterns(true);
-    index._maxNumPatterns = 1;
-    index.createFromOnDiskIndex("_testindex");
-
-    ASSERT_EQ(2u, index.getHasPattern().size());
-    ASSERT_EQ(1u, index.getHasPredicate().size());
-    ASSERT_EQ(1u, index._patterns.size());
-    Pattern p;
-    p.push_back(3);
-    p.push_back(6);
-    const auto& ip = index._patterns[0];
-    for (size_t i = 0; i < ip.size(); i++) {
-      ASSERT_EQ(p[i], ip[i]);
-    }
-    ASSERT_EQ(0u, index.getHasPattern()[1]);
-    ASSERT_EQ(NO_PATTERN, index.getHasPattern()[0]);
-
-    ASSERT_FLOAT_EQ(4.0 / 2, index.getHasPredicateMultiplicityEntities());
-    ASSERT_FLOAT_EQ(4.0 / 3, index.getHasPredicateMultiplicityPredicates());
+    checkPattern(p0, index.getPatterns()[index.getHasPattern()[id]]);
+    ASSERT_TRUE(index.getVocab().getId("<a2>", &id));
+    checkPattern(p1, index.getPatterns()[index.getHasPattern()[id]]);
   }
 }
 
@@ -315,6 +310,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   {
     Index indexPrim;
     indexPrim.setOnDiskBase("_testindex2");
+    indexPrim.setNumTriplesPerBatch(2);
     indexPrim.createFromFile<TsvParser>("_testtmp3.tsv");
   }
 
@@ -365,6 +361,7 @@ TEST(IndexTest, scanTest) {
     {
       Index index;
       index.setOnDiskBase("_testindex");
+      index.setNumTriplesPerBatch(2);
       index.createFromFile<TsvParser>("_testtmp2.tsv");
     }
 
@@ -450,6 +447,7 @@ TEST(IndexTest, scanTest) {
     {
       Index index;
       index.setOnDiskBase("_testindex");
+      index.setNumTriplesPerBatch(2);
       index.createFromFile<TsvParser>("_testtmp2.tsv");
     }
     Index index;

@@ -117,7 +117,7 @@ index:
 	fi
 
 remove_index:
-	rm -f $(DB).index.* $(DB).literals-index $(DB).vocabulary $(DB).prefixes $(DB).meta-data.json $(DB).index-log.txt
+	rm -f $(DB).index.* $(DB).vocabulary.* $(DB).prefixes $(DB).meta-data.json $(DB).index-log.txt
 
 # Create wordsfile and docsfile from all literals of the given NT file.
 # Using this as input for a SPARQL+Text index build will effectively enable
@@ -183,7 +183,7 @@ clear_unpinned:
 # STATISTICS on cache, memory, and the number of triples per predicate.
 
 disk_usage:
-	du -hc $(DB).index.* $(DB).literals-index $(DB).vocabulary $(DB).prefixes $(DB).meta-data.json
+	du -hc $(DB).index.* $(DB).vocabulary.* $(DB).prefixes $(DB).meta-data.json
 
 cachestats:
 	@curl -Gs $(QLEVER_API) --data-urlencode "cmd=cachestats" \
