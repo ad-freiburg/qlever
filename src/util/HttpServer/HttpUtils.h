@@ -9,7 +9,7 @@
 #include "../CompressorStream.h"
 #include "../StringUtils.h"
 #include "../TypeTraits.h"
-#include "../streamable_generator.h"
+#include "../stream_generator.h"
 #include "./MediaTypes.h"
 #include "./UrlParser.h"
 #include "./beast.h"

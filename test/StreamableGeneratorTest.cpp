@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/util/streamable_generator.h"
+#include "../src/util/stream_generator.h"
 
 using namespace ad_utility::stream_generator;
 namespace io = boost::iostreams;
