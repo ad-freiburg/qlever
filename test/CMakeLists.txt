@@ -137,9 +137,9 @@ addLinkAndDiscoverTest(TypeTraitsTest)
 
 addLinkAndDiscoverTest(SparqlExpressionTest sparqlExpressions index)
 
-addLinkAndDiscoverTest(StreamableBodyTest engine)
+addLinkAndDiscoverTest(StreamableBodyTest)
 
-addLinkAndDiscoverTest(StreamableGeneratorTest engine)
+addLinkAndDiscoverTest(StreamableGeneratorTest)
 
 addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
@@ -160,3 +160,5 @@ addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary ${ICU_LIBRARIES})
 addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
 
 addLinkAndDiscoverTest(PrefixCompressorTest)
+
+addLinkAndDiscoverTest(CompressorStreamTest engine)
