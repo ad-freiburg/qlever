@@ -162,3 +162,5 @@ addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
 addLinkAndDiscoverTest(PrefixCompressorTest)
 
 addLinkAndDiscoverTest(CompressorStreamTest engine)
+
+addLinkAndDiscoverTest(AsyncStreamTest)
