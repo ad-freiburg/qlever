@@ -401,6 +401,10 @@ QueryExecutionTree::generateResults(
   co_yield absl::StrJoin(variables, sepView);
   co_yield '\n';
 
+  constexpr auto& escapeFunction = format == ExportSubFormat::TSV
+                                       ? RdfEscaping::escapeForTsv
+                                       : RdfEscaping::escapeForCsv;
+
   for (size_t i = offset; i < upperBound; ++i) {
     for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
       if (selectedColumnIndices[j].has_value()) {
@@ -412,9 +416,10 @@ QueryExecutionTree::generateResults(
                     .idToOptionalString(idTable(i, val._columnIndex))
                     .value_or("");
             if (entity.starts_with(VALUE_PREFIX)) {
-              co_yield ad_utility::convertIndexWordToValueLiteral(entity);
+              co_yield escapeFunction(
+                  ad_utility::convertIndexWordToValueLiteral(entity));
             } else {
-              co_yield entity;
+              co_yield escapeFunction(entity);
             }
             break;
           }
@@ -422,8 +427,8 @@ QueryExecutionTree::generateResults(
             co_yield idTable(i, val._columnIndex);
             break;
           case ResultTable::ResultType::TEXT:
-            co_yield _qec->getIndex().getTextExcerpt(
-                idTable(i, val._columnIndex));
+            co_yield escapeFunction(
+                _qec->getIndex().getTextExcerpt(idTable(i, val._columnIndex)));
             break;
           case ResultTable::ResultType::FLOAT: {
             float f;
@@ -432,9 +437,9 @@ QueryExecutionTree::generateResults(
             break;
           }
           case ResultTable::ResultType::LOCAL_VOCAB: {
-            co_yield resultTable
-                ->idToOptionalString(idTable(i, val._columnIndex))
-                .value_or("");
+            co_yield escapeFunction(
+                resultTable->idToOptionalString(idTable(i, val._columnIndex))
+                    .value_or(""));
             break;
           }
           default:
