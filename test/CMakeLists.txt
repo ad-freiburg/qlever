@@ -149,7 +149,7 @@ addLinkAndDiscoverTest(CompactStringVectorTest)
 
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
-addLinkAndDiscoverTest(ContentEncodingHelperTest)
+addLinkAndDiscoverTest(ContentEncodingHelperTest absl::strings)
 
 addLinkAndDiscoverTest(VocabularyInMemoryTest vocabulary)
 

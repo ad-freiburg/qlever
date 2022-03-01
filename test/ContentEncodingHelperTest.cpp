@@ -65,3 +65,12 @@ TEST(ContentEncodingHelper, DeflateHeaderIsPreferredOverGzip) {
 
   ASSERT_EQ(result, CompressionMethod::DEFLATE);
 }
+
+TEST(ContentEncodingHelper, DeflateHeaderIsPreferredOverGzipOnMultipleHeaders) {
+  http::request<http::string_body> request;
+  request.insert(http::field::accept_encoding, "gzip");
+  request.insert(http::field::accept_encoding, "deflate");
+  auto result = getCompressionMethodForRequest(request);
+
+  ASSERT_EQ(result, CompressionMethod::DEFLATE);
+}
