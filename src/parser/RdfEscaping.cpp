@@ -263,14 +263,14 @@ std::string replaceAll(std::string str, const std::string_view from,
 }
 
 std::string escapeForCsv(std::string input) {
-  if (!ctre::search<"[\r\n\",]">(input)) {
+  if (!ctre::search<"[\r\n\",]">(input)) [[likely]] {
     return input;
   }
   return '"' + replaceAll(std::move(input), "\"", "\"\"") + '"';
 }
 
 std::string escapeForTsv(std::string input) {
-  if (!ctre::search<"[\n\t]">(input)) {
+  if (!ctre::search<"[\n\t]">(input)) [[likely]] {
     return input;
   }
   auto stage1 = replaceAll(std::move(input), "\t", " ");
