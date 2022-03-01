@@ -19,9 +19,9 @@ namespace ad_utility::httpUtils::httpStreams {
  * generator function to dynamically create a response.
  * Example usage:
  * http::response<streamable_body> response;
- * // generatorFunction returns a ad_utility::stream_generator::stream_generator
+ * // generatorFunction returns a ad_utility::streams::stream_generator
  * response.body() =
- * std::make_unique<ad_utility::stream_generator::stream_generator>(generatorFunction());
+ * std::make_unique<ad_utility::streams::stream_generator>(generatorFunction());
  * response.prepare_payload();
  */
 struct streamable_body {
