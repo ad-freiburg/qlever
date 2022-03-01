@@ -72,6 +72,28 @@ INSTANTIATE_TEST_SUITE_P(CompressionMethodParameters,
                          CompressorStreamTestFixture1,
                          getValuePairsForHeaderTest());
 
+TEST(CompressorStream, TestHeadersAreInsertedCorrectly) {
+  CompressorStream stream1{generateNothing(), CompressionMethod::GZIP};
+  CompressorStream stream2{generateNothing(), CompressionMethod::DEFLATE};
+  CompressorStream stream3{generateNothing(), CompressionMethod::DEFLATE};
+  http::header<false, http::fields> header;
+  stream1.prepareHttpHeaders(header);
+  stream2.prepareHttpHeaders(header);
+  stream3.prepareHttpHeaders(header);
+
+  auto [ current, end ] = header.equal_range(http::field::content_encoding);
+  ASSERT_NE(current, end);
+  ASSERT_EQ(current->value(), "gzip");
+  current++;
+  ASSERT_NE(current, end);
+  ASSERT_EQ(current->value(), "deflate");
+  current++;
+  ASSERT_NE(current, end);
+  ASSERT_EQ(current->value(), "deflate");
+  current++;
+  ASSERT_EQ(current, end);
+}
+
 class CompressorStreamTestFixture2
     : public ::testing::TestWithParam<CompressionMethod> {
  public:
