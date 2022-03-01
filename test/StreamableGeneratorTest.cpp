@@ -6,8 +6,7 @@
 
 #include "../src/util/stream_generator.h"
 
-using namespace ad_utility::stream_generator;
-namespace io = boost::iostreams;
+using namespace ad_utility::streams;
 
 constexpr size_t TEST_BUFFER_SIZE = 10;
 
@@ -77,47 +76,3 @@ TEST(StreamableGeneratorTest, TestGeneratorNextThrowsExceptionWhenDone) {
     ASSERT_STREQ(e.what(), "Coroutine is not active");
   }
 }
-
-class StreamableGeneratorTestFixture
-    : public ::testing::TestWithParam<CompressionMethod> {
- public:
-  [[nodiscard]] static std::string decompressData(
-      std::string_view compressedData) {
-    std::string result;
-    io::filtering_ostream filterStream;
-    if (GetParam() == CompressionMethod::GZIP) {
-      filterStream.push(io::gzip_decompressor());
-    } else if (GetParam() == CompressionMethod::DEFLATE) {
-      filterStream.push(io::zlib_decompressor());
-    } else {
-      // Unsupported decompression
-      AD_CHECK(false);
-    }
-    filterStream.push(io::back_inserter(result));
-
-    filterStream.write(compressedData.data(),
-                       static_cast<std::streamsize>(compressedData.size()));
-    return result;
-  }
-};
-
-TEST_P(StreamableGeneratorTestFixture, TestGeneratorAppliesCompression) {
-  auto generator = generateMultipleElements();
-  generator.setCompressionMethod(GetParam());
-
-  ASSERT_TRUE(generator.hasNext());
-  auto compressedData = generator.next();
-
-  // compression introduces another buffer, which is why co_yield
-  // is not suspended after TEST_BUFFER_SIZE bytes
-  ASSERT_EQ(decompressData(compressedData), MAX_TEST_BUFFER_STRING + "1Abc");
-
-  ASSERT_FALSE(generator.hasNext());
-}
-
-using ad_utility::content_encoding::CompressionMethod;
-
-INSTANTIATE_TEST_SUITE_P(CompressionMethodParameters,
-                         StreamableGeneratorTestFixture,
-                         ::testing::Values(CompressionMethod::DEFLATE,
-                                           CompressionMethod::GZIP));

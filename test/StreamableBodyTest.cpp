@@ -4,11 +4,15 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+
 #include "../src/util/HttpServer/beast.h"
 #include "../src/util/HttpServer/streamable_body.h"
 
 using namespace ad_utility::httpUtils::httpStreams;
+using ad_utility::streams::basic_stream_generator;
 using ad_utility::streams::stream_generator;
+using ad_utility::streams::StringSupplier;
 
 std::string_view toStringView(
     const streamable_body::writer::const_buffers_type& buffer) {
@@ -40,8 +44,15 @@ std::ostream& operator<<(
 
 constexpr size_t BUFFER_SIZE = 1u << 20;
 
+template <size_t BUFFER_SIZE>
+std::unique_ptr<StringSupplier> toPtr(
+    basic_stream_generator<BUFFER_SIZE>&& generator) {
+  return std::make_unique<basic_stream_generator<BUFFER_SIZE>>(
+      std::move(generator));
+}
+
 TEST(StreamableBodyTest, TestInitReturnsNoErrorCode) {
-  stream_generator generator;
+  auto generator = toPtr(stream_generator{});
   boost::beast::http::header<false, boost::beast::http::fields> header;
   streamable_body::writer writer{header, generator};
   boost::system::error_code errorCode;
@@ -56,7 +67,7 @@ stream_generator generateException() {
 }
 
 TEST(StreamableBodyTest, TestGeneratorExceptionResultsInErrorCode) {
-  auto generator = generateException();
+  auto generator = toPtr(generateException());
   boost::beast::http::header<false, boost::beast::http::fields> header;
   streamable_body::writer writer{header, generator};
   boost::system::error_code errorCode;
@@ -69,7 +80,7 @@ TEST(StreamableBodyTest, TestGeneratorExceptionResultsInErrorCode) {
 stream_generator generateNothing() { co_return; }
 
 TEST(StreamableBodyTest, TestEmptyGeneratorReturnsEmptyResult) {
-  auto generator = generateNothing();
+  auto generator = toPtr(generateNothing());
   boost::beast::http::header<false, boost::beast::http::fields> header;
   streamable_body::writer writer{header, generator};
   boost::system::error_code errorCode;
@@ -88,7 +99,7 @@ stream_generator generateMultipleElements() {
 }
 
 TEST(StreamableBodyTest, TestGeneratorReturnsBufferedResults) {
-  auto generator = generateMultipleElements();
+  auto generator = toPtr(generateMultipleElements());
   boost::beast::http::header<false, boost::beast::http::fields> header;
   streamable_body::writer writer{header, generator};
   boost::system::error_code errorCode;
@@ -105,33 +116,3 @@ TEST(StreamableBodyTest, TestGeneratorReturnsBufferedResults) {
   ASSERT_EQ(toStringView(result2->first), std::string("1Abc"));
   ASSERT_FALSE(result2->second);
 }
-
-namespace http = boost::beast::http;
-using ad_utility::content_encoding::CompressionMethod;
-
-class StreamableBodyTestFixture
-    : public ::testing::TestWithParam<
-          std::pair<CompressionMethod, std::string_view>> {};
-
-TEST_P(StreamableBodyTestFixture,
-       TestHeadersAreSetCorrectlyForCompressingGenerator) {
-  const auto& [compressionMethod, headerValue] = GetParam();
-
-  auto generator = generateNothing();
-  generator.setCompressionMethod(compressionMethod);
-  http::header<false, http::fields> header;
-  streamable_body::writer{header, generator};
-
-  ASSERT_EQ(header[http::field::content_encoding], headerValue);
-}
-
-auto getValuePairsForHeaderTest() {
-  return ::testing::Values(
-      // empty string_view means no such header is present
-      std::pair{CompressionMethod::NONE, std::string_view{}},
-      std::pair{CompressionMethod::DEFLATE, "deflate"},
-      std::pair{CompressionMethod::GZIP, "gzip"});
-}
-
-INSTANTIATE_TEST_SUITE_P(CompressionMethodParameters, StreamableBodyTestFixture,
-                         getValuePairsForHeaderTest());

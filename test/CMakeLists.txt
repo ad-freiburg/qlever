@@ -137,9 +137,9 @@ addLinkAndDiscoverTest(TypeTraitsTest)
 
 addLinkAndDiscoverTest(SparqlExpressionTest sparqlExpressions index)
 
-#addLinkAndDiscoverTest(StreamableBodyTest engine)
+addLinkAndDiscoverTest(StreamableBodyTest engine)
 
-#addLinkAndDiscoverTest(StreamableGeneratorTest engine)
+addLinkAndDiscoverTest(StreamableGeneratorTest engine)
 
 addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
