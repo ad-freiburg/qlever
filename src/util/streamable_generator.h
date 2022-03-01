@@ -80,7 +80,7 @@ class stream_generator_promise {
 
   void unhandled_exception() { _exception = std::current_exception(); }
 
-  void return_void() {}
+  constexpr void return_void() const noexcept {}
 
   std::string_view value() const noexcept { return _stream.view(); }
 
