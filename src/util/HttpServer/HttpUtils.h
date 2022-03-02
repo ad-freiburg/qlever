@@ -24,6 +24,7 @@ namespace http = beast::http;      // from <boost/beast/http.hpp>
 namespace net = boost::asio;       // from <boost/asio.hpp>
 using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
 namespace streams = ad_utility::streams;
+using ad_utility::httpUtils::httpStreams::streamable_body;
 
 /// Concatenate base and path. Path must start with a '/', base may end with a
 /// slash. For example, path_cat("base", "/file.txt"), path_cat("base/" ,
@@ -76,8 +77,9 @@ static auto createOkResponse(std::string text, const HttpRequest auto& request,
                                       request, mediaType);
 }
 
-static std::unique_ptr<streams::StringSupplier> compressIfPossible(
-    const HttpRequest auto& request, streams::stream_generator&& generator) {
+static void setBody(http::response<streamable_body>& response,
+                    const HttpRequest auto& request,
+                    streams::stream_generator&& generator) {
   using ad_utility::content_encoding::CompressionMethod;
 
   CompressionMethod method =
@@ -87,21 +89,23 @@ static std::unique_ptr<streams::StringSupplier> compressIfPossible(
   auto asyncGenerator =
       std::make_unique<streams::AsyncStream>(std::move(generatorPointer));
   if (method != CompressionMethod::NONE) {
-    return std::make_unique<streams::CompressorStream>(
+    response.body() = std::make_unique<streams::CompressorStream>(
         std::move(asyncGenerator), method);
+    ad_utility::content_encoding::setContentEncodingHeaderForCompressionMethod(
+        method, response);
+  } else {
+    response.body() = std::move(asyncGenerator);
   }
-  return asyncGenerator;
 }
 
 /// Create a HttpResponse from a stream_generator with status 200 OK.
 static auto createOkResponse(ad_utility::streams::stream_generator&& generator,
                              const HttpRequest auto& request,
                              MediaType mediaType) {
-  http::response<ad_utility::httpUtils::httpStreams::streamable_body> response{
-      http::status::ok, request.version()};
+  http::response<streamable_body> response{http::status::ok, request.version()};
   response.set(http::field::content_type, toString(mediaType));
   response.keep_alive(request.keep_alive());
-  response.body() = compressIfPossible(request, std::move(generator));
+  setBody(response, request, std::move(generator));
   // Set Content-Length and Transfer-Encoding.
   // Because ad_utility::httpUtils::httpStreams::streamable_body::size
   // is not defined, Content-Length will be cleared and Transfer-Encoding

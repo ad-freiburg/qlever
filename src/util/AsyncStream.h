@@ -99,10 +99,5 @@ class AsyncStream : public StringSupplier {
       _thread.join();
     }
   }
-
-  void prepareHttpHeaders(
-      http::header<false, http::fields>& header) const override {
-    _supplier->prepareHttpHeaders(header);
-  }
 };
 }  // namespace ad_utility::streams

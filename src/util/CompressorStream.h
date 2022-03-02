@@ -47,12 +47,5 @@ class CompressorStream : public StringSupplier {
     }
     return _value;
   }
-
-  void prepareHttpHeaders(
-      http::header<false, http::fields>& header) const override {
-    _supplier->prepareHttpHeaders(header);
-    ad_utility::content_encoding::setContentEncodingHeaderForCompressionMethod(
-        _compressionMethod, header);
-  }
 };
 }  // namespace ad_utility::streams

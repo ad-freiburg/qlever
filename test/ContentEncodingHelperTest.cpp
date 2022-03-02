@@ -23,6 +23,27 @@ TEST_P(ContentEncodingHelperFixture, HeaderIsNotSetCorrectly) {
   ASSERT_EQ(header[http::field::content_encoding], headerValue);
 }
 
+TEST(ContentEncodingHelper, TestHeadersAreInsertedCorrectly) {
+  http::header<false, http::fields> header;
+  setContentEncodingHeaderForCompressionMethod(CompressionMethod::GZIP, header);
+  setContentEncodingHeaderForCompressionMethod(CompressionMethod::DEFLATE,
+                                               header);
+  setContentEncodingHeaderForCompressionMethod(CompressionMethod::DEFLATE,
+                                               header);
+
+  auto [current, end] = header.equal_range(http::field::content_encoding);
+  ASSERT_NE(current, end);
+  ASSERT_EQ(current->value(), "gzip");
+  current++;
+  ASSERT_NE(current, end);
+  ASSERT_EQ(current->value(), "deflate");
+  current++;
+  ASSERT_NE(current, end);
+  ASSERT_EQ(current->value(), "deflate");
+  current++;
+  ASSERT_EQ(current, end);
+}
+
 auto getValuePairsForHeaderTest() {
   return ::testing::Values(
       // empty string_view means no such header is present

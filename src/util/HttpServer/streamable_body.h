@@ -47,8 +47,8 @@ class streamable_body::writer {
   using const_buffers_type = boost::asio::const_buffer;
 
   /**
-   * `h` holds the headers of the message we are
-   * serializing, while `b` holds the body.
+   * `header` holds the headers of the message we are
+   * serializing, while `stringSupplier` holds the body.
    *
    * The BodyWriter concept allows the writer to choose
    * whether to take the message by const reference or
@@ -67,11 +67,9 @@ class streamable_body::writer {
    * conceptually can't allow const access.
    */
   template <bool isRequest, class Fields>
-  writer(boost::beast::http::header<isRequest, Fields>& header,
+  writer([[maybe_unused]] boost::beast::http::header<isRequest, Fields>& header,
          value_type& stringSupplier)
-      : _stringSupplier{stringSupplier} {
-    _stringSupplier->prepareHttpHeaders(header);
-  }
+      : _stringSupplier{stringSupplier} {}
 
   /**
    * This is called before the body is serialized and

@@ -437,9 +437,8 @@ boost::asio::awaitable<void> Server::processQuery(
         auto responseGenerator = co_await composeResponseSepValues<
             QueryExecutionTree::ExportSubFormat::BINARY>(pq, qet);
 
-        auto response =
-            createOkResponse(std::move(responseGenerator), request,
-                             ad_utility::MediaType::octetStream);
+        auto response = createOkResponse(std::move(responseGenerator), request,
+                                         ad_utility::MediaType::octetStream);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::qleverJson: {
