@@ -21,12 +21,11 @@ class CompressorStream : public StringSupplier {
   std::unique_ptr<StringSupplier> _supplier;
   io::filtering_ostream _filteringStream;
   std::string _value;
-  CompressionMethod _compressionMethod;
 
  public:
   CompressorStream(std::unique_ptr<StringSupplier> supplier,
                    CompressionMethod compressionMethod)
-      : _supplier{std::move(supplier)}, _compressionMethod{compressionMethod} {
+      : _supplier{std::move(supplier)} {
     if (compressionMethod == CompressionMethod::DEFLATE) {
       _filteringStream.push(io::zlib_compressor(io::zlib::best_speed));
     } else if (compressionMethod == CompressionMethod::GZIP) {
