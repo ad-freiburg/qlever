@@ -15,7 +15,6 @@
 namespace ad_utility::streams {
 namespace io = boost::iostreams;
 using ad_utility::content_encoding::CompressionMethod;
-namespace http = boost::beast::http;
 
 class CompressorStream : public StringSupplier {
   std::unique_ptr<StringSupplier> _supplier;
