@@ -42,7 +42,7 @@ std::unique_ptr<StringSupplier> generateNChars(size_t n) {
   return std::make_unique<FiniteStream>(n);
 }
 
-class CompressorStreamTestFixture2
+class CompressorStreamTestFixture
     : public ::testing::TestWithParam<CompressionMethod> {
  public:
   [[nodiscard]] static std::string decompressData(
@@ -65,7 +65,7 @@ class CompressorStreamTestFixture2
   }
 };
 
-TEST_P(CompressorStreamTestFixture2, TestGeneratorAppliesCompression) {
+TEST_P(CompressorStreamTestFixture, TestGeneratorAppliesCompression) {
   CompressorStream stream{generateNChars(10), GetParam()};
 
   ASSERT_TRUE(stream.hasNext());
@@ -79,6 +79,6 @@ TEST_P(CompressorStreamTestFixture2, TestGeneratorAppliesCompression) {
 using ad_utility::content_encoding::CompressionMethod;
 
 INSTANTIATE_TEST_SUITE_P(CompressionMethodParameters,
-                         CompressorStreamTestFixture2,
+                         CompressorStreamTestFixture,
                          ::testing::Values(CompressionMethod::DEFLATE,
                                            CompressionMethod::GZIP));

@@ -13,7 +13,6 @@
 #include "./StringSupplier.h"
 
 namespace ad_utility::streams {
-namespace http = boost::beast::http;
 
 // 100 MiB
 constexpr size_t BUFFER_LIMIT = (1u << 20) * 100;
