@@ -54,7 +54,7 @@ std::unique_ptr<StringSupplier> waitingStream(
   return std::make_unique<WaitingStream>(semaphore, views);
 }
 
-/*TEST(AsyncStream, EnsureMaximumBufferLimitWorks) {
+TEST(AsyncStream, EnsureMaximumBufferLimitWorks) {
   AsyncStream stream{generateNChars(ad_utility::streams::BUFFER_LIMIT + 1)};
 
   ASSERT_TRUE(stream.hasNext());
@@ -66,7 +66,7 @@ std::unique_ptr<StringSupplier> waitingStream(
   for (auto character : view) {
     ASSERT_EQ(character, 'A');
   }
-}*/
+}
 
 TEST(AsyncStream, EnsureBuffersAreFilledAndClearedCorrectly) {
   std::vector<std::string_view> strings{"Abc", "Def", "Ghi"};

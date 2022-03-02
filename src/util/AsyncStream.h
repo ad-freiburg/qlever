@@ -29,6 +29,7 @@ class AsyncStream : public StringSupplier {
   std::condition_variable _conditionVariable;
   bool _ready = false;
   std::exception_ptr _exception = nullptr;
+  std::thread _thread;
 
   void run() {
     try {
@@ -36,8 +37,11 @@ class AsyncStream : public StringSupplier {
         auto view = _supplier->next();
         std::unique_lock lock{_mutex};
         if (_stream.view().length() >= BUFFER_LIMIT) {
-          _conditionVariable.wait(lock,
-                                  [this]() { return _stream.view().empty(); });
+          _conditionVariable.wait(
+              lock, [this]() { return _stream.view().empty() || _done; });
+          if (_done) {
+            return;
+          }
         }
         _stream << view;
         _ready = true;
@@ -68,7 +72,7 @@ class AsyncStream : public StringSupplier {
 
   std::string_view next() override {
     if (!_started.exchange(true)) {
-      std::thread{[&]() { run(); }}.detach();
+      _thread = std::thread{[&]() { run(); }};
     } else {
       _extraStorage.clear();
     }
@@ -84,6 +88,16 @@ class AsyncStream : public StringSupplier {
     _conditionVariable.notify_one();
 
     return _extraStorage;
+  }
+
+  ~AsyncStream() override {
+    std::unique_lock lock{_mutex};
+    _done = true;
+    lock.unlock();
+    _conditionVariable.notify_one();
+    if (_thread.joinable()) {
+      _thread.join();
+    }
   }
 
   void prepareHttpHeaders(

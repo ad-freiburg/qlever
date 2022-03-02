@@ -17,6 +17,8 @@ class StringSupplier {
   constexpr virtual void prepareHttpHeaders(
       [[maybe_unused]] boost::beast::http::header<
           false, boost::beast::http::fields>& header) const {}
+
+  virtual ~StringSupplier() = default;
 };
 
 }  // namespace ad_utility::streams
