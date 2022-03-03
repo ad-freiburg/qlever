@@ -7,6 +7,7 @@
 #include <exception>
 #include <memory>
 
+#include "../Generator.h"
 #include "../Log.h"
 #include "../stream_generator.h"
 #include "./ContentEncodingHelper.h"
@@ -30,7 +31,7 @@ struct streamable_body {
 
   // The type of the message::body member.
   // This determines which type response<streamable_body>::body() returns
-  using value_type = std::unique_ptr<ad_utility::streams::StringSupplier>;
+  using value_type = cppcoro::generator<std::string>;
 };
 
 /**
@@ -40,7 +41,10 @@ struct streamable_body {
  * to extract the buffers representing the body.
  */
 class streamable_body::writer {
-  value_type& _stringSupplier;
+  value_type& _generator;
+  value_type::iterator _iterator;
+  std::string _storage;
+  bool _first = true;
 
  public:
   // The type of buffer sequence returned by `get`.
@@ -48,7 +52,7 @@ class streamable_body::writer {
 
   /**
    * `header` holds the headers of the message we are
-   * serializing, while `stringSupplier` holds the body.
+   * serializing, while `generator` holds the body.
    *
    * The BodyWriter concept allows the writer to choose
    * whether to take the message by const reference or
@@ -68,8 +72,8 @@ class streamable_body::writer {
    */
   template <bool isRequest, class Fields>
   writer([[maybe_unused]] boost::beast::http::header<isRequest, Fields>& header,
-         value_type& stringSupplier)
-      : _stringSupplier{stringSupplier} {}
+         value_type& generator)
+      : _generator{generator} {}
 
   /**
    * This is called before the body is serialized and
@@ -102,18 +106,24 @@ class streamable_body::writer {
     // again.
     //
     try {
-      std::string_view view = _stringSupplier->next();
+      if (_first) {
+        _iterator = _generator.begin();
+        _first = false;
+      } else {
+        _iterator++;
+      }
+      if (_iterator == _generator.end()) {
+        return boost::none;
+      }
+      _storage = std::move(*_iterator);
       ec = {};
-      // we can safely pass away the data() pointer because
-      // it's just referencing the memory inside the generator's promise
-      // it won't be modified until the next call to _streamableGenerator.next()
       return {{
-          const_buffers_type{view.data(), view.size()},
-          _stringSupplier->hasNext()  // `true` if there are more buffers.
+          const_buffers_type{_storage.data(), _storage.size()},
+          true // `true` if there are more buffers.
       }};
     } catch (const std::exception& e) {
-      ec = {EPIPE, boost::system::generic_category()};
-      LOG(ERROR) << "Failed to generate response:\n" << e.what() << '\n';
+      ec = {ERANGE, boost::system::generic_category()};
+      LOG(ERROR) << "Failed to generate response:\n" << e.what() << std::endl;
       return boost::none;
     }
   }

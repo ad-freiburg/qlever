@@ -84,12 +84,10 @@ static void setBody(http::response<streamable_body>& response,
 
   CompressionMethod method =
       ad_utility::content_encoding::getCompressionMethodForRequest(request);
-  auto generatorPointer =
-      std::make_unique<streams::stream_generator>(std::move(generator));
   auto asyncGenerator =
-      std::make_unique<streams::AsyncStream>(std::move(generatorPointer));
+      streams::runStreamAsync<streams::stream_generator>(std::move(generator));
   if (method != CompressionMethod::NONE) {
-    response.body() = std::make_unique<streams::CompressorStream>(
+    response.body() = streams::compressStream<cppcoro::generator<std::string>>(
         std::move(asyncGenerator), method);
     ad_utility::content_encoding::setContentEncodingHeaderForCompressionMethod(
         method, response);

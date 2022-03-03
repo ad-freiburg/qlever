@@ -6,92 +6,54 @@
 
 #include <chrono>
 #include <semaphore>
-#include <thread>
 
 #include "../src/util/AsyncStream.h"
 
-using ad_utility::streams::AsyncStream;
-using ad_utility::streams::StringSupplier;
+using ad_utility::streams::runStreamAsync;
 
-std::unique_ptr<StringSupplier> generateNChars(size_t n) {
-  class FiniteStream : public StringSupplier {
-    size_t _counter = 0;
-    size_t _n;
-
-   public:
-    explicit FiniteStream(size_t n) : _n{n} {}
-
-    [[nodiscard]] bool hasNext() const override { return _counter < _n; }
-    [[nodiscard]] constexpr std::string_view next() override {
-      _counter++;
-      return "A";
-    }
-  };
-  return std::make_unique<FiniteStream>(n);
-}
-
-std::unique_ptr<StringSupplier> waitingStream(
-    std::counting_semaphore<2>& semaphore,
-    std::vector<std::string_view>& views) {
-  class WaitingStream : public StringSupplier {
-    std::counting_semaphore<2>& _semaphore;
-    std::vector<std::string_view>& _views;
-    std::vector<std::string_view>::reverse_iterator _current{};
-
-   public:
-    explicit WaitingStream(std::counting_semaphore<2>& semaphore,
-                           std::vector<std::string_view>& views)
-        : _semaphore{semaphore}, _views{views}, _current{views.rend()} {}
-    [[nodiscard]] bool hasNext() const override {
-      return _current != _views.rbegin();
-    }
-    [[nodiscard]] std::string_view next() override {
-      _semaphore.acquire();
-      _current--;
-      return *_current;
-    }
-  };
-  return std::make_unique<WaitingStream>(semaphore, views);
+cppcoro::generator<std::string> generateNChars(size_t n,
+                                               size_t& totalProcessed) {
+  for (size_t i = 0; i < n; i++) {
+    co_yield "A";
+    totalProcessed = i + 1;
+  }
 }
 
 TEST(AsyncStream, EnsureMaximumBufferLimitWorks) {
-  AsyncStream stream{generateNChars(ad_utility::streams::BUFFER_LIMIT + 1)};
+  size_t totalProcessed = 0;
+  auto stream = runStreamAsync<cppcoro::generator<std::string>>(
+      generateNChars(ad_utility::streams::BUFFER_LIMIT + 2, totalProcessed));
+  auto iterator = stream.begin();
 
-  ASSERT_TRUE(stream.hasNext());
-
-  const auto view = stream.next();
-
-  ASSERT_LE(view.size(), ad_utility::streams::BUFFER_LIMIT);
-  ASSERT_GT(view.size(), 0);
-  for (auto character : view) {
-    ASSERT_EQ(character, 'A');
-  }
-}
-
-TEST(AsyncStream, EnsureBuffersAreFilledAndClearedCorrectly) {
-  std::vector<std::string_view> strings{"Abc", "Def", "Ghi"};
-  std::counting_semaphore<2> semaphore{1};
-  auto ptr = waitingStream(semaphore, strings);
-  auto streamView = ptr.get();
-  AsyncStream stream{std::move(ptr)};
-
-  ASSERT_TRUE(stream.hasNext());
-
-  const auto view = stream.next();
-
-  ASSERT_EQ(view, strings[0]);
-
-  ASSERT_TRUE(stream.hasNext());
-
-  semaphore.release();
-  semaphore.release();
-
-  while (streamView->hasNext()) {
+  while (totalProcessed <= ad_utility::streams::BUFFER_LIMIT) {
     std::this_thread::sleep_for(std::chrono::milliseconds{10});
   }
 
-  ASSERT_TRUE(stream.hasNext());
-  ASSERT_EQ("DefGhi", stream.next());
+  ASSERT_EQ(totalProcessed, ad_utility::streams::BUFFER_LIMIT + 1);
 
-  ASSERT_FALSE(stream.hasNext());
+  iterator++;
+
+  while (totalProcessed == ad_utility::streams::BUFFER_LIMIT + 1) {
+    std::this_thread::sleep_for(std::chrono::milliseconds{10});
+  }
+  ASSERT_EQ(totalProcessed, ad_utility::streams::BUFFER_LIMIT + 2);
+}
+
+TEST(AsyncStream, EnsureBuffersArePassedCorrectly) {
+  auto generator = runStreamAsync<std::vector<std::string>>({"Abc", "Def", "Ghi"});
+
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  ASSERT_EQ(*iterator, "Abc");
+
+  iterator++;
+  ASSERT_NE(iterator, generator.end());
+  ASSERT_EQ(*iterator, "Def");
+
+  iterator++;
+  ASSERT_NE(iterator, generator.end());
+  ASSERT_EQ(*iterator, "Ghi");
+
+  iterator++;
+  ASSERT_EQ(iterator, generator.end());
 }

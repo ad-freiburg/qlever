@@ -6,44 +6,38 @@
 
 #include <boost/iostreams/filter/gzip.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
-#include <memory>
-#include <string_view>
+#include <string>
 
+#include "./Generator.h"
 #include "./HttpServer/ContentEncodingHelper.h"
-#include "./StringSupplier.h"
 
 namespace ad_utility::streams {
 namespace io = boost::iostreams;
 using ad_utility::content_encoding::CompressionMethod;
 
-class CompressorStream : public StringSupplier {
-  std::unique_ptr<StringSupplier> _supplier;
-  io::filtering_ostream _filteringStream;
-  std::string _value;
-
- public:
-  CompressorStream(std::unique_ptr<StringSupplier> supplier,
-                   CompressionMethod compressionMethod)
-      : _supplier{std::move(supplier)} {
-    if (compressionMethod == CompressionMethod::DEFLATE) {
-      _filteringStream.push(io::zlib_compressor(io::zlib::best_speed));
-    } else if (compressionMethod == CompressionMethod::GZIP) {
-      _filteringStream.push(io::gzip_compressor(io::gzip::best_speed));
-    }
-    _filteringStream.push(io::back_inserter(_value), 0);
+template <typename GeneratorType>
+cppcoro::generator<std::string> compressStream(
+    std::remove_reference_t<GeneratorType> generator,
+    CompressionMethod compressionMethod) {
+  io::filtering_ostream filteringStream;
+  std::string stringBuffer;
+  if (compressionMethod == CompressionMethod::DEFLATE) {
+    filteringStream.push(io::zlib_compressor(io::zlib::best_speed));
+  } else if (compressionMethod == CompressionMethod::GZIP) {
+    filteringStream.push(io::gzip_compressor(io::gzip::best_speed));
   }
+  filteringStream.push(io::back_inserter(stringBuffer), 0);
 
-  [[nodiscard]] bool hasNext() const override { return _supplier->hasNext(); }
-
-  std::string_view next() override {
-    _value.clear();
-    while (_value.empty() && _supplier->hasNext()) {
-      _filteringStream << _supplier->next();
+  for (const auto& value : generator) {
+    filteringStream << value;
+    if (!stringBuffer.empty()) {
+      co_yield stringBuffer;
+      stringBuffer.clear();
     }
-    if (!_supplier->hasNext()) {
-      _filteringStream.reset();
-    }
-    return _value;
   }
-};
+  filteringStream.reset();
+  if (!stringBuffer.empty()) {
+    co_yield stringBuffer;
+  }
+}
 }  // namespace ad_utility::streams

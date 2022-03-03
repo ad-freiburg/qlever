@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <boost/iostreams/device/back_inserter.hpp>
+#include <boost/iostreams/filtering_stream.hpp>
 #include <exception>
 #include <sstream>
 
@@ -12,7 +14,6 @@
 #include "./Concepts.h"
 #include "./Coroutines.h"
 #include "./Exception.h"
-#include "./StringSupplier.h"
 
 namespace ad_utility::streams {
 
@@ -20,6 +21,7 @@ template <size_t MIN_BUFFER_SIZE>
 class basic_stream_generator;
 
 namespace detail {
+namespace io = boost::iostreams;
 /**
  * A Promise for a generator type needs to indicate if a coroutine should
  * actually get suspended on co_yield or co_await or if there's a shortcut
@@ -44,11 +46,17 @@ class suspend_sometimes {
  */
 template <size_t MIN_BUFFER_SIZE>
 class stream_generator_promise {
-  std::ostringstream _stream;
+  io::filtering_ostream _stream;
   std::exception_ptr _exception;
+  std::string _value;
 
  public:
-  stream_generator_promise() = default;
+  using value_type = std::string;
+  using reference_type = value_type&;
+  using pointer_type = value_type*;
+  stream_generator_promise() {
+    _stream.push(io::back_inserter(_value), 0);
+  }
 
   basic_stream_generator<MIN_BUFFER_SIZE> get_return_object() noexcept;
 
@@ -66,13 +74,6 @@ class stream_generator_promise {
    */
   suspend_sometimes yield_value(
       const ad_utility::Streamable auto& value) noexcept {
-    // whenever the buffer size exceeds the threshold the coroutine
-    // is suspended, thus we can safely assume the value is read
-    // before resuming
-    if (isBufferLargeEnough()) {
-      _stream.clear();
-      _stream.str("");
-    }
     // _stream appends its result to _value
     _stream << value;
     return suspend_sometimes{isBufferLargeEnough()};
@@ -82,7 +83,7 @@ class stream_generator_promise {
 
   constexpr void return_void() const noexcept {}
 
-  std::string_view value() const noexcept { return _stream.view(); }
+  reference_type value() noexcept { return _value; }
 
   // Don't allow any use of 'co_await' inside the generator coroutine.
   template <typename U>
@@ -95,10 +96,75 @@ class stream_generator_promise {
   }
 
  private:
-  bool isBufferLargeEnough() {
-    return _stream.view().length() >= MIN_BUFFER_SIZE;
-  }
+  bool isBufferLargeEnough() { return _value.length() >= MIN_BUFFER_SIZE; }
 };
+
+struct stream_generator_sentinel {};
+
+template <size_t MIN_BUFFER_SIZE>
+class stream_generator_iterator {
+  using promise_type = stream_generator_promise<MIN_BUFFER_SIZE>;
+  using coroutine_handle = std::coroutine_handle<promise_type>;
+
+ public:
+  using iterator_category = std::input_iterator_tag;
+  // What type should we use for counting elements of a potentially infinite
+  // sequence?
+  using difference_type = std::ptrdiff_t;
+  using value_type = typename promise_type::value_type;
+  using reference = typename promise_type::reference_type;
+  using pointer = typename promise_type::pointer_type;
+
+  // Iterator needs to be default-constructible to satisfy the Range concept.
+  stream_generator_iterator() noexcept : _coroutine(nullptr) {}
+
+  explicit stream_generator_iterator(coroutine_handle coroutine) noexcept
+      : _coroutine(coroutine) {}
+
+  friend bool operator==(const stream_generator_iterator& it,
+                         stream_generator_sentinel) noexcept {
+    return !it._coroutine ||
+           (it._coroutine.done() && it._coroutine.promise().value().empty());
+  }
+
+  friend bool operator!=(const stream_generator_iterator& it,
+                         stream_generator_sentinel s) noexcept {
+    return !(it == s);
+  }
+
+  friend bool operator==(stream_generator_sentinel s,
+                         const stream_generator_iterator& it) noexcept {
+    return (it == s);
+  }
+
+  friend bool operator!=(stream_generator_sentinel s,
+                         const stream_generator_iterator& it) noexcept {
+    return it != s;
+  }
+
+  stream_generator_iterator& operator++() {
+    _coroutine.promise().value().clear();
+    if (!_coroutine.done()) {
+      _coroutine.resume();
+    }
+    if (_coroutine.done()) {
+      _coroutine.promise().rethrow_if_exception();
+    }
+
+    return *this;
+  }
+
+  // Need to provide post-increment operator to implement the 'Range' concept.
+  void operator++(int) { (void)operator++(); }
+
+  reference operator*() const noexcept { return _coroutine.promise().value(); }
+
+  pointer operator->() const noexcept { return std::addressof(operator*()); }
+
+ private:
+  coroutine_handle _coroutine;
+};
+
 }  // namespace detail
 
 /**
@@ -112,10 +178,10 @@ class stream_generator_promise {
  * }
  */
 template <size_t MIN_BUFFER_SIZE>
-class [[nodiscard]] basic_stream_generator
-    : public ad_utility::streams::StringSupplier {
+class [[nodiscard]] basic_stream_generator {
  public:
   using promise_type = detail::stream_generator_promise<MIN_BUFFER_SIZE>;
+  using iterator = detail::stream_generator_iterator<MIN_BUFFER_SIZE>;
 
  private:
   std::coroutine_handle<promise_type> _coroutine = nullptr;
@@ -143,27 +209,19 @@ class [[nodiscard]] basic_stream_generator
     return *this;
   }
 
-  /**
-   * Resumes the promise until the coroutine suspends.
-   * @return A view of the accumulated values since the last suspension.
-   */
-  std::string_view next() override {
-    if (!hasNext()) {
-      throw std::runtime_error("Coroutine is not active");
+  iterator begin() {
+    if (_coroutine) {
+      _coroutine.resume();
+      if (_coroutine.done()) {
+        _coroutine.promise().rethrow_if_exception();
+      }
     }
-    _coroutine.resume();
-    if (_coroutine.done()) {
-      _coroutine.promise().rethrow_if_exception();
-    }
-    return _coroutine.promise().value();
+
+    return iterator{_coroutine};
   }
 
-  /**
-   * Indicates if the coroutine is done processing.
-   * @return False, if the coroutine is done, true otherwise.
-   */
-  [[nodiscard]] bool hasNext() const override {
-    return _coroutine && !_coroutine.done();
+  detail::stream_generator_sentinel end() noexcept {
+    return detail::stream_generator_sentinel{};
   }
 
  private:

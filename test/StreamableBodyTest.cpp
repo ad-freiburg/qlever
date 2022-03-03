@@ -12,7 +12,12 @@
 using namespace ad_utility::httpUtils::httpStreams;
 using ad_utility::streams::basic_stream_generator;
 using ad_utility::streams::stream_generator;
-using ad_utility::streams::StringSupplier;
+
+cppcoro::generator<std::string> toGenerator(stream_generator generator) {
+  for (auto& value : generator) {
+    co_yield value;
+  }
+}
 
 std::string_view toStringView(
     const streamable_body::writer::const_buffers_type& buffer) {
@@ -44,15 +49,9 @@ std::ostream& operator<<(
 
 constexpr size_t BUFFER_SIZE = 1u << 20;
 
-template <size_t BUFFER_SIZE>
-std::unique_ptr<StringSupplier> toPtr(
-    basic_stream_generator<BUFFER_SIZE>&& generator) {
-  return std::make_unique<basic_stream_generator<BUFFER_SIZE>>(
-      std::move(generator));
-}
 
 TEST(StreamableBodyTest, TestInitReturnsNoErrorCode) {
-  auto generator = toPtr(stream_generator{});
+  auto generator = toGenerator(stream_generator{});
   boost::beast::http::header<false, boost::beast::http::fields> header;
   streamable_body::writer writer{header, generator};
   boost::system::error_code errorCode;
@@ -67,7 +66,7 @@ stream_generator generateException() {
 }
 
 TEST(StreamableBodyTest, TestGeneratorExceptionResultsInErrorCode) {
-  auto generator = toPtr(generateException());
+  auto generator = toGenerator(generateException());
   boost::beast::http::header<false, boost::beast::http::fields> header;
   streamable_body::writer writer{header, generator};
   boost::system::error_code errorCode;
@@ -80,7 +79,7 @@ TEST(StreamableBodyTest, TestGeneratorExceptionResultsInErrorCode) {
 stream_generator generateNothing() { co_return; }
 
 TEST(StreamableBodyTest, TestEmptyGeneratorReturnsEmptyResult) {
-  auto generator = toPtr(generateNothing());
+  auto generator = toGenerator(generateNothing());
   boost::beast::http::header<false, boost::beast::http::fields> header;
   streamable_body::writer writer{header, generator};
   boost::system::error_code errorCode;
@@ -99,7 +98,7 @@ stream_generator generateMultipleElements() {
 }
 
 TEST(StreamableBodyTest, TestGeneratorReturnsBufferedResults) {
-  auto generator = toPtr(generateMultipleElements());
+  auto generator = toGenerator(generateMultipleElements());
   boost::beast::http::header<false, boost::beast::http::fields> header;
   streamable_body::writer writer{header, generator};
   boost::system::error_code errorCode;

@@ -4,99 +4,50 @@
 
 #pragma once
 
+#include <absl/cleanup/cleanup.h>
+
 #include <atomic>
 #include <condition_variable>
-#include <memory>
 #include <string_view>
 #include <thread>
 
-#include "./StringSupplier.h"
+#include "./Generator.h"
+#include "./ThreadSafeQueue.h"
 
 namespace ad_utility::streams {
 
-// 100 MiB
-constexpr size_t BUFFER_LIMIT = (1u << 20) * 100;
+constexpr size_t BUFFER_LIMIT = 100;
 
-class AsyncStream : public StringSupplier {
-  std::unique_ptr<StringSupplier> _supplier;
-  std::ostringstream _stream;
-  std::string _extraStorage;
-  std::atomic_bool _started = false;
-  bool _done = false;
-  std::atomic_bool _doneRead = false;
-  std::mutex _mutex;
-  std::condition_variable _conditionVariable;
-  bool _ready = false;
-  std::exception_ptr _exception = nullptr;
-  std::thread _thread;
+using ad_utility::data_structures::ThreadSafeQueue;
 
-  void run() {
+template <typename GeneratorType>
+cppcoro::generator<std::string> runStreamAsync(
+    std::remove_reference_t<GeneratorType> generator) {
+  ThreadSafeQueue<std::string> queue{BUFFER_LIMIT};
+  std::exception_ptr exception = nullptr;
+  std::thread thread{[&] {
     try {
-      while (_supplier->hasNext()) {
-        auto view = _supplier->next();
-        std::unique_lock lock{_mutex};
-        if (_stream.view().length() >= BUFFER_LIMIT) {
-          _conditionVariable.wait(
-              lock, [this]() { return _stream.view().empty() || _done; });
-          if (_done) {
-            return;
-          }
+      for (auto& value : generator) {
+        if (queue.push(std::move(value))) {
+          return;
         }
-        _stream << view;
-        _ready = true;
-        _done = !_supplier->hasNext();
-        lock.unlock();
-        _conditionVariable.notify_one();
       }
     } catch (...) {
-      std::lock_guard guard{_mutex};
-      _exception = std::current_exception();
-      _ready = true;
-      _done = true;
+      exception = std::current_exception();
     }
-    _conditionVariable.notify_one();
-  }
+    queue.finish();
+  }};
 
-  void swapStreamStorage() {
-    std::ostringstream temp{std::move(_extraStorage)};
-    std::swap(temp, _stream);
-    _extraStorage = std::move(temp).str();
-  }
-
- public:
-  explicit AsyncStream(std::unique_ptr<StringSupplier> supplier)
-      : _supplier{std::move(supplier)} {}
-
-  [[nodiscard]] bool hasNext() const override { return !_doneRead.load(); }
-
-  std::string_view next() override {
-    if (!_started.exchange(true)) {
-      _thread = std::thread{[&]() { run(); }};
-    } else {
-      _extraStorage.clear();
+  absl::Cleanup cleanup{[&] {
+    queue.abort();
+    thread.join();
+    if (exception) {
+      std::rethrow_exception(exception);
     }
-    std::unique_lock lock{_mutex};
-    _conditionVariable.wait(lock, [this]() { return _ready; });
-    if (_exception) {
-      std::rethrow_exception(_exception);
-    }
-    swapStreamStorage();
-    _ready = false;
-    _doneRead = _done;
-    lock.unlock();
-    _conditionVariable.notify_one();
+  }};
 
-    return _extraStorage;
+  while (std::optional<std::string> value = queue.pop()) {
+    co_yield value.value();
   }
-
-  ~AsyncStream() override {
-    std::unique_lock lock{_mutex};
-    _done = true;
-    lock.unlock();
-    _conditionVariable.notify_one();
-    if (_thread.joinable()) {
-      _thread.join();
-    }
-  }
-};
+}
 }  // namespace ad_utility::streams

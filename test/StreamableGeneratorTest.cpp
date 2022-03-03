@@ -17,23 +17,23 @@ stream_generator generateException() {
 
 TEST(StreamableGeneratorTest, TestGeneratorExceptionResultsInException) {
   auto generator = generateException();
-  ASSERT_TRUE(generator.hasNext());
   try {
-    generator.next();
+    generator.begin();
     FAIL() << "Generator should throw Exception";
   } catch (const std::exception& e) {
     ASSERT_STREQ(e.what(), "Test Exception");
   }
-  ASSERT_FALSE(generator.hasNext());
 }
 
 stream_generator generateNothing() { co_return; }
 
 TEST(StreamableGeneratorTest, TestEmptyGeneratorReturnsEmptyResult) {
   auto generator = generateNothing();
-  ASSERT_TRUE(generator.hasNext());
-  ASSERT_EQ(generator.next(), "");
-  ASSERT_FALSE(generator.hasNext());
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  ASSERT_EQ(*iterator, "");
+  iterator++;
+  ASSERT_EQ(iterator, generator.end());
 }
 
 const std::string MAX_TEST_BUFFER_STRING(TEST_BUFFER_SIZE, 'A');
@@ -47,32 +47,22 @@ basic_stream_generator<TEST_BUFFER_SIZE> generateMultipleElements() {
 TEST(StreamableGeneratorTest, TestGeneratorReturnsBufferedResults) {
   auto generator = generateMultipleElements();
 
-  ASSERT_TRUE(generator.hasNext());
-  ASSERT_EQ(generator.next(), MAX_TEST_BUFFER_STRING);
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  ASSERT_EQ(*iterator, MAX_TEST_BUFFER_STRING);
+  iterator++;
 
-  ASSERT_TRUE(generator.hasNext());
-  ASSERT_EQ(generator.next(), std::string("1Abc"));
+  ASSERT_NE(iterator, generator.end());
+  ASSERT_EQ(*iterator, std::string("1Abc"));
 
-  ASSERT_FALSE(generator.hasNext());
+  ASSERT_EQ(iterator, generator.end());
 }
 
 TEST(StreamableGeneratorTest, TestGeneratorDefaultInitialisesWithNoOp) {
   stream_generator generator;
-
-  ASSERT_TRUE(generator.hasNext());
-  std::string_view view = generator.next();
-  ASSERT_TRUE(view.empty());
-  ASSERT_FALSE(generator.hasNext());
-}
-
-TEST(StreamableGeneratorTest, TestGeneratorNextThrowsExceptionWhenDone) {
-  auto generator = generateNothing();
-
-  generator.next();
-  try {
-    generator.next();
-    FAIL() << "next() should throw an exception";
-  } catch (const std::exception& e) {
-    ASSERT_STREQ(e.what(), "Coroutine is not active");
-  }
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  ASSERT_EQ(*iterator, "");
+  iterator++;
+  ASSERT_EQ(iterator, generator.end());
 }

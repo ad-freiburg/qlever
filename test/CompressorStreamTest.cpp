@@ -11,35 +11,14 @@ namespace io = boost::iostreams;
 
 namespace http = boost::beast::http;
 using ad_utility::content_encoding::CompressionMethod;
-using ad_utility::streams::CompressorStream;
-using ad_utility::streams::StringSupplier;
+using ad_utility::streams::compressStream;
 
-std::unique_ptr<StringSupplier> generateNothing() {
-  class NoOp : public StringSupplier {
-   public:
-    [[nodiscard]] constexpr bool hasNext() const override { return false; }
-    [[nodiscard]] constexpr std::string_view next() override {
-      return std::string_view{};
-    }
-  };
-  return std::make_unique<NoOp>();
-}
+cppcoro::generator<std::string> generateNothing() { co_return; }
 
-std::unique_ptr<StringSupplier> generateNChars(size_t n) {
-  class FiniteStream : public StringSupplier {
-    size_t _counter = 0;
-    size_t _n;
-
-   public:
-    explicit FiniteStream(size_t n) : _n{n} {}
-
-    [[nodiscard]] bool hasNext() const override { return _counter < _n; }
-    [[nodiscard]] constexpr std::string_view next() override {
-      _counter++;
-      return "A";
-    }
-  };
-  return std::make_unique<FiniteStream>(n);
+cppcoro::generator<std::string> generateNChars(size_t n) {
+  for (size_t i = 0; i < n; i++) {
+    co_yield "A";
+  }
 }
 
 class CompressorStreamTestFixture
@@ -66,14 +45,19 @@ class CompressorStreamTestFixture
 };
 
 TEST_P(CompressorStreamTestFixture, TestGeneratorAppliesCompression) {
-  CompressorStream stream{generateNChars(10), GetParam()};
+  auto generator = compressStream<cppcoro::generator<std::string>>(
+      generateNChars(10), GetParam());
 
-  ASSERT_TRUE(stream.hasNext());
-  auto compressedData = stream.next();
+  auto iterator = generator.begin();
+
+  ASSERT_NE(iterator, generator.end());
+  auto compressedData = *iterator;
 
   ASSERT_EQ(decompressData(compressedData), "AAAAAAAAAA");
 
-  ASSERT_FALSE(stream.hasNext());
+  iterator++;
+
+  ASSERT_EQ(iterator, generator.end());
 }
 
 using ad_utility::content_encoding::CompressionMethod;
