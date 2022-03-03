@@ -54,9 +54,7 @@ class stream_generator_promise {
   using value_type = std::string;
   using reference_type = value_type&;
   using pointer_type = value_type*;
-  stream_generator_promise() {
-    _stream.push(io::back_inserter(_value), 0);
-  }
+  stream_generator_promise() { _stream.push(io::back_inserter(_value), 0); }
 
   basic_stream_generator<MIN_BUFFER_SIZE> get_return_object() noexcept;
 

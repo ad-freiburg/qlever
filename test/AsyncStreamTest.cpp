@@ -40,7 +40,8 @@ TEST(AsyncStream, EnsureMaximumBufferLimitWorks) {
 }
 
 TEST(AsyncStream, EnsureBuffersArePassedCorrectly) {
-  auto generator = runStreamAsync<std::vector<std::string>>({"Abc", "Def", "Ghi"});
+  auto generator =
+      runStreamAsync<std::vector<std::string>>({"Abc", "Def", "Ghi"});
 
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());

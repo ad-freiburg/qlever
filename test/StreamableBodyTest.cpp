@@ -49,7 +49,6 @@ std::ostream& operator<<(
 
 constexpr size_t BUFFER_SIZE = 1u << 20;
 
-
 TEST(StreamableBodyTest, TestInitReturnsNoErrorCode) {
   auto generator = toGenerator(stream_generator{});
   boost::beast::http::header<false, boost::beast::http::fields> header;
