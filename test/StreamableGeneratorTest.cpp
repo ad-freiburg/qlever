@@ -30,9 +30,6 @@ stream_generator generateNothing() { co_return; }
 TEST(StreamableGeneratorTest, TestEmptyGeneratorReturnsEmptyResult) {
   auto generator = generateNothing();
   auto iterator = generator.begin();
-  ASSERT_NE(iterator, generator.end());
-  ASSERT_EQ(*iterator, "");
-  iterator++;
   ASSERT_EQ(iterator, generator.end());
 }
 
@@ -50,10 +47,11 @@ TEST(StreamableGeneratorTest, TestGeneratorReturnsBufferedResults) {
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());
   ASSERT_EQ(*iterator, MAX_TEST_BUFFER_STRING);
-  iterator++;
+  ++iterator;
 
   ASSERT_NE(iterator, generator.end());
   ASSERT_EQ(*iterator, std::string("1Abc"));
+  ++iterator;
 
   ASSERT_EQ(iterator, generator.end());
 }
@@ -61,8 +59,5 @@ TEST(StreamableGeneratorTest, TestGeneratorReturnsBufferedResults) {
 TEST(StreamableGeneratorTest, TestGeneratorDefaultInitialisesWithNoOp) {
   stream_generator generator;
   auto iterator = generator.begin();
-  ASSERT_NE(iterator, generator.end());
-  ASSERT_EQ(*iterator, "");
-  iterator++;
   ASSERT_EQ(iterator, generator.end());
 }

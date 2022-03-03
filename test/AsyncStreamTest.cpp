@@ -31,7 +31,7 @@ TEST(AsyncStream, EnsureMaximumBufferLimitWorks) {
 
   ASSERT_EQ(totalProcessed, ad_utility::streams::BUFFER_LIMIT + 1);
 
-  iterator++;
+  ++iterator;
 
   while (totalProcessed == ad_utility::streams::BUFFER_LIMIT + 1) {
     std::this_thread::sleep_for(std::chrono::milliseconds{10});
@@ -46,14 +46,14 @@ TEST(AsyncStream, EnsureBuffersArePassedCorrectly) {
   ASSERT_NE(iterator, generator.end());
   ASSERT_EQ(*iterator, "Abc");
 
-  iterator++;
+  ++iterator;
   ASSERT_NE(iterator, generator.end());
   ASSERT_EQ(*iterator, "Def");
 
-  iterator++;
+  ++iterator;
   ASSERT_NE(iterator, generator.end());
   ASSERT_EQ(*iterator, "Ghi");
 
-  iterator++;
+  ++iterator;
   ASSERT_EQ(iterator, generator.end());
 }

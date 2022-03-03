@@ -55,7 +55,7 @@ TEST_P(CompressorStreamTestFixture, TestGeneratorAppliesCompression) {
 
   ASSERT_EQ(decompressData(compressedData), "AAAAAAAAAA");
 
-  iterator++;
+  ++iterator;
 
   ASSERT_EQ(iterator, generator.end());
 }

@@ -86,9 +86,7 @@ TEST(StreamableBodyTest, TestEmptyGeneratorReturnsEmptyResult) {
 
   auto result = writer.get(errorCode);
   ASSERT_EQ(errorCode, boost::system::error_code());
-  ASSERT_NE(result, boost::none);
-  ASSERT_EQ(result->first.size(), 0u);
-  ASSERT_FALSE(result->second);
+  ASSERT_EQ(result, boost::none);
 }
 
 stream_generator generateMultipleElements() {
@@ -113,5 +111,9 @@ TEST(StreamableBodyTest, TestGeneratorReturnsBufferedResults) {
   ASSERT_EQ(errorCode, boost::system::error_code());
   ASSERT_NE(result2, boost::none);
   ASSERT_EQ(toStringView(result2->first), std::string("1Abc"));
-  ASSERT_FALSE(result2->second);
+  ASSERT_TRUE(result2->second);
+
+  auto result3 = writer.get(errorCode);
+  ASSERT_EQ(errorCode, boost::system::error_code());
+  ASSERT_EQ(result3, boost::none);
 }

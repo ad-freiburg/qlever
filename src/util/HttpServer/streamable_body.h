@@ -113,16 +113,17 @@ class streamable_body::writer {
         _iterator++;
       }
       if (_iterator == _generator.end()) {
+        ec = {};
         return boost::none;
       }
       _storage = std::move(*_iterator);
       ec = {};
       return {{
           const_buffers_type{_storage.data(), _storage.size()},
-          true // `true` if there are more buffers.
+          true  // `true` if there are more buffers.
       }};
     } catch (const std::exception& e) {
-      ec = {ERANGE, boost::system::generic_category()};
+      ec = {EPIPE, boost::system::generic_category()};
       LOG(ERROR) << "Failed to generate response:\n" << e.what() << std::endl;
       return boost::none;
     }
