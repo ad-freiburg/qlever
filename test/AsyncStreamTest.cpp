@@ -21,27 +21,28 @@ cppcoro::generator<std::string> generateNChars(size_t n,
 
 TEST(AsyncStream, EnsureMaximumBufferLimitWorks) {
   size_t totalProcessed = 0;
+  size_t bufferLimit = 10;
   auto stream = runStreamAsync<cppcoro::generator<std::string>>(
-      generateNChars(ad_utility::streams::BUFFER_LIMIT + 2, totalProcessed));
+      generateNChars(bufferLimit + 2, totalProcessed), bufferLimit);
   auto iterator = stream.begin();
 
-  while (totalProcessed <= ad_utility::streams::BUFFER_LIMIT) {
+  while (totalProcessed <= bufferLimit) {
     std::this_thread::sleep_for(std::chrono::milliseconds{10});
   }
 
-  ASSERT_EQ(totalProcessed, ad_utility::streams::BUFFER_LIMIT + 1);
+  ASSERT_EQ(totalProcessed, bufferLimit + 1);
 
   ++iterator;
 
-  while (totalProcessed == ad_utility::streams::BUFFER_LIMIT + 1) {
+  while (totalProcessed == bufferLimit + 1) {
     std::this_thread::sleep_for(std::chrono::milliseconds{10});
   }
-  ASSERT_EQ(totalProcessed, ad_utility::streams::BUFFER_LIMIT + 2);
+  ASSERT_EQ(totalProcessed, bufferLimit + 2);
 }
 
 TEST(AsyncStream, EnsureBuffersArePassedCorrectly) {
   auto generator =
-      runStreamAsync<std::vector<std::string>>({"Abc", "Def", "Ghi"});
+      runStreamAsync<std::vector<std::string>>({"Abc", "Def", "Ghi"}, 3);
 
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());

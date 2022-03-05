@@ -84,8 +84,8 @@ static void setBody(http::response<streamable_body>& response,
 
   CompressionMethod method =
       ad_utility::content_encoding::getCompressionMethodForRequest(request);
-  auto asyncGenerator =
-      streams::runStreamAsync<streams::stream_generator>(std::move(generator));
+  auto asyncGenerator = streams::runStreamAsync<streams::stream_generator>(
+      std::move(generator), 100);
   if (method != CompressionMethod::NONE) {
     response.body() = streams::compressStream<cppcoro::generator<std::string>>(
         std::move(asyncGenerator), method);

@@ -15,14 +15,12 @@
 
 namespace ad_utility::streams {
 
-constexpr size_t BUFFER_LIMIT = 100;
-
 using ad_utility::data_structures::ThreadSafeQueue;
 
 template <typename GeneratorType>
 cppcoro::generator<std::string> runStreamAsync(
-    std::remove_reference_t<GeneratorType> generator) {
-  ThreadSafeQueue<std::string> queue{BUFFER_LIMIT};
+    std::remove_reference_t<GeneratorType> generator, size_t bufferLimit) {
+  ThreadSafeQueue<std::string> queue{bufferLimit};
   std::exception_ptr exception = nullptr;
   std::thread thread{[&] {
     try {
