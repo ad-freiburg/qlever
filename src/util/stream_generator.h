@@ -46,17 +46,14 @@ class suspend_sometimes {
  */
 template <size_t MIN_BUFFER_SIZE>
 class stream_generator_promise {
-  // a filtering_ostream is used instead of an
-  // std::ostringstream to have direct access to the underlying buffer.
-  io::filtering_ostream _stream;
+  std::ostringstream _stream;
   std::exception_ptr _exception;
-  std::string _value;
 
  public:
-  using value_type = std::string;
+  using value_type = std::stringbuf;
   using reference_type = value_type&;
   using pointer_type = value_type*;
-  stream_generator_promise() { _stream.push(io::back_inserter(_value), 0); }
+  stream_generator_promise() = default;
 
   basic_stream_generator<MIN_BUFFER_SIZE> get_return_object() noexcept;
 
@@ -83,7 +80,7 @@ class stream_generator_promise {
 
   constexpr void return_void() const noexcept {}
 
-  reference_type value() noexcept { return _value; }
+  reference_type value() noexcept { return *_stream.rdbuf(); }
 
   // Don't allow any use of 'co_await' inside the generator coroutine.
   template <typename U>
@@ -96,7 +93,9 @@ class stream_generator_promise {
   }
 
  private:
-  bool isBufferLargeEnough() { return _value.length() >= MIN_BUFFER_SIZE; }
+  bool isBufferLargeEnough() {
+    return _stream.view().length() >= MIN_BUFFER_SIZE;
+  }
 };
 
 struct stream_generator_sentinel {};
@@ -111,23 +110,23 @@ class stream_generator_iterator {
   // What type should we use for counting elements of a potentially infinite
   // sequence?
   using difference_type = std::ptrdiff_t;
-  using value_type = typename promise_type::value_type;
-  using reference = typename promise_type::reference_type;
-  using pointer = typename promise_type::pointer_type;
+  using value_type = std::string;
+  using reference = value_type&;
+  using pointer = value_type*;
 
   // Iterator needs to be default-constructible to satisfy the Range concept.
   stream_generator_iterator() noexcept : _coroutine(nullptr) {}
 
   explicit stream_generator_iterator(coroutine_handle coroutine) noexcept
-      : _coroutine(coroutine) {}
+      : _coroutine(coroutine),
+        _value{std::move(coroutine.promise().value()).str()} {}
 
   friend bool operator==(const stream_generator_iterator& it,
                          stream_generator_sentinel) noexcept {
     // If the coroutine is done processing, but the aggregated string
     // has not been read so far the iterator needs to increment its value
     // one last time.
-    return !it._coroutine ||
-           (it._coroutine.done() && it._coroutine.promise().value().empty());
+    return !it._coroutine || (it._coroutine.done() && it._value.empty());
   }
 
   friend bool operator!=(const stream_generator_iterator& it,
@@ -146,7 +145,8 @@ class stream_generator_iterator {
   }
 
   stream_generator_iterator& operator++() {
-    _coroutine.promise().value().clear();
+    _value.clear();
+    _coroutine.promise().value().str(std::move(_value));
     // if the coroutine is done but the remaining aggregated
     // buffer has not been cleared yet the iterator needs to be incremented one
     // last time
@@ -157,6 +157,8 @@ class stream_generator_iterator {
       _coroutine.promise().rethrow_if_exception();
     }
 
+    _value = std::move(_coroutine.promise().value()).str();
+
     return *this;
   }
 
@@ -165,12 +167,13 @@ class stream_generator_iterator {
   // not support post-increment
   void operator++(int) { (void)operator++(); }
 
-  reference operator*() const noexcept { return _coroutine.promise().value(); }
+  reference operator*() noexcept { return _value; }
 
-  pointer operator->() const noexcept { return std::addressof(operator*()); }
+  pointer operator->() noexcept { return std::addressof(operator*()); }
 
  private:
   coroutine_handle _coroutine;
+  value_type _value;
 };
 
 }  // namespace detail
