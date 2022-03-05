@@ -7,6 +7,7 @@
 #include <absl/cleanup/cleanup.h>
 
 #include <exception>
+#include <ranges>
 #include <thread>
 #include <type_traits>
 
@@ -18,39 +19,42 @@ namespace ad_utility::streams {
 using ad_utility::data_structures::ThreadSafeQueue;
 
 /**
- * Runs the passed generator on an asynchronous layer. This can improve
- * performance if the generated values are expensive to compute so that the time
- * between resumes can be used additionally.
+ * Yield all the elements of the range. A background thread iterates over the
+ * range and adds the element to a queue with size bufferLimit, the elements are
+ * the yielded from this queue. This is faster if retrieving a single element
+ * from the range is expensive, but very inefficient if retrieving elements is
+ * cheap because of the synchronization overhead.
  */
-template <typename GeneratorType>
-cppcoro::generator<std::string> runStreamAsync(
-    std::remove_reference_t<GeneratorType> generator, size_t bufferLimit) {
-  ThreadSafeQueue<std::string> queue{bufferLimit};
+template <std::ranges::range Range>
+cppcoro::generator<typename Range::value_type> runStreamAsync(
+    std::remove_reference_t<Range> range, size_t bufferLimit) {
+  using value_type = typename Range::value_type;
+  ThreadSafeQueue<value_type> queue{bufferLimit};
   std::exception_ptr exception = nullptr;
   std::thread thread{[&] {
     try {
-      for (auto& value : generator) {
-        if (queue.push(std::move(value))) {
+      for (auto& value : range) {
+        if (!queue.push(std::move(value))) {
           return;
         }
       }
     } catch (...) {
       exception = std::current_exception();
     }
-    queue.finish();
+    queue.signalLastElementWasPushed();
   }};
 
   absl::Cleanup cleanup{[&] {
-    queue.abort();
+    queue.disablePush();
     thread.join();
     if (exception) {
-      // This exception will only be thrown once all the already existing values
-      // have already been processed.
+      // This exception will only be thrown once all the values that were
+      // pushed to the queue before the exception occurred.
       std::rethrow_exception(exception);
     }
   }};
 
-  while (std::optional<std::string> value = queue.pop()) {
+  while (std::optional<value_type> value = queue.pop()) {
     co_yield value.value();
   }
 }

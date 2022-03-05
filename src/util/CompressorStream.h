@@ -6,6 +6,7 @@
 
 #include <boost/iostreams/filter/gzip.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
+#include <ranges>
 #include <string>
 
 #include "./Generator.h"
@@ -16,14 +17,13 @@ namespace io = boost::iostreams;
 using ad_utility::content_encoding::CompressionMethod;
 
 /**
- * Takes a generator that generates strings, applies the provided
- * compressionMethod on the fly and yields values once there is something
- * to yield.
+ * Takes a view of strings. Behavior: The concatenation of all yielded strings
+ * is the compression, specified by the compressionMethod applied to the
+ * concatenation of all the strings from the view.
  */
-template <typename GeneratorType>
+template <std::ranges::range Range>
 cppcoro::generator<std::string> compressStream(
-    std::remove_reference_t<GeneratorType> generator,
-    CompressionMethod compressionMethod) {
+    std::remove_reference_t<Range> range, CompressionMethod compressionMethod) {
   io::filtering_ostream filteringStream;
   std::string stringBuffer;
 
@@ -35,15 +35,14 @@ cppcoro::generator<std::string> compressStream(
   }
   filteringStream.push(io::back_inserter(stringBuffer), 0);
 
-  for (const auto& value : generator) {
+  for (const auto& value : range) {
     filteringStream << value;
     if (!stringBuffer.empty()) {
       co_yield stringBuffer;
       stringBuffer.clear();
     }
   }
-  // reset() flushes the stream and puts the remaining bytes into stringBuffer
-  // to be yielded one final time
+  // reset() flushes the stream and puts the remaining bytes into stringBuffer.
   filteringStream.reset();
   if (!stringBuffer.empty()) {
     co_yield stringBuffer;

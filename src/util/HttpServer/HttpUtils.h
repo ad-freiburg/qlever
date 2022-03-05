@@ -77,8 +77,9 @@ static auto createOkResponse(std::string text, const HttpRequest auto& request,
                                       request, mediaType);
 }
 
-/// Assigns the generator to the body, potentially applying compression
-/// along the way and setting the appropriate headers
+/// Assigns the generator to the body of the response. If a supported
+/// compression is specified in the request, this method is applied to the body
+/// and the corresponding response headers are set.
 static void setBody(http::response<streamable_body>& response,
                     const HttpRequest auto& request,
                     streams::stream_generator&& generator) {

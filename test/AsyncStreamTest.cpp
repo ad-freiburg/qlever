@@ -32,8 +32,8 @@ TEST(AsyncStream, EnsureMaximumBufferLimitWorks) {
     std::this_thread::sleep_for(std::chrono::milliseconds{10});
   }
 
-  // begin() consumes a single element, now the async wrapper
-  // should asynchronously consume bufferLimit more.
+  // stream.begin() consumes a single element, and bufferLimit elements are
+  // stored in the queue inside of stream.
   ASSERT_EQ(totalProcessed, bufferLimit + 1);
 
   // One element has been retrieved, so another one may enter the buffer.
@@ -46,7 +46,7 @@ TEST(AsyncStream, EnsureMaximumBufferLimitWorks) {
 }
 
 TEST(AsyncStream, EnsureBuffersArePassedCorrectly) {
-  std::vector<std::string> testData{"Abc", "Def", "Ghi"};
+  const std::vector<std::string> testData{"Abc", "Def", "Ghi"};
   auto generator = runStreamAsync<std::vector<std::string>>(testData, 2);
 
   ASSERT_TRUE(std::ranges::equal(testData.begin(), testData.end(),

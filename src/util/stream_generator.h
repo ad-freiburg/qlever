@@ -193,6 +193,7 @@ class [[nodiscard]] basic_stream_generator {
  public:
   using promise_type = detail::stream_generator_promise<MIN_BUFFER_SIZE>;
   using iterator = detail::stream_generator_iterator<MIN_BUFFER_SIZE>;
+  using value_type = typename iterator::value_type;
 
  private:
   std::coroutine_handle<promise_type> _coroutine = nullptr;

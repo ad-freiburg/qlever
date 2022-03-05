@@ -12,6 +12,7 @@
 
 namespace ad_utility::data_structures {
 
+/// A thread safe, multi-consumer, multi-producer queue.
 template <typename T>
 class ThreadSafeQueue {
   std::queue<T> _queue;
@@ -19,31 +20,32 @@ class ThreadSafeQueue {
   std::condition_variable _pushNotification;
   std::condition_variable _popNotification;
   bool _lastElementPushed = false;
-  bool _disablePush = false;
+  bool _pushDisabled = false;
   size_t _maxSize;
 
  public:
   explicit ThreadSafeQueue(size_t maxSize) : _maxSize{maxSize} {}
 
-  /// Pushes an element into the queue and blocks if the queue's capacity
-  /// is currently exhausted until some space is freed via pop() or abort()
-  /// is called to cancel execution
+  /// Push an element into the queue. Block until there is free space in the
+  /// queue or until disablePush() was called. Return false if disablePush()
+  /// was called. In this case the current element element abd akk future
+  /// elements are not added to the queue.
   bool push(T value) {
     std::unique_lock lock{_mutex};
     _popNotification.wait(
-        lock, [&] { return _queue.size() < _maxSize || _disablePush; });
-    if (_disablePush) {
-      return true;
+        lock, [&] { return _queue.size() < _maxSize || _pushDisabled; });
+    if (_pushDisabled) {
+      return false;
     }
     _queue.push(std::move(value));
     lock.unlock();
     _pushNotification.notify_one();
-    return false;
+    return true;
   }
 
   /// Signals all threads waiting for pop() to return that data transmission
   /// has ended and it should stop processing.
-  void finish() {
+  void signalLastElementWasPushed() {
     std::unique_lock lock{_mutex};
     _lastElementPushed = true;
     lock.unlock();
@@ -51,16 +53,16 @@ class ThreadSafeQueue {
   }
 
   /// Wakes up all blocked threads waiting for push, cancelling execution
-  void abort() {
+  void disablePush() {
     std::unique_lock lock{_mutex};
-    _disablePush = true;
+    _pushDisabled = true;
     lock.unlock();
     _popNotification.notify_all();
   }
 
   /// Blocks until another thread pushes an element via push() which is
-  /// hen returned or finish() is called resulting in an empty optional,
-  /// whatever happens first
+  /// hen returned or signalLastElementWasPushed() is called resulting in an
+  /// empty optional, whatever happens first
   std::optional<T> pop() {
     std::unique_lock lock{_mutex};
     _pushNotification.wait(
