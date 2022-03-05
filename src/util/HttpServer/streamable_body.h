@@ -6,8 +6,9 @@
 
 #include <exception>
 
+#include "../Generator.h"
 #include "../Log.h"
-#include "../streamable_generator.h"
+#include "../stream_generator.h"
 #include "./ContentEncodingHelper.h"
 #include "./beast.h"
 
@@ -18,7 +19,7 @@ namespace ad_utility::httpUtils::httpStreams {
  * generator function to dynamically create a response.
  * Example usage:
  * http::response<streamable_body> response;
- * // generatorFunction returns a ad_utility::stream_generator::stream_generator
+ * // generatorFunction returns a cppcoro::generator<std::string>
  * response.body() = generatorFunction();
  * response.prepare_payload();
  */
@@ -28,7 +29,7 @@ struct streamable_body {
 
   // The type of the message::body member.
   // This determines which type response<streamable_body>::body() returns
-  using value_type = ad_utility::stream_generator::stream_generator;
+  using value_type = cppcoro::generator<std::string>;
 };
 
 /**
@@ -38,15 +39,18 @@ struct streamable_body {
  * to extract the buffers representing the body.
  */
 class streamable_body::writer {
-  value_type& _streamableGenerator;
+  value_type& _generator;
+  value_type::iterator _iterator;
+  std::string _storage;
+  bool _first = true;
 
  public:
   // The type of buffer sequence returned by `get`.
   using const_buffers_type = boost::asio::const_buffer;
 
   /**
-   * `h` holds the headers of the message we are
-   * serializing, while `b` holds the body.
+   * `header` holds the headers of the message we are
+   * serializing, while `generator` holds the body.
    *
    * The BodyWriter concept allows the writer to choose
    * whether to take the message by const reference or
@@ -65,12 +69,9 @@ class streamable_body::writer {
    * conceptually can't allow const access.
    */
   template <bool isRequest, class Fields>
-  writer(boost::beast::http::header<isRequest, Fields>& header,
-         value_type& streamableGenerator)
-      : _streamableGenerator{streamableGenerator} {
-    ad_utility::content_encoding::setContentEncodingHeaderForCompressionMethod(
-        _streamableGenerator.getCompressionMethod(), header);
-  }
+  writer([[maybe_unused]] boost::beast::http::header<isRequest, Fields>& header,
+         value_type& generator)
+      : _generator{generator} {}
 
   /**
    * This is called before the body is serialized and
@@ -102,19 +103,26 @@ class streamable_body::writer {
     // we set this bool to `false` so we will not be called
     // again.
     //
+    ec = {};
     try {
-      std::string_view view = _streamableGenerator.next();
-      ec = {};
-      // we can safely pass away the data() pointer because
-      // it's just referencing the memory inside the generator's promise
-      // it won't be modified until the next call to _streamableGenerator.next()
+      if (_first) {
+        // This is not done in init() to avoid the duplicate exception handling.
+        _iterator = _generator.begin();
+        _first = false;
+      } else {
+        _iterator++;
+      }
+      if (_iterator == _generator.end()) {
+        return boost::none;
+      }
+      _storage = std::move(*_iterator);
       return {{
-          const_buffers_type{view.data(), view.size()},
-          _streamableGenerator.hasNext()  // `true` if there are more buffers.
+          const_buffers_type{_storage.data(), _storage.size()},
+          true  // `true` if there are more buffers.
       }};
     } catch (const std::exception& e) {
       ec = {EPIPE, boost::system::generic_category()};
-      LOG(ERROR) << "Failed to generate response:\n" << e.what() << '\n';
+      LOG(ERROR) << "Failed to generate response:\n" << e.what() << std::endl;
       return boost::none;
     }
   }

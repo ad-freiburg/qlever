@@ -362,8 +362,7 @@ nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
 
 // _____________________________________________________________________________
 template <QueryExecutionTree::ExportSubFormat format>
-ad_utility::stream_generator::stream_generator
-QueryExecutionTree::generateResults(
+ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
     const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
     size_t offset) const {
   static_assert(format == ExportSubFormat::BINARY ||
@@ -450,17 +449,17 @@ QueryExecutionTree::generateResults(
 
 // Instantiate template function for all enum types
 
-template ad_utility::stream_generator::stream_generator
+template ad_utility::streams::stream_generator
 QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::CSV>(
     const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
     size_t offset) const;
 
-template ad_utility::stream_generator::stream_generator
+template ad_utility::streams::stream_generator
 QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::TSV>(
     const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
     size_t offset) const;
 
-template ad_utility::stream_generator::stream_generator QueryExecutionTree::
+template ad_utility::streams::stream_generator QueryExecutionTree::
     generateResults<QueryExecutionTree::ExportSubFormat::BINARY>(
         const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
         size_t offset) const;
@@ -490,8 +489,7 @@ QueryExecutionTree::generateRdfGraph(
 }
 
 // _____________________________________________________________________________
-ad_utility::stream_generator::stream_generator
-QueryExecutionTree::writeRdfGraphTurtle(
+ad_utility::streams::stream_generator QueryExecutionTree::writeRdfGraphTurtle(
     const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
     size_t offset, std::shared_ptr<const ResultTable> res) const {
   auto generator = generateRdfGraph(constructTriples, limit, offset, res);
@@ -507,7 +505,7 @@ QueryExecutionTree::writeRdfGraphTurtle(
 
 // _____________________________________________________________________________
 template <QueryExecutionTree::ExportSubFormat format>
-ad_utility::stream_generator::stream_generator
+ad_utility::streams::stream_generator
 QueryExecutionTree::writeRdfGraphSeparatedValues(
     const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
     size_t offset, std::shared_ptr<const ResultTable> res) const {
@@ -535,17 +533,17 @@ QueryExecutionTree::writeRdfGraphSeparatedValues(
 
 // Instantiate template function for all enum types
 
-template ad_utility::stream_generator::stream_generator QueryExecutionTree::
+template ad_utility::streams::stream_generator QueryExecutionTree::
     writeRdfGraphSeparatedValues<QueryExecutionTree::ExportSubFormat::CSV>(
         const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
         size_t offset, std::shared_ptr<const ResultTable> res) const;
 
-template ad_utility::stream_generator::stream_generator QueryExecutionTree::
+template ad_utility::streams::stream_generator QueryExecutionTree::
     writeRdfGraphSeparatedValues<QueryExecutionTree::ExportSubFormat::TSV>(
         const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
         size_t offset, std::shared_ptr<const ResultTable> res) const;
 
-template ad_utility::stream_generator::stream_generator QueryExecutionTree::
+template ad_utility::streams::stream_generator QueryExecutionTree::
     writeRdfGraphSeparatedValues<QueryExecutionTree::ExportSubFormat::BINARY>(
         const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
         size_t offset, std::shared_ptr<const ResultTable> res) const;
