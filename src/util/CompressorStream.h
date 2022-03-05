@@ -21,7 +21,7 @@ using ad_utility::content_encoding::CompressionMethod;
  * is the compression, specified by the `compressionMethod` applied to the
  * concatenation of all the strings from the range.
  */
-template <std::ranges::range Range>
+template <typename Range>
 cppcoro::generator<std::string> compressStream(
     Range range, CompressionMethod compressionMethod) {
   io::filtering_ostream filteringStream;

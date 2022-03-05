@@ -24,7 +24,7 @@ using ad_utility::data_structures::ThreadSafeQueue;
  * element from the range is expensive, but very inefficient if retrieving
  * elements is cheap because of the synchronization overhead.
  */
-template <std::ranges::range Range>
+template <typename Range>
 cppcoro::generator<typename Range::value_type> runStreamAsync(
     Range range, size_t bufferLimit) {
   using value_type = typename Range::value_type;
