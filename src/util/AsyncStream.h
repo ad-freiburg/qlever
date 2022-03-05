@@ -7,7 +7,6 @@
 #include <absl/cleanup/cleanup.h>
 
 #include <exception>
-#include <ranges>
 #include <thread>
 
 #include "./Generator.h"

@@ -6,7 +6,6 @@
 
 #include <boost/iostreams/filter/gzip.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
-#include <ranges>
 #include <string>
 
 #include "./Generator.h"
