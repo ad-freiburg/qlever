@@ -30,8 +30,11 @@ TEST(AsyncStream, EnsureMaximumBufferLimitWorks) {
     std::this_thread::sleep_for(std::chrono::milliseconds{10});
   }
 
+  // begin() consumes a single element, now the async wrapper
+  // should asynchronously consume bufferLimit more.
   ASSERT_EQ(totalProcessed, bufferLimit + 1);
 
+  // One element has been retrieved, so another one may enter the buffer.
   ++iterator;
 
   while (totalProcessed == bufferLimit + 1) {

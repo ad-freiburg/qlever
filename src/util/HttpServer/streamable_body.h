@@ -5,7 +5,6 @@
 #pragma once
 
 #include <exception>
-#include <memory>
 
 #include "../Generator.h"
 #include "../Log.h"
@@ -20,9 +19,8 @@ namespace ad_utility::httpUtils::httpStreams {
  * generator function to dynamically create a response.
  * Example usage:
  * http::response<streamable_body> response;
- * // generatorFunction returns a ad_utility::streams::stream_generator
- * response.body() =
- * std::make_unique<ad_utility::streams::stream_generator>(generatorFunction());
+ * // generatorFunction returns a cppcoro::generator<std::string>
+ * response.body() = generatorFunction();
  * response.prepare_payload();
  */
 struct streamable_body {
@@ -105,19 +103,19 @@ class streamable_body::writer {
     // we set this bool to `false` so we will not be called
     // again.
     //
+    ec = {};
     try {
       if (_first) {
+        // this is not done in init() to avoid the duplicate exception handling
         _iterator = _generator.begin();
         _first = false;
       } else {
         _iterator++;
       }
       if (_iterator == _generator.end()) {
-        ec = {};
         return boost::none;
       }
       _storage = std::move(*_iterator);
-      ec = {};
       return {{
           const_buffers_type{_storage.data(), _storage.size()},
           true  // `true` if there are more buffers.

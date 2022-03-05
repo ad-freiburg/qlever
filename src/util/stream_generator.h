@@ -46,6 +46,8 @@ class suspend_sometimes {
  */
 template <size_t MIN_BUFFER_SIZE>
 class stream_generator_promise {
+  // a filtering_ostream is used instead of an
+  // std::ostringstream to have direct access to the underlying buffer.
   io::filtering_ostream _stream;
   std::exception_ptr _exception;
   std::string _value;
@@ -121,6 +123,9 @@ class stream_generator_iterator {
 
   friend bool operator==(const stream_generator_iterator& it,
                          stream_generator_sentinel) noexcept {
+    // If the coroutine is done processing, but the aggregated string
+    // has not been read so far the iterator needs to increment its value
+    // one last time.
     return !it._coroutine ||
            (it._coroutine.done() && it._coroutine.promise().value().empty());
   }
@@ -142,6 +147,9 @@ class stream_generator_iterator {
 
   stream_generator_iterator& operator++() {
     _coroutine.promise().value().clear();
+    // if the coroutine is done but the remaining aggregated
+    // buffer has not been cleared yet the iterator needs to be incremented one
+    // last time
     if (!_coroutine.done()) {
       _coroutine.resume();
     }
@@ -153,6 +161,8 @@ class stream_generator_iterator {
   }
 
   // Need to provide post-increment operator to implement the 'Range' concept.
+  // The void return type disables any invalid uses, since this iterator does
+  // not support post-increment
   void operator++(int) { (void)operator++(); }
 
   reference operator*() const noexcept { return _coroutine.promise().value(); }

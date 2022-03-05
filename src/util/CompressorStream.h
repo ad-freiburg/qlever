@@ -15,12 +15,19 @@ namespace ad_utility::streams {
 namespace io = boost::iostreams;
 using ad_utility::content_encoding::CompressionMethod;
 
+/**
+ * Takes a generator that generates strings, applies the provided
+ * compressionMethod on the fly and yields values once there is something
+ * to yield.
+ */
 template <typename GeneratorType>
 cppcoro::generator<std::string> compressStream(
     std::remove_reference_t<GeneratorType> generator,
     CompressionMethod compressionMethod) {
   io::filtering_ostream filteringStream;
   std::string stringBuffer;
+
+  // setup compression method
   if (compressionMethod == CompressionMethod::DEFLATE) {
     filteringStream.push(io::zlib_compressor(io::zlib::best_speed));
   } else if (compressionMethod == CompressionMethod::GZIP) {
@@ -35,6 +42,8 @@ cppcoro::generator<std::string> compressStream(
       stringBuffer.clear();
     }
   }
+  // reset() flushes the stream and puts the remaining bytes into stringBuffer
+  // to be yielded one final time
   filteringStream.reset();
   if (!stringBuffer.empty()) {
     co_yield stringBuffer;
