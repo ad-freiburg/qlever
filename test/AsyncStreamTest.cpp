@@ -24,8 +24,8 @@ cppcoro::generator<std::string> generateNChars(
 TEST(AsyncStream, EnsureMaximumBufferLimitWorks) {
   std::atomic_size_t totalProcessed = 0;
   size_t bufferLimit = 10;
-  auto stream = runStreamAsync<cppcoro::generator<std::string>>(
-      generateNChars(bufferLimit + 2, totalProcessed), bufferLimit);
+  auto stream = runStreamAsync(generateNChars(bufferLimit + 2, totalProcessed),
+                               bufferLimit);
   auto iterator = stream.begin();
 
   while (totalProcessed <= bufferLimit) {
@@ -47,7 +47,7 @@ TEST(AsyncStream, EnsureMaximumBufferLimitWorks) {
 
 TEST(AsyncStream, EnsureBuffersArePassedCorrectly) {
   const std::vector<std::string> testData{"Abc", "Def", "Ghi"};
-  auto generator = runStreamAsync<std::vector<std::string>>(testData, 2);
+  auto generator = runStreamAsync(testData, 2);
 
   ASSERT_TRUE(std::ranges::equal(testData.begin(), testData.end(),
                                  generator.begin(), generator.end()));

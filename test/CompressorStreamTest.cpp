@@ -45,8 +45,7 @@ class CompressorStreamTestFixture
 };
 
 TEST_P(CompressorStreamTestFixture, TestGeneratorAppliesCompression) {
-  auto generator = compressStream<cppcoro::generator<std::string>>(
-      generateNChars(10), GetParam());
+  auto generator = compressStream(generateNChars(10), GetParam());
 
   auto iterator = generator.begin();
 
