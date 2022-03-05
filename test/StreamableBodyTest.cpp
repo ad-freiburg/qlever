@@ -4,8 +4,6 @@
 
 #include <gtest/gtest.h>
 
-#include <memory>
-
 #include "../src/util/HttpServer/beast.h"
 #include "../src/util/HttpServer/streamable_body.h"
 

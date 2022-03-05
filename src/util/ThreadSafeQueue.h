@@ -5,6 +5,7 @@
 #ifndef QLEVER_THREADSAFEQUEUE_H
 #define QLEVER_THREADSAFEQUEUE_H
 
+#include <condition_variable>
 #include <mutex>
 #include <optional>
 #include <queue>

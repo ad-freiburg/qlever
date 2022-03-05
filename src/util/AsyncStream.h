@@ -6,10 +6,9 @@
 
 #include <absl/cleanup/cleanup.h>
 
-#include <atomic>
-#include <condition_variable>
-#include <string_view>
+#include <exception>
 #include <thread>
+#include <type_traits>
 
 #include "./Generator.h"
 #include "./ThreadSafeQueue.h"
