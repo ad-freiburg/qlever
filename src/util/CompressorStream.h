@@ -17,13 +17,13 @@ namespace io = boost::iostreams;
 using ad_utility::content_encoding::CompressionMethod;
 
 /**
- * Takes a view of strings. Behavior: The concatenation of all yielded strings
- * is the compression, specified by the compressionMethod applied to the
- * concatenation of all the strings from the view.
+ * Takes a range of strings. Behavior: The concatenation of all yielded strings
+ * is the compression, specified by the `compressionMethod` applied to the
+ * concatenation of all the strings from the range.
  */
 template <std::ranges::range Range>
 cppcoro::generator<std::string> compressStream(
-    std::remove_reference_t<Range> range, CompressionMethod compressionMethod) {
+    Range range, CompressionMethod compressionMethod) {
   io::filtering_ostream filteringStream;
   std::string stringBuffer;
 

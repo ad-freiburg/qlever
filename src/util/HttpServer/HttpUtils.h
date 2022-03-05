@@ -77,7 +77,7 @@ static auto createOkResponse(std::string text, const HttpRequest auto& request,
                                       request, mediaType);
 }
 
-/// Assigns the generator to the body of the response. If a supported
+/// Assign the generator to the body of the response. If a supported
 /// compression is specified in the request, this method is applied to the body
 /// and the corresponding response headers are set.
 static void setBody(http::response<streamable_body>& response,
@@ -87,11 +87,10 @@ static void setBody(http::response<streamable_body>& response,
 
   CompressionMethod method =
       ad_utility::content_encoding::getCompressionMethodForRequest(request);
-  auto asyncGenerator = streams::runStreamAsync<streams::stream_generator>(
-      std::move(generator), 100);
+  auto asyncGenerator = streams::runStreamAsync(std::move(generator), 100);
   if (method != CompressionMethod::NONE) {
-    response.body() = streams::compressStream<cppcoro::generator<std::string>>(
-        std::move(asyncGenerator), method);
+    response.body() =
+        streams::compressStream(std::move(asyncGenerator), method);
     ad_utility::content_encoding::setContentEncodingHeaderForCompressionMethod(
         method, response);
   } else {

@@ -106,7 +106,7 @@ class streamable_body::writer {
     ec = {};
     try {
       if (_first) {
-        // this is not done in init() to avoid the duplicate exception handling.
+        // This is not done in init() to avoid the duplicate exception handling.
         _iterator = _generator.begin();
         _first = false;
       } else {
