@@ -1001,7 +1001,7 @@ void Index::initializeVocabularySettingsBuild() {
                    "en_US"
                 << std::endl;
     }
-    LOG(INFO) << "You specified \"locale = " << lang << "_" << country << "\" "
+    LOG(INFO) << "Setting \"locale = " << lang << "_" << country << "\" "
               << "and \"ignore-punctuation = " << ignorePunctuation << "\""
               << std::endl;
 
@@ -1046,11 +1046,10 @@ void Index::initializeVocabularySettingsBuild() {
 
   if (j.count("num-triples-per-batch")) {
     _numTriplesPerBatch = size_t{j["num-triples-per-batch"]};
-    LOG(INFO)
-        << "You specified \"num-triples-per-batch = " << _numTriplesPerBatch
-        << "\", choose a lower value if the index builder runs out of memory"
-        << std::endl;
   }
+  LOG(INFO) << "Setting \"num-triples-per-batch = " << _numTriplesPerBatch
+            << "\", choose a lower value if the index builder runs out of memory"
+            << std::endl;
 
   if (j.count("parser-batch-size")) {
     _parserBatchSize = size_t{j["parser-batch-size"]};
