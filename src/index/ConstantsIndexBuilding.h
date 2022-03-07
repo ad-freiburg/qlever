@@ -19,7 +19,7 @@ static const size_t MAX_INTERNAL_LITERAL_BYTES = 1024;
 
 // How many lines are parsed at once during index creation.
 // Reduce to save RAM
-static const int NUM_TRIPLES_PER_PARTIAL_VOCAB = 100000000;
+static const int NUM_TRIPLES_PER_PARTIAL_VOCAB = 10'000'000;
 
 // How many Triples is the Buffer supposed to parse ahead.
 // If too big, the memory consumption is high, if too low we possibly lose speed
