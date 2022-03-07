@@ -14,6 +14,7 @@
 #include "../util/Serializer/SerializeVector.h"
 #include "../util/Serializer/Serializer.h"
 #include "../util/Timer.h"
+#include "../util/CoroToStateMachine.h"
 
 // The meta data of a compressed block of ID triples in an index permutation.
 struct CompressedBlockMetaData {
@@ -183,9 +184,11 @@ class CompressedRelationWriter {
                    const ad_utility::BufferedVector<std::array<Id, 2>>& data,
                    size_t numDistinctCol1, bool functional);
 
+
+
   /// Finish writing all relations which have previously been added, but might
   /// still be in some internal buffer.
-  void finish() { writeBufferedRelationsToSingleBlock(); }
+  //void finish() { writeBufferedRelationsToSingleBlock(); }
 
   /// Get the complete CompressedRelationMetaData created by the calls to
   /// addRelation. This meta data is then deleted from the
@@ -216,6 +219,26 @@ class CompressedRelationWriter {
   // block meta data to `_blockBuffer`.
   void writeRelationToExclusiveBlocks(
       Id col0Id, const ad_utility::BufferedVector<std::array<Id, 2>>& data);
+
+ public:
+  ad_utility::CoroToStateMachine<std::array<Id, 3>> triplePusher(size_t c0, size_t c1, size_t c2);
+  ad_utility::CoroToStateMachine<std::array<Id, 3>> switchedTriplePusher(size_t c0, size_t c1, size_t c2);
+ private:
+
+  struct Block {
+    bool _toExclusiveBlocks;
+    Id _col0Id;
+    std::vector<std::array<Id, 2>> _data;
+  };
+  using BlockPusher =
+  ad_utility::CoroToStateMachine<Block> ;
+  CompressedRelationWriter::BlockPusher blockPusher(uint64_t& offsetInBlock);
+
+  ad_utility::CoroToStateMachine<std::array<Id, 2>> internalTriplePusher(Id col0Id, BlockPusher& blockPusher);
+  void writeBlock(Id firstCol0Id, Id lastCol0Id,
+                  const std::vector<std::array<Id, 2>>& data);
+  uint64_t writeSmallRelationToBuffer(
+      Id col0Id, const std::vector<std::array<Id, 2>>& data);
 };
 
 #endif  // QLEVER_COMPRESSEDRELATION_H

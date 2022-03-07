@@ -474,58 +474,30 @@ Index::createPermutationPairImpl(const string& fileName1,
 
   CompressedRelationWriter writer1{ad_utility::File(fileName1, "w")};
   CompressedRelationWriter writer2{ad_utility::File(fileName2, "w")};
+  auto pusher1 = writer1.triplePusher(c0, c1, c2);
+  auto pusher2 = writer2.switchedTriplePusher(c0, c1, c2);
 
   // Iterate over the vector and identify "relation" boundaries, where a
   // "relation" is the sequence of sortedTriples equal first component. For PSO
   // and POS, this is a predicate (of which "relation" is a synonym).
   LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
-  size_t from = 0;
-  std::optional<Id> currentRel;
-  ad_utility::BufferedVector<array<Id, 2>> buffer(
-      THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.mmap-buffer");
-  bool functional = true;
-  size_t distinctCol1 = 0;
-  size_t sizeOfRelation = 0;
-  Id lastLhs = std::numeric_limits<Id>::max();
-  uint64_t totalNumTriples = 0;
   for (auto triple : sortedTriples) {
-    if (!currentRel.has_value()) {
-      currentRel = triple[c0];
-    }
     // Call each of the `perTripleCallbacks` for the current triple
     (..., perTripleCallbacks(triple));
-    ++totalNumTriples;
-    if (triple[c0] != currentRel) {
-      writer1.addRelation(currentRel.value(), buffer, distinctCol1, functional);
-      writeSwitchedRel(&writer2, currentRel.value(), &buffer);
-      for (auto& md : writer1.getFinishedMetaData()) {
-        metaData1.add(md);
-      }
-      for (auto& md : writer2.getFinishedMetaData()) {
-        metaData2.add(md);
-      }
-      buffer.clear();
-      distinctCol1 = 1;
-      currentRel = triple[c0];
-      functional = true;
-    } else {
-      sizeOfRelation++;
-      if (triple[c1] == lastLhs) {
-        functional = false;
-      } else {
-        distinctCol1++;
-      }
+    pusher1.push(triple);
+    pusher2.push(triple);
+
+    // TODO<joka921> Don't do this after every triple and possibly integrate it somewhere.
+    for (auto& md : writer1.getFinishedMetaData()) {
+      metaData1.add(md);
     }
-    buffer.push_back(array<Id, 2>{{triple[c1], triple[c2]}});
-    lastLhs = triple[c1];
-  }
-  if (from < totalNumTriples) {
-    writer1.addRelation(currentRel.value(), buffer, distinctCol1, functional);
-    writeSwitchedRel(&writer2, currentRel.value(), &buffer);
+    for (auto& md : writer2.getFinishedMetaData()) {
+      metaData2.add(md);
+    }
   }
 
-  writer1.finish();
-  writer2.finish();
+  pusher1.finish();
+  pusher2.finish();
   for (auto& md : writer1.getFinishedMetaData()) {
     metaData1.add(md);
   }
@@ -536,35 +508,6 @@ Index::createPermutationPairImpl(const string& fileName1,
   metaData2.blockData() = writer2.getFinishedBlocks();
 
   return std::make_pair(std::move(metaData1), std::move(metaData2));
-}
-
-// __________________________________________________________________________
-void Index::writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
-                             ad_utility::BufferedVector<array<Id, 2>>* bufPtr) {
-  // sort according to the "switched" relation.
-  auto& buffer = *bufPtr;
-
-  for (auto& el : buffer) {
-    std::swap(el[0], el[1]);
-  }
-  std::sort(buffer.begin(), buffer.end(), [](const auto& a, const auto& b) {
-    return a[0] == b[0] ? a[1] < b[1] : a[0] < b[0];
-  });
-
-  Id lastLhs = std::numeric_limits<Id>::max();
-
-  bool functional = true;
-  size_t distinctC1 = 0;
-  for (const auto& el : buffer) {
-    if (el[0] == lastLhs) {
-      functional = false;
-    } else {
-      distinctC1++;
-    }
-    lastLhs = el[0];
-  }
-
-  out->addRelation(currentRel, buffer, distinctC1, functional);
 }
 
 // ________________________________________________________________________

@@ -11,6 +11,7 @@
 #include "../util/TypeTraits.h"
 #include "./Permutations.h"
 #include "ConstantsIndexBuilding.h"
+#include "../util/BackgroundStxxlSorter.h"
 
 using namespace std::chrono_literals;
 
@@ -47,8 +48,7 @@ void CompressedRelationMetaData::scan(
       size_t _col0FirstId;
       size_t _col0LastId;
     };
-    auto [beginBlock, endBlock] = std::equal_range(
-        permutation._meta.blockData().begin(),
+    auto [beginBlock, endBlock] = std::equal_range( permutation._meta.blockData().begin(),
         permutation._meta.blockData().end(), KeyLhs{col0Id, col0Id},
         [](const auto& a, const auto& b) {
           return a._col0FirstId < b._col0FirstId &&
@@ -365,71 +365,45 @@ template void CompressedRelationMetaData::scan<Permutation::OSP_T, IdTable>(
     const Id, const Id&, IdTable*, const Permutation::OSP_T&,
     ad_utility::SharedConcurrentTimeoutTimer);
 
-// ___________________________________________________________________________
-void CompressedRelationWriter::addRelation(
-    Id col0Id, const ad_utility::BufferedVector<std::array<Id, 2>>& data,
-    size_t numDistinctCol1, bool functional) {
-  LOG(TRACE) << "Writing a relation ...\n";
-  AD_CHECK_GT(data.size(), 0);
-  LOG(TRACE) << "Calculating multiplicities ...\n";
-  float multC1 = functional ? 1.0 : data.size() / float(numDistinctCol1);
-  // Dummy value that will be overwritten later
-  float multC2 = 42.42;
-  LOG(TRACE) << "Done calculating multiplicities.\n";
-  // This sets everything except the _offsetInBlock, which will be set
-  // explicitly below.
-  CompressedRelationMetaData metaData{col0Id, data.size(), multC1, multC2};
-  auto sizeOfRelation = data.size() * 2 * sizeof(Id);
-
-  // If this is a large relation, or the currrently buffered relations +
-  // this relation are too large, we will write the buffered relations to file
-  // and start a new block.
-  if (sizeOfRelation > BLOCKSIZE_COMPRESSED_METADATA * 8 / 10 ||
-      sizeOfRelation + _buffer.data().size() >
-          1.5 * BLOCKSIZE_COMPRESSED_METADATA) {
-    writeBufferedRelationsToSingleBlock();
-  }
-
-  if (sizeOfRelation > BLOCKSIZE_COMPRESSED_METADATA * 8 / 10) {
-    // The relation is large, immediately write the relation to a set of
-    // exclusive blocks.
-    writeRelationToExclusiveBlocks(col0Id, data);
-    metaData._offsetInBlock = Id(-1);
-  } else {
-    // Append to the current buffered block.
-    metaData._offsetInBlock = _buffer.data().size() / (2 * sizeof(Id));
-    static_assert(sizeof(data[0]) == 2 * sizeof(Id));
-    if (_buffer.data().empty()) {
-      _currentBlockData._col0FirstId = col0Id;
-      _currentBlockData._col1FirstId = data.front()[0];
-    }
-    _currentBlockData._col0LastId = col0Id;
-    _currentBlockData._col1LastId = data.back()[0];
-    _buffer.serializeBytes(reinterpret_cast<const char*>(data.data()),
-                           data.size() * 2 * sizeof(Id));
-  }
-  _metaDataBuffer.push_back(metaData);
-}
-
 // _____________________________________________________________________________
-void CompressedRelationWriter::writeRelationToExclusiveBlocks(
-    Id col0Id, const ad_utility::BufferedVector<std::array<Id, 2>>& data) {
-  constexpr size_t NUM_ROWS_PER_BLOCK =
-      BLOCKSIZE_COMPRESSED_METADATA / (2 * sizeof(Id));
-  for (size_t i = 0; i < data.size(); i += NUM_ROWS_PER_BLOCK) {
-    size_t actualNumRowsPerBlock =
-        std::min(NUM_ROWS_PER_BLOCK, size_t(data.size() - i));
+void CompressedRelationWriter::writeBlock(
+    Id firstCol0Id, Id lastCol0Id, const std::vector<std::array<Id, 2>>& data) {
+  if (data.empty()) {
+    return;
+  }
 
     std::vector<char> compressedBlock = ZstdWrapper::compress(
-        (void*)(data.data() + i), actualNumRowsPerBlock * 2 * sizeof(Id));
+        (void*)(data.data()), data.size() * 2 * sizeof(Id));
     _blockBuffer.push_back(CompressedBlockMetaData{
-        _outfile.tell(), compressedBlock.size(), actualNumRowsPerBlock, col0Id,
-        col0Id, data[i][0], data[i + actualNumRowsPerBlock - 1][0]});
+        _outfile.tell(), compressedBlock.size(), data.size(), firstCol0Id,
+        lastCol0Id, data.front()[0], data.back()[0]});
     _outfile.write(compressedBlock.data(), compressedBlock.size());
-  }
-  LOG(TRACE) << "Done writing relation.\n";
 }
 
+/*
+// _____________________________________________________________________________
+uint64_t CompressedRelationWriter::writeSmallRelationToBuffer(
+    Id col0Id, const std::vector<std::array<Id, 2>>& data) {
+  // Append to the current buffered block.
+  if (data.empty()) {
+    return 0;
+  }
+  AD_CHECK(!data.empty());
+  uint64_t offsetInBlock = _buffer.data().size() / (2 * sizeof(Id));
+  static_assert(sizeof(data[0]) == 2 * sizeof(Id));
+  if (_buffer.data().empty()) {
+    _currentBlockData._col0FirstId = col0Id;
+    _currentBlockData._col1FirstId = data.front()[0];
+  }
+  _currentBlockData._col0LastId = col0Id;
+  _currentBlockData._col1LastId = data.back()[0];
+  _buffer.serializeBytes(reinterpret_cast<const char*>(data.data()),
+                         data.size() * 2 * sizeof(Id));
+  return offsetInBlock;
+}
+ */
+
+/*
 // ___________________________________________________________________________
 void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
   if (_buffer.data().empty()) {
@@ -453,6 +427,7 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
   _outfile.write(compressedBlock.data(), compressedBlock.size());
   LOG(TRACE) << "Done writing relation.\n";
 }
+ */
 
 // _____________________________________________________________________________
 template <class Permutation>
@@ -494,4 +469,139 @@ CompressedRelationMetaData::readAndDecompressBlock(
   auto compressed = readCompressedBlockFromFile(block, permutation);
   auto numRowsToRead = block._numRows;
   return decompressBlock(compressed, numRowsToRead);
+}
+
+CompressedRelationWriter::BlockPusher CompressedRelationWriter::blockPusher(
+    uint64_t& offsetInBlock) {
+  std::vector<std::array<Id, 2>> secondAndThirdColumn;
+  Id firstCol0Id;
+  Id lastCol0Id;
+  while (co_await BlockPusher::ValueWasPushed{}) {
+    auto&& nextBlock = co_await BlockPusher::NextValue{};
+    if (nextBlock._toExclusiveBlocks) {
+      writeBlock(firstCol0Id, lastCol0Id, secondAndThirdColumn);
+      secondAndThirdColumn.clear();
+      writeBlock(nextBlock._col0Id, nextBlock._col0Id, std::move(nextBlock._data));
+      offsetInBlock = uint64_t(-1);
+    } else {
+      if (secondAndThirdColumn.empty()) {
+        firstCol0Id = nextBlock._col0Id;
+      }
+      lastCol0Id = nextBlock._col0Id;
+      offsetInBlock = secondAndThirdColumn.size();
+      secondAndThirdColumn.insert(secondAndThirdColumn.end(), nextBlock._data.begin(), nextBlock._data.end());
+    }
+  }
+
+  // There might be a leftover block
+  writeBlock(firstCol0Id, lastCol0Id, secondAndThirdColumn);
+}
+
+ad_utility::CoroToStateMachine<std::array<Id, 2>> CompressedRelationWriter::internalTriplePusher(Id col0Id, CompressedRelationWriter::BlockPusher& blockPusher) {
+  using C = ad_utility::CoroToStateMachine<std::array<Id, 2>>;
+  std::vector<std::array<Id, 2>> secondAndThirdColumn;
+  secondAndThirdColumn.reserve(BLOCKSIZE_COMPRESSED_METADATA);
+  bool hasExclusiveBlocks = false;
+  while ( co_await C::ValueWasPushed{}) {
+    secondAndThirdColumn.push_back(co_await C::NextValue{});
+    if (secondAndThirdColumn.size() >= BLOCKSIZE_COMPRESSED_METADATA) {
+      hasExclusiveBlocks = true;
+      blockPusher.push({true, col0Id, std::move(secondAndThirdColumn)});
+      secondAndThirdColumn.clear();
+    }
+  }
+  blockPusher.push({hasExclusiveBlocks, col0Id, std::move(secondAndThirdColumn)});
+}
+
+ad_utility::CoroToStateMachine<std::array<Id, 3>> CompressedRelationWriter::triplePusher(size_t c0, size_t c1, size_t c2) {
+  using C = ad_utility::CoroToStateMachine<std::array<Id, 3>>;
+  if (! co_await C::ValueWasPushed{}) {
+    // empty permutation
+    co_return;
+  }
+  const auto& firstTriple = co_await C::NextValue{};
+  auto currentC0 = firstTriple[c0];
+  auto previousC1 = firstTriple[c1];
+  size_t distinctC1 = 1;
+  size_t sizeOfRelation = 0;
+  uint64_t offsetInBlock;
+  auto blockStore = blockPusher(offsetInBlock);
+  auto tripleStore = internalTriplePusher(currentC0, blockStore);
+
+  auto pushMetadata = [this](Id col0Id, uint64_t sizeOfRelation, uint64_t numDistinctCol1, uint64_t offsetInBlock) {
+    bool functional = sizeOfRelation == numDistinctCol1;
+    float multC1 = functional ? 1.0 : sizeOfRelation / float(numDistinctCol1);
+    // Dummy value that will be overwritten later
+    float multC2 = 42.42;
+    LOG(TRACE) << "Done calculating multiplicities.\n";
+    // This sets everything except the _offsetInBlock, which will be set
+    // explicitly below.
+    CompressedRelationMetaData metaData{col0Id, sizeOfRelation, multC1, multC2, offsetInBlock};
+    _metaDataBuffer.push_back(metaData);
+  };
+  do {
+    auto triple = co_await C::NextValue{};
+    if (triple[c0] != currentC0) {
+      auto previousC0 = currentC0;
+      currentC0 = triple[c0];
+      tripleStore = internalTriplePusher(currentC0, blockStore);
+      pushMetadata(previousC0, sizeOfRelation, distinctC1, offsetInBlock);
+      sizeOfRelation = 0;
+      distinctC1 = 1;
+    } else  {
+      distinctC1 += triple[c1] != previousC1;
+    }
+    tripleStore.push({triple[c1], triple[c2]});
+    ++sizeOfRelation;
+  } while (co_await C::ValueWasPushed{});
+  tripleStore.finish();
+  blockStore.finish();
+  pushMetadata(currentC0, sizeOfRelation, distinctC1, offsetInBlock);
+}
+
+ad_utility::CoroToStateMachine<std::array<Id, 3>> CompressedRelationWriter::switchedTriplePusher(size_t c0, size_t c1, size_t c2) {
+  using C = ad_utility::CoroToStateMachine<std::array<Id, 3>>;
+  if (! co_await C::ValueWasPushed{}) {
+    // empty permutation
+    co_return;
+  }
+
+  using T = std::array<Id, 2>;
+  struct SwitchedCompare {
+    bool operator()(const T& a, const T& b) const  {
+      if (a[1] != b[1]) {
+        return a[1] < b[1];
+      }
+      return a[0] < b[0];
+    }
+
+    static T max_value() {
+      static constexpr auto m = std::numeric_limits<Id>::max();
+      return {m, m};
+    }
+    static T min_value() {
+      static constexpr auto m = std::numeric_limits<Id>::min();
+      return {m, m};
+    }
+  };
+
+  ad_utility::BackgroundStxxlSorter<std::array<Id, 2>, SwitchedCompare> sorter(1 <<  30);
+  const auto& firstTriple = co_await C::NextValue{};
+  auto currentC0 = firstTriple[0];
+  auto actualTriplePusher = triplePusher(0, 1, 2);
+  do {
+    auto triple = co_await C::NextValue{};
+    if (triple[c0] != currentC0) {
+      for (const auto [a, b] : sorter.sortedView()) {
+        actualTriplePusher.push({currentC0, b, a});
+      }
+      sorter.clear();
+      currentC0 = triple[c0];
+    }
+    sorter.push({triple[c1], triple[c2]});
+  } while (co_await C::ValueWasPushed{});
+  for (const auto [a, b] : sorter.sortedView()) {
+    actualTriplePusher.push({currentC0, b, a});
+  }
+
 }
