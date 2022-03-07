@@ -16,7 +16,7 @@
 #include "../util/Conversions.h"
 #include "../util/Generator.h"
 #include "../util/HashSet.h"
-#include "../util/streamable_generator.h"
+#include "../util/stream_generator.h"
 #include "./Operation.h"
 #include "./QueryExecutionContext.h"
 
@@ -113,18 +113,18 @@ class QueryExecutionTree {
       const ResultTable& resultTable) const;
 
   template <ExportSubFormat format>
-  ad_utility::stream_generator::stream_generator generateResults(
+  ad_utility::streams::stream_generator generateResults(
       const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
       size_t offset) const;
 
   // Generate an RDF graph in turtle format for a CONSTRUCT query.
-  ad_utility::stream_generator::stream_generator writeRdfGraphTurtle(
+  ad_utility::streams::stream_generator writeRdfGraphTurtle(
       const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
       size_t offset, std::shared_ptr<const ResultTable> res) const;
 
   // Generate an RDF graph in csv/tsv format for a CONSTRUCT query.
   template <ExportSubFormat format>
-  ad_utility::stream_generator::stream_generator writeRdfGraphSeparatedValues(
+  ad_utility::streams::stream_generator writeRdfGraphSeparatedValues(
       const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
       size_t offset, std::shared_ptr<const ResultTable> res) const;
 
