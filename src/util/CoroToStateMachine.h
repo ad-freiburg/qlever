@@ -46,8 +46,8 @@ class CoroToStateMachine {
     // `co_await ValueWasPushed{}` is run eagerly and behaves like a
     // "constructor".
     constexpr std::suspend_never initial_suspend() noexcept { return {}; }
-    // After the coroutine has finished we have no legal access to the promise
-    // type, so we can as well destroy it.
+
+    // We need to suspend at the end so that the `promise_type` is not immediately destroyed and we can properly propagate exceptions in the destructor or `finish`
     constexpr std::suspend_always final_suspend() noexcept { return {}; }
 
     void unhandled_exception() { _exception = std::current_exception(); }
@@ -70,6 +70,7 @@ class CoroToStateMachine {
       }
     }
 
+    // The following code has these effects:
     // `co_await valueWasPushedTag` suspends the coroutine. As soon as it
     // resumes (either from a call to `push` or `finish`) either the next value
     // is stored in the promise type (`push`), or `isFinished` is true
@@ -81,14 +82,15 @@ class CoroToStateMachine {
       bool await_resume() { return !_promise_type->_isFinished; }
     };
 
-    // Transform the simple tags into an object that is aware of the
-    // `promise_type` that knows, which coroutine it belongs to.
+    // Transform the tag into an object that is aware of the
+    // `promise_type` and knows which coroutine it belongs to.
     ValueWasPushedAwaitable await_transform(detail::ValueWasPushedTag) {
       return {this};
     }
 
-    // `co_await nextValueTag` immediately returns the next value from the
-    // promise.
+    // The following code has these effects:
+    // `co_await nextValueTag` immediately returns a reference to the most recent value that was
+    // passed to `push`.
     struct NextValueAwaitable {
       promise_type* _promise_type;
       bool await_ready() { return true; }
@@ -104,7 +106,7 @@ class CoroToStateMachine {
   bool _isFinished = false;
 
  public:
-  // Constructor that gets a handle on the actual coroutine frame.
+  // Constructor that gets a handle to the coroutine frame.
   CoroToStateMachine(Handle handle) : _coro{handle} {
     // Rethrow the exceptions from the constructor part.
     if (_coro.done()) {
@@ -118,8 +120,8 @@ class CoroToStateMachine {
   // by `co_await nextValue`.Depending on the `isConst` parameter, `push` may
   // either be called only with non-const (`isConst == false`) or const
   // (`isConst == true`) references.
-  void push(value_type& value) requires(!isConst) { pushImpl(AD_FWD(value)); }
-  void push(value_type&& value) requires(!isConst) { pushImpl(AD_FWD(value)); }
+  void push(value_type& value) { pushImpl(AD_FWD(value)); }
+  void push(value_type&& value) { pushImpl(AD_FWD(value)); }
   void push(const value_type& value) requires(isConst) {
     pushImpl(AD_FWD(value));
   }
@@ -135,8 +137,9 @@ class CoroToStateMachine {
   }
 
  public:
-  // Make `co_await valueWasPushed` return false, run the coroutine to
-  // completion and destroy it.
+  // The effect of calling this function is that the next
+  // `co_await valueWasPushed` returns false such that the coroutine runs to
+  // completion.
   void finish() {
     if (_isFinished || !_coro) {
       return;
@@ -150,7 +153,7 @@ class CoroToStateMachine {
     _coro.promise().rethrow_if_exception();
   }
 
-  // Implicitly call finished if it hasn't been called explicitly before.
+  // The destructor implicitly calls `finish` if it hasn't been called explicitly before.
   ~CoroToStateMachine() {
     finish();
     if (_coro) {
@@ -158,7 +161,7 @@ class CoroToStateMachine {
     }
   }
 
-  // Uninitialized default constructor, move and swap.
+  // Default constructor create an object without a coroutine. It can be destroyed or move-assigned from another `CoroToStateMachine`.
   CoroToStateMachine() = default;
   CoroToStateMachine(CoroToStateMachine&& rhs) noexcept : _coro{rhs._coro} {
     rhs._coro = nullptr;
