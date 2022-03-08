@@ -157,34 +157,10 @@ class CompressedRelationWriter {
   ad_utility::File _outfile;
   std::vector<CompressedRelationMetaData> _metaDataBuffer;
   std::vector<CompressedBlockMetaData> _blockBuffer;
-  CompressedBlockMetaData _currentBlockData;
-  ad_utility::serialization::ByteBufferWriteSerializer _buffer;
 
  public:
   /// Create using a filename, to which the relation data will be written.
   CompressedRelationWriter(ad_utility::File f) : _outfile{std::move(f)} {}
-
-  /**
-   * Add a complete (single) relation.
-   *
-   * \param col0Id The ID of the relation, that is, the value of X for a
-   * permutation XYZ.
-   *
-   * \param data The sorted data of the relation, that is, the sequence of all
-   * pairs of Y and Z for the given X.
-   *
-   * \param numDistinctCol1 The number of distinct values for X (from which we
-   * can also calculate the average multiplicity, so we don't need to store that
-   * explicitly).
-   *
-   * \param functional Whether each value of Y occurs at most once (so that we
-   * have a function from the occurring Ys to the Zs).
-   */
-  void addRelation(Id col0Id,
-                   const ad_utility::BufferedVector<std::array<Id, 2>>& data,
-                   size_t numDistinctCol1, bool functional);
-
-
 
   /// Finish writing all relations which have previously been added, but might
   /// still be in some internal buffer.
@@ -208,37 +184,31 @@ class CompressedRelationWriter {
     _blockBuffer.clear();
   }
 
- private:
-  // Compress the contents of `_buffer` into a single block and write it to
-  // _outfile. Update `_currentBlockData` with the meta data of the written
-  // block. Then clear `_buffer`.
-  void writeBufferedRelationsToSingleBlock();
-
-  // Compress the relation from `data` into one or more blocks, depending on
-  // its size. Write the blocks to `_outfile` and append all the created
-  // block meta data to `_blockBuffer`.
-  void writeRelationToExclusiveBlocks(
-      Id col0Id, const ad_utility::BufferedVector<std::array<Id, 2>>& data);
-
  public:
-  ad_utility::CoroToStateMachine<std::array<Id, 3>> triplePusher(size_t c0, size_t c1, size_t c2);
-  ad_utility::CoroToStateMachine<std::array<Id, 3>> switchedTriplePusher(size_t c0, size_t c1, size_t c2);
+  ad_utility::CoroToStateMachine<std::array<Id, 3>> triplePusher();
+  ad_utility::CoroToStateMachine<std::array<Id, 3>> switchedTriplePusher();
  private:
 
+  // A block of triples with the same first column.
   struct Block {
+    // Will the triples from this col0Id be written to multiple exclusive blocks.
+    // If false, then this is the only block for this col0Id that exists.
     bool _toExclusiveBlocks;
     Id _col0Id;
-    std::vector<std::array<Id, 2>> _data;
+    std::vector<std::array<Id, 2>> _col1And2Ids;
   };
   using BlockPusher =
   ad_utility::CoroToStateMachine<Block> ;
+
+  // Write `Block`s of triples of Ids with the same col0Id. On each call to `push()` the correct `offsetInBlock` for the corresponding `col0Id` will be written
   CompressedRelationWriter::BlockPusher blockPusher(uint64_t& offsetInBlock);
 
+  // Takes tuples of `(col1Id, col2Id)`, aggregates them to `Block`s and call `blockPusher.push()` for each of those blocks.
   ad_utility::CoroToStateMachine<std::array<Id, 2>> internalTriplePusher(Id col0Id, BlockPusher& blockPusher);
+
+  // Compress and write a block of `[col1Id, col2Id]` pairs to disk, and append the corresponding block meta data to `_blockBuffer`
   void writeBlock(Id firstCol0Id, Id lastCol0Id,
                   const std::vector<std::array<Id, 2>>& data);
-  uint64_t writeSmallRelationToBuffer(
-      Id col0Id, const std::vector<std::array<Id, 2>>& data);
 };
 
 #endif  // QLEVER_COMPRESSEDRELATION_H

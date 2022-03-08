@@ -174,3 +174,5 @@ addLinkAndDiscoverTest(ViewsTest)
 addLinkAndDiscoverTest(ForwardTest)
 
 addLinkAndDiscoverTest(CoroToStateMachineTest)
+
+addLinkAndDiscoverTest(AggregateBlocksTest)
