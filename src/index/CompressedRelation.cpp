@@ -456,7 +456,7 @@ ad_utility::CoroToStateMachine<std::array<Id, 2>>
 CompressedRelationWriter::internalTriplePusher(
     Id col0Id, CompressedRelationWriter::BlockPusher& blockPusher) {
   std::vector<std::array<Id, 2>> secondAndThirdColumn;
-  static constexpr auto blocksize = BLOCKSIZE_COMPRESSED_METADATA / 2 * sizeof(Id);
+  static constexpr auto blocksize = BLOCKSIZE_COMPRESSED_METADATA / (2 * sizeof(Id));
   secondAndThirdColumn.reserve(blocksize);
   bool hasExclusiveBlocks = false;
   while (co_await ad_utility::valueWasPushedTag) {
