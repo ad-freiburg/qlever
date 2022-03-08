@@ -477,18 +477,12 @@ Index::createPermutationPairImpl(const string& fileName1,
   auto pusher1 = writer1.triplePusher();
   auto pusher2 = writer2.switchedTriplePusher();
 
-  auto addMetadataAndExchangeMultiplicities = [&]() {
-    auto md1 = writer1.getFinishedMetaData();
-    auto md2 = writer2.getFinishedMetaData();
-    AD_CHECK(md1.size() == md2.size());
-
-    for (size_t i = 0; i < md1.size(); ++i) {
-      auto& m1 = md1[i];
-      auto& m2 = md2[i];
-      m1.setCol2Multiplicity(m2.getCol1Multiplicity());
-      m2.setCol2Multiplicity(m1.getCol1Multiplicity());
-      metaData1.add(m1);
-      metaData2.add(m2);
+  auto addMetadata = [&]() {
+    for (const auto& md : writer1.getFinishedMetaData()) {
+      metaData1.add(md);
+    }
+    for (const auto& md : writer2.getFinishedMetaData()) {
+      metaData2.add(md);
     }
   };
 
@@ -501,7 +495,7 @@ Index::createPermutationPairImpl(const string& fileName1,
     pusher2.push({triple[c0], triple[c2], triple[c1]});
 
     if (i % 1 << 20 == 0) {
-      addMetadataAndExchangeMultiplicities();
+      addMetadata();
     }
     ++i;
   }
@@ -509,7 +503,7 @@ Index::createPermutationPairImpl(const string& fileName1,
   pusher1.finish();
   pusher2.finish();
 
-  addMetadataAndExchangeMultiplicities();
+  addMetadata();
 
   metaData1.blockData() = writer1.getFinishedBlocks();
   metaData2.blockData() = writer2.getFinishedBlocks();
@@ -557,12 +551,33 @@ void Index::createPermutationPair(
   auto metaData = createPermutations<MetaDataDispatcher>(
       AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
   if (metaData) {
+    LOG(INFO) << "Exchanging multiplicities for " << p1._readableName << " and "
+              << p2._readableName << " ..." << std::endl;
+    exchangeMultiplicities(&(metaData.value().first),
+                           &(metaData.value().second));
     LOG(INFO) << "Writing meta data for " << p1._readableName << " and "
               << p2._readableName << " ..." << std::endl;
     ad_utility::File f1(_onDiskBase + ".index" + p1._fileSuffix, "r+");
     metaData.value().first.appendToFile(&f1);
     ad_utility::File f2(_onDiskBase + ".index" + p2._fileSuffix, "r+");
     metaData.value().second.appendToFile(&f2);
+  }
+}
+
+// _________________________________________________________________________
+template <class MetaData>
+void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
+  for (auto it = m1->data().begin(); it != m1->data().end(); ++it) {
+    // our MetaData classes have a read-only interface because normally the
+    // FuullRelationMetaData are created separately and then added and never
+    // changed. This function forms an exception to this pattern
+    // because calculation the 2nd column multiplicity separately for each
+    // permutation is inefficient. So it is fine to use const_cast here as an
+    // exception: we delibarately write to a read-only data structure and are
+    // knowing what we are doing
+    Id id = it.getId();
+    m2->data()[id].setCol2Multiplicity(m1->data()[id].getCol1Multiplicity());
+    m1->data()[id].setCol2Multiplicity(m2->data()[id].getCol1Multiplicity());
   }
 }
 

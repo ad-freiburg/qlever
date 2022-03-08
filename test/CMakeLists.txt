@@ -176,3 +176,5 @@ addLinkAndDiscoverTest(ForwardTest)
 addLinkAndDiscoverTest(CoroToStateMachineTest)
 
 addLinkAndDiscoverTest(AggregateBlocksTest)
+
+addLinkAndDiscoverTest(CompressedRelationTest index)
