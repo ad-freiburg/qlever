@@ -11,7 +11,7 @@ TEST(CompressedRelation, Writer) {
 
   {
     CompressedRelationWriter writer(ad_utility::File{filename, "w"});
-    auto pusher = writer.triplePusher();
+    auto pusher = writer.makeTriplePusher();
     pusher.push({1, 10, 20});
     pusher.push({1, 10, 21});
     pusher.push({1, 11, 20});

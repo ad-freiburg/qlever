@@ -474,8 +474,8 @@ Index::createPermutationPairImpl(const string& fileName1,
 
   CompressedRelationWriter writer1{ad_utility::File(fileName1, "w")};
   CompressedRelationWriter writer2{ad_utility::File(fileName2, "w")};
-  auto pusher1 = writer1.triplePusher();
-  auto pusher2 = writer2.switchedTriplePusher();
+  auto pusher1 = writer1.makeTriplePusher();
+  auto pusher2 = writer2.permutingTriplePusher();
 
   auto addMetadata = [&]() {
     for (const auto& md : writer1.getFinishedMetaData()) {

@@ -162,10 +162,6 @@ class CompressedRelationWriter {
   /// Create using a filename, to which the relation data will be written.
   CompressedRelationWriter(ad_utility::File f) : _outfile{std::move(f)} {}
 
-  /// Finish writing all relations which have previously been added, but might
-  /// still be in some internal buffer.
-  // void finish() { writeBufferedRelationsToSingleBlock(); }
-
   /// Get the complete CompressedRelationMetaData created by the calls to
   /// addRelation. This meta data is then deleted from the
   /// CompressedRelationWriter. The typical workflow is: add all relations,
@@ -185,16 +181,16 @@ class CompressedRelationWriter {
   }
 
  public:
-  ad_utility::CoroToStateMachine<std::array<Id, 3>> triplePusher();
-  ad_utility::CoroToStateMachine<std::array<Id, 3>> switchedTriplePusher();
+  ad_utility::CoroToStateMachine<std::array<Id, 3>> makeTriplePusher();
+  ad_utility::CoroToStateMachine<std::array<Id, 3>> permutingTriplePusher();
 
  private:
   // A block of triples with the same first column.
   struct Block {
-    // Will the triples from this col0Id be written to multiple exclusive
-    // blocks. If false, then this is the only block for this col0Id that
+    // If true then the triples from this col0ID be written to multiple exclusive
+    // blocks. If false then this is the only block for this col0Id that
     // exists.
-    bool _toExclusiveBlocks;
+    bool _writeToExclusiveBlocks;
     Id _col0Id;
     std::vector<std::array<Id, 2>> _col1And2Ids;
   };
@@ -205,12 +201,12 @@ class CompressedRelationWriter {
   // written
   CompressedRelationWriter::BlockPusher blockPusher(uint64_t& offsetInBlock);
 
-  // Takes tuples of `(col1Id, col2Id)`, aggregates them to `Block`s and call
+  // Takes tuples (col1Id, col2Id), aggregates them to `Block`s and call
   // `blockPusher.push()` for each of those blocks.
   ad_utility::CoroToStateMachine<std::array<Id, 2>> internalTriplePusher(
       Id col0Id, BlockPusher& blockPusher);
 
-  // Compress and write a block of `[col1Id, col2Id]` pairs to disk, and append
+  // Compress and write a block of (col1Id, col2Id)` pairs to disk, and append
   // the corresponding block meta data to `_blockBuffer`
   void writeBlock(Id firstCol0Id, Id lastCol0Id,
                   const std::vector<std::array<Id, 2>>& data);

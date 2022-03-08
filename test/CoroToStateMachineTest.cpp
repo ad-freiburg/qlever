@@ -9,7 +9,7 @@
 
 using ad_utility::CoroToStateMachine;
 
-CoroToStateMachine<int, true> constStateMachine(int initial, int& target) {
+CoroToStateMachine<int, true> intStateMachine(int initial, int& target) {
   target += initial;
 
   while (co_await ad_utility::valueWasPushedTag) {
@@ -19,11 +19,11 @@ CoroToStateMachine<int, true> constStateMachine(int initial, int& target) {
   target += initial;
 }
 
-TEST(CoroToStateMachine, Const) {
+TEST(CoroToStateMachine, IntStateMachine) {
   int target = 0;
   int compare = 0;
 
-  auto z = constStateMachine(42, target);
+  auto z = intStateMachine(42, target);
   compare += 42;
   EXPECT_EQ(target, compare);
 
@@ -39,7 +39,7 @@ TEST(CoroToStateMachine, Const) {
 }
 
 // _______________________________________________________________________________________
-CoroToStateMachine<std::string, false> movingStateMachine(
+CoroToStateMachine<std::string, false> moveStringStateMachine(
     std::string initial, std::vector<std::string>& target) {
   target.push_back(initial);
 
@@ -50,26 +50,71 @@ CoroToStateMachine<std::string, false> movingStateMachine(
   target.push_back(initial);
 }
 
-TEST(CoroToStateMachine, MovingStateMachine) {
+TEST(CoroToStateMachine, MoveStringStateMachine) {
   std::vector<std::string> target;
   std::vector<std::string> compare;
 
-  auto stateMachine = movingStateMachine("hello", target);
+  auto stateMachine = moveStringStateMachine("hello", target);
+  compare.push_back("hello");
+  EXPECT_EQ(target, compare);
+
+  compare.push_back("alpha");
+  std::string str = "alpha";
+  // Push an lvalue reference, which the coroutine will move.
+  stateMachine.push(str);
+  EXPECT_TRUE(str.empty());
+  EXPECT_EQ(target, compare);
+
+  compare.push_back("beta");
+  str = "beta";
+  // Push an rvalue reference, which the coroutine will move.
+  stateMachine.push(std::move(str));
+  // also a move
+  EXPECT_TRUE(str.empty());
+  EXPECT_EQ(target, compare);
+
+  compare.push_back("gamma");
+  // Push a temporary, which the coroutine will also move (but we cannot actually test this).
+  stateMachine.push("gamma");
+  EXPECT_EQ(target, compare);
+
+  stateMachine.finish();
+  compare.push_back("hello");
+  ASSERT_EQ(target, compare);
+}
+
+// _______________________________________________________________________________________
+CoroToStateMachine<std::string, true> constStringStateMachine(
+    std::string initial, std::vector<std::string>& target) {
+  target.push_back(initial);
+
+  while (co_await ad_utility::valueWasPushedTag) {
+    target.push_back(std::move(co_await ad_utility::nextValueTag));
+  }
+
+  target.push_back(initial);
+}
+
+TEST(CoroToStateMachine, ConstStringStateMachine) {
+  std::vector<std::string> target;
+  std::vector<std::string> compare;
+
+  auto stateMachine = constStringStateMachine("hello", target);
   compare.push_back("hello");
   EXPECT_EQ(target, compare);
 
   compare.push_back("alpha");
   std::string str = "alpha";
   stateMachine.push(str);
-  // The coroutine has moved from the string.
-  EXPECT_TRUE(str.empty());
+  // We called `move` on the string, but the const state machine can't actually
+  // move.
+  EXPECT_EQ(str, "alpha");
   EXPECT_EQ(target, compare);
 
   compare.push_back("beta");
   str = "beta";
   stateMachine.push(std::move(str));
-  // also a move
-  EXPECT_TRUE(str.empty());
+  EXPECT_EQ(str, "beta");
   EXPECT_EQ(target, compare);
 
   compare.push_back("gamma");
@@ -90,6 +135,7 @@ CoroToStateMachine<bool> stateMachineWithExceptions(bool throwInitial,
   }
 
   while (co_await ad_utility::valueWasPushedTag) {
+    // `push(true)` will throw a `TestException`
     if (co_await ad_utility::nextValueTag) {
       throw TestException{};
     }
@@ -100,7 +146,7 @@ CoroToStateMachine<bool> stateMachineWithExceptions(bool throwInitial,
   }
 }
 
-TEST(CoroToStateMachine, Exceptions) {
+TEST(CoroToStateMachine, StateMachineWithExceptions) {
   ASSERT_THROW(stateMachineWithExceptions(true, false), TestException);
 
   {
@@ -122,7 +168,7 @@ TEST(CoroToStateMachine, Exceptions) {
 
 TEST(CoroToStateMachine, DefaultConstructor) {
   // The only thing we can legally do with an default constructed
-  // `CoroToStateMachine` is destroying it or moving something in.
+  // `CoroToStateMachine` is to destroy it or to move something in.
   { ad_utility::CoroToStateMachine<int> x; }
   {
     ad_utility::CoroToStateMachine<int> x;
@@ -130,7 +176,7 @@ TEST(CoroToStateMachine, DefaultConstructor) {
   }
 }
 
-ad_utility::CoroToStateMachine<int> simple(int& result) {
+ad_utility::CoroToStateMachine<int> simpleStateMachine(int& result) {
   while (co_await ad_utility::valueWasPushedTag) {
     result = co_await ad_utility::nextValueTag;
   }
@@ -142,7 +188,7 @@ TEST(CoroToStateMachine, MoveAssignment) {
     int target = 0;
     ad_utility::CoroToStateMachine<int> a;
     {
-      auto b = simple(target);
+      auto b = simpleStateMachine(target);
       b.push(42);
       ASSERT_EQ(target, 42);
       a = std::move(b);
@@ -164,7 +210,7 @@ TEST(CoroToStateMachine, MoveConstructor) {
   {
     int target = 0;
     {
-      auto b = simple(target);
+      auto b = simpleStateMachine(target);
       b.push(42);
       ASSERT_EQ(target, 42);
       auto a{std::move(b)};
@@ -187,8 +233,8 @@ TEST(CoroToStateMachine, Swap) {
     int target = 0;
     int target2 = 0;
     {
-      auto a = simple(target);
-      auto b = simple(target2);
+      auto a = simpleStateMachine(target);
+      auto b = simpleStateMachine(target2);
       ASSERT_EQ(target, 0);
       ASSERT_EQ(target2, 0);
       b.push(42);
