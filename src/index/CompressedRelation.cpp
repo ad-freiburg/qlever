@@ -445,6 +445,11 @@ CompressedRelationWriter::BlockPusher CompressedRelationWriter::blockPusher(
       secondAndThirdColumn.insert(secondAndThirdColumn.end(),
                                   nextBlock._col1And2Ids.begin(),
                                   nextBlock._col1And2Ids.end());
+      auto blocksize = BLOCKSIZE_COMPRESSED_METADATA / (2 * sizeof(Id));
+      if (secondAndThirdColumn.size() >= blocksize) {
+        writeBlock(col0FirstId, col0LastId, secondAndThirdColumn);
+        secondAndThirdColumn.clear();
+      }
     }
   }
 
