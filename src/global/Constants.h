@@ -75,7 +75,7 @@ static const std::string ERROR_IGNORE_CASE_UNSUPPORTED =
     "your settings.json and rebuild your index. You can optionally specify the "
     "\"locale\" key, otherwise \"en.US\" will be used as default";
 static const std::string WARNING_ASCII_ONLY_PREFIXES =
-    "You specified \"ascii-prefixes-only = true\", which enables faster "
+    "Setting \"ascii-prefixes-only = true\", which enables faster "
     "parsing for well-behaved TTL files";
 // " but only works correctly if there are no escape sequences in "
 // "prefixed names (e.g., rdfs:label\\,el is not allowed), no multiline "

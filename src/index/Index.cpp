@@ -1031,7 +1031,6 @@ void Index::initializeVocabularySettingsBuild() {
     if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
       bool v{j["ascii-prefixes-only"]};
       if (v) {
-        LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
         _onlyAsciiTurtlePrefixes = true;
       } else {
         _onlyAsciiTurtlePrefixes = false;
@@ -1041,7 +1040,11 @@ void Index::initializeVocabularySettingsBuild() {
                    "not the Turtle stream parser. This means that this setting "
                    "is ignored."
                 << std::endl;
+      _onlyAsciiTurtlePrefixes = false;
     }
+  }
+  if (_onlyAsciiTurtlePrefixes) {
+    LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
   }
 
   if (j.count("num-triples-per-batch")) {
