@@ -3,12 +3,13 @@
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
+
 #include "../src/util/CoroToStateMachine.h"
 #include "../src/util/Log.h"
 
 using ad_utility::CoroToStateMachine;
 
-CoroToStateMachine<int, true> constStateMachine (int initial, int& target) {
+CoroToStateMachine<int, true> constStateMachine(int initial, int& target) {
   target += initial;
 
   while (co_await ad_utility::valueWasPushedTag) {
@@ -32,13 +33,14 @@ TEST(CoroToStateMachine, Const) {
     EXPECT_EQ(target, compare);
   }
 
- z.finish();
- compare += 42;
- ASSERT_EQ(target, compare);
+  z.finish();
+  compare += 42;
+  ASSERT_EQ(target, compare);
 }
 
 // _______________________________________________________________________________________
-CoroToStateMachine<std::string, false> movingStateMachine (std::string initial, std::vector<std::string>& target) {
+CoroToStateMachine<std::string, false> movingStateMachine(
+    std::string initial, std::vector<std::string>& target) {
   target.push_back(initial);
 
   while (co_await ad_utility::valueWasPushedTag) {
@@ -81,7 +83,8 @@ TEST(CoroToStateMachine, MovingStateMachine) {
 
 struct TestException : public std::exception {};
 
-CoroToStateMachine<bool> stateMachineWithExceptions(bool throwInitial, bool throwFinal) {
+CoroToStateMachine<bool> stateMachineWithExceptions(bool throwInitial,
+                                                    bool throwFinal) {
   if (throwInitial) {
     throw TestException{};
   }
@@ -98,7 +101,6 @@ CoroToStateMachine<bool> stateMachineWithExceptions(bool throwInitial, bool thro
 }
 
 TEST(CoroToStateMachine, Exceptions) {
-
   ASSERT_THROW(stateMachineWithExceptions(true, false), TestException);
 
   {
@@ -119,7 +121,8 @@ TEST(CoroToStateMachine, Exceptions) {
 }
 
 TEST(CoroToStateMachine, DefaultConstructor) {
-  // The only thing we can legally do with an default constructed `CoroToStateMachine` is destroying it or moving something in.
+  // The only thing we can legally do with an default constructed
+  // `CoroToStateMachine` is destroying it or moving something in.
   { ad_utility::CoroToStateMachine<int> x; }
   {
     ad_utility::CoroToStateMachine<int> x;
@@ -155,7 +158,6 @@ TEST(CoroToStateMachine, MoveAssignment) {
     a.finish();
     ASSERT_EQ(target, 0);
   }
-
 }
 
 TEST(CoroToStateMachine, MoveConstructor) {
@@ -171,14 +173,13 @@ TEST(CoroToStateMachine, MoveConstructor) {
       ASSERT_EQ(target, 12);
       b.finish();
       ASSERT_EQ(target, 12);
-    ASSERT_EQ(target, 12);
-    a.push(15);
-    ASSERT_EQ(target, 15);
-    a.finish();
-    ASSERT_EQ(target, 0);
+      ASSERT_EQ(target, 12);
+      a.push(15);
+      ASSERT_EQ(target, 15);
+      a.finish();
+      ASSERT_EQ(target, 0);
     }
   }
-
 }
 
 TEST(CoroToStateMachine, Swap) {

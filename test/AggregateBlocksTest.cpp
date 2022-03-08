@@ -5,5 +5,3 @@
 #include <gtest/gtest.h>
 
 #include "../src/util/AggregateBlocks.h"
-
-

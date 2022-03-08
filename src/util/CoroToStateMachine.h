@@ -9,6 +9,7 @@
 #include <iterator>
 #include <type_traits>
 #include <utility>
+
 #include "./Forward.h"
 
 // Coroutines are still experimental in clang libcpp, therefore adapt the
@@ -21,19 +22,20 @@ namespace ad_utility {
 namespace detail {
 struct ValueWasPushedTag {};
 struct NextValueTag {};
-}
+}  // namespace detail
 
 static constexpr detail::ValueWasPushedTag valueWasPushedTag;
 static constexpr detail::NextValueTag nextValueTag;
-template<typename ValueType, bool isConst = false>
+template <typename ValueType, bool isConst = false>
 class CoroToStateMachine {
   using value_type = std::remove_reference_t<ValueType>;
 
  public:
-
   struct promise_type {
-    using reference_type = std::conditional_t<isConst, const value_type&, value_type&>;
-    using pointer_type = std::conditional_t<isConst, const ValueType*, ValueType*>;
+    using reference_type =
+        std::conditional_t<isConst, const value_type&, value_type&>;
+    using pointer_type =
+        std::conditional_t<isConst, const ValueType*, ValueType*>;
 
     bool _isFinished = false;
 
@@ -41,21 +43,22 @@ class CoroToStateMachine {
     std::exception_ptr _exception;
 
     // Don't suspend at the beginning, such that everything before the first
-    // `co_await ValueWasPushed{}` is run eagerly and behaves like a "constructor".
-    constexpr std::suspend_never initial_suspend() noexcept {return {};}
+    // `co_await ValueWasPushed{}` is run eagerly and behaves like a
+    // "constructor".
+    constexpr std::suspend_never initial_suspend() noexcept { return {}; }
     // After the coroutine has finished we have no legal access to the promise
     // type, so we can as well destroy it.
-    constexpr std::suspend_always final_suspend() noexcept {return {};}
+    constexpr std::suspend_always final_suspend() noexcept { return {}; }
 
-    void unhandled_exception() {
-      _exception = std::current_exception();
-    }
+    void unhandled_exception() { _exception = std::current_exception(); }
     void return_void() {}
 
-    // Create the actual `CoroToStateMachine` object, which gets a `coroutine_handle` to access the `promise_type` object.
-    // Note: We only return a `coroutine_handle` here that will later be implicitly converted to a `CoroToStateMachine` object.
-    // This way, the exceptions that occur in the "constructor" part of the coroutine make the construction of the coroutine
-    // throw directly.
+    // Create the actual `CoroToStateMachine` object, which gets a
+    // `coroutine_handle` to access the `promise_type` object. Note: We only
+    // return a `coroutine_handle` here that will later be implicitly converted
+    // to a `CoroToStateMachine` object. This way, the exceptions that occur in
+    // the "constructor" part of the coroutine make the construction of the
+    // coroutine throw directly.
     std::coroutine_handle<promise_type> get_return_object() {
       return std::coroutine_handle<promise_type>::from_promise(*this);
     }
@@ -67,37 +70,36 @@ class CoroToStateMachine {
       }
     }
 
-    // `co_await valueWasPushedTag` suspends the coroutine. As soon as it resumes
-    // (either from a call to `push` or `finish`) either the next value is stored
-    // in the promise type (`push`), or `isFinished` is true (`finish`);
+    // `co_await valueWasPushedTag` suspends the coroutine. As soon as it
+    // resumes (either from a call to `push` or `finish`) either the next value
+    // is stored in the promise type (`push`), or `isFinished` is true
+    // (`finish`);
     struct ValueWasPushedAwaitable {
       promise_type* _promise_type;
-      bool await_ready() {return false;}
+      bool await_ready() { return false; }
       void await_suspend(std::coroutine_handle<>) {}
-      bool await_resume() {return !_promise_type->_isFinished;}
+      bool await_resume() { return !_promise_type->_isFinished; }
     };
 
-    // Transform the simple tags into an object that is aware of the `promise_type` that knows, which coroutine it belongs to.
+    // Transform the simple tags into an object that is aware of the
+    // `promise_type` that knows, which coroutine it belongs to.
     ValueWasPushedAwaitable await_transform(detail::ValueWasPushedTag) {
       return {this};
     }
 
-    // `co_await nextValueTag` immediately returns the next value from the promise.
+    // `co_await nextValueTag` immediately returns the next value from the
+    // promise.
     struct NextValueAwaitable {
       promise_type* _promise_type;
-      bool await_ready() {return true;}
+      bool await_ready() { return true; }
       void await_suspend(std::coroutine_handle<>) {}
-      reference_type await_resume() {return *_promise_type->_nextValue;}
+      reference_type await_resume() { return *_promise_type->_nextValue; }
     };
-    NextValueAwaitable await_transform(detail::NextValueTag) {
-      return {this};
-    }
-
+    NextValueAwaitable await_transform(detail::NextValueTag) { return {this}; }
   };
 
  private:
-  using Handle =
-  std::coroutine_handle<promise_type>;
+  using Handle = std::coroutine_handle<promise_type>;
   Handle _coro = nullptr;
   bool _isFinished = false;
 
@@ -111,20 +113,19 @@ class CoroToStateMachine {
   }
 
  public:
-
-  // Push the next value to the coroutine loop. Make the `co_await valueWasPushed` return true and store the next value that will be retrieved by `co_await nextValue`.Depending on the `isConst` parameter, `push` may either be called only with non-const (`isConst == false`) or const (`isConst == true`) references.
-  void push(value_type& value) requires(!isConst) {
-    pushImpl(AD_FWD(value));
-  }
-  void push(value_type&& value) requires(!isConst) {
-    pushImpl(AD_FWD(value));
-  }
+  // Push the next value to the coroutine loop. Make the `co_await
+  // valueWasPushed` return true and store the next value that will be retrieved
+  // by `co_await nextValue`.Depending on the `isConst` parameter, `push` may
+  // either be called only with non-const (`isConst == false`) or const
+  // (`isConst == true`) references.
+  void push(value_type& value) requires(!isConst) { pushImpl(AD_FWD(value)); }
+  void push(value_type&& value) requires(!isConst) { pushImpl(AD_FWD(value)); }
   void push(const value_type& value) requires(isConst) {
     pushImpl(AD_FWD(value));
   }
 
  private:
-  template<typename T>
+  template <typename T>
   void pushImpl(T&& value) {
     _coro.promise()._nextValue = std::addressof(value);
     _coro.resume();
@@ -132,9 +133,10 @@ class CoroToStateMachine {
       finish();
     }
   }
- public:
 
-  // Make `co_await valueWasPushed` return false, run the coroutine to completion and destroy it.
+ public:
+  // Make `co_await valueWasPushed` return false, run the coroutine to
+  // completion and destroy it.
   void finish() {
     if (_isFinished || !_coro) {
       return;
@@ -161,12 +163,10 @@ class CoroToStateMachine {
   CoroToStateMachine(CoroToStateMachine&& rhs) noexcept : _coro{rhs._coro} {
     rhs._coro = nullptr;
   }
-  void swap(CoroToStateMachine& rhs) noexcept {
-    std::swap(_coro, rhs._coro);
-  }
+  void swap(CoroToStateMachine& rhs) noexcept { std::swap(_coro, rhs._coro); }
   CoroToStateMachine& operator=(CoroToStateMachine rhs) {
     swap(rhs);
     return *this;
   }
 };
-}
+}  // namespace ad_utility

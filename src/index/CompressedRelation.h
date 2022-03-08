@@ -10,11 +10,11 @@
 
 #include "../global/Id.h"
 #include "../util/BufferedVector.h"
+#include "../util/CoroToStateMachine.h"
 #include "../util/File.h"
 #include "../util/Serializer/SerializeVector.h"
 #include "../util/Serializer/Serializer.h"
 #include "../util/Timer.h"
-#include "../util/CoroToStateMachine.h"
 
 // The meta data of a compressed block of ID triples in an index permutation.
 struct CompressedBlockMetaData {
@@ -164,7 +164,7 @@ class CompressedRelationWriter {
 
   /// Finish writing all relations which have previously been added, but might
   /// still be in some internal buffer.
-  //void finish() { writeBufferedRelationsToSingleBlock(); }
+  // void finish() { writeBufferedRelationsToSingleBlock(); }
 
   /// Get the complete CompressedRelationMetaData created by the calls to
   /// addRelation. This meta data is then deleted from the
@@ -187,26 +187,31 @@ class CompressedRelationWriter {
  public:
   ad_utility::CoroToStateMachine<std::array<Id, 3>> triplePusher();
   ad_utility::CoroToStateMachine<std::array<Id, 3>> switchedTriplePusher();
- private:
 
+ private:
   // A block of triples with the same first column.
   struct Block {
-    // Will the triples from this col0Id be written to multiple exclusive blocks.
-    // If false, then this is the only block for this col0Id that exists.
+    // Will the triples from this col0Id be written to multiple exclusive
+    // blocks. If false, then this is the only block for this col0Id that
+    // exists.
     bool _toExclusiveBlocks;
     Id _col0Id;
     std::vector<std::array<Id, 2>> _col1And2Ids;
   };
-  using BlockPusher =
-  ad_utility::CoroToStateMachine<Block> ;
+  using BlockPusher = ad_utility::CoroToStateMachine<Block>;
 
-  // Write `Block`s of triples of Ids with the same col0Id. On each call to `push()` the correct `offsetInBlock` for the corresponding `col0Id` will be written
+  // Write `Block`s of triples of Ids with the same col0Id. On each call to
+  // `push()` the correct `offsetInBlock` for the corresponding `col0Id` will be
+  // written
   CompressedRelationWriter::BlockPusher blockPusher(uint64_t& offsetInBlock);
 
-  // Takes tuples of `(col1Id, col2Id)`, aggregates them to `Block`s and call `blockPusher.push()` for each of those blocks.
-  ad_utility::CoroToStateMachine<std::array<Id, 2>> internalTriplePusher(Id col0Id, BlockPusher& blockPusher);
+  // Takes tuples of `(col1Id, col2Id)`, aggregates them to `Block`s and call
+  // `blockPusher.push()` for each of those blocks.
+  ad_utility::CoroToStateMachine<std::array<Id, 2>> internalTriplePusher(
+      Id col0Id, BlockPusher& blockPusher);
 
-  // Compress and write a block of `[col1Id, col2Id]` pairs to disk, and append the corresponding block meta data to `_blockBuffer`
+  // Compress and write a block of `[col1Id, col2Id]` pairs to disk, and append
+  // the corresponding block meta data to `_blockBuffer`
   void writeBlock(Id firstCol0Id, Id lastCol0Id,
                   const std::vector<std::array<Id, 2>>& data);
 };

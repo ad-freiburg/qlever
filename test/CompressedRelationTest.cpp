@@ -3,6 +3,7 @@
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
+
 #include "../src/index/CompressedRelation.h"
 
 TEST(CompressedRelation, Writer) {
@@ -24,7 +25,5 @@ TEST(CompressedRelation, Writer) {
     ASSERT_EQ(blocks.size(), 1);
   }
 
-
   ad_utility::deleteFile(filename);
 }
-
