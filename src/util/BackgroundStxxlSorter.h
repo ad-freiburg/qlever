@@ -98,9 +98,10 @@ class BackgroundStxxlSorter {
   /// Transition from the input phase, where `push()` may be called, to the
   /// output phase and return a generator that yields the sorted elements. This
   /// function may be called exactly once.
-  [[nodiscard]] cppcoro::generator<value_type> sortedView() {
+  template <bool useBlocks = false>
+  [[nodiscard]] auto sortedView() {
     setupSort();
-    return bufferedAsyncView(outputGeneratorImpl(), _numElementsInRun);
+    return bufferedAsyncView<useBlocks>(outputGeneratorImpl(), _numElementsInRun);
   }
 
  private:
