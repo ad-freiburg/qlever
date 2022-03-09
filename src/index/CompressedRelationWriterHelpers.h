@@ -160,7 +160,7 @@ struct BlockPusherT {
   WriteBlock _writeBlock;
   explicit BlockPusherT(WriteBlock writeBlock): _writeBlock(std::move(writeBlock)) {}
 
-  void push(Block nextBlock) {
+  void push(const Block& nextBlock) {
     if (nextBlock._writeToExclusiveBlocks) {
       _writeBlock(col0FirstId, col0LastId, secondAndThirdColumn);
       secondAndThirdColumn.clear();
@@ -200,13 +200,12 @@ struct BlockPusherT {
 
 template<typename BlockPusher>
 struct InternalTriplePusher{
-  Id _col0Id;
   BlockPusher* _blockPusher;
-  std::vector<std::array<Id, 2>> secondAndThirdColumn;
-  bool hasExclusiveBlocks = false;
+  Block block;
   bool _isFinished = false;
   static constexpr auto blocksize = BLOCKSIZE_COMPRESSED_METADATA / (2 * sizeof(Id));
-  InternalTriplePusher(Id col0Id, BlockPusher& blockPusher) : _col0Id{col0Id}, _blockPusher(&blockPusher) {
+  InternalTriplePusher(Id col0Id, BlockPusher& blockPusher) : _blockPusher(&blockPusher) {
+
     secondAndThirdColumn.reserve(blocksize);
   }
 
@@ -219,6 +218,7 @@ struct InternalTriplePusher{
       secondAndThirdColumn.reserve(blocksize);
     }
   }
+
 
 
   void finish() {
@@ -272,6 +272,12 @@ struct TriplePusher {
     _metaDataBuffer.push_back(metaData);
   }
 
+  void push(std::vector<std::array<Id, 3>> triples) {
+    for (auto triple : triples) {
+      push(triples);
+    }
+  }
+
   void push(std::array<Id, 3> triple) {
     if (!currentC0.has_value()) {
       currentC0 = triple[0];
@@ -318,15 +324,15 @@ struct TriplePusher {
 template <typename TriplePusher>
 struct PermutingTriplePusher {
 
-  using T = std::array<Id, 2>;
+  using T = std::array<Id, 3>;
   struct Compare : public std::less<> {
     static T max_value() {
       static constexpr auto max = std::numeric_limits<Id>::max();
-      return {max, max};
+      return {max, max, max};
     }
     static T min_value() {
       static constexpr auto min = std::numeric_limits<Id>::min();
-      return {min, min};
+      return {min, min, min};
     }
   };
 
@@ -342,8 +348,8 @@ struct PermutingTriplePusher {
       _currentC0 = triple[0];
     }
     if (triple[0] != _currentC0) {
-      for (const auto [a, b] : sorter.sortedView()) {
-        _permutedTriplePusher.push({_currentC0.value(), a, b});
+      for (auto& block : sorter.template sortedView<true>()) {
+        _permutedTriplePusher.push(std::move(block));
       }
       sorter.clear();
       _currentC0 = triple[0];
@@ -356,8 +362,8 @@ struct PermutingTriplePusher {
       return;
     }
     _isFinished = true;
-    for (const auto [a, b] : sorter.sortedView()) {
-      _permutedTriplePusher.push({_currentC0.value(), a, b});
+    for (auto& block : sorter.template sortedView<true>()) {
+      _permutedTriplePusher.push(std::move(block));
     }
   }
   ~PermutingTriplePusher() {

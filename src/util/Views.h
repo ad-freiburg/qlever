@@ -11,12 +11,14 @@
 
 namespace ad_utility {
 
+template <typename View, bool useBlocks>
+using ViewReturnType = std::conditional_t<useBlocks, std::vector<typename View::value_type>, typename View::value_type>;
 /// Takes a input-iterable and yields the elements of that view (no visible
 /// effect). The iteration over the input view is done on a separate thread with
 /// a buffer size of `blockSize`. This might speed up the computation when the
 /// values of the input view are expensive to compute.
-template <typename View>
-cppcoro::generator<typename View::value_type> bufferedAsyncView(
+template <typename View, bool useBlocks = false>
+cppcoro::generator<ViewReturnType<View, useBlocks>> bufferedAsyncView(
     View view, uint64_t blockSize) {
   using value_type = typename View::value_type;
   auto it = view.begin();
@@ -36,8 +38,12 @@ cppcoro::generator<typename View::value_type> bufferedAsyncView(
   auto block = getNextBlock();
   auto future = std::async(std::launch::async, getNextBlock);
   while (true) {
-    for (auto& element : block) {
-      co_yield element;
+    if constexpr (useBlocks) {
+      co_yield block;
+    } else {
+      for (auto& element : block) {
+        co_yield element;
+      }
     }
     block = future.get();
     if (block.empty()) {
