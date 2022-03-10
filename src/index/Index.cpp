@@ -477,28 +477,56 @@ Index::createPermutationPairImpl(const string& fileName1,
   auto pusher1 = writer1.makeTriplePusher();
   auto pusher2 = writer2.permutingTriplePusher();
 
-  auto addMetadata = [&]() {
-    for (const auto& md : writer1.getFinishedMetaData()) {
-      metaData1.add(md);
-    }
-    for (const auto& md : writer2.getFinishedMetaData()) {
-      metaData2.add(md);
+  auto addMetaSingle = [](auto& writer, auto& metaTarget) {
+    auto meta = writer.getFinishedMetaData();
+    auto blocks = writer.getFinishedBlockOffsets();
+    AD_CHECK(meta.size() == blocks.size());
+    for (size_t i = 0; i < meta.size(); ++i) {
+      meta[i]._offsetInBlock = blocks[i];
+      metaTarget.add(meta[i]);
     }
   };
+
+  auto addMetadata = [&]() {
+    addMetaSingle(writer1, metaData1);
+    addMetaSingle(writer2, metaData2);
+  };
+
+  using T = std::array<Id, 3>;
+  std::vector<T> buffer1;
+  std::vector<T> buffer2;
+  constexpr static uint64_t blocksize = 1'000'000;
+  buffer1.reserve(blocksize);
+  buffer2.reserve(blocksize);
 
   LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
   size_t i = 0;
   for (auto triple : sortedTriples) {
     // Call each of the `perTripleCallbacks` for the current triple
     (..., perTripleCallbacks(triple));
-    pusher1.push({triple[c0], triple[c1], triple[c2]});
-    pusher2.push({triple[c0], triple[c2], triple[c1]});
+    buffer1.push_back({triple[c0], triple[c1], triple[c2]});
+    buffer2.push_back({triple[c0], triple[c2], triple[c1]});
 
+    if (buffer1.size() >= blocksize) {
+      pusher1.push(std::move(buffer1));
+      pusher2.push(std::move(buffer2));
+      buffer1.clear();
+      buffer2.clear();
+      buffer1.reserve(blocksize);
+      buffer2.reserve(blocksize);
+    }
+
+    // TODO<joka921> solve this differently, it is currently not threadsafe.
+    /*
     if (i % 1 << 20 == 0) {
       addMetadata();
     }
     ++i;
+     */
   }
+
+  pusher1.push(std::move(buffer1));
+  pusher2.push(std::move(buffer2));
 
   pusher1.finish();
   pusher2.finish();

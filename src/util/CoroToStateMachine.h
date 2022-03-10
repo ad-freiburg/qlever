@@ -9,6 +9,7 @@
 #include <iterator>
 #include <type_traits>
 #include <utility>
+#include <future>
 
 #include "./Forward.h"
 
@@ -39,7 +40,7 @@ class CoroToStateMachine {
 
     bool _isFinished = false;
 
-    pointer_type _nextValue;
+    value_type _nextValue;
     std::exception_ptr _exception;
 
     // Don't suspend at the beginning, such that everything before the first
@@ -95,7 +96,7 @@ class CoroToStateMachine {
       promise_type* _promise_type;
       bool await_ready() { return true; }
       void await_suspend(std::coroutine_handle<>) {}
-      reference_type await_resume() { return *_promise_type->_nextValue; }
+      reference_type await_resume() { return _promise_type->_nextValue; }
     };
     NextValueAwaitable await_transform(detail::NextValueTag) { return {this}; }
   };
@@ -104,6 +105,9 @@ class CoroToStateMachine {
   using Handle = std::coroutine_handle<promise_type>;
   Handle _coro = nullptr;
   bool _isFinished = false;
+
+  std::future<void> _pushFuture;
+  std::mutex _pushMutex;
 
  public:
   // Constructor that gets a handle to the coroutine frame.
@@ -129,11 +133,27 @@ class CoroToStateMachine {
  private:
   template <typename T>
   void pushImpl(T&& value) {
-    _coro.promise()._nextValue = std::addressof(value);
-    _coro.resume();
-    if (_coro.done()) {
-      finish();
+    std::lock_guard l{_pushMutex};
+    if (_pushFuture.valid()) {
+      _pushFuture.get();
     }
+    _coro.promise()._nextValue = AD_FWD(value);
+    _coro.promise()._isFinished = false;
+    _pushFuture = std::async(std::launch::async, [this] {
+      //if (_coro && ! _coro.done()) {
+      assert(_coro);
+      assert(!_coro.done());
+        _coro.resume();
+      //}
+        assert(!_coro.done());
+
+      /*
+      if (coro.done()) {
+        // TODO<joka921> let this work also when using the future.
+        //finish();
+      }
+       */
+});
   }
 
  public:
@@ -141,6 +161,11 @@ class CoroToStateMachine {
   // `co_await valueWasPushed` returns false such that the coroutine runs to
   // completion.
   void finish() {
+    std::lock_guard l{_pushMutex};
+    if (_pushFuture.valid()) {
+      _pushFuture.get();
+    }
+
     if (_isFinished || !_coro) {
       return;
     }

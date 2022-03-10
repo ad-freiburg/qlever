@@ -17,7 +17,7 @@ using ViewReturnType = std::conditional_t<useBlocks, std::vector<typename View::
 /// effect). The iteration over the input view is done on a separate thread with
 /// a buffer size of `blockSize`. This might speed up the computation when the
 /// values of the input view are expensive to compute.
-template <typename View, bool useBlocks = false>
+template <bool useBlocks = false, typename View>
 cppcoro::generator<ViewReturnType<View, useBlocks>> bufferedAsyncView(
     View view, uint64_t blockSize) {
   using value_type = typename View::value_type;

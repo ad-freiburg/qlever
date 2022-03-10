@@ -12,10 +12,13 @@ TEST(CompressedRelation, Writer) {
   {
     CompressedRelationWriter writer(ad_utility::File{filename, "w"});
     auto pusher = writer.makeTriplePusher();
-    pusher.push({1, 10, 20});
-    pusher.push({1, 10, 21});
-    pusher.push({1, 11, 20});
-    pusher.push({2, 10, 22});
+    std::vector<std::array<Id, 3>> v;
+
+    v.push_back({1, 10, 20});
+    v.push_back({1, 10, 21});
+    v.push_back({1, 11, 20});
+    v.push_back({2, 10, 22});
+    pusher.push(v);
     pusher.finish();
 
     auto metaData = writer.getFinishedMetaData();
