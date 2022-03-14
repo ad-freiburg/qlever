@@ -69,16 +69,19 @@ class Operation {
 
   // Get a unique, not ambiguous string representation for a subtree.
   // This should possible act like an ID for each subtree.
+  // Calls  `asStringImpl` and adds the information about the `LIMIT` clause.
   virtual string asString(size_t indent = 0) const final {
     auto result = asStringImpl(indent);
     if (supportsLimit() && _limit.has_value()) {
       result +=
-          " LIMIT (directly from operation) " + std::to_string(_limit.value());
+          " LIMIT (as part of operation) " + std::to_string(_limit.value());
     }
     return result;
   }
 
  protected:
+  // The individual implementation of `asString` (see above) that has to be
+  // customized by every child class.
   virtual string asStringImpl(size_t indent = 0) const = 0;
 
  public:
@@ -214,11 +217,11 @@ class Operation {
         resultAndCacheStatus._resultPointer->_runtimeInfo.getOperationTime());
   }
 
-  // recursively call a function on all children
+  // Recursively call a function on all children.
   template <typename F>
   void forAllDescendants(F f);
 
-  // recursively call a function on all children
+  // Recursively call a function on all children.
   template <typename F>
   void forAllDescendants(F f) const;
 
@@ -227,10 +230,10 @@ class Operation {
 
   bool _hasComputedSortColumns;
 
-  /// collect all the warnings that were created during the creation or
-  /// execution of this operation
+  /// Collect all the warnings that were created during the creation or
+  /// execution of this operation.
   std::vector<std::string> _warnings;
 
-  /// The
+  /// The limit from a SPARQL `LIMIT` clause.
   std::optional<uint64_t> _limit;
 };
