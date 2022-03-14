@@ -32,15 +32,19 @@ class BufferedVector {
 
   // standard iterator functions, each in a const and non-const version
   // begin
-  T* begin() { return _isInternal ? _vec.data() : _extVec.begin(); }
-  T* data() { return _isInternal ? _vec.data() : _extVec.begin(); }
-  const T* begin() const { return _isInternal ? _vec.data() : _extVec.begin(); }
-  const T* data() const { return _isInternal ? _vec.data() : _extVec.begin(); }
+  T* begin() { return _isInternal ? _vec.data() : _extVec.data(); }
+  T* data() { return _isInternal ? _vec.data() : _extVec.data(); }
+  const T* begin() const { return _isInternal ? _vec.data() : _extVec.data(); }
+  const T* data() const { return _isInternal ? _vec.data() : _extVec.data(); }
 
   // end
-  T* end() { return _isInternal ? _vec.data() + _vec.size() : _extVec.end(); }
+  T* end() {
+    return _isInternal ? _vec.data() + _vec.size()
+                       : _extVec.data() + _extVec.size();
+  }
   const T* end() const {
-    return _isInternal ? _vec.data() + _vec.size() : _extVec.end();
+    return _isInternal ? _vec.data() + _vec.size()
+                       : _extVec.data() + _extVec.size();
   }
 
   // cbegin and cend

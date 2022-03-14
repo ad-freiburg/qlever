@@ -10,6 +10,7 @@
 #include <string>
 
 #include "../util/Exception.h"
+#include "../util/Iterators.h"
 #include "File.h"
 
 using std::string;
@@ -71,8 +72,12 @@ enum class AccessPattern { None, Random, Sequential };
 template <class T>
 class MmapVector {
  public:
-  using const_iterator = const T*;
-  using iterator = T*;
+  using iterator =
+      ad_utility::IteratorForAccessOperator<MmapVector,
+                                            AccessViaBracketOperator, false>;
+  using const_iterator =
+      ad_utility::IteratorForAccessOperator<MmapVector,
+                                            AccessViaBracketOperator, true>;
   using value_type = T;
 
   // __________________________________________________________________
@@ -83,16 +88,16 @@ class MmapVector {
 
   // standard iterator functions, each in a const and non-const version
   // begin
-  T* begin() { return _ptr; }
+  iterator begin() { return {this, 0}; }
   T* data() { return _ptr; }
-  const T* begin() const { return _ptr; }
+  const_iterator begin() const { return {this, 0}; }
   const T* data() const { return _ptr; }
   // end
-  T* end() { return _ptr + _size; }
-  const T* end() const { return _ptr + _size; }
+  iterator end() { return {this, _size}; }
+  const_iterator end() const { return {this, _size}; }
   // cbegin and cend
-  const T* cbegin() const { return _ptr; }
-  const T* cend() const { return _ptr + _size; }
+  const_iterator cbegin() const { return {this, 0}; }
+  const_iterator cend() const { return {this, _size}; }
 
   // Element access
   // without bounds checking
@@ -284,13 +289,14 @@ template <class T>
 class MmapVectorView : private MmapVector<T> {
  public:
   using value_type = T;
-  using const_iterator = const T*;
-  using iterator = T*;
+  using const_iterator = typename MmapVector<T>::const_iterator;
+  using iterator = typename MmapVector<T>::iterator;
   // const access and iteration methods, directly map to the MmapVector-Variants
-  const T* begin() const { return MmapVector<T>::begin(); }
-  const T* end() const { return MmapVector<T>::end(); }
-  const T* cbegin() const { return MmapVector<T>::cbegin(); }
-  const T* cend() const { return MmapVector<T>::cend(); }
+  const_iterator begin() const { return MmapVector<T>::begin(); }
+  const T* data() const { return MmapVector<T>::data(); }
+  const_iterator end() const { return MmapVector<T>::end(); }
+  const_iterator cbegin() const { return MmapVector<T>::cbegin(); }
+  const_iterator cend() const { return MmapVector<T>::cend(); }
   const T& operator[](size_t idx) const {
     return MmapVector<T>::operator[](idx);
   }

@@ -23,6 +23,27 @@ TEST_P(ContentEncodingHelperFixture, HeaderIsNotSetCorrectly) {
   ASSERT_EQ(header[http::field::content_encoding], headerValue);
 }
 
+TEST(ContentEncodingHelper, TestHeadersAreInsertedCorrectly) {
+  http::header<false, http::fields> header;
+  setContentEncodingHeaderForCompressionMethod(CompressionMethod::GZIP, header);
+  setContentEncodingHeaderForCompressionMethod(CompressionMethod::DEFLATE,
+                                               header);
+  setContentEncodingHeaderForCompressionMethod(CompressionMethod::DEFLATE,
+                                               header);
+
+  auto [current, end] = header.equal_range(http::field::content_encoding);
+  ASSERT_NE(current, end);
+  ASSERT_EQ(current->value(), "gzip");
+  current++;
+  ASSERT_NE(current, end);
+  ASSERT_EQ(current->value(), "deflate");
+  current++;
+  ASSERT_NE(current, end);
+  ASSERT_EQ(current->value(), "deflate");
+  current++;
+  ASSERT_EQ(current, end);
+}
+
 auto getValuePairsForHeaderTest() {
   return ::testing::Values(
       // empty string_view means no such header is present
@@ -61,6 +82,15 @@ TEST(ContentEncodingHelper, DeflateHeaderIsIndentifiedCorrectly) {
 TEST(ContentEncodingHelper, DeflateHeaderIsPreferredOverGzip) {
   http::request<http::string_body> request;
   request.set(http::field::accept_encoding, "gzip, deflate");
+  auto result = getCompressionMethodForRequest(request);
+
+  ASSERT_EQ(result, CompressionMethod::DEFLATE);
+}
+
+TEST(ContentEncodingHelper, DeflateHeaderIsPreferredOverGzipOnMultipleHeaders) {
+  http::request<http::string_body> request;
+  request.insert(http::field::accept_encoding, "gzip");
+  request.insert(http::field::accept_encoding, "deflate");
   auto result = getCompressionMethodForRequest(request);
 
   ASSERT_EQ(result, CompressionMethod::DEFLATE);

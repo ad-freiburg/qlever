@@ -133,9 +133,9 @@ addLinkAndDiscoverTest(TypeTraitsTest)
 
 addLinkAndDiscoverTest(SparqlExpressionTest sparqlExpressions index)
 
-addLinkAndDiscoverTest(StreamableBodyTest engine)
+addLinkAndDiscoverTest(StreamableBodyTest)
 
-addLinkAndDiscoverTest(StreamableGeneratorTest engine)
+addLinkAndDiscoverTest(StreamableGeneratorTest)
 
 addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
@@ -145,7 +145,7 @@ addLinkAndDiscoverTest(CompactStringVectorTest)
 
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
-addLinkAndDiscoverTest(ContentEncodingHelperTest)
+addLinkAndDiscoverTest(ContentEncodingHelperTest absl::strings)
 
 addLinkAndDiscoverTest(VocabularyInMemoryTest vocabulary)
 
@@ -164,6 +164,18 @@ addLinkAndDiscoverTest(VocabularyOnDiskTest index)
 addLinkAndDiscoverTest(VocabularyTest index)
 
 addLinkAndDiscoverTest(IteratorTest)
+
+addLinkAndDiscoverTest(PatternCreatorTest index)
+
+addLinkAndDiscoverTest(BackgroundStxxlSorterTest ${STXXL_LIBRARIES})
+
+addLinkAndDiscoverTest(ViewsTest)
+
+addLinkAndDiscoverTest(ForwardTest)
+
+addLinkAndDiscoverTest(CompressorStreamTest engine)
+
+addLinkAndDiscoverTest(AsyncStreamTest)
 
 addLinkAndDiscoverTest(DatatypesTest)
 

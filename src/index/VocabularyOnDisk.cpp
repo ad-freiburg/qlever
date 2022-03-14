@@ -116,9 +116,9 @@ void VocabularyOnDisk::buildFromTextFile(const string& textFileName,
     uint64_t index = 0;
     while (std::getline(infile, word)) {
       // The temporary file for the to-be-externalized vocabulary strings is
-      // line-based, just like the normal vocabulary file. Therefore, \n and \
-      // are escaped there. When we read from this file, we have to unescape
-      // these.
+      // line-based, just like the normal vocabulary file. Therefore, newlines
+      // and backslashes are escaped there. When we read from this file, we have
+      // to unescape these.
       word = RdfEscaping::unescapeNewlinesAndBackslashes(word);
       co_yield std::pair{std::string_view{word}, index};
       index++;

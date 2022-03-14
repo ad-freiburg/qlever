@@ -55,11 +55,11 @@ class File {
     open(filename, mode);
   }
 
-  // TODO<joka921> This copies non-owning pointer semantics which is really
-  // dangerous. This operator should be deleted.
-  File& operator=(const File&) = default;
-
   File& operator=(File&& rhs) noexcept {
+    if (isOpen()) {
+      close();
+    }
+
     _file = rhs._file;
     rhs._file = nullptr;
     _name = std::move(rhs._name);
@@ -68,15 +68,6 @@ class File {
 
   File(File&& rhs) : _name{std::move(rhs._name)}, _file{rhs._file} {
     rhs._file = nullptr;
-  }
-
-  // TODO<joka921> should also be deleted!
-  //! Copy constructor.
-  //! Does not copy the file in the file system!
-  File(const File& orig) {
-    _name = orig._name;
-    open(_name.c_str(), "r");
-    assert(_file);
   }
 
   //! Destructor closes file if still open
