@@ -8,6 +8,7 @@
 #include <cstring>
 #include <string>
 #include <string_view>
+#include <exception>
 
 namespace ad_utility {
 /// A String/character array that can be constructed at compile time. It can

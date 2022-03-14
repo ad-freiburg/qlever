@@ -8,6 +8,7 @@
 #include <tuple>
 #include <utility>
 #include <variant>
+#include <vector>
 
 namespace ad_utility {
 

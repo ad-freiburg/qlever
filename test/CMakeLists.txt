@@ -180,3 +180,5 @@ addLinkAndDiscoverTest(AsyncStreamTest)
 addLinkAndDiscoverTest(DatatypesTest)
 
 addLinkAndDiscoverTest(BitUtilsTest)
+
+addLinkAndDiscoverTest(BoundedIntegerTest)

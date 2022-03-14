@@ -9,6 +9,7 @@
 
 #include "../../src/engine/datatypes/Datatypes.h"
 
+using namespace ad_utility;
 using namespace ad_utility::datatypes;
 static auto print = [](auto d) {
   auto b = std::bit_cast<std::bitset<64>>(d);
@@ -17,14 +18,14 @@ static auto print = [](auto d) {
 
 TEST(FancyId, Double) {
   auto test = [](double d, bool testExact = false) {
-    auto result = FancyId::Double(d).getDoubleUnchecked();
+    auto result = NBitInteger::Double(d).getDoubleUnchecked();
 
     if (std::isnan(d)) {
       ASSERT_TRUE(std::isnan(result));
     } else if (testExact) {
-      ASSERT_EQ(d, FancyId::Double(d).getDoubleUnchecked());
+      ASSERT_EQ(d, NBitInteger::Double(d).getDoubleUnchecked());
     } else {
-      ASSERT_FLOAT_EQ(d, FancyId::Double(d).getDoubleUnchecked());
+      ASSERT_FLOAT_EQ(d, NBitInteger::Double(d).getDoubleUnchecked());
     }
   };
 
@@ -55,7 +56,7 @@ TEST(FancyId, Double) {
 
 TEST(FancyId, Int) {
   auto inOut = [](int64_t i) {
-    return FancyId::Integer(i).getIntegerUnchecked();
+    return NBitInteger::Integer(i).getIntegerUnchecked();
   };
 
   auto testEq = [&](int64_t i) { ASSERT_EQ(i, inOut(i)); };

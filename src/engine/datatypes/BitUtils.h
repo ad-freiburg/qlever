@@ -8,7 +8,6 @@
 #include <cmath>
 #include <exception>
 
-#include "../../util/ConstexprSmallString.h"
 #include "../../util/Exception.h"
 #include "../../util/TypeTraits.h"
 
