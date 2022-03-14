@@ -67,7 +67,8 @@ struct IndexBuilderDataBase {
 // All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
 // triples.
 struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
-  using TripleVec = stxxl::vector<array<Id, 3>>;
+  using TripleVec = stxxl::vector<array<Id, 3>, 4, stxxl::lru_pager<8>,2162688>;
+  //using TripleVec = stxxl::vector<array<Id, 3>>;
   // All the triples as Ids.
   std::unique_ptr<TripleVec> idTriples;
   // The number of triples for each partial vocabulary. This also depends on the
@@ -94,7 +95,7 @@ class TurtleParserAuto {};
 
 class Index {
  public:
-  using TripleVec = stxxl::vector<array<Id, 3>>;
+  using TripleVec = stxxl::vector<array<Id, 3>, 4, stxxl::lru_pager<8>,2162688>;
   // Block Id, Context Id, Word Id, Score, entity
   using TextVec = stxxl::vector<tuple<Id, Id, Id, Score, bool>>;
   using Posting = std::tuple<Id, Id, Score>;

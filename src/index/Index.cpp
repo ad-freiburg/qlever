@@ -12,6 +12,7 @@
 #include <stxxl/algorithm>
 #include <stxxl/map>
 #include <unordered_map>
+#include <foxxll//io/syscall_file.hpp>
 
 #include "../parser/ParallelParseBuffer.h"
 #include "../parser/TsvParser.h"
@@ -34,6 +35,7 @@ Index::Index() : _usePatterns(false) {}
 template <class Parser>
 IndexBuilderDataAsPsoSorter Index::createIdTriplesAndVocab(
     const string& ntFile) {
+#if false
   auto indexBuilderData =
       passFileForVocabulary<Parser>(ntFile, _numTriplesPerBatch);
   // first save the total number of words, this is needed to initialize the
@@ -54,11 +56,20 @@ IndexBuilderDataAsPsoSorter Index::createIdTriplesAndVocab(
   // used from now on). This will preserve information about externalized
   // Prefixes etc.
   _vocab.clear();
+
+  ad_utility::serialization::FileWriteSerializer w{_onDiskBase + ".actualPartialSizes"};
+  w << indexBuilderData.actualPartialSizes;
+  w.close();
+#endif
+  std::vector<size_t> actualPartialSizes;
+  ad_utility::serialization::FileReadSerializer w{_onDiskBase + ".actualPartialSizes"};
+  w >> actualPartialSizes;
+  std::unique_ptr<TripleVec> idTriples(new TripleVec(foxxll::file_ptr{new foxxll::syscall_file{_onDiskBase + ".localTriples.stxxl", foxxll::file::RDONLY}}));
   auto psoSorter = convertPartialToGlobalIds(
-      *indexBuilderData.idTriples, indexBuilderData.actualPartialSizes,
+      *idTriples, actualPartialSizes,
       NUM_TRIPLES_PER_PARTIAL_VOCAB);
 
-  return {indexBuilderData, std::move(psoSorter)};
+  return {IndexBuilderDataBase{}, std::move(psoSorter)};
 }
 namespace {
 // Return a lambda that takes a triple of IDs and returns true iff the predicate
@@ -114,6 +125,7 @@ void Index::createFromFile(const string& filename) {
     indexBuilderData = createIdTriplesAndVocab<Parser>(filename);
   }
 
+  /*
   // If we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
   // hurt.
@@ -154,6 +166,7 @@ void Index::createFromFile(const string& filename) {
               << ". Terminating..." << std::endl;
     AD_CHECK(false);
   }
+*/
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.
@@ -228,9 +241,16 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
     const string& filename, size_t linesPerPartial) {
   LOG(INFO) << "Processing input triples from " << filename << " ..."
             << std::endl;
-  auto parser = std::make_shared<Parser>(filename);
-  std::unique_ptr<TripleVec> idTriples(new TripleVec());
+  LOG(INFO) << "Setup filePtr" << std::endl;
+  //auto filePtr = foxxll::file_ptr{new foxxll::syscall_file{_onDiskBase + ".localTriples.stxxl", foxxll::file::TRUNC | foxxll::file::RDWR | foxxll::file::CREAT}};
+  LOG(INFO) << "Setup stxxlVector" << std::endl;
+  std::unique_ptr<TripleVec> idTriples(new TripleVec(foxxll::file_ptr{new foxxll::syscall_file{_onDiskBase + ".localTriples.stxxl", foxxll::file::TRUNC | foxxll::file::RDWR | foxxll::file::CREAT}}));
+  //std::unique_ptr<TripleVec> idTriples(new TripleVec());
+  LOG(INFO) << "Setup wirter" << std::endl;
   ad_utility::Synchronized<TripleVec::bufwriter_type> writer(*idTriples);
+  LOG(INFO) << "Done" << std::endl;
+
+  auto parser = std::make_shared<Parser>(filename);
   bool parserExhausted = false;
 
   size_t i = 0;
@@ -281,7 +301,8 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
             localWriter.push_back(innerOpt.value());
           }
         }
-        if (i % 100'000'000 == 0) {
+        //if (i % 100'000'000 == 0) {
+        if (i % 100'000 == 0) {
           LOG(INFO) << "Input triples processed: " << i << std::endl;
         }
       }
@@ -425,7 +446,7 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
     LOG(DEBUG) << "Reading ID map from: " << mmapFilename << std::endl;
     ad_utility::HashMap<Id, Id> idMap = IdMapFromPartialIdMapFile(mmapFilename);
     // Delete the temporary file in which we stored this map
-    deleteTemporaryFile(mmapFilename);
+    //deleteTemporaryFile(mmapFilename);
 
     // update the triples for which this partial vocabulary was responsible
     for (size_t tmpNum = 0; tmpNum < actualLinesPerPartial[partialNum];
@@ -475,7 +496,9 @@ Index::createPermutationPairImpl(const string& fileName1,
   CompressedRelationWriter writer1{ad_utility::File(fileName1, "w")};
   CompressedRelationWriter writer2{ad_utility::File(fileName2, "w")};
   auto pusher1 = writer1.makeTriplePusher();
+  pusher1.setName("unswitchedTriplePusher");
   auto pusher2 = writer2.permutingTriplePusher();
+  pusher2.setName("switchedTriplePusher");
 
   auto addMetaSingle = [](auto& writer, auto& metaTarget) {
     auto meta = writer.getFinishedMetaData();
@@ -500,7 +523,7 @@ Index::createPermutationPairImpl(const string& fileName1,
   buffer2.reserve(blocksize);
 
   LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
-  size_t i = 0;
+  //size_t i = 0;
   for (auto triple : sortedTriples) {
     // Call each of the `perTripleCallbacks` for the current triple
     (..., perTripleCallbacks(triple));
@@ -531,7 +554,9 @@ Index::createPermutationPairImpl(const string& fileName1,
   pusher1.finish();
   pusher2.finish();
 
+  LOG(INFO) << "Combining metadata and block offsets" << std::endl;
   addMetadata();
+  LOG(INFO) << "Done" << std::endl;
 
   metaData1.blockData() = writer1.getFinishedBlocks();
   metaData2.blockData() = writer2.getFinishedBlocks();

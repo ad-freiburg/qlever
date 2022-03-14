@@ -11,6 +11,8 @@
 #include <utility>
 #include <future>
 
+#include "./ThreadSafeQueue.h"
+
 #include "./Forward.h"
 
 // Coroutines are still experimental in clang libcpp, therefore adapt the
@@ -105,6 +107,8 @@ class CoroToStateMachine {
   using Handle = std::coroutine_handle<promise_type>;
   Handle _coro = nullptr;
   bool _isFinished = false;
+  std::string _name = "UnnamedCoroToStateMachine";
+  ad_utility::Synchronized<ad_utility::Timer> _pushTimer;
 
   std::future<void> _pushFuture;
   std::mutex _pushMutex;
@@ -133,6 +137,7 @@ class CoroToStateMachine {
  private:
   template <typename T>
   void pushImpl(T&& value) {
+    _pushTimer.wlock()->cont();
     std::lock_guard l{_pushMutex};
     if (_pushFuture.valid()) {
       _pushFuture.get();
@@ -153,7 +158,9 @@ class CoroToStateMachine {
         //finish();
       }
        */
+
 });
+    _pushTimer.wlock()->stop();
   }
 
  public:
@@ -161,6 +168,7 @@ class CoroToStateMachine {
   // `co_await valueWasPushed` returns false such that the coroutine runs to
   // completion.
   void finish() {
+    _pushTimer.wlock()->cont();
     std::lock_guard l{_pushMutex};
     if (_pushFuture.valid()) {
       _pushFuture.get();
@@ -175,7 +183,13 @@ class CoroToStateMachine {
       _coro.resume();
     }
     assert(_coro.done());
+    _pushTimer.wlock()->stop();
+    LOG(INFO) << "Coro to state machine " << _name << " waited for " << _pushTimer.wlock()->msecs() << "ms" << std::endl;
     _coro.promise().rethrow_if_exception();
+  }
+
+  void setName(std::string name)  {
+    _name = std::move(name);
   }
 
   // The destructor implicitly calls `finish` if it hasn't been called explicitly before.

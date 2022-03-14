@@ -12,6 +12,7 @@
 #include "../util/TypeTraits.h"
 #include "./Permutations.h"
 #include "ConstantsIndexBuilding.h"
+#include <execution>
 
 using namespace std::chrono_literals;
 
@@ -473,7 +474,7 @@ CompressedRelationWriter::internalTriplePusher(
   const auto& firstTriple = firstTriples[0];
   auto currentC0 = firstTriple[0];
   do {
-    auto triples = co_await ad_utility::nextValueTag;
+    auto& triples = co_await ad_utility::nextValueTag;
     for (auto& triple : triples) {
       if (triple[0] != currentC0) {
         auto previousC0 = currentC0;
@@ -505,6 +506,7 @@ CompressedRelationWriter::makeTriplePusher() {
   size_t distinctC1 = 1;
   size_t sizeOfRelation = 0;
   auto tripleStore = internalTriplePusher();
+  tripleStore.setName("internalTriplePusher");
 
   auto pushMetadata = [this](Id col0Id, uint64_t sizeOfRelation,
                              uint64_t numDistinctCol1) {
@@ -555,8 +557,10 @@ CompressedRelationWriter::permutingTriplePusher() {
     }
   };
 
+  //sorter.reserve(100'000'000);
   ad_utility::BackgroundStxxlSorter<T, Compare> sorter(
       1 << 30);
+  //stxxl::sorter<T, Compare> sorter(Compare{}, 1<<30);
 
   if (!co_await ad_utility::valueWasPushedTag) {
     // empty permutation
@@ -566,20 +570,47 @@ CompressedRelationWriter::permutingTriplePusher() {
 
   auto currentC0 = firstTriples[0][0];
   auto permutedTriplePusher = makeTriplePusher();
+  permutedTriplePusher.setName("permutedTriplePusher");
+  const uint64_t blocksize = 1'000'000;
+  std::vector<T> blockBuffer;
+  blockBuffer.reserve(2 * blocksize);
   do {
     auto triples = co_await ad_utility::nextValueTag;
     for (auto triple : triples) {
       if (triple[0] != currentC0) {
+        //std::sort(sorter.begin(), sorter.end(), Compare{});
+        //auto& block = sorter;
         for (auto& block  : sorter.template sortedView<true>()) {
-          permutedTriplePusher.push(std::move(block));
+          if (block.size() < blocksize) {
+            blockBuffer.insert(blockBuffer.end(), block.begin(), block.end());
+            if (blockBuffer.size() >= blocksize) {
+              permutedTriplePusher.push(std::move(blockBuffer));
+              blockBuffer.clear();
+              blockBuffer.reserve(2 * blocksize);
+            }
+          } else {
+              if (!blockBuffer.empty()) {
+                permutedTriplePusher.push(std::move(blockBuffer));
+                blockBuffer.clear();
+                blockBuffer.reserve(2 * blocksize);
+              }
+              permutedTriplePusher.push(std::move(block));
+            }
         }
         sorter.clear();
+        //sorter.reserve(100'000'000);
         currentC0 = triple[0];
       }
       sorter.push(triple);
     }
   } while (co_await ad_utility::valueWasPushedTag);
+  //std::sort(sorter.begin(), sorter.end(), Compare{});
+  if (!blockBuffer.empty()) {
+    permutedTriplePusher.push(std::move(blockBuffer));
+  }
   for (auto& block  : sorter.template sortedView<true>()) {
+  //  if (! sorter.empty()) {
     permutedTriplePusher.push(std::move(block));
   }
+  permutedTriplePusher.finish();
 }

@@ -73,7 +73,7 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
   setenv("STXXLCFG", stxxlConfigFileName.c_str(), true);
   std::ostringstream config;
   config << "disk=" << getStxxlDiskFileName(location, tail) << ","
-         << STXXL_DISK_SIZE_INDEX_BUILDER << ",syscall";
+         << STXXL_DISK_SIZE_INDEX_BUILDER << ",syscall_compressed";
   stxxlConfig.writeLine(std::move(config).str());
 }
 
@@ -332,6 +332,7 @@ int main(int argc, char** argv) {
       }
     }
 
+    /*
     if (wordsfile.size() > 0) {
       index.addTextFromContextFile(wordsfile);
     }
@@ -339,6 +340,7 @@ int main(int argc, char** argv) {
     if (docsfile.size() > 0) {
       index.buildDocsDB(docsfile);
     }
+     */
     std::remove(stxxlFileName.c_str());
   } catch (std::exception& e) {
     LOG(ERROR) << e.what() << std::endl;

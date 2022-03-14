@@ -35,7 +35,11 @@ cppcoro::generator<ViewReturnType<View, useBlocks>> bufferedAsyncView(
     return buffer;
   };
 
+  ad_utility::Timer timer;
+  timer.cont();
   auto block = getNextBlock();
+  timer.stop();
+  //LOG(INFO) << "Next wait time" << timer.msecs() << "ms" << std::endl;
   auto future = std::async(std::launch::async, getNextBlock);
   while (true) {
     if constexpr (useBlocks) {
@@ -45,8 +49,12 @@ cppcoro::generator<ViewReturnType<View, useBlocks>> bufferedAsyncView(
         co_yield element;
       }
     }
+    timer.cont();
     block = future.get();
+    timer.stop();
+    //LOG(INFO) << "Next wait time" << timer.msecs() << "ms" << std::endl;
     if (block.empty()) {
+      LOG(INFO) << "Wait time in bufferedAsyncView:" << timer.msecs() << "ms" << std::endl;
       co_return;
     }
     future = std::async(std::launch::async, getNextBlock);
