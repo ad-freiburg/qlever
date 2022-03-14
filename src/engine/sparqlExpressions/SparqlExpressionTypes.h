@@ -308,8 +308,8 @@ struct SpecializedFunction {
 
   // Check if the function can be applied to arguments of type(s) `Operands`
   template <typename... Operands>
-  static constexpr bool checkIfOperandsAreValid() {
-    return CheckT{}.template operator()<Operands...>();
+  static bool checkIfOperandsAreValid(const Operands&... operands) {
+    return CheckT{}.template operator()<Operands...>(operands...);
   }
 
   // Evaluate the function on the `operands`. Return std::nullopt if the
@@ -317,10 +317,14 @@ struct SpecializedFunction {
   template <typename... Operands>
   std::optional<ExpressionResult> evaluateIfOperandsAreValid(
       Operands&&... operands) {
-    if constexpr (!checkIfOperandsAreValid<Operands...>()) {
+    if (!checkIfOperandsAreValid<Operands...>(operands...)) {
       return std::nullopt;
     } else {
-      return Function{}(std::forward<Operands>(operands)...);
+      if constexpr (requires{Function{}(std::forward<Operands>(operands)...);}) {
+        return Function{}(std::forward<Operands>(operands)...);
+      } else {
+        AD_CHECK(false);
+      }
     }
   }
 };
@@ -329,9 +333,9 @@ struct SpecializedFunction {
 /// `SpecializedFunctionsTuple` that can be evaluated on all the `Operands`
 template <typename SpecializedFunctionsTuple, typename... Operands>
 constexpr bool isAnySpecializedFunctionPossible(SpecializedFunctionsTuple&& tup,
-                                                Operands&&...) {
-  auto onPack = [](auto&&... fs) constexpr {
-    return (... || fs.template checkIfOperandsAreValid<Operands...>());
+                                                const Operands&... operands) {
+  auto onPack = [&](auto&&... fs) constexpr {
+    return (... || fs.template checkIfOperandsAreValid(operands...));
   };
 
   return std::apply(onPack, tup);

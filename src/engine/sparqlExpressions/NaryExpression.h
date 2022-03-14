@@ -126,7 +126,7 @@ using FV = FunctionAndValueGetters<T...>;
 template <size_t N, typename X, typename... T>
 using NARY = NaryExpression<Operation<N, X, T...>>;
 
-inline auto allowedForSetOfIntervals = []<typename... Ts>() constexpr {
+inline auto allowedForSetOfIntervals = []<typename... Ts>(const Ts&...) constexpr {
   return (... && ad_utility::isSimilar<Ts, ad_utility::SetOfIntervals>);
 };
 template <typename F>
