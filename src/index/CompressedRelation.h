@@ -172,7 +172,8 @@ class CompressedRelationWriter {
     _metaDataBuffer.clear();
   }
 
-  //TODO<joka921>  this has to be merged with the metadata in here, and then passed on
+  // TODO<joka921>  this has to be merged with the metadata in here, and then
+  // passed on
   // in a threadsafe manner.
   auto getFinishedBlockOffsets() {
     return std::move(_offsetsInBlocks);
@@ -189,15 +190,17 @@ class CompressedRelationWriter {
   }
 
  public:
-  ad_utility::CoroToStateMachine<std::vector<std::array<Id, 3>>> makeTriplePusher();
-  ad_utility::CoroToStateMachine<std::vector<std::array<Id, 3>>> permutingTriplePusher();
+  ad_utility::CoroToStateMachine<std::vector<std::array<Id, 3>>>
+  makeTriplePusher();
+  ad_utility::CoroToStateMachine<std::vector<std::array<Id, 3>>>
+  permutingTriplePusher();
 
  private:
   // A block of triples with the same first column.
   struct Block {
-    // If true then the triples from this col0ID be written to multiple exclusive
-    // blocks. If false then this is the only block for this col0Id that
-    // exists.
+    // If true then the triples from this col0ID be written to multiple
+    // exclusive blocks. If false then this is the only block for this col0Id
+    // that exists.
     bool _writeToExclusiveBlocks = false;
     Id _col0Id;
     // TODO<joka921> Maybe use a vector with small vector optimization.
@@ -205,12 +208,12 @@ class CompressedRelationWriter {
     std::optional<CompressedRelationMetaData> _metaData;
   };
 
-  //using BlockPusher = ad_utility::CoroToStateMachine<Blocks>;
+  // using BlockPusher = ad_utility::CoroToStateMachine<Blocks>;
 
   // Write `Block`s of triples of Ids with the same col0Id. On each call to
   // `push()` the correct `offsetInBlock` for the corresponding `col0Id` will be
   // written
-  //CompressedRelationWriter::BlockPusher blockPusher();
+  // CompressedRelationWriter::BlockPusher blockPusher();
   ad_utility::CoroToStateMachine<std::vector<std::array<Id, 3>>>
   internalTriplePusher();
 

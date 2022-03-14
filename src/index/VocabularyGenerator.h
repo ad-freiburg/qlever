@@ -19,8 +19,8 @@ using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
 using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
 using std::string;
 
-//using TripleVec = stxxl::vector<std::array<Id, 3>>;
-using TripleVec = stxxl::vector<array<Id, 3>, 4, stxxl::lru_pager<8>,2162688>;
+// using TripleVec = stxxl::vector<std::array<Id, 3>>;
+using TripleVec = stxxl::vector<array<Id, 3>, 4, stxxl::lru_pager<8>, 2162688>;
 
 /**
  * Class for merging the partial vocabularies. The main function is still in the

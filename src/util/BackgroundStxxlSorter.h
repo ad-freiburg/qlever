@@ -5,9 +5,9 @@
 #ifndef QLEVER_BACKGROUNDSTXXLSORTER_H
 #define QLEVER_BACKGROUNDSTXXLSORTER_H
 
+#include <execution>
 #include <future>
 #include <stxxl/sorter>
-#include <execution>
 
 #include "./Exception.h"
 #include "./Generator.h"
@@ -70,7 +70,8 @@ class BackgroundStxxlSorter {
     }
     auto sortRunInBackground = [this, buffer = std::move(_buffer)]() mutable {
 #ifdef _PARALLEL_SORT
-      std::sort(std::execution::par_unseq, buffer.begin(), buffer.end(), _comparator);
+      std::sort(std::execution::par_unseq, buffer.begin(), buffer.end(),
+                _comparator);
 #else
       std::sort(buffer.begin(), buffer.end(), _comparator);
 #endif
@@ -79,13 +80,14 @@ class BackgroundStxxlSorter {
         _pushInBackgroundFuture.get();
         _toStxxlTimer.stop();
       }
-      _pushInBackgroundFuture = std::async(std::launch::async, [this, buffer = std::move(buffer)]() {
-        for (const auto& element : buffer) {
-          // TODO<joka921> extend the `stxxl::sorter` interface s.t. we can push a
-          // whole block at once.
-          _sorter.push(element, true);
-        }
-      });
+      _pushInBackgroundFuture =
+          std::async(std::launch::async, [this, buffer = std::move(buffer)]() {
+            for (const auto& element : buffer) {
+              // TODO<joka921> extend the `stxxl::sorter` interface s.t. we can
+              // push a whole block at once.
+              _sorter.push(element, true);
+            }
+          });
     };
     _sortInBackgroundFuture =
         std::async(std::launch::async, std::move(sortRunInBackground));
@@ -129,7 +131,6 @@ class BackgroundStxxlSorter {
     } else {
       return bufferGeneratorImpl<useBlocks>();
     }
-
   }
 
  private:
@@ -151,8 +152,10 @@ class BackgroundStxxlSorter {
       _pushTimer.stop();
     }
     if (_sorter.size() > 0) {
-      LOG(INFO) << "Wait time in BackgroundStxxlSorter::push " << _pushTimer.msecs() << "ms"<<std::endl;
-      //LOG(INFO) << "Wait time in BackgroundStxxlSorter::write to underlying " << _toStxxlTimer.msecs() << "ms"<<std::endl;
+      LOG(INFO) << "Wait time in BackgroundStxxlSorter::push "
+                << _pushTimer.msecs() << "ms" << std::endl;
+      // LOG(INFO) << "Wait time in BackgroundStxxlSorter::write to underlying "
+      // << _toStxxlTimer.msecs() << "ms"<<std::endl;
       for (const auto& el : _buffer) {
         _sorter.push(el);
       }
@@ -160,11 +163,9 @@ class BackgroundStxxlSorter {
       // Deallocate memory for `_buffer`, the output buffering is handled via a
       // `bufferedAsyncView` which owns its own buffer.
       _buffer = decltype(_buffer){};
-    }
-    else {
+    } else {
       std::sort(_buffer.begin(), _buffer.end(), _comparator);
     }
-
   }
 
   // Yield all elements of the underlying sorter. Only valid after `setupSort`
@@ -176,8 +177,10 @@ class BackgroundStxxlSorter {
     }
   }
 
-  template<bool useBlocks>
-  cppcoro::generator<std::conditional_t<useBlocks, std::vector<value_type>, value_type>> bufferGeneratorImpl() {
+  template <bool useBlocks>
+  cppcoro::generator<
+      std::conditional_t<useBlocks, std::vector<value_type>, value_type>>
+  bufferGeneratorImpl() {
     if constexpr (useBlocks) {
       co_yield _buffer;
     } else {
@@ -186,7 +189,6 @@ class BackgroundStxxlSorter {
       }
     }
   }
-
 };
 
 }  // namespace ad_utility

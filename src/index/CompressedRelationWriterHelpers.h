@@ -5,8 +5,8 @@
 #ifndef QLEVER_COMPRESSEDRELATIONWRITERHELPERS_H
 #define QLEVER_COMPRESSEDRELATIONWRITERHELPERS_H
 
-#include "./ConstantsIndexBuilding.h"
 #include "../util/BackgroundStxxlSorter.h"
+#include "./ConstantsIndexBuilding.h"
 
 struct Block {
   // If true then the triples from this col0ID be written to multiple exclusive
@@ -150,7 +150,7 @@ void serialize(Serializer& s, CompressedRelationMetaData& c) {
   s | c._multiplicityCol2;
   s | c._offsetInBlock;
 }
-template<typename WriteBlock>
+template <typename WriteBlock>
 struct BlockPusherT {
   bool _isFinished = false;
   uint64_t offsetInBlock;
@@ -158,7 +158,8 @@ struct BlockPusherT {
   Id col0LastId;
   std::vector<std::array<Id, 2>> secondAndThirdColumn;
   WriteBlock _writeBlock;
-  explicit BlockPusherT(WriteBlock writeBlock): _writeBlock(std::move(writeBlock)) {}
+  explicit BlockPusherT(WriteBlock writeBlock)
+      : _writeBlock(std::move(writeBlock)) {}
 
   void push(const Block& nextBlock) {
     if (nextBlock._writeToExclusiveBlocks) {
@@ -193,19 +194,18 @@ struct BlockPusherT {
     _writeBlock(col0FirstId, col0LastId, secondAndThirdColumn);
   }
 
-  ~BlockPusherT() {
-    finish();
-  }
+  ~BlockPusherT() { finish(); }
 };
 
-template<typename BlockPusher>
-struct InternalTriplePusher{
+template <typename BlockPusher>
+struct InternalTriplePusher {
   BlockPusher* _blockPusher;
   Block block;
   bool _isFinished = false;
-  static constexpr auto blocksize = BLOCKSIZE_COMPRESSED_METADATA / (2 * sizeof(Id));
-  InternalTriplePusher(Id col0Id, BlockPusher& blockPusher) : _blockPusher(&blockPusher) {
-
+  static constexpr auto blocksize =
+      BLOCKSIZE_COMPRESSED_METADATA / (2 * sizeof(Id));
+  InternalTriplePusher(Id col0Id, BlockPusher& blockPusher)
+      : _blockPusher(&blockPusher) {
     secondAndThirdColumn.reserve(blocksize);
   }
 
@@ -218,8 +218,6 @@ struct InternalTriplePusher{
       secondAndThirdColumn.reserve(blocksize);
     }
   }
-
-
 
   void finish() {
     if (_isFinished) {
@@ -240,11 +238,11 @@ struct InternalTriplePusher{
 
   // TODO: shall we perform this via a Mixin?
   ~InternalTriplePusher() {
-    //finish();
+    // finish();
   }
 };
 
-template<typename WriteBlock>
+template <typename WriteBlock>
 struct TriplePusher {
   bool _isFinished = false;
   std::optional<Id> currentC0;
@@ -254,12 +252,12 @@ struct TriplePusher {
   BlockPusherT<WriteBlock> blockStore;
   InternalTriplePusher<decltype(blockStore)> tripleStore{0, blockStore};
   std::vector<CompressedRelationMetaData>& _metaDataBuffer;
-  explicit TriplePusher(WriteBlock writeBlock, std::vector<CompressedRelationMetaData>& metaDataBuffer) : blockStore{std::move(writeBlock)}, _metaDataBuffer{metaDataBuffer} {}
+  explicit TriplePusher(WriteBlock writeBlock,
+                        std::vector<CompressedRelationMetaData>& metaDataBuffer)
+      : blockStore{std::move(writeBlock)}, _metaDataBuffer{metaDataBuffer} {}
 
-
-  void pushMetadata (Id col0Id, uint64_t sizeOfRelation,
-                             uint64_t numDistinctCol1,
-                             uint64_t offsetInBlock) {
+  void pushMetadata(Id col0Id, uint64_t sizeOfRelation,
+                    uint64_t numDistinctCol1, uint64_t offsetInBlock) {
     bool functional = sizeOfRelation == numDistinctCol1;
     float multC1 = functional ? 1.0 : sizeOfRelation / float(numDistinctCol1);
     // Dummy value that will be overwritten later
@@ -267,8 +265,8 @@ struct TriplePusher {
     LOG(TRACE) << "Done calculating multiplicities.\n";
     // This sets everything except the _offsetInBlock, which will be set
     // explicitly below.
-    CompressedRelationMetaData metaData{col0Id, sizeOfRelation, multC1,
-                                        multC2, offsetInBlock};
+    CompressedRelationMetaData metaData{col0Id, sizeOfRelation, multC1, multC2,
+                                        offsetInBlock};
     _metaDataBuffer.push_back(metaData);
   }
 
@@ -315,15 +313,11 @@ struct TriplePusher {
     pushMetadata(currentC0.value(), sizeOfRelation, distinctC1,
                  blockStore.offsetInBlock);
   }
-  ~TriplePusher() {
-    finish();
-  }
-
+  ~TriplePusher() { finish(); }
 };
 
 template <typename TriplePusher>
 struct PermutingTriplePusher {
-
   using T = std::array<Id, 3>;
   struct Compare : public std::less<> {
     static T max_value() {
@@ -341,7 +335,8 @@ struct PermutingTriplePusher {
   std::optional<Id> _currentC0;
   TriplePusher _permutedTriplePusher;
 
-  explicit PermutingTriplePusher(TriplePusher triplePusher) : _permutedTriplePusher{std::move(triplePusher)} {}
+  explicit PermutingTriplePusher(TriplePusher triplePusher)
+      : _permutedTriplePusher{std::move(triplePusher)} {}
 
   void push(std::array<Id, 3> triple) {
     if (!_currentC0.has_value()) {
@@ -366,9 +361,7 @@ struct PermutingTriplePusher {
       _permutedTriplePusher.push(std::move(block));
     }
   }
-  ~PermutingTriplePusher() {
-    finish();
-  }
+  ~PermutingTriplePusher() { finish(); }
 };
 
 #endif  // QLEVER_COMPRESSEDRELATIONWRITERHELPERS_H

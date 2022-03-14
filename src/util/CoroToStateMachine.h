@@ -6,14 +6,13 @@
 
 #include <exception>
 #include <functional>
+#include <future>
 #include <iterator>
 #include <type_traits>
 #include <utility>
-#include <future>
-
-#include "./ThreadSafeQueue.h"
 
 #include "./Forward.h"
+#include "./ThreadSafeQueue.h"
 
 // Coroutines are still experimental in clang libcpp, therefore adapt the
 // appropriate namespaces by including the convenience header.
@@ -50,7 +49,9 @@ class CoroToStateMachine {
     // "constructor".
     constexpr std::suspend_never initial_suspend() noexcept { return {}; }
 
-    // We need to suspend at the end so that the `promise_type` is not immediately destroyed and we can properly propagate exceptions in the destructor or `finish`
+    // We need to suspend at the end so that the `promise_type` is not
+    // immediately destroyed and we can properly propagate exceptions in the
+    // destructor or `finish`
     constexpr std::suspend_always final_suspend() noexcept { return {}; }
 
     void unhandled_exception() { _exception = std::current_exception(); }
@@ -92,8 +93,8 @@ class CoroToStateMachine {
     }
 
     // The following code has these effects:
-    // `co_await nextValueTag` immediately returns a reference to the most recent value that was
-    // passed to `push`.
+    // `co_await nextValueTag` immediately returns a reference to the most
+    // recent value that was passed to `push`.
     struct NextValueAwaitable {
       promise_type* _promise_type;
       bool await_ready() { return true; }
@@ -145,12 +146,12 @@ class CoroToStateMachine {
     _coro.promise()._nextValue = AD_FWD(value);
     _coro.promise()._isFinished = false;
     _pushFuture = std::async(std::launch::async, [this] {
-      //if (_coro && ! _coro.done()) {
+      // if (_coro && ! _coro.done()) {
       assert(_coro);
       assert(!_coro.done());
-        _coro.resume();
+      _coro.resume();
       //}
-        assert(!_coro.done());
+      assert(!_coro.done());
 
       /*
       if (coro.done()) {
@@ -158,8 +159,7 @@ class CoroToStateMachine {
         //finish();
       }
        */
-
-});
+    });
     _pushTimer.wlock()->stop();
   }
 
@@ -184,15 +184,15 @@ class CoroToStateMachine {
     }
     assert(_coro.done());
     _pushTimer.wlock()->stop();
-    LOG(INFO) << "Coro to state machine " << _name << " waited for " << _pushTimer.wlock()->msecs() << "ms" << std::endl;
+    LOG(INFO) << "Coro to state machine " << _name << " waited for "
+              << _pushTimer.wlock()->msecs() << "ms" << std::endl;
     _coro.promise().rethrow_if_exception();
   }
 
-  void setName(std::string name)  {
-    _name = std::move(name);
-  }
+  void setName(std::string name) { _name = std::move(name); }
 
-  // The destructor implicitly calls `finish` if it hasn't been called explicitly before.
+  // The destructor implicitly calls `finish` if it hasn't been called
+  // explicitly before.
   ~CoroToStateMachine() {
     finish();
     if (_coro) {
@@ -200,7 +200,8 @@ class CoroToStateMachine {
     }
   }
 
-  // Default constructor create an object without a coroutine. It can be destroyed or move-assigned from another `CoroToStateMachine`.
+  // Default constructor create an object without a coroutine. It can be
+  // destroyed or move-assigned from another `CoroToStateMachine`.
   CoroToStateMachine() = default;
   CoroToStateMachine(CoroToStateMachine&& rhs) noexcept : _coro{rhs._coro} {
     rhs._coro = nullptr;

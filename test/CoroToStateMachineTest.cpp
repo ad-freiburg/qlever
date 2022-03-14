@@ -9,7 +9,7 @@
 
 using ad_utility::CoroToStateMachine;
 
-CoroToStateMachine<int, false>intStateMachine(int initial, int& target) {
+CoroToStateMachine<int, false> intStateMachine(int initial, int& target) {
   target += initial;
 
   while (co_await ad_utility::valueWasPushedTag) {
@@ -30,7 +30,7 @@ TEST(CoroToStateMachine, IntStateMachine) {
   for (int i = 0; i < 2000; ++i) {
     compare += i;
     z.push(i);
-    //EXPECT_EQ(target, compare);
+    // EXPECT_EQ(target, compare);
   }
 
   z.finish();
@@ -74,7 +74,8 @@ TEST(CoroToStateMachine, MoveStringStateMachine) {
   EXPECT_EQ(target, compare);
 
   compare.push_back("gamma");
-  // Push a temporary, which the coroutine will also move (but we cannot actually test this).
+  // Push a temporary, which the coroutine will also move (but we cannot
+  // actually test this).
   stateMachine.push("gamma");
   EXPECT_EQ(target, compare);
 

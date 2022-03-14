@@ -7,12 +7,12 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <foxxll/io/syscall_file.hpp>
 #include <future>
 #include <optional>
 #include <stxxl/algorithm>
 #include <stxxl/map>
 #include <unordered_map>
-#include <foxxll//io/syscall_file.hpp>
 
 #include "../parser/ParallelParseBuffer.h"
 #include "../parser/TsvParser.h"
@@ -62,12 +62,14 @@ IndexBuilderDataAsPsoSorter Index::createIdTriplesAndVocab(
   w.close();
 #endif
   std::vector<size_t> actualPartialSizes;
-  ad_utility::serialization::FileReadSerializer w{_onDiskBase + ".actualPartialSizes"};
+  ad_utility::serialization::FileReadSerializer w{_onDiskBase +
+                                                  ".actualPartialSizes"};
   w >> actualPartialSizes;
-  std::unique_ptr<TripleVec> idTriples(new TripleVec(foxxll::file_ptr{new foxxll::syscall_file{_onDiskBase + ".localTriples.stxxl", foxxll::file::RDONLY}}));
-  auto psoSorter = convertPartialToGlobalIds(
-      *idTriples, actualPartialSizes,
-      NUM_TRIPLES_PER_PARTIAL_VOCAB);
+  std::unique_ptr<TripleVec> idTriples(
+      new TripleVec(foxxll::file_ptr{new foxxll::syscall_file{
+          _onDiskBase + ".localTriples.stxxl", foxxll::file::RDONLY}}));
+  auto psoSorter = convertPartialToGlobalIds(*idTriples, actualPartialSizes,
+                                             NUM_TRIPLES_PER_PARTIAL_VOCAB);
 
   return {IndexBuilderDataBase{}, std::move(psoSorter)};
 }
@@ -242,10 +244,15 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
   LOG(INFO) << "Processing input triples from " << filename << " ..."
             << std::endl;
   LOG(INFO) << "Setup filePtr" << std::endl;
-  //auto filePtr = foxxll::file_ptr{new foxxll::syscall_file{_onDiskBase + ".localTriples.stxxl", foxxll::file::TRUNC | foxxll::file::RDWR | foxxll::file::CREAT}};
+  // auto filePtr = foxxll::file_ptr{new foxxll::syscall_file{_onDiskBase +
+  // ".localTriples.stxxl", foxxll::file::TRUNC | foxxll::file::RDWR |
+  // foxxll::file::CREAT}};
   LOG(INFO) << "Setup stxxlVector" << std::endl;
-  std::unique_ptr<TripleVec> idTriples(new TripleVec(foxxll::file_ptr{new foxxll::syscall_file{_onDiskBase + ".localTriples.stxxl", foxxll::file::TRUNC | foxxll::file::RDWR | foxxll::file::CREAT}}));
-  //std::unique_ptr<TripleVec> idTriples(new TripleVec());
+  std::unique_ptr<TripleVec> idTriples(
+      new TripleVec(foxxll::file_ptr{new foxxll::syscall_file{
+          _onDiskBase + ".localTriples.stxxl",
+          foxxll::file::TRUNC | foxxll::file::RDWR | foxxll::file::CREAT}}));
+  // std::unique_ptr<TripleVec> idTriples(new TripleVec());
   LOG(INFO) << "Setup wirter" << std::endl;
   ad_utility::Synchronized<TripleVec::bufwriter_type> writer(*idTriples);
   LOG(INFO) << "Done" << std::endl;
@@ -301,7 +308,7 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
             localWriter.push_back(innerOpt.value());
           }
         }
-        //if (i % 100'000'000 == 0) {
+        // if (i % 100'000'000 == 0) {
         if (i % 100'000 == 0) {
           LOG(INFO) << "Input triples processed: " << i << std::endl;
         }
@@ -446,7 +453,7 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
     LOG(DEBUG) << "Reading ID map from: " << mmapFilename << std::endl;
     ad_utility::HashMap<Id, Id> idMap = IdMapFromPartialIdMapFile(mmapFilename);
     // Delete the temporary file in which we stored this map
-    //deleteTemporaryFile(mmapFilename);
+    // deleteTemporaryFile(mmapFilename);
 
     // update the triples for which this partial vocabulary was responsible
     for (size_t tmpNum = 0; tmpNum < actualLinesPerPartial[partialNum];
@@ -523,7 +530,7 @@ Index::createPermutationPairImpl(const string& fileName1,
   buffer2.reserve(blocksize);
 
   LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
-  //size_t i = 0;
+  // size_t i = 0;
   for (auto triple : sortedTriples) {
     // Call each of the `perTripleCallbacks` for the current triple
     (..., perTripleCallbacks(triple));

@@ -4,6 +4,8 @@
 
 #include "CompressedRelation.h"
 
+#include <execution>
+
 #include "../engine/IdTable.h"
 #include "../util/BackgroundStxxlSorter.h"
 #include "../util/Cache.h"
@@ -12,7 +14,6 @@
 #include "../util/TypeTraits.h"
 #include "./Permutations.h"
 #include "ConstantsIndexBuilding.h"
-#include <execution>
 
 using namespace std::chrono_literals;
 
@@ -425,23 +426,23 @@ CompressedRelationMetaData::readAndDecompressBlock(
 }
 
 ad_utility::CoroToStateMachine<std::vector<std::array<Id, 3>>>
-CompressedRelationWriter::internalTriplePusher(
-    ) {
+CompressedRelationWriter::internalTriplePusher() {
   std::vector<std::array<Id, 2>> secondAndThirdColumn;
   std::vector<std::array<Id, 2>> secondAndThirdColumnCurrentRelation;
   Id col0FirstId;
   Id col0LastId;
   bool hasExclusiveBlocks = false;
-  static constexpr auto blocksize = BLOCKSIZE_COMPRESSED_METADATA / (2 * sizeof(Id));
+  static constexpr auto blocksize =
+      BLOCKSIZE_COMPRESSED_METADATA / (2 * sizeof(Id));
 
-
-  auto writeBufferedRelations = [&secondAndThirdColumn, &col0FirstId, &col0LastId, this] (Id col0NextId) {
+  auto writeBufferedRelations = [&secondAndThirdColumn, &col0FirstId,
+                                 &col0LastId, this](Id col0NextId) {
     writeBlock(col0FirstId, col0LastId, secondAndThirdColumn);
     secondAndThirdColumn.clear();
     col0FirstId = col0LastId = col0NextId;
   };
 
-  auto writeExclusiveBlockForCurrentRelation = [&] (Id col0Id) {
+  auto writeExclusiveBlockForCurrentRelation = [&](Id col0Id) {
     writeBlock(col0Id, col0Id, secondAndThirdColumnCurrentRelation);
     secondAndThirdColumnCurrentRelation.clear();
     hasExclusiveBlocks = true;
@@ -457,7 +458,9 @@ CompressedRelationWriter::internalTriplePusher(
       }
       col0LastId = col0Id;
       _offsetsInBlocks.push_back(secondAndThirdColumn.size());
-      secondAndThirdColumn.insert(secondAndThirdColumn.end(), secondAndThirdColumnCurrentRelation.begin(), secondAndThirdColumnCurrentRelation.end());
+      secondAndThirdColumn.insert(secondAndThirdColumn.end(),
+                                  secondAndThirdColumnCurrentRelation.begin(),
+                                  secondAndThirdColumnCurrentRelation.end());
       secondAndThirdColumnCurrentRelation.clear();
       if (secondAndThirdColumn.size() >= blocksize) {
         writeBufferedRelations(nextCol0Id);
@@ -482,7 +485,8 @@ CompressedRelationWriter::internalTriplePusher(
         finishRelation(previousC0, currentC0);
       }
 
-      secondAndThirdColumnCurrentRelation.push_back(std::array{triple[1], triple[2]});
+      secondAndThirdColumnCurrentRelation.push_back(
+          std::array{triple[1], triple[2]});
       if (secondAndThirdColumnCurrentRelation.size() >= blocksize) {
         writeBufferedRelations(currentC0);
         writeExclusiveBlockForCurrentRelation(currentC0);
@@ -517,8 +521,12 @@ CompressedRelationWriter::makeTriplePusher() {
     LOG(TRACE) << "Done calculating multiplicities.\n";
     // This sets everything except the _offsetInBlock, which will be set
     // explicitly later.
-    CompressedRelationMetaData metaData{col0Id, sizeOfRelation, multC1, multC2,
-                                        };
+    CompressedRelationMetaData metaData{
+        col0Id,
+        sizeOfRelation,
+        multC1,
+        multC2,
+    };
     _metaDataBuffer.push_back(metaData);
   };
 
@@ -544,7 +552,6 @@ CompressedRelationWriter::makeTriplePusher() {
 
 ad_utility::CoroToStateMachine<std::vector<std::array<Id, 3>>>
 CompressedRelationWriter::permutingTriplePusher() {
-
   using T = std::array<Id, 3>;
   struct Compare : public std::less<> {
     static T max_value() {
@@ -557,10 +564,9 @@ CompressedRelationWriter::permutingTriplePusher() {
     }
   };
 
-  //sorter.reserve(100'000'000);
-  ad_utility::BackgroundStxxlSorter<T, Compare> sorter(
-      1 << 30);
-  //stxxl::sorter<T, Compare> sorter(Compare{}, 1<<30);
+  // sorter.reserve(100'000'000);
+  ad_utility::BackgroundStxxlSorter<T, Compare> sorter(1 << 30);
+  // stxxl::sorter<T, Compare> sorter(Compare{}, 1<<30);
 
   if (!co_await ad_utility::valueWasPushedTag) {
     // empty permutation
@@ -578,9 +584,9 @@ CompressedRelationWriter::permutingTriplePusher() {
     auto triples = co_await ad_utility::nextValueTag;
     for (auto triple : triples) {
       if (triple[0] != currentC0) {
-        //std::sort(sorter.begin(), sorter.end(), Compare{});
-        //auto& block = sorter;
-        for (auto& block  : sorter.template sortedView<true>()) {
+        // std::sort(sorter.begin(), sorter.end(), Compare{});
+        // auto& block = sorter;
+        for (auto& block : sorter.template sortedView<true>()) {
           if (block.size() < blocksize) {
             blockBuffer.insert(blockBuffer.end(), block.begin(), block.end());
             if (blockBuffer.size() >= blocksize) {
@@ -589,27 +595,27 @@ CompressedRelationWriter::permutingTriplePusher() {
               blockBuffer.reserve(2 * blocksize);
             }
           } else {
-              if (!blockBuffer.empty()) {
-                permutedTriplePusher.push(std::move(blockBuffer));
-                blockBuffer.clear();
-                blockBuffer.reserve(2 * blocksize);
-              }
-              permutedTriplePusher.push(std::move(block));
+            if (!blockBuffer.empty()) {
+              permutedTriplePusher.push(std::move(blockBuffer));
+              blockBuffer.clear();
+              blockBuffer.reserve(2 * blocksize);
             }
+            permutedTriplePusher.push(std::move(block));
+          }
         }
         sorter.clear();
-        //sorter.reserve(100'000'000);
+        // sorter.reserve(100'000'000);
         currentC0 = triple[0];
       }
       sorter.push(triple);
     }
   } while (co_await ad_utility::valueWasPushedTag);
-  //std::sort(sorter.begin(), sorter.end(), Compare{});
+  // std::sort(sorter.begin(), sorter.end(), Compare{});
   if (!blockBuffer.empty()) {
     permutedTriplePusher.push(std::move(blockBuffer));
   }
-  for (auto& block  : sorter.template sortedView<true>()) {
-  //  if (! sorter.empty()) {
+  for (auto& block : sorter.template sortedView<true>()) {
+    //  if (! sorter.empty()) {
     permutedTriplePusher.push(std::move(block));
   }
   permutedTriplePusher.finish();

@@ -12,7 +12,9 @@
 namespace ad_utility {
 
 template <typename View, bool useBlocks>
-using ViewReturnType = std::conditional_t<useBlocks, std::vector<typename View::value_type>, typename View::value_type>;
+using ViewReturnType =
+    std::conditional_t<useBlocks, std::vector<typename View::value_type>,
+                       typename View::value_type>;
 /// Takes a input-iterable and yields the elements of that view (no visible
 /// effect). The iteration over the input view is done on a separate thread with
 /// a buffer size of `blockSize`. This might speed up the computation when the
@@ -39,7 +41,7 @@ cppcoro::generator<ViewReturnType<View, useBlocks>> bufferedAsyncView(
   timer.cont();
   auto block = getNextBlock();
   timer.stop();
-  //LOG(INFO) << "Next wait time" << timer.msecs() << "ms" << std::endl;
+  // LOG(INFO) << "Next wait time" << timer.msecs() << "ms" << std::endl;
   auto future = std::async(std::launch::async, getNextBlock);
   while (true) {
     if constexpr (useBlocks) {
@@ -52,9 +54,10 @@ cppcoro::generator<ViewReturnType<View, useBlocks>> bufferedAsyncView(
     timer.cont();
     block = future.get();
     timer.stop();
-    //LOG(INFO) << "Next wait time" << timer.msecs() << "ms" << std::endl;
+    // LOG(INFO) << "Next wait time" << timer.msecs() << "ms" << std::endl;
     if (block.empty()) {
-      LOG(INFO) << "Wait time in bufferedAsyncView:" << timer.msecs() << "ms" << std::endl;
+      LOG(INFO) << "Wait time in bufferedAsyncView:" << timer.msecs() << "ms"
+                << std::endl;
       co_return;
     }
     future = std::async(std::launch::async, getNextBlock);
