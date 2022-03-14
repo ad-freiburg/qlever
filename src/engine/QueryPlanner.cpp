@@ -92,6 +92,14 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   // plan for this graph pattern.
   vector<SubtreePlan>& lastRow = plans.back();
 
+  if (pq._limit.has_value()) {
+    for (auto& plan : lastRow) {
+      if (plan._qet->getRootOperation()->supportsLimit()) {
+        (plan._qet->getRootOperation()->setLimit(pq._limit.value()));
+      }
+    }
+  }
+
   AD_CHECK_GT(lastRow.size(), 0);
   auto minInd = findCheapestExecutionTree(lastRow);
   if (pq._rootGraphPattern._optional) {

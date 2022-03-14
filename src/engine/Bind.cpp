@@ -51,7 +51,7 @@ string Bind::getDescriptor() const { return _bind.getDescriptor(); }
 bool Bind::knownEmptyResult() { return _subtree->knownEmptyResult(); }
 
 // _____________________________________________________________________________
-string Bind::asString(size_t indent) const {
+string Bind::asStringImpl(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";

@@ -7,10 +7,12 @@
 #include <sstream>
 #include <string>
 
+#include "../index/TriplesView.h"
+
 using std::string;
 
 // _____________________________________________________________________________
-string IndexScan::asString(size_t indent) const {
+string IndexScan::asStringImpl(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << ' ';
@@ -253,14 +255,23 @@ void IndexScan::computeResult(ResultTable* result) {
       computeOPSfreeP(result);
       break;
     case FULL_INDEX_SCAN_SPO:
+      computeFullScan(result, getIndex().SPO());
+      break;
     case FULL_INDEX_SCAN_SOP:
+      computeFullScan(result, getIndex().SOP());
+      break;
     case FULL_INDEX_SCAN_PSO:
+      computeFullScan(result, getIndex().PSO());
+      break;
     case FULL_INDEX_SCAN_POS:
+      computeFullScan(result, getIndex().POS());
+      break;
     case FULL_INDEX_SCAN_OSP:
+      computeFullScan(result, getIndex().OSP());
+      break;
     case FULL_INDEX_SCAN_OPS:
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-               "Asked to execute a scan for the full index. "
-               "This should never happen.");
+      computeFullScan(result, getIndex().OPS());
+      break;
   }
   LOG(DEBUG) << "IndexScan result computation done.\n";
 }
@@ -438,4 +449,29 @@ void IndexScan::determineMultiplicities() {
     }
   }
   assert(_multiplicity.size() >= 1 || _multiplicity.size() <= 3);
+}
+
+void IndexScan::computeFullScan(ResultTable* result,
+                                const auto& Permutation) const {
+  result->_idTable.setCols(3);
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
+  result->_sortedBy = {0, 1, 2};
+
+  uint64_t resultSize = getIndex().getNofTriples();
+  if (getLimit().has_value() && getLimit() < resultSize) {
+    resultSize = getLimit().value();
+  }
+  result->_idTable.reserve(resultSize);
+  auto table = result->_idTable.moveToStatic<3>();
+  size_t i = 0;
+  for (const auto& triple : TriplesView(Permutation)) {
+    if (i >= resultSize) {
+      break;
+    }
+    table.push_back(triple);
+    ++i;
+  }
+  result->_idTable = table.moveToDynamic();
 }

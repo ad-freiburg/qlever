@@ -69,8 +69,19 @@ class Operation {
 
   // Get a unique, not ambiguous string representation for a subtree.
   // This should possible act like an ID for each subtree.
-  virtual string asString(size_t indent = 0) const = 0;
+  virtual string asString(size_t indent = 0) const final {
+    auto result = asStringImpl(indent);
+    if (supportsLimit() && _limit.has_value()) {
+      result +=
+          " LIMIT (directly from operation) " + std::to_string(_limit.value());
+    }
+    return result;
+  }
 
+ protected:
+  virtual string asStringImpl(size_t indent = 0) const = 0;
+
+ public:
   // Gets a very short (one line without line ending) descriptor string for
   // this Operation.  This string is used in the RuntimeInformation
   virtual string getDescriptor() const = 0;
@@ -95,6 +106,16 @@ class Operation {
   void recursivelySetTimeoutTimer(
       const ad_utility::SharedConcurrentTimeoutTimer& timer);
 
+  // True iff this operation directly implement a `LIMIT` clause on its result.
+  [[nodiscard]] virtual bool supportsLimit() const { return false; }
+
+  // Set the value of the `LIMIT` clause that will be applied to the result of
+  // this operation. May only be called if `supportsLimit` returns true.
+  void setLimit(uint64_t limit) {
+    AD_CHECK(supportsLimit());
+    _limit = limit;
+  }
+
  protected:
   QueryExecutionContext* getExecutionContext() const {
     return _executionContext;
@@ -118,6 +139,8 @@ class Operation {
    * @return The columns on which the result will be sorted.
    */
   [[nodiscard]] virtual vector<size_t> resultSortedOn() const = 0;
+
+  const auto& getLimit() const { return _limit; }
 
   /// interface to the generated warnings of this operation
   std::vector<std::string>& getWarnings() { return _warnings; }
@@ -191,6 +214,14 @@ class Operation {
         resultAndCacheStatus._resultPointer->_runtimeInfo.getOperationTime());
   }
 
+  // recursively call a function on all children
+  template <typename F>
+  void forAllDescendants(F f);
+
+  // recursively call a function on all children
+  template <typename F>
+  void forAllDescendants(F f) const;
+
   vector<size_t> _resultSortedColumns;
   RuntimeInformation _runtimeInfo;
 
@@ -200,11 +231,6 @@ class Operation {
   /// execution of this operation
   std::vector<std::string> _warnings;
 
-  // recursively call a function on all children
-  template <typename F>
-  void forAllDescendants(F f);
-
-  // recursively call a function on all children
-  template <typename F>
-  void forAllDescendants(F f) const;
+  /// The
+  std::optional<uint64_t> _limit;
 };

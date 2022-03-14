@@ -21,8 +21,10 @@ class Minus : public Operation {
   struct OnlyForTestingTag {};
   Minus(OnlyForTestingTag){};
 
-  virtual string asString(size_t indent = 0) const override;
+ protected:
+  virtual string asStringImpl(size_t indent = 0) const override;
 
+ public:
   virtual string getDescriptor() const override;
 
   virtual size_t getResultWidth() const override;
