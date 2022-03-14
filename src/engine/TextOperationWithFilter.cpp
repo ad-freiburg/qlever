@@ -68,7 +68,7 @@ string TextOperationWithFilter::asString(size_t indent) const {
     os << " ";
   }
   os << " filtered on column " << _filterColumn;
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________

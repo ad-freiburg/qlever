@@ -185,7 +185,7 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       s << _lexer.current().raw;
       _lexer.expect(")");
       s << ")";
-      manuallySelectedVariables.push_back(s.str());
+      manuallySelectedVariables.push_back(std::move(s).str());
     } else if (_lexer.accept("score")) {
       _lexer.expect("(");
       std::ostringstream s;
@@ -194,7 +194,7 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       s << _lexer.current().raw;
       _lexer.expect(")");
       s << ")";
-      manuallySelectedVariables.push_back(s.str());
+      manuallySelectedVariables.push_back(std::move(s).str());
     } else if (_lexer.accept("(")) {
       // expect an alias
       ParsedQuery::Alias a = parseAliasWithAntlr();
@@ -255,7 +255,7 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
   }
   _lexer.expect(")");
   s << ")";
-  return OrderKey(s.str());
+  return OrderKey(std::move(s).str());
 }
 
 // _____________________________________________________________________________
@@ -864,7 +864,7 @@ string SparqlParser::parseLiteral(const string& literal, bool isEntireString,
                            " was not terminated properly.");
     }
   }
-  return out.str();
+  return std::move(out).str();
 }
 SparqlFilter SparqlParser::parseRegexFilter(bool expectKeyword) {
   if (expectKeyword) {

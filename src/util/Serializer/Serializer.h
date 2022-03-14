@@ -28,6 +28,10 @@ class ByteBufferWriteSerializer {
   using Storage = std::vector<char>;
   ByteBufferWriteSerializer() = default;
   ByteBufferWriteSerializer(const ByteBufferWriteSerializer&) = delete;
+  ByteBufferWriteSerializer& operator=(const ByteBufferWriteSerializer&) =
+      delete;
+  ByteBufferWriteSerializer(ByteBufferWriteSerializer&&) = default;
+  ByteBufferWriteSerializer& operator=(ByteBufferWriteSerializer&&) = default;
 
   void serializeBytes(const char* bytePointer, size_t numBytes) {
     _data.insert(_data.end(), bytePointer, bytePointer + numBytes);
@@ -50,17 +54,23 @@ class ByteBufferReadSerializer {
   constexpr static bool IsWriteSerializer = false;
   using Storage = std::vector<char>;
 
-  ByteBufferReadSerializer(Storage data) : _data{std::move(data)} {};
+  explicit ByteBufferReadSerializer(Storage data) : _data{std::move(data)} {};
   void serializeBytes(char* bytePointer, size_t numBytes) {
     AD_CHECK(_iterator + numBytes <= _data.end());
     std::copy(_iterator, _iterator + numBytes, bytePointer);
     _iterator += numBytes;
   }
 
+  ByteBufferReadSerializer(const ByteBufferReadSerializer&) noexcept = delete;
+  ByteBufferReadSerializer& operator=(const ByteBufferReadSerializer&) = delete;
+  ByteBufferReadSerializer(ByteBufferReadSerializer&&) noexcept = default;
+  ByteBufferReadSerializer& operator=(ByteBufferReadSerializer&&) noexcept =
+      default;
+
   const Storage& data() const noexcept { return _data; }
 
  private:
-  const Storage _data;
+  Storage _data;
   Storage::const_iterator _iterator{_data.begin()};
 };
 
@@ -110,9 +120,11 @@ requires(!Serializer::IsWriteSerializer) void operator>>(Serializer& serializer,
 }
 
 // Automatically allow serialization from reference to const into a
-// writeSerializer CAREFUL: this does not enforce, that the serialization
+// writeSerializer. CAREFUL: this does not enforce that the serialization
 // functions actually preserve the constness, this has to be made sure by the
 // user.
+// TODO<joka921> This leads to infinite loops if we use the << operator and have
+// no actual serialize-function. Fix this by properly defining const overloads.
 template <typename Serializer, typename T>
 requires(Serializer::IsWriteSerializer) void serialize(Serializer& serializer,
                                                        const T& t) {

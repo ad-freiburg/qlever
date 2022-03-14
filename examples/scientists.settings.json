@@ -1,4 +1,4 @@
 {
   "ascii-prefixes-only": true,
-  "num-triples-per-partial-vocab": 10000000
+  "num-triples-per-batch": 10000000
 }

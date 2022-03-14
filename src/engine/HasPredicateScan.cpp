@@ -40,7 +40,7 @@ string HasPredicateScan::asString(size_t indent) const {
       os << "HAS_RELATION_SCAN with S = " << _subtree->asString(indent);
       break;
   }
-  return os.str();
+  return std::move(os).str();
 }
 
 string HasPredicateScan::getDescriptor() const {

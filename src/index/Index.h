@@ -8,6 +8,8 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <stxxl/sorter>
+#include <stxxl/stream>
 #include <stxxl/vector>
 #include <vector>
 
@@ -15,9 +17,11 @@
 #include "../global/Pattern.h"
 #include "../parser/TsvParser.h"
 #include "../parser/TurtleParser.h"
+#include "../util/BackgroundStxxlSorter.h"
 #include "../util/BufferedVector.h"
 #include "../util/CompressionUsingZstd/ZstdWrapper.h"
 #include "../util/File.h"
+#include "../util/Forward.h"
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
 #include "../util/Timer.h"
@@ -27,6 +31,7 @@
 #include "./DocsDB.h"
 #include "./IndexBuilderTypes.h"
 #include "./IndexMetaData.h"
+#include "./PatternCreator.h"
 #include "./Permutations.h"
 #include "./StxxlSortFunctors.h"
 #include "./TextMetaData.h"
@@ -43,20 +48,42 @@ using std::vector;
 
 using json = nlohmann::json;
 
-// A simple struct for better naming.
-struct VocabularyData {
-  using TripleVec = stxxl::vector<array<Id, 3>>;
+template <typename Comparator>
+using StxxlSorter =
+    ad_utility::BackgroundStxxlSorter<std::array<Id, 3>, Comparator>;
+
+using PsoSorter = StxxlSorter<SortByPSO>;
+
+// Several data that are passed along between different phases of the
+// index builder.
+struct IndexBuilderDataBase {
   // The total number of distinct words in the complete Vocabulary
   size_t nofWords;
   // Id lower and upper bound of @lang@<predicate> predicates
   Id langPredLowerBound;
   Id langPredUpperBound;
-  // The number of triples in the idTriples vec that each partial vocabulary is
-  // responsible for (depends on the number of additional language filter
-  // triples)
-  std::vector<size_t> actualPartialSizes;
+};
+
+// All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
+// triples.
+struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
+  using TripleVec = stxxl::vector<array<Id, 3>>;
   // All the triples as Ids.
   std::unique_ptr<TripleVec> idTriples;
+  // The number of triples for each partial vocabulary. This also depends on the
+  // number of additional language filter triples.
+  std::vector<size_t> actualPartialSizes;
+};
+
+// All the data from IndexBuilderDataBase and a StxxlSorter that stores all ID
+// triples sorted by the PSO permutation.
+struct IndexBuilderDataAsPsoSorter : IndexBuilderDataBase {
+  using SorterPtr = std::unique_ptr<StxxlSorter<SortByPSO>>;
+  SorterPtr psoSorter;
+  IndexBuilderDataAsPsoSorter(const IndexBuilderDataBase& base,
+                              SorterPtr sorter)
+      : IndexBuilderDataBase{base}, psoSorter{std::move(sorter)} {}
+  IndexBuilderDataAsPsoSorter() = default;
 };
 
 /**
@@ -282,6 +309,10 @@ class Index {
 
   void setPrefixCompression(bool compressed);
 
+  void setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
+    _numTriplesPerBatch = numTriplesPerBatch;
+  }
+
   const string& getTextName() const { return _textMeta.getName(); }
 
   const string& getKbName() const { return _PSO.metaData().getName(); }
@@ -444,15 +475,13 @@ class Index {
   bool _loadAllPermutations = true;
 
   // Pattern trick data
-  static const uint32_t PATTERNS_FILE_VERSION;
   bool _usePatterns;
-  size_t _maxNumPatterns;
   double _fullHasPredicateMultiplicityEntities;
   double _fullHasPredicateMultiplicityPredicates;
   size_t _fullHasPredicateSize;
 
   size_t _parserBatchSize = PARSER_BATCH_SIZE;
-  size_t _numTriplesPerPartialVocab = NUM_TRIPLES_PER_PARTIAL_VOCAB;
+  size_t _numTriplesPerBatch = NUM_TRIPLES_PER_PARTIAL_VOCAB;
   /**
    * @brief Maps pattern ids to sets of predicate ids.
    */
@@ -472,12 +501,12 @@ class Index {
   // needed for index creation once the TripleVec is set up and it would be a
   // waste of RAM.
   template <class Parser>
-  VocabularyData createIdTriplesAndVocab(const string& ntFile);
+  IndexBuilderDataAsPsoSorter createIdTriplesAndVocab(const string& ntFile);
 
   // ___________________________________________________________________
   template <class Parser>
-  VocabularyData passFileForVocabulary(const string& ntFile,
-                                       size_t linesPerPartial);
+  IndexBuilderDataAsStxxlVector passFileForVocabulary(const string& ntFile,
+                                                      size_t linesPerPartial);
 
   /**
    * @brief Everything that has to be done when we have seen all the triples
@@ -495,23 +524,23 @@ class Index {
    */
   std::future<void> writeNextPartialVocabulary(
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-      std::unique_ptr<ItemMapArray> items, std::unique_ptr<TripleVec> localIds,
+      std::unique_ptr<ItemMapArray> items, auto localIds,
       ad_utility::Synchronized<TripleVec::bufwriter_type>* globalWritePtr);
 
-  void convertPartialToGlobalIds(TripleVec& data,
-                                 const vector<size_t>& actualLinesPerPartial,
-                                 size_t linesPerPartial);
+  std::unique_ptr<StxxlSorter<SortByPSO>> convertPartialToGlobalIds(
+      TripleVec& data, const vector<size_t>& actualLinesPerPartial,
+      size_t linesPerPartial);
 
   size_t passContextFileForVocabulary(const string& contextFile);
 
   void passContextFileIntoVector(const string& contextFile, TextVec& vec);
 
-  template <class MetaDataDispatcher>
+  template <class MetaDataDispatcher, typename SortedTriples>
   std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                           typename MetaDataDispatcher::WriteType>>
   createPermutationPairImpl(const string& fileName1, const string& fileName2,
-                            const Index::TripleVec& vec, size_t c0, size_t c1,
-                            size_t c2);
+                            SortedTriples&& sortedTriples, size_t c0, size_t c1,
+                            size_t c2, auto&&... perTripleCallbacks);
 
   void writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
                         ad_utility::BufferedVector<array<Id, 2>>* bufPtr);
@@ -527,16 +556,14 @@ class Index {
   // the SPO permutation is also needed for patterns (see usage in
   // Index::createFromFile function)
 
-  enum class PerformUnique { True, False };
   template <class MetaDataDispatcher, class Comparator1, class Comparator2>
   void createPermutationPair(
-      VocabularyData* vocabularyData,
+      auto&& sortedTriples,
       const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
-      PerformUnique performUnique = PerformUnique::False,
-      bool createPatternsAfterFirst = false);
+      auto&&... perTripleCallbacks);
 
   // The pairs of permutations are PSO-POS, OSP-OPS and SPO-SOP
   // the multiplicity of column 1 in partner 1 of the pair is equal to the
@@ -559,36 +586,12 @@ class Index {
   std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                           typename MetaDataDispatcher::WriteType>>
   createPermutations(
-      TripleVec* vec,
+      auto&& sortedTriples,
       const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
-      PerformUnique performUnique);
-
-  /**
-   * @brief Creates the data required for the "pattern-trick" used for fast
-   *        ql:has-relation evaluation when selection relation counts.
-   * @param fileName The name of the file in which the data should be stored
-   * @param args The arguments that need to be passed to the constructor of
-   *             VecReaderType. VecReaderType should allow for iterating over
-   *             the tuples of the spo permutation after having been constructed
-   *             using args.
-   */
-  template <typename VecReaderType, typename... Args>
-  void createPatternsImpl(
-      const string& fileName, CompactVectorOfStrings<Id>& hasPredicate,
-      std::vector<PatternID>& hasPattern, CompactVectorOfStrings<Id>& patterns,
-      double& fullHasPredicateMultiplicityEntities,
-      double& fullHasPredicateMultiplicityPredicates,
-      size_t& fullHasPredicateSize, const size_t maxNumPatterns,
-      const Id langPredLowerBound, const Id langPredUpperBound,
-      const Args&... vecReaderArgs);
-
-  // wrap the static function using the internal member variables
-  // the bool indicates wether the TripleVec has to be sorted before the pattern
-  // creation
-  void createPatterns(bool isSortedSPO, VocabularyData* idTriples);
+      auto&&... perTripleCallbacks);
 
   void createTextIndex(const string& filename, const TextVec& vec);
 
@@ -676,7 +679,8 @@ class Index {
   // and add externalization characters if necessary.
   // Returns the language tag of spo[2] (the object) or ""
   // if there is none.
-  LangtagAndTriple tripleToInternalRepresentation(Triple&& spo);
+  LangtagAndTriple tripleToInternalRepresentation(
+      std::array<string, 3>&& stringTriple);
 
   /**
    * @brief Throws an exception if no patterns are loaded. Should be called from

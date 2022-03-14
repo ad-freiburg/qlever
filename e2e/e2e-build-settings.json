@@ -1,5 +1,5 @@
 {
-  "num-triples-per-partial-vocab" : 40000,
+  "num-triples-per-batch" : 40000,
   "parser-batch-size" : 1000,
   "ascii-prefixes-only":false
 }

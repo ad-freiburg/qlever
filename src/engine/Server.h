@@ -138,14 +138,13 @@ class Server {
       size_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
 
   template <QueryExecutionTree::ExportSubFormat format>
-  Awaitable<ad_utility::stream_generator::stream_generator>
-  composeResponseSepValues(const ParsedQuery& query,
-                           const QueryExecutionTree& qet) const;
+  Awaitable<ad_utility::streams::stream_generator> composeResponseSepValues(
+      const ParsedQuery& query, const QueryExecutionTree& qet) const;
 
   static json composeExceptionJson(const string& query, const std::exception& e,
                                    ad_utility::Timer& requestTimer);
 
-  static ad_utility::stream_generator::stream_generator composeTurtleResponse(
+  static ad_utility::streams::stream_generator composeTurtleResponse(
       const ParsedQuery& query, const QueryExecutionTree& qet);
 
   json composeStatsJson() const;

@@ -23,25 +23,22 @@
 #include "../util/TupleHelpers.h"
 #include "./PrefixHeuristic.h"
 #include "./VocabularyGenerator.h"
-#include "MetaDataIterator.h"
+#include "TriplesView.h"
 
 using std::array;
 
-const uint32_t Index::PATTERNS_FILE_VERSION = 0;
-
 // _____________________________________________________________________________
-Index::Index()
-    : _usePatterns(false),
-      _maxNumPatterns(std::numeric_limits<PatternID>::max() - 2) {}
+Index::Index() : _usePatterns(false) {}
 
 // _____________________________________________________________________________
 template <class Parser>
-VocabularyData Index::createIdTriplesAndVocab(const string& ntFile) {
-  auto vocabData =
-      passFileForVocabulary<Parser>(ntFile, _numTriplesPerPartialVocab);
+IndexBuilderDataAsPsoSorter Index::createIdTriplesAndVocab(
+    const string& ntFile) {
+  auto indexBuilderData =
+      passFileForVocabulary<Parser>(ntFile, _numTriplesPerBatch);
   // first save the total number of words, this is needed to initialize the
   // dense IndexMetaData variants
-  _totalVocabularySize = vocabData.nofWords;
+  _totalVocabularySize = indexBuilderData.nofWords;
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << _totalVocabularySize << std::endl;
 
@@ -50,18 +47,46 @@ VocabularyData Index::createIdTriplesAndVocab(const string& ntFile) {
   if (_onDiskLiterals) {
     _vocab.externalizeLiteralsFromTextFile(
         _onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME,
-        _onDiskBase + ".literals-index");
+        _onDiskBase + EXTERNAL_VOCAB_SUFFIX);
   }
   deleteTemporaryFile(_onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME);
   // clear vocabulary to save ram (only information from partial binary files
   // used from now on). This will preserve information about externalized
   // Prefixes etc.
   _vocab.clear();
-  convertPartialToGlobalIds(*vocabData.idTriples, vocabData.actualPartialSizes,
-                            NUM_TRIPLES_PER_PARTIAL_VOCAB);
+  auto psoSorter = convertPartialToGlobalIds(
+      *indexBuilderData.idTriples, indexBuilderData.actualPartialSizes,
+      NUM_TRIPLES_PER_PARTIAL_VOCAB);
 
-  return vocabData;
+  return {indexBuilderData, std::move(psoSorter)};
 }
+namespace {
+// Return a lambda that takes a triple of IDs and returns true iff the predicate
+// `triple[1]` is in [langPredLowerBound, langPredUpperBound)
+auto predicateHasLanguage(Id langPredLowerBound, Id langPredUpperBound) {
+  return [langPredLowerBound, langPredUpperBound](const auto& triple) {
+    return triple[1] >= langPredLowerBound && triple[1] < langPredUpperBound;
+  };
+}
+
+// Compute patterns and write them to `filename`. Triples where the predicate is
+// in [langPredLowerBound, langPredUpperBound). `spoTriplesView` must be
+// input-spoTriplesView and yield SPO-sorted triples of IDs.
+void createPatternsFromSpoTriplesView(auto&& spoTriplesView,
+                                      const std::string& filename,
+                                      Id langPredLowerBound,
+                                      Id langPredUpperBound) {
+  PatternCreator patternCreator{filename};
+  auto hasLanguage =
+      predicateHasLanguage(langPredLowerBound, langPredUpperBound);
+  for (const auto& triple : spoTriplesView) {
+    if (!hasLanguage(triple)) {
+      patternCreator.processTriple(triple);
+    }
+  }
+  patternCreator.finish();
+}
+}  // namespace
 
 // _____________________________________________________________________________
 template <class Parser>
@@ -71,34 +96,35 @@ void Index::createFromFile(const string& filename) {
 
   initializeVocabularySettingsBuild<Parser>();
 
-  VocabularyData vocabData;
+  IndexBuilderDataAsPsoSorter indexBuilderData;
   if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
     if (_onlyAsciiTurtlePrefixes) {
       LOG(DEBUG) << "Using the CTRE library for tokenization" << std::endl;
-      vocabData = createIdTriplesAndVocab<TurtleParallelParser<TokenizerCtre>>(
-          filename);
+      indexBuilderData =
+          createIdTriplesAndVocab<TurtleParallelParser<TokenizerCtre>>(
+              filename);
     } else {
       LOG(DEBUG) << "Using the Google RE2 library for tokenization"
                  << std::endl;
-      vocabData =
+      indexBuilderData =
           createIdTriplesAndVocab<TurtleParallelParser<Tokenizer>>(filename);
     }
 
   } else {
-    vocabData = createIdTriplesAndVocab<Parser>(filename);
+    indexBuilderData = createIdTriplesAndVocab<Parser>(filename);
   }
 
   // If we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
   // hurt.
-  string vocabFile = _onDiskBase + ".vocabulary";
+  string vocabFile = _onDiskBase + INTERNAL_VOCAB_SUFFIX;
   string vocabFileTmp = _onDiskBase + ".vocabularyTmp";
   std::vector<string> prefixes;
   if (_vocabPrefixCompressed) {
     // We have to use the "normally" sorted vocabulary for the prefix
     // compression.
     std::string vocabFileForPrefixCalculation =
-        _onDiskBase + TMP_BASENAME_COMPRESSION + ".vocabulary";
+        _onDiskBase + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX;
     prefixes = calculatePrefixes(vocabFileForPrefixCalculation,
                                  NUM_COMPRESSION_PREFIXES, 1, true);
     deleteTemporaryFile(vocabFileForPrefixCalculation);
@@ -110,13 +136,15 @@ void Index::createFromFile(const string& filename) {
   }
   _configurationJson["prefixes"] = _vocabPrefixCompressed;
   LOG(INFO) << "Writing compressed vocabulary to disk ..." << std::endl;
-  decltype(_vocab)::WordWriter wordWriter{vocabFileTmp};
-  auto internalVocabularyAction = [&wordWriter](const auto& word) {
-    wordWriter.push(word.data(), word.size());
-  };
-  auto wordReader = decltype(_vocab)::makeWordDiskIterator(vocabFile);
-  Vocabulary<CompressedString, TripleComponentComparator>::prefixCompressFile(
-      std::move(wordReader), prefixes, internalVocabularyAction);
+
+  _vocab.buildCodebookForPrefixCompression(prefixes);
+  auto wordReader = _vocab.makeUncompressedDiskIterator(vocabFile);
+  auto wordWriter = _vocab.makeCompressedWordWriter(vocabFileTmp);
+  for (const auto& word : wordReader) {
+    wordWriter.push(word);
+  }
+  wordWriter.finish();
+
   LOG(DEBUG) << "Finished writing compressed vocabulary" << std::endl;
 
   // TODO<joka921> maybe move this to its own function.
@@ -131,25 +159,54 @@ void Index::createFromFile(const string& filename) {
   // case any of the permutations fail.
   writeConfiguration();
 
+  StxxlSorter<SortBySPO> spoSorter{STXXL_MEMORY_TO_USE};
+  auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
-  createPermutationPair<IndexMetaDataHmapDispatcher>(&vocabData, _PSO, _POS,
-                                                     PerformUnique::True);
+  auto uniqueSorter = ad_utility::uniqueView(psoSorter.sortedView());
+
+  createPermutationPair<IndexMetaDataHmapDispatcher>(
+      std::move(uniqueSorter), _PSO, _POS, spoSorter.makePushCallback());
+  psoSorter.clear();
+
+  auto hasLanguagePredicate = predicateHasLanguage(
+      indexBuilderData.langPredLowerBound, indexBuilderData.langPredUpperBound);
 
   if (_loadAllPermutations) {
     // After the SPO permutation, create patterns if so desired.
-    createPermutationPair<IndexMetaDataMmapDispatcher>(
-        &vocabData, _SPO, _SOP, PerformUnique::False, _usePatterns);
-    createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _OSP, _OPS);
+    StxxlSorter<SortByOSP> ospSorter{STXXL_MEMORY_TO_USE};
+    if (_usePatterns) {
+      PatternCreator patternCreator{_onDiskBase + ".index.patterns"};
+      auto pushTripleToPatterns = [&patternCreator,
+                                   &hasLanguagePredicate](const auto& triple) {
+        if (!hasLanguagePredicate(triple)) {
+          patternCreator.processTriple(triple);
+        }
+      };
+      createPermutationPair<IndexMetaDataMmapDispatcher>(
+          spoSorter.sortedView(), _SPO, _SOP, ospSorter.makePushCallback(),
+          pushTripleToPatterns);
+      patternCreator.finish();
+    } else {
+      createPermutationPair<IndexMetaDataMmapDispatcher>(
+          spoSorter.sortedView(), _SPO, _SOP, ospSorter.makePushCallback());
+    }
+    spoSorter.clear();
+
+    // For the last pair of permutations we don't need a next sorter, so we have
+    // no fourth argument.
+    createPermutationPair<IndexMetaDataMmapDispatcher>(ospSorter.sortedView(),
+                                                       _OSP, _OPS);
     _configurationJson["has-all-permutations"] = true;
   } else {
     if (_usePatterns) {
-      // The first argument means that the triples are not yet sorted according
-      // to SPO.
-      createPatterns(false, &vocabData);
+      createPatternsFromSpoTriplesView(spoSorter.sortedView(),
+                                       _onDiskBase + ".index.patterns",
+                                       indexBuilderData.langPredLowerBound,
+                                       indexBuilderData.langPredUpperBound);
     }
     _configurationJson["has-all-permutations"] = false;
   }
-  LOG(INFO) << "Finished writing permutations" << std::endl;
+  LOG(DEBUG) << "Finished writing permutations" << std::endl;
 
   // Dump the configuration again in case the permutations have added some
   // information.
@@ -167,8 +224,8 @@ template void Index::createFromFile<TurtleParserAuto>(const string& filename);
 
 // _____________________________________________________________________________
 template <class Parser>
-VocabularyData Index::passFileForVocabulary(const string& filename,
-                                            size_t linesPerPartial) {
+IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
+    const string& filename, size_t linesPerPartial) {
   LOG(INFO) << "Processing input triples from " << filename << " ..."
             << std::endl;
   auto parser = std::make_shared<Parser>(filename);
@@ -190,8 +247,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
-    std::unique_ptr<TripleVec> localIdTriples(new TripleVec());
-    TripleVec::bufwriter_type localWriter(*localIdTriples);
+    std::vector<std::array<Id, 3>> localWriter;
 
     std::array<ItemMapManager, NUM_PARALLEL_ITEM_MAPS> itemArray;
 
@@ -207,7 +263,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
                         [&]() { parserExhausted = true; }),
           // convert each triple to the internal representation (e.g. special
           // values for Numbers, externalized literals, etc.)
-          [this](Triple&& t) {
+          [this](std::array<std::string, 3>&& t) -> LangtagAndTriple {
             return tripleToInternalRepresentation(std::move(t));
           },
 
@@ -222,7 +278,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
         for (const auto& innerOpt : opt.value()) {
           if (innerOpt) {
             actualCurrentPartialSize++;
-            localWriter << innerOpt.value();
+            localWriter.push_back(innerOpt.value());
           }
         }
         if (i % 100'000'000 == 0) {
@@ -239,7 +295,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
       }
     }
 
-    localWriter.finish();
+    // localWriter.finish();
     // wait until sorting the last partial vocabulary has finished
     // to control the number of threads and the amount of memory used at the
     // same time. typically sorting is finished before we reach again here so
@@ -265,7 +321,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] =
         writeNextPartialVocabulary(i, numFiles, actualCurrentPartialSize,
                                    std::move(oldItemPtr),
-                                   std::move(localIdTriples), &writer);
+                                   std::move(localWriter), &writer);
     numFiles++;
     // Save the information how many triples this partial vocabulary actually
     // deals with we will use this later for mapping from partial to global
@@ -290,7 +346,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
               << "(internal only) ..." << std::endl;
     VocabularyMerger m;
     std::ofstream compressionOutfile(_onDiskBase + TMP_BASENAME_COMPRESSION +
-                                     ".vocabulary");
+                                     INTERNAL_VOCAB_SUFFIX);
     AD_CHECK(compressionOutfile.is_open());
     auto internalVocabularyActionCompression =
         [&compressionOutfile](const auto& word) {
@@ -314,7 +370,8 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
                                                           std::string_view b) {
       return (*cmp)(a, b, decltype(_vocab)::SortLevel::TOTAL);
     };
-    decltype(_vocab)::WordWriter wordWriter{_onDiskBase + ".vocabulary"};
+    auto wordWriter =
+        _vocab.makeUncompressingWordWriter(_onDiskBase + INTERNAL_VOCAB_SUFFIX);
     auto internalVocabularyAction = [&wordWriter](const auto& word) {
       wordWriter.push(word.data(), word.size());
     };
@@ -322,7 +379,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
                              internalVocabularyAction);
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
-  VocabularyData res;
+  IndexBuilderDataAsStxxlVector res;
   res.nofWords = mergeRes._numWordsTotal;
   res.langPredLowerBound = mergeRes._langPredLowerBound;
   res.langPredUpperBound = mergeRes._langPredUpperBound;
@@ -348,7 +405,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
 }
 
 // _____________________________________________________________________________
-void Index::convertPartialToGlobalIds(
+std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
     TripleVec& data, const vector<size_t>& actualLinesPerPartial,
     size_t linesPerPartial) {
   LOG(INFO) << "Converting triples from local IDs to global IDs ..."
@@ -356,8 +413,11 @@ void Index::convertPartialToGlobalIds(
   LOG(DEBUG) << "Triples per partial vocabulary: " << linesPerPartial
              << std::endl;
 
-  size_t i = 0;
   // Iterate over all partial vocabularies.
+  TripleVec::bufreader_type reader(data);
+  auto resultPtr = std::make_unique<PsoSorter>(STXXL_MEMORY_TO_USE);
+  auto& result = *resultPtr;
+  size_t i = 0;
   for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();
        partialNum++) {
     std::string mmapFilename(_onDiskBase + PARTIAL_MMAP_IDS +
@@ -370,23 +430,22 @@ void Index::convertPartialToGlobalIds(
     // update the triples for which this partial vocabulary was responsible
     for (size_t tmpNum = 0; tmpNum < actualLinesPerPartial[partialNum];
          ++tmpNum) {
-      std::array<Id, 3> curTriple = data[i];
+      std::array<Id, 3> curTriple = *reader;
+      ++reader;
 
-      // for all triple elements find their mapping from partial to global ids
-      ad_utility::HashMap<Id, Id>::iterator iterators[3];
+      // For all triple elements find their mapping from partial to global ids.
       for (size_t k = 0; k < 3; ++k) {
-        iterators[k] = idMap.find(curTriple[k]);
-        if (iterators[k] == idMap.end()) {
+        auto iterator = idMap.find(curTriple[k]);
+        if (iterator == idMap.end()) {
           LOG(INFO) << "Not found in partial vocabulary: " << curTriple[k]
                     << std::endl;
           AD_CHECK(false);
         }
+        curTriple[k] = iterator->second;
       }
 
       // update the Element
-      data[i] = array<Id, 3>{
-          {iterators[0]->second, iterators[1]->second, iterators[2]->second}};
-
+      result.push(curTriple);
       ++i;
       if (i % 100'000'000 == 0) {
         LOG(INFO) << "Triples converted: " << i << std::endl;
@@ -394,53 +453,51 @@ void Index::convertPartialToGlobalIds(
     }
   }
   LOG(INFO) << "Done, total number of triples converted: " << i << std::endl;
+  return resultPtr;
 }
 
 // _____________________________________________________________________________
-template <class MetaDataDispatcher>
+template <class MetaDataDispatcher, typename SortedTriples>
 std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                         typename MetaDataDispatcher::WriteType>>
 Index::createPermutationPairImpl(const string& fileName1,
                                  const string& fileName2,
-                                 const Index::TripleVec& triples, size_t c0,
-                                 size_t c1, size_t c2) {
+                                 SortedTriples&& sortedTriples, size_t c0,
+                                 size_t c1, size_t c2,
+                                 auto&&... perTripleCallbacks) {
   using MetaData = typename MetaDataDispatcher::WriteType;
   MetaData metaData1, metaData2;
   if constexpr (metaData1._isMmapBased) {
-    metaData1.setup(_totalVocabularySize,
-                    CompressedRelationMetaData::emptyMetaData(),
-                    fileName1 + MMAP_FILE_SUFFIX);
-    metaData2.setup(_totalVocabularySize,
-                    CompressedRelationMetaData::emptyMetaData(),
-                    fileName2 + MMAP_FILE_SUFFIX);
-  }
-
-  if (triples.empty()) {
-    LOG(WARN) << "Creating pair of index permutations from empty vector of "
-                 "triples, probably something went wrong"
-              << std::endl;
-    return std::nullopt;
+    metaData1.setup(fileName1 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
+    metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
   }
 
   CompressedRelationWriter writer1{ad_utility::File(fileName1, "w")};
   CompressedRelationWriter writer2{ad_utility::File(fileName2, "w")};
 
   // Iterate over the vector and identify "relation" boundaries, where a
-  // "relation" is the sequence of triples equal first component. For PSO and
-  // POS, this is a predicate (of which "relation" is a synonym).
+  // "relation" is the sequence of sortedTriples equal first component. For PSO
+  // and POS, this is a predicate (of which "relation" is a synonym).
   LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
   size_t from = 0;
-  Id currentRel = triples[0][c0];
+  std::optional<Id> currentRel;
   ad_utility::BufferedVector<array<Id, 2>> buffer(
       THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.mmap-buffer");
   bool functional = true;
   size_t distinctCol1 = 0;
   size_t sizeOfRelation = 0;
   Id lastLhs = std::numeric_limits<Id>::max();
-  for (TripleVec::bufreader_type reader(triples); !reader.empty(); ++reader) {
-    if ((*reader)[c0] != currentRel) {
-      writer1.addRelation(currentRel, buffer, distinctCol1, functional);
-      writeSwitchedRel(&writer2, currentRel, &buffer);
+  uint64_t totalNumTriples = 0;
+  for (auto triple : sortedTriples) {
+    if (!currentRel.has_value()) {
+      currentRel = triple[c0];
+    }
+    // Call each of the `perTripleCallbacks` for the current triple
+    (..., perTripleCallbacks(triple));
+    ++totalNumTriples;
+    if (triple[c0] != currentRel) {
+      writer1.addRelation(currentRel.value(), buffer, distinctCol1, functional);
+      writeSwitchedRel(&writer2, currentRel.value(), &buffer);
       for (auto& md : writer1.getFinishedMetaData()) {
         metaData1.add(md);
       }
@@ -449,22 +506,22 @@ Index::createPermutationPairImpl(const string& fileName1,
       }
       buffer.clear();
       distinctCol1 = 1;
-      currentRel = (*reader)[c0];
+      currentRel = triple[c0];
       functional = true;
     } else {
       sizeOfRelation++;
-      if ((*reader)[c1] == lastLhs) {
+      if (triple[c1] == lastLhs) {
         functional = false;
       } else {
         distinctCol1++;
       }
     }
-    buffer.push_back(array<Id, 2>{{(*reader)[c1], (*reader)[c2]}});
-    lastLhs = (*reader)[c1];
+    buffer.push_back(array<Id, 2>{{triple[c1], triple[c2]}});
+    lastLhs = triple[c1];
   }
-  if (from < triples.size()) {
-    writer1.addRelation(currentRel, buffer, distinctCol1, functional);
-    writeSwitchedRel(&writer2, currentRel, &buffer);
+  if (from < totalNumTriples) {
+    writer1.addRelation(currentRel.value(), buffer, distinctCol1, functional);
+    writeSwitchedRel(&writer2, currentRel.value(), &buffer);
   }
 
   writer1.finish();
@@ -515,33 +572,18 @@ template <class MetaDataDispatcher, class Comparator1, class Comparator2>
 std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                         typename MetaDataDispatcher::WriteType>>
 Index::createPermutations(
-    TripleVec* vec,
+    auto&& sortedTriples,
     const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
         p1,
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
-    PerformUnique performUnique) {
-  LOG(INFO) << "Sorting for " << p1._readableName << " permutation ..."
-            << std::endl;
-  stxxl::sort(begin(*vec), end(*vec), p1._comp, STXXL_MEMORY_TO_USE);
-  LOG(DEBUG) << "Sort done" << std::endl;
-
-  if (performUnique == PerformUnique::True) {
-    // this only has to be done for the first permutation (PSO)
-    LOG(INFO) << "Removing duplicate triples ..." << std::endl;
-    auto last = std::unique(begin(*vec), end(*vec));
-    vec->resize(size_t(last - vec->begin()));
-    LOG(INFO) << "Done, number of distinct triples is: " << vec->size()
-              << std::endl;
-  }
-
+    auto&&... perTripleCallbacks) {
   auto metaData = createPermutationPairImpl<MetaDataDispatcher>(
       _onDiskBase + ".index" + p1._fileSuffix,
-      _onDiskBase + ".index" + p2._fileSuffix, *vec, p1._keyOrder[0],
-      p1._keyOrder[1], p1._keyOrder[2]);
+      _onDiskBase + ".index" + p2._fileSuffix, AD_FWD(sortedTriples),
+      p1._keyOrder[0], p1._keyOrder[1], p1._keyOrder[2],
+      AD_FWD(perTripleCallbacks)...);
 
-  // metaData1.calculateExpensiveStatistics();
-  // metaData2.calculateExpensiveStatistics();
   if (metaData.has_value()) {
     auto& mdv = metaData.value();
     LOG(INFO) << "Statistics for " << p1._readableName << ": "
@@ -556,19 +598,14 @@ Index::createPermutations(
 // ________________________________________________________________________
 template <class MetaDataDispatcher, class Comparator1, class Comparator2>
 void Index::createPermutationPair(
-    VocabularyData* vocabularyData,
+    auto&& sortedTriples,
     const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
         p1,
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
-    PerformUnique performUnique, bool createPatternsAfterFirst) {
+    auto&&... perTripleCallbacks) {
   auto metaData = createPermutations<MetaDataDispatcher>(
-      &(*vocabularyData->idTriples), p1, p2, performUnique);
-  if (createPatternsAfterFirst) {
-    // the second permutation does not alter the original triple vector,
-    // so this does still work.
-    createPatterns(true, vocabularyData);
-  }
+      AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
   if (metaData) {
     LOG(INFO) << "Exchanging multiplicities for " << p1._readableName << " and "
               << p2._readableName << " ..." << std::endl;
@@ -594,364 +631,27 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
     // permutation is inefficient. So it is fine to use const_cast here as an
     // exception: we delibarately write to a read-only data structure and are
     // knowing what we are doing
-    m2->data()[it->first].setCol2Multiplicity(
-        m1->data()[it->first].getCol1Multiplicity());
-    m1->data()[it->first].setCol2Multiplicity(
-        m2->data()[it->first].getCol1Multiplicity());
+    Id id = it.getId();
+    m2->data()[id].setCol2Multiplicity(m1->data()[id].getCol1Multiplicity());
+    m1->data()[id].setCol2Multiplicity(m2->data()[id].getCol1Multiplicity());
   }
 }
 
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
   auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
-  createPatternsImpl<MetaDataIterator<Permutation::SPO_T>, Permutation::SPO_T>(
-      _onDiskBase + ".index.patterns", _hasPredicate, _hasPattern, _patterns,
-      _fullHasPredicateMultiplicityEntities,
-      _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
-      _maxNumPatterns, langPredLowerBound, langPredUpperBound, _SPO);
-}
-
-// _____________________________________________________________________________
-void Index::createPatterns(bool isSortedSPO, VocabularyData* vocabData) {
-  // The first argument means that the triples are not yet sorted according
-  // to SPO.
-  if (isSortedSPO) {
-    LOG(DEBUG) << "Triples are already sorted by SPO for pattern creation"
-               << std::endl;
-  } else {
-    LOG(INFO) << "Sorting triples by SPO for computing predicate patterns ..."
-              << std::endl;
-    stxxl::sort(begin(*vocabData->idTriples), end(*vocabData->idTriples),
-                SortBySPO(), STXXL_MEMORY_TO_USE);
-    LOG(DEBUG) << "Sort done" << std::endl;
-  }
-  createPatternsImpl<TripleVec::bufreader_type>(
-      _onDiskBase + ".index.patterns", _hasPredicate, _hasPattern, _patterns,
-      _fullHasPredicateMultiplicityEntities,
-      _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
-      _maxNumPatterns, vocabData->langPredLowerBound,
-      vocabData->langPredUpperBound, *vocabData->idTriples);
-}
-
-// _____________________________________________________________________________
-template <typename VecReaderType, typename... Args>
-void Index::createPatternsImpl(
-    const string& fileName, CompactVectorOfStrings<Id>& hasPredicate,
-    std::vector<PatternID>& hasPattern, CompactVectorOfStrings<Id>& patterns,
-    double& fullHasPredicateMultiplicityEntities,
-    double& fullHasPredicateMultiplicityPredicates,
-    size_t& fullHasPredicateSize, const size_t maxNumPatterns,
-    const Id langPredLowerBound, const Id langPredUpperBound,
-    const Args&... vecReaderArgs) {
-  IndexMetaDataHmap meta;
-  using PatternsCountMap = ad_utility::HashMap<Pattern, size_t>;
-
-  LOG(INFO) << "Computing predicate patterns ..." << std::endl;
-  VecReaderType reader(vecReaderArgs...);
-  if (reader.empty()) {
-    LOG(WARN) << "Triple vector was empty, no patterns created" << std::endl;
-    return;
-  }
-
-  PatternsCountMap patternCounts;
-  // determine the most common patterns
-  Pattern pattern;
-
-  size_t numValidPatterns = 0;
-  Id currentSubj = (*reader)[0];
-
-  for (; !reader.empty(); ++reader) {
-    auto triple = *reader;
-    if (triple[0] != currentSubj) {
-      currentSubj = triple[0];
-      numValidPatterns++;
-      patternCounts[pattern]++;
-      pattern.clear();
-    }
-    // don't list predicates twice
-    if (pattern.empty() || pattern.back() != triple[1]) {
-      // Ignore @..@ type language predicates
-      if (triple[1] < langPredLowerBound || triple[1] >= langPredUpperBound) {
-        pattern.push_back(triple[1]);
-      }
-    }
-  }
-  // Don't forget to process the last entry.
-  patternCounts[pattern]++;
-
-  LOG(DEBUG) << "Number of distinct pattens: " << patternCounts.size()
-             << std::endl;
-  LOG(DEBUG) << "Number of entities for which a pattern was found: "
-             << numValidPatterns << std::endl;
-
-  // Stores patterns sorted by their number of occurences.
-  size_t actualNumPatterns = patternCounts.size() < maxNumPatterns
-                                 ? patternCounts.size()
-                                 : maxNumPatterns;
-  if (actualNumPatterns < patternCounts.size()) {
-    LOG(DEBUG) << "Using " << actualNumPatterns << " of the "
-               << patternCounts.size()
-               << " patterns that were found in the data" << std::endl;
-  }
-  std::vector<std::pair<Pattern, size_t>> sortedPatterns;
-  sortedPatterns.reserve(actualNumPatterns);
-  auto comparePatternCounts =
-      [](const std::pair<Pattern, size_t>& first,
-         const std::pair<Pattern, size_t>& second) -> bool {
-    return first.second > second.second ||
-           (first.second == second.second && first.first > second.first);
-  };
-  for (auto& it : patternCounts) {
-    if (sortedPatterns.size() < maxNumPatterns) {
-      sortedPatterns.push_back(it);
-      if (sortedPatterns.size() == maxNumPatterns) {
-        LOG(DEBUG) << "Sorting patterns after initial insertions" << std::endl;
-        // actuall sort the sorted patterns
-        std::sort(sortedPatterns.begin(), sortedPatterns.end(),
-                  comparePatternCounts);
-      }
-    } else {
-      if (comparePatternCounts(it, sortedPatterns.back())) {
-        // The new element is larger than the smallest element in the vector.
-        // Insert it into the correct position in the vector using binary
-        // search.
-        sortedPatterns.pop_back();
-        auto sortedIt =
-            std::lower_bound(sortedPatterns.begin(), sortedPatterns.end(), it,
-                             comparePatternCounts);
-        sortedPatterns.insert(sortedIt, it);
-      }
-    }
-  }
-  if (sortedPatterns.size() < maxNumPatterns) {
-    LOG(DEBUG) << "Sorting patterns after all insertions" << std::endl;
-    // actuall sort the sorted patterns
-    std::sort(sortedPatterns.begin(), sortedPatterns.end(),
-              comparePatternCounts);
-  }
-
-  LOG(DEBUG) << "Number of sorted patterns: " << sortedPatterns.size()
-             << std::endl;
-
-  // store the actual patterns
-  std::vector<std::vector<Id>> buffer;
-  buffer.reserve(sortedPatterns.size());
-  for (const auto& p : sortedPatterns) {
-    buffer.push_back(p.first._data);
-  }
-  patterns.build(buffer);
-
-  std::unordered_map<Pattern, Id> patternSet;
-  patternSet.reserve(sortedPatterns.size());
-  for (size_t i = 0; i < sortedPatterns.size(); i++) {
-    patternSet.insert(std::pair<Pattern, Id>(sortedPatterns[i].first, i));
-  }
-
-  LOG(DEBUG) << "Pattern set size: " << patternSet.size() << std::endl;
-
-  // Associate entities with patterns if possible, store has-relation otherwise
-  ad_utility::MmapVectorTmp<std::array<Id, 2>> entityHasPattern(
-      fileName + ".mmap.entityHasPattern.tmp");
-  ad_utility::MmapVectorTmp<std::array<Id, 2>> entityHasPredicate(
-      fileName + ".mmap.entityHasPredicate.tmp");
-
-  size_t numEntitiesWithPatterns = 0;
-  size_t numEntitiesWithoutPatterns = 0;
-  size_t numInvalidEntities = 0;
-
-  // store how many entries there are in the full has-relation relation (after
-  // resolving all patterns) and how may distinct elements there are (for the
-  // multiplicity;
-  fullHasPredicateSize = 0;
-  size_t fullHasPredicateEntitiesDistinctSize = 0;
-  size_t fullHasPredicatePredicatesDistinctSize = 0;
-  // This vector stores if the pattern was already counted toward the distinct
-  // has relation predicates size.
-  std::vector<bool> haveCountedPattern(patternSet.size());
-
-  // the input triple list is in spo order, we only need a hash map for
-  // predicates
-  ad_utility::HashSet<Id> predicateHashSet;
-
-  pattern.clear();
-  currentSubj = (*VecReaderType(vecReaderArgs...))[0];
-  size_t patternIndex = 0;
-  // Create the has-relation and has-pattern predicates
-  for (VecReaderType reader2(vecReaderArgs...); !reader2.empty(); ++reader2) {
-    auto triple = *reader2;
-    if (triple[0] != currentSubj) {
-      // we have arrived at a new entity;
-      fullHasPredicateEntitiesDistinctSize++;
-      auto it = patternSet.find(pattern);
-      // increase the haspredicate size here as every predicate is only
-      // listed once per entity (otherwise it woul always be the same as
-      // vec.size()
-      fullHasPredicateSize += pattern.size();
-      if (it == patternSet.end()) {
-        numEntitiesWithoutPatterns++;
-        // The pattern does not exist, use the has-relation predicate instead
-        for (size_t i = 0; i < patternIndex; i++) {
-          if (predicateHashSet.find(pattern[i]) == predicateHashSet.end()) {
-            predicateHashSet.insert(pattern[i]);
-            fullHasPredicatePredicatesDistinctSize++;
-          }
-          entityHasPredicate.push_back(
-              std::array<Id, 2>{currentSubj, pattern[i]});
-        }
-      } else {
-        numEntitiesWithPatterns++;
-        // The pattern does exist, add an entry to the has-pattern predicate
-        entityHasPattern.push_back(std::array<Id, 2>{currentSubj, it->second});
-        if (!haveCountedPattern[it->second]) {
-          haveCountedPattern[it->second] = true;
-          // iterate over the pattern once to
-          for (size_t i = 0; i < patternIndex; i++) {
-            if (predicateHashSet.find(pattern[i]) == predicateHashSet.end()) {
-              predicateHashSet.insert(pattern[i]);
-              fullHasPredicatePredicatesDistinctSize++;
-            }
-          }
-        }
-      }
-      pattern.clear();
-      currentSubj = triple[0];
-      patternIndex = 0;
-    }
-    // don't list predicates twice
-    if (patternIndex == 0 || pattern[patternIndex - 1] != (triple[1])) {
-      // Ignore @..@ type language predicates
-      if (triple[1] < langPredLowerBound || triple[1] >= langPredUpperBound) {
-        pattern.push_back(triple[1]);
-        patternIndex++;
-      }
-    }
-  }
-  // process the last element
-  fullHasPredicateSize += pattern.size();
-  fullHasPredicateEntitiesDistinctSize++;
-  auto last = patternSet.find(pattern);
-  if (last == patternSet.end()) {
-    numEntitiesWithoutPatterns++;
-    // The pattern does not exist, use the has-relation predicate instead
-    for (size_t i = 0; i < patternIndex; i++) {
-      entityHasPredicate.push_back(std::array<Id, 2>{currentSubj, pattern[i]});
-      if (predicateHashSet.find(pattern[i]) == predicateHashSet.end()) {
-        predicateHashSet.insert(pattern[i]);
-        fullHasPredicatePredicatesDistinctSize++;
-      }
-    }
-  } else {
-    numEntitiesWithPatterns++;
-    // The pattern does exist, add an entry to the has-pattern predicate
-    entityHasPattern.push_back(std::array<Id, 2>{currentSubj, last->second});
-    for (size_t i = 0; i < patternIndex; i++) {
-      if (predicateHashSet.find(pattern[i]) == predicateHashSet.end()) {
-        predicateHashSet.insert(pattern[i]);
-        fullHasPredicatePredicatesDistinctSize++;
-      }
-    }
-  }
-
-  fullHasPredicateMultiplicityEntities =
-      fullHasPredicateSize /
-      static_cast<double>(fullHasPredicateEntitiesDistinctSize);
-  fullHasPredicateMultiplicityPredicates =
-      fullHasPredicateSize /
-      static_cast<double>(fullHasPredicatePredicatesDistinctSize);
-
-  LOG(DEBUG) << "Number of entity-has-pattern entries: "
-             << entityHasPattern.size() << std::endl;
-  LOG(DEBUG) << "Number of entity-has-relation entries: "
-             << entityHasPredicate.size() << std::endl;
-
-  LOG(INFO) << "Number of patterns: " << patterns.size() << std::endl;
-  LOG(INFO) << "Number of subjects with pattern: " << numEntitiesWithPatterns
-            << (numEntitiesWithoutPatterns == 0 ? " [all]" : "") << std::endl;
-  if (numEntitiesWithoutPatterns > 0) {
-    LOG(INFO) << "Number of subjects without pattern: "
-              << numEntitiesWithoutPatterns << std::endl;
-    LOG(INFO) << "Of these " << numInvalidEntities
-              << " would have to large a pattern." << std::endl;
-  }
-
-  LOG(INFO) << "Total number of distinct subject-predicate pairs: "
-            << fullHasPredicateSize << std::endl;
-  LOG(INFO) << "Average number of predicates per subject: " << std::fixed
-            << std::setprecision(1) << fullHasPredicateMultiplicityEntities
-            << std::endl;
-  LOG(INFO) << "Average number of subjects per predicate: " << std::fixed
-            << std::setprecision(0) << fullHasPredicateMultiplicityPredicates
-            << std::endl;
-
-  // Store all data in the file
-  ad_utility::File file(fileName, "w");
-
-  // Write a byte of ones to make it less likely that an unversioned file is
-  // read as a versioned one (unversioned files begin with the id of the lowest
-  // entity that has a pattern).
-  // Then write the version, both multiplicitires and the full size.
-  unsigned char firstByte = 255;
-  file.write(&firstByte, sizeof(char));
-  file.write(&PATTERNS_FILE_VERSION, sizeof(uint32_t));
-  file.write(&fullHasPredicateMultiplicityEntities, sizeof(double));
-  file.write(&fullHasPredicateMultiplicityPredicates, sizeof(double));
-  file.write(&fullHasPredicateSize, sizeof(size_t));
-
-  // write the entityHasPatterns vector
-  size_t numHasPatterns = entityHasPattern.size();
-  file.write(&numHasPatterns, sizeof(size_t));
-  file.write(entityHasPattern.data(), sizeof(Id) * numHasPatterns * 2);
-
-  // write the entityHasPredicate vector
-  size_t numHasPredicatess = entityHasPredicate.size();
-  file.write(&numHasPredicatess, sizeof(size_t));
-  file.write(entityHasPredicate.data(), sizeof(Id) * numHasPredicatess * 2);
-
-  // write the patterns
-  // TODO<joka921> Also use the serializer interface for the patterns.
-  ad_utility::serialization::FileWriteSerializer patternWriter{std::move(file)};
-  patternWriter << patterns;
-
-  // create the has-relation and has-pattern lookup vectors
-  if (entityHasPattern.size() > 0) {
-    hasPattern.resize(entityHasPattern.back()[0] + 1);
-    size_t pos = 0;
-    for (size_t i = 0; i < entityHasPattern.size(); i++) {
-      while (entityHasPattern[i][0] > pos) {
-        hasPattern[pos] = NO_PATTERN;
-        pos++;
-      }
-      hasPattern[pos] = entityHasPattern[i][1];
-      pos++;
-    }
-  }
-
-  vector<vector<Id>> hasPredicateTmp;
-  if (entityHasPredicate.size() > 0) {
-    hasPredicateTmp.resize(entityHasPredicate.back()[0] + 1);
-    size_t pos = 0;
-    for (size_t i = 0; i < entityHasPredicate.size(); i++) {
-      Id current = entityHasPredicate[i][0];
-      while (current > pos) {
-        pos++;
-      }
-      while (i < entityHasPredicate.size() &&
-             entityHasPredicate[i][0] == current) {
-        hasPredicateTmp.back().push_back(entityHasPredicate[i][1]);
-        i++;
-      }
-      pos++;
-    }
-  }
-  hasPredicate.build(hasPredicateTmp);
+  auto iterator = TriplesView(_SPO);
+  createPatternsFromSpoTriplesView(iterator, _onDiskBase + ".index.patterns",
+                                   langPredLowerBound, langPredUpperBound);
 }
 
 // _____________________________________________________________________________
 void Index::createFromOnDiskIndex(const string& onDiskBase) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
-  _vocab.readFromFile(_onDiskBase + ".vocabulary",
-                      _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
+  _vocab.readFromFile(
+      _onDiskBase + INTERNAL_VOCAB_SUFFIX,
+      _onDiskLiterals ? _onDiskBase + EXTERNAL_VOCAB_SUFFIX : "");
 
   _totalVocabularySize = _vocab.size() + _vocab.getExternalVocab().size();
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
@@ -971,99 +671,11 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   }
 
   if (_usePatterns) {
-    // Read the pattern info from the patterns file.
-    std::string patternsFilePath = _onDiskBase + ".index.patterns";
-    LOG(INFO) << "Reading patterns from file " << patternsFilePath << " ..."
-              << std::endl;
-    ad_utility::File patternsFile;
-    patternsFile.open(patternsFilePath, "r");
-    AD_CHECK(patternsFile.isOpen());
-    off_t off = 0;
-    unsigned char firstByte;
-    patternsFile.read(&firstByte, sizeof(char), off);
-    off++;
-    uint32_t version;
-    patternsFile.read(&version, sizeof(uint32_t), off);
-    off += sizeof(uint32_t);
-    if (version != PATTERNS_FILE_VERSION || firstByte != 255) {
-      version = firstByte == 255 ? version : -1;
-      _usePatterns = false;
-      patternsFile.close();
-      std::ostringstream oss;
-      oss << "The patterns file " << patternsFilePath << " version of "
-          << version << " does not match the programs pattern file "
-          << "version of " << PATTERNS_FILE_VERSION << ". Rebuild the index"
-          << " or start the query engine without pattern support." << std::endl;
-      throw std::runtime_error(oss.str());
-    } else {
-      patternsFile.read(&_fullHasPredicateMultiplicityEntities, sizeof(double),
-                        off);
-      off += sizeof(double);
-      patternsFile.read(&_fullHasPredicateMultiplicityPredicates,
-                        sizeof(double), off);
-      off += sizeof(double);
-      patternsFile.read(&_fullHasPredicateSize, sizeof(size_t), off);
-      off += sizeof(size_t);
-
-      // read the entity has patterns vector
-      size_t hasPatternSize;
-      patternsFile.read(&hasPatternSize, sizeof(size_t), off);
-      off += sizeof(size_t);
-      std::vector<array<Id, 2>> entityHasPattern(hasPatternSize);
-      patternsFile.read(entityHasPattern.data(),
-                        hasPatternSize * sizeof(Id) * 2, off);
-      off += hasPatternSize * sizeof(Id) * 2;
-
-      // read the entity has relation vector
-      size_t hasPredicateSize;
-      patternsFile.read(&hasPredicateSize, sizeof(size_t), off);
-      off += sizeof(size_t);
-      std::vector<array<Id, 2>> entityHasPredicate(hasPredicateSize);
-      patternsFile.read(entityHasPredicate.data(),
-                        hasPredicateSize * sizeof(Id) * 2, off);
-      off += hasPredicateSize * sizeof(Id) * 2;
-
-      // read the patterns
-      // TODO<joka921> Refactor the rest of the patterns into  the serializer
-      // interface.
-      patternsFile.seek(off, SEEK_SET);
-      ad_utility::serialization::FileReadSerializer patternLoader{
-          std::move(patternsFile)};
-      patternLoader >> _patterns;
-
-      // create the has-relation and has-pattern lookup vectors
-      if (entityHasPattern.size() > 0) {
-        _hasPattern.resize(entityHasPattern.back()[0] + 1);
-        size_t pos = 0;
-        for (size_t i = 0; i < entityHasPattern.size(); i++) {
-          while (entityHasPattern[i][0] > pos) {
-            _hasPattern[pos] = NO_PATTERN;
-            pos++;
-          }
-          _hasPattern[pos] = entityHasPattern[i][1];
-          pos++;
-        }
-      }
-
-      vector<vector<Id>> hasPredicateTmp;
-      if (entityHasPredicate.size() > 0) {
-        hasPredicateTmp.resize(entityHasPredicate.back()[0] + 1);
-        size_t pos = 0;
-        for (size_t i = 0; i < entityHasPredicate.size(); i++) {
-          Id current = entityHasPredicate[i][0];
-          while (current > pos) {
-            pos++;
-          }
-          while (i < entityHasPredicate.size() &&
-                 entityHasPredicate[i][0] == current) {
-            hasPredicateTmp.back().push_back(entityHasPredicate[i][1]);
-            i++;
-          }
-          pos++;
-        }
-      }
-      _hasPredicate.build(hasPredicateTmp);
-    }
+    PatternCreator::readPatternsFromFile(
+        _onDiskBase + ".index.patterns",
+        _fullHasPredicateMultiplicityPredicates,
+        _fullHasPredicateMultiplicityEntities, _fullHasPredicateSize, _patterns,
+        _hasPattern);
   }
 }
 
@@ -1272,9 +884,9 @@ void Index::readConfiguration() {
       for (string prefix; std::getline(prefixFile, prefix);) {
         prefixes.emplace_back(std::move(prefix));
       }
-      _vocab.initializePrefixes(prefixes);
+      _vocab.buildCodebookForPrefixCompression(prefixes);
     } else {
-      _vocab.initializePrefixes(std::vector<std::string>());
+      _vocab.buildCodebookForPrefixCompression(std::vector<std::string>());
     }
   }
 
@@ -1318,31 +930,29 @@ void Index::readConfiguration() {
 }
 
 // ___________________________________________________________________________
-LangtagAndTriple Index::tripleToInternalRepresentation(Triple&& tripleIn) {
-  LangtagAndTriple res{"", std::move(tripleIn)};
+LangtagAndTriple Index::tripleToInternalRepresentation(
+    std::array<std::string, 3>&& tripleIn) {
+  LangtagAndTriple res{"", makeTriple(std::move(tripleIn))};
   auto& spo = res._triple;
   for (auto& el : spo) {
-    el = _vocab.getLocaleManager().normalizeUtf8(el);
+    el._iriOrLiteral =
+        _vocab.getLocaleManager().normalizeUtf8(el._iriOrLiteral);
   }
   size_t upperBound = 3;
-  if (ad_utility::isXsdValue(spo[2])) {
-    spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
+  auto& object = spo[2]._iriOrLiteral;
+  if (ad_utility::isXsdValue(object)) {
+    object = ad_utility::convertValueLiteralToIndexWord(object);
     upperBound = 2;
-  } else if (ad_utility::isNumeric(spo[2])) {
-    spo[2] = ad_utility::convertNumericToIndexWord(spo[2]);
+  } else if (ad_utility::isNumeric(object)) {
+    object = ad_utility::convertNumericToIndexWord(object);
     upperBound = 2;
-  } else if (isLiteral(spo[2])) {
-    res._langtag = decltype(_vocab)::getLanguage(spo[2]);
+  } else if (isLiteral(object)) {
+    res._langtag = decltype(_vocab)::getLanguage(object);
   }
 
   for (size_t k = 0; k < upperBound; ++k) {
-    if (_onDiskLiterals && _vocab.shouldBeExternalized(spo[k])) {
-      if (isLiteral(spo[k])) {
-        spo[k][0] = EXTERNALIZED_LITERALS_PREFIX_CHAR;
-      } else {
-        AD_CHECK(spo[k][0] == '<');
-        spo[k][0] = EXTERNALIZED_ENTITIES_PREFIX_CHAR;
-      }
+    if (_onDiskLiterals && _vocab.shouldBeExternalized(spo[k]._iriOrLiteral)) {
+      spo[k]._isExternal = true;
     }
   }
   return res;
@@ -1434,11 +1044,10 @@ void Index::initializeVocabularySettingsBuild() {
     }
   }
 
-  if (j.count("num-triples-per-partial-vocab")) {
-    _numTriplesPerPartialVocab = size_t{j["num-triples-per-partial-vocab"]};
+  if (j.count("num-triples-per-batch")) {
+    _numTriplesPerBatch = size_t{j["num-triples-per-batch"]};
     LOG(INFO)
-        << "You specified \"num-triples-per-partial-vocab = "
-        << _numTriplesPerPartialVocab
+        << "You specified \"num-triples-per-batch = " << _numTriplesPerBatch
         << "\", choose a lower value if the index builder runs out of memory"
         << std::endl;
   }
@@ -1454,7 +1063,7 @@ void Index::initializeVocabularySettingsBuild() {
 // ___________________________________________________________________________
 std::future<void> Index::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-    std::unique_ptr<ItemMapArray> items, std::unique_ptr<TripleVec> localIds,
+    std::unique_ptr<ItemMapArray> items, auto localIds,
     ad_utility::Synchronized<TripleVec::bufwriter_type>* globalWritePtr) {
   LOG(DEBUG) << "Input triples read in this section: " << numLines << std::endl;
   LOG(DEBUG)
@@ -1497,7 +1106,7 @@ std::future<void> Index::writeNextPartialVocabulary(
     // make the update from local to global ids work.
     globalWritePtr->withWriteLockAndOrdered(
         [&](auto& writerPtr) {
-          writeMappedIdsToExtVec(*localIds, mapping, &writerPtr);
+          writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
         },
         numFiles);
     writePartialVocabularyToFile(vec, partialFilename);
@@ -1510,6 +1119,11 @@ std::future<void> Index::writeNextPartialVocabulary(
           false);
       LOG(TIMING) << "Finished sorting of vocabulary for prefix compression"
                   << std::endl;
+      LOG(TIMING) << "Remove externalized words from prefix compression"
+                  << std::endl;
+      std::erase_if(vec, [](const auto& a) {
+        return a.second.m_splitVal.isExternalized;
+      });
       writePartialVocabularyToFile(vec, partialCompressionFilename);
     }
     LOG(TIMING) << "Finished writing the partial vocabulary" << std::endl;

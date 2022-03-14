@@ -153,3 +153,96 @@ TEST(Serializer, Vector) {
   testWithAllSerializers(testTriviallyCopyableDatatype);
   testWithAllSerializers(testNonTriviallyCopyableDatatype);
 }
+
+TEST(Serializer, CopyAndMove) {
+  auto testWithMove = [](auto&& writer, auto makeReaderFromWriter) {
+    using Writer = std::decay_t<decltype(writer)>;
+
+    // Assert that write serializers cannot be copied.
+    static_assert(!requires(Writer w1, Writer w2) { {w1 = w2}; });
+    static_assert(!std::constructible_from<Writer, const Writer&>);
+
+    // Assert that moving writers consistently writes to the same resource.
+    writer | 1;
+    Writer writer2(std::move(writer));
+    writer2 | 2;
+    writer = std::move(writer2);
+    writer | 3;
+
+    auto reader = makeReaderFromWriter();
+    // Assert that read serializers cannot be copied.
+    using Reader = decltype(reader);
+    static_assert(!requires(Reader r1, Reader r2) { {r1 = r2}; });
+    static_assert(!std::constructible_from<Reader, const Reader&>);
+    // Assert that moving writers consistently reads from the same resource.
+    int i;
+    reader | i;
+    ASSERT_EQ(i, 1);
+    decltype(reader) reader2{std::move(reader)};
+    reader2 | i;
+    ASSERT_EQ(i, 2);
+    reader = std::move(reader2);
+    reader | i;
+    ASSERT_EQ(i, 3);
+  };
+  testWithAllSerializers(testWithMove);
+}
+
+TEST(VectorIncrementalSerializer, Serialize) {
+  std::vector<int> ints{9, 7, 5, 3, 1, -1, -3, 5, 5, 6, 67498235, 0, 42};
+  std::vector<std::string> strings{"alpha", "beta", "gamma", "Epsilon",
+                                   "kartoffelsalat"};
+  std::string filename = "vectorIncrementalTest.tmp";
+
+  auto testIncrementalSerialization =
+      [filename]<typename T>(const T& inputVector) {
+        VectorIncrementalSerializer<typename T::value_type, FileWriteSerializer>
+            writer{filename};
+        for (const auto& element : inputVector) {
+          writer.push(element);
+        }
+        writer.finish();
+        FileReadSerializer reader{filename};
+        T vectorRead;
+        reader >> vectorRead;
+        ASSERT_EQ(inputVector, vectorRead);
+      };
+  testIncrementalSerialization(ints);
+  testIncrementalSerialization(strings);
+  ad_utility::deleteFile(filename);
+}
+
+TEST(VectorIncrementalSerializer, SerializeInTheMiddle) {
+  std::vector<int> ints{9, 7, 5, 3, 1, -1, -3, 5, 5, 6, 67498235, 0, 42};
+  std::vector<std::string> strings{"alpha", "beta", "gamma", "Epsilon",
+                                   "kartoffelsalat"};
+  std::string filename = "vectorIncrementalTest.tmp";
+
+  auto testIncrementalSerialization =
+      [filename]<typename T>(const T& inputVector) {
+        FileWriteSerializer writeSerializer{filename};
+        double d = 42.42;
+        writeSerializer << d;
+        VectorIncrementalSerializer<typename T::value_type, FileWriteSerializer>
+            writer{std::move(writeSerializer)};
+        for (const auto& element : inputVector) {
+          writer.push(element);
+        }
+        writeSerializer = FileWriteSerializer{std::move(writer).serializer()};
+        d = -13.123;
+        writeSerializer << d;
+        writeSerializer.close();
+        FileReadSerializer reader{filename};
+        double doubleRead;
+        reader >> doubleRead;
+        ASSERT_FLOAT_EQ(doubleRead, 42.42);
+        T vectorRead;
+        reader >> vectorRead;
+        ASSERT_EQ(inputVector, vectorRead);
+        reader >> doubleRead;
+        ASSERT_FLOAT_EQ(doubleRead, -13.123);
+      };
+  testIncrementalSerialization(ints);
+  testIncrementalSerialization(strings);
+  ad_utility::deleteFile(filename);
+}

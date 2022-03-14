@@ -66,7 +66,7 @@ class Variable {
           AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
                    "Cannot deduce output type.");
       }
-      return stream.str();
+      return std::move(stream).str();
     }
     return std::nullopt;
   }

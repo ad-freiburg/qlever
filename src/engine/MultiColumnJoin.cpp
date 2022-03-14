@@ -52,7 +52,7 @@ string MultiColumnJoin::asString(size_t indent) const {
     os << _joinColumns[i][1] << (i < _joinColumns.size() - 1 ? " & " : "");
   };
   os << "]";
-  return os.str();
+  return std::move(os).str();
 }
 
 // _____________________________________________________________________________
