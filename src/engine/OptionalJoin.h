@@ -18,7 +18,7 @@ class OptionalJoin : public Operation {
                std::shared_ptr<QueryExecutionTree> t2, bool t2Optional,
                const std::vector<array<Id, 2>>& joinCols);
 
- protected:
+ private:
   virtual string asStringImpl(size_t indent = 0) const override;
 
  public:

@@ -28,7 +28,7 @@ class HasPredicateScan : public Operation {
 
   HasPredicateScan(QueryExecutionContext* qec, ScanType type);
 
- protected:
+ private:
   virtual string asStringImpl(size_t indent = 0) const override;
 
  public:

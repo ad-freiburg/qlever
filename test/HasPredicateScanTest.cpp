@@ -30,7 +30,7 @@ class DummyOperation : public Operation {
     }
   }
 
- protected:
+ private:
   string asStringImpl(size_t indent = 0) const override {
     (void)indent;
     return "dummy";

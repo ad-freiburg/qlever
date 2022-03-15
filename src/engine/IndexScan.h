@@ -30,7 +30,7 @@ class IndexScan : public Operation {
     FULL_INDEX_SCAN_OPS = 14
   };
 
- protected:
+ private:
   virtual string asStringImpl(size_t indent = 0) const override;
 
  public:

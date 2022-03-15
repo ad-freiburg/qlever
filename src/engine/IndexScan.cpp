@@ -453,6 +453,36 @@ void IndexScan::determineMultiplicities() {
 
 void IndexScan::computeFullScan(ResultTable* result,
                                 const auto& Permutation) const {
+
+  std::vector<std::pair<Id, Id>> ignoredRanges;
+  using P = decltype(Permutation);
+
+  auto literalRange = getIndex().getVocab().prefix_range("\"");
+  auto taggedPredicatesRange = getIndex().getVocab().prefix_range("@");
+  Id languagePredicateId;
+  bool success = getIndex().getVocab().getId(LANGUAGE_PREDICATE, &languagePredicateId);
+  AD_CHECK(success);
+
+
+  if (ad_utility::isSimilar<Permutation::SPO_T, P> || ad_utility::isSimilar<Permutation::SOP_T, P>) {
+    ignoredRanges.push_back(literalRange);
+  } else if (ad_utility::isSimilar<Permutation::PSO_T, P> || ad_utility::isSimilar<Permutation::POS_T, P>) {
+    ignoredRanges.push_back(taggedPredicatesRange);
+    ignoredRanges.emplace_back(languagePredicateId, languagePredicateId + 1);
+  }
+
+  auto isTripelIgnored = [&](const auto& triple) {
+    if constexpr (ad_utility::isSimilar<Permutation::SPO_T, P> || ad_utility::isSimilar<Permutation::OPS_T, P>) {
+      return triple[1] == languagePredicateId || (triple[1] >= taggedPredicatesRange.first && triple[1] < taggedPredicatesRange.second);
+    } else if constexpr (ad_utility::isSimilar<Permutation::SOP_T, P> || ad_utility::isSimilar<Permutation::OSP_T, P>) {
+      return triple[2] == languagePredicateId ||
+             (triple[2] >= taggedPredicatesRange.first &&
+              triple[2] < taggedPredicatesRange.second);
+    }
+    return false;
+  };
+
+
   result->_idTable.setCols(3);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
@@ -466,7 +496,7 @@ void IndexScan::computeFullScan(ResultTable* result,
   result->_idTable.reserve(resultSize);
   auto table = result->_idTable.moveToStatic<3>();
   size_t i = 0;
-  for (const auto& triple : TriplesView(Permutation)) {
+  for (const auto& triple : TriplesView(Permutation, getExecutionContext()->getAllocator(), ignoredRanges, isTripelIgnored)) {
     if (i >= resultSize) {
       break;
     }

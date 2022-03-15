@@ -79,7 +79,7 @@ class Operation {
     return result;
   }
 
- protected:
+ private:
   // The individual implementation of `asString` (see above) that has to be
   // customized by every child class.
   virtual string asStringImpl(size_t indent = 0) const = 0;

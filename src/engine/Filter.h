@@ -25,7 +25,7 @@ class Filter : public Operation {
          SparqlFilter::FilterType type, string lhs, string rhs,
          vector<string> additionalLhs, vector<string> additionalPrefixes);
 
- protected:
+ private:
   virtual string asStringImpl(size_t indent = 0) const override;
 
  public:
