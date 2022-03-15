@@ -176,3 +176,5 @@ addLinkAndDiscoverTest(ForwardTest)
 addLinkAndDiscoverTest(CompressorStreamTest engine)
 
 addLinkAndDiscoverTest(AsyncStreamTest)
+
+addLinkAndDiscoverTest(TriplesViewTest)

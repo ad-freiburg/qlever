@@ -176,7 +176,8 @@ template void CompressedRelationMetaData::scan<Permutation::OSP_T, IdTable>(
     Id key, IdTable* result, const Permutation::OSP_T& p,
     ad_utility::SharedConcurrentTimeoutTimer timer);
 
-using V = std::vector<std::array<Id, 2>, ad_utility::AllocatorWithLimit<std::array<Id, 2>>>;
+using V = std::vector<std::array<Id, 2>,
+                      ad_utility::AllocatorWithLimit<std::array<Id, 2>>>;
 template void CompressedRelationMetaData::scan<Permutation::POS_T, V>(
     Id key, V* result, const Permutation::POS_T& p,
     ad_utility::SharedConcurrentTimeoutTimer timer);
