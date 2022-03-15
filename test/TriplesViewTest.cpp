@@ -6,7 +6,7 @@
 
 #include "../src/index/TriplesView.h"
 
-// This struct imitates the structure of the actual `Permutation` types used in
+// This struct mocks the structure of the actual `Permutation` types used in
 // QLever for testing the `TriplesView`.
 struct DummyPermutation {
   void scan(Id col0Id, auto* result) const {

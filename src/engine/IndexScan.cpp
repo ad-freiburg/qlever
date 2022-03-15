@@ -472,7 +472,7 @@ void IndexScan::computeFullScan(ResultTable* result,
     ignoredRanges.emplace_back(languagePredicateId, languagePredicateId + 1);
   }
 
-  auto isTripelIgnored = [&](const auto& triple) {
+  auto isTripleIgnored = [&](const auto& triple) {
     if constexpr (ad_utility::isSimilar<Permutation::SPO_T, P> ||
                   ad_utility::isSimilar<Permutation::OPS_T, P>) {
       return triple[1] == languagePredicateId ||
@@ -502,7 +502,7 @@ void IndexScan::computeFullScan(ResultTable* result,
   size_t i = 0;
   for (const auto& triple :
        TriplesView(Permutation, getExecutionContext()->getAllocator(),
-                   ignoredRanges, isTripelIgnored)) {
+                   ignoredRanges, isTripleIgnored)) {
     if (i >= resultSize) {
       break;
     }

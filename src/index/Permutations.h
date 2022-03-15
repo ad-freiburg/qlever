@@ -53,8 +53,7 @@ class PermutationImpl {
 
   /// For a given ID for the first column, retrieve all IDs of the second and
   /// third column, and store them in `result`. This is just a thin wrapper
-  /// around
-  //// `CompressedRelationMetaData::scan`.
+  /// around `CompressedRelationMetaData::scan`.
   template <typename IdTableImpl>
   void scan(Id col0Id, IdTableImpl* result,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {

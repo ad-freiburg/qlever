@@ -154,7 +154,7 @@ class MetaDataWrapperHashMap {
   // in order. This is used for deterministically exporting the underlying
   // permutation.
   static inline auto getSortedKey = [](const auto& wrapper,
-                                             uint64_t i) -> decltype(auto) {
+                                       uint64_t i) -> decltype(auto) {
     const auto& m = wrapper.getUnderlyingHashMap();
     return *m.find(wrapper.sortedKeys()[i]);
   };
