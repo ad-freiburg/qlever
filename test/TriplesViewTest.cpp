@@ -56,6 +56,7 @@ TEST(TriplesView, AllTriples) {
   ASSERT_EQ(result, expectedResult());
 }
 
+
 TEST(TriplesView, IgnoreRanges) {
   std::vector<std::array<Id, 3>> result;
   auto expected = expectedResult();
