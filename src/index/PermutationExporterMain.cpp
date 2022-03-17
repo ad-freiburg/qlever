@@ -8,7 +8,10 @@
 /// in deterministic order
 template <typename Permutation>
 void dumpToStdout(const Permutation& permutation) {
-  auto triples = TriplesView(permutation);
+  ad_utility::AllocatorWithLimit<Id> allocator{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          std::numeric_limits<uint64_t>::max())};
+  auto triples = TriplesView(permutation, allocator);
   size_t i = 0;
   for (auto triple : triples) {
     std::cout << triple[0] << " " << triple[1] << " " << triple[2] << std::endl;

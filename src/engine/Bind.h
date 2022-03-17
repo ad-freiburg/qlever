@@ -17,7 +17,10 @@ class Bind : public Operation {
       : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {}
 
   // For the documentation of the overridden members, see Operation.h
-  [[nodiscard]] string asString(size_t indent) const override;
+ protected:
+  [[nodiscard]] string asStringImpl(size_t indent) const override;
+
+ public:
   [[nodiscard]] string getDescriptor() const override;
   [[nodiscard]] size_t getResultWidth() const override;
   std::vector<QueryExecutionTree*> getChildren() override;

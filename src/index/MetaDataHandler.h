@@ -10,6 +10,7 @@
 #include "../global/Id.h"
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
+#include "../util/Iterators.h"
 #include "../util/Log.h"
 #include "./CompressedRelation.h"
 
@@ -21,7 +22,11 @@ class MetaDataWrapperDense {
   struct AddGetIdIterator : BaseIterator {
     using BaseIterator::BaseIterator;
     AddGetIdIterator(BaseIterator base) : BaseIterator{base} {}
-    uint64_t getId() const { return (*this)->_col0Id; }
+    uint64_t getId() const { return getIdFromElement(*(*this)); }
+    static uint64_t getIdFromElement(
+        const typename BaseIterator::value_type& v) {
+      return v._col0Id;
+    }
   };
 
   using Iterator = AddGetIdIterator<typename M::iterator>;
@@ -135,6 +140,10 @@ class MetaDataWrapperHashMap {
     using BaseIterator::BaseIterator;
     AddGetIdIterator(BaseIterator base) : BaseIterator{base} {}
     uint64_t getId() const { return (*this)->first; }
+    static uint64_t getIdFromElement(
+        const typename BaseIterator::value_type& v) {
+      return v.first;
+    }
   };
   using Iterator = AddGetIdIterator<typename hashMap::iterator>;
   using ConstIterator = AddGetIdIterator<typename hashMap::const_iterator>;
@@ -144,60 +153,16 @@ class MetaDataWrapperHashMap {
   // An iterator on the underlying hashMap that iterates over the elements
   // in order. This is used for deterministically exporting the underlying
   // permutation.
-  class ConstOrderedIterator {
-    using key_type = typename hashMap::key_type;
-
-    const MetaDataWrapperHashMap& wrapper_;
-    std::vector<key_type> sortedKeys_;
-    size_t position_;
-
-   public:
-    // ________________________________________________________________________
-    ConstOrderedIterator(const MetaDataWrapperHashMap& wrapper, size_t position)
-        : wrapper_{wrapper}, position_{position} {
-      // Sort all the keys from the underlying hashMap and store them.
-      sortedKeys_.reserve(wrapper.size());
-      for (const auto& [key, value] : wrapper_) {
-        (void)value;  // Silence the warning about `value` being unused.
-        sortedKeys_.push_back(key);
-      }
-      std::sort(sortedKeys_.begin(), sortedKeys_.end());
-    }
-
-    // ________________________________________________________________________
-    const auto& operator*() const {
-      const auto& m = wrapper_.getUnderlyingHashMap();
-      return *m.find(sortedKeys_[position_]);
-    }
-
-    // _________________________________________________
-    const auto* operator->() const {
-      // Call operator* and return a pointer to the result.
-      // This is safe, because the underlying hashMap ensures the lifetime of
-      // the returned reference;
-      return &(**this);
-    }
-
-    // ________________________________________________________________________
-    ConstOrderedIterator& operator++() {
-      ++position_;
-      return *this;
-    }
-
-    // _________________________________________________________________________
-    ConstOrderedIterator operator++(int) {
-      auto cpy = *this;
-      ++position_;
-      return cpy;
-    }
-
-    bool operator==(const ConstOrderedIterator& rhs) const {
-      return position_ == rhs.position_;
-    }
-
-    // ________________________________________________________________________
-    uint64_t getId() const { return (*this)->first; }
+  static inline auto getSortedKey = [](const auto& wrapper,
+                                       uint64_t i) -> decltype(auto) {
+    const auto& m = wrapper.getUnderlyingHashMap();
+    return *m.find(wrapper.sortedKeys()[i]);
   };
+
+  using ConstOrderedIteratorBase =
+      ad_utility::IteratorForAccessOperator<MetaDataWrapperHashMap,
+                                            decltype(getSortedKey)>;
+  using ConstOrderedIterator = AddGetIdIterator<ConstOrderedIteratorBase>;
 
   // nothing to do here, since the default constructor of the hashMap does
   // everything we want
@@ -217,7 +182,7 @@ class MetaDataWrapperHashMap {
 
   // _________________________________________________________________________
   ConstOrderedIterator ordered_begin() const {
-    return ConstOrderedIterator{*this, 0};
+    return ConstOrderedIterator{this, 0};
   }
 
   // ____________________________________________________________
@@ -229,11 +194,18 @@ class MetaDataWrapperHashMap {
 
   // _________________________________________________________________________
   ConstOrderedIterator ordered_end() const {
-    return ConstOrderedIterator{*this, size()};
+    AD_CHECK(size() == _sortedKeys.size());
+    return ConstOrderedIterator{this, size()};
   }
 
   // ____________________________________________________________
-  void set(Id id, value_type value) { _map[id] = std::move(value); }
+  void set(Id id, value_type value) {
+    _map[id] = std::move(value);
+    if (!_sortedKeys.empty()) {
+      AD_CHECK(id > _sortedKeys.back());
+    }
+    _sortedKeys.push_back(id);
+  }
 
   const auto& getUnderlyingHashMap() const { return _map; }
 
@@ -261,8 +233,19 @@ class MetaDataWrapperHashMap {
   friend void serialize(Serializer& serializer,
                         MetaDataWrapperHashMap& metaDataWrapper) {
     serializer | metaDataWrapper._map;
+    metaDataWrapper._sortedKeys.clear();
+    metaDataWrapper._sortedKeys.reserve(metaDataWrapper.size());
+    for (const auto& [key, value] : metaDataWrapper) {
+      (void)value;  // Silence the warning about `value` being unused.
+      metaDataWrapper._sortedKeys.push_back(key);
+    }
+    std::sort(metaDataWrapper._sortedKeys.begin(),
+              metaDataWrapper._sortedKeys.end());
   }
+
+  const auto& sortedKeys() const { return _sortedKeys; }
 
  private:
   hashMap _map;
+  std::vector<typename hashMap::key_type> _sortedKeys;
 };

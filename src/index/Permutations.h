@@ -51,6 +51,24 @@ class PermutationImpl {
     _isLoaded = true;
   }
 
+  /// For a given ID for the first column, retrieve all IDs of the second and
+  /// third column, and store them in `result`. This is just a thin wrapper
+  /// around `CompressedRelationMetaData::scan`.
+  template <typename IdTableImpl>
+  void scan(Id col0Id, IdTableImpl* result,
+            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
+    return CompressedRelationMetaData::scan(col0Id, result, *this, timer);
+  }
+  /// For given IDs for the first and second column, retrieve all IDs of the
+  /// third column, and store them in `result`. This is just a thin wrapper
+  /// around `CompressedRelationMetaData::scan`.
+  template <typename IdTableImpl>
+  void scan(Id col0Id, Id col1Id, IdTableImpl* result,
+            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
+    return CompressedRelationMetaData::scan(col0Id, col1Id, result, *this,
+                                            timer);
+  }
+
   // _______________________________________________________
   void setKbName(const string& name) { _meta.setName(name); }
 

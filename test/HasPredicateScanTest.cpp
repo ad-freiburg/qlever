@@ -30,11 +30,13 @@ class DummyOperation : public Operation {
     }
   }
 
-  string asString(size_t indent = 0) const override {
+ private:
+  string asStringImpl(size_t indent = 0) const override {
     (void)indent;
     return "dummy";
   }
 
+ public:
   string getDescriptor() const override { return "dummy"; }
 
   virtual size_t getResultWidth() const override { return 2; }
