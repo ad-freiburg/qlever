@@ -24,7 +24,7 @@ OrderBy::OrderBy(QueryExecutionContext* qec,
       _sortIndices(std::move(sortIndices)) {}
 
 // _____________________________________________________________________________
-string OrderBy::asString(size_t indent) const {
+string OrderBy::asStringImpl(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";

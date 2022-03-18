@@ -25,8 +25,10 @@ class Filter : public Operation {
          SparqlFilter::FilterType type, string lhs, string rhs,
          vector<string> additionalLhs, vector<string> additionalPrefixes);
 
-  virtual string asString(size_t indent = 0) const override;
+ private:
+  virtual string asStringImpl(size_t indent = 0) const override;
 
+ public:
   virtual string getDescriptor() const override;
 
   virtual vector<size_t> resultSortedOn() const override {

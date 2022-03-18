@@ -35,7 +35,7 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string OptionalJoin::asString(size_t indent) const {
+string OptionalJoin::asStringImpl(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";

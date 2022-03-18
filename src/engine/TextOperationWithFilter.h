@@ -22,8 +22,10 @@ class TextOperationWithFilter : public Operation {
                           std::shared_ptr<QueryExecutionTree> filterResult,
                           size_t filterColumn, size_t textLimit = 1);
 
-  virtual string asString(size_t indent) const override;
+ protected:
+  virtual string asStringImpl(size_t indent) const override;
 
+ public:
   virtual string getDescriptor() const override;
 
   virtual size_t getResultWidth() const override;

@@ -49,7 +49,7 @@ TwoColumnJoin::TwoColumnJoin(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string TwoColumnJoin::asString(size_t indent) const {
+string TwoColumnJoin::asStringImpl(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";

@@ -39,7 +39,7 @@ Union::Union(QueryExecutionContext* qec,
   }
 }
 
-string Union::asString(size_t indent) const {
+string Union::asStringImpl(size_t indent) const {
   std::ostringstream os;
   os << _subtrees[0]->asString(indent) << "\n";
   for (size_t i = 0; i < indent; ++i) {
