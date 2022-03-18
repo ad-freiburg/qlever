@@ -15,7 +15,7 @@ Values::Values(QueryExecutionContext* qec, SparqlValues values)
   _values = sanitizeValues(std::move(values));
 }
 
-string Values::asString(size_t indent) const {
+string Values::asStringImpl(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";

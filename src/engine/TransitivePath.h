@@ -46,8 +46,10 @@ class TransitivePath : public Operation {
    */
   bool isBound() const;
 
-  virtual std::string asString(size_t indent = 0) const override;
+ protected:
+  virtual std::string asStringImpl(size_t indent = 0) const override;
 
+ public:
   virtual std::string getDescriptor() const override;
 
   virtual size_t getResultWidth() const override;

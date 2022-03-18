@@ -18,8 +18,10 @@ class OptionalJoin : public Operation {
                std::shared_ptr<QueryExecutionTree> t2, bool t2Optional,
                const std::vector<array<Id, 2>>& joinCols);
 
-  virtual string asString(size_t indent = 0) const override;
+ private:
+  virtual string asStringImpl(size_t indent = 0) const override;
 
+ public:
   virtual string getDescriptor() const override;
 
   virtual size_t getResultWidth() const override;

@@ -640,7 +640,12 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
   auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
-  auto iterator = TriplesView(_SPO);
+  // We only iterate over the SPO permutation which typically only has few
+  // triples per subject, so it should be safe to not apply a memory limit here.
+  ad_utility::AllocatorWithLimit<Id> allocator{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          std::numeric_limits<uint64_t>::max())};
+  auto iterator = TriplesView(_SPO, allocator);
   createPatternsFromSpoTriplesView(iterator, _onDiskBase + ".index.patterns",
                                    langPredLowerBound, langPredUpperBound);
 }

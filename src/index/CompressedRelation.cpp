@@ -156,7 +156,6 @@ void CompressedRelationMetaData::scan(
   }
 }
 
-using V = std::vector<std::array<Id, 2>>;
 // Explicit instantiations for all six permutations
 template void CompressedRelationMetaData::scan<Permutation::POS_T, IdTable>(
     Id key, IdTable* result, const Permutation::POS_T& p,
@@ -177,6 +176,8 @@ template void CompressedRelationMetaData::scan<Permutation::OSP_T, IdTable>(
     Id key, IdTable* result, const Permutation::OSP_T& p,
     ad_utility::SharedConcurrentTimeoutTimer timer);
 
+using V = std::vector<std::array<Id, 2>,
+                      ad_utility::AllocatorWithLimit<std::array<Id, 2>>>;
 template void CompressedRelationMetaData::scan<Permutation::POS_T, V>(
     Id key, V* result, const Permutation::POS_T& p,
     ad_utility::SharedConcurrentTimeoutTimer timer);
@@ -194,6 +195,26 @@ template void CompressedRelationMetaData::scan<Permutation::OPS_T, V>(
     ad_utility::SharedConcurrentTimeoutTimer timer);
 template void CompressedRelationMetaData::scan<Permutation::OSP_T, V>(
     Id key, V* result, const Permutation::OSP_T& p,
+    ad_utility::SharedConcurrentTimeoutTimer timer);
+
+using V2 = std::vector<std::array<Id, 2>>;
+template void CompressedRelationMetaData::scan<Permutation::POS_T, V2>(
+    Id key, V2* result, const Permutation::POS_T& p,
+    ad_utility::SharedConcurrentTimeoutTimer timer);
+template void CompressedRelationMetaData::scan<Permutation::PSO_T, V2>(
+    Id key, V2* result, const Permutation::PSO_T& p,
+    ad_utility::SharedConcurrentTimeoutTimer timer);
+template void CompressedRelationMetaData::scan<Permutation::SPO_T, V2>(
+    Id key, V2* result, const Permutation::SPO_T& p,
+    ad_utility::SharedConcurrentTimeoutTimer timer);
+template void CompressedRelationMetaData::scan<Permutation::SOP_T, V2>(
+    Id key, V2* result, const Permutation::SOP_T& p,
+    ad_utility::SharedConcurrentTimeoutTimer timer);
+template void CompressedRelationMetaData::scan<Permutation::OPS_T, V2>(
+    Id key, V2* result, const Permutation::OPS_T& p,
+    ad_utility::SharedConcurrentTimeoutTimer timer);
+template void CompressedRelationMetaData::scan<Permutation::OSP_T, V2>(
+    Id key, V2* result, const Permutation::OSP_T& p,
     ad_utility::SharedConcurrentTimeoutTimer timer);
 
 // _____________________________________________________________________________

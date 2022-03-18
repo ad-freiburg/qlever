@@ -7,10 +7,12 @@
 #include <sstream>
 #include <string>
 
+#include "../index/TriplesView.h"
+
 using std::string;
 
 // _____________________________________________________________________________
-string IndexScan::asString(size_t indent) const {
+string IndexScan::asStringImpl(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << ' ';
@@ -253,14 +255,23 @@ void IndexScan::computeResult(ResultTable* result) {
       computeOPSfreeP(result);
       break;
     case FULL_INDEX_SCAN_SPO:
+      computeFullScan(result, getIndex().SPO());
+      break;
     case FULL_INDEX_SCAN_SOP:
+      computeFullScan(result, getIndex().SOP());
+      break;
     case FULL_INDEX_SCAN_PSO:
+      computeFullScan(result, getIndex().PSO());
+      break;
     case FULL_INDEX_SCAN_POS:
+      computeFullScan(result, getIndex().POS());
+      break;
     case FULL_INDEX_SCAN_OSP:
+      computeFullScan(result, getIndex().OSP());
+      break;
     case FULL_INDEX_SCAN_OPS:
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-               "Asked to execute a scan for the full index. "
-               "This should never happen.");
+      computeFullScan(result, getIndex().OPS());
+      break;
   }
   LOG(DEBUG) << "IndexScan result computation done.\n";
 }
@@ -438,4 +449,65 @@ void IndexScan::determineMultiplicities() {
     }
   }
   assert(_multiplicity.size() >= 1 || _multiplicity.size() <= 3);
+}
+
+void IndexScan::computeFullScan(ResultTable* result,
+                                const auto& Permutation) const {
+  std::vector<std::pair<Id, Id>> ignoredRanges;
+  using P = decltype(Permutation);
+
+  auto literalRange = getIndex().getVocab().prefix_range("\"");
+  auto taggedPredicatesRange = getIndex().getVocab().prefix_range("@");
+  Id languagePredicateId;
+  bool success =
+      getIndex().getVocab().getId(LANGUAGE_PREDICATE, &languagePredicateId);
+  AD_CHECK(success);
+
+  if (ad_utility::isSimilar<Permutation::SPO_T, P> ||
+      ad_utility::isSimilar<Permutation::SOP_T, P>) {
+    ignoredRanges.push_back(literalRange);
+  } else if (ad_utility::isSimilar<Permutation::PSO_T, P> ||
+             ad_utility::isSimilar<Permutation::POS_T, P>) {
+    ignoredRanges.push_back(taggedPredicatesRange);
+    ignoredRanges.emplace_back(languagePredicateId, languagePredicateId + 1);
+  }
+
+  auto isTripleIgnored = [&](const auto& triple) {
+    if constexpr (ad_utility::isSimilar<Permutation::SPO_T, P> ||
+                  ad_utility::isSimilar<Permutation::OPS_T, P>) {
+      return triple[1] == languagePredicateId ||
+             (triple[1] >= taggedPredicatesRange.first &&
+              triple[1] < taggedPredicatesRange.second);
+    } else if constexpr (ad_utility::isSimilar<Permutation::SOP_T, P> ||
+                         ad_utility::isSimilar<Permutation::OSP_T, P>) {
+      return triple[2] == languagePredicateId ||
+             (triple[2] >= taggedPredicatesRange.first &&
+              triple[2] < taggedPredicatesRange.second);
+    }
+    return false;
+  };
+
+  result->_idTable.setCols(3);
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
+  result->_sortedBy = {0, 1, 2};
+
+  uint64_t resultSize = getIndex().getNofTriples();
+  if (getLimit().has_value() && getLimit() < resultSize) {
+    resultSize = getLimit().value();
+  }
+  result->_idTable.reserve(resultSize);
+  auto table = result->_idTable.moveToStatic<3>();
+  size_t i = 0;
+  for (const auto& triple :
+       TriplesView(Permutation, getExecutionContext()->getAllocator(),
+                   ignoredRanges, isTripleIgnored)) {
+    if (i >= resultSize) {
+      break;
+    }
+    table.push_back(triple);
+    ++i;
+  }
+  result->_idTable = table.moveToDynamic();
 }

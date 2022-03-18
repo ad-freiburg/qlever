@@ -47,8 +47,10 @@ class CountAvailablePredicates : public Operation {
    */
   CountAvailablePredicates(QueryExecutionContext* qec, std::string entityName);
 
-  [[nodiscard]] string asString(size_t indent) const override;
+ protected:
+  [[nodiscard]] string asStringImpl(size_t indent) const override;
 
+ public:
   [[nodiscard]] string getDescriptor() const override;
 
   [[nodiscard]] size_t getResultWidth() const override;

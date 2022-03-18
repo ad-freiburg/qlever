@@ -1,22 +1,92 @@
 #pragma once
 
+#include <utility>
+#include <vector>
+
 #include "../global/Id.h"
+#include "../util/AllocatorWithLimit.h"
 #include "../util/File.h"
 #include "../util/Generator.h"
 #include "CompressedRelation.h"
 
+namespace detail {
+using IgnoredRelations = std::vector<std::pair<Id, Id>>;
+inline auto alwaysReturnFalse = [](auto&&...) { return false; };
+}  // namespace detail
+
 /**
- * This allows iterating over one of the permutations of the index once.
- **/
-cppcoro::generator<std::array<Id, 3>> TriplesView(const auto& permutation) {
+ * @brief Yield all triples from a given permutations
+ * @param permutation
+ * @param allocator The current implementation reads complete relations into
+ *        memory. The `allocator` is used  to allocate the needed buffers for
+ *        this.
+ * @param ignoredRanges For each range (a, b) in `ignoredRanges` a triple
+ *        will not be yielded if a <= triple[0] < b. Specifying contiguous
+ *        ranges of ignored relations is more efficient than the
+ *        `isTripleIgnored` callable (see below), because the ignored relations
+ *        will never be read from disk. If the different pairs overlap, the
+ *        behavior is undefined.
+ * @param isTripleIgnored For each triple `isTripleIgnored(triple)` is called.
+ *        The triple is only yielded, if the result of this call is `false` ̇.
+ */
+template <typename IsTripleIgnored = decltype(detail::alwaysReturnFalse)>
+cppcoro::generator<std::array<Id, 3>> TriplesView(
+    const auto& permutation, ad_utility::AllocatorWithLimit<Id> allocator,
+    detail::IgnoredRelations ignoredRanges = {},
+    IsTripleIgnored isTripleIgnored = IsTripleIgnored{}) {
+  std::sort(ignoredRanges.begin(), ignoredRanges.end());
+
   const auto& metaData = permutation._meta.data();
-  for (auto it = metaData.ordered_begin(); it != metaData.ordered_end(); ++it) {
-    uint64_t id = it.getId();
-    std::vector<std::array<Id, 2>> col2And3;
-    CompressedRelationMetaData::scan(id, &col2And3, permutation);
-    for (const auto& [col2, col3] : col2And3) {
-      std::array<Id, 3> triple{id, col2, col3};
-      co_yield triple;
+  // The argument `ignoredRanges` specifies the ignored ranges, but we need to
+  // compute the ranges that are allowed (the inverse).
+  using Iterator = std::decay_t<decltype(metaData.ordered_begin())>;
+  std::vector<std::pair<Iterator, Iterator>> allowedRanges;
+
+  // Add sentinels.
+  ignoredRanges.insert(ignoredRanges.begin(), {0, 0});
+  ignoredRanges.insert(ignoredRanges.end(), {std::numeric_limits<Id>::max(),
+                                             std::numeric_limits<Id>::max()});
+  auto orderedBegin = metaData.ordered_begin();
+  auto orderedEnd = metaData.ordered_end();
+
+  // Convert the `ignoredRanges` to the `allowedRanges`. The algorithm
+  // works because of the sentinels.
+  for (auto it = ignoredRanges.begin(); it != ignoredRanges.end() - 1; ++it) {
+    auto beginOfAllowed = std::lower_bound(
+        orderedBegin, orderedEnd, it->second,
+        [](const auto& meta, const auto& id) {
+          return decltype(orderedBegin)::getIdFromElement(meta) < id;
+        });
+    auto endOfAllowed = std::lower_bound(
+        orderedBegin, orderedEnd, (it + 1)->first,
+        [](const auto& meta, const auto& id) {
+          return decltype(orderedBegin)::getIdFromElement(meta) < id;
+        });
+    allowedRanges.emplace_back(beginOfAllowed, endOfAllowed);
+  }
+
+  // Currently complete relations are yielded at once. This might take a lot of
+  // space for certain predicates in the Pxx permutations, so we respect the
+  // specified memory limit.
+  // TODO<joka921> Implement the scanning of large relations lazily and in
+  // blocks, making the limit here unnecessary.
+  using Tuple = std::array<Id, 2>;
+  auto tupleAllocator = allocator.as<Tuple>();
+  std::vector<Tuple, ad_utility::AllocatorWithLimit<Tuple>> col2And3{
+      tupleAllocator};
+  for (auto& [begin, end] : allowedRanges) {
+    for (auto it = begin; it != end; ++it) {
+      col2And3.clear();
+      uint64_t id = it.getId();
+      // TODO<joka921> We could also pass a timeout pointer here.
+      permutation.scan(id, &col2And3);
+      for (const auto& [col2, col3] : col2And3) {
+        std::array<Id, 3> triple{id, col2, col3};
+        if (isTripleIgnored(triple)) [[unlikely]] {
+          continue;
+        }
+        co_yield triple;
+      }
     }
   }
 }

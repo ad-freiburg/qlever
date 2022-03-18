@@ -42,7 +42,7 @@ void GroupBy::setSubtree(std::shared_ptr<QueryExecutionTree> subtree) {
   _subtree = std::move(subtree);
 }
 
-string GroupBy::asString(size_t indent) const {
+string GroupBy::asStringImpl(size_t indent) const {
   const auto varMap = getVariableColumns();
   const auto varMapInput = _subtree->getVariableColumns();
   std::ostringstream os;

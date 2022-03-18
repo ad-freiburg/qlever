@@ -32,10 +32,12 @@ template <typename RandomAccessContainer,
 class IteratorForAccessOperator {
  public:
   using iterator_category = std::random_access_iterator_tag;
+  using difference_type = int64_t;
   using index_type = uint64_t;
   using value_type = std::remove_reference_t<
       std::invoke_result_t<Accessor, const RandomAccessContainer&, index_type>>;
-  using difference_type = int64_t;
+  using pointer = value_type*;
+  using reference = value_type&;
 
  private:
   using RandomAccessContainerPtr =
