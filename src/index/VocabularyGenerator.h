@@ -19,7 +19,7 @@ using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
 using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
 using std::string;
 
-using TripleVec = stxxl::vector<std::array<Id, 3>>;
+using TripleVec = stxxl::vector<std::array<FancyId, 3>>;
 
 /**
  * Class for merging the partial vocabularies. The main function is still in the
@@ -100,8 +100,8 @@ class VocabularyMerger {
     _outfileExternal = std::ofstream();
     _idVecs.clear();
     _firstLangPredSeen = false;
-    _langPredLowerBound = 0;
-    _langPredUpperBound = 0;
+    _langPredLowerBound = Id::Undefined();
+    _langPredUpperBound = Id::Undefined();
   }
 
   // private data members
@@ -116,8 +116,8 @@ class VocabularyMerger {
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> _idVecs;
   bool _firstLangPredSeen = false;
-  Id _langPredLowerBound = 0;
-  Id _langPredUpperBound = 0;
+  Id _langPredLowerBound = Id::Undefined();
+  Id _langPredUpperBound = Id::Undefined();
 
   const size_t _bufferSize = 10000000;
 
@@ -151,7 +151,7 @@ ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
  * @param els  Must be sorted(at least duplicates must be adjacent) according to
  * the strings and the Ids must be unique to work correctly.
  */
-ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* els);
+ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec* els);
 
 /**
  * @brief for each of the IdTriples in <input>: map the three Ids using the

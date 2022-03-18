@@ -36,6 +36,7 @@
 #include "./StxxlSortFunctors.h"
 #include "./TextMetaData.h"
 #include "./Vocabulary.h"
+#include "../engine/datatypes/Datatypes.h"
 
 using ad_utility::BufferedVector;
 using ad_utility::MmapVector;
@@ -46,11 +47,13 @@ using std::string;
 using std::tuple;
 using std::vector;
 
+using ad_utility::datatypes::FancyId;
+
 using json = nlohmann::json;
 
 template <typename Comparator>
 using StxxlSorter =
-    ad_utility::BackgroundStxxlSorter<std::array<Id, 3>, Comparator>;
+    ad_utility::BackgroundStxxlSorter<std::array<ad_utility::datatypes::FancyId, 3>, Comparator>;
 
 using PsoSorter = StxxlSorter<SortByPSO>;
 
@@ -67,7 +70,7 @@ struct IndexBuilderDataBase {
 // All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
 // triples.
 struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
-  using TripleVec = stxxl::vector<array<Id, 3>>;
+  using TripleVec = stxxl::vector<array<ad_utility::datatypes::FancyId, 3>>;
   // All the triples as Ids.
   std::unique_ptr<TripleVec> idTriples;
   // The number of triples for each partial vocabulary. This also depends on the
@@ -94,7 +97,7 @@ class TurtleParserAuto {};
 
 class Index {
  public:
-  using TripleVec = stxxl::vector<array<Id, 3>>;
+  using TripleVec = stxxl::vector<array<ad_utility::datatypes::FancyId, 3>>;
   // Block Id, Context Id, Word Id, Score, entity
   using TextVec = stxxl::vector<tuple<Id, Id, Id, Score, bool>>;
   using Posting = std::tuple<Id, Id, Score>;
@@ -193,7 +196,7 @@ class Index {
   size_t sizeEstimate(const string& sub, const string& pred,
                       const string& obj) const;
 
-  std::optional<string> idToOptionalString(Id id) const {
+  std::optional<string> idToOptionalString(VocabId id) const {
     return _vocab.idToOptionalString(id);
   }
 
@@ -274,10 +277,11 @@ class Index {
                                 vector<Id>& eids, vector<Score>& scores) const;
 
   string getTextExcerpt(Id cid) const {
+    // TODO<joka921> this is probably wrong, what is a cid?
     if (cid == ID_NO_VALUE) {
       return std::string();
     } else {
-      return _docsDB.getTextExcerpt(cid);
+      return _docsDB.getTextExcerpt(cid.data());
     }
   }
 
@@ -355,7 +359,8 @@ class Index {
   template <class PermutationImpl>
   vector<float> getMultiplicities(const string& key,
                                   const PermutationImpl& p) const {
-    Id keyId;
+    // TODO<joka921> Could it be that we have numbers here?
+    VocabId keyId;
     vector<float> res;
     if (_vocab.getId(key, &keyId) && p._meta.col0IdExists(keyId)) {
       auto metaData = p._meta.getMetaData(keyId);
@@ -410,10 +415,10 @@ class Index {
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
     LOG(DEBUG) << "Performing " << p._readableName
                << " scan for full list for: " << key << "\n";
-    Id relId;
+    VocabId relId;
     if (_vocab.getId(key, &relId)) {
       LOG(TRACE) << "Successfully got key ID.\n";
-      scan(relId, result, p, std::move(timer));
+      scan(Id::Vocab(relId), result, p, std::move(timer));
     }
     LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
   }
@@ -437,8 +442,8 @@ class Index {
   void scan(const string& col0String, const string& col1String, IdTable* result,
             const PermutationInfo& p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
-    Id col0Id;
-    Id col1Id;
+    VocabId col0Id;
+    VocabId col1Id;
     if (!_vocab.getId(col0String, &col0Id) ||
         !_vocab.getId(col1String, &col1Id)) {
       LOG(DEBUG) << "Key " << col0String << " or key " << col1String
@@ -450,7 +455,7 @@ class Index {
                << col0String << " with fixed subject: " << col1String
                << "...\n";
 
-    CompressedRelationMetaData::scan(col0Id, col1Id, result, p, timer);
+    CompressedRelationMetaData::scan(Id::Vocab(col0Id), Id::Vocab(col1Id), result, p, timer);
   }
 
  private:
@@ -724,7 +729,7 @@ class Index {
   // the input).
   std::pair<size_t, size_t> getNumTriplesActuallyAndAdded() const {
     auto [begin, end] = _vocab.prefix_range("@");
-    Id qleverLangtag;
+    VocabId qleverLangtag;
     auto actualTriples = 0ul;
     auto addedTriples = 0ul;
     bool foundQleverLangtag = _vocab.getId(LANGUAGE_PREDICATE, &qleverLangtag);
@@ -733,7 +738,7 @@ class Index {
     // to the respective counter.
     for (const auto& [key, value] : PSO()._meta.data()) {
       auto numTriples = value.getNofElements();
-      if (key == qleverLangtag || (key >= begin && key < end)) {
+      if (key == Id::Vocab(qleverLangtag) || (key >= Id::Vocab(begin) && key < Id::Vocab(end))) {
         addedTriples += numTriples;
       } else {
         actualTriples += numTriples;

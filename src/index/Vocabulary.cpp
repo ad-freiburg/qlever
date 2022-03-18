@@ -191,14 +191,14 @@ bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
 
 // _______________________________________________________________
 template <typename S, typename C>
-Id Vocabulary<S, C>::upper_bound(const string& word,
+VocabId Vocabulary<S, C>::upper_bound(const string& word,
                                  const SortLevel level) const {
   return _internalVocabulary.upper_bound(word, level)._index;
 }
 
 // _____________________________________________________________________________
 template <typename S, typename C>
-Id Vocabulary<S, C>::lower_bound(const string& word,
+VocabId Vocabulary<S, C>::lower_bound(const string& word,
                                  const SortLevel level) const {
   return _internalVocabulary.lower_bound(word, level)._index;
 }
@@ -217,13 +217,13 @@ void Vocabulary<S, ComparatorType>::setLocale(const std::string& language,
 template <typename StringType, typename C>
 //! Get the word with the given id.
 //! lvalue for compressedString and const& for string-based vocabulary
-AccessReturnType_t<StringType> Vocabulary<StringType, C>::at(Id id) const {
+AccessReturnType_t<StringType> Vocabulary<StringType, C>::at(VocabId id) const {
   return _internalVocabulary[static_cast<size_t>(id)];
 }
 
 // _____________________________________________________________________________
 template <typename S, typename C>
-bool Vocabulary<S, C>::getId(const string& word, Id* id) const {
+bool Vocabulary<S, C>::getId(const string& word, VocabId* id) const {
   if (!shouldBeExternalized(word)) {
     // need the TOTAL level because we want the unique word.
     *id = lower_bound(word, SortLevel::TOTAL);
@@ -239,7 +239,7 @@ bool Vocabulary<S, C>::getId(const string& word, Id* id) const {
 
 // ___________________________________________________________________________
 template <typename S, typename C>
-std::pair<Id, Id> Vocabulary<S, C>::prefix_range(const string& prefix) const {
+std::pair<VocabId, VocabId> Vocabulary<S, C>::prefix_range(const string& prefix) const {
   return _internalVocabulary.prefix_range(prefix);
 }
 
@@ -247,7 +247,7 @@ std::pair<Id, Id> Vocabulary<S, C>::prefix_range(const string& prefix) const {
 template <typename S, typename C>
 template <typename, typename>
 const std::optional<std::string_view> Vocabulary<S, C>::operator[](
-    Id id) const {
+    VocabId id) const {
   if (id < _internalVocabulary.size()) {
     return _internalVocabulary[static_cast<size_t>(id)];
   } else {
@@ -255,15 +255,13 @@ const std::optional<std::string_view> Vocabulary<S, C>::operator[](
   }
 }
 template const std::optional<std::string_view>
-TextVocabulary::operator[]<std::string, void>(Id id) const;
+TextVocabulary::operator[]<std::string, void>(VocabId id) const;
 
 template <typename S, typename C>
 template <typename, typename>
-const std::optional<string> Vocabulary<S, C>::idToOptionalString(Id id) const {
+const std::optional<string> Vocabulary<S, C>::idToOptionalString(VocabId id) const {
   if (id < _internalVocabulary.size()) {
     return _internalVocabulary[static_cast<size_t>(id)];
-  } else if (id == ID_NO_VALUE) {
-    return std::nullopt;
   } else {
     // this word must be externalized
     id -= _internalVocabulary.size();
@@ -274,9 +272,9 @@ const std::optional<string> Vocabulary<S, C>::idToOptionalString(Id id) const {
 
 // ___________________________________________________________________________
 template <typename S, typename C>
-ad_utility::HashMap<typename Vocabulary<S, C>::Datatypes, std::pair<Id, Id>>
+ad_utility::HashMap<typename Vocabulary<S, C>::Datatypes, std::pair<VocabId, VocabId>>
 Vocabulary<S, C>::getRangesForDatatypes() const {
-  ad_utility::HashMap<Datatypes, std::pair<Id, Id>> result;
+  ad_utility::HashMap<Datatypes, std::pair<VocabId, VocabId>> result;
   result[Datatypes::Float] = prefix_range(VALUE_FLOAT_PREFIX);
   result[Datatypes::Date] = prefix_range(VALUE_DATE_PREFIX);
   result[Datatypes::Literal] = prefix_range("\"");
@@ -310,7 +308,7 @@ void Vocabulary<S, C>::printRangesForDatatypes() {
 }
 
 template const std::optional<string>
-RdfsVocabulary::idToOptionalString<CompressedString, void>(Id id) const;
+RdfsVocabulary::idToOptionalString<CompressedString, void>(VocabId id) const;
 
 // Explicit template instantiations
 template class Vocabulary<CompressedString, TripleComponentComparator>;

@@ -34,39 +34,21 @@ class Variable {
     const auto& idTable = res._idTable;
     if (variableColumns.contains(_name)) {
       size_t index = variableColumns.at(_name);
-      std::ostringstream stream;
-      switch (res.getResultType(index)) {
-        case ResultTable::ResultType::KB: {
-          string entity =
-              qecIndex.idToOptionalString(idTable(row, index)).value_or("");
-          if (entity.starts_with(VALUE_PREFIX)) {
-            stream << ad_utility::convertIndexWordToValueLiteral(entity);
-          } else {
-            stream << entity;
-          }
-          break;
-        }
-        case ResultTable::ResultType::VERBATIM:
-          stream << idTable(row, index);
-          break;
-        case ResultTable::ResultType::TEXT:
-          stream << qecIndex.getTextExcerpt(idTable(row, index));
-          break;
-        case ResultTable::ResultType::FLOAT: {
-          float f;
-          std::memcpy(&f, &idTable(row, index), sizeof(float));
-          stream << f;
-          break;
-        }
-        case ResultTable::ResultType::LOCAL_VOCAB: {
-          stream << res.idToOptionalString(idTable(row, index)).value_or("");
-          break;
-        }
-        default:
-          AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
-                   "Cannot deduce output type.");
+      auto id = idTable(row, index);
+      if (id.isInteger()) {
+        return std::to_string(id.getIntegerUnchecked());
       }
-      return std::move(stream).str();
+      if (id.isDouble()) {
+        return std::to_string(id.getDoubleUnchecked());
+      }
+      if (id.isVocab()) {
+        return qecIndex.idToOptionalString(id.getVocabUnchecked()).value_or("");
+      }
+      if (id == ID_NO_VALUE) {
+        return std::nullopt;
+      }
+      AD_CHECK(false);
+      // TODO<joka921> Remaining valuetypes (date, text, local vocab, etc).
     }
     return std::nullopt;
   }

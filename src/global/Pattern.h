@@ -33,7 +33,7 @@ static const PatternID NO_PATTERN = std::numeric_limits<PatternID>::max();
  *        while writing a query).
  */
 struct Pattern {
-  using value_type = Id;
+  using value_type = uint64_t;
   using ref = value_type&;
   using const_ref = const value_type&;
 
@@ -81,7 +81,7 @@ struct Pattern {
 
   size_t size() const { return _data.size(); }
 
-  void push_back(const Id i) { _data.push_back(i); }
+  void push_back(value_type i) { _data.push_back(i); }
 
   void clear() { _data.clear(); }
 
@@ -89,9 +89,9 @@ struct Pattern {
   ref back() { return _data.back(); }
   bool empty() { return _data.empty(); }
 
-  const Id* data() const { return _data.data(); }
+  const value_type* data() const { return _data.data(); }
 
-  std::vector<Id> _data;
+  std::vector<value_type> _data;
 };
 
 namespace detail {
@@ -315,12 +315,13 @@ struct hash<Pattern> {
 };
 }  // namespace std
 
+// TODO<joka921> reinstate
 inline std::ostream& operator<<(std::ostream& o, const Pattern& p) {
   for (size_t i = 0; i + 1 < p.size(); i++) {
-    o << p[i] << ", ";
+    //o << p[i] << ", ";
   }
   if (p.size() > 0) {
-    o << p[p.size() - 1];
+    //o << p[p.size() - 1];
   }
   return o;
 }

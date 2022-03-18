@@ -247,7 +247,7 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
-    std::vector<std::array<Id, 3>> localWriter;
+    std::vector<std::array<FancyId, 3>> localWriter;
 
     std::array<ItemMapManager, NUM_PARALLEL_ITEM_MAPS> itemArray;
 
@@ -430,17 +430,21 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
     // update the triples for which this partial vocabulary was responsible
     for (size_t tmpNum = 0; tmpNum < actualLinesPerPartial[partialNum];
          ++tmpNum) {
-      std::array<Id, 3> curTriple = *reader;
+      auto curTriple = *reader;
       ++reader;
 
       // For all triple elements find their mapping from partial to global ids.
       for (size_t k = 0; k < 3; ++k) {
+        if (!curTriple[k].isVocab()) {
+          continue;
+        }
         auto iterator = idMap.find(curTriple[k]);
         if (iterator == idMap.end()) {
-          LOG(INFO) << "Not found in partial vocabulary: " << curTriple[k]
+          LOG(INFO) << "Not found in partial vocabulary: " << curTriple[k].getVocabUnchecked()
                     << std::endl;
           AD_CHECK(false);
         }
+        // TODO<joka921> at some point we have to check for out of range.
         curTriple[k] = iterator->second;
       }
 
@@ -480,13 +484,14 @@ Index::createPermutationPairImpl(const string& fileName1,
   // and POS, this is a predicate (of which "relation" is a synonym).
   LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
   size_t from = 0;
-  std::optional<Id> currentRel;
-  ad_utility::BufferedVector<array<Id, 2>> buffer(
+  using IdType = ad_utility::datatypes::FancyId;
+  std::optional<IdType> currentRel;
+  ad_utility::BufferedVector<array<Id,2>> buffer(
       THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.mmap-buffer");
   bool functional = true;
   size_t distinctCol1 = 0;
   size_t sizeOfRelation = 0;
-  Id lastLhs = std::numeric_limits<Id>::max();
+  IdType lastLhs;
   uint64_t totalNumTriples = 0;
   for (auto triple : sortedTriples) {
     if (!currentRel.has_value()) {
@@ -516,7 +521,7 @@ Index::createPermutationPairImpl(const string& fileName1,
         distinctCol1++;
       }
     }
-    buffer.push_back(array<Id, 2>{{triple[c1], triple[c2]}});
+    buffer.push_back({triple[c1], triple[c2]});
     lastLhs = triple[c1];
   }
   if (from < totalNumTriples) {
@@ -642,12 +647,16 @@ void Index::addPatternsToExistingIndex() {
   auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
   // We only iterate over the SPO permutation which typically only has few
   // triples per subject, so it should be safe to not apply a memory limit here.
+  AD_CHECK(false);
+  // TODO<joka921> Reinstate this, as soon as we have fancy IDs everywhere.
+  /*
   ad_utility::AllocatorWithLimit<Id> allocator{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
           std::numeric_limits<uint64_t>::max())};
   auto iterator = TriplesView(_SPO, allocator);
   createPatternsFromSpoTriplesView(iterator, _onDiskBase + ".index.patterns",
                                    langPredLowerBound, langPredUpperBound);
+                                   */
 }
 
 // _____________________________________________________________________________
@@ -734,10 +743,11 @@ size_t Index::relationCardinality(const string& relationName) const {
   if (relationName == INTERNAL_TEXT_MATCH_PREDICATE) {
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
-  Id relId;
+  VocabId relId;
+  // TODO<joka921> other datatypes
   if (_vocab.getId(relationName, &relId)) {
-    if (this->_PSO.metaData().col0IdExists(relId)) {
-      return this->_PSO.metaData().getMetaData(relId).getNofElements();
+    if (this->_PSO.metaData().col0IdExists(Id::Vocab(relId))) {
+      return this->_PSO.metaData().getMetaData(Id::Vocab(relId)).getNofElements();
     }
   }
   return 0;
@@ -745,10 +755,11 @@ size_t Index::relationCardinality(const string& relationName) const {
 
 // _____________________________________________________________________________
 size_t Index::subjectCardinality(const string& sub) const {
-  Id relId;
+  VocabId relId;
+  // TODO<joka921> other datatypes
   if (_vocab.getId(sub, &relId)) {
-    if (this->_SPO.metaData().col0IdExists(relId)) {
-      return this->_SPO.metaData().getMetaData(relId).getNofElements();
+    if (this->_SPO.metaData().col0IdExists(Id::Vocab(relId))) {
+      return this->_SPO.metaData().getMetaData(Id::Vocab(relId)).getNofElements();
     }
   }
   return 0;
@@ -756,10 +767,11 @@ size_t Index::subjectCardinality(const string& sub) const {
 
 // _____________________________________________________________________________
 size_t Index::objectCardinality(const string& obj) const {
-  Id relId;
+  VocabId relId;
+  // TODO<joka921> other datatypes
   if (_vocab.getId(obj, &relId)) {
-    if (this->_OSP.metaData().col0IdExists(relId)) {
-      return this->_OSP.metaData().getMetaData(relId).getNofElements();
+    if (this->_OSP.metaData().col0IdExists(Id::Vocab(relId))) {
+      return this->_OSP.metaData().getMetaData(Id::Vocab(relId)).getNofElements();
     }
   }
   return 0;
@@ -940,11 +952,13 @@ LangtagAndTriple Index::tripleToInternalRepresentation(
   LangtagAndTriple res{"", makeTriple(std::move(tripleIn))};
   auto& spo = res._triple;
   for (auto& el : spo) {
-    el._iriOrLiteral =
-        _vocab.getLocaleManager().normalizeUtf8(el._iriOrLiteral);
+    auto& iriOrLiteral = std::get<TripleComponent>(el)._iriOrLiteral;
+    iriOrLiteral =
+        _vocab.getLocaleManager().normalizeUtf8(iriOrLiteral);
   }
   size_t upperBound = 3;
-  auto& object = spo[2]._iriOrLiteral;
+  auto& object = std::get<TripleComponent>(spo[2])._iriOrLiteral;
+  // TODO<joka921> Actually create numeric Ids here...
   if (ad_utility::isXsdValue(object)) {
     object = ad_utility::convertValueLiteralToIndexWord(object);
     upperBound = 2;
@@ -956,8 +970,13 @@ LangtagAndTriple Index::tripleToInternalRepresentation(
   }
 
   for (size_t k = 0; k < upperBound; ++k) {
-    if (_onDiskLiterals && _vocab.shouldBeExternalized(spo[k]._iriOrLiteral)) {
-      spo[k]._isExternal = true;
+    // If we already have an ID, we can just continue;
+    if (!std::holds_alternative<TripleComponent>(spo[k])) {
+      continue;
+    }
+    auto& component = std::get<TripleComponent>(spo[k]);
+    if (_onDiskLiterals && _vocab.shouldBeExternalized(component._iriOrLiteral)) {
+      component._isExternal = true;
     }
   }
   return res;

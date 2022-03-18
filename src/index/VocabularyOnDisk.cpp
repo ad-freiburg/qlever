@@ -15,7 +15,7 @@
 using OffsetAndSize = VocabularyOnDisk::OffsetAndSize;
 
 // ____________________________________________________________________________
-std::optional<OffsetAndSize> VocabularyOnDisk::getOffsetAndSize(Id id) const {
+std::optional<OffsetAndSize> VocabularyOnDisk::getOffsetAndSize(uint64_t id) const {
   IdAndOffset idAndDummyOffset{id, 0};
   auto it = std::lower_bound(_idsAndOffsets.begin(), _idsAndOffsets.end(),
                              idAndDummyOffset);
@@ -35,7 +35,7 @@ VocabularyOnDisk::OffsetSizeId VocabularyOnDisk::getOffsetSizeIdForIthElement(
 }
 
 // _____________________________________________________________________________
-std::optional<string> VocabularyOnDisk::operator[](Id id) const {
+std::optional<string> VocabularyOnDisk::operator[](uint64_t id) const {
   auto optionalOffsetAndSize = getOffsetAndSize(id);
   if (!optionalOffsetAndSize.has_value()) {
     return std::nullopt;

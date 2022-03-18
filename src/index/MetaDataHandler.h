@@ -22,8 +22,8 @@ class MetaDataWrapperDense {
   struct AddGetIdIterator : BaseIterator {
     using BaseIterator::BaseIterator;
     AddGetIdIterator(BaseIterator base) : BaseIterator{base} {}
-    uint64_t getId() const { return getIdFromElement(*(*this)); }
-    static uint64_t getIdFromElement(
+    auto getId() const { return getIdFromElement(*(*this)); }
+    static auto getIdFromElement(
         const typename BaseIterator::value_type& v) {
       return v._col0Id;
     }
@@ -139,10 +139,10 @@ class MetaDataWrapperHashMap {
   struct AddGetIdIterator : public BaseIterator {
     using BaseIterator::BaseIterator;
     AddGetIdIterator(BaseIterator base) : BaseIterator{base} {}
-    uint64_t getId() const { return (*this)->first; }
-    static uint64_t getIdFromElement(
+    auto getId() const { return (*this)->second._col0Id; }
+    static auto getIdFromElement(
         const typename BaseIterator::value_type& v) {
-      return v.first;
+      return v.second._col0Id;
     }
   };
   using Iterator = AddGetIdIterator<typename hashMap::iterator>;

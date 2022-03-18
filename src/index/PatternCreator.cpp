@@ -5,24 +5,28 @@
 #include "./PatternCreator.h"
 
 // _________________________________________________________________________
-void PatternCreator::processTriple(std::array<Id, 3> triple) {
+void PatternCreator::processTriple(std::array<ad_utility::datatypes::FancyId, 3> triple) {
+  if (!triple[0].isVocab()) {
+    return;
+  }
+  AD_CHECK(triple[1].isVocab());
   if (!_currentSubjectId.has_value()) {
     // This is the first triple
-    _currentSubjectId = triple[0];
-  } else if (triple[0] != _currentSubjectId) {
+    _currentSubjectId = triple[0].getVocabUnchecked();
+  } else if (triple[0].getVocabUnchecked() != _currentSubjectId) {
     // New subject.
     finishSubject(_currentSubjectId.value(), _currentPattern);
-    _currentSubjectId = triple[0];
+    _currentSubjectId = triple[0].getVocabUnchecked();
     _currentPattern.clear();
   }
   // Don't list predicates twice in the same pattern.
-  if (_currentPattern.empty() || _currentPattern.back() != triple[1]) {
-    _currentPattern.push_back(triple[1]);
+  if (_currentPattern.empty() || _currentPattern.back() != triple[1].getVocabUnchecked()) {
+    _currentPattern.push_back(triple[1].getVocabUnchecked());
   }
 }
 
 // ________________________________________________________________________________
-void PatternCreator::finishSubject(const Id& subjectId,
+void PatternCreator::finishSubject(const uint64_t& subjectId,
                                    const Pattern& pattern) {
   _numDistinctSubjects++;
   _numDistinctSubjectPredicatePairs += pattern.size();
@@ -90,7 +94,7 @@ void PatternCreator::finish() {
             [](const auto& a, const auto& b) {
               return a.second._patternId < b.second._patternId;
             });
-  CompactVectorOfStrings<Id>::Writer patternWriter{
+  CompactVectorOfStrings<Pattern::value_type>::Writer patternWriter{
       std::move(patternSerializer).file()};
   for (const auto& p : orderedPatterns) {
     patternWriter.push(p.first.data(), p.first.size());

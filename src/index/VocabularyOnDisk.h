@@ -38,7 +38,7 @@ class VocabularyOnDisk {
 
   // The highest ID that occurs in the vocabulary. If the vocabulary is empty,
   // this will be Id(-1), s.t. _highestId + 1 will overflow to 0.
-  Id _highestId = std::numeric_limits<Id>::max();
+  uint64_t _highestId = std::numeric_limits<uint64_t>::max();
   // The number of words stored in the vocabulary.
   size_t _size = 0;
 
@@ -68,7 +68,7 @@ class VocabularyOnDisk {
 
   /// If an entry with this `id` exists, return the corresponding string, else
   /// `std::nullopt`
-  std::optional<string> operator[](Id id) const;
+  std::optional<string> operator[](uint64_t id) const;
 
   /// Get the number of words in the vocabulary.
   size_t size() const { return _size; }
@@ -85,7 +85,7 @@ class VocabularyOnDisk {
   // to 0). This makes the behavior of `lower_bound` and `upper_bound` for empty
   // vocabularies consistent with other vocabulary types like
   // `VocabularyInMemory`.
-  Id getHighestId() const { return _highestId; }
+  uint64_t getHighestId() const { return _highestId; }
 
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt the `comparator`. Only works correctly if the
@@ -174,7 +174,7 @@ class VocabularyOnDisk {
 
   // Get the `OffsetAndSize` for the element with the `id`. Return
   // `std::nullopt` if `id` is not contained in the vocabulary.
-  std::optional<OffsetAndSize> getOffsetAndSize(Id id) const;
+  std::optional<OffsetAndSize> getOffsetAndSize(uint64_t id) const;
 
   // Return the `OffsetSizeId` for the element with the i-th smallest ID.
   // Requires that i < size().

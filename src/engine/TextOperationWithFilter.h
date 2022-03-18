@@ -6,6 +6,7 @@
 #include <set>
 #include <utility>
 #include <vector>
+#include <cstdio>
 
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"

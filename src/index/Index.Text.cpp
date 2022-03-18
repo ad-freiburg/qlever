@@ -32,6 +32,9 @@ void Index::addTextFromContextFile(const string& contextFile) {
 
 // _____________________________________________________________________________
 void Index::buildDocsDB(const string& docsFileName) {
+  LOG(ERROR) << "Building text indicies is currently not supported" << std::endl;
+  AD_CHECK(false);
+  /*
   LOG(INFO) << "Building DocsDB...\n";
   ad_utility::File docsFile(docsFileName.c_str(), "r");
   std::ofstream ofs(_onDiskBase + ".text.docsDB", std::ios_base::out);
@@ -68,6 +71,7 @@ void Index::buildDocsDB(const string& docsFileName) {
   }
   out.close();
   LOG(INFO) << "DocsDB done.\n";
+   */
 }
 
 // _____________________________________________________________________________
@@ -124,6 +128,8 @@ size_t Index::passContextFileForVocabulary(string const& contextFile) {
 // _____________________________________________________________________________
 void Index::passContextFileIntoVector(const string& contextFile,
                                       Index::TextVec& vec) {
+  AD_CHECK(false);
+  /*
   LOG(INFO) << "Making pass over ContextFile " << contextFile
             << " and creating stxxl vector.\n";
   ContextFileParser::Line line;
@@ -207,6 +213,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
 
   writer.finish();
   LOG(INFO) << "Pass done.\n";
+   */
 }
 
 // _____________________________________________________________________________
@@ -214,6 +221,8 @@ void Index::addContextToVector(Index::TextVec::bufwriter_type& writer,
                                Id context,
                                const ad_utility::HashMap<Id, Score>& words,
                                const ad_utility::HashMap<Id, Score>& entities) {
+  AD_CHECK(false);
+  /*
   // Determine blocks for each word and each entity.
   // Add the posting to each block.
   ad_utility::HashSet<Id> touchedBlocks;
@@ -243,10 +252,13 @@ void Index::addContextToVector(Index::TextVec::bufwriter_type& writer,
       writer << std::make_tuple(blockId, context, it->first, it->second, true);
     }
   }
+   */
 }
 
 // _____________________________________________________________________________
 void Index::createTextIndex(const string& filename, const Index::TextVec& vec) {
+  AD_CHECK(false);
+  /*
   ad_utility::File out(filename.c_str(), "w");
   _currentoff_t = 0;
   // Detect block boundaries from the main key of the vec.
@@ -314,8 +326,10 @@ void Index::createTextIndex(const string& filename, const Index::TextVec& vec) {
   out.write(&startOfMeta, sizeof(startOfMeta));
   out.close();
   LOG(INFO) << "Text index done.\n";
+   */
 }
 
+/*
 // _____________________________________________________________________________
 ContextListMetaData Index::writePostings(ad_utility::File& out,
                                          const vector<Posting>& postings,
@@ -1565,3 +1579,4 @@ void Index::getRhsForSingleLhs(const IdTable& in, Id lhsId,
 
 // _____________________________________________________________________________
 void Index::setTextName(const string& name) { _textMeta.setName(name); }
+ */

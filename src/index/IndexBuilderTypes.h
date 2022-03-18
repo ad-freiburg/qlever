@@ -49,9 +49,10 @@ struct TripleComponentWithId {
   }
 };
 
+using TripleComponentOrId = std::variant<TripleComponent, Id>;
 // A triple that also knows for each entry, whether this entry should be
 // part of the external vocabulary.
-using Triple = std::array<TripleComponent, 3>;
+using Triple = std::array<TripleComponentOrId, 3>;
 
 // Convert a triple of `std::string` to a triple of `TripleComponents`. All
 // three entries will have `isExternal()==false` and an uninitialized ID.
@@ -62,7 +63,7 @@ inline Triple makeTriple(std::array<std::string, 3>&& t) {
 
 /// named value type for the ItemMap
 struct IdAndSplitVal {
-  Id m_id;
+  uint64_t m_id;
   TripleComponentComparator::SplitVal m_splitVal;
 };
 
@@ -78,7 +79,7 @@ using ItemVec = std::vector<std::pair<std::string, IdAndSplitVal>>;
 // Align each ItemMapManager on its own cache line to avoid false sharing.
 struct alignas(256) ItemMapManager {
   /// Construct by assigning the minimum ID that should be returned by the map.
-  explicit ItemMapManager(Id minId, const TripleComponentComparator* cmp)
+  explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp)
       : _map(), _minId(minId), m_comp(cmp) {}
   /// Minimum Id is 0
   ItemMapManager() = default;
@@ -89,17 +90,21 @@ struct alignas(256) ItemMapManager {
 
   /// If the key was seen before, return its preassigned ID. Else assign the
   /// next free ID to the string, store and return it.
-  Id getId(const TripleComponent& key) {
+  Id getId(const TripleComponentOrId & keyOrId) {
+    if (std::holds_alternative<Id>(keyOrId)) {
+      return std::get<Id>(keyOrId);
+    }
+    const auto& key = std::get<TripleComponent>(keyOrId);
     if (!_map.count(key._iriOrLiteral)) {
-      Id res = _map.size() + _minId;
+      auto res = _map.size() + _minId;
       _map[key._iriOrLiteral] = {
           res,
           m_comp->extractAndTransformComparable(
               key._iriOrLiteral, TripleComponentComparator::Level::IDENTICAL,
               key._isExternal)};
-      return res;
+      return Id::Vocab(res);
     } else {
-      return _map[key._iriOrLiteral].m_id;
+      return Id::Vocab(_map[key._iriOrLiteral].m_id);
     }
   }
 
@@ -108,7 +113,7 @@ struct alignas(256) ItemMapManager {
     return {getId(t[0]), getId(t[1]), getId(t[2])};
   }
   ItemMap _map;
-  Id _minId = 0;
+  uint64_t _minId = 0;
   const TripleComponentComparator* m_comp = nullptr;
 };
 
@@ -184,7 +189,7 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
         // get the Id for the tagged predicate, e.g. @en@rdfs:label
         auto langTaggedPredId =
             map.getId(ad_utility::convertToLanguageTaggedPredicate(
-                lt._triple[1]._iriOrLiteral, lt._langtag));
+                std::get<TripleComponent>(lt._triple[1])._iriOrLiteral, lt._langtag));
         auto& spoIds = *(res[0]);  // ids of original triple
         // TODO replace the std::array by an explicit IdTriple class,
         //  then the emplace calls don't need the explicit type.

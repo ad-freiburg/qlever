@@ -20,7 +20,7 @@ void DocsDB::init(const string& fileName) {
 }
 
 // _____________________________________________________________________________
-string DocsDB::getTextExcerpt(Id cid) const {
+string DocsDB::getTextExcerpt(uint64_t cid) const {
   off_t ft[2];
   off_t& from = ft[0];
   off_t& to = ft[1];

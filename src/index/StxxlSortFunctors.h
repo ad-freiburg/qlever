@@ -7,142 +7,48 @@
 #include <tuple>
 
 #include "../global/Id.h"
+#include "../engine/datatypes/Datatypes.h"
 
 using std::array;
 using std::tuple;
 
-struct SortByPSO {
+template<int A0, int A1, int A2>
+struct SortTriple {
+  using FancyId = ad_utility::datatypes::FancyId;
+  using T = std::array<FancyId, 3>;
   // comparison function
-  bool operator()(const array<Id, 3>& a, const array<Id, 3>& b) const {
-    if (a[1] == b[1]) {
-      if (a[0] == b[0]) {
-        return a[2] < b[2];
+  bool operator()(const T& a, const T& b) const {
+    if (a[A0] == b[A0]) {
+      if (a[A1] == b[A1]) {
+        return a[A2] < b[A2];
       }
-      return a[0] < b[0];
+      return a[A1] < b[A1];
     }
-    return a[1] < b[1];
+    return a[A0] < b[A0];
   }
 
   // min sentinel = value which is strictly smaller that any input element
-  static array<Id, 3> min_value() { return array<Id, 3>{{0, 0, 0}}; }
+  static T min_value() {
+    auto zero = FancyId::fromRawBits(0);
+
+    return {{zero, zero, zero}}; }
 
   // max sentinel = value which is strictly larger that any input element
-  static array<Id, 3> max_value() {
-    Id max = std::numeric_limits<Id>::max();
-    return array<Id, 3>{{max, max, max}};
+  static T max_value() {
+    uint64_t max = std::numeric_limits<uint64_t>::max();
+    auto maxFancy = FancyId::fromRawBits(max);
+    return {{maxFancy, maxFancy, maxFancy}};
   }
 };
 
-struct SortByPOS {
-  // comparison function
-  bool operator()(const array<Id, 3>& a, const array<Id, 3>& b) const {
-    if (a[1] == b[1]) {
-      if (a[2] == b[2]) {
-        return a[0] < b[0];
-      }
-      return a[2] < b[2];
-    }
-    return a[1] < b[1];
-  }
+using SortByPSO = SortTriple<1, 0, 2>;
+using SortByPOS = SortTriple<1, 2, 0>;
+using SortBySPO = SortTriple<0, 1, 2>;
+using SortBySOP = SortTriple<0, 2, 1>;
+using SortByOSP = SortTriple<2, 0, 1>;
+using SortByOPS = SortTriple<2, 1, 0>;
 
-  // min sentinel = value which is strictly smaller that any input element
-  static array<Id, 3> min_value() { return array<Id, 3>{{0, 0, 0}}; }
-
-  // max sentinel = value which is strictly larger that any input element
-  static array<Id, 3> max_value() {
-    Id max = std::numeric_limits<Id>::max();
-    return array<Id, 3>{{max, max, max}};
-  }
-};
-
-struct SortBySPO {
-  // comparison function
-  bool operator()(const array<Id, 3>& a, const array<Id, 3>& b) const {
-    if (a[0] == b[0]) {
-      if (a[1] == b[1]) {
-        return a[2] < b[2];
-      }
-      return a[1] < b[1];
-    }
-    return a[0] < b[0];
-  }
-
-  // min sentinel = value which is strictly smaller that any input element
-  static array<Id, 3> min_value() { return array<Id, 3>{{0, 0, 0}}; }
-
-  // max sentinel = value which is strictly larger that any input element
-  static array<Id, 3> max_value() {
-    Id max = std::numeric_limits<Id>::max();
-    return array<Id, 3>{{max, max, max}};
-  }
-};
-
-struct SortBySOP {
-  // comparison function
-  bool operator()(const array<Id, 3>& a, const array<Id, 3>& b) const {
-    if (a[0] == b[0]) {
-      if (a[2] == b[2]) {
-        return a[1] < b[1];
-      }
-      return a[2] < b[2];
-    }
-    return a[0] < b[0];
-  }
-
-  // min sentinel = value which is strictly smaller that any input element
-  static array<Id, 3> min_value() { return array<Id, 3>{{0, 0, 0}}; }
-
-  // max sentinel = value which is strictly larger that any input element
-  static array<Id, 3> max_value() {
-    Id max = std::numeric_limits<Id>::max();
-    return array<Id, 3>{{max, max, max}};
-  }
-};
-
-struct SortByOSP {
-  // comparison function
-  bool operator()(const array<Id, 3>& a, const array<Id, 3>& b) const {
-    if (a[2] == b[2]) {
-      if (a[0] == b[0]) {
-        return a[1] < b[1];
-      }
-      return a[0] < b[0];
-    }
-    return a[2] < b[2];
-  }
-
-  // min sentinel = value which is strictly smaller that any input element
-  static array<Id, 3> min_value() { return array<Id, 3>{{0, 0, 0}}; }
-
-  // max sentinel = value which is strictly larger that any input element
-  static array<Id, 3> max_value() {
-    Id max = std::numeric_limits<Id>::max();
-    return array<Id, 3>{{max, max, max}};
-  }
-};
-
-struct SortByOPS {
-  // comparison function
-  bool operator()(const array<Id, 3>& a, const array<Id, 3>& b) const {
-    if (a[2] == b[2]) {
-      if (a[1] == b[1]) {
-        return a[0] < b[0];
-      }
-      return a[1] < b[1];
-    }
-    return a[2] < b[2];
-  }
-
-  // min sentinel = value which is strictly smaller that any input element
-  static array<Id, 3> min_value() { return array<Id, 3>{{0, 0, 0}}; }
-
-  // max sentinel = value which is strictly larger that any input element
-  static array<Id, 3> max_value() {
-    Id max = std::numeric_limits<Id>::max();
-    return array<Id, 3>{{max, max, max}};
-  }
-};
-
+// TODO<joka921> Which of those are actually "IDs" and which are something else?
 struct SortText {
   // comparison function
   bool operator()(const tuple<Id, Id, Id, Score, bool>& a,
@@ -168,7 +74,8 @@ struct SortText {
 
   // min sentinel = value which is strictly smaller that any input element
   static tuple<Id, Id, Id, Score, bool> min_value() {
-    return tuple<Id, Id, Id, Score, bool>{0, 0, 0, 0, false};
+    auto zero = Id::fromRawBits(0);
+    return tuple<Id, Id, Id, Score, bool>{zero, zero, zero, 0, false};
   }
 
   // max sentinel = value which is strictly larger that any input element

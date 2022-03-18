@@ -9,13 +9,16 @@
 #include <limits>
 
 #include "../util/Exception.h"
+#include "../engine/datatypes/Datatypes.h"
 
-typedef uint64_t Id;
+//typedef uint64_t Id;
+using Id = ad_utility::datatypes::FancyId;
 typedef uint16_t Score;
 
 // A value to use when the result should be empty (e.g. due to an optional join)
 // The highest two values are used as sentinels.
-static const Id ID_NO_VALUE = std::numeric_limits<Id>::max() - 2;
+//static const Id ID_NO_VALUE = std::numeric_limits<Id>::max() - 2;
+static const Id ID_NO_VALUE = Id::Undefined();
 
 namespace ad_utility {
 

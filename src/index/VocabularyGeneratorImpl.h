@@ -177,11 +177,11 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       if (top.iriOrLiteral().starts_with('@')) {
         if (!_firstLangPredSeen) {
           // inclusive
-          _langPredLowerBound = _lastTripleComponent.value()._id;
+          _langPredLowerBound = Id::Vocab(_lastTripleComponent.value()._id);
           _firstLangPredSeen = true;
         }
         // exclusive
-        _langPredUpperBound = _lastTripleComponent.value()._id + 1;
+        _langPredUpperBound = Id::Vocab(_lastTripleComponent.value()._id + 1);
       }
       _totalWritten++;
       if (_totalWritten % 100'000'000 == 0) {
@@ -224,14 +224,14 @@ void VocabularyMerger::doActualWrite(
     return;
   }
   for (const auto& [id, value] : buffer) {
-    _idVecs[id].push_back(value);
+    _idVecs[id].push_back({Id::Vocab(value.first), Id::Vocab(value.second)});
   }
 }
 
 // ____________________________________________________________________________________________________________
-ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* elsPtr) {
+ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec* elsPtr) {
   auto& els = *elsPtr;
-  ad_utility::HashMap<Id, Id> res;
+  ad_utility::HashMap<uint64_t, uint64_t> res;
   bool first = true;
   std::string lastWord;
   size_t nextWordId = 0;
@@ -250,24 +250,28 @@ ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* elsPtr) {
 
 // ________________________________________________________________________________________________________
 void writeMappedIdsToExtVec(const auto& input,
-                            const ad_utility::HashMap<Id, Id>& map,
+                            const ad_utility::HashMap<uint64_t, uint64_t>& map,
                             TripleVec::bufwriter_type* writePtr) {
   auto& writer = *writePtr;
   for (const auto& curTriple : input) {
+    std::array<ad_utility::datatypes::FancyId, 3> mappedTriple;
     // for all triple elements find their mapping from partial to global ids
-    ad_utility::HashMap<Id, Id>::const_iterator iterators[3];
     for (size_t k = 0; k < 3; ++k) {
-      iterators[k] = map.find(curTriple[k]);
-      if (iterators[k] == map.end()) {
-        LOG(INFO) << "not found in partial local Vocab: " << curTriple[k]
+      if (!curTriple[k].isVocab()) {
+        mappedTriple[k] = curTriple[k];
+        continue;
+      }
+      auto iterator = map.find(curTriple[k].getVocabUnchecked());
+      if (iterator == map.end()) {
+        LOG(INFO) << "not found in partial local Vocab: " << curTriple[k].getVocabUnchecked()
                   << '\n';
         AD_CHECK(false);
       }
+      mappedTriple[k] = ad_utility::datatypes::FancyId::Vocab(iterator->second);
     }
 
     // update the Element
-    writer << std::array<Id, 3>{
-        {iterators[0]->second, iterators[1]->second, iterators[2]->second}};
+    writer << mappedTriple;
   }
 }
 

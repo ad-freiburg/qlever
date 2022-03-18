@@ -21,10 +21,10 @@ using std::mutex;
 using std::unique_lock;
 using std::vector;
 
-template <typename ResultType>
-class ResultTableTemplate {
+class ResultTable {
  public:
   enum Status { IN_PROGRESS = 0, FINISHED = 1, ABORTED = 2 };
+  using ResultType = qlever::ResultType;
 
   /**
    * @brief This vector contains a list of column indices by which the result
@@ -52,23 +52,21 @@ class ResultTableTemplate {
   using LocalVocab = vector<string>;
   std::shared_ptr<LocalVocab> _localVocab;
 
-  explicit ResultTableTemplate(ad_utility::AllocatorWithLimit<Id> allocator);
+  explicit ResultTable(ad_utility::AllocatorWithLimit<Id> allocator);
 
-  ResultTableTemplate(const ResultTableTemplate& other) = delete;
+  ResultTable(const ResultTable& other) = delete;
 
-  ResultTableTemplate(ResultTableTemplate&& other) = default;
+  ResultTable(ResultTable&& other) = default;
 
-  ResultTableTemplate& operator=(const ResultTableTemplate& other) = delete;
+  ResultTable& operator=(const ResultTable& other) = delete;
 
-  ResultTableTemplate& operator=(ResultTableTemplate&& other) = default;
+  ResultTable& operator=(ResultTable&& other) = default;
 
-  virtual ~ResultTableTemplate();
+  virtual ~ResultTable();
 
-  std::optional<std::string> idToOptionalString(Id id) const {
+  std::optional<std::string> idToOptionalString(uint64_t id) const {
     if (id < _localVocab->size()) {
       return (*_localVocab)[id];
-    } else if (id == ID_NO_VALUE) {
-      return std::nullopt;
     }
     return std::nullopt;
   }
@@ -89,5 +87,3 @@ class ResultTableTemplate {
 
  private:
 };
-
-using ResultTable = ResultTableTemplate<qlever::ResultType>

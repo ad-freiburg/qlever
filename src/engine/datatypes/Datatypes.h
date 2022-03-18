@@ -35,6 +35,8 @@ class FancyId {
  public:
   static constexpr FancyId Undefined() {return {0ul};}
 
+  static constexpr FancyId fromRawBits(T bits) {return {bits};}
+
   static constexpr FancyId Double(double d) {
     auto asBits = std::bit_cast<T>(d);
     asBits = asBits >> MASK_SIZE_DOUBLE;
@@ -65,6 +67,21 @@ class FancyId {
     return (_data & HigherBits) == IntMask;
   }
 
+  static constexpr FancyId Vocab(uint64_t id) {
+    // TODO<joka921> Check that it is within range?
+    return {id & VocabMask};
+  }
+
+  [[nodiscard]] constexpr bool isVocab() const {
+    constexpr T HigherBits = bitMaskForHigherBits(MASK_SIZE_VOCAB);
+    return (_data & HigherBits) == VocabMask;
+  }
+
+  [[nodiscard]] constexpr uint64_t getVocabUnchecked() const {
+    constexpr T mask = bitMaskForLowerBits(64- MASK_SIZE_VOCAB);
+    return _data & mask;
+  }
+
   constexpr static auto MinInteger() {
     return N::MinInteger();
   }
@@ -75,6 +92,30 @@ class FancyId {
   // TODO::Implement all the other datatypes.
 
   [[nodiscard]] constexpr T data() const { return _data; }
+
+  // The default comparison is performed on the raw data.
+  constexpr auto operator<=>(const FancyId&) const = default;
+  constexpr bool operator==(const FancyId&) const = default;
+
+  // Uninitialized default construction is required for `stxxl::sort`.
+  constexpr FancyId() = default;
+
+  template <typename H>
+  friend H AbslHashValue(H h, const FancyId& id) {
+    return H::combine(std::move(h), id.data());
+  }
+
+  template <typename Serializer>
+  friend void serialize(Serializer& serializer, FancyId& id) {
+    serializer | id._data;
+  }
+
+  // TODO<joka921> This is just a dummy to make things compile, should
+  // we make a proper human-readable output of it?
+  friend std::ostream& operator<<(std::ostream& ostr, const FancyId& id) {
+    ostr << id.data();
+    return ostr;
+  }
 
  private:
   T _data;
@@ -95,6 +136,15 @@ class FancyId {
   constexpr static uint64_t BoolMask = T(0b0000'1000) << 56;
 };
 
+
 }  // namespace ad_utility::datatypes
+namespace std {
+template<> struct hash<ad_utility::datatypes::FancyId> {
+  uint64_t operator()(const ad_utility::datatypes::FancyId& id) const {
+    return std::hash<uint64_t>{}(id.data());
+  }
+
+};
+}
 
 #endif  // QLEVER_DATATYPES_H
