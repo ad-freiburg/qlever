@@ -16,9 +16,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      - name: Install dependencies
+      - name: Install clang-format dependencies
         run: sudo apt-get install -y clang-format-11
 
-      - name: Run the format checker
+      - name: Run the clang format checker
         run: ${{github.workspace}}/misc/format-check.sh
 
+      - name: Install yamll-format dependencies
+        run: sudo apt-get install yamllint -y
+
+      - name: Run the yaml format checker
+        run: ${{github.workspace}}/e2e/yaml-format-check.sh
