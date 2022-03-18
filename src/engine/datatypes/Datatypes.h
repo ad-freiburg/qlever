@@ -15,83 +15,85 @@
 #include "./BoundedInteger.h"
 
 namespace ad_utility::datatypes {
+
+// TODO<joka921> For now, double/float/decimals all will become "doubles" without the possibility of converting them back.
 enum struct Datatype {
   Undefined,
   Int,
   Bool,
-  Decimal,
   Double,
-  Float,
   Date,
   Vocab,
-  LocalVocab
 };
 class FancyId {
   using T = uint64_t;
 
+  static constexpr size_t MASK_SIZE_INT = 2;
+  static constexpr size_t numBits = 64 - MASK_SIZE_INT;
+  using N = ad_utility::NBitInteger<numBits>;
+
  public:
-  // static NBitInteger Undefined() {return {0ul};}
+  static constexpr FancyId Undefined() {return {0ul};}
+
   static constexpr FancyId Double(double d) {
     auto asBits = std::bit_cast<T>(d);
-    asBits = asBits >> MASK_SIZE;
+    asBits = asBits >> MASK_SIZE_DOUBLE;
     asBits |= DoubleMask;
     return FancyId{asBits};
   }
 
-  static constexpr FancyId Integer(int64_t i) {
-    // propagate the sign.
-    constexpr int64_t signBit = 1l << MASK_SHIFT;
-    auto highestBitShifted =
-        ((signBit & i) << (MASK_SIZE - 1)) >> (MASK_SIZE - 1);
-    constexpr T mask = std::numeric_limits<T>::max() >> MASK_SIZE;
-    return {static_cast<T>((i & mask) | highestBitShifted)};
-  }
-  static constexpr FancyId MaxInteger() {
-    // propagate the sign.
-    return {std::numeric_limits<T>::max() >> MASK_SIZE};
-  }
-  static constexpr FancyId MinInteger() {
-    constexpr int64_t signBit = 1l << MASK_SHIFT;
-    auto highestBitShifted = ((signBit) << (MASK_SIZE - 1)) >> (MASK_SIZE - 1);
-    return {static_cast<T>(highestBitShifted)};
+  [[nodiscard]] constexpr bool isDouble() const {
+    constexpr T HigherBits = bitMaskForHigherBits(MASK_SIZE_DOUBLE);
+    return (_data & HigherBits) == DoubleMask;
   }
 
   [[nodiscard]] constexpr double getDoubleUnchecked() const {
-    return std::bit_cast<double>(_data << MASK_SIZE);
+    return std::bit_cast<double>(_data << MASK_SIZE_DOUBLE);
+  }
+
+  static constexpr FancyId Integer(int64_t i) {
+    return {IntMask | N::toNBit(i)};
   }
 
   [[nodiscard]] constexpr int64_t getIntegerUnchecked() const {
-    return static_cast<int64_t>(_data);
+    // This automatically gets rid of the Mask in the higher bits.
+    return N::fromNBit(_data);
   }
+
+  [[nodiscard]] constexpr bool isInteger() const {
+    constexpr T HigherBits = bitMaskForHigherBits(MASK_SIZE_INT);
+    return (_data & HigherBits) == IntMask;
+  }
+
+  constexpr static auto MinInteger() {
+    return N::MinInteger();
+  }
+  constexpr static auto MaxInteger() {
+    return N::MaxInteger();
+  }
+
+  // TODO::Implement all the other datatypes.
 
   [[nodiscard]] constexpr T data() const { return _data; }
 
  private:
   T _data;
-  static constexpr size_t MASK_SIZE = 4;
-  static constexpr size_t MASK_SHIFT = 8 * sizeof(T) - MASK_SIZE;
   constexpr FancyId(uint64_t data) : _data{data} {};
 
-  constexpr static uint64_t DoubleMask = 1ul << MASK_SHIFT;
-  constexpr static uint64_t DecimalMask = 3ul << MASK_SHIFT;
-  constexpr static uint64_t FloatMask = 5ul << MASK_SHIFT;
+  static constexpr size_t MASK_SIZE_DOUBLE = 1;
+  constexpr static uint64_t DoubleMask = T(0b1000'0000) << 56;
 
-  constexpr static uint64_t PositiveIntMask = 0ul << MASK_SHIFT;
-  constexpr static uint64_t NegativeIntMask = 16ul << MASK_SHIFT;
-  constexpr static uint64_t BoolMask = 6ul << MASK_SHIFT;
+  constexpr static uint64_t IntMask = T(0b0100'0000) << 56;
 
-  constexpr static uint64_t VocabMask = 4ul << MASK_SHIFT;
-  constexpr static uint64_t LocalVocabMask = 8ul << MASK_SHIFT;
-  constexpr static uint64_t DateMask = 12ul << MASK_SHIFT;
+  static constexpr size_t MASK_SIZE_VOCAB = 3;
+  constexpr static uint64_t VocabMask = T(0b0010'0000) << 56;
+
+  static constexpr size_t MASK_SIZE_DATE = 4;
+  constexpr static uint64_t DateMask = T(0b0001'0000) << 56;
+
+  static constexpr size_t MASK_SIZE_BOOL = 5;
+  constexpr static uint64_t BoolMask = T(0b0000'1000) << 56;
 };
-
-namespace fancyIdLimits {
-
-static constexpr int64_t maxInteger =
-    FancyId::MaxInteger().getIntegerUnchecked();
-static constexpr int64_t minInteger =
-    FancyId::MinInteger().getIntegerUnchecked();
-}  // namespace fancyIdLimits
 
 }  // namespace ad_utility::datatypes
 

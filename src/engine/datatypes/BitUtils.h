@@ -39,6 +39,12 @@ constexpr inline uint64_t bitMaskForLowerBits(uint64_t numBits) {
   return (uint64_t(1) << numBits) - 1;
 }
 
+// The return value has 1s for the highest `numBits` bits, and 0 in all the
+// lower bits.
+constexpr inline uint64_t bitMaskForHigherBits(uint64_t numBits) {
+  return ~bitMaskForLowerBits(64 - numBits);
+}
+
 namespace detail {
 
 // A constexpr implementation of `ceil` (round up) on 32-bit floats.

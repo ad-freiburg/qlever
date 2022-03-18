@@ -18,7 +18,7 @@ class NBitInteger {
 
   static constexpr T toNBit (int64_t i) {
     constexpr T mask = bitMaskForLowerBits(N);
-    return static_cast<T>(i & N);
+    return static_cast<T>(i & mask);
   }
 
   static constexpr int64_t fromNBit (T t) {

@@ -18,14 +18,17 @@ static auto print = [](auto d) {
 
 TEST(FancyId, Double) {
   auto test = [](double d, bool testExact = false) {
-    auto result = NBitInteger::Double(d).getDoubleUnchecked();
+    auto fancy = FancyId::Double(d);
+    ASSERT_TRUE(fancy.isDouble());
+    ASSERT_FALSE(fancy.isInteger());
+    auto result = FancyId::Double(d).getDoubleUnchecked();
 
     if (std::isnan(d)) {
       ASSERT_TRUE(std::isnan(result));
     } else if (testExact) {
-      ASSERT_EQ(d, NBitInteger::Double(d).getDoubleUnchecked());
+      ASSERT_EQ(d, FancyId::Double(d).getDoubleUnchecked());
     } else {
-      ASSERT_FLOAT_EQ(d, NBitInteger::Double(d).getDoubleUnchecked());
+      ASSERT_FLOAT_EQ(d, FancyId::Double(d).getDoubleUnchecked());
     }
   };
 
@@ -56,7 +59,7 @@ TEST(FancyId, Double) {
 
 TEST(FancyId, Int) {
   auto inOut = [](int64_t i) {
-    return NBitInteger::Integer(i).getIntegerUnchecked();
+    return FancyId::Integer(i).getIntegerUnchecked();
   };
 
   auto testEq = [&](int64_t i) { ASSERT_EQ(i, inOut(i)); };
@@ -69,8 +72,8 @@ TEST(FancyId, Int) {
 
   testAll({0, 1, -1});
 
-  auto min = fancyIdLimits::minInteger;
-  auto max = fancyIdLimits::maxInteger;
+  auto min = FancyId::MinInteger();
+  auto max = FancyId::MaxInteger();
 
   testAll({min, min + 1, max, max - 1});
 
@@ -111,35 +114,7 @@ TEST(Date, FirstTests) {
   ASSERT_EQ(d.day(), 28);
 }
 
-TEST(BitPacking, FirstTests) {
-  using B = BoundedInteger<-24, 38>;
-  B b{11};
-  ASSERT_EQ(b.get(), 11);
-  ASSERT_EQ(B::fromUncheckedBits(b.toBits()).get(), 11);
-}
-
-TEST(BitPacking, numBitsRequired) {
-  auto test = [](auto range) {
-    auto expected = static_cast<uint8_t>(std::floor(std::log2(range - 1)) + 1);
-    ASSERT_EQ(numBitsRequired(range), expected);
-  };
-
-  for (size_t i = 2; i <= 5'000'000; ++i) {
-    test(i);
-  }
-}
-
-TEST(BitPacking, BitMasks) {
-  ASSERT_EQ(bitMaskForLowerBits(0), 0);
-  ASSERT_EQ(bitMaskForLowerBits(1), 1);
-  ASSERT_EQ(bitMaskForLowerBits(2), 3);
-  ASSERT_EQ(bitMaskForLowerBits(3), 7);
-  ASSERT_EQ(bitMaskForLowerBits(4), 15);
-  ASSERT_EQ(bitMaskForLowerBits(5), 31);
-
-  ASSERT_EQ(bitMaskForLowerBits(64), static_cast<uint64_t>(-1));
-}
-
+/*
 TEST(BitPacking, Systematic) {
   auto testSingleValue = []<typename B>(int64_t value, B*) {
     B b{value};
@@ -193,3 +168,4 @@ TEST(BitPacking, Systematic) {
   testAll(o);
   testAll(p);
 }
+*/

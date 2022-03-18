@@ -72,7 +72,7 @@ class Date {
       : _year{year}, _month{month}, _day{day} {}
 
   static constexpr uint64_t onlyLastBits(uint64_t input, uint64_t numBits) {
-    return ~(std::numeric_limits<uint64_t>::max() << numBytes) & input;
+    return ~(std::numeric_limits<uint64_t>::max() << numBits) & input;
   }
 
  public:
@@ -102,9 +102,9 @@ class Time {
  public:
   constexpr Time(signed char hour, signed char minute, float seconds)
       : _hour{hour}, _minute{minute} {
-    detail::check(hour, 0, 24, "hour");
-    detail::check(minute, 0, 60, "minute");
-    detail::check(seconds, 0.0f, 60.0f, "seconds");
+    detail::checkUpperBoundExclusive(hour, 0, 24, "hour");
+    detail::checkUpperBoundExclusive(minute, 0, 60, "minute");
+    detail::checkUpperBoundExclusive(seconds, 0.0f, 60.0f, "seconds");
 
     constexpr auto numBitsForFraction = numBitsForSeconds - 6;
     _seconds = static_cast<unsigned>(seconds * pow(2, numBitsForFraction));
@@ -112,7 +112,8 @@ class Time {
   constexpr Time(signed char hour, signed char minute, float seconds,
                  signed char timezone)
       : Time(hour, minute, seconds) {
-    detail::check(timezone, -23, 25, "timezone");
+    // TODO<joka921> What are the correct limits here?
+    detail::checkUpperBoundInclusive(timezone, -23, 23, "timezone");
     // The minimal timezone is -23 which will become 1, so
     // 0 stands for "undefined timezone"
     _timezone = timezone + static_cast<signed char>(24);
