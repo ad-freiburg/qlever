@@ -7,6 +7,10 @@
 #include "../src/index/PatternCreator.h"
 #include "../src/util/Serializer/Serializer.h"
 
+auto V = [](const auto& id) {
+  return Id::Vocab(id);
+};
+
 TEST(PatternStatistics, Initialization) {
   PatternStatistics patternStatistics{50, 25, 4};
   ASSERT_EQ(patternStatistics._numDistinctSubjectPredicatePairs, 50u);
@@ -31,15 +35,15 @@ TEST(PatternStatistics, Serialization) {
 
 // Create patterns from a small SPO-sorted sequence of triples.
 void createExamplePatterns(PatternCreator& creator) {
-  creator.processTriple({0, 10, 20});
-  creator.processTriple({0, 10, 21});
-  creator.processTriple({0, 11, 18});
-  creator.processTriple({1, 10, 18});
-  creator.processTriple({1, 12, 18});
-  creator.processTriple({1, 13, 18});
-  creator.processTriple({3, 10, 28});
-  creator.processTriple({3, 11, 29});
-  creator.processTriple({3, 11, 45});
+  creator.processTriple({V(0), V(10), V(20)});
+  creator.processTriple({V(0), V(10), V(21)});
+  creator.processTriple({V(0), V(11), V(18)});
+  creator.processTriple({V(1), V(10), V(18)});
+  creator.processTriple({V(1), V(12), V(18)});
+  creator.processTriple({V(1), V(13), V(18)});
+  creator.processTriple({V(3), V(10), V(28)});
+  creator.processTriple({V(3), V(11), V(29)});
+  creator.processTriple({V(3), V(11), V(45)});
 }
 
 // Assert that the contents of patterns read from `filename` match the triples
@@ -63,13 +67,13 @@ void assertPatternContents(const std::string& filename) {
   ASSERT_EQ(patterns.size(), 2);
 
   ASSERT_EQ(patterns[0].size(), 2);
-  ASSERT_EQ(patterns[0][0], 10);
-  ASSERT_EQ(patterns[0][1], 11);
+  ASSERT_EQ(patterns[0][0], V(10));
+  ASSERT_EQ(patterns[0][1], V(11));
 
   ASSERT_EQ(patterns[1].size(), 3);
-  ASSERT_EQ(patterns[1][0], 10);
-  ASSERT_EQ(patterns[1][1], 12);
-  ASSERT_EQ(patterns[1][2], 13);
+  ASSERT_EQ(patterns[1][0], V(10));
+  ASSERT_EQ(patterns[1][1], V(12));
+  ASSERT_EQ(patterns[1][2], V(13));
 
   // We have 4 subjects 0, 1, 2, 3. Subject 2 has no pattern, because
   // it has no triples. Subjects 0 and 3 have the first pattern, subject 1 has

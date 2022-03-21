@@ -78,43 +78,43 @@ TEST(TransitivePathTest, computeTransitivePath) {
   TransitivePath T(nullptr, nullptr, false, false, 0, 0, V(0), V(0), "bim"s, "bam"s,
                    0, 0);
 
-  T.computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0, 0, 1,
+  T.computeTransitivePath<2>(&result, sub, true, true, 0, 1, V(0), V(0), 1,
                              std::numeric_limits<size_t>::max());
   assertSameUnorderedContent(expected, result);
 
   result.clear();
   expected.clear();
-  expected.push_back({0, 2});
-  expected.push_back({0, 4});
-  expected.push_back({0, 7});
-  expected.push_back({0, 0});
-  expected.push_back({2, 4});
-  expected.push_back({2, 7});
-  expected.push_back({4, 7});
-  expected.push_back({4, 0});
-  expected.push_back({3, 3});
-  expected.push_back({7, 0});
-  expected.push_back({7, 2});
-  expected.push_back({7, 7});
-  expected.push_back({10, 11});
+  expected.push_back({V(0), V(2)});
+  expected.push_back({V(0), V(4)});
+  expected.push_back({V(0), V(7)});
+  expected.push_back({V(0), V(0)});
+  expected.push_back({V(2), V(4)});
+  expected.push_back({V(2), V(7)});
+  expected.push_back({V(4), V(7)});
+  expected.push_back({V(4), V(0)});
+  expected.push_back({V(3), V(3)});
+  expected.push_back({V(7), V(0)});
+  expected.push_back({V(7), V(2)});
+  expected.push_back({V(7), V(7)});
+  expected.push_back({V(10), V(11)});
 
-  T.computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0, 0, 1, 2);
+  T.computeTransitivePath<2>(&result, sub, true, true, 0, 1, V(0), V(0), 1, 2);
   assertSameUnorderedContent(expected, result);
 
   result.clear();
   expected.clear();
-  expected.push_back({7, 0});
-  expected.push_back({7, 2});
-  expected.push_back({7, 7});
+  expected.push_back({V(7), V(0)});
+  expected.push_back({V(7), V(2)});
+  expected.push_back({V(7), V(7)});
 
-  T.computeTransitivePath<2>(&result, sub, false, true, 0, 1, 7, 0, 1, 2);
+  T.computeTransitivePath<2>(&result, sub, false, true, 0, 1, V(7), V(0), 1, 2);
   assertSameUnorderedContent(expected, result);
 
   result.clear();
   expected.clear();
-  expected.push_back({0, 2});
-  expected.push_back({7, 2});
+  expected.push_back({V(0), V(2)});
+  expected.push_back({V(7), V(2)});
 
-  T.computeTransitivePath<2>(&result, sub, true, false, 0, 1, 0, 2, 1, 2);
+  T.computeTransitivePath<2>(&result, sub, true, false, 0, 1, V(0), V(2), 1, 2);
   assertSameUnorderedContent(expected, result);
 }

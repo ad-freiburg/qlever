@@ -4,9 +4,12 @@
 
 #pragma once
 
+#include <string>
+#ifndef EOF
+#define EOF std::char_traits<char>::eof()
+#endif
 #include <boost/iostreams/filter/gzip.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
-#include <string>
 
 #include "./Generator.h"
 #include "./HttpServer/ContentEncodingHelper.h"

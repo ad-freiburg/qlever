@@ -328,7 +328,7 @@ void OptionalJoin::createOptionalResult(
 template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
 void OptionalJoin::optionalJoin(const IdTable& dynA, const IdTable& dynB,
                                 bool aOptional, bool bOptional,
-                                const vector<array<uint64_t, 2>>& joinColumns,
+                                const vector<array<ColumnIndex, 2>>& joinColumns,
                                 IdTable* dynResult) {
   // check for trivial cases
   if ((dynA.size() == 0 && dynB.size() == 0) ||

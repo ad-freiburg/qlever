@@ -272,7 +272,7 @@ Id constantExpressionResultToId(T&& result, LocalVocab& localVocab,
     if (!isRepetitionOfConstant) {
       localVocab.push_back(std::forward<T>(result));
     }
-    return localVocab.size() - 1;
+    return Id::LocalVocab(localVocab.size() - 1);
   } else {
     static_assert(ad_utility::alwaysFalse<T>,
                   "The result types other than VERBATIM, FLOAT and LOCAL_VOCAB "

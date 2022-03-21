@@ -18,15 +18,19 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
   return a;
 }
 
+auto V = [](const auto& id) {
+  return Id::Vocab(id);
+};
+
 TEST(UnionTest, computeUnion) {
   IdTable left(1, allocator());
-  left.push_back({1});
-  left.push_back({2});
-  left.push_back({3});
+  left.push_back({V(1)});
+  left.push_back({V(2)});
+  left.push_back({V(3)});
 
   IdTable right(2, allocator());
-  right.push_back({4, 5});
-  right.push_back({6, 7});
+  right.push_back({V(4), V(5)});
+  right.push_back({V(6), V(7)});
 
   IdTable result(2, allocator());
 
@@ -54,13 +58,13 @@ TEST(UnionTest, computeUnion) {
 TEST(UnionTest, computeUnionOptimized) {
   // the left and right data vectors will be deleted by the result tables
   IdTable left(2, allocator());
-  left.push_back({1, 2});
-  left.push_back({2, 3});
-  left.push_back({3, 4});
+  left.push_back({V(1), V(2)});
+  left.push_back({V(2), V(3)});
+  left.push_back({V(3), V(4)});
 
   IdTable right(2, allocator());
-  right.push_back({4, 5});
-  right.push_back({6, 7});
+  right.push_back({V(4), V(5)});
+  right.push_back({V(6), V(7)});
 
   IdTable result(2, allocator());
 

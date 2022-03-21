@@ -27,6 +27,10 @@ bool vocabTestCompare(const IdPairMMapVecView& a,
   return true;
 }
 
+auto V = [](const auto& id) {
+  return Id::Vocab(id);
+};
+
 // Test fixture that sets up the binary files vor partial vocabulary and
 // everything else connected with vocabulary merging.
 class MergeVocabularyTest : public ::testing::Test {
@@ -100,7 +104,7 @@ class MergeVocabularyTest : public ::testing::Test {
             w._id = localIdx;
             partialVocab << w;
             if (mapping) {
-              mapping->emplace_back(localIdx, globalId);
+              mapping->emplace_back(V(localIdx), V(globalId));
             }
             localIdx++;
           }
@@ -165,8 +169,8 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   }
 
   // No language tags in text file
-  ASSERT_EQ(res._langPredLowerBound, 0ul);
-  ASSERT_EQ(res._langPredUpperBound, 0ul);
+  ASSERT_EQ(res._langPredLowerBound, V(0));
+  ASSERT_EQ(res._langPredUpperBound, V(0));
   // check that (external) vocabulary has the right form.
   ASSERT_TRUE(
       areBinaryFilesEqual(_pathVocabExp, _basePath + INTERNAL_VOCAB_SUFFIX));
@@ -207,10 +211,10 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
                         internalVocabularyAction);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
-    ASSERT_EQ(0u, idMap[5]);
-    ASSERT_EQ(1u, idMap[7]);
-    ASSERT_EQ(2u, idMap[6]);
-    ASSERT_EQ(3u, idMap[8]);
+    ASSERT_EQ(V(0), idMap[V(5)]);
+    ASSERT_EQ(V(1), idMap[V(7)]);
+    ASSERT_EQ(V(2), idMap[V(6)]);
+    ASSERT_EQ(V(3), idMap[V(8)]);
     auto res = system("rm _tmp_testidx*");
     (void)res;
   }
@@ -251,11 +255,11 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
                         internalVocabularyAction);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
-    EXPECT_EQ(0u, idMap[6]);
-    EXPECT_EQ(1u, idMap[5]);
-    EXPECT_EQ(2u, idMap[9]);
-    EXPECT_EQ(3u, idMap[7]);
-    EXPECT_EQ(4u, idMap[8]);
+    EXPECT_EQ(V(0), idMap[V(6)]);
+    EXPECT_EQ(V(1), idMap[V(5)]);
+    EXPECT_EQ(V(2), idMap[V(9)]);
+    EXPECT_EQ(V(3), idMap[V(7)]);
+    EXPECT_EQ(V(4), idMap[V(8)]);
     auto res = system("rm _tmp_testidx*");
     (void)res;
 

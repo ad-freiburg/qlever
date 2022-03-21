@@ -15,6 +15,10 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
   return a;
 }
 
+auto V = [](const auto& id) {
+  return Id::Vocab(id);
+};
+
 // This fixture is used to create an Index for the tests.
 // The full index creation is required for initialization of the vocabularies.
 class GroupByTest : public ::testing::Test {
@@ -107,15 +111,15 @@ TEST_F(GroupByTest, doGroupBy) {
   IdTable inputData(6, allocator());
   // The input data types are
   //                   KB, KB, VERBATIM, TEXT, FLOAT,           STRING
-  inputData.push_back({1, 4, 123, 0, floatBuffers[0], 0});
-  inputData.push_back({1, 5, 0, 1, floatBuffers[1], 1});
+  inputData.push_back({V(1), V(4), V(123), V(0), floatBuffers[0], V(0)});
+  inputData.push_back({V(1), V(5), V(0), V(1), floatBuffers[1], V(1)});
 
-  inputData.push_back({2, 6, 41223, 2, floatBuffers[2], 2});
-  inputData.push_back({2, 7, 123, 0, floatBuffers[0], 0});
-  inputData.push_back({2, 7, 123, 0, floatBuffers[0], 0});
+  inputData.push_back({V(2), V(6), V(41223), V(2), floatBuffers[2], V(2)});
+  inputData.push_back({V(2), V(7), V(123), V(0), floatBuffers[0], V(0)});
+  inputData.push_back({V(2), V(7), V(123), V(0), floatBuffers[0], V(0)});
 
-  inputData.push_back({3, 8, 0, 1, floatBuffers[1], 1});
-  inputData.push_back({3, 9, 41223, 2, floatBuffers[2], 2});
+  inputData.push_back({V(3), V(8), V(0), V(1), floatBuffers[1], V(1)});
+  inputData.push_back({V(3), V(9), V(41223), V(2), floatBuffers[2], V(2)});
 
   std::vector<ResultTable::ResultType> inputTypes = {
       ResultTable::ResultType::KB,       ResultTable::ResultType::KB,
