@@ -11,8 +11,21 @@
 #include "../engine/datatypes/Datatypes.h"
 #include "../util/Exception.h"
 
+struct Id {
+  using T = uint64_t;
+
+  static Id make(T id) noexcept { return {id};}
+  const T& get() const noexcept {return _data;}
+
+  bool operator==(const Id&) const = default;
+  auto operator<=>(const Id&) const = default;
+
+ private:
+  Id(T data) noexcept : _data{data} {}
+  T _data;
+};
 // typedef uint64_t Id;
-using Id = ad_utility::datatypes::FancyId;
+//using Id = ad_utility::datatypes::FancyId;
 typedef uint16_t Score;
 
 // TODO<joka921> Make the following ID and index types strong.
@@ -21,8 +34,7 @@ using VocabId = uint64_t;
 
 // A value to use when the result should be empty (e.g. due to an optional join)
 // The highest two values are used as sentinels.
-// static const Id ID_NO_VALUE = std::numeric_limits<Id>::max() - 2;
-static const Id ID_NO_VALUE = Id::Undefined();
+ static const Id ID_NO_VALUE = Id::make(std::numeric_limits<uint64_t>::max() - 2);
 
 namespace ad_utility {
 
