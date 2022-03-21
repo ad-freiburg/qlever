@@ -6,18 +6,14 @@
 
 // _________________________________________________________________________
 void PatternCreator::processTriple(
-    std::array<ad_utility::datatypes::FancyId, 3> triple) {
-  if (!triple[0].isVocab()) {
-    return;
-  }
-  AD_CHECK(triple[1].isVocab());
+    std::array<Id, 3> triple) {
   if (!_currentSubjectId.has_value()) {
     // This is the first triple
-    _currentSubjectId = triple[0].getVocabUnchecked();
-  } else if (triple[0].getVocabUnchecked() != _currentSubjectId) {
+    _currentSubjectId = triple[0].get();
+  } else if (triple[0].get() != _currentSubjectId) {
     // New subject.
     finishSubject(_currentSubjectId.value(), _currentPattern);
-    _currentSubjectId = triple[0].getVocabUnchecked();
+    _currentSubjectId = triple[0].get();
     _currentPattern.clear();
   }
   // Don't list predicates twice in the same pattern.

@@ -102,9 +102,9 @@ struct alignas(256) ItemMapManager {
           m_comp->extractAndTransformComparable(
               key._iriOrLiteral, TripleComponentComparator::Level::IDENTICAL,
               key._isExternal)};
-      return Id::Vocab(res);
+      return Id::make(res);
     } else {
-      return Id::Vocab(_map[key._iriOrLiteral].m_id);
+      return Id::make(_map[key._iriOrLiteral].m_id);
     }
   }
 

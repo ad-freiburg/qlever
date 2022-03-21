@@ -300,8 +300,7 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
       return std::pair{std::move(entity.value()), nullptr};
     }
     case ResultTable::ResultType::VERBATIM:
-      AD_CHECK(id.isInteger());
-      return std::pair{std::to_string(id.getIntegerUnchecked()), XSD_INT_TYPE};
+      return std::pair{std::to_string(id.get()), XSD_INT_TYPE};
     case ResultTable::ResultType::TEXT:
       return std::pair{_qec->getIndex().getTextExcerpt(id), nullptr};
     case ResultTable::ResultType::FLOAT: {

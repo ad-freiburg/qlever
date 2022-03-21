@@ -74,7 +74,7 @@ struct CompressedRelationMetaData {
   // for the mmap-based meta data.
   // TODO<joka921> Can we throw this out?
   static CompressedRelationMetaData emptyMetaData() {
-    auto id = Id::Undefined();
+    auto id = ID_NO_VALUE;
     size_t m = size_t(-1);
     return CompressedRelationMetaData{id, m, 0, 0, m};
   }

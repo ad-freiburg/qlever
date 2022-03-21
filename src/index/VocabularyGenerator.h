@@ -100,8 +100,8 @@ class VocabularyMerger {
     _outfileExternal = std::ofstream();
     _idVecs.clear();
     _firstLangPredSeen = false;
-    _langPredLowerBound = Id::Undefined();
-    _langPredUpperBound = Id::Undefined();
+    _langPredLowerBound = ID_NO_VALUE;
+    _langPredUpperBound = ID_NO_VALUE;
   }
 
   // private data members
@@ -116,8 +116,8 @@ class VocabularyMerger {
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> _idVecs;
   bool _firstLangPredSeen = false;
-  Id _langPredLowerBound = Id::Undefined();
-  Id _langPredUpperBound = Id::Undefined();
+  Id _langPredLowerBound = ID_NO_VALUE;
+  Id _langPredUpperBound = ID_NO_VALUE;
 
   const size_t _bufferSize = 10000000;
 

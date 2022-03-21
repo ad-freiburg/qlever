@@ -203,7 +203,7 @@ void Values::writeValues(IdTable* res, const Index& index,
         // sucessfully written, so the numActuallyWritten index is not advanced
         goto skipRow;
       }
-      result(numActuallyWritten, colIdx) = Id::LocalVocab(id);
+      result(numActuallyWritten, colIdx) = Id::make(id);
     }
     numActuallyWritten++;
   skipRow:;  // the label for the goto. Jumping to this label is basically

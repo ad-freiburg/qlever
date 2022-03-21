@@ -33,7 +33,7 @@ class LiteralExpression : public SparqlExpression {
         // TODO<joka921>:: emit a warning.
         return _value;
       }
-      return StrongIdWithResultType{{Id::Vocab(id)},
+      return StrongIdWithResultType{{Id::make(id)},
                                     ResultTable::ResultType::KB};
     } else {
       return _value;

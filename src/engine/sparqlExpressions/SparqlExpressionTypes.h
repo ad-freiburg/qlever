@@ -265,14 +265,16 @@ Id constantExpressionResultToId(T&& result, LocalVocab& localVocab,
   if constexpr (type == qlever::ResultType::VERBATIM) {
     return Id{result};
   } else if constexpr (type == qlever::ResultType::FLOAT) {
-    // TODO::throw the whole RESULT TYPES out
-    return Id::Double(static_cast<double>(result));
+    auto tmpF = static_cast<float>(result);
+    Id id;
+    std::memcpy(&id, &tmpF, sizeof(float));
+    return id;
   } else if constexpr (type == qlever::ResultType::LOCAL_VOCAB) {
     // Return the index in the local vocabulary.
     if (!isRepetitionOfConstant) {
       localVocab.push_back(std::forward<T>(result));
     }
-    return Id::LocalVocab(localVocab.size() - 1);
+    return Id::make(localVocab.size() - 1);
   } else {
     static_assert(ad_utility::alwaysFalse<T>,
                   "The result types other than VERBATIM, FLOAT and LOCAL_VOCAB "

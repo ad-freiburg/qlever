@@ -26,7 +26,7 @@ IdTable createRandomIdTable(
   for (size_t i = 0; i < numRows; ++i) {
     result.push_back();
     for (size_t j = 0; j < numColumns; ++j) {
-      result(i, j) = Id::fromRawBits(generator());
+      result(i, j) = Id::make(generator());
     }
   }
   return result;

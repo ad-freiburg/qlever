@@ -78,10 +78,9 @@ std::string TransitivePath::getDescriptor() const {
   if (_leftIsVar) {
     os << _leftColName;
   } else {
-    AD_CHECK(_leftValue.isVocab());
     os << getIndex()
-              .idToOptionalString(_leftValue.getVocabUnchecked())
-              .value_or("#" + std::to_string(_leftValue.getVocabUnchecked()));
+              .idToOptionalString(_leftValue)
+              .value_or("#" + std::to_string(_leftValue.get()));
   }
   // The predicate.
   auto scanOperation =
@@ -96,10 +95,9 @@ std::string TransitivePath::getDescriptor() const {
   if (_rightIsVar) {
     os << _rightColName;
   } else {
-    AD_CHECK(_rightValue.isVocab());
     os << getIndex()
-              .idToOptionalString(_rightValue.getVocabUnchecked())
-              .value_or("#" + std::to_string(_rightValue.getVocabUnchecked()));
+              .idToOptionalString(_rightValue)
+              .value_or("#" + std::to_string(_rightValue.get()));
   }
   return std::move(os).str();
 }
@@ -440,7 +438,7 @@ void TransitivePath::computeTransitivePathLeftBound(
   // be modified after this point.
   std::vector<std::shared_ptr<const ad_utility::HashSet<Id>>> edgeCache;
 
-  Id last_elem = Id::Undefined();
+  Id last_elem = ID_NO_VALUE;
   size_t last_result_begin = 0;
   size_t last_result_end = 0;
   for (size_t i = 0; i < left.size(); i++) {
@@ -578,7 +576,7 @@ void TransitivePath::computeTransitivePathRightBound(
   // be modified after this point.
   std::vector<std::shared_ptr<const ad_utility::HashSet<Id>>> edgeCache;
 
-  Id last_elem = Id::Undefined();
+  Id last_elem = ID_NO_VALUE;
   size_t last_result_begin = 0;
   size_t last_result_end = 0;
   for (size_t i = 0; i < right.size(); i++) {

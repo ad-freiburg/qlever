@@ -274,14 +274,14 @@ void HasPredicateScan::computeFreeS(
       const auto& pattern = patterns[hasPattern[id]];
       for (const auto& predicate : pattern) {
         if (predicate == objectId) {
-          result.push_back({Id::Vocab(id)});
+          result.push_back({Id::make(id)});
         }
       }
     } else if (id < hasPredicate.size()) {
       // add the relations
       for (const auto& predicate : hasPredicate[id]) {
         if (predicate == objectId) {
-          result.push_back({Id::Vocab(id)});
+          result.push_back({Id::make(id)});
         }
       }
     }
@@ -298,8 +298,7 @@ void HasPredicateScan::computeFreeO(
   IdTableStatic<1> result = resultTable->_idTable.moveToStatic<1>();
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
 
-  AD_CHECK(subjectAsId.isVocab());
-  auto subjectId = subjectAsId.getVocabUnchecked();
+  auto subjectId = subjectAsId.get();
   if (subjectId < hasPattern.size() && hasPattern[subjectId] != NO_PATTERN) {
     // add the pattern
     const auto& pattern = patterns[hasPattern[subjectId]];
@@ -329,12 +328,12 @@ void HasPredicateScan::computeFullScan(
     if (id < hasPattern.size() && hasPattern[id] != NO_PATTERN) {
       // add the pattern
       for (const auto& predicate : patterns[hasPattern[id]]) {
-        result.push_back({Id::Vocab(id), predicate});
+        result.push_back({Id::make(id), predicate});
       }
     } else if (id < hasPredicate.size()) {
       // add the relations
       for (const auto& predicate : hasPredicate[id]) {
-        result.push_back({Id::Vocab(id), predicate});
+        result.push_back({Id::make(id), predicate});
       }
     }
     id++;
@@ -355,10 +354,7 @@ void HasPredicateScan::computeSubqueryS(
 
   for (size_t i = 0; i < input.size(); i++) {
     Id idAsId = input(i, subtreeColIndex);
-    if (!idAsId.isVocab()) {
-      continue;
-    }
-    auto id = idAsId.getVocabUnchecked();
+    auto id = idAsId.get();
     if (id < hasPattern.size() && hasPattern[id] != NO_PATTERN) {
       // Expand the pattern and add it to the result
       for (const auto& predicate : patterns[hasPattern[id]]) {

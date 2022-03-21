@@ -17,13 +17,41 @@ struct Id {
   static Id make(T id) noexcept { return {id};}
   const T& get() const noexcept {return _data;}
 
+  Id() = default;
+
   bool operator==(const Id&) const = default;
   auto operator<=>(const Id&) const = default;
+
+  template <typename H>
+  friend H AbslHashValue(H h, const Id& id) {
+    return H::combine(std::move(h), id.get());
+  }
+
+  template <typename Serializer>
+  friend void serialize(Serializer& serializer, Id& id) {
+    serializer | id._data;
+  }
+
+  // TODO<joka921> This is just a dummy to make things compile, should
+  // we make a proper human-readable output of it?
+  friend std::ostream& operator<<(std::ostream& ostr, const Id& id) {
+    ostr << id.get();
+    return ostr;
+  }
 
  private:
   Id(T data) noexcept : _data{data} {}
   T _data;
 };
+
+namespace std {
+template <>
+struct hash<Id> {
+  uint64_t operator()(const Id& id) const {
+    return std::hash<uint64_t>{}(id.get());
+  }
+};
+}
 // typedef uint64_t Id;
 //using Id = ad_utility::datatypes::FancyId;
 typedef uint16_t Score;

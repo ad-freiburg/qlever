@@ -217,7 +217,7 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   }
   result.reserve(predicateCounts.size());
   for (const auto& it : predicateCounts) {
-    result.push_back({it.first, Id::Integer(it.second)});
+    result.push_back({it.first, Id::make(it.second)});
   }
   *dynResult = result.moveToDynamic();
 }
@@ -282,10 +282,7 @@ void CountAvailablePredicates::computePatternTrick(
       if (inputIdx > 0 && subjectId == input(inputIdx - 1, subjectColumn)) {
         continue;
       }
-      if (!subjectId.isVocab()) {
-        continue;
-      }
-      auto subject = subjectId.getVocabUnchecked();
+      auto subject = subjectId.get();
 
       if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
         // The subject matches a pattern
@@ -347,7 +344,7 @@ void CountAvailablePredicates::computePatternTrick(
   // write the predicate counts to the result
   result.reserve(predicateCounts.size());
   for (const auto& it : predicateCounts) {
-    result.push_back({it.first, Id::Integer(it.second)});
+    result.push_back({it.first, Id::make(it.second)});
   }
   LOG(DEBUG) << "Finished writing results" << std::endl;
 

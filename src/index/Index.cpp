@@ -247,7 +247,7 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
-    std::vector<std::array<FancyId, 3>> localWriter;
+    std::vector<std::array<Id, 3>> localWriter;
 
     std::array<ItemMapManager, NUM_PARALLEL_ITEM_MAPS> itemArray;
 
@@ -435,13 +435,10 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
 
       // For all triple elements find their mapping from partial to global ids.
       for (size_t k = 0; k < 3; ++k) {
-        if (!curTriple[k].isVocab()) {
-          continue;
-        }
         auto iterator = idMap.find(curTriple[k]);
         if (iterator == idMap.end()) {
           LOG(INFO) << "Not found in partial vocabulary: "
-                    << curTriple[k].getVocabUnchecked() << std::endl;
+                    << curTriple[k].get() << std::endl;
           AD_CHECK(false);
         }
         // TODO<joka921> at some point we have to check for out of range.
@@ -484,7 +481,7 @@ Index::createPermutationPairImpl(const string& fileName1,
   // and POS, this is a predicate (of which "relation" is a synonym).
   LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
   size_t from = 0;
-  using IdType = ad_utility::datatypes::FancyId;
+  using IdType = Id;
   std::optional<IdType> currentRel;
   ad_utility::BufferedVector<array<Id, 2>> buffer(
       THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.mmap-buffer");
@@ -743,12 +740,11 @@ size_t Index::relationCardinality(const string& relationName) const {
   if (relationName == INTERNAL_TEXT_MATCH_PREDICATE) {
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
-  VocabId relId;
-  // TODO<joka921> other datatypes
-  if (_vocab.getId(relationName, &relId)) {
-    if (this->_PSO.metaData().col0IdExists(Id::Vocab(relId))) {
+  Id relId;
+  if (getId(relationName, &relId)) {
+    if (this->_PSO.metaData().col0IdExists(relId)) {
       return this->_PSO.metaData()
-          .getMetaData(Id::Vocab(relId))
+          .getMetaData(relId)
           .getNofElements();
     }
   }
@@ -757,12 +753,11 @@ size_t Index::relationCardinality(const string& relationName) const {
 
 // _____________________________________________________________________________
 size_t Index::subjectCardinality(const string& sub) const {
-  VocabId relId;
-  // TODO<joka921> other datatypes
-  if (_vocab.getId(sub, &relId)) {
-    if (this->_SPO.metaData().col0IdExists(Id::Vocab(relId))) {
+  Id relId;
+  if (getId(sub, &relId)) {
+    if (this->_SPO.metaData().col0IdExists(relId)) {
       return this->_SPO.metaData()
-          .getMetaData(Id::Vocab(relId))
+          .getMetaData(relId)
           .getNofElements();
     }
   }
@@ -771,12 +766,12 @@ size_t Index::subjectCardinality(const string& sub) const {
 
 // _____________________________________________________________________________
 size_t Index::objectCardinality(const string& obj) const {
-  VocabId relId;
+  Id relId;
   // TODO<joka921> other datatypes
-  if (_vocab.getId(obj, &relId)) {
-    if (this->_OSP.metaData().col0IdExists(Id::Vocab(relId))) {
+  if (getId(obj, &relId)) {
+    if (this->_OSP.metaData().col0IdExists(relId)) {
       return this->_OSP.metaData()
-          .getMetaData(Id::Vocab(relId))
+          .getMetaData(relId)
           .getNofElements();
     }
   }

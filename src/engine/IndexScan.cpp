@@ -463,29 +463,30 @@ void IndexScan::computeFullScan(ResultTable* result,
       getIndex().getVocab().getId(LANGUAGE_PREDICATE, &languagePredicateId);
   AD_CHECK(success);
 
+  // TODO<joka921> lift `prefixRange` to Index and ID
   if (ad_utility::isSimilar<Permutation::SPO_T, P> ||
       ad_utility::isSimilar<Permutation::SOP_T, P>) {
     ignoredRanges.push_back(
-        {Id::Vocab(literalRange.first), Id::Vocab(literalRange.second)});
+        {Id::make(literalRange.first), Id::make(literalRange.second)});
   } else if (ad_utility::isSimilar<Permutation::PSO_T, P> ||
              ad_utility::isSimilar<Permutation::POS_T, P>) {
-    ignoredRanges.push_back({Id::Vocab(taggedPredicatesRange.first),
-                             Id::Vocab(taggedPredicatesRange.second)});
-    ignoredRanges.emplace_back(Id::Vocab(languagePredicateId),
-                               Id::Vocab(languagePredicateId + 1));
+    ignoredRanges.push_back({Id::make(taggedPredicatesRange.first),
+                             Id::make(taggedPredicatesRange.second)});
+    ignoredRanges.emplace_back(Id::make(languagePredicateId),
+                               Id::make(languagePredicateId + 1));
   }
 
   auto isTripleIgnored = [&](const auto& triple) {
     if constexpr (ad_utility::isSimilar<Permutation::SPO_T, P> ||
                   ad_utility::isSimilar<Permutation::OPS_T, P>) {
-      return triple[1].getVocabUnchecked() == languagePredicateId ||
-             (triple[1].getVocabUnchecked() >= taggedPredicatesRange.first &&
-              triple[1].getVocabUnchecked() < taggedPredicatesRange.second);
+      return triple[1].get() == languagePredicateId ||
+             (triple[1].get() >= taggedPredicatesRange.first &&
+              triple[1].get() < taggedPredicatesRange.second);
     } else if constexpr (ad_utility::isSimilar<Permutation::SOP_T, P> ||
                          ad_utility::isSimilar<Permutation::OSP_T, P>) {
-      return triple[2].getVocabUnchecked() == languagePredicateId ||
-             (triple[2].getVocabUnchecked() >= taggedPredicatesRange.first &&
-              triple[2].getVocabUnchecked() < taggedPredicatesRange.second);
+      return triple[2].get() == languagePredicateId ||
+             (triple[2].get() >= taggedPredicatesRange.first &&
+              triple[2].get() < taggedPredicatesRange.second);
     }
     return false;
   };

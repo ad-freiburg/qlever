@@ -6,7 +6,6 @@
 #include <array>
 #include <tuple>
 
-#include "../engine/datatypes/Datatypes.h"
 #include "../global/Id.h"
 
 using std::array;
@@ -14,8 +13,7 @@ using std::tuple;
 
 template <int A0, int A1, int A2>
 struct SortTriple {
-  using FancyId = ad_utility::datatypes::FancyId;
-  using T = std::array<FancyId, 3>;
+  using T = std::array<Id, 3>;
   // comparison function
   bool operator()(const T& a, const T& b) const {
     if (a[A0] == b[A0]) {
@@ -29,7 +27,7 @@ struct SortTriple {
 
   // min sentinel = value which is strictly smaller that any input element
   static T min_value() {
-    auto zero = FancyId::fromRawBits(0);
+    auto zero = Id::make(0);
 
     return {{zero, zero, zero}};
   }
@@ -37,7 +35,7 @@ struct SortTriple {
   // max sentinel = value which is strictly larger that any input element
   static T max_value() {
     uint64_t max = std::numeric_limits<uint64_t>::max();
-    auto maxFancy = FancyId::fromRawBits(max);
+    auto maxFancy = Id::make(max);
     return {{maxFancy, maxFancy, maxFancy}};
   }
 };
@@ -75,13 +73,13 @@ struct SortText {
 
   // min sentinel = value which is strictly smaller that any input element
   static tuple<Id, Id, Id, Score, bool> min_value() {
-    auto zero = Id::fromRawBits(0);
+    auto zero = Id::make(0);
     return tuple<Id, Id, Id, Score, bool>{zero, zero, zero, 0, false};
   }
 
   // max sentinel = value which is strictly larger that any input element
   static tuple<Id, Id, Id, Score, bool> max_value() {
-    Id max = std::numeric_limits<Id>::max();
+    Id max = Id::make(std::numeric_limits<uint64_t>::max());
     Score maxScore = std::numeric_limits<Score>::max();
     return tuple<Id, Id, Id, Score, bool>{max, max, max, maxScore, true};
   }

@@ -117,7 +117,7 @@ class PatternCreator {
   /// This function has to be called for all the triples in the SPO permutation
   /// \param triple Must be >= all previously pushed triples wrt the SPO
   /// permutation.
-  void processTriple(std::array<ad_utility::datatypes::FancyId, 3> triple);
+  void processTriple(std::array<Id, 3> triple);
 
   /// Write the patterns to disk after all triples have been pushed. Calls to
   /// `processTriple` after calling `finish` lead to undefined behavior. Note
