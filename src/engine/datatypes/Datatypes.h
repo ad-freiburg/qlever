@@ -11,12 +11,13 @@
 #include <variant>
 
 #include "./BitUtils.h"
-#include "./Date.h"
 #include "./BoundedInteger.h"
+#include "./Date.h"
 
 namespace ad_utility::datatypes {
 
-// TODO<joka921> For now, double/float/decimals all will become "doubles" without the possibility of converting them back.
+// TODO<joka921> For now, double/float/decimals all will become "doubles"
+// without the possibility of converting them back.
 enum struct Datatype {
   Undefined,
   Int,
@@ -35,9 +36,9 @@ class FancyId {
   using N = ad_utility::NBitInteger<numBits>;
 
  public:
-  static constexpr FancyId Undefined() {return {0ul};}
+  static constexpr FancyId Undefined() { return {0ul}; }
 
-  static constexpr FancyId fromRawBits(T bits) {return {bits};}
+  static constexpr FancyId fromRawBits(T bits) { return {bits}; }
 
   static constexpr FancyId Double(double d) {
     auto asBits = std::bit_cast<T>(d);
@@ -80,11 +81,11 @@ class FancyId {
   }
 
   [[nodiscard]] constexpr uint64_t getVocabUnchecked() const {
-    constexpr T mask = bitMaskForLowerBits(64- MASK_SIZE_VOCAB);
+    constexpr T mask = bitMaskForLowerBits(64 - MASK_SIZE_VOCAB);
     return _data & mask;
   }
 
-  static FancyId LocalVocab(uint64_t){
+  static FancyId LocalVocab(uint64_t) {
     // TODO<joka921> implement and make constexpr
     AD_CHECK(false);
   }
@@ -98,7 +99,7 @@ class FancyId {
     AD_CHECK(false);
   }
 
-  static FancyId Text(uint64_t){
+  static FancyId Text(uint64_t) {
     // TODO<joka921> implement and make constexpr
     AD_CHECK(false);
   }
@@ -112,13 +113,8 @@ class FancyId {
     AD_CHECK(false);
   }
 
-
-  constexpr static auto MinInteger() {
-    return N::MinInteger();
-  }
-  constexpr static auto MaxInteger() {
-    return N::MaxInteger();
-  }
+  constexpr static auto MinInteger() { return N::MinInteger(); }
+  constexpr static auto MaxInteger() { return N::MaxInteger(); }
 
   // TODO::Implement all the other datatypes.
 
@@ -167,15 +163,14 @@ class FancyId {
   constexpr static uint64_t BoolMask = T(0b0000'1000) << 56;
 };
 
-
 }  // namespace ad_utility::datatypes
 namespace std {
-template<> struct hash<ad_utility::datatypes::FancyId> {
+template <>
+struct hash<ad_utility::datatypes::FancyId> {
   uint64_t operator()(const ad_utility::datatypes::FancyId& id) const {
     return std::hash<uint64_t>{}(id.data());
   }
-
 };
-}
+}  // namespace std
 
 #endif  // QLEVER_DATATYPES_H

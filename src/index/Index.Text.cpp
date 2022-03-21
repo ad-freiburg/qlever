@@ -32,7 +32,8 @@ void Index::addTextFromContextFile(const string& contextFile) {
 
 // _____________________________________________________________________________
 void Index::buildDocsDB(const string& docsFileName) {
-  LOG(ERROR) << "Building text indicies is currently not supported" << std::endl;
+  LOG(ERROR) << "Building text indicies is currently not supported"
+             << std::endl;
   AD_CHECK(false);
   /*
   LOG(INFO) << "Building DocsDB...\n";

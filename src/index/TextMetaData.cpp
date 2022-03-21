@@ -16,8 +16,8 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
          _blockUpperBoundWordIds.size() + _blockUpperBoundEntityIds.size());
 
   // Binary search in the sorted _blockUpperBoundWordIds vector.
-  auto it = std::lower_bound(
-      _blockUpperBoundWordIds.begin(), _blockUpperBoundWordIds.end(), lower);
+  auto it = std::lower_bound(_blockUpperBoundWordIds.begin(),
+                             _blockUpperBoundWordIds.end(), lower);
 
   // If the word would be behind all that, return the last block
   if (it == _blockUpperBoundWordIds.end()) {
@@ -51,8 +51,8 @@ bool TextMetaData::existsTextBlockForEntityId(const uint64_t eid) const {
          _blockUpperBoundWordIds.size() + _blockUpperBoundEntityIds.size());
 
   // Binary search in the sorted _blockUpperBoundWordIds vector.
-  auto it = std::lower_bound(
-      _blockUpperBoundEntityIds.begin(), _blockUpperBoundEntityIds.end(), eid);
+  auto it = std::lower_bound(_blockUpperBoundEntityIds.begin(),
+                             _blockUpperBoundEntityIds.end(), eid);
 
   return (*it == eid);
 }
@@ -65,8 +65,8 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByEntityId(
          _blockUpperBoundWordIds.size() + _blockUpperBoundEntityIds.size());
 
   // Binary search in the sorted _blockUpperBoundWordIds vector.
-  auto it = std::lower_bound(
-      _blockUpperBoundEntityIds.begin(), _blockUpperBoundEntityIds.end(), eid);
+  auto it = std::lower_bound(_blockUpperBoundEntityIds.begin(),
+                             _blockUpperBoundEntityIds.end(), eid);
 
   assert(*it == eid);
 

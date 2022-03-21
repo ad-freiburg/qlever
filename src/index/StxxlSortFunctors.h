@@ -6,13 +6,13 @@
 #include <array>
 #include <tuple>
 
-#include "../global/Id.h"
 #include "../engine/datatypes/Datatypes.h"
+#include "../global/Id.h"
 
 using std::array;
 using std::tuple;
 
-template<int A0, int A1, int A2>
+template <int A0, int A1, int A2>
 struct SortTriple {
   using FancyId = ad_utility::datatypes::FancyId;
   using T = std::array<FancyId, 3>;
@@ -31,7 +31,8 @@ struct SortTriple {
   static T min_value() {
     auto zero = FancyId::fromRawBits(0);
 
-    return {{zero, zero, zero}}; }
+    return {{zero, zero, zero}};
+  }
 
   // max sentinel = value which is strictly larger that any input element
   static T max_value() {

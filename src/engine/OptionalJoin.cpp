@@ -14,7 +14,8 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
                            std::shared_ptr<QueryExecutionTree> t1,
                            bool t1Optional,
                            std::shared_ptr<QueryExecutionTree> t2,
-                           bool t2Optional, const vector<array<ColumnIndex, 2>>& jcs)
+                           bool t2Optional,
+                           const vector<array<ColumnIndex, 2>>& jcs)
     : Operation(qec), _joinColumns(jcs), _multiplicitiesComputed(false) {
   // Make sure subtrees are ordered so that identical queries can be identified.
   AD_CHECK_GT(jcs.size(), 0);
@@ -278,7 +279,8 @@ void OptionalJoin::createOptionalResult(
     const IdTableView<A_WIDTH>& a, size_t aIdx, bool aEmpty,
     const IdTableView<B_WIDTH>& b, size_t bIdx, bool bEmpty,
     int joinColumnBitmap_a, int joinColumnBitmap_b,
-    const std::vector<ColumnIndex>& joinColumnAToB, IdTableStatic<OUT_WIDTH>* res) {
+    const std::vector<ColumnIndex>& joinColumnAToB,
+    IdTableStatic<OUT_WIDTH>* res) {
   assert(!(aEmpty && bEmpty));
   res->emplace_back();
   size_t rIdx = res->size() - 1;
@@ -326,10 +328,9 @@ void OptionalJoin::createOptionalResult(
 }
 
 template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
-void OptionalJoin::optionalJoin(const IdTable& dynA, const IdTable& dynB,
-                                bool aOptional, bool bOptional,
-                                const vector<array<ColumnIndex, 2>>& joinColumns,
-                                IdTable* dynResult) {
+void OptionalJoin::optionalJoin(
+    const IdTable& dynA, const IdTable& dynB, bool aOptional, bool bOptional,
+    const vector<array<ColumnIndex, 2>>& joinColumns, IdTable* dynResult) {
   // check for trivial cases
   if ((dynA.size() == 0 && dynB.size() == 0) ||
       (dynA.size() == 0 && !aOptional) || (dynB.size() == 0 && !bOptional)) {

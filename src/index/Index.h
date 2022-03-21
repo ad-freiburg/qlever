@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "../engine/ResultTable.h"
+#include "../engine/datatypes/Datatypes.h"
 #include "../global/Pattern.h"
 #include "../parser/TsvParser.h"
 #include "../parser/TurtleParser.h"
@@ -36,7 +37,6 @@
 #include "./StxxlSortFunctors.h"
 #include "./TextMetaData.h"
 #include "./Vocabulary.h"
-#include "../engine/datatypes/Datatypes.h"
 
 using ad_utility::BufferedVector;
 using ad_utility::MmapVector;
@@ -52,8 +52,8 @@ using ad_utility::datatypes::FancyId;
 using json = nlohmann::json;
 
 template <typename Comparator>
-using StxxlSorter =
-    ad_utility::BackgroundStxxlSorter<std::array<ad_utility::datatypes::FancyId, 3>, Comparator>;
+using StxxlSorter = ad_utility::BackgroundStxxlSorter<
+    std::array<ad_utility::datatypes::FancyId, 3>, Comparator>;
 
 using PsoSorter = StxxlSorter<SortByPSO>;
 
@@ -211,7 +211,7 @@ class Index {
     if (id.isInteger()) {
       return std::to_string(id.getIntegerUnchecked());
     }
-    //TODO<joka921> add additional types here.
+    // TODO<joka921> add additional types here.
     // Should be unreachable.
     AD_CHECK(false);
   }
@@ -223,8 +223,6 @@ class Index {
     *id = Id::Vocab(vocabId);
     return success;
   }
-
-
 
   const vector<PatternID>& getHasPattern() const;
   const CompactVectorOfStrings<Id>& getHasPredicate() const;
@@ -481,7 +479,8 @@ class Index {
                << col0String << " with fixed subject: " << col1String
                << "...\n";
 
-    CompressedRelationMetaData::scan(Id::Vocab(col0Id), Id::Vocab(col1Id), result, p, timer);
+    CompressedRelationMetaData::scan(Id::Vocab(col0Id), Id::Vocab(col1Id),
+                                     result, p, timer);
   }
 
  private:
@@ -764,7 +763,8 @@ class Index {
     // to the respective counter.
     for (const auto& [key, value] : PSO()._meta.data()) {
       auto numTriples = value.getNofElements();
-      if (key == Id::Vocab(qleverLangtag) || (key >= Id::Vocab(begin) && key < Id::Vocab(end))) {
+      if (key == Id::Vocab(qleverLangtag) ||
+          (key >= Id::Vocab(begin) && key < Id::Vocab(end))) {
         addedTriples += numTriples;
       } else {
         actualTriples += numTriples;

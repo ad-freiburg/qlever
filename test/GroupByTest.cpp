@@ -15,9 +15,7 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
   return a;
 }
 
-auto V = [](const auto& id) {
-  return Id::Vocab(id);
-};
+auto V = [](const auto& id) { return Id::Vocab(id); };
 
 // This fixture is used to create an Index for the tests.
 // The full index creation is required for initialization of the vocabularies.

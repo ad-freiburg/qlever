@@ -139,7 +139,8 @@ class Vocabulary {
   //! lvalue for compressedString and const& for string-based vocabulary
   AccessReturnType_t<StringType> at(VocabId id) const;
 
-  // AccessReturnType_t<StringType> at(VocabId id) const { return operator[](id); }
+  // AccessReturnType_t<StringType> at(VocabId id) const { return
+  // operator[](id); }
 
   //! Get the number of words in the vocabulary.
   size_t size() const { return _internalVocabulary.size(); }
@@ -148,15 +149,18 @@ class Vocabulary {
   //! Return value signals if something was found at all.
   bool getId(const string& word, VocabId* id) const;
 
-  VocabId getValueIdForLT(const string& indexWord, const SortLevel level) const {
+  VocabId getValueIdForLT(const string& indexWord,
+                          const SortLevel level) const {
     VocabId lb = lower_bound(indexWord, level);
     return lb;
   }
-  VocabId getValueIdForGE(const string& indexWord, const SortLevel level) const {
+  VocabId getValueIdForGE(const string& indexWord,
+                          const SortLevel level) const {
     return getValueIdForLT(indexWord, level);
   }
 
-  VocabId getValueIdForLE(const string& indexWord, const SortLevel level) const {
+  VocabId getValueIdForLE(const string& indexWord,
+                          const SortLevel level) const {
     VocabId lb = upper_bound(indexWord, level);
     if (lb > 0) {
       // We actually retrieved the first word that is bigger than our entry.
@@ -166,7 +170,8 @@ class Vocabulary {
     return lb;
   }
 
-  VocabId getValueIdForGT(const string& indexWord, const SortLevel level) const {
+  VocabId getValueIdForGT(const string& indexWord,
+                          const SortLevel level) const {
     return getValueIdForLE(indexWord, level);
   }
 
@@ -178,8 +183,8 @@ class Vocabulary {
   // consider using the prefixRange function.
   bool getIdRangeForFullTextPrefix(const string& word, IdRange* range) const;
 
-  ad_utility::HashMap<Datatypes, std::pair<VocabId, VocabId>> getRangesForDatatypes()
-      const;
+  ad_utility::HashMap<Datatypes, std::pair<VocabId, VocabId>>
+  getRangesForDatatypes() const;
 
   template <typename U = StringType, typename = enable_if_compressed<U>>
   void printRangesForDatatypes();
@@ -253,7 +258,7 @@ class Vocabulary {
 
   // Wraps std::lower_bound and returns an index instead of an iterator
   VocabId lower_bound(const string& word,
-                 const SortLevel level = SortLevel::QUARTERNARY) const;
+                      const SortLevel level = SortLevel::QUARTERNARY) const;
 
   // _______________________________________________________________
   VocabId upper_bound(const string& word, const SortLevel level) const;

@@ -27,9 +27,7 @@ bool vocabTestCompare(const IdPairMMapVecView& a,
   return true;
 }
 
-auto V = [](const auto& id) {
-  return Id::Vocab(id);
-};
+auto V = [](const auto& id) { return Id::Vocab(id); };
 
 // Test fixture that sets up the binary files vor partial vocabulary and
 // everything else connected with vocabulary merging.

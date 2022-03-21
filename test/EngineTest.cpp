@@ -19,9 +19,7 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
   return a;
 }
 
-auto V = [](const auto& id) {
-  return Id::Vocab(id);
-};
+auto V = [](const auto& id) { return Id::Vocab(id); };
 
 TEST(EngineTest, joinTest) {
   IdTable a(2, allocator());
@@ -180,7 +178,7 @@ TEST(EngineTest, optionalJoinTest) {
 
   IdTable vres(7, allocator());
   jcls.clear();
-  jcls.push_back(array<ColumnIndex , 2>{{1, 0}});
+  jcls.push_back(array<ColumnIndex, 2>{{1, 0}});
   jcls.push_back(array<ColumnIndex, 2>{{2, 1}});
 
   aWidth = va.cols();

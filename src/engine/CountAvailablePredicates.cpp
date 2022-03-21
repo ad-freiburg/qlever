@@ -154,7 +154,8 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
     // otherwise return an empty result.
     if (getIndex().getId(_subjectEntityName.value(), &entityId)) {
       IdTable input(1, _executionContext->getAllocator());
-      // TODO<joka921> What does this push back do? Is it wrong? or right? or will it be overwritten anyway?
+      // TODO<joka921> What does this push back do? Is it wrong? or right? or
+      // will it be overwritten anyway?
       input.push_back({entityId});
       int width = input.cols();
       CALL_FIXED_SIZE_1(width, CountAvailablePredicates::computePatternTrick,
@@ -282,7 +283,7 @@ void CountAvailablePredicates::computePatternTrick(
         continue;
       }
       if (!subjectId.isVocab()) {
-          continue;
+        continue;
       }
       auto subject = subjectId.getVocabUnchecked();
 

@@ -460,11 +460,11 @@ void Filter::computeFilterFixedValue(
             if constexpr (T == ResultTable::ResultType::KB) {
               AD_CHECK(false);
               // not implemented yet
-              //entity = getIndex().idToOptionalString(e[lhs]);
+              // entity = getIndex().idToOptionalString(e[lhs]);
               (void)subRes;  // Silence unused warning
             } else if (T == ResultTable::ResultType::LOCAL_VOCAB) {
               AD_CHECK(false);
-              //entity = subRes->idToOptionalString(e[lhs]);
+              // entity = subRes->idToOptionalString(e[lhs]);
             }
             if (!entity) {
               return true;
@@ -486,7 +486,8 @@ void Filter::computeFilterFixedValue(
               _additionalPrefixRegexes[i].substr(1));
         }
         // TODO<joka921> Is this a "columnIndex"?
-        ad_utility::HashMap<uint64_t, std::vector<std::pair<VocabId, VocabId>>> prefixRanges;
+        ad_utility::HashMap<uint64_t, std::vector<std::pair<VocabId, VocabId>>>
+            prefixRanges;
         // TODO<joka921>: handle Levels correctly;
         for (const auto& [l, r] : lhsRhsMap) {
           for (const auto& pref : r) {
@@ -505,8 +506,8 @@ void Filter::computeFilterFixedValue(
           }
         }
 
-        const std::optional<ColumnIndex> sortedLhs = [&prefixRanges,
-                                             &subRes]() -> std::optional<ColumnIndex> {
+        const std::optional<ColumnIndex> sortedLhs =
+            [&prefixRanges, &subRes]() -> std::optional<ColumnIndex> {
           if (prefixRanges.size() > 1 || subRes->_sortedBy.empty() ||
               !prefixRanges.contains(subRes->_sortedBy[0])) {
             return std::nullopt;
@@ -559,7 +560,8 @@ void Filter::computeFilterFixedValue(
             getEngine().filter(
                 input,
                 [lhs, p = prefixRanges[lhs][0]](const auto& e) {
-                  return Id::Vocab(p.first) <= e[lhs] && e[lhs] < Id::Vocab(p.second);
+                  return Id::Vocab(p.first) <= e[lhs] &&
+                         e[lhs] < Id::Vocab(p.second);
                 },
                 res);
           } else {
@@ -572,7 +574,8 @@ void Filter::computeFilterFixedValue(
                                        return std::any_of(
                                            vec.begin(), vec.end(),
                                            [&e, &l = x.first](const auto& p) {
-                                             return Id::Vocab(p.first) <= e[l] &&
+                                             return Id::Vocab(p.first) <=
+                                                        e[l] &&
                                                     e[l] < Id::Vocab(p.second);
                                            });
                                      });
@@ -610,7 +613,8 @@ void Filter::computeFilterFixedValue(
           [self_regex, &lhs, &subRes, this](const auto& e) {
             std::optional<string> entity;
             if constexpr (T == ResultTable::ResultType::KB) {
-              entity = getIndex().idToOptionalString(e[lhs].getVocabUnchecked());
+              entity =
+                  getIndex().idToOptionalString(e[lhs].getVocabUnchecked());
             } else if (T == ResultTable::ResultType::LOCAL_VOCAB) {
               entity = subRes->idToOptionalString(e[lhs].getVocabUnchecked());
             }
@@ -678,13 +682,17 @@ void Filter::computeResultFixedValue(
         apply_range_filter = true;
         range_filter_inverse = _type == SparqlFilter::NE;
       } else if (_type == SparqlFilter::GE) {
-        rhs = Id::Vocab(getIndex().getVocab().getValueIdForGE(rhs_string, level));
+        rhs =
+            Id::Vocab(getIndex().getVocab().getValueIdForGE(rhs_string, level));
       } else if (_type == SparqlFilter::GT) {
-        rhs = Id::Vocab(getIndex().getVocab().getValueIdForGT(rhs_string, level));
+        rhs =
+            Id::Vocab(getIndex().getVocab().getValueIdForGT(rhs_string, level));
       } else if (_type == SparqlFilter::LT) {
-        rhs = Id::Vocab(getIndex().getVocab().getValueIdForLT(rhs_string, level));
+        rhs =
+            Id::Vocab(getIndex().getVocab().getValueIdForLT(rhs_string, level));
       } else if (_type == SparqlFilter::LE) {
-        rhs = Id::Vocab(getIndex().getVocab().getValueIdForLE(rhs_string, level));
+        rhs =
+            Id::Vocab(getIndex().getVocab().getValueIdForLE(rhs_string, level));
       }
       // All other types of filters do not use r and work on _rhs directly
       break;

@@ -440,8 +440,8 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
         }
         auto iterator = idMap.find(curTriple[k]);
         if (iterator == idMap.end()) {
-          LOG(INFO) << "Not found in partial vocabulary: " << curTriple[k].getVocabUnchecked()
-                    << std::endl;
+          LOG(INFO) << "Not found in partial vocabulary: "
+                    << curTriple[k].getVocabUnchecked() << std::endl;
           AD_CHECK(false);
         }
         // TODO<joka921> at some point we have to check for out of range.
@@ -486,7 +486,7 @@ Index::createPermutationPairImpl(const string& fileName1,
   size_t from = 0;
   using IdType = ad_utility::datatypes::FancyId;
   std::optional<IdType> currentRel;
-  ad_utility::BufferedVector<array<Id,2>> buffer(
+  ad_utility::BufferedVector<array<Id, 2>> buffer(
       THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.mmap-buffer");
   bool functional = true;
   size_t distinctCol1 = 0;
@@ -747,7 +747,9 @@ size_t Index::relationCardinality(const string& relationName) const {
   // TODO<joka921> other datatypes
   if (_vocab.getId(relationName, &relId)) {
     if (this->_PSO.metaData().col0IdExists(Id::Vocab(relId))) {
-      return this->_PSO.metaData().getMetaData(Id::Vocab(relId)).getNofElements();
+      return this->_PSO.metaData()
+          .getMetaData(Id::Vocab(relId))
+          .getNofElements();
     }
   }
   return 0;
@@ -759,7 +761,9 @@ size_t Index::subjectCardinality(const string& sub) const {
   // TODO<joka921> other datatypes
   if (_vocab.getId(sub, &relId)) {
     if (this->_SPO.metaData().col0IdExists(Id::Vocab(relId))) {
-      return this->_SPO.metaData().getMetaData(Id::Vocab(relId)).getNofElements();
+      return this->_SPO.metaData()
+          .getMetaData(Id::Vocab(relId))
+          .getNofElements();
     }
   }
   return 0;
@@ -771,7 +775,9 @@ size_t Index::objectCardinality(const string& obj) const {
   // TODO<joka921> other datatypes
   if (_vocab.getId(obj, &relId)) {
     if (this->_OSP.metaData().col0IdExists(Id::Vocab(relId))) {
-      return this->_OSP.metaData().getMetaData(Id::Vocab(relId)).getNofElements();
+      return this->_OSP.metaData()
+          .getMetaData(Id::Vocab(relId))
+          .getNofElements();
     }
   }
   return 0;
@@ -953,8 +959,7 @@ LangtagAndTriple Index::tripleToInternalRepresentation(
   auto& spo = res._triple;
   for (auto& el : spo) {
     auto& iriOrLiteral = std::get<TripleComponent>(el)._iriOrLiteral;
-    iriOrLiteral =
-        _vocab.getLocaleManager().normalizeUtf8(iriOrLiteral);
+    iriOrLiteral = _vocab.getLocaleManager().normalizeUtf8(iriOrLiteral);
   }
   size_t upperBound = 3;
   auto& object = std::get<TripleComponent>(spo[2])._iriOrLiteral;
@@ -975,7 +980,8 @@ LangtagAndTriple Index::tripleToInternalRepresentation(
       continue;
     }
     auto& component = std::get<TripleComponent>(spo[k]);
-    if (_onDiskLiterals && _vocab.shouldBeExternalized(component._iriOrLiteral)) {
+    if (_onDiskLiterals &&
+        _vocab.shouldBeExternalized(component._iriOrLiteral)) {
       component._isExternal = true;
     }
   }

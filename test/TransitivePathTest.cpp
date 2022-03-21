@@ -10,9 +10,7 @@
 #include "../src/engine/TransitivePath.h"
 #include "../src/global/Id.h"
 
-auto V = [](const auto& id) {
-  return Id::Vocab(id);
-};
+auto V = [](const auto& id) { return Id::Vocab(id); };
 
 // First sort both of the inputs and then ASSERT their equality. Needed for
 // results of the TransitivePath operations which have a non-deterministic order
@@ -75,8 +73,8 @@ TEST(TransitivePathTest, computeTransitivePath) {
   expected.push_back({V(7), V(7)});
   expected.push_back({V(10), V(11)});
 
-  TransitivePath T(nullptr, nullptr, false, false, 0, 0, V(0), V(0), "bim"s, "bam"s,
-                   0, 0);
+  TransitivePath T(nullptr, nullptr, false, false, 0, 0, V(0), V(0), "bim"s,
+                   "bam"s, 0, 0);
 
   T.computeTransitivePath<2>(&result, sub, true, true, 0, 1, V(0), V(0), 1,
                              std::numeric_limits<size_t>::max());

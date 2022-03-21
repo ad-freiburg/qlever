@@ -7,9 +7,7 @@
 #include "../src/index/PatternCreator.h"
 #include "../src/util/Serializer/Serializer.h"
 
-auto V = [](const auto& id) {
-  return Id::Vocab(id);
-};
+auto V = [](const auto& id) { return Id::Vocab(id); };
 
 TEST(PatternStatistics, Initialization) {
   PatternStatistics patternStatistics{50, 25, 4};

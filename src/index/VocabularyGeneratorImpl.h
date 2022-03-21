@@ -263,8 +263,8 @@ void writeMappedIdsToExtVec(const auto& input,
       }
       auto iterator = map.find(curTriple[k].getVocabUnchecked());
       if (iterator == map.end()) {
-        LOG(INFO) << "not found in partial local Vocab: " << curTriple[k].getVocabUnchecked()
-                  << '\n';
+        LOG(INFO) << "not found in partial local Vocab: "
+                  << curTriple[k].getVocabUnchecked() << '\n';
         AD_CHECK(false);
       }
       mappedTriple[k] = ad_utility::datatypes::FancyId::Vocab(iterator->second);

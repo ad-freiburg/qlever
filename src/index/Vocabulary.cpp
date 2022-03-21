@@ -192,14 +192,14 @@ bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
 // _______________________________________________________________
 template <typename S, typename C>
 VocabId Vocabulary<S, C>::upper_bound(const string& word,
-                                 const SortLevel level) const {
+                                      const SortLevel level) const {
   return _internalVocabulary.upper_bound(word, level)._index;
 }
 
 // _____________________________________________________________________________
 template <typename S, typename C>
 VocabId Vocabulary<S, C>::lower_bound(const string& word,
-                                 const SortLevel level) const {
+                                      const SortLevel level) const {
   return _internalVocabulary.lower_bound(word, level)._index;
 }
 
@@ -239,7 +239,8 @@ bool Vocabulary<S, C>::getId(const string& word, VocabId* id) const {
 
 // ___________________________________________________________________________
 template <typename S, typename C>
-std::pair<VocabId, VocabId> Vocabulary<S, C>::prefix_range(const string& prefix) const {
+std::pair<VocabId, VocabId> Vocabulary<S, C>::prefix_range(
+    const string& prefix) const {
   return _internalVocabulary.prefix_range(prefix);
 }
 
@@ -259,7 +260,8 @@ TextVocabulary::operator[]<std::string, void>(VocabId id) const;
 
 template <typename S, typename C>
 template <typename, typename>
-const std::optional<string> Vocabulary<S, C>::idToOptionalString(VocabId id) const {
+const std::optional<string> Vocabulary<S, C>::idToOptionalString(
+    VocabId id) const {
   if (id < _internalVocabulary.size()) {
     return _internalVocabulary[static_cast<size_t>(id)];
   } else {
@@ -272,7 +274,8 @@ const std::optional<string> Vocabulary<S, C>::idToOptionalString(VocabId id) con
 
 // ___________________________________________________________________________
 template <typename S, typename C>
-ad_utility::HashMap<typename Vocabulary<S, C>::Datatypes, std::pair<VocabId, VocabId>>
+ad_utility::HashMap<typename Vocabulary<S, C>::Datatypes,
+                    std::pair<VocabId, VocabId>>
 Vocabulary<S, C>::getRangesForDatatypes() const {
   ad_utility::HashMap<Datatypes, std::pair<VocabId, VocabId>> result;
   result[Datatypes::Float] = prefix_range(VALUE_FLOAT_PREFIX);

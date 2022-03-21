@@ -60,9 +60,9 @@ constexpr float ceil(float input) {
     return asInt;
   }
 }
-// Return any value, the type of which is the smallest unsigned integer type that
-// contains at least `numBits` many bits. For example, if `numBits` <= 8, then
-// an `uint8_t` will be returned.
+// Return any value, the type of which is the smallest unsigned integer type
+// that contains at least `numBits` many bits. For example, if `numBits` <= 8,
+// then an `uint8_t` will be returned.
 template <uint8_t numBits>
 constexpr auto unsignedTypeForNumberOfBitsImpl() {
   constexpr uint8_t numBytes = ceil(static_cast<float>(numBits) / 8);

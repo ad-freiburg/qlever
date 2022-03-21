@@ -5,7 +5,8 @@
 #include "./PatternCreator.h"
 
 // _________________________________________________________________________
-void PatternCreator::processTriple(std::array<ad_utility::datatypes::FancyId, 3> triple) {
+void PatternCreator::processTriple(
+    std::array<ad_utility::datatypes::FancyId, 3> triple) {
   if (!triple[0].isVocab()) {
     return;
   }

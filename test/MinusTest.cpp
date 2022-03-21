@@ -15,9 +15,7 @@ auto table(size_t cols) {
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1'000'000)};
   return IdTable(cols, std::move(alloc));
 }
-auto V = [](const auto& id) {
-  return Id::Vocab(id);
-};
+auto V = [](const auto& id) { return Id::Vocab(id); };
 
 TEST(EngineTest, minusTest) {
   using std::array;
@@ -37,8 +35,8 @@ TEST(EngineTest, minusTest) {
 
   IdTable res = table(3);
 
-  vector<array<ColumnIndex,2>> jcls;
-  jcls.push_back(array<ColumnIndex , 2>{{0, 1}});
+  vector<array<ColumnIndex, 2>> jcls;
+  jcls.push_back(array<ColumnIndex, 2>{{0, 1}});
   jcls.push_back(array<ColumnIndex, 2>{{1, 0}});
 
   IdTable wantedRes = table(3);

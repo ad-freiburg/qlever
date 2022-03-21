@@ -3,10 +3,10 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <cstdio>
 #include <set>
 #include <utility>
 #include <vector>
-#include <cstdio>
 
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"

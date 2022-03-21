@@ -15,9 +15,7 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
           std::numeric_limits<size_t>::max())};
   return a;
 }
-auto V = [](const auto& id) {
-  return Id::Vocab(id);
-};
+auto V = [](const auto& id) { return Id::Vocab(id); };
 
 TEST(EngineTest, multiColumnJoinTest) {
   using std::array;
@@ -35,9 +33,9 @@ TEST(EngineTest, multiColumnJoinTest) {
   b.push_back({V(4), V(2), V(2)});
   b.push_back({V(1), V(1), V(3)});
   IdTable res(4, allocator());
-  vector<array<ColumnIndex , 2>> jcls;
-  jcls.push_back(array<ColumnIndex , 2>{{1, 2}});
-  jcls.push_back(array<ColumnIndex , 2>{{2, 1}});
+  vector<array<ColumnIndex, 2>> jcls;
+  jcls.push_back(array<ColumnIndex, 2>{{1, 2}});
+  jcls.push_back(array<ColumnIndex, 2>{{2, 1}});
 
   // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
   // a have to equal those of column 2 of b and vice versa).

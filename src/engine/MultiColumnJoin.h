@@ -11,7 +11,6 @@
 
 class MultiColumnJoin : public Operation {
  public:
-
   // TODO<joka921> Make ColumnIndex a strong type across QLever
   using ColumnIndex = uint64_t;
   MultiColumnJoin(QueryExecutionContext* qec,
@@ -57,9 +56,9 @@ class MultiColumnJoin : public Operation {
    *        This method is made public here for unit testing purposes.
    **/
   template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
-  static void computeMultiColumnJoin(const IdTable& a, const IdTable& b,
-                                     const vector<array<ColumnIndex , 2>>& joinColumns,
-                                     IdTable* result);
+  static void computeMultiColumnJoin(
+      const IdTable& a, const IdTable& b,
+      const vector<array<ColumnIndex, 2>>& joinColumns, IdTable* result);
 
  private:
   void computeSizeEstimateAndMultiplicities();

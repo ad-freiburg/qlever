@@ -90,7 +90,7 @@ struct alignas(256) ItemMapManager {
 
   /// If the key was seen before, return its preassigned ID. Else assign the
   /// next free ID to the string, store and return it.
-  Id getId(const TripleComponentOrId & keyOrId) {
+  Id getId(const TripleComponentOrId& keyOrId) {
     if (std::holds_alternative<Id>(keyOrId)) {
       return std::get<Id>(keyOrId);
     }
@@ -189,7 +189,8 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
         // get the Id for the tagged predicate, e.g. @en@rdfs:label
         auto langTaggedPredId =
             map.getId(ad_utility::convertToLanguageTaggedPredicate(
-                std::get<TripleComponent>(lt._triple[1])._iriOrLiteral, lt._langtag));
+                std::get<TripleComponent>(lt._triple[1])._iriOrLiteral,
+                lt._langtag));
         auto& spoIds = *(res[0]);  // ids of original triple
         // TODO replace the std::array by an explicit IdTriple class,
         //  then the emplace calls don't need the explicit type.

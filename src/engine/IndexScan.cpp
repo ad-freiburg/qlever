@@ -465,11 +465,14 @@ void IndexScan::computeFullScan(ResultTable* result,
 
   if (ad_utility::isSimilar<Permutation::SPO_T, P> ||
       ad_utility::isSimilar<Permutation::SOP_T, P>) {
-    ignoredRanges.push_back({Id::Vocab(literalRange.first), Id::Vocab(literalRange.second)});
+    ignoredRanges.push_back(
+        {Id::Vocab(literalRange.first), Id::Vocab(literalRange.second)});
   } else if (ad_utility::isSimilar<Permutation::PSO_T, P> ||
              ad_utility::isSimilar<Permutation::POS_T, P>) {
-    ignoredRanges.push_back({Id::Vocab(taggedPredicatesRange.first), Id::Vocab(taggedPredicatesRange.second)});
-    ignoredRanges.emplace_back(Id::Vocab(languagePredicateId), Id::Vocab(languagePredicateId + 1));
+    ignoredRanges.push_back({Id::Vocab(taggedPredicatesRange.first),
+                             Id::Vocab(taggedPredicatesRange.second)});
+    ignoredRanges.emplace_back(Id::Vocab(languagePredicateId),
+                               Id::Vocab(languagePredicateId + 1));
   }
 
   auto isTripleIgnored = [&](const auto& triple) {

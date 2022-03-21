@@ -9,19 +9,18 @@
 
 namespace ad_utility {
 
-template <uint8_t N> requires (N <= 64 && N >= 1)
-class NBitInteger {
+template <uint8_t N>
+requires(N <= 64 && N >= 1) class NBitInteger {
   using T = uint64_t;
   static constexpr uint8_t UNUSED_BITS = 64 - N;
 
  public:
-
-  static constexpr T toNBit (int64_t i) {
+  static constexpr T toNBit(int64_t i) {
     constexpr T mask = bitMaskForLowerBits(N);
     return static_cast<T>(i & mask);
   }
 
-  static constexpr int64_t fromNBit (T t) {
+  static constexpr int64_t fromNBit(T t) {
     // The right shift is arithmetic, so a sign bit will be propagated.
     return (static_cast<int64_t>(t) << UNUSED_BITS) >> UNUSED_BITS;
   }

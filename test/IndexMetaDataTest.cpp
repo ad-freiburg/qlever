@@ -10,9 +10,7 @@
 #include "../src/util/File.h"
 #include "../src/util/Serializer/FileSerializer.h"
 
-auto V = [](const auto& id) {
-  return Id::Vocab(id);
-};
+auto V = [](const auto& id) { return Id::Vocab(id); };
 
 TEST(RelationMetaDataTest, writeReadTest) {
   try {

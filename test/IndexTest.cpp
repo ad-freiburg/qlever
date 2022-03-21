@@ -77,9 +77,7 @@ TEST(IndexTest, createFromTsvTest) {
     Index index;
     index.createFromOnDiskIndex("_testindex");
 
-    auto V = [](auto id) {
-      return Id::Vocab(id);
-    };
+    auto V = [](auto id) { return Id::Vocab(id); };
 
     ASSERT_TRUE(index._PSO.metaData().col0IdExists(V(2)));
     ASSERT_TRUE(index._PSO.metaData().col0IdExists(V(3)));
@@ -156,9 +154,7 @@ TEST(IndexTest, createFromTsvTest) {
     Index index;
     index.createFromOnDiskIndex("_testindex");
 
-    auto V = [](auto id) {
-      return Id::Vocab(id);
-    };
+    auto V = [](auto id) { return Id::Vocab(id); };
     ASSERT_TRUE(index._PSO.metaData().col0IdExists(V(7)));
     ASSERT_FALSE(index._PSO.metaData().col0IdExists(V(1)));
 
@@ -323,9 +319,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
 
   Index index;
   index.createFromOnDiskIndex("_testindex2");
-  auto V = [](auto id) {
-    return Id::Vocab(id);
-  };
+  auto V = [](auto id) { return Id::Vocab(id); };
 
   ASSERT_TRUE(index.PSO().metaData().col0IdExists(V(2)));
   ASSERT_TRUE(index.PSO().metaData().col0IdExists(V(3)));
@@ -381,9 +375,7 @@ TEST(IndexTest, scanTest) {
     IdTable wol(1, allocator());
     IdTable wtl(2, allocator());
 
-    auto V = [](auto id) {
-      return Id::Vocab(id);
-    };
+    auto V = [](auto id) { return Id::Vocab(id); };
 
     index.scan("<b>", &wtl, index._PSO);
     ASSERT_EQ(2u, wtl.size());
@@ -470,9 +462,7 @@ TEST(IndexTest, scanTest) {
     IdTable wol(1, allocator());
     IdTable wtl(2, allocator());
 
-    auto V = [](auto id) {
-      return Id::Vocab(id);
-    };
+    auto V = [](auto id) { return Id::Vocab(id); };
     index.scan("<is-a>", &wtl, index._PSO);
     ASSERT_EQ(7u, wtl.size());
     ASSERT_EQ(V(4u), wtl[0][0]);

@@ -4,8 +4,8 @@
 
 #pragma once
 
-#include <cstdio>
 #include <boost/iostreams/device/back_inserter.hpp>
+#include <cstdio>
 #define EOF std::char_traits<char>::eof()
 #include <boost/iostreams/filtering_stream.hpp>
 #include <exception>

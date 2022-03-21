@@ -12,9 +12,7 @@
 #include "../src/engine/HasPredicateScan.h"
 #include "../src/engine/SortPerformanceEstimator.h"
 
-auto V = [](const auto& id) {
-  return Id::Vocab(id);
-};
+auto V = [](const auto& id) { return Id::Vocab(id); };
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
@@ -80,10 +78,12 @@ TEST(HasPredicateScan, freeS) {
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
   // The has relation relation, which is used when an entity does not have a
   // pattern
-  vector<vector<Id>> hasRelationSrc = {{},     {V(0), V(3)}, {V(0)},    {}, {},
-                                       {V(0), V(3)}, {V(3), V(4)}, {V(2), V(4)}, {V(3)}};
+  vector<vector<Id>> hasRelationSrc = {{},           {V(0), V(3)}, {V(0)},
+                                       {},           {},           {V(0), V(3)},
+                                       {V(3), V(4)}, {V(2), V(4)}, {V(3)}};
   // Maps pattern ids to patterns
-  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)}, {V(1), V(3), V(4), V(2), V(0)}};
+  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)},
+                                    {V(1), V(3), V(4), V(2), V(0)}};
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
@@ -120,10 +120,12 @@ TEST(HasPredicateScan, freeO) {
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
   // The has relation relation, which is used when an entity does not have a
   // pattern
-  vector<vector<Id>> hasRelationSrc = {{},     {V(0), V(3)}, {V(0)},    {}, {},
-                                       {V(0), V(3)}, {V(3), V(4)}, {V(2), V(4)}, {V(3)}};
+  vector<vector<Id>> hasRelationSrc = {{},           {V(0), V(3)}, {V(0)},
+                                       {},           {},           {V(0), V(3)},
+                                       {V(3), V(4)}, {V(2), V(4)}, {V(3)}};
   // Maps pattern ids to patterns
-  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)}, {V(1), V(3), V(4), V(2), V(0)}};
+  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)},
+                                    {V(1), V(3), V(4), V(2), V(0)}};
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
@@ -162,9 +164,11 @@ TEST(HasPredicateScan, fullScan) {
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
   // The has relation relation, which is used when an entity does not have a
   // pattern
-  vector<vector<Id>> hasRelationSrc = {{}, {V(0), V(3)}, {V(0)}, {}, {}, {V(0), V(3)}};
+  vector<vector<Id>> hasRelationSrc = {{}, {V(0), V(3)}, {V(0)},
+                                       {}, {},           {V(0), V(3)}};
   // Maps pattern ids to patterns
-  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)}, {V(1), V(3), V(4), V(2), V(0)}};
+  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)},
+                                    {V(1), V(3), V(4), V(2), V(0)}};
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
@@ -224,10 +228,12 @@ TEST(HasPredicateScan, subtreeS) {
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
   // The has relation relation, which is used when an entity does not have a
   // pattern
-  vector<vector<Id>> hasRelationSrc = {{},     {V(0), V(3)}, {V(0)},    {}, {},
-                                       {V(0), V(3)}, {V(3), V(4)}, {V(2), V(4)}, {V(3)}};
+  vector<vector<Id>> hasRelationSrc = {{},           {V(0), V(3)}, {V(0)},
+                                       {},           {},           {V(0), V(3)},
+                                       {V(3), V(4)}, {V(2), V(4)}, {V(3)}};
   // Maps pattern ids to patterns
-  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)}, {V(1), V(3), V(4), V(2), V(0)}};
+  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)},
+                                    {V(1), V(3), V(4), V(2), V(0)}};
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
@@ -312,10 +318,12 @@ TEST(CountAvailablePredicates, patternTrickTest) {
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
   // The has relation relation, which is used when an entity does not have a
   // pattern
-  vector<vector<Id>> hasRelationSrc = {{},     {V(0), V(3)}, {V(0)},    {}, {},
-                                       {V(0), V(3)}, {V(3), V(4)}, {V(2), V(4)}, {V(3)}};
+  vector<vector<Id>> hasRelationSrc = {{},           {V(0), V(3)}, {V(0)},
+                                       {},           {},           {V(0), V(3)},
+                                       {V(3), V(4)}, {V(2), V(4)}, {V(3)}};
   // Maps pattern ids to patterns
-  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)}, {V(1), V(3), V(4), V(2), V(0)}};
+  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)},
+                                    {V(1), V(3), V(4), V(2), V(0)}};
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.

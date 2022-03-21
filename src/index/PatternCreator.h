@@ -10,13 +10,12 @@
 #ifndef QLEVER_PATTERNCREATOR_H
 #define QLEVER_PATTERNCREATOR_H
 
+#include "../engine/datatypes/Datatypes.h"
 #include "../global/Constants.h"
 #include "../global/Id.h"
 #include "../global/Pattern.h"
 #include "../util/MmapVector.h"
 #include "../util/Serializer/SerializeVector.h"
-#include "../engine/datatypes/Datatypes.h"
-
 
 /// Several statistics for the patterns, as well as the functionality to
 /// serialize them.

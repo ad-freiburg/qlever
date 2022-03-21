@@ -250,7 +250,8 @@ void CompressedRelationMetaData::scan(
 
     // Invariant: The col0Id is completely stored in a single block, or it is
     // contained in multiple blocks that only contain this col0Id,
-    bool col0IdHasExclusiveBlocks = metaData._offsetInBlock == std::numeric_limits<uint64_t>::max();
+    bool col0IdHasExclusiveBlocks =
+        metaData._offsetInBlock == std::numeric_limits<uint64_t>::max();
     if (!col0IdHasExclusiveBlocks) {
       AD_CHECK(endBlock - beginBlock == 1);
     }
@@ -264,7 +265,8 @@ void CompressedRelationMetaData::scan(
           readAndDecompressBlock(block, permutation);
 
       // Find the range in the block, that belongs to the same relation `col0Id`
-      bool containedInOnlyOneBlock =metaData._offsetInBlock != std::numeric_limits<uint64_t>::max();
+      bool containedInOnlyOneBlock =
+          metaData._offsetInBlock != std::numeric_limits<uint64_t>::max();
       auto begin = uncompressedBuffer.begin();
       if (containedInOnlyOneBlock) {
         begin += metaData._offsetInBlock;

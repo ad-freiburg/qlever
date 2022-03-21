@@ -13,9 +13,7 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
           std::numeric_limits<size_t>::max())};
   return a;
 }
-auto V = [](const auto& id) {
-  return Id::Vocab(id);
-};
+auto V = [](const auto& id) { return Id::Vocab(id); };
 
 TEST(FTSAlgorithmsTest, filterByRangeTest) {
   IdRange idRange;

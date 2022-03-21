@@ -15,8 +15,7 @@ class TransitivePath : public Operation {
   TransitivePath(QueryExecutionContext* qec,
                  std::shared_ptr<QueryExecutionTree> child, bool leftIsVar,
                  bool rightIsVar, size_t leftSubCol, size_t rightSubCol,
-                 Id leftValue, Id rightValue,
-                 const std::string& leftColName,
+                 Id leftValue, Id rightValue, const std::string& leftColName,
                  const std::string& rightColName, size_t minDist,
                  size_t maxDist);
 

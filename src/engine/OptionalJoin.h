@@ -13,7 +13,6 @@ using std::list;
 
 class OptionalJoin : public Operation {
  public:
-
   // TODO<joka921> Make the column index a strong type
   using ColumnIndex = uint64_t;
   OptionalJoin(QueryExecutionContext* qec,
@@ -86,13 +85,12 @@ class OptionalJoin : public Operation {
    * @param res the result row
    */
   template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
-  static void createOptionalResult(const IdTableView<A_WIDTH>& a, size_t aIdx,
-                                   bool aEmpty, const IdTableView<B_WIDTH>& b,
-                                   size_t bIdx, bool bEmpty,
-                                   int joinColumnBitmap_a,
-                                   int joinColumnBitmap_b,
-                                   const std::vector<ColumnIndex>& joinColumnAToB,
-                                   IdTableStatic<OUT_WIDTH>* res);
+  static void createOptionalResult(
+      const IdTableView<A_WIDTH>& a, size_t aIdx, bool aEmpty,
+      const IdTableView<B_WIDTH>& b, size_t bIdx, bool bEmpty,
+      int joinColumnBitmap_a, int joinColumnBitmap_b,
+      const std::vector<ColumnIndex>& joinColumnAToB,
+      IdTableStatic<OUT_WIDTH>* res);
 
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;

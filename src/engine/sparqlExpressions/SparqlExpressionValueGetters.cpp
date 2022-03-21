@@ -36,11 +36,12 @@ bool EffectiveBooleanValueGetter::operator()(StrongIdWithResultType strongId,
   }
   if (id.isDouble()) {
     auto d = id.getDoubleUnchecked();
-    return d !=0.0 && !std::isnan(d);
+    return d != 0.0 && !std::isnan(d);
   }
   if (id.isVocab()) {
-    std::string entity =
-        context->_qec.getIndex().idToOptionalString(id.getVocabUnchecked()).value_or("");
+    std::string entity = context->_qec.getIndex()
+                             .idToOptionalString(id.getVocabUnchecked())
+                             .value_or("");
     return (!entity.empty());
   }
   // TODO<joka921> Other types like Text/Data/localVocab etc.
@@ -59,7 +60,9 @@ string StringValueGetter::operator()(StrongIdWithResultType strongId,
     return std::to_string(id.getDoubleUnchecked());
   }
   if (id.isVocab()) {
-    return context->_qec.getIndex().idToOptionalString(id.getVocabUnchecked()).value_or("");
+    return context->_qec.getIndex()
+        .idToOptionalString(id.getVocabUnchecked())
+        .value_or("");
   }
   // TODO<joka921> Other types like Text/Data/localVocab etc.
 }
