@@ -10,6 +10,10 @@
 #include "../src/engine/TransitivePath.h"
 #include "../src/global/Id.h"
 
+auto V = [](const auto& id) {
+  return Id::Vocab(id);
+};
+
 // First sort both of the inputs and then ASSERT their equality. Needed for
 // results of the TransitivePath operations which have a non-deterministic order
 // because of the hash maps which are used internally.
@@ -40,38 +44,38 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
 
 TEST(TransitivePathTest, computeTransitivePath) {
   IdTable sub(2, allocator());
-  sub.push_back({0, 2});
-  sub.push_back({2, 4});
-  sub.push_back({4, 7});
-  sub.push_back({0, 7});
-  sub.push_back({3, 3});
-  sub.push_back({7, 0});
+  sub.push_back({V(0), V(2)});
+  sub.push_back({V(2), V(4)});
+  sub.push_back({V(4), V(7)});
+  sub.push_back({V(0), V(7)});
+  sub.push_back({V(3), V(3)});
+  sub.push_back({V(7), V(0)});
   // Disconnected component.
-  sub.push_back({10, 11});
+  sub.push_back({V(10), V(11)});
 
   IdTable result(2, allocator());
 
   IdTable expected(2, allocator());
-  expected.push_back({0, 2});
-  expected.push_back({0, 4});
-  expected.push_back({0, 7});
-  expected.push_back({0, 0});
-  expected.push_back({2, 4});
-  expected.push_back({2, 7});
-  expected.push_back({2, 0});
-  expected.push_back({2, 2});
-  expected.push_back({4, 7});
-  expected.push_back({4, 0});
-  expected.push_back({4, 2});
-  expected.push_back({4, 4});
-  expected.push_back({3, 3});
-  expected.push_back({7, 0});
-  expected.push_back({7, 2});
-  expected.push_back({7, 4});
-  expected.push_back({7, 7});
-  expected.push_back({10, 11});
+  expected.push_back({V(0), V(2)});
+  expected.push_back({V(0), V(4)});
+  expected.push_back({V(0), V(7)});
+  expected.push_back({V(0), V(0)});
+  expected.push_back({V(2), V(4)});
+  expected.push_back({V(2), V(7)});
+  expected.push_back({V(2), V(0)});
+  expected.push_back({V(2), V(2)});
+  expected.push_back({V(4), V(7)});
+  expected.push_back({V(4), V(0)});
+  expected.push_back({V(4), V(2)});
+  expected.push_back({V(4), V(4)});
+  expected.push_back({V(3), V(3)});
+  expected.push_back({V(7), V(0)});
+  expected.push_back({V(7), V(2)});
+  expected.push_back({V(7), V(4)});
+  expected.push_back({V(7), V(7)});
+  expected.push_back({V(10), V(11)});
 
-  TransitivePath T(nullptr, nullptr, false, false, 0, 0, 0, 0, "bim"s, "bam"s,
+  TransitivePath T(nullptr, nullptr, false, false, 0, 0, V(0), V(0), "bim"s, "bam"s,
                    0, 0);
 
   T.computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0, 0, 1,

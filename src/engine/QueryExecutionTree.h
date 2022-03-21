@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "../util/stream_generator.h"
 #include "../parser/ParsedQuery.h"
 #include "../parser/data/Context.h"
 #include "../parser/data/Types.h"
@@ -16,7 +17,6 @@
 #include "../util/Conversions.h"
 #include "../util/Generator.h"
 #include "../util/HashSet.h"
-#include "../util/stream_generator.h"
 #include "./Operation.h"
 #include "./QueryExecutionContext.h"
 

@@ -13,10 +13,13 @@ using std::list;
 
 class OptionalJoin : public Operation {
  public:
+
+  // TODO<joka921> Make the column index a strong type
+  using ColumnIndex = uint64_t;
   OptionalJoin(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> t1, bool t1Optional,
                std::shared_ptr<QueryExecutionTree> t2, bool t2Optional,
-               const std::vector<array<Id, 2>>& joinCols);
+               const std::vector<array<ColumnIndex, 2>>& joinCols);
 
  private:
   virtual string asStringImpl(size_t indent = 0) const override;
@@ -64,7 +67,7 @@ class OptionalJoin : public Operation {
   template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
   static void optionalJoin(const IdTable& dynA, const IdTable& dynB,
                            bool aOptional, bool bOptional,
-                           const vector<array<Id, 2>>& joinColumns,
+                           const vector<array<ColumnIndex, 2>>& joinColumns,
                            IdTable* dynResult);
 
  private:
@@ -88,7 +91,7 @@ class OptionalJoin : public Operation {
                                    size_t bIdx, bool bEmpty,
                                    int joinColumnBitmap_a,
                                    int joinColumnBitmap_b,
-                                   const std::vector<Id>& joinColumnAToB,
+                                   const std::vector<ColumnIndex>& joinColumnAToB,
                                    IdTableStatic<OUT_WIDTH>* res);
 
   std::shared_ptr<QueryExecutionTree> _left;
@@ -96,7 +99,7 @@ class OptionalJoin : public Operation {
   bool _leftOptional;
   bool _rightOptional;
 
-  std::vector<std::array<Id, 2>> _joinColumns;
+  std::vector<std::array<ColumnIndex, 2>> _joinColumns;
 
   vector<float> _multiplicities;
   size_t _sizeEstimate;

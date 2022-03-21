@@ -262,9 +262,9 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     ASSERT_EQ(2u, index.getHasPattern().size());
     ASSERT_EQ(0u, index.getHasPredicate().size());
     ASSERT_EQ(2u, index._patterns.size());
-    Pattern p0;
-    Pattern p1;
-    Pattern::value_type id;
+    std::vector<VocabId> p0;
+    std::vector<VocabId> p1;
+    VocabId id;
     // Pattern p0 (for subject <a>) consists of <b> and <b2)
     ASSERT_TRUE(index.getVocab().getId("<b>", &id));
     p0.push_back(id);

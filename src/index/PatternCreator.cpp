@@ -20,8 +20,8 @@ void PatternCreator::processTriple(std::array<ad_utility::datatypes::FancyId, 3>
     _currentPattern.clear();
   }
   // Don't list predicates twice in the same pattern.
-  if (_currentPattern.empty() || _currentPattern.back() != triple[1].getVocabUnchecked()) {
-    _currentPattern.push_back(triple[1].getVocabUnchecked());
+  if (_currentPattern.empty() || _currentPattern.back() != triple[1]) {
+    _currentPattern.push_back(triple[1]);
   }
 }
 

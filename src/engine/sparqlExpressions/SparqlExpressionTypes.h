@@ -265,11 +265,8 @@ Id constantExpressionResultToId(T&& result, LocalVocab& localVocab,
   if constexpr (type == qlever::ResultType::VERBATIM) {
     return Id{result};
   } else if constexpr (type == qlever::ResultType::FLOAT) {
-    auto tmpF = static_cast<float>(result);
-    Id id = 0;
-    ;
-    std::memcpy(&id, &tmpF, sizeof(float));
-    return id;
+    // TODO::throw the whole RESULT TYPES out
+    return Id::Double(static_cast<double>(result));
   } else if constexpr (type == qlever::ResultType::LOCAL_VOCAB) {
     // Return the index in the local vocabulary.
     if (!isRepetitionOfConstant) {

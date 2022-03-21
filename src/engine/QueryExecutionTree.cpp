@@ -287,6 +287,7 @@ void QueryExecutionTree::readFromCache() {
 std::optional<std::pair<std::string, const char*>>
 QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
                                        const ResultTable& resultTable) const {
+  // TODO<joka921> This is one of the central methods which we have to rewrite
   switch (type) {
     case ResultTable::ResultType::KB: {
       std::optional<string> entity = _qec->getIndex().idToOptionalString(id);
@@ -299,7 +300,8 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
       return std::pair{std::move(entity.value()), nullptr};
     }
     case ResultTable::ResultType::VERBATIM:
-      return std::pair{std::to_string(id), XSD_INT_TYPE};
+      AD_CHECK(id.isInteger());
+      return std::pair{std::to_string(id.getIntegerUnchecked()), XSD_INT_TYPE};
     case ResultTable::ResultType::TEXT:
       return std::pair{_qec->getIndex().getTextExcerpt(id), nullptr};
     case ResultTable::ResultType::FLOAT: {
@@ -311,11 +313,15 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
       return std::pair{std::move(s).str(), XSD_DECIMAL_TYPE};
     }
     case ResultTable::ResultType::LOCAL_VOCAB: {
+      // TODO<joka921> Implement the localVocabStuff.
+      AD_CHECK(false);
+      /*
       auto optionalString = resultTable.idToOptionalString(id);
       if (!optionalString.has_value()) {
         return std::nullopt;
       }
       return std::pair{optionalString.value(), nullptr};
+       */
     }
     default:
       AD_CHECK(false);
@@ -431,10 +437,14 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
             break;
           }
           case ResultTable::ResultType::LOCAL_VOCAB: {
+            // TODO<joka921> Implement this and make it all correct.
+            AD_CHECK(false);
+            /*
             co_yield resultTable
                 ->idToOptionalString(idTable(i, val._columnIndex))
                 .value_or("");
             break;
+             */
           }
           default:
             AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,

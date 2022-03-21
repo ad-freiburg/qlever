@@ -196,9 +196,35 @@ class Index {
   size_t sizeEstimate(const string& sub, const string& pred,
                       const string& obj) const;
 
+  // TODO<joka921> can we unify the Id->string functionality in this function?
   std::optional<string> idToOptionalString(VocabId id) const {
     return _vocab.idToOptionalString(id);
   }
+
+  std::optional<string> idToOptionalString(Id id) const {
+    if (id.isVocab()) {
+      return _vocab.idToOptionalString(id.getVocabUnchecked());
+    }
+    if (id.isDouble()) {
+      return std::to_string(id.getDoubleUnchecked());
+    }
+    if (id.isInteger()) {
+      return std::to_string(id.getIntegerUnchecked());
+    }
+    //TODO<joka921> add additional types here.
+    // Should be unreachable.
+    AD_CHECK(false);
+  }
+  bool getId(const string& element, Id* id) const {
+    // TODO<joka921> Either parse the numeric values here, or earlier in the
+    // to make sure, that only "vocabulary" entries land in the vocabulary.
+    VocabId vocabId;
+    auto success = getVocab().getId(element, &vocabId);
+    *id = Id::Vocab(vocabId);
+    return success;
+  }
+
+
 
   const vector<PatternID>& getHasPattern() const;
   const CompactVectorOfStrings<Id>& getHasPredicate() const;
@@ -362,8 +388,8 @@ class Index {
     // TODO<joka921> Could it be that we have numbers here?
     VocabId keyId;
     vector<float> res;
-    if (_vocab.getId(key, &keyId) && p._meta.col0IdExists(keyId)) {
-      auto metaData = p._meta.getMetaData(keyId);
+    if (_vocab.getId(key, &keyId) && p._meta.col0IdExists(Id::Vocab(keyId))) {
+      auto metaData = p._meta.getMetaData(Id::Vocab(keyId));
       res.push_back(metaData.getCol1Multiplicity());
       res.push_back(metaData.getCol2Multiplicity());
     } else {

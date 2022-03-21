@@ -24,6 +24,8 @@ enum struct Datatype {
   Double,
   Date,
   Vocab,
+  LocalVocab,
+  Text,
 };
 class FancyId {
   using T = uint64_t;
@@ -69,7 +71,7 @@ class FancyId {
 
   static constexpr FancyId Vocab(uint64_t id) {
     // TODO<joka921> Check that it is within range?
-    return {id & VocabMask};
+    return {id | VocabMask};
   }
 
   [[nodiscard]] constexpr bool isVocab() const {
@@ -81,6 +83,35 @@ class FancyId {
     constexpr T mask = bitMaskForLowerBits(64- MASK_SIZE_VOCAB);
     return _data & mask;
   }
+
+  static FancyId LocalVocab(uint64_t){
+    // TODO<joka921> implement and make constexpr
+    AD_CHECK(false);
+  }
+  [[nodiscard]] bool isLocalVocab() const {
+    // TODO<joka921> implement and make constexpr
+    AD_CHECK(false);
+  }
+
+  [[nodiscard]] uint64_t getLocalVocabUnchecked() const {
+    // TODO<joka921> implement and make constexpr
+    AD_CHECK(false);
+  }
+
+  static FancyId Text(uint64_t){
+    // TODO<joka921> implement and make constexpr
+    AD_CHECK(false);
+  }
+  [[nodiscard]] bool isText() const {
+    // TODO<joka921> implement and make constexpr
+    AD_CHECK(false);
+  }
+
+  [[nodiscard]] uint64_t getTextUnchecked() const {
+    // TODO<joka921> implement and make constexpr
+    AD_CHECK(false);
+  }
+
 
   constexpr static auto MinInteger() {
     return N::MinInteger();

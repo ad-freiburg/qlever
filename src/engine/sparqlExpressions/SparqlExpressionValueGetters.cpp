@@ -23,6 +23,7 @@ double NumericValueGetter::operator()(StrongIdWithResultType strongId,
     return id.getDoubleUnchecked();
   }
   // TODO<joka921> Other datatypes like bool? Should we make the above a switch?
+  AD_CHECK(false);
 }
 
 // _____________________________________________________________________________

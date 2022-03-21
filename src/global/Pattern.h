@@ -33,7 +33,7 @@ static const PatternID NO_PATTERN = std::numeric_limits<PatternID>::max();
  *        while writing a query).
  */
 struct Pattern {
-  using value_type = uint64_t;
+  using value_type = Id;
   using ref = value_type&;
   using const_ref = const value_type&;
 

@@ -15,6 +15,10 @@
 using Id = ad_utility::datatypes::FancyId;
 typedef uint16_t Score;
 
+// TODO<joka921> Make the following ID and index types strong.
+using ColumnIndex = uint64_t;
+using VocabId = uint64_t;
+
 // A value to use when the result should be empty (e.g. due to an optional join)
 // The highest two values are used as sentinels.
 //static const Id ID_NO_VALUE = std::numeric_limits<Id>::max() - 2;

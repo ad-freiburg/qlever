@@ -216,7 +216,7 @@ void HasPredicateScan::computeResult(ResultTable* result) {
     case ScanType::FREE_S: {
       runtimeInfo.setDescriptor("HasPredicateScan free subject: " + _subject);
       Id objectId;
-      if (!getIndex().getVocab().getId(_object, &objectId)) {
+      if (!getIndex().getId(_object, &objectId)) {
         AD_THROW(ad_semsearch::Exception::BAD_INPUT,
                  "The predicate '" + _object + "' is not in the vocabulary.");
       }
@@ -226,7 +226,7 @@ void HasPredicateScan::computeResult(ResultTable* result) {
     case ScanType::FREE_O: {
       runtimeInfo.setDescriptor("HasPredicateScan free object: " + _object);
       Id subjectId;
-      if (!getIndex().getVocab().getId(_subject, &subjectId)) {
+      if (!getIndex().getId(_subject, &subjectId)) {
         AD_THROW(ad_semsearch::Exception::BAD_INPUT,
                  "The subject " + _subject + " is not in the vocabulary.");
       }
@@ -261,27 +261,27 @@ void HasPredicateScan::computeResult(ResultTable* result) {
 }
 
 void HasPredicateScan::computeFreeS(
-    ResultTable* resultTable, size_t objectId,
+    ResultTable* resultTable, Id objectId,
     const std::vector<PatternID>& hasPattern,
     const CompactVectorOfStrings<Id>& hasPredicate,
     const CompactVectorOfStrings<Id>& patterns) {
   IdTableStatic<1> result = resultTable->_idTable.moveToStatic<1>();
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
-  Id id = 0;
+  uint64_t id = 0;
   while (id < hasPattern.size() || id < hasPredicate.size()) {
     if (id < hasPattern.size() && hasPattern[id] != NO_PATTERN) {
       // add the pattern
       const auto& pattern = patterns[hasPattern[id]];
       for (const auto& predicate : pattern) {
         if (predicate == objectId) {
-          result.push_back({id});
+          result.push_back({Id::Vocab(id)});
         }
       }
     } else if (id < hasPredicate.size()) {
       // add the relations
       for (const auto& predicate : hasPredicate[id]) {
         if (predicate == objectId) {
-          result.push_back({id});
+          result.push_back({Id::Vocab(id)});
         }
       }
     }
@@ -291,13 +291,15 @@ void HasPredicateScan::computeFreeS(
 }
 
 void HasPredicateScan::computeFreeO(
-    ResultTable* resultTable, size_t subjectId,
+    ResultTable* resultTable, Id subjectAsId,
     const std::vector<PatternID>& hasPattern,
     const CompactVectorOfStrings<Id>& hasPredicate,
     const CompactVectorOfStrings<Id>& patterns) {
   IdTableStatic<1> result = resultTable->_idTable.moveToStatic<1>();
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
 
+  AD_CHECK(subjectAsId.isVocab());
+  auto subjectId = subjectAsId.getVocabUnchecked();
   if (subjectId < hasPattern.size() && hasPattern[subjectId] != NO_PATTERN) {
     // add the pattern
     const auto& pattern = patterns[hasPattern[subjectId]];
@@ -327,12 +329,12 @@ void HasPredicateScan::computeFullScan(
     if (id < hasPattern.size() && hasPattern[id] != NO_PATTERN) {
       // add the pattern
       for (const auto& predicate : patterns[hasPattern[id]]) {
-        result.push_back({id, predicate});
+        result.push_back({Id::Vocab(id), predicate});
       }
     } else if (id < hasPredicate.size()) {
       // add the relations
       for (const auto& predicate : hasPredicate[id]) {
-        result.push_back({id, predicate});
+        result.push_back({Id::Vocab(id), predicate});
       }
     }
     id++;
@@ -352,7 +354,11 @@ void HasPredicateScan::computeSubqueryS(
   LOG(DEBUG) << "HasPredicateScan subresult size " << input.size() << std::endl;
 
   for (size_t i = 0; i < input.size(); i++) {
-    size_t id = input(i, subtreeColIndex);
+    Id idAsId = input(i, subtreeColIndex);
+    if (!idAsId.isVocab()) {
+      continue;
+    }
+    auto id = idAsId.getVocabUnchecked();
     if (id < hasPattern.size() && hasPattern[id] != NO_PATTERN) {
       // Expand the pattern and add it to the result
       for (const auto& predicate : patterns[hasPattern[id]]) {

@@ -98,7 +98,7 @@ class PatternCreator {
 
   // The predicates which have already occured in one of the patterns. Needed to
   // count the number of distinct predicates.
-  ad_utility::HashSet<uint64_t> _distinctPredicates;
+  ad_utility::HashSet<Pattern::value_type> _distinctPredicates;
 
   // The number of distinct subjects and distinct subject-predicate pairs.
   uint64_t _numDistinctSubjects = 0;
