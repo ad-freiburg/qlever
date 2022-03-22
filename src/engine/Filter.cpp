@@ -570,8 +570,7 @@ void Filter::computeFilterFixedValue(
                                        return std::any_of(
                                            vec.begin(), vec.end(),
                                            [&e, &l = x.first](const auto& p) {
-                                             return Id::make(p.first) <=
-                                                        e[l] &&
+                                             return Id::make(p.first) <= e[l] &&
                                                     e[l] < Id::make(p.second);
                                            });
                                      });
@@ -609,8 +608,7 @@ void Filter::computeFilterFixedValue(
           [self_regex, &lhs, &subRes, this](const auto& e) {
             std::optional<string> entity;
             if constexpr (T == ResultTable::ResultType::KB) {
-              entity =
-                  getIndex().idToOptionalString(e[lhs]);
+              entity = getIndex().idToOptionalString(e[lhs]);
             } else if (T == ResultTable::ResultType::LOCAL_VOCAB) {
               entity = subRes->idToOptionalString(e[lhs].get());
             }
@@ -707,7 +705,7 @@ void Filter::computeResultFixedValue(
     case ResultTable::ResultType::FLOAT:
       try {
         float f = std::stof(_rhs);
-        std::memcpy(&rhs, &f, sizeof(float));
+        std::memcpy(&rhs.get(), &f, sizeof(float));
       } catch (const std::logic_error& e) {
         AD_THROW(
             ad_semsearch::Exception::BAD_QUERY,

@@ -312,15 +312,11 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
       return std::pair{std::move(s).str(), XSD_DECIMAL_TYPE};
     }
     case ResultTable::ResultType::LOCAL_VOCAB: {
-      // TODO<joka921> Implement the localVocabStuff.
-      AD_CHECK(false);
-      /*
-      auto optionalString = resultTable.idToOptionalString(id);
+      auto optionalString = resultTable.idToOptionalString(id.get());
       if (!optionalString.has_value()) {
         return std::nullopt;
       }
       return std::pair{optionalString.value(), nullptr};
-       */
     }
     default:
       AD_CHECK(false);

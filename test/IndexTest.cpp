@@ -79,7 +79,6 @@ TEST(IndexTest, createFromTsvTest) {
     Index index;
     index.createFromOnDiskIndex("_testindex");
 
-
     ASSERT_TRUE(index._PSO.metaData().col0IdExists(V(2)));
     ASSERT_TRUE(index._PSO.metaData().col0IdExists(V(3)));
     ASSERT_FALSE(index._PSO.metaData().col0IdExists(V(1)));

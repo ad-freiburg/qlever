@@ -437,8 +437,8 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
       for (size_t k = 0; k < 3; ++k) {
         auto iterator = idMap.find(curTriple[k]);
         if (iterator == idMap.end()) {
-          LOG(INFO) << "Not found in partial vocabulary: "
-                    << curTriple[k].get() << std::endl;
+          LOG(INFO) << "Not found in partial vocabulary: " << curTriple[k].get()
+                    << std::endl;
           AD_CHECK(false);
         }
         // TODO<joka921> at some point we have to check for out of range.
@@ -488,7 +488,7 @@ Index::createPermutationPairImpl(const string& fileName1,
   bool functional = true;
   size_t distinctCol1 = 0;
   size_t sizeOfRelation = 0;
-  IdType lastLhs;
+  IdType lastLhs = ID_NO_VALUE;
   uint64_t totalNumTriples = 0;
   for (auto triple : sortedTriples) {
     if (!currentRel.has_value()) {
@@ -743,9 +743,7 @@ size_t Index::relationCardinality(const string& relationName) const {
   Id relId;
   if (getId(relationName, &relId)) {
     if (this->_PSO.metaData().col0IdExists(relId)) {
-      return this->_PSO.metaData()
-          .getMetaData(relId)
-          .getNofElements();
+      return this->_PSO.metaData().getMetaData(relId).getNofElements();
     }
   }
   return 0;
@@ -756,9 +754,7 @@ size_t Index::subjectCardinality(const string& sub) const {
   Id relId;
   if (getId(sub, &relId)) {
     if (this->_SPO.metaData().col0IdExists(relId)) {
-      return this->_SPO.metaData()
-          .getMetaData(relId)
-          .getNofElements();
+      return this->_SPO.metaData().getMetaData(relId).getNofElements();
     }
   }
   return 0;
@@ -770,9 +766,7 @@ size_t Index::objectCardinality(const string& obj) const {
   // TODO<joka921> other datatypes
   if (getId(obj, &relId)) {
     if (this->_OSP.metaData().col0IdExists(relId)) {
-      return this->_OSP.metaData()
-          .getMetaData(relId)
-          .getNofElements();
+      return this->_OSP.metaData().getMetaData(relId).getNofElements();
     }
   }
   return 0;

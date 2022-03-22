@@ -32,9 +32,6 @@ void Index::addTextFromContextFile(const string& contextFile) {
 
 // _____________________________________________________________________________
 void Index::buildDocsDB(const string& docsFileName) {
-  LOG(ERROR) << "Building text indicies is currently not supported"
-             << std::endl;
-  AD_CHECK(false);
   LOG(INFO) << "Building DocsDB...\n";
   ad_utility::File docsFile(docsFileName.c_str(), "r");
   std::ofstream ofs(_onDiskBase + ".text.docsDB", std::ios_base::out);
@@ -203,7 +200,8 @@ void Index::passContextFileIntoVector(const string& contextFile,
   LOG(WARN) << "Number of total entity mentions: " << nofEntityPostings
             << std::endl;
   ++nofContexts;
-  addContextToVector(writer, Id::make(currentContext), wordsInContext, entitiesInContext);
+  addContextToVector(writer, Id::make(currentContext), wordsInContext,
+                     entitiesInContext);
   _textMeta.setNofTextRecords(nofContexts);
   _textMeta.setNofWordPostings(nofWordPostings);
   _textMeta.setNofEntityPostings(nofEntityPostings);
@@ -272,8 +270,8 @@ void Index::createTextIndex(const string& filename, const Index::TextVec& vec) {
       }
       ContextListMetaData classic = writePostings(out, classicPostings, true);
       ContextListMetaData entity = writePostings(out, entityPostings, false);
-      _textMeta.addBlock(TextBlockMetaData(currentMinWordId.get(), currentMaxWordId.get(),
-                                           classic, entity));
+      _textMeta.addBlock(TextBlockMetaData(
+          currentMinWordId.get(), currentMaxWordId.get(), classic, entity));
       classicPostings.clear();
       entityPostings.clear();
       currentBlockId = std::get<0>(*reader);
@@ -303,8 +301,8 @@ void Index::createTextIndex(const string& filename, const Index::TextVec& vec) {
   }
   ContextListMetaData classic = writePostings(out, classicPostings, true);
   ContextListMetaData entity = writePostings(out, entityPostings, false);
-  _textMeta.addBlock(
-      TextBlockMetaData(currentMinWordId.get(), currentMaxWordId.get(), classic, entity));
+  _textMeta.addBlock(TextBlockMetaData(
+      currentMinWordId.get(), currentMaxWordId.get(), classic, entity));
   _textMeta.setNofEntities(nofEntities);
   _textMeta.setNofEntityContexts(nofEntityContexts);
   classicPostings.clear();
@@ -563,8 +561,8 @@ void Index::printBlockBoundariesToFile(const string& filename) const {
 // _____________________________________________________________________________
 Id Index::getWordBlockId(Id wordId) const {
   return Id::make(std::lower_bound(_blockBoundaries.begin(),
-                                          _blockBoundaries.end(), wordId) -
-                         _blockBoundaries.begin());
+                                   _blockBoundaries.end(), wordId) -
+                  _blockBoundaries.begin());
 }
 
 // _____________________________________________________________________________
@@ -662,7 +660,7 @@ void Index::openTextFileHandle() {
 
 // _____________________________________________________________________________
 std::string_view Index::wordIdToString(Id id) const {
-  return _textVocab[id].value();
+  return _textVocab[id.get()].value();
 }
 
 // _____________________________________________________________________________
@@ -1026,10 +1024,21 @@ void Index::readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
   LOG(DEBUG) << "Decoding Simple8b code...\n";
   ad_utility::Simple8bCode::decode(encoded, nofElements, result.data());
   LOG(DEBUG) << "Reverting gaps to actual IDs...\n";
-  T id = 0;
-  for (size_t i = 0; i < result.size(); ++i) {
-    id += result[i];
-    result[i] = id;
+
+  // TODO<joka921> make this hack unnecessary, probably by a proper output
+  // iterator.
+  if constexpr (requires { T::make(0); }) {
+    uint64_t id = 0;
+    for (size_t i = 0; i < result.size(); ++i) {
+      id += result[i].get();
+      result[i] = T::make(id);
+    }
+  } else {
+    T id = 0;
+    for (size_t i = 0; i < result.size(); ++i) {
+      id += result[i];
+      result[i] = id;
+    }
   }
   result.resize(nofElements);
   delete[] encoded;
@@ -1066,7 +1075,12 @@ void Index::readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
   LOG(DEBUG) << "Reverting frequency encoded items to actual IDs...\n";
   result.resize(nofElements);
   for (size_t i = 0; i < result.size(); ++i) {
-    result[i] = codebook[result[i]];
+    // TODO<joka921> handle the strong ID types properly.
+    if constexpr (requires { T::make(0); }) {
+      result[i] = codebook[result[i].get()];
+    } else {
+      result[i] = codebook[result[i]];
+    }
   }
   delete[] encoded;
   delete[] codebook;
@@ -1102,8 +1116,8 @@ void Index::dumpAsciiLists(const vector<string>& lists,
         vector<Id> cids;
         vector<Score> scores;
         getEntityPostingsForTerm(lists[i], cids, eids, scores);
-        auto firstWord = wordIdToString(tbmd._firstWordId);
-        auto lastWord = wordIdToString(tbmd._lastWordId);
+        auto firstWord = wordIdToString(Id::make(tbmd._firstWordId));
+        auto lastWord = wordIdToString(Id::make(tbmd._lastWordId));
         string basename = _onDiskBase + ".list." + firstWord + "-" + lastWord;
         string docIdsFn = basename + ".recIds.ent.ascii";
         string wordIdsFn = basename + ".wordIds.ent.ascii";
@@ -1120,8 +1134,8 @@ void Index::dumpAsciiLists(const vector<string>& lists,
 
 //_ ____________________________________________________________________________
 void Index::dumpAsciiLists(const TextBlockMetaData& tbmd) const {
-  auto firstWord = wordIdToString(tbmd._firstWordId);
-  auto lastWord = wordIdToString(tbmd._lastWordId);
+  auto firstWord = wordIdToString(Id::make(tbmd._firstWordId));
+  auto lastWord = wordIdToString(Id::make(tbmd._lastWordId));
   LOG(INFO) << "This block is from " << firstWord << " to " << lastWord
             << std::endl;
   string basename = _onDiskBase + ".list." + firstWord + "-" + lastWord;
@@ -1552,7 +1566,7 @@ void Index::getRhsForSingleLhs(const IdTable& in, Id lhsId,
   AD_CHECK(result);
   AD_CHECK_EQ(0, result->size());
 
-  Id compareElem[] = {lhsId, 0};
+  Id compareElem[] = {lhsId, Id::make(0)};
   auto it = std::lower_bound(
       in.begin(), in.end(), compareElem,
       [](const auto& a, const auto& b) { return a[0] < b[0]; });

@@ -18,7 +18,7 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
   return a;
 }
 
-auto V = [](const auto& id) { return Id::Vocab(id); };
+auto V = [](const auto& id) { return Id::make(id); };
 
 TEST(IdTableTest, push_back_and_assign) {
   constexpr size_t NUM_ROWS = 30;

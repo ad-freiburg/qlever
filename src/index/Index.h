@@ -46,12 +46,11 @@ using std::string;
 using std::tuple;
 using std::vector;
 
-
 using json = nlohmann::json;
 
 template <typename Comparator>
-using StxxlSorter = ad_utility::BackgroundStxxlSorter<
-    std::array<Id, 3>, Comparator>;
+using StxxlSorter =
+    ad_utility::BackgroundStxxlSorter<std::array<Id, 3>, Comparator>;
 
 using PsoSorter = StxxlSorter<SortByPSO>;
 
@@ -194,12 +193,17 @@ class Index {
   size_t sizeEstimate(const string& sub, const string& pred,
                       const string& obj) const;
 
+  /*
   // TODO<joka921> can we unify the Id->string functionality in this function?
   std::optional<string> idToOptionalString(VocabId id) const {
     return _vocab.idToOptionalString(id);
   }
+  */
 
   std::optional<string> idToOptionalString(Id id) const {
+    if (id == ID_NO_VALUE) {
+      return std::nullopt;
+    }
     return _vocab.idToOptionalString(id.get());
   }
 
@@ -452,8 +456,7 @@ class Index {
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
     Id col0Id;
     Id col1Id;
-    if (!getId(col0String, &col0Id) ||
-        !getId(col1String, &col1Id)) {
+    if (!getId(col0String, &col0Id) || !getId(col1String, &col1Id)) {
       LOG(DEBUG) << "Key " << col0String << " or key " << col1String
                  << " were not found in the vocabulary \n";
       return;
@@ -463,8 +466,7 @@ class Index {
                << col0String << " with fixed subject: " << col1String
                << "...\n";
 
-    CompressedRelationMetaData::scan(col0Id, col1Id,
-                                     result, p, timer);
+    CompressedRelationMetaData::scan(col0Id, col1Id, result, p, timer);
   }
 
  private:

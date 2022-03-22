@@ -259,8 +259,8 @@ void writeMappedIdsToExtVec(const auto& input,
     for (size_t k = 0; k < 3; ++k) {
       auto iterator = map.find(curTriple[k].get());
       if (iterator == map.end()) {
-        LOG(INFO) << "not found in partial local Vocab: "
-                  << curTriple[k] << '\n';
+        LOG(INFO) << "not found in partial local Vocab: " << curTriple[k]
+                  << '\n';
         AD_CHECK(false);
       }
       mappedTriple[k] = Id::make(iterator->second);

@@ -5,8 +5,7 @@
 #include "./PatternCreator.h"
 
 // _________________________________________________________________________
-void PatternCreator::processTriple(
-    std::array<Id, 3> triple) {
+void PatternCreator::processTriple(std::array<Id, 3> triple) {
   if (!_currentSubjectId.has_value()) {
     // This is the first triple
     _currentSubjectId = triple[0].get();

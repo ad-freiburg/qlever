@@ -14,8 +14,9 @@
 struct Id {
   using T = uint64_t;
 
-  static Id make(T id) noexcept { return {id};}
-  const T& get() const noexcept {return _data;}
+  static Id make(T id) noexcept { return {id}; }
+  const T& get() const noexcept { return _data; }
+  T& get() noexcept { return _data; }
 
   Id() = default;
 
@@ -51,9 +52,9 @@ struct hash<Id> {
     return std::hash<uint64_t>{}(id.get());
   }
 };
-}
+}  // namespace std
 // typedef uint64_t Id;
-//using Id = ad_utility::datatypes::FancyId;
+// using Id = ad_utility::datatypes::FancyId;
 typedef uint16_t Score;
 
 // TODO<joka921> Make the following ID and index types strong.
@@ -62,7 +63,8 @@ using VocabId = uint64_t;
 
 // A value to use when the result should be empty (e.g. due to an optional join)
 // The highest two values are used as sentinels.
- static const Id ID_NO_VALUE = Id::make(std::numeric_limits<uint64_t>::max() - 2);
+static const Id ID_NO_VALUE =
+    Id::make(std::numeric_limits<uint64_t>::max() - 2);
 
 namespace ad_utility {
 

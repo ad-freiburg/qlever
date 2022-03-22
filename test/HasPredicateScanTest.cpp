@@ -12,7 +12,7 @@
 #include "../src/engine/HasPredicateScan.h"
 #include "../src/engine/SortPerformanceEstimator.h"
 
-auto V = [](const auto& id) { return Id::Vocab(id); };
+auto V = [](const auto& id) { return Id::make(id); };
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{

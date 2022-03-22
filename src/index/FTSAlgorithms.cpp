@@ -679,8 +679,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
   // arguments.
   // TODO<joka921> proper Id types
   vector<Id> emptyKey{std::numeric_limits<Id>::max()};
-  vector<Id> deletedKey{
-      Id::make(std::numeric_limits<uint64_t>::max() - 1)};
+  vector<Id> deletedKey{Id::make(std::numeric_limits<uint64_t>::max() - 1)};
   AggMap map;
   vector<Id> entitiesInContext;
   Id currentCid = cids[0];
@@ -819,9 +818,8 @@ void FTSAlgorithms::appendCrossProduct(
   for (size_t i = from; i < toExclusive; ++i) {
     for (size_t j = 0; j < contextSubRes1.size(); ++j) {
       for (size_t k = 0; k < contextSubRes2.size(); ++k) {
-        res.emplace_back(
-            array<Id, 5>{{eids[i], Id::make(scores[i]), cids[i],
-                          contextSubRes1[j], contextSubRes2[k]}});
+        res.emplace_back(array<Id, 5>{{eids[i], Id::make(scores[i]), cids[i],
+                                       contextSubRes1[j], contextSubRes2[k]}});
       }
     }
   }
