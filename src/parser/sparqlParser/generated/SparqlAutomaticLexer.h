@@ -3,186 +3,50 @@
 
 #pragma once
 
+
 #include "antlr4-runtime.h"
 
-class SparqlAutomaticLexer : public antlr4::Lexer {
- public:
+
+
+
+class  SparqlAutomaticLexer : public antlr4::Lexer {
+public:
   enum {
-    T__0 = 1,
-    T__1 = 2,
-    T__2 = 3,
-    T__3 = 4,
-    T__4 = 5,
-    T__5 = 6,
-    T__6 = 7,
-    T__7 = 8,
-    T__8 = 9,
-    T__9 = 10,
-    T__10 = 11,
-    T__11 = 12,
-    T__12 = 13,
-    T__13 = 14,
-    T__14 = 15,
-    T__15 = 16,
-    T__16 = 17,
-    T__17 = 18,
-    T__18 = 19,
-    T__19 = 20,
-    T__20 = 21,
-    T__21 = 22,
-    T__22 = 23,
-    T__23 = 24,
-    T__24 = 25,
-    T__25 = 26,
-    T__26 = 27,
-    T__27 = 28,
-    T__28 = 29,
-    T__29 = 30,
-    T__30 = 31,
-    BASE = 32,
-    PREFIX = 33,
-    SELECT = 34,
-    DISTINCT = 35,
-    REDUCED = 36,
-    AS = 37,
-    CONSTRUCT = 38,
-    WHERE = 39,
-    DESCRIBE = 40,
-    ASK = 41,
-    FROM = 42,
-    NAMED = 43,
-    GROUPBY = 44,
-    GROUP_CONCAT = 45,
-    HAVING = 46,
-    ORDERBY = 47,
-    ASC = 48,
-    DESC = 49,
-    LIMIT = 50,
-    OFFSET = 51,
-    VALUES = 52,
-    LOAD = 53,
-    SILENT = 54,
-    CLEAR = 55,
-    DROP = 56,
-    CREATE = 57,
-    ADD = 58,
-    DATA = 59,
-    MOVE = 60,
-    COPY = 61,
-    INSERT = 62,
-    DELETE = 63,
-    WITH = 64,
-    USING = 65,
-    DEFAULT = 66,
-    GRAPH = 67,
-    ALL = 68,
-    OPTIONAL = 69,
-    SERVICE = 70,
-    BIND = 71,
-    UNDEF = 72,
-    MINUS = 73,
-    UNION = 74,
-    FILTER = 75,
-    NOT = 76,
-    IN = 77,
-    STR = 78,
-    LANG = 79,
-    LANGMATCHES = 80,
-    DATATYPE = 81,
-    BOUND = 82,
-    IRI = 83,
-    URI = 84,
-    BNODE = 85,
-    RAND = 86,
-    ABS = 87,
-    CEIL = 88,
-    FLOOR = 89,
-    ROUND = 90,
-    CONCAT = 91,
-    STRLEN = 92,
-    UCASE = 93,
-    LCASE = 94,
-    ENCODE = 95,
-    FOR = 96,
-    CONTAINS = 97,
-    STRSTARTS = 98,
-    STRENDS = 99,
-    STRBEFORE = 100,
-    STRAFTER = 101,
-    YEAR = 102,
-    MONTH = 103,
-    DAY = 104,
-    HOURS = 105,
-    MINUTES = 106,
-    SECONDS = 107,
-    TIMEZONE = 108,
-    TZ = 109,
-    NOW = 110,
-    UUID = 111,
-    STRUUID = 112,
-    SHA1 = 113,
-    SHA256 = 114,
-    SHA384 = 115,
-    SHA512 = 116,
-    MD5 = 117,
-    COALESCE = 118,
-    IF = 119,
-    STRLANG = 120,
-    STRDT = 121,
-    SAMETERM = 122,
-    ISIRI = 123,
-    ISURI = 124,
-    ISBLANK = 125,
-    ISLITERAL = 126,
-    ISNUMERIC = 127,
-    REGEX = 128,
-    SUBSTR = 129,
-    REPLACE = 130,
-    EXISTS = 131,
-    COUNT = 132,
-    SUM = 133,
-    MIN = 134,
-    MAX = 135,
-    AVG = 136,
-    SAMPLE = 137,
-    SEPARATOR = 138,
-    IRI_REF = 139,
-    PNAME_NS = 140,
-    PNAME_LN = 141,
-    BLANK_NODE_LABEL = 142,
-    VAR1 = 143,
-    VAR2 = 144,
-    LANGTAG = 145,
-    INTEGER = 146,
-    DECIMAL = 147,
-    DOUBLE = 148,
-    INTEGER_POSITIVE = 149,
-    DECIMAL_POSITIVE = 150,
-    DOUBLE_POSITIVE = 151,
-    INTEGER_NEGATIVE = 152,
-    DECIMAL_NEGATIVE = 153,
-    DOUBLE_NEGATIVE = 154,
-    EXPONENT = 155,
-    STRING_LITERAL1 = 156,
-    STRING_LITERAL2 = 157,
-    STRING_LITERAL_LONG1 = 158,
-    STRING_LITERAL_LONG2 = 159,
-    ECHAR = 160,
-    NIL = 161,
-    ANON = 162,
-    PN_CHARS_U = 163,
-    VARNAME = 164,
-    PN_PREFIX = 165,
-    PN_LOCAL = 166,
-    PLX = 167,
-    PERCENT = 168,
-    HEX = 169,
-    PN_LOCAL_ESC = 170,
-    WS = 171,
-    COMMENTS = 172
+    T__0 = 1, T__1 = 2, T__2 = 3, T__3 = 4, T__4 = 5, T__5 = 6, T__6 = 7, 
+    T__7 = 8, T__8 = 9, T__9 = 10, T__10 = 11, T__11 = 12, T__12 = 13, T__13 = 14, 
+    T__14 = 15, T__15 = 16, T__16 = 17, T__17 = 18, T__18 = 19, T__19 = 20, 
+    T__20 = 21, T__21 = 22, T__22 = 23, T__23 = 24, T__24 = 25, T__25 = 26, 
+    T__26 = 27, T__27 = 28, T__28 = 29, T__29 = 30, T__30 = 31, DIST = 32, 
+    SQR = 33, BASE = 34, PREFIX = 35, SELECT = 36, DISTINCT = 37, REDUCED = 38, 
+    AS = 39, CONSTRUCT = 40, WHERE = 41, DESCRIBE = 42, ASK = 43, FROM = 44, 
+    NAMED = 45, GROUPBY = 46, GROUP_CONCAT = 47, HAVING = 48, ORDERBY = 49, 
+    ASC = 50, DESC = 51, LIMIT = 52, OFFSET = 53, VALUES = 54, LOAD = 55, 
+    SILENT = 56, CLEAR = 57, DROP = 58, CREATE = 59, ADD = 60, DATA = 61, 
+    MOVE = 62, COPY = 63, INSERT = 64, DELETE = 65, WITH = 66, USING = 67, 
+    DEFAULT = 68, GRAPH = 69, ALL = 70, OPTIONAL = 71, SERVICE = 72, BIND = 73, 
+    UNDEF = 74, MINUS = 75, UNION = 76, FILTER = 77, NOT = 78, IN = 79, 
+    STR = 80, LANG = 81, LANGMATCHES = 82, DATATYPE = 83, BOUND = 84, IRI = 85, 
+    URI = 86, BNODE = 87, RAND = 88, ABS = 89, CEIL = 90, FLOOR = 91, ROUND = 92, 
+    CONCAT = 93, STRLEN = 94, UCASE = 95, LCASE = 96, ENCODE = 97, FOR = 98, 
+    CONTAINS = 99, STRSTARTS = 100, STRENDS = 101, STRBEFORE = 102, STRAFTER = 103, 
+    YEAR = 104, MONTH = 105, DAY = 106, HOURS = 107, MINUTES = 108, SECONDS = 109, 
+    TIMEZONE = 110, TZ = 111, NOW = 112, UUID = 113, STRUUID = 114, SHA1 = 115, 
+    SHA256 = 116, SHA384 = 117, SHA512 = 118, MD5 = 119, COALESCE = 120, 
+    IF = 121, STRLANG = 122, STRDT = 123, SAMETERM = 124, ISIRI = 125, ISURI = 126, 
+    ISBLANK = 127, ISLITERAL = 128, ISNUMERIC = 129, REGEX = 130, SUBSTR = 131, 
+    REPLACE = 132, EXISTS = 133, COUNT = 134, SUM = 135, MIN = 136, MAX = 137, 
+    AVG = 138, SAMPLE = 139, SEPARATOR = 140, IRI_REF = 141, PNAME_NS = 142, 
+    PNAME_LN = 143, BLANK_NODE_LABEL = 144, VAR1 = 145, VAR2 = 146, LANGTAG = 147, 
+    INTEGER = 148, DECIMAL = 149, DOUBLE = 150, INTEGER_POSITIVE = 151, 
+    DECIMAL_POSITIVE = 152, DOUBLE_POSITIVE = 153, INTEGER_NEGATIVE = 154, 
+    DECIMAL_NEGATIVE = 155, DOUBLE_NEGATIVE = 156, EXPONENT = 157, STRING_LITERAL1 = 158, 
+    STRING_LITERAL2 = 159, STRING_LITERAL_LONG1 = 160, STRING_LITERAL_LONG2 = 161, 
+    ECHAR = 162, NIL = 163, ANON = 164, PN_CHARS_U = 165, VARNAME = 166, 
+    PN_PREFIX = 167, PN_LOCAL = 168, PLX = 169, PERCENT = 170, HEX = 171, 
+    PN_LOCAL_ESC = 172, WS = 173, COMMENTS = 174
   };
 
-  explicit SparqlAutomaticLexer(antlr4::CharStream* input);
+  explicit SparqlAutomaticLexer(antlr4::CharStream *input);
   ~SparqlAutomaticLexer();
 
   virtual std::string getGrammarFileName() const override;
@@ -190,14 +54,13 @@ class SparqlAutomaticLexer : public antlr4::Lexer {
 
   virtual const std::vector<std::string>& getChannelNames() const override;
   virtual const std::vector<std::string>& getModeNames() const override;
-  virtual const std::vector<std::string>& getTokenNames()
-      const override;  // deprecated, use vocabulary instead
+  virtual const std::vector<std::string>& getTokenNames() const override; // deprecated, use vocabulary instead
   virtual antlr4::dfa::Vocabulary& getVocabulary() const override;
 
   virtual const std::vector<uint16_t> getSerializedATN() const override;
   virtual const antlr4::atn::ATN& getATN() const override;
 
- private:
+private:
   static std::vector<antlr4::dfa::DFA> _decisionToDFA;
   static antlr4::atn::PredictionContextCache _sharedContextCache;
   static std::vector<std::string> _ruleNames;
@@ -211,6 +74,7 @@ class SparqlAutomaticLexer : public antlr4::Lexer {
   static antlr4::atn::ATN _atn;
   static std::vector<uint16_t> _serializedATN;
 
+
   // Individual action functions triggered by action() above.
 
   // Individual semantic predicate functions triggered by sempred() above.
@@ -220,3 +84,4 @@ class SparqlAutomaticLexer : public antlr4::Lexer {
   };
   static Initializer _init;
 };
+

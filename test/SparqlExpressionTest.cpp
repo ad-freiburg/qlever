@@ -1,8 +1,11 @@
-//
-// Created by johannes on 12.05.21.
-//
+// Copyright 2022, University of Freiburg,
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
+
+#include <string>
 
 #include "../src/engine/sparqlExpressions/LiteralExpression.h"
 #include "../src/engine/sparqlExpressions/NaryExpression.h"
@@ -216,4 +219,19 @@ TEST(SparqlExpression, PlusAndMinus) {
   testMultiply(bTimesD, b, d);
   testDivide(bByD, b, d);
   testDivide(dByB, d, b);
+}
+
+auto testDist = testBinaryExpressionCommutative<DistExpression>;
+TEST(SparqlExpression, Dist) {
+  auto nan = std::numeric_limits<double>::quiet_NaN();
+  ad_utility::AllocatorWithLimit<Id> alloc{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
+
+  V<std::string> p1{{"\"POINT(4.0 3.0)\"", "\"PoInT(-1.0  3)\"", "\"POINT"},
+                    alloc};
+  V<std::string> p2{{"\"POINT(1.0 7.0)\"", "\"pOiNt(-4.0  7)\"", "\"POINT"},
+                    alloc};
+  V<double> result{{5.0, 5.0, nan}, alloc};
+
+  testDist(result, p1, p2);
 }

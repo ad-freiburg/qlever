@@ -979,6 +979,19 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       override {
     if (context->aggregate()) {
       return context->aggregate()->accept(this);
+    } else if (ad_utility::getLowercase(context->children[0]->getText()) == "sqr") {
+      if (context->expression().size() != 1) {
+        throw SparqlParseException{"SQR needs one argument"};
+      }
+      auto children = visitExpressionChildren(context->expression());
+      return createExpression<sparqlExpression::SquareExpression>(std::move(children[0]));
+    } else if (ad_utility::getLowercase(context->children[0]->getText()) == "dist") {
+      if (context->expression().size() != 2) {
+        throw SparqlParseException{"DIST needs two arguments"};
+      }
+      auto children = visitExpressionChildren(context->expression());
+      return createExpression<sparqlExpression::DistExpression>(
+          std::move(children[0]), std::move(children[1]));
     } else {
       throw SparqlParseException{
           "aggregates like COUNT are the only 'builtInCalls' that are "
