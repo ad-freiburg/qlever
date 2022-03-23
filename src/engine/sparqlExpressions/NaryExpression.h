@@ -205,12 +205,18 @@ inline auto dist = [](const auto& p1, const auto& p2) -> double {
   auto latlng1 = parse_wkt_point(p1);
   auto latlng2 = parse_wkt_point(p2);
   auto sqr = [](double x) { return x * x; };
-  // Multiplying by 111.139 is a simple way to convert lat-lng differences to
-  // meters. The precise way is the Haversine formula, which we save for when we
+  // Using the "ellipsoidal earth projected to a plane" formula from
+  // https://en.wikipedia.org/wiki/Geographical_distance
+  // A more precise way is the Haversine formula, which we save for when we
   // compute this at indexing time.
-  return sqrt(sqr(latlng1.first - latlng2.first) +
-              sqr(latlng1.second - latlng2.second)) *
-         111.139;
+  auto m = M_PI / 180.0 * (latlng1.first + latlng2.first) / 2.0;
+  // std::cout << "p1 = " << latlng1.first << " " << latlng1.second <<
+  // std::endl; std::cout << "p2 = " << latlng2.first << " " << latlng2.second
+  // << std::endl; std::cout << "m = " << m << std::endl;
+  auto k1 = 111.13209 - 0.56605 * cos(2 * m) + 0.00120 * cos(4 * m);
+  auto k2 = 111.41513 * cos(m) - 0.09455 * cos(3 * m) + 0.00012 * cos(5 * m);
+  return sqrt(sqr(k1 * (latlng1.first - latlng2.first)) +
+              sqr(k2 * (latlng1.second - latlng2.second)));
 };
 using DistExpression = NARY<2, FV<decltype(dist), StringValueGetter>>;
 
