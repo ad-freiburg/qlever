@@ -205,8 +205,12 @@ inline auto dist = [](const auto& p1, const auto& p2) -> double {
   auto latlng1 = parse_wkt_point(p1);
   auto latlng2 = parse_wkt_point(p2);
   auto sqr = [](double x) { return x * x; };
+  // Multiplying by 111.139 is a simple way to convert lat-lng differences to
+  // meters. The precise way is the Haversine formula, which we save for when we
+  // compute this at indexing time.
   return sqrt(sqr(latlng1.first - latlng2.first) +
-              sqr(latlng1.second - latlng2.second));
+              sqr(latlng1.second - latlng2.second)) *
+         111.139;
 };
 using DistExpression = NARY<2, FV<decltype(dist), StringValueGetter>>;
 
