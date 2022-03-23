@@ -8,6 +8,14 @@ For Ubuntu 18.04 the following packages are required
 * build-essential cmake libicu-dev
 * wget python3-yaml unzip curl (for End-to-End Tests)
 
+For RHEL-8 the following packages are required
+
+ * gcc gcc-c++ make cmake libicu-devel tzdata pkgconf-pkg-config libuuid-devel uuid libzstd-devel boost 
+ boost-program-options boost-iostreams libgomp boost-devel gcc-toolset-11
+ And requires to run all commands with the right tool set enabled.
+ * scl enable gcc-toolset-11 bash
+ ** The boost dependency might not be new enough, so try changes to the CMakefile.txt at the risk of new and exiting bugs.
+
 This roughly translates to
 
 * GCC >= 7.x
