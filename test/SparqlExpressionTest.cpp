@@ -231,7 +231,7 @@ TEST(SparqlExpression, Dist) {
                     alloc};
   V<std::string> p2{{"\"POINT(1.0 7.0)\"", "\"pOiNt(-4.0  7)\"", "\"POINT"},
                     alloc};
-  V<double> result{{5.0, 5.0, nan}, alloc};
+  V<double> result{{5.0 * 111.139, 5.0 * 111.139, nan}, alloc};
 
   testDist(result, p1, p2);
 }
