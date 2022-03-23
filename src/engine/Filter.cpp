@@ -724,8 +724,10 @@ void Filter::computeResultFixedValue(
         // Find a matching entry in subRes' _localVocab. If _rhs is not in the
         // _localVocab of subRes r will be equal to  _localVocab.size() and
         // not match the index of any entry in _localVocab.
+        rhs = Id::make(subRes->_localVocab->size());
         for (size_t i = 0; i < subRes->_localVocab->size(); ++i) {
           if ((*subRes->_localVocab)[i] == _rhs) {
+            rhs = Id::make(i);
             break;
           }
         }

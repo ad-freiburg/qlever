@@ -49,9 +49,6 @@ struct AccessReturnTypeGetter<CompressedString> {
 template <class StringType>
 using AccessReturnType_t = typename AccessReturnTypeGetter<StringType>::type;
 
-// TODO<joka921> Make this also a strong type
-using VocabId = uint64_t;
-
 struct IdRange {
   IdRange() : _first(), _last() {}
 

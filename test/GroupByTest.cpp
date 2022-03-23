@@ -86,7 +86,7 @@ TEST_F(GroupByTest, doGroupBy) {
   Id floatBuffers[3];
   float floatValues[3] = {-3, 2, 1231};
   for (int i = 0; i < 3; i++) {
-    std::memcpy(&floatBuffers[i], &floatValues[i], sizeof(float));
+    std::memcpy(&floatBuffers[i].get(), &floatValues[i], sizeof(float));
   }
 
   // add some words to the index's vocabulary
