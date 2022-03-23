@@ -227,11 +227,14 @@ TEST(SparqlExpression, Dist) {
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
 
-  V<std::string> p1{{"\"POINT(4.0 3.0)\"", "\"PoInT(-1.0  3)\"", "\"POINT"},
+  V<std::string> p1{{"\"POINT(2.0 1.5)\"", "\"PoInT(3   0.0)\"", "\"POINT"},
                     alloc};
-  V<std::string> p2{{"\"POINT(1.0 7.0)\"", "\"pOiNt(-4.0  7)\"", "\"POINT"},
+  V<std::string> p2{{"\"POINT(2.0 -1.5)\"", "\"pOiNt(7 -0.0)\"", "\"POINT"},
                     alloc};
-  V<double> result{{5.0 * 111.139, 5.0 * 111.139, nan}, alloc};
+  // The first value is 331.70172, the second value is 445.2828.
+  V<double> result{{3.0 * (111.13209 - 0.56605 + 0.0012),
+                    4.0 * (111.41513 - 0.09455 + 0.00012), nan},
+                   alloc};
 
   testDist(result, p1, p2);
 }
