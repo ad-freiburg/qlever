@@ -1,15 +1,14 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
-//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
-
-//
-// Created by johannes on 29.09.21.
-//
+// Copyright 2021, University of Freiburg,
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 // Nary expressions
 
 #ifndef QLEVER_NARYEXPRESSION_H
 #define QLEVER_NARYEXPRESSION_H
 
+#include "../../util/GeoSparqlHelpers.h"
 #include "./SparqlExpression.h"
 #include "./SparqlExpressionGenerators.h"
 
@@ -177,61 +176,24 @@ inline auto subtract = [](const auto& a, const auto& b) -> double {
 };
 using SubtractExpression = NARY<2, FV<decltype(subtract), NumericValueGetter>>;
 
-/// Distance between two WKT points.
-inline auto dist = [](const auto& p1, const auto& p2) -> double {
-  auto nan = std::numeric_limits<double>::quiet_NaN();
-  // Parse a single WKT Point of the form "POINT(<double>, <double>)", where the
-  // quote are included, the POINT must be uppercase, there is an arbitrary
-  // amount of whitespace after the comma, and arbitrary contents after the
-  // final quote. If the string does not match this format, a pair of
-  // `quiet_NaN` is returned
-  auto parse_wkt_point = [nan](const auto& p) -> std::pair<double, double> {
-    auto error_result = std::pair(nan, nan);
-    if (p.size() < 12) return error_result;
-    if (p[0] != '"' || (p[1] != 'P' && p[1] != 'p') ||
-        (p[2] != 'O' && p[2] != 'o') || (p[3] != 'I' && p[3] != 'i') ||
-        (p[4] != 'N' && p[4] != 'n') || (p[5] != 'T' && p[5] != 't') ||
-        p[6] != '(')
-      return error_result;
-    const char* beg = p.c_str() + 7;
-    char* end;
-    double lng = std::strtod(beg, &end);
-    if (end == nullptr) return error_result;
-    beg = end + 1;
-    double lat = std::strtod(beg, &end);
-    if (end == nullptr || *end != ')' || *(end + 1) != '"') return error_result;
-    return std::pair(lat, lng);
-  };
-  auto latlng1 = parse_wkt_point(p1);
-  auto latlng2 = parse_wkt_point(p2);
-  auto sqr = [](double x) { return x * x; };
-  // Using the "ellipsoidal earth projected to a plane" formula from
-  // https://en.wikipedia.org/wiki/Geographical_distance
-  // A more precise way is the Haversine formula, which we save for when we
-  // compute this at indexing time.
-  auto m = M_PI / 180.0 * (latlng1.first + latlng2.first) / 2.0;
-  // std::cout << "p1 = " << latlng1.first << " " << latlng1.second <<
-  // std::endl; std::cout << "p2 = " << latlng2.first << " " << latlng2.second
-  // << std::endl; std::cout << "m = " << m << std::endl;
-  auto k1 = 111.13209 - 0.56605 * cos(2 * m) + 0.00120 * cos(4 * m);
-  auto k2 = 111.41513 * cos(m) - 0.09455 * cos(3 * m) + 0.00012 * cos(5 * m);
-  return sqrt(sqr(k1 * (latlng1.first - latlng2.first)) +
-              sqr(k2 * (latlng1.second - latlng2.second)));
-};
-using DistExpression = NARY<2, FV<decltype(dist), StringValueGetter>>;
+// Basic GeoSPARQL functions (code in util/GeoSparqlHelpers.h).
+using LongitudeExpression =
+    NARY<1, FV<decltype(ad_utility::wktLongitude), StringValueGetter>>;
+using LatitudeExpression =
+    NARY<1, FV<decltype(ad_utility::wktLatitude), StringValueGetter>>;
+using DistExpression =
+    NARY<2, FV<decltype(ad_utility::wktDist), StringValueGetter>>;
 
-/// Square.
-inline auto square = [](const auto& x) -> double { return x.size(); };
-using SquareExpression = NARY<1, FV<decltype(square), StringValueGetter>>;
 }  // namespace detail
 
 using detail::AddExpression;
 using detail::AndExpression;
 using detail::DistExpression;
 using detail::DivideExpression;
+using detail::LatitudeExpression;
+using detail::LongitudeExpression;
 using detail::MultiplyExpression;
 using detail::OrExpression;
-using detail::SquareExpression;
 using detail::SubtractExpression;
 using detail::UnaryMinusExpression;
 using detail::UnaryNegateExpression;
