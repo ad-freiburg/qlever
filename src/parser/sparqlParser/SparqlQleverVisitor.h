@@ -368,12 +368,37 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitFunctionCall(
       SparqlAutomaticParser::FunctionCallContext* ctx) override {
-    return visitChildren(ctx);
+    // TODO<Hannah>: duplicate code in visitIriOrFunction.
+    auto& iri = visitIri(ctx->iri()).as<std::string>();
+    auto& argList =
+        visitArgList(ctx->argList()).as<std::vector<ExpressionPtr>>();
+    if (iri == "<http://www.opengis.net/def/function/geosparql/distance>") {
+      if (argList.size() != 2) {
+        throw SparqlParseException{
+            "Function geof:distance requires two arguments"};
+      }
+      return createExpression<sparqlExpression::DistExpression>(
+          std::move(argList[0]), std::move(argList[1]));
+    } else {
+      throw SparqlParseException{"IRI function \"" + iri + "\" not supported"};
+    }
   }
 
   antlrcpp::Any visitArgList(
       SparqlAutomaticParser::ArgListContext* ctx) override {
-    return visitChildren(ctx);
+    // If no arguments, return empty expression vector.
+    if (ctx->NIL()) {
+      return std::vector<ExpressionPtr>{};
+    }
+    // The grammar allows an optional DISTICT before the argument list (the
+    // whole list, not the individual arguments), but we currently don't support
+    // it.
+    if (ctx->DISTINCT()) {
+      throw SparqlParseException{
+          "DISTINCT for argument lists of IRI functions are not supported"};
+    }
+    // Visit the expression of each argument.
+    return visitExpressionChildren(ctx->expression());
   }
 
   antlrcpp::Any visitExpressionList(
@@ -1086,16 +1111,26 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitIriOrFunction(
       SparqlAutomaticParser::IriOrFunctionContext* ctx) override {
-    if (ctx->argList()) {
-      throw SparqlParseException{
-          "calls to non-built-in functions in expressions are not supported by "
-          "this parser"};
+    // Case 1: Just an IRI.
+    if (ctx->argList() == nullptr) {
+      return ExpressionPtr{
+          std::make_unique<sparqlExpression::StringOrIriExpression>(
+              ctx->getText())};
     }
-
-    return ExpressionPtr{
-        std::make_unique<sparqlExpression::StringOrIriExpression>(
-            ctx->getText())};
-    return visitChildren(ctx);
+    // Case 2: Function call, where the function name is an IRI.
+    auto iri = std::move(visitIri(ctx->iri()).as<std::string>());
+    auto argList = std::move(
+        visitArgList(ctx->argList()).as<std::vector<ExpressionPtr>>());
+    if (iri == "<http://www.opengis.net/def/function/geosparql/distance>") {
+      if (argList.size() != 2) {
+        throw SparqlParseException{
+            "Function geof:distance requires two arguments"};
+      }
+      return createExpression<sparqlExpression::DistExpression>(
+          std::move(argList[0]), std::move(argList[1]));
+    } else {
+      throw SparqlParseException{"Function \"" + iri + "\" not supported"};
+    }
   }
 
   antlrcpp::Any visitRdfLiteral(
