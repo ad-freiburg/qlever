@@ -12,7 +12,7 @@
 TEST(GeoSparqlHelpers, WktLatLng) {
   // Valid WKT points.
   ASSERT_FLOAT_EQ(4.20, ad_utility::wktLongitude("\"POINT(4.20 3.14)\""));
-  ASSERT_FLOAT_EQ(3.14, ad_utility::wktLatitude("\"POINT(4.20 3.14)\""));
+  ASSERT_FLOAT_EQ(3.14, ad_utility::wktLatitude("\"POINT(-4.20 3.14)\""));
 
   // Invalid WKT points.
   ASSERT_TRUE(std::isnan(ad_utility::wktLongitude("\"POINT\"")));

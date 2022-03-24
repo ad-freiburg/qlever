@@ -60,7 +60,7 @@ std::pair<double, double> parse_wkt_point(const std::string& p) {
 
 namespace ad_utility {
 
-// _________________________________________________________________________
+// Parse the longitude coordinate from a WKT point (it's the first coordinate).
 inline auto wktLongitude = [](const std::string& p) -> double {
   auto nan = std::numeric_limits<double>::quiet_NaN();
   if (!is_wkt_point(p)) return nan;
@@ -70,28 +70,28 @@ inline auto wktLongitude = [](const std::string& p) -> double {
   return end != nullptr || *(end + 1) == ' ' ? lng : nan;
 };
 
-// _________________________________________________________________________
+// Parse the latitute coordinate from a WKT point (it's the second coordinate).
 inline auto wktLatitude = [](const std::string& p) -> double {
   auto nan = std::numeric_limits<double>::quiet_NaN();
   if (!is_wkt_point(p)) return nan;
   const char* beg = p.c_str() + 7;
   while (*beg == ' ') ++beg;
+  if (*beg == '-') ++beg;
   while (isdigit(*beg) || *beg == '.') ++beg;
   char* end;
   double lat = std::strtod(beg, &end);
   return end != nullptr || *(end + 1) == ')' ? lat : nan;
 };
 
-// _________________________________________________________________________
+// Compute the distance in km between two WKT points according to the formula in
+// https://en.wikipedia.org/wiki/Geographical_distance ("ellipsoidal earth
+// projected to a plane"). A more precise way is the Haversine formula, which we
+// save for when we compute this at indexing time.
 inline auto wktDist = [](const std::string& p1,
                          const std::string& p2) -> double {
   auto latlng1 = parse_wkt_point(p1);
   auto latlng2 = parse_wkt_point(p2);
   auto sqr = [](double x) { return x * x; };
-  // Using the "ellipsoidal earth projected to a plane" formula from
-  // https://en.wikipedia.org/wiki/Geographical_distance
-  // A more precise way is the Haversine formula, which we save for when we
-  // compute this at indexing time.
   auto m = M_PI / 180.0 * (latlng1.first + latlng2.first) / 2.0;
   // std::cout << "p1 = " << latlng1.first << " " << latlng1.second <<
   // std::endl; std::cout << "p2 = " << latlng2.first << " " << latlng2.second
