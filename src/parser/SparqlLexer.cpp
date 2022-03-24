@@ -54,7 +54,7 @@ const std::string KEYWORD =
     "(?i)(TEXTLIMIT|PREFIX|SELECT|CONSTRUCT|DISTINCT|REDUCED|"
     "HAVING|WHERE|ASC|AS|LIMIT|OFFSET|DESC|FILTER|VALUES|"
     "OPTIONAL|UNION|LANGMATCHES|LANG|TEXT|SCORE|REGEX|PREFIX|SEPARATOR|STR|"
-    "BIND|MINUS|SQR|DIST)";
+    "BIND|MINUS)";
 const std::string AGGREGATE = "(?i)(SAMPLE|COUNT|MIN|MAX|AVG|SUM|GROUP_CONCAT)";
 const std::string VARIABLE = "(\\?" + VARNAME + ")";
 const std::string SYMBOL = "([\\.\\{\\}\\(\\)\\=\\*,;:<>!\\|/\\^\\?\\*\\+-])";

@@ -1004,26 +1004,28 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       override {
     if (context->aggregate()) {
       return context->aggregate()->accept(this);
-    } else if (ad_utility::getLowercase(context->children[0]->getText()) ==
-               "sqr") {
-      if (context->expression().size() != 1) {
-        throw SparqlParseException{"SQR needs one argument"};
-      }
-      auto children = visitExpressionChildren(context->expression());
-      return createExpression<sparqlExpression::SquareExpression>(
-          std::move(children[0]));
-    } else if (ad_utility::getLowercase(context->children[0]->getText()) ==
-               "dist") {
-      if (context->expression().size() != 2) {
-        throw SparqlParseException{"DIST needs two arguments"};
-      }
-      auto children = visitExpressionChildren(context->expression());
-      return createExpression<sparqlExpression::DistExpression>(
-          std::move(children[0]), std::move(children[1]));
+      // TODO: Implement built-in calls according to the following examples.
+      //
+      // } else if (ad_utility::getLowercase(context->children[0]->getText()) ==
+      //            "sqr") {
+      //   if (context->expression().size() != 1) {
+      //     throw SparqlParseException{"SQR needs one argument"};
+      //   }
+      //   auto children = visitExpressionChildren(context->expression());
+      //   return createExpression<sparqlExpression::SquareExpression>(
+      //       std::move(children[0]));
+      // } else if (ad_utility::getLowercase(context->children[0]->getText()) ==
+      //            "dist") {
+      //   if (context->expression().size() != 2) {
+      //     throw SparqlParseException{"DIST needs two arguments"};
+      //   }
+      //   auto children = visitExpressionChildren(context->expression());
+      //   return createExpression<sparqlExpression::DistExpression>(
+      //       std::move(children[0]), std::move(children[1]));
     } else {
       throw SparqlParseException{
-          "aggregates like COUNT are the only 'builtInCalls' that are "
-          "supported by this parser"};
+          "Built-in function not yet implemented (only aggregates like COUNT "
+          "so far)"};
     }
   }
 
@@ -1121,16 +1123,36 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     auto iri = std::move(visitIri(ctx->iri()).as<std::string>());
     auto argList = std::move(
         visitArgList(ctx->argList()).as<std::vector<ExpressionPtr>>());
-    if (iri == "<http://www.opengis.net/def/function/geosparql/distance>") {
-      if (argList.size() != 2) {
-        throw SparqlParseException{
-            "Function geof:distance requires two arguments"};
+    const char* geofPrefix = "<http://www.opengis.net/def/function/geosparql/";
+    if (iri.rfind("<http://www.opengis.net/def/function/geosparql/", 0) == 0) {
+      size_t pos = strlen(geofPrefix);
+      if (iri.compare(pos, std::string::npos, "distance>") == 0) {
+        if (argList.size() == 2) {
+          return createExpression<sparqlExpression::DistExpression>(
+              std::move(argList[0]), std::move(argList[1]));
+        } else {
+          throw SparqlParseException{
+              "Function geof:distance requires two arguments"};
+        }
+      } else if (iri.compare(pos, std::string::npos, "longitude>") == 0) {
+        if (argList.size() == 1) {
+          return createExpression<sparqlExpression::LongitudeExpression>(
+              std::move(argList[0]));
+        } else {
+          throw SparqlParseException{
+              "Function geof:longitude requires one argument"};
+        }
+      } else if (iri.compare(pos, std::string::npos, "latitude>") == 0) {
+        if (argList.size() == 1) {
+          return createExpression<sparqlExpression::LatitudeExpression>(
+              std::move(argList[0]));
+        } else {
+          throw SparqlParseException{
+              "Function geof:longitude requires one argument"};
+        }
       }
-      return createExpression<sparqlExpression::DistExpression>(
-          std::move(argList[0]), std::move(argList[1]));
-    } else {
-      throw SparqlParseException{"Function \"" + iri + "\" not supported"};
     }
+    throw SparqlParseException{"Function \"" + iri + "\" not supported"};
   }
 
   antlrcpp::Any visitRdfLiteral(

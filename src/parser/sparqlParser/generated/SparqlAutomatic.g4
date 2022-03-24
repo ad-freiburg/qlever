@@ -296,7 +296,6 @@ brackettedExpression : '(' expression ')';
 
 builtInCall
     : aggregate |
-      DIST '(' expression ',' expression ')' | SQR '(' expression ')' |
       STR '(' expression ')' | LANG '(' expression ')' |
       LANGMATCHES '(' expression ',' expression ')' |
       DATATYPE '(' expression ')' | BOUND '(' var ')' | IRI '(' expression ')' |
@@ -378,9 +377,6 @@ pnameLn
     : PNAME_LN;
 
 pnameNs : PNAME_NS;
-
-DIST : D I S T;
-SQR : S Q R;
 
 BASE : B A S E;
 PREFIX : P R E F I X;
