@@ -15,7 +15,6 @@
 
 #include "../engine/ResultTable.h"
 #include "../global/Pattern.h"
-#include "../parser/TsvParser.h"
 #include "../parser/TurtleParser.h"
 #include "../util/BackgroundStxxlSorter.h"
 #include "../util/BufferedVector.h"
@@ -680,7 +679,7 @@ class Index {
   // Returns the language tag of spo[2] (the object) or ""
   // if there is none.
   LangtagAndTriple tripleToInternalRepresentation(
-      std::array<string, 3>&& stringTriple);
+      TurtleTriple&& stringTriple);
 
   /**
    * @brief Throws an exception if no patterns are loaded. Should be called from

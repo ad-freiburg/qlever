@@ -192,7 +192,7 @@ TEST(TurtleParserTest, blankNodePropertyList) {
   p._activePredicate = "<p1>";
 
   string blankNodeL = "[<p2> <ob2>; <p3> <ob3>]";
-  std::vector<std::array<string, 3>> exp;
+  std::vector<TurtleTriple> exp;
   exp.push_back({"<s>", "<p1>", "QLever-Anon-Node:0"});
   exp.push_back({"QLever-Anon-Node:0", "<p2>", "<ob2>"});
   exp.push_back({"QLever-Anon-Node:0", "<p3>", "<ob3>"});
@@ -211,7 +211,6 @@ TEST(TurtleParserTest, object) {
   TurtleStringParser<Tokenizer> p;
   string sub = "<sub>";
   string pred = "<pred>";
-  using triple = std::array<string, 3>;
   p._activeSubject = sub;
   p._activePredicate = pred;
   p._prefixMap["b"] = "bla/";
@@ -219,14 +218,14 @@ TEST(TurtleParserTest, object) {
   p.setInputStream(iri);
   ASSERT_TRUE(p.object());
   ASSERT_EQ(p._lastParseResult, "<bla/iri>");
-  auto exp = triple{sub, pred, "<bla/iri>"};
+  auto exp = TurtleTriple{sub, pred, "<bla/iri>"};
   ASSERT_EQ(p._triples.back(), exp);
 
   string literal = "\"literal\"";
   p.setInputStream(literal);
   ASSERT_TRUE(p.object());
   ASSERT_EQ(p._lastParseResult, literal);
-  exp = triple{sub, pred, literal};
+  exp = TurtleTriple{sub, pred, literal};
   ASSERT_EQ(p._triples.back(), exp);
 
   string blank = "_:someblank";
@@ -234,7 +233,7 @@ TEST(TurtleParserTest, object) {
   ASSERT_TRUE(p.object());
   ASSERT_EQ(p._lastParseResult, "_:someblank");
 
-  exp = triple{sub, pred, "_:someblank"};
+  exp = TurtleTriple{sub, pred, "_:someblank"};
   ASSERT_EQ(p._triples.back(), exp);
 }
 
@@ -243,7 +242,7 @@ TEST(TurtleParserTest, objectList) {
   parser._activeSubject = "<s>";
   parser._activePredicate = "<p>";
   string objectL = " <ob1>, <ob2>, <ob3>";
-  std::vector<std::array<string, 3>> exp;
+  std::vector<TurtleTriple> exp;
   exp.push_back({"<s>", "<p>", "<ob1>"});
   exp.push_back({"<s>", "<p>", "<ob2>"});
   exp.push_back({"<s>", "<p>", "<ob3>"});
@@ -263,7 +262,7 @@ TEST(TurtleParserTest, predicateObjectList) {
   TurtleStringParser<Tokenizer> parser;
   parser._activeSubject = "<s>";
   string predL = "\n <p1> <ob1>;<p2> \"ob2\",\n <ob3>";
-  std::vector<std::array<string, 3>> exp;
+  std::vector<TurtleTriple> exp;
   exp.push_back({"<s>", "<p1>", "<ob1>"});
   exp.push_back({"<s>", "<p2>", "\"ob2\""});
   exp.push_back({"<s>", "<p2>", "<ob3>"});

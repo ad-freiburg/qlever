@@ -14,7 +14,6 @@
 #include <unordered_map>
 
 #include "../parser/ParallelParseBuffer.h"
-#include "../parser/TsvParser.h"
 #include "../util/BatchedPipeline.h"
 #include "../util/CompressionUsingZstd/ZstdWrapper.h"
 #include "../util/Conversions.h"
@@ -215,7 +214,7 @@ void Index::createFromFile(const string& filename) {
 }
 
 // Explicit instantiations.
-template void Index::createFromFile<TsvParser>(const string& filename);
+//template void Index::createFromFile<TsvParser>(const string& filename);
 template void Index::createFromFile<TurtleStreamParser<Tokenizer>>(
     const string& filename);
 template void Index::createFromFile<TurtleMmapParser<Tokenizer>>(
@@ -263,7 +262,8 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
                         [&]() { parserExhausted = true; }),
           // convert each triple to the internal representation (e.g. special
           // values for Numbers, externalized literals, etc.)
-          [this](std::array<std::string, 3>&& t) -> LangtagAndTriple {
+          [this](TurtleTriple&& t) -> LangtagAndTriple {
+            // TODO<joka921> This is very wrong, but just to find the interface.
             return tripleToInternalRepresentation(std::move(t));
           },
 
@@ -936,14 +936,19 @@ void Index::readConfiguration() {
 
 // ___________________________________________________________________________
 LangtagAndTriple Index::tripleToInternalRepresentation(
-    std::array<std::string, 3>&& tripleIn) {
-  LangtagAndTriple res{"", makeTriple(std::move(tripleIn))};
+    TurtleTriple&& tripleIn) {
+  LangtagAndTriple res{"", {}};
   auto& spo = res._triple;
+  spo[0] = std::move(tripleIn._subject);
+  spo[1] = std::move(tripleIn._predicate);
+  // TODO<joka921> As soon as we have the "folded" Ids, we simply store the numeric value.
+  spo[2] = tripleIn._object.toRdf();
   for (auto& el : spo) {
     el._iriOrLiteral =
         _vocab.getLocaleManager().normalizeUtf8(el._iriOrLiteral);
   }
   size_t upperBound = 3;
+
   auto& object = spo[2]._iriOrLiteral;
   if (ad_utility::isXsdValue(object)) {
     object = ad_utility::convertValueLiteralToIndexWord(object);

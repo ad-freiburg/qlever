@@ -9,7 +9,6 @@
 #include <iostream>
 #include <string>
 
-#include "./parser/TsvParser.h"
 #include "./parser/TurtleParser.h"
 #include "./util/Log.h"
 
@@ -25,11 +24,11 @@
 template <class Parser>
 void writeNTImpl(std::ostream& out, const std::string& filename) {
   Parser p(filename);
-  std::array<std::string, 3> triple;
+  TurtleTriple triple;
   // this call by reference is necesary because of the TSV-Parsers interface
   size_t numTriples = 0;
   while (p.getLine(triple)) {
-    out << triple[0] << " " << triple[1] << " " << triple[2] << " .\n";
+    out << triple._subject << " " << triple._predicate << " " << triple._object.toRdf() << " .\n";
     numTriples++;
     if (numTriples % 10000000 == 0) {
       LOG(INFO) << "Parsed " << numTriples << " triples" << std::endl;
@@ -75,7 +74,10 @@ void writeNT(std::ostream& out, const string& fileFormat,
     // writeLabel<TurtleStreamParser<Tokenizer_T>>(out, filename);
     writeNTImpl<TurtleStreamParser<Tokenizer_T>>(out, filename);
   } else if (fileFormat == "tsv") {
-    writeNTImpl<TsvParser>(out, filename);
+    // TODO<joka921>
+    // Throw out tsv
+    AD_CHECK(false);
+    //writeNTImpl<TsvParser>(out, filename);
   } else if (fileFormat == "mmap") {
     writeNTImpl<TurtleMmapParser<Tokenizer_T>>(out, filename);
   } else {

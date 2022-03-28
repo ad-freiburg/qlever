@@ -46,14 +46,16 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
   stxxlConfig.writeLine(std::move(config).str());
 }
 
-TEST(IndexTest, createFromTsvTest) {
+TEST(IndexTest, createFromTurtleTest) {
   string location = "./";
   string tail = "";
   writeStxxlConfigFile(location, tail);
   string stxxlFileName = getStxxlDiskFileName(location, tail);
 
+  std::string filename = "_testtmp2.ttl";
+
   {
-    std::fstream f("_testtmp2.tsv", std::ios_base::out);
+    std::fstream f(filename, std::ios_base::out);
 
     // Vocab:
     // 0: a
@@ -72,7 +74,7 @@ TEST(IndexTest, createFromTsvTest) {
       Index index;
       index.setOnDiskBase("_testindex");
       index.setNumTriplesPerBatch(2);
-      index.createFromFile<TsvParser>("_testtmp2.tsv");
+      index.createFromFile<TurtleParserAuto>(filename);
     }
     Index index;
     index.createFromOnDiskIndex("_testindex");
@@ -109,7 +111,7 @@ TEST(IndexTest, createFromTsvTest) {
     ASSERT_EQ(1u, buffer[1][0]);
     ASSERT_EQ(5u, buffer[1][1]);
 
-    remove("_testtmp2.tsv");
+    ad_utility::deleteFile(filename);
     std::remove(stxxlFileName.c_str());
     remove("_testindex.index.pso");
     remove("_testindex.index.pos");
@@ -122,7 +124,7 @@ TEST(IndexTest, createFromTsvTest) {
     // b       is-a    0       .
     // c       is-a    1       .
     // c       is-a    2       .
-    std::fstream f("_testtmp2.tsv", std::ios_base::out);
+    std::fstream f(filename, std::ios_base::out);
 
     // Vocab:
     // 0: 0
@@ -147,7 +149,7 @@ TEST(IndexTest, createFromTsvTest) {
       Index index;
       index.setOnDiskBase("_testindex");
       index.setNumTriplesPerBatch(2);
-      index.createFromFile<TsvParser>("_testtmp2.tsv");
+      index.createFromFile<TurtleParserAuto>(filename);
     }
     Index index;
     index.createFromOnDiskIndex("_testindex");
@@ -199,7 +201,7 @@ TEST(IndexTest, createFromTsvTest) {
     ASSERT_EQ(3u, buffer[6][0]);
     ASSERT_EQ(5u, buffer[6][1]);
 
-    remove("_testtmp2.tsv");
+    ad_utility::deleteFile(filename);
     std::remove(stxxlFileName.c_str());
     remove("_testindex.index.pso");
     remove("_testindex.index.pos");
@@ -217,22 +219,23 @@ class CreatePatternsFixture : public testing::Test {
   }
 
   virtual ~CreatePatternsFixture() {
-    remove("_testtmppatterns.tsv");
-    std::remove(stxxlFileName.c_str());
-    remove("_testindex.index.pso");
-    remove("_testindex.index.pos");
-    remove("_testindex.index.patterns");
-    remove("stxxl.log");
-    remove("stxxl.errorlog");
+    ad_utility::deleteFile(inputFilename);
+    ad_utility::deleteFile(stxxlFileName);
+    ad_utility::deleteFile("_testindex.index.pso");
+    ad_utility::deleteFile("_testindex.index.pos");
+    ad_utility::deleteFile("_testindex.index.patterns");
+    ad_utility::deleteFile("stxxl.log");
+    ad_utility::deleteFile("stxxl.errorlog");
   }
 
   string stxxlFileName;
+  string inputFilename ="_testtmppatterns.ttl" ;
 };
 
 TEST_F(CreatePatternsFixture, createPatterns) {
   {
-    LOG(DEBUG) << "Testing createPatterns with tsv file..." << std::endl;
-    std::fstream f("_testtmppatterns.tsv", std::ios_base::out);
+    LOG(DEBUG) << "Testing createPatterns with ttl file..." << std::endl;
+    std::ofstream f(inputFilename);
 
     f << "<a>\t<b>\t<c>\t.\n"
          "<a>\t<b>\t<c2>\t.\n"
@@ -246,7 +249,7 @@ TEST_F(CreatePatternsFixture, createPatterns) {
       index.setUsePatterns(true);
       index.setOnDiskBase("_testindex");
       index.setNumTriplesPerBatch(2);
-      index.createFromFile<TsvParser>("_testtmppatterns.tsv");
+      index.createFromFile<TurtleParserAuto>(inputFilename);
     }
     Index index;
     index.setUsePatterns(true);
@@ -291,8 +294,9 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   string tail = "";
   writeStxxlConfigFile(location, tail);
   string stxxlFileName = getStxxlDiskFileName(location, tail);
+  string filename = "_testtmp3.ttl";
 
-  std::fstream f("_testtmp3.tsv", std::ios_base::out);
+  std::ofstream f(filename);
 
   // Vocab:
   // 0: a
@@ -311,7 +315,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
     Index indexPrim;
     indexPrim.setOnDiskBase("_testindex2");
     indexPrim.setNumTriplesPerBatch(2);
-    indexPrim.createFromFile<TsvParser>("_testtmp3.tsv");
+    indexPrim.createFromFile<TurtleParserAuto>(filename);
   }
 
   Index index;
@@ -331,10 +335,10 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   ASSERT_TRUE(index.POS().metaData().getMetaData(2).isFunctional());
   ASSERT_TRUE(index.POS().metaData().getMetaData(3).isFunctional());
 
-  remove("_testtmp3.tsv");
-  remove("_testindex2.index.pso");
-  remove("_testindex2.index.pos");
-  std::remove(stxxlFileName.c_str());
+  ad_utility::deleteFile(filename);
+  ad_utility::deleteFile("_testindex2.index.pso");
+  ad_utility::deleteFile("_testindex2.index.pos");
+  ad_utility::deleteFile(stxxlFileName);
 };
 
 TEST(IndexTest, scanTest) {
@@ -342,8 +346,8 @@ TEST(IndexTest, scanTest) {
   string tail = "";
   writeStxxlConfigFile(location, tail);
   string stxxlFileName = getStxxlDiskFileName(location, tail);
-
-  std::fstream f("_testtmp2.tsv", std::ios_base::out);
+  string filename = "_testtmp2.ttl";
+  std::ofstream f(filename);
 
   // Vocab:
   // 0: a
@@ -362,7 +366,7 @@ TEST(IndexTest, scanTest) {
       Index index;
       index.setOnDiskBase("_testindex");
       index.setNumTriplesPerBatch(2);
-      index.createFromFile<TsvParser>("_testtmp2.tsv");
+      index.createFromFile<TurtleParserAuto>(filename);
     }
 
     Index index;
@@ -410,10 +414,10 @@ TEST(IndexTest, scanTest) {
     ASSERT_EQ(1u, wol[0][0]);
   }
 
-  remove("_testtmp2.tsv");
-  std::remove(stxxlFileName.c_str());
-  remove("_testindex.index.pso");
-  remove("_testindex.index.pos");
+  ad_utility::deleteFile(filename);
+  ad_utility::deleteFile(stxxlFileName);
+  ad_utility::deleteFile("_testindex.index.pso");
+  ad_utility::deleteFile("_testindex.index.pos");
 
   // a       is-a    1       .
   // a       is-a    2       .
@@ -422,7 +426,7 @@ TEST(IndexTest, scanTest) {
   // b       is-a    0       .
   // c       is-a    1       .
   // c       is-a    2       .
-  std::fstream f2("_testtmp2.tsv", std::ios_base::out);
+  std::ofstream f2(filename);
 
   // Vocab:
   // 0: 0
@@ -448,7 +452,7 @@ TEST(IndexTest, scanTest) {
       Index index;
       index.setOnDiskBase("_testindex");
       index.setNumTriplesPerBatch(2);
-      index.createFromFile<TsvParser>("_testtmp2.tsv");
+      index.createFromFile<TurtleParserAuto>(filename);
     }
     Index index;
     index.createFromOnDiskIndex("_testindex");
@@ -531,8 +535,8 @@ TEST(IndexTest, scanTest) {
     ASSERT_EQ(1u, wol[0][0]);
     ASSERT_EQ(2u, wol[1][0]);
   }
-  remove("_testtmp2.tsv");
-  std::remove(stxxlFileName.c_str());
-  remove("_testindex.index.pso");
-  remove("_testindex.index.pos");
+  ad_utility::deleteFile(filename);
+  ad_utility::deleteFile(stxxlFileName);
+  ad_utility::deleteFile("_testindex.index.pso");
+  ad_utility::deleteFile("_testindex.index.pos");
 };

@@ -12,6 +12,7 @@
 #include <exception>
 #include <future>
 #include <locale>
+#include <variant>
 #include <string_view>
 
 #include "../global/Constants.h"
@@ -23,9 +24,100 @@
 #include "../util/TaskQueue.h"
 #include "./Tokenizer.h"
 #include "./TokenizerCtre.h"
+#include "../util/Forward.h"
 #include "ParallelBuffer.h"
 
 using std::string;
+
+struct TripleObject {
+  using Variant = std::variant<std::string, double, int64_t>;
+
+  Variant _variant;
+
+  template <typename T> requires requires(Variant v, T&& t) {_variant = t;}
+  TripleObject& operator=(T&& value)  {
+    _variant = AD_FWD(value);
+    return *this;
+  }
+  TripleObject& operator=(std::string_view value) {
+    _variant = std::string{value};
+    return *this;
+  }
+
+  template <typename T> requires requires(T&& t) {_variant == t;}
+  bool operator==(const T& other) const{
+    return _variant == other;
+  }
+
+  bool operator==(std::string_view other) const{
+    return isString() && getString() == other;
+  }
+
+  bool operator==(const TripleObject&) const = default;
+
+
+
+  Variant& variant() {
+    return _variant;
+  }
+  [[nodiscard]] bool isString() const noexcept {
+    return std::holds_alternative<std::string>(_variant);
+  }
+  [[nodiscard]] bool isDouble() const noexcept {
+    return std::holds_alternative<double>(_variant);
+  }
+  [[nodiscard]] bool isInt() const noexcept {
+    return std::holds_alternative<int64_t>(_variant);
+  }
+
+  // TODO<C++23> Deducing this.
+  decltype(auto) getString () {
+    return std::get<std::string>(_variant);
+  }
+  const std::string& getString() const {
+    return std::get<std::string>(_variant);
+  }
+  decltype(auto) getDouble () {
+    return std::get<double>(_variant);
+  }
+  decltype(auto) getInt () {
+    return std::get<int64_t>(_variant);
+  }
+
+  std::string toRdf() {
+    if (isString()) {
+      return getString();
+    }
+    if (isDouble()) {
+      return absl::StrCat("\"", getDouble(), "\"^^", XSD_DOUBLE_TYPE);
+    } else {
+      AD_CHECK(isInt());
+      return absl::StrCat("\"", getInt(), "\"^^", XSD_INT_TYPE);
+    }
+  }
+};
+
+struct TurtleTriple {
+  std::string _subject;
+  std::string _predicate;
+  TripleObject _object;
+
+  bool operator== (const TurtleTriple&) const = default;
+};
+
+inline std::string_view stripAngleBrackets(std::string_view input) {
+  AD_CHECK(input.starts_with('<') && input.ends_with('>'));
+  input.remove_prefix(1);
+  input.remove_suffix(1);
+  return input;
+}
+
+inline std::string_view stripDoubleQuotes(std::string_view input) {
+  AD_CHECK(input.starts_with('"') && input.ends_with('"') && input.size() >= 2);
+  input.remove_prefix(1);
+  input.remove_suffix(1);
+  return input;
+}
 
 /**
  * @brief The actual parser class
@@ -63,14 +155,14 @@ class TurtleParser {
   TurtleParser& operator=(TurtleParser&& rhs) = default;
 
   // Wrapper to getLine that is expected by the rest of QLever
-  bool getLine(std::array<string, 3>& triple) { return getLine(&triple); }
+  bool getLine(TurtleTriple& triple) { return getLine(&triple); }
 
   // Main access method to the parser
   // If a triple can be parsed (or has previously been parsed and stored
   // Writes the triple to the argument (format subject, object predicate)
   // returns true iff a triple can be successfully written, else the triple
   // value is invalid and the parser is at the end of the input.
-  virtual bool getLine(std::array<string, 3>* triple) = 0;
+  virtual bool getLine(TurtleTriple* triple) = 0;
 
   // Get the offset (relative to the beginning of the file) of the first byte
   // that has not yet been dealt with by the parser.
@@ -79,7 +171,7 @@ class TurtleParser {
  protected:
   // clear all the parser's state to the initial values.
   void clear() {
-    _lastParseResult.clear();
+    _lastParseResult.variant() =  std::string{};
 
     _activeSubject.clear();
     _activePredicate.clear();
@@ -109,7 +201,7 @@ class TurtleParser {
   /* Data Members */
 
   // Stores the triples that have been parsed but not retrieved yet.
-  std::vector<std::array<string, 3>> _triples;
+  std::vector<TurtleTriple> _triples;
 
   // if this is set, there is nothing else to parse and we will only
   // retrieve what is left in our tripleBuffer;
@@ -120,7 +212,7 @@ class TurtleParser {
 
   // the result of the last succesful call to a parsing function
   // (a function named after a (non-)terminal of the Turtle grammar
-  std::string _lastParseResult;
+  TripleObject _lastParseResult;
 
   // maps prefixes to their expanded form, initialized with the empty base
   // (i.e. the prefix ":" maps to the empty IRI)
@@ -272,7 +364,7 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
  public:
   using TurtleParser<Tokenizer_T>::_prefixMap;
   using TurtleParser<Tokenizer_T>::getLine;
-  bool getLine(std::array<string, 3>* triple) override {
+  bool getLine(TurtleTriple* triple) override {
     (void)triple;
     throw std::runtime_error(
         "TurtleStringParser doesn't support calls to getLine. Only use "
@@ -398,7 +490,7 @@ class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
   // inherit the wrapper overload
   using TurtleParser<Tokenizer_T>::getLine;
 
-  bool getLine(std::array<string, 3>* triple) override;
+  bool getLine(TurtleTriple* triple) override;
 
   void initialize(const string& filename);
 
@@ -466,7 +558,7 @@ class TurtleMmapParser : public TurtleParser<Tokenizer_T> {
   // inherit the other overload
   using TurtleParser<Tokenizer_T>::getLine;
   // overload of the actual mmap-based parsing logic
-  bool getLine(std::array<string, 3>* triple) override;
+  bool getLine(TurtleTriple* triple) override;
 
   // initialize parse input from a turtle file using mmap
   void initialize(const string& filename);
@@ -513,9 +605,9 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   // inherit the wrapper overload
   using TurtleParser<Tokenizer_T>::getLine;
 
-  bool getLine(std::array<string, 3>* triple) override;
+  bool getLine(TurtleTriple* triple) override;
 
-  std::optional<std::vector<Triple>> getBatch();
+  std::optional<std::vector<TurtleTriple>> getBatch();
 
   void printAndResetQueueStatistics() {
     LOG(TIMING) << parallelParser.getTimeStatistics() << '\n';
