@@ -25,10 +25,10 @@ struct SortTriple {
     return a[i0] < b[i0];
   }
 
-  // Value that is strictly smaller that any input element.
+  // Value that is strictly smaller than any input element.
   static T min_value() { return {Id::min(), Id::min(), Id::min()}; }
 
-  // Value which is strictly larger that any input element
+  // Value that is strictly larger than any input element.
   static T max_value() { return {Id::max(), Id::max(), Id::max()}; }
 };
 
