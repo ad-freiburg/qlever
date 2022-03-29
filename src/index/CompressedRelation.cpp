@@ -274,7 +274,7 @@ void CompressedRelationMetaData::scan(
       auto end = containedInOnlyOneBlock ? begin + metaData._numRows
                                          : uncompressedBuffer.end();
 
-      // Find the range in the block, where also the col1Id matches (The second
+      // Find the range in the block, where also the col1Id matches (the second
       // ID in the `std::array` does not matter).
       std::tie(begin, end) = std::equal_range(
           begin, end, std::array<Id, 2>{col1Id, Id{}},

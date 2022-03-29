@@ -83,7 +83,7 @@ TEST_F(GroupByTest, doGroupBy) {
   // There are 7 different aggregates, of which 5 (all apart from SAMPLE and
   // COUNT) react different to the 5 different ResultTypes.
 
-  Id floatBuffers[3]{Id::min(), Id::min(), Id::min()};
+  Id floatBuffers[3]{Id::make(0), Id::make(0), Id::make(0)};
   float floatValues[3] = {-3, 2, 1231};
   for (int i = 0; i < 3; i++) {
     std::memcpy(&floatBuffers[i].get(), &floatValues[i], sizeof(float));

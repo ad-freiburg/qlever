@@ -67,10 +67,10 @@ class VocabularyMerger {
   // represents tokens/words in a certain partial vocabulary
   struct QueueWord {
     QueueWord() = default;
-    QueueWord(TripleComponentWithId&& v, size_t file)
+    QueueWord(TripleComponentWithIndex&& v, size_t file)
         : _entry(std::move(v)), _partialFileId(file) {}
-    TripleComponentWithId _entry;  // the word, its local ID and the information
-                                   // if it will be externalized
+    TripleComponentWithIndex _entry;  // the word, its local ID and the
+                                      // information if it will be externalized
     size_t _partialFileId;  // from which partial vocabulary did this word come
 
     [[nodiscard]] const bool& isExternal() const { return _entry.isExternal(); }
@@ -111,7 +111,7 @@ class VocabularyMerger {
   size_t _totalWritten = 0;
   // keep track of the last seen word to correctly handle duplicates
 
-  std::optional<TripleComponentWithId> _lastTripleComponent = std::nullopt;
+  std::optional<TripleComponentWithIndex> _lastTripleComponent = std::nullopt;
   std::ofstream _outfileExternal;
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> _idVecs;

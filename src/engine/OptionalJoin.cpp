@@ -452,9 +452,9 @@ void OptionalJoin::optionalJoin(
         ib++;
 
         // do the rows still match?
-        // TODO<joka921> [joinColumnLeft, joinColumnRight]
-        for (const array<ColumnIndex, 2>& jc : joinColumns) {
-          if (ib >= b.size() || a[ia][jc[0]] != b[ib][jc[1]]) {
+        for (const auto& [joinColumnLeft, joinColumnRight] : joinColumns) {
+          if (ib >= b.size() ||
+              a[ia][joinColumnLeft] != b[ib][joinColumnRight]) {
             matched = false;
             break;
           }

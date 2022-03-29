@@ -57,7 +57,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
 
   auto pushWordFromPartialVocabularyToQueue = [&](size_t i) {
     if (numWordsLeftInPartialVocabulary[i] > 0) {
-      TripleComponentWithId tripleComponent;
+      TripleComponentWithIndex tripleComponent;
       infiles[i] >> tripleComponent;
       queue.push(QueueWord(std::move(tripleComponent), i));
       numWordsLeftInPartialVocabulary[i]--;
@@ -158,7 +158,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
         top.iriOrLiteral() != _lastTripleComponent.value().iriOrLiteral()) {
       // TODO<joka921> Once we have interleaved IDs using the MilestoneIdManager
       // we have to compute the correct Ids here.
-      _lastTripleComponent = TripleComponentWithId{
+      _lastTripleComponent = TripleComponentWithIndex{
           top.iriOrLiteral(), top.isExternal(), _totalWritten};
 
       // TODO<optimization> If we aim to further speed this up, we could
@@ -280,7 +280,7 @@ void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
     // we have assigned to this word, and the information, whether this word
     // belongs to the internal or external vocabulary.
     const auto& [id, splitVal] = idAndSplitVal;
-    TripleComponentWithId entry{word, splitVal.isExternalized, id};
+    TripleComponentWithIndex entry{word, splitVal.isExternalized, id};
     serializer << entry;
   }
   serializer.close();

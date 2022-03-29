@@ -74,13 +74,13 @@ class MergeVocabularyTest : public ::testing::Test {
 
     // these will be the contents of partial vocabularies, second element of
     // pair is the correct Id which is expected from mergeVocabulary
-    std::vector<TripleComponentWithId> words0{{"\"ape\"", false, 0},
-                                              {"\"gorilla\"", false, 2},
-                                              {"\"monkey\"", false, 3},
-                                              {"\"bla\"", true, 5}};
-    std::vector<TripleComponentWithId> words1{{"\"bear\"", false, 1},
-                                              {"\"monkey\"", false, 3},
-                                              {"\"zebra\"", false, 4}};
+    std::vector<TripleComponentWithIndex> words0{{"\"ape\"", false, 0},
+                                                 {"\"gorilla\"", false, 2},
+                                                 {"\"monkey\"", false, 3},
+                                                 {"\"bla\"", true, 5}};
+    std::vector<TripleComponentWithIndex> words1{{"\"bear\"", false, 1},
+                                                 {"\"monkey\"", false, 3},
+                                                 {"\"zebra\"", false, 4}};
 
     // write expected vocabulary files
     std::ofstream expVoc(_pathVocabExp);

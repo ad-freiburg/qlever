@@ -705,7 +705,7 @@ void Filter::computeResultFixedValue(
       break;
     case ResultTable::ResultType::FLOAT:
       try {
-        rhs = Id::make(0);
+        rhs = Id::min();
         float f = std::stof(_rhs);
         std::memcpy(&rhs.get(), &f, sizeof(float));
       } catch (const std::logic_error& e) {

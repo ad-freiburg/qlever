@@ -31,7 +31,7 @@ struct TripleComponent {
   }
 };
 
-struct TripleComponentWithId {
+struct TripleComponentWithIndex {
   std::string _iriOrLiteral;
   bool _isExternal = false;
   uint64_t _index = 0;
@@ -42,7 +42,8 @@ struct TripleComponentWithId {
   [[nodiscard]] auto& iriOrLiteral() { return _iriOrLiteral; }
 
   template <typename Serializer>
-  friend void serialize(Serializer& serializer, TripleComponentWithId& entry) {
+  friend void serialize(Serializer& serializer,
+                        TripleComponentWithIndex& entry) {
     serializer | entry._iriOrLiteral;
     serializer | entry._isExternal;
     serializer | entry._index;

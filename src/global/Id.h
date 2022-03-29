@@ -43,9 +43,9 @@ struct Id {
   }
 
   // This is not only used in debug code, but also for the direct output
-  // of `VERBATIM` (integer) columns. TODO<joka921> as soon as we have the
-  // folded IDs, this should only be used for debugging with a clearer output
-  // like "ID:0".
+  // of `VERBATIM` (integer) columns.
+  // TODO<joka921> as soon as we have the folded IDs, this should only be used
+  // for debugging with a clearer output like "ID:0".
   friend std::ostream& operator<<(std::ostream& ostr, const Id& id) {
     ostr << id.get();
     return ostr;
@@ -70,8 +70,8 @@ typedef uint16_t Score;
 // TODO<joka921> Make the following ID and index types strong.
 using ColumnIndex = uint64_t;
 using VocabIndex = uint64_t;
-using TextVocabIndex = uint64_t;
 using LocalVocabIndex = uint64_t;
+using TextVocabIndex = uint64_t;
 
 // Integers, that are probably not integers but strong IDs or indices, but their
 // true nature is still to be discovered.
