@@ -215,26 +215,26 @@ void Vocabulary<S, ComparatorType>::setLocale(const std::string& language,
 }
 
 template <typename StringType, typename C>
-//! Get the word with the given id.
+//! Get the word with the given idx.
 //! lvalue for compressedString and const& for string-based vocabulary
 AccessReturnType_t<StringType> Vocabulary<StringType, C>::at(
-    VocabIndex id) const {
-  return _internalVocabulary[static_cast<size_t>(id)];
+    VocabIndex idx) const {
+  return _internalVocabulary[static_cast<size_t>(idx)];
 }
 
 // _____________________________________________________________________________
 template <typename S, typename C>
-bool Vocabulary<S, C>::getId(const string& word, VocabIndex* id) const {
+bool Vocabulary<S, C>::getId(const string& word, VocabIndex* idx) const {
   if (!shouldBeExternalized(word)) {
     // need the TOTAL level because we want the unique word.
-    *id = lower_bound(word, SortLevel::TOTAL);
+    *idx = lower_bound(word, SortLevel::TOTAL);
     // works for the case insensitive version because
     // of the strict ordering.
-    return *id < _internalVocabulary.size() && at(*id) == word;
+    return *idx < _internalVocabulary.size() && at(*idx) == word;
   }
   auto wordAndIndex = _externalVocabulary.lower_bound(word, SortLevel::TOTAL);
-  *id = wordAndIndex._index;
-  *id += _internalVocabulary.size();
+  *idx = wordAndIndex._index;
+  *idx += _internalVocabulary.size();
   return wordAndIndex._word == word;
 }
 
@@ -249,27 +249,27 @@ std::pair<VocabIndex, VocabIndex> Vocabulary<S, C>::prefix_range(
 template <typename S, typename C>
 template <typename, typename>
 const std::optional<std::string_view> Vocabulary<S, C>::operator[](
-    VocabIndex id) const {
-  if (id < _internalVocabulary.size()) {
-    return _internalVocabulary[static_cast<size_t>(id)];
+    VocabIndex idx) const {
+  if (idx < _internalVocabulary.size()) {
+    return _internalVocabulary[static_cast<size_t>(idx)];
   } else {
     return std::nullopt;
   }
 }
 template const std::optional<std::string_view>
-TextVocabulary::operator[]<std::string, void>(VocabIndex id) const;
+TextVocabulary::operator[]<std::string, void>(VocabIndex idx) const;
 
 template <typename S, typename C>
 template <typename, typename>
 const std::optional<string> Vocabulary<S, C>::indexToOptionalString(
-    VocabIndex id) const {
-  if (id < _internalVocabulary.size()) {
-    return _internalVocabulary[static_cast<size_t>(id)];
+    VocabIndex idx) const {
+  if (idx < _internalVocabulary.size()) {
+    return _internalVocabulary[static_cast<size_t>(idx)];
   } else {
     // this word must be externalized
-    id -= _internalVocabulary.size();
-    AD_CHECK(id < _externalVocabulary.size());
-    return _externalVocabulary[id];
+    idx -= _internalVocabulary.size();
+    AD_CHECK(idx < _externalVocabulary.size());
+    return _externalVocabulary[idx];
   }
 }
 
@@ -312,7 +312,7 @@ void Vocabulary<S, C>::printRangesForDatatypes() {
 }
 
 template const std::optional<string> RdfsVocabulary::indexToOptionalString<
-    CompressedString, void>(VocabIndex id) const;
+    CompressedString, void>(VocabIndex idx) const;
 
 // Explicit template instantiations
 template class Vocabulary<CompressedString, TripleComponentComparator>;

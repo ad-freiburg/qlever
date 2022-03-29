@@ -120,24 +120,24 @@ class Vocabulary {
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
   void writeToFile(const string& fileName) const;
 
-  //! Get the word with the given id or an empty optional if the
+  //! Get the word with the given idx or an empty optional if the
   //! word is not in the vocabulary.
   //! Only enabled when uncompressed which also means no externalization
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  const std::optional<std::string_view> operator[](VocabIndex id) const;
+  const std::optional<std::string_view> operator[](VocabIndex idx) const;
 
-  //! Get the word with the given id or an empty optional if the
+  //! Get the word with the given idx or an empty optional if the
   //! word is not in the vocabulary. Returns an lvalue because compressed or
   //! externalized words don't allow references
   template <typename U = StringType, typename = enable_if_compressed<U>>
   [[nodiscard]] const std::optional<string> indexToOptionalString(
-      VocabIndex id) const;
+      VocabIndex idx) const;
 
-  //! Get the word with the given id.
+  //! Get the word with the given idx.
   //! lvalue for compressedString and const& for string-based vocabulary
-  AccessReturnType_t<StringType> at(VocabIndex id) const;
+  AccessReturnType_t<StringType> at(VocabIndex idx) const;
 
-  // AccessReturnType_t<StringType> at(VocabIndex id) const { return
+  // AccessReturnType_t<StringType> at(VocabIndex idx) const { return
   // operator[](id); }
 
   //! Get the number of words in the vocabulary.
@@ -145,7 +145,7 @@ class Vocabulary {
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
-  bool getId(const string& word, VocabIndex* id) const;
+  bool getId(const string& word, VocabIndex* idx) const;
 
   VocabIndex getValueIdForLT(const string& indexWord,
                              const SortLevel level) const {

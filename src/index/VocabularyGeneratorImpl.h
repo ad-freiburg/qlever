@@ -177,11 +177,11 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       if (top.iriOrLiteral().starts_with('@')) {
         if (!_firstLangPredSeen) {
           // inclusive
-          _langPredLowerBound = Id::make(_lastTripleComponent.value()._id);
+          _langPredLowerBound = Id::make(_lastTripleComponent.value()._index);
           _firstLangPredSeen = true;
         }
         // exclusive
-        _langPredUpperBound = Id::make(_lastTripleComponent.value()._id + 1);
+        _langPredUpperBound = Id::make(_lastTripleComponent.value()._index + 1);
       }
       _totalWritten++;
       if (_totalWritten % 100'000'000 == 0) {
@@ -191,7 +191,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
     // Write pair of local and global ID to buffer.
     writeBuf.emplace_back(
         top._partialFileId,
-        std::pair{top.id(), _lastTripleComponent.value()._id});
+        std::pair{top.id(), _lastTripleComponent.value()._index});
 
     if (writeBuf.size() >= bufSize) {
       auto task = [this, buf = std::move(writeBuf)]() {
@@ -265,8 +265,6 @@ void writeMappedIdsToExtVec(const auto& input,
       }
       mappedTriple[k] = Id::make(iterator->second);
     }
-
-    // update the Element
     writer << mappedTriple;
   }
 }

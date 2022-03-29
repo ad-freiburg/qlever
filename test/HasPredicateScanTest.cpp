@@ -12,7 +12,7 @@
 #include "../src/engine/HasPredicateScan.h"
 #include "../src/engine/SortPerformanceEstimator.h"
 
-auto V = [](const auto& id) { return Id::make(id); };
+auto I = [](const auto& id) { return Id::make(id); };
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
@@ -28,7 +28,7 @@ class DummyOperation : public Operation {
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_idTable.setCols(2);
     for (size_t i = 0; i < 10; i++) {
-      result->_idTable.push_back({V(10 - i), V(2 * i)});
+      result->_idTable.push_back({I(10 - i), I(2 * i)});
     }
   }
 
@@ -78,12 +78,12 @@ TEST(HasPredicateScan, freeS) {
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
   // The has relation relation, which is used when an entity does not have a
   // pattern
-  vector<vector<Id>> hasRelationSrc = {{},           {V(0), V(3)}, {V(0)},
-                                       {},           {},           {V(0), V(3)},
-                                       {V(3), V(4)}, {V(2), V(4)}, {V(3)}};
+  vector<vector<Id>> hasRelationSrc = {{},           {I(0), I(3)}, {I(0)},
+                                       {},           {},           {I(0), I(3)},
+                                       {I(3), I(4)}, {I(2), I(4)}, {I(3)}};
   // Maps pattern ids to patterns
-  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)},
-                                    {V(1), V(3), V(4), V(2), V(0)}};
+  vector<vector<Id>> patternsSrc = {{I(0), I(2), I(3)},
+                                    {I(1), I(3), I(4), I(2), I(0)}};
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
@@ -91,7 +91,7 @@ TEST(HasPredicateScan, freeS) {
   CompactVectorOfStrings<Id> patterns(patternsSrc);
 
   // Find all entities that are in a triple with predicate 3
-  HasPredicateScan::computeFreeS(&resultTable, V(3), hasPattern, hasRelation,
+  HasPredicateScan::computeFreeS(&resultTable, I(3), hasPattern, hasRelation,
                                  patterns);
   IdTable& result = resultTable._idTable;
 
@@ -102,13 +102,13 @@ TEST(HasPredicateScan, freeS) {
   // three entties with a pattern and four entities without one are in the
   // relation
   ASSERT_EQ(7u, result.size());
-  ASSERT_EQ(V(0u), result[0][0]);
-  ASSERT_EQ(V(1u), result[1][0]);
-  ASSERT_EQ(V(3u), result[2][0]);
-  ASSERT_EQ(V(4u), result[3][0]);
-  ASSERT_EQ(V(5u), result[4][0]);
-  ASSERT_EQ(V(6u), result[5][0]);
-  ASSERT_EQ(V(8u), result[6][0]);
+  ASSERT_EQ(I(0u), result[0][0]);
+  ASSERT_EQ(I(1u), result[1][0]);
+  ASSERT_EQ(I(3u), result[2][0]);
+  ASSERT_EQ(I(4u), result[3][0]);
+  ASSERT_EQ(I(5u), result[4][0]);
+  ASSERT_EQ(I(6u), result[5][0]);
+  ASSERT_EQ(I(8u), result[6][0]);
 }
 
 TEST(HasPredicateScan, freeO) {
@@ -120,12 +120,12 @@ TEST(HasPredicateScan, freeO) {
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
   // The has relation relation, which is used when an entity does not have a
   // pattern
-  vector<vector<Id>> hasRelationSrc = {{},           {V(0), V(3)}, {V(0)},
-                                       {},           {},           {V(0), V(3)},
-                                       {V(3), V(4)}, {V(2), V(4)}, {V(3)}};
+  vector<vector<Id>> hasRelationSrc = {{},           {I(0), I(3)}, {I(0)},
+                                       {},           {},           {I(0), I(3)},
+                                       {I(3), I(4)}, {I(2), I(4)}, {I(3)}};
   // Maps pattern ids to patterns
-  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)},
-                                    {V(1), V(3), V(4), V(2), V(0)}};
+  vector<vector<Id>> patternsSrc = {{I(0), I(2), I(3)},
+                                    {I(1), I(3), I(4), I(2), I(0)}};
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
@@ -133,26 +133,26 @@ TEST(HasPredicateScan, freeO) {
   CompactVectorOfStrings<Id> patterns(patternsSrc);
 
   // Find all predicates for entity 3 (pattern 1)
-  HasPredicateScan::computeFreeO(&resultTable, V(3), hasPattern, hasRelation,
+  HasPredicateScan::computeFreeO(&resultTable, I(3), hasPattern, hasRelation,
                                  patterns);
   IdTable& result = resultTable._idTable;
 
   ASSERT_EQ(5u, result.size());
-  ASSERT_EQ(V(1u), result[0][0]);
-  ASSERT_EQ(V(3u), result[1][0]);
-  ASSERT_EQ(V(4u), result[2][0]);
-  ASSERT_EQ(V(2u), result[3][0]);
-  ASSERT_EQ(V(0u), result[4][0]);
+  ASSERT_EQ(I(1u), result[0][0]);
+  ASSERT_EQ(I(3u), result[1][0]);
+  ASSERT_EQ(I(4u), result[2][0]);
+  ASSERT_EQ(I(2u), result[3][0]);
+  ASSERT_EQ(I(0u), result[4][0]);
 
   resultTable._idTable.clear();
 
   // Find all predicates for entity 6 (has-relation entry 6)
-  HasPredicateScan::computeFreeO(&resultTable, V(6), hasPattern, hasRelation,
+  HasPredicateScan::computeFreeO(&resultTable, I(6), hasPattern, hasRelation,
                                  patterns);
 
   ASSERT_EQ(2u, result.size());
-  ASSERT_EQ(V(3u), result[0][0]);
-  ASSERT_EQ(V(4u), result[1][0]);
+  ASSERT_EQ(I(3u), result[0][0]);
+  ASSERT_EQ(I(4u), result[1][0]);
 }
 
 TEST(HasPredicateScan, fullScan) {
@@ -164,11 +164,11 @@ TEST(HasPredicateScan, fullScan) {
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
   // The has relation relation, which is used when an entity does not have a
   // pattern
-  vector<vector<Id>> hasRelationSrc = {{}, {V(0), V(3)}, {V(0)},
-                                       {}, {},           {V(0), V(3)}};
+  vector<vector<Id>> hasRelationSrc = {{}, {I(0), I(3)}, {I(0)},
+                                       {}, {},           {I(0), I(3)}};
   // Maps pattern ids to patterns
-  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)},
-                                    {V(1), V(3), V(4), V(2), V(0)}};
+  vector<vector<Id>> patternsSrc = {{I(0), I(2), I(3)},
+                                    {I(1), I(3), I(4), I(2), I(0)}};
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
@@ -183,40 +183,40 @@ TEST(HasPredicateScan, fullScan) {
   ASSERT_EQ(16u, result.size());
 
   // check the entity ids
-  ASSERT_EQ(V(0u), result[0][0]);
-  ASSERT_EQ(V(0u), result[1][0]);
-  ASSERT_EQ(V(0u), result[2][0]);
-  ASSERT_EQ(V(1u), result[3][0]);
-  ASSERT_EQ(V(1u), result[4][0]);
-  ASSERT_EQ(V(2u), result[5][0]);
-  ASSERT_EQ(V(3u), result[6][0]);
-  ASSERT_EQ(V(3u), result[7][0]);
-  ASSERT_EQ(V(3u), result[8][0]);
-  ASSERT_EQ(V(3u), result[9][0]);
-  ASSERT_EQ(V(3u), result[10][0]);
-  ASSERT_EQ(V(4u), result[11][0]);
-  ASSERT_EQ(V(4u), result[12][0]);
-  ASSERT_EQ(V(4u), result[13][0]);
-  ASSERT_EQ(V(5u), result[14][0]);
-  ASSERT_EQ(V(5u), result[15][0]);
+  ASSERT_EQ(I(0u), result[0][0]);
+  ASSERT_EQ(I(0u), result[1][0]);
+  ASSERT_EQ(I(0u), result[2][0]);
+  ASSERT_EQ(I(1u), result[3][0]);
+  ASSERT_EQ(I(1u), result[4][0]);
+  ASSERT_EQ(I(2u), result[5][0]);
+  ASSERT_EQ(I(3u), result[6][0]);
+  ASSERT_EQ(I(3u), result[7][0]);
+  ASSERT_EQ(I(3u), result[8][0]);
+  ASSERT_EQ(I(3u), result[9][0]);
+  ASSERT_EQ(I(3u), result[10][0]);
+  ASSERT_EQ(I(4u), result[11][0]);
+  ASSERT_EQ(I(4u), result[12][0]);
+  ASSERT_EQ(I(4u), result[13][0]);
+  ASSERT_EQ(I(5u), result[14][0]);
+  ASSERT_EQ(I(5u), result[15][0]);
 
   // check the predicate ids
-  ASSERT_EQ(V(0u), result[0][1]);
-  ASSERT_EQ(V(2u), result[1][1]);
-  ASSERT_EQ(V(3u), result[2][1]);
-  ASSERT_EQ(V(0u), result[3][1]);
-  ASSERT_EQ(V(3u), result[4][1]);
-  ASSERT_EQ(V(0u), result[5][1]);
-  ASSERT_EQ(V(1u), result[6][1]);
-  ASSERT_EQ(V(3u), result[7][1]);
-  ASSERT_EQ(V(4u), result[8][1]);
-  ASSERT_EQ(V(2u), result[9][1]);
-  ASSERT_EQ(V(0u), result[10][1]);
-  ASSERT_EQ(V(0u), result[11][1]);
-  ASSERT_EQ(V(2u), result[12][1]);
-  ASSERT_EQ(V(3u), result[13][1]);
-  ASSERT_EQ(V(0u), result[14][1]);
-  ASSERT_EQ(V(3u), result[15][1]);
+  ASSERT_EQ(I(0u), result[0][1]);
+  ASSERT_EQ(I(2u), result[1][1]);
+  ASSERT_EQ(I(3u), result[2][1]);
+  ASSERT_EQ(I(0u), result[3][1]);
+  ASSERT_EQ(I(3u), result[4][1]);
+  ASSERT_EQ(I(0u), result[5][1]);
+  ASSERT_EQ(I(1u), result[6][1]);
+  ASSERT_EQ(I(3u), result[7][1]);
+  ASSERT_EQ(I(4u), result[8][1]);
+  ASSERT_EQ(I(2u), result[9][1]);
+  ASSERT_EQ(I(0u), result[10][1]);
+  ASSERT_EQ(I(0u), result[11][1]);
+  ASSERT_EQ(I(2u), result[12][1]);
+  ASSERT_EQ(I(3u), result[13][1]);
+  ASSERT_EQ(I(0u), result[14][1]);
+  ASSERT_EQ(I(3u), result[15][1]);
 }
 
 TEST(HasPredicateScan, subtreeS) {
@@ -228,12 +228,12 @@ TEST(HasPredicateScan, subtreeS) {
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
   // The has relation relation, which is used when an entity does not have a
   // pattern
-  vector<vector<Id>> hasRelationSrc = {{},           {V(0), V(3)}, {V(0)},
-                                       {},           {},           {V(0), V(3)},
-                                       {V(3), V(4)}, {V(2), V(4)}, {V(3)}};
+  vector<vector<Id>> hasRelationSrc = {{},           {I(0), I(3)}, {I(0)},
+                                       {},           {},           {I(0), I(3)},
+                                       {I(3), I(4)}, {I(2), I(4)}, {I(3)}};
   // Maps pattern ids to patterns
-  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)},
-                                    {V(1), V(3), V(4), V(2), V(0)}};
+  vector<vector<Id>> patternsSrc = {{I(0), I(2), I(3)},
+                                    {I(1), I(3), I(4), I(2), I(0)}};
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
@@ -269,47 +269,47 @@ TEST(HasPredicateScan, subtreeS) {
   // check for the first column
 
   // check for the entity ids
-  ASSERT_EQ(V(10u), result[0][0]);
-  ASSERT_EQ(V(10u), result[1][0]);
-  ASSERT_EQ(V(10u), result[2][0]);
-  ASSERT_EQ(V(9u), result[3][0]);
-  ASSERT_EQ(V(8u), result[4][0]);
-  ASSERT_EQ(V(8u), result[5][0]);
-  ASSERT_EQ(V(8u), result[6][0]);
-  ASSERT_EQ(V(7u), result[7][0]);
-  ASSERT_EQ(V(7u), result[8][0]);
-  ASSERT_EQ(V(6u), result[9][0]);
+  ASSERT_EQ(I(10u), result[0][0]);
+  ASSERT_EQ(I(10u), result[1][0]);
+  ASSERT_EQ(I(10u), result[2][0]);
+  ASSERT_EQ(I(9u), result[3][0]);
+  ASSERT_EQ(I(8u), result[4][0]);
+  ASSERT_EQ(I(8u), result[5][0]);
+  ASSERT_EQ(I(8u), result[6][0]);
+  ASSERT_EQ(I(7u), result[7][0]);
+  ASSERT_EQ(I(7u), result[8][0]);
+  ASSERT_EQ(I(6u), result[9][0]);
 
   // check for the entity ids
-  ASSERT_EQ(V(0u), result[0][1]);
-  ASSERT_EQ(V(0u), result[1][1]);
-  ASSERT_EQ(V(0u), result[2][1]);
-  ASSERT_EQ(V(2u), result[3][1]);
-  ASSERT_EQ(V(4u), result[4][1]);
-  ASSERT_EQ(V(4u), result[5][1]);
-  ASSERT_EQ(V(4u), result[6][1]);
-  ASSERT_EQ(V(6u), result[7][1]);
-  ASSERT_EQ(V(6u), result[8][1]);
-  ASSERT_EQ(V(8u), result[9][1]);
+  ASSERT_EQ(I(0u), result[0][1]);
+  ASSERT_EQ(I(0u), result[1][1]);
+  ASSERT_EQ(I(0u), result[2][1]);
+  ASSERT_EQ(I(2u), result[3][1]);
+  ASSERT_EQ(I(4u), result[4][1]);
+  ASSERT_EQ(I(4u), result[5][1]);
+  ASSERT_EQ(I(4u), result[6][1]);
+  ASSERT_EQ(I(6u), result[7][1]);
+  ASSERT_EQ(I(6u), result[8][1]);
+  ASSERT_EQ(I(8u), result[9][1]);
 
   // check for the predicate ids
-  ASSERT_EQ(V(0u), result[0][2]);
-  ASSERT_EQ(V(2u), result[1][2]);
-  ASSERT_EQ(V(3u), result[2][2]);
-  ASSERT_EQ(V(0u), result[3][2]);
-  ASSERT_EQ(V(0u), result[4][2]);
-  ASSERT_EQ(V(2u), result[5][2]);
-  ASSERT_EQ(V(3u), result[6][2]);
-  ASSERT_EQ(V(3u), result[7][2]);
-  ASSERT_EQ(V(4u), result[8][2]);
-  ASSERT_EQ(V(3u), result[9][2]);
+  ASSERT_EQ(I(0u), result[0][2]);
+  ASSERT_EQ(I(2u), result[1][2]);
+  ASSERT_EQ(I(3u), result[2][2]);
+  ASSERT_EQ(I(0u), result[3][2]);
+  ASSERT_EQ(I(0u), result[4][2]);
+  ASSERT_EQ(I(2u), result[5][2]);
+  ASSERT_EQ(I(3u), result[6][2]);
+  ASSERT_EQ(I(3u), result[7][2]);
+  ASSERT_EQ(I(4u), result[8][2]);
+  ASSERT_EQ(I(3u), result[9][2]);
 }
 
 TEST(CountAvailablePredicates, patternTrickTest) {
   // The input table containing entity ids
   IdTable input(1, allocator());
   for (uint64_t i = 0; i < 8; i++) {
-    input.push_back({V(i)});
+    input.push_back({I(i)});
   }
   // Used to store the result.
   IdTable result(2, allocator());
@@ -318,12 +318,12 @@ TEST(CountAvailablePredicates, patternTrickTest) {
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
   // The has relation relation, which is used when an entity does not have a
   // pattern
-  vector<vector<Id>> hasRelationSrc = {{},           {V(0), V(3)}, {V(0)},
-                                       {},           {},           {V(0), V(3)},
-                                       {V(3), V(4)}, {V(2), V(4)}, {V(3)}};
+  vector<vector<Id>> hasRelationSrc = {{},           {I(0), I(3)}, {I(0)},
+                                       {},           {},           {I(0), I(3)},
+                                       {I(3), I(4)}, {I(2), I(4)}, {I(3)}};
   // Maps pattern ids to patterns
-  vector<vector<Id>> patternsSrc = {{V(0), V(2), V(3)},
-                                    {V(1), V(3), V(4), V(2), V(0)}};
+  vector<vector<Id>> patternsSrc = {{I(0), I(2), I(3)},
+                                    {I(1), I(3), I(4), I(2), I(0)}};
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
@@ -346,20 +346,20 @@ TEST(CountAvailablePredicates, patternTrickTest) {
       [](const auto& i1, const auto& i2) -> bool { return i1[0] < i2[0]; });
   ASSERT_EQ(5u, result.size());
 
-  ASSERT_EQ(V(0u), result(0, 0));
-  ASSERT_EQ(V(6u), result(0, 1));
+  ASSERT_EQ(I(0u), result(0, 0));
+  ASSERT_EQ(I(6u), result(0, 1));
 
-  ASSERT_EQ(V(1u), result(1, 0));
-  ASSERT_EQ(V(1u), result(1, 1));
+  ASSERT_EQ(I(1u), result(1, 0));
+  ASSERT_EQ(I(1u), result(1, 1));
 
-  ASSERT_EQ(V(2u), result(2, 0));
-  ASSERT_EQ(V(4u), result(2, 1));
+  ASSERT_EQ(I(2u), result(2, 0));
+  ASSERT_EQ(I(4u), result(2, 1));
 
-  ASSERT_EQ(V(3u), result(3, 0));
-  ASSERT_EQ(V(6u), result(3, 1));
+  ASSERT_EQ(I(3u), result(3, 0));
+  ASSERT_EQ(I(6u), result(3, 1));
 
-  ASSERT_EQ(V(4u), result(4, 0));
-  ASSERT_EQ(V(3u), result(4, 1));
+  ASSERT_EQ(I(4u), result(4, 0));
+  ASSERT_EQ(I(3u), result(4, 1));
 
   //  ASSERT_EQ(0u, result[0][0]);
   //  ASSERT_EQ(5u, result[0][1]);
@@ -392,18 +392,18 @@ TEST(CountAvailablePredicates, patternTrickTest) {
 
   ASSERT_EQ(5u, result.size());
 
-  ASSERT_EQ(V(0u), result[0][0]);
-  ASSERT_EQ(V(6u), result[0][1]);
+  ASSERT_EQ(I(0u), result[0][0]);
+  ASSERT_EQ(I(6u), result[0][1]);
 
-  ASSERT_EQ(V(1u), result[1][0]);
-  ASSERT_EQ(V(1u), result[1][1]);
+  ASSERT_EQ(I(1u), result[1][0]);
+  ASSERT_EQ(I(1u), result[1][1]);
 
-  ASSERT_EQ(V(2u), result[2][0]);
-  ASSERT_EQ(V(4u), result[2][1]);
+  ASSERT_EQ(I(2u), result[2][0]);
+  ASSERT_EQ(I(4u), result[2][1]);
 
-  ASSERT_EQ(V(3u), result[3][0]);
-  ASSERT_EQ(V(7u), result[3][1]);
+  ASSERT_EQ(I(3u), result[3][0]);
+  ASSERT_EQ(I(7u), result[3][1]);
 
-  ASSERT_EQ(V(4u), result[4][0]);
-  ASSERT_EQ(V(3u), result[4][1]);
+  ASSERT_EQ(I(4u), result[4][0]);
+  ASSERT_EQ(I(3u), result[4][1]);
 }

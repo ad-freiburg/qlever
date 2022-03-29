@@ -18,7 +18,7 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
   return a;
 }
 
-auto V = [](const auto& id) { return Id::make(id); };
+auto I = [](const auto& id) { return Id::make(id); };
 
 TEST(IdTableTest, push_back_and_assign) {
   constexpr size_t NUM_ROWS = 30;
@@ -27,8 +27,8 @@ TEST(IdTableTest, push_back_and_assign) {
   IdTable t1{NUM_COLS, allocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
-    t1.push_back({V(i * NUM_COLS + 1), V(i * NUM_COLS + 2), V(i * NUM_COLS + 3),
-                  V(i * NUM_COLS + 4)});
+    t1.push_back({I(i * NUM_COLS + 1), I(i * NUM_COLS + 2), I(i * NUM_COLS + 3),
+                  I(i * NUM_COLS + 4)});
   }
 
   ASSERT_EQ(NUM_ROWS, t1.size());
@@ -36,30 +36,30 @@ TEST(IdTableTest, push_back_and_assign) {
   ASSERT_EQ(NUM_COLS, t1.cols());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(V(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
   }
 
   // assign new values to the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    t1(i / NUM_COLS, i % NUM_COLS) = V((NUM_ROWS * NUM_COLS) - i);
+    t1(i / NUM_COLS, i % NUM_COLS) = I((NUM_ROWS * NUM_COLS) - i);
   }
 
   // test for the new entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(V((NUM_ROWS * NUM_COLS) - i), t1(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(I((NUM_ROWS * NUM_COLS) - i), t1(i / NUM_COLS, i % NUM_COLS));
   }
 }
 
 TEST(IdTableTest, insert) {
   IdTable t1{4, allocator()};
-  t1.push_back({V(7), V(2), V(4), V(1)});
-  t1.push_back({V(0), V(22), V(1), V(4)});
+  t1.push_back({I(7), I(2), I(4), I(1)});
+  t1.push_back({I(0), I(22), I(1), I(4)});
 
   IdTable init(4, allocator());
-  init.push_back({V(1), V(0), V(6), V(3)});
-  init.push_back({V(3), V(1), V(8), V(2)});
-  init.push_back({V(0), V(6), V(8), V(5)});
-  init.push_back({V(9), V(2), V(6), V(8)});
+  init.push_back({I(1), I(0), I(6), I(3)});
+  init.push_back({I(3), I(1), I(8), I(2)});
+  init.push_back({I(0), I(6), I(8), I(5)});
+  init.push_back({I(9), I(2), I(6), I(8)});
 
   IdTable t2(init);
 
@@ -108,7 +108,7 @@ TEST(IdTableTest, reserve_and_resize) {
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.push_back();
     for (size_t j = 0; j < NUM_COLS; j++) {
-      t1(i, j) = V(i * NUM_COLS + 1 + j);
+      t1(i, j) = I(i * NUM_COLS + 1 + j);
     }
   }
 
@@ -117,7 +117,7 @@ TEST(IdTableTest, reserve_and_resize) {
   ASSERT_EQ(NUM_COLS, t1.cols());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(V(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
   }
 
   // Test a resize call instead of insertions
@@ -126,7 +126,7 @@ TEST(IdTableTest, reserve_and_resize) {
 
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    t2(i / NUM_COLS, i % NUM_COLS) = V(i + 1);
+    t2(i / NUM_COLS, i % NUM_COLS) = I(i + 1);
   }
 
   ASSERT_EQ(NUM_ROWS, t2.size());
@@ -134,7 +134,7 @@ TEST(IdTableTest, reserve_and_resize) {
   ASSERT_EQ(NUM_COLS, t2.cols());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(V(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(I(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
   }
 }
 
@@ -145,8 +145,8 @@ TEST(IdTableTest, copyAndMove) {
   IdTable t1(NUM_COLS, allocator());
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
-    t1.push_back({V(i * NUM_COLS + 1), V(i * NUM_COLS + 2), V(i * NUM_COLS + 3),
-                  V(i * NUM_COLS + 4)});
+    t1.push_back({I(i * NUM_COLS + 1), I(i * NUM_COLS + 2), I(i * NUM_COLS + 3),
+                  I(i * NUM_COLS + 4)});
   }
 
   // Test all copy and move constructors and assignment operators
@@ -174,10 +174,10 @@ TEST(IdTableTest, copyAndMove) {
 
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(V(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
-    ASSERT_EQ(V(i + 1), t3(i / NUM_COLS, i % NUM_COLS));
-    ASSERT_EQ(V(i + 1), t4(i / NUM_COLS, i % NUM_COLS));
-    ASSERT_EQ(V(i + 1), t5(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(I(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(I(i + 1), t3(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(I(i + 1), t4(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(I(i + 1), t5(i / NUM_COLS, i % NUM_COLS));
   }
 }
 
@@ -189,8 +189,8 @@ TEST(IdTableTest, erase) {
   // Fill the rows with numbers counting up from 1
   for (size_t j = 0; j < 2 * NUM_ROWS; j++) {
     size_t i = j / 2;
-    t1.push_back({V(i * NUM_COLS + 1), V(i * NUM_COLS + 2), V(i * NUM_COLS + 3),
-                  V(i * NUM_COLS + 4)});
+    t1.push_back({I(i * NUM_COLS + 1), I(i * NUM_COLS + 2), I(i * NUM_COLS + 3),
+                  I(i * NUM_COLS + 4)});
   }
   // i will underflow and then be larger than 2 * NUM_ROWS
   for (size_t i = 2 * NUM_ROWS - 1; i <= 2 * NUM_ROWS; i -= 2) {
@@ -202,7 +202,7 @@ TEST(IdTableTest, erase) {
   ASSERT_EQ(NUM_COLS, t1.cols());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(V(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
   }
 
   t1.erase(t1.begin(), t1.end());
@@ -218,7 +218,7 @@ TEST(IdTableTest, iterating) {
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.push_back();
     for (size_t j = 0; j < NUM_COLS; j++) {
-      t1(i, j) = V(i * NUM_COLS + 1 + j);
+      t1(i, j) = I(i * NUM_COLS + 1 + j);
     }
   }
 
@@ -233,7 +233,7 @@ TEST(IdTableTest, iterating) {
   size_t row_index = 0;
   for (auto row : t1) {
     for (size_t i = 0; i < NUM_COLS; i++) {
-      ASSERT_EQ(V(row_index * NUM_COLS + i + 1), row[i]);
+      ASSERT_EQ(I(row_index * NUM_COLS + i + 1), row[i]);
     }
     row_index++;
   }
@@ -241,12 +241,12 @@ TEST(IdTableTest, iterating) {
 
 TEST(IdTableTest, sortTest) {
   IdTable test(2, allocator());
-  test.push_back({V(3), V(1)});
-  test.push_back({V(8), V(9)});
-  test.push_back({V(1), V(5)});
-  test.push_back({V(0), V(4)});
-  test.push_back({V(5), V(8)});
-  test.push_back({V(6), V(2)});
+  test.push_back({I(3), I(1)});
+  test.push_back({I(8), I(9)});
+  test.push_back({I(1), I(5)});
+  test.push_back({I(0), I(4)});
+  test.push_back({I(5), I(8)});
+  test.push_back({I(6), I(2)});
 
   IdTable orig(test);
 
@@ -299,8 +299,8 @@ TEST(IdTableStaticTest, push_back_and_assign) {
   IdTableStatic<NUM_COLS> t1{allocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
-    t1.push_back({V(i * NUM_COLS + 1), V(i * NUM_COLS + 2), V(i * NUM_COLS + 3),
-                  V(i * NUM_COLS + 4)});
+    t1.push_back({I(i * NUM_COLS + 1), I(i * NUM_COLS + 2), I(i * NUM_COLS + 3),
+                  I(i * NUM_COLS + 4)});
   }
 
   ASSERT_EQ(NUM_ROWS, t1.size());
@@ -308,30 +308,30 @@ TEST(IdTableStaticTest, push_back_and_assign) {
   ASSERT_EQ(NUM_COLS, t1.cols());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(V(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
   }
 
   // assign new values to the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    t1(i / NUM_COLS, i % NUM_COLS) = V((NUM_ROWS * NUM_COLS) - i);
+    t1(i / NUM_COLS, i % NUM_COLS) = I((NUM_ROWS * NUM_COLS) - i);
   }
 
   // test for the new entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(V((NUM_ROWS * NUM_COLS) - i), t1(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(I((NUM_ROWS * NUM_COLS) - i), t1(i / NUM_COLS, i % NUM_COLS));
   }
 }
 
 TEST(IdTableStaticTest, insert) {
   IdTableStatic<4> t1{allocator()};
-  t1.push_back({V(7), V(2), V(4), V(1)});
-  t1.push_back({V(0), V(22), V(1), V(4)});
+  t1.push_back({I(7), I(2), I(4), I(1)});
+  t1.push_back({I(0), I(22), I(1), I(4)});
 
   IdTableStatic<4> init{allocator()};
-  init.push_back({V(1), V(0), V(6), V(3)});
-  init.push_back({V(3), V(1), V(8), V(2)});
-  init.push_back({V(0), V(6), V(8), V(5)});
-  init.push_back({V(9), V(2), V(6), V(8)});
+  init.push_back({I(1), I(0), I(6), I(3)});
+  init.push_back({I(3), I(1), I(8), I(2)});
+  init.push_back({I(0), I(6), I(8), I(5)});
+  init.push_back({I(9), I(2), I(6), I(8)});
 
   IdTableStatic<4> t2(init);
 
@@ -382,7 +382,7 @@ TEST(IdTableStaticTest, reserve_and_resize) {
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.push_back();
     for (size_t j = 0; j < NUM_COLS; j++) {
-      t1(i, j) = V(i * NUM_COLS + 1 + j);
+      t1(i, j) = I(i * NUM_COLS + 1 + j);
     }
   }
 
@@ -391,7 +391,7 @@ TEST(IdTableStaticTest, reserve_and_resize) {
   ASSERT_EQ(NUM_COLS, t1.cols());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(V(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
   }
 
   // Test a resize call instead of insertions
@@ -400,7 +400,7 @@ TEST(IdTableStaticTest, reserve_and_resize) {
 
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    t2(i / NUM_COLS, i % NUM_COLS) = V(i + 1);
+    t2(i / NUM_COLS, i % NUM_COLS) = I(i + 1);
   }
 
   ASSERT_EQ(NUM_ROWS, t2.size());
@@ -408,7 +408,7 @@ TEST(IdTableStaticTest, reserve_and_resize) {
   ASSERT_EQ(NUM_COLS, t2.cols());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(V(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(I(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
   }
 }
 
@@ -419,8 +419,8 @@ TEST(IdTableStaticTest, copyAndMove) {
   IdTableStatic<NUM_COLS> t1{allocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
-    t1.push_back({V(i * NUM_COLS + 1), V(i * NUM_COLS + 2), V(i * NUM_COLS + 3),
-                  V(i * NUM_COLS + 4)});
+    t1.push_back({I(i * NUM_COLS + 1), I(i * NUM_COLS + 2), I(i * NUM_COLS + 3),
+                  I(i * NUM_COLS + 4)});
   }
 
   // Test all copy and move constructors and assignment operators
@@ -448,10 +448,10 @@ TEST(IdTableStaticTest, copyAndMove) {
 
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(V(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
-    ASSERT_EQ(V(i + 1), t3(i / NUM_COLS, i % NUM_COLS));
-    ASSERT_EQ(V(i + 1), t4(i / NUM_COLS, i % NUM_COLS));
-    ASSERT_EQ(V(i + 1), t5(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(I(i + 1), t2(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(I(i + 1), t3(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(I(i + 1), t4(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(I(i + 1), t5(i / NUM_COLS, i % NUM_COLS));
   }
 }
 
@@ -463,8 +463,8 @@ TEST(IdTableStaticTest, erase) {
   // Fill the rows with numbers counting up from 1
   for (size_t j = 0; j < 2 * NUM_ROWS; j++) {
     size_t i = j / 2;
-    t1.push_back({V(i * NUM_COLS + 1), V(i * NUM_COLS + 2), V(i * NUM_COLS + 3),
-                  V(i * NUM_COLS + 4)});
+    t1.push_back({I(i * NUM_COLS + 1), I(i * NUM_COLS + 2), I(i * NUM_COLS + 3),
+                  I(i * NUM_COLS + 4)});
   }
   // i will underflow and then be larger than 2 * NUM_ROWS
   for (size_t i = 2 * NUM_ROWS - 1; i <= 2 * NUM_ROWS; i -= 2) {
@@ -476,7 +476,7 @@ TEST(IdTableStaticTest, erase) {
   ASSERT_EQ(NUM_COLS, t1.cols());
   // check the entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
-    ASSERT_EQ(V(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
+    ASSERT_EQ(I(i + 1), t1(i / NUM_COLS, i % NUM_COLS));
   }
 
   t1.erase(t1.begin(), t1.end());
@@ -492,7 +492,7 @@ TEST(IdTableStaticTest, iterating) {
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.push_back();
     for (size_t j = 0; j < NUM_COLS; j++) {
-      t1(i, j) = V(i * NUM_COLS + 1 + j);
+      t1(i, j) = I(i * NUM_COLS + 1 + j);
     }
   }
 
@@ -507,7 +507,7 @@ TEST(IdTableStaticTest, iterating) {
   size_t row_index = 0;
   for (const IdTableStatic<NUM_COLS>::row_type& row : t1) {
     for (size_t i = 0; i < NUM_COLS; i++) {
-      ASSERT_EQ(V(row_index * NUM_COLS + i + 1), row[i]);
+      ASSERT_EQ(I(row_index * NUM_COLS + i + 1), row[i]);
     }
     row_index++;
   }
@@ -518,10 +518,10 @@ TEST(IdTableStaticTest, iterating) {
 // =============================================================================
 TEST(IdTableTest, conversion) {
   IdTable table(3, allocator());
-  table.push_back({V(4), V(1), V(0)});
-  table.push_back({V(1), V(7), V(8)});
-  table.push_back({V(7), V(12), V(2)});
-  table.push_back({V(9), V(3), V(4)});
+  table.push_back({I(4), I(1), I(0)});
+  table.push_back({I(1), I(7), I(8)});
+  table.push_back({I(7), I(12), I(2)});
+  table.push_back({I(9), I(3), I(4)});
 
   IdTable initial = table;
 
@@ -555,10 +555,10 @@ TEST(IdTableTest, conversion) {
 
   // Test with more than 5 columns
   IdTable tableVar(6, allocator());
-  tableVar.push_back({V(1), V(2), V(3), V(6), V(5), V(9)});
-  tableVar.push_back({V(0), V(4), V(3), V(4), V(5), V(3)});
-  tableVar.push_back({V(3), V(2), V(3), V(2), V(5), V(6)});
-  tableVar.push_back({V(5), V(5), V(9), V(4), V(7), V(0)});
+  tableVar.push_back({I(1), I(2), I(3), I(6), I(5), I(9)});
+  tableVar.push_back({I(0), I(4), I(3), I(4), I(5), I(3)});
+  tableVar.push_back({I(3), I(2), I(3), I(2), I(5), I(6)});
+  tableVar.push_back({I(5), I(5), I(9), I(4), I(7), I(0)});
 
   IdTable initialVar = tableVar;
 

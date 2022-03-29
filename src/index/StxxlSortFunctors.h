@@ -11,33 +11,25 @@
 using std::array;
 using std::tuple;
 
-template <int A0, int A1, int A2>
+template <int i0, int i1, int i2>
 struct SortTriple {
   using T = std::array<Id, 3>;
   // comparison function
   bool operator()(const T& a, const T& b) const {
-    if (a[A0] == b[A0]) {
-      if (a[A1] == b[A1]) {
-        return a[A2] < b[A2];
+    if (a[i0] == b[i0]) {
+      if (a[i1] == b[i1]) {
+        return a[i2] < b[i2];
       }
-      return a[A1] < b[A1];
+      return a[i1] < b[i1];
     }
-    return a[A0] < b[A0];
+    return a[i0] < b[i0];
   }
 
   // min sentinel = value which is strictly smaller that any input element
-  static T min_value() {
-    auto zero = Id::make(0);
-
-    return {{zero, zero, zero}};
-  }
+  static T min_value() { return {Id::min(), Id::min(), Id::min()}; }
 
   // max sentinel = value which is strictly larger that any input element
-  static T max_value() {
-    uint64_t max = std::numeric_limits<uint64_t>::max();
-    auto maxFancy = Id::make(max);
-    return {{maxFancy, maxFancy, maxFancy}};
-  }
+  static T max_value() { return {Id::max(), Id::max(), Id::max()}; }
 };
 
 using SortByPSO = SortTriple<1, 0, 2>;
@@ -73,14 +65,12 @@ struct SortText {
 
   // min sentinel = value which is strictly smaller that any input element
   static tuple<Id, Id, Id, Score, bool> min_value() {
-    auto zero = Id::make(0);
-    return tuple<Id, Id, Id, Score, bool>{zero, zero, zero, 0, false};
+    return {Id::min(), Id::min(), Id::min(), 0, false};
   }
 
   // max sentinel = value which is strictly larger that any input element
   static tuple<Id, Id, Id, Score, bool> max_value() {
-    Id max = Id::make(std::numeric_limits<uint64_t>::max());
     Score maxScore = std::numeric_limits<Score>::max();
-    return tuple<Id, Id, Id, Score, bool>{max, max, max, maxScore, true};
+    return {Id::max(), Id::max(), Id::max(), maxScore, true};
   }
 };

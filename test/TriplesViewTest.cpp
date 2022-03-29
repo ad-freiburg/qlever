@@ -6,7 +6,7 @@
 
 #include "../src/index/TriplesView.h"
 
-auto V = [](const auto& id) { return Id::make(id); };
+auto I = [](const auto& id) { return Id::make(id); };
 
 // This struct mocks the structure of the actual `Permutation` types used in
 // QLever for testing the `TriplesView`.
@@ -15,13 +15,13 @@ struct DummyPermutation {
     result->reserve(col0Id.get());
     for (size_t i = 0; i < col0Id.get(); ++i) {
       result->push_back(
-          std::array{V((i + 1) * col0Id.get()), V((i + 2) * col0Id.get())});
+          std::array{I((i + 1) * col0Id.get()), I((i + 2) * col0Id.get())});
     }
   }
 
   struct Metadata {
     struct Data {
-      std::vector<Id> _ids{V(1), V(3), V(5), V(7), V(8), V(10), V(13)};
+      std::vector<Id> _ids{I(1), I(3), I(5), I(7), I(8), I(10), I(13)};
       using BaseIterator = std::vector<Id>::const_iterator;
       struct Iterator : BaseIterator {
         Iterator(BaseIterator b) : BaseIterator{std::move(b)} {}
@@ -41,12 +41,12 @@ auto allocator = ad_utility::AllocatorWithLimit<Id>{
     ad_utility::makeAllocationMemoryLeftThreadsafeObject(10000)};
 
 std::vector<std::array<Id, 3>> expectedResult() {
-  std::vector<Id> ids{V(1), V(3), V(5), V(7), V(8), V(10), V(13)};
+  std::vector<Id> ids{I(1), I(3), I(5), I(7), I(8), I(10), I(13)};
   std::vector<std::array<Id, 3>> result;
   for (auto idComplex : ids) {
     auto id = idComplex.get();
     for (size_t i = 0; i < id; ++i) {
-      result.push_back(std::array{V(id), V(id * (i + 1)), V(id * (i + 2))});
+      result.push_back(std::array{I(id), I(id * (i + 1)), I(id * (i + 2))});
     }
   }
   return result;
@@ -68,7 +68,7 @@ TEST(TriplesView, IgnoreRanges) {
     return t == 1 || t == 3 || t == 7 || t == 13;
   });
   std::vector<std::pair<Id, Id>> ignoredRanges{
-      {V(0), V(4)}, {V(7), V(8)}, {V(13), V(87593)}};
+      {I(0), I(4)}, {I(7), I(8)}, {I(13), I(87593)}};
   for (auto triple :
        TriplesView(DummyPermutation{}, allocator, ignoredRanges)) {
     result.push_back(triple);

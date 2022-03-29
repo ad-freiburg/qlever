@@ -27,7 +27,7 @@ bool vocabTestCompare(const IdPairMMapVecView& a,
   return true;
 }
 
-auto V = [](const auto& id) { return Id::make(id); };
+auto I = [](const auto& id) { return Id::make(id); };
 
 // Test fixture that sets up the binary files vor partial vocabulary and
 // everything else connected with vocabulary merging.
@@ -98,11 +98,11 @@ class MergeVocabularyTest : public ::testing::Test {
           partialVocab << tripleComponents.size();
           size_t localIdx = 0;
           for (auto w : tripleComponents) {
-            auto globalId = w._id;
-            w._id = localIdx;
+            auto globalId = w._index;
+            w._index = localIdx;
             partialVocab << w;
             if (mapping) {
-              mapping->emplace_back(V(localIdx), V(globalId));
+              mapping->emplace_back(I(localIdx), I(globalId));
             }
             localIdx++;
           }
@@ -167,8 +167,8 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   }
 
   // No language tags in text file
-  ASSERT_EQ(res._langPredLowerBound, V(0));
-  ASSERT_EQ(res._langPredUpperBound, V(0));
+  ASSERT_EQ(res._langPredLowerBound, I(0));
+  ASSERT_EQ(res._langPredUpperBound, I(0));
   // check that (external) vocabulary has the right form.
   ASSERT_TRUE(
       areBinaryFilesEqual(_pathVocabExp, _basePath + INTERNAL_VOCAB_SUFFIX));
@@ -209,10 +209,10 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
                         internalVocabularyAction);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
-    ASSERT_EQ(V(0), idMap[V(5)]);
-    ASSERT_EQ(V(1), idMap[V(7)]);
-    ASSERT_EQ(V(2), idMap[V(6)]);
-    ASSERT_EQ(V(3), idMap[V(8)]);
+    ASSERT_EQ(I(0), idMap[I(5)]);
+    ASSERT_EQ(I(1), idMap[I(7)]);
+    ASSERT_EQ(I(2), idMap[I(6)]);
+    ASSERT_EQ(I(3), idMap[I(8)]);
     auto res = system("rm _tmp_testidx*");
     (void)res;
   }
@@ -253,11 +253,11 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
                         internalVocabularyAction);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
-    EXPECT_EQ(V(0), idMap[V(6)]);
-    EXPECT_EQ(V(1), idMap[V(5)]);
-    EXPECT_EQ(V(2), idMap[V(9)]);
-    EXPECT_EQ(V(3), idMap[V(7)]);
-    EXPECT_EQ(V(4), idMap[V(8)]);
+    EXPECT_EQ(I(0), idMap[I(6)]);
+    EXPECT_EQ(I(1), idMap[I(5)]);
+    EXPECT_EQ(I(2), idMap[I(9)]);
+    EXPECT_EQ(I(3), idMap[I(7)]);
+    EXPECT_EQ(I(4), idMap[I(8)]);
     auto res = system("rm _tmp_testidx*");
     (void)res;
 
@@ -268,7 +268,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
 
 TEST(VocabularyGeneratorTest, createInternalMapping) {
   ItemVec input;
-  using S = IdAndSplitVal;
+  using S = LocalVocabIndexAndSplitVal;
   TripleComponentComparator::SplitVal
       d;  // dummy value that is unused in this case.
   input.emplace_back("alpha", S{5, d});

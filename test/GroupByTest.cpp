@@ -15,7 +15,7 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
   return a;
 }
 
-auto V = [](const auto& id) { return Id::make(id); };
+auto I = [](const auto& id) { return Id::make(id); };
 
 // This fixture is used to create an Index for the tests.
 // The full index creation is required for initialization of the vocabularies.
@@ -83,7 +83,7 @@ TEST_F(GroupByTest, doGroupBy) {
   // There are 7 different aggregates, of which 5 (all apart from SAMPLE and
   // COUNT) react different to the 5 different ResultTypes.
 
-  Id floatBuffers[3];
+  Id floatBuffers[3]{Id::min(), Id::min(), Id::min()};
   float floatValues[3] = {-3, 2, 1231};
   for (int i = 0; i < 3; i++) {
     std::memcpy(&floatBuffers[i].get(), &floatValues[i], sizeof(float));
@@ -109,15 +109,15 @@ TEST_F(GroupByTest, doGroupBy) {
   IdTable inputData(6, allocator());
   // The input data types are
   //                   KB, KB, VERBATIM, TEXT, FLOAT,           STRING
-  inputData.push_back({V(1), V(4), V(123), V(0), floatBuffers[0], V(0)});
-  inputData.push_back({V(1), V(5), V(0), V(1), floatBuffers[1], V(1)});
+  inputData.push_back({I(1), I(4), I(123), I(0), floatBuffers[0], I(0)});
+  inputData.push_back({I(1), I(5), I(0), I(1), floatBuffers[1], I(1)});
 
-  inputData.push_back({V(2), V(6), V(41223), V(2), floatBuffers[2], V(2)});
-  inputData.push_back({V(2), V(7), V(123), V(0), floatBuffers[0], V(0)});
-  inputData.push_back({V(2), V(7), V(123), V(0), floatBuffers[0], V(0)});
+  inputData.push_back({I(2), I(6), I(41223), I(2), floatBuffers[2], I(2)});
+  inputData.push_back({I(2), I(7), I(123), I(0), floatBuffers[0], I(0)});
+  inputData.push_back({I(2), I(7), I(123), I(0), floatBuffers[0], I(0)});
 
-  inputData.push_back({V(3), V(8), V(0), V(1), floatBuffers[1], V(1)});
-  inputData.push_back({V(3), V(9), V(41223), V(2), floatBuffers[2], V(2)});
+  inputData.push_back({I(3), I(8), I(0), I(1), floatBuffers[1], I(1)});
+  inputData.push_back({I(3), I(9), I(41223), I(2), floatBuffers[2], I(2)});
 
   std::vector<ResultTable::ResultType> inputTypes = {
       ResultTable::ResultType::KB,       ResultTable::ResultType::KB,

@@ -15,23 +15,23 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
           std::numeric_limits<size_t>::max())};
   return a;
 }
-auto V = [](const auto& id) { return Id::make(id); };
+auto I = [](const auto& id) { return Id::make(id); };
 
 TEST(EngineTest, multiColumnJoinTest) {
   using std::array;
   using std::vector;
 
   IdTable a(3, allocator());
-  a.push_back({V(4), V(1), V(2)});
-  a.push_back({V(2), V(1), V(3)});
-  a.push_back({V(1), V(1), V(4)});
-  a.push_back({V(2), V(2), V(1)});
-  a.push_back({V(1), V(3), V(1)});
+  a.push_back({I(4), I(1), I(2)});
+  a.push_back({I(2), I(1), I(3)});
+  a.push_back({I(1), I(1), I(4)});
+  a.push_back({I(2), I(2), I(1)});
+  a.push_back({I(1), I(3), I(1)});
   IdTable b(3, allocator());
-  b.push_back({V(3), V(3), V(1)});
-  b.push_back({V(1), V(8), V(1)});
-  b.push_back({V(4), V(2), V(2)});
-  b.push_back({V(1), V(1), V(3)});
+  b.push_back({I(3), I(3), I(1)});
+  b.push_back({I(1), I(8), I(1)});
+  b.push_back({I(4), I(2), I(2)});
+  b.push_back({I(1), I(1), I(3)});
   IdTable res(4, allocator());
   vector<array<ColumnIndex, 2>> jcls;
   jcls.push_back(array<ColumnIndex, 2>{{1, 2}});
@@ -47,26 +47,26 @@ TEST(EngineTest, multiColumnJoinTest) {
 
   ASSERT_EQ(2u, res.size());
 
-  ASSERT_EQ(V(2u), res[0][0]);
-  ASSERT_EQ(V(1u), res[0][1]);
-  ASSERT_EQ(V(3u), res[0][2]);
-  ASSERT_EQ(V(3u), res[0][3]);
+  ASSERT_EQ(I(2u), res[0][0]);
+  ASSERT_EQ(I(1u), res[0][1]);
+  ASSERT_EQ(I(3u), res[0][2]);
+  ASSERT_EQ(I(3u), res[0][3]);
 
-  ASSERT_EQ(V(1u), res[1][0]);
-  ASSERT_EQ(V(3u), res[1][1]);
-  ASSERT_EQ(V(1u), res[1][2]);
-  ASSERT_EQ(V(1u), res[1][3]);
+  ASSERT_EQ(I(1u), res[1][0]);
+  ASSERT_EQ(I(3u), res[1][1]);
+  ASSERT_EQ(I(1u), res[1][2]);
+  ASSERT_EQ(I(1u), res[1][3]);
 
   // Test the multi column join with variable sized data.
   IdTable va(6, allocator());
-  va.push_back({V(1), V(2), V(3), V(4), V(5), V(6)});
-  va.push_back({V(1), V(2), V(3), V(7), V(5), V(6)});
-  va.push_back({V(7), V(6), V(5), V(4), V(3), V(2)});
+  va.push_back({I(1), I(2), I(3), I(4), I(5), I(6)});
+  va.push_back({I(1), I(2), I(3), I(7), I(5), I(6)});
+  va.push_back({I(7), I(6), I(5), I(4), I(3), I(2)});
 
   IdTable vb(3, allocator());
-  vb.push_back({V(2), V(3), V(4)});
-  vb.push_back({V(2), V(3), V(5)});
-  vb.push_back({V(6), V(7), V(4)});
+  vb.push_back({I(2), I(3), I(4)});
+  vb.push_back({I(2), I(3), I(5)});
+  vb.push_back({I(6), I(7), I(4)});
 
   IdTable vres(7, allocator());
   jcls.clear();
@@ -86,10 +86,10 @@ TEST(EngineTest, multiColumnJoinTest) {
   ASSERT_EQ(7u, vres.cols());
 
   IdTable wantedRes(7, allocator());
-  wantedRes.push_back({V(1), V(2), V(3), V(4), V(5), V(6), V(4)});
-  wantedRes.push_back({V(1), V(2), V(3), V(4), V(5), V(6), V(5)});
-  wantedRes.push_back({V(1), V(2), V(3), V(7), V(5), V(6), V(4)});
-  wantedRes.push_back({V(1), V(2), V(3), V(7), V(5), V(6), V(5)});
+  wantedRes.push_back({I(1), I(2), I(3), I(4), I(5), I(6), I(4)});
+  wantedRes.push_back({I(1), I(2), I(3), I(4), I(5), I(6), I(5)});
+  wantedRes.push_back({I(1), I(2), I(3), I(7), I(5), I(6), I(4)});
+  wantedRes.push_back({I(1), I(2), I(3), I(7), I(5), I(6), I(5)});
 
   ASSERT_EQ(wantedRes[0], vres[0]);
   ASSERT_EQ(wantedRes[1], vres[1]);

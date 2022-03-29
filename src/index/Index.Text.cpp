@@ -180,7 +180,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
       }
     } else {
       ++nofWordPostings;
-      VocabIndex wid;
+      TextVocabIndex wid;
       bool ret = _textVocab.getId(line._word, &wid);
       if (!ret) {
         LOG(ERROR) << "ERROR: word \"" << line._word << "\" "
@@ -255,8 +255,8 @@ void Index::createTextIndex(const string& filename, const Index::TextVec& vec) {
   // First, there's the classic lists, then the additional entity ones.
   Id currentBlockId = Id::make(0);
   // TODO<joka921> is this numeric limit correct?
-  Id currentMinWordId = std::numeric_limits<Id>::max();
-  Id currentMaxWordId = std::numeric_limits<Id>::min();
+  Id currentMinWordId = Id::max();
+  Id currentMaxWordId = Id::min();
   vector<Posting> classicPostings;
   vector<Posting> entityPostings;
   size_t nofEntities = 0;

@@ -34,7 +34,7 @@ struct TripleComponent {
 struct TripleComponentWithId {
   std::string _iriOrLiteral;
   bool _isExternal = false;
-  uint64_t _id = 0;
+  uint64_t _index = 0;
 
   [[nodiscard]] const auto& isExternal() const { return _isExternal; }
   [[nodiscard]] auto& isExternal() { return _isExternal; }
@@ -45,7 +45,7 @@ struct TripleComponentWithId {
   friend void serialize(Serializer& serializer, TripleComponentWithId& entry) {
     serializer | entry._iriOrLiteral;
     serializer | entry._isExternal;
-    serializer | entry._id;
+    serializer | entry._index;
   }
 };
 
@@ -61,15 +61,15 @@ inline Triple makeTriple(std::array<std::string, 3>&& t) {
   return {T{t[0]}, T{t[1]}, T{t[2]}};
 }
 
-/// named value type for the ItemMap
-struct IdAndSplitVal {
+/// The index of a word and the corresponding `SplitVal`.
+struct LocalVocabIndexAndSplitVal {
   uint64_t m_id;
   TripleComponentComparator::SplitVal m_splitVal;
 };
 
-using ItemMap = ad_utility::HashMap<std::string, IdAndSplitVal>;
+using ItemMap = ad_utility::HashMap<std::string, LocalVocabIndexAndSplitVal>;
 using ItemMapArray = std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS>;
-using ItemVec = std::vector<std::pair<std::string, IdAndSplitVal>>;
+using ItemVec = std::vector<std::pair<std::string, LocalVocabIndexAndSplitVal>>;
 
 /**
  * Manage a HashMap of string->Id to create unique Ids for strings.
@@ -96,7 +96,7 @@ struct alignas(256) ItemMapManager {
     }
     const auto& key = std::get<TripleComponent>(keyOrId);
     if (!_map.count(key._iriOrLiteral)) {
-      auto res = _map.size() + _minId;
+      uint64_t res = _map.size() + _minId;
       _map[key._iriOrLiteral] = {
           res,
           m_comp->extractAndTransformComparable(

@@ -28,6 +28,10 @@ struct Id {
   bool operator==(const Id&) const = default;
   auto operator<=>(const Id&) const = default;
 
+  static constexpr Id max() { return {std::numeric_limits<Type>::max()}; }
+
+  static constexpr Id min() { return {std::numeric_limits<Type>::min()}; }
+
   template <typename H>
   friend H AbslHashValue(H h, const Id& id) {
     return H::combine(std::move(h), id.get());
@@ -48,7 +52,7 @@ struct Id {
   }
 
  private:
-  Id(Type data) noexcept : _data{data} {}
+  constexpr Id(Type data) noexcept : _data{data} {}
 };
 
 namespace std {
@@ -66,6 +70,7 @@ typedef uint16_t Score;
 // TODO<joka921> Make the following ID and index types strong.
 using ColumnIndex = uint64_t;
 using VocabIndex = uint64_t;
+using TextVocabIndex = uint64_t;
 using LocalVocabIndex = uint64_t;
 
 // Integers, that are probably not integers but strong IDs or indices, but their

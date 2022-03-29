@@ -81,8 +81,8 @@ class VocabularyMerger {
     }
     [[nodiscard]] std::string& iriOrLiteral() { return _entry.iriOrLiteral(); }
 
-    [[nodiscard]] const auto& id() const { return _entry._id; }
-    [[nodiscard]] auto& id() { return _entry._id; }
+    [[nodiscard]] const auto& id() const { return _entry._index; }
+    [[nodiscard]] auto& id() { return _entry._index; }
   };
 
   // write the queu words in the buffer to their corresponding idPairVecs.
@@ -116,8 +116,8 @@ class VocabularyMerger {
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> _idVecs;
   bool _firstLangPredSeen = false;
-  Id _langPredLowerBound = Id::make(0);
-  Id _langPredUpperBound = Id::make(0);
+  Id _langPredLowerBound = Id::min();
+  Id _langPredUpperBound = Id::min();
 
   const size_t _bufferSize = 10000000;
 

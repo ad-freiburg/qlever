@@ -315,13 +315,12 @@ struct hash<Pattern> {
 };
 }  // namespace std
 
-// TODO<joka921> reinstate
 inline std::ostream& operator<<(std::ostream& o, const Pattern& p) {
   for (size_t i = 0; i + 1 < p.size(); i++) {
-    // o << p[i] << ", ";
+    o << p[i] << ", ";
   }
   if (p.size() > 0) {
-    // o << p[p.size() - 1];
+    o << p[p.size() - 1];
   }
   return o;
 }

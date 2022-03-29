@@ -65,9 +65,6 @@ class PatternCreator {
   // The file to which the patterns will be written.
   std::string _filename;
 
-  // TODO<joka921> Make this a proper also strong type.
-  using VocabId = uint64_t;
-
   // Store the Id of a pattern, and the number of distinct subjects it occurs
   // with.
   struct PatternIdAndCount {
@@ -80,14 +77,14 @@ class PatternCreator {
   // Between the calls to `processTriple` we have to remember the current
   // subject (the subject of the last triple for which `processTriple` was
   // called).
-  std::optional<VocabId> _currentSubjectId;
-  // The pattern of `_currentSubjectId`. This might still be incomplete, because
-  // more triples with the same subject might be pushed.
+  std::optional<VocabIndex> _currentSubjectIndex;
+  // The pattern of `_currentSubjectIndex`. This might still be incomplete,
+  // because more triples with the same subject might be pushed.
   Pattern _currentPattern;
 
   // The lowest subject Id for which we have not yet finished and written the
   // pattern.
-  VocabId _nextUnassignedSubjectId = 0;
+  VocabIndex _nextUnassignedSubjectIndex = 0;
 
   // Directly serialize the mapping from subjects to patterns to disk.
   ad_utility::serialization::VectorIncrementalSerializer<
@@ -141,7 +138,7 @@ class PatternCreator {
                                    std::vector<PatternID>& subjectToPattern);
 
  private:
-  void finishSubject(const uint64_t& subjectId, const Pattern& pattern);
+  void finishSubject(VocabIndex subjectIndex, const Pattern& pattern);
   void printStatistics(PatternStatistics patternStatistics) const;
 };
 #endif  // QLEVER_PATTERNCREATOR_H
