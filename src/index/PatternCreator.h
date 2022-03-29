@@ -10,7 +10,6 @@
 #ifndef QLEVER_PATTERNCREATOR_H
 #define QLEVER_PATTERNCREATOR_H
 
-#include "../engine/datatypes/Datatypes.h"
 #include "../global/Constants.h"
 #include "../global/Id.h"
 #include "../global/Pattern.h"

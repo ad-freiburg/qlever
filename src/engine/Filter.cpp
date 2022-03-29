@@ -461,7 +461,7 @@ void Filter::computeFilterFixedValue(
               entity = getIndex().idToOptionalString(e[lhs]);
               (void)subRes;  // Silence unused warning
             } else if (T == ResultTable::ResultType::LOCAL_VOCAB) {
-              entity = subRes->idToOptionalString(e[lhs].get());
+              entity = subRes->indexToOptionalString(e[lhs].get());
             }
             if (!entity) {
               return true;
@@ -476,14 +476,15 @@ void Filter::computeFilterFixedValue(
       if constexpr (T == ResultTable::ResultType::KB) {
         // remove the leading '^' symbol
         // TODO<joka921> Is this a "columnIndex"?
-        ad_utility::HashMap<uint64_t, vector<string>> lhsRhsMap;
+        ad_utility::HashMap<UnknownIndex, vector<string>> lhsRhsMap;
         lhsRhsMap[lhs].push_back(_rhs.substr(1));
         for (size_t i = 0; i < _additionalPrefixRegexes.size(); ++i) {
           lhsRhsMap[_subtree->getVariableColumn(_additionalLhs[i])].push_back(
               _additionalPrefixRegexes[i].substr(1));
         }
         // TODO<joka921> Is this a "columnIndex"?
-        ad_utility::HashMap<uint64_t, std::vector<std::pair<VocabId, VocabId>>>
+        ad_utility::HashMap<UnknownIndex,
+                            std::vector<std::pair<VocabIndex, VocabIndex>>>
             prefixRanges;
         // TODO<joka921>: handle Levels correctly;
         for (const auto& [l, r] : lhsRhsMap) {
@@ -610,7 +611,7 @@ void Filter::computeFilterFixedValue(
             if constexpr (T == ResultTable::ResultType::KB) {
               entity = getIndex().idToOptionalString(e[lhs]);
             } else if (T == ResultTable::ResultType::LOCAL_VOCAB) {
-              entity = subRes->idToOptionalString(e[lhs].get());
+              entity = subRes->indexToOptionalString(e[lhs].get());
             }
             (void)subRes;  // Silence unused warning.
             (void)this;
@@ -704,6 +705,7 @@ void Filter::computeResultFixedValue(
       break;
     case ResultTable::ResultType::FLOAT:
       try {
+        rhs = Id::make(0);
         float f = std::stof(_rhs);
         std::memcpy(&rhs.get(), &f, sizeof(float));
       } catch (const std::logic_error& e) {

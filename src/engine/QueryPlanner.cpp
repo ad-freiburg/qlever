@@ -2025,9 +2025,9 @@ QueryPlanner::SubtreePlan QueryPlanner::minus(const SubtreePlan& a,
   // a and b need to be ordered properly first
   vector<pair<size_t, bool>> sortIndicesA;
   vector<pair<size_t, bool>> sortIndicesB;
-  for (const auto& jc : jcs) {
-    sortIndicesA.push_back(std::make_pair(jc[0], false));
-    sortIndicesB.push_back(std::make_pair(jc[1], false));
+  for (const auto& [joinColumnA, joinColumnB] : jcs) {
+    sortIndicesA.push_back(std::make_pair(joinColumnA, false));
+    sortIndicesB.push_back(std::make_pair(joinColumnB, false));
   }
 
   SubtreePlan orderByPlanA(_qec), orderByPlanB(_qec);
@@ -2081,9 +2081,9 @@ QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
   // a and b need to be ordered properly first
   vector<pair<size_t, bool>> sortIndicesA;
   vector<pair<size_t, bool>> sortIndicesB;
-  for (const auto& jc : jcs) {
-    sortIndicesA.push_back(std::make_pair(jc[0], false));
-    sortIndicesB.push_back(std::make_pair(jc[1], false));
+  for (const auto& [joinColumnA, joinColumnB] : jcs) {
+    sortIndicesA.push_back(std::make_pair(joinColumnA, false));
+    sortIndicesB.push_back(std::make_pair(joinColumnB, false));
   }
 
   SubtreePlan orderByPlanA(_qec), orderByPlanB(_qec);

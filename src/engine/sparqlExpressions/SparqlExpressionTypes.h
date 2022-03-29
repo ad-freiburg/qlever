@@ -266,7 +266,7 @@ Id constantExpressionResultToId(T&& result, LocalVocab& localVocab,
     return Id{result};
   } else if constexpr (type == qlever::ResultType::FLOAT) {
     auto tmpF = static_cast<float>(result);
-    Id id;
+    Id id = Id::make(0);
     std::memcpy(&id.get(), &tmpF, sizeof(float));
     return id;
   } else if constexpr (type == qlever::ResultType::LOCAL_VOCAB) {

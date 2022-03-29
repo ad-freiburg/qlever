@@ -59,8 +59,8 @@ class Variable {
           break;
         }
         case ResultTable::ResultType::LOCAL_VOCAB: {
-          stream
-              << res.idToOptionalString(idTable(row, index).get()).value_or("");
+          stream << res.indexToOptionalString(idTable(row, index).get())
+                        .value_or("");
           break;
         }
         default:

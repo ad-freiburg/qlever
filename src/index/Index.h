@@ -193,25 +193,25 @@ class Index {
   size_t sizeEstimate(const string& sub, const string& pred,
                       const string& obj) const;
 
-  /*
-  // TODO<joka921> can we unify the Id->string functionality in this function?
-  std::optional<string> idToOptionalString(VocabId id) const {
-    return _vocab.idToOptionalString(id);
-  }
-  */
-
+  // TODO<joka921> The following three functions have to be adapted when we
+  // have the "fancy" or "folded" Ids.
   std::optional<string> idToOptionalString(Id id) const {
     if (id == ID_NO_VALUE) {
       return std::nullopt;
     }
-    return _vocab.idToOptionalString(id.get());
+    return _vocab.indexToOptionalString(id.get());
   }
 
   bool getId(const string& element, Id* id) const {
-    VocabId vocabId;
+    VocabIndex vocabId;
     auto success = getVocab().getId(element, &vocabId);
     *id = Id::make(vocabId);
     return success;
+  }
+
+  std::pair<Id, Id> prefix_range(const std::string& prefix) const {
+    auto [begin, end] = _vocab.prefix_range(prefix);
+    return {Id::make(begin), Id::make(end)};
   }
 
   const vector<PatternID>& getHasPattern() const;
@@ -739,7 +739,7 @@ class Index {
   // predicate starts with @) and all other triples (that were actually part of
   // the input).
   std::pair<size_t, size_t> getNumTriplesActuallyAndAdded() const {
-    auto [begin, end] = _vocab.prefix_range("@");
+    auto [begin, end] = prefix_range("@");
     Id qleverLangtag;
     auto actualTriples = 0ul;
     auto addedTriples = 0ul;
@@ -749,8 +749,7 @@ class Index {
     // to the respective counter.
     for (const auto& [key, value] : PSO()._meta.data()) {
       auto numTriples = value.getNofElements();
-      if (key == qleverLangtag ||
-          (key >= Id::make(begin) && key < Id::make(end))) {
+      if (key == qleverLangtag || (begin <= key && key < end)) {
         addedTriples += numTriples;
       } else {
         actualTriples += numTriples;

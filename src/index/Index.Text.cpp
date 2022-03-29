@@ -180,7 +180,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
       }
     } else {
       ++nofWordPostings;
-      VocabId wid;
+      VocabIndex wid;
       bool ret = _textVocab.getId(line._word, &wid);
       if (!ret) {
         LOG(ERROR) << "ERROR: word \"" << line._word << "\" "

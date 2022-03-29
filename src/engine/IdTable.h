@@ -345,8 +345,7 @@ class ConstRow final {
   inline friend std::ostream& operator<<(std::ostream& out,
                                          const ConstRow&& row) {
     for (size_t col = 0; col < row.size(); col++) {
-      // TODO<joka921> Reimplement for the new Ids.
-      // out << row[col] << ", ";
+      out << row[col] << ", ";
     }
     out << std::endl;
     return out;

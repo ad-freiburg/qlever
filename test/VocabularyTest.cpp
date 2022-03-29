@@ -19,7 +19,7 @@ TEST(VocabularyTest, getIdForWordTest) {
   ad_utility::HashSet<std::string> s{"a", "ab", "ba", "car"};
   for (auto& v : vec) {
     v.createFromSet(s);
-    VocabId id;
+    VocabIndex id;
     ASSERT_TRUE(v.getId("ba", &id));
     ASSERT_EQ(2u, id);
     ASSERT_TRUE(v.getId("a", &id));
@@ -32,7 +32,7 @@ TEST(VocabularyTest, getIdForWordTest) {
   voc.setLocale("en", "US", false);
   ad_utility::HashSet<string> s2{"a", "A", "Ba", "car"};
   voc.createFromSet(s2);
-  VocabId id;
+  VocabIndex id;
   ASSERT_TRUE(voc.getId("Ba", &id));
   ASSERT_EQ(2u, id);
   ASSERT_TRUE(voc.getId("a", &id));
@@ -47,7 +47,7 @@ TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
                                 "wordB4"};
   v.createFromSet(s);
 
-  VocabId word0 = 0;
+  VocabIndex word0 = 0;
   IdRange retVal;
   // Match exactly one
   ASSERT_TRUE(v.getIdRangeForFullTextPrefix("wordA1*", &retVal));
@@ -97,7 +97,7 @@ TEST(VocabularyTest, createFromSetTest) {
   s.insert("car");
   TextVocabulary v;
   v.createFromSet(s);
-  VocabId id;
+  VocabIndex id;
   ASSERT_TRUE(v.getId("ba", &id));
   ASSERT_EQ(2u, id);
   ASSERT_TRUE(v.getId("a", &id));

@@ -458,9 +458,9 @@ void IndexScan::computeFullScan(ResultTable* result,
 
   auto literalRange = getIndex().getVocab().prefix_range("\"");
   auto taggedPredicatesRange = getIndex().getVocab().prefix_range("@");
-  VocabId languagePredicateId;
+  VocabIndex languagePredicateIndex;
   bool success =
-      getIndex().getVocab().getId(LANGUAGE_PREDICATE, &languagePredicateId);
+      getIndex().getVocab().getId(LANGUAGE_PREDICATE, &languagePredicateIndex);
   AD_CHECK(success);
 
   // TODO<joka921> lift `prefixRange` to Index and ID
@@ -472,19 +472,19 @@ void IndexScan::computeFullScan(ResultTable* result,
              ad_utility::isSimilar<Permutation::POS_T, P>) {
     ignoredRanges.push_back({Id::make(taggedPredicatesRange.first),
                              Id::make(taggedPredicatesRange.second)});
-    ignoredRanges.emplace_back(Id::make(languagePredicateId),
-                               Id::make(languagePredicateId + 1));
+    ignoredRanges.emplace_back(Id::make(languagePredicateIndex),
+                               Id::make(languagePredicateIndex + 1));
   }
 
   auto isTripleIgnored = [&](const auto& triple) {
     if constexpr (ad_utility::isSimilar<Permutation::SPO_T, P> ||
                   ad_utility::isSimilar<Permutation::OPS_T, P>) {
-      return triple[1].get() == languagePredicateId ||
+      return triple[1].get() == languagePredicateIndex ||
              (triple[1].get() >= taggedPredicatesRange.first &&
               triple[1].get() < taggedPredicatesRange.second);
     } else if constexpr (ad_utility::isSimilar<Permutation::SOP_T, P> ||
                          ad_utility::isSimilar<Permutation::OSP_T, P>) {
-      return triple[2].get() == languagePredicateId ||
+      return triple[2].get() == languagePredicateIndex ||
              (triple[2].get() >= taggedPredicatesRange.first &&
               triple[2].get() < taggedPredicatesRange.second);
     }

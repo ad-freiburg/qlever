@@ -312,7 +312,7 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
       return std::pair{std::move(s).str(), XSD_DECIMAL_TYPE};
     }
     case ResultTable::ResultType::LOCAL_VOCAB: {
-      auto optionalString = resultTable.idToOptionalString(id.get());
+      auto optionalString = resultTable.indexToOptionalString(id.get());
       if (!optionalString.has_value()) {
         return std::nullopt;
       }
@@ -432,14 +432,10 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
             break;
           }
           case ResultTable::ResultType::LOCAL_VOCAB: {
-            // TODO<joka921> Implement this and make it all correct.
-            AD_CHECK(false);
-            /*
             co_yield resultTable
-                ->idToOptionalString(idTable(i, val._columnIndex))
+                ->indexToOptionalString(idTable(i, val._columnIndex).get())
                 .value_or("");
             break;
-             */
           }
           default:
             AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,

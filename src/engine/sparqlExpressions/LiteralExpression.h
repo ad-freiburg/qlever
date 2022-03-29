@@ -26,15 +26,14 @@ class LiteralExpression : public SparqlExpression {
   ExpressionResult evaluate(
       [[maybe_unused]] EvaluationContext* context) const override {
     if constexpr (std::is_same_v<string, T>) {
-      VocabId id;
-      bool idWasFound = context->_qec.getIndex().getVocab().getId(_value, &id);
+      Id id;
+      bool idWasFound = context->_qec.getIndex().getId(_value, &id);
       if (!idWasFound) {
         // no vocabulary entry found, just use it as a string constant.
         // TODO<joka921>:: emit a warning.
         return _value;
       }
-      return StrongIdWithResultType{{Id::make(id)},
-                                    ResultTable::ResultType::KB};
+      return StrongIdWithResultType{id, ResultTable::ResultType::KB};
     } else {
       return _value;
     }

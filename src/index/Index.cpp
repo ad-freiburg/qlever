@@ -430,14 +430,14 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
     // update the triples for which this partial vocabulary was responsible
     for (size_t tmpNum = 0; tmpNum < actualLinesPerPartial[partialNum];
          ++tmpNum) {
-      auto curTriple = *reader;
+      std::array<Id, 3> curTriple = *reader;
       ++reader;
 
       // For all triple elements find their mapping from partial to global ids.
       for (size_t k = 0; k < 3; ++k) {
         auto iterator = idMap.find(curTriple[k]);
         if (iterator == idMap.end()) {
-          LOG(INFO) << "Not found in partial vocabulary: " << curTriple[k].get()
+          LOG(INFO) << "Not found in partial vocabulary: " << curTriple[k]
                     << std::endl;
           AD_CHECK(false);
         }
@@ -481,14 +481,13 @@ Index::createPermutationPairImpl(const string& fileName1,
   // and POS, this is a predicate (of which "relation" is a synonym).
   LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
   size_t from = 0;
-  using IdType = Id;
-  std::optional<IdType> currentRel;
+  std::optional<Id> currentRel;
   ad_utility::BufferedVector<array<Id, 2>> buffer(
       THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.mmap-buffer");
   bool functional = true;
   size_t distinctCol1 = 0;
   size_t sizeOfRelation = 0;
-  IdType lastLhs = ID_NO_VALUE;
+  Id lastLhs = ID_NO_VALUE;
   uint64_t totalNumTriples = 0;
   for (auto triple : sortedTriples) {
     if (!currentRel.has_value()) {
@@ -645,15 +644,13 @@ void Index::addPatternsToExistingIndex() {
   // We only iterate over the SPO permutation which typically only has few
   // triples per subject, so it should be safe to not apply a memory limit here.
   AD_CHECK(false);
-  // TODO<joka921> Reinstate this, as soon as we have fancy IDs everywhere.
-  /*
   ad_utility::AllocatorWithLimit<Id> allocator{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
           std::numeric_limits<uint64_t>::max())};
   auto iterator = TriplesView(_SPO, allocator);
   createPatternsFromSpoTriplesView(iterator, _onDiskBase + ".index.patterns",
-                                   langPredLowerBound, langPredUpperBound);
-                                   */
+                                   Id::make(langPredLowerBound),
+                                   Id::make(langPredUpperBound));
 }
 
 // _____________________________________________________________________________

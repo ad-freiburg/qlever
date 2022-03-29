@@ -8,15 +8,20 @@
 #include <cstdint>
 #include <limits>
 
-#include "../engine/datatypes/Datatypes.h"
 #include "../util/Exception.h"
 
+// A strong Id type that internally stores a `uint64_t` but can only be
+// explicitly converted to and from the underlying `uint64_t`
 struct Id {
-  using T = uint64_t;
+  using Type = uint64_t;
 
-  static Id make(T id) noexcept { return {id}; }
-  const T& get() const noexcept { return _data; }
-  T& get() noexcept { return _data; }
+ private:
+  Type _data;
+
+ public:
+  static Id make(Type id) noexcept { return {id}; }
+  [[nodiscard]] const Type& get() const noexcept { return _data; }
+  Type& get() noexcept { return _data; }
 
   Id() = default;
 
@@ -33,16 +38,17 @@ struct Id {
     serializer | id._data;
   }
 
-  // TODO<joka921> This is just a dummy to make things compile, should
-  // we make a proper human-readable output of it?
+  // This is not only used in debug code, but also for the direct output
+  // of `VERBATIM` (integer) columns. TODO<joka921> as soon as we have the
+  // folded IDs, this should only be used for debugging with a clearer output
+  // like "ID:0".
   friend std::ostream& operator<<(std::ostream& ostr, const Id& id) {
     ostr << id.get();
     return ostr;
   }
 
  private:
-  Id(T data) noexcept : _data{data} {}
-  T _data;
+  Id(Type data) noexcept : _data{data} {}
 };
 
 namespace std {
@@ -59,7 +65,12 @@ typedef uint16_t Score;
 
 // TODO<joka921> Make the following ID and index types strong.
 using ColumnIndex = uint64_t;
-using VocabId = uint64_t;
+using VocabIndex = uint64_t;
+using LocalVocabIndex = uint64_t;
+
+// Integers, that are probably not integers but strong IDs or indices, but their
+// true nature is still to be discovered.
+using UnknownIndex = uint64_t;
 
 // A value to use when the result should be empty (e.g. due to an optional join)
 // The highest two values are used as sentinels.
