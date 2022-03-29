@@ -42,7 +42,7 @@ class Filter : public Operation {
   virtual size_t getSizeEstimate() override {
     if (_type == SparqlFilter::FilterType::REGEX) {
       // TODO(jbuerklin): return a better estimate
-      return std::numeric_limits<Id>::max();
+      return std::numeric_limits<size_t>::max();
     }
     // TODO(schnelle): return a better estimate
     if (_rhs[0] == '?') {
@@ -80,7 +80,7 @@ class Filter : public Operation {
 
   virtual size_t getCostEstimate() override {
     if (_type == SparqlFilter::FilterType::REGEX) {
-      return std::numeric_limits<Id>::max();
+      return std::numeric_limits<size_t>::max();
     }
     if (isLhsSorted()) {
       // we can apply the very cheap binary sort filter
@@ -174,13 +174,13 @@ class Filter : public Operation {
    */
   template <ResultTable::ResultType T>
   struct ValueReader {
-    static Id get(size_t in) { return in; }
+    static Id get(Id in) { return in; }
   };
 };
 
 template <>
 struct Filter::ValueReader<ResultTable::ResultType::FLOAT> {
-  static float get(size_t in) {
+  static float get(Id in) {
     float f;
     std::memcpy(&f, &in, sizeof(float));
     return f;

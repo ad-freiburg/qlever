@@ -43,9 +43,9 @@ cppcoro::generator<std::array<Id, 3>> TriplesView(
   std::vector<std::pair<Iterator, Iterator>> allowedRanges;
 
   // Add sentinels.
-  ignoredRanges.insert(ignoredRanges.begin(), {0, 0});
-  ignoredRanges.insert(ignoredRanges.end(), {std::numeric_limits<Id>::max(),
-                                             std::numeric_limits<Id>::max()});
+  // TODO<joka921> implement Index::prefixRange with all the logic.
+  ignoredRanges.insert(ignoredRanges.begin(), {Id::min(), Id::min()});
+  ignoredRanges.insert(ignoredRanges.end(), {Id::max(), Id::max()});
   auto orderedBegin = metaData.ordered_begin();
   auto orderedEnd = metaData.ordered_end();
 
@@ -77,7 +77,7 @@ cppcoro::generator<std::array<Id, 3>> TriplesView(
   for (auto& [begin, end] : allowedRanges) {
     for (auto it = begin; it != end; ++it) {
       col2And3.clear();
-      uint64_t id = it.getId();
+      Id id = it.getId();
       // TODO<joka921> We could also pass a timeout pointer here.
       permutation.scan(id, &col2And3);
       for (const auto& [col2, col3] : col2And3) {

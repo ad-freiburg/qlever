@@ -193,8 +193,25 @@ class Index {
   size_t sizeEstimate(const string& sub, const string& pred,
                       const string& obj) const;
 
+  // TODO<joka921> The following three functions have to be adapted when we
+  // have the "fancy" or "folded" Ids.
   std::optional<string> idToOptionalString(Id id) const {
-    return _vocab.idToOptionalString(id);
+    if (id == ID_NO_VALUE) {
+      return std::nullopt;
+    }
+    return _vocab.indexToOptionalString(id.get());
+  }
+
+  bool getId(const string& element, Id* id) const {
+    VocabIndex vocabId;
+    auto success = getVocab().getId(element, &vocabId);
+    *id = Id::make(vocabId);
+    return success;
+  }
+
+  std::pair<Id, Id> prefix_range(const std::string& prefix) const {
+    auto [begin, end] = _vocab.prefix_range(prefix);
+    return {Id::make(begin), Id::make(end)};
   }
 
   const vector<PatternID>& getHasPattern() const;
@@ -277,7 +294,7 @@ class Index {
     if (cid == ID_NO_VALUE) {
       return std::string();
     } else {
-      return _docsDB.getTextExcerpt(cid);
+      return _docsDB.getTextExcerpt(cid.get());
     }
   }
 
@@ -357,7 +374,7 @@ class Index {
                                   const PermutationImpl& p) const {
     Id keyId;
     vector<float> res;
-    if (_vocab.getId(key, &keyId) && p._meta.col0IdExists(keyId)) {
+    if (getId(key, &keyId) && p._meta.col0IdExists(keyId)) {
       auto metaData = p._meta.getMetaData(keyId);
       res.push_back(metaData.getCol1Multiplicity());
       res.push_back(metaData.getCol2Multiplicity());
@@ -411,7 +428,7 @@ class Index {
     LOG(DEBUG) << "Performing " << p._readableName
                << " scan for full list for: " << key << "\n";
     Id relId;
-    if (_vocab.getId(key, &relId)) {
+    if (getId(key, &relId)) {
       LOG(TRACE) << "Successfully got key ID.\n";
       scan(relId, result, p, std::move(timer));
     }
@@ -439,8 +456,7 @@ class Index {
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
     Id col0Id;
     Id col1Id;
-    if (!_vocab.getId(col0String, &col0Id) ||
-        !_vocab.getId(col1String, &col1Id)) {
+    if (!getId(col0String, &col0Id) || !getId(col1String, &col1Id)) {
       LOG(DEBUG) << "Key " << col0String << " or key " << col1String
                  << " were not found in the vocabulary \n";
       return;
@@ -723,17 +739,17 @@ class Index {
   // predicate starts with @) and all other triples (that were actually part of
   // the input).
   std::pair<size_t, size_t> getNumTriplesActuallyAndAdded() const {
-    auto [begin, end] = _vocab.prefix_range("@");
+    auto [begin, end] = prefix_range("@");
     Id qleverLangtag;
     auto actualTriples = 0ul;
     auto addedTriples = 0ul;
-    bool foundQleverLangtag = _vocab.getId(LANGUAGE_PREDICATE, &qleverLangtag);
+    bool foundQleverLangtag = getId(LANGUAGE_PREDICATE, &qleverLangtag);
     AD_CHECK(foundQleverLangtag);
     // Use the PSO index to get the number of triples for each predicate and add
     // to the respective counter.
     for (const auto& [key, value] : PSO()._meta.data()) {
       auto numTriples = value.getNofElements();
-      if (key == qleverLangtag || (key >= begin && key < end)) {
+      if (key == qleverLangtag || (begin <= key && key < end)) {
         addedTriples += numTriples;
       } else {
         actualTriples += numTriples;

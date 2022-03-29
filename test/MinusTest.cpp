@@ -15,33 +15,34 @@ auto table(size_t cols) {
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1'000'000)};
   return IdTable(cols, std::move(alloc));
 }
+auto I = [](const auto& id) { return Id::make(id); };
 
 TEST(EngineTest, minusTest) {
   using std::array;
   using std::vector;
 
   IdTable a = table(3);
-  a.push_back({1, 2, 1});
-  a.push_back({2, 1, 4});
-  a.push_back({5, 4, 1});
-  a.push_back({8, 1, 2});
-  a.push_back({8, 2, 3});
+  a.push_back({I(1), I(2), I(1)});
+  a.push_back({I(2), I(1), I(4)});
+  a.push_back({I(5), I(4), I(1)});
+  a.push_back({I(8), I(1), I(2)});
+  a.push_back({I(8), I(2), I(3)});
 
   IdTable b = table(4);
-  b.push_back({1, 2, 7, 5});
-  b.push_back({3, 3, 1, 5});
-  b.push_back({1, 8, 1, 5});
+  b.push_back({I(1), I(2), I(7), I(5)});
+  b.push_back({I(3), I(3), I(1), I(5)});
+  b.push_back({I(1), I(8), I(1), I(5)});
 
   IdTable res = table(3);
 
-  vector<array<Id, 2>> jcls;
-  jcls.push_back(array<Id, 2>{{0, 1}});
-  jcls.push_back(array<Id, 2>{{1, 0}});
+  vector<array<ColumnIndex, 2>> jcls;
+  jcls.push_back(array<ColumnIndex, 2>{{0, 1}});
+  jcls.push_back(array<ColumnIndex, 2>{{1, 0}});
 
   IdTable wantedRes = table(3);
-  wantedRes.push_back({1, 2, 1});
-  wantedRes.push_back({5, 4, 1});
-  wantedRes.push_back({8, 2, 3});
+  wantedRes.push_back({I(1), I(2), I(1)});
+  wantedRes.push_back({I(5), I(4), I(1)});
+  wantedRes.push_back({I(8), I(2), I(3)});
 
   // Subtract b from a on the column pairs 1,2 and 2,1 (entries from columns 1
   // of a have to equal those of column 2 of b and vice versa).
@@ -67,14 +68,14 @@ TEST(EngineTest, minusTest) {
 
   // Test minus with variable sized data.
   IdTable va = table(6);
-  va.push_back({1, 2, 3, 4, 5, 6});
-  va.push_back({1, 2, 3, 7, 5, 6});
-  va.push_back({7, 6, 5, 4, 3, 2});
+  va.push_back({I(1), I(2), I(3), I(4), I(5), I(6)});
+  va.push_back({I(1), I(2), I(3), I(7), I(5), I(6)});
+  va.push_back({I(7), I(6), I(5), I(4), I(3), I(2)});
 
   IdTable vb = table(3);
-  vb.push_back({2, 3, 4});
-  vb.push_back({2, 3, 5});
-  vb.push_back({6, 7, 4});
+  vb.push_back({I(2), I(3), I(4)});
+  vb.push_back({I(2), I(3), I(5)});
+  vb.push_back({I(6), I(7), I(4)});
 
   IdTable vres = table(6);
   jcls.clear();
@@ -88,7 +89,7 @@ TEST(EngineTest, minusTest) {
   CALL_FIXED_SIZE_2(aWidth, bWidth, m.computeMinus, va, vb, jcls, &vres);
 
   wantedRes = table(6);
-  wantedRes.push_back({7, 6, 5, 4, 3, 2});
+  wantedRes.push_back({I(7), I(6), I(5), I(4), I(3), I(2)});
   ASSERT_EQ(wantedRes.size(), vres.size());
   ASSERT_EQ(wantedRes.cols(), vres.cols());
 

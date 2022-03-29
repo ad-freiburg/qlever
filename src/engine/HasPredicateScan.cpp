@@ -216,7 +216,7 @@ void HasPredicateScan::computeResult(ResultTable* result) {
     case ScanType::FREE_S: {
       runtimeInfo.setDescriptor("HasPredicateScan free subject: " + _subject);
       Id objectId;
-      if (!getIndex().getVocab().getId(_object, &objectId)) {
+      if (!getIndex().getId(_object, &objectId)) {
         AD_THROW(ad_semsearch::Exception::BAD_INPUT,
                  "The predicate '" + _object + "' is not in the vocabulary.");
       }
@@ -226,7 +226,7 @@ void HasPredicateScan::computeResult(ResultTable* result) {
     case ScanType::FREE_O: {
       runtimeInfo.setDescriptor("HasPredicateScan free object: " + _object);
       Id subjectId;
-      if (!getIndex().getVocab().getId(_subject, &subjectId)) {
+      if (!getIndex().getId(_subject, &subjectId)) {
         AD_THROW(ad_semsearch::Exception::BAD_INPUT,
                  "The subject " + _subject + " is not in the vocabulary.");
       }
@@ -261,52 +261,55 @@ void HasPredicateScan::computeResult(ResultTable* result) {
 }
 
 void HasPredicateScan::computeFreeS(
-    ResultTable* resultTable, size_t objectId,
+    ResultTable* resultTable, Id objectId,
     const std::vector<PatternID>& hasPattern,
     const CompactVectorOfStrings<Id>& hasPredicate,
     const CompactVectorOfStrings<Id>& patterns) {
   IdTableStatic<1> result = resultTable->_idTable.moveToStatic<1>();
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
-  Id id = 0;
-  while (id < hasPattern.size() || id < hasPredicate.size()) {
-    if (id < hasPattern.size() && hasPattern[id] != NO_PATTERN) {
+  uint64_t entityIndex = 0;
+  while (entityIndex < hasPattern.size() || entityIndex < hasPredicate.size()) {
+    if (entityIndex < hasPattern.size() &&
+        hasPattern[entityIndex] != NO_PATTERN) {
       // add the pattern
-      const auto& pattern = patterns[hasPattern[id]];
+      const auto& pattern = patterns[hasPattern[entityIndex]];
       for (const auto& predicate : pattern) {
         if (predicate == objectId) {
-          result.push_back({id});
+          result.push_back({Id::make(entityIndex)});
         }
       }
-    } else if (id < hasPredicate.size()) {
+    } else if (entityIndex < hasPredicate.size()) {
       // add the relations
-      for (const auto& predicate : hasPredicate[id]) {
+      for (const auto& predicate : hasPredicate[entityIndex]) {
         if (predicate == objectId) {
-          result.push_back({id});
+          result.push_back({Id::make(entityIndex)});
         }
       }
     }
-    id++;
+    entityIndex++;
   }
   resultTable->_idTable = result.moveToDynamic();
 }
 
 void HasPredicateScan::computeFreeO(
-    ResultTable* resultTable, size_t subjectId,
+    ResultTable* resultTable, Id subjectAsId,
     const std::vector<PatternID>& hasPattern,
     const CompactVectorOfStrings<Id>& hasPredicate,
     const CompactVectorOfStrings<Id>& patterns) {
   IdTableStatic<1> result = resultTable->_idTable.moveToStatic<1>();
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
 
-  if (subjectId < hasPattern.size() && hasPattern[subjectId] != NO_PATTERN) {
+  auto subjectIndex = subjectAsId.get();
+  if (subjectIndex < hasPattern.size() &&
+      hasPattern[subjectIndex] != NO_PATTERN) {
     // add the pattern
-    const auto& pattern = patterns[hasPattern[subjectId]];
+    const auto& pattern = patterns[hasPattern[subjectIndex]];
     for (const auto& predicate : pattern) {
       result.push_back({predicate});
     }
-  } else if (subjectId < hasPredicate.size()) {
+  } else if (subjectIndex < hasPredicate.size()) {
     // add the relations
-    for (const auto& predicate : hasPredicate[subjectId]) {
+    for (const auto& predicate : hasPredicate[subjectIndex]) {
       result.push_back({predicate});
     }
   }
@@ -322,20 +325,22 @@ void HasPredicateScan::computeFullScan(
   IdTableStatic<2> result = resultTable->_idTable.moveToStatic<2>();
   result.reserve(resultSize);
 
-  size_t id = 0;
-  while (id < hasPattern.size() || id < hasPredicate.size()) {
-    if (id < hasPattern.size() && hasPattern[id] != NO_PATTERN) {
+  uint64_t subjectIndex = 0;
+  while (subjectIndex < hasPattern.size() ||
+         subjectIndex < hasPredicate.size()) {
+    if (subjectIndex < hasPattern.size() &&
+        hasPattern[subjectIndex] != NO_PATTERN) {
       // add the pattern
-      for (const auto& predicate : patterns[hasPattern[id]]) {
-        result.push_back({id, predicate});
+      for (const auto& predicate : patterns[hasPattern[subjectIndex]]) {
+        result.push_back({Id::make(subjectIndex), predicate});
       }
-    } else if (id < hasPredicate.size()) {
+    } else if (subjectIndex < hasPredicate.size()) {
       // add the relations
-      for (const auto& predicate : hasPredicate[id]) {
-        result.push_back({id, predicate});
+      for (const auto& predicate : hasPredicate[subjectIndex]) {
+        result.push_back({Id::make(subjectIndex), predicate});
       }
     }
-    id++;
+    subjectIndex++;
   }
   resultTable->_idTable = result.moveToDynamic();
 }
@@ -352,10 +357,12 @@ void HasPredicateScan::computeSubqueryS(
   LOG(DEBUG) << "HasPredicateScan subresult size " << input.size() << std::endl;
 
   for (size_t i = 0; i < input.size(); i++) {
-    size_t id = input(i, subtreeColIndex);
-    if (id < hasPattern.size() && hasPattern[id] != NO_PATTERN) {
+    Id idAsId = input(i, subtreeColIndex);
+    auto subjectIndex = idAsId.get();
+    if (subjectIndex < hasPattern.size() &&
+        hasPattern[subjectIndex] != NO_PATTERN) {
       // Expand the pattern and add it to the result
-      for (const auto& predicate : patterns[hasPattern[id]]) {
+      for (const auto& predicate : patterns[hasPattern[subjectIndex]]) {
         result.push_back();
         size_t backIdx = result.size() - 1;
         for (size_t k = 0; k < input.cols(); k++) {
@@ -363,9 +370,9 @@ void HasPredicateScan::computeSubqueryS(
         }
         result(backIdx, input.cols()) = predicate;
       }
-    } else if (id < hasPredicate.size()) {
+    } else if (subjectIndex < hasPredicate.size()) {
       // add the relations
-      for (const auto& predicate : hasPredicate[id]) {
+      for (const auto& predicate : hasPredicate[subjectIndex]) {
         result.push_back();
         size_t backIdx = result.size() - 1;
         for (size_t k = 0; k < input.cols(); k++) {

@@ -194,8 +194,8 @@ void Values::writeValues(IdTable* res, const Index& index,
   size_t numSkipped = 0;
   for (const auto& row : values._values) {
     for (size_t colIdx = 0; colIdx < result.cols(); colIdx++) {
-      size_t id;
-      if (!index.getVocab().getId(row[colIdx], &id)) {
+      Id id;
+      if (!index.getId(row[colIdx], &id)) {
         getWarnings().push_back("The word " + row[colIdx] +
                                 " is not part of the vocabulary.");
         numSkipped++;

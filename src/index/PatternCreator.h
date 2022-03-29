@@ -77,14 +77,14 @@ class PatternCreator {
   // Between the calls to `processTriple` we have to remember the current
   // subject (the subject of the last triple for which `processTriple` was
   // called).
-  std::optional<Id> _currentSubjectId;
-  // The pattern of `_currentSubjectId`. This might still be incomplete, because
-  // more triples with the same subject might be pushed.
+  std::optional<VocabIndex> _currentSubjectIndex;
+  // The pattern of `_currentSubjectIndex`. This might still be incomplete,
+  // because more triples with the same subject might be pushed.
   Pattern _currentPattern;
 
   // The lowest subject Id for which we have not yet finished and written the
   // pattern.
-  Id _nextUnassignedSubjectId = 0;
+  VocabIndex _nextUnassignedSubjectIndex = 0;
 
   // Directly serialize the mapping from subjects to patterns to disk.
   ad_utility::serialization::VectorIncrementalSerializer<
@@ -93,7 +93,7 @@ class PatternCreator {
 
   // The predicates which have already occured in one of the patterns. Needed to
   // count the number of distinct predicates.
-  ad_utility::HashSet<uint64_t> _distinctPredicates;
+  ad_utility::HashSet<Pattern::value_type> _distinctPredicates;
 
   // The number of distinct subjects and distinct subject-predicate pairs.
   uint64_t _numDistinctSubjects = 0;
@@ -138,7 +138,7 @@ class PatternCreator {
                                    std::vector<PatternID>& subjectToPattern);
 
  private:
-  void finishSubject(const Id& subjectId, const Pattern& pattern);
+  void finishSubject(VocabIndex subjectIndex, const Pattern& pattern);
   void printStatistics(PatternStatistics patternStatistics) const;
 };
 #endif  // QLEVER_PATTERNCREATOR_H

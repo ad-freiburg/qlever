@@ -6,19 +6,22 @@
 
 #include "../src/index/TriplesView.h"
 
+auto I = [](const auto& id) { return Id::make(id); };
+
 // This struct mocks the structure of the actual `Permutation` types used in
 // QLever for testing the `TriplesView`.
 struct DummyPermutation {
   void scan(Id col0Id, auto* result) const {
-    result->reserve(col0Id);
-    for (size_t i = 0; i < col0Id; ++i) {
-      result->push_back(std::array{(i + 1) * col0Id, (i + 2) * col0Id});
+    result->reserve(col0Id.get());
+    for (size_t i = 0; i < col0Id.get(); ++i) {
+      result->push_back(
+          std::array{I((i + 1) * col0Id.get()), I((i + 2) * col0Id.get())});
     }
   }
 
   struct Metadata {
     struct Data {
-      std::vector<Id> _ids{1, 3, 5, 7, 8, 10, 13};
+      std::vector<Id> _ids{I(1), I(3), I(5), I(7), I(8), I(10), I(13)};
       using BaseIterator = std::vector<Id>::const_iterator;
       struct Iterator : BaseIterator {
         Iterator(BaseIterator b) : BaseIterator{std::move(b)} {}
@@ -38,11 +41,12 @@ auto allocator = ad_utility::AllocatorWithLimit<Id>{
     ad_utility::makeAllocationMemoryLeftThreadsafeObject(10000)};
 
 std::vector<std::array<Id, 3>> expectedResult() {
-  std::vector<Id> ids{1, 3, 5, 7, 8, 10, 13};
+  std::vector<Id> ids{I(1), I(3), I(5), I(7), I(8), I(10), I(13)};
   std::vector<std::array<Id, 3>> result;
-  for (auto id : ids) {
+  for (auto idComplex : ids) {
+    auto id = idComplex.get();
     for (size_t i = 0; i < id; ++i) {
-      result.push_back(std::array{id, id * (i + 1), id * (i + 2)});
+      result.push_back(std::array{I(id), I(id * (i + 1)), I(id * (i + 2))});
     }
   }
   return result;
@@ -60,10 +64,11 @@ TEST(TriplesView, IgnoreRanges) {
   std::vector<std::array<Id, 3>> result;
   auto expected = expectedResult();
   std::erase_if(expected, [](const auto& triple) {
-    auto t = triple[0];
+    auto t = triple[0].get();
     return t == 1 || t == 3 || t == 7 || t == 13;
   });
-  std::vector<std::pair<Id, Id>> ignoredRanges{{0, 4}, {7, 8}, {13, 87593}};
+  std::vector<std::pair<Id, Id>> ignoredRanges{
+      {I(0), I(4)}, {I(7), I(8)}, {I(13), I(87593)}};
   for (auto triple :
        TriplesView(DummyPermutation{}, allocator, ignoredRanges)) {
     result.push_back(triple);
@@ -74,7 +79,9 @@ TEST(TriplesView, IgnoreRanges) {
 TEST(TriplesView, IgnoreTriples) {
   std::vector<std::array<Id, 3>> result;
   auto expected = expectedResult();
-  auto isTripleIgnored = [](const auto& triple) { return triple[1] % 2 == 0; };
+  auto isTripleIgnored = [](const auto& triple) {
+    return triple[1].get() % 2 == 0;
+  };
   std::erase_if(expected, isTripleIgnored);
   for (auto triple :
        TriplesView(DummyPermutation{}, allocator, {}, isTripleIgnored)) {

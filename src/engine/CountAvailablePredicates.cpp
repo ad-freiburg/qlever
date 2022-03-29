@@ -149,11 +149,13 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
       _executionContext->getIndex().getPatterns();
 
   if (_subjectEntityName) {
-    size_t entityId;
+    Id entityId;
     // If the entity exists return the all predicates for that entitity,
     // otherwise return an empty result.
-    if (getIndex().getVocab().getId(_subjectEntityName.value(), &entityId)) {
+    if (getIndex().getId(_subjectEntityName.value(), &entityId)) {
       IdTable input(1, _executionContext->getAllocator());
+      // TODO<joka921> What does this push back do? Is it wrong? or right? or
+      // will it be overwritten anyway?
       input.push_back({entityId});
       int width = input.cols();
       CALL_FIXED_SIZE_1(width, CountAvailablePredicates::computePatternTrick,
@@ -215,7 +217,7 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   }
   result.reserve(predicateCounts.size());
   for (const auto& it : predicateCounts) {
-    result.push_back({it.first, static_cast<Id>(it.second)});
+    result.push_back({it.first, Id::make(it.second)});
   }
   *dynResult = result.moveToDynamic();
 }
@@ -276,10 +278,11 @@ void CountAvailablePredicates::computePatternTrick(
                                        reduction(+ : numEntitiesWithPatterns) reduction(+: numPatternPredicates) reduction(+: numListPredicates) shared(input, subjectColumn, hasPattern, hasPredicate)
     for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
       // Skip over elements with the same subject (don't count them twice)
-      Id subject = input(inputIdx, subjectColumn);
-      if (inputIdx > 0 && subject == input(inputIdx - 1, subjectColumn)) {
+      Id subjectId = input(inputIdx, subjectColumn);
+      if (inputIdx > 0 && subjectId == input(inputIdx - 1, subjectColumn)) {
         continue;
       }
+      auto subject = subjectId.get();
 
       if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
         // The subject matches a pattern
@@ -341,7 +344,7 @@ void CountAvailablePredicates::computePatternTrick(
   // write the predicate counts to the result
   result.reserve(predicateCounts.size());
   for (const auto& it : predicateCounts) {
-    result.push_back({it.first, static_cast<Id>(it.second)});
+    result.push_back({it.first, Id::make(it.second)});
   }
   LOG(DEBUG) << "Finished writing results" << std::endl;
 

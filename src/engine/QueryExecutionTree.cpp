@@ -287,6 +287,7 @@ void QueryExecutionTree::readFromCache() {
 std::optional<std::pair<std::string, const char*>>
 QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
                                        const ResultTable& resultTable) const {
+  // TODO<joka921> This is one of the central methods which we have to rewrite
   switch (type) {
     case ResultTable::ResultType::KB: {
       std::optional<string> entity = _qec->getIndex().idToOptionalString(id);
@@ -299,7 +300,7 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
       return std::pair{std::move(entity.value()), nullptr};
     }
     case ResultTable::ResultType::VERBATIM:
-      return std::pair{std::to_string(id), XSD_INT_TYPE};
+      return std::pair{std::to_string(id.get()), XSD_INT_TYPE};
     case ResultTable::ResultType::TEXT:
       return std::pair{_qec->getIndex().getTextExcerpt(id), nullptr};
     case ResultTable::ResultType::FLOAT: {
@@ -311,7 +312,7 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
       return std::pair{std::move(s).str(), XSD_DECIMAL_TYPE};
     }
     case ResultTable::ResultType::LOCAL_VOCAB: {
-      auto optionalString = resultTable.idToOptionalString(id);
+      auto optionalString = resultTable.indexToOptionalString(id.get());
       if (!optionalString.has_value()) {
         return std::nullopt;
       }
@@ -432,7 +433,7 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
           }
           case ResultTable::ResultType::LOCAL_VOCAB: {
             co_yield resultTable
-                ->idToOptionalString(idTable(i, val._columnIndex))
+                ->indexToOptionalString(idTable(i, val._columnIndex).get())
                 .value_or("");
             break;
           }

@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstring>
+#include <exception>
 #include <string>
 #include <string_view>
 

@@ -56,7 +56,7 @@ class TextBlockMetaData {
  public:
   TextBlockMetaData() : _firstWordId(), _lastWordId(), _cl(), _entityCl() {}
 
-  TextBlockMetaData(Id firstWordId, Id lastWordId,
+  TextBlockMetaData(uint64_t firstWordId, uint64_t lastWordId,
                     const ContextListMetaData& cl,
                     const ContextListMetaData& entityCl)
       : _firstWordId(firstWordId),
@@ -64,8 +64,8 @@ class TextBlockMetaData {
         _cl(cl),
         _entityCl(entityCl) {}
 
-  Id _firstWordId;
-  Id _lastWordId;
+  uint64_t _firstWordId;
+  uint64_t _lastWordId;
   ContextListMetaData _cl;
   ContextListMetaData _entityCl;
 
@@ -87,12 +87,12 @@ class TextMetaData {
  public:
   //! Get the corresponding block meta data for some word or entity Id range.
   //! Currently assumes that the range lies in a single block.
-  const TextBlockMetaData& getBlockInfoByWordRange(const Id lower,
-                                                   const Id upper) const;
+  const TextBlockMetaData& getBlockInfoByWordRange(const uint64_t lower,
+                                                   const uint64_t upper) const;
 
-  const TextBlockMetaData& getBlockInfoByEntityId(const Id eid) const;
+  const TextBlockMetaData& getBlockInfoByEntityId(const uint64_t eid) const;
 
-  bool existsTextBlockForEntityId(const Id eid) const;
+  bool existsTextBlockForEntityId(const uint64_t eid) const;
 
   size_t getBlockCount() const;
 
@@ -137,8 +137,8 @@ class TextMetaData {
   };
 
  private:
-  vector<Id> _blockUpperBoundWordIds;
-  vector<Id> _blockUpperBoundEntityIds;
+  vector<uint64_t> _blockUpperBoundWordIds;
+  vector<uint64_t> _blockUpperBoundEntityIds;
   size_t _nofEntities = 0;
   size_t _nofEntityContexts = 0;
   size_t _nofTextRecords = 0;

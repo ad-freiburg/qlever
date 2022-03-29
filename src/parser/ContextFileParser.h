@@ -19,7 +19,7 @@ class ContextFileParser {
   struct Line {
     string _word;
     bool _isEntity;
-    Id _contextId;
+    uint64_t _contextId;
     Score _score;
   };
 

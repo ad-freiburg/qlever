@@ -57,7 +57,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
 
   auto pushWordFromPartialVocabularyToQueue = [&](size_t i) {
     if (numWordsLeftInPartialVocabulary[i] > 0) {
-      TripleComponentWithId tripleComponent;
+      TripleComponentWithIndex tripleComponent;
       infiles[i] >> tripleComponent;
       queue.push(QueueWord(std::move(tripleComponent), i));
       numWordsLeftInPartialVocabulary[i]--;
@@ -158,7 +158,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
         top.iriOrLiteral() != _lastTripleComponent.value().iriOrLiteral()) {
       // TODO<joka921> Once we have interleaved IDs using the MilestoneIdManager
       // we have to compute the correct Ids here.
-      _lastTripleComponent = TripleComponentWithId{
+      _lastTripleComponent = TripleComponentWithIndex{
           top.iriOrLiteral(), top.isExternal(), _totalWritten};
 
       // TODO<optimization> If we aim to further speed this up, we could
@@ -177,11 +177,11 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       if (top.iriOrLiteral().starts_with('@')) {
         if (!_firstLangPredSeen) {
           // inclusive
-          _langPredLowerBound = _lastTripleComponent.value()._id;
+          _langPredLowerBound = Id::make(_lastTripleComponent.value()._index);
           _firstLangPredSeen = true;
         }
         // exclusive
-        _langPredUpperBound = _lastTripleComponent.value()._id + 1;
+        _langPredUpperBound = Id::make(_lastTripleComponent.value()._index + 1);
       }
       _totalWritten++;
       if (_totalWritten % 100'000'000 == 0) {
@@ -191,7 +191,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
     // Write pair of local and global ID to buffer.
     writeBuf.emplace_back(
         top._partialFileId,
-        std::pair{top.id(), _lastTripleComponent.value()._id});
+        std::pair{top.id(), _lastTripleComponent.value()._index});
 
     if (writeBuf.size() >= bufSize) {
       auto task = [this, buf = std::move(writeBuf)]() {
@@ -224,14 +224,14 @@ void VocabularyMerger::doActualWrite(
     return;
   }
   for (const auto& [id, value] : buffer) {
-    _idVecs[id].push_back(value);
+    _idVecs[id].push_back({Id::make(value.first), Id::make(value.second)});
   }
 }
 
 // ____________________________________________________________________________________________________________
-ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* elsPtr) {
+ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec* elsPtr) {
   auto& els = *elsPtr;
-  ad_utility::HashMap<Id, Id> res;
+  ad_utility::HashMap<uint64_t, uint64_t> res;
   bool first = true;
   std::string lastWord;
   size_t nextWordId = 0;
@@ -250,24 +250,22 @@ ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* elsPtr) {
 
 // ________________________________________________________________________________________________________
 void writeMappedIdsToExtVec(const auto& input,
-                            const ad_utility::HashMap<Id, Id>& map,
+                            const ad_utility::HashMap<uint64_t, uint64_t>& map,
                             TripleVec::bufwriter_type* writePtr) {
   auto& writer = *writePtr;
   for (const auto& curTriple : input) {
+    std::array<Id, 3> mappedTriple;
     // for all triple elements find their mapping from partial to global ids
-    ad_utility::HashMap<Id, Id>::const_iterator iterators[3];
     for (size_t k = 0; k < 3; ++k) {
-      iterators[k] = map.find(curTriple[k]);
-      if (iterators[k] == map.end()) {
+      auto iterator = map.find(curTriple[k].get());
+      if (iterator == map.end()) {
         LOG(INFO) << "not found in partial local Vocab: " << curTriple[k]
                   << '\n';
         AD_CHECK(false);
       }
+      mappedTriple[k] = Id::make(iterator->second);
     }
-
-    // update the Element
-    writer << std::array<Id, 3>{
-        {iterators[0]->second, iterators[1]->second, iterators[2]->second}};
+    writer << mappedTriple;
   }
 }
 
@@ -282,7 +280,7 @@ void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
     // we have assigned to this word, and the information, whether this word
     // belongs to the internal or external vocabulary.
     const auto& [id, splitVal] = idAndSplitVal;
-    TripleComponentWithId entry{word, splitVal.isExternalized, id};
+    TripleComponentWithIndex entry{word, splitVal.isExternalized, id};
     serializer << entry;
   }
   serializer.close();

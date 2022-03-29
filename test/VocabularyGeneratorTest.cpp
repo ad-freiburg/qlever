@@ -27,6 +27,8 @@ bool vocabTestCompare(const IdPairMMapVecView& a,
   return true;
 }
 
+auto I = [](const auto& id) { return Id::make(id); };
+
 // Test fixture that sets up the binary files vor partial vocabulary and
 // everything else connected with vocabulary merging.
 class MergeVocabularyTest : public ::testing::Test {
@@ -72,13 +74,13 @@ class MergeVocabularyTest : public ::testing::Test {
 
     // these will be the contents of partial vocabularies, second element of
     // pair is the correct Id which is expected from mergeVocabulary
-    std::vector<TripleComponentWithId> words0{{"\"ape\"", false, 0},
-                                              {"\"gorilla\"", false, 2},
-                                              {"\"monkey\"", false, 3},
-                                              {"\"bla\"", true, 5}};
-    std::vector<TripleComponentWithId> words1{{"\"bear\"", false, 1},
-                                              {"\"monkey\"", false, 3},
-                                              {"\"zebra\"", false, 4}};
+    std::vector<TripleComponentWithIndex> words0{{"\"ape\"", false, 0},
+                                                 {"\"gorilla\"", false, 2},
+                                                 {"\"monkey\"", false, 3},
+                                                 {"\"bla\"", true, 5}};
+    std::vector<TripleComponentWithIndex> words1{{"\"bear\"", false, 1},
+                                                 {"\"monkey\"", false, 3},
+                                                 {"\"zebra\"", false, 4}};
 
     // write expected vocabulary files
     std::ofstream expVoc(_pathVocabExp);
@@ -96,11 +98,11 @@ class MergeVocabularyTest : public ::testing::Test {
           partialVocab << tripleComponents.size();
           size_t localIdx = 0;
           for (auto w : tripleComponents) {
-            auto globalId = w._id;
-            w._id = localIdx;
+            auto globalId = w._index;
+            w._index = localIdx;
             partialVocab << w;
             if (mapping) {
-              mapping->emplace_back(localIdx, globalId);
+              mapping->emplace_back(I(localIdx), I(globalId));
             }
             localIdx++;
           }
@@ -165,8 +167,8 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   }
 
   // No language tags in text file
-  ASSERT_EQ(res._langPredLowerBound, 0ul);
-  ASSERT_EQ(res._langPredUpperBound, 0ul);
+  ASSERT_EQ(res._langPredLowerBound, I(0));
+  ASSERT_EQ(res._langPredUpperBound, I(0));
   // check that (external) vocabulary has the right form.
   ASSERT_TRUE(
       areBinaryFilesEqual(_pathVocabExp, _basePath + INTERNAL_VOCAB_SUFFIX));
@@ -207,10 +209,10 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
                         internalVocabularyAction);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
-    ASSERT_EQ(0u, idMap[5]);
-    ASSERT_EQ(1u, idMap[7]);
-    ASSERT_EQ(2u, idMap[6]);
-    ASSERT_EQ(3u, idMap[8]);
+    ASSERT_EQ(I(0), idMap[I(5)]);
+    ASSERT_EQ(I(1), idMap[I(7)]);
+    ASSERT_EQ(I(2), idMap[I(6)]);
+    ASSERT_EQ(I(3), idMap[I(8)]);
     auto res = system("rm _tmp_testidx*");
     (void)res;
   }
@@ -251,11 +253,11 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
                         internalVocabularyAction);
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
-    EXPECT_EQ(0u, idMap[6]);
-    EXPECT_EQ(1u, idMap[5]);
-    EXPECT_EQ(2u, idMap[9]);
-    EXPECT_EQ(3u, idMap[7]);
-    EXPECT_EQ(4u, idMap[8]);
+    EXPECT_EQ(I(0), idMap[I(6)]);
+    EXPECT_EQ(I(1), idMap[I(5)]);
+    EXPECT_EQ(I(2), idMap[I(9)]);
+    EXPECT_EQ(I(3), idMap[I(7)]);
+    EXPECT_EQ(I(4), idMap[I(8)]);
     auto res = system("rm _tmp_testidx*");
     (void)res;
 
@@ -266,7 +268,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
 
 TEST(VocabularyGeneratorTest, createInternalMapping) {
   ItemVec input;
-  using S = IdAndSplitVal;
+  using S = LocalVocabIndexAndSplitVal;
   TripleComponentComparator::SplitVal
       d;  // dummy value that is unused in this case.
   input.emplace_back("alpha", S{5, d});

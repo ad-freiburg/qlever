@@ -105,13 +105,13 @@ class CountAvailablePredicates : public Operation {
       const IdTable& input, IdTable* result,
       const vector<PatternID>& hasPattern,
       const CompactVectorOfStrings<Id>& hasPredicate,
-      const CompactVectorOfStrings<size_t>& patterns, size_t subjectColumn,
+      const CompactVectorOfStrings<Id>& patterns, size_t subjectColumn,
       RuntimeInformation* runtimeInfo);
 
   static void computePatternTrickAllEntities(
       IdTable* result, const vector<PatternID>& hasPattern,
       const CompactVectorOfStrings<Id>& hasPredicate,
-      const CompactVectorOfStrings<size_t>& patterns);
+      const CompactVectorOfStrings<Id>& patterns);
 
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;

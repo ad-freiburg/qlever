@@ -81,7 +81,7 @@ struct Pattern {
 
   size_t size() const { return _data.size(); }
 
-  void push_back(const Id i) { _data.push_back(i); }
+  void push_back(value_type i) { _data.push_back(i); }
 
   void clear() { _data.clear(); }
 
@@ -89,9 +89,9 @@ struct Pattern {
   ref back() { return _data.back(); }
   bool empty() { return _data.empty(); }
 
-  const Id* data() const { return _data.data(); }
+  const value_type* data() const { return _data.data(); }
 
-  std::vector<Id> _data;
+  std::vector<value_type> _data;
 };
 
 namespace detail {

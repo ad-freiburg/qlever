@@ -19,12 +19,12 @@ TEST(VocabularyTest, getIdForWordTest) {
   ad_utility::HashSet<std::string> s{"a", "ab", "ba", "car"};
   for (auto& v : vec) {
     v.createFromSet(s);
-    Id id;
-    ASSERT_TRUE(v.getId("ba", &id));
-    ASSERT_EQ(Id(2), id);
-    ASSERT_TRUE(v.getId("a", &id));
-    ASSERT_EQ(Id(0), id);
-    ASSERT_FALSE(v.getId("foo", &id));
+    VocabIndex idx;
+    ASSERT_TRUE(v.getId("ba", &idx));
+    ASSERT_EQ(2u, idx);
+    ASSERT_TRUE(v.getId("a", &idx));
+    ASSERT_EQ(0u, idx);
+    ASSERT_FALSE(v.getId("foo", &idx));
   }
 
   // with case insensitive ordering
@@ -32,13 +32,13 @@ TEST(VocabularyTest, getIdForWordTest) {
   voc.setLocale("en", "US", false);
   ad_utility::HashSet<string> s2{"a", "A", "Ba", "car"};
   voc.createFromSet(s2);
-  Id id;
-  ASSERT_TRUE(voc.getId("Ba", &id));
-  ASSERT_EQ(Id(2), id);
-  ASSERT_TRUE(voc.getId("a", &id));
-  ASSERT_EQ(Id(0), id);
+  VocabIndex idx;
+  ASSERT_TRUE(voc.getId("Ba", &idx));
+  ASSERT_EQ(2u, idx);
+  ASSERT_TRUE(voc.getId("a", &idx));
+  ASSERT_EQ(0u, idx);
   // getId only gets exact matches;
-  ASSERT_FALSE(voc.getId("ba", &id));
+  ASSERT_FALSE(voc.getId("ba", &idx));
 };
 
 TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
@@ -47,7 +47,7 @@ TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
                                 "wordB4"};
   v.createFromSet(s);
 
-  Id word0 = 0;
+  VocabIndex word0 = 0;
   IdRange retVal;
   // Match exactly one
   ASSERT_TRUE(v.getIdRangeForFullTextPrefix("wordA1*", &retVal));
@@ -97,12 +97,12 @@ TEST(VocabularyTest, createFromSetTest) {
   s.insert("car");
   TextVocabulary v;
   v.createFromSet(s);
-  Id id;
-  ASSERT_TRUE(v.getId("ba", &id));
-  ASSERT_EQ(Id(2), id);
-  ASSERT_TRUE(v.getId("a", &id));
-  ASSERT_EQ(Id(0), id);
-  ASSERT_FALSE(v.getId("foo", &id));
+  VocabIndex idx;
+  ASSERT_TRUE(v.getId("ba", &idx));
+  ASSERT_EQ(2u, idx);
+  ASSERT_TRUE(v.getId("a", &idx));
+  ASSERT_EQ(0u, idx);
+  ASSERT_FALSE(v.getId("foo", &idx));
 };
 
 TEST(VocabularyTest, IncompleteLiterals) {
