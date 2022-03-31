@@ -178,3 +178,7 @@ addLinkAndDiscoverTest(CompressorStreamTest engine)
 addLinkAndDiscoverTest(AsyncStreamTest)
 
 addLinkAndDiscoverTest(TriplesViewTest)
+
+addLinkAndDiscoverTest(BitUtilsTest)
+
+addLinkAndDiscoverTest(NBitIntegerTest)
