@@ -13,7 +13,7 @@ TEST(BitUtils, bitMaskForLowerBits) {
   static_assert(bitMaskForLowerBits(1) == 1);
   static_assert(bitMaskForLowerBits(2) == 3);
 
-  for (size_t i = 1; i < 64; ++i) {
+  for (size_t i = 0; i < 64; ++i) {
     auto expected = static_cast<uint64_t>(std::pow(2, i)) - 1;
     ASSERT_EQ(bitMaskForLowerBits(i), expected);
   }
