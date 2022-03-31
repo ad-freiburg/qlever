@@ -5,9 +5,9 @@
 #ifndef QLEVER_DATE_H
 #define QLEVER_DATE_H
 
+#include <bit>
 #include <exception>
 #include <sstream>
-#include <bit>
 
 // Exception that is thrown when a value for a component of the `Date`, `Time`
 // or `Datetime` classes below is out of range (e.g. the month 13, or the hour
@@ -48,7 +48,8 @@ class Date {
   static constexpr short minYear = -9999;
   static constexpr short maxYear = 9999;
 
-  static constexpr uint8_t numBitsYear = std::bit_width(unsigned{maxYear - minYear});
+  static constexpr uint8_t numBitsYear =
+      std::bit_width(unsigned{maxYear - minYear});
   static constexpr uint8_t numBitsMonth = std::bit_width(12u);
   static constexpr uint8_t numBitsDay = std::bit_width(31u);
   static constexpr uint8_t numBitsHour = std::bit_width(23u);
@@ -57,8 +58,9 @@ class Date {
 
   static constexpr uint8_t numBitsTimezone = std::bit_width(24u);
 
-  static constexpr uint8_t remainingBits = 64 - numBitsYear - numBitsMonth - numBitsDay - numBitsHour - numBitsMinute - numBitsSecond - numBitsTimezone - 10;
-
+  static constexpr uint8_t remainingBits =
+      64 - numBitsYear - numBitsMonth - numBitsDay - numBitsHour -
+      numBitsMinute - numBitsSecond - numBitsTimezone - 10;
 
  private:
   unsigned _year : numBitsYear;
@@ -72,8 +74,7 @@ class Date {
   unsigned _secFrac2 : 5;
   // Timezone is currently only supported as an hour;
   unsigned _timezone : numBitsTimezone = 0;
-  //unsigned _emptyBytesForTag : remainingBits = 0;
-
+  // unsigned _emptyBytesForTag : remainingBits = 0;
 
  public:
   // Construct a date from year, month and day, e.g. `Date(1992, 7, 3)`. Throw
@@ -86,7 +87,6 @@ class Date {
   }
 
  private:
-
  public:
   static constexpr Date fromBytes(uint64_t bytes) {
     return std::bit_cast<Date>(bytes);
@@ -101,7 +101,9 @@ class Date {
   [[nodiscard]] auto day() const { return _day; }
   [[nodiscard]] auto hour() const { return _hour; }
   [[nodiscard]] auto minute() const { return _minute; }
-  [[nodiscard]] auto second() const { return ((_secFrac << 5u) + (_secFrac2)) / 1000.0 + _seconds; }
+  [[nodiscard]] auto second() const {
+    return ((_secFrac << 5u) + (_secFrac2)) / 1000.0 + _seconds;
+  }
   [[nodiscard]] auto timezone() const { return _timezone; }
 };
 
