@@ -18,10 +18,10 @@ auto testToFrom = []<size_t N>(int64_t x) {
   }
 };
 
-// For any valid `NBitInteger x` (obtained via `toNBit`), `toNBit(fromNBit(x))`
-// is the identity function. Note: Calling `fromNbit` on an arbitrary integer is
-// not allowed in general, since it might violate the invariants of
-// `NBitInteger`.
+// Check that for any valid `NBitInteger x` (obtained via `toNBit`),
+// `toNBit(fromNBit(x))` is the identity function. Note: Calling `fromNbit` on
+// an arbitrary integer is not allowed in general, since it might violate the
+// invariants of `NBitInteger`.
 auto testFromTo = []<size_t N>(int64_t x) {
   using I = ad_utility::NBitInteger<N>;
   auto to = I::toNBit(x);
@@ -114,10 +114,10 @@ auto testNumericNearLimits = []<size_t N>() {
 };
 
 void testAllN(auto function, auto... args) {
-  // call function<N>(args) for all N in [1..64].
+  // Call function<N>(args) for all N in 1..64.
   // Note that the `(std::make_index_sequence...)` is the argument to the
-  // (unnamed) immediately invoked lambda. Clang format wants it on a separate
-  // line for some reason.
+  // unnamed lambda (immediately invoked lambda). Clang format wants the
+  // argument on a separate line for some reason.
   [&]<size_t... Ns>(std::index_sequence<Ns...>) {
     (..., function.template operator()<Ns + 1>(args...));
   }
