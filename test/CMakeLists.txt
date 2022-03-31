@@ -181,4 +181,4 @@ addLinkAndDiscoverTest(TriplesViewTest)
 
 addLinkAndDiscoverTest(BitUtilsTest)
 
-addLinkAndDiscoverTest(BoundedIntegerTest)
+addLinkAndDiscoverTest(NBitIntegerTest)

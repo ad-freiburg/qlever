@@ -6,23 +6,29 @@
 
 #include <iostream>
 
-#include "../src/util/BoundedInteger.h"
 #include "../src/util/Generator.h"
+#include "../src/util/NBitInteger.h"
 
-auto testChange = []<size_t N>(int64_t x) {
+auto testToFrom = []<size_t N>(int64_t x) {
   using I = ad_utility::NBitInteger<N>;
-  if (x >= I::MinInteger() && x <= I::MaxInteger()) {
+  if (x >= I::min() && x <= I::max()) {
     ASSERT_EQ(x, I::fromNBit(I::toNBit(x)));
   } else {
     ASSERT_NE(x, I::fromNBit(I::toNBit(x)));
   }
 };
 
+auto testMinMax = []<size_t N>() {
+  using I = ad_utility::NBitInteger<N>;
+  ASSERT_EQ(I::max(), (1ll << (N - 1)) - 1);
+  ASSERT_EQ(I::min(), -1 * (1ll << (N - 1)));
+};
+
 template <size_t N>
 cppcoro::generator<int64_t> valuesNearLimits() {
   using I = ad_utility::NBitInteger<N>;
-  constexpr static auto min = I::MinInteger();
-  constexpr static auto max = I::MaxInteger();
+  constexpr static auto min = I::min();
+  constexpr static auto max = I::max();
 
   constexpr static auto globalMin = std::numeric_limits<int64_t>::min();
   constexpr static auto globalMax = std::numeric_limits<int64_t>::max();
@@ -38,20 +44,20 @@ cppcoro::generator<int64_t> valuesNearLimits() {
   }
 }
 
-auto testNearLimitsUnary = []<size_t N>(auto function) {
+auto testNearLimitsUnaryFunction = []<size_t N>(auto function) {
   for (auto i : valuesNearLimits<N>()) {
     function.template operator()<N>(i);
   }
 };
 
-auto testNearLimitsBinary = []<size_t N>(auto function) {
+auto testNearLimitsBinaryFunction = []<size_t N>(auto function) {
   for (auto i : valuesNearLimits<N>()) {
     for (auto j : valuesNearLimits<N>()) function.template operator()<N>(i, j);
   }
 };
 
-auto testChangeNearLimits = []<size_t N>() {
-  testNearLimitsUnary.operator()<N>(testChange);
+auto testTranslationNearLimits = []<size_t N>() {
+  testNearLimitsUnaryFunction.operator()<N>(testToFrom);
 };
 
 template <size_t N>
@@ -82,26 +88,26 @@ auto testNumeric = []<size_t N>(int64_t a, int64_t b) {
   addition<N>(a, b);
   subtraction<N>(a, b);
   multiplication<N>(a, b);
+  // Division in general does not have an easily predictabel behaviors in the
+  // presence of overflows.
 };
 
 auto testNumericNearLimits = []<size_t N>() {
-  testNearLimitsBinary.operator()<N>(testNumeric);
+  testNearLimitsBinaryFunction.operator()<N>(testNumeric);
 };
 
-template <size_t... Ns>
-void testAllImpl(std::index_sequence<Ns...>, auto function, auto... args) {
-  (..., function.template operator()<Ns + 1>(args...));
-}
-
 void testAll(auto function, auto... args) {
-  testAllImpl(std::make_index_sequence<64>(), function, args...);
+  [&]<size_t... Ns>(std::index_sequence<Ns...>) {
+    (..., function.template operator()<Ns + 1>(args...));
+  }
+  (std::make_index_sequence<64>());
 }
 
+// A generator that yields 100 values near int64_t::min(), 100 values near 0,
+// 100 values near int64_t::max();
 auto closeToCornercases = []() -> cppcoro::generator<int64_t> {
-  int64_t lower = std::numeric_limits<int64_t>::max() - 100;
-  int64_t upper = std::numeric_limits<int64_t>::max();
-
-  for (auto i = lower - 1; i < upper; ++i) {
+  int64_t max = std::numeric_limits<int64_t>::max();
+  for (auto i = max - 100; i < max; ++i) {
     co_yield i + 1;
   }
 
@@ -109,24 +115,23 @@ auto closeToCornercases = []() -> cppcoro::generator<int64_t> {
     co_yield i;
   }
 
-  lower = std::numeric_limits<int64_t>::min();
-  upper = lower + 101;
-
-  for (auto i = lower; i <= upper; ++i) {
+  int64_t min = std::numeric_limits<int64_t>::min();
+  for (auto i = min; i <= min + 100; ++i) {
     co_yield i;
   }
 };
 
 TEST(NBitInteger, SingleBit) {
   using N = ad_utility::NBitInteger<1>;
-  ASSERT_EQ(N::MinInteger(), -1);
-  ASSERT_EQ(N::MaxInteger(), 0);
+  ASSERT_EQ(N::min(), -1);
+  ASSERT_EQ(N::max(), 0);
 
-  testAll(testChangeNearLimits);
+  testAll(testMinMax);
+  testAll(testTranslationNearLimits);
   testAll(testNumericNearLimits);
 
   for (auto i : closeToCornercases()) {
-    testAll(testChange, i);
+    testAll(testToFrom, i);
     for (auto j : closeToCornercases()) {
       testAll(testNumeric, i, j);
     }
