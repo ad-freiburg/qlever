@@ -953,9 +953,9 @@ GraphPatternOperation::BasicGraphPattern& SparqlParser::lastBasicPattern(
   return c.back().get<GraphPatternOperation::BasicGraphPattern>();
 }
 
-// Helper function that converts the prefix map from `parsedQUery` (a vector of
-// prefix, IRI pairs) to the prefix map we need for the `SparqlQleverVisitor` (a
-// hash map from prefixes to IRIs).
+// Helper function that converts the prefix map from `parsedQuery` (a vector of
+// pairs of prefix and IRI) to the prefix map we need for the
+// `SparqlQleverVisitor` (a hash map from prefixes to IRIs).
 namespace {
 SparqlQleverVisitor::PrefixMap getPrefixMap(const ParsedQuery& parsedQuery) {
   SparqlQleverVisitor::PrefixMap prefixMap;
