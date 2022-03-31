@@ -13,10 +13,11 @@ TEST(BitUtils, bitMaskForLowerBits) {
   static_assert(bitMaskForLowerBits(1) == 1);
   static_assert(bitMaskForLowerBits(2) == 3);
 
-  for (size_t i = 0; i <= 64; ++i) {
+  for (size_t i = 1; i < 64; ++i) {
     auto expected = static_cast<uint64_t>(std::pow(2, i)) - 1;
     ASSERT_EQ(bitMaskForLowerBits(i), expected);
   }
+  ASSERT_EQ(bitMaskForLowerBits(64), std::numeric_limits<uint64_t>::max());
 
   for (size_t i = 65; i < 2048; ++i) {
     ASSERT_THROW(bitMaskForLowerBits(i), std::out_of_range);
