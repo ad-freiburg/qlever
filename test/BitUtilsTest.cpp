@@ -13,7 +13,7 @@ TEST(BitUtils, bitMaskForLowerBits) {
   static_assert(bitMaskForLowerBits(1) == 1);
   static_assert(bitMaskForLowerBits(2) == 3);
 
-  for (size_t i = 1; i <= 64; ++i) {
+  for (size_t i = 0; i <= 64; ++i) {
     auto expected = static_cast<uint64_t>(std::pow(2, i)) - 1;
     ASSERT_EQ(bitMaskForLowerBits(i), expected);
   }
@@ -24,9 +24,14 @@ TEST(BitUtils, bitMaskForLowerBits) {
 }
 
 TEST(BitUtils, bitMaskForHigherBits) {
-  for (size_t i = 1; i <= 64; ++i) {
-    auto max = std::numeric_limits<uint64_t>::max();
-    auto expected = max - (static_cast<uint64_t>(std::pow(2, i)) - 1);
+  constexpr static auto max = std::numeric_limits<uint64_t>::max();
+  static_assert(bitMaskForHigherBits(0) == 0);
+  static_assert(bitMaskForHigherBits(64) == max);
+  static_assert(bitMaskForHigherBits(63) == max - 1);
+  static_assert(bitMaskForHigherBits(62) == max - 3);
+
+  for (size_t i = 0; i <= 64; ++i) {
+    auto expected = max - bitMaskForLowerBits(64 - i);
     ASSERT_EQ(bitMaskForHigherBits(i), expected);
   }
 
