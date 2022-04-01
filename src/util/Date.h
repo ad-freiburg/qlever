@@ -6,6 +6,7 @@
 #define QLEVER_DATE_H
 
 #include <bit>
+#include <cmath>
 #include <exception>
 #include <sstream>
 
@@ -20,7 +21,7 @@ namespace detail {
 // Check that `min <= element <= max`. Throw `DateOutOfRangeException` if the
 // check fails.
 inline void checkBoundsIncludingMax(const auto& element, const auto& min,
-                                     const auto& max, std::string_view name) {
+                                    const auto& max, std::string_view name) {
   if (element < min || element > max) {
     std::stringstream s;
     s << name << " " << element << " is out of range.";
@@ -31,7 +32,7 @@ inline void checkBoundsIncludingMax(const auto& element, const auto& min,
 // Check that `min <= element < max`. Throw `DateOutOfRangeException` if the
 // check fails.
 inline void checkBoundsExcludingMax(const auto& element, const auto& min,
-                                     const auto& max, std::string_view name) {
+                                    const auto& max, std::string_view name) {
   if (element < min || element >= max) {
     std::stringstream s;
     s << name << " " << element << " is out of range.";
@@ -60,7 +61,9 @@ inline void checkBoundsExcludingMax(const auto& element, const auto& min,
  *   "12:00 with a timezone of 0" (Central Europe) will be sorted before
  *   "13:00 with a timezone of -6" (US East coast) because 12 < 13, although
  *   the second timestamp actually happens before the first one.
- *   TODO<joka921> Use this class as "all times are in UTC, and the timezone is stored additionally" and write converters for this (correctly comparable) format for the input and output to and from string literals.0
+ *   TODO<joka921> Use this class as "all times are in UTC, and the timezone is
+ * stored additionally" and write converters for this (correctly comparable)
+ * format for the input and output to and from string literals.0
  */
 class Date {
  public:
@@ -92,6 +95,7 @@ class Date {
 
   // Seconds are imported and exported as double, but internally stored as fixed
   // point decimals with millisecond precision.
+  static constexpr double minSecond = 0.0;
   static constexpr double maxSecond = 60.0;
   static constexpr double secondMultiplier = 1024.0;
   static constexpr uint8_t numBitsSecond =
@@ -173,7 +177,9 @@ class Date {
   /// `DateOutOfRangeException` is thrown.
 
   /// Getter and setter for the year.
-  [[nodiscard]] auto getYear() const { return static_cast<int>(_year) + minYear; }
+  [[nodiscard]] auto getYear() const {
+    return static_cast<int>(_year) + minYear;
+  }
   void setYear(int year) {
     detail::checkBoundsIncludingMax(year, minYear, maxYear, "year");
     _year = static_cast<unsigned>(year - minYear);
@@ -213,8 +219,8 @@ class Date {
     return static_cast<double>(_second) / secondMultiplier;
   }
   void setSecond(double second) {
-    detail::checkBoundsExcludingMax(second, 0.0, maxSecond, "second");
-    _second = static_cast<unsigned>(second * secondMultiplier);
+    detail::checkBoundsExcludingMax(second, minSecond, maxSecond, "second");
+    _second = static_cast<unsigned>(std::round(second * secondMultiplier));
   }
 
   /// Getter and setter for the timezone.

@@ -39,7 +39,7 @@ TEST(Date, SetAndExtract) {
     ASSERT_EQ(day, date.getDay());
     ASSERT_EQ(hour, date.getHour());
     ASSERT_EQ(minute, date.getMinute());
-    ASSERT_NEAR(seconds, date.getSecond(), 0.002);
+    ASSERT_NEAR(seconds, date.getSecond(), 0.001);
     ASSERT_EQ(timezone, date.getTimezone());
 
     Date date2 = Date::fromBits(date.toBits());
@@ -69,8 +69,8 @@ Date getRandomDate() {
 
 TEST(Date, RangeChecks) {
   Date date = getRandomDate();
-  date.setYear(-9999);
-  date.setYear(9999);
+  ASSERT_NO_THROW(date.setYear(-9999));
+  ASSERT_NO_THROW(date.setYear(9999));
   Date dateCopy = date;
   ASSERT_THROW(date.setYear(-10000), DateOutOfRangeException);
   ASSERT_THROW(date.setYear(10000), DateOutOfRangeException);
@@ -78,50 +78,50 @@ TEST(Date, RangeChecks) {
   // `Date` remains unchanged.
   ASSERT_EQ(date, dateCopy);
 
-  date.setMonth(1);
-  date.setMonth(12);
+  ASSERT_NO_THROW(date.setMonth(1));
+  ASSERT_NO_THROW(date.setMonth(12));
   dateCopy = date;
   ASSERT_THROW(date.setMonth(0), DateOutOfRangeException);
   ASSERT_THROW(date.setMonth(13), DateOutOfRangeException);
   ASSERT_EQ(date, dateCopy);
 
-  date.setDay(1);
-  date.setDay(31);
+  ASSERT_NO_THROW(date.setDay(1));
+  ASSERT_NO_THROW(date.setDay(31));
   dateCopy = date;
   ASSERT_THROW(date.setDay(0), DateOutOfRangeException);
   ASSERT_THROW(date.setDay(32), DateOutOfRangeException);
   ASSERT_EQ(date, dateCopy);
 
-  date.setHour(0);
-  date.setHour(23);
+  ASSERT_NO_THROW(date.setHour(0));
+  ASSERT_NO_THROW(date.setHour(23));
   dateCopy = date;
   ASSERT_THROW(date.setHour(-1), DateOutOfRangeException);
   ASSERT_THROW(date.setHour(24), DateOutOfRangeException);
   ASSERT_EQ(date, dateCopy);
 
-  date.setMinute(0);
-  date.setMinute(59);
+  ASSERT_NO_THROW(date.setMinute(0));
+  ASSERT_NO_THROW(date.setMinute(59));
   dateCopy = date;
   ASSERT_THROW(date.setMinute(-1), DateOutOfRangeException);
   ASSERT_THROW(date.setMinute(60), DateOutOfRangeException);
   ASSERT_EQ(date, dateCopy);
 
-  date.setSecond(0.0);
-  date.setSecond(59.999);
+  ASSERT_NO_THROW(date.setSecond(0.0));
+  ASSERT_NO_THROW(date.setSecond(59.999));
   dateCopy = date;
   ASSERT_THROW(date.setSecond(-0.1), DateOutOfRangeException);
   ASSERT_THROW(date.setSecond(60.0), DateOutOfRangeException);
   ASSERT_EQ(date, dateCopy);
 
-  date.setTimezone(-23);
-  date.setTimezone(23);
+  ASSERT_NO_THROW(date.setTimezone(-23));
+  ASSERT_NO_THROW(date.setTimezone(23));
   dateCopy = date;
   ASSERT_THROW(date.setTimezone(-24), DateOutOfRangeException);
   ASSERT_THROW(date.setTimezone(24), DateOutOfRangeException);
   ASSERT_EQ(date, dateCopy);
 }
 
-auto dateComparator = [](Date a, Date b) -> bool {
+auto dateLessComparator = [](Date a, Date b) -> bool {
   if (a.getYear() != b.getYear()) {
     return a.getYear() < b.getYear();
   }
@@ -155,7 +155,7 @@ std::vector<Date> getRandomDates(size_t n) {
 void testSorting(std::vector<Date> dates) {
   auto datesCopy = dates;
   std::sort(dates.begin(), dates.end());
-  std::sort(datesCopy.begin(), datesCopy.end(), dateComparator);
+  std::sort(datesCopy.begin(), datesCopy.end(), dateLessComparator);
   ASSERT_EQ(dates, datesCopy);
 }
 
