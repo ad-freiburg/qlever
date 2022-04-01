@@ -29,17 +29,17 @@ TEST(Date, SetAndExtract) {
     auto day = dayGenerator();
     auto hour = hourGenerator();
     auto minute = minuteGenerator();
-    auto seconds = secondGenerator();
+    auto second = secondGenerator();
     auto timezone = timezoneGenerator();
 
-    Date date(year, month, day, hour, minute, seconds, timezone);
+    Date date(year, month, day, hour, minute, second, timezone);
 
     ASSERT_EQ(year, date.getYear());
     ASSERT_EQ(month, date.getMonth());
     ASSERT_EQ(day, date.getDay());
     ASSERT_EQ(hour, date.getHour());
     ASSERT_EQ(minute, date.getMinute());
-    ASSERT_NEAR(seconds, date.getSecond(), 0.001);
+    ASSERT_NEAR(second, date.getSecond(), 0.001);
     ASSERT_EQ(timezone, date.getTimezone());
 
     Date date2 = Date::fromBits(date.toBits());
@@ -50,7 +50,7 @@ TEST(Date, SetAndExtract) {
     ASSERT_EQ(day, date2.getDay());
     ASSERT_EQ(hour, date2.getHour());
     ASSERT_EQ(minute, date2.getMinute());
-    ASSERT_NEAR(seconds, date2.getSecond(), 0.002);
+    ASSERT_NEAR(second, date2.getSecond(), 0.002);
     ASSERT_EQ(timezone, date2.getTimezone());
   }
 }
@@ -61,10 +61,10 @@ Date getRandomDate() {
   auto day = dayGenerator();
   auto hour = hourGenerator();
   auto minute = minuteGenerator();
-  auto seconds = secondGenerator();
+  auto second = secondGenerator();
   auto timezone = timezoneGenerator();
 
-  return {year, month, day, hour, minute, seconds, timezone};
+  return {year, month, day, hour, minute, second, timezone};
 }
 
 TEST(Date, RangeChecks) {

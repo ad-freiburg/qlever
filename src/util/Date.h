@@ -61,7 +61,7 @@ inline void checkBoundsExcludingMax(const auto& element, const auto& min,
  *   "12:00 with a timezone of 0" (Central Europe) will be sorted before
  *   "13:00 with a timezone of -6" (US East coast) because 12 < 13, although
  *   the second timestamp actually happens before the first one.
- *   TODO<joka921> Use this class as "all times are in UTC, and the timezone is
+ * TODO<joka921> Use this class as "all times are in UTC, and the timezone is
  * stored additionally" and write converters for this (correctly comparable)
  * format for the input and output to and from string literals.0
  */
@@ -146,14 +146,14 @@ class Date {
     (void)_unusedBits;
   }
 
-  /// Convert the `Date` to a `uint64_t`. This just casts the
-  /// underlying representation.
+  /// Convert the `Date` to a `uint64_t`. This just casts the underlying
+  /// representation.
   [[nodiscard]] constexpr uint64_t toBits() const {
     return std::bit_cast<uint64_t>(*this);
   }
 
   /// Convert a `uint64_t` to a `Date`. This is only valid if the `uint64_t` was
-  /// obtained via a call to `Date::toBits()`. This just casts the unerlying
+  /// obtained via a call to `Date::toBits()`. This just casts the underlying
   /// representaion.
   static constexpr Date fromBits(uint64_t bytes) {
     return std::bit_cast<Date>(bytes);
