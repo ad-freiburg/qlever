@@ -9,6 +9,12 @@
 
 #include "../src/util/GeoSparqlHelpers.h"
 
+TEST(GeoSparqlHelpers, isWktPoint) {
+  ASSERT_TRUE(ad_utility::detail::isWktPoint("\"POINT("));
+  ASSERT_FALSE(ad_utility::detail::isWktPoint("\"POINT"));
+  ASSERT_FALSE(ad_utility::detail::isWktPoint("POINT("));
+}
+
 TEST(GeoSparqlHelpers, WktLatLng) {
   // Valid WKT points.
   ASSERT_FLOAT_EQ(4.20, ad_utility::wktLongitude("\"POINT(4.20 3.14)\""));

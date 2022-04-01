@@ -7,29 +7,31 @@
 
 #include <string>
 
+namespace ad_utility {
+
 namespace detail {
 
-// Implementations of the lambdas below. Note: our SPARQL expression code
-// currently needs lambdas, and we can't define the lambdas in the .cpp file,
-// hence this detour.
+// Implementations of the lambdas below + two helper functions. Note: our SPARQL
+// expression code currently needs lambdas, and we can't define the lambdas in
+// the .cpp file, hence this detour.
 // TODO: Make the SPARQL expressions work for function pointers or
 // std::function.
+bool isWktPoint(const std::string& p);
+std::pair<double, double> parseWktPoint(const std::string& p);
 double wktLongitudeImpl(const std::string& p);
 double wktLatitudeImpl(const std::string& p);
 double wktDistImpl(const std::string& p1, const std::string& p2);
 
 }  // namespace detail
 
-namespace ad_utility {
-
 // Parse the longitude coordinate from a WKT point (it's the first coordinate).
 inline auto wktLongitude = [](const std::string& p) -> double {
-  return ::detail::wktLongitudeImpl(p);
+  return detail::wktLongitudeImpl(p);
 };
 
 // Parse the latitute coordinate from a WKT point (it's the second coordinate).
 inline auto wktLatitude = [](const std::string& p) -> double {
-  return ::detail::wktLatitudeImpl(p);
+  return detail::wktLatitudeImpl(p);
 };
 
 // Compute the distance in km between two WKT points according to the formula in
@@ -38,7 +40,7 @@ inline auto wktLatitude = [](const std::string& p) -> double {
 // save for when we compute this at indexing time.
 inline auto wktDist = [](const std::string& p1,
                          const std::string& p2) -> double {
-  return ::detail::wktDistImpl(p1, p2);
+  return detail::wktDistImpl(p1, p2);
 };
 
 }  // namespace ad_utility

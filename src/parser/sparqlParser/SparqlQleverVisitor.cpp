@@ -10,35 +10,42 @@
 // ___________________________________________________________________________
 antlrcpp::Any SparqlQleverVisitor::processIriFunctionCall(
     std::string iri, std::vector<SparqlQleverVisitor::ExpressionPtr> argList) {
+
+  // Lambda that checks the number of arguments and throws an error if it's
+  // not right.
+  auto checkNumArgs = [&argList](
+      const std::string_view prefix,
+      const std::string_view functionName, size_t numArgs) {
+    static std::array<std::string, 5> wordForNumArgs =
+        {"no", "one", "two", "three", "four"};
+    if (argList.size() != numArgs) {
+      throw SparqlParseException{
+        absl::StrCat("Function ", prefix, functionName,
+            numArgs == 0 ? "has " : "requires ",
+            numArgs < 5 ? wordForNumArgs[numArgs] : std::to_string(numArgs),
+            numArgs == 1 ? " argument" : " arguments")};
+    }
+  };
+
   constexpr static std::string_view geofPrefix =
       "<http://www.opengis.net/def/function/geosparql/";
   std::string_view iriView = iri;
   if (iriView.starts_with(geofPrefix)) {
     iriView.remove_prefix(geofPrefix.size());
-    if (iriView == "distance>") {
-      if (argList.size() == 2) {
-        return createExpression<sparqlExpression::DistExpression>(
-            std::move(argList[0]), std::move(argList[1]));
-      } else {
-        throw SparqlParseException{
-            "Function geof:distance requires two arguments"};
-      }
-    } else if (iriView == "longitude>") {
-      if (argList.size() == 1) {
-        return createExpression<sparqlExpression::LongitudeExpression>(
-            std::move(argList[0]));
-      } else {
-        throw SparqlParseException{
-            "Function geof:longitude requires one argument"};
-      }
-    } else if (iriView == "latitude>") {
-      if (argList.size() == 1) {
-        return createExpression<sparqlExpression::LatitudeExpression>(
-            std::move(argList[0]));
-      } else {
-        throw SparqlParseException{
-            "Function geof:longitude requires one argument"};
-      }
+    AD_CHECK(iriView.ends_with('>'));
+    iriView.remove_suffix(1);
+    if (iriView == "distance") {
+      checkNumArgs("geof:", iriView, 2);
+      return createExpression<sparqlExpression::DistExpression>(
+          std::move(argList[0]), std::move(argList[1]));
+    } else if (iriView == "longitude") {
+      checkNumArgs("geof:", iriView, 1);
+      return createExpression<sparqlExpression::LongitudeExpression>(
+          std::move(argList[0]));
+    } else if (iriView == "latitude") {
+      checkNumArgs("geof:", iriView, 1);
+      return createExpression<sparqlExpression::LatitudeExpression>(
+          std::move(argList[0]));
     }
   }
   throw SparqlParseException{"Function \"" + iri + "\" not supported"};
