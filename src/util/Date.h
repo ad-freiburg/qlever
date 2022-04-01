@@ -19,7 +19,7 @@ class DateOutOfRangeException : public std::runtime_error {
 namespace detail {
 // Check that `min <= element <= max`. Throw `DateOutOfRangeException` if the
 // check fails.
-inline void checkUpperBoundInclusive(const auto& element, const auto& min,
+inline void checkBoundsIncludingMax(const auto& element, const auto& min,
                                      const auto& max, std::string_view name) {
   if (element < min || element > max) {
     std::stringstream s;
@@ -30,11 +30,11 @@ inline void checkUpperBoundInclusive(const auto& element, const auto& min,
 
 // Check that `min <= element < max`. Throw `DateOutOfRangeException` if the
 // check fails.
-inline void checkUpperBoundExclusive(const auto& element, const auto& min,
+inline void checkBoundsExcludingMax(const auto& element, const auto& min,
                                      const auto& max, std::string_view name) {
   if (element < min || element >= max) {
     std::stringstream s;
-    s << name << " " << element << "is out of range.";
+    s << name << " " << element << " is out of range.";
     throw DateOutOfRangeException{s.str()};
   }
 }
@@ -42,15 +42,14 @@ inline void checkUpperBoundExclusive(const auto& element, const auto& min,
 
 /**
  * @brief This class encodes a xsd:DateTime value in 64 bits. Comparisons
- * (==, <=>) are maximally efficient, as they are directly performe don the
+ * (==, <=>) are maximally efficient, as they are directly performed on the
  * underlying 64-bit representation.
  *
  * It has a static constexpr member Date::numUnusedBits (currently 7).
  * This means that the `numUnusedBits` most significant bits are always 0 in the
  * binary representation and can be used for other purposes. It is important to
  * set these bits back to 0 before calling `fromBits` because otherwise the
- * comparisons
- * (== and <=>) don't work.
+ * comparisons (== and <=>) don't work.
  *
  * The following limitations hold:
  * - Years can be in the range -9999...9999
@@ -61,11 +60,11 @@ inline void checkUpperBoundExclusive(const auto& element, const auto& min,
  *   "12:00 with a timezone of 0" (Central Europe) will be sorted before
  *   "13:00 with a timezone of -6" (US East coast) because 12 < 13, although
  *   the second timestamp actually happens before the first one.
- *
+ *   TODO<joka921> Use this class as "all times are in UTC, and the timezone is stored additionally" and write converters for this (correctly comparable) format for the input and output to and from string literals.0
  */
 class Date {
  public:
-  // Define the minimal and maximal values for the different fiels (year, day,
+  // Define the minimal and maximal values for the different fields (year, day,
   // ...) and calculate the number of bits required to store these values.
 
   // Year takes values in -9999..9999, which are stored shifted to
@@ -93,10 +92,10 @@ class Date {
 
   // Seconds are imported and exported as double, but internally stored as fixed
   // point decimals with millisecond precision.
-  static constexpr double maxSeconds = 60.0;
+  static constexpr double maxSecond = 60.0;
   static constexpr double secondMultiplier = 1024.0;
   static constexpr uint8_t numBitsSecond =
-      std::bit_width(static_cast<unsigned>(maxSeconds * secondMultiplier));
+      std::bit_width(static_cast<unsigned>(maxSecond * secondMultiplier));
 
   // The timezone is an hour in -23..23. It is shifted to the positive range
   // 0..46 (similar to the years)
@@ -118,7 +117,7 @@ class Date {
   // tests will fail. If we need support for such platforms, we have to
   // implement the bitfields manually using bit shifting.
   uint64_t _timezone : numBitsTimezone = 0;
-  uint64_t _seconds : numBitsSecond = 0;
+  uint64_t _second : numBitsSecond = 0;
   uint64_t _minute : numBitsMinute = 0;
   uint64_t _hour : numBitsHour = 0;
   uint64_t _day : numBitsDay = 1;
@@ -129,29 +128,29 @@ class Date {
 
  public:
   /// Construct a `Date` from values for the different components. If any of the
-  /// components is out of range a `DateOutOfRangeException` is thrown.
+  /// components is out of range, a `DateOutOfRangeException` is thrown.
   constexpr Date(int year, int month, int day, int hour = 0, int minute = 0,
-                 double seconds = 0.0, int timezone = 0) {
+                 double second = 0.0, int timezone = 0) {
     setYear(year);
     setMonth(month);
     setDay(day);
     setHour(hour);
     setMinute(minute);
-    setSeconds(seconds);
+    setSecond(second);
     setTimezone(timezone);
     // Suppress the "unused member" warning on clang.
     (void)_unusedBits;
   }
 
-  /// Convert the `Date` to a `uint64_t`. This is a noop that just casts the
+  /// Convert the `Date` to a `uint64_t`. This just casts the
   /// underlying representation.
   [[nodiscard]] constexpr uint64_t toBits() const {
     return std::bit_cast<uint64_t>(*this);
   }
 
   /// Convert a `uint64_t` to a `Date`. This is only valid if the `uint64_t` was
-  /// obtained via a call to `Date::toBits()`. This is a noop that just
-  /// trivially casts the unerlying representaion.
+  /// obtained via a call to `Date::toBits()`. This just casts the unerlying
+  /// representaion.
   static constexpr Date fromBits(uint64_t bytes) {
     return std::bit_cast<Date>(bytes);
   }
@@ -164,7 +163,7 @@ class Date {
 
   /// Comparison is performed directly on the underlying representation. This is
   /// very efficient but has some caveats concerning the ordering of dates with
-  /// different timezone values (See the docstring of this class).
+  /// different timezone values (see the docstring of this class).
   [[nodiscard]] constexpr auto operator<=>(const Date& rhs) const {
     return toBits() <=> rhs.toBits();
   }
@@ -174,57 +173,57 @@ class Date {
   /// `DateOutOfRangeException` is thrown.
 
   /// Getter and setter for the year.
-  [[nodiscard]] auto year() const { return static_cast<int>(_year) + minYear; }
+  [[nodiscard]] auto getYear() const { return static_cast<int>(_year) + minYear; }
   void setYear(int year) {
-    detail::checkUpperBoundInclusive(year, minYear, maxYear, "year");
+    detail::checkBoundsIncludingMax(year, minYear, maxYear, "year");
     _year = static_cast<unsigned>(year - minYear);
   }
 
   /// Getter and setter for the month.
-  [[nodiscard]] int month() const { return static_cast<int>(_month); }
+  [[nodiscard]] int getMonth() const { return static_cast<int>(_month); }
   void setMonth(int month) {
-    detail::checkUpperBoundInclusive(month, minMonth, int{maxMonth}, "month");
+    detail::checkBoundsIncludingMax(month, minMonth, int{maxMonth}, "month");
     _month = static_cast<unsigned>(month);
   }
 
   /// Getter and setter for the day.
-  [[nodiscard]] int day() const { return static_cast<int>(_day); }
+  [[nodiscard]] int getDay() const { return static_cast<int>(_day); }
   void setDay(int day) {
-    detail::checkUpperBoundInclusive(day, minDay, int{maxDay}, "day");
+    detail::checkBoundsIncludingMax(day, minDay, int{maxDay}, "day");
     _day = static_cast<unsigned>(day);
   }
 
   /// Getter and setter for the hour.
-  [[nodiscard]] int hour() const { return static_cast<int>(_hour); }
+  [[nodiscard]] int getHour() const { return static_cast<int>(_hour); }
   void setHour(int hour) {
-    detail::checkUpperBoundInclusive(hour, minHour, int{maxHour}, "hour");
+    detail::checkBoundsIncludingMax(hour, minHour, int{maxHour}, "hour");
     _hour = static_cast<unsigned>(hour);
   }
 
   /// Getter and setter for the minute.
-  [[nodiscard]] int minute() const { return static_cast<int>(_minute); }
+  [[nodiscard]] int getMinute() const { return static_cast<int>(_minute); }
   void setMinute(int minute) {
-    detail::checkUpperBoundInclusive(minute, minMinute, int{maxMinute},
-                                     "minute");
+    detail::checkBoundsIncludingMax(minute, minMinute, int{maxMinute},
+                                    "minute");
     _minute = static_cast<unsigned>(minute);
   }
 
   /// Getter and setter for the second.
-  [[nodiscard]] double second() const {
-    return static_cast<double>(_seconds) / secondMultiplier;
+  [[nodiscard]] double getSecond() const {
+    return static_cast<double>(_second) / secondMultiplier;
   }
-  void setSeconds(double seconds) {
-    detail::checkUpperBoundExclusive(seconds, 0.0, maxSeconds, "seconds");
-    _seconds = static_cast<unsigned>(seconds * secondMultiplier);
+  void setSecond(double second) {
+    detail::checkBoundsExcludingMax(second, 0.0, maxSecond, "second");
+    _second = static_cast<unsigned>(second * secondMultiplier);
   }
 
   /// Getter and setter for the timezone.
-  [[nodiscard]] int timezone() const {
+  [[nodiscard]] int getTimezone() const {
     return static_cast<int>(_timezone) + minTimezone;
   }
   void setTimezone(int timezone) {
-    detail::checkUpperBoundInclusive(timezone, minTimezone, maxTimezone,
-                                     "timezone");
+    detail::checkBoundsIncludingMax(timezone, minTimezone, maxTimezone,
+                                    "timezone");
     _timezone = static_cast<unsigned>(timezone - minTimezone);
   }
 };

@@ -34,24 +34,24 @@ TEST(Date, SetAndExtract) {
 
     Date date(year, month, day, hour, minute, seconds, timezone);
 
-    ASSERT_EQ(year, date.year());
-    ASSERT_EQ(month, date.month());
-    ASSERT_EQ(day, date.day());
-    ASSERT_EQ(hour, date.hour());
-    ASSERT_EQ(minute, date.minute());
-    ASSERT_NEAR(seconds, date.second(), 0.002);
-    ASSERT_EQ(timezone, date.timezone());
+    ASSERT_EQ(year, date.getYear());
+    ASSERT_EQ(month, date.getMonth());
+    ASSERT_EQ(day, date.getDay());
+    ASSERT_EQ(hour, date.getHour());
+    ASSERT_EQ(minute, date.getMinute());
+    ASSERT_NEAR(seconds, date.getSecond(), 0.002);
+    ASSERT_EQ(timezone, date.getTimezone());
 
     Date date2 = Date::fromBits(date.toBits());
     ASSERT_EQ(date, date2);
 
-    ASSERT_EQ(year, date2.year());
-    ASSERT_EQ(month, date2.month());
-    ASSERT_EQ(day, date2.day());
-    ASSERT_EQ(hour, date2.hour());
-    ASSERT_EQ(minute, date2.minute());
-    ASSERT_NEAR(seconds, date2.second(), 0.002);
-    ASSERT_EQ(timezone, date2.timezone());
+    ASSERT_EQ(year, date2.getYear());
+    ASSERT_EQ(month, date2.getMonth());
+    ASSERT_EQ(day, date2.getDay());
+    ASSERT_EQ(hour, date2.getHour());
+    ASSERT_EQ(minute, date2.getMinute());
+    ASSERT_NEAR(seconds, date2.getSecond(), 0.002);
+    ASSERT_EQ(timezone, date2.getTimezone());
   }
 }
 
@@ -106,11 +106,11 @@ TEST(Date, RangeChecks) {
   ASSERT_THROW(date.setMinute(60), DateOutOfRangeException);
   ASSERT_EQ(date, dateCopy);
 
-  date.setSeconds(0.0);
-  date.setSeconds(59.999);
+  date.setSecond(0.0);
+  date.setSecond(59.999);
   dateCopy = date;
-  ASSERT_THROW(date.setSeconds(-0.1), DateOutOfRangeException);
-  ASSERT_THROW(date.setSeconds(60.0), DateOutOfRangeException);
+  ASSERT_THROW(date.setSecond(-0.1), DateOutOfRangeException);
+  ASSERT_THROW(date.setSecond(60.0), DateOutOfRangeException);
   ASSERT_EQ(date, dateCopy);
 
   date.setTimezone(-23);
@@ -122,25 +122,25 @@ TEST(Date, RangeChecks) {
 }
 
 auto dateComparator = [](Date a, Date b) -> bool {
-  if (a.year() != b.year()) {
-    return a.year() < b.year();
+  if (a.getYear() != b.getYear()) {
+    return a.getYear() < b.getYear();
   }
-  if (a.month() != b.month()) {
-    return a.month() < b.month();
+  if (a.getMonth() != b.getMonth()) {
+    return a.getMonth() < b.getMonth();
   }
-  if (a.day() != b.day()) {
-    return a.day() < b.day();
+  if (a.getDay() != b.getDay()) {
+    return a.getDay() < b.getDay();
   }
-  if (a.hour() != b.hour()) {
-    return a.hour() < b.hour();
+  if (a.getHour() != b.getHour()) {
+    return a.getHour() < b.getHour();
   }
-  if (a.minute() != b.minute()) {
-    return a.minute() < b.minute();
+  if (a.getMinute() != b.getMinute()) {
+    return a.getMinute() < b.getMinute();
   }
-  if (a.second() != b.second()) {
-    return a.second() < b.second();
+  if (a.getSecond() != b.getSecond()) {
+    return a.getSecond() < b.getSecond();
   }
-  return a.timezone() < b.timezone();
+  return a.getTimezone() < b.getTimezone();
 };
 
 std::vector<Date> getRandomDates(size_t n) {
@@ -231,7 +231,7 @@ TEST(Date, OrderRandomValues) {
     date.setDay(randomDay);
     date.setHour(randomHour);
     date.setMinute(randomMinute);
-    date.setSeconds(randomSecond);
+    date.setSecond(randomSecond);
   }
   testSorting(dates);
 
@@ -249,7 +249,7 @@ TEST(Date, OrderRandomValues) {
     date.setDay(randomDay);
     date.setHour(randomHour);
     date.setMinute(randomMinute);
-    date.setSeconds(randomSecond);
+    date.setSecond(randomSecond);
     date.setTimezone(randomTimezone);
   }
   testSorting(dates);
