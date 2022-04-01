@@ -72,14 +72,13 @@ double wktLatitudeImpl(const std::string& p) {
 
 // See wktDist.
 double wktDistImpl(const std::string& p1, const std::string& p2) {
-  auto latlng1 = parseWktPoint(p1);
-  auto latlng2 = parseWktPoint(p2);
+  auto [lat1, lng1] = parseWktPoint(p1);
+  auto [lat2, lng2] = parseWktPoint(p2);
   auto sqr = [](double x) { return x * x; };
-  auto m = std::numbers::pi / 180.0 * (latlng1.first + latlng2.first) / 2.0;
+  auto m = std::numbers::pi / 180.0 * (lat1 + lat2) / 2.0;
   auto k1 = 111.13209 - 0.56605 * cos(2 * m) + 0.00120 * cos(4 * m);
   auto k2 = 111.41513 * cos(m) - 0.09455 * cos(3 * m) + 0.00012 * cos(5 * m);
-  return sqrt(sqr(k1 * (latlng1.first - latlng2.first)) +
-              sqr(k2 * (latlng1.second - latlng2.second)));
+  return sqrt(sqr(k1 * (lat1 - lat2)) + sqr(k2 * (lng1 - lng2)));
 }
 
 }  // namespace detail
