@@ -9,21 +9,20 @@
 
 // ___________________________________________________________________________
 antlrcpp::Any SparqlQleverVisitor::processIriFunctionCall(
-    const std::string& iri, std::vector<SparqlQleverVisitor::ExpressionPtr> argList) {
-
+    const std::string& iri,
+    std::vector<SparqlQleverVisitor::ExpressionPtr> argList) {
   // Lambda that checks the number of arguments and throws an error if it's
   // not right.
-  auto checkNumArgs = [&argList](
-      const std::string_view prefix,
-      const std::string_view functionName, size_t numArgs) {
-    static std::array<std::string, 5> wordForNumArgs =
-        {"no", "one", "two", "three", "four"};
+  auto checkNumArgs = [&argList](const std::string_view prefix,
+                                 const std::string_view functionName,
+                                 size_t numArgs) {
+    static std::array<std::string, 6> wordForNumArgs = {
+        "no", "one", "two", "three", "four", "five"};
     if (argList.size() != numArgs) {
-      throw SparqlParseException{
-        absl::StrCat("Function ", prefix, functionName,
-            numArgs == 0 ? " has " : " requires ",
-            numArgs < 5 ? wordForNumArgs[numArgs] : std::to_string(numArgs),
-            numArgs == 1 ? " argument" : " arguments")};
+      throw SparqlParseException{absl::StrCat(
+          "Function ", prefix, functionName, " takes ",
+          numArgs < 5 ? wordForNumArgs[numArgs] : std::to_string(numArgs),
+          numArgs == 1 ? " argument" : " arguments")};
     }
   };
 
