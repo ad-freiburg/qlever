@@ -229,7 +229,7 @@ class CreatePatternsFixture : public testing::Test {
   }
 
   string stxxlFileName;
-  string inputFilename ="_testtmppatterns.ttl" ;
+  string inputFilename = "_testtmppatterns.ttl";
 };
 
 TEST_F(CreatePatternsFixture, createPatterns) {

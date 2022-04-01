@@ -257,10 +257,12 @@ bool TurtleParser<T>::rdfLiteral() {
     std::string strippedLiteral{stripDoubleQuotes(literalString)};
     if (type == XSD_INT_TYPE || type == XSD_INTEGER_TYPE) {
       std::size_t pos = 0;
-      _lastParseResult = static_cast<int64_t>(std::stoll(strippedLiteral, &pos));
+      _lastParseResult =
+          static_cast<int64_t>(std::stoll(strippedLiteral, &pos));
       AD_CHECK(pos = strippedLiteral.size());
       return true;
-    } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE || type == XSD_FLOAT_TYPE) {
+    } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
+               type == XSD_FLOAT_TYPE) {
       std::size_t pos = 0;
       _lastParseResult = std::stod(strippedLiteral, &pos);
       AD_CHECK(pos = strippedLiteral.size());
@@ -358,8 +360,9 @@ bool TurtleParser<T>::prefixedName() {
     }
     parseTerminal<TurtleTokenId::PnLocal, false>();
   }
-  _lastParseResult = '<' + expandPrefix(_activePrefix) +
-                     RdfEscaping::unescapePrefixedIri(_lastParseResult.getString()) + '>';
+  _lastParseResult =
+      '<' + expandPrefix(_activePrefix) +
+      RdfEscaping::unescapePrefixedIri(_lastParseResult.getString()) + '>';
   return true;
 }
 
@@ -397,7 +400,8 @@ template <class T>
 bool TurtleParser<T>::pnameNS() {
   if (parseTerminal<TurtleTokenId::PnameNS>()) {
     // this also includes a ":" which we do not need, hence the "-1"
-    _activePrefix = _lastParseResult.getString().substr(0, _lastParseResult.getString().size() - 1);
+    _activePrefix = _lastParseResult.getString().substr(
+        0, _lastParseResult.getString().size() - 1);
     _lastParseResult = "";
     return true;
   } else {
@@ -459,7 +463,8 @@ bool TurtleParser<T>::iriref() {
     if (!parseTerminal<TurtleTokenId::Iriref>()) {
       return false;
     }
-    _lastParseResult = RdfEscaping::unescapeIriref(_lastParseResult.getString());
+    _lastParseResult =
+        RdfEscaping::unescapeIriref(_lastParseResult.getString());
     return true;
   }
 }
@@ -769,8 +774,7 @@ bool TurtleParallelParser<T>::getLine(TurtleTriple* triple) {
 }
 
 template <class T>
-std::optional<std::vector<TurtleTriple>>
-TurtleParallelParser<T>::getBatch() {
+std::optional<std::vector<TurtleTriple>> TurtleParallelParser<T>::getBatch() {
   // we need a while in case there is a batch that contains no triples
   // (this should be rare, // TODO warn about this
   while (_triples.empty()) {

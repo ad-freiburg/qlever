@@ -10,7 +10,9 @@
 #include "../src/parser/TurtleParser.h"
 #include "../src/util/Conversions.h"
 
+
 using std::string;
+using namespace std::literals;
 TEST(TurtleParserTest, prefixedName) {
   auto runCommonTests = [](auto& parser) {
     parser._prefixMap["wd"] = "www.wikidata.org/";
@@ -139,10 +141,20 @@ TEST(TurtleParserTest, stringParse) {
 
 TEST(TurtleParserTest, rdfLiteral) {
   std::vector<string> literals;
-  std::vector<string> expected;
+  std::vector<TripleObject> expected;
   literals.push_back("\"simpleString\"");
+  expected.emplace_back("\"simpleString\""s);
   literals.push_back("\"langtag\"@en-gb");
-  literals.push_back("\"valueLong\"^^<www.xsd.org/integer>");
+  expected.emplace_back("\"langtag\"@en-gb"s);
+  literals.push_back("\"valueLong\"^^<www.someunknownType/integer>");
+  expected.emplace_back("\"valueLong\"^^<www.someunknownType/integer>");
+
+  literals.push_back("\"42.1234\"^^"s + XSD_DOUBLE_TYPE);
+  expected.emplace_back(42.1234);
+  literals.push_back("\"-142.321\"^^"s + XSD_DECIMAL_TYPE);
+  expected.emplace_back(-142.321);
+  literals.push_back("\"-142321\"^^"s + XSD_INT_TYPE);
+  literals.push_back("\"+144321\"^^"s + XSD_INTEGER_TYPE);
 
   TurtleStringParser<Tokenizer> p;
   for (const auto& s : literals) {
@@ -273,27 +285,15 @@ TEST(TurtleParserTest, predicateObjectList) {
 }
 
 TEST(TurtleParserTest, numericLiteral) {
-  std::vector<std::string> literals{"2", "-2", "42.209", "-42.239", ".74"};
+  std::vector<std::string> literals{"2", "-2", "42.209", "-42.239", ".74","2.3e12", "2.34E-14", "-0.3e2"};
+  std::vector<TripleObject> expected{{int64_t{2}}, {int64_t{-2}}, {42.209}, {-42.239}, {.74},{2.3e12}, {2.34e-14}, {-0.3e2} };
 
   TurtleStringParser<Tokenizer> parser;
-  for (const auto& literal : literals) {
+  for (size_t i = 0; i < literals.size(); ++i) {
+    const auto& literal = literals[i];
     parser.setInputStream(literal);
     ASSERT_TRUE(parser.numericLiteral());
-    ASSERT_EQ(parser._lastParseResult, literal);
-    LOG(INFO) << literal << std::endl;
-    ASSERT_TRUE(ad_utility::isNumeric(literal));
-    ASSERT_FLOAT_EQ(ad_utility::convertIndexWordToFloat(
-                        ad_utility::convertNumericToIndexWord(literal)),
-                    std::strtod(literal.c_str(), nullptr));
-  }
-
-  std::vector<std::string> nonWorkingLiterals{"2.3e12", "2.34e-14", "-0.3e2"};
-
-  for (const auto& literal : nonWorkingLiterals) {
-    parser.setInputStream(literal);
-    ASSERT_TRUE(parser.numericLiteral());
-    ASSERT_EQ(parser._lastParseResult, literal);
-    ASSERT_THROW(ad_utility::isNumeric(literal), std::out_of_range);
+    ASSERT_EQ(parser._lastParseResult, expected[i]);
   }
 }
 

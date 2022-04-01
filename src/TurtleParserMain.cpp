@@ -28,7 +28,8 @@ void writeNTImpl(std::ostream& out, const std::string& filename) {
   // this call by reference is necesary because of the TSV-Parsers interface
   size_t numTriples = 0;
   while (p.getLine(triple)) {
-    out << triple._subject << " " << triple._predicate << " " << triple._object.toRdf() << " .\n";
+    out << triple._subject << " " << triple._predicate << " "
+        << triple._object.toRdf() << " .\n";
     numTriples++;
     if (numTriples % 10000000 == 0) {
       LOG(INFO) << "Parsed " << numTriples << " triples" << std::endl;
@@ -77,7 +78,7 @@ void writeNT(std::ostream& out, const string& fileFormat,
     // TODO<joka921>
     // Throw out tsv
     AD_CHECK(false);
-    //writeNTImpl<TsvParser>(out, filename);
+    // writeNTImpl<TsvParser>(out, filename);
   } else if (fileFormat == "mmap") {
     writeNTImpl<TurtleMmapParser<Tokenizer_T>>(out, filename);
   } else {

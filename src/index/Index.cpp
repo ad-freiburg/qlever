@@ -214,7 +214,7 @@ void Index::createFromFile(const string& filename) {
 }
 
 // Explicit instantiations.
-//template void Index::createFromFile<TsvParser>(const string& filename);
+// template void Index::createFromFile<TsvParser>(const string& filename);
 template void Index::createFromFile<TurtleStreamParser<Tokenizer>>(
     const string& filename);
 template void Index::createFromFile<TurtleMmapParser<Tokenizer>>(
@@ -941,7 +941,8 @@ LangtagAndTriple Index::tripleToInternalRepresentation(
   auto& spo = res._triple;
   spo[0] = std::move(tripleIn._subject);
   spo[1] = std::move(tripleIn._predicate);
-  // TODO<joka921> As soon as we have the "folded" Ids, we simply store the numeric value.
+  // TODO<joka921> As soon as we have the "folded" Ids, we simply store the
+  // numeric value.
   spo[2] = tripleIn._object.toRdf();
   for (auto& el : spo) {
     el._iriOrLiteral =

@@ -12,19 +12,19 @@
 #include <exception>
 #include <future>
 #include <locale>
-#include <variant>
 #include <string_view>
+#include <variant>
 
 #include "../global/Constants.h"
 #include "../index/ConstantsIndexBuilding.h"
 #include "../util/Exception.h"
 #include "../util/File.h"
+#include "../util/Forward.h"
 #include "../util/HashMap.h"
 #include "../util/Log.h"
 #include "../util/TaskQueue.h"
 #include "./Tokenizer.h"
 #include "./TokenizerCtre.h"
-#include "../util/Forward.h"
 #include "ParallelBuffer.h"
 
 using std::string;
@@ -34,7 +34,13 @@ struct TripleObject {
 
   Variant _variant;
 
-  template <typename T> requires requires(Variant v, T&& t) {_variant = t;}
+  // Construct from anything that is able to construct the underlying `Variant`
+  TripleObject(auto&&... args) : _variant(AD_FWD(args)...) {}
+
+  template <typename T>
+  requires requires(Variant v, T&& t) {
+    _variant = t;
+  }
   TripleObject& operator=(T&& value)  {
     _variant = AD_FWD(value);
     return *this;
@@ -44,22 +50,19 @@ struct TripleObject {
     return *this;
   }
 
-  template <typename T> requires requires(T&& t) {_variant == t;}
-  bool operator==(const T& other) const{
-    return _variant == other;
+  template <typename T>
+  requires requires(T&& t) {
+    _variant == t;
   }
+  bool operator==(const T& other) const { return _variant == other; }
 
-  bool operator==(std::string_view other) const{
+  bool operator==(std::string_view other) const {
     return isString() && getString() == other;
   }
 
   bool operator==(const TripleObject&) const = default;
 
-
-
-  Variant& variant() {
-    return _variant;
-  }
+  Variant& variant() { return _variant; }
   [[nodiscard]] bool isString() const noexcept {
     return std::holds_alternative<std::string>(_variant);
   }
@@ -71,18 +74,12 @@ struct TripleObject {
   }
 
   // TODO<C++23> Deducing this.
-  decltype(auto) getString () {
-    return std::get<std::string>(_variant);
-  }
+  std::string& getString() { return std::get<std::string>(_variant); }
   const std::string& getString() const {
     return std::get<std::string>(_variant);
   }
-  decltype(auto) getDouble () {
-    return std::get<double>(_variant);
-  }
-  decltype(auto) getInt () {
-    return std::get<int64_t>(_variant);
-  }
+  decltype(auto) getDouble() const { return std::get<double>(_variant); }
+  decltype(auto) getInt() const { return std::get<int64_t>(_variant); }
 
   std::string toRdf() {
     if (isString()) {
@@ -95,6 +92,21 @@ struct TripleObject {
       return absl::StrCat("\"", getInt(), "\"^^", XSD_INT_TYPE);
     }
   }
+  friend std::ostream& operator<<(std::ostream& stream, const TripleObject& obj) {
+    if (obj.isString()) {
+      stream << "string: " << obj.getString();
+    } else if (obj.isInt()) {
+        stream << "int: " << obj.getInt();
+    } else if (obj.isDouble()) {
+      stream << "double: " << obj.getDouble();
+    }
+    else {
+      AD_CHECK(false);
+    }
+    return stream;
+  }
+
+
 };
 
 struct TurtleTriple {
@@ -102,7 +114,7 @@ struct TurtleTriple {
   std::string _predicate;
   TripleObject _object;
 
-  bool operator== (const TurtleTriple&) const = default;
+  bool operator==(const TurtleTriple&) const = default;
 };
 
 inline std::string_view stripAngleBrackets(std::string_view input) {
@@ -171,7 +183,7 @@ class TurtleParser {
  protected:
   // clear all the parser's state to the initial values.
   void clear() {
-    _lastParseResult.variant() =  std::string{};
+    _lastParseResult.variant() = std::string{};
 
     _activeSubject.clear();
     _activePredicate.clear();
@@ -267,11 +279,26 @@ class TurtleParser {
   // Terminal symbols from the grammar
   // Behavior of the functions is similar to the nonterminals (see above)
   bool iriref();
-  bool integer() { return parseTerminal<TurtleTokenId::Integer>(); }
-  bool decimal() { return parseTerminal<TurtleTokenId::Decimal>(); }
-  bool doubleParse() { return parseTerminal<TurtleTokenId::Double>(); }
+  bool integer() { if (parseTerminal<TurtleTokenId::Integer>()) {
+      _lastParseResult = std::stoll(_lastParseResult.getString());
+      return true;
+    } else {
+      return false;
+    } }
+  bool decimal() { if (parseTerminal<TurtleTokenId::Decimal>()) {
+      _lastParseResult = std::stod(_lastParseResult.getString());
+      return true;
+    } else {
+      return false;
+    } }
+  bool doubleParse() { if (parseTerminal<TurtleTokenId::Double>()) {
+      _lastParseResult = std::stod(_lastParseResult.getString());
+      return true;
+    } else {
+      return false;
+    } }
 
-  /// this version only works if no escape sequences were used.
+  // this version only works if no escape sequences were used.
   bool pnameLnRelaxed();
 
   // __________________________________________________________________________
