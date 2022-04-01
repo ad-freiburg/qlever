@@ -9,7 +9,7 @@
 
 // ___________________________________________________________________________
 antlrcpp::Any SparqlQleverVisitor::processIriFunctionCall(
-    std::string iri, std::vector<SparqlQleverVisitor::ExpressionPtr> argList) {
+    const std::string& iri, std::vector<SparqlQleverVisitor::ExpressionPtr> argList) {
 
   // Lambda that checks the number of arguments and throws an error if it's
   // not right.
@@ -21,7 +21,7 @@ antlrcpp::Any SparqlQleverVisitor::processIriFunctionCall(
     if (argList.size() != numArgs) {
       throw SparqlParseException{
         absl::StrCat("Function ", prefix, functionName,
-            numArgs == 0 ? "has " : "requires ",
+            numArgs == 0 ? " has " : " requires ",
             numArgs < 5 ? wordForNumArgs[numArgs] : std::to_string(numArgs),
             numArgs == 1 ? " argument" : " arguments")};
     }

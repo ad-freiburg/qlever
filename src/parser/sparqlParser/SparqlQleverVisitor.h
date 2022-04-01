@@ -101,7 +101,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   // Process an IRI function call. This is used in both `visitFunctionCall` and
   // `visitIriOrFunction`.
-  antlrcpp::Any processIriFunctionCall(std::string iri,
+  antlrcpp::Any processIriFunctionCall(const std::string& iri,
                                        std::vector<ExpressionPtr> argList);
 
  public:
@@ -374,7 +374,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitFunctionCall(
       SparqlAutomaticParser::FunctionCallContext* ctx) override {
     return processIriFunctionCall(
-        std::move(visitIri(ctx->iri()).as<std::string>()),
+        visitIri(ctx->iri()).as<std::string>(),
         std::move(
             visitArgList(ctx->argList()).as<std::vector<ExpressionPtr>>()));
   }
@@ -1116,7 +1116,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     }
     // Case 2: Function call, where the function name is an IRI.
     return processIriFunctionCall(
-        std::move(visitIri(ctx->iri()).as<std::string>()),
+        visitIri(ctx->iri()).as<std::string>(),
         std::move(
             visitArgList(ctx->argList()).as<std::vector<ExpressionPtr>>()));
   }
