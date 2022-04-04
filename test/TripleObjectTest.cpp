@@ -9,8 +9,10 @@
 
 TEST(TripleObject, setAndGet) {
   const char* s = "someString\"%%\\";
-  TripleObject t{s};
-  ASSERT_TRUE(t.isString());
-  ASSERT_FALSE(t.isDouble());
-  ASSERT_FALSE(t.isInt());
+  auto testString = [](auto input) {
+    TripleObject t{input};
+    ASSERT_TRUE(t.isString());
+    ASSERT_FALSE(t.isDouble());
+    ASSERT_FALSE(t.isInt());
+  };
 }
