@@ -159,19 +159,19 @@ TEST(TurtleParserTest, rdfLiteral) {
 
   TurtleStringParser<Tokenizer> p;
   for (size_t i = 0; i < literals.size(); ++i) {
-    const auto& s = literals[i];
+    const auto& literal = literals[i];
     const auto& exp = expected[i];
-    p.setInputStream(s);
+    p.setInputStream(literal);
     ASSERT_TRUE(p.rdfLiteral());
     ASSERT_EQ(p._lastParseResult, exp);
-    ASSERT_EQ(p.getPosition(), s.size());
+    ASSERT_EQ(p.getPosition(), literal.size());
   }
 
-  p._prefixMap["qlever"] = "www.qlever.org/";
-  string s("\"valuePrefixed\"^^qlever:sometype");
+  p._prefixMap["doof"] = "www.doof.org/";
+  string s("\"valuePrefixed\"^^doof:sometype");
   p.setInputStream(s);
   ASSERT_TRUE(p.rdfLiteral());
-  ASSERT_EQ(p._lastParseResult, "\"valuePrefixed\"^^<www.qlever.org/sometype>");
+  ASSERT_EQ(p._lastParseResult, "\"valuePrefixed\"^^<www.doof.org/sometype>");
   ASSERT_EQ(p.getPosition(), s.size());
 }
 
@@ -290,9 +290,8 @@ TEST(TurtleParserTest, predicateObjectList) {
 TEST(TurtleParserTest, numericLiteral) {
   std::vector<std::string> literals{"2",   "-2",     "42.209",   "-42.239",
                                     ".74", "2.3e12", "2.34E-14", "-0.3e2"};
-  std::vector<TripleObject> expected{{int64_t{2}}, {int64_t{-2}}, {42.209},
-                                     {-42.239},    {.74},         {2.3e12},
-                                     {2.34e-14},   {-0.3e2}};
+  std::vector<TripleObject> expected{2,   -2,     42.209,   -42.239,
+                                     .74, 2.3e12, 2.34e-14, -0.3e2};
 
   TurtleStringParser<Tokenizer> parser;
   for (size_t i = 0; i < literals.size(); ++i) {

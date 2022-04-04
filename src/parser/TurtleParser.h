@@ -13,13 +13,11 @@
 #include <future>
 #include <locale>
 #include <string_view>
-#include <variant>
 
 #include "../global/Constants.h"
 #include "../index/ConstantsIndexBuilding.h"
 #include "../util/Exception.h"
 #include "../util/File.h"
-#include "../util/Forward.h"
 #include "../util/HashMap.h"
 #include "../util/Log.h"
 #include "../util/TaskQueue.h"
@@ -143,8 +141,10 @@ class TurtleParser {
   // The tokenizer
   Tokenizer_T _tok{std::string_view("")};
 
-  // the result of the last succesful call to a parsing function
-  // (a function named after a (non-)terminal of the Turtle grammar
+  // The result of the last succesful call to a parsing function
+  // (a function named after a (non-)terminal of the Turtle grammar.
+  // We are using `TripleObject` since it can hold any parsing result although
+  // they often are not actually "objects".
   TripleObject _lastParseResult;
 
   // maps prefixes to their expanded form, initialized with the empty base
@@ -205,7 +205,7 @@ class TurtleParser {
   // The grammar rule is called "double" but this is a reserved name in C++.
   bool doubleParse();
 
-  // this version only works if no escape sequences were used.
+  // This version only works if no escape sequences were used.
   bool pnameLnRelaxed();
 
   // __________________________________________________________________________

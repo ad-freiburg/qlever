@@ -12,16 +12,19 @@
 #include "../util/Exception.h"
 #include "../util/Forward.h"
 
-// A wrapper around a `std::variant` that can hold the different types that the
-// object of a triple can have in the Turtle Parser. Those currently are
-// `double` (xsd:double and xsd:decimal), `int64_t(xsd:int and xsd:integer)` and
-// `std::string` (iris and literals of any other type.
-struct TripleObject {
-  // The underlying variant type
+/// A wrapper around a `std::variant` that can hold the different types that the
+/// object of a triple can have in the Turtle Parser. Those currently are
+/// `double` (xsd:double and xsd:decimal), `int64_t` (xsd:int and xsd:integer)
+/// and `std::string` (IRIs and literals of any other type).
+class TripleObject {
+ private:
+  // The underlying variant type.
   using Variant = std::variant<std::string, double, int64_t>;
   Variant _variant;
 
-  /// Construct from anything that is able to construct the underlying `Variant`
+ public:
+  /// Construct from anything that is able to construct the underlying
+  /// `Variant`.
   template <typename... Args>
   requires std::is_constructible_v<Variant, Args&&...> TripleObject(
       Args&&... args)
@@ -91,9 +94,9 @@ struct TripleObject {
   }
 
   /// Convert to an RDF literal. `std::strings` will be emitted directly,
-  /// `int64_t` is converted to a `xsd:integer` literal and a `double` is
+  /// `int64_t` is converted to a `xsd:integer` literal, and a `double` is
   /// converted to a `xsd:double`.
-  [[nodiscard]] std::string toRdf() const {
+  [[nodiscard]] std::string toRdfLiteral() const {
     if (isString()) {
       return getString();
     }
@@ -109,11 +112,11 @@ struct TripleObject {
   friend std::ostream& operator<<(std::ostream& stream,
                                   const TripleObject& obj) {
     if (obj.isString()) {
-      stream << "string: " << obj.getString();
+      stream << "string:\"" << obj.getString() << '"';
     } else if (obj.isInt()) {
-      stream << "int: " << obj.getInt();
+      stream << "int:" << obj.getInt();
     } else if (obj.isDouble()) {
-      stream << "double: " << obj.getDouble();
+      stream << "double:" << obj.getDouble();
     } else {
       AD_CHECK(false);
     }

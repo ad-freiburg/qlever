@@ -368,7 +368,7 @@ bool TurtleParser<T>::stringParse() {
   }
   // also include the quotation marks in the word
   // TODO <joka921> how do we have to translate multiline strings for QLever?
-  _lastParseResult = std::string{view.substr(0, endPos + startPos)};
+  _lastParseResult = view.substr(0, endPos + startPos);
   _tok.remove_prefix(endPos + startPos);
   return true;
 }

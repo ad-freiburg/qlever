@@ -25,21 +25,23 @@ TEST(TripleObject, SetAndGetString) {
 }
 
 TEST(TripleObject, SetAndGetDouble) {
-  TripleObject object{83.12};
+  double value = 83.12;
+  TripleObject object{value};
   ASSERT_FALSE(object.isString());
   ASSERT_TRUE(object.isDouble());
   ASSERT_FALSE(object.isInt());
-  ASSERT_EQ(object, 83.12);
-  ASSERT_EQ(object.getDouble(), 83.12);
+  ASSERT_EQ(object, value);
+  ASSERT_EQ(object.getDouble(), value);
 }
 
 TEST(TripleObject, SetAndGetInt) {
-  TripleObject object{-42};
+  int value = -42;
+  TripleObject object{value};
   ASSERT_FALSE(object.isString());
   ASSERT_FALSE(object.isDouble());
   ASSERT_TRUE(object.isInt());
-  ASSERT_EQ(object, -42);
-  ASSERT_EQ(object.getInt(), -42);
+  ASSERT_EQ(object, value);
+  ASSERT_EQ(object.getInt(), value);
 }
 
 TEST(TripleObject, AssignmentOperator) {
@@ -61,18 +63,18 @@ TEST(TripleObject, AssignmentOperator) {
   testString("aPlainString"s);
 }
 
-TEST(TripleObject, ToRdf) {
+TEST(TripleObject, ToRdfLiteral) {
   std::vector<std::string> strings{"plainString", "<IRI>",
                                    R"("aTypedLiteral"^^xsd::integer)"};
   for (const auto& s : strings) {
-    ASSERT_EQ(s, TripleObject{s}.toRdf());
+    ASSERT_EQ(s, TripleObject{s}.toRdfLiteral());
   }
 
   TripleObject object{42};
-  ASSERT_EQ(object.toRdf(),
+  ASSERT_EQ(object.toRdfLiteral(),
             R"("42"^^<http://www.w3.org/2001/XMLSchema#integer>)");
 
   object = -43.3;
-  ASSERT_EQ(object.toRdf(),
+  ASSERT_EQ(object.toRdfLiteral(),
             R"("-43.3"^^<http://www.w3.org/2001/XMLSchema#double>)");
 }

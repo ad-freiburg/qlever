@@ -214,7 +214,6 @@ void Index::createFromFile(const string& filename) {
 }
 
 // Explicit instantiations.
-// template void Index::createFromFile<TsvParser>(const string& filename);
 template void Index::createFromFile<TurtleStreamParser<Tokenizer>>(
     const string& filename);
 template void Index::createFromFile<TurtleMmapParser<Tokenizer>>(
@@ -263,7 +262,6 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
           // convert each triple to the internal representation (e.g. special
           // values for Numbers, externalized literals, etc.)
           [this](TurtleTriple&& t) -> LangtagAndTriple {
-            // TODO<joka921> This is very wrong, but just to find the interface.
             return tripleToInternalRepresentation(std::move(t));
           },
 
@@ -939,21 +937,20 @@ void Index::readConfiguration() {
 }
 
 // ___________________________________________________________________________
-LangtagAndTriple Index::tripleToInternalRepresentation(
-    TurtleTriple&& tripleIn) {
-  LangtagAndTriple res{"", {}};
-  auto& spo = res._triple;
-  spo[0] = std::move(tripleIn._subject);
-  spo[1] = std::move(tripleIn._predicate);
+LangtagAndTriple Index::tripleToInternalRepresentation(TurtleTriple&& triple) {
+  LangtagAndTriple result{"", {}};
+  auto& resultTriple = result._triple;
+  resultTriple[0] = std::move(triple._subject);
+  resultTriple[1] = std::move(triple._predicate);
   // TODO<joka921> As soon as we have the "folded" Ids, we simply store the
   // numeric value.
-  spo[2] = tripleIn._object.toRdf();
-  for (auto& el : spo) {
+  resultTriple[2] = triple._object.toRdfLiteral();
+  for (auto& el : resultTriple) {
     auto& iriOrLiteral = std::get<TripleComponent>(el)._iriOrLiteral;
     iriOrLiteral = _vocab.getLocaleManager().normalizeUtf8(iriOrLiteral);
   }
   size_t upperBound = 3;
-  auto& object = std::get<TripleComponent>(spo[2])._iriOrLiteral;
+  auto& object = std::get<TripleComponent>(resultTriple[2])._iriOrLiteral;
   // TODO<joka921> Actually create numeric Ids here...
   if (ad_utility::isXsdValue(object)) {
     object = ad_utility::convertValueLiteralToIndexWord(object);
@@ -962,21 +959,21 @@ LangtagAndTriple Index::tripleToInternalRepresentation(
     object = ad_utility::convertNumericToIndexWord(object);
     upperBound = 2;
   } else if (isLiteral(object)) {
-    res._langtag = decltype(_vocab)::getLanguage(object);
+    result._langtag = decltype(_vocab)::getLanguage(object);
   }
 
   for (size_t k = 0; k < upperBound; ++k) {
     // If we already have an ID, we can just continue;
-    if (!std::holds_alternative<TripleComponent>(spo[k])) {
+    if (!std::holds_alternative<TripleComponent>(resultTriple[k])) {
       continue;
     }
-    auto& component = std::get<TripleComponent>(spo[k]);
+    auto& component = std::get<TripleComponent>(resultTriple[k]);
     if (_onDiskLiterals &&
         _vocab.shouldBeExternalized(component._iriOrLiteral)) {
       component._isExternal = true;
     }
   }
-  return res;
+  return result;
 }
 
 // ___________________________________________________________________________
