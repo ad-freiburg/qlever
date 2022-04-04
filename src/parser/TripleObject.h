@@ -17,6 +17,8 @@ struct TripleObject {
   // Construct from anything that is able to construct the underlying `Variant`
   template<typename... Args> requires std::is_constructible_v<Variant, Args&&...>
   TripleObject(Args&&... args) : _variant(AD_FWD(args)...) {}
+
+  TripleObject(std::string_view sv): _variant{std::string{sv}} {}
   TripleObject(const TripleObject&) = default;
   TripleObject(TripleObject&&) noexcept = default;
 
