@@ -9,10 +9,15 @@
 
 #include "../src/util/GeoSparqlHelpers.h"
 
-TEST(GeoSparqlHelpers, isWktPoint) {
-  ASSERT_TRUE(ad_utility::detail::isWktPoint("\"POINT("));
-  ASSERT_FALSE(ad_utility::detail::isWktPoint("\"POINT"));
-  ASSERT_FALSE(ad_utility::detail::isWktPoint("POINT("));
+TEST(GeoSparqlHelpers, CheckWktPointPrefix) {
+  ASSERT_TRUE(ad_utility::detail::checkWktPointPrefix("\"POINT(xxxxx"));
+  ASSERT_TRUE(ad_utility::detail::checkWktPointPrefix("\"point(xxxxx"));
+  ASSERT_TRUE(ad_utility::detail::checkWktPointPrefix("\"pOiNt(xxxxx"));
+  ASSERT_TRUE(ad_utility::detail::checkWktPointPrefix("\"POINT(1xxxx"));
+  ASSERT_TRUE(ad_utility::detail::checkWktPointPrefix("\"POINT(xxxxx"));
+  ASSERT_FALSE(ad_utility::detail::checkWktPointPrefix("\"POINT("));
+  ASSERT_FALSE(ad_utility::detail::checkWktPointPrefix("\"POINTxxxxx"));
+  ASSERT_FALSE(ad_utility::detail::checkWktPointPrefix("POINT(xxxxxx"));
 }
 
 TEST(GeoSparqlHelpers, WktLatLng) {

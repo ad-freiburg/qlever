@@ -13,9 +13,9 @@ namespace ad_utility {
 
 namespace detail {
 
-// Helper function that checks whether a string looks like a WKT pointC (just
-// checks the beginning and that it has the minimal length).
-bool isWktPoint(const std::string& p) {
+// Helper function that checks whether a string starts with "POINT( where any of
+// the letters can be uppercase or lowercase.
+bool checkWktPointPrefix(const std::string& p) {
   return p.size() >= 12 && p[0] == '"' && (p[1] == 'P' || p[1] == 'p') &&
          (p[2] == 'O' || p[2] == 'o') && (p[3] == 'I' || p[3] == 'i') &&
          (p[4] == 'N' || p[4] == 'n') && (p[5] == 'T' || p[5] == 't') &&
@@ -30,7 +30,7 @@ bool isWktPoint(const std::string& p) {
 std::pair<double, double> parseWktPoint(const std::string& p) {
   auto error_result = std::pair(std::numeric_limits<double>::quiet_NaN(),
                                 std::numeric_limits<double>::quiet_NaN());
-  if (!isWktPoint(p)) {
+  if (!checkWktPointPrefix(p)) {
     return error_result;
   }
   const char* beg = p.c_str() + 7;
@@ -50,7 +50,7 @@ std::pair<double, double> parseWktPoint(const std::string& p) {
 // See wktLongitude.
 double wktLongitudeImpl(const std::string& p) {
   auto nan = std::numeric_limits<double>::quiet_NaN();
-  if (!isWktPoint(p)) return nan;
+  if (!checkWktPointPrefix(p)) return nan;
   const char* beg = p.c_str() + 7;
   char* end;
   double lng = std::strtod(beg, &end);
@@ -60,7 +60,7 @@ double wktLongitudeImpl(const std::string& p) {
 // see wktLatitude.
 double wktLatitudeImpl(const std::string& p) {
   auto nan = std::numeric_limits<double>::quiet_NaN();
-  if (!isWktPoint(p)) return nan;
+  if (!checkWktPointPrefix(p)) return nan;
   const char* beg = p.c_str() + 7;
   while (*beg == ' ') ++beg;
   if (*beg == '-') ++beg;
