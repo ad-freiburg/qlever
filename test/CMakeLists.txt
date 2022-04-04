@@ -184,3 +184,5 @@ addLinkAndDiscoverTest(BitUtilsTest)
 addLinkAndDiscoverTest(NBitIntegerTest)
 
 addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
+
+addLinkAndDiscoverTest(DateTest)
