@@ -31,7 +31,9 @@ void FTSAlgorithms::filterByRange(const IdRange& idRange,
   size_t nofResultElements = 0;
 
   for (size_t i = 0; i < blockWids.size(); ++i) {
-    if (blockWids[i] >= idRange._first && blockWids[i] <= idRange._last) {
+    // TODO<joka921> proper Ids for the text stuff.
+    if (blockWids[i].get() >= idRange._first &&
+        blockWids[i].get() <= idRange._last) {
       resultCids[nofResultElements] = blockCids[i];
       resultScores[nofResultElements++] = blockScores[i];
     }
@@ -350,7 +352,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(const vector<Id>& cids,
   result.reserve(map.size() * k + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     Id eid = it->first;
-    Id entityScore = static_cast<Id>(it->second.first);
+    Id entityScore = Id::make(it->second.first);
     ScoreToContext& stc = it->second.second;
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
       result.push_back({itt->second, entityScore, eid});
@@ -415,7 +417,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(vector<Row>& nonAggRes,
            j < res.size(); ++j) {
         assert(j < i);
         assert(j < res.size());
-        res[j][1] = contextsInResult;
+        res[j][1] = Id::make(contextsInResult);
       }
 
       // start with current
@@ -466,7 +468,7 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(const vector<Id>& cids,
   size_t n = 0;
   for (auto it = map.begin(); it != map.end(); ++it) {
     result(n, 0) = it->second.second.first;
-    result(n, 1) = static_cast<Id>(it->second.first);
+    result(n, 1) = Id::make(it->second.first);
     result(n, 2) = it->first;
     n++;
   }
@@ -614,7 +616,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
         size_t n = result.size();
         result.push_back();
         result(n, 0) = itt->second;
-        result(n, 1) = static_cast<Id>(it->second.first);
+        result(n, 1) = Id::make(it->second.first);
         for (size_t k = 0; k < nofVars; ++k) {
           result(n, k + 2) = it->first[k];  // eid
         }
@@ -675,8 +677,9 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
   // Note: vector{k} initializes with a single value k, as opposed to
   // vector<Id>(k), which initializes a vector with k default constructed
   // arguments.
+  // TODO<joka921> proper Id types
   vector<Id> emptyKey{std::numeric_limits<Id>::max()};
-  vector<Id> deletedKey{std::numeric_limits<Id>::max() - 1};
+  vector<Id> deletedKey{Id::make(std::numeric_limits<uint64_t>::max() - 1)};
   AggMap map;
   vector<Id> entitiesInContext;
   Id currentCid = cids[0];
@@ -745,7 +748,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
   // Iterate over the map and populate the result.
   for (auto it = map.begin(); it != map.end(); ++it) {
     result(n, 0) = it->second.second.first;
-    result(n, 1) = static_cast<Id>(it->second.first);
+    result(n, 1) = Id::make(it->second.first);
     for (size_t k = 0; k < nofVars; ++k) {
       result(n, k + 2) = it->first[k];
     }
@@ -815,7 +818,7 @@ void FTSAlgorithms::appendCrossProduct(
   for (size_t i = from; i < toExclusive; ++i) {
     for (size_t j = 0; j < contextSubRes1.size(); ++j) {
       for (size_t k = 0; k < contextSubRes2.size(); ++k) {
-        res.emplace_back(array<Id, 5>{{eids[i], scores[i], cids[i],
+        res.emplace_back(array<Id, 5>{{eids[i], Id::make(scores[i]), cids[i],
                                        contextSubRes1[j], contextSubRes2[k]}});
       }
     }
@@ -860,7 +863,7 @@ void FTSAlgorithms::appendCrossProduct(
     }
 
     for (size_t n = 0; n < nofResultRows; ++n) {
-      vector<Id> resRow = {eids[i], scores[i], cids[i]};
+      vector<Id> resRow = {eids[i], Id::make(scores[i]), cids[i]};
       for (size_t j = 0; j < subResMatches.size(); ++j) {
         size_t index = n;
         for (size_t k = 0; k < j; ++k) {
@@ -924,7 +927,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   result.reserve(map.size() * k + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     Id eid = it->first;
-    Id score = static_cast<Id>(it->second.first);
+    Id score = Id::make(it->second.first);
     ScoreToContext& stc = it->second.second;
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
       for (auto fRow : fMap.find(eid)->second) {
@@ -1030,7 +1033,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
   result.reserve(map.size() * k + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     Id eid = it->first;
-    Id score = static_cast<Id>(it->second.first);
+    Id score = Id::make(it->second.first);
     ScoreToContext& stc = it->second.second;
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
       result.push_back({itt->second, score, eid});
@@ -1187,7 +1190,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
   IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
   for (auto it = map.begin(); it != map.end(); ++it) {
     ScoreToContext& stc = it->second.second;
-    Id rscore = it->second.first;
+    Id rscore = Id::make(it->second.first);
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
       const vector<Id>& keyEids = it->first;
       const IdTable& filterRows = fMap.find(keyEids[0])->second;
@@ -1379,7 +1382,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
   IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
   for (auto it = map.begin(); it != map.end(); ++it) {
     ScoreToContext& stc = it->second.second;
-    Id rscore = it->second.first;
+    Id rscore = Id::make(it->second.first);
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
       const vector<Id>& keyEids = it->first;
       size_t n = result.size();

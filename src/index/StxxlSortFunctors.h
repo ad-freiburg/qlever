@@ -11,138 +11,35 @@
 using std::array;
 using std::tuple;
 
-struct SortByPSO {
+template <int i0, int i1, int i2>
+struct SortTriple {
+  using T = std::array<Id, 3>;
   // comparison function
-  bool operator()(const array<Id, 3>& a, const array<Id, 3>& b) const {
-    if (a[1] == b[1]) {
-      if (a[0] == b[0]) {
-        return a[2] < b[2];
+  bool operator()(const T& a, const T& b) const {
+    if (a[i0] == b[i0]) {
+      if (a[i1] == b[i1]) {
+        return a[i2] < b[i2];
       }
-      return a[0] < b[0];
+      return a[i1] < b[i1];
     }
-    return a[1] < b[1];
+    return a[i0] < b[i0];
   }
 
-  // min sentinel = value which is strictly smaller that any input element
-  static array<Id, 3> min_value() { return array<Id, 3>{{0, 0, 0}}; }
+  // Value that is strictly smaller than any input element.
+  static T min_value() { return {Id::min(), Id::min(), Id::min()}; }
 
-  // max sentinel = value which is strictly larger that any input element
-  static array<Id, 3> max_value() {
-    Id max = std::numeric_limits<Id>::max();
-    return array<Id, 3>{{max, max, max}};
-  }
+  // Value that is strictly larger than any input element.
+  static T max_value() { return {Id::max(), Id::max(), Id::max()}; }
 };
 
-struct SortByPOS {
-  // comparison function
-  bool operator()(const array<Id, 3>& a, const array<Id, 3>& b) const {
-    if (a[1] == b[1]) {
-      if (a[2] == b[2]) {
-        return a[0] < b[0];
-      }
-      return a[2] < b[2];
-    }
-    return a[1] < b[1];
-  }
+using SortByPSO = SortTriple<1, 0, 2>;
+using SortByPOS = SortTriple<1, 2, 0>;
+using SortBySPO = SortTriple<0, 1, 2>;
+using SortBySOP = SortTriple<0, 2, 1>;
+using SortByOSP = SortTriple<2, 0, 1>;
+using SortByOPS = SortTriple<2, 1, 0>;
 
-  // min sentinel = value which is strictly smaller that any input element
-  static array<Id, 3> min_value() { return array<Id, 3>{{0, 0, 0}}; }
-
-  // max sentinel = value which is strictly larger that any input element
-  static array<Id, 3> max_value() {
-    Id max = std::numeric_limits<Id>::max();
-    return array<Id, 3>{{max, max, max}};
-  }
-};
-
-struct SortBySPO {
-  // comparison function
-  bool operator()(const array<Id, 3>& a, const array<Id, 3>& b) const {
-    if (a[0] == b[0]) {
-      if (a[1] == b[1]) {
-        return a[2] < b[2];
-      }
-      return a[1] < b[1];
-    }
-    return a[0] < b[0];
-  }
-
-  // min sentinel = value which is strictly smaller that any input element
-  static array<Id, 3> min_value() { return array<Id, 3>{{0, 0, 0}}; }
-
-  // max sentinel = value which is strictly larger that any input element
-  static array<Id, 3> max_value() {
-    Id max = std::numeric_limits<Id>::max();
-    return array<Id, 3>{{max, max, max}};
-  }
-};
-
-struct SortBySOP {
-  // comparison function
-  bool operator()(const array<Id, 3>& a, const array<Id, 3>& b) const {
-    if (a[0] == b[0]) {
-      if (a[2] == b[2]) {
-        return a[1] < b[1];
-      }
-      return a[2] < b[2];
-    }
-    return a[0] < b[0];
-  }
-
-  // min sentinel = value which is strictly smaller that any input element
-  static array<Id, 3> min_value() { return array<Id, 3>{{0, 0, 0}}; }
-
-  // max sentinel = value which is strictly larger that any input element
-  static array<Id, 3> max_value() {
-    Id max = std::numeric_limits<Id>::max();
-    return array<Id, 3>{{max, max, max}};
-  }
-};
-
-struct SortByOSP {
-  // comparison function
-  bool operator()(const array<Id, 3>& a, const array<Id, 3>& b) const {
-    if (a[2] == b[2]) {
-      if (a[0] == b[0]) {
-        return a[1] < b[1];
-      }
-      return a[0] < b[0];
-    }
-    return a[2] < b[2];
-  }
-
-  // min sentinel = value which is strictly smaller that any input element
-  static array<Id, 3> min_value() { return array<Id, 3>{{0, 0, 0}}; }
-
-  // max sentinel = value which is strictly larger that any input element
-  static array<Id, 3> max_value() {
-    Id max = std::numeric_limits<Id>::max();
-    return array<Id, 3>{{max, max, max}};
-  }
-};
-
-struct SortByOPS {
-  // comparison function
-  bool operator()(const array<Id, 3>& a, const array<Id, 3>& b) const {
-    if (a[2] == b[2]) {
-      if (a[1] == b[1]) {
-        return a[0] < b[0];
-      }
-      return a[1] < b[1];
-    }
-    return a[2] < b[2];
-  }
-
-  // min sentinel = value which is strictly smaller that any input element
-  static array<Id, 3> min_value() { return array<Id, 3>{{0, 0, 0}}; }
-
-  // max sentinel = value which is strictly larger that any input element
-  static array<Id, 3> max_value() {
-    Id max = std::numeric_limits<Id>::max();
-    return array<Id, 3>{{max, max, max}};
-  }
-};
-
+// TODO<joka921> Which of those are actually "IDs" and which are something else?
 struct SortText {
   // comparison function
   bool operator()(const tuple<Id, Id, Id, Score, bool>& a,
@@ -168,13 +65,12 @@ struct SortText {
 
   // min sentinel = value which is strictly smaller that any input element
   static tuple<Id, Id, Id, Score, bool> min_value() {
-    return tuple<Id, Id, Id, Score, bool>{0, 0, 0, 0, false};
+    return {Id::min(), Id::min(), Id::min(), 0, false};
   }
 
   // max sentinel = value which is strictly larger that any input element
   static tuple<Id, Id, Id, Score, bool> max_value() {
-    Id max = std::numeric_limits<Id>::max();
     Score maxScore = std::numeric_limits<Score>::max();
-    return tuple<Id, Id, Id, Score, bool>{max, max, max, maxScore, true};
+    return {Id::max(), Id::max(), Id::max(), maxScore, true};
   }
 };

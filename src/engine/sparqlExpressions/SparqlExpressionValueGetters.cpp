@@ -18,7 +18,7 @@ double NumericValueGetter::operator()(StrongIdWithResultType strongId,
   switch (strongId._type) {
     // This code is borrowed from the original QLever code.
     case ResultTable::ResultType::VERBATIM:
-      return static_cast<double>(id);
+      return static_cast<double>(id.get());
     case ResultTable::ResultType::FLOAT:
       // used to store the id value of the entry interpreted as a float
       float tempF;
@@ -47,7 +47,7 @@ bool EffectiveBooleanValueGetter::operator()(StrongIdWithResultType strongId,
   const Id id = strongId._id._value;
   switch (strongId._type) {
     case ResultTable::ResultType::VERBATIM:
-      return id != 0;
+      return id.get() != 0;
     case ResultTable::ResultType::FLOAT:
       // used to store the id value of the entry interpreted as a float
       float tempF;
@@ -56,8 +56,8 @@ bool EffectiveBooleanValueGetter::operator()(StrongIdWithResultType strongId,
     case ResultTable::ResultType::TEXT:
       return true;
     case ResultTable::ResultType::LOCAL_VOCAB:
-      AD_CHECK(id < context->_localVocab.size());
-      return !(context->_localVocab[id].empty());
+      AD_CHECK(id.get() < context->_localVocab.size());
+      return !(context->_localVocab[id.get()].empty());
     case ResultTable::ResultType::KB:
       // Load the string.
       std::string entity =
@@ -84,7 +84,7 @@ string StringValueGetter::operator()(StrongIdWithResultType strongId,
   const Id id = strongId._id._value;
   switch (strongId._type) {
     case ResultTable::ResultType::VERBATIM:
-      return std::to_string(id);
+      return std::to_string(id.get());
     case ResultTable::ResultType::FLOAT:
       // used to store the id value of the entry interpreted as a float
       float tempF;
@@ -93,8 +93,8 @@ string StringValueGetter::operator()(StrongIdWithResultType strongId,
     case ResultTable::ResultType::TEXT:
       return context->_qec.getIndex().getTextExcerpt(id);
     case ResultTable::ResultType::LOCAL_VOCAB:
-      AD_CHECK(id < context->_localVocab.size());
-      return context->_localVocab[id];
+      AD_CHECK(id.get() < context->_localVocab.size());
+      return context->_localVocab[id.get()];
     case ResultTable::ResultType::KB:
       // load the string, parse it as an xsd::int or float
       std::string entity =

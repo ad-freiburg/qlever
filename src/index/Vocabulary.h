@@ -52,10 +52,10 @@ using AccessReturnType_t = typename AccessReturnTypeGetter<StringType>::type;
 struct IdRange {
   IdRange() : _first(), _last() {}
 
-  IdRange(Id first, Id last) : _first(first), _last(last) {}
+  IdRange(VocabIndex first, VocabIndex last) : _first(first), _last(last) {}
 
-  Id _first;
-  Id _last;
+  VocabIndex _first;
+  VocabIndex _last;
 };
 
 //! Stream operator for convenience.
@@ -120,41 +120,46 @@ class Vocabulary {
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
   void writeToFile(const string& fileName) const;
 
-  //! Get the word with the given id or an empty optional if the
+  //! Get the word with the given idx or an empty optional if the
   //! word is not in the vocabulary.
   //! Only enabled when uncompressed which also means no externalization
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  const std::optional<std::string_view> operator[](Id id) const;
+  const std::optional<std::string_view> operator[](VocabIndex idx) const;
 
-  //! Get the word with the given id or an empty optional if the
+  //! Get the word with the given idx or an empty optional if the
   //! word is not in the vocabulary. Returns an lvalue because compressed or
   //! externalized words don't allow references
   template <typename U = StringType, typename = enable_if_compressed<U>>
-  const std::optional<string> idToOptionalString(Id id) const;
+  [[nodiscard]] const std::optional<string> indexToOptionalString(
+      VocabIndex idx) const;
 
-  //! Get the word with the given id.
+  //! Get the word with the given idx.
   //! lvalue for compressedString and const& for string-based vocabulary
-  AccessReturnType_t<StringType> at(Id id) const;
+  AccessReturnType_t<StringType> at(VocabIndex idx) const;
 
-  // AccessReturnType_t<StringType> at(Id id) const { return operator[](id); }
+  // AccessReturnType_t<StringType> at(VocabIndex idx) const { return
+  // operator[](id); }
 
   //! Get the number of words in the vocabulary.
-  size_t size() const { return _internalVocabulary.size(); }
+  [[nodiscard]] size_t size() const { return _internalVocabulary.size(); }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
-  bool getId(const string& word, Id* id) const;
+  bool getId(const string& word, VocabIndex* idx) const;
 
-  Id getValueIdForLT(const string& indexWord, const SortLevel level) const {
-    Id lb = lower_bound(indexWord, level);
+  VocabIndex getValueIdForLT(const string& indexWord,
+                             const SortLevel level) const {
+    VocabIndex lb = lower_bound(indexWord, level);
     return lb;
   }
-  Id getValueIdForGE(const string& indexWord, const SortLevel level) const {
+  VocabIndex getValueIdForGE(const string& indexWord,
+                             const SortLevel level) const {
     return getValueIdForLT(indexWord, level);
   }
 
-  Id getValueIdForLE(const string& indexWord, const SortLevel level) const {
-    Id lb = upper_bound(indexWord, level);
+  VocabIndex getValueIdForLE(const string& indexWord,
+                             const SortLevel level) const {
+    VocabIndex lb = upper_bound(indexWord, level);
     if (lb > 0) {
       // We actually retrieved the first word that is bigger than our entry.
       // TODO<joka921>: What to do, if the 0th entry is already too big?
@@ -163,7 +168,8 @@ class Vocabulary {
     return lb;
   }
 
-  Id getValueIdForGT(const string& indexWord, const SortLevel level) const {
+  VocabIndex getValueIdForGT(const string& indexWord,
+                             const SortLevel level) const {
     return getValueIdForLE(indexWord, level);
   }
 
@@ -175,8 +181,8 @@ class Vocabulary {
   // consider using the prefixRange function.
   bool getIdRangeForFullTextPrefix(const string& word, IdRange* range) const;
 
-  ad_utility::HashMap<Datatypes, std::pair<Id, Id>> getRangesForDatatypes()
-      const;
+  ad_utility::HashMap<Datatypes, std::pair<VocabIndex, VocabIndex>>
+  getRangesForDatatypes() const;
 
   template <typename U = StringType, typename = enable_if_compressed<U>>
   void printRangesForDatatypes();
@@ -242,18 +248,18 @@ class Vocabulary {
   /// prefix according to the collation level the first Id is included in the
   /// range, the last one not. Currently only supports the Primary collation
   /// level, due to limitations in the StringSortComparators
-  std::pair<Id, Id> prefix_range(const string& prefix) const;
+  std::pair<VocabIndex, VocabIndex> prefix_range(const string& prefix) const;
 
   [[nodiscard]] const LocaleManager& getLocaleManager() const {
     return getCaseComparator().getLocaleManager();
   }
 
   // Wraps std::lower_bound and returns an index instead of an iterator
-  Id lower_bound(const string& word,
-                 const SortLevel level = SortLevel::QUARTERNARY) const;
+  VocabIndex lower_bound(const string& word,
+                         const SortLevel level = SortLevel::QUARTERNARY) const;
 
   // _______________________________________________________________
-  Id upper_bound(const string& word, const SortLevel level) const;
+  VocabIndex upper_bound(const string& word, const SortLevel level) const;
 
  private:
   // If a word starts with one of those prefixes it will be externalized

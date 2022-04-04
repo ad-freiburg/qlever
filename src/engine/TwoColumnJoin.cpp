@@ -12,7 +12,7 @@ using std::string;
 TwoColumnJoin::TwoColumnJoin(QueryExecutionContext* qec,
                              std::shared_ptr<QueryExecutionTree> t1,
                              std::shared_ptr<QueryExecutionTree> t2,
-                             const vector<array<Id, 2>>& jcs)
+                             const vector<array<ColumnIndex, 2>>& jcs)
     : Operation(qec) {
   // Make sure subtrees are ordered so that identical queries can be identified.
   AD_CHECK_EQ(jcs.size(), 2);

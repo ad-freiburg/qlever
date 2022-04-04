@@ -6,13 +6,13 @@
 
 // _________________________________________________________________________
 void PatternCreator::processTriple(std::array<Id, 3> triple) {
-  if (!_currentSubjectId.has_value()) {
+  if (!_currentSubjectIndex.has_value()) {
     // This is the first triple
-    _currentSubjectId = triple[0];
-  } else if (triple[0] != _currentSubjectId) {
+    _currentSubjectIndex = triple[0].get();
+  } else if (triple[0].get() != _currentSubjectIndex) {
     // New subject.
-    finishSubject(_currentSubjectId.value(), _currentPattern);
-    _currentSubjectId = triple[0];
+    finishSubject(_currentSubjectIndex.value(), _currentPattern);
+    _currentSubjectIndex = triple[0].get();
     _currentPattern.clear();
   }
   // Don't list predicates twice in the same pattern.
@@ -22,7 +22,7 @@ void PatternCreator::processTriple(std::array<Id, 3> triple) {
 }
 
 // ________________________________________________________________________________
-void PatternCreator::finishSubject(const Id& subjectId,
+void PatternCreator::finishSubject(VocabIndex subjectIndex,
                                    const Pattern& pattern) {
   _numDistinctSubjects++;
   _numDistinctSubjectPredicatePairs += pattern.size();
@@ -48,14 +48,14 @@ void PatternCreator::finishSubject(const Id& subjectId,
   // The mapping from subjects to patterns is a vector of pattern IDs. We have
   // to assign the ID NO_PATTERN to all the possible subjects that have no
   // triple.
-  while (_nextUnassignedSubjectId < subjectId) {
+  while (_nextUnassignedSubjectIndex < subjectIndex) {
     _subjectToPatternSerializer.push(NO_PATTERN);
-    _nextUnassignedSubjectId++;
+    _nextUnassignedSubjectIndex++;
   }
 
-  // Write the subjectId-pattern mapping for this subjectId.
+  // Write the subjectIndex-pattern mapping for this subjectIndex.
   _subjectToPatternSerializer.push(patternId);
-  _nextUnassignedSubjectId++;
+  _nextUnassignedSubjectIndex++;
 }
 
 // ____________________________________________________________________________
@@ -66,7 +66,7 @@ void PatternCreator::finish() {
   _isFinished = true;
 
   // Write the pattern of the last subject.
-  finishSubject(_currentSubjectId.value(), _currentPattern);
+  finishSubject(_currentSubjectIndex.value(), _currentPattern);
 
   // The mapping from subjects to patterns is already written to disk at this
   // point.
@@ -90,7 +90,7 @@ void PatternCreator::finish() {
             [](const auto& a, const auto& b) {
               return a.second._patternId < b.second._patternId;
             });
-  CompactVectorOfStrings<Id>::Writer patternWriter{
+  CompactVectorOfStrings<Pattern::value_type>::Writer patternWriter{
       std::move(patternSerializer).file()};
   for (const auto& p : orderedPatterns) {
     patternWriter.push(p.first.data(), p.first.size());

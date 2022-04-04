@@ -67,10 +67,10 @@ class VocabularyMerger {
   // represents tokens/words in a certain partial vocabulary
   struct QueueWord {
     QueueWord() = default;
-    QueueWord(TripleComponentWithId&& v, size_t file)
+    QueueWord(TripleComponentWithIndex&& v, size_t file)
         : _entry(std::move(v)), _partialFileId(file) {}
-    TripleComponentWithId _entry;  // the word, its local ID and the information
-                                   // if it will be externalized
+    TripleComponentWithIndex _entry;  // the word, its local ID and the
+                                      // information if it will be externalized
     size_t _partialFileId;  // from which partial vocabulary did this word come
 
     [[nodiscard]] const bool& isExternal() const { return _entry.isExternal(); }
@@ -81,8 +81,8 @@ class VocabularyMerger {
     }
     [[nodiscard]] std::string& iriOrLiteral() { return _entry.iriOrLiteral(); }
 
-    [[nodiscard]] const auto& id() const { return _entry._id; }
-    [[nodiscard]] auto& id() { return _entry._id; }
+    [[nodiscard]] const auto& id() const { return _entry._index; }
+    [[nodiscard]] auto& id() { return _entry._index; }
   };
 
   // write the queu words in the buffer to their corresponding idPairVecs.
@@ -100,8 +100,8 @@ class VocabularyMerger {
     _outfileExternal = std::ofstream();
     _idVecs.clear();
     _firstLangPredSeen = false;
-    _langPredLowerBound = 0;
-    _langPredUpperBound = 0;
+    _langPredLowerBound = ID_NO_VALUE;
+    _langPredUpperBound = ID_NO_VALUE;
   }
 
   // private data members
@@ -111,13 +111,13 @@ class VocabularyMerger {
   size_t _totalWritten = 0;
   // keep track of the last seen word to correctly handle duplicates
 
-  std::optional<TripleComponentWithId> _lastTripleComponent = std::nullopt;
+  std::optional<TripleComponentWithIndex> _lastTripleComponent = std::nullopt;
   std::ofstream _outfileExternal;
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> _idVecs;
   bool _firstLangPredSeen = false;
-  Id _langPredLowerBound = 0;
-  Id _langPredUpperBound = 0;
+  Id _langPredLowerBound = Id::min();
+  Id _langPredUpperBound = Id::min();
 
   const size_t _bufferSize = 10000000;
 
@@ -151,7 +151,7 @@ ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
  * @param els  Must be sorted(at least duplicates must be adjacent) according to
  * the strings and the Ids must be unique to work correctly.
  */
-ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* els);
+ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec* els);
 
 /**
  * @brief for each of the IdTriples in <input>: map the three Ids using the

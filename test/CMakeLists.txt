@@ -82,7 +82,7 @@ addLinkAndDiscoverTest(BufferedVectorTest)
 
 addLinkAndDiscoverTest(UnionTest engine)
 
-add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp TripleObjectTest.cpp)
+add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
 linkAndDiscoverTest(TokenTest parser re2 ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(TurtleParserTest parser absl::flat_hash_map re2)
@@ -176,5 +176,11 @@ addLinkAndDiscoverTest(CompressorStreamTest engine)
 addLinkAndDiscoverTest(AsyncStreamTest)
 
 addLinkAndDiscoverTest(TriplesViewTest)
+
+addLinkAndDiscoverTest(BitUtilsTest)
+
+addLinkAndDiscoverTest(NBitIntegerTest)
+
+addLinkAndDiscoverTest(DateTest)
 
 addLinkAndDiscoverTest(TripleObjectTest absl::strings)

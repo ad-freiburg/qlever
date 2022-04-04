@@ -58,7 +58,7 @@ struct CompressedRelationMetaData {
   // the uncompressed sequence of triples).  Otherwise, this "relation" is
   // stored in one or several blocks of its own, and we set `_offsetInBlock` to
   // `Id(-1)`.
-  Id _offsetInBlock = Id(-1);
+  uint64_t _offsetInBlock = std::numeric_limits<uint64_t>::max();
 
   size_t getNofElements() const { return _numRows; }
 
@@ -72,9 +72,11 @@ struct CompressedRelationMetaData {
 
   // A special value for an "empty" or "nonexisting" meta data. This is needed
   // for the mmap-based meta data.
+  // TODO<joka921> Can we throw this out?
   static CompressedRelationMetaData emptyMetaData() {
+    auto id = ID_NO_VALUE;
     size_t m = size_t(-1);
-    return CompressedRelationMetaData{m, m, 0, 0, m};
+    return CompressedRelationMetaData{id, m, 0, 0, m};
   }
 
   // Two of these are equal if all members are equal.

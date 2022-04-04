@@ -63,12 +63,12 @@ class HasPredicateScan : public Operation {
   }
 
   // These are made static and public mainly for easier testing
-  static void computeFreeS(ResultTable* result, size_t objectId,
+  static void computeFreeS(ResultTable* result, Id objectId,
                            const std::vector<PatternID>& hasPattern,
                            const CompactVectorOfStrings<Id>& hasPredicate,
                            const CompactVectorOfStrings<Id>& patterns);
 
-  static void computeFreeO(ResultTable* result, size_t subjectId,
+  static void computeFreeO(ResultTable* result, Id subjectId,
                            const std::vector<PatternID>& hasPattern,
                            const CompactVectorOfStrings<Id>& hasPredicate,
                            const CompactVectorOfStrings<Id>& patterns);

@@ -23,22 +23,24 @@ using std::vector;
 class VocabularyOnDisk {
  private:
   // An ID and the offset of the corresponding word in the underlying file.
-  struct IdAndOffset {
-    uint64_t _id;
+  struct IndexAndOffset {
+    uint64_t _idx;
     uint64_t _offset;
     // Compare only by the IDs.
-    auto operator<=>(const IdAndOffset& rhs) const { return _id <=> rhs._id; }
+    auto operator<=>(const IndexAndOffset& rhs) const {
+      return _idx <=> rhs._idx;
+    }
   };
 
   // The file in which the words are stored.
   mutable ad_utility::File _file;
 
   // The IDs and offsets of the words.
-  ad_utility::MmapVectorView<IdAndOffset> _idsAndOffsets;
+  ad_utility::MmapVectorView<IndexAndOffset> _idsAndOffsets;
 
   // The highest ID that occurs in the vocabulary. If the vocabulary is empty,
-  // this will be Id(-1), s.t. _highestId + 1 will overflow to 0.
-  Id _highestId = std::numeric_limits<Id>::max();
+  // this will be Id(-1), s.t. _highestIdx + 1 will overflow to 0.
+  uint64_t _highestIdx = std::numeric_limits<uint64_t>::max();
   // The number of words stored in the vocabulary.
   size_t _size = 0;
 
@@ -66,9 +68,9 @@ class VocabularyOnDisk {
   /// use.
   void close() { _file.close(); }
 
-  /// If an entry with this `id` exists, return the corresponding string, else
+  /// If an entry with this `idx` exists, return the corresponding string, else
   /// `std::nullopt`
-  std::optional<string> operator[](Id id) const;
+  std::optional<string> operator[](uint64_t idx) const;
 
   /// Get the number of words in the vocabulary.
   size_t size() const { return _size; }
@@ -85,7 +87,7 @@ class VocabularyOnDisk {
   // to 0). This makes the behavior of `lower_bound` and `upper_bound` for empty
   // vocabularies consistent with other vocabulary types like
   // `VocabularyInMemory`.
-  Id getHighestId() const { return _highestId; }
+  uint64_t getHighestId() const { return _highestIdx; }
 
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt the `comparator`. Only works correctly if the
@@ -172,9 +174,9 @@ class VocabularyOnDisk {
     }
   }
 
-  // Get the `OffsetAndSize` for the element with the `id`. Return
-  // `std::nullopt` if `id` is not contained in the vocabulary.
-  std::optional<OffsetAndSize> getOffsetAndSize(Id id) const;
+  // Get the `OffsetAndSize` for the element with the `idx`. Return
+  // `std::nullopt` if `idx` is not contained in the vocabulary.
+  std::optional<OffsetAndSize> getOffsetAndSize(uint64_t idx) const;
 
   // Return the `OffsetSizeId` for the element with the i-th smallest ID.
   // Requires that i < size().

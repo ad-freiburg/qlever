@@ -11,10 +11,12 @@
 
 class MultiColumnJoin : public Operation {
  public:
+  // TODO<joka921> Make ColumnIndex a strong type across QLever
+  using ColumnIndex = uint64_t;
   MultiColumnJoin(QueryExecutionContext* qec,
                   std::shared_ptr<QueryExecutionTree> t1,
                   std::shared_ptr<QueryExecutionTree> t2,
-                  const std::vector<std::array<Id, 2>>& joinCols);
+                  const std::vector<std::array<ColumnIndex, 2>>& joinCols);
 
  protected:
   virtual string asStringImpl(size_t indent = 0) const override;
@@ -54,9 +56,9 @@ class MultiColumnJoin : public Operation {
    *        This method is made public here for unit testing purposes.
    **/
   template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
-  static void computeMultiColumnJoin(const IdTable& a, const IdTable& b,
-                                     const vector<array<Id, 2>>& joinColumns,
-                                     IdTable* result);
+  static void computeMultiColumnJoin(
+      const IdTable& a, const IdTable& b,
+      const vector<array<ColumnIndex, 2>>& joinColumns, IdTable* result);
 
  private:
   void computeSizeEstimateAndMultiplicities();
@@ -64,7 +66,7 @@ class MultiColumnJoin : public Operation {
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 
-  std::vector<std::array<Id, 2>> _joinColumns;
+  std::vector<std::array<ColumnIndex, 2>> _joinColumns;
 
   vector<float> _multiplicities;
   size_t _sizeEstimate;
@@ -76,7 +78,7 @@ class MultiColumnJoin : public Operation {
 template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
 void MultiColumnJoin::computeMultiColumnJoin(
     const IdTable& dynA, const IdTable& dynB,
-    const vector<array<Id, 2>>& joinColumns, IdTable* dynResult) {
+    const vector<array<ColumnIndex, 2>>& joinColumns, IdTable* dynResult) {
   // check for trivial cases
   if (dynA.size() == 0 || dynB.size() == 0) {
     return;
@@ -85,7 +87,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
   // Marks the columns in b that are join columns. Used to skip these
   // when computing the result of the join
   int joinColumnBitmap_b = 0;
-  for (const array<Id, 2>& jc : joinColumns) {
+  for (const array<ColumnIndex, 2>& jc : joinColumns) {
     joinColumnBitmap_b |= (1 << jc[1]);
   }
 
@@ -114,7 +116,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
     matched = true;
     for (size_t joinColIndex = 0; joinColIndex < joinColumns.size();
          joinColIndex++) {
-      const array<Id, 2>& joinColumn = joinColumns[joinColIndex];
+      const array<ColumnIndex, 2>& joinColumn = joinColumns[joinColIndex];
       if (a(ia, joinColumn[0]) < b(ib, joinColumn[1])) {
         ia++;
         matched = false;
@@ -153,7 +155,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
         ib++;
 
         // do the rows still match?
-        for (const array<Id, 2>& jc : joinColumns) {
+        for (const array<ColumnIndex, 2>& jc : joinColumns) {
           if (ib >= b.size() || a(ia, jc[0]) != b(ib, jc[1])) {
             matched = false;
             break;
@@ -163,7 +165,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
       ia++;
       // Check if the next row in a also matches the initial row in b
       matched = true;
-      for (const array<Id, 2>& jc : joinColumns) {
+      for (const array<ColumnIndex, 2>& jc : joinColumns) {
         if (ia >= a.size() || a(ia, jc[0]) != b(initIb, jc[1])) {
           matched = false;
           break;

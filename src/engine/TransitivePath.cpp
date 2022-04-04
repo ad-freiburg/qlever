@@ -14,7 +14,7 @@
 TransitivePath::TransitivePath(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     bool leftIsVar, bool rightIsVar, size_t leftSubCol, size_t rightSubCol,
-    size_t leftValue, size_t rightValue, const std::string& leftColName,
+    Id leftValue, Id rightValue, const std::string& leftColName,
     const std::string& rightColName, size_t minDist, size_t maxDist)
     : Operation(qec),
       _leftSideTree(nullptr),
@@ -80,7 +80,7 @@ std::string TransitivePath::getDescriptor() const {
   } else {
     os << getIndex()
               .idToOptionalString(_leftValue)
-              .value_or("#" + std::to_string(_leftValue));
+              .value_or("#" + std::to_string(_leftValue.get()));
   }
   // The predicate.
   auto scanOperation =
@@ -97,7 +97,7 @@ std::string TransitivePath::getDescriptor() const {
   } else {
     os << getIndex()
               .idToOptionalString(_rightValue)
-              .value_or("#" + std::to_string(_rightValue));
+              .value_or("#" + std::to_string(_rightValue.get()));
   }
   return std::move(os).str();
 }
@@ -282,8 +282,8 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
     }
     for (size_t i = 0; i < sub.size(); i++) {
       checkTimeoutHashSet();
-      size_t l = sub(i, leftSubCol);
-      size_t r = sub(i, rightSubCol);
+      Id l = sub(i, leftSubCol);
+      Id r = sub(i, rightSubCol);
       MapIt it = edges.find(l);
       if (it == edges.end()) {
         if constexpr (leftIsVar) {
@@ -304,8 +304,8 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
     for (size_t i = 0; i < sub.size(); i++) {
       checkTimeoutHashSet();
       // Use the inverted edges
-      size_t l = sub(i, leftSubCol);
-      size_t r = sub(i, rightSubCol);
+      Id l = sub(i, leftSubCol);
+      Id r = sub(i, rightSubCol);
       MapIt it = edges.find(r);
       if (it == edges.end()) {
         std::shared_ptr<ad_utility::HashSet<Id>> s =
@@ -359,7 +359,7 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
         continue;
       }
 
-      size_t child = *pos;
+      Id child = *pos;
       ++pos;
       size_t childDepth = positions.size();
       if (childDepth <= maxDist && marks.count(child) == 0) {
@@ -412,8 +412,8 @@ void TransitivePath::computeTransitivePathLeftBound(
   // initialize the map from the subresult
   for (size_t i = 0; i < sub.size(); i++) {
     checkTimeoutHashSet();
-    size_t l = sub(i, leftSubCol);
-    size_t r = sub(i, rightSubCol);
+    Id l = sub(i, leftSubCol);
+    Id r = sub(i, rightSubCol);
     MapIt it = edges.find(l);
     if (it == edges.end()) {
       std::shared_ptr<ad_utility::HashSet<Id>> s =
@@ -438,7 +438,7 @@ void TransitivePath::computeTransitivePathLeftBound(
   // be modified after this point.
   std::vector<std::shared_ptr<const ad_utility::HashSet<Id>>> edgeCache;
 
-  size_t last_elem = std::numeric_limits<size_t>::max();
+  Id last_elem = ID_NO_VALUE;
   size_t last_result_begin = 0;
   size_t last_result_end = 0;
   for (size_t i = 0; i < left.size(); i++) {
@@ -484,7 +484,7 @@ void TransitivePath::computeTransitivePathLeftBound(
         continue;
       }
 
-      size_t child = *pos;
+      Id child = *pos;
       ++pos;
       size_t childDepth = positions.size();
       if (childDepth <= maxDist && marks.count(child) == 0) {
@@ -550,8 +550,8 @@ void TransitivePath::computeTransitivePathRightBound(
   // initialize the map from the subresult
   for (size_t i = 0; i < sub.size(); i++) {
     checkTimeoutHashSet();
-    size_t l = sub(i, leftSubCol);
-    size_t r = sub(i, rightSubCol);
+    Id l = sub(i, leftSubCol);
+    Id r = sub(i, rightSubCol);
     MapIt it = edges.find(r);
     if (it == edges.end()) {
       std::shared_ptr<ad_utility::HashSet<Id>> s =
@@ -576,7 +576,7 @@ void TransitivePath::computeTransitivePathRightBound(
   // be modified after this point.
   std::vector<std::shared_ptr<const ad_utility::HashSet<Id>>> edgeCache;
 
-  size_t last_elem = std::numeric_limits<size_t>::max();
+  Id last_elem = ID_NO_VALUE;
   size_t last_result_begin = 0;
   size_t last_result_end = 0;
   for (size_t i = 0; i < right.size(); i++) {
@@ -622,7 +622,7 @@ void TransitivePath::computeTransitivePathRightBound(
         continue;
       }
 
-      size_t child = *pos;
+      Id child = *pos;
       ++pos;
       size_t childDepth = positions.size();
       if (childDepth <= maxDist && marks.count(child) == 0) {

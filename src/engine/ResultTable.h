@@ -64,11 +64,9 @@ class ResultTable {
 
   virtual ~ResultTable();
 
-  std::optional<std::string> idToOptionalString(Id id) const {
-    if (id < _localVocab->size()) {
-      return (*_localVocab)[id];
-    } else if (id == ID_NO_VALUE) {
-      return std::nullopt;
+  std::optional<std::string> indexToOptionalString(LocalVocabIndex idx) const {
+    if (idx < _localVocab->size()) {
+      return (*_localVocab)[idx];
     }
     return std::nullopt;
   }

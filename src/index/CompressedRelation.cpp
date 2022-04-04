@@ -44,8 +44,8 @@ void CompressedRelationMetaData::scan(
 
     // get all the blocks where _col0FirstId <= col0Id <= _col0LastId
     struct KeyLhs {
-      size_t _col0FirstId;
-      size_t _col0LastId;
+      Id _col0FirstId;
+      Id _col0LastId;
     };
     auto [beginBlock, endBlock] = std::equal_range(
         permutation._meta.blockData().begin(),
@@ -82,7 +82,7 @@ void CompressedRelationMetaData::scan(
     AD_CHECK(!firstBlockIsIncomplete || (beginBlock == lastBlock));
     AD_CHECK(!lastBlockIsIncomplete);
     if (firstBlockIsIncomplete) {
-      AD_CHECK(metaData._offsetInBlock != Id(-1));
+      AD_CHECK(metaData._offsetInBlock != std::numeric_limits<uint64_t>::max());
     }
 
     // We have at most one block that is incomplete and thus requires trimming.
@@ -230,10 +230,10 @@ void CompressedRelationMetaData::scan(
     // Get all the blocks  that possibly might contain our pair of col0Id and
     // col1Id
     struct KeyLhs {
-      size_t _col0FirstId;
-      size_t _col0LastId;
-      size_t _col1FirstId;
-      size_t _col1LastId;
+      Id _col0FirstId;
+      Id _col0LastId;
+      Id _col1FirstId;
+      Id _col1LastId;
     };
 
     auto comp = [](const auto& a, const auto& b) {
@@ -250,7 +250,8 @@ void CompressedRelationMetaData::scan(
 
     // Invariant: The col0Id is completely stored in a single block, or it is
     // contained in multiple blocks that only contain this col0Id,
-    bool col0IdHasExclusiveBlocks = metaData._offsetInBlock == Id(-1);
+    bool col0IdHasExclusiveBlocks =
+        metaData._offsetInBlock == std::numeric_limits<uint64_t>::max();
     if (!col0IdHasExclusiveBlocks) {
       AD_CHECK(endBlock - beginBlock == 1);
     }
@@ -264,7 +265,8 @@ void CompressedRelationMetaData::scan(
           readAndDecompressBlock(block, permutation);
 
       // Find the range in the block, that belongs to the same relation `col0Id`
-      bool containedInOnlyOneBlock = metaData._offsetInBlock != Id(-1);
+      bool containedInOnlyOneBlock =
+          metaData._offsetInBlock != std::numeric_limits<uint64_t>::max();
       auto begin = uncompressedBuffer.begin();
       if (containedInOnlyOneBlock) {
         begin += metaData._offsetInBlock;
@@ -272,9 +274,10 @@ void CompressedRelationMetaData::scan(
       auto end = containedInOnlyOneBlock ? begin + metaData._numRows
                                          : uncompressedBuffer.end();
 
-      // Find the range in the block, where also the col1Id matches.
+      // Find the range in the block, where also the col1Id matches (the second
+      // ID in the `std::array` does not matter).
       std::tie(begin, end) = std::equal_range(
-          begin, end, std::array<Id, 2>{col1Id, 0},
+          begin, end, std::array<Id, 2>{col1Id, Id{}},
           [](const auto& a, const auto& b) { return a[0] < b[0]; });
 
       // Extract the one column result from the two column block.
@@ -415,7 +418,7 @@ void CompressedRelationWriter::addRelation(
     // The relation is large, immediately write the relation to a set of
     // exclusive blocks.
     writeRelationToExclusiveBlocks(col0Id, data);
-    metaData._offsetInBlock = Id(-1);
+    metaData._offsetInBlock = std::numeric_limits<uint64_t>::max();
   } else {
     // Append to the current buffered block.
     metaData._offsetInBlock = _buffer.data().size() / (2 * sizeof(Id));
