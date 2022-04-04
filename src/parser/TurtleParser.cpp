@@ -253,7 +253,8 @@ bool TurtleParser<T>::rdfLiteral() {
     // TODO<joka921> this allows spaces here since the ^^ is unique in the
     // sparql syntax. is this correct?
   } else if (skip<TurtleTokenId::DoubleCircumflex>() && check(iri())) {
-    const auto& type = _lastParseResult.getString();
+    const auto& typeIri = _lastParseResult.getString();
+    auto type = stripAngleBrackets(typeIri);
     std::string strippedLiteral{stripDoubleQuotes(literalString)};
     if (type == XSD_INT_TYPE || type == XSD_INTEGER_TYPE) {
       std::size_t pos = 0;

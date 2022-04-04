@@ -142,33 +142,37 @@ TEST(TurtleParserTest, stringParse) {
 TEST(TurtleParserTest, rdfLiteral) {
   std::vector<string> literals;
   std::vector<TripleObject> expected;
-  literals.push_back("\"simpleString\"");
-  expected.emplace_back("\"simpleString\""s);
-  literals.push_back("\"langtag\"@en-gb");
-  expected.emplace_back("\"langtag\"@en-gb"s);
-  literals.push_back("\"valueLong\"^^<www.someunknownType/integer>");
+  literals.emplace_back(R"("simpleString")");
+  expected.emplace_back(R"("simpleString")");
+  literals.emplace_back(R"("langtag"@en-gb)");
+  expected.emplace_back(R"("langtag"@en-gb)");
+  literals.emplace_back("\"valueLong\"^^<www.someunknownType/integer>");
   expected.emplace_back("\"valueLong\"^^<www.someunknownType/integer>");
 
-  literals.push_back("\"42.1234\"^^"s + XSD_DOUBLE_TYPE);
+  literals.emplace_back(R"("42.1234"^^)"s + "<" + XSD_DOUBLE_TYPE + ">");
   expected.emplace_back(42.1234);
-  literals.push_back("\"-142.321\"^^"s + XSD_DECIMAL_TYPE);
+  literals.push_back(R"("-142.321"^^)"s + "<" + XSD_DECIMAL_TYPE + ">");
   expected.emplace_back(-142.321);
-  literals.push_back("\"-142321\"^^"s + XSD_INT_TYPE);
-  literals.push_back("\"+144321\"^^"s + XSD_INTEGER_TYPE);
+  literals.push_back(R"("-142321"^^)"s + "<" + XSD_INT_TYPE + ">" );
+  expected.emplace_back(-142321);
+  literals.push_back(R"("+144321"^^)"s + "<" + XSD_INTEGER_TYPE + ">");
+  expected.emplace_back(144321);
 
   TurtleStringParser<Tokenizer> p;
-  for (const auto& s : literals) {
+  for (size_t i = 0; i < literals.size(); ++i){
+    const auto& s = literals[i];
+    const auto& exp = expected[i];
     p.setInputStream(s);
     ASSERT_TRUE(p.rdfLiteral());
-    ASSERT_EQ(p._lastParseResult, s);
+    ASSERT_EQ(p._lastParseResult, exp);
     ASSERT_EQ(p.getPosition(), s.size());
   }
 
-  p._prefixMap["xsd"] = "www.xsd.org/";
-  string s("\"valuePrefixed\"^^xsd:integer");
+  p._prefixMap["qlever"] = "www.qlever.org/";
+  string s("\"valuePrefixed\"^^qlever:sometype");
   p.setInputStream(s);
   ASSERT_TRUE(p.rdfLiteral());
-  ASSERT_EQ(p._lastParseResult, "\"valuePrefixed\"^^<www.xsd.org/integer>");
+  ASSERT_EQ(p._lastParseResult, "\"valuePrefixed\"^^<www.qlever.org/sometype>");
   ASSERT_EQ(p.getPosition(), s.size());
 }
 
@@ -205,9 +209,9 @@ TEST(TurtleParserTest, blankNodePropertyList) {
 
   string blankNodeL = "[<p2> <ob2>; <p3> <ob3>]";
   std::vector<TurtleTriple> exp;
-  exp.push_back({"<s>", "<p1>", "QLever-Anon-Node:0"});
-  exp.push_back({"QLever-Anon-Node:0", "<p2>", "<ob2>"});
-  exp.push_back({"QLever-Anon-Node:0", "<p3>", "<ob3>"});
+  exp.push_back({"<s>", "<p1>", TripleObject{"QLever-Anon-Node:0"}});
+  exp.push_back({"QLever-Anon-Node:0", "<p2>", TripleObject{"<ob2>"}});
+  exp.push_back({"QLever-Anon-Node:0", "<p3>", TripleObject{"<ob3>"}});
   p.setInputStream(blankNodeL);
   ASSERT_TRUE(p.blankNodePropertyList());
   ASSERT_EQ(p._triples, exp);

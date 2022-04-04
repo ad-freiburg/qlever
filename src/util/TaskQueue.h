@@ -8,6 +8,7 @@
 #include <queue>
 #include <string>
 #include <thread>
+#include <optional>
 
 #include "./Exception.h"
 #include "./Timer.h"
