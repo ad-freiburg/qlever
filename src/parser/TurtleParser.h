@@ -30,7 +30,6 @@
 
 using std::string;
 
-
 struct TurtleTriple {
   std::string _subject;
   std::string _predicate;
@@ -52,7 +51,6 @@ inline std::string_view stripDoubleQuotes(std::string_view input) {
   input.remove_suffix(1);
   return input;
 }
-
 
 /**
  * @brief The actual parser class
@@ -106,7 +104,7 @@ class TurtleParser {
  protected:
   // clear all the parser's state to the initial values.
   void clear() {
-    _lastParseResult.variant() = std::string{};
+    _lastParseResult = "";
 
     _activeSubject.clear();
     _activePredicate.clear();
@@ -202,24 +200,10 @@ class TurtleParser {
   // Terminal symbols from the grammar
   // Behavior of the functions is similar to the nonterminals (see above)
   bool iriref();
-  bool integer() { if (parseTerminal<TurtleTokenId::Integer>()) {
-      _lastParseResult = std::stoll(_lastParseResult.getString());
-      return true;
-    } else {
-      return false;
-    } }
-  bool decimal() { if (parseTerminal<TurtleTokenId::Decimal>()) {
-      _lastParseResult = std::stod(_lastParseResult.getString());
-      return true;
-    } else {
-      return false;
-    } }
-  bool doubleParse() { if (parseTerminal<TurtleTokenId::Double>()) {
-      _lastParseResult = std::stod(_lastParseResult.getString());
-      return true;
-    } else {
-      return false;
-    } }
+  bool integer();
+  bool decimal();
+  // The grammar rule is called "double" but this is a reserved name in C++.
+  bool doubleParse();
 
   // this version only works if no escape sequences were used.
   bool pnameLnRelaxed();

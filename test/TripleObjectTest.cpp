@@ -3,9 +3,9 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
 
-#include "../src/parser/TripleObject.h"
 #include <gtest/gtest.h>
 
+#include "../src/parser/TripleObject.h"
 
 using namespace std::literals;
 
@@ -59,4 +59,19 @@ TEST(TripleObject, AssignmentOperator) {
   testString("<someIri>");
   testString(std::string_view{R"("aLiteral")"});
   testString("aPlainString"s);
+}
+
+TEST(TripleObject, ToRdf) {
+  std::vector<std::string> strings{"plainString", "<IRI>",
+                                   R"("aTypedLiteral"^^xsd::integer)"};
+  for (const auto& s : strings) {
+    ASSERT_EQ(s, TripleObject{s}.toRdf());
+  }
+
+  TripleObject object{42};
+  ASSERT_EQ(object.toRdf(), R"("42"^^<http://www.w3.org/2001/XMLSchema#int>)");
+
+  object = -43.3;
+  ASSERT_EQ(object.toRdf(),
+            R"("-43.3"^^<http://www.w3.org/2001/XMLSchema#double>)");
 }

@@ -5,10 +5,10 @@
 #define QLEVER_TASKQUEUE_H
 
 #include <functional>
+#include <optional>
 #include <queue>
 #include <string>
 #include <thread>
-#include <optional>
 
 #include "./Exception.h"
 #include "./Timer.h"

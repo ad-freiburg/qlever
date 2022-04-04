@@ -240,6 +240,39 @@ bool TurtleParser<T>::numericLiteral() {
 
 // ______________________________________________________________________
 template <class T>
+bool TurtleParser<T>::integer() {
+  if (parseTerminal<TurtleTokenId::Integer>()) {
+    _lastParseResult = std::stoll(_lastParseResult.getString());
+    return true;
+  } else {
+    return false;
+  }
+}
+
+// ______________________________________________________________________
+template <class T>
+bool TurtleParser<T>::decimal() {
+  if (parseTerminal<TurtleTokenId::Decimal>()) {
+    _lastParseResult = std::stod(_lastParseResult.getString());
+    return true;
+  } else {
+    return false;
+  }
+}
+
+// _______________________________________________________________________
+template <class T>
+bool TurtleParser<T>::doubleParse() {
+  if (parseTerminal<TurtleTokenId::Double>()) {
+    _lastParseResult = std::stod(_lastParseResult.getString());
+    return true;
+  } else {
+    return false;
+  }
+}
+
+// ______________________________________________________________________
+template <class T>
 bool TurtleParser<T>::rdfLiteral() {
   if (!stringParse()) {
     return false;

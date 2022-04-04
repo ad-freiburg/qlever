@@ -177,4 +177,4 @@ addLinkAndDiscoverTest(AsyncStreamTest)
 
 addLinkAndDiscoverTest(TriplesViewTest)
 
-addLinkAndDiscoverTest(TripleObjectTest)
+addLinkAndDiscoverTest(TripleObjectTest absl::strings)
