@@ -141,10 +141,10 @@ class TurtleParser {
   // The tokenizer
   Tokenizer_T _tok{std::string_view("")};
 
-  // The result of the last succesful call to a parsing function
-  // (a function named after a (non-)terminal of the Turtle grammar.
-  // We are using `TripleObject` since it can hold any parsing result although
-  // they often are not actually "objects".
+  // The result of the last successful call to a parsing function
+  // (a function named after a (non-)terminal of the Turtle grammar).
+  // We are using `TripleObject` since it can hold any parsing result, not only
+  // objects.
   TripleObject _lastParseResult;
 
   // maps prefixes to their expanded form, initialized with the empty base
