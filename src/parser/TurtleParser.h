@@ -200,9 +200,8 @@ class TurtleParser {
     throw ParseException(msg, getParsePosition());
   }
 
-  // Throw an exception or simply ignore
-  // the current triple, depending on the setting of
-  // `invalidLiteralsAreSkipped()`.
+  // Throw an exception or simply ignore the current triple, depending on the
+  // setting of `invalidLiteralsAreSkipped()`.
   void raiseOrIgnoreTriple(std::string_view errorMessage) {
     if (invalidLiteralsAreSkipped()) {
       _currentTripleIgnoredBecauseOfInvalidLiteral = true;

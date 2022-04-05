@@ -278,8 +278,7 @@ void TurtleParser<T>::parseIntegerConstant(const std::string& input) {
           "Value ", input,
           " cannot be represented as an integer value inside QLever, "
           "make it a xsd:decimal/xsd:double literal or specify "
-          "\"parser-integer-overflow-behavior=[overflowing-integers-become-"
-          "doubles|all-integers-become-doubles]\"");
+          "\"parser-integer-overflow-behavior\"");
       raiseOrIgnoreTriple(errorMessage);
     }
   } catch (const std::invalid_argument& e) {
