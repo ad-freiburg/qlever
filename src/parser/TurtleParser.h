@@ -87,16 +87,16 @@ class TurtleParser {
       std::is_same_v<Tokenizer_T, TokenizerCtre>;
 
  protected:
-  /* Data Members */
+  // Data members.
 
   // Stores the triples that have been parsed but not retrieved yet.
   std::vector<TurtleTriple> _triples;
 
-  // if this is set, there is nothing else to parse and we will only
-  // retrieve what is left in our tripleBuffer;
+  // If this is set, there is nothing else to parse and we will only
+  // retrieve what is left in our tripleBuffer.
   bool _isParserExhausted = false;
 
-  // The tokenizer
+  // The tokenizer.
   Tokenizer_T _tok{std::string_view("")};
 
   // The result of the last successful call to a parsing function (a function
@@ -104,19 +104,18 @@ class TurtleParser {
   // `TripleObject` since it can hold any parsing result, not only objects.
   TripleObject _lastParseResult;
 
-  // maps prefixes to their expanded form, initialized with the empty base
-  // (i.e. the prefix ":" maps to the empty IRI)
+  // Maps prefixes to their expanded form, initialized with the empty base
+  // (i.e. the prefix ":" maps to the empty IRI).
   ad_utility::HashMap<std::string, std::string> _prefixMap{{"", ""}};
 
-  // there are turtle constructs that reuse prefixes, subjects and predicates
-  // so we have to save the last seen ones
+  // There are turtle constructs that reuse prefixes, subjects and predicates
+  // so we have to save the last seen ones.
   std::string _activePrefix;
   std::string _activeSubject;
   std::string _activePredicate;
   size_t _numBlankNodes = 0;
 
-  // For documentation, see the accesor functions `integerOverflowBehavior()`
-  // etc.
+  // How to handle integer overflow and invalid literals (see below).
   TurtleParserIntegerOverflowBehavior _integerOverflowBehavior =
       TurtleParserIntegerOverflowBehavior::Error;
   bool _invalidLiteralsAreSkipped = false;
@@ -142,6 +141,7 @@ class TurtleParser {
   // that has not yet been dealt with by the parser.
   [[nodiscard]] virtual size_t getParsePosition() const = 0;
 
+  // Specifies the behavior if an integer literal overflows.
   TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() {
     return _integerOverflowBehavior;
   }
@@ -150,6 +150,9 @@ class TurtleParser {
     return _integerOverflowBehavior;
   }
 
+  // If true then triples with invalid literals (for example
+  // "noNumber"^^xsd:integer) are ignored. If false an exception is thrown when
+  // such literals are encountered.
   bool& invalidLiteralsAreSkipped() { return _invalidLiteralsAreSkipped; };
   [[nodiscard]] const bool& invalidLiteralsAreSkipped() const {
     return _invalidLiteralsAreSkipped;
@@ -197,14 +200,14 @@ class TurtleParser {
     throw ParseException(msg, getParsePosition());
   }
 
-  // Throw an exception annotated with position information, or simply ignore
-  // the current triple, depending on the settings of
-  // `invalidLiteralsAreSkipped`
-  void raiseOrIgnoreTriple(std::string_view msg) {
-    if (_invalidLiteralsAreSkipped) {
+  // Throw an exception or simply ignore
+  // the current triple, depending on the setting of
+  // `invalidLiteralsAreSkipped()`.
+  void raiseOrIgnoreTriple(std::string_view errorMessage) {
+    if (invalidLiteralsAreSkipped()) {
       _currentTripleIgnoredBecauseOfInvalidLiteral = true;
     } else {
-      raise(msg);
+      raise(errorMessage);
     }
   }
 

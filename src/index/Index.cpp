@@ -1081,42 +1081,44 @@ void Index::readIndexBuilderSettingsFromFile() {
               << std::endl;
   }
 
-  std::string overflowError = "overflowing-integers-throw";
-  std::string overflowDouble = "overflowing-integers-become-doubles";
-  std::string allDouble = "all-integers-become-doubles";
-  std::vector<std::string_view> allModes{overflowError, overflowDouble,
-                                         allDouble};
+  std::string overflowingIntegersThrow = "overflowing-integers-throw";
+  std::string overflowingIntegersBecomeDoubles =
+      "overflowing-integers-become-doubles";
+  std::string allIntegersBecomeDoubles = "all-integers-become-doubles";
+  std::vector<std::string_view> allModes{overflowingIntegersThrow,
+                                         overflowingIntegersBecomeDoubles,
+                                         allIntegersBecomeDoubles};
   std::string key = "parser-integer-overflow-behavior";
   if (j.count(key)) {
     auto value = j[key];
-    if (value == overflowError) {
+    if (value == overflowingIntegersThrow) {
       LOG(INFO) << "Integers that cannot be represented by QLever will throw "
-                   "an exception."
+                   "an exception"
                 << std::endl;
       _turtleParserIntegerOverflowBehavior =
           TurtleParserIntegerOverflowBehavior::Error;
-    } else if (value == overflowDouble) {
+    } else if (value == overflowingIntegersBecomeDoubles) {
       LOG(INFO) << "Integers that cannot be represented by QLever will be "
-                   "converted to doubles."
+                   "converted to doubles"
                 << std::endl;
       _turtleParserIntegerOverflowBehavior =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
-    } else if (value == allDouble) {
-      LOG(INFO) << "All integers will be converted to doubles." << std::endl;
+    } else if (value == allIntegersBecomeDoubles) {
+      LOG(INFO) << "All integers will be converted to doubles" << std::endl;
       _turtleParserIntegerOverflowBehavior =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
     } else {
       AD_CHECK(std::find(allModes.begin(), allModes.end(), value) ==
                allModes.end());
-      LOG(ERROR) << "invalid value for " << key << '\n';
-      LOG(ERROR) << "The currently supported values are "
-                 << absl::StrJoin(allModes, ",") << std::endl;
+      LOG(ERROR) << "Invalid value for " << key << std::endl;
+      LOG(INFO) << "The currently supported values are "
+                << absl::StrJoin(allModes, ",") << std::endl;
     }
   } else {
     _turtleParserIntegerOverflowBehavior =
         TurtleParserIntegerOverflowBehavior::Error;
     LOG(INFO) << "Integers that cannot be represented by QLever will throw an "
-                 "exception. This is the default behavior"
+                 "exception (this is the default behavior)"
               << std::endl;
   }
 }

@@ -236,7 +236,6 @@ bool TurtleParser<T>::collection() {
 template <class T>
 void TurtleParser<T>::parseDoubleConstant(const std::string& input) {
   size_t position;
-  size_t size = input.size();
 
   bool errorOccured = false;
   TripleObject result;
@@ -247,10 +246,9 @@ void TurtleParser<T>::parseDoubleConstant(const std::string& input) {
   } catch (const std::exception& e) {
     errorOccured = true;
   }
-  if (errorOccured || position != size) {
+  if (errorOccured || position != input.size()) {
     auto errorMessage = absl::StrCat(
-        "Value ", input,
-        " could not be parsed as a decimal or floating point value");
+        "Value ", input, " could not be parsed as a floating point value");
     raiseOrIgnoreTriple(errorMessage);
   }
   _lastParseResult = result;
@@ -264,7 +262,6 @@ void TurtleParser<T>::parseIntegerConstant(const std::string& input) {
     return parseDoubleConstant(input);
   }
   size_t position = 0;
-  size_t size = input.size();
 
   bool errorOccured = false;
   TripleObject result;
@@ -279,20 +276,19 @@ void TurtleParser<T>::parseIntegerConstant(const std::string& input) {
     } else {
       auto errorMessage = absl::StrCat(
           "Value ", input,
-          " cannot be represented as an integer value inside qlever. Please "
-          "make it a decimal/double literal or specify "
-          "`IntegersOverflowToDoubles=true` in the index builder settings");
+          " cannot be represented as an integer value inside QLever, "
+          "make it a xsd:decimal/xsd:double literal or specify "
+          "\"parser-integer-overflow-behavior=[overflowing-integers-become-"
+          "doubles|all-integers-become-doubles]\"");
       raiseOrIgnoreTriple(errorMessage);
     }
   } catch (const std::invalid_argument& e) {
     errorOccured = true;
   }
-  if (errorOccured || position != size) {
+  if (errorOccured || position != input.size()) {
     auto errorMessage = absl::StrCat(
         "Value ", input, " could not be parsed as an integer value");
     raiseOrIgnoreTriple(errorMessage);
-  } else {
-    std::cout << "something" << std::endl;
   }
   _lastParseResult = result;
 }
@@ -364,7 +360,7 @@ bool TurtleParser<T>::rdfLiteral() {
     }
     return true;
   } else {
-    // it is okay to neither have a langtag nor a xsd datatype
+    // It is okay to neither have a langtag nor an XSD datatype.
     return true;
   }
 }

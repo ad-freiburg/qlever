@@ -303,35 +303,35 @@ TEST(TurtleParserTest, numericLiteral) {
 }
 
 TEST(TurtleParserTest, numericLiteralErrorBehavior) {
-  auto testParsingFails = [](auto& parser, std::string input) {
+  auto assertParsingFails = [](auto& parser, std::string input) {
     parser.setInputStream(input);
     ASSERT_THROW(parser.parseAndReturnAllTriples(),
                  TurtleStringParser<Tokenizer>::ParseException);
   };
 
-  auto testParsingWorks = [](auto& parser, std::string input) {
+  auto parseAllTriples = [](auto& parser, std::string input) {
     parser.setInputStream(input);
     return parser.parseAndReturnAllTriples();
   };
 
-  auto testTripleObjects = [&testParsingWorks]<typename T>(
+  auto testTripleObjects = [&parseAllTriples]<typename T>(
                                auto& parser, std::vector<std::string> triples,
                                std::vector<T> expectedObjects) {
     for (size_t i = 0; i < triples.size(); ++i) {
       const auto& triple = triples[i];
       std::vector<TurtleTriple> result;
-      ASSERT_NO_THROW(result = testParsingWorks(parser, triple));
+      ASSERT_NO_THROW(result = parseAllTriples(parser, triple));
       ASSERT_EQ(result.size(), 1ul);
       ASSERT_EQ(result[0]._object, expectedObjects[i]);
     }
   };
   {
-    // Test the default mode (overflowing integers throw an exception)
+    // Test the default mode (overflowing integers throw an exception).
     std::vector<std::string> inputs{
         "<a> <b> 99999999999999999999999",
         "<a> <b> \"99999999999999999999\"^^xsd:integer",
         "<a> <b> \"9999.0\"^^xsd:integer",
-        "<a> <b> \"9999.0\"^^xsd:int",
+        "<a> <b> \"-9999.0\"^^xsd:int",
         "<a> <b> \"9999E4\"^^xsd:integer",
         "<a> <b> \"9999E4\"^^xsd:int",
         "<a> <b> \"kartoffelsalat\"^^xsd:integer",
@@ -341,19 +341,19 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
     TurtleStringParser<Tokenizer> parser;
     parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
     for (const auto& input : inputs) {
-      testParsingFails(parser, input);
+      assertParsingFails(parser, input);
     }
   }
   {
     // These all work when the datatype is double.
     std::vector<std::string> inputs{
         "<a> <b> 99999999999999999999999.0",
-        "<a> <b> \"9999999999999999999999\"^^xsd:double",
+        "<a> <b> \"-9999999999999999999999\"^^xsd:double",
         "<a> <b> \"9999999999999999999999\"^^xsd:decimal",
         "<a> <b> \"99999999999999999999E4\"^^xsd:double",
         "<a> <b> \"99999999999999999999.0E4\"^^xsd:decimal"};
     std::vector<double> expectedObjects{
-        99999999999999999999999.0, 9999999999999999999999.0,
+        99999999999999999999999.0, -9999999999999999999999.0,
         9999999999999999999999.0, 99999999999999999999E4,
         99999999999999999999E4};
     TurtleStringParser<Tokenizer> parser;
@@ -364,7 +364,7 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
     // Test the overflow to double mode.
     std::vector<std::string> nonWorkingInputs{
         "<a> <b> \"9999.0\"^^xsd:integer",
-        "<a> <b> \"9999.0\"^^xsd:int",
+        "<a> <b> \"-9999.0\"^^xsd:int",
         "<a> <b> \"9999E4\"^^xsd:integer",
         "<a> <b> \"9999E4\"^^xsd:int",
         "<a> <b> \"kartoffelsalat\"^^xsd:integer",
@@ -374,14 +374,14 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
     parser.integerOverflowBehavior() =
         TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
     for (const auto& input : nonWorkingInputs) {
-      testParsingFails(parser, input);
+      assertParsingFails(parser, input);
     }
     std::vector<std::string> workingInputs{
         "<a> <b> 99999999999999999999999",
-        "<a> <b> \"99999999999999999999\"^^xsd:integer",
+        "<a> <b> \"-99999999999999999999\"^^xsd:integer",
     };
     std::vector<double> expectedDoubles{99999999999999999999999.0,
-                                        99999999999999999999.0};
+                                        -99999999999999999999.0};
     testTripleObjects(parser, workingInputs, expectedDoubles);
   }
   {
@@ -394,12 +394,12 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
     parser.integerOverflowBehavior() =
         TurtleParserIntegerOverflowBehavior::AllToDouble;
     for (const auto& input : nonWorkingInputs) {
-      testParsingFails(parser, input);
+      assertParsingFails(parser, input);
     }
     std::vector<std::string> workingInputs{
         "<a> <b> \"123\"^^xsd:integer",
         "<a> <b> 456",
-        "<a> <b> \"9999.0\"^^xsd:integer",
+        "<a> <b> \"-9999.0\"^^xsd:integer",
         "<a> <b> \"9999.0\"^^xsd:int",
         "<a> <b> \"9999E4\"^^xsd:integer",
         "<a> <b> \"9999E4\"^^xsd:int",
@@ -408,7 +408,7 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
     };
     std::vector<double> expectedDoubles{123.0,
                                         456.0,
-                                        9999.0,
+                                        -9999.0,
                                         9999.0,
                                         9999e4,
                                         9999e4,
@@ -416,7 +416,6 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
                                         99999999999999999999.0};
     testTripleObjects(parser, workingInputs, expectedDoubles);
   }
-
   {
     // Test the skipping of unsupported triples with the "overflow is error"
     // behavior.
@@ -426,7 +425,7 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
                                        {"<e>", "<f>", 234}};
     TurtleStringParser<Tokenizer> parser;
     parser.invalidLiteralsAreSkipped() = true;
-    auto result = testParsingWorks(parser, input);
+    auto result = parseAllTriples(parser, input);
     ASSERT_EQ(result, expected);
   }
   {
@@ -442,7 +441,7 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
     parser.invalidLiteralsAreSkipped() = true;
     parser.integerOverflowBehavior() =
         TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
-    auto result = testParsingWorks(parser, input);
+    auto result = parseAllTriples(parser, input);
     ASSERT_EQ(result, expected);
   }
 }
