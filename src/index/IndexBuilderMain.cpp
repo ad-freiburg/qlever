@@ -267,8 +267,8 @@ int main(int argc, char** argv) {
     index.setUsePatterns(usePatterns);
     index.setOnDiskLiterals(onDiskLiterals);
     index.setOnDiskBase(baseName);
-    index.setKeepTempFiles(keepTemporaryFiles);
-    index.setSettingsFile(settingsFile);
+    index.indexBuilderParameters().set<"keep-temp-files">(keepTemporaryFiles);
+    index.indexBuilderParameters().set<"settings-filename">(settingsFile);
     index.setPrefixCompression(useCompression);
     index.setLoadAllPermutations(loadAllPermutations);
     // NOTE: If `onlyAddTextIndex` is true, we do not want to construct an

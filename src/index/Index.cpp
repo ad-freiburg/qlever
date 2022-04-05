@@ -34,8 +34,8 @@ Index::Index() : _usePatterns(false) {}
 template <class Parser>
 IndexBuilderDataAsPsoSorter Index::createIdTriplesAndVocab(
     const string& ntFile) {
-  auto indexBuilderData =
-      passFileForVocabulary<Parser>(ntFile, _numTriplesPerBatch);
+  auto indexBuilderData = passFileForVocabulary<Parser>(
+      ntFile, indexBuilderParameters().get<"num-triples-per-batch">());
   // first save the total number of words, this is needed to initialize the
   // dense IndexMetaData variants
   _totalVocabularySize = indexBuilderData.nofWords;
@@ -98,7 +98,7 @@ void Index::createFromFile(const string& filename) {
 
   IndexBuilderDataAsPsoSorter indexBuilderData;
   if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
-    if (_onlyAsciiTurtlePrefixes) {
+    if (indexBuilderParameters().get<"relaxed-parsing">()) {
       LOG(DEBUG) << "Using the CTRE library for tokenization" << std::endl;
       indexBuilderData =
           createIdTriplesAndVocab<TurtleParallelParser<TokenizerCtre>>(
@@ -253,7 +253,7 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
 
     {
       auto p = ad_pipeline::setupParallelPipeline<3, NUM_PARALLEL_ITEM_MAPS>(
-          _parserBatchSize,
+          indexBuilderParameters().get<"parser-batch-size">(),
           // when called, returns an optional to the next triple. If
           // `linesPerPartial` triples were parsed, return std::nullopt. when
           // the parser is unable to deliver triples, set parserExhausted to
@@ -844,22 +844,12 @@ void Index::setOnDiskBase(const std::string& onDiskBase) {
   _onDiskBase = onDiskBase;
 }
 
-// ____________________________________________________________________________
-void Index::setKeepTempFiles(bool keepTempFiles) {
-  _keepTempFiles = keepTempFiles;
-}
-
 // _____________________________________________________________________________
 void Index::setUsePatterns(bool usePatterns) { _usePatterns = usePatterns; }
 
 // _____________________________________________________________________________
 void Index::setLoadAllPermutations(bool loadAllPermutations) {
   _loadAllPermutations = loadAllPermutations;
-}
-
-// ____________________________________________________________________________
-void Index::setSettingsFile(const std::string& filename) {
-  _settingsFileName = filename;
 }
 
 // ____________________________________________________________________________
@@ -979,8 +969,10 @@ template <class Parser>
 void Index::initializeVocabularySettingsBuild() {
   json j;  // if we have no settings, we still have to initialize some default
            // values
-  if (!_settingsFileName.empty()) {
-    std::ifstream f(_settingsFileName);
+  const std::string& settingsFilename =
+      indexBuilderParameters().get<"settings-filename">();
+  if (!settingsFilename.empty()) {
+    std::ifstream f(settingsFilename);
     AD_CHECK(f.is_open());
     f >> j;
   }
@@ -1048,9 +1040,9 @@ void Index::initializeVocabularySettingsBuild() {
       bool v{j["ascii-prefixes-only"]};
       if (v) {
         LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
-        _onlyAsciiTurtlePrefixes = true;
+        indexBuilderParameters().set<"relaxed-parsing">(true);
       } else {
-        _onlyAsciiTurtlePrefixes = false;
+        indexBuilderParameters().set<"relaxed-parsing">(false);
       }
     } else {
       LOG(WARN) << "You specified the ascii-prefixes-only but a parser that is "
@@ -1061,16 +1053,18 @@ void Index::initializeVocabularySettingsBuild() {
   }
 
   if (j.count("num-triples-per-batch")) {
-    _numTriplesPerBatch = size_t{j["num-triples-per-batch"]};
+    auto numTriplesPerBatch = size_t{j["num-triples-per-batch"]};
+    indexBuilderParameters().set<"num-triples-per-batch">(numTriplesPerBatch);
     LOG(INFO)
-        << "You specified \"num-triples-per-batch = " << _numTriplesPerBatch
+        << "You specified \"num-triples-per-batch = " << numTriplesPerBatch
         << "\", choose a lower value if the index builder runs out of memory"
         << std::endl;
   }
 
   if (j.count("parser-batch-size")) {
-    _parserBatchSize = size_t{j["parser-batch-size"]};
-    LOG(INFO) << "Overriding setting parser-batch-size to " << _parserBatchSize
+    auto parserBatchSize = size_t{j["parser-batch-size"]};
+    indexBuilderParameters().set<"parser-batch-size">(parserBatchSize);
+    LOG(INFO) << "Overriding setting parser-batch-size to " << parserBatchSize
               << " This might influence performance during index build."
               << std::endl;
   }

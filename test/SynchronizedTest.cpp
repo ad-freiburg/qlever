@@ -92,9 +92,11 @@ TEST(Synchronized, Vector) {
 
 TEST(Synchronized, MutexReference) {
   std::shared_mutex m;
+  std::condition_variable_any cv;
   int i = 0;
-  ad_utility::Synchronized<int&, std::shared_mutex&> s{
-      ad_utility::ConstructWithMutex{}, m, i};
+  ad_utility::Synchronized<int&, std::shared_mutex&,
+                           std::condition_variable_any&>
+      s{ad_utility::ConstructWithMutex{}, m, cv, i};
 
   *(s.wlock()) = 4;
 

@@ -29,3 +29,10 @@ TEST(Parameters, First) {
   ASSERT_EQ("3", map.at("SizeT"));
   ASSERT_EQ("42.000000", map.at("Float"));
 }
+
+TEST(Parameters, Move) {
+  using FloatParameter = Float<"Float">;
+  using IntParameter = SizeT<"SizeT">;
+  Parameters parameters(FloatParameter{2.0f}, IntParameter{3ull});
+  auto parameters2 = std::move(parameters);
+}

@@ -5,6 +5,8 @@
 #ifndef QLEVER_PARAMETERS_H
 #define QLEVER_PARAMETERS_H
 
+#include <absl/strings/str_join.h>
+
 #include <atomic>
 #include <tuple>
 
@@ -33,14 +35,13 @@ struct ParameterBase {
 /// Abstraction for a parameter that connects a (compile time) `Name` to a
 /// runtime value.
 /// \tparam Type The type of the parameter value
-/// \tparam FromString A function type, that takes a const string&
+/// \tparam FromString A function that takes a const string&
 ///         (representation of a `Type`) and converts it to `Type`.
-/// \tparam ToString A function type, that takes a `Type` and produces
+/// \tparam ToString A function that takes a `Type` and produces
 ///         a std::string representation.
 /// \tparam Name The Name of the parameter (there are typically a lot of
 ///         parameters with the same `Type`).
-template <typename Type, typename FromString, typename ToString,
-          ParameterName Name>
+template <typename Type, auto FromString, auto ToString, ParameterName Name>
 struct Parameter : public ParameterBase {
   constexpr static ParameterName name = Name;
 
@@ -65,7 +66,7 @@ struct Parameter : public ParameterBase {
 
   /// Set the value by using the `FromString` conversion.
   void setFromString(const std::string& stringInput) override {
-    set(FromString{}(stringInput));
+    set(FromString(stringInput));
   }
 
   /// Set the value.
@@ -86,7 +87,7 @@ struct Parameter : public ParameterBase {
 
   // ___________________________________________________________________
   [[nodiscard]] std::string toString() const override {
-    return ToString{}(_value);
+    return ToString(_value);
   }
 
  private:
@@ -102,11 +103,29 @@ namespace detail::parameterShortNames {
 
 // TODO<joka921> Replace these by versions that actually parse the whole
 // string.
-using fl = decltype([](const auto& s) { return std::stof(s); });
-using dbl = decltype([](const auto& s) { return std::stod(s); });
-using szt = decltype([](const auto& s) { return std::stoull(s); });
+inline auto fl = [](const auto& s) { return std::stof(s); };
+inline auto dbl = [](const auto& s) { return std::stod(s); };
+inline auto szt = [](const auto& s) { return std::stoull(s); };
+inline auto stringToBool = [](std::string_view s) {
+  static const ad_utility::HashSet<std::string> trueStrings{"1", "True", "true",
+                                                            "TRUE"};
+  static const ad_utility::HashSet<std::string> falseStrings{"0", "False",
+                                                             "false", "FALSE"};
+  static const std::string trueStringsCat = absl::StrJoin(trueStrings, ",");
+  static const std::string falseStringsCat = absl::StrJoin(falseStrings, ",");
+  if (trueStrings.contains(s)) {
+    return true;
+  } else if (falseStrings.contains(s)) {
+    return false;
+  }
+  throw std::runtime_error{absl::StrCat(
+      "Cannot parse parameter value \"", s, "\" as a boolean. Must be one of [",
+      trueStringsCat, "] or [", falseStringsCat, "]")};
+};
 
-using toString = decltype([](const auto& s) { return std::to_string(s); });
+inline auto boolToString = [](bool b) { return b ? "true" : "false"; };
+
+inline auto toString = [](const auto& s) { return std::to_string(s); };
 
 /// Partial template specialization for Parameters with common types (numeric
 /// types and strings)
@@ -120,8 +139,10 @@ template <ParameterName Name>
 using SizeT = Parameter<size_t, szt, toString, Name>;
 
 template <ParameterName Name>
-using String = Parameter<std::string, std::identity, std::identity, Name>;
+using String = Parameter<std::string, std::identity{}, std::identity{}, Name>;
 
+template <ParameterName Name>
+using Bool = Parameter<bool, stringToBool, boolToString, Name>;
 }  // namespace detail::parameterShortNames
 
 /// A container class that stores several `Parameters`. The reading (via
@@ -135,7 +156,8 @@ using String = Parameter<std::string, std::identity, std::identity, Name>;
 template <typename... ParameterTypes>
 class Parameters {
  private:
-  using Tuple = std::tuple<ad_utility::Synchronized<ParameterTypes>...>;
+  using Tuple =
+      std::tuple<std::unique_ptr<ad_utility::Synchronized<ParameterTypes>>...>;
   Tuple _parameters;
 
   // A compile-time map from `ParameterName` to the index of the corresponding
@@ -158,11 +180,12 @@ class Parameters {
   // The i-th element in this vector points to the i-th element in the
   // `_parameters` tuple.
   using RuntimePointers =
-      std::array<ad_utility::Synchronized<ParameterBase&, std::shared_mutex&>,
+      std::array<ad_utility::Synchronized<ParameterBase&, std::shared_mutex&,
+                                          std::condition_variable_any&>,
                  std::tuple_size_v<Tuple>>;
   RuntimePointers _runtimePointers = [this]() {
     auto toBase = [](auto& synchronizedParameter) {
-      return synchronizedParameter.template toBaseReference<ParameterBase>();
+      return synchronizedParameter->template toBaseReference<ParameterBase>();
     };
     return ad_utility::tupleToArray(_parameters, toBase);
   }();
@@ -170,7 +193,8 @@ class Parameters {
  public:
   Parameters() = delete;
   explicit(sizeof...(ParameterTypes) == 1) Parameters(ParameterTypes... ts)
-      : _parameters{std::move(ts)...} {}
+      : _parameters{std::make_unique<ad_utility::Synchronized<ParameterTypes>>(
+            std::move(ts))...} {}
 
   // Get value for parameter `Name` known at compile time.
   // The parameter is returned  by value, since
@@ -181,14 +205,14 @@ class Parameters {
   template <ParameterName Name>
   auto get() const {
     constexpr auto index = _nameToIndex.at(Name);
-    return std::get<index>(_parameters).rlock()->get();
+    return std::get<index>(_parameters)->rlock()->get();
   }
 
   // Set value for parameter `Name` known at compile time.
   template <ParameterName Name, typename Value>
   void set(Value newValue) {
     constexpr auto index = _nameToIndex.at(Name);
-    return std::get<index>(_parameters).wlock()->set(std::move(newValue));
+    return std::get<index>(_parameters)->wlock()->set(std::move(newValue));
   }
 
   // For the parameter with name `Name` specify the function that is to be
@@ -197,7 +221,7 @@ class Parameters {
   auto setOnUpdateAction(OnUpdateAction onUpdateAction) {
     constexpr auto index = _nameToIndex.at(name);
     std::get<index>(_parameters)
-        .wlock()
+        ->wlock()
         ->setOnUpdateAction(std::move(onUpdateAction));
   }
 
@@ -229,8 +253,8 @@ class Parameters {
     ad_utility::HashMap<std::string, std::string> result;
 
     auto insert = [&]<typename T>(const T& synchronizedParameter) {
-      std::string name{T::value_type::name};
-      result[std::move(name)] = synchronizedParameter.rlock()->toString();
+      std::string name{T::element_type::value_type::name};
+      result[std::move(name)] = synchronizedParameter->rlock()->toString();
     };
     ad_utility::forEachInTuple(_parameters, insert);
     return result;
@@ -242,7 +266,7 @@ class Parameters {
       ad_utility::HashSet<std::string> result;
 
       auto insert = [&result]<typename T>(const T&) {
-        result.insert(std::string{T::value_type::name});
+        result.insert(std::string{T::element_type::value_type::name});
       };
       ad_utility::forEachInTuple(_parameters, insert);
       return result;

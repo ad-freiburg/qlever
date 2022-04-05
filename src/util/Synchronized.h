@@ -71,6 +71,7 @@ class LockPtr;
  * Defaults to std::shared_mutex
  */
 template <typename T, typename Mutex = std::shared_mutex,
+          typename ConditionVariable = std::condition_variable_any,
           typename = std::enable_if_t<AllowsLocking<Mutex>::value>>
 class Synchronized {
  public:
@@ -94,8 +95,11 @@ class Synchronized {
       : data_{std::forward<Args>(args)...}, m_{} {}
 
   template <typename... Args>
-  Synchronized(ConstructWithMutex, Mutex mutex, Args&&... args)
-      : data_{std::forward<Args>(args)...}, m_{mutex} {}
+  Synchronized(ConstructWithMutex, Mutex mutex,
+               ConditionVariable conditionVariable, Args&&... args)
+      : data_{std::forward<Args>(args)...},
+        m_{mutex},
+        requestCv_{conditionVariable} {}
 
   /** @brief Obtain an exclusive lock and then call f() on the underlying data
    * type, return the result.
@@ -211,8 +215,9 @@ class Synchronized {
   // Return a `Synchronized` that uses a reference to this `Synchronized`'s
   // `_data` and `mutext_`. The reference is a reference of the Base class U.
   template <typename U>
-  requires std::is_base_of_v<U, T> Synchronized<U&, Mutex&> toBaseReference() {
-    return {ConstructWithMutex{}, mutex(), data_};
+  requires std::is_base_of_v<U, T> Synchronized<U&, Mutex&, ConditionVariable&>
+  toBaseReference() {
+    return {ConstructWithMutex{}, mutex(), requestCv_, data_};
   }
 
  private:
@@ -223,7 +228,7 @@ class Synchronized {
 
   // These are used for the withWriteLockAndOrdered function
   size_t nextOrderedRequest_ = 0;
-  std::condition_variable_any requestCv_;
+  ConditionVariable requestCv_;
 
   template <class S, bool b, bool c>
   friend class LockPtr;  // The LockPtr implementation requires private access
@@ -238,7 +243,7 @@ class LockPtr {
 
  private:
   // construction is private and only allowed by the Synchronized class
-  template <typename T, typename M, typename>
+  template <typename T, typename M, typename CV, typename>
   friend class Synchronized;
 
   // store a pointer to the parent object and immediately lock it.

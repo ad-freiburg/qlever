@@ -318,17 +318,12 @@ class Index {
 
   void setOnDiskLiterals(bool onDiskLiterals);
 
-  void setKeepTempFiles(bool keepTempFiles);
-
   void setOnDiskBase(const std::string& onDiskBase);
-
-  void setSettingsFile(const std::string& filename);
 
   void setPrefixCompression(bool compressed);
 
-  void setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
-    _numTriplesPerBatch = numTriplesPerBatch;
-  }
+  auto& indexBuilderParameters() { return _indexBuilderParameters; }
+  const auto& indexBuilderParameters() const { return _indexBuilderParameters; }
 
   const string& getTextName() const { return _textMeta.getName(); }
 
@@ -470,11 +465,26 @@ class Index {
   }
 
  private:
+  constexpr static const auto makeIndexBuilderParameters = [] {
+    using ad_utility::detail::parameterShortNames::Double;
+    using ad_utility::detail::parameterShortNames::SizeT;
+    using ad_utility::detail::parameterShortNames::Bool;
+    using ad_utility::detail::parameterShortNames::String;
+    ad_utility::Parameters params{
+        Bool<"only-ascii-turtle-prefixes">{false},
+        Bool<"keep-temp-files">{false},
+        Bool<"relaxed-parsing">{false},
+        Bool<"vocab-prefix-compressed">{true},
+        SizeT<"parser-batch-size">{PARSER_BATCH_SIZE},
+        SizeT<"num-triples-per-batch">{NUM_TRIPLES_PER_PARTIAL_VOCAB},
+        String<"settings-filename">{""}};
+    return params;
+  };
+  decltype(makeIndexBuilderParameters()) _indexBuilderParameters =
+      makeIndexBuilderParameters();
+
   string _onDiskBase;
-  string _settingsFileName;
-  bool _onlyAsciiTurtlePrefixes = false;
   bool _onDiskLiterals = false;
-  bool _keepTempFiles = false;
   json _configurationJson;
   Vocabulary<CompressedString, TripleComponentComparator> _vocab;
   size_t _totalVocabularySize = 0;
@@ -495,9 +505,6 @@ class Index {
   double _fullHasPredicateMultiplicityEntities;
   double _fullHasPredicateMultiplicityPredicates;
   size_t _fullHasPredicateSize;
-
-  size_t _parserBatchSize = PARSER_BATCH_SIZE;
-  size_t _numTriplesPerBatch = NUM_TRIPLES_PER_PARTIAL_VOCAB;
   /**
    * @brief Maps pattern ids to sets of predicate ids.
    */
@@ -729,7 +736,7 @@ class Index {
    * @param path
    */
   void deleteTemporaryFile(const string& path) {
-    if (!_keepTempFiles) {
+    if (!indexBuilderParameters().get<"keep-temp-files">()) {
       ad_utility::deleteFile(path);
     }
   }
