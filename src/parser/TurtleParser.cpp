@@ -34,7 +34,7 @@ bool TurtleParser<T>::prefixID() {
           _lastParseResult.substr(1, _lastParseResult.size() - 2);
       return true;
     } else {
-      raise("prefixID");
+      raise("Parsing @prefix definition failed");
     }
   } else {
     return false;
@@ -49,7 +49,7 @@ bool TurtleParser<T>::base() {
       _prefixMap[""] = _lastParseResult.substr(1, _lastParseResult.size() - 2);
       return true;
     } else {
-      raise("base");
+      raise("Parsing @base definition failed");
     }
   } else {
     return false;
@@ -65,7 +65,7 @@ bool TurtleParser<T>::sparqlPrefix() {
           _lastParseResult.substr(1, _lastParseResult.size() - 2);
       return true;
     } else {
-      raise("sparqlPrefix");
+      raise("Parsing PREFIX definition failed");
     }
   } else {
     return false;
@@ -80,7 +80,7 @@ bool TurtleParser<T>::sparqlBase() {
       _prefixMap[""] = _lastParseResult.substr(1, _lastParseResult.size() - 2);
       return true;
     } else {
-      raise("sparqlBase");
+      raise("Parsing BASE definition failed");
     }
   } else {
     return false;
@@ -94,7 +94,7 @@ bool TurtleParser<T>::triples() {
     if (predicateObjectList()) {
       return true;
     } else {
-      raise("triples");
+      raise("Parsing predicate or object failed");
     }
   } else {
     if (blankNodePropertyList()) {
@@ -228,7 +228,7 @@ bool TurtleParser<T>::collection() {
   if (!skip<TurtleTokenId::OpenRound>()) {
     return false;
   }
-  raise("We do not know how to handle collections in QLever yet\n");
+  raise("The QLever turtle parser cannot handle collections yet");
   // TODO<joka921> understand collections
 }
 
@@ -313,7 +313,7 @@ bool TurtleParser<T>::stringParse() {
     return false;
   }
   if (endPos == string::npos) {
-    raise("unterminated string Literal");
+    raise("Unterminated string literal");
   }
   // also include the quotation marks in the word
   // TODO <joka921> how do we have to translate multiline strings for QLever?
@@ -422,15 +422,15 @@ bool TurtleParser<T>::pnameLnRelaxed() {
 template <class T>
 bool TurtleParser<T>::iriref() {
   if constexpr (UseRelaxedParsing) {
-    // manually check if the input starts with "<" and then find the next ">"
+    // Manually check if the input starts with "<" and then find the next ">"
     // this might accept invalid irirefs but is faster than checking the
-    // complete regexes
+    // complete regexes.
     _tok.skipWhitespaceAndComments();
     auto view = _tok.view();
     if (view.starts_with('<')) {
       auto endPos = view.find_first_of("> \n");
       if (endPos == string::npos || view[endPos] != '>') {
-        raise("Iriref");
+        raise("Parsing IRI ref (IRI without prefix) failed");
       } else {
         _tok.remove_prefix(endPos + 1);
         _lastParseResult =

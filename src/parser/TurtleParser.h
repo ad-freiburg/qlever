@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 #include <sys/mman.h>
 
@@ -45,12 +46,10 @@ class TurtleParser {
   class ParseException : public std::exception {
    public:
     ParseException() = default;
-    ParseException(std::string_view msg, const size_t pos)
-        : _msg{std::string(msg) + " at position " + std::to_string(pos)} {}
     const char* what() const throw() { return _msg.c_str(); }
 
    private:
-    string _msg = "Error while parsing Turtle";
+    string _msg = "Error parsing turtle input";
   };
 
   // The CTRE Tokenizer implies relaxed parsing.
@@ -133,15 +132,18 @@ class TurtleParser {
   std::string _activePredicate;
   size_t _numBlankNodes = 0;
 
-  // throw an exception annotated with position information
-  [[noreturn]] void raise(std::string_view msg) {
+  // Log error message (with parse position) and throw parse exception.
+  [[noreturn]] void raise(std::string_view error_message) {
     auto d = _tok.view();
     if (!d.empty()) {
-      LOG(ERROR) << "Parsing error has occured, showing next 1000 bytes:\n";
-      auto s = std::min(size_t(10000), size_t(d.size()));
-      LOG(ERROR) << std::string_view(d.data(), s) << std::endl;
+      size_t num_bytes = 500;
+      auto s = std::min(size_t(num_bytes), size_t(d.size()));
+      LOG(ERROR) << "Parse error at byte position " << getParsePosition()
+                 << ": " << error_message << std::endl;
+      LOG(INFO) << "The next " << num_bytes << " bytes are:\n"
+                << std::string_view(d.data(), s) << std::endl;
     }
-    throw ParseException(msg, getParsePosition());
+    throw ParseException();
   }
 
  protected:
@@ -216,18 +218,14 @@ class TurtleParser {
     _triples.push_back({_activeSubject, _activePredicate, _lastParseResult});
   }
 
-  // enforce that the argument is true: if it is false, a parse Exception is
+  // Enforce that the argument is true: if it is false, a parse Exception is
   // thrown this helps formulating the LL1 property in easily readable code
   bool check(bool result) {
     if (result) {
       return true;
     } else {
       auto view = _tok.view();
-      auto s = std::min(size_t(1000), size_t(view.size()));
-      auto nextChars = std::string_view(view.data(), s);
-      raise(
-          "A check for a required Element failed. Next unparsed characters are:\n"s +
-          nextChars);
+      raise("A check for a required element failed");
     }
   }
 
@@ -236,8 +234,8 @@ class TurtleParser {
   string expandPrefix(const string& prefix) {
     if (!_prefixMap.count(prefix)) {
       raise("Prefix " + prefix +
-            " was not defined using a PREFIX or @prefix "
-            "declaration before using it!");
+            " was not previously defined using a PREFIX or @prefix "
+            "declaration");
     } else {
       return _prefixMap[prefix];
     }
@@ -290,8 +288,8 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
         "parseUtf8String() for unit tests\n");
   }
 
-  // load a string object directly to the buffer
-  // allows easier testing without a file object
+  // Load a string object directly to the buffer allows easier testing without a
+  // file object.
   void parseUtf8String(const std::string& toParse) {
     setInputStream(toParse);
     this->turtleDoc();
@@ -303,13 +301,8 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
     this->turtleDoc();
     auto d = this->_tok.view();
     if (!d.empty()) {
-      LOG(INFO) << "Warning at position " << getParsePosition()
-                << ":Parsing of line has Failed, but parseInput is not "
-                   "yet exhausted. Remaining bytes: "
-                << d.size() << '\n';
-      auto s = std::min(size_t(1000), size_t(d.size()));
-      LOG(INFO) << "Logging first 1000 unparsed characters\n";
-      LOG(INFO) << std::string_view(d.data(), s) << std::endl;
+      this->raise(absl::StrCat(
+          "Parsing failed before end of input, remaining bytes: ", d.size()));
     }
     return std::move(this->_triples);
   }
@@ -326,8 +319,8 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
  private:
   // The complete input to this parser.
   std::vector<char> _tmpToParse;
-  // used to add a certain offset to the parsing position when using this
-  // in a parallel setting
+  // Used to add a certain offset to the parsing position when using this
+  // in a parallel setting.
   size_t _positionOffset = 0;
 
  public:
