@@ -313,32 +313,137 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
     parser.setInputStream(input);
     return parser.parseAndReturnAllTriples();
   };
-  {
 
-    std::vector<std::string> inputs{"<a> <b> 99999999999999999999999", "<a> <b> \"99999999999999999999\"^^xsd:integer", "<a> <b> \"kartoffelsalat\"^^xsd:integer", "<a> <b> \"123kartoffel\"^^xsd:integer"};
+  auto testTripleObjects = [&testParsingWorks]<typename T>(
+                               auto& parser, std::vector<std::string> triples,
+                               std::vector<T> expectedObjects) {
+    for (size_t i = 0; i < triples.size(); ++i) {
+      const auto& triple = triples[i];
+      std::vector<TurtleTriple> result;
+      ASSERT_NO_THROW(result = testParsingWorks(parser, triple));
+      ASSERT_EQ(result.size(), 1ul);
+      ASSERT_EQ(result[0]._object, expectedObjects[i]);
+    }
+  };
+  {
+    // Test the default mode (overflowing integers throw an exception)
+    std::vector<std::string> inputs{
+        "<a> <b> 99999999999999999999999",
+        "<a> <b> \"99999999999999999999\"^^xsd:integer",
+        "<a> <b> \"9999.0\"^^xsd:integer",
+        "<a> <b> \"9999.0\"^^xsd:int",
+        "<a> <b> \"9999E4\"^^xsd:integer",
+        "<a> <b> \"9999E4\"^^xsd:int",
+        "<a> <b> \"kartoffelsalat\"^^xsd:integer",
+        "<a> <b> \"123kartoffel\"^^xsd:integer",
+        "<a> <b> \"kartoffelsalat\"^^xsd:double",
+        "<a> <b> \"123kartoffel\"^^xsd:decimal"};
     TurtleStringParser<Tokenizer> parser;
-    parser._prefixMap["xsd"] ="http://www.w3.org/2001/XMLSchema#";
+    parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
     for (const auto& input : inputs) {
       testParsingFails(parser, input);
     }
   }
   {
-
-    std::vector<std::string> inputs{"<a> <b> 99999999999999999999999.0", "<a> <b> \"99999999999999999999E4\"^^xsd:double"};
+    // These all work when the datatype is double.
+    std::vector<std::string> inputs{
+        "<a> <b> 99999999999999999999999.0",
+        "<a> <b> \"9999999999999999999999\"^^xsd:double",
+        "<a> <b> \"9999999999999999999999\"^^xsd:decimal",
+        "<a> <b> \"99999999999999999999E4\"^^xsd:double",
+        "<a> <b> \"99999999999999999999.0E4\"^^xsd:decimal"};
+    std::vector<double> expectedObjects{
+        99999999999999999999999.0, 9999999999999999999999.0,
+        9999999999999999999999.0, 99999999999999999999E4,
+        99999999999999999999E4};
     TurtleStringParser<Tokenizer> parser;
-    parser._prefixMap["xsd"] ="http://www.w3.org/2001/XMLSchema#";
-    for (const auto& input : inputs) {
-      testParsingWorks(parser, input);
-    }
+    parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+    testTripleObjects(parser, inputs, expectedObjects);
   }
   {
-    std::string input{"<a> <b> 99999999999999999999999"};
+    // Test the overflow to double mode.
+    std::vector<std::string> nonWorkingInputs{
+        "<a> <b> \"9999.0\"^^xsd:integer",
+        "<a> <b> \"9999.0\"^^xsd:int",
+        "<a> <b> \"9999E4\"^^xsd:integer",
+        "<a> <b> \"9999E4\"^^xsd:int",
+        "<a> <b> \"kartoffelsalat\"^^xsd:integer",
+        "<a> <b> \"123kartoffel\"^^xsd:integer"};
     TurtleStringParser<Tokenizer> parser;
-    parser.integersOverflowToDouble() = true;
+    parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+    parser.integerOverflowBehavior() =
+        TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+    for (const auto& input : nonWorkingInputs) {
+      testParsingFails(parser, input);
+    }
+    std::vector<std::string> workingInputs{
+        "<a> <b> 99999999999999999999999",
+        "<a> <b> \"99999999999999999999\"^^xsd:integer",
+    };
+    std::vector<double> expectedDoubles{99999999999999999999999.0,
+                                        99999999999999999999.0};
+    testTripleObjects(parser, workingInputs, expectedDoubles);
+  }
+  {
+    // Test the "all integers become doubles" mode.
+    std::vector<std::string> nonWorkingInputs{
+        "<a> <b> \"kartoffelsalat\"^^xsd:integer",
+        "<a> <b> \"123kartoffel\"^^xsd:integer"};
+    TurtleStringParser<Tokenizer> parser;
+    parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+    parser.integerOverflowBehavior() =
+        TurtleParserIntegerOverflowBehavior::AllToDouble;
+    for (const auto& input : nonWorkingInputs) {
+      testParsingFails(parser, input);
+    }
+    std::vector<std::string> workingInputs{
+        "<a> <b> \"123\"^^xsd:integer",
+        "<a> <b> 456",
+        "<a> <b> \"9999.0\"^^xsd:integer",
+        "<a> <b> \"9999.0\"^^xsd:int",
+        "<a> <b> \"9999E4\"^^xsd:integer",
+        "<a> <b> \"9999E4\"^^xsd:int",
+        "<a> <b> 99999999999999999999999",
+        "<a> <b> \"99999999999999999999\"^^xsd:integer",
+    };
+    std::vector<double> expectedDoubles{123.0,
+                                        456.0,
+                                        9999.0,
+                                        9999.0,
+                                        9999e4,
+                                        9999e4,
+                                        99999999999999999999999.0,
+                                        99999999999999999999.0};
+    testTripleObjects(parser, workingInputs, expectedDoubles);
+  }
+
+  {
+    // Test the skipping of unsupported triples with the "overflow is error"
+    // behavior.
+    std::string input{
+        "<a> <b> 123. <c> <d> 99999999999999999999999. <e> <f> 234"};
+    std::vector<TurtleTriple> expected{{"<a>", "<b>", 123},
+                                       {"<e>", "<f>", 234}};
+    TurtleStringParser<Tokenizer> parser;
+    parser.invalidLiteralsAreSkipped() = true;
     auto result = testParsingWorks(parser, input);
-    ASSERT_EQ(result.size(), 1ul);
-    ASSERT_TRUE(result[0]._object.isDouble());
-    ASSERT_EQ(result[0]._object, 99999999999999999999999.0);
+    ASSERT_EQ(result, expected);
+  }
+  {
+    // Test the skipping of unsupported triples with the "overflow to double"
+    // behavior.
+    std::string input{
+        "<a> <b> 99999999999999999999999. <c> <d> \"invalid\"^^xsd:integer. "
+        "<e> <f> 234"};
+    std::vector<TurtleTriple> expected{
+        {"<a>", "<b>", 99999999999999999999999.0}, {"<e>", "<f>", 234}};
+    TurtleStringParser<Tokenizer> parser;
+    parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+    parser.invalidLiteralsAreSkipped() = true;
+    parser.integerOverflowBehavior() =
+        TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+    auto result = testParsingWorks(parser, input);
+    ASSERT_EQ(result, expected);
   }
 }
 

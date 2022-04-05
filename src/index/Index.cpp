@@ -4,6 +4,8 @@
 
 #include "./Index.h"
 
+#include <absl/strings/str_join.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -93,7 +95,7 @@ void Index::createFromFile(const string& filename) {
   string indexFilename = _onDiskBase + ".index";
   _configurationJson["external-literals"] = _onDiskLiterals;
 
-  initializeVocabularySettingsBuild<Parser>();
+  readIndexBuilderSettingsFromFile<Parser>();
 
   IndexBuilderDataAsPsoSorter indexBuilderData;
   if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
@@ -227,6 +229,8 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
   LOG(INFO) << "Processing input triples from " << filename << " ..."
             << std::endl;
   auto parser = std::make_shared<Parser>(filename);
+  parser->integerOverflowBehavior() = _turtleParserIntegerOverflowBehavior;
+  parser->invalidLiteralsAreSkipped() = _turtleParserSkipIllegalLiterals;
   std::unique_ptr<TripleVec> idTriples(new TripleVec());
   ad_utility::Synchronized<TripleVec::bufwriter_type> writer(*idTriples);
   bool parserExhausted = false;
@@ -978,7 +982,7 @@ LangtagAndTriple Index::tripleToInternalRepresentation(TurtleTriple&& triple) {
 
 // ___________________________________________________________________________
 template <class Parser>
-void Index::initializeVocabularySettingsBuild() {
+void Index::readIndexBuilderSettingsFromFile() {
   json j;  // if we have no settings, we still have to initialize some default
            // values
   if (!_settingsFileName.empty()) {
@@ -1074,6 +1078,45 @@ void Index::initializeVocabularySettingsBuild() {
     _parserBatchSize = size_t{j["parser-batch-size"]};
     LOG(INFO) << "Overriding setting parser-batch-size to " << _parserBatchSize
               << " This might influence performance during index build."
+              << std::endl;
+  }
+
+  std::string overflowError = "overflowing-integers-throw";
+  std::string overflowDouble = "overflowing-integers-become-doubles";
+  std::string allDouble = "all-integers-become-doubles";
+  std::vector<std::string_view> allModes{overflowError, overflowDouble,
+                                         allDouble};
+  std::string key = "parser-integer-overflow-behavior";
+  if (j.count(key)) {
+    auto value = j[key];
+    if (value == overflowError) {
+      LOG(INFO) << "Integers that cannot be represented by QLever will throw "
+                   "an exception."
+                << std::endl;
+      _turtleParserIntegerOverflowBehavior =
+          TurtleParserIntegerOverflowBehavior::Error;
+    } else if (value == overflowDouble) {
+      LOG(INFO) << "Integers that cannot be represented by QLever will be "
+                   "converted to doubles."
+                << std::endl;
+      _turtleParserIntegerOverflowBehavior =
+          TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+    } else if (value == allDouble) {
+      LOG(INFO) << "All integers will be converted to doubles." << std::endl;
+      _turtleParserIntegerOverflowBehavior =
+          TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+    } else {
+      AD_CHECK(std::find(allModes.begin(), allModes.end(), value) ==
+               allModes.end());
+      LOG(ERROR) << "invalid value for " << key << '\n';
+      LOG(ERROR) << "The currently supported values are "
+                 << absl::StrJoin(allModes, ",") << std::endl;
+    }
+  } else {
+    _turtleParserIntegerOverflowBehavior =
+        TurtleParserIntegerOverflowBehavior::Error;
+    LOG(INFO) << "Integers that cannot be represented by QLever will throw an "
+                 "exception. This is the default behavior"
               << std::endl;
   }
 }

@@ -28,6 +28,12 @@
 
 using std::string;
 
+enum class TurtleParserIntegerOverflowBehavior {
+  Error,
+  OverflowingToDouble,
+  AllToDouble
+};
+
 struct TurtleTriple {
   std::string _subject;
   std::string _predicate;
@@ -79,6 +85,7 @@ class TurtleParser {
   // The CTRE Tokenizer implies relaxed parsing.
   static constexpr bool UseRelaxedParsing =
       std::is_same_v<Tokenizer_T, TokenizerCtre>;
+
  protected:
   /* Data Members */
 
@@ -108,8 +115,10 @@ class TurtleParser {
   std::string _activePredicate;
   size_t _numBlankNodes = 0;
 
-  // For documentation, see the accesor functions `integersOverflowToDouble()` etc.
-  bool _integersOverflowToDouble = false;
+  // For documentation, see the accesor functions `integerOverflowBehavior()`
+  // etc.
+  TurtleParserIntegerOverflowBehavior _integerOverflowBehavior =
+      TurtleParserIntegerOverflowBehavior::Error;
   bool _invalidLiteralsAreSkipped = false;
   bool _currentTripleIgnoredBecauseOfInvalidLiteral = false;
 
@@ -131,13 +140,20 @@ class TurtleParser {
 
   // Get the offset (relative to the beginning of the file) of the first byte
   // that has not yet been dealt with by the parser.
-  virtual size_t getParsePosition() const = 0;
+  [[nodiscard]] virtual size_t getParsePosition() const = 0;
 
-  bool& integersOverflowToDouble() {return _integersOverflowToDouble;}
-  const bool& integersOverflowToDouble() const {return _integersOverflowToDouble;}
+  TurtleParserIntegerOverflowBehavior& integerOverflowBehavior() {
+    return _integerOverflowBehavior;
+  }
+  [[nodiscard]] const TurtleParserIntegerOverflowBehavior&
+  integerOverflowBehavior() const {
+    return _integerOverflowBehavior;
+  }
 
-  bool& invalidLiteralsAreSkipped() {return _invalidLiteralsAreSkipped;};
-  const bool& invalidLiteralsAreSkipped() const {return _invalidLiteralsAreSkipped;};
+  bool& invalidLiteralsAreSkipped() { return _invalidLiteralsAreSkipped; };
+  [[nodiscard]] const bool& invalidLiteralsAreSkipped() const {
+    return _invalidLiteralsAreSkipped;
+  };
 
  protected:
   // clear all the parser's state to the initial values.
@@ -182,7 +198,8 @@ class TurtleParser {
   }
 
   // Throw an exception annotated with position information, or simply ignore
-  // the current triple, depending on the settings of `invalidLiteralsAreSkipped`
+  // the current triple, depending on the settings of
+  // `invalidLiteralsAreSkipped`
   void raiseOrIgnoreTriple(std::string_view msg) {
     if (_invalidLiteralsAreSkipped) {
       _currentTripleIgnoredBecauseOfInvalidLiteral = true;

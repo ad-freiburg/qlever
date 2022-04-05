@@ -233,7 +233,7 @@ bool TurtleParser<T>::collection() {
 }
 
 // ____________________________________________________________________________
-template<class T>
+template <class T>
 void TurtleParser<T>::parseDoubleConstant(const std::string& input) {
   size_t position;
   size_t size = input.size();
@@ -241,42 +241,58 @@ void TurtleParser<T>::parseDoubleConstant(const std::string& input) {
   bool errorOccured = false;
   TripleObject result;
   try {
-    // We cannot directly store this in `_lastParseResult` because this might overwrite `input`.
+    // We cannot directly store this in `_lastParseResult` because this might
+    // overwrite `input`.
     result = std::stod(input, &position);
   } catch (const std::exception& e) {
     errorOccured = true;
   }
   if (errorOccured || position != size) {
-    auto errorMessage = absl::StrCat("Value ", input, " could not be parsed as a decimal or floating point value");
+    auto errorMessage = absl::StrCat(
+        "Value ", input,
+        " could not be parsed as a decimal or floating point value");
     raiseOrIgnoreTriple(errorMessage);
   }
   _lastParseResult = result;
 }
 
 // ____________________________________________________________________________
-template<class T>
+template <class T>
 void TurtleParser<T>::parseIntegerConstant(const std::string& input) {
-  size_t position;
+  if (integerOverflowBehavior() ==
+      TurtleParserIntegerOverflowBehavior::AllToDouble) {
+    return parseDoubleConstant(input);
+  }
+  size_t position = 0;
   size_t size = input.size();
 
   bool errorOccured = false;
   TripleObject result;
   try {
-    // We cannot directly store this in `_lastParseResult` because this might overwrite `input`.
+    // We cannot directly store this in `_lastParseResult` because this might
+    // overwrite `input`.
     result = std::stoll(input, &position);
   } catch (const std::out_of_range&) {
-    if (integersOverflowToDouble()) {
+    if (integerOverflowBehavior() ==
+        TurtleParserIntegerOverflowBehavior::OverflowingToDouble) {
       return parseDoubleConstant(input);
     } else {
-      auto errorMessage = absl::StrCat("Value ", input, " cannot be represented as an integer value inside qlever. Please make it a decimal/double literal or specify `IntegersOverflowToDoubles=true` in the index builder settings");
+      auto errorMessage = absl::StrCat(
+          "Value ", input,
+          " cannot be represented as an integer value inside qlever. Please "
+          "make it a decimal/double literal or specify "
+          "`IntegersOverflowToDoubles=true` in the index builder settings");
       raiseOrIgnoreTriple(errorMessage);
     }
-  } catch (const std::exception& e) {
+  } catch (const std::invalid_argument& e) {
     errorOccured = true;
   }
   if (errorOccured || position != size) {
-    auto errorMessage = absl::StrCat("Value ", input, " could not be parsed as an integer value");
+    auto errorMessage = absl::StrCat(
+        "Value ", input, " could not be parsed as an integer value");
     raiseOrIgnoreTriple(errorMessage);
+  } else {
+    std::cout << "something" << std::endl;
   }
   _lastParseResult = result;
 }
@@ -297,7 +313,6 @@ bool TurtleParser<T>::integer() {
     return false;
   }
 }
-
 
 // ______________________________________________________________________
 template <class T>

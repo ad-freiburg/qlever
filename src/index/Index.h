@@ -472,6 +472,9 @@ class Index {
   string _onDiskBase;
   string _settingsFileName;
   bool _onlyAsciiTurtlePrefixes = false;
+  TurtleParserIntegerOverflowBehavior _turtleParserIntegerOverflowBehavior =
+      TurtleParserIntegerOverflowBehavior::Error;
+  bool _turtleParserSkipIllegalLiterals = false;
   bool _onDiskLiterals = false;
   bool _keepTempFiles = false;
   json _configurationJson;
@@ -708,7 +711,7 @@ class Index {
 
   // initialize the index-build-time settings for the vocabulary
   template <class Parser>
-  void initializeVocabularySettingsBuild();
+  void readIndexBuilderSettingsFromFile();
 
   // Helper function for Debugging during the index build.
   // ExtVecs are not persistent, so we dump them to a mmapVector in a file with
