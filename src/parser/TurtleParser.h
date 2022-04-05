@@ -298,7 +298,6 @@ class TurtleParser {
     if (result) {
       return true;
     } else {
-      auto view = _tok.view();
       raise("A check for a required element failed");
     }
   }
