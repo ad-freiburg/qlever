@@ -15,7 +15,6 @@
 
 #include "../engine/ResultTable.h"
 #include "../global/Pattern.h"
-#include "../parser/TsvParser.h"
 #include "../parser/TurtleParser.h"
 #include "../util/BackgroundStxxlSorter.h"
 #include "../util/BufferedVector.h"
@@ -473,6 +472,9 @@ class Index {
   string _onDiskBase;
   string _settingsFileName;
   bool _onlyAsciiTurtlePrefixes = false;
+  TurtleParserIntegerOverflowBehavior _turtleParserIntegerOverflowBehavior =
+      TurtleParserIntegerOverflowBehavior::Error;
+  bool _turtleParserSkipIllegalLiterals = false;
   bool _onDiskLiterals = false;
   bool _keepTempFiles = false;
   json _configurationJson;
@@ -695,8 +697,7 @@ class Index {
   // and add externalization characters if necessary.
   // Returns the language tag of spo[2] (the object) or ""
   // if there is none.
-  LangtagAndTriple tripleToInternalRepresentation(
-      std::array<string, 3>&& stringTriple);
+  LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple);
 
   /**
    * @brief Throws an exception if no patterns are loaded. Should be called from
@@ -710,7 +711,7 @@ class Index {
 
   // initialize the index-build-time settings for the vocabulary
   template <class Parser>
-  void initializeVocabularySettingsBuild();
+  void readIndexBuilderSettingsFromFile();
 
   // Helper function for Debugging during the index build.
   // ExtVecs are not persistent, so we dump them to a mmapVector in a file with

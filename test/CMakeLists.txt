@@ -52,8 +52,6 @@ addLinkAndDiscoverTest(FileTest)
 
 addLinkAndDiscoverTest(Simple8bTest)
 
-addLinkAndDiscoverTest(TsvParserTest parser)
-
 addLinkAndDiscoverTest(ContextFileParserTest parser ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(IndexMetaDataTest index)
@@ -184,3 +182,5 @@ addLinkAndDiscoverTest(BitUtilsTest)
 addLinkAndDiscoverTest(NBitIntegerTest)
 
 addLinkAndDiscoverTest(DateTest)
+
+addLinkAndDiscoverTest(TripleObjectTest absl::strings)
