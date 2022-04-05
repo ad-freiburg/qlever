@@ -232,6 +232,55 @@ bool TurtleParser<T>::collection() {
   // TODO<joka921> understand collections
 }
 
+// ____________________________________________________________________________
+template<class T>
+void TurtleParser<T>::parseDoubleConstant(const std::string& input) {
+  size_t position;
+  size_t size = input.size();
+
+  bool errorOccured = false;
+  TripleObject result;
+  try {
+    // We cannot directly store this in `_lastParseResult` because this might overwrite `input`.
+    result = std::stod(input, &position);
+  } catch (const std::exception& e) {
+    errorOccured = true;
+  }
+  if (errorOccured || position != size) {
+    auto errorMessage = absl::StrCat("Value ", input, " could not be parsed as a decimal or floating point value");
+    raiseOrIgnoreTriple(errorMessage);
+  }
+  _lastParseResult = result;
+}
+
+// ____________________________________________________________________________
+template<class T>
+void TurtleParser<T>::parseIntegerConstant(const std::string& input) {
+  size_t position;
+  size_t size = input.size();
+
+  bool errorOccured = false;
+  TripleObject result;
+  try {
+    // We cannot directly store this in `_lastParseResult` because this might overwrite `input`.
+    result = std::stoll(input, &position);
+  } catch (const std::out_of_range&) {
+    if (integersOverflowToDouble()) {
+      return parseDoubleConstant(input);
+    } else {
+      auto errorMessage = absl::StrCat("Value ", input, " cannot be represented as an integer value inside qlever. Please make it a decimal/double literal or specify `IntegersOverflowToDoubles=true` in the index builder settings");
+      raiseOrIgnoreTriple(errorMessage);
+    }
+  } catch (const std::exception& e) {
+    errorOccured = true;
+  }
+  if (errorOccured || position != size) {
+    auto errorMessage = absl::StrCat("Value ", input, " could not be parsed as an integer value");
+    raiseOrIgnoreTriple(errorMessage);
+  }
+  _lastParseResult = result;
+}
+
 // ______________________________________________________________________
 template <class T>
 bool TurtleParser<T>::numericLiteral() {
@@ -242,18 +291,19 @@ bool TurtleParser<T>::numericLiteral() {
 template <class T>
 bool TurtleParser<T>::integer() {
   if (parseTerminal<TurtleTokenId::Integer>()) {
-    _lastParseResult = std::stoll(_lastParseResult.getString());
+    parseIntegerConstant(_lastParseResult.getString());
     return true;
   } else {
     return false;
   }
 }
 
+
 // ______________________________________________________________________
 template <class T>
 bool TurtleParser<T>::decimal() {
   if (parseTerminal<TurtleTokenId::Decimal>()) {
-    _lastParseResult = std::stod(_lastParseResult.getString());
+    parseDoubleConstant(_lastParseResult.getString());
     return true;
   } else {
     return false;
@@ -264,7 +314,7 @@ bool TurtleParser<T>::decimal() {
 template <class T>
 bool TurtleParser<T>::doubleParse() {
   if (parseTerminal<TurtleTokenId::Double>()) {
-    _lastParseResult = std::stod(_lastParseResult.getString());
+    parseDoubleConstant(_lastParseResult.getString());
     return true;
   } else {
     return false;
@@ -290,21 +340,14 @@ bool TurtleParser<T>::rdfLiteral() {
     auto type = stripAngleBrackets(typeIri);
     std::string strippedLiteral{stripDoubleQuotes(literalString)};
     if (type == XSD_INT_TYPE || type == XSD_INTEGER_TYPE) {
-      std::size_t pos = 0;
-      _lastParseResult =
-          static_cast<int64_t>(std::stoll(strippedLiteral, &pos));
-      AD_CHECK(pos = strippedLiteral.size());
-      return true;
+      parseIntegerConstant(strippedLiteral);
     } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
                type == XSD_FLOAT_TYPE) {
-      std::size_t pos = 0;
-      _lastParseResult = std::stod(strippedLiteral, &pos);
-      AD_CHECK(pos = strippedLiteral.size());
-      return true;
+      parseDoubleConstant(strippedLiteral);
     } else {
       _lastParseResult = literalString + "^^" + _lastParseResult.getString();
-      return true;
     }
+    return true;
   } else {
     // it is okay to neither have a langtag nor a xsd datatype
     return true;

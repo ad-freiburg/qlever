@@ -79,11 +79,45 @@ class TurtleParser {
   // The CTRE Tokenizer implies relaxed parsing.
   static constexpr bool UseRelaxedParsing =
       std::is_same_v<Tokenizer_T, TokenizerCtre>;
+ protected:
+  /* Data Members */
 
+  // Stores the triples that have been parsed but not retrieved yet.
+  std::vector<TurtleTriple> _triples;
+
+  // if this is set, there is nothing else to parse and we will only
+  // retrieve what is left in our tripleBuffer;
+  bool _isParserExhausted = false;
+
+  // The tokenizer
+  Tokenizer_T _tok{std::string_view("")};
+
+  // The result of the last successful call to a parsing function (a function
+  // named after a (non-)terminal of the Turtle grammar). We are using
+  // `TripleObject` since it can hold any parsing result, not only objects.
+  TripleObject _lastParseResult;
+
+  // maps prefixes to their expanded form, initialized with the empty base
+  // (i.e. the prefix ":" maps to the empty IRI)
+  ad_utility::HashMap<std::string, std::string> _prefixMap{{"", ""}};
+
+  // there are turtle constructs that reuse prefixes, subjects and predicates
+  // so we have to save the last seen ones
+  std::string _activePrefix;
+  std::string _activeSubject;
+  std::string _activePredicate;
+  size_t _numBlankNodes = 0;
+
+  // For documentation, see the accesor functions `integersOverflowToDouble()` etc.
+  bool _integersOverflowToDouble = false;
+  bool _invalidLiteralsAreSkipped = false;
+  bool _currentTripleIgnoredBecauseOfInvalidLiteral = false;
+
+ public:
   virtual ~TurtleParser() = default;
   TurtleParser() = default;
-  TurtleParser(TurtleParser&& rhs) = default;
-  TurtleParser& operator=(TurtleParser&& rhs) = default;
+  TurtleParser(TurtleParser&& rhs) noexcept = default;
+  TurtleParser& operator=(TurtleParser&& rhs) noexcept = default;
 
   // Wrapper to getLine that is expected by the rest of QLever
   bool getLine(TurtleTriple& triple) { return getLine(&triple); }
@@ -98,6 +132,12 @@ class TurtleParser {
   // Get the offset (relative to the beginning of the file) of the first byte
   // that has not yet been dealt with by the parser.
   virtual size_t getParsePosition() const = 0;
+
+  bool& integersOverflowToDouble() {return _integersOverflowToDouble;}
+  const bool& integersOverflowToDouble() const {return _integersOverflowToDouble;}
+
+  bool& invalidLiteralsAreSkipped() {return _invalidLiteralsAreSkipped;};
+  const bool& invalidLiteralsAreSkipped() const {return _invalidLiteralsAreSkipped;};
 
  protected:
   // clear all the parser's state to the initial values.
@@ -129,36 +169,8 @@ class TurtleParser {
   }
 
   bool statement();
-  /* Data Members */
 
-  // Stores the triples that have been parsed but not retrieved yet.
-  std::vector<TurtleTriple> _triples;
-
-  // if this is set, there is nothing else to parse and we will only
-  // retrieve what is left in our tripleBuffer;
-  bool _isParserExhausted = false;
-
-  // The tokenizer
-  Tokenizer_T _tok{std::string_view("")};
-
-  // The result of the last successful call to a parsing function
-  // (a function named after a (non-)terminal of the Turtle grammar).
-  // We are using `TripleObject` since it can hold any parsing result, not only
-  // objects.
-  TripleObject _lastParseResult;
-
-  // maps prefixes to their expanded form, initialized with the empty base
-  // (i.e. the prefix ":" maps to the empty IRI)
-  ad_utility::HashMap<std::string, std::string> _prefixMap{{"", ""}};
-
-  // there are turtle constructs that reuse prefixes, subjects and predicates
-  // so we have to save the last seen ones
-  std::string _activePrefix;
-  std::string _activeSubject;
-  std::string _activePredicate;
-  size_t _numBlankNodes = 0;
-
-  // throw an exception annotated with position information
+  // Throw an exception annotated with position information.
   [[noreturn]] void raise(std::string_view msg) {
     auto d = _tok.view();
     if (!d.empty()) {
@@ -167,6 +179,16 @@ class TurtleParser {
       LOG(ERROR) << std::string_view(d.data(), s) << std::endl;
     }
     throw ParseException(msg, getParsePosition());
+  }
+
+  // Throw an exception annotated with position information, or simply ignore
+  // the current triple, depending on the settings of `invalidLiteralsAreSkipped`
+  void raiseOrIgnoreTriple(std::string_view msg) {
+    if (_invalidLiteralsAreSkipped) {
+      _currentTripleIgnoredBecauseOfInvalidLiteral = true;
+    } else {
+      raise(msg);
+    }
   }
 
  protected:
@@ -205,6 +227,10 @@ class TurtleParser {
   // The grammar rule is called "double" but this is a reserved name in C++.
   bool doubleParse();
 
+  // Two helper functions for the actual conversion from strings to numbers.
+  void parseDoubleConstant(const std::string& input);
+  void parseIntegerConstant(const std::string& input);
+
   // This version only works if no escape sequences were used.
   bool pnameLnRelaxed();
 
@@ -239,7 +265,10 @@ class TurtleParser {
 
   // ______________________________________________________________________________________
   void emitTriple() {
-    _triples.push_back({_activeSubject, _activePredicate, _lastParseResult});
+    if (!_currentTripleIgnoredBecauseOfInvalidLiteral) {
+      _triples.push_back({_activeSubject, _activePredicate, _lastParseResult});
+    }
+    _currentTripleIgnoredBecauseOfInvalidLiteral = false;
   }
 
   // enforce that the argument is true: if it is false, a parse Exception is

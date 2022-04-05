@@ -690,4 +690,5 @@ std::string convertToLanguageTaggedPredicate(const string& pred,
                                              const string& langtag) {
   return '@' + langtag + '@' + pred;
 }
+
 }  // namespace ad_utility

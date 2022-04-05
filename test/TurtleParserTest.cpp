@@ -302,6 +302,46 @@ TEST(TurtleParserTest, numericLiteral) {
   }
 }
 
+TEST(TurtleParserTest, numericLiteralErrorBehavior) {
+  auto testParsingFails = [](auto& parser, std::string input) {
+    parser.setInputStream(input);
+    ASSERT_THROW(parser.parseAndReturnAllTriples(),
+                 TurtleStringParser<Tokenizer>::ParseException);
+  };
+
+  auto testParsingWorks = [](auto& parser, std::string input) {
+    parser.setInputStream(input);
+    return parser.parseAndReturnAllTriples();
+  };
+  {
+
+    std::vector<std::string> inputs{"<a> <b> 99999999999999999999999", "<a> <b> \"99999999999999999999\"^^xsd:integer", "<a> <b> \"kartoffelsalat\"^^xsd:integer", "<a> <b> \"123kartoffel\"^^xsd:integer"};
+    TurtleStringParser<Tokenizer> parser;
+    parser._prefixMap["xsd"] ="http://www.w3.org/2001/XMLSchema#";
+    for (const auto& input : inputs) {
+      testParsingFails(parser, input);
+    }
+  }
+  {
+
+    std::vector<std::string> inputs{"<a> <b> 99999999999999999999999.0", "<a> <b> \"99999999999999999999E4\"^^xsd:double"};
+    TurtleStringParser<Tokenizer> parser;
+    parser._prefixMap["xsd"] ="http://www.w3.org/2001/XMLSchema#";
+    for (const auto& input : inputs) {
+      testParsingWorks(parser, input);
+    }
+  }
+  {
+    std::string input{"<a> <b> 99999999999999999999999"};
+    TurtleStringParser<Tokenizer> parser;
+    parser.integersOverflowToDouble() = true;
+    auto result = testParsingWorks(parser, input);
+    ASSERT_EQ(result.size(), 1ul);
+    ASSERT_TRUE(result[0]._object.isDouble());
+    ASSERT_EQ(result[0]._object, 99999999999999999999999.0);
+  }
+}
+
 TEST(TurtleParserTest, booleanLiteral) {
   TurtleStringParser<Tokenizer> parser;
   parser.setInputStream("true");
