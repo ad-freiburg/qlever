@@ -46,8 +46,6 @@ class TurtleParser {
   class ParseException : public std::exception {
    public:
     ParseException() = default;
-    // ParseException(std::string_view msg, const size_t pos)
-    //     : _msg{std::string(msg) + " at position " + std::to_string(pos)} {}
     const char* what() const throw() { return _msg.c_str(); }
 
    private:
