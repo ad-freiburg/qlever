@@ -185,4 +185,4 @@ addLinkAndDiscoverTest(DateTest)
 
 addLinkAndDiscoverTest(TripleObjectTest absl::strings)
 
-addLinkAndDiscoverTest(FoldedIdTest absl::flat_hash_set)
+addLinkAndDiscoverTest(ValueIdTest absl::flat_hash_set)
