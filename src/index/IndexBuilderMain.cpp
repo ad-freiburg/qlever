@@ -311,10 +311,6 @@ int main(int argc, char** argv) {
         LOG(DEBUG) << "Parsing uncompressed TTL from: " << inputFile
                    << std::endl;
         index.createFromFile<TurtleParserAuto>(inputFile);
-      } else if (filetype == "tsv") {
-        LOG(DEBUG) << "Parsing uncompressed TSV from: " << inputFile
-                   << std::endl;
-        index.createFromFile<TsvParser>(inputFile);
       } else if (filetype == "nt") {
         LOG(DEBUG) << "Parsing uncompressed N-Triples from: " << inputFile
                    << " (using the Turtle parser)" << std::endl;
@@ -325,8 +321,7 @@ int main(int argc, char** argv) {
                    << "streams)" << std::endl;
         index.createFromFile<TurtleMmapParser<Tokenizer>>(inputFile);
       } else {
-        LOG(ERROR) << "File format must be one of: tsv nt ttl mmap"
-                   << std::endl;
+        LOG(ERROR) << "File format must be one of: nt ttl mmap" << std::endl;
         printUsage(argv[0]);
         exit(1);
       }

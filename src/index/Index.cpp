@@ -4,6 +4,8 @@
 
 #include "./Index.h"
 
+#include <absl/strings/str_join.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -14,7 +16,6 @@
 #include <unordered_map>
 
 #include "../parser/ParallelParseBuffer.h"
-#include "../parser/TsvParser.h"
 #include "../util/BatchedPipeline.h"
 #include "../util/CompressionUsingZstd/ZstdWrapper.h"
 #include "../util/Conversions.h"
@@ -94,7 +95,7 @@ void Index::createFromFile(const string& filename) {
   string indexFilename = _onDiskBase + ".index";
   _configurationJson["external-literals"] = _onDiskLiterals;
 
-  initializeVocabularySettingsBuild<Parser>();
+  readIndexBuilderSettingsFromFile<Parser>();
 
   IndexBuilderDataAsPsoSorter indexBuilderData;
   if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
@@ -215,7 +216,6 @@ void Index::createFromFile(const string& filename) {
 }
 
 // Explicit instantiations.
-template void Index::createFromFile<TsvParser>(const string& filename);
 template void Index::createFromFile<TurtleStreamParser<Tokenizer>>(
     const string& filename);
 template void Index::createFromFile<TurtleMmapParser<Tokenizer>>(
@@ -229,6 +229,8 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
   LOG(INFO) << "Processing input triples from " << filename << " ..."
             << std::endl;
   auto parser = std::make_shared<Parser>(filename);
+  parser->integerOverflowBehavior() = _turtleParserIntegerOverflowBehavior;
+  parser->invalidLiteralsAreSkipped() = _turtleParserSkipIllegalLiterals;
   std::unique_ptr<TripleVec> idTriples(new TripleVec());
   ad_utility::Synchronized<TripleVec::bufwriter_type> writer(*idTriples);
   bool parserExhausted = false;
@@ -263,7 +265,7 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
                         [&]() { parserExhausted = true; }),
           // convert each triple to the internal representation (e.g. special
           // values for Numbers, externalized literals, etc.)
-          [this](std::array<std::string, 3>&& t) -> LangtagAndTriple {
+          [this](TurtleTriple&& t) -> LangtagAndTriple {
             return tripleToInternalRepresentation(std::move(t));
           },
 
@@ -939,16 +941,20 @@ void Index::readConfiguration() {
 }
 
 // ___________________________________________________________________________
-LangtagAndTriple Index::tripleToInternalRepresentation(
-    std::array<std::string, 3>&& tripleIn) {
-  LangtagAndTriple res{"", makeTriple(std::move(tripleIn))};
-  auto& spo = res._triple;
-  for (auto& el : spo) {
+LangtagAndTriple Index::tripleToInternalRepresentation(TurtleTriple&& triple) {
+  LangtagAndTriple result{"", {}};
+  auto& resultTriple = result._triple;
+  resultTriple[0] = std::move(triple._subject);
+  resultTriple[1] = std::move(triple._predicate);
+  // TODO<joka921> As soon as we have the "folded" Ids, we simply store the
+  // numeric value.
+  resultTriple[2] = triple._object.toRdfLiteral();
+  for (auto& el : resultTriple) {
     auto& iriOrLiteral = std::get<TripleComponent>(el)._iriOrLiteral;
     iriOrLiteral = _vocab.getLocaleManager().normalizeUtf8(iriOrLiteral);
   }
   size_t upperBound = 3;
-  auto& object = std::get<TripleComponent>(spo[2])._iriOrLiteral;
+  auto& object = std::get<TripleComponent>(resultTriple[2])._iriOrLiteral;
   // TODO<joka921> Actually create numeric Ids here...
   if (ad_utility::isXsdValue(object)) {
     object = ad_utility::convertValueLiteralToIndexWord(object);
@@ -957,26 +963,26 @@ LangtagAndTriple Index::tripleToInternalRepresentation(
     object = ad_utility::convertNumericToIndexWord(object);
     upperBound = 2;
   } else if (isLiteral(object)) {
-    res._langtag = decltype(_vocab)::getLanguage(object);
+    result._langtag = decltype(_vocab)::getLanguage(object);
   }
 
   for (size_t k = 0; k < upperBound; ++k) {
     // If we already have an ID, we can just continue;
-    if (!std::holds_alternative<TripleComponent>(spo[k])) {
+    if (!std::holds_alternative<TripleComponent>(resultTriple[k])) {
       continue;
     }
-    auto& component = std::get<TripleComponent>(spo[k]);
+    auto& component = std::get<TripleComponent>(resultTriple[k]);
     if (_onDiskLiterals &&
         _vocab.shouldBeExternalized(component._iriOrLiteral)) {
       component._isExternal = true;
     }
   }
-  return res;
+  return result;
 }
 
 // ___________________________________________________________________________
 template <class Parser>
-void Index::initializeVocabularySettingsBuild() {
+void Index::readIndexBuilderSettingsFromFile() {
   json j;  // if we have no settings, we still have to initialize some default
            // values
   if (!_settingsFileName.empty()) {
@@ -1072,6 +1078,47 @@ void Index::initializeVocabularySettingsBuild() {
     _parserBatchSize = size_t{j["parser-batch-size"]};
     LOG(INFO) << "Overriding setting parser-batch-size to " << _parserBatchSize
               << " This might influence performance during index build."
+              << std::endl;
+  }
+
+  std::string overflowingIntegersThrow = "overflowing-integers-throw";
+  std::string overflowingIntegersBecomeDoubles =
+      "overflowing-integers-become-doubles";
+  std::string allIntegersBecomeDoubles = "all-integers-become-doubles";
+  std::vector<std::string_view> allModes{overflowingIntegersThrow,
+                                         overflowingIntegersBecomeDoubles,
+                                         allIntegersBecomeDoubles};
+  std::string key = "parser-integer-overflow-behavior";
+  if (j.count(key)) {
+    auto value = j[key];
+    if (value == overflowingIntegersThrow) {
+      LOG(INFO) << "Integers that cannot be represented by QLever will throw "
+                   "an exception"
+                << std::endl;
+      _turtleParserIntegerOverflowBehavior =
+          TurtleParserIntegerOverflowBehavior::Error;
+    } else if (value == overflowingIntegersBecomeDoubles) {
+      LOG(INFO) << "Integers that cannot be represented by QLever will be "
+                   "converted to doubles"
+                << std::endl;
+      _turtleParserIntegerOverflowBehavior =
+          TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+    } else if (value == allIntegersBecomeDoubles) {
+      LOG(INFO) << "All integers will be converted to doubles" << std::endl;
+      _turtleParserIntegerOverflowBehavior =
+          TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+    } else {
+      AD_CHECK(std::find(allModes.begin(), allModes.end(), value) ==
+               allModes.end());
+      LOG(ERROR) << "Invalid value for " << key << std::endl;
+      LOG(INFO) << "The currently supported values are "
+                << absl::StrJoin(allModes, ",") << std::endl;
+    }
+  } else {
+    _turtleParserIntegerOverflowBehavior =
+        TurtleParserIntegerOverflowBehavior::Error;
+    LOG(INFO) << "Integers that cannot be represented by QLever will throw an "
+                 "exception (this is the default behavior)"
               << std::endl;
   }
 }
