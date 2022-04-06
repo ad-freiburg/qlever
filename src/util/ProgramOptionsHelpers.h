@@ -60,11 +60,14 @@ void validate(boost::any& v, const std::vector<std::string>& values,
 }
 
 /// Create `boost::program_options::value`s (command-line options) from
-/// `ad_utility::Parameters`
+/// `ad_utility::Parameters`. `Parameters` can either be an instantiation of
+/// `ad_utility::Parameters` or
+/// `ad_utility::Synchronized<ad_utility::Parameters<...>
 template <typename Parameters>
 class ParameterToProgramOptionFactory {
  private:
   Parameters* _parameters;
+  static constexpr bool isSynchronized = requires { _parameters->wlock(); };
 
  public:
   // Construct from a pointer to `ad_utility::Parameters`
@@ -85,15 +88,26 @@ class ParameterToProgramOptionFactory {
   auto getProgramOption() {
     // Get the current value of the parameter, it will become the default
     // value of the command-line option.
-    auto defaultValue = _parameters->template get<name>();
+    auto defaultValue = [&]() {
+      if constexpr (isSynchronized) {
+        return _parameters->rlock()->template get<name>();
+      } else {
+        return _parameters->template get<name>();
+      }
+    }();
 
     // The underlying type for the parameter.
     using Type = decltype(defaultValue);
 
     // The function that is called when the command-line option is called.
     // It sets the parameter to the parsed value.
-    auto setParameterToValue{
-        [this](const Type& value) { _parameters->template set<name>(value); }};
+    auto setParameterToValue = [this](const Type& value) {
+      if constexpr (isSynchronized) {
+        _parameters->wlock()->template set<name>(value);
+      } else {
+        _parameters->template set<name>(value);
+      }
+    };
 
     return boost::program_options::value<Type>()
         ->default_value(defaultValue)

@@ -49,14 +49,8 @@ int main(int argc, char** argv) {
 
   NonNegative memoryMaxSizeGb;
 
-  // The `ParameterToProgramOptionFactory` requires a `Parameters*`, but the
-  // `RuntimeParameters()` are a threadsafe
-  // `ad_utility::Synchronized<Parameters>`. We store the lock object of the
-  // `Synchronized` in an `optional` and then extract the pointer. Later we will
-  // set the `optional` to nullopt, which will free the lock.
-  std::optional lockedParameters{RuntimeParameters().wlock()};
   ad_utility::ParameterToProgramOptionFactory optionFactory{
-      &(*lockedParameters.value())};
+      &RuntimeParameters()};
 
   po::options_description options("Options for ServerMain");
   auto add = [&options]<typename... Args>(Args && ... args) {
@@ -127,8 +121,6 @@ int main(int argc, char** argv) {
   LOG(INFO) << EMPH_ON << "QLever Server, compiled on " << __DATE__ << " "
             << __TIME__ << EMPH_OFF << std::endl;
 
-  // We still hold a lock on the runtimeParameters, so we release it now.
-  lockedParameters = std::nullopt;
   try {
     Server server(port, static_cast<int>(numSimultaneousQueries),
                   memoryMaxSizeGb);
