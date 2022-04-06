@@ -9,7 +9,9 @@
 #include <limits>
 
 #include "../util/Exception.h"
+#include "./ValueId.h"
 
+/*
 // A strong Id type that internally stores a `uint64_t` but can only be
 // explicitly converted to and from the underlying `uint64_t`
 struct Id {
@@ -65,6 +67,8 @@ struct hash<Id> {
 }  // namespace std
 // typedef uint64_t Id;
 // using Id = ad_utility::datatypes::FancyId;
+ */
+using Id = ValueId;
 typedef uint16_t Score;
 
 // TODO<joka921> Make the following ID and index types strong.
@@ -72,6 +76,10 @@ using ColumnIndex = uint64_t;
 using VocabIndex = uint64_t;
 using LocalVocabIndex = uint64_t;
 using TextVocabIndex = uint64_t;
+using WordIndex = uint64_t;
+using WordOrEntityIndex = uint64_t;
+using TextBlockIndex = uint64_t;
+using Code = uint64_t;
 
 // Integers, that are probably not integers but strong IDs or indices, but their
 // true nature is still to be discovered.
@@ -79,8 +87,7 @@ using UnknownIndex = uint64_t;
 
 // A value to use when the result should be empty (e.g. due to an optional join)
 // The highest two values are used as sentinels.
-static const Id ID_NO_VALUE =
-    Id::make(std::numeric_limits<uint64_t>::max() - 2);
+static const Id ID_NO_VALUE = Id::makeUndefined();
 
 namespace ad_utility {
 

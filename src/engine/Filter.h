@@ -179,10 +179,17 @@ class Filter : public Operation {
 };
 
 template <>
+struct Filter::ValueReader<ResultTable::ResultType::VERBATIM> {
+  static int64_t get(Id in) {
+    AD_CHECK(in.getDatatype() == Datatype::Int)
+    return in.getInt();
+  }
+};
+
+template <>
 struct Filter::ValueReader<ResultTable::ResultType::FLOAT> {
   static float get(Id in) {
-    float f;
-    std::memcpy(&f, &in, sizeof(float));
-    return f;
+    AD_CHECK(in.getDatatype() == Datatype::Double)
+    return static_cast<float>(in.getDouble());
   }
 };

@@ -461,7 +461,7 @@ void Filter::computeFilterFixedValue(
               entity = getIndex().idToOptionalString(e[lhs]);
               (void)subRes;  // Silence unused warning
             } else if (T == ResultTable::ResultType::LOCAL_VOCAB) {
-              entity = subRes->indexToOptionalString(e[lhs].get());
+              entity = subRes->indexToOptionalString(e[lhs].getVocabIndex());
             }
             if (!entity) {
               return true;
@@ -520,7 +520,7 @@ void Filter::computeFilterFixedValue(
           // and last element that match rhs and copy the range.
           for (auto [lowerBound, upperBound] : prefixRanges[*sortedLhs]) {
             AD_CHECK(*sortedLhs == lhs);
-            rhs_array[lhs] = Id::make(lowerBound);
+            rhs_array[lhs] = Id::makeFromVocabIndex(lowerBound);
             const auto& lower =
                 std::lower_bound(input.begin(), input.end(), rhs_row,
                                  [lhs](const auto& l, const auto& r) {
@@ -530,7 +530,7 @@ void Filter::computeFilterFixedValue(
               // There is at least one element in the input that is also within
               // the range, look for the upper boundary and then copy all
               // elements within the range.
-              rhs_array[lhs] = Id::make(upperBound);
+              rhs_array[lhs] = Id::makeFromVocabIndex(upperBound);
               const auto& upper =
                   std::lower_bound(lower, input.end(), rhs_row,
                                    [lhs](const auto& l, const auto& r) {
@@ -557,24 +557,25 @@ void Filter::computeFilterFixedValue(
                 input,
                 // TODO<joka921> prefixRanges on Ids
                 [lhs, p = prefixRanges[lhs][0]](const auto& e) {
-                  return Id::make(p.first) <= e[lhs] &&
-                         e[lhs] < Id::make(p.second);
+                  return Id::makeFromVocabIndex(p.first) <= e[lhs] &&
+                         e[lhs] < Id::makeFromVocabIndex(p.second);
                 },
                 res);
           } else {
             getEngine().filter(
                 input,
                 [&prefixRanges](const auto& e) {
-                  return std::any_of(prefixRanges.begin(), prefixRanges.end(),
-                                     [&e](const auto& x) {
-                                       const auto& vec = x.second;
-                                       return std::any_of(
-                                           vec.begin(), vec.end(),
-                                           [&e, &l = x.first](const auto& p) {
-                                             return Id::make(p.first) <= e[l] &&
-                                                    e[l] < Id::make(p.second);
-                                           });
-                                     });
+                  return std::any_of(
+                      prefixRanges.begin(), prefixRanges.end(),
+                      [&e](const auto& x) {
+                        const auto& vec = x.second;
+                        return std::any_of(
+                            vec.begin(), vec.end(),
+                            [&e, &l = x.first](const auto& p) {
+                              return Id::makeFromVocabIndex(p.first) <= e[l] &&
+                                     e[l] < Id::makeFromVocabIndex(p.second);
+                            });
+                      });
                 },
                 res);
           }
@@ -611,7 +612,8 @@ void Filter::computeFilterFixedValue(
             if constexpr (T == ResultTable::ResultType::KB) {
               entity = getIndex().idToOptionalString(e[lhs]);
             } else if (T == ResultTable::ResultType::LOCAL_VOCAB) {
-              entity = subRes->indexToOptionalString(e[lhs].get());
+              entity =
+                  subRes->indexToOptionalString(e[lhs].getLocalVocabIndex());
             }
             (void)subRes;  // Silence unused warning.
             (void)this;
@@ -649,6 +651,7 @@ void Filter::computeResultFixedValue(
   switch (subRes->getResultType(lhs)) {
     case ResultTable::ResultType::KB: {
       std::string rhs_string = _rhs;
+      // TODO<joka921> This parsing should really be in the sparql parser
       if (ad_utility::isXsdValue(rhs_string)) {
         rhs_string = ad_utility::convertValueLiteralToIndexWord(rhs_string);
       } else if (ad_utility::isNumeric(_rhs)) {
@@ -671,31 +674,32 @@ void Filter::computeResultFixedValue(
       // TODO<joka921> which level do we want for these filters
       auto level = TripleComponentComparator::Level::QUARTERNARY;
       if (_type == SparqlFilter::EQ || _type == SparqlFilter::NE) {
-        rhs = Id::make(getIndex().getVocab().lower_bound(rhs_string, level));
-        rhs_upper_for_range =
-            Id::make(getIndex().getVocab().upper_bound(rhs_string, level));
+        rhs = Id::makeFromVocabIndex(
+            getIndex().getVocab().lower_bound(rhs_string, level));
+        rhs_upper_for_range = Id::makeFromVocabIndex(
+            getIndex().getVocab().upper_bound(rhs_string, level));
         apply_range_filter = true;
         range_filter_inverse = _type == SparqlFilter::NE;
       } else if (_type == SparqlFilter::GE) {
-        // TODO<joka921>
-        rhs =
-            Id::make(getIndex().getVocab().getValueIdForGE(rhs_string, level));
+        // TODO<joka921> Here we have to parse "rhs_string" correctly...
+        rhs = Id::makeFromVocabIndex(
+            getIndex().getVocab().getValueIdForGE(rhs_string, level));
       } else if (_type == SparqlFilter::GT) {
-        rhs =
-            Id::make(getIndex().getVocab().getValueIdForGT(rhs_string, level));
+        rhs = Id::makeFromVocabIndex(
+            getIndex().getVocab().getValueIdForGT(rhs_string, level));
       } else if (_type == SparqlFilter::LT) {
-        rhs =
-            Id::make(getIndex().getVocab().getValueIdForLT(rhs_string, level));
+        rhs = Id::makeFromVocabIndex(
+            getIndex().getVocab().getValueIdForLT(rhs_string, level));
       } else if (_type == SparqlFilter::LE) {
-        rhs =
-            Id::make(getIndex().getVocab().getValueIdForLE(rhs_string, level));
+        rhs = Id::makeFromVocabIndex(
+            getIndex().getVocab().getValueIdForLE(rhs_string, level));
       }
       // All other types of filters do not use r and work on _rhs directly
       break;
     }
     case ResultTable::ResultType::VERBATIM:
       try {
-        rhs = Id::make(std::stoull(_rhs));
+        rhs = Id::makeFromInt(std::stoull(_rhs));
       } catch (const std::logic_error& e) {
         AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                  "A filter filters on an unsigned integer column, but its "
@@ -705,9 +709,8 @@ void Filter::computeResultFixedValue(
       break;
     case ResultTable::ResultType::FLOAT:
       try {
-        rhs = Id::make(0);
         float f = std::stof(_rhs);
-        std::memcpy(&rhs.get(), &f, sizeof(float));
+        rhs = Id::makeFromDouble(f);
       } catch (const std::logic_error& e) {
         AD_THROW(
             ad_semsearch::Exception::BAD_QUERY,
@@ -726,10 +729,10 @@ void Filter::computeResultFixedValue(
         // Find a matching entry in subRes' _localVocab. If _rhs is not in the
         // _localVocab of subRes r will be equal to  _localVocab.size() and
         // not match the index of any entry in _localVocab.
-        rhs = Id::make(subRes->_localVocab->size());
+        rhs = Id::makeFromLocalVocabIndex(subRes->_localVocab->size());
         for (size_t i = 0; i < subRes->_localVocab->size(); ++i) {
           if ((*subRes->_localVocab)[i] == _rhs) {
-            rhs = Id::make(i);
+            rhs = Id::makeFromLocalVocabIndex(i);
             break;
           }
         }

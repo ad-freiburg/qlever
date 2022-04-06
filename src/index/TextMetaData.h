@@ -56,7 +56,7 @@ class TextBlockMetaData {
  public:
   TextBlockMetaData() : _firstWordId(), _lastWordId(), _cl(), _entityCl() {}
 
-  TextBlockMetaData(uint64_t firstWordId, uint64_t lastWordId,
+  TextBlockMetaData(WordIndex firstWordId, WordIndex lastWordId,
                     const ContextListMetaData& cl,
                     const ContextListMetaData& entityCl)
       : _firstWordId(firstWordId),

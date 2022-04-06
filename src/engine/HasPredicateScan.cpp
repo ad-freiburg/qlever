@@ -275,14 +275,14 @@ void HasPredicateScan::computeFreeS(
       const auto& pattern = patterns[hasPattern[entityIndex]];
       for (const auto& predicate : pattern) {
         if (predicate == objectId) {
-          result.push_back({Id::make(entityIndex)});
+          result.push_back({Id::makeFromVocabIndex(entityIndex)});
         }
       }
     } else if (entityIndex < hasPredicate.size()) {
       // add the relations
       for (const auto& predicate : hasPredicate[entityIndex]) {
         if (predicate == objectId) {
-          result.push_back({Id::make(entityIndex)});
+          result.push_back({Id::makeFromVocabIndex(entityIndex)});
         }
       }
     }
@@ -299,7 +299,9 @@ void HasPredicateScan::computeFreeO(
   IdTableStatic<1> result = resultTable->_idTable.moveToStatic<1>();
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
 
-  auto subjectIndex = subjectAsId.get();
+  // subjects are always from the vocabulary
+  AD_CHECK(subjectAsId.getDatatype() == Datatype::VocabIndex);
+  auto subjectIndex = subjectAsId.getVocabIndex();
   if (subjectIndex < hasPattern.size() &&
       hasPattern[subjectIndex] != NO_PATTERN) {
     // add the pattern
@@ -332,12 +334,12 @@ void HasPredicateScan::computeFullScan(
         hasPattern[subjectIndex] != NO_PATTERN) {
       // add the pattern
       for (const auto& predicate : patterns[hasPattern[subjectIndex]]) {
-        result.push_back({Id::make(subjectIndex), predicate});
+        result.push_back({Id::makeFromVocabIndex(subjectIndex), predicate});
       }
     } else if (subjectIndex < hasPredicate.size()) {
       // add the relations
       for (const auto& predicate : hasPredicate[subjectIndex]) {
-        result.push_back({Id::make(subjectIndex), predicate});
+        result.push_back({Id::makeFromVocabIndex(subjectIndex), predicate});
       }
     }
     subjectIndex++;
@@ -357,8 +359,9 @@ void HasPredicateScan::computeSubqueryS(
   LOG(DEBUG) << "HasPredicateScan subresult size " << input.size() << std::endl;
 
   for (size_t i = 0; i < input.size(); i++) {
-    Id idAsId = input(i, subtreeColIndex);
-    auto subjectIndex = idAsId.get();
+    Id subjectAsId = input(i, subtreeColIndex);
+    AD_CHECK(subjectAsId.getDatatype() == Datatype::VocabIndex);
+    auto subjectIndex = subjectAsId.getVocabIndex();
     if (subjectIndex < hasPattern.size() &&
         hasPattern[subjectIndex] != NO_PATTERN) {
       // Expand the pattern and add it to the result

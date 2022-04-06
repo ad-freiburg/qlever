@@ -23,6 +23,8 @@ class Variable {
     _name[0] = '?';
   }
 
+  // Todo<joka921> There are several similar variants of this function across
+  // the codebase. Unify them!
   // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> evaluate(
       const Context& context, [[maybe_unused]] ContextRole role) const {
@@ -34,40 +36,32 @@ class Variable {
     const auto& idTable = res._idTable;
     if (variableColumns.contains(_name)) {
       size_t index = variableColumns.at(_name);
-      std::ostringstream stream;
-      switch (res.getResultType(index)) {
-        case ResultTable::ResultType::KB: {
-          string entity =
-              qecIndex.idToOptionalString(idTable(row, index)).value_or("");
-          if (entity.starts_with(VALUE_PREFIX)) {
-            stream << ad_utility::convertIndexWordToValueLiteral(entity);
-          } else {
-            stream << entity;
-          }
-          break;
+      auto id = idTable(row, index);
+      switch (id.getDatatype()) {
+        case Datatype::Undefined:
+          return std::nullopt;
+        case Datatype::Double: {
+          std::ostringstream stream;
+          stream << id.getDouble();
+          return std::move(stream).str();
         }
-        case ResultTable::ResultType::VERBATIM:
-          stream << idTable(row, index);
-          break;
-        case ResultTable::ResultType::TEXT:
-          stream << qecIndex.getTextExcerpt(idTable(row, index));
-          break;
-        case ResultTable::ResultType::FLOAT: {
-          float f;
-          std::memcpy(&f, &idTable(row, index), sizeof(float));
-          stream << f;
-          break;
+        case Datatype::Int: {
+          std::ostringstream stream;
+          stream << id.getInt();
+          return std::move(stream).str();
         }
-        case ResultTable::ResultType::LOCAL_VOCAB: {
-          stream << res.indexToOptionalString(idTable(row, index).get())
-                        .value_or("");
-          break;
-        }
-        default:
-          AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
-                   "Cannot deduce output type.");
+        case Datatype::VocabIndex:
+          return qecIndex.getVocab()
+              .indexToOptionalString(id.getVocabIndex())
+              .value_or("");
+        case Datatype::LocalVocabIndex:
+          return res.indexToOptionalString(id.getLocalVocabIndex())
+              .value_or("");
+        case Datatype::TextIndex:
+          return qecIndex.getTextExcerpt(id.getTextIndex());
       }
-      return std::move(stream).str();
+      // The switch is exhaustive
+      AD_CHECK(false);
     }
     return std::nullopt;
   }

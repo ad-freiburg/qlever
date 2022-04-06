@@ -177,11 +177,13 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       if (top.iriOrLiteral().starts_with('@')) {
         if (!_firstLangPredSeen) {
           // inclusive
-          _langPredLowerBound = Id::make(_lastTripleComponent.value()._index);
+          _langPredLowerBound =
+              Id::makeFromVocabIndex(_lastTripleComponent.value()._index);
           _firstLangPredSeen = true;
         }
         // exclusive
-        _langPredUpperBound = Id::make(_lastTripleComponent.value()._index + 1);
+        _langPredUpperBound =
+            Id::makeFromVocabIndex(_lastTripleComponent.value()._index + 1);
       }
       _totalWritten++;
       if (_totalWritten % 100'000'000 == 0) {
@@ -224,7 +226,8 @@ void VocabularyMerger::doActualWrite(
     return;
   }
   for (const auto& [id, value] : buffer) {
-    _idVecs[id].push_back({Id::make(value.first), Id::make(value.second)});
+    _idVecs[id].push_back({Id::makeFromVocabIndex(value.first),
+                           Id::makeFromVocabIndex(value.second)});
   }
 }
 
@@ -257,13 +260,17 @@ void writeMappedIdsToExtVec(const auto& input,
     std::array<Id, 3> mappedTriple;
     // for all triple elements find their mapping from partial to global ids
     for (size_t k = 0; k < 3; ++k) {
-      auto iterator = map.find(curTriple[k].get());
+      if (curTriple[k].getDatatype() != Datatype::VocabIndex) {
+        mappedTriple[k] = curTriple[k];
+        continue;
+      }
+      auto iterator = map.find(curTriple[k].getVocabIndex());
       if (iterator == map.end()) {
         LOG(INFO) << "not found in partial local Vocab: " << curTriple[k]
                   << '\n';
         AD_CHECK(false);
       }
-      mappedTriple[k] = Id::make(iterator->second);
+      mappedTriple[k] = Id::makeFromVocabIndex(iterator->second);
     }
     writer << mappedTriple;
   }
