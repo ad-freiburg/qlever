@@ -145,19 +145,11 @@ template <ParameterName Name>
 using Bool = Parameter<bool, stringToBool, boolToString, Name>;
 }  // namespace detail::parameterShortNames
 
-/// A container class that stores several `Parameters`. The reading (via
-/// the `get()` method) and writing (via `set()`) of the individual `Parameters`
-/// is threadsafe (there is a mutex for each of the parameters). Note: The
-/// design only allows atomic setting of a single parameter to a fixed value. It
-/// does not support atomic updates depending on the current value (for example,
-/// "increase the cache size by 20%") nor an atomic update of multiple
-/// parameters at the same time. If needed, this functionality could be added
-/// to the current implementation.
+/// A container class that stores several `Parameters`.
 template <typename... ParameterTypes>
 class Parameters {
  private:
-  using Tuple =
-      std::tuple<std::unique_ptr<ad_utility::Synchronized<ParameterTypes>>...>;
+  using Tuple = std::tuple<ParameterTypes...>;
   Tuple _parameters;
 
   // A compile-time map from `ParameterName` to the index of the corresponding
@@ -179,22 +171,16 @@ class Parameters {
 
   // The i-th element in this vector points to the i-th element in the
   // `_parameters` tuple.
-  using RuntimePointers =
-      std::array<ad_utility::Synchronized<ParameterBase&, std::shared_mutex&,
-                                          std::condition_variable_any&>,
-                 std::tuple_size_v<Tuple>>;
+  using RuntimePointers = std::array<ParameterBase*, std::tuple_size_v<Tuple>>;
   RuntimePointers _runtimePointers = [this]() {
-    auto toBase = [](auto& synchronizedParameter) {
-      return synchronizedParameter->template toBaseReference<ParameterBase>();
-    };
+    auto toBase = [](auto& parameter) -> ParameterBase* { return &parameter; };
     return ad_utility::tupleToArray(_parameters, toBase);
   }();
 
  public:
   Parameters() = delete;
   explicit(sizeof...(ParameterTypes) == 1) Parameters(ParameterTypes... ts)
-      : _parameters{std::make_unique<ad_utility::Synchronized<ParameterTypes>>(
-            std::move(ts))...} {}
+      : _parameters{std::move(ts)...} {}
 
   // Get value for parameter `Name` known at compile time.
   // The parameter is returned  by value, since
@@ -205,14 +191,14 @@ class Parameters {
   template <ParameterName Name>
   auto get() const {
     constexpr auto index = _nameToIndex.at(Name);
-    return std::get<index>(_parameters)->rlock()->get();
+    return std::get<index>(_parameters).get();
   }
 
   // Set value for parameter `Name` known at compile time.
   template <ParameterName Name, typename Value>
   void set(Value newValue) {
     constexpr auto index = _nameToIndex.at(Name);
-    return std::get<index>(_parameters)->wlock()->set(std::move(newValue));
+    return std::get<index>(_parameters).set(std::move(newValue));
   }
 
   // For the parameter with name `Name` specify the function that is to be
@@ -221,8 +207,8 @@ class Parameters {
   auto setOnUpdateAction(OnUpdateAction onUpdateAction) {
     constexpr auto index = _nameToIndex.at(name);
     std::get<index>(_parameters)
-        ->wlock()
-        ->setOnUpdateAction(std::move(onUpdateAction));
+
+        .setOnUpdateAction(std::move(onUpdateAction));
   }
 
   // Set the parameter with the name `parameterName` known at runtime to the
@@ -237,8 +223,7 @@ class Parameters {
     try {
       // Call the virtual set(std::string) function on the
       // correct ParameterBase& in the `_runtimePointers`.
-      _runtimePointers[_nameToIndex.at(parameterName)].wlock()->setFromString(
-          value);
+      _runtimePointers[_nameToIndex.at(parameterName)]->setFromString(value);
     } catch (const std::exception& e) {
       throw std::runtime_error("Could not set parameter " +
                                std::string{parameterName} + " to value " +
@@ -252,9 +237,9 @@ class Parameters {
   [[nodiscard]] ad_utility::HashMap<std::string, std::string> toMap() const {
     ad_utility::HashMap<std::string, std::string> result;
 
-    auto insert = [&]<typename T>(const T& synchronizedParameter) {
-      std::string name{T::element_type::value_type::name};
-      result[std::move(name)] = synchronizedParameter->rlock()->toString();
+    auto insert = [&]<typename T>(const T& parameter) {
+      std::string name{T::name};
+      result[std::move(name)] = parameter.toString();
     };
     ad_utility::forEachInTuple(_parameters, insert);
     return result;
@@ -266,7 +251,7 @@ class Parameters {
       ad_utility::HashSet<std::string> result;
 
       auto insert = [&result]<typename T>(const T&) {
-        result.insert(std::string{T::element_type::value_type::name});
+        result.insert(std::string{T::name});
       };
       ad_utility::forEachInTuple(_parameters, insert);
       return result;

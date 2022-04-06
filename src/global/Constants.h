@@ -128,7 +128,9 @@ inline auto& RuntimeParameters() {
       Double<"sort-estimate-cancellation-factor">{3.0},
       SizeT<"cache-max-num-entries">{1000}, SizeT<"cache-max-size-gb">{30},
       SizeT<"cache-max-size-gb-single-entry">{5}};
-  return params;
+  static ad_utility::Synchronized<decltype(params)> threadSafeParams{
+      std::move(params)};
+  return threadSafeParams;
 }
 
 #ifdef _PARALLEL_SORT

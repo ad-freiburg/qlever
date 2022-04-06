@@ -56,16 +56,18 @@ class Server {
     };
     // This also directly triggers the update functions and propagates the
     // values of the parameters to the cache.
-    RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
-        [this](size_t newValue) { _cache.setMaxNumEntries(newValue); });
-    RuntimeParameters().setOnUpdateAction<"cache-max-size-gb">(
-        [this, toNumIds](size_t newValue) {
-          _cache.setMaxSize(toNumIds(newValue));
-        });
-    RuntimeParameters().setOnUpdateAction<"cache-max-size-gb-single-entry">(
-        [this, toNumIds](size_t newValue) {
-          _cache.setMaxSizeSingleEntry(toNumIds(newValue));
-        });
+    RuntimeParameters().withWriteLock([this, &toNumIds](auto& parameters) {
+      parameters.template setOnUpdateAction<"cache-max-num-entries">(
+          [this](size_t newValue) { _cache.setMaxNumEntries(newValue); });
+      parameters.template setOnUpdateAction<"cache-max-size-gb">(
+          [this, toNumIds](size_t newValue) {
+            _cache.setMaxSize(toNumIds(newValue));
+          });
+      parameters.template setOnUpdateAction<"cache-max-size-gb-single-entry">(
+          [this, toNumIds](size_t newValue) {
+            _cache.setMaxSizeSingleEntry(toNumIds(newValue));
+          });
+    });
   }
 
   virtual ~Server() = default;

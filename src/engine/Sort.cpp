@@ -59,7 +59,7 @@ void Sort::computeResult(ResultTable* result) {
       static_cast<double>(_timeoutTimer->wlock()->remainingMicroseconds()) /
       1'000'000;
   auto sortEstimateCancellationFactor =
-      RuntimeParameters().get<"sort-estimate-cancellation-factor">();
+      RuntimeParameters().rlock()->get<"sort-estimate-cancellation-factor">();
   if (getExecutionContext()
           ->getSortPerformanceEstimator()
           .estimatedSortTimeInSeconds(subRes->size(), subRes->width()) >

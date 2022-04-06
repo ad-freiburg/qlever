@@ -101,7 +101,7 @@ Awaitable<void> Server::process(
           createJsonResponse(composeCacheStatsJson(), request);
     } else if (cmd == "get-settings") {
       LOG(INFO) << "Supplying settings..." << std::endl;
-      json settingsJson = RuntimeParameters().toMap();
+      json settingsJson = RuntimeParameters().rlock()->toMap();
       co_await sendWithCors(createJsonResponse(settingsJson, request));
       co_return;
     } else {
@@ -116,14 +116,14 @@ Awaitable<void> Server::process(
   // TODO<joka921> Warn about unknown parameters
   bool anyParamWasChanged = false;
   for (const auto& [key, value] : params) {
-    if (RuntimeParameters().getKeys().contains(key)) {
-      RuntimeParameters().set(key, value);
+    if (RuntimeParameters().rlock()->getKeys().contains(key)) {
+      RuntimeParameters().wlock()->set(key, value);
       anyParamWasChanged = true;
     }
   }
 
   if (anyParamWasChanged) {
-    json settingsJson = RuntimeParameters().toMap();
+    json settingsJson = RuntimeParameters().rlock()->toMap();
     responseFromCommand = createJsonResponse(settingsJson, request);
   }
 
