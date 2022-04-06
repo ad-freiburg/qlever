@@ -322,8 +322,18 @@ class Index {
 
   void setPrefixCompression(bool compressed);
 
-  auto& indexBuilderParameters() { return _indexBuilderParameters; }
-  const auto& indexBuilderParameters() const { return _indexBuilderParameters; }
+  /// Setters and getters for the `_indexBuilderParameters`. See
+  /// `util/Parameters.h` for a detailed description of this mechanism and the
+  /// documentation of the `_indexBuilderParameters` member for a list of the
+  /// available parameters.
+  template <ad_utility::ParameterName Name, typename Value>
+  void set(Value newValue) {
+    _indexBuilderParameters.set<Name>(std::move(newValue));
+  }
+  template <ad_utility::ParameterName Name>
+  auto get() const {
+    return _indexBuilderParameters.get<Name>();
+  }
 
   const string& getTextName() const { return _textMeta.getName(); }
 
@@ -465,13 +475,15 @@ class Index {
   }
 
  private:
+  /// This lambda creates an `ad_utility::Parameters` class for several
+  /// parameters that are used during the index building. We use this mechanism
+  /// here since it makes the parsing of commandline arguments easier.
   constexpr static const auto makeIndexBuilderParameters = [] {
     using ad_utility::detail::parameterShortNames::Double;
     using ad_utility::detail::parameterShortNames::SizeT;
     using ad_utility::detail::parameterShortNames::Bool;
     using ad_utility::detail::parameterShortNames::String;
     ad_utility::Parameters params{
-        Bool<"only-ascii-turtle-prefixes">{false},
         Bool<"keep-temp-files">{false},
         Bool<"relaxed-parsing">{false},
         Bool<"vocab-prefix-compressed">{true},
@@ -480,6 +492,11 @@ class Index {
         String<"settings-filename">{""}};
     return params;
   };
+
+  /// The actual parameters, created by the `makeIndexBuilderParameters` lambda
+  /// above. Note that we cannot use an immediately invoked lambda here, because
+  /// type deduction via `auto` is forbidden for a non-static class member, but
+  /// `decltype(constexprStaticLambda())` is fine.
   decltype(makeIndexBuilderParameters()) _indexBuilderParameters =
       makeIndexBuilderParameters();
 
@@ -736,7 +753,7 @@ class Index {
    * @param path
    */
   void deleteTemporaryFile(const string& path) {
-    if (!indexBuilderParameters().get<"keep-temp-files">()) {
+    if (!get<"keep-temp-files">()) {
       ad_utility::deleteFile(path);
     }
   }

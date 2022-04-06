@@ -34,8 +34,8 @@ Index::Index() : _usePatterns(false) {}
 template <class Parser>
 IndexBuilderDataAsPsoSorter Index::createIdTriplesAndVocab(
     const string& ntFile) {
-  auto indexBuilderData = passFileForVocabulary<Parser>(
-      ntFile, indexBuilderParameters().get<"num-triples-per-batch">());
+  auto indexBuilderData =
+      passFileForVocabulary<Parser>(ntFile, get<"num-triples-per-batch">());
   // first save the total number of words, this is needed to initialize the
   // dense IndexMetaData variants
   _totalVocabularySize = indexBuilderData.nofWords;
@@ -98,7 +98,7 @@ void Index::createFromFile(const string& filename) {
 
   IndexBuilderDataAsPsoSorter indexBuilderData;
   if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
-    if (indexBuilderParameters().get<"relaxed-parsing">()) {
+    if (get<"relaxed-parsing">()) {
       LOG(DEBUG) << "Using the CTRE library for tokenization" << std::endl;
       indexBuilderData =
           createIdTriplesAndVocab<TurtleParallelParser<TokenizerCtre>>(
@@ -253,7 +253,7 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
 
     {
       auto p = ad_pipeline::setupParallelPipeline<3, NUM_PARALLEL_ITEM_MAPS>(
-          indexBuilderParameters().get<"parser-batch-size">(),
+          get<"parser-batch-size">(),
           // when called, returns an optional to the next triple. If
           // `linesPerPartial` triples were parsed, return std::nullopt. when
           // the parser is unable to deliver triples, set parserExhausted to
@@ -969,8 +969,7 @@ template <class Parser>
 void Index::initializeVocabularySettingsBuild() {
   json j;  // if we have no settings, we still have to initialize some default
            // values
-  const std::string& settingsFilename =
-      indexBuilderParameters().get<"settings-filename">();
+  const std::string& settingsFilename = get<"settings-filename">();
   if (!settingsFilename.empty()) {
     std::ifstream f(settingsFilename);
     AD_CHECK(f.is_open());
@@ -1040,9 +1039,9 @@ void Index::initializeVocabularySettingsBuild() {
       bool v{j["ascii-prefixes-only"]};
       if (v) {
         LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
-        indexBuilderParameters().set<"relaxed-parsing">(true);
+        set<"relaxed-parsing">(true);
       } else {
-        indexBuilderParameters().set<"relaxed-parsing">(false);
+        set<"relaxed-parsing">(false);
       }
     } else {
       LOG(WARN) << "You specified the ascii-prefixes-only but a parser that is "
@@ -1054,7 +1053,7 @@ void Index::initializeVocabularySettingsBuild() {
 
   if (j.count("num-triples-per-batch")) {
     auto numTriplesPerBatch = size_t{j["num-triples-per-batch"]};
-    indexBuilderParameters().set<"num-triples-per-batch">(numTriplesPerBatch);
+    set<"num-triples-per-batch">(numTriplesPerBatch);
     LOG(INFO)
         << "You specified \"num-triples-per-batch = " << numTriplesPerBatch
         << "\", choose a lower value if the index builder runs out of memory"
@@ -1063,7 +1062,7 @@ void Index::initializeVocabularySettingsBuild() {
 
   if (j.count("parser-batch-size")) {
     auto parserBatchSize = size_t{j["parser-batch-size"]};
-    indexBuilderParameters().set<"parser-batch-size">(parserBatchSize);
+    set<"parser-batch-size">(parserBatchSize);
     LOG(INFO) << "Overriding setting parser-batch-size to " << parserBatchSize
               << " This might influence performance during index build."
               << std::endl;

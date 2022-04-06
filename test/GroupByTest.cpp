@@ -46,7 +46,7 @@ class GroupByTest : public ::testing::Test {
       _index.setKbName("group_by_test");
       _index.setTextName("group_by_test");
       _index.setOnDiskBase("group_ty_test");
-      _index.indexBuilderParameters().set<"num-triples-per-batch">(2);
+      _index.set<"num-triples-per-batch">(2);
       _index.createFromFile<TurtleParserAuto>("group_by_test.nt");
       _index.addTextFromContextFile("group_by_test.words");
       _index.buildDocsDB("group_by_test.documents");
