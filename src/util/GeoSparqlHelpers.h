@@ -16,7 +16,7 @@ namespace detail {
 // the .cpp file, hence this detour.
 // TODO: Make the SPARQL expressions work for function pointers or
 // std::function.
-bool checkWktPointPrefix(const std::string& p);
+const char* checkWktPoint(const char* s);
 std::pair<double, double> parseWktPoint(const std::string& p);
 double wktLongitudeImpl(const std::string& p);
 double wktLatitudeImpl(const std::string& p);
