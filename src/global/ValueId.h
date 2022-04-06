@@ -50,12 +50,12 @@ class ValueId {
 
   using IntegerType = ad_utility::NBitInteger<numDataBits>;
 
-  /// The maximum value for the unsigned types that are used as indexes
+  /// The maximum value for the unsigned types that are used as indices
   /// (currently makeFromVocabIndex, makeFromLocalVocabIndex and Text).
   static constexpr T maxIndex = 1ull << (numDataBits - 1);
 
   /// This exception is thrown if we try to store a value of an index type
-  /// (makeFromVocabIndex, makeFromLocalVocabIndex, Text) that is larger than
+  /// (VocabIndex, LocalVocabIndex, TextIndex) that is larger than
   /// `maxIndex`.
   struct IndexTooLargeException : public std::exception {};
 
@@ -75,16 +75,16 @@ class ValueId {
   /// representation.
   constexpr bool operator==(const ValueId&) const = default;
 
-  /// Comparison is performed directly on the underlying representation. Not
+  /// Comparison is performed directly on the underlying representation. Note
   /// that because the type bits are the most significant bits, all values of
   /// the same `Datatype` will be adjacent to each other. Unsigned index types
   /// are also ordered correctly. Signed integers are ordered as follows: first
   /// the positive integers in order and then the negative integers in order.
   /// For doubles it is first the positive doubles in order, then the negative
   /// doubles in reversed order. This is a direct consequence of comparing the
-  /// bit representation of these values as unsigned integers. TODO<joka921> Is
-  /// this ordering also consistent for corner cases of doubles (inf, nan,
-  /// denormalized numbers, negative zero)?
+  /// bit representation of these values as unsigned integers.
+  /// TODO<joka921> Is this ordering also consistent for corner cases of doubles
+  /// (inf, nan, denormalized numbers, negative zero)?
   constexpr auto operator<=>(const ValueId& other) const {
     return _bits <=> other._bits;
   }
@@ -95,7 +95,7 @@ class ValueId {
   }
 
   /// Create a `ValueId` of the `Undefined` type. There is only one such ID and
-  /// it is guaranteed to be smaller than all Ids of other types. This helps
+  /// it is guaranteed to be smaller than all IDs of other types. This helps
   /// implementing the correct join behavior in presence of undefined values.
   constexpr static ValueId makeUndefined() noexcept { return {0}; }
 
@@ -133,7 +133,7 @@ class ValueId {
   }
 
   /// Create a `ValueId` for an unsigned index of type
-  /// `makeFromVocabIndex|Text|makeFromLocalVocabIndex`. These types can
+  /// `VocabIndex|TextIndex|LocalVocabIndex`. These types can
   /// represent values in the range [0, 2^60]. When `index` is outside of this
   /// range, and `IndexTooLargeException` is thrown.
   static ValueId makeFromVocabIndex(T index) {
@@ -149,10 +149,10 @@ class ValueId {
   /// Obtain the unsigned index that this `ValueId` encodes. If `getDatatype()
   /// != [makeFromVocabIndex|Text|makeFromLocalVocabIndex]` then the result is
   /// unspecified.
-  [[nodiscard]] constexpr T getVocab() const noexcept {
+  [[nodiscard]] constexpr T getVocabIndex() const noexcept {
     return removeDatatypeBits(_bits);
   }
-  [[nodiscard]] constexpr T getText() const noexcept {
+  [[nodiscard]] constexpr T getTextIndex() const noexcept {
     return removeDatatypeBits(_bits);
   }
   [[nodiscard]] constexpr T getLocalVocab() const noexcept {
@@ -190,11 +190,11 @@ class ValueId {
       case Datatype::Int:
         return std::invoke(visitor, getInt());
       case Datatype::VocabIndex:
-        return std::invoke(visitor, getVocab());
+        return std::invoke(visitor, getVocabIndex());
       case Datatype::LocalVocabIndex:
         return std::invoke(visitor, getLocalVocab());
       case Datatype::TextIndex:
-        return std::invoke(visitor, getText());
+        return std::invoke(visitor, getTextIndex());
     }
   }
 

@@ -73,9 +73,9 @@ TEST(ValueId, Indices) {
     }
   };
 
-  testRandomIds(&ValueId::makeFromTextIndex, &ValueId::getText,
+  testRandomIds(&ValueId::makeFromTextIndex, &ValueId::getTextIndex,
                 Datatype::TextIndex);
-  testRandomIds(&ValueId::makeFromVocabIndex, &ValueId::getVocab,
+  testRandomIds(&ValueId::makeFromVocabIndex, &ValueId::getVocabIndex,
                 Datatype::VocabIndex);
   testRandomIds(&ValueId::makeFromLocalVocabIndex, &ValueId::getLocalVocab,
                 Datatype::LocalVocabIndex);
@@ -122,7 +122,7 @@ TEST(ValueId, Ordering) {
     static ad_utility::HashSet<Datatype> indexTypes{
         Datatype::LocalVocabIndex, Datatype::VocabIndex, Datatype::TextIndex};
     if (indexTypes.contains(a.getDatatype())) {
-      return a.getVocab() < b.getVocab();
+      return a.getVocabIndex() < b.getVocabIndex();
     }
     return false;
   };
