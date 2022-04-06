@@ -155,7 +155,7 @@ class ValueId {
   [[nodiscard]] constexpr T getTextIndex() const noexcept {
     return removeDatatypeBits(_bits);
   }
-  [[nodiscard]] constexpr T getLocalVocab() const noexcept {
+  [[nodiscard]] constexpr T getLocalVocabIndex() const noexcept {
     return removeDatatypeBits(_bits);
   }
 
@@ -192,7 +192,7 @@ class ValueId {
       case Datatype::VocabIndex:
         return std::invoke(visitor, getVocabIndex());
       case Datatype::LocalVocabIndex:
-        return std::invoke(visitor, getLocalVocab());
+        return std::invoke(visitor, getLocalVocabIndex());
       case Datatype::TextIndex:
         return std::invoke(visitor, getTextIndex());
     }

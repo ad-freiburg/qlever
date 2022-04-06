@@ -77,7 +77,7 @@ TEST(ValueId, Indices) {
                 Datatype::TextIndex);
   testRandomIds(&ValueId::makeFromVocabIndex, &ValueId::getVocabIndex,
                 Datatype::VocabIndex);
-  testRandomIds(&ValueId::makeFromLocalVocabIndex, &ValueId::getLocalVocab,
+  testRandomIds(&ValueId::makeFromLocalVocabIndex, &ValueId::getLocalVocabIndex,
                 Datatype::LocalVocabIndex);
 }
 
