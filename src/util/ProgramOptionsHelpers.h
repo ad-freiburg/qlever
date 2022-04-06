@@ -62,7 +62,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
 /// Create `boost::program_options::value`s (command-line options) from
 /// `ad_utility::Parameters`. `Parameters` can either be an instantiation of
 /// `ad_utility::Parameters` or
-/// `ad_utility::Synchronized<ad_utility::Parameters<...>
+/// `ad_utility::Synchronized<ad_utility::Parameters<...>`
 template <typename Parameters>
 class ParameterToProgramOptionFactory {
  private:
