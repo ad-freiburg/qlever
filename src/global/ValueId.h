@@ -38,6 +38,8 @@ constexpr std::string_view toString(Datatype type) {
     case Datatype::TextIndex:
       return "TextIndex";
   }
+  // This line is reachable if we cast an arbitrary invalid int to this enum
+  throw std::runtime_error("should be unreachable");
 }
 
 /// Encode values of different types (the types from the `Datatype` enum above)
@@ -51,8 +53,14 @@ class ValueId {
   using IntegerType = ad_utility::NBitInteger<numDataBits>;
 
   /// The maximum value for the unsigned types that are used as indices
-  /// (currently makeFromVocabIndex, makeFromLocalVocabIndex and Text).
+  /// (currently VocabIndex, LocalVocabIndex and Text).
   static constexpr T maxIndex = 1ull << (numDataBits - 1);
+
+  /// The smallest double > 0 that will not be rounded to zero by the precision
+  /// loss of `FoldedId`. Symmetrically, `-minPositiveDouble` is the largest
+  /// double <0 that will not be rounded to zero.
+  static constexpr double minPositiveDouble =
+      std::bit_cast<double>(1ull << numTypeBits);
 
   /// This exception is thrown if we try to store a value of an index type
   /// (VocabIndex, LocalVocabIndex, TextIndex) that is larger than
@@ -147,7 +155,7 @@ class ValueId {
   }
 
   /// Obtain the unsigned index that this `ValueId` encodes. If `getDatatype()
-  /// != [makeFromVocabIndex|Text|makeFromLocalVocabIndex]` then the result is
+  /// != [VocabIndex|TextIndex|LocalVocabIndex]` then the result is
   /// unspecified.
   [[nodiscard]] constexpr T getVocabIndex() const noexcept {
     return removeDatatypeBits(_bits);
@@ -180,6 +188,10 @@ class ValueId {
   /// for the datatype (e.g. `getDouble` for `Datatype::Double`). Visitor must
   /// be callable with all of the possible return types of the `getTYPE`
   /// functions.
+  /// TODO<joka921> This currently still has limited functionality because
+  /// VocabIndex, LocalVocabIndex and TextIndex are all of the same type
+  /// `uint64_t` and the visitor cannot distinguish between them. Create strong
+  /// types for these indices and make the `ValueId` class use them.
   template <typename Visitor>
   decltype(auto) visit(Visitor&& visitor) const {
     switch (getDatatype()) {
