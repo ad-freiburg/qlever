@@ -949,36 +949,22 @@ LangtagAndTriple Index::tripleToInternalRepresentation(TurtleTriple&& triple) {
   resultTriple[1] = std::move(triple._predicate);
   // TODO<joka921> As soon as we have the "folded" Ids, we simply store the
   // numeric value.
-  bool objectIsString = false;
-  if (triple._object.isDouble()) {
-    resultTriple[2] = Id::make(triple._object.getDouble());
-  } else if (triple._object.isInt()) {
-    resultTriple[2] = Id::make(triple._object.getInt());
-  } else {
-    AD_CHECK(triple._object.isString());
-    resultTriple[2] = triple._object.getString();
-    objectIsString = true;
-  }
+  resultTriple[2] = triple._object.toRdfLiteral();
   for (auto& el : resultTriple) {
-    if (!std::holds_alternative<TripleComponent>(el)) {
-      continue;
-    }
     auto& iriOrLiteral = std::get<TripleComponent>(el)._iriOrLiteral;
     iriOrLiteral = _vocab.getLocaleManager().normalizeUtf8(iriOrLiteral);
   }
   size_t upperBound = 3;
-  if (objectIsString) {
-    auto& object = std::get<TripleComponent>(resultTriple[2])._iriOrLiteral;
-    // TODO<joka921> Actually create numeric Ids here...
-    if (ad_utility::isXsdValue(object)) {
-      object = ad_utility::convertValueLiteralToIndexWord(object);
-      upperBound = 2;
-    } else if (ad_utility::isNumeric(object)) {
-      object = ad_utility::convertNumericToIndexWord(object);
-      upperBound = 2;
-    } else if (isLiteral(object)) {
-      result._langtag = decltype(_vocab)::getLanguage(object);
-    }
+  auto& object = std::get<TripleComponent>(resultTriple[2])._iriOrLiteral;
+  // TODO<joka921> Actually create numeric Ids here...
+  if (ad_utility::isXsdValue(object)) {
+    object = ad_utility::convertValueLiteralToIndexWord(object);
+    upperBound = 2;
+  } else if (ad_utility::isNumeric(object)) {
+    object = ad_utility::convertNumericToIndexWord(object);
+    upperBound = 2;
+  } else if (isLiteral(object)) {
+    result._langtag = decltype(_vocab)::getLanguage(object);
   }
 
   for (size_t k = 0; k < upperBound; ++k) {

@@ -168,6 +168,8 @@ void Index::passContextFileIntoVector(const string& contextFile,
       // be tagged entities in the text index (no doubles, ints, etc).
       VocabIndex eid;
       if (getVocab().getId(line._word, &eid)) {
+        // Note that `entitiesInContext` is a HashMap, so the `Id`s don't have
+        // to be contiguous.
         entitiesInContext[Id::make(eid)] += line._score;
       } else {
         if (entityNotFoundErrorMsgCount < 20) {
@@ -182,7 +184,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
       }
     } else {
       ++nofWordPostings;
-      TextRecordIndex wid;
+      WordIndex wid;
       bool ret = _textVocab.getId(line._word, &wid);
       if (!ret) {
         LOG(ERROR) << "ERROR: word \"" << line._word << "\" "
@@ -256,38 +258,38 @@ void Index::createTextIndex(const string& filename, const Index::TextVec& vec) {
   // Detect block boundaries from the main key of the vec.
   // Write the data for each block.
   // First, there's the classic lists, then the additional entity ones.
-  TextBlockIndex currentBlockId = 0;
-  WordIndex currentMinWordId = std::numeric_limits<WordIndex>::max();
-  WordIndex currentMaxWordId = std::numeric_limits<WordIndex>::min();
+  TextBlockIndex currentBlockIndex = 0;
+  WordIndex currentMinWordIndex = std::numeric_limits<WordIndex>::max();
+  WordIndex currentMaxWordIndex = std::numeric_limits<WordIndex>::min();
   vector<Posting> classicPostings;
   vector<Posting> entityPostings;
   size_t nofEntities = 0;
   size_t nofEntityContexts = 0;
   for (TextVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
-    if (std::get<0>(*reader) != currentBlockId) {
+    if (std::get<0>(*reader) != currentBlockIndex) {
       AD_CHECK(classicPostings.size() > 0);
-      if (isEntityBlockId(currentBlockId)) {
+      if (isEntityBlockId(currentBlockIndex)) {
         ++nofEntities;
         nofEntityContexts += classicPostings.size();
       }
       ContextListMetaData classic = writePostings(out, classicPostings, true);
       ContextListMetaData entity = writePostings(out, entityPostings, false);
-      _textMeta.addBlock(TextBlockMetaData(currentMinWordId, currentMaxWordId,
-                                           classic, entity));
+      _textMeta.addBlock(TextBlockMetaData(
+          currentMinWordIndex, currentMaxWordIndex, classic, entity));
       classicPostings.clear();
       entityPostings.clear();
-      currentBlockId = std::get<0>(*reader);
-      currentMinWordId = std::get<2>(*reader);
-      currentMaxWordId = std::get<2>(*reader);
+      currentBlockIndex = std::get<0>(*reader);
+      currentMinWordIndex = std::get<2>(*reader);
+      currentMaxWordIndex = std::get<2>(*reader);
     }
     if (!std::get<4>(*reader)) {
       classicPostings.emplace_back(std::make_tuple(
           std::get<1>(*reader), std::get<2>(*reader), std::get<3>(*reader)));
-      if (std::get<2>(*reader) < currentMinWordId) {
-        currentMinWordId = std::get<2>(*reader);
+      if (std::get<2>(*reader) < currentMinWordIndex) {
+        currentMinWordIndex = std::get<2>(*reader);
       }
-      if (std::get<2>(*reader) > currentMaxWordId) {
-        currentMaxWordId = std::get<2>(*reader);
+      if (std::get<2>(*reader) > currentMaxWordIndex) {
+        currentMaxWordIndex = std::get<2>(*reader);
       }
 
     } else {
@@ -297,14 +299,14 @@ void Index::createTextIndex(const string& filename, const Index::TextVec& vec) {
   }
   // Write the last block
   AD_CHECK(classicPostings.size() > 0);
-  if (isEntityBlockId(currentBlockId)) {
+  if (isEntityBlockId(currentBlockIndex)) {
     ++nofEntities;
     nofEntityContexts += classicPostings.size();
   }
   ContextListMetaData classic = writePostings(out, classicPostings, true);
   ContextListMetaData entity = writePostings(out, entityPostings, false);
-  _textMeta.addBlock(
-      TextBlockMetaData(currentMinWordId, currentMaxWordId, classic, entity));
+  _textMeta.addBlock(TextBlockMetaData(currentMinWordIndex, currentMaxWordIndex,
+                                       classic, entity));
   _textMeta.setNofEntities(nofEntities);
   _textMeta.setNofEntityContexts(nofEntityContexts);
   classicPostings.clear();
@@ -571,7 +573,6 @@ TextBlockIndex Index::getWordBlockId(WordIndex wordIndex) const {
 
 // _____________________________________________________________________________
 TextBlockIndex Index::getEntityBlockId(Id entityId) const {
-  // TODO<joka921> should this function take a `Id` directly?
   return entityId.get() + _blockBoundaries.size();
 }
 

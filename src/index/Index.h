@@ -293,6 +293,8 @@ class Index {
                                 vector<Score>& scores) const;
 
   string getTextExcerpt(TextRecordIndex cid) const {
+    // TODO<joka921> There was a check about NOVALUE here, this should be still
+    // handled.
     return _docsDB.getTextExcerpt(cid);
   }
 

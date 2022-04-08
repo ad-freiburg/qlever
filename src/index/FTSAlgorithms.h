@@ -27,60 +27,6 @@ class FTSAlgorithms {
   typedef vector<array<Id, 5>> WidthFiveList;
   typedef vector<vector<Id>> VarWidthList;
 
-  /*
-  // Copied from boost without adding the dependency
-  template <class T>
-  static inline void hash_combine(std::size_t& seed, const T& v) {
-    std::hash<T> hasher;
-    seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-  }
-
-  template <typename It>
-  static inline size_t hash_range(It first, It last) {
-    size_t seed = 0;
-    for (; first != last; ++first) {
-      hash_combine(seed, *first);
-    }
-    return seed;
-  }
-
-  class IdPairHash {
-   public:
-    size_t operator()(const std::pair<Id, Id>& p) const {
-      std::hash<Id> hasher;
-      size_t seed = hasher(p.first);
-      seed ^= hasher(p.second) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-      return seed;
-    }
-  };
-
-  class IdTripleHash {
-   public:
-    size_t operator()(const std::tuple<Id, Id, Id>& t) const {
-      std::hash<Id> hasher;
-      size_t seed = hasher(std::get<0>(t));
-      seed ^= hasher(std::get<1>(t)) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-      seed ^= hasher(std::get<2>(t)) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-      return seed;
-    }
-  };
-
-  class IdVectorHash {
-   public:
-    size_t operator()(const vector<Id>& v) const {
-      return hash_range(std::begin(v), std::end(v));
-    }
-  };
-
-  template <typename T>
-  class IterableHash {
-   public:
-    size_t operator()(const T& iterable) const {
-      return hash_range(std::begin(iterable), std::end(iterable));
-    }
-  };
-   */
-
   static void filterByRange(const IdRange& idRange,
                             const vector<TextRecordIndex>& blockCids,
                             const vector<WordIndex>& blockWids,
