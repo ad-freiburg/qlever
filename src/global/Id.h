@@ -10,6 +10,7 @@
 
 #include "../util/Exception.h"
 
+/*
 // A strong Id type that internally stores a `uint64_t` but can only be
 // explicitly converted to and from the underlying `uint64_t`
 struct Id {
@@ -72,6 +73,10 @@ using ColumnIndex = uint64_t;
 using VocabIndex = uint64_t;
 using LocalVocabIndex = uint64_t;
 using TextVocabIndex = uint64_t;
+using WordIndex = uint64_t;
+using WordOrEntityIndex = uint64_t;
+using TextBlockIndex = uint64_t;
+using Code = uint64_t;
 
 // Integers, that are probably not integers but strong IDs or indices, but their
 // true nature is still to be discovered.

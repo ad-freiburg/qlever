@@ -27,6 +27,7 @@ class FTSAlgorithms {
   typedef vector<array<Id, 5>> WidthFiveList;
   typedef vector<vector<Id>> VarWidthList;
 
+  /*
   // Copied from boost without adding the dependency
   template <class T>
   static inline void hash_combine(std::size_t& seed, const T& v) {
@@ -78,50 +79,49 @@ class FTSAlgorithms {
       return hash_range(std::begin(iterable), std::end(iterable));
     }
   };
+   */
 
-  static void filterByRange(const IdRange& idRange, const vector<Id>& blockCids,
-                            const vector<Id>& blockWids,
+  static void filterByRange(const IdRange& idRange,
+                            const vector<TextVocabIndex>& blockCids,
+                            const vector<WordIndex>& blockWids,
                             const vector<Score>& blockScores,
-                            vector<Id>& resultCids,
+                            vector<TextVocabIndex>& resultCids,
                             vector<Score>& resultScores);
 
-  static void intersect(const vector<Id>& matchingContexts,
-                        const vector<Id>& eBlockCids,
+  static void intersect(const vector<TextVocabIndex>& matchingContexts,
+                        const vector<TextVocabIndex>& eBlockCids,
                         const vector<Id>& eBlockWids,
                         const vector<Score>& eBlockScores,
-                        vector<Id>& resultCids, vector<Id>& resultEids,
-                        vector<Score>& resultScores);
+                        vector<TextVocabIndex>& resultCids,
+                        vector<Id>& resultEids, vector<Score>& resultScores);
 
-  static void intersectTwoPostingLists(const vector<Id>& cids1,
+  static void intersectTwoPostingLists(const vector<TextVocabIndex>& cids1,
                                        const vector<Score>& scores1,
-                                       const vector<Id>& cids2,
+                                       const vector<TextVocabIndex>& cids2,
                                        const vector<Score>& scores2,
-                                       vector<Id>& resultCids,
+                                       vector<TextVocabIndex>& resultCids,
                                        vector<Score>& resultScores);
 
   static void getTopKByScores(const vector<Id>& cids,
                               const vector<Score>& scores, size_t k,
                               WidthOneList* result);
 
-  static void aggScoresAndTakeTopKContexts(const vector<Id>& cids,
+  static void aggScoresAndTakeTopKContexts(const vector<TextVocabIndex>& cids,
                                            const vector<Id>& eids,
                                            const vector<Score>& scores,
-                                           size_t k, IdTable* result);
+                                           size_t k, IdTable* dynResult);
 
   template <int WIDTH>
-  static void multVarsAggScoresAndTakeTopKContexts(const vector<Id>& cids,
-                                                   const vector<Id>& eids,
-                                                   const vector<Score>& scores,
-                                                   size_t nofVars, size_t k,
-                                                   IdTable* result);
+  static void multVarsAggScoresAndTakeTopKContexts(
+      const vector<TextVocabIndex>& cids, const vector<Id>& eids,
+      const vector<Score>& scores, size_t nofVars, size_t kLimit,
+      IdTable* dynResult);
 
   // Special case with only top-1 context(s).
   template <int WIDTH>
-  static void multVarsAggScoresAndTakeTopContext(const vector<Id>& cids,
-                                                 const vector<Id>& eids,
-                                                 const vector<Score>& scores,
-                                                 size_t nofVars,
-                                                 IdTable* result);
+  static void multVarsAggScoresAndTakeTopContext(
+      const vector<TextVocabIndex>& cids, const vector<Id>& eids,
+      const vector<Score>& scores, size_t nofVars, IdTable* dynResult);
 
   template <typename Row>
   static void aggScoresAndTakeTopKContexts(vector<Row>& nonAggRes, size_t k,
@@ -129,26 +129,27 @@ class FTSAlgorithms {
 
   // Special case where k == 1.
   template <int WIDTH>
-  static void aggScoresAndTakeTopContext(const vector<Id>& cids,
+  static void aggScoresAndTakeTopContext(const vector<TextVocabIndex>& cids,
                                          const vector<Id>& eids,
                                          const vector<Score>& scores,
-                                         IdTable* result);
+                                         IdTable* dynResult);
 
   // K-way intersect whereas there may be word ids / entity ids
   // parallel to the last list in the vectors.
   // That list (param: eids) can be given or null.
   // If it is null, resEids is left untouched, otherwise resEids
   // will contain word/entity for the matching contexts.
-  static void intersectKWay(const vector<vector<Id>>& cidVecs,
+  static void intersectKWay(const vector<vector<TextVocabIndex>>& cidVecs,
                             const vector<vector<Score>>& scoreVecs,
-                            vector<Id>* eids, vector<Id>& resCids,
+                            vector<Id>* lastListEids,
+                            vector<TextVocabIndex>& resCids,
                             vector<Id>& resEids, vector<Score>& resScores);
 
   // Constructs the cross-product between entity postings of this
   // context and matching subtree result tuples.
   template <size_t I>
   static inline void appendCrossProduct(
-      const vector<Id>& cids, const vector<Id>& eids,
+      const vector<TextVocabIndex>& cids, const vector<Id>& eids,
       const vector<Score>& scores, size_t from, size_t toExclusive,
       const ad_utility::HashMap<Id, vector<array<Id, I>>>& subRes,
       vector<array<Id, 3 + I>>& res) {
@@ -165,8 +166,9 @@ class FTSAlgorithms {
     }
     for (size_t i = from; i < toExclusive; ++i) {
       for (auto& tup : contextSubRes) {
-        res.emplace_back(concatTupleOld(eids[i], Id::make(scores[i]), cids[i],
-                                        tup, GenSeq<I>()));
+        res.emplace_back(concatTupleOld(eids[i], Id::makeFromInt(scores[i]),
+                                        Id::makeFromTextIndex(cids[i]), tup,
+                                        GenSeq<I>()));
       }
     }
   }
@@ -272,7 +274,8 @@ class FTSAlgorithms {
     out.insert(out.end(), fBegin, fEnd);
   }
 
-  static void appendCrossProduct(const vector<Id>& cids, const vector<Id>& eids,
+  static void appendCrossProduct(const vector<TextVocabIndex>& cids,
+                                 const vector<Id>& eids,
                                  const vector<Score>& scores, size_t from,
                                  size_t toExclusive,
                                  const ad_utility::HashSet<Id>& subRes1,
@@ -280,31 +283,31 @@ class FTSAlgorithms {
                                  vector<array<Id, 5>>& res);
 
   static void appendCrossProduct(
-      const vector<Id>& cids, const vector<Id>& eids,
+      const vector<TextVocabIndex>& cids, const vector<Id>& eids,
       const vector<Score>& scores, size_t from, size_t toExclusive,
       const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>&,
       vector<vector<Id>>& res);
 
   template <int WIDTH>
   static void oneVarFilterAggScoresAndTakeTopKContexts(
-      const vector<Id>& cids, const vector<Id>& eids,
+      const vector<TextVocabIndex>& cids, const vector<Id>& eids,
       const vector<Score>& scores, const ad_utility::HashMap<Id, IdTable>& fMap,
-      size_t k, IdTable* result);
+      size_t k, IdTable* dynResult);
 
   static void oneVarFilterAggScoresAndTakeTopKContexts(
-      const vector<Id>& cids, const vector<Id>& eids,
-      const vector<Score>& scores, const ad_utility::HashSet<Id>& fSet,
-      size_t k, IdTable* result);
+      const vector<TextVocabIndex>& cids, const vector<Id>& eids,
+      const vector<Score>& scores, const HashSet<Id>& fSet, size_t k,
+      IdTable* dynResult);
 
   template <int WIDTH>
   static void multVarsFilterAggScoresAndTakeTopKContexts(
-      const vector<Id>& cids, const vector<Id>& eids,
+      const vector<TextVocabIndex>& cids, const vector<Id>& eids,
       const vector<Score>& scores, const ad_utility::HashMap<Id, IdTable>& fMap,
-      size_t nofVars, size_t k, IdTable* result);
+      size_t nofVars, size_t kLimit, IdTable* dynResult);
 
   template <int WIDTH>
   static void multVarsFilterAggScoresAndTakeTopKContexts(
-      const vector<Id>& cids, const vector<Id>& eids,
-      const vector<Score>& scores, const ad_utility::HashSet<Id>& fSet,
-      size_t nofVars, size_t k, IdTable* result);
+      const vector<TextVocabIndex>& cids, const vector<Id>& eids,
+      const vector<Score>& scores, const HashSet<Id>& fSet, size_t nofVars,
+      size_t kLimit, IdTable* dynResult);
 };
