@@ -10,7 +10,6 @@
 
 #include "../util/Exception.h"
 
-/*
 // A strong Id type that internally stores a `uint64_t` but can only be
 // explicitly converted to and from the underlying `uint64_t`
 struct Id {

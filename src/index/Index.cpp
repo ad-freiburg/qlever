@@ -438,9 +438,6 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
       // For all triple elements find their mapping from partial to global ids.
       for (size_t k = 0; k < 3; ++k) {
         // TODO<joka921> The Maps should actually store `VocabIndex`es
-        if (curTriple[k].getDatatype() != Datatype::VocabIndex) {
-          continue;
-        }
         auto iterator = idMap.find(curTriple[k]);
         if (iterator == idMap.end()) {
           LOG(INFO) << "Not found in partial vocabulary: " << curTriple[k]
@@ -655,8 +652,8 @@ void Index::addPatternsToExistingIndex() {
           std::numeric_limits<uint64_t>::max())};
   auto iterator = TriplesView(_SPO, allocator);
   createPatternsFromSpoTriplesView(iterator, _onDiskBase + ".index.patterns",
-                                   Id::makeFromVocabIndex(langPredLowerBound),
-                                   Id::makeFromVocabIndex(langPredUpperBound));
+                                   Id::make(langPredLowerBound),
+                                   Id::make(langPredUpperBound));
 }
 
 // _____________________________________________________________________________
@@ -954,9 +951,9 @@ LangtagAndTriple Index::tripleToInternalRepresentation(TurtleTriple&& triple) {
   // numeric value.
   bool objectIsString = false;
   if (triple._object.isDouble()) {
-    resultTriple[2] = Id::makeFromDouble(triple._object.getDouble());
+    resultTriple[2] = Id::make(triple._object.getDouble());
   } else if (triple._object.isInt()) {
-    resultTriple[2] = Id::makeFromInt(triple._object.getInt());
+    resultTriple[2] = Id::make(triple._object.getInt());
   } else {
     AD_CHECK(triple._object.isString());
     resultTriple[2] = triple._object.getString();

@@ -302,7 +302,7 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
     case ResultTable::ResultType::VERBATIM:
       return std::pair{std::to_string(id.get()), XSD_INT_TYPE};
     case ResultTable::ResultType::TEXT:
-      return std::pair{_qec->getIndex().getTextExcerpt(id), nullptr};
+      return std::pair{_qec->getIndex().getTextExcerpt(id.get()), nullptr};
     case ResultTable::ResultType::FLOAT: {
       float f;
       // TODO<LLVM 14> std::bit_cast
@@ -423,7 +423,7 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
             break;
           case ResultTable::ResultType::TEXT:
             co_yield _qec->getIndex().getTextExcerpt(
-                idTable(i, val._columnIndex));
+                idTable(i, val._columnIndex).get());
             break;
           case ResultTable::ResultType::FLOAT: {
             float f;

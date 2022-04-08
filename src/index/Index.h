@@ -195,41 +195,23 @@ class Index {
 
   // TODO<joka921> The following three functions have to be adapted when we
   // have the "fancy" or "folded" Ids.
-  // TODO<joka921> Once we have an overview over the folding this logic should
-  // probably not be in the index class.
   std::optional<string> idToOptionalString(Id id) const {
-    switch (id.getDatatype()) {
-      case Datatype::Undefined:
-        return std::nullopt;
-      case Datatype::Double:
-        return std::to_string(id.getDouble());
-      case Datatype::Int:
-        return std::to_string(id.getInt());
-      case Datatype::VocabIndex:
-        return _vocab.indexToOptionalString(id.getVocabIndex());
-      case Datatype::LocalVocabIndex:
-        // TODO:: this is why this shouldn't be here
-        return std::nullopt;
-      case Datatype::TextIndex:
-        return getTextExcerpt(id.getTextIndex());
+    if (id == ID_NO_VALUE) {
+      return std::nullopt;
     }
-    // should be unreachable because the enum is exhaustive.
-    AD_CHECK(false);
+    return _vocab.indexToOptionalString(id.get());
   }
 
   bool getId(const string& element, Id* id) const {
-    // TODO<joka921> we should parse doubles correctly in the SparqlParser and
-    // then return the correct ids here or somewhere else.
     VocabIndex vocabId;
     auto success = getVocab().getId(element, &vocabId);
-    *id = Id::makeFromVocabIndex(vocabId);
+    *id = Id::make(vocabId);
     return success;
   }
 
   std::pair<Id, Id> prefix_range(const std::string& prefix) const {
-    // TODO<joka921> Do we need prefix ranges for numbers?
     auto [begin, end] = _vocab.prefix_range(prefix);
-    return {Id::makeFromVocabIndex(begin), Id::makeFromVocabIndex(end)};
+    return {Id::make(begin), Id::make(end)};
   }
 
   const vector<PatternID>& getHasPattern() const;
