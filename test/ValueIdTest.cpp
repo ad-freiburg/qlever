@@ -32,7 +32,8 @@ TEST(ValueId, makeFromDouble) {
   auto testRepresentableDouble = [](double d) {
     auto id = ValueId::makeFromDouble(d);
     ASSERT_EQ(id.getDatatype(), Datatype::Double);
-    // We lose 4 bits of precision, so `ASSERT_DOUBLE_EQ` would fail.
+    // We lose `numDatatypeBits` bits of precision, so `ASSERT_DOUBLE_EQ` would
+    // fail.
     ASSERT_FLOAT_EQ(id.getDouble(), d);
     // This check expresses the precision more exactly
     if (id.getDouble() != d) {
