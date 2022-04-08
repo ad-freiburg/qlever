@@ -96,8 +96,8 @@ class Index {
   using TripleVec = stxxl::vector<array<Id, 3>>;
   // Block Id, Context Id, Word Id, Score, entity
   using TextVec = stxxl::vector<
-      tuple<TextBlockIndex, TextVocabIndex, WordOrEntityIndex, Score, bool>>;
-  using Posting = std::tuple<TextVocabIndex, WordIndex, Score>;
+      tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex, Score, bool>>;
+  using Posting = std::tuple<TextRecordIndex, WordIndex, Score>;
 
   // Forbid copy and assignment
   Index& operator=(const Index&) = delete;
@@ -264,7 +264,7 @@ class Index {
                                          size_t limit, IdTable* result) const;
 
   void getContextEntityScoreListsForWords(const string& words,
-                                          vector<TextVocabIndex>& cids,
+                                          vector<TextRecordIndex>& cids,
                                           vector<Id>& eids,
                                           vector<Score>& scores) const;
 
@@ -285,14 +285,14 @@ class Index {
       const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
       size_t limit, vector<vector<Id>>& res) const;
 
-  void getWordPostingsForTerm(const string& term, vector<TextVocabIndex>& cids,
+  void getWordPostingsForTerm(const string& term, vector<TextRecordIndex>& cids,
                               vector<Score>& scores) const;
 
   void getEntityPostingsForTerm(const string& term,
-                                vector<TextVocabIndex>& cids, vector<Id>& eids,
+                                vector<TextRecordIndex>& cids, vector<Id>& eids,
                                 vector<Score>& scores) const;
 
-  string getTextExcerpt(TextVocabIndex cid) const {
+  string getTextExcerpt(TextRecordIndex cid) const {
     return _docsDB.getTextExcerpt(cid);
   }
 
@@ -619,7 +619,7 @@ class Index {
   void openTextFileHandle();
 
   void addContextToVector(TextVec::bufwriter_type& writer,
-                          TextVocabIndex context,
+                          TextRecordIndex context,
                           const ad_utility::HashMap<WordIndex, Score>& words,
                           const ad_utility::HashMap<Id, Score>& entities);
 
@@ -668,9 +668,9 @@ class Index {
                    ad_utility::File& file) const;
 
   // TODO<joka921> understand what the "codes" are, are they better just ints?
-  typedef ad_utility::HashMap<WordIndex, Code> WordToCodeMap;
+  typedef ad_utility::HashMap<WordIndex, CompressionCode> WordToCodeMap;
   typedef ad_utility::HashMap<Score, Score> ScoreCodeMap;
-  typedef vector<Code> WordCodebook;
+  typedef vector<CompressionCode> WordCodebook;
   typedef vector<Score> ScoreCodebook;
 
   //! Creates codebooks for lists that are supposed to be entropy encoded.

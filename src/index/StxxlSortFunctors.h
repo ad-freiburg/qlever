@@ -41,8 +41,8 @@ using SortByOPS = SortTriple<2, 1, 0>;
 
 // TODO<joka921> Which of those are actually "IDs" and which are something else?
 struct SortText {
-  using T = std::tuple<TextBlockIndex, TextVocabIndex, WordOrEntityIndex, Score,
-                       bool>;
+  using T = std::tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex,
+                       Score, bool>;
   // comparison function
   bool operator()(const T& a, const T& b) const {
     if (std::get<0>(a) == std::get<0>(b)) {
