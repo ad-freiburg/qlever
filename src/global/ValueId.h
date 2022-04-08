@@ -47,8 +47,8 @@ constexpr std::string_view toString(Datatype type) {
 class ValueId {
  public:
   using T = uint64_t;
-  static constexpr T numTypeBits = 4;
-  static constexpr T numDataBits = 64 - numTypeBits;
+  static constexpr T numDatatypeBits = 4;
+  static constexpr T numDataBits = 64 - numDatatypeBits;
 
   using IntegerType = ad_utility::NBitInteger<numDataBits>;
 
@@ -60,7 +60,7 @@ class ValueId {
   /// loss of `FoldedId`. Symmetrically, `-minPositiveDouble` is the largest
   /// double <0 that will not be rounded to zero.
   static constexpr double minPositiveDouble =
-      std::bit_cast<double>(1ull << numTypeBits);
+      std::bit_cast<double>(1ull << numDatatypeBits);
 
   /// This exception is thrown if we try to store a value of an index type
   /// (VocabIndex, LocalVocabIndex, TextIndex) that is larger than
@@ -117,13 +117,13 @@ class ValueId {
   /// precision of the mantissa of an IEEE double precision floating point
   /// number from 53 to 49 significant bits.
   static ValueId makeFromDouble(double d) {
-    auto shifted = std::bit_cast<T>(d) >> numTypeBits;
+    auto shifted = std::bit_cast<T>(d) >> numDatatypeBits;
     return addDatatypeBits(shifted, Datatype::Double);
   }
   /// Obtain the `double` that this `ValueId` encodes. If `getDatatype() !=
   /// Double` then the result is unspecified.
   [[nodiscard]] double getDouble() const noexcept {
-    return std::bit_cast<double>(_bits << numTypeBits);
+    return std::bit_cast<double>(_bits << numDatatypeBits);
   }
 
   /// Create a `ValueId` for a signed integer value. Integers in the range

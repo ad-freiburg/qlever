@@ -37,7 +37,8 @@ TEST(ValueId, makeFromDouble) {
     // This check expresses the precision more exactly
     if (id.getDouble() != d) {
       // The if is needed for the case of += infinity.
-      ASSERT_NEAR(id.getDouble(), d, std::abs(d / (1ul << 48)));
+      ASSERT_NEAR(id.getDouble(), d,
+                  std::abs(d / (1ul << (52 - ValueId::numDatatypeBits))));
     }
   };
 
@@ -51,7 +52,8 @@ TEST(ValueId, makeFromDouble) {
     testRepresentableDouble(positiveRepresentableDoubleGenerator());
     testRepresentableDouble(negativeRepresentableDoubleGenerator());
     auto nonRepresentable = nonRepresentableDoubleGenerator();
-    // The RNG includes the edge cases which would make the tests fail.
+    // The random number generator includes the edge cases which would make the
+    // tests fail.
     if (nonRepresentable != ValueId::minPositiveDouble &&
         nonRepresentable != -ValueId::minPositiveDouble) {
       testNonRepresentableSubnormal(nonRepresentable);
@@ -198,19 +200,20 @@ TEST(ValueId, OrderingDifferentDatatypes) {
 }
 
 TEST(ValueId, IndexOrdering) {
-  auto testOrder = [](auto makeId, auto getId) {
+  auto testOrder = [](auto makeIdFromIndex, auto getIndexFromId) {
     std::vector<ValueId> ids;
-    addIdsFromGenerator(indexGenerator, makeId, ids);
-    std::vector<std::invoke_result_t<decltype(getId), ValueId>> indices;
+    addIdsFromGenerator(indexGenerator, makeIdFromIndex, ids);
+    std::vector<std::invoke_result_t<decltype(getIndexFromId), ValueId>>
+        indices;
     for (auto id : ids) {
-      indices.push_back(std::invoke(getId, id));
+      indices.push_back(std::invoke(getIndexFromId, id));
     }
 
     std::sort(ids.begin(), ids.end());
     std::sort(indices.begin(), indices.end());
 
     for (size_t i = 0; i < ids.size(); ++i) {
-      ASSERT_EQ(std::invoke(getId, ids[i]), indices[i]);
+      ASSERT_EQ(std::invoke(getIndexFromId, ids[i]), indices[i]);
     }
   };
 
