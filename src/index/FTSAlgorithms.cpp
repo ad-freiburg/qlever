@@ -829,9 +829,9 @@ void FTSAlgorithms::appendCrossProduct(const vector<TextVocabIndex>& cids,
   for (size_t i = from; i < toExclusive; ++i) {
     for (size_t j = 0; j < contextSubRes1.size(); ++j) {
       for (size_t k = 0; k < contextSubRes2.size(); ++k) {
-        res.emplace_back(array<Id, 5>{{eids[i], Id::make(scores[i]),
-                                       Id::make(cids[i]),
-                                       contextSubRes1[j], contextSubRes2[k]}});
+        res.emplace_back(
+            array<Id, 5>{{eids[i], Id::make(scores[i]), Id::make(cids[i]),
+                          contextSubRes1[j], contextSubRes2[k]}});
       }
     }
   }
@@ -875,8 +875,7 @@ void FTSAlgorithms::appendCrossProduct(
     }
 
     for (size_t n = 0; n < nofResultRows; ++n) {
-      vector<Id> resRow = {eids[i], Id::make(scores[i]),
-                           Id::make(cids[i])};
+      vector<Id> resRow = {eids[i], Id::make(scores[i]), Id::make(cids[i])};
       for (size_t j = 0; j < subResMatches.size(); ++j) {
         size_t index = n;
         for (size_t k = 0; k < j; ++k) {

@@ -228,8 +228,8 @@ void Index::addContextToVector(
   for (auto it = entities.begin(); it != entities.end(); ++it) {
     TextBlockIndex blockId = getEntityBlockId(it->first);
     touchedBlocks.insert(blockId);
-    writer << std::make_tuple(blockId, context, it->first.get(),
-                              it->second, false);
+    writer << std::make_tuple(blockId, context, it->first.get(), it->second,
+                              false);
   }
 
   // All entities have to be written in the entity list part for each block.
@@ -243,8 +243,8 @@ void Index::addContextToVector(
       // FIX JUN 07 2017: DO add it. It's needed so that it is returned
       // as a result itself.
       // if (blockId == getEntityBlockId(it->first)) { continue; }
-      writer << std::make_tuple(blockId, context, it->first.get(),
-                                it->second, true);
+      writer << std::make_tuple(blockId, context, it->first.get(), it->second,
+                                true);
     }
   }
 }

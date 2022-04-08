@@ -105,10 +105,10 @@ TEST(FTSAlgorithmsTest, intersectTest) {
   eBlockCids.push_back(2);
   eBlockCids.push_back(2);
   eBlockCids.push_back(4);
-  eBlockWids.push_back(10);
-  eBlockWids.push_back(1);
-  eBlockWids.push_back(1);
-  eBlockWids.push_back(2);
+  eBlockWids.push_back(I(10));
+  eBlockWids.push_back(I(1));
+  eBlockWids.push_back(I(1));
+  eBlockWids.push_back(I(2));
   eBlockScores.push_back(1);
   eBlockScores.push_back(1);
   eBlockScores.push_back(1);
@@ -231,8 +231,8 @@ TEST(FTSAlgorithmsTest, intersectKWayTest) {
   ASSERT_EQ(2u, resCids.size());
   ASSERT_EQ(2u, resEids.size());
   ASSERT_EQ(2u, resScores.size());
-  ASSERT_EQ(I(10), resCids[0]);
-  ASSERT_EQ(I(10), resCids[1]);
+  ASSERT_EQ(10, resCids[0]);
+  ASSERT_EQ(10, resCids[1]);
   ASSERT_EQ(I(1), resEids[0]);
   ASSERT_EQ(I(2), resEids[1]);
   ASSERT_EQ(6u, resScores[0]);
@@ -420,9 +420,9 @@ TEST(FTSAlgorithmsTest, appendCrossProductWithTwoW1Test) {
 
   vector<array<Id, 5>> res;
 
-  vector<Id> cids;
-  cids.push_back(I(1));
-  cids.push_back(I(1));
+  vector<TextBlockIndex> cids;
+  cids.push_back(1);
+  cids.push_back(1);
 
   vector<Id> eids;
   eids.push_back(I(0));
@@ -449,7 +449,7 @@ TEST(FTSAlgorithmsTest, appendCrossProductWithTwoW1Test) {
 }
 
 TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
-  vector<Id> cids;
+  vector<TextVocabIndex> cids;
   vector<Id> eids;
   vector<Score> scores;
   size_t nofVars = 2;
@@ -467,12 +467,12 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
                     cids, eids, scores, nofVars, k, &resWV);
   ASSERT_EQ(0u, resWV.size());
 
-  cids.push_back(I(0));
-  cids.push_back(I(1));
-  cids.push_back(I(1));
-  cids.push_back(I(2));
-  cids.push_back(I(2));
-  cids.push_back(I(2));
+  cids.push_back(0);
+  cids.push_back(1);
+  cids.push_back(1);
+  cids.push_back(2);
+  cids.push_back(2);
+  cids.push_back(2);
 
   eids.push_back(I(0));
   eids.push_back(I(0));
@@ -541,7 +541,7 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
 }
 
 TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
-  vector<Id> cids;
+  vector<TextVocabIndex> cids;
   vector<Id> eids;
   vector<Score> scores;
   size_t k = 1;
@@ -554,12 +554,12 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
                     cids, eids, scores, fMap1, k, &resW3);
   ASSERT_EQ(0u, resW3.size());
 
-  cids.push_back(I(0));
-  cids.push_back(I(1));
-  cids.push_back(I(1));
-  cids.push_back(I(2));
-  cids.push_back(I(2));
-  cids.push_back(I(2));
+  cids.push_back(0);
+  cids.push_back(1);
+  cids.push_back(1);
+  cids.push_back(2);
+  cids.push_back(2);
+  cids.push_back(2);
 
   eids.push_back(I(0));
   eids.push_back(I(0));
@@ -637,15 +637,15 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
 
 TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
   try {
-    vector<Id> cids;
+    vector<TextVocabIndex> cids;
     vector<Id> eids;
     vector<Score> scores;
-    cids.push_back(I(0));
-    cids.push_back(I(1));
-    cids.push_back(I(1));
-    cids.push_back(I(2));
-    cids.push_back(I(2));
-    cids.push_back(I(2));
+    cids.push_back(0);
+    cids.push_back(1);
+    cids.push_back(1);
+    cids.push_back(2);
+    cids.push_back(2);
+    cids.push_back(2);
 
     eids.push_back(I(0));
     eids.push_back(I(0));
