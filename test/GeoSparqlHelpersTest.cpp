@@ -15,28 +15,43 @@ using ad_utility::wktLongitude;
 using ad_utility::detail::checkWktPoint;
 using ad_utility::detail::parseWktPoint;
 
-TEST(GeoSparqlHelpers, CheckWktPoint) {
-  // Valid points (note that in the case of success, checkWktPoint returns a
-  // pointer to the character, where the first coordinate starts).
-  ASSERT_STREQ(checkWktPoint("\"POINT(42.0 7.8)\""), "42.0 7.8)\"");
-  ASSERT_STREQ(checkWktPoint("\"point(42.0 7.8)\""), "42.0 7.8)\"");
-  ASSERT_STREQ(checkWktPoint("\"PoInT(42.0 7.8)\""), "42.0 7.8)\"");
-  ASSERT_STREQ(checkWktPoint("\"POINT ( 42.0  7.8 )\""), "42.0  7.8 )\"");
-  ASSERT_STREQ(checkWktPoint("\"POINT(-42.0  -7.8)\""), "-42.0  -7.8)\"");
-  ASSERT_STREQ(checkWktPoint("\"POINT(  42 7 )\""), "42 7 )\"");
+TEST(GeoSparqlHelpers, ParseWktPoint) {
+  // Test that the given WKT point parses correctly.
+  auto testParseWktPointCorrect = [](const std::string& point,
+                                     double expected_lng, double expected_lat) {
+    auto [lat, lng] = parseWktPoint(point);
+    ASSERT_FLOAT_EQ(expected_lng, lng);
+    ASSERT_FLOAT_EQ(expected_lat, lat);
+  };
 
-  // Invalid points (one of the quotes missing, one of the parentheses missing,
-  // explicit plus sign not allowed, scientific notation not allowed, it must be
-  // exactly two coordinates).
-  ASSERT_FALSE(checkWktPoint("\"POINT(42.0 7.8)"));
-  ASSERT_FALSE(checkWktPoint("POINT(42.0 7.8)\""));
-  ASSERT_FALSE(checkWktPoint("\"POINT42.0 7.8)\""));
-  ASSERT_FALSE(checkWktPoint("\"POINT(42.0 7.8\""));
-  ASSERT_FALSE(checkWktPoint("\"POINT(+42.0 7.8)\""));
-  ASSERT_FALSE(checkWktPoint("\"POINT(42.0 +7.8)\""));
-  ASSERT_FALSE(checkWktPoint("\"POINT(42e3 7.8)\""));
-  ASSERT_FALSE(checkWktPoint("\"POINT(42.0)\""));
-  ASSERT_FALSE(checkWktPoint("\"POINT(42.0 7.8 3.14)\""));
+  // Test that the given WKT point is invalid.
+  auto testWktPointInvalid = [](const std::string& point) {
+    auto [lat, lng] = parseWktPoint(point);
+    ASSERT_TRUE(std::isnan(lng));
+    ASSERT_TRUE(std::isnan(lng));
+  };
+
+  // Some valid WKT points, including those from the test for `wktDist` below.
+  testParseWktPointCorrect("\"POINT(2.0 1.5)\"", 2.0, 1.5);
+  testParseWktPointCorrect("\"POINT(2.0 -1.5)\"", 2.0, -1.5);
+  testParseWktPointCorrect("\"PoInT(3   0.0)\"", 3.0, 0.0);
+  testParseWktPointCorrect("\"pOiNt(7 -0.0)\"", 7.0, 0.0);
+  testParseWktPointCorrect("\"pOiNt (  7  -0.0   )\"", 7.0, 0.0);
+  testParseWktPointCorrect("\"POINT(2.2945 48.8585)\"", 2.2945, 48.8585);
+  testParseWktPointCorrect("\"POINT(7.8529 47.9957)\"", 7.8529, 47.9957);
+
+  // All kinds of invalid WKT points (one of the quotes missing, one of the
+  // parentheses missing, explicit plus sign not allowed, scientific notation
+  // not allowed, it must be exactly two coordinates).
+  testWktPointInvalid("\"POINT(42.0 7.8)");
+  testWktPointInvalid("POINT(42.0 7.8)\"");
+  testWktPointInvalid("\"POINT42.0 7.8)\"");
+  testWktPointInvalid("\"POINT(42.0 7.8\"");
+  testWktPointInvalid("\"POINT(+42.0 7.8)\"");
+  testWktPointInvalid("\"POINT(42.0 +7.8)\"");
+  testWktPointInvalid("\"POINT(42e3 7.8)\"");
+  testWktPointInvalid("\"POINT(42.0)\"");
+  testWktPointInvalid("\"POINT(42.0 7.8 3.14)\"");
 }
 
 TEST(GeoSparqlHelpers, WktLatLng) {
@@ -47,19 +62,6 @@ TEST(GeoSparqlHelpers, WktLatLng) {
   // Invalid WKT points.
   ASSERT_TRUE(std::isnan(wktLongitude("\"POINT(4.20)\"")));
   ASSERT_TRUE(std::isnan(wktLatitude("\"POINT\"(4.20)\"")));
-}
-
-TEST(GeoSparqlHelpers, ParseWktPoint) {
-  auto testParseWktPoint = [](const std::string& point, double expected_lng,
-                              double expected_lat) {
-    auto [lat, lng] = parseWktPoint(point);
-    ASSERT_FLOAT_EQ(expected_lng, lng);
-    ASSERT_FLOAT_EQ(expected_lat, lat);
-  };
-  testParseWktPoint("\"POINT(2.0 1.5)\"", 2.0, 1.5);
-  testParseWktPoint("\"POINT(2.0 -1.5)\"", 2.0, -1.5);
-  testParseWktPoint("\"PoInT(3   0.0)\"", 3.0, 0.0);
-  testParseWktPoint("\"pOiNt(7 -0.0)\"", 7.0, 0.0);
 }
 
 TEST(GeoSparqlHelpers, WktDist) {
