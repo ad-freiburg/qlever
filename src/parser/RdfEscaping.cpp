@@ -238,7 +238,7 @@ std::string unescapePrefixedIri(std::string_view literal) {
     if (pos + 1 >= literal.size() || !m.contains(literal[pos + 1])) {
       LOG(ERROR) << "Error in function unescapePrefixedIri, could not unescape "
                     "prefixed iri "
-                 << origLiteral;
+                 << origLiteral << '\n';
     }
     AD_CHECK(pos + 1 < literal.size());
     AD_CHECK(m.contains(literal[pos + 1]));

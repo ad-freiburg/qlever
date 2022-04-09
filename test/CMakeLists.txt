@@ -52,8 +52,6 @@ addLinkAndDiscoverTest(FileTest)
 
 addLinkAndDiscoverTest(Simple8bTest)
 
-addLinkAndDiscoverTest(TsvParserTest parser)
-
 addLinkAndDiscoverTest(ContextFileParserTest parser ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(IndexMetaDataTest index)
@@ -183,6 +181,12 @@ addLinkAndDiscoverTest(BitUtilsTest)
 
 addLinkAndDiscoverTest(NBitIntegerTest)
 
+<<<<<<< HEAD
 addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
 addLinkAndDiscoverTest(DateTest)
+=======
+addLinkAndDiscoverTest(DateTest)
+
+addLinkAndDiscoverTest(TripleObjectTest absl::strings)
+>>>>>>> master
