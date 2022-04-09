@@ -52,6 +52,13 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
   testWktPointInvalid("\"POINT(42e3 7.8)\"");
   testWktPointInvalid("\"POINT(42.0)\"");
   testWktPointInvalid("\"POINT(42.0 7.8 3.14)\"");
+
+  // A type appended with ^^... is fine, but not needed. We don't care about the
+  // format of the type for now, but if something is appended to the string, it
+  // should at least start with ^^.
+  testParseWktPointCorrect("\"POINT(1 2)\"^^anything is fine here", 1, 2);
+  testParseWktPointCorrect("\"POINT(1 2)\"^^", 1, 2);
+  testWktPointInvalid("\"POINT(1 2)\"not ok");
 }
 
 TEST(GeoSparqlHelpers, WktLatLng) {

@@ -21,9 +21,9 @@ namespace ad_utility {
 namespace detail {
 
 static constexpr auto wktPointRegex = ctll::fixed_string(
-    "\"[Pp][Oo][Ii][Nn][Tt] *\\( *"
+    "^\"[Pp][Oo][Ii][Nn][Tt] *\\( *"
     "(-?[0-9]+|-?[0-9]+\\.[0-9]+) +(-?[0-9+]|-?[0-9]+\\.[0-9]+)"
-    " *\\)\"");
+    " *\\)\"(\\^\\^|$)");
 
 static constexpr double invalidCoordinate =
     std::numeric_limits<double>::quiet_NaN();
@@ -33,7 +33,7 @@ static constexpr double invalidCoordinate =
 // parse as a WKT point, a pair of `invalidCoordinate` is returned.
 std::pair<double, double> parseWktPoint(const std::string& wktPoint) {
   double lng = invalidCoordinate, lat = invalidCoordinate;
-  if (auto match = ctre::match<wktPointRegex>(wktPoint)) {
+  if (auto match = ctre::search<wktPointRegex>(wktPoint)) {
     std::string_view lng_sv = match.get<1>();
     std::string_view lat_sv = match.get<2>();
     absl::from_chars(lng_sv.begin(), lng_sv.end() + lng_sv.size(), lng);
@@ -49,7 +49,7 @@ std::pair<double, double> parseWktPoint(const std::string& wktPoint) {
 // Parse longitude from WKT point.
 double wktLongitudeImpl(const std::string& wktPoint) {
   double lng = invalidCoordinate;
-  if (auto match = ctre::match<wktPointRegex>(wktPoint)) {
+  if (auto match = ctre::search<wktPointRegex>(wktPoint)) {
     std::string_view lng_sv = match.get<1>();
     absl::from_chars(lng_sv.begin(), lng_sv.end() + lng_sv.size(), lng);
     AD_CHECK(lng != invalidCoordinate);
@@ -60,7 +60,7 @@ double wktLongitudeImpl(const std::string& wktPoint) {
 // Parse latitude from WKI point.
 double wktLatitudeImpl(const std::string& wktPoint) {
   double lat = invalidCoordinate;
-  if (auto match = ctre::match<wktPointRegex>(wktPoint)) {
+  if (auto match = ctre::search<wktPointRegex>(wktPoint)) {
     std::string_view lat_sv = match.get<2>();
     absl::from_chars(lat_sv.begin(), lat_sv.end() + lat_sv.size(), lat);
     AD_CHECK(lat != invalidCoordinate);
