@@ -38,8 +38,8 @@ std::pair<double, double> parseWktPoint(const std::string_view point) {
   if (auto match = ctre::search<wktPointRegex>(point)) {
     std::string_view lng_sv = match.get<1>();
     std::string_view lat_sv = match.get<2>();
-    absl::from_chars(lng_sv.begin(), lng_sv.begin() + lng_sv.size(), lng);
-    absl::from_chars(lat_sv.begin(), lat_sv.begin() + lat_sv.size(), lat);
+    absl::from_chars(lng_sv.data(), lng_sv.data() + lng_sv.size(), lng);
+    absl::from_chars(lat_sv.data(), lat_sv.data() + lat_sv.size(), lat);
     // This should never happen: if the regex matches, then each of the two
     // coordinate strings should also parse to a double.
     AD_CHECK(lng != invalidCoordinate);
@@ -53,7 +53,7 @@ double wktLongitudeImpl(const std::string_view point) {
   double lng = invalidCoordinate;
   if (auto match = ctre::search<wktPointRegex>(point)) {
     std::string_view lng_sv = match.get<1>();
-    absl::from_chars(lng_sv.begin(), lng_sv.begin() + lng_sv.size(), lng);
+    absl::from_chars(lng_sv.data(), lng_sv.data() + lng_sv.size(), lng);
     AD_CHECK(lng != invalidCoordinate);
   }
   return lng;
@@ -64,7 +64,7 @@ double wktLatitudeImpl(const std::string_view point) {
   double lat = invalidCoordinate;
   if (auto match = ctre::search<wktPointRegex>(point)) {
     std::string_view lat_sv = match.get<2>();
-    absl::from_chars(lat_sv.begin(), lat_sv.begin() + lat_sv.size(), lat);
+    absl::from_chars(lat_sv.data(), lat_sv.data() + lat_sv.size(), lat);
     AD_CHECK(lat != invalidCoordinate);
   }
   return lat;
