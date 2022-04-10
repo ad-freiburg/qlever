@@ -16,31 +16,31 @@ namespace detail {
 // the .cpp file, hence this detour.
 // TODO: Make the SPARQL expressions work for function pointers or
 // std::function.
-const char* checkWktPoint(const char* s);
-std::pair<double, double> parseWktPoint(const std::string& p);
-double wktLongitudeImpl(const std::string& p);
-double wktLatitudeImpl(const std::string& p);
-double wktDistImpl(const std::string& p1, const std::string& p2);
+std::pair<double, double> parseWktPoint(const std::string_view point);
+double wktLongitudeImpl(const std::string_view point);
+double wktLatitudeImpl(const std::string_view point);
+double wktDistImpl(const std::string_view point1,
+                   const std::string_view point2);
 
 }  // namespace detail
 
 // Parse the longitude coordinate from a WKT point (it's the first coordinate).
-inline auto wktLongitude = [](const std::string& p) -> double {
-  return detail::wktLongitudeImpl(p);
+inline auto wktLongitude = [](const std::string& point) -> double {
+  return detail::wktLongitudeImpl(point);
 };
 
 // Parse the latitute coordinate from a WKT point (it's the second coordinate).
-inline auto wktLatitude = [](const std::string& p) -> double {
-  return detail::wktLatitudeImpl(p);
+inline auto wktLatitude = [](const std::string& point) -> double {
+  return detail::wktLatitudeImpl(point);
 };
 
 // Compute the distance in km between two WKT points according to the formula in
 // https://en.wikipedia.org/wiki/Geographical_distance ("ellipsoidal earth
 // projected to a plane"). A more precise way is the Haversine formula, which we
 // save for when we compute this at indexing time.
-inline auto wktDist = [](const std::string& p1,
-                         const std::string& p2) -> double {
-  return detail::wktDistImpl(p1, p2);
+inline auto wktDist = [](const std::string& point1,
+                         const std::string& point2) -> double {
+  return detail::wktDistImpl(point1, point2);
 };
 
 }  // namespace ad_utility
