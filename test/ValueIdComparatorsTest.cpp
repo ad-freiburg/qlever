@@ -52,7 +52,6 @@ std::vector<ValueId> makeAndSortIds() {
   return ids;
 }
 
-
 TEST(ValueIdComparators, Int) {
   auto ids = makeAndSortIds();
   auto ranges = getRangesForId(ids.begin(), ids.end(), ValueId::makeFromInt(42),

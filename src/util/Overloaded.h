@@ -23,6 +23,10 @@ template <class... Ts>
 struct Overloaded : Ts... {
   using Ts::operator()...;
 };
+// Explicit deduction guide (not needed as of C++20, but clang 13 still needs
+// it).
+template <class... Ts>
+Overloaded(Ts...) -> Overloaded<Ts...>;
 }  // namespace ad_utility
 
 #endif  // QLEVER_OVERLOADED_H

@@ -69,7 +69,8 @@ inline std::pair<RandomIt, RandomIt> getRangeForDatatype(RandomIt begin,
 
 namespace detail {
 
-// A helper type that stores a vector of iterator pairs (ranges) and an `Ordering` and factors out common logic.
+// A helper type that stores a vector of iterator pairs (ranges) and an
+// `Ordering` and factors out common logic.
 template <typename RandomIt>
 class RangeManager {
  private:
@@ -81,8 +82,10 @@ class RangeManager {
   explicit RangeManager(Ordering order) : _order{order} {};
   Vec getResult() && { return std::move(_result); }
 
-
-  // Semantic: The elements in the range [begin, end) are all smaller than the value we are comparing against, so this range is only to be included in the result, if our ordering is LE, LT or NE (Similar for the other `addXXX` functions).
+  // Semantic: The elements in the range [begin, end) are all smaller than the
+  // value we are comparing against, so this range is only to be included in the
+  // result, if our ordering is LE, LT or NE (Similar for the other `addXXX`
+  // functions).
   void addSmallerRange(auto begin, auto end) {
     addImpl<Ordering::LT, Ordering::LE, Ordering::NE>(begin, end);
   }
@@ -98,7 +101,8 @@ class RangeManager {
   }
 
  private:
-  // Only add the pair `[begin, end)` to `_result` of `_order` is any of the `acceptedOrders`
+  // Only add the pair `[begin, end)` to `_result` of `_order` is any of the
+  // `acceptedOrders`
   template <Ordering... acceptedOrders>
   void addImpl(RandomIt begin, RandomIt end) {
     if ((... || (_order == acceptedOrders))) {
@@ -119,8 +123,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getEqualRangeForDouble(
     // NaNs are non-comparable.
     return {};
   }
-  std::tie(begin, end) =
-      getRangeForDatatype(begin, end, Datatype::Double);
+  std::tie(begin, end) = getRangeForDatatype(begin, end, Datatype::Double);
   // In `ids` the negative number stand AFTER the positive numbers because of
   // the bitOrdering. First rotate the negative numbers to the beginning.
   auto doubleIdIsNegative = [](ValueId id) {
