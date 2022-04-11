@@ -9,17 +9,12 @@
 
 #include "../engine/ResultTable.h"
 #include "../index/Vocabulary.h"
+#include "../util/Overloaded.h"
 #include "./ValueId.h"
 
-namespace ad_utility {
-template <class... Ts>
-struct overloaded : Ts... {
-  using Ts::operator()...;
-};
-
-}  // namespace ad_utility
 
 enum struct Ordering { LT, LE, EQ, NE, GE, GT };
+
 
 namespace valueIdComparators {
 inline bool compareByBits(ValueId a, ValueId b) {
@@ -37,10 +32,47 @@ inline std::pair<RandomIt, RandomIt> getRangeForDatatype(RandomIt begin,
     return type < id.getDatatype();
   };
   return std::equal_range(begin, end, datatype,
-                          ad_utility::overloaded{pred1, pred2});
+                          ad_utility::Overloaded{pred1, pred2});
 }
 
 namespace detail {
+
+template<typename RandomIt>
+class RangeManager {
+ private:
+  using Vec = std::vector<std::pair<RandomIt, RandomIt>>;
+  Ordering _order;
+  Vec _result;
+ public:
+  explicit RangeManager(Ordering order): _order{order}{};
+
+  Vec getResult() && {
+    return std::move(_result);
+  }
+
+  void addSmallerRange (auto begin, auto end) {
+    addImpl<Ordering::LT, Ordering::LE, Ordering::NE>(begin, end);
+  }
+  void addEqualRange (auto begin, auto end) {
+    addImpl<Ordering::LE, Ordering::EQ, Ordering::GE>(begin, end);
+  };
+  void addGreaterRange (auto begin, auto end) {
+    addImpl<Ordering::GE, Ordering::GT, Ordering::NE>(begin, end);
+  };
+
+  void addNanRange(RandomIt begin, RandomIt end) {
+    addImpl<Ordering::NE>(begin, end);
+  }
+
+ private:
+  template <Ordering... acceptedOrders>
+  void addImpl(RandomIt begin, RandomIt end) {
+    if ((... ||(_order == acceptedOrders))) {
+      _result.emplace_back(begin, end);
+    }
+  }
+
+};
 template <typename RandomIt, typename Value>
 // TODO<joka921> `Value` must be double or int64_t
 inline std::vector<std::pair<RandomIt, RandomIt>> getEqualRangeForDouble(
@@ -72,38 +104,17 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getEqualRangeForDouble(
   // TODO<joka921> filter Nan range.
   auto pred1 = [](ValueId id, Value val) { return id.getDouble() < val; };
   auto pred2 = [](Value val, ValueId id) { return val < id.getDouble(); };
-  auto predicate = ad_utility::overloaded{pred1, pred2};
-  std::vector<std::pair<RandomIt, RandomIt>> result;
-  auto addSmallerRange = [&](auto begin, auto end) {
-    if (order == Ordering::LT || order == Ordering::LE ||
-        order == Ordering::NE) {
-      result.emplace_back(begin, end);
-    }
-  };
-  auto addEqualRange = [&](auto begin, auto end) {
-    if (order == Ordering::LE || order == Ordering::EQ ||
-        order == Ordering::GE) {
-      result.emplace_back(begin, end);
-    }
-  };
-  auto addGreaterRange = [&](auto begin, auto end) {
-    if (order == Ordering::GE || order == Ordering::GT ||
-        order == Ordering::NE) {
-      result.emplace_back(begin, end);
-    }
-  };
+  auto predicate = ad_utility::Overloaded{pred1, pred2};
+  RangeManager<RandomIt> manager{order};
 
-  if (order == Ordering::NE) {
-    result.emplace_back(firstNan, firstNegative);
-  }
-
+  manager.addNanRange(firstNan, firstNegative);
   if (value > 0) {
     auto [eqBegin, eqEnd] =
         std::equal_range(doubleBegin, firstNan, value, predicate);
-    addEqualRange(eqBegin, eqEnd);
-    addSmallerRange(doubleBegin, eqBegin);
-    addSmallerRange(firstNegative, doubleEnd);
-    addGreaterRange(eqEnd, firstNan);
+    manager.addEqualRange(eqBegin, eqEnd);
+    manager.addSmallerRange(doubleBegin, eqBegin);
+    manager.addSmallerRange(firstNegative, doubleEnd);
+    manager.addGreaterRange(eqEnd, firstNan);
   } else if (value < 0) {
     // The negative range is inverted.
     auto [reverseEnd, reverseBegin] = std::equal_range(
@@ -112,9 +123,9 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getEqualRangeForDouble(
     auto eqBegin = (reverseBegin + 1).base();
     auto eqEnd = (reverseEnd + 1).base();
 
-    addSmallerRange(eqEnd, doubleEnd);
-    addGreaterRange(doubleBegin, firstNan);
-    addGreaterRange(firstNegative, eqBegin);
+    manager.addSmallerRange(eqEnd, doubleEnd);
+    manager.addGreaterRange(doubleBegin, firstNan);
+    manager.addGreaterRange(firstNegative, eqBegin);
   } else if (value == 0) {
     auto positiveEnd =
         std::upper_bound(doubleBegin, firstNegative, 0.0, predicate);
@@ -122,14 +133,14 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getEqualRangeForDouble(
         std::make_reverse_iterator(doubleEnd),
         std::make_reverse_iterator(firstNegative), 0.0, predicate);
     auto negativeEnd = reverseUpper.base();
-    addEqualRange(doubleBegin, positiveEnd);
-    addEqualRange(firstNegative, negativeEnd);
-    addSmallerRange(negativeEnd, doubleEnd);
-    addGreaterRange(positiveEnd, firstNan);
+    manager.addEqualRange(doubleBegin, positiveEnd);
+    manager.addEqualRange(firstNegative, negativeEnd);
+    manager.addSmallerRange(negativeEnd, doubleEnd);
+    manager.addGreaterRange(positiveEnd, firstNan);
   } else {
     AD_CHECK(false);
   }
-  return result;
+  return std::move(manager).getResult();
 }
 
 template <typename RandomIt, typename Value>
@@ -151,50 +162,32 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getEqualRangeForInt(
 
   auto pred1 = [](ValueId id, Value val) { return id.getInt() < val; };
   auto pred2 = [](Value val, ValueId id) { return val < id.getInt(); };
-  auto predicate = ad_utility::overloaded{pred1, pred2};
+  auto predicate = ad_utility::Overloaded{pred1, pred2};
 
   if (std::is_floating_point_v<Value> && std::isnan(value)) {
     // NaNs are non-comparable.
     return {};
   }
 
-  std::vector<std::pair<RandomIt, RandomIt>> result;
-  auto addSmallerRange = [&](auto begin, auto end) {
-    if (order == Ordering::LT || order == Ordering::LE ||
-        order == Ordering::NE) {
-      result.emplace_back(begin, end);
-    }
-  };
-  auto addEqualRange = [&](auto begin, auto end) {
-    if (order == Ordering::LE || order == Ordering::EQ ||
-        order == Ordering::GE) {
-      result.emplace_back(begin, end);
-    }
-  };
-  auto addGreaterRange = [&](auto begin, auto end) {
-    if (order == Ordering::GE || order == Ordering::GT ||
-        order == Ordering::NE) {
-      result.emplace_back(begin, end);
-    }
-  };
+  RangeManager<RandomIt> manager{order};
   if (value >= 0) {
     auto [eqBegin, eqEnd] =
         std::equal_range(intBegin, firstNegative, value, predicate);
-    addEqualRange(eqBegin, eqEnd);
-    addSmallerRange(intBegin, eqBegin);
-    addSmallerRange(firstNegative, intEnd);
-    addGreaterRange(eqEnd, firstNegative);
+    manager.addEqualRange(eqBegin, eqEnd);
+    manager.addSmallerRange(intBegin, eqBegin);
+    manager.addSmallerRange(firstNegative, intEnd);
+    manager.addGreaterRange(eqEnd, firstNegative);
   } else if (value < 0) {
     auto [eqBegin, eqEnd] =
         std::equal_range(firstNegative, intEnd, value, predicate);
-    addEqualRange(eqBegin, eqEnd);
-    addSmallerRange(firstNegative, eqBegin);
-    addGreaterRange(intBegin, firstNegative);
-    addGreaterRange(eqEnd, intEnd);
+    manager.addEqualRange(eqBegin, eqEnd);
+    manager.addSmallerRange(firstNegative, eqBegin);
+    manager.addGreaterRange(intBegin, firstNegative);
+    manager.addGreaterRange(eqEnd, intEnd);
   } else {
     AD_CHECK(false);
   }
-  return result;
+  return std::move(manager).getResult();
 }
 template <typename RandomIt, typename Value>
 // TODO<joka921> `Value` must be double or int64_t
@@ -212,31 +205,13 @@ template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
     RandomIt begin, RandomIt end, ValueId id, Ordering order = Ordering::EQ) {
   std::tie(begin, end) = getRangeForDatatype(begin, end, id.getDatatype());
-  std::vector<std::pair<RandomIt, RandomIt>> result;
-  auto addSmallerRange = [&](auto begin, auto end) {
-    if (order == Ordering::LT || order == Ordering::LE ||
-        order == Ordering::NE) {
-      result.emplace_back(begin, end);
-    }
-  };
-  auto addEqualRange = [&](auto begin, auto end) {
-    if (order == Ordering::LE || order == Ordering::EQ ||
-        order == Ordering::GE) {
-      result.emplace_back(begin, end);
-    }
-  };
-  auto addGreaterRange = [&](auto begin, auto end) {
-    if (order == Ordering::GE || order == Ordering::GT ||
-        order == Ordering::NE) {
-      result.emplace_back(begin, end);
-    }
-  };
 
+  RangeManager<RandomIt> manager {order};
   auto [eqBegin, eqEnd] = std::equal_range(begin, end, id, &compareByBits);
-  addSmallerRange(begin, eqBegin);
-  addEqualRange(eqBegin, eqEnd);
-  addGreaterRange(eqEnd, end);
-  return result;
+  manager.addSmallerRange(begin, eqBegin);
+  manager.addEqualRange(eqBegin, eqEnd);
+  manager.addGreaterRange(eqEnd, end);
+  return std::move(manager).getResult();
 }
 
 }  // namespace detail
