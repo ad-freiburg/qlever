@@ -5,12 +5,13 @@
 #ifndef QLEVER_VALUEID_H
 #define QLEVER_VALUEID_H
 
+#include <bit>
 #include <cstdint>
+#include <functional>
 #include <limits>
 
 #include "../util/BitUtils.h"
 #include "../util/NBitInteger.h"
-#include <bit>
 
 /// The different Datatypes that a `ValueId` (see below) can encode.
 enum struct Datatype {
