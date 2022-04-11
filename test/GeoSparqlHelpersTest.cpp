@@ -41,7 +41,7 @@ TEST(GeoSparqlHelpers, ParseWktPoint) {
   testParseWktPointCorrect("\"POINT(2.0 -1.5)\"", 2.0, -1.5);
   testParseWktPointCorrect("\"PoInT(3   0.0)\"", 3.0, 0.0);
   testParseWktPointCorrect("\"pOiNt(7 -0.0)\"", 7.0, 0.0);
-  testParseWktPointCorrect("\"pOiNt\t(  7 \r -0.0 \n )\"", 7.0, 0.0);
+  testParseWktPointCorrect("\" pOiNt\t(  7 \r -0.0 \n ) \"", 7.0, 0.0);
   testParseWktPointCorrect("\"POINT(2.2945 48.8585)\"", 2.2945, 48.8585);
   testParseWktPointCorrect("\"POINT(7.8529 47.9957)\"", 7.8529, 47.9957);
 

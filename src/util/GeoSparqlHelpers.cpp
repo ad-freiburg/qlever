@@ -21,11 +21,11 @@ namespace ad_utility {
 namespace detail {
 
 static constexpr auto wktPointRegex = ctll::fixed_string(
-    "^\"[Pp][Oo][Ii][Nn][Tt]\\s*\\( *"
+    "^\"\\s*[Pp][Oo][Ii][Nn][Tt]\\s*\\(\\s*"
     "(-?[0-9]+|-?[0-9]+\\.[0-9]+)"
     "\\s+"
     "(-?[0-9+]|-?[0-9]+\\.[0-9]+)"
-    "\\s*\\)\"(\\^\\^|$)");
+    "\\s*\\)\\s*\"(\\^\\^|$)");
 
 static constexpr double invalidCoordinate =
     std::numeric_limits<double>::quiet_NaN();
