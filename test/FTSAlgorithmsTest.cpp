@@ -20,10 +20,10 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
   idRange._first = 5;
   idRange._last = 7;
 
-  vector<Id> blockCids;
-  vector<Id> blockWids;
+  vector<TextBlockIndex> blockCids;
+  vector<WordIndex> blockWids;
   vector<Score> blockScores;
-  vector<Id> resultCids;
+  vector<TextBlockIndex> resultCids;
   vector<Score> resultScores;
 
   // Empty
@@ -32,8 +32,8 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
   ASSERT_EQ(0u, resultCids.size());
 
   // None
-  blockCids.push_back(I(0));
-  blockWids.push_back(I(2));
+  blockCids.push_back(0);
+  blockWids.push_back(2);
   blockScores.push_back(1);
 
   FTSAlgorithms::filterByRange(idRange, blockCids, blockWids, blockScores,
@@ -41,15 +41,15 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
   ASSERT_EQ(0u, resultCids.size());
 
   // Match
-  blockCids.push_back(I(0));
-  blockCids.push_back(I(1));
-  blockCids.push_back(I(2));
-  blockCids.push_back(I(3));
+  blockCids.push_back(0);
+  blockCids.push_back(1);
+  blockCids.push_back(2);
+  blockCids.push_back(3);
 
-  blockWids.push_back(I(5));
-  blockWids.push_back(I(7));
-  blockWids.push_back(I(5));
-  blockWids.push_back(I(6));
+  blockWids.push_back(5);
+  blockWids.push_back(7);
+  blockWids.push_back(5);
+  blockWids.push_back(6);
 
   blockScores.push_back(1);
   blockScores.push_back(1);
@@ -64,8 +64,8 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
   resultCids.clear();
   resultScores.clear();
 
-  blockCids.push_back(I(4));
-  blockWids.push_back(I(8));
+  blockCids.push_back(4);
+  blockWids.push_back(8);
   blockScores.push_back(1);
 
   // Partial
@@ -76,12 +76,12 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
 };
 
 TEST(FTSAlgorithmsTest, intersectTest) {
-  vector<Id> matchingContexts;
+  vector<TextRecordIndex> matchingContexts;
   vector<Score> matchingContextScores;
-  vector<Id> eBlockCids;
+  vector<TextRecordIndex> eBlockCids;
   vector<Id> eBlockWids;
   vector<Score> eBlockScores;
-  vector<Id> resultCids;
+  vector<TextRecordIndex> resultCids;
   vector<Id> resultEids;
   vector<Score> resultScores;
   FTSAlgorithms::intersect(matchingContexts, eBlockCids, eBlockWids,
@@ -89,9 +89,9 @@ TEST(FTSAlgorithmsTest, intersectTest) {
   ASSERT_EQ(0u, resultCids.size());
   ASSERT_EQ(0u, resultScores.size());
 
-  matchingContexts.push_back(I(0));
-  matchingContexts.push_back(I(2));
-  matchingContexts.push_back(I(3));
+  matchingContexts.push_back(0);
+  matchingContexts.push_back(2);
+  matchingContexts.push_back(3);
   matchingContextScores.push_back(1);
   matchingContextScores.push_back(1);
   matchingContextScores.push_back(1);
@@ -101,10 +101,10 @@ TEST(FTSAlgorithmsTest, intersectTest) {
   ASSERT_EQ(0u, resultCids.size());
   ASSERT_EQ(0u, resultScores.size());
 
-  eBlockCids.push_back(I(1));
-  eBlockCids.push_back(I(2));
-  eBlockCids.push_back(I(2));
-  eBlockCids.push_back(I(4));
+  eBlockCids.push_back(1);
+  eBlockCids.push_back(2);
+  eBlockCids.push_back(2);
+  eBlockCids.push_back(4);
   eBlockWids.push_back(I(10));
   eBlockWids.push_back(I(1));
   eBlockWids.push_back(I(1));
@@ -122,19 +122,19 @@ TEST(FTSAlgorithmsTest, intersectTest) {
 };
 
 TEST(FTSAlgorithmsTest, intersectTwoPostingListsTest) {
-  vector<Id> cids1;
+  vector<TextRecordIndex> cids1;
   vector<Score> scores1;
-  vector<Id> cids2;
+  vector<TextRecordIndex> cids2;
   vector<Score> scores2;
-  vector<Id> resCids;
+  vector<TextRecordIndex> resCids;
   vector<Score> resScores;
   FTSAlgorithms::intersectTwoPostingLists(cids1, scores1, cids2, scores2,
                                           resCids, resScores);
   ASSERT_EQ(0u, resCids.size());
   ASSERT_EQ(0u, resScores.size());
 
-  cids1.push_back(I(0));
-  cids1.push_back(I(2));
+  cids1.push_back(0);
+  cids1.push_back(2);
   scores1.push_back(1);
   scores1.push_back(1);
   FTSAlgorithms::intersectTwoPostingLists(cids1, scores1, cids2, scores2,
@@ -142,14 +142,14 @@ TEST(FTSAlgorithmsTest, intersectTwoPostingListsTest) {
   ASSERT_EQ(0u, resCids.size());
   ASSERT_EQ(0u, resScores.size());
 
-  cids2.push_back(I(2));
+  cids2.push_back(2);
   scores2.push_back(1);
   FTSAlgorithms::intersectTwoPostingLists(cids1, scores1, cids2, scores2,
                                           resCids, resScores);
   ASSERT_EQ(1u, resCids.size());
   ASSERT_EQ(1u, resScores.size());
 
-  cids2.push_back(I(4));
+  cids2.push_back(4);
   scores2.push_back(1);
   FTSAlgorithms::intersectTwoPostingLists(cids1, scores1, cids2, scores2,
                                           resCids, resScores);
@@ -158,10 +158,10 @@ TEST(FTSAlgorithmsTest, intersectTwoPostingListsTest) {
 };
 
 TEST(FTSAlgorithmsTest, intersectKWayTest) {
-  vector<vector<Id>> cidVecs;
+  vector<vector<TextRecordIndex>> cidVecs;
   vector<vector<Score>> scoreVecs;
   vector<Id> eids;
-  vector<Id> resCids;
+  vector<TextRecordIndex> resCids;
   vector<Id> resEids;
   vector<Score> resScores;
 
@@ -171,20 +171,20 @@ TEST(FTSAlgorithmsTest, intersectKWayTest) {
   fourScores.push_back(1);
   fourScores.push_back(1);
 
-  vector<Id> cids1;
-  cids1.push_back(I(0));
-  cids1.push_back(I(1));
-  cids1.push_back(I(2));
-  cids1.push_back(I(10));
+  vector<TextRecordIndex> cids1;
+  cids1.push_back(0);
+  cids1.push_back(1);
+  cids1.push_back(2);
+  cids1.push_back(10);
 
   cidVecs.push_back(cids1);
   scoreVecs.push_back(fourScores);
 
-  cids1[2] = I(8);
+  cids1[2] = 8;
   cidVecs.push_back(cids1);
   scoreVecs.push_back(fourScores);
 
-  cids1[1] = I(6);
+  cids1[1] = 6;
   fourScores[3] = 3;
   cidVecs.push_back(cids1);
   scoreVecs.push_back(fourScores);
@@ -206,15 +206,15 @@ TEST(FTSAlgorithmsTest, intersectKWayTest) {
   eids.push_back(I(1));
   eids.push_back(I(2));
 
-  vector<Id> cids2;
+  vector<TextRecordIndex> cids2;
   vector<Score> scores2;
 
-  cids2.push_back(I(1));
-  cids2.push_back(I(1));
-  cids2.push_back(I(3));
-  cids2.push_back(I(4));
-  cids2.push_back(I(10));
-  cids2.push_back(I(10));
+  cids2.push_back(1);
+  cids2.push_back(1);
+  cids2.push_back(3);
+  cids2.push_back(4);
+  cids2.push_back(10);
+  cids2.push_back(10);
 
   scores2.push_back(1);
   scores2.push_back(4);
@@ -231,8 +231,8 @@ TEST(FTSAlgorithmsTest, intersectKWayTest) {
   ASSERT_EQ(2u, resCids.size());
   ASSERT_EQ(2u, resEids.size());
   ASSERT_EQ(2u, resScores.size());
-  ASSERT_EQ(I(10), resCids[0]);
-  ASSERT_EQ(I(10), resCids[1]);
+  ASSERT_EQ(10, resCids[0]);
+  ASSERT_EQ(10, resCids[1]);
   ASSERT_EQ(I(1), resEids[0]);
   ASSERT_EQ(I(2), resEids[1]);
   ASSERT_EQ(6u, resScores[0]);
@@ -243,16 +243,16 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
   try {
     IdTable result{allocator()};
     result.setCols(3);
-    vector<Id> cids;
+    vector<TextRecordIndex> cids;
     vector<Id> eids;
     vector<Score> scores;
 
     FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
     ASSERT_EQ(0u, result.size());
 
-    cids.push_back(I(0));
-    cids.push_back(I(1));
-    cids.push_back(I(2));
+    cids.push_back(0);
+    cids.push_back(1);
+    cids.push_back(2);
 
     eids.push_back(I(0));
     eids.push_back(I(0));
@@ -271,7 +271,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
     ASSERT_EQ(I(0u), result(1, 2));
     ASSERT_EQ(I(3u), result(1, 1));
 
-    cids.push_back(I(4));
+    cids.push_back(4);
     eids.push_back(I(1));
     scores.push_back(1);
 
@@ -295,7 +295,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
 TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   IdTable result{allocator()};
   result.setCols(3);
-  vector<Id> cids;
+  vector<TextRecordIndex> cids;
   vector<Id> eids;
   vector<Score> scores;
   int width = result.cols();
@@ -303,9 +303,9 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
                     eids, scores, &result);
   ASSERT_EQ(0u, result.size());
 
-  cids.push_back(I(0));
-  cids.push_back(I(1));
-  cids.push_back(I(2));
+  cids.push_back(0);
+  cids.push_back(1);
+  cids.push_back(2);
 
   eids.push_back(I(0));
   eids.push_back(I(0));
@@ -322,7 +322,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   ASSERT_EQ(I(3u), result(0, 1));
   ASSERT_EQ(I(0u), result(0, 2));
 
-  cids.push_back(I(3));
+  cids.push_back(3);
   eids.push_back(I(1));
   scores.push_back(1);
 
@@ -338,7 +338,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   ASSERT_EQ(I(1u), result(1, 1));
   ASSERT_EQ(I(1u), result(1, 2));
 
-  cids.push_back(I(4));
+  cids.push_back(4);
   eids.push_back(I(0));
   scores.push_back(10);
 
@@ -362,9 +362,9 @@ TEST(FTSAlgorithmsTest, appendCrossProductWithSingleOtherTest) {
 
   vector<array<Id, 4>> res;
 
-  vector<Id> cids;
-  cids.push_back(I(1));
-  cids.push_back(I(1));
+  vector<TextRecordIndex> cids;
+  cids.push_back(1);
+  cids.push_back(1);
 
   vector<Id> eids;
   eids.push_back(I(0));
@@ -420,9 +420,9 @@ TEST(FTSAlgorithmsTest, appendCrossProductWithTwoW1Test) {
 
   vector<array<Id, 5>> res;
 
-  vector<Id> cids;
-  cids.push_back(I(1));
-  cids.push_back(I(1));
+  vector<TextBlockIndex> cids;
+  cids.push_back(1);
+  cids.push_back(1);
 
   vector<Id> eids;
   eids.push_back(I(0));
@@ -449,7 +449,7 @@ TEST(FTSAlgorithmsTest, appendCrossProductWithTwoW1Test) {
 }
 
 TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
-  vector<Id> cids;
+  vector<TextRecordIndex> cids;
   vector<Id> eids;
   vector<Score> scores;
   size_t nofVars = 2;
@@ -467,12 +467,12 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
                     cids, eids, scores, nofVars, k, &resWV);
   ASSERT_EQ(0u, resWV.size());
 
-  cids.push_back(I(0));
-  cids.push_back(I(1));
-  cids.push_back(I(1));
-  cids.push_back(I(2));
-  cids.push_back(I(2));
-  cids.push_back(I(2));
+  cids.push_back(0);
+  cids.push_back(1);
+  cids.push_back(1);
+  cids.push_back(2);
+  cids.push_back(2);
+  cids.push_back(2);
 
   eids.push_back(I(0));
   eids.push_back(I(0));
@@ -541,7 +541,7 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
 }
 
 TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
-  vector<Id> cids;
+  vector<TextRecordIndex> cids;
   vector<Id> eids;
   vector<Score> scores;
   size_t k = 1;
@@ -554,12 +554,12 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
                     cids, eids, scores, fMap1, k, &resW3);
   ASSERT_EQ(0u, resW3.size());
 
-  cids.push_back(I(0));
-  cids.push_back(I(1));
-  cids.push_back(I(1));
-  cids.push_back(I(2));
-  cids.push_back(I(2));
-  cids.push_back(I(2));
+  cids.push_back(0);
+  cids.push_back(1);
+  cids.push_back(1);
+  cids.push_back(2);
+  cids.push_back(2);
+  cids.push_back(2);
 
   eids.push_back(I(0));
   eids.push_back(I(0));
@@ -637,15 +637,15 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
 
 TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
   try {
-    vector<Id> cids;
+    vector<TextRecordIndex> cids;
     vector<Id> eids;
     vector<Score> scores;
-    cids.push_back(I(0));
-    cids.push_back(I(1));
-    cids.push_back(I(1));
-    cids.push_back(I(2));
-    cids.push_back(I(2));
-    cids.push_back(I(2));
+    cids.push_back(0);
+    cids.push_back(1);
+    cids.push_back(1);
+    cids.push_back(2);
+    cids.push_back(2);
+    cids.push_back(2);
 
     eids.push_back(I(0));
     eids.push_back(I(0));

@@ -437,6 +437,7 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
 
       // For all triple elements find their mapping from partial to global ids.
       for (size_t k = 0; k < 3; ++k) {
+        // TODO<joka921> The Maps should actually store `VocabIndex`es
         auto iterator = idMap.find(curTriple[k]);
         if (iterator == idMap.end()) {
           LOG(INFO) << "Not found in partial vocabulary: " << curTriple[k]
