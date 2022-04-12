@@ -71,7 +71,14 @@ typedef uint16_t Score;
 using ColumnIndex = uint64_t;
 using VocabIndex = uint64_t;
 using LocalVocabIndex = uint64_t;
-using TextVocabIndex = uint64_t;
+using TextRecordIndex = uint64_t;
+
+// TODO<joka921> The following IDs only appear within the text index in the
+// `Index` class, so they should not be public.
+using WordIndex = uint64_t;
+using WordOrEntityIndex = uint64_t;
+using TextBlockIndex = uint64_t;
+using CompressionCode = uint64_t;
 
 // Integers, that are probably not integers but strong IDs or indices, but their
 // true nature is still to be discovered.

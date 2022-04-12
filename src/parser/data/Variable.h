@@ -50,7 +50,7 @@ class Variable {
           stream << idTable(row, index);
           break;
         case ResultTable::ResultType::TEXT:
-          stream << qecIndex.getTextExcerpt(idTable(row, index));
+          stream << qecIndex.getTextExcerpt(idTable(row, index).get());
           break;
         case ResultTable::ResultType::FLOAT: {
           float f;

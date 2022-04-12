@@ -95,8 +95,9 @@ class Index {
  public:
   using TripleVec = stxxl::vector<array<Id, 3>>;
   // Block Id, Context Id, Word Id, Score, entity
-  using TextVec = stxxl::vector<tuple<Id, Id, Id, Score, bool>>;
-  using Posting = std::tuple<Id, Id, Score>;
+  using TextVec = stxxl::vector<
+      tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex, Score, bool>>;
+  using Posting = std::tuple<TextRecordIndex, WordIndex, Score>;
 
   // Forbid copy and assignment
   Index& operator=(const Index&) = delete;
@@ -237,7 +238,7 @@ class Index {
   // --------------------------------------------------------------------------
   // TEXT RETRIEVAL
   // --------------------------------------------------------------------------
-  std::string_view wordIdToString(Id id) const;
+  std::string_view wordIdToString(WordIndex wordIndex) const;
 
   size_t getSizeEstimate(const string& words) const;
 
@@ -262,7 +263,8 @@ class Index {
                                          const IdTable& filter, size_t nofVars,
                                          size_t limit, IdTable* result) const;
 
-  void getContextEntityScoreListsForWords(const string& words, vector<Id>& cids,
+  void getContextEntityScoreListsForWords(const string& words,
+                                          vector<TextRecordIndex>& cids,
                                           vector<Id>& eids,
                                           vector<Score>& scores) const;
 
@@ -283,18 +285,18 @@ class Index {
       const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
       size_t limit, vector<vector<Id>>& res) const;
 
-  void getWordPostingsForTerm(const string& term, vector<Id>& cids,
+  void getWordPostingsForTerm(const string& term, vector<TextRecordIndex>& cids,
                               vector<Score>& scores) const;
 
-  void getEntityPostingsForTerm(const string& term, vector<Id>& cids,
-                                vector<Id>& eids, vector<Score>& scores) const;
+  void getEntityPostingsForTerm(const string& term,
+                                vector<TextRecordIndex>& cids, vector<Id>& eids,
+                                vector<Score>& scores) const;
 
-  string getTextExcerpt(Id cid) const {
-    if (cid == ID_NO_VALUE) {
-      return std::string();
-    } else {
-      return _docsDB.getTextExcerpt(cid.get());
+  string getTextExcerpt(TextRecordIndex cid) const {
+    if (cid >= _docsDB._size) {
+      return "";
     }
+    return _docsDB.getTextExcerpt(cid);
   }
 
   // Only for debug reasons and external encoding tests.
@@ -485,7 +487,7 @@ class Index {
 
   TextMetaData _textMeta;
   DocsDB _docsDB;
-  vector<Id> _blockBoundaries;
+  vector<WordIndex> _blockBoundaries;
   off_t _currentoff_t;
   mutable ad_utility::File _textIndexFile;
 
@@ -619,8 +621,9 @@ class Index {
 
   void openTextFileHandle();
 
-  void addContextToVector(TextVec::bufwriter_type& writer, Id context,
-                          const ad_utility::HashMap<Id, Score>& words,
+  void addContextToVector(TextVec::bufwriter_type& writer,
+                          TextRecordIndex context,
+                          const ad_utility::HashMap<WordIndex, Score>& words,
                           const ad_utility::HashMap<Id, Score>& entities);
 
   template <typename T>
@@ -654,11 +657,11 @@ class Index {
   /// `caluclateBlockBoundariesImpl`.
   void printBlockBoundariesToFile(const string& filename) const;
 
-  Id getWordBlockId(Id wordId) const;
+  TextBlockIndex getWordBlockId(WordIndex wordIndex) const;
 
-  Id getEntityBlockId(Id entityId) const;
+  TextBlockIndex getEntityBlockId(Id entityId) const;
 
-  bool isEntityBlockId(Id blockId) const;
+  bool isEntityBlockId(TextBlockIndex blockIndex) const;
 
   //! Writes a list of elements (have to be able to be cast to unit64_t)
   //! to file.
@@ -667,14 +670,16 @@ class Index {
   size_t writeList(Numeric* data, size_t nofElements,
                    ad_utility::File& file) const;
 
-  typedef ad_utility::HashMap<Id, Id> IdCodeMap;
+  // TODO<joka921> understand what the "codes" are, are they better just ints?
+  typedef ad_utility::HashMap<WordIndex, CompressionCode> WordToCodeMap;
   typedef ad_utility::HashMap<Score, Score> ScoreCodeMap;
-  typedef vector<Id> IdCodebook;
+  typedef vector<CompressionCode> WordCodebook;
   typedef vector<Score> ScoreCodebook;
 
   //! Creates codebooks for lists that are supposed to be entropy encoded.
-  void createCodebooks(const vector<Posting>& postings, IdCodeMap& wordCodemap,
-                       IdCodebook& wordCodebook, ScoreCodeMap& scoreCodemap,
+  void createCodebooks(const vector<Posting>& postings,
+                       WordToCodeMap& wordCodemap, WordCodebook& wordCodebook,
+                       ScoreCodeMap& scoreCodemap,
                        ScoreCodebook& scoreCodebook) const;
 
   template <class T>
