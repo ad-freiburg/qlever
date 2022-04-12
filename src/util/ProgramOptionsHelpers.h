@@ -67,7 +67,7 @@ template <typename Parameters>
 class ParameterToProgramOptionFactory {
  private:
   Parameters* _parameters;
-  static constexpr bool isSynchronized = requires { _parameters->wlock(); };
+  static constexpr bool isSynchronized = requires(Parameters p) { p.wlock(); };
 
  public:
   // Construct from a pointer to `ad_utility::Parameters`

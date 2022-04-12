@@ -4,6 +4,7 @@
 
 #include <getopt.h>
 
+#include <boost/program_options.hpp>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -15,6 +16,7 @@
 
 #include "../global/Constants.h"
 #include "../util/File.h"
+#include "../util/ProgramOptionsHelpers.h"
 #include "../util/ReadableNumberFact.h"
 #include "../util/StringUtils.h"
 #include "./ConstantsIndexBuilding.h"
@@ -26,27 +28,10 @@ using std::endl;
 using std::flush;
 using std::string;
 
+namespace po = boost::program_options;
+
 #define EMPH_ON "\033[1m"
 #define EMPH_OFF "\033[22m"
-
-// Available options.
-struct option options[] = {
-    {"docs-by-contexts", required_argument, NULL, 'd'},
-    {"help", no_argument, NULL, 'h'},
-    {"index-basename", required_argument, NULL, 'i'},
-    {"file-format", required_argument, NULL, 'F'},
-    {"knowledge-base-input-file", required_argument, NULL, 'f'},
-    {"kb-index-name", required_argument, NULL, 'K'},
-    {"on-disk-literals", no_argument, NULL, 'l'},
-    {"no-patterns", no_argument, NULL, 'P'},
-    {"text-index-name", required_argument, NULL, 'T'},
-    {"words-by-contexts", required_argument, NULL, 'w'},
-    {"add-text-index", no_argument, NULL, 'A'},
-    {"keep-temporary-files", no_argument, NULL, 'k'},
-    {"settings-file", required_argument, NULL, 's'},
-    {"no-compressed-vocabulary", no_argument, NULL, 'N'},
-    {"only-pso-and-pos-permutations", no_argument, NULL, 'o'},
-    {NULL, 0, NULL, 0}};
 
 string getStxxlConfigFileName(const string& location) {
   std::ostringstream os;
@@ -77,74 +62,6 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
   stxxlConfig.writeLine(std::move(config).str());
 }
 
-void printUsage(char* execName) {
-  std::ios cerrState(nullptr);
-  cerrState.copyfmt(cerr);
-  cerr << std::setfill(' ') << std::left;
-
-  cerr << "Usage: " << execName << " -i <index> [OPTIONS]" << endl << endl;
-  cerr << "Options" << endl;
-  cerr << "  " << std::setw(20) << "d, docs-by-contexts" << std::setw(1)
-       << "    "
-       << "docs-file to build text index from." << endl;
-  cerr << "  " << std::setw(20) << "h, help" << std::setw(1) << "    "
-       << "Print this help and exit." << endl;
-  cerr << "  " << std::setw(20) << "i, index-basename" << std::setw(1) << "    "
-       << "(designated) name and path of the index to build." << endl;
-
-  cerr << "  " << std::setw(20) << "F, file-format" << std::setw(1) << "    "
-       << " Specify format of the input file. Must be one of "
-          "[tsv|nt|ttl|mmap]."
-       << " " << std::setw(36)
-       << "If not set, we will try to deduce from the filename" << endl
-       << " " << std::setw(36)
-       << "(mmap assumes an on-disk turtle file that can be mmapped to memory)"
-       << endl;
-  cerr << "  " << std::setw(20) << "f, knowledge-base-input-file"
-       << std::setw(1) << "    "
-       << " The file to be parsed from. If omitted, we will read from stdin"
-       << endl;
-  cerr << "  " << std::setw(20) << "K, kb-index-name" << std::setw(1) << "    "
-       << "Assign a name to be displayed in the UI (default: name of nt-file)"
-       << endl;
-  cerr << "  " << std::setw(20) << "l, on-disk-literals" << std::setw(1)
-       << "    "
-       << "Externalize parts of the KB vocab." << endl;
-  cerr << "  " << std::setw(20) << "n, ntriples-file" << std::setw(1) << "    "
-       << "NT file to build KB index from." << endl;
-  cerr << "  " << std::setw(20) << "no-patterns" << std::setw(1) << "    "
-       << "Disable the use of patterns. This disables ql:has-predicate."
-       << endl;
-  cerr << "  " << std::setw(20) << "T, text-index-name" << std::setw(1)
-       << "    "
-       << "Assign a name to be displayed in the UI "
-          "(default: name of words-file)."
-       << endl;
-  cerr << "  " << std::setw(20) << "w, words-by-contexts" << std::setw(1)
-       << "    "
-       << "words-file to build text index from." << endl;
-  cerr << "  " << std::setw(20) << "A, add-text-index" << std::setw(1) << "    "
-       << "Add text index to already existing kb-index" << endl;
-  cerr
-      << "  " << std::setw(20) << "k, keep-temporary-files" << std::setw(1)
-      << "    "
-      << "Keep Temporary Files from IndexCreation (normally only for debugging)"
-      << endl;
-  cerr << "  " << std::setw(20) << "s, settings-file" << std::setw(1) << "    "
-       << "Specify a input settings file where prefixes that are to be "
-          "externalized etc can be specified"
-       << endl;
-  cerr << "  " << std::setw(20) << "N, no-compressed-vocabulary" << std::setw(1)
-       << "    "
-       << "Do NOT use prefix compression on the vocabulary (default is to "
-          "compress)."
-       << endl;
-  cerr << "  " << std::setw(20) << "o, only-pos-and-pso-permutations"
-       << std::setw(1) << "    "
-       << "Only load PSO and POS permutations" << endl;
-  cerr.copyfmt(cerrState);
-}
-
 // Main function.
 int main(int argc, char** argv) {
   setlocale(LC_CTYPE, "");
@@ -162,91 +79,82 @@ int main(int argc, char** argv) {
   string settingsFile;
   string filetype;
   string inputFile;
-  bool useCompression = true;
+  bool noCompression = false;
   bool onDiskLiterals = false;
-  bool usePatterns = true;
+  bool noPatterns = false;
   bool onlyAddTextIndex = false;
   bool keepTemporaryFiles = false;
-  bool loadAllPermutations = true;
+  bool onlyTwoPermutations = false;
+
   optind = 1;
   // Process command line arguments.
-  while (true) {
-    int c = getopt_long(argc, argv, "F:f:i:w:d:lT:K:hAks:No", options, nullptr);
-    if (c == -1) {
-      break;
+
+  Index index;
+  ad_utility::ParameterToProgramOptionFactory optionFactor{
+      &index.getIndexBuilderParameters()};
+  po::options_description opts("Options for IndexBuilderMain");
+  auto add = [&opts]<typename... Args>(Args && ... args) {
+    opts.add_options()(std::forward<Args>(args)...);
+  };
+  add("help,h", "Produce this help message.");
+  add("docs-by-contexts,d", po::value(&docsfile),
+      "docs-file to build text index from");
+  add("index-basename,i", po::value(&baseName)->required(),
+      "(designated) name and path of the index to build.");
+  add("file-format,F", po::value(&filetype),
+      " Specify format of the input file. Must be one of [ttl|mmap]. If not "
+      "set, we will try to deduce from the filename (mmap assumes an on-disk "
+      "turtle file that can be mmapped to memory)");
+  add("knowledge-base-input-file,f", po::value(&inputFile)->required(),
+      " The file to be parsed from. If omitted, we will read from stdin");
+  add("kb-index-name,K", po::value(&kbIndexName),
+      "Assign a name to be displayed in the UI (default: name of nt-file)");
+  add("on-disk-literals,l", po::bool_switch(&onDiskLiterals),
+      "Externalize parts of the KB vocab.");
+  add("no-patterns", po::bool_switch(&noPatterns),
+      "Disable the use of patterns. This disables ql:has-predicate.");
+  add("text-index-name,T", po::value(&textIndexName),
+      "Assign a name to be displayed in the UI "
+      "(default: name of words-file).");
+  add("words-by-contexts,w", po::value(&wordsfile),
+      "words-file to build text index from.");
+  add("add-text-index,A", po::bool_switch(&onlyAddTextIndex),
+      "Add text index to already existing kb-index");
+  add("keep-temporary-files,k", po::bool_switch(&keepTemporaryFiles),
+      "Keep Temporary Files from IndexCreation (normally only for debugging)");
+  add("settings-file,s", po::value(&settingsFile),
+      "Specify a input settings file where prefixes that are to be "
+      "externalized etc can be specified");
+  add("no-compressed-vocabulary,N", po::bool_switch(&noCompression),
+      "Do NOT use prefix compression on the vocabulary (default is to "
+      "compress).");
+  add("only-pos-and-pso-permutations,o", po::bool_switch(&onlyTwoPermutations),
+      "Only load PSO and POS permutations");
+  po::variables_map optionsMap;
+
+  try {
+    po::store(po::parse_command_line(argc, argv, opts), optionsMap);
+
+    if (optionsMap.count("help")) {
+      std::cout << opts << '\n';
+      return EXIT_SUCCESS;
     }
-    switch (c) {
-      case 'h':
-        printUsage(argv[0]);
-        return 0;
-        break;
-      case 'i':
-        baseName = optarg;
-        break;
-      case 'w':
-        wordsfile = optarg;
-        break;
-      case 'd':
-        docsfile = optarg;
-        break;
-      case 'l':
-        onDiskLiterals = true;
-        break;
-      case 'T':
-        textIndexName = optarg;
-        break;
-      case 'K':
-        kbIndexName = optarg;
-        break;
-      case 'P':
-        usePatterns = false;
-        break;
-      case 'A':
-        onlyAddTextIndex = true;
-        break;
-      case 'k':
-        keepTemporaryFiles = true;
-        break;
-      case 's':
-        settingsFile = optarg;
-        break;
-      case 'F':
-        filetype = optarg;
-        break;
-      case 'f':
-        inputFile = optarg;
-        break;
-      case 'N':
-        useCompression = false;
-        break;
-      case 'o':
-        loadAllPermutations = false;
-        break;
-      default:
-        cerr << endl
-             << "! ERROR in processing options (getopt returned '" << c
-             << "' = 0x" << std::setbase(16) << c << ")" << endl
-             << "Corresponding ascii option : -" << std::string(1, c) << endl
-             << "This is either an unsupported option or there was an error"
-             << endl;
-        exit(1);
-    }
+
+    po::notify(optionsMap);
+  } catch (const std::exception& e) {
+    std::cerr << "Error in command-line Argument: " << e.what() << '\n';
+    std::cerr << opts << '\n';
+    return EXIT_FAILURE;
   }
 
-  if (textIndexName.size() == 0 && wordsfile.size() > 0) {
+  if (textIndexName.empty() && !wordsfile.empty()) {
     textIndexName = ad_utility::getLastPartOfString(wordsfile, '/');
   }
 
-  if (kbIndexName.size() == 0) {
+  if (kbIndexName.empty()) {
     if (!inputFile.empty()) {
       kbIndexName = ad_utility::getLastPartOfString(inputFile, '/');
     }
-  }
-
-  if (baseName.size() == 0) {
-    std::cerr << "Missing required argument --index-basename (-i)..." << endl;
-    printUsage(argv[0]);
-    exit(1);
   }
 
   LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on " << __DATE__ << " "
@@ -264,13 +172,13 @@ int main(int argc, char** argv) {
     Index index;
     index.setKbName(kbIndexName);
     index.setTextName(textIndexName);
-    index.setUsePatterns(usePatterns);
+    index.setUsePatterns(!noPatterns);
     index.setOnDiskLiterals(onDiskLiterals);
     index.setOnDiskBase(baseName);
     index.set<"keep-temp-files">(keepTemporaryFiles);
     index.set<"settings-filename">(settingsFile);
-    index.setPrefixCompression(useCompression);
-    index.setLoadAllPermutations(loadAllPermutations);
+    index.setPrefixCompression(!noCompression);
+    index.setLoadAllPermutations(!onlyTwoPermutations);
     // NOTE: If `onlyAddTextIndex` is true, we do not want to construct an
     // index, but we assume that it already exists. In particular, we then need
     // the vocabulary from the KB index for building the text index.
@@ -322,16 +230,16 @@ int main(int argc, char** argv) {
         index.createFromFile<TurtleMmapParser<Tokenizer>>(inputFile);
       } else {
         LOG(ERROR) << "File format must be one of: nt ttl mmap" << std::endl;
-        printUsage(argv[0]);
+        std::cerr << opts;
         exit(1);
       }
     }
 
-    if (wordsfile.size() > 0) {
+    if (!wordsfile.empty()) {
       index.addTextFromContextFile(wordsfile);
     }
 
-    if (docsfile.size() > 0) {
+    if (!docsfile.empty() > 0) {
       index.buildDocsDB(docsfile);
     }
     std::remove(stxxlFileName.c_str());

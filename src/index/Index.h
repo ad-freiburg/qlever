@@ -336,6 +336,8 @@ class Index {
     return _indexBuilderParameters.get<Name>();
   }
 
+  auto& getIndexBuilderParameters() { return _indexBuilderParameters; }
+
   const string& getTextName() const { return _textMeta.getName(); }
 
   const string& getKbName() const { return _PSO.metaData().getName(); }

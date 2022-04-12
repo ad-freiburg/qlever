@@ -228,7 +228,7 @@ configure_file(src/web/script.js script.js)
 
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
-target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
 
 add_executable(CreatePatternsMain src/index/CreatePatternsMain.cpp src/util/ConstexprSmallString.h)
 target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
