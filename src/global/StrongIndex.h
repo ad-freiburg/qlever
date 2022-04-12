@@ -17,14 +17,14 @@ struct StrongIndex {
   Type _data;
 
  public:
-  static StrongIndex make(Type id) noexcept { return {id}; }
-  [[nodiscard]] const Type& get() const noexcept { return _data; }
-  Type& get() noexcept { return _data; }
+  static constexpr StrongIndex make(Type id) noexcept { return {id}; }
+  [[nodiscard]] constexpr const Type& get() const noexcept { return _data; }
+  constexpr Type& get() noexcept { return _data; }
 
-  StrongIndex() = default;
+  constexpr StrongIndex() = default;
 
-  bool operator==(const StrongIndex&) const = default;
-  auto operator<=>(const StrongIndex&) const = default;
+  constexpr bool operator==(const StrongIndex&) const = default;
+  constexpr auto operator<=>(const StrongIndex&) const = default;
 
   static constexpr StrongIndex max() {
     return {std::numeric_limits<Type>::max()};
@@ -38,7 +38,7 @@ struct StrongIndex {
     return *this;
   }
 
-  StrongIndex operator++(int) {
+  const StrongIndex operator++(int) {
     StrongIndex copy = *this;
     ++_data;
     return copy;
@@ -49,7 +49,7 @@ struct StrongIndex {
     return *this;
   }
 
-  StrongIndex operator--(int) {
+  const StrongIndex operator--(int) {
     StrongIndex copy = *this;
     --_data;
     return copy;
