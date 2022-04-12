@@ -222,8 +222,6 @@ add_subdirectory(src/util)
 enable_testing()
 add_subdirectory(test)
 
-
-
 configure_file(src/web/index.html index.html)
 configure_file(src/web/style.css style.css)
 configure_file(src/web/script.js script.js)
