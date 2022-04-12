@@ -52,7 +52,7 @@ class IteratorForAccessOperator {
   IteratorForAccessOperator(RandomAccessContainerPtr vec, index_type index)
       : _vector{vec}, _index{index} {}
 
-  // Comparisons
+  // Comparison
   auto operator<=>(const IteratorForAccessOperator& rhs) const {
     return (_index <=> rhs._index);
   }

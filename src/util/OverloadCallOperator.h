@@ -2,8 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_OVERLOADED_H
-#define QLEVER_OVERLOADED_H
+#ifndef QLEVER_OVERLOADCALLOPERATOR_H
+#define QLEVER_OVERLOADCALLOPERATOR_H
 
 namespace ad_utility {
 /**
@@ -14,19 +14,19 @@ namespace ad_utility {
  * `global/ValueIdComparators.h`)
  *
  * @example:
- * auto overloaded = Overloaded{[](double d) {return "double";},
+ * auto overloaded = OverloadCallOperator{[](double d) {return "double";},
  *                              [](std::string s) {return "string";}};
  * overloaded(2.4); // returns "double"
  * overloaded("hello"); // returns "string"
  */
 template <class... Ts>
-struct Overloaded : Ts... {
+struct OverloadCallOperator : Ts... {
   using Ts::operator()...;
 };
 // Explicit deduction guide (not needed as of C++20, but clang 13 still needs
 // it).
 template <class... Ts>
-Overloaded(Ts...) -> Overloaded<Ts...>;
+OverloadCallOperator(Ts...) -> OverloadCallOperator<Ts...>;
 }  // namespace ad_utility
 
-#endif  // QLEVER_OVERLOADED_H
+#endif  // QLEVER_OVERLOADCALLOPERATOR_H

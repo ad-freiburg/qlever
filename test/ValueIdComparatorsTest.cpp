@@ -55,7 +55,7 @@ std::vector<ValueId> makeAndSortIds() {
 TEST(ValueIdComparators, Int) {
   auto ids = makeAndSortIds();
   auto ranges = getRangesForId(ids.begin(), ids.end(), ValueId::makeFromInt(42),
-                               Ordering::EQ);
+                               Comparison::EQ);
   ASSERT_EQ(ranges.size(), 2ul);
   ASSERT_EQ(ranges[0].second - ranges[0].first, 1u);
   ASSERT_EQ(ranges[0].first->getDatatype(), Datatype::Int);
