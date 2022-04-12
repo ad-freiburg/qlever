@@ -503,8 +503,8 @@ void Index::calculateBlockBoundariesImpl(
     }
   };
 
-  auto getLengthAndPrefixSortKey = [&](size_t i) {
-    auto word = index._textVocab[VocabIndex::make(i)].value();
+  auto getLengthAndPrefixSortKey = [&](VocabIndex i) {
+    auto word = index._textVocab[i].value();
     auto [len, prefixSortKey] =
         locManager.getPrefixSortKey(word, MIN_WORD_PREFIX_SIZE);
     if (len > MIN_WORD_PREFIX_SIZE) {
@@ -517,12 +517,14 @@ void Index::calculateBlockBoundariesImpl(
     adjustPrefixSortKey(prefixSortKey, len);
     return std::tuple{std::move(len), std::move(prefixSortKey)};
   };
-  auto [currentLen, prefixSortKey] = getLengthAndPrefixSortKey(0);
+  auto [currentLen, prefixSortKey] =
+      getLengthAndPrefixSortKey(VocabIndex::make(0));
   for (size_t i = 0; i < index._textVocab.size() - 1; ++i) {
     // we need foo.value().get() because the vocab returns
     // a std::optional<std::reference_wrapper<string>> and the "." currently
     // doesn't implicitly convert to a true reference (unlike function calls)
-    const auto& [nextLen, nextPrefixSortKey] = getLengthAndPrefixSortKey(i + 1);
+    const auto& [nextLen, nextPrefixSortKey] =
+        getLengthAndPrefixSortKey(VocabIndex::make(i + 1));
 
     bool tooShortButNotEqual =
         (currentLen < MIN_WORD_PREFIX_SIZE || nextLen < MIN_WORD_PREFIX_SIZE) &&

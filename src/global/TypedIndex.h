@@ -33,26 +33,12 @@ struct TypedIndex {
     return {std::numeric_limits<Type>::min()};
   }
 
-  TypedIndex& operator++() {
-    ++_value;
-    return *this;
+  [[nodiscard]] constexpr TypedIndex decremented() const {
+    return {_value - 1};
   }
 
-  const TypedIndex operator++(int) {
-    TypedIndex copy = *this;
-    ++_value;
-    return copy;
-  }
-
-  TypedIndex& operator--() {
-    --_value;
-    return *this;
-  }
-
-  const TypedIndex operator--(int) {
-    TypedIndex copy = *this;
-    --_value;
-    return copy;
+  [[nodiscard]] constexpr TypedIndex incremented() const {
+    return {_value + 1};
   }
 
   template <typename H>
@@ -72,7 +58,7 @@ struct TypedIndex {
   }
 
  private:
-  constexpr TypedIndex(Type data) noexcept : _value{data} {}
+  constexpr TypedIndex(Type value) noexcept : _value{value} {}
 };
 }  // namespace ad_utility
 

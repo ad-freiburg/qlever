@@ -180,7 +180,7 @@ bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
   auto prefixRange = prefix_range(word.substr(0, word.size() - 1));
   bool success = prefixRange.second > prefixRange.first;
   range->_first = prefixRange.first;
-  range->_last = --prefixRange.second;
+  range->_last = prefixRange.second.decremented();
 
   if (success) {
     AD_CHECK_LT(range->_first.get(), _internalVocabulary.size());
@@ -296,18 +296,16 @@ void Vocabulary<S, C>::printRangesForDatatypes() {
     LOG(INFO) << range.first << " " << range.second << '\n';
     if (range.second > range.first) {
       LOG(INFO) << indexToOptionalString(range.first).value() << '\n';
-      auto previous = range.second;
-      --previous;
-      LOG(INFO) << indexToOptionalString(previous).value() << '\n';
+      LOG(INFO) << indexToOptionalString(range.second.decremented()).value()
+                << '\n';
     }
     if (range.second.get() < _internalVocabulary.size()) {
       LOG(INFO) << indexToOptionalString(range.second).value() << '\n';
     }
 
     if (range.first.get() > 0) {
-      auto previous = range.first;
-      --previous;
-      LOG(INFO) << indexToOptionalString(previous).value() << '\n';
+      LOG(INFO) << indexToOptionalString(range.first.decremented()).value()
+                << '\n';
     }
   };
 

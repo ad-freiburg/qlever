@@ -7,7 +7,7 @@
 
 #include "./TypedIndex.h"
 
-// Typedefs for several strong index types that are used across QLever
+// Typedefs for several kinds of typed indices that are used across QLever.
 using VocabIndex = ad_utility::TypedIndex<uint64_t, "VocabIndex">;
 using LocalVocabIndex = ad_utility::TypedIndex<uint64_t, "LocalVocabIndex">;
 using TextRecordIndex = ad_utility::TypedIndex<uint64_t, "TextRecordIndex">;
