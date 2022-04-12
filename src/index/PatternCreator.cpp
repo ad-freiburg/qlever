@@ -8,7 +8,7 @@
 void PatternCreator::processTriple(std::array<Id, 3> triple) {
   if (!_currentSubjectIndex.has_value()) {
     // This is the first triple
-    _currentSubjectIndex->get() = triple[0].get();
+    _currentSubjectIndex = VocabIndex::make(triple[0].get());
   } else if (triple[0].get() != _currentSubjectIndex->get()) {
     // New subject.
     finishSubject(_currentSubjectIndex.value(), _currentPattern);
