@@ -8,11 +8,11 @@
 void PatternCreator::processTriple(std::array<Id, 3> triple) {
   if (!_currentSubjectIndex.has_value()) {
     // This is the first triple
-    _currentSubjectIndex = triple[0].get();
-  } else if (triple[0].get() != _currentSubjectIndex) {
+    _currentSubjectIndex->get() = triple[0].get();
+  } else if (triple[0].get() != _currentSubjectIndex->get()) {
     // New subject.
     finishSubject(_currentSubjectIndex.value(), _currentPattern);
-    _currentSubjectIndex = triple[0].get();
+    _currentSubjectIndex->get() = triple[0].get();
     _currentPattern.clear();
   }
   // Don't list predicates twice in the same pattern.

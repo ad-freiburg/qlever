@@ -160,7 +160,7 @@ class Vocabulary {
   VocabIndex getValueIdForLE(const string& indexWord,
                              const SortLevel level) const {
     VocabIndex lb = upper_bound(indexWord, level);
-    if (lb > 0) {
+    if (lb.get() > 0) {
       // We actually retrieved the first word that is bigger than our entry.
       // TODO<joka921>: What to do, if the 0th entry is already too big?
       --lb;

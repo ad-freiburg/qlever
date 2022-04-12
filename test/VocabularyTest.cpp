@@ -21,9 +21,9 @@ TEST(VocabularyTest, getIdForWordTest) {
     v.createFromSet(s);
     VocabIndex idx;
     ASSERT_TRUE(v.getId("ba", &idx));
-    ASSERT_EQ(2u, idx);
+    ASSERT_EQ(2u, idx.get());
     ASSERT_TRUE(v.getId("a", &idx));
-    ASSERT_EQ(0u, idx);
+    ASSERT_EQ(0u, idx.get());
     ASSERT_FALSE(v.getId("foo", &idx));
   }
 
@@ -34,9 +34,9 @@ TEST(VocabularyTest, getIdForWordTest) {
   voc.createFromSet(s2);
   VocabIndex idx;
   ASSERT_TRUE(voc.getId("Ba", &idx));
-  ASSERT_EQ(2u, idx);
+  ASSERT_EQ(2u, idx.get());
   ASSERT_TRUE(voc.getId("a", &idx));
-  ASSERT_EQ(0u, idx);
+  ASSERT_EQ(0u, idx.get());
   // getId only gets exact matches;
   ASSERT_FALSE(voc.getId("ba", &idx));
 };
@@ -47,27 +47,27 @@ TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
                                 "wordB4"};
   v.createFromSet(s);
 
-  VocabIndex word0 = 0;
+  uint64_t word0 = 0;
   IdRange retVal;
   // Match exactly one
   ASSERT_TRUE(v.getIdRangeForFullTextPrefix("wordA1*", &retVal));
-  ASSERT_EQ(word0 + 1, retVal._first);
-  ASSERT_EQ(word0 + 1, retVal._last);
+  ASSERT_EQ(word0 + 1, retVal._first.get());
+  ASSERT_EQ(word0 + 1, retVal._last.get());
 
   // Match all
   ASSERT_TRUE(v.getIdRangeForFullTextPrefix("word*", &retVal));
-  ASSERT_EQ(word0, retVal._first);
-  ASSERT_EQ(word0 + 4, retVal._last);
+  ASSERT_EQ(word0, retVal._first.get());
+  ASSERT_EQ(word0 + 4, retVal._last.get());
 
   // Match first two
   ASSERT_TRUE(v.getIdRangeForFullTextPrefix("wordA*", &retVal));
-  ASSERT_EQ(word0, retVal._first);
-  ASSERT_EQ(word0 + 1, retVal._last);
+  ASSERT_EQ(word0, retVal._first.get());
+  ASSERT_EQ(word0 + 1, retVal._last.get());
 
   // Match last three
   ASSERT_TRUE(v.getIdRangeForFullTextPrefix("wordB*", &retVal));
-  ASSERT_EQ(word0 + 2, retVal._first);
-  ASSERT_EQ(word0 + 4, retVal._last);
+  ASSERT_EQ(word0 + 2, retVal._first.get());
+  ASSERT_EQ(word0 + 4, retVal._last.get());
 
   ASSERT_FALSE(v.getIdRangeForFullTextPrefix("foo*", &retVal));
 }
@@ -99,9 +99,9 @@ TEST(VocabularyTest, createFromSetTest) {
   v.createFromSet(s);
   VocabIndex idx;
   ASSERT_TRUE(v.getId("ba", &idx));
-  ASSERT_EQ(2u, idx);
+  ASSERT_EQ(2u, idx.get());
   ASSERT_TRUE(v.getId("a", &idx));
-  ASSERT_EQ(0u, idx);
+  ASSERT_EQ(0u, idx.get());
   ASSERT_FALSE(v.getId("foo", &idx));
 };
 
@@ -123,6 +123,6 @@ TEST(Vocabulary, PrefixFilter) {
   voc.createFromSet(s);
 
   auto x = voc.prefix_range("\"exp");
-  ASSERT_EQ(x.first, 1u);
-  ASSERT_EQ(x.second, 2u);
+  ASSERT_EQ(x.first.get(), 1u);
+  ASSERT_EQ(x.second.get(), 2u);
 }

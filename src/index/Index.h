@@ -199,19 +199,19 @@ class Index {
     if (id == ID_NO_VALUE) {
       return std::nullopt;
     }
-    return _vocab.indexToOptionalString(id.get());
+    return _vocab.indexToOptionalString(VocabIndex::make(id.get()));
   }
 
   bool getId(const string& element, Id* id) const {
     VocabIndex vocabId;
     auto success = getVocab().getId(element, &vocabId);
-    *id = Id::make(vocabId);
+    *id = Id::make(vocabId.get());
     return success;
   }
 
   std::pair<Id, Id> prefix_range(const std::string& prefix) const {
     auto [begin, end] = _vocab.prefix_range(prefix);
-    return {Id::make(begin), Id::make(end)};
+    return {Id::make(begin.get()), Id::make(end.get())};
   }
 
   const vector<PatternID>& getHasPattern() const;
@@ -293,7 +293,7 @@ class Index {
                                 vector<Score>& scores) const;
 
   string getTextExcerpt(TextRecordIndex cid) const {
-    if (cid >= _docsDB._size) {
+    if (cid.get() >= _docsDB._size) {
       return "";
     }
     return _docsDB.getTextExcerpt(cid);

@@ -65,11 +65,11 @@ struct SortText {
   }
 
   // min sentinel = value which is strictly smaller that any input element
-  static T min_value() { return {0, 0, 0, 0, false}; }
+  static T min_value() { return {0, TextRecordIndex::min(), 0, 0, false}; }
 
   // max sentinel = value which is strictly larger that any input element
   static T max_value() {
     Score maxScore = std::numeric_limits<Score>::max();
-    return {maxScore, maxScore, maxScore, maxScore, true};
+    return {maxScore, TextRecordIndex::max(), maxScore, maxScore, true};
   }
 };

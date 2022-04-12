@@ -91,7 +91,8 @@ string StringValueGetter::operator()(StrongIdWithResultType strongId,
       std::memcpy(&tempF, &id, sizeof(float));
       return std::to_string(tempF);
     case ResultTable::ResultType::TEXT:
-      return context->_qec.getIndex().getTextExcerpt(id.get());
+      return context->_qec.getIndex().getTextExcerpt(
+          TextRecordIndex::make(id.get()));
     case ResultTable::ResultType::LOCAL_VOCAB:
       AD_CHECK(id.get() < context->_localVocab.size());
       return context->_localVocab[id.get()];

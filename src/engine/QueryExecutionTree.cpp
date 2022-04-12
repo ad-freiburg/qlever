@@ -302,7 +302,9 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
     case ResultTable::ResultType::VERBATIM:
       return std::pair{std::to_string(id.get()), XSD_INT_TYPE};
     case ResultTable::ResultType::TEXT:
-      return std::pair{_qec->getIndex().getTextExcerpt(id.get()), nullptr};
+      return std::pair{
+          _qec->getIndex().getTextExcerpt(TextRecordIndex::make(id.get())),
+          nullptr};
     case ResultTable::ResultType::FLOAT: {
       float f;
       // TODO<LLVM 14> std::bit_cast
@@ -312,7 +314,8 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
       return std::pair{std::move(s).str(), XSD_DECIMAL_TYPE};
     }
     case ResultTable::ResultType::LOCAL_VOCAB: {
-      auto optionalString = resultTable.indexToOptionalString(id.get());
+      auto optionalString =
+          resultTable.indexToOptionalString(LocalVocabIndex::make(id.get()));
       if (!optionalString.has_value()) {
         return std::nullopt;
       }
@@ -423,7 +426,7 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
             break;
           case ResultTable::ResultType::TEXT:
             co_yield _qec->getIndex().getTextExcerpt(
-                idTable(i, val._columnIndex).get());
+                TextRecordIndex::make(idTable(i, val._columnIndex).get()));
             break;
           case ResultTable::ResultType::FLOAT: {
             float f;
@@ -433,7 +436,8 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
           }
           case ResultTable::ResultType::LOCAL_VOCAB: {
             co_yield resultTable
-                ->indexToOptionalString(idTable(i, val._columnIndex).get())
+                ->indexToOptionalString(
+                    LocalVocabIndex::make(idTable(i, val._columnIndex).get()))
                 .value_or("");
             break;
           }
