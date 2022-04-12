@@ -17,7 +17,7 @@ namespace ad_utility {
 class NonNegative {
  public:
   operator size_t() { return _value; }
-  NonNegative(size_t value) : _value{value} {}
+  explicit NonNegative(size_t value) : _value{value} {}
   NonNegative() = default;
 
  private:

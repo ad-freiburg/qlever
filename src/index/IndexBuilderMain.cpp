@@ -4,7 +4,6 @@
 
 #include <getopt.h>
 
-#include <boost/program_options.hpp>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -22,6 +21,7 @@
 #include "./ConstantsIndexBuilding.h"
 #include "./Index.h"
 
+#include <boost/program_options.hpp>
 using std::cerr;
 using std::cout;
 using std::endl;
