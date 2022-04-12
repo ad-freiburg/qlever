@@ -18,7 +18,7 @@ endfunction()
 # Then run `gtest_discover_tests` to add the tests cases from the executable.
 # Typically you should use `addAndLinkTest` (below) but this function can be used,
 # if a test binary requires multiple sources
-function(linkAndDiscoverTest basename )
+function(linkAndDiscoverTest basename)
     linkTest(${basename} ${ARGN})
     gtest_discover_tests(${basename} ${basename})
 endfunction()
@@ -51,8 +51,6 @@ addLinkAndDiscoverTest(ConcurrentCacheTest absl::flat_hash_map)
 addLinkAndDiscoverTest(FileTest)
 
 addLinkAndDiscoverTest(Simple8bTest)
-
-addLinkAndDiscoverTest(TsvParserTest parser)
 
 addLinkAndDiscoverTest(ContextFileParserTest parser ${ICU_LIBRARIES})
 
@@ -183,4 +181,10 @@ addLinkAndDiscoverTest(BitUtilsTest)
 
 addLinkAndDiscoverTest(NBitIntegerTest)
 
+addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
+
 addLinkAndDiscoverTest(DateTest)
+
+addLinkAndDiscoverTest(TripleObjectTest absl::strings)
+
+addLinkAndDiscoverTest(ValueIdTest absl::flat_hash_set)

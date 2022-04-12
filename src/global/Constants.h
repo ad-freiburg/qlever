@@ -52,6 +52,8 @@ static const char VALUE_FLOAT_PREFIX[] = ":v:float:";
 static const char XSD_DATETIME_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#dateTime";
 static const char XSD_INT_TYPE[] = "http://www.w3.org/2001/XMLSchema#int";
+static const char XSD_INTEGER_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#integer";
 static const char XSD_FLOAT_TYPE[] = "http://www.w3.org/2001/XMLSchema#float";
 static const char XSD_DOUBLE_TYPE[] = "http://www.w3.org/2001/XMLSchema#double";
 static const char XSD_DECIMAL_TYPE[] =

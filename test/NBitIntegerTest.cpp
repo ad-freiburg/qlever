@@ -31,8 +31,13 @@ auto testFromTo = []<size_t N>(int64_t x) {
 
 auto testMinMax = []<size_t N>() {
   using I = ad_utility::NBitInteger<N>;
-  ASSERT_EQ(I::max(), (1ll << (N - 1)) - 1);
-  ASSERT_EQ(I::min(), -1 * (1ll << (N - 1)));
+  if (N == 64) {
+    ASSERT_EQ(I::max(), std::numeric_limits<int64_t>::max());
+    ASSERT_EQ(I::min(), std::numeric_limits<int64_t>::min());
+  } else {
+    ASSERT_EQ(I::max(), (1ll << (N - 1)) - 1);
+    ASSERT_EQ(I::min(), -1 * (1ll << (N - 1)));
+  }
 };
 
 template <size_t N>
