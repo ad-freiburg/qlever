@@ -69,7 +69,8 @@ struct SortText {
 
   // max sentinel = value which is strictly larger that any input element
   static T max_value() {
-    Score maxScore = std::numeric_limits<Score>::max();
-    return {maxScore, TextRecordIndex::max(), maxScore, maxScore, true};
+    return {std::numeric_limits<TextBlockIndex>::max(), TextRecordIndex::max(),
+            std::numeric_limits<WordOrEntityIndex>::max(),
+            std::numeric_limits<Score>::max(), true};
   }
 };

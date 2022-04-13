@@ -20,7 +20,8 @@ void Index::addTextFromContextFile(const string& contextFile) {
   size_t nofLines = passContextFileForVocabulary(contextFile);
   _textVocab.writeToFile(_onDiskBase + ".text.vocabulary");
   calculateBlockBoundaries();
-  TextVec v(nofLines);
+  TextVec v;
+  v.reserve(nofLines);
   passContextFileIntoVector(contextFile, v);
   LOG(INFO) << "Sorting text index with " << v.size() << " items ..."
             << std::endl;
