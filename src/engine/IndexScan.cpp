@@ -466,27 +466,27 @@ void IndexScan::computeFullScan(ResultTable* result,
   // TODO<joka921> lift `prefixRange` to Index and ID
   if (ad_utility::isSimilar<Permutation::SPO_T, P> ||
       ad_utility::isSimilar<Permutation::SOP_T, P>) {
-    ignoredRanges.push_back(
-        {Id::make(literalRange.first), Id::make(literalRange.second)});
+    ignoredRanges.push_back({Id::make(literalRange.first.get()),
+                             Id::make(literalRange.second.get())});
   } else if (ad_utility::isSimilar<Permutation::PSO_T, P> ||
              ad_utility::isSimilar<Permutation::POS_T, P>) {
-    ignoredRanges.push_back({Id::make(taggedPredicatesRange.first),
-                             Id::make(taggedPredicatesRange.second)});
-    ignoredRanges.emplace_back(Id::make(languagePredicateIndex),
-                               Id::make(languagePredicateIndex + 1));
+    ignoredRanges.push_back({Id::make(taggedPredicatesRange.first.get()),
+                             Id::make(taggedPredicatesRange.second.get())});
+    ignoredRanges.emplace_back(Id::make(languagePredicateIndex.get()),
+                               Id::make(languagePredicateIndex.get() + 1));
   }
 
   auto isTripleIgnored = [&](const auto& triple) {
     if constexpr (ad_utility::isSimilar<Permutation::SPO_T, P> ||
                   ad_utility::isSimilar<Permutation::OPS_T, P>) {
-      return triple[1].get() == languagePredicateIndex ||
-             (triple[1].get() >= taggedPredicatesRange.first &&
-              triple[1].get() < taggedPredicatesRange.second);
+      return triple[1].get() == languagePredicateIndex.get() ||
+             (triple[1].get() >= taggedPredicatesRange.first.get() &&
+              triple[1].get() < taggedPredicatesRange.second.get());
     } else if constexpr (ad_utility::isSimilar<Permutation::SOP_T, P> ||
                          ad_utility::isSimilar<Permutation::OSP_T, P>) {
-      return triple[2].get() == languagePredicateIndex ||
-             (triple[2].get() >= taggedPredicatesRange.first &&
-              triple[2].get() < taggedPredicatesRange.second);
+      return triple[2].get() == languagePredicateIndex.get() ||
+             (triple[2].get() >= taggedPredicatesRange.first.get() &&
+              triple[2].get() < taggedPredicatesRange.second.get());
     }
     return false;
   };

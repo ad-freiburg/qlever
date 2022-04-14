@@ -180,11 +180,11 @@ bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
   auto prefixRange = prefix_range(word.substr(0, word.size() - 1));
   bool success = prefixRange.second > prefixRange.first;
   range->_first = prefixRange.first;
-  range->_last = prefixRange.second - 1;
+  range->_last = prefixRange.second.decremented();
 
   if (success) {
-    AD_CHECK_LT(range->_first, _internalVocabulary.size());
-    AD_CHECK_LT(range->_last, _internalVocabulary.size());
+    AD_CHECK_LT(range->_first.get(), _internalVocabulary.size());
+    AD_CHECK_LT(range->_last.get(), _internalVocabulary.size());
   }
   return success;
 }
@@ -193,14 +193,14 @@ bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
 template <typename S, typename C>
 VocabIndex Vocabulary<S, C>::upper_bound(const string& word,
                                          const SortLevel level) const {
-  return _internalVocabulary.upper_bound(word, level)._index;
+  return VocabIndex::make(_internalVocabulary.upper_bound(word, level)._index);
 }
 
 // _____________________________________________________________________________
 template <typename S, typename C>
 VocabIndex Vocabulary<S, C>::lower_bound(const string& word,
                                          const SortLevel level) const {
-  return _internalVocabulary.lower_bound(word, level)._index;
+  return VocabIndex::make(_internalVocabulary.lower_bound(word, level)._index);
 }
 
 // _____________________________________________________________________________
@@ -219,7 +219,7 @@ template <typename StringType, typename C>
 //! lvalue for compressedString and const& for string-based vocabulary
 AccessReturnType_t<StringType> Vocabulary<StringType, C>::at(
     VocabIndex idx) const {
-  return _internalVocabulary[static_cast<size_t>(idx)];
+  return _internalVocabulary[idx.get()];
 }
 
 // _____________________________________________________________________________
@@ -230,11 +230,11 @@ bool Vocabulary<S, C>::getId(const string& word, VocabIndex* idx) const {
     *idx = lower_bound(word, SortLevel::TOTAL);
     // works for the case insensitive version because
     // of the strict ordering.
-    return *idx < _internalVocabulary.size() && at(*idx) == word;
+    return idx->get() < _internalVocabulary.size() && at(*idx) == word;
   }
   auto wordAndIndex = _externalVocabulary.lower_bound(word, SortLevel::TOTAL);
-  *idx = wordAndIndex._index;
-  *idx += _internalVocabulary.size();
+  idx->get() = wordAndIndex._index;
+  idx->get() += _internalVocabulary.size();
   return wordAndIndex._word == word;
 }
 
@@ -242,7 +242,8 @@ bool Vocabulary<S, C>::getId(const string& word, VocabIndex* idx) const {
 template <typename S, typename C>
 std::pair<VocabIndex, VocabIndex> Vocabulary<S, C>::prefix_range(
     const string& prefix) const {
-  return _internalVocabulary.prefix_range(prefix);
+  auto [begin, end] = _internalVocabulary.prefix_range(prefix);
+  return {VocabIndex::make(begin), VocabIndex::make(end)};
 }
 
 // _____________________________________________________________________________
@@ -250,8 +251,8 @@ template <typename S, typename C>
 template <typename, typename>
 const std::optional<std::string_view> Vocabulary<S, C>::operator[](
     VocabIndex idx) const {
-  if (idx < _internalVocabulary.size()) {
-    return _internalVocabulary[static_cast<size_t>(idx)];
+  if (idx.get() < _internalVocabulary.size()) {
+    return _internalVocabulary[idx.get()];
   } else {
     return std::nullopt;
   }
@@ -263,13 +264,13 @@ template <typename S, typename C>
 template <typename, typename>
 const std::optional<string> Vocabulary<S, C>::indexToOptionalString(
     VocabIndex idx) const {
-  if (idx < _internalVocabulary.size()) {
-    return _internalVocabulary[static_cast<size_t>(idx)];
+  if (idx.get() < _internalVocabulary.size()) {
+    return _internalVocabulary[idx.get()];
   } else {
     // this word must be externalized
-    idx -= _internalVocabulary.size();
-    AD_CHECK(idx < _externalVocabulary.size());
-    return _externalVocabulary[idx];
+    idx.get() -= _internalVocabulary.size();
+    AD_CHECK(idx.get() < _externalVocabulary.size());
+    return _externalVocabulary[idx.get()];
   }
 }
 
@@ -295,14 +296,16 @@ void Vocabulary<S, C>::printRangesForDatatypes() {
     LOG(INFO) << range.first << " " << range.second << '\n';
     if (range.second > range.first) {
       LOG(INFO) << indexToOptionalString(range.first).value() << '\n';
-      LOG(INFO) << indexToOptionalString(range.second - 1).value() << '\n';
+      LOG(INFO) << indexToOptionalString(range.second.decremented()).value()
+                << '\n';
     }
-    if (range.second < _internalVocabulary.size()) {
+    if (range.second.get() < _internalVocabulary.size()) {
       LOG(INFO) << indexToOptionalString(range.second).value() << '\n';
     }
 
-    if (range.first > 0) {
-      LOG(INFO) << indexToOptionalString(range.first - 1).value() << '\n';
+    if (range.first.get() > 0) {
+      LOG(INFO) << indexToOptionalString(range.first.decremented()).value()
+                << '\n';
     }
   };
 

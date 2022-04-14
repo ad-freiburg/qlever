@@ -19,7 +19,7 @@ class ContextFileParser {
   struct Line {
     string _word;
     bool _isEntity;
-    uint64_t _contextId;
+    TextRecordIndex _contextId;
     Score _score;
   };
 
@@ -38,7 +38,7 @@ class ContextFileParser {
   std::ifstream _in;
 #ifndef NDEBUG
   // Only used for sanity checks in debug builds
-  size_t _lastCId = 0;
+  TextRecordIndex _lastCId = TextRecordIndex::make(0);
 #endif
   LocaleManager _localeManager;
 };

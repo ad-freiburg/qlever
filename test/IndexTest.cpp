@@ -276,7 +276,7 @@ TEST_F(CreatePatternsFixture, createPatterns) {
 
     auto checkPattern = [](const auto& expected, const auto& actual) {
       for (size_t i = 0; i < actual.size(); i++) {
-        ASSERT_EQ(Id::make(expected[i]), actual[i]);
+        ASSERT_EQ(Id::make(expected[i].get()), actual[i]);
       }
     };
 
@@ -285,9 +285,9 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     for (size_t i = 0; i < index.getHasPattern().size(); ++i) {
       LOG(INFO) << index.getHasPattern()[i] << std::endl;
     }
-    checkPattern(p0, index.getPatterns()[index.getHasPattern()[idx]]);
+    checkPattern(p0, index.getPatterns()[index.getHasPattern()[idx.get()]]);
     ASSERT_TRUE(index.getVocab().getId("<a2>", &idx));
-    checkPattern(p1, index.getPatterns()[index.getHasPattern()[idx]]);
+    checkPattern(p1, index.getPatterns()[index.getHasPattern()[idx.get()]]);
   }
 }
 
