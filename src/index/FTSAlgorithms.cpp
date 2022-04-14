@@ -31,8 +31,14 @@ void FTSAlgorithms::filterByRange(const IdRange& idRange,
   size_t nofResultElements = 0;
 
   for (size_t i = 0; i < blockWids.size(); ++i) {
-    // TODO<joka921> proper Ids for the text stuff.
-    if (blockWids[i] >= idRange._first && blockWids[i] <= idRange._last) {
+    // The mapping from words that appear in text records to `WordIndex`es is
+    // stored in a `Vocabulary` that stores `VocabIndex`es, so we have to
+    // convert between those two types.
+    // TODO<joka921> Can we make the returned `IndexType` a template parameter
+    // of the vocabulary, s.t. we have a vocabulary that stores `WordIndex`es
+    // directly?
+    if (blockWids[i] >= idRange._first.get() &&
+        blockWids[i] <= idRange._last.get()) {
       resultCids[nofResultElements] = blockCids[i];
       resultScores[nofResultElements++] = blockScores[i];
     }
@@ -352,7 +358,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
     Id entityScore = Id::make(it->second.first);
     ScoreToContext& stc = it->second.second;
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
-      result.push_back({Id::make(itt->second), entityScore, eid});
+      result.push_back({Id::make(itt->second.get()), entityScore, eid});
     }
   }
   *dynResult = result.moveToDynamic();
@@ -464,7 +470,7 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(
   result.resize(map.size());
   size_t n = 0;
   for (auto it = map.begin(); it != map.end(); ++it) {
-    result(n, 0) = Id::make(it->second.second.first);
+    result(n, 0) = Id::make(it->second.second.first.get());
     result(n, 1) = Id::make(it->second.first);
     result(n, 2) = it->first;
     n++;
@@ -613,7 +619,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
       for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
         size_t n = result.size();
         result.push_back();
-        result(n, 0) = Id::make(itt->second);
+        result(n, 0) = Id::make(itt->second.get());
         result(n, 1) = Id::make(it->second.first);
         for (size_t k = 0; k < nofVars; ++k) {
           result(n, k + 2) = it->first[k];  // eid
@@ -754,7 +760,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
 
   // Iterate over the map and populate the result.
   for (auto it = map.begin(); it != map.end(); ++it) {
-    result(n, 0) = Id::make(it->second.second.first);
+    result(n, 0) = Id::make(it->second.second.first.get());
     result(n, 1) = Id::make(it->second.first);
     for (size_t k = 0; k < nofVars; ++k) {
       result(n, k + 2) = it->first[k];
@@ -829,7 +835,7 @@ void FTSAlgorithms::appendCrossProduct(const vector<TextRecordIndex>& cids,
     for (size_t j = 0; j < contextSubRes1.size(); ++j) {
       for (size_t k = 0; k < contextSubRes2.size(); ++k) {
         res.emplace_back(
-            array<Id, 5>{{eids[i], Id::make(scores[i]), Id::make(cids[i]),
+            array<Id, 5>{{eids[i], Id::make(scores[i]), Id::make(cids[i].get()),
                           contextSubRes1[j], contextSubRes2[k]}});
       }
     }
@@ -874,7 +880,8 @@ void FTSAlgorithms::appendCrossProduct(
     }
 
     for (size_t n = 0; n < nofResultRows; ++n) {
-      vector<Id> resRow = {eids[i], Id::make(scores[i]), Id::make(cids[i])};
+      vector<Id> resRow = {eids[i], Id::make(scores[i]),
+                           Id::make(cids[i].get())};
       for (size_t j = 0; j < subResMatches.size(); ++j) {
         size_t index = n;
         for (size_t k = 0; k < j; ++k) {
@@ -944,7 +951,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
       for (auto fRow : fMap.find(eid)->second) {
         size_t n = result.size();
         result.push_back();
-        result(n, 0) = Id::make(itt->second);  // cid
+        result(n, 0) = Id::make(itt->second.get());  // cid
         result(n, 1) = score;
         for (size_t i = 0; i < fRow.size(); i++) {
           result(n, 2 + i) = fRow[i];
@@ -1059,7 +1066,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     Id score = Id::make(it->second.first);
     ScoreToContext& stc = it->second.second;
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
-      result.push_back({Id::make(itt->second), score, eid});
+      result.push_back({Id::make(itt->second.get()), score, eid});
     }
   }
   *dynResult = result.moveToDynamic();
@@ -1190,7 +1197,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
       for (auto fRow : filterRows) {
         size_t n = result.size();
         result.push_back();
-        result(n, 0) = Id::make(itt->second);  // cid
+        result(n, 0) = Id::make(itt->second.get());  // cid
         result(n, 1) = rscore;
         size_t off = 2;
         for (size_t i = 1; i < keyEids.size(); i++) {
@@ -1380,7 +1387,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
       const vector<Id>& keyEids = it->first;
       size_t n = result.size();
       result.push_back();
-      result(n, 0) = Id::make(itt->second);  // cid
+      result(n, 0) = Id::make(itt->second.get());  // cid
       result(n, 1) = rscore;
       size_t off = 2;
       for (size_t i = 1; i < keyEids.size(); i++) {

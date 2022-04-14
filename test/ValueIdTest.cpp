@@ -110,6 +110,26 @@ TEST(ValueId, makeFromInt) {
   testOverflow(underflowingNBitGenerator);
 }
 
+// Some helper functions to convert uint64_t values directly to and from index
+// type `ValueId`s.
+ValueId makeVocabId(uint64_t value) {
+  return ValueId::makeFromVocabIndex(VocabIndex::make(value));
+}
+ValueId makeLocalVocabId(uint64_t value) {
+  return ValueId::makeFromLocalVocabIndex(LocalVocabIndex::make(value));
+}
+ValueId makeTextRecordId(uint64_t value) {
+  return ValueId::makeFromTextRecordIndex(TextRecordIndex::make(value));
+}
+
+uint64_t getVocabIndex(ValueId id) { return id.getVocabIndex().get(); }
+uint64_t getLocalVocabIndex(ValueId id) {
+  return id.getLocalVocabIndex().get();
+}
+uint64_t getTextRecordIndex(ValueId id) {
+  return id.getTextRecordIndex().get();
+}
+
 TEST(ValueId, Indices) {
   auto testRandomIds = [&](auto makeId, auto getFromId, Datatype type) {
     auto testSingle = [&](auto value) {
@@ -129,11 +149,10 @@ TEST(ValueId, Indices) {
     }
   };
 
-  testRandomIds(&ValueId::makeFromTextIndex, &ValueId::getTextIndex,
-                Datatype::TextIndex);
-  testRandomIds(&ValueId::makeFromVocabIndex, &ValueId::getVocabIndex,
-                Datatype::VocabIndex);
-  testRandomIds(&ValueId::makeFromLocalVocabIndex, &ValueId::getLocalVocabIndex,
+  testRandomIds(&makeTextRecordId, &getTextRecordIndex,
+                Datatype::TextRecordIndex);
+  testRandomIds(&makeVocabId, &getVocabIndex, Datatype::VocabIndex);
+  testRandomIds(&makeLocalVocabId, &getLocalVocabIndex,
                 Datatype::LocalVocabIndex);
 }
 
@@ -174,9 +193,9 @@ auto makeRandomDoubleIds = []() {
 };
 auto makeRandomIds = []() {
   std::vector<ValueId> ids = makeRandomDoubleIds();
-  addIdsFromGenerator(indexGenerator, &ValueId::makeFromVocabIndex, ids);
-  addIdsFromGenerator(indexGenerator, &ValueId::makeFromLocalVocabIndex, ids);
-  addIdsFromGenerator(indexGenerator, &ValueId::makeFromTextIndex, ids);
+  addIdsFromGenerator(indexGenerator, &makeVocabId, ids);
+  addIdsFromGenerator(indexGenerator, &makeLocalVocabId, ids);
+  addIdsFromGenerator(indexGenerator, &makeTextRecordId, ids);
   addIdsFromGenerator(nonOverflowingNBitGenerator, &ValueId::makeFromInt, ids);
   addIdsFromGenerator(overflowingNBitGenerator, &ValueId::makeFromInt, ids);
   addIdsFromGenerator(underflowingNBitGenerator, &ValueId::makeFromInt, ids);
@@ -218,9 +237,9 @@ TEST(ValueId, IndexOrdering) {
     }
   };
 
-  testOrder(&ValueId::makeFromVocabIndex, &ValueId::getVocabIndex);
-  testOrder(&ValueId::makeFromLocalVocabIndex, &ValueId::getLocalVocabIndex);
-  testOrder(&ValueId::makeFromTextIndex, &ValueId::getTextIndex);
+  testOrder(&makeVocabId, &getVocabIndex);
+  testOrder(&makeLocalVocabId, &getLocalVocabIndex);
+  testOrder(&makeTextRecordId, &getTextRecordIndex);
 }
 
 TEST(ValueId, DoubleOrdering) {
@@ -344,9 +363,9 @@ TEST(ValueId, toDebugString) {
   test(ValueId::makeUndefined(), "Undefined:Undefined");
   test(ValueId::makeFromInt(-42), "Int:-42");
   test(ValueId::makeFromDouble(42.0), "Double:42.000000");
-  test(ValueId::makeFromVocabIndex(15), "VocabIndex:15");
-  test(ValueId::makeFromLocalVocabIndex(25), "LocalVocabIndex:25");
-  test(ValueId::makeFromTextIndex(37), "TextIndex:37");
+  test(makeVocabId(15), "VocabIndex:15");
+  test(makeLocalVocabId(25), "LocalVocabIndex:25");
+  test(makeTextRecordId(37), "TextRecordIndex:37");
 }
 
 TEST(ValueId, TriviallyCopyable) {

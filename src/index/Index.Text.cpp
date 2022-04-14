@@ -20,7 +20,8 @@ void Index::addTextFromContextFile(const string& contextFile) {
   size_t nofLines = passContextFileForVocabulary(contextFile);
   _textVocab.writeToFile(_onDiskBase + ".text.vocabulary");
   calculateBlockBoundaries();
-  TextVec v(nofLines);
+  TextVec v;
+  v.reserve(nofLines);
   passContextFileIntoVector(contextFile, v);
   LOG(INFO) << "Sorting text index with " << v.size() << " items ..."
             << std::endl;
@@ -147,7 +148,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
   TextVec::bufwriter_type writer(vec);
   ad_utility::HashMap<WordIndex, Score> wordsInContext;
   ad_utility::HashMap<Id, Score> entitiesInContext;
-  uint64_t currentContext = 0;
+  auto currentContext = TextRecordIndex::make(0);
   size_t nofContexts = 0;
   size_t nofWordPostings = 0;
   size_t nofEntityPostings = 0;
@@ -170,7 +171,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
       if (getVocab().getId(line._word, &eid)) {
         // Note that `entitiesInContext` is a HashMap, so the `Id`s don't have
         // to be contiguous.
-        entitiesInContext[Id::make(eid)] += line._score;
+        entitiesInContext[Id::make(eid.get())] += line._score;
       } else {
         if (entityNotFoundErrorMsgCount < 20) {
           LOG(WARN) << "Entity from text not in KB: " << line._word << '\n';
@@ -184,8 +185,10 @@ void Index::passContextFileIntoVector(const string& contextFile,
       }
     } else {
       ++nofWordPostings;
-      WordIndex wid;
-      bool ret = _textVocab.getId(line._word, &wid);
+      // TODO<joka921> Let the `_textVocab` return a `WordIndex` directly.
+      VocabIndex vid;
+      bool ret = _textVocab.getId(line._word, &vid);
+      WordIndex wid = vid.get();
       if (!ret) {
         LOG(ERROR) << "ERROR: word \"" << line._word << "\" "
                    << "not found in textVocab. Terminating\n";
@@ -355,13 +358,13 @@ ContextListMetaData Index::writePostings(ad_utility::File& out,
                   scoreCodebook);
 
   TextRecordIndex lastContext = std::get<0>(postings[0]);
-  contextList[n] = lastContext;
+  contextList[n] = lastContext.get();
   wordList[n] = wordCodeMap[std::get<1>(postings[0])];
   scoreList[n] = scoreCodeMap[std::get<2>(postings[0])];
   ++n;
 
   for (auto it = postings.begin() + 1; it < postings.end(); ++it) {
-    uint64_t gap = std::get<0>(*it) - lastContext;
+    uint64_t gap = std::get<0>(*it).get() - lastContext.get();
     contextList[n] = gap;
     lastContext = std::get<0>(*it);
     wordList[n] = wordCodeMap[std::get<1>(*it)];
@@ -501,7 +504,7 @@ void Index::calculateBlockBoundariesImpl(
     }
   };
 
-  auto getLengthAndPrefixSortKey = [&](size_t i) {
+  auto getLengthAndPrefixSortKey = [&](VocabIndex i) {
     auto word = index._textVocab[i].value();
     auto [len, prefixSortKey] =
         locManager.getPrefixSortKey(word, MIN_WORD_PREFIX_SIZE);
@@ -515,12 +518,14 @@ void Index::calculateBlockBoundariesImpl(
     adjustPrefixSortKey(prefixSortKey, len);
     return std::tuple{std::move(len), std::move(prefixSortKey)};
   };
-  auto [currentLen, prefixSortKey] = getLengthAndPrefixSortKey(0);
+  auto [currentLen, prefixSortKey] =
+      getLengthAndPrefixSortKey(VocabIndex::make(0));
   for (size_t i = 0; i < index._textVocab.size() - 1; ++i) {
     // we need foo.value().get() because the vocab returns
     // a std::optional<std::reference_wrapper<string>> and the "." currently
     // doesn't implicitly convert to a true reference (unlike function calls)
-    const auto& [nextLen, nextPrefixSortKey] = getLengthAndPrefixSortKey(i + 1);
+    const auto& [nextLen, nextPrefixSortKey] =
+        getLengthAndPrefixSortKey(VocabIndex::make(i + 1));
 
     bool tooShortButNotEqual =
         (currentLen < MIN_WORD_PREFIX_SIZE || nextLen < MIN_WORD_PREFIX_SIZE) &&
@@ -556,9 +561,9 @@ void Index::printBlockBoundariesToFile(const string& filename) const {
   of << "Printing block boundaries ot text vocabulary\n"
      << "Format: <Last word of Block> <First word of next Block>\n";
   auto printBlockToFile = [this, &of](size_t i) {
-    of << _textVocab[i].value() << " ";
+    of << _textVocab[VocabIndex::make(i)].value() << " ";
     if (i + 1 < _textVocab.size()) {
-      of << _textVocab[i + 1].value() << '\n';
+      of << _textVocab[VocabIndex::make(i + 1)].value() << '\n';
     }
   };
   return calculateBlockBoundariesImpl(*this, printBlockToFile);
@@ -664,7 +669,7 @@ void Index::openTextFileHandle() {
 
 // _____________________________________________________________________________
 std::string_view Index::wordIdToString(WordIndex wordIndex) const {
-  return _textVocab[wordIndex].value();
+  return _textVocab[VocabIndex::make(wordIndex)].value();
 }
 
 // _____________________________________________________________________________
@@ -702,7 +707,7 @@ void Index::getContextListForWords(const string& words,
   IdTableStatic<2> result = dynResult->moveToStatic<2>();
   result.resize(cids.size());
   for (size_t i = 0; i < cids.size(); ++i) {
-    result(i, 0) = Id::make(cids[i]);
+    result(i, 0) = Id::make(cids[i].get());
     result(i, 1) = Id::make(scores[i]);
   }
   *dynResult = result.moveToDynamic();
@@ -734,16 +739,18 @@ void Index::getWordPostingsForTerm(const string& term,
     }
     idRange._last = idRange._first;
   }
-  if (entityTerm && !_textMeta.existsTextBlockForEntityId(idRange._first)) {
+  if (entityTerm &&
+      !_textMeta.existsTextBlockForEntityId(idRange._first.get())) {
     LOG(INFO) << "Entity " << term << " not contained in the text.\n";
     return;
   }
   const auto& tbmd =
-      entityTerm
-          ? _textMeta.getBlockInfoByEntityId(idRange._first)
-          : _textMeta.getBlockInfoByWordRange(idRange._first, idRange._last);
-  if (tbmd._cl.hasMultipleWords() && !(tbmd._firstWordId == idRange._first &&
-                                       tbmd._lastWordId == idRange._last)) {
+      entityTerm ? _textMeta.getBlockInfoByEntityId(idRange._first.get())
+                 : _textMeta.getBlockInfoByWordRange(idRange._first.get(),
+                                                     idRange._last.get());
+  if (tbmd._cl.hasMultipleWords() &&
+      !(tbmd._firstWordId == idRange._first.get() &&
+        tbmd._lastWordId == idRange._last.get())) {
     vector<TextRecordIndex> blockCids;
     vector<WordIndex> blockWids;
     vector<Score> blockScores;
@@ -960,13 +967,17 @@ void Index::getEntityPostingsForTerm(const string& term,
     }
     idRange._last = idRange._first;
   }
-  const auto& tbmd =
-      entityTerm
-          ? _textMeta.getBlockInfoByEntityId(idRange._first)
-          : _textMeta.getBlockInfoByWordRange(idRange._first, idRange._last);
 
-  if (!tbmd._cl.hasMultipleWords() || (tbmd._firstWordId == idRange._first &&
-                                       tbmd._lastWordId == idRange._last)) {
+  // TODO<joka921> Find out which ID types the `getBlockInfo...` functions
+  // should take.
+  const auto& tbmd =
+      entityTerm ? _textMeta.getBlockInfoByEntityId(idRange._first.get())
+                 : _textMeta.getBlockInfoByWordRange(idRange._first.get(),
+                                                     idRange._last.get());
+
+  if (!tbmd._cl.hasMultipleWords() ||
+      (tbmd._firstWordId == idRange._first.get() &&
+       tbmd._lastWordId == idRange._last.get())) {
     // CASE: Only one word in the block or full block should be matched.
     // Hence we can just read the entity CL lists for co-occurring
     // entity postings.
@@ -1347,9 +1358,9 @@ size_t Index::getIndexOfBestSuitedElTerm(const vector<string>& terms) const {
       range._last = range._first;
     }
     const auto& tbmd =
-        entityTerm
-            ? _textMeta.getBlockInfoByEntityId(range._first)
-            : _textMeta.getBlockInfoByWordRange(range._first, range._last);
+        entityTerm ? _textMeta.getBlockInfoByEntityId(range._first.get())
+                   : _textMeta.getBlockInfoByWordRange(range._first.get(),
+                                                       range._last.get());
     toBeSorted.emplace_back(std::make_tuple(
         i, tbmd._firstWordId == tbmd._lastWordId, tbmd._entityCl._nofElements));
   }
@@ -1558,9 +1569,9 @@ size_t Index::getSizeEstimate(const string& words) const {
       range._last = range._first;
     }
     const auto& tbmd =
-        entityTerm
-            ? _textMeta.getBlockInfoByEntityId(range._first)
-            : _textMeta.getBlockInfoByWordRange(range._first, range._last);
+        entityTerm ? _textMeta.getBlockInfoByEntityId(range._first.get())
+                   : _textMeta.getBlockInfoByWordRange(range._first.get(),
+                                                       range._last.get());
     if (minElLength > tbmd._entityCl._nofElements) {
       minElLength = tbmd._entityCl._nofElements;
     }

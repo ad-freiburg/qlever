@@ -652,8 +652,8 @@ void Index::addPatternsToExistingIndex() {
           std::numeric_limits<uint64_t>::max())};
   auto iterator = TriplesView(_SPO, allocator);
   createPatternsFromSpoTriplesView(iterator, _onDiskBase + ".index.patterns",
-                                   Id::make(langPredLowerBound),
-                                   Id::make(langPredUpperBound));
+                                   Id::make(langPredLowerBound.get()),
+                                   Id::make(langPredUpperBound.get()));
 }
 
 // _____________________________________________________________________________

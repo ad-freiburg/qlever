@@ -10,6 +10,7 @@
 
 #include "../util/BitUtils.h"
 #include "../util/NBitInteger.h"
+#include "./IndexTypes.h"
 
 /// The different Datatypes that a `ValueId` (see below) can encode.
 enum struct Datatype {
@@ -18,7 +19,7 @@ enum struct Datatype {
   Double,
   VocabIndex,
   LocalVocabIndex,
-  TextIndex,
+  TextRecordIndex,
   // TODO<joka921> At least "date" is missing and not yet folded.
 };
 
@@ -35,8 +36,8 @@ constexpr std::string_view toString(Datatype type) {
       return "VocabIndex";
     case Datatype::LocalVocabIndex:
       return "LocalVocabIndex";
-    case Datatype::TextIndex:
-      return "TextIndex";
+    case Datatype::TextRecordIndex:
+      return "TextRecordIndex";
   }
   // This line is reachable if we cast an arbitrary invalid int to this enum
   throw std::runtime_error("should be unreachable");
@@ -63,7 +64,7 @@ class ValueId {
       std::bit_cast<double>(1ull << numDatatypeBits);
 
   /// This exception is thrown if we try to store a value of an index type
-  /// (VocabIndex, LocalVocabIndex, TextIndex) that is larger than
+  /// (VocabIndex, LocalVocabIndex, TextRecordIndex) that is larger than
   /// `maxIndex`.
   struct IndexTooLargeException : public std::exception {};
 
@@ -141,30 +142,30 @@ class ValueId {
   }
 
   /// Create a `ValueId` for an unsigned index of type
-  /// `VocabIndex|TextIndex|LocalVocabIndex`. These types can
+  /// `VocabIndex|TextRecordIndex|LocalVocabIndex`. These types can
   /// represent values in the range [0, 2^60]. When `index` is outside of this
   /// range, and `IndexTooLargeException` is thrown.
-  static ValueId makeFromVocabIndex(T index) {
-    return makeFromIndex(index, Datatype::VocabIndex);
+  static ValueId makeFromVocabIndex(VocabIndex index) {
+    return makeFromIndex(index.get(), Datatype::VocabIndex);
   }
-  static ValueId makeFromTextIndex(T index) {
-    return makeFromIndex(index, Datatype::TextIndex);
+  static ValueId makeFromTextRecordIndex(TextRecordIndex index) {
+    return makeFromIndex(index.get(), Datatype::TextRecordIndex);
   }
-  static ValueId makeFromLocalVocabIndex(T index) {
-    return makeFromIndex(index, Datatype::LocalVocabIndex);
+  static ValueId makeFromLocalVocabIndex(LocalVocabIndex index) {
+    return makeFromIndex(index.get(), Datatype::LocalVocabIndex);
   }
 
   /// Obtain the unsigned index that this `ValueId` encodes. If `getDatatype()
-  /// != [VocabIndex|TextIndex|LocalVocabIndex]` then the result is
+  /// != [VocabIndex|TextRecordIndex|LocalVocabIndex]` then the result is
   /// unspecified.
-  [[nodiscard]] constexpr T getVocabIndex() const noexcept {
-    return removeDatatypeBits(_bits);
+  [[nodiscard]] constexpr VocabIndex getVocabIndex() const noexcept {
+    return VocabIndex::make(removeDatatypeBits(_bits));
   }
-  [[nodiscard]] constexpr T getTextIndex() const noexcept {
-    return removeDatatypeBits(_bits);
+  [[nodiscard]] constexpr TextRecordIndex getTextRecordIndex() const noexcept {
+    return TextRecordIndex::make(removeDatatypeBits(_bits));
   }
-  [[nodiscard]] constexpr T getLocalVocabIndex() const noexcept {
-    return removeDatatypeBits(_bits);
+  [[nodiscard]] constexpr LocalVocabIndex getLocalVocabIndex() const noexcept {
+    return LocalVocabIndex::make(removeDatatypeBits(_bits));
   }
 
   // TODO<joka921> implement dates
@@ -189,7 +190,7 @@ class ValueId {
   /// be callable with all of the possible return types of the `getTYPE`
   /// functions.
   /// TODO<joka921> This currently still has limited functionality because
-  /// VocabIndex, LocalVocabIndex and TextIndex are all of the same type
+  /// VocabIndex, LocalVocabIndex and TextRecordIndex are all of the same type
   /// `uint64_t` and the visitor cannot distinguish between them. Create strong
   /// types for these indices and make the `ValueId` class use them.
   template <typename Visitor>
@@ -205,8 +206,8 @@ class ValueId {
         return std::invoke(visitor, getVocabIndex());
       case Datatype::LocalVocabIndex:
         return std::invoke(visitor, getLocalVocabIndex());
-      case Datatype::TextIndex:
-        return std::invoke(visitor, getTextIndex());
+      case Datatype::TextRecordIndex:
+        return std::invoke(visitor, getTextRecordIndex());
     }
   }
 
@@ -217,8 +218,12 @@ class ValueId {
     auto visitor = [&ostr]<typename T>(T&& value) {
       if constexpr (ad_utility::isSimilar<T, ValueId::UndefinedType>) {
         ostr << "Undefined";
-      } else {
+      } else if constexpr (ad_utility::isSimilar<T, double> ||
+                           ad_utility::isSimilar<T, int64_t>) {
         ostr << std::to_string(value);
+      } else {
+        // T is `VocabIndex || LocalVocabIndex || TextRecordIndex`
+        ostr << std::to_string(value.get());
       }
     };
     id.visit(visitor);
