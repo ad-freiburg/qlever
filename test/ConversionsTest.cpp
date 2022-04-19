@@ -324,12 +324,11 @@ TEST(ConversionsTest, convertIndexWordToFloat) {
 }
 
 TEST(ConversionsTest, isXsdValue) {
-  auto makeXsdValue =
-      [](auto value, string_view typeString) {
-        return absl::StrCat("\"", value, "\"^^<", typeString, ">");
-      };
+  auto makeXsdValue = [](auto value, string_view typeString) {
+    return absl::StrCat("\"", value, "\"^^<", typeString, ">");
+  };
 
-  // These all parse as XSD value (we are not very strict yet).
+  // These all parse as XSD values (note that we are not very strict).
   ASSERT_TRUE(isXsdValue(makeXsdValue(42, XSD_INT_TYPE)));
   ASSERT_TRUE(isXsdValue(makeXsdValue(42, XSD_INTEGER_TYPE)));
   ASSERT_TRUE(isXsdValue(makeXsdValue(42.0, XSD_DOUBLE_TYPE)));
@@ -338,7 +337,8 @@ TEST(ConversionsTest, isXsdValue) {
   ASSERT_TRUE(isXsdValue(makeXsdValue("true", XSD_BOOLEAN_TYPE)));
   ASSERT_TRUE(isXsdValue(makeXsdValue("no date", XSD_DATETIME_TYPE)));
   ASSERT_TRUE(isXsdValue(makeXsdValue("no date", XSD_DATETIME_TYPE)));
-  ASSERT_TRUE(isXsdValue(makeXsdValue("spargel", "http://www.w3.org/2001/XMLSchema#saLat")));
+  ASSERT_TRUE(isXsdValue(
+      makeXsdValue("spargel", "http://www.w3.org/2001/XMLSchema#saLat")));
 
   // These don't.
   ASSERT_FALSE(isXsdValue("\"42\"^<http://www.w3.org/2001/XMLSchema#int>"));
@@ -348,7 +348,8 @@ TEST(ConversionsTest, isXsdValue) {
   ASSERT_FALSE(isXsdValue("\"42\"^^http://www.w3.org/2001/XMLSchema#int>"));
   ASSERT_FALSE(isXsdValue("\"42\"^^<http://www.wdrei.org/2001/XMLSchema#int>"));
   ASSERT_FALSE(isXsdValue("\"42^^<http://www.w3.org/2001/XMLSchema#int>"));
-  ASSERT_FALSE(isXsdValue(makeXsdValue("spargel", "http://www.w3.org/2001/XMLSchema#sa1at")));
+  ASSERT_FALSE(isXsdValue(
+      makeXsdValue("spargel", "http://www.w3.org/2001/XMLSchema#sa1at")));
 }
 
 TEST(ConversionsTest, isNumeric) {
