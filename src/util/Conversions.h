@@ -638,16 +638,6 @@ bool isXsdValue(string_view value) {
   static constexpr auto xsdValueRegex = ctll::fixed_string(
       "\"\\^\\^<http://www\\.w3\\.org/2001/XMLSchema#[a-zA-Z]+>$");
   return ctre::search<xsdValueRegex>(value);
-  // Search for the last quote and check if it is followed by ^^ and the IRI of
-  // an XSD type.
-  // NOTE: searching for "^^ starting at position 1 (as done previously) fails
-  // for literal "\"^^"@en (which is contained in the RDF dump of DBpedia).
-  // size_t posLastQuote = val.rfind('"');
-  // if (!val.starts_with('"') || posLastQuote == 0) {
-  //   return false;
-  // }
-  // return val.find("^^<http://www.w3.org/2001/XMLSchema#", posLastQuote) ==
-  //            posLastQuote + 1;
 }
 
 // _____________________________________________________________________________
