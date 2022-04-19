@@ -46,7 +46,7 @@ struct option options[] = {
     {"settings-file", required_argument, NULL, 's'},
     {"no-compressed-vocabulary", no_argument, NULL, 'N'},
     {"only-pso-and-pos-permutations", no_argument, NULL, 'o'},
-    {"stxxl-memory-gb", no_argument, NULL, 'm'},
+    {"stxxl-memory-gb", required_argument, NULL, 'm'},
     {NULL, 0, NULL, 0}};
 
 string getStxxlConfigFileName(const string& location) {
@@ -233,7 +233,8 @@ int main(int argc, char** argv) {
         loadAllPermutations = false;
         break;
       case 'm':
-        index.stxxlMemoryGb() = std::strtoul(optarg, nullptr, 10);
+        index.stxxlMemoryBytes() =
+            1024ul * 1024ul * 1024ul * std::strtoul(optarg, nullptr, 10);
       default:
         cerr << endl
              << "! ERROR in processing options (getopt returned '" << c
