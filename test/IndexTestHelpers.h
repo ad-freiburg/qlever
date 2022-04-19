@@ -10,7 +10,7 @@
 inline Index makeIndexWithTestSettings() {
   Index index;
   index.setNumTriplesPerBatch(2);
-  index.stxxlMemoryInBytes() = 1024ul * 1024ul * 10;
+  index.stxxlMemoryInBytes() = 1024ul * 1024ul * 50;
   return index;
 }
 
