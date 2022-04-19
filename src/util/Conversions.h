@@ -639,7 +639,8 @@ bool isXsdValue(const string& val) {
   // for literal "\"^^"@en (which is contained in the RDF dump of DBpedia).
   size_t posLastQuote = val.rfind("\"");
   return !val.empty() && val[0] == '\"' && posLastQuote > 0 &&
-         val.find("^^", posLastQuote) != string::npos;
+         val.find("^^<http://www.w3.org/2001/XMLSchema#") != string::npos;
+  // val.find("^^", posLastQuote) != string::npos;
 }
 
 // _____________________________________________________________________________
