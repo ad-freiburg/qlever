@@ -5,6 +5,7 @@
 #pragma once
 
 #include <assert.h>
+#include <ctre/ctre.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -99,7 +100,7 @@ inline string getBase10ComplementOfIntegerString(const string& orig);
 inline string removeLeadingZeros(const string& orig);
 
 //! Check if this looks like an value literal
-inline bool isXsdValue(const string& val);
+inline bool isXsdValue(string_view value);
 
 //! Check if the given string is numeric, i.e. a decimal integer or float string
 //! i.e. "42", "42.2", "0123", ".3" are all numeric while "a", "1F", "0x32" are
@@ -633,13 +634,10 @@ inline string removeLeadingZeros(const string& orig) {
 }
 
 // _____________________________________________________________________________
-bool isXsdValue(const string& val) {
-  // Search for the last quote and check if it is followed by ^^.
-  // NOTE: searching for "^^ starting at position 1 (as done previously) fails
-  // for literal "\"^^"@en (which is contained in the RDF dump of DBpedia).
-  size_t posLastQuote = val.rfind("\"");
-  return !val.empty() && val[0] == '\"' && posLastQuote > 0 &&
-         val.find("^^", posLastQuote) != string::npos;
+bool isXsdValue(string_view value) {
+  static constexpr auto xsdValueRegex = ctll::fixed_string(
+      "\"\\^\\^<http://www\\.w3\\.org/2001/XMLSchema#[a-zA-Z]+>$");
+  return ctre::search<xsdValueRegex>(value);
 }
 
 // _____________________________________________________________________________

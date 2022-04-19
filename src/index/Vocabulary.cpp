@@ -112,6 +112,12 @@ bool Vocabulary<S, C>::shouldEntityBeExternalized(const string& word) const {
 // ___________________________________________________________________
 template <class S, class C>
 bool Vocabulary<S, C>::shouldLiteralBeExternalized(const string& word) const {
+  for (const auto& p : _externalizedPrefixes) {
+    if (word.starts_with(p)) {
+      return true;
+    }
+  }
+
   if (word.size() > MAX_INTERNAL_LITERAL_BYTES) {
     return true;
   }
