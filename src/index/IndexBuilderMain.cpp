@@ -46,6 +46,7 @@ struct option options[] = {
     {"settings-file", required_argument, NULL, 's'},
     {"no-compressed-vocabulary", no_argument, NULL, 'N'},
     {"only-pso-and-pos-permutations", no_argument, NULL, 'o'},
+    {"stxxl-memory-gb", required_argument, NULL, 'm'},
     {NULL, 0, NULL, 0}};
 
 string getStxxlConfigFileName(const string& location) {
@@ -142,6 +143,11 @@ void printUsage(char* execName) {
   cerr << "  " << std::setw(20) << "o, only-pos-and-pso-permutations"
        << std::setw(1) << "    "
        << "Only load PSO and POS permutations" << endl;
+  cerr << "  " << std::setw(20) << "m, stxxl-memory-gb" << std::setw(1)
+       << "    "
+       << "The amount of memory to use for sorting during the index build. "
+          "Decrease if the index builder runs out of memory."
+       << endl;
   cerr.copyfmt(cerrState);
 }
 
@@ -169,9 +175,13 @@ int main(int argc, char** argv) {
   bool keepTemporaryFiles = false;
   bool loadAllPermutations = true;
   optind = 1;
+
+  Index index;
+
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "F:f:i:w:d:lT:K:hAks:No", options, nullptr);
+    int c =
+        getopt_long(argc, argv, "F:f:i:w:d:lT:K:hAks:Nom:", options, nullptr);
     if (c == -1) {
       break;
     }
@@ -222,6 +232,10 @@ int main(int argc, char** argv) {
       case 'o':
         loadAllPermutations = false;
         break;
+      case 'm':
+        index.stxxlMemoryInBytes() =
+            1024ul * 1024ul * 1024ul * std::strtoul(optarg, nullptr, 10);
+        break;
       default:
         cerr << endl
              << "! ERROR in processing options (getopt returned '" << c
@@ -261,7 +275,6 @@ int main(int argc, char** argv) {
     string stxxlFileName = getStxxlDiskFileName(location, tail);
     LOG(TRACE) << "done." << std::endl;
 
-    Index index;
     index.setKbName(kbIndexName);
     index.setTextName(textIndexName);
     index.setUsePatterns(usePatterns);

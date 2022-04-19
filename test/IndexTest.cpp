@@ -9,6 +9,7 @@
 
 #include "../src/global/Pattern.h"
 #include "../src/index/Index.h"
+#include "./IndexTestHelpers.h"
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
@@ -73,9 +74,8 @@ TEST(IndexTest, createFromTurtleTest) {
     f.close();
 
     {
-      Index index;
+      Index index = makeIndexWithTestSettings();
       index.setOnDiskBase("_testindex");
-      index.setNumTriplesPerBatch(2);
       index.createFromFile<TurtleParserAuto>(filename);
     }
     Index index;
@@ -148,9 +148,8 @@ TEST(IndexTest, createFromTurtleTest) {
     f.close();
 
     {
-      Index index;
+      Index index = makeIndexWithTestSettings();
       index.setOnDiskBase("_testindex");
-      index.setNumTriplesPerBatch(2);
       index.createFromFile<TurtleParserAuto>(filename);
     }
     Index index;
@@ -247,10 +246,9 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     f.close();
 
     {
-      Index index;
+      Index index = makeIndexWithTestSettings();
       index.setUsePatterns(true);
       index.setOnDiskBase("_testindex");
-      index.setNumTriplesPerBatch(2);
       index.createFromFile<TurtleParserAuto>(inputFilename);
     }
     Index index;
@@ -314,9 +312,8 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   f.close();
 
   {
-    Index indexPrim;
+    Index indexPrim = makeIndexWithTestSettings();
     indexPrim.setOnDiskBase("_testindex2");
-    indexPrim.setNumTriplesPerBatch(2);
     indexPrim.createFromFile<TurtleParserAuto>(filename);
   }
 
@@ -365,9 +362,8 @@ TEST(IndexTest, scanTest) {
   f.close();
   {
     {
-      Index index;
+      Index index = makeIndexWithTestSettings();
       index.setOnDiskBase("_testindex");
-      index.setNumTriplesPerBatch(2);
       index.createFromFile<TurtleParserAuto>(filename);
     }
 
@@ -451,9 +447,8 @@ TEST(IndexTest, scanTest) {
 
   {
     {
-      Index index;
+      Index index = makeIndexWithTestSettings();
       index.setOnDiskBase("_testindex");
-      index.setNumTriplesPerBatch(2);
       index.createFromFile<TurtleParserAuto>(filename);
     }
     Index index;
