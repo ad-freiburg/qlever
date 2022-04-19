@@ -116,7 +116,7 @@ endpoint by logging into QLever UI (user and password `demo`) and clicking on
         cd qlever-ui
         docker build -t qlever-ui .
         chmod o+w db && cp $QLEVER_HOME/qlever-code/examples/qleverui.sqlite3 db && chmod o+w db/qleverui.sqlite3
-        PORT=8000; docker run -it --rm -p $PORT:8000 -v $(pwd)/db:/app/db qlever-ui
+        PORT=8000; docker run -it --rm -p $PORT:7000 -v $(pwd)/db:/app/db qlever-ui
 
 If you just want to see the QLever UI in action and not install it yourself,
 here is [a demo instance of the QLever UI](https://qlever.cs.uni-freiburg.de)
