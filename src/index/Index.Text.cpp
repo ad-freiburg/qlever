@@ -25,7 +25,7 @@ void Index::addTextFromContextFile(const string& contextFile) {
   passContextFileIntoVector(contextFile, v);
   LOG(INFO) << "Sorting text index with " << v.size() << " items ..."
             << std::endl;
-  stxxl::sort(begin(v), end(v), SortText(), stxxlMemoryToUse());
+  stxxl::sort(begin(v), end(v), SortText(), stxxlMemoryGb());
   LOG(INFO) << "Sort done." << std::endl;
   createTextIndex(indexFilename, v);
   openTextFileHandle();

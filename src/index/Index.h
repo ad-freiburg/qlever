@@ -323,8 +323,8 @@ class Index {
 
   void setKeepTempFiles(bool keepTempFiles);
 
-  uint64_t& stxxlMemoryToUse() { return this->_stxxlMemoryToUse; }
-  const uint64_t& stxxlMemoryToUse() const { return this->_stxxlMemoryToUse; }
+  uint64_t& stxxlMemoryGb() { return _stxxlMemoryGb; }
+  const uint64_t& stxxlMemoryGb() const { return _stxxlMemoryGb; }
 
   void setOnDiskBase(const std::string& onDiskBase);
 
@@ -484,7 +484,7 @@ class Index {
   bool _turtleParserSkipIllegalLiterals = false;
   bool _onDiskLiterals = false;
   bool _keepTempFiles = false;
-  uint64_t _stxxlMemoryToUse = STXXL_MEMORY_TO_USE;
+  uint64_t _stxxlMemoryGb = DEFAULT_STXXL_MEMORY_IN_GB;
   json _configurationJson;
   Vocabulary<CompressedString, TripleComponentComparator> _vocab;
   size_t _totalVocabularySize = 0;

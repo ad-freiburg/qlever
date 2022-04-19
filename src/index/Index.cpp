@@ -160,7 +160,7 @@ void Index::createFromFile(const string& filename) {
   // case any of the permutations fail.
   writeConfiguration();
 
-  StxxlSorter<SortBySPO> spoSorter{stxxlMemoryToUse()};
+  StxxlSorter<SortBySPO> spoSorter{stxxlMemoryGb()};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
   auto uniqueSorter = ad_utility::uniqueView(psoSorter.sortedView());
@@ -174,7 +174,7 @@ void Index::createFromFile(const string& filename) {
 
   if (_loadAllPermutations) {
     // After the SPO permutation, create patterns if so desired.
-    StxxlSorter<SortByOSP> ospSorter{stxxlMemoryToUse()};
+    StxxlSorter<SortByOSP> ospSorter{stxxlMemoryGb()};
     if (_usePatterns) {
       PatternCreator patternCreator{_onDiskBase + ".index.patterns"};
       auto pushTripleToPatterns = [&patternCreator,
@@ -417,7 +417,7 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
 
   // Iterate over all partial vocabularies.
   TripleVec::bufreader_type reader(data);
-  auto resultPtr = std::make_unique<PsoSorter>(stxxlMemoryToUse());
+  auto resultPtr = std::make_unique<PsoSorter>(stxxlMemoryGb());
   auto& result = *resultPtr;
   size_t i = 0;
   for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();
