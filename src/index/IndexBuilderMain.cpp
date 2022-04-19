@@ -233,7 +233,7 @@ int main(int argc, char** argv) {
         loadAllPermutations = false;
         break;
       case 'm':
-        index.stxxlMemoryBytes() =
+        index.stxxlMemoryInBytes() =
             1024ul * 1024ul * 1024ul * std::strtoul(optarg, nullptr, 10);
       default:
         cerr << endl
