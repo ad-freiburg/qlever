@@ -588,7 +588,7 @@ bool TurtleStreamParser<T>::resetStateAndRead(
   this->_triples.resize(b._numTriples);
   this->_tok.reset(b._tokenizerPosition, b._tokenizerSize);
 
-  std::vector<char> buf;
+  ParallelBuffer::BufferType buf;
 
   // Used for a more informative error message when a parse error occurs (see
   // function "raise").
@@ -617,7 +617,7 @@ void TurtleMmapParser<T>::initialize(const string& filename) {
   size_t size = f.sizeOfFile();
   LOG(INFO) << "mapping " << size << " bytes" << std::endl;
   const int fd = f.getFileDescriptor();
-  void* ptr = mmap(0, size, PROT_READ, MAP_SHARED, fd, 0);
+  void* ptr = mmap(nullptr, size, PROT_READ, MAP_SHARED, fd, 0);
   AD_CHECK(ptr != MAP_FAILED);
   f.close();
   _dataSize = size;
@@ -782,7 +782,7 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
     throw std::runtime_error("Could not read from the input file or stream");
   }
   TurtleStringParser<Tokenizer_T> declarationParser{};
-  declarationParser.setInputStream(*batch);
+  declarationParser.setInputStream(std::move(*batch));
   while (declarationParser.parseDirectiveManually()) {
   }
   this->_prefixMap = std::move(declarationParser.getPrefixMap());
@@ -817,7 +817,8 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
         inputBatch = std::move(nextOptional.value());
       }
       auto batchSize = inputBatch.size();
-      auto parseBatch = [this, parsePosition, batch = std::move(inputBatch)]() {
+      auto parseBatch = [this, parsePosition,
+                         batch = std::move(inputBatch)]() mutable {
         TurtleStringParser<Tokenizer_T> parser;
         parser._prefixMap = this->_prefixMap;
         parser.setPositionOffset(parsePosition);
@@ -826,7 +827,7 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
         // TODO: handle exceptions in threads;
         std::vector<TurtleTriple> triples = parser.parseAndReturnAllTriples();
 
-        tripleCollector.push([triples = std::move(triples), this]() {
+        tripleCollector.push([triples = std::move(triples), this]() mutable {
           _triples = std::move(triples);
         });
       };
