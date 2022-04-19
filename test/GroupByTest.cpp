@@ -7,6 +7,7 @@
 #include <cstdio>
 
 #include "../src/engine/GroupBy.h"
+#include "./IndexTestHelpers.h"
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
@@ -46,7 +47,6 @@ class GroupByTest : public ::testing::Test {
       _index.setKbName("group_by_test");
       _index.setTextName("group_by_test");
       _index.setOnDiskBase("group_ty_test");
-      _index.setNumTriplesPerBatch(2);
       _index.createFromFile<TurtleParserAuto>("group_by_test.nt");
       _index.addTextFromContextFile("group_by_test.words");
       _index.buildDocsDB("group_by_test.documents");
@@ -73,7 +73,7 @@ class GroupByTest : public ::testing::Test {
     std::remove("group_by_test.nt");
   }
 
-  Index _index;
+  Index _index = makeIndexWithTestSettings();
 };
 
 TEST_F(GroupByTest, doGroupBy) {

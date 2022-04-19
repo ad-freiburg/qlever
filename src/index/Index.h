@@ -99,10 +99,12 @@ class Index {
       tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex, Score, bool>>;
   using Posting = std::tuple<TextRecordIndex, WordIndex, Score>;
 
-  // Forbid copy and assignment
+  /// Forbid copy and assignment.
   Index& operator=(const Index&) = delete;
-
   Index(const Index&) = delete;
+
+  /// Allow move construction, which is mostly used in unit tests.
+  Index(Index&&) noexcept = default;
 
   Index();
 
@@ -321,6 +323,9 @@ class Index {
 
   void setKeepTempFiles(bool keepTempFiles);
 
+  uint64_t& stxxlMemoryToUse() { return this->_stxxlMemoryToUse; }
+  const uint64_t& stxxlMemoryToUse() const { return this->_stxxlMemoryToUse; }
+
   void setOnDiskBase(const std::string& onDiskBase);
 
   void setSettingsFile(const std::string& filename);
@@ -479,6 +484,7 @@ class Index {
   bool _turtleParserSkipIllegalLiterals = false;
   bool _onDiskLiterals = false;
   bool _keepTempFiles = false;
+  uint64_t _stxxlMemoryToUse = STXXL_MEMORY_TO_USE;
   json _configurationJson;
   Vocabulary<CompressedString, TripleComponentComparator> _vocab;
   size_t _totalVocabularySize = 0;
