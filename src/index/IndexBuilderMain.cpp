@@ -235,6 +235,7 @@ int main(int argc, char** argv) {
       case 'm':
         index.stxxlMemoryInBytes() =
             1024ul * 1024ul * 1024ul * std::strtoul(optarg, nullptr, 10);
+        break;
       default:
         cerr << endl
              << "! ERROR in processing options (getopt returned '" << c
