@@ -14,10 +14,11 @@ namespace ad_utility {
  * `global/ValueIdComparators.h`)
  *
  * @example:
- * auto overloaded = OverloadCallOperator{[](double d) {return "double";},
+ * auto overloadedCallable = OverloadCallOperator{[](double d) {return
+ * "double";},
  *                              [](std::string s) {return "string";}};
- * overloaded(2.4); // returns "double"
- * overloaded("hello"); // returns "string"
+ * overloadedCallable(2.4); // returns "double"
+ * overloadedCallable("hello"); // returns "string"
  */
 template <class... Ts>
 struct OverloadCallOperator : Ts... {

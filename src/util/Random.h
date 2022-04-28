@@ -91,14 +91,6 @@ class RandomDoubleGenerator {
   std::uniform_real_distribution<double> _distribution;
 };
 
-class RandomBoolGenerator {
- private:
-  SlowRandomIntGenerator<uint8_t> _generator;
-
- public:
-  bool operator()() { return (_generator() % 2 == 0); }
-};
-
 /// Randomly shuffle range denoted by `[begin, end)`
 template <typename RandomIt>
 void randomShuffle(RandomIt begin, RandomIt end) {

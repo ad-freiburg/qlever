@@ -34,7 +34,7 @@ TEST(ValueIdComparators, GetRangeForDatatype) {
 }
 
 template <Comparison comparison>
-auto toFunctor() {
+auto getComparisonFunctor() {
 #define RETURN(comp, func)            \
   if constexpr (comparison == comp) { \
     return func<>();                  \
@@ -46,58 +46,61 @@ auto toFunctor() {
   RETURN(Comparison::NE, std::not_equal_to)
   RETURN(Comparison::GE, std::greater_equal)
   RETURN(Comparison::GT, std::greater)
-#undef RETURN
 }
 
+// Test whether `getRangesForID` behaves as expected for all of the
+// `Comparison`s `isMatchingDatatype(ValueId cmp)` must return true iff the
+// `Datatype` of `id` and of `cmp` are compatible. `applyComparator(comparator,
+// ValueId a, ValueId b) must apply the comparator (like `std::less` on the
+// values contained in `a` and `b` (`isMatchingDatatype(a) and
+// `isMatchingDatatype(b)` both are true when `applyComparator` is called.
 auto testGetRangesForId(auto begin, auto end, ValueId id,
                         auto isMatchingDatatype, auto applyComparator) {
-  auto impl = [&]<Comparison comparison>() {
+  // Perform the testing for a single `Comparison`
+  auto testImpl = [&]<Comparison comparison>() {
     auto ranges = getRangesForId(begin, end, id, comparison);
-    auto comparator = toFunctor<comparison>();
+    auto comparator = getComparisonFunctor<comparison>();
     auto it = begin;
-    for (auto [singleBegin, singleEnd] : ranges) {
-      while (it != singleBegin) {
-        if (isMatchingDatatype(*it) && applyComparator(comparator, *it, id)) {
-          std::cout << *it << ' ' << id << std::endl;
-        }
-        ASSERT_TRUE(!isMatchingDatatype(*it) ||
-                    !applyComparator(comparator, *it, id));
+    for (auto [rangeBegin, rangeEnd] : ranges) {
+      while (it != rangeBegin) {
+        ASSERT_FALSE(isMatchingDatatype(*it) &&
+                     applyComparator(comparator, *it, id));
         ++it;
       }
-      while (it != singleEnd) {
-        ASSERT_TRUE(isMatchingDatatype(*it));
-        ASSERT_TRUE(applyComparator(comparator, *it, id));
+      while (it != rangeEnd) {
+        ASSERT_TRUE(isMatchingDatatype(*it) &&
+                    applyComparator(comparator, *it, id));
         ++it;
       }
     }
     while (it != end) {
-      if (isMatchingDatatype(*it) && applyComparator(comparator, *it, id)) {
-        std::cout << *it << ' ' << id << std::endl;
-      }
-      ASSERT_TRUE(!isMatchingDatatype(*it) ||
-                  !applyComparator(comparator, *it, id));
+      ASSERT_FALSE(isMatchingDatatype(*it) &&
+                   applyComparator(comparator, *it, id));
       ++it;
     }
   };
 
-  impl.template operator()<Comparison::LT>();
-  impl.template operator()<Comparison::LE>();
-  impl.template operator()<Comparison::EQ>();
-  impl.template operator()<Comparison::NE>();
-  impl.template operator()<Comparison::GE>();
-  impl.template operator()<Comparison::GT>();
+  testImpl.template operator()<Comparison::LT>();
+  testImpl.template operator()<Comparison::LE>();
+  testImpl.template operator()<Comparison::EQ>();
+  testImpl.template operator()<Comparison::NE>();
+  testImpl.template operator()<Comparison::GE>();
+  testImpl.template operator()<Comparison::GT>();
 }
 
+// Test that `getRangesFromId` works correctly for `ValueId`s of the unsigned
+// index types (`VocabIndex`, `TextRecordIndex`, `LocalVocabIndex`)
 TEST(ValueIdComparators, IndexTypes) {
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end(), compareByBits);
 
-  auto impl = [&]<Datatype datatype>(auto getFromId) {
-    auto [beginType, endType] =
+  // Perform the testing for a single `Datatype`
+  auto testImpl = [&]<Datatype datatype>(auto getFromId) {
+    auto [beginOfDatatype, endOfDatatype] =
         getRangeForDatatype(ids.begin(), ids.end(), datatype);
-    auto numEntries = endType - beginType;
+    auto numEntries = endOfDatatype - beginOfDatatype;
     AD_CHECK(numEntries > 0);
-    auto generator = SlowRandomIntGenerator<uint64_t>(0, numEntries - 1);
+    auto getRandomIndex = SlowRandomIntGenerator<uint64_t>(0, numEntries - 1);
 
     auto isTypeMatching = [&](ValueId id) {
       return id.getDatatype() == datatype;
@@ -108,29 +111,33 @@ TEST(ValueIdComparators, IndexTypes) {
     };
 
     for (size_t i = 0; i < 200; ++i) {
-      testGetRangesForId(ids.begin(), ids.end(), *(beginType + generator()),
-                         isTypeMatching, applyComparator);
+      testGetRangesForId(ids.begin(), ids.end(),
+                         *(beginOfDatatype + getRandomIndex()), isTypeMatching,
+                         applyComparator);
     }
   };
 
-  impl.operator()<Datatype::VocabIndex>(&getVocabIndex);
-  impl.operator()<Datatype::TextRecordIndex>(&getTextRecordIndex);
-  impl.operator()<Datatype::LocalVocabIndex>(&getLocalVocabIndex);
+  testImpl.operator()<Datatype::VocabIndex>(&getVocabIndex);
+  testImpl.operator()<Datatype::TextRecordIndex>(&getTextRecordIndex);
+  testImpl.operator()<Datatype::LocalVocabIndex>(&getLocalVocabIndex);
 }
 
+// Test that `getRangesFromId` works correctly for `ValueId`s of the numeric
+// types (`Int` and `Double`)
 TEST(ValueIdComparators, NumericTypes) {
   auto impl = [](Datatype datatype, auto isTypeMatching, auto applyComparator) {
     auto ids = makeRandomIds();
     std::sort(ids.begin(), ids.end(), compareByBits);
-    auto [beginType, endType] =
+    auto [beginOfDatatype, endOfDatatype] =
         getRangeForDatatype(ids.begin(), ids.end(), datatype);
-    auto numEntries = endType - beginType;
+    auto numEntries = endOfDatatype - beginOfDatatype;
     AD_CHECK(numEntries > 0);
-    auto generator = SlowRandomIntGenerator<uint64_t>(0, numEntries - 1);
+    auto getRandomIndex = SlowRandomIntGenerator<uint64_t>(0, numEntries - 1);
 
     for (size_t i = 0; i < 200; ++i) {
-      testGetRangesForId(ids.begin(), ids.end(), *(beginType + generator()),
-                         isTypeMatching, applyComparator);
+      testGetRangesForId(ids.begin(), ids.end(),
+                         *(beginOfDatatype + getRandomIndex()), isTypeMatching,
+                         applyComparator);
     }
   };
   auto isTypeMatching = [&](ValueId id) {
@@ -159,6 +166,7 @@ TEST(ValueIdComparators, NumericTypes) {
   impl(Datatype::Int, isTypeMatching, applyComparator);
 }
 
+// Test that `getRangesFromId` works correctly for the undefined Id.
 TEST(ValueIdComparators, Undefined) {
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end(), compareByBits);

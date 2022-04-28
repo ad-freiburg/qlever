@@ -48,11 +48,11 @@ inline uint64_t getTextRecordIndex(ValueId id) {
 
 inline auto addIdsFromGenerator = [](auto& generator, auto makeIds,
                                      std::vector<ValueId>& ids) {
-  SlowRandomIntGenerator<uint8_t> repetitionGenerator(1, 4);
+  SlowRandomIntGenerator<uint8_t> numRepetitionGenerator(1, 4);
   for (size_t i = 0; i < 10'000; ++i) {
     auto randomValue = generator();
-    auto repetitions = repetitionGenerator();
-    for (size_t j = 0; j < repetitions; ++j) {
+    auto numRepetitions = numRepetitionGenerator();
+    for (size_t j = 0; j < numRepetitions; ++j) {
       ids.push_back(makeIds(randomValue));
     }
   }

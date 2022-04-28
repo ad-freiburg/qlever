@@ -41,7 +41,7 @@ namespace detail {
 /// work. Example: `makeSymmetricComparator(&ValueId::getDatatype,
 /// std::equal_to<>{})` returs a predicate that can be called with
 /// `pred(Datatype, ValueId)` and pred(ValueId, Datatype)` and returns true iff
-/// the `Datatype` and the datatype of the Id are the same.
+/// `Datatype` and the datatype of the Id are the same.
 template <typename Projection, typename Comparator = std::less<>>
 auto makeSymmetricComparator(Projection valueIdProjection,
                              Comparator comparator = Comparator{}) {
@@ -79,22 +79,26 @@ class RangeFilter {
   Vec _result;
 
  public:
-  explicit RangeFilter(Comparison order) : _comparison{order} {};
+  explicit RangeFilter(Comparison comparison) : _comparison{comparison} {};
   Vec getResult() && { return std::move(_result); }
 
-  // Semantics: The elements in the range [begin, end) are all smaller than the
-  // value we are comparing against, so this range is only to be included in the
-  // result, if our ordering is LE, LT or NE (similar for the other `addXXX`
-  // functions).
-  void addSmaller(auto begin, auto end) {
-    addImpl<Comparison::LT, Comparison::LE, Comparison::NE>(begin, end);
-  }
+  // Here is the explanation for `addEqualRange`. The explanation for the other
+  // functions is analogous:
+
+  // Let X be the set of numbers x for which x _comparison _value is true. The
+  // given range for `addEqualRange` are numbers that are equal to `_value` (not
+  // necessarily all of them). The function adds them if they are a subset of X.
   void addEqual(auto begin, auto end) {
     addImpl<Comparison::LE, Comparison::EQ, Comparison::GE>(begin, end);
   };
+
+  void addSmaller(auto begin, auto end) {
+    addImpl<Comparison::LT, Comparison::LE, Comparison::NE>(begin, end);
+  }
+
   void addGreater(auto begin, auto end) {
     addImpl<Comparison::GE, Comparison::GT, Comparison::NE>(begin, end);
-  };
+  }
 
   void addNan(RandomIt begin, RandomIt end) {
     addImpl<Comparison::NE>(begin, end);
@@ -111,18 +115,14 @@ class RangeFilter {
   }
 };
 
-// In a range of `ValueId`s, that is sorted according to `compareByBits` and
-// denoted by `begin` and `end` return the contiguous ranges (as iterator pairs)
-// of `ValueId`s where `id.getDatatype() == Double` and `id.getDouble() CMP
-// value`, where `CMP` is the comparator associated with the `comparison`, so
-// `<=` for `Comparison::LE` etc.
+// The following four functions are part of the implementation of
+// `getRangesForId`. The the documentation of that function below for details.
 template <typename RandomIt, typename Value>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForDouble(
-    RandomIt begin, RandomIt end, Value value,
-    Comparison comparison = Comparison::EQ) {
+    RandomIt begin, RandomIt end, Value value, Comparison comparison) {
   std::tie(begin, end) = getRangeForDatatype(begin, end, Datatype::Double);
   if (std::is_floating_point_v<Value> && std::isnan(value)) {
-    // NaNs compare "not equal" to all values.
+    // NaN compares "not equal" to all values, even NaN itself.
     if (comparison == Comparison::NE) {
       return {{begin, end}};
     } else {
@@ -151,48 +151,43 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForDouble(
   auto comparatorGreater =
       makeSymmetricComparator(&ValueId::getDouble, std::greater<>{});
 
-  RangeFilter<RandomIt> rangeManager{comparison};
+  RangeFilter<RandomIt> rangeFilter{comparison};
 
-  rangeManager.addNan(beginOfNans, beginOfNegatives);
+  rangeFilter.addNan(beginOfNans, beginOfNegatives);
   if (value > 0) {
-    // The comparison is [smaller positives, equal, greater positives, nan, all
+    // The order is [smaller positives, equal, greater positives, nan, all
     // negatives].
     auto [eqBegin, eqEnd] =
         std::equal_range(begin, beginOfNans, value, comparatorLess);
-    rangeManager.addSmaller(begin, eqBegin);
-    rangeManager.addEqual(eqBegin, eqEnd);
-    rangeManager.addGreater(eqEnd, beginOfNans);
-    rangeManager.addSmaller(beginOfNegatives, end);
+    rangeFilter.addSmaller(begin, eqBegin);
+    rangeFilter.addEqual(eqBegin, eqEnd);
+    rangeFilter.addGreater(eqEnd, beginOfNans);
+    rangeFilter.addSmaller(beginOfNegatives, end);
   } else if (value < 0) {
-    // The comparison is [all positives, nan,  greater negatives, equal, smaller
+    // The order is [all positives, nan,  greater negatives, equal, smaller
     // negatives].
     auto [eqBegin, eqEnd] =
         std::equal_range(beginOfNegatives, end, value, comparatorGreater);
-    rangeManager.addGreater(begin, beginOfNans);
-    rangeManager.addGreater(beginOfNegatives, eqBegin);
-    rangeManager.addEqual(eqBegin, eqEnd);
-    rangeManager.addSmaller(eqEnd, end);
+    rangeFilter.addGreater(begin, beginOfNans);
+    rangeFilter.addGreater(beginOfNegatives, eqBegin);
+    rangeFilter.addEqual(eqBegin, eqEnd);
+    rangeFilter.addSmaller(eqEnd, end);
   } else if (value == 0) {
     auto positiveEnd =
         std::upper_bound(begin, beginOfNegatives, 0.0, comparatorLess);
     auto negativeEnd =
         std::upper_bound(beginOfNegatives, end, 0.0, comparatorGreater);
-    // The comparison is [0.0, > 0, nan,  -0.0, , < 0.0]
-    rangeManager.addEqual(begin, positiveEnd);
-    rangeManager.addGreater(positiveEnd, beginOfNans);
-    rangeManager.addEqual(beginOfNegatives, negativeEnd);
-    rangeManager.addSmaller(negativeEnd, end);
+    // The order is [0.0, > 0, nan,  -0.0, , < 0.0]
+    rangeFilter.addEqual(begin, positiveEnd);
+    rangeFilter.addGreater(positiveEnd, beginOfNans);
+    rangeFilter.addEqual(beginOfNegatives, negativeEnd);
+    rangeFilter.addSmaller(negativeEnd, end);
   } else {
     AD_CHECK(false);
   }
-  return std::move(rangeManager).getResult();
+  return std::move(rangeFilter).getResult();
 }
 
-// In a range of `ValueId`s, that is sorted according to `compareByBits` and
-// denoted by `begin` and `end` return the contiguous ranges (as iterator pairs)
-// of `ValueId`s where `id.getDatatype() == Int` and `id.getInt() CMP value`,
-// where `CMP` is the comparator associated with the `comparison`, so `<=` for
-// `Comparison::LE` etc.
 template <typename RandomIt, typename Value>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForInt(
     RandomIt begin, RandomIt end, Value value,
@@ -200,7 +195,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForInt(
   std::tie(begin, end) = getRangeForDatatype(begin, end, Datatype::Int);
 
   if (std::is_floating_point_v<Value> && std::isnan(value)) {
-    // NaNs compare "not equal" to all values.
+    // NaN compares "not equal" to all values, even NaN itself.
     if (comparison == Comparison::NE) {
       return {{begin, end}};
     } else {
@@ -214,38 +209,32 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForInt(
   auto firstNegative = std::lower_bound(
       begin, end, true, [](ValueId id, bool) { return id.getInt() >= 0; });
 
-  RangeFilter<RandomIt> manager{comparison};
+  RangeFilter<RandomIt> rangeFilter{comparison};
   auto predicate = makeSymmetricComparator(&ValueId::getInt);
   if (value >= 0) {
     auto [eqBegin, eqEnd] =
         std::equal_range(begin, firstNegative, value, predicate);
-    // The comparison is [smaller positives, equal, greater positives, all
+    // The order is [smaller positives, equal, greater positives, all
     // negatives].
-    manager.addSmaller(begin, eqBegin);
-    manager.addEqual(eqBegin, eqEnd);
-    manager.addGreater(eqEnd, firstNegative);
-    manager.addSmaller(firstNegative, end);
+    rangeFilter.addSmaller(begin, eqBegin);
+    rangeFilter.addEqual(eqBegin, eqEnd);
+    rangeFilter.addGreater(eqEnd, firstNegative);
+    rangeFilter.addSmaller(firstNegative, end);
   } else if (value < 0) {
     auto [eqBegin, eqEnd] =
         std::equal_range(firstNegative, end, value, predicate);
-    // The comparison is [all positives, smaller negatives, equal, greater
+    // The order is [all positives, smaller negatives, equal, greater
     // negatives].
-    manager.addGreater(begin, firstNegative);
-    manager.addSmaller(firstNegative, eqBegin);
-    manager.addEqual(eqBegin, eqEnd);
-    manager.addGreater(eqEnd, end);
+    rangeFilter.addGreater(begin, firstNegative);
+    rangeFilter.addSmaller(firstNegative, eqBegin);
+    rangeFilter.addEqual(eqBegin, eqEnd);
+    rangeFilter.addGreater(eqEnd, end);
   } else {
     AD_CHECK(false);
   }
-  return std::move(manager).getResult();
+  return std::move(rangeFilter).getResult();
 }
 
-// In a range of `ValueId`s, that is sorted according to `compareByBits` and
-// denoted by `begin` and `end` return the contiguous ranges (as iterator pairs)
-// of `ValueId`s where `id.getDatatype()` returns `Double` or `Int` and
-// `id.getXXX() CMP value`, where `CMP` is the comparator associated with the
-// `comparison`, so `<=` for `Comparison::LE` etc and `XXX` is `Double` or
-// `Int`, depending on the datatype.
 template <typename RandomIt, typename Value>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIntsAndDoubles(
     RandomIt begin, RandomIt end, Value value, Comparison comparison) {
@@ -255,46 +244,29 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIntsAndDoubles(
   return result;
 }
 
-// For a range from `begin` to `end` of `ValueId`s, which is sorted by
-// `compareByBits` and return the contiguous ranges (as iterator pairs) of
-// `ValueId`s where `idInRange.getDatatype() == valueId.getDatatype()`
-// `someId.getXXX() CMP valueId.getXXX()`, where `CMP` is the comparator
-// associated with the `comparison`, so `<=` for `Comparison::LE` etc and `XXX`
-// is the Datatype of `valueId`. This function only returns correct results if
-// `valueId.getDatatype()` is an unsigned index type (`Vocab, LocalVocab,
-// TextVocab`).
 template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
-    RandomIt begin, RandomIt end, ValueId valueId,
-    Comparison comparison = Comparison::EQ) {
+    RandomIt begin, RandomIt end, ValueId valueId, Comparison comparison) {
   std::tie(begin, end) = getRangeForDatatype(begin, end, valueId.getDatatype());
 
-  RangeFilter<RandomIt> manager{comparison};
+  RangeFilter<RandomIt> rangeFilter{comparison};
   auto [eqBegin, eqEnd] = std::equal_range(begin, end, valueId, &compareByBits);
-  manager.addSmaller(begin, eqBegin);
-  manager.addEqual(eqBegin, eqEnd);
-  manager.addGreater(eqEnd, end);
-  return std::move(manager).getResult();
+  rangeFilter.addSmaller(begin, eqBegin);
+  rangeFilter.addEqual(eqBegin, eqEnd);
+  rangeFilter.addGreater(eqEnd, end);
+  return std::move(rangeFilter).getResult();
 }
 
 }  // namespace detail
 
-/// In a range of `ValueId`s, that is sorted according to `compareByBits` and
-/// denoted by `begin` and `end` return the contiguous ranges (as iterator
-/// pairs) of `ValueId`s where `idInRange.getDatatype()` and
-/// `valueId.getDatatype()` are compatible and `idInRange.getXXX() CMP
-/// valueId.getYYY()`, where `CMP` is the comparator associated with the
-/// `order`, so `<=` for `Comparison::LE` etc and `XXX` is the Datatype of
-/// `idInRange()` and `YYY` is the Datatype of `valueId`. Two datatypes are
-/// compatible, if they are the same, or if they are both numeric. The ranges in
-/// the result are non-overlapping, non-empy, and sorted (ranges that contain
-/// smaller iterators come first).
-// TODO<joka921> A version of this function that takes `double`, `int64_t`,
-// `VocabIndex` etc. directly would probably also come in handy, but it requires
-// the index types to be strong for a nice implementation.
+// The function returns the sequence of all IDs x (as a sequence of
+// non-overlapping ranges in ascending order) with the following properties: //
+// // 1. x is contained in the given range `begin, end`. // 2. The condition x
+// `comparison` value is fulfilled, where value is the value of `valueId`. // 3.
+// The datatype ofs of x and `valueId` are compatible
 template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
-    RandomIt begin, RandomIt end, ValueId id, Comparison order) {
+    RandomIt begin, RandomIt end, ValueId valueId, Comparison comparison) {
   // This lambda enforces the invariants `non-empty` and `sorted`.
   auto simplify = [](std::vector<std::pair<RandomIt, RandomIt>>&& result) {
     std::sort(result.begin(), result.end());
@@ -302,18 +274,19 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     std::erase_if(result, [](const auto& p) { return p.first == p.second; });
     return std::move(result);
   };
-  switch (id.getDatatype()) {
+  switch (valueId.getDatatype()) {
     case Datatype::Double:
       return simplify(detail::getRangesForIntsAndDoubles(
-          begin, end, id.getDouble(), order));
+          begin, end, valueId.getDouble(), comparison));
     case Datatype::Int:
-      return simplify(
-          detail::getRangesForIntsAndDoubles(begin, end, id.getInt(), order));
+      return simplify(detail::getRangesForIntsAndDoubles(
+          begin, end, valueId.getInt(), comparison));
     case Datatype::Undefined:
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::TextRecordIndex:
-      return simplify(detail::getRangesForIndexTypes(begin, end, id, order));
+      return simplify(
+          detail::getRangesForIndexTypes(begin, end, valueId, comparison));
   }
   AD_CHECK(false);
 }
