@@ -270,7 +270,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
 // 1. x is contained in the given range `begin, end`.
 // 2. The condition x `comparison` value is fulfilled, where value is the value
 // of `valueId`.
-// 3. The datatype ofs of x and `valueId` are compatible.
+// 3. The datatype of x and `valueId` are compatible.
 template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     RandomIt begin, RandomIt end, ValueId valueId, Comparison comparison) {
