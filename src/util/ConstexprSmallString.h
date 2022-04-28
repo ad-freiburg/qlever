@@ -72,6 +72,12 @@ struct ConstexprSmallString {
 
   /// Implicit conversion to std::string_view
   operator std::string_view() const { return {_characters.data(), _size}; }
+
+  friend std::ostream& operator<<(std::ostream& stream,
+                                  const ConstexprSmallString& string) {
+    stream << std::string_view{string};
+    return stream;
+  }
 };
 }  // namespace ad_utility
 

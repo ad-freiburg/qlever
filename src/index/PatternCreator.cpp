@@ -8,11 +8,11 @@
 void PatternCreator::processTriple(std::array<Id, 3> triple) {
   if (!_currentSubjectIndex.has_value()) {
     // This is the first triple
-    _currentSubjectIndex = triple[0].get();
-  } else if (triple[0].get() != _currentSubjectIndex) {
+    _currentSubjectIndex = VocabIndex::make(triple[0].get());
+  } else if (triple[0].get() != _currentSubjectIndex.value().get()) {
     // New subject.
     finishSubject(_currentSubjectIndex.value(), _currentPattern);
-    _currentSubjectIndex = triple[0].get();
+    _currentSubjectIndex->get() = triple[0].get();
     _currentPattern.clear();
   }
   // Don't list predicates twice in the same pattern.
@@ -50,12 +50,12 @@ void PatternCreator::finishSubject(VocabIndex subjectIndex,
   // triple.
   while (_nextUnassignedSubjectIndex < subjectIndex) {
     _subjectToPatternSerializer.push(NO_PATTERN);
-    _nextUnassignedSubjectIndex++;
+    _nextUnassignedSubjectIndex = _nextUnassignedSubjectIndex.incremented();
   }
 
   // Write the subjectIndex-pattern mapping for this subjectIndex.
   _subjectToPatternSerializer.push(patternId);
-  _nextUnassignedSubjectIndex++;
+  _nextUnassignedSubjectIndex = _nextUnassignedSubjectIndex.incremented();
 }
 
 // ____________________________________________________________________________

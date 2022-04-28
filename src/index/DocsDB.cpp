@@ -20,11 +20,11 @@ void DocsDB::init(const string& fileName) {
 }
 
 // _____________________________________________________________________________
-string DocsDB::getTextExcerpt(UnknownIndex cid) const {
+string DocsDB::getTextExcerpt(TextRecordIndex cid) const {
   off_t ft[2];
   off_t& from = ft[0];
   off_t& to = ft[1];
-  off_t at = _startOfOffsets + cid * sizeof(off_t);
+  off_t at = _startOfOffsets + cid.get() * sizeof(off_t);
   at += _dbFile.read(ft, sizeof(ft), at);
   while (to == from) {
     at += _dbFile.read(&to, sizeof(off_t), at);

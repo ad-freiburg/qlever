@@ -99,10 +99,12 @@ class Index {
       tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex, Score, bool>>;
   using Posting = std::tuple<TextRecordIndex, WordIndex, Score>;
 
-  // Forbid copy and assignment
+  /// Forbid copy and assignment.
   Index& operator=(const Index&) = delete;
-
   Index(const Index&) = delete;
+
+  /// Allow move construction, which is mostly used in unit tests.
+  Index(Index&&) noexcept = default;
 
   Index();
 
@@ -199,19 +201,19 @@ class Index {
     if (id == ID_NO_VALUE) {
       return std::nullopt;
     }
-    return _vocab.indexToOptionalString(id.get());
+    return _vocab.indexToOptionalString(VocabIndex::make(id.get()));
   }
 
   bool getId(const string& element, Id* id) const {
     VocabIndex vocabId;
     auto success = getVocab().getId(element, &vocabId);
-    *id = Id::make(vocabId);
+    *id = Id::make(vocabId.get());
     return success;
   }
 
   std::pair<Id, Id> prefix_range(const std::string& prefix) const {
     auto [begin, end] = _vocab.prefix_range(prefix);
-    return {Id::make(begin), Id::make(end)};
+    return {Id::make(begin.get()), Id::make(end.get())};
   }
 
   const vector<PatternID>& getHasPattern() const;
@@ -293,7 +295,7 @@ class Index {
                                 vector<Score>& scores) const;
 
   string getTextExcerpt(TextRecordIndex cid) const {
-    if (cid >= _docsDB._size) {
+    if (cid.get() >= _docsDB._size) {
       return "";
     }
     return _docsDB.getTextExcerpt(cid);
@@ -320,6 +322,9 @@ class Index {
   void setOnDiskLiterals(bool onDiskLiterals);
 
   void setKeepTempFiles(bool keepTempFiles);
+
+  uint64_t& stxxlMemoryInBytes() { return _stxxlMemoryInBytes; }
+  const uint64_t& stxxlMemoryInBytes() const { return _stxxlMemoryInBytes; }
 
   void setOnDiskBase(const std::string& onDiskBase);
 
@@ -479,6 +484,7 @@ class Index {
   bool _turtleParserSkipIllegalLiterals = false;
   bool _onDiskLiterals = false;
   bool _keepTempFiles = false;
+  uint64_t _stxxlMemoryInBytes = DEFAULT_STXXL_MEMORY_IN_BYTES;
   json _configurationJson;
   Vocabulary<CompressedString, TripleComponentComparator> _vocab;
   size_t _totalVocabularySize = 0;

@@ -1,9 +1,12 @@
-// Copyright 2016, University of Freiburg, Chair of Algorithms and Data
+// Copyright 2022, University of Freiburg, Chair of Algorithms and Data
 // Structures.
-// Author: Björn Buchhold <buchholb>
+// Authors: Björn Buchhold <buchholb> (2016), Hannah Bast <bast>, Johannes
+// Kalmbach <kalmbach>
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
+#include "../src/global/Constants.h"
 #include "../src/util/Conversions.h"
 
 using std::string;
@@ -318,6 +321,35 @@ TEST(ConversionsTest, convertIndexWordToFloat) {
                   convertIndexWordToFloat(convertFloatStringToIndexWord("1")));
   ASSERT_FLOAT_EQ(-1,
                   convertIndexWordToFloat(convertFloatStringToIndexWord("-1")));
+}
+
+TEST(ConversionsTest, isXsdValue) {
+  auto makeXsdValue = [](auto value, string_view typeString) {
+    return absl::StrCat("\"", value, "\"^^<", typeString, ">");
+  };
+
+  // These all parse as XSD values (note that we are not very strict).
+  ASSERT_TRUE(isXsdValue(makeXsdValue(42, XSD_INT_TYPE)));
+  ASSERT_TRUE(isXsdValue(makeXsdValue(42, XSD_INTEGER_TYPE)));
+  ASSERT_TRUE(isXsdValue(makeXsdValue(42.0, XSD_DOUBLE_TYPE)));
+  ASSERT_TRUE(isXsdValue(makeXsdValue(42.1, XSD_DECIMAL_TYPE)));
+  ASSERT_TRUE(isXsdValue(makeXsdValue("spargelsalat", XSD_FLOAT_TYPE)));
+  ASSERT_TRUE(isXsdValue(makeXsdValue("true", XSD_BOOLEAN_TYPE)));
+  ASSERT_TRUE(isXsdValue(makeXsdValue("no date", XSD_DATETIME_TYPE)));
+  ASSERT_TRUE(isXsdValue(makeXsdValue("no date", XSD_DATETIME_TYPE)));
+  ASSERT_TRUE(isXsdValue(
+      makeXsdValue("spargel", "http://www.w3.org/2001/XMLSchema#saLat")));
+
+  // These don't.
+  ASSERT_FALSE(isXsdValue("\"42\"^<http://www.w3.org/2001/XMLSchema#int>"));
+  ASSERT_FALSE(isXsdValue("\"42\"^^^<http://www.w3.org/2001/XMLSchema#int>"));
+  ASSERT_FALSE(isXsdValue("\"42\"^^<http://www.w3.org/2001/XMLSchema#int"));
+  ASSERT_FALSE(isXsdValue("\"42\"^^http://www.w3.org/2001/XMLSchema#int>"));
+  ASSERT_FALSE(isXsdValue("\"42\"^^http://www.w3.org/2001/XMLSchema#int>"));
+  ASSERT_FALSE(isXsdValue("\"42\"^^<http://www.wdrei.org/2001/XMLSchema#int>"));
+  ASSERT_FALSE(isXsdValue("\"42^^<http://www.w3.org/2001/XMLSchema#int>"));
+  ASSERT_FALSE(isXsdValue(
+      makeXsdValue("spargel", "http://www.w3.org/2001/XMLSchema#sa1at")));
 }
 
 TEST(ConversionsTest, isNumeric) {

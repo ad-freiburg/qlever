@@ -30,8 +30,8 @@ then start a SPARQL endpoint using that index, see our [Quickstart Guide](docs/q
 This will take you through a simple example dataset ([120 Years of Olympics](https://github.com/wallscope/olympics-rdf), with 1.8M triples)
 as well as a very large dataset ([the complete Wikidata](https://www.wikidata.org), with 16 billion triples as of 30.09.2021).
 
+NEW 19.04.2022: There is now a very easy-to-use script `qlever` that allows you to control all things QLever does. For example, you can index a dataset, start a server, and launch a UI as simply as `qlever index start ui`. The script also provides all kinds of monitoring functions. Check it out on https://github.com/ad-freiburg/qlever-control .
+
 # Advanced feature and more in-depth information
 
-QLever's [advanced features are described here](docs/advanced_features.md).
-
-For more in-depth information, see the various other `.md` files in [this folder](docs).
+QLever's [advanced features are described here](docs/advanced_features.md) . For more in-depth information, see the various other `.md` files in [this folder](docs). Some of this is outdated. We will gradually put more information on https://github.com/ad-freiburg/qlever/wiki

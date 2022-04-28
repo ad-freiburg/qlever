@@ -391,7 +391,7 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
 
  private:
   // The complete input to this parser.
-  std::vector<char> _tmpToParse;
+  ParallelBuffer::BufferType _tmpToParse;
   // Used to add a certain offset to the parsing position when using this
   // in a parallel setting.
   size_t _positionOffset = 0;
@@ -412,7 +412,7 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
   const auto& getPrefixMap() const { return _prefixMap; }
 
   // __________________________________________________________
-  void setInputStream(std::vector<char> toParse) {
+  void setInputStream(ParallelBuffer::BufferType&& toParse) {
     _tmpToParse = std::move(toParse);
     this->_tok.reset(_tmpToParse.data(), _tmpToParse.size());
   }
@@ -491,7 +491,7 @@ class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
   // stores the current batch of bytes we have to parse.
   // Might end in the middle of a statement or even a multibyte utf8 character,
   // that's why we need the backupState() and resetStateAndRead() methods
-  std::vector<char> _byteVec;
+  ParallelBuffer::BufferType _byteVec;
 
   std::unique_ptr<ParallelBuffer> _fileBuffer;
   // this many characters will be buffered at once,
@@ -614,5 +614,5 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
                                              "parallel parser"};
   std::future<void> _parseFuture;
 
-  std::vector<char> _remainingBatchFromInitialization;
+  ParallelBuffer::BufferType _remainingBatchFromInitialization;
 };

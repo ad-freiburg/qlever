@@ -64,7 +64,7 @@ addLinkAndDiscoverTest(EngineTest engine)
 
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
-addLinkAndDiscoverTest(ConversionsTest)
+addLinkAndDiscoverTest(ConversionsTest absl::strings)
 
 addLinkAndDiscoverTest(HashMapTest absl::flat_hash_map)
 

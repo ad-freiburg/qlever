@@ -4,6 +4,8 @@
 #ifndef QLEVER_UNINITIALIZEDALLOCATOR_H
 #define QLEVER_UNINITIALIZEDALLOCATOR_H
 
+#include <vector>
+
 namespace ad_utility {
 // Allocator adaptor that interposes construct() calls to
 // convert value initialization into default initialization.
@@ -55,6 +57,10 @@ class default_init_allocator : public A {
     a_t::construct(static_cast<A&>(*this), ptr, std::forward<Args>(args)...);
   }
 };
+
+/// Alias for a `std::vector<T>` that uses the `default_init_allocator`
+template <typename T>
+using UninitializedVector = std::vector<T, default_init_allocator<T>>;
 }  // namespace ad_utility
 
 #endif  // QLEVER_UNINITIALIZEDALLOCATOR_H
