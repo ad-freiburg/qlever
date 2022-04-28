@@ -39,7 +39,7 @@ namespace detail {
 /// both `pred(ValueId, Value)` and `pred(Value, ValueId)` work as expected.
 /// This function is useful for `std::equal_range` which expects both orders to
 /// work. Example: `makeSymmetricComparator(&ValueId::getDatatype,
-/// std::equal_to<>{})` returs a predicate that can be called with
+/// std::equal_to<>{})` returns a predicate that can be called with
 /// `pred(Datatype, ValueId)` and pred(ValueId, Datatype)` and returns true iff
 /// `Datatype` and the datatype of the Id are the same.
 template <typename Projection, typename Comparator = std::less<>>
@@ -82,9 +82,6 @@ class RangeFilter {
   explicit RangeFilter(Comparison comparison) : _comparison{comparison} {};
   Vec getResult() && { return std::move(_result); }
 
-  // Here is the explanation for `addEqualRange`. The explanation for the other
-  // functions is analogous:
-
   // Let X be the set of numbers x for which x _comparison _value is true. The
   // given range for `addEqualRange` are numbers that are equal to `_value` (not
   // necessarily all of them). The function adds them if they are a subset of X.
@@ -92,14 +89,17 @@ class RangeFilter {
     addImpl<Comparison::LE, Comparison::EQ, Comparison::GE>(begin, end);
   };
 
+  // Analogous to `addEqual`.
   void addSmaller(auto begin, auto end) {
     addImpl<Comparison::LT, Comparison::LE, Comparison::NE>(begin, end);
   }
 
+  // Analogous to `addEqual`.
   void addGreater(auto begin, auto end) {
     addImpl<Comparison::GE, Comparison::GT, Comparison::NE>(begin, end);
   }
 
+  // Analogous to `addEqual`.
   void addNan(RandomIt begin, RandomIt end) {
     addImpl<Comparison::NE>(begin, end);
   }
@@ -115,14 +115,14 @@ class RangeFilter {
   }
 };
 
-// The following four functions are part of the implementation of
-// `getRangesForId`. The the documentation of that function below for details.
+// This function is part of the implementation of `getRangesForId`. See the
+// documentation there.
 template <typename RandomIt, typename Value>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForDouble(
     RandomIt begin, RandomIt end, Value value, Comparison comparison) {
   std::tie(begin, end) = getRangeForDatatype(begin, end, Datatype::Double);
   if (std::is_floating_point_v<Value> && std::isnan(value)) {
-    // NaN compares "not equal" to all values, even NaN itself.
+    // NaN compares "not equal" to all values, even to NaN itself.
     if (comparison == Comparison::NE) {
       return {{begin, end}};
     } else {
@@ -188,6 +188,8 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForDouble(
   return std::move(rangeFilter).getResult();
 }
 
+// This function is part of the implementation of `getRangesForId`. See the
+// documentation there.
 template <typename RandomIt, typename Value>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForInt(
     RandomIt begin, RandomIt end, Value value,
@@ -195,7 +197,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForInt(
   std::tie(begin, end) = getRangeForDatatype(begin, end, Datatype::Int);
 
   if (std::is_floating_point_v<Value> && std::isnan(value)) {
-    // NaN compares "not equal" to all values, even NaN itself.
+    // NaN compares "not equal" to all values, even to NaN itself.
     if (comparison == Comparison::NE) {
       return {{begin, end}};
     } else {
@@ -235,6 +237,8 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForInt(
   return std::move(rangeFilter).getResult();
 }
 
+// This function is part of the implementation of `getRangesForId`. See the
+// documentation there.
 template <typename RandomIt, typename Value>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIntsAndDoubles(
     RandomIt begin, RandomIt end, Value value, Comparison comparison) {
@@ -244,6 +248,8 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIntsAndDoubles(
   return result;
 }
 
+// This function is part of the implementation of `getRangesForId`. See the
+// documentation there.
 template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
     RandomIt begin, RandomIt end, ValueId valueId, Comparison comparison) {
@@ -260,10 +266,11 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
 }  // namespace detail
 
 // The function returns the sequence of all IDs x (as a sequence of
-// non-overlapping ranges in ascending order) with the following properties: //
-// // 1. x is contained in the given range `begin, end`. // 2. The condition x
-// `comparison` value is fulfilled, where value is the value of `valueId`. // 3.
-// The datatype ofs of x and `valueId` are compatible
+// non-overlapping ranges in ascending order) with the following properties:
+// 1. x is contained in the given range `begin, end`.
+// 2. The condition x `comparison` value is fulfilled, where value is the value
+// of `valueId`.
+// 3. The datatype ofs of x and `valueId` are compatible.
 template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     RandomIt begin, RandomIt end, ValueId valueId, Comparison comparison) {

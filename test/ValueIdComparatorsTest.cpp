@@ -49,11 +49,13 @@ auto getComparisonFunctor() {
 }
 
 // Test whether `getRangesForID` behaves as expected for all of the
-// `Comparison`s `isMatchingDatatype(ValueId cmp)` must return true iff the
-// `Datatype` of `id` and of `cmp` are compatible. `applyComparator(comparator,
-// ValueId a, ValueId b) must apply the comparator (like `std::less` on the
-// values contained in `a` and `b` (`isMatchingDatatype(a) and
-// `isMatchingDatatype(b)` both are true when `applyComparator` is called.
+// `Comparison`s.
+// `isMatchingDatatype(ValueId cmp)` must return true iff the
+// `Datatype` of `id` and of `cmp` are compatible.
+// `applyComparator(comparator, ValueId a, ValueId b) must apply the comparator
+// (like `std::less` on the values contained in `a` and `b`
+// (`isMatchingDatatype(a) and `isMatchingDatatype(b)` both are true when
+// `applyComparator` is called.
 auto testGetRangesForId(auto begin, auto end, ValueId id,
                         auto isMatchingDatatype, auto applyComparator) {
   // Perform the testing for a single `Comparison`
@@ -89,12 +91,12 @@ auto testGetRangesForId(auto begin, auto end, ValueId id,
 }
 
 // Test that `getRangesFromId` works correctly for `ValueId`s of the unsigned
-// index types (`VocabIndex`, `TextRecordIndex`, `LocalVocabIndex`)
+// index types (`VocabIndex`, `TextRecordIndex`, `LocalVocabIndex`).
 TEST(ValueIdComparators, IndexTypes) {
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end(), compareByBits);
 
-  // Perform the testing for a single `Datatype`
+  // Perform the test for a single `Datatype`.
   auto testImpl = [&]<Datatype datatype>(auto getFromId) {
     auto [beginOfDatatype, endOfDatatype] =
         getRangeForDatatype(ids.begin(), ids.end(), datatype);
