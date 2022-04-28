@@ -5,7 +5,9 @@
 #ifndef QLEVER_VALUEID_H
 #define QLEVER_VALUEID_H
 
+#include <bit>
 #include <cstdint>
+#include <functional>
 #include <limits>
 
 #include "../util/BitUtils.h"
@@ -97,6 +99,12 @@ class ValueId {
   constexpr auto operator<=>(const ValueId& other) const {
     return _bits <=> other._bits;
   }
+
+  /// Get the underlying bit representation, e.g. for compression etc.
+  [[nodiscard]] constexpr T getBits() const noexcept { return _bits; }
+  /// Construct from the underlying bit representation. `bits` must have been
+  /// obtained by a call to `getBits()` on a valid `ValueId`.
+  static constexpr ValueId fromBits(T bits) noexcept { return {bits}; }
 
   /// Get the datatype.
   [[nodiscard]] constexpr Datatype getDatatype() const noexcept {
