@@ -120,11 +120,15 @@ template <typename RandomIt, typename Value>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForDouble(
     RandomIt begin, RandomIt end, Value value,
     Comparison comparison = Comparison::EQ) {
-  if (std::is_floating_point_v<Value> && std::isnan(value)) {
-    // NaNs are non-comparable.
-    return {};
-  }
   std::tie(begin, end) = getRangeForDatatype(begin, end, Datatype::Double);
+  if (std::is_floating_point_v<Value> && std::isnan(value)) {
+    // NaNs compare "not equal" to all values.
+    if (comparison == Comparison::NE) {
+      return {{begin, end}};
+    } else {
+      return {};
+    }
+  }
   // In `ids` the negative number stand AFTER the positive numbers because of
   // the bitOrdering. First rotate the negative numbers to the beginning.
   auto doubleIdIsNegative = [](ValueId id) -> bool {
@@ -151,28 +155,33 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForDouble(
 
   rangeManager.addNan(beginOfNans, beginOfNegatives);
   if (value > 0) {
+    // The comparison is [smaller positives, equal, greater positives, nan, all
+    // negatives].
     auto [eqBegin, eqEnd] =
         std::equal_range(begin, beginOfNans, value, comparatorLess);
-    rangeManager.addEqual(eqBegin, eqEnd);
     rangeManager.addSmaller(begin, eqBegin);
-    rangeManager.addSmaller(beginOfNegatives, end);
+    rangeManager.addEqual(eqBegin, eqEnd);
     rangeManager.addGreater(eqEnd, beginOfNans);
+    rangeManager.addSmaller(beginOfNegatives, end);
   } else if (value < 0) {
-    // The negative range is inverted (greater values first)
+    // The comparison is [all positives, nan,  greater negatives, equal, smaller
+    // negatives].
     auto [eqBegin, eqEnd] =
         std::equal_range(beginOfNegatives, end, value, comparatorGreater);
-    rangeManager.addSmaller(eqEnd, end);
     rangeManager.addGreater(begin, beginOfNans);
     rangeManager.addGreater(beginOfNegatives, eqBegin);
+    rangeManager.addEqual(eqBegin, eqEnd);
+    rangeManager.addSmaller(eqEnd, end);
   } else if (value == 0) {
     auto positiveEnd =
         std::upper_bound(begin, beginOfNegatives, 0.0, comparatorLess);
     auto negativeEnd =
         std::upper_bound(beginOfNegatives, end, 0.0, comparatorGreater);
+    // The comparison is [0.0, > 0, nan,  -0.0, , < 0.0]
     rangeManager.addEqual(begin, positiveEnd);
+    rangeManager.addGreater(positiveEnd, beginOfNans);
     rangeManager.addEqual(beginOfNegatives, negativeEnd);
     rangeManager.addSmaller(negativeEnd, end);
-    rangeManager.addGreater(positiveEnd, beginOfNans);
   } else {
     AD_CHECK(false);
   }
@@ -188,12 +197,16 @@ template <typename RandomIt, typename Value>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForInt(
     RandomIt begin, RandomIt end, Value value,
     Comparison comparison = Comparison::EQ) {
-  if (std::is_floating_point_v<Value> && std::isnan(value)) {
-    // NaNs are non-comparable.
-    return {};
-  }
-
   std::tie(begin, end) = getRangeForDatatype(begin, end, Datatype::Int);
+
+  if (std::is_floating_point_v<Value> && std::isnan(value)) {
+    // NaNs compare "not equal" to all values.
+    if (comparison == Comparison::NE) {
+      return {{begin, end}};
+    } else {
+      return {};
+    }
+  }
 
   // Find the first int < 0. It stands after all ints >= 0 because of the bit
   // representation of the 2s-complement. The constant `true` and the unnamed
@@ -299,7 +312,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     case Datatype::Undefined:
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
-    case Datatype::TextIndex:
+    case Datatype::TextRecordIndex:
       return simplify(detail::getRangesForIndexTypes(begin, end, id, order));
   }
   AD_CHECK(false);

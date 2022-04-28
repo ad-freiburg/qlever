@@ -10,23 +10,7 @@
 #include "../src/util/HashSet.h"
 #include "../src/util/Random.h"
 #include "../src/util/Serializer/Serializer.h"
-
-auto positiveRepresentableDoubleGenerator = RandomDoubleGenerator(
-    ValueId::minPositiveDouble, std::numeric_limits<double>::max());
-auto negativeRepresentableDoubleGenerator = RandomDoubleGenerator(
-    -std::numeric_limits<double>::max(), -ValueId::minPositiveDouble);
-auto nonRepresentableDoubleGenerator = RandomDoubleGenerator(
-    -ValueId::minPositiveDouble, ValueId::minPositiveDouble);
-auto indexGenerator = SlowRandomIntGenerator<uint64_t>(0, ValueId::maxIndex);
-auto invalidIndexGenerator = SlowRandomIntGenerator<uint64_t>(
-    ValueId::maxIndex, std::numeric_limits<uint64_t>::max());
-
-auto nonOverflowingNBitGenerator = SlowRandomIntGenerator<int64_t>(
-    ValueId::IntegerType::min(), ValueId::IntegerType::max());
-auto overflowingNBitGenerator = SlowRandomIntGenerator<int64_t>(
-    ValueId::IntegerType::max() + 1, std::numeric_limits<int64_t>::max());
-auto underflowingNBitGenerator = SlowRandomIntGenerator<int64_t>(
-    std::numeric_limits<int64_t>::min(), ValueId::IntegerType::min() - 1);
+#include "./ValueIdTestHelpers.h"
 
 TEST(ValueId, makeFromDouble) {
   auto testRepresentableDouble = [](double d) {
@@ -110,26 +94,6 @@ TEST(ValueId, makeFromInt) {
   testOverflow(underflowingNBitGenerator);
 }
 
-// Some helper functions to convert uint64_t values directly to and from index
-// type `ValueId`s.
-ValueId makeVocabId(uint64_t value) {
-  return ValueId::makeFromVocabIndex(VocabIndex::make(value));
-}
-ValueId makeLocalVocabId(uint64_t value) {
-  return ValueId::makeFromLocalVocabIndex(LocalVocabIndex::make(value));
-}
-ValueId makeTextRecordId(uint64_t value) {
-  return ValueId::makeFromTextRecordIndex(TextRecordIndex::make(value));
-}
-
-uint64_t getVocabIndex(ValueId id) { return id.getVocabIndex().get(); }
-uint64_t getLocalVocabIndex(ValueId id) {
-  return id.getLocalVocabIndex().get();
-}
-uint64_t getTextRecordIndex(ValueId id) {
-  return id.getTextRecordIndex().get();
-}
-
 TEST(ValueId, Indices) {
   auto testRandomIds = [&](auto makeId, auto getFromId, Datatype type) {
     auto testSingle = [&](auto value) {
@@ -160,53 +124,6 @@ TEST(ValueId, Undefined) {
   auto id = ValueId::makeUndefined();
   ASSERT_EQ(id.getDatatype(), Datatype::Undefined);
 }
-
-auto addIdsFromGenerator = [](auto& generator, auto makeIds,
-                              std::vector<ValueId>& ids) {
-  for (size_t i = 0; i < 10'000; ++i) {
-    ids.push_back(makeIds(generator()));
-  }
-};
-
-auto makeRandomDoubleIds = []() {
-  std::vector<ValueId> ids;
-  addIdsFromGenerator(positiveRepresentableDoubleGenerator,
-                      &ValueId::makeFromDouble, ids);
-  addIdsFromGenerator(negativeRepresentableDoubleGenerator,
-                      &ValueId::makeFromDouble, ids);
-
-  for (size_t i = 0; i < 1000; ++i) {
-    ids.push_back(ValueId::makeFromDouble(0.0));
-    ids.push_back(ValueId::makeFromDouble(-0.0));
-    auto inf = std::numeric_limits<double>::infinity();
-    ids.push_back(ValueId::makeFromDouble(inf));
-    ids.push_back(ValueId::makeFromDouble(-inf));
-    auto nan = std::numeric_limits<double>::quiet_NaN();
-    ids.push_back(ValueId::makeFromDouble(nan));
-    auto max = std::numeric_limits<double>::max();
-    auto min = std::numeric_limits<double>::min();
-    ids.push_back(ValueId::makeFromDouble(max));
-    ids.push_back(ValueId::makeFromDouble(min));
-  }
-  randomShuffle(ids.begin(), ids.end());
-  return ids;
-};
-auto makeRandomIds = []() {
-  std::vector<ValueId> ids = makeRandomDoubleIds();
-  addIdsFromGenerator(indexGenerator, &makeVocabId, ids);
-  addIdsFromGenerator(indexGenerator, &makeLocalVocabId, ids);
-  addIdsFromGenerator(indexGenerator, &makeTextRecordId, ids);
-  addIdsFromGenerator(nonOverflowingNBitGenerator, &ValueId::makeFromInt, ids);
-  addIdsFromGenerator(overflowingNBitGenerator, &ValueId::makeFromInt, ids);
-  addIdsFromGenerator(underflowingNBitGenerator, &ValueId::makeFromInt, ids);
-
-  for (size_t i = 0; i < 10'000; ++i) {
-    ids.push_back(ValueId::makeUndefined());
-  }
-
-  randomShuffle(ids.begin(), ids.end());
-  return ids;
-};
 
 TEST(ValueId, OrderingDifferentDatatypes) {
   auto ids = makeRandomIds();

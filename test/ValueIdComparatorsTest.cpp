@@ -6,68 +6,19 @@
 
 #include "../src/global/ValueIdComparators.h"
 #include "../src/util/Random.h"
+#include "./ValueIdTestHelpers.h"
 
 using namespace valueIdComparators;
 
-std::vector<ValueId> makeAndSortIds() {
-  std::vector<ValueId> ids;
-  ids.push_back(ValueId::makeFromVocabIndex(0));
-  ids.push_back(ValueId::makeFromVocabIndex(3));
-  ids.push_back(ValueId::makeFromVocabIndex(ValueId::maxIndex));
-
-  ids.push_back(ValueId::makeFromLocalVocabIndex(0));
-  ids.push_back(ValueId::makeFromLocalVocabIndex(3));
-  ids.push_back(ValueId::makeFromLocalVocabIndex(ValueId::maxIndex));
-
-  ids.push_back(ValueId::makeFromTextIndex(0));
-  ids.push_back(ValueId::makeFromTextIndex(3));
-  ids.push_back(ValueId::makeFromTextIndex(ValueId::maxIndex));
-
-  auto i = [&](int64_t value) { ids.push_back(ValueId::makeFromInt(value)); };
-  auto d = [&](double value) { ids.push_back(ValueId::makeFromDouble(value)); };
-
-  i(0);
-  i(42);
-  i(12395);
-  i(-1235);
-  i(-21);
-  i(ValueId::IntegerType::min());
-  i(ValueId::IntegerType::max());
-
-  d(0.0);
-  d(-0.0);
-  d(42.0);
-  d(1230e12);
-  d(-16.2);
-  d(-1239.3e5);
-  d(std::numeric_limits<double>::quiet_NaN());
-  d(std::numeric_limits<double>::signaling_NaN());
-  d(std::numeric_limits<double>::max());
-  d(-std::numeric_limits<double>::max());
-  d(std::numeric_limits<double>::infinity());
-  d(-std::numeric_limits<double>::infinity());
-
-  randomShuffle(ids.begin(), ids.end());
-  std::sort(ids.begin(), ids.end(), &valueIdComparators::compareByBits);
-  return ids;
-}
-
-TEST(ValueIdComparators, Int) {
-  auto ids = makeAndSortIds();
-  auto ranges = getRangesForId(ids.begin(), ids.end(), ValueId::makeFromInt(42),
-                               Comparison::EQ);
-  ASSERT_EQ(ranges.size(), 2ul);
-  ASSERT_EQ(ranges[0].second - ranges[0].first, 1u);
-  ASSERT_EQ(ranges[0].first->getDatatype(), Datatype::Int);
-  ASSERT_EQ(ranges[0].first->getInt(), 42);
-  ASSERT_EQ(ranges[1].second - ranges[1].first, 1u);
-  ASSERT_EQ(ranges[1].first->getDatatype(), Datatype::Double);
-  ASSERT_DOUBLE_EQ(ranges[1].first->getDouble(), 42.0);
-}
-
 TEST(ValueIdComparators, GetRangeForDatatype) {
-  std::vector<Datatype> datatypes {Datatype::Int, Datatype::Double, Datatype::VocabIndex, Datatype::Undefined, Datatype::LocalVocabIndex, Datatype::TextIndex};
-  auto ids = makeAndSortIds();
+  std::vector<Datatype> datatypes{Datatype::Int,
+                                  Datatype::Double,
+                                  Datatype::VocabIndex,
+                                  Datatype::Undefined,
+                                  Datatype::LocalVocabIndex,
+                                  Datatype::TextRecordIndex};
+  auto ids = makeRandomIds();
+  std::sort(ids.begin(), ids.end(), compareByBits);
   for (auto datatype : datatypes) {
     auto [begin, end] = getRangeForDatatype(ids.begin(), ids.end(), datatype);
     for (auto it = ids.begin(); it < begin; ++it) {
@@ -82,11 +33,11 @@ TEST(ValueIdComparators, GetRangeForDatatype) {
   }
 }
 
-template<Comparison comparison>
+template <Comparison comparison>
 auto toFunctor() {
-#define RETURN(comp, func)                         \
-  if constexpr (comparison == comp) {                    \
-    return func<>();                               \
+#define RETURN(comp, func)            \
+  if constexpr (comparison == comp) { \
+    return func<>();                  \
   }
 
   RETURN(Comparison::LT, std::less)
@@ -98,17 +49,34 @@ auto toFunctor() {
 #undef RETURN
 }
 
-auto testGetRangesForId(auto begin, auto end, ValueId id, auto getFromId) {
-  auto valueFromId = std::invoke(getFromId, id);
-
+auto testGetRangesForId(auto begin, auto end, ValueId id,
+                        auto isMatchingDatatype, auto applyComparator) {
   auto impl = [&]<Comparison comparison>() {
     auto ranges = getRangesForId(begin, end, id, comparison);
-    auto comparator = toFunctor<comparison>;
+    auto comparator = toFunctor<comparison>();
+    auto it = begin;
     for (auto [singleBegin, singleEnd] : ranges) {
-      for (auto it = singleBegin; it != singleEnd; ++it) {
-        auto valueFromRange = std::invoke(getFromId, *it);
-        ASSERT_TRUE(comparator(valueFromRange, valueFromId));
+      while (it != singleBegin) {
+        if (isMatchingDatatype(*it) && applyComparator(comparator, *it, id)) {
+          std::cout << *it << ' ' << id << std::endl;
+        }
+        ASSERT_TRUE(!isMatchingDatatype(*it) ||
+                    !applyComparator(comparator, *it, id));
+        ++it;
       }
+      while (it != singleEnd) {
+        ASSERT_TRUE(isMatchingDatatype(*it));
+        ASSERT_TRUE(applyComparator(comparator, *it, id));
+        ++it;
+      }
+    }
+    while (it != end) {
+      if (isMatchingDatatype(*it) && applyComparator(comparator, *it, id)) {
+        std::cout << *it << ' ' << id << std::endl;
+      }
+      ASSERT_TRUE(!isMatchingDatatype(*it) ||
+                  !applyComparator(comparator, *it, id));
+      ++it;
     }
   };
 
@@ -120,10 +88,94 @@ auto testGetRangesForId(auto begin, auto end, ValueId id, auto getFromId) {
   impl.template operator()<Comparison::GT>();
 }
 
+TEST(ValueIdComparators, IndexTypes) {
+  auto ids = makeRandomIds();
+  std::sort(ids.begin(), ids.end(), compareByBits);
 
+  auto impl = [&]<Datatype datatype>(auto getFromId) {
+    auto [beginType, endType] =
+        getRangeForDatatype(ids.begin(), ids.end(), datatype);
+    auto numEntries = endType - beginType;
+    AD_CHECK(numEntries > 0);
+    auto generator = SlowRandomIntGenerator<uint64_t>(0, numEntries - 1);
 
+    auto isTypeMatching = [&](ValueId id) {
+      return id.getDatatype() == datatype;
+    };
 
+    auto applyComparator = [&](auto comparator, ValueId a, ValueId b) {
+      return comparator(std::invoke(getFromId, a), std::invoke(getFromId, b));
+    };
 
+    for (size_t i = 0; i < 200; ++i) {
+      testGetRangesForId(ids.begin(), ids.end(), *(beginType + generator()),
+                         isTypeMatching, applyComparator);
+    }
+  };
 
+  impl.operator()<Datatype::VocabIndex>(&getVocabIndex);
+  impl.operator()<Datatype::TextRecordIndex>(&getTextRecordIndex);
+  impl.operator()<Datatype::LocalVocabIndex>(&getLocalVocabIndex);
+}
 
+TEST(ValueIdComparators, NumericTypes) {
+  auto impl = [](Datatype datatype, auto isTypeMatching, auto applyComparator) {
+    auto ids = makeRandomIds();
+    std::sort(ids.begin(), ids.end(), compareByBits);
+    auto [beginType, endType] =
+        getRangeForDatatype(ids.begin(), ids.end(), datatype);
+    auto numEntries = endType - beginType;
+    AD_CHECK(numEntries > 0);
+    auto generator = SlowRandomIntGenerator<uint64_t>(0, numEntries - 1);
 
+    for (size_t i = 0; i < 200; ++i) {
+      testGetRangesForId(ids.begin(), ids.end(), *(beginType + generator()),
+                         isTypeMatching, applyComparator);
+    }
+  };
+  auto isTypeMatching = [&](ValueId id) {
+    auto type = id.getDatatype();
+    return type == Datatype::Double || type == Datatype::Int;
+  };
+
+  auto applyComparator = [&](auto comparator, ValueId aId, ValueId bId) {
+    std::variant<int64_t, double> aValue, bValue;
+    if (aId.getDatatype() == Datatype::Double) {
+      aValue = aId.getDouble();
+    } else {
+      aValue = aId.getInt();
+    }
+    if (bId.getDatatype() == Datatype::Double) {
+      bValue = bId.getDouble();
+    } else {
+      bValue = bId.getInt();
+    }
+
+    return std::visit([&](auto a, auto b) { return comparator(a, b); }, aValue,
+                      bValue);
+  };
+
+  impl(Datatype::Double, isTypeMatching, applyComparator);
+  impl(Datatype::Int, isTypeMatching, applyComparator);
+}
+
+TEST(ValueIdComparators, Undefined) {
+  auto ids = makeRandomIds();
+  std::sort(ids.begin(), ids.end(), compareByBits);
+  auto undefined = ValueId::makeUndefined();
+
+  auto undefinedRange =
+      getRangeForDatatype(ids.begin(), ids.end(), Datatype::Undefined);
+
+  for (auto comparison : {Comparison::EQ, Comparison::LE, Comparison::GE}) {
+    auto equalRange =
+        getRangesForId(ids.begin(), ids.end(), undefined, comparison);
+    ASSERT_EQ(equalRange.size(), 1);
+    ASSERT_EQ(equalRange[0], undefinedRange);
+  }
+  for (auto comparison : {Comparison::NE, Comparison::GT, Comparison::LT}) {
+    auto equalRange =
+        getRangesForId(ids.begin(), ids.end(), undefined, comparison);
+    ASSERT_TRUE(equalRange.empty());
+  }
+}
