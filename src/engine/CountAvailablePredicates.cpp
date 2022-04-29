@@ -283,7 +283,7 @@ void CountAvailablePredicates::computePatternTrick(
         continue;
       }
       AD_CHECK(subjectId.getDatatype() == Datatype::VocabIndex);
-      auto subject = subjectId.getVocabIndex();
+      auto subject = subjectId.getVocabIndex().get();
 
       if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
         // The subject matches a pattern

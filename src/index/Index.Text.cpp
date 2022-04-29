@@ -234,7 +234,7 @@ void Index::addContextToVector(
     TextBlockIndex blockId = getEntityBlockId(it->first);
     touchedBlocks.insert(blockId);
     AD_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
-    writer << std::make_tuple(blockId, context, it->first.getVocabIndex(),
+    writer << std::make_tuple(blockId, context, it->first.getVocabIndex().get(),
                               it->second, false);
   }
 
@@ -250,7 +250,7 @@ void Index::addContextToVector(
       // as a result itself.
       // if (blockId == getEntityBlockId(it->first)) { continue; }
       AD_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
-      writer << std::make_tuple(blockId, context, it->first.getVocabIndex(),
+      writer << std::make_tuple(blockId, context, it->first.getVocabIndex().get(),
                                 it->second, true);
     }
   }
@@ -581,7 +581,7 @@ TextBlockIndex Index::getWordBlockId(WordIndex wordIndex) const {
 // _____________________________________________________________________________
 TextBlockIndex Index::getEntityBlockId(Id entityId) const {
   AD_CHECK(entityId.getDatatype() == Datatype::VocabIndex);
-  return entityId.getVocabIndex() + _blockBoundaries.size();
+  return entityId.getVocabIndex().get() + _blockBoundaries.size();
 }
 
 // _____________________________________________________________________________
@@ -710,7 +710,7 @@ void Index::getContextListForWords(const string& words,
   IdTableStatic<2> result = dynResult->moveToStatic<2>();
   result.resize(cids.size());
   for (size_t i = 0; i < cids.size(); ++i) {
-    result(i, 0) = Id::makeFromTextIndex(cids[i]);
+    result(i, 0) = Id::makeFromTextRecordIndex(cids[i]);
     result(i, 1) = Id::makeFromInt(scores[i]);
   }
   *dynResult = result.moveToDynamic();

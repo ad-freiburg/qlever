@@ -178,6 +178,14 @@ class ValueId {
 
   // TODO<joka921> implement dates
 
+  /// Return the smallest and largest possible `ValueId` wrt the underlying representation
+  constexpr static ValueId min() noexcept {
+    return {std::numeric_limits<T>::min()};
+  }
+  constexpr static ValueId max() noexcept {
+    return {std::numeric_limits<T>::max()};
+  }
+
   /// Enable hashing in abseil for `ValueId` (required by `ad_utility::HashSet`
   /// and `ad_utility::HashMap`
   template <typename H>

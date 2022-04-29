@@ -57,8 +57,8 @@ class Variable {
         case Datatype::LocalVocabIndex:
           return res.indexToOptionalString(id.getLocalVocabIndex())
               .value_or("");
-        case Datatype::TextIndex:
-          return qecIndex.getTextExcerpt(id.getTextIndex());
+        case Datatype::TextRecordIndex:
+          return qecIndex.getTextExcerpt(id.getTextRecordIndex());
       }
       // The switch is exhaustive
       AD_CHECK(false);

@@ -13,7 +13,7 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
           std::numeric_limits<size_t>::max())};
   return a;
 }
-auto I = [](const auto& id) { return Id::make(id); };
+auto I = [](const auto& id) { return Id::makeFromVocabIndex(VocabIndex::make(id)); };
 auto T = [](const auto& id) { return TextRecordIndex::make(id); };
 
 TEST(FTSAlgorithmsTest, filterByRangeTest) {

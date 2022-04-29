@@ -475,7 +475,7 @@ void IndexScan::computeFullScan(ResultTable* result,
          Id::makeFromVocabIndex(taggedPredicatesRange.second)});
     ignoredRanges.emplace_back(
         Id::makeFromVocabIndex(languagePredicateIndex),
-        Id::makeFromVocabIndex(languagePredicateIndex + 1));
+        Id::makeFromVocabIndex(languagePredicateIndex.incremented()));
   }
 
   auto isTripleIgnored = [&](const auto& triple) {

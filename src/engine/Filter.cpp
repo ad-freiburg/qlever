@@ -461,7 +461,7 @@ void Filter::computeFilterFixedValue(
               entity = getIndex().idToOptionalString(e[lhs]);
               (void)subRes;  // Silence unused warning
             } else if (T == ResultTable::ResultType::LOCAL_VOCAB) {
-              entity = subRes->indexToOptionalString(e[lhs].getVocabIndex());
+              entity = subRes->indexToOptionalString(e[lhs].getLocalVocabIndex());
             }
             if (!entity) {
               return true;
@@ -729,10 +729,10 @@ void Filter::computeResultFixedValue(
         // Find a matching entry in subRes' _localVocab. If _rhs is not in the
         // _localVocab of subRes r will be equal to  _localVocab.size() and
         // not match the index of any entry in _localVocab.
-        rhs = Id::makeFromLocalVocabIndex(subRes->_localVocab->size());
+        rhs = Id::makeFromLocalVocabIndex(LocalVocabIndex::make(subRes->_localVocab->size()));
         for (size_t i = 0; i < subRes->_localVocab->size(); ++i) {
           if ((*subRes->_localVocab)[i] == _rhs) {
-            rhs = Id::makeFromLocalVocabIndex(i);
+            rhs = Id::makeFromLocalVocabIndex(LocalVocabIndex::make(i));
             break;
           }
         }

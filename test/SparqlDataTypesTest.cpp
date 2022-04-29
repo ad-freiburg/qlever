@@ -6,7 +6,7 @@
 
 #include "../src/parser/data/VarOrTerm.h"
 
-auto I = [](const auto& id) { return Id::make(id); };
+auto I = [](const auto& id) { return Id::makeFromVocabIndex(VocabIndex::make(id)); };
 using namespace std::string_literals;
 using ::testing::Optional;
 

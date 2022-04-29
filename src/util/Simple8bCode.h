@@ -153,10 +153,13 @@ class Simple8bCode {
       word = encoded[nofCodeWordsDone] >> 4;
       for (size_t i(0); i < SIMPLE8B_SELECTORS[selector]._groupSize; ++i) {
         // TODO<joka921> Hack for the IDs.
-        if constexpr (requires() { Numeric::fromBits(0ul); }) {
+        if constexpr (requires() { Numeric::make(0ul); }) {
           decoded[nofElementsDone++] =
-              Numeric::fromBits(word & SIMPLE8B_SELECTORS[selector]._mask);
-        } else {
+              Numeric::make(word & SIMPLE8B_SELECTORS[selector]._mask);
+        }else if constexpr (requires() { Numeric::fromBits(0ul); }) {
+            decoded[nofElementsDone++] =
+                Numeric::fromBits(word & SIMPLE8B_SELECTORS[selector]._mask);
+          } else {
           decoded[nofElementsDone++] =
               word & SIMPLE8B_SELECTORS[selector]._mask;
         }

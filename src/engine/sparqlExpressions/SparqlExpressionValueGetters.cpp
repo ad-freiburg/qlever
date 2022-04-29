@@ -23,7 +23,7 @@ double NumericValueGetter::operator()(StrongIdWithResultType strongId,
     case Datatype::Undefined:
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
-    case Datatype::TextIndex:
+    case Datatype::TextRecordIndex:
       return std::numeric_limits<double>::quiet_NaN();
   }
   AD_CHECK(false);
@@ -54,10 +54,10 @@ bool EffectiveBooleanValueGetter::operator()(StrongIdWithResultType strongId,
     }
     case Datatype::LocalVocabIndex: {
       auto index = id.getLocalVocabIndex();
-      AD_CHECK(index < context->_localVocab.size());
-      return !(context->_localVocab[index].empty());
+      AD_CHECK(index.get() < context->_localVocab.size());
+      return !(context->_localVocab[index.get()].empty());
     }
-    case Datatype::TextIndex:
+    case Datatype::TextRecordIndex:
       return true;
   }
   AD_CHECK(false);
@@ -80,12 +80,12 @@ string StringValueGetter::operator()(StrongIdWithResultType strongId,
           .indexToOptionalString(id.getVocabIndex())
           .value_or("");
     case Datatype::LocalVocabIndex: {
-      auto index = id.getLocalVocabIndex();
+      auto index = id.getLocalVocabIndex().get();
       AD_CHECK(index < context->_localVocab.size());
       return context->_localVocab[index];
     }
-    case Datatype::TextIndex:
-      context->_qec.getIndex().getTextExcerpt(id.getTextIndex());
+    case Datatype::TextRecordIndex:
+      context->_qec.getIndex().getTextExcerpt(id.getTextRecordIndex());
   }
   AD_CHECK(false);
 }

@@ -314,8 +314,8 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
       }
       return std::pair{optionalString.value(), nullptr};
     }
-    case Datatype::TextIndex:
-      return std::pair{_qec->getIndex().getTextExcerpt(id.getTextIndex()),
+    case Datatype::TextRecordIndex:
+      return std::pair{_qec->getIndex().getTextExcerpt(id.getTextRecordIndex()),
                        nullptr};
   }
   AD_CHECK(false);
@@ -415,15 +415,15 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
           case Datatype::VocabIndex:
             co_yield _qec->getIndex()
                 .getVocab()
-                .indexToOptionalString(id.getLocalVocabIndex())
+                .indexToOptionalString(id.getVocabIndex())
                 .value_or("");
             break;
           case Datatype::LocalVocabIndex:
             co_yield resultTable->indexToOptionalString(id.getLocalVocabIndex())
                 .value_or("");
             break;
-          case Datatype::TextIndex:
-            co_yield _qec->getIndex().getTextExcerpt(id.getTextIndex());
+          case Datatype::TextRecordIndex:
+            co_yield _qec->getIndex().getTextExcerpt(id.getTextRecordIndex());
             break;
           default:
             AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,

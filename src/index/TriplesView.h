@@ -44,6 +44,7 @@ cppcoro::generator<std::array<Id, 3>> TriplesView(
 
   // Add sentinels.
   // TODO<joka921> implement Index::prefixRange with all the logic.
+
   ignoredRanges.insert(ignoredRanges.begin(), {Id::min(), Id::min()});
   ignoredRanges.insert(ignoredRanges.end(), {Id::max(), Id::max()});
   auto orderedBegin = metaData.ordered_begin();

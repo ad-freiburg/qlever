@@ -212,8 +212,8 @@ class Index {
       case Datatype::LocalVocabIndex:
         // TODO:: this is why this shouldn't be here
         return std::nullopt;
-      case Datatype::TextIndex:
-        return getTextExcerpt(id.getTextIndex());
+      case Datatype::TextRecordIndex:
+        return getTextExcerpt(id.getTextRecordIndex());
     }
     // should be unreachable because the enum is exhaustive.
     AD_CHECK(false);

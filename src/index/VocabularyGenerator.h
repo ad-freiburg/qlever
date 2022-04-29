@@ -116,8 +116,8 @@ class VocabularyMerger {
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> _idVecs;
   bool _firstLangPredSeen = false;
-  Id _langPredLowerBound = Id::min();
-  Id _langPredUpperBound = Id::min();
+  Id _langPredLowerBound = ID_NO_VALUE;
+  Id _langPredUpperBound = ID_NO_VALUE;
 
   const size_t _bufferSize = 10000000;
 
