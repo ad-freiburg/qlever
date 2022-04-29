@@ -15,6 +15,8 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
 }
 auto I = [](const auto& id) { return Id::makeFromVocabIndex(VocabIndex::make(id)); };
 auto T = [](const auto& id) { return TextRecordIndex::make(id); };
+auto TextId = [](const auto& id) { return Id::makeFromTextRecordIndex(T(id)); };
+auto IntId = [](const auto& id) { return Id::makeFromInt(id); };
 
 TEST(FTSAlgorithmsTest, filterByRangeTest) {
   IdRange idRange;
@@ -265,12 +267,12 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
 
     FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
     ASSERT_EQ(2u, result.size());
-    ASSERT_EQ(I(2u), result(0, 0));
+    ASSERT_EQ(TextId(2u), result(0, 0));
+    ASSERT_EQ(IntId(3u), result(0, 1));
     ASSERT_EQ(I(0u), result(0, 2));
-    ASSERT_EQ(I(3u), result(0, 1));
-    ASSERT_EQ(I(1u), result(1, 0));
+    ASSERT_EQ(TextId(1u), result(1, 0));
+    ASSERT_EQ(IntId(3u), result(1, 1));
     ASSERT_EQ(I(0u), result(1, 2));
-    ASSERT_EQ(I(3u), result(1, 1));
 
     cids.push_back(T(4));
     eids.push_back(I(1));
@@ -281,8 +283,8 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
     ASSERT_EQ(3u, result.size());
     std::sort(result.begin(), result.end(),
               [](const auto& a, const auto& b) { return a[0] < b[0]; });
-    ASSERT_EQ(I(4u), result(2, 0));
-    ASSERT_EQ(I(1u), result(2, 1));
+    ASSERT_EQ(TextId(4u), result(2, 0));
+    ASSERT_EQ(IntId(1u), result(2, 1));
     ASSERT_EQ(I(1u), result(2, 2));
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
@@ -319,8 +321,8 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   CALL_FIXED_SIZE_1(width, FTSAlgorithms::aggScoresAndTakeTopContext, cids,
                     eids, scores, &result);
   ASSERT_EQ(1u, result.size());
-  ASSERT_EQ(I(2u), result(0, 0));
-  ASSERT_EQ(I(3u), result(0, 1));
+  ASSERT_EQ(TextId(2u), result(0, 0));
+  ASSERT_EQ(IntId(3u), result(0, 1));
   ASSERT_EQ(I(0u), result(0, 2));
 
   cids.push_back(T(3));
@@ -332,11 +334,11 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   ASSERT_EQ(2u, result.size());
   std::sort(result.begin(), result.end(),
             [](const auto& a, const auto& b) { return a[2] < b[2]; });
-  ASSERT_EQ(I(2u), result(0, 0));
-  ASSERT_EQ(I(3u), result(0, 1));
+  ASSERT_EQ(TextId(2u), result(0, 0));
+  ASSERT_EQ(IntId(3u), result(0, 1));
   ASSERT_EQ(I(0u), result(0, 2));
-  ASSERT_EQ(I(3u), result(1, 0));
-  ASSERT_EQ(I(1u), result(1, 1));
+  ASSERT_EQ(TextId(3u), result(1, 0));
+  ASSERT_EQ(IntId(1u), result(1, 1));
   ASSERT_EQ(I(1u), result(1, 2));
 
   cids.push_back(T(4));
@@ -349,11 +351,11 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   std::sort(result.begin(), result.end(),
             [](const auto& a, const auto& b) { return a[2] < b[2]; });
 
-  ASSERT_EQ(I(4u), result(0, 0));
-  ASSERT_EQ(I(4u), result(0, 1));
+  ASSERT_EQ(TextId(4u), result(0, 0));
+  ASSERT_EQ(IntId(4u), result(0, 1));
   ASSERT_EQ(I(0u), result(0, 2));
-  ASSERT_EQ(I(3u), result(1, 0));
-  ASSERT_EQ(I(1u), result(1, 1));
+  ASSERT_EQ(TextId(3u), result(1, 0));
+  ASSERT_EQ(IntId(1u), result(1, 1));
   ASSERT_EQ(I(1u), result(1, 2));
 };
 
@@ -379,12 +381,12 @@ TEST(FTSAlgorithmsTest, appendCrossProductWithSingleOtherTest) {
 
   ASSERT_EQ(2, res.size());
   ASSERT_EQ(I(0), res[0][0]);
-  ASSERT_EQ(I(2), res[0][1]);
-  ASSERT_EQ(I(1), res[0][2]);
+  ASSERT_EQ(IntId(2), res[0][1]);
+  ASSERT_EQ(TextId(1), res[0][2]);
   ASSERT_EQ(I(1), res[0][3]);
   ASSERT_EQ(I(1), res[1][0]);
-  ASSERT_EQ(I(2), res[1][1]);
-  ASSERT_EQ(I(1), res[1][2]);
+  ASSERT_EQ(IntId(2), res[1][1]);
+  ASSERT_EQ(TextId(1), res[1][2]);
   ASSERT_EQ(I(1), res[1][3]);
 
   subRes[I(0)] = vector<array<Id, 1>>{{{I(0)}}};
