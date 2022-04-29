@@ -32,7 +32,7 @@ bool ContextFileParser::getLine(ContextFileParser::Line& line) {
         (line._isEntity ? l.substr(0, i)
                         : _localeManager.getLowercaseUtf8(l.substr(0, i)));
     line._contextId =
-        static_cast<uint64_t>(atol(l.substr(j + 1, k - j - 1).c_str()));
+        TextRecordIndex::make(atol(l.substr(j + 1, k - j - 1).c_str()));
     line._score = static_cast<Score>(atol(l.substr(k + 1).c_str()));
 #ifndef NDEBUG
     if (_lastCId > line._contextId) {

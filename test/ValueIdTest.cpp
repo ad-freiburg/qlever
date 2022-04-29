@@ -10,34 +10,20 @@
 #include "../src/util/HashSet.h"
 #include "../src/util/Random.h"
 #include "../src/util/Serializer/Serializer.h"
-
-auto positiveRepresentableDoubleGenerator = RandomDoubleGenerator(
-    ValueId::minPositiveDouble, std::numeric_limits<double>::max());
-auto negativeRepresentableDoubleGenerator = RandomDoubleGenerator(
-    -std::numeric_limits<double>::max(), -ValueId::minPositiveDouble);
-auto nonRepresentableDoubleGenerator = RandomDoubleGenerator(
-    -ValueId::minPositiveDouble, ValueId::minPositiveDouble);
-auto indexGenerator = SlowRandomIntGenerator<uint64_t>(0, ValueId::maxIndex);
-auto invalidIndexGenerator = SlowRandomIntGenerator<uint64_t>(
-    ValueId::maxIndex, std::numeric_limits<uint64_t>::max());
-
-auto nonOverflowingNBitGenerator = SlowRandomIntGenerator<int64_t>(
-    ValueId::IntegerType::min(), ValueId::IntegerType::max());
-auto overflowingNBitGenerator = SlowRandomIntGenerator<int64_t>(
-    ValueId::IntegerType::max() + 1, std::numeric_limits<int64_t>::max());
-auto underflowingNBitGenerator = SlowRandomIntGenerator<int64_t>(
-    std::numeric_limits<int64_t>::min(), ValueId::IntegerType::min() - 1);
+#include "./ValueIdTestHelpers.h"
 
 TEST(ValueId, makeFromDouble) {
   auto testRepresentableDouble = [](double d) {
     auto id = ValueId::makeFromDouble(d);
     ASSERT_EQ(id.getDatatype(), Datatype::Double);
-    // We lose 4 bits of precision, so `ASSERT_DOUBLE_EQ` would fail.
+    // We lose `numDatatypeBits` bits of precision, so `ASSERT_DOUBLE_EQ` would
+    // fail.
     ASSERT_FLOAT_EQ(id.getDouble(), d);
     // This check expresses the precision more exactly
     if (id.getDouble() != d) {
       // The if is needed for the case of += infinity.
-      ASSERT_NEAR(id.getDouble(), d, std::abs(d / (1ul << 48)));
+      ASSERT_NEAR(id.getDouble(), d,
+                  std::abs(d / (1ul << (52 - ValueId::numDatatypeBits))));
     }
   };
 
@@ -51,7 +37,8 @@ TEST(ValueId, makeFromDouble) {
     testRepresentableDouble(positiveRepresentableDoubleGenerator());
     testRepresentableDouble(negativeRepresentableDoubleGenerator());
     auto nonRepresentable = nonRepresentableDoubleGenerator();
-    // The RNG includes the edge cases which would make the tests fail.
+    // The random number generator includes the edge cases which would make the
+    // tests fail.
     if (nonRepresentable != ValueId::minPositiveDouble &&
         nonRepresentable != -ValueId::minPositiveDouble) {
       testNonRepresentableSubnormal(nonRepresentable);
@@ -126,11 +113,10 @@ TEST(ValueId, Indices) {
     }
   };
 
-  testRandomIds(&ValueId::makeFromTextIndex, &ValueId::getTextIndex,
-                Datatype::TextIndex);
-  testRandomIds(&ValueId::makeFromVocabIndex, &ValueId::getVocabIndex,
-                Datatype::VocabIndex);
-  testRandomIds(&ValueId::makeFromLocalVocabIndex, &ValueId::getLocalVocabIndex,
+  testRandomIds(&makeTextRecordId, &getTextRecordIndex,
+                Datatype::TextRecordIndex);
+  testRandomIds(&makeVocabId, &getVocabIndex, Datatype::VocabIndex);
+  testRandomIds(&makeLocalVocabId, &getLocalVocabIndex,
                 Datatype::LocalVocabIndex);
 }
 
@@ -138,53 +124,6 @@ TEST(ValueId, Undefined) {
   auto id = ValueId::makeUndefined();
   ASSERT_EQ(id.getDatatype(), Datatype::Undefined);
 }
-
-auto addIdsFromGenerator = [](auto& generator, auto makeIds,
-                              std::vector<ValueId>& ids) {
-  for (size_t i = 0; i < 10'000; ++i) {
-    ids.push_back(makeIds(generator()));
-  }
-};
-
-auto makeRandomDoubleIds = []() {
-  std::vector<ValueId> ids;
-  addIdsFromGenerator(positiveRepresentableDoubleGenerator,
-                      &ValueId::makeFromDouble, ids);
-  addIdsFromGenerator(negativeRepresentableDoubleGenerator,
-                      &ValueId::makeFromDouble, ids);
-
-  for (size_t i = 0; i < 1000; ++i) {
-    ids.push_back(ValueId::makeFromDouble(0.0));
-    ids.push_back(ValueId::makeFromDouble(-0.0));
-    auto inf = std::numeric_limits<double>::infinity();
-    ids.push_back(ValueId::makeFromDouble(inf));
-    ids.push_back(ValueId::makeFromDouble(-inf));
-    auto nan = std::numeric_limits<double>::quiet_NaN();
-    ids.push_back(ValueId::makeFromDouble(nan));
-    auto max = std::numeric_limits<double>::max();
-    auto min = std::numeric_limits<double>::min();
-    ids.push_back(ValueId::makeFromDouble(max));
-    ids.push_back(ValueId::makeFromDouble(min));
-  }
-  randomShuffle(ids.begin(), ids.end());
-  return ids;
-};
-auto makeRandomIds = []() {
-  std::vector<ValueId> ids = makeRandomDoubleIds();
-  addIdsFromGenerator(indexGenerator, &ValueId::makeFromVocabIndex, ids);
-  addIdsFromGenerator(indexGenerator, &ValueId::makeFromLocalVocabIndex, ids);
-  addIdsFromGenerator(indexGenerator, &ValueId::makeFromTextIndex, ids);
-  addIdsFromGenerator(nonOverflowingNBitGenerator, &ValueId::makeFromInt, ids);
-  addIdsFromGenerator(overflowingNBitGenerator, &ValueId::makeFromInt, ids);
-  addIdsFromGenerator(underflowingNBitGenerator, &ValueId::makeFromInt, ids);
-
-  for (size_t i = 0; i < 10'000; ++i) {
-    ids.push_back(ValueId::makeUndefined());
-  }
-
-  randomShuffle(ids.begin(), ids.end());
-  return ids;
-};
 
 TEST(ValueId, OrderingDifferentDatatypes) {
   auto ids = makeRandomIds();
@@ -198,25 +137,26 @@ TEST(ValueId, OrderingDifferentDatatypes) {
 }
 
 TEST(ValueId, IndexOrdering) {
-  auto testOrder = [](auto makeId, auto getId) {
+  auto testOrder = [](auto makeIdFromIndex, auto getIndexFromId) {
     std::vector<ValueId> ids;
-    addIdsFromGenerator(indexGenerator, makeId, ids);
-    std::vector<std::invoke_result_t<decltype(getId), ValueId>> indices;
+    addIdsFromGenerator(indexGenerator, makeIdFromIndex, ids);
+    std::vector<std::invoke_result_t<decltype(getIndexFromId), ValueId>>
+        indices;
     for (auto id : ids) {
-      indices.push_back(std::invoke(getId, id));
+      indices.push_back(std::invoke(getIndexFromId, id));
     }
 
     std::sort(ids.begin(), ids.end());
     std::sort(indices.begin(), indices.end());
 
     for (size_t i = 0; i < ids.size(); ++i) {
-      ASSERT_EQ(std::invoke(getId, ids[i]), indices[i]);
+      ASSERT_EQ(std::invoke(getIndexFromId, ids[i]), indices[i]);
     }
   };
 
-  testOrder(&ValueId::makeFromVocabIndex, &ValueId::getVocabIndex);
-  testOrder(&ValueId::makeFromLocalVocabIndex, &ValueId::getLocalVocabIndex);
-  testOrder(&ValueId::makeFromTextIndex, &ValueId::getTextIndex);
+  testOrder(&makeVocabId, &getVocabIndex);
+  testOrder(&makeLocalVocabId, &getLocalVocabIndex);
+  testOrder(&makeTextRecordId, &getTextRecordIndex);
 }
 
 TEST(ValueId, DoubleOrdering) {
@@ -340,9 +280,9 @@ TEST(ValueId, toDebugString) {
   test(ValueId::makeUndefined(), "Undefined:Undefined");
   test(ValueId::makeFromInt(-42), "Int:-42");
   test(ValueId::makeFromDouble(42.0), "Double:42.000000");
-  test(ValueId::makeFromVocabIndex(15), "VocabIndex:15");
-  test(ValueId::makeFromLocalVocabIndex(25), "LocalVocabIndex:25");
-  test(ValueId::makeFromTextIndex(37), "TextIndex:37");
+  test(makeVocabId(15), "VocabIndex:15");
+  test(makeLocalVocabId(25), "LocalVocabIndex:25");
+  test(makeTextRecordId(37), "TextRecordIndex:37");
 }
 
 TEST(ValueId, TriviallyCopyable) {

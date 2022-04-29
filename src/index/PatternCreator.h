@@ -84,7 +84,7 @@ class PatternCreator {
 
   // The lowest subject Id for which we have not yet finished and written the
   // pattern.
-  VocabIndex _nextUnassignedSubjectIndex = 0;
+  VocabIndex _nextUnassignedSubjectIndex = VocabIndex::make(0);
 
   // Directly serialize the mapping from subjects to patterns to disk.
   ad_utility::serialization::VectorIncrementalSerializer<

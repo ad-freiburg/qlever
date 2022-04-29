@@ -10,6 +10,7 @@
 
 #include "../util/Exception.h"
 #include "./ValueId.h"
+#include "./IndexTypes.h"
 
 /*
 // A strong Id type that internally stores a `uint64_t` but can only be
@@ -73,13 +74,13 @@ typedef uint16_t Score;
 
 // TODO<joka921> Make the following ID and index types strong.
 using ColumnIndex = uint64_t;
-using VocabIndex = uint64_t;
-using LocalVocabIndex = uint64_t;
-using TextVocabIndex = uint64_t;
+
+// TODO<joka921> The following IDs only appear within the text index in the
+// `Index` class, so they should not be public.
 using WordIndex = uint64_t;
 using WordOrEntityIndex = uint64_t;
 using TextBlockIndex = uint64_t;
-using Code = uint64_t;
+using CompressionCode = uint64_t;
 
 // Integers, that are probably not integers but strong IDs or indices, but their
 // true nature is still to be discovered.

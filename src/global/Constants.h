@@ -8,7 +8,8 @@
 
 #include "../util/Parameters.h"
 
-static const size_t STXXL_MEMORY_TO_USE = 1024UL * 1024UL * 1024UL * 2UL;
+static const size_t DEFAULT_STXXL_MEMORY_IN_BYTES =
+    1024UL * 1024UL * 1024UL * 5UL;
 static const size_t STXXL_DISK_SIZE_INDEX_BUILDER = 1000 * 1000;
 static const size_t STXXL_DISK_SIZE_INDEX_TEST = 10;
 

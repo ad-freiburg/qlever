@@ -41,8 +41,8 @@ using SortByOPS = SortTriple<2, 1, 0>;
 
 // TODO<joka921> Which of those are actually "IDs" and which are something else?
 struct SortText {
-  using T = std::tuple<TextBlockIndex, TextVocabIndex, WordOrEntityIndex, Score,
-                       bool>;
+  using T = std::tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex,
+                       Score, bool>;
   // comparison function
   bool operator()(const T& a, const T& b) const {
     if (std::get<0>(a) == std::get<0>(b)) {
@@ -65,11 +65,12 @@ struct SortText {
   }
 
   // min sentinel = value which is strictly smaller that any input element
-  static T min_value() { return {0, 0, 0, 0, false}; }
+  static T min_value() { return {0, TextRecordIndex::min(), 0, 0, false}; }
 
   // max sentinel = value which is strictly larger that any input element
   static T max_value() {
-    Score maxScore = std::numeric_limits<Score>::max();
-    return {maxScore, maxScore, maxScore, maxScore, true};
+    return {std::numeric_limits<TextBlockIndex>::max(), TextRecordIndex::max(),
+            std::numeric_limits<WordOrEntityIndex>::max(),
+            std::numeric_limits<Score>::max(), true};
   }
 };

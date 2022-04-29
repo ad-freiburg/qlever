@@ -196,8 +196,8 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       s << ")";
       manuallySelectedVariables.push_back(std::move(s).str());
     } else if (_lexer.accept("(")) {
-      // expect an alias
-      ParsedQuery::Alias a = parseAliasWithAntlr();
+      // Expect an alias.
+      ParsedQuery::Alias a = parseAliasWithAntlr(*query);
       selectClause._aliases.push_back(a);
       manuallySelectedVariables.push_back(a._outVarName);
       _lexer.expect(")");
@@ -234,7 +234,7 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
              _lexer.accept("(")) {
     // TODO This assumes that aliases can stand in the ORDER BY
     // This is not true, only expression may stand there
-    ParsedQuery::Alias a = parseAliasWithAntlr();
+    ParsedQuery::Alias a = parseAliasWithAntlr(*query);
     auto& selectClause = query->selectClause();
 
     for (const auto& selectedVariable :
@@ -292,14 +292,14 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       _lexer.accept(".");
     } else if (_lexer.accept("bind")) {
       _lexer.expect("(");
-      GraphPatternOperation::Bind bind{parseExpressionWithAntlr()};
+      GraphPatternOperation::Bind bind{parseExpressionWithAntlr(*query)};
       _lexer.expect("as");
       _lexer.expect(SparqlToken::Type::VARIABLE);
       query->registerVariableVisibleInQueryBody(_lexer.current().raw);
       bind._target = _lexer.current().raw;
       _lexer.expect(")");
       currentPattern->_children.emplace_back(std::move(bind));
-      // the dot after the bind is optional
+      // The dot after a BIND is optional.
       _lexer.accept(".");
     } else if (_lexer.accept("minus")) {
       currentPattern->_children.emplace_back(
@@ -953,20 +953,35 @@ GraphPatternOperation::BasicGraphPattern& SparqlParser::lastBasicPattern(
   return c.back().get<GraphPatternOperation::BasicGraphPattern>();
 }
 
+// Helper function that converts the prefix map from `parsedQuery` (a vector of
+// pairs of prefix and IRI) to the prefix map we need for the
+// `SparqlQleverVisitor` (a hash map from prefixes to IRIs).
+namespace {
+SparqlQleverVisitor::PrefixMap getPrefixMap(const ParsedQuery& parsedQuery) {
+  SparqlQleverVisitor::PrefixMap prefixMap;
+  for (const auto& prefixDef : parsedQuery._prefixes) {
+    prefixMap[prefixDef._prefix] = prefixDef._uri;
+  }
+  return prefixMap;
+}
+}  // namespace
+
 // ________________________________________________________________________
-sparqlExpression::SparqlExpressionPimpl
-SparqlParser::parseExpressionWithAntlr() {
+sparqlExpression::SparqlExpressionPimpl SparqlParser::parseExpressionWithAntlr(
+    const ParsedQuery& parsedQuery) {
   auto str = _lexer.getUnconsumedInput();
   auto resultOfParseAndRemainingText =
-      sparqlParserHelpers::parseExpression(str);
+      sparqlParserHelpers::parseExpression(str, getPrefixMap(parsedQuery));
   _lexer.reset(std::move(resultOfParseAndRemainingText._remainingText));
   return std::move(resultOfParseAndRemainingText._resultOfParse);
 }
 
 // ________________________________________________________________________
-ParsedQuery::Alias SparqlParser::parseAliasWithAntlr() {
+ParsedQuery::Alias SparqlParser::parseAliasWithAntlr(
+    const ParsedQuery& parsedQuery) {
   auto str = _lexer.getUnconsumedInput();
-  auto resultOfParseAndRemainingText = sparqlParserHelpers::parseAlias(str);
+  auto resultOfParseAndRemainingText =
+      sparqlParserHelpers::parseAlias(str, getPrefixMap(parsedQuery));
   _lexer.reset(std::move(resultOfParseAndRemainingText._remainingText));
   return std::move(resultOfParseAndRemainingText._resultOfParse);
 }

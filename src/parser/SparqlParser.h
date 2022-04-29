@@ -68,6 +68,7 @@ class SparqlParser {
   string _query;
   SparqlFilter parseRegexFilter(bool expectKeyword);
 
-  sparqlExpression::SparqlExpressionPimpl parseExpressionWithAntlr();
-  ParsedQuery::Alias parseAliasWithAntlr();
+  sparqlExpression::SparqlExpressionPimpl parseExpressionWithAntlr(
+      const ParsedQuery& parsedQuery);
+  ParsedQuery::Alias parseAliasWithAntlr(const ParsedQuery& parsedQuery);
 };

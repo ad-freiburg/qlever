@@ -50,12 +50,12 @@ void PatternCreator::finishSubject(VocabIndex subjectIndex,
   // triple.
   while (_nextUnassignedSubjectIndex < subjectIndex) {
     _subjectToPatternSerializer.push(NO_PATTERN);
-    _nextUnassignedSubjectIndex++;
+    _nextUnassignedSubjectIndex = _nextUnassignedSubjectIndex.incremented();
   }
 
   // Write the subjectIndex-pattern mapping for this subjectIndex.
   _subjectToPatternSerializer.push(patternId);
-  _nextUnassignedSubjectIndex++;
+  _nextUnassignedSubjectIndex = _nextUnassignedSubjectIndex.incremented();
 }
 
 // ____________________________________________________________________________
