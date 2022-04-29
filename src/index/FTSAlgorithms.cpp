@@ -38,7 +38,8 @@ void FTSAlgorithms::filterByRange(const IdRange& idRange,
     // TODO<joka921> Can we make the returned `IndexType` a template parameter
     // of the vocabulary, s.t. we have a vocabulary that stores `WordIndex`es
     // directly?
-    if (blockWids[i] >= idRange._first.get() && blockWids[i] <= idRange._last.get()) {
+    if (blockWids[i] >= idRange._first.get() &&
+        blockWids[i] <= idRange._last.get()) {
       resultCids[nofResultElements] = blockCids[i];
       resultScores[nofResultElements++] = blockScores[i];
     }
@@ -358,7 +359,8 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
     Id entityScore = Id::makeFromInt(it->second.first);
     ScoreToContext& stc = it->second.second;
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
-      result.push_back({Id::makeFromTextRecordIndex(itt->second), entityScore, eid});
+      result.push_back(
+          {Id::makeFromTextRecordIndex(itt->second), entityScore, eid});
     }
   }
   *dynResult = result.moveToDynamic();

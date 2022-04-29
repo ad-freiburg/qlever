@@ -177,13 +177,13 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       if (top.iriOrLiteral().starts_with('@')) {
         if (!_firstLangPredSeen) {
           // inclusive
-          _langPredLowerBound =
-              Id::makeFromVocabIndex(VocabIndex::make(_lastTripleComponent.value()._index));
+          _langPredLowerBound = Id::makeFromVocabIndex(
+              VocabIndex::make(_lastTripleComponent.value()._index));
           _firstLangPredSeen = true;
         }
         // exclusive
-        _langPredUpperBound =
-            Id::makeFromVocabIndex(VocabIndex::make(_lastTripleComponent.value()._index + 1));
+        _langPredUpperBound = Id::makeFromVocabIndex(
+            VocabIndex::make(_lastTripleComponent.value()._index + 1));
       }
       _totalWritten++;
       if (_totalWritten % 100'000'000 == 0) {
@@ -226,8 +226,9 @@ void VocabularyMerger::doActualWrite(
     return;
   }
   for (const auto& [id, value] : buffer) {
-    _idVecs[id].push_back({Id::makeFromVocabIndex(VocabIndex::make(value.first)),
-                           Id::makeFromVocabIndex(VocabIndex::make(value.second))});
+    _idVecs[id].push_back(
+        {Id::makeFromVocabIndex(VocabIndex::make(value.first)),
+         Id::makeFromVocabIndex(VocabIndex::make(value.second))});
   }
 }
 
@@ -270,7 +271,8 @@ void writeMappedIdsToExtVec(const auto& input,
                   << '\n';
         AD_CHECK(false);
       }
-      mappedTriple[k] = Id::makeFromVocabIndex(VocabIndex::make(iterator->second));
+      mappedTriple[k] =
+          Id::makeFromVocabIndex(VocabIndex::make(iterator->second));
     }
     writer << mappedTriple;
   }

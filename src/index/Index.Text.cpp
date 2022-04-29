@@ -250,8 +250,8 @@ void Index::addContextToVector(
       // as a result itself.
       // if (blockId == getEntityBlockId(it->first)) { continue; }
       AD_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
-      writer << std::make_tuple(blockId, context, it->first.getVocabIndex().get(),
-                                it->second, true);
+      writer << std::make_tuple(
+          blockId, context, it->first.getVocabIndex().get(), it->second, true);
     }
   }
 }

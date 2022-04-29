@@ -266,7 +266,8 @@ Id constantExpressionResultToId(T&& result, LocalVocab& localVocab,
     if (!isRepetitionOfConstant) {
       localVocab.push_back(std::forward<T>(result));
     }
-    return Id::makeFromLocalVocabIndex(LocalVocabIndex::make(localVocab.size() - 1));
+    return Id::makeFromLocalVocabIndex(
+        LocalVocabIndex::make(localVocab.size() - 1));
   } else if constexpr (isConstantResult<T>) {
     // TODO<joka921> Here we could (and should) differentiate between double,
     // int and bool.

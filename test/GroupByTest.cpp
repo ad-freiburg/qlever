@@ -83,7 +83,8 @@ TEST_F(GroupByTest, doGroupBy) {
   // There are 7 different aggregates, of which 5 (all apart from SAMPLE and
   // COUNT) react different to the 5 different ResultTypes.
 
-  Id floatBuffers[3]{Id::makeUndefined(), Id::makeUndefined(), Id::makeUndefined()};
+  Id floatBuffers[3]{Id::makeUndefined(), Id::makeUndefined(),
+                     Id::makeUndefined()};
   float floatValues[3] = {-3, 2, 1231};
   for (int i = 0; i < 3; i++) {
     floatBuffers[i] = Id::makeFromDouble(floatValues[i]);

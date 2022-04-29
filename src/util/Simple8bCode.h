@@ -156,10 +156,10 @@ class Simple8bCode {
         if constexpr (requires() { Numeric::make(0ul); }) {
           decoded[nofElementsDone++] =
               Numeric::make(word & SIMPLE8B_SELECTORS[selector]._mask);
-        }else if constexpr (requires() { Numeric::fromBits(0ul); }) {
-            decoded[nofElementsDone++] =
-                Numeric::fromBits(word & SIMPLE8B_SELECTORS[selector]._mask);
-          } else {
+        } else if constexpr (requires() { Numeric::fromBits(0ul); }) {
+          decoded[nofElementsDone++] =
+              Numeric::fromBits(word & SIMPLE8B_SELECTORS[selector]._mask);
+        } else {
           decoded[nofElementsDone++] =
               word & SIMPLE8B_SELECTORS[selector]._mask;
         }

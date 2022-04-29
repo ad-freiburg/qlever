@@ -9,8 +9,8 @@
 #include <limits>
 
 #include "../util/Exception.h"
-#include "./ValueId.h"
 #include "./IndexTypes.h"
+#include "./ValueId.h"
 
 /*
 // A strong Id type that internally stores a `uint64_t` but can only be

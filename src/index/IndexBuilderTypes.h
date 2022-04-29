@@ -105,7 +105,8 @@ struct alignas(256) ItemMapManager {
               key._isExternal)};
       return Id::makeFromVocabIndex(VocabIndex::make(res));
     } else {
-      return Id::makeFromVocabIndex(VocabIndex::make(_map[key._iriOrLiteral].m_id));
+      return Id::makeFromVocabIndex(
+          VocabIndex::make(_map[key._iriOrLiteral].m_id));
     }
   }
 

@@ -12,9 +12,10 @@
 #include "../src/engine/HasPredicateScan.h"
 #include "../src/engine/SortPerformanceEstimator.h"
 
-auto I = [](const auto& id) { return Id::makeFromVocabIndex(VocabIndex::make(id)); };
+auto I = [](const auto& id) {
+  return Id::makeFromVocabIndex(VocabIndex::make(id));
+};
 auto Int = [](const auto& id) { return Id::makeFromInt(id); };
-
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{

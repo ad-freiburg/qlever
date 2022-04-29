@@ -13,7 +13,9 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
           std::numeric_limits<size_t>::max())};
   return a;
 }
-auto I = [](const auto& id) { return Id::makeFromVocabIndex(VocabIndex::make(id)); };
+auto I = [](const auto& id) {
+  return Id::makeFromVocabIndex(VocabIndex::make(id));
+};
 auto T = [](const auto& id) { return TextRecordIndex::make(id); };
 auto TextId = [](const auto& id) { return Id::makeFromTextRecordIndex(T(id)); };
 auto IntId = [](const auto& id) { return Id::makeFromInt(id); };
@@ -395,20 +397,20 @@ TEST(FTSAlgorithmsTest, appendCrossProductWithSingleOtherTest) {
 
   ASSERT_EQ(4u, res.size());
   ASSERT_EQ(I(0), res[0][0]);
-  ASSERT_EQ(I(2), res[0][1]);
-  ASSERT_EQ(I(1), res[0][2]);
+  ASSERT_EQ(IntId(2), res[0][1]);
+  ASSERT_EQ(TextId(1), res[0][2]);
   ASSERT_EQ(I(0), res[0][3]);
   ASSERT_EQ(I(0), res[1][0]);
-  ASSERT_EQ(I(2), res[1][1]);
-  ASSERT_EQ(I(1), res[1][2]);
+  ASSERT_EQ(IntId(2), res[1][1]);
+  ASSERT_EQ(TextId(1), res[1][2]);
   ASSERT_EQ(I(1), res[1][3]);
   ASSERT_EQ(I(1), res[2][0]);
-  ASSERT_EQ(I(2), res[2][1]);
-  ASSERT_EQ(I(1), res[2][2]);
+  ASSERT_EQ(IntId(2), res[2][1]);
+  ASSERT_EQ(TextId(1), res[2][2]);
   ASSERT_EQ(I(0), res[2][3]);
   ASSERT_EQ(I(1), res[3][0]);
-  ASSERT_EQ(I(2), res[3][1]);
-  ASSERT_EQ(I(1), res[3][2]);
+  ASSERT_EQ(IntId(2), res[3][1]);
+  ASSERT_EQ(TextId(1), res[3][2]);
   ASSERT_EQ(I(1), res[3][3]);
 }
 
@@ -440,13 +442,13 @@ TEST(FTSAlgorithmsTest, appendCrossProductWithTwoW1Test) {
 
   ASSERT_EQ(2u, res.size());
   ASSERT_EQ(I(0), res[0][0]);
-  ASSERT_EQ(I(2), res[0][1]);
-  ASSERT_EQ(I(1), res[0][2]);
+  ASSERT_EQ(IntId(2), res[0][1]);
+  ASSERT_EQ(TextId(1), res[0][2]);
   ASSERT_EQ(I(1), res[0][3]);
   ASSERT_EQ(I(0), res[0][4]);
   ASSERT_EQ(I(1), res[1][0]);
-  ASSERT_EQ(I(2), res[1][1]);
-  ASSERT_EQ(I(1), res[1][2]);
+  ASSERT_EQ(IntId(2), res[1][1]);
+  ASSERT_EQ(TextId(1), res[1][2]);
   ASSERT_EQ(I(1), res[1][3]);
   ASSERT_EQ(I(0), res[0][4]);
 }
@@ -501,15 +503,15 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
   ASSERT_EQ(9u, resW4.size());
   std::sort(std::begin(resW4), std::end(resW4),
             [](const auto& a, const auto& b) { return a[1] > b[1]; });
-  ASSERT_EQ(I(3), resW4(0, 1));
-  ASSERT_EQ(I(0), resW4(0, 0));
+  ASSERT_EQ(TextId(0), resW4(0, 0));
+  ASSERT_EQ(IntId(3), resW4(0, 1));
   ASSERT_EQ(I(0), resW4(0, 2));
   ASSERT_EQ(I(0), resW4(0, 3));
-  ASSERT_EQ(I(2), resW4(1, 1));
-  ASSERT_EQ(I(2), resW4(2, 1));
-  ASSERT_EQ(I(2), resW4(3, 1));
-  ASSERT_EQ(I(1), resW4(4, 1));
-  ASSERT_EQ(I(1), resW4(5, 1));
+  ASSERT_EQ(IntId(2), resW4(1, 1));
+  ASSERT_EQ(IntId(2), resW4(2, 1));
+  ASSERT_EQ(IntId(2), resW4(3, 1));
+  ASSERT_EQ(IntId(1), resW4(4, 1));
+  ASSERT_EQ(IntId(1), resW4(5, 1));
   k = 2;
   resW4.clear();
   CALL_FIXED_SIZE_1(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
@@ -519,12 +521,12 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
             [](const auto& a, const auto& b) {
               return a[1] != b[1] ? a[1] > b[1] : a[0] < b[0];
             });
-  ASSERT_EQ(I(0), resW4(0, 0));
-  ASSERT_EQ(I(3), resW4(0, 1));
+  ASSERT_EQ(TextId(0), resW4(0, 0));
+  ASSERT_EQ(IntId(3), resW4(0, 1));
   ASSERT_EQ(I(0), resW4(0, 2));
   ASSERT_EQ(I(0), resW4(0, 3));
-  ASSERT_EQ(I(1), resW4(1, 0));
-  ASSERT_EQ(I(3), resW4(1, 1));
+  ASSERT_EQ(TextId(1), resW4(1, 0));
+  ASSERT_EQ(IntId(3), resW4(1, 1));
   ASSERT_EQ(I(0), resW4(1, 2));
   ASSERT_EQ(I(0), resW4(1, 3));
 
@@ -694,16 +696,16 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
       return a[1] > b[1];
     });
 
-    ASSERT_EQ(I(1), resW4(0, 0));
-    ASSERT_EQ(I(2), resW4(0, 1));
+    ASSERT_EQ(TextId(1), resW4(0, 0));
+    ASSERT_EQ(IntId(2), resW4(0, 1));
     ASSERT_EQ(I(0), resW4(0, 2));
     ASSERT_EQ(I(1), resW4(0, 3));
-    ASSERT_EQ(I(1), resW4(1, 0));
-    ASSERT_EQ(I(2), resW4(1, 1));
+    ASSERT_EQ(TextId(1), resW4(1, 0));
+    ASSERT_EQ(IntId(2), resW4(1, 1));
     ASSERT_EQ(I(1), resW4(1, 2));
     ASSERT_EQ(I(1), resW4(1, 3));
-    ASSERT_EQ(I(2), resW4(2, 0));
-    ASSERT_EQ(I(1), resW4(2, 1));
+    ASSERT_EQ(TextId(2), resW4(2, 0));
+    ASSERT_EQ(IntId(1), resW4(2, 1));
     ASSERT_EQ(I(2), resW4(2, 2));
     ASSERT_EQ(I(1), resW4(2, 3));
 
@@ -724,26 +726,26 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
                 return a[1] > b[1];
               });
 
-    ASSERT_EQ(I(1u), resW4(0, 0));
-    ASSERT_EQ(I(2u), resW4(0, 1));
+    ASSERT_EQ(TextId(1u), resW4(0, 0));
+    ASSERT_EQ(IntId(2u), resW4(0, 1));
     ASSERT_EQ(I(0u), resW4(0, 2));
     ASSERT_EQ(I(1u), resW4(0, 3));
-    ASSERT_EQ(I(2u), resW4(1, 0));
-    ASSERT_EQ(I(2u), resW4(1, 1));
+    ASSERT_EQ(TextId(2u), resW4(1, 0));
+    ASSERT_EQ(IntId(2u), resW4(1, 1));
     ASSERT_EQ(I(0u), resW4(1, 2));
     ASSERT_EQ(I(1u), resW4(1, 3));
 
-    ASSERT_EQ(I(1u), resW4(2, 0));
-    ASSERT_EQ(I(2u), resW4(2, 1));
+    ASSERT_EQ(TextId(1u), resW4(2, 0));
+    ASSERT_EQ(IntId(2u), resW4(2, 1));
     ASSERT_EQ(I(1u), resW4(2, 2));
     ASSERT_EQ(I(1u), resW4(2, 3));
-    ASSERT_EQ(I(2u), resW4(3, 0));
-    ASSERT_EQ(I(2u), resW4(3, 1));
+    ASSERT_EQ(TextId(2u), resW4(3, 0));
+    ASSERT_EQ(IntId(2u), resW4(3, 1));
     ASSERT_EQ(I(1u), resW4(3, 2));
     ASSERT_EQ(I(1u), resW4(3, 3));
 
-    ASSERT_EQ(I(2u), resW4(4, 0));
-    ASSERT_EQ(I(1u), resW4(4, 1));
+    ASSERT_EQ(TextId(2u), resW4(4, 0));
+    ASSERT_EQ(IntId(1u), resW4(4, 1));
     ASSERT_EQ(I(2u), resW4(4, 2));
     ASSERT_EQ(I(1u), resW4(4, 3));
 

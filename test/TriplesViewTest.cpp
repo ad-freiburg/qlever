@@ -6,7 +6,9 @@
 
 #include "../src/index/TriplesView.h"
 
-auto I = [](const auto& id) { return Id::makeFromVocabIndex(VocabIndex::make(id)); };
+auto I = [](const auto& id) {
+  return Id::makeFromVocabIndex(VocabIndex::make(id));
+};
 
 // This struct mocks the structure of the actual `Permutation` types used in
 // QLever for testing the `TriplesView`.
@@ -14,8 +16,8 @@ struct DummyPermutation {
   void scan(Id col0Id, auto* result) const {
     result->reserve(col0Id.getVocabIndex().get());
     for (size_t i = 0; i < col0Id.getVocabIndex().get(); ++i) {
-      result->push_back(
-          std::array{I((i + 1) * col0Id.getVocabIndex().get()), I((i + 2) * col0Id.getVocabIndex().get())});
+      result->push_back(std::array{I((i + 1) * col0Id.getVocabIndex().get()),
+                                   I((i + 2) * col0Id.getVocabIndex().get())});
     }
   }
 

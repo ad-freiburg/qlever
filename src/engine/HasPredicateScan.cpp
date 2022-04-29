@@ -275,14 +275,16 @@ void HasPredicateScan::computeFreeS(
       const auto& pattern = patterns[hasPattern[entityIndex]];
       for (const auto& predicate : pattern) {
         if (predicate == objectId) {
-          result.push_back({Id::makeFromVocabIndex(VocabIndex::make(entityIndex))});
+          result.push_back(
+              {Id::makeFromVocabIndex(VocabIndex::make(entityIndex))});
         }
       }
     } else if (entityIndex < hasPredicate.size()) {
       // add the relations
       for (const auto& predicate : hasPredicate[entityIndex]) {
         if (predicate == objectId) {
-          result.push_back({Id::makeFromVocabIndex(VocabIndex::make(entityIndex))});
+          result.push_back(
+              {Id::makeFromVocabIndex(VocabIndex::make(entityIndex))});
         }
       }
     }
@@ -334,12 +336,16 @@ void HasPredicateScan::computeFullScan(
         hasPattern[subjectIndex] != NO_PATTERN) {
       // add the pattern
       for (const auto& predicate : patterns[hasPattern[subjectIndex]]) {
-        result.push_back({Id::makeFromVocabIndex(VocabIndex::make(subjectIndex)), predicate});
+        result.push_back(
+            {Id::makeFromVocabIndex(VocabIndex::make(subjectIndex)),
+             predicate});
       }
     } else if (subjectIndex < hasPredicate.size()) {
       // add the relations
       for (const auto& predicate : hasPredicate[subjectIndex]) {
-        result.push_back({Id::makeFromVocabIndex(VocabIndex::make(subjectIndex)), predicate});
+        result.push_back(
+            {Id::makeFromVocabIndex(VocabIndex::make(subjectIndex)),
+             predicate});
       }
     }
     subjectIndex++;

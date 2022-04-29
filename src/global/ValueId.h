@@ -178,7 +178,8 @@ class ValueId {
 
   // TODO<joka921> implement dates
 
-  /// Return the smallest and largest possible `ValueId` wrt the underlying representation
+  /// Return the smallest and largest possible `ValueId` wrt the underlying
+  /// representation
   constexpr static ValueId min() noexcept {
     return {std::numeric_limits<T>::min()};
   }
