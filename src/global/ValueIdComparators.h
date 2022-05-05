@@ -263,6 +263,24 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
   return std::move(rangeFilter).getResult();
 }
 
+// This function is part of the implementation of `getRangesForId`. See the
+// documentation there.
+template <typename RandomIt>
+inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
+    RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
+    Comparison comparison) {
+  std::tie(begin, end) =
+      getRangeForDatatype(begin, end, valueIdBegin.getDatatype());
+
+  RangeFilter<RandomIt> rangeFilter{comparison};
+  auto eqBegin = std::lower_bound(begin, end, valueIdBegin, &compareByBits);
+  auto eqEnd = std::lower_bound(begin, end, valueIdEnd, &compareByBits);
+  rangeFilter.addSmaller(begin, eqBegin);
+  rangeFilter.addEqual(eqBegin, eqEnd);
+  rangeFilter.addGreater(eqEnd, end);
+  return std::move(rangeFilter).getResult();
+}
+
 }  // namespace detail
 
 // The function returns the sequence of all IDs x (as a sequence of
@@ -298,6 +316,32 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
   AD_CHECK(false);
 }
 
+template <typename RandomIt>
+inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIdWithEqualRange(
+    RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
+    Comparison comparison) {
+  // This lambda enforces the invariants `non-empty` and `sorted`.
+  auto simplify = [](std::vector<std::pair<RandomIt, RandomIt>>&& result) {
+    std::sort(result.begin(), result.end());
+    // Eliminate empty ranges
+    std::erase_if(result, [](const auto& p) { return p.first == p.second; });
+    return std::move(result);
+  };
+  AD_CHECK(valueIdBegin.getDatatype() == valueIdEnd.getDatatype());
+  switch (valueIdBegin.getDatatype()) {
+    case Datatype::Double:
+    case Datatype::Int:
+      AD_CHECK(false);
+    case Datatype::Undefined:
+    case Datatype::VocabIndex:
+    case Datatype::LocalVocabIndex:
+    case Datatype::TextRecordIndex:
+      return simplify(detail::getRangesForIndexTypes(begin, end, valueIdBegin,
+                                                     valueIdEnd, comparison));
+  }
+  AD_CHECK(false);
+}
+
 bool compareIds(Id a, Id b, auto comparator) {
   auto isNumeric = [](Id id) {
     return id.getDatatype() == Datatype::Double ||
@@ -320,7 +364,7 @@ bool compareIds(Id a, Id b, auto comparator) {
   return ValueId::visitBinary(visitor, a, b);
 }
 
-bool compareIds(Id a, Id b, Comparison comparison) {
+inline bool compareIds(Id a, Id b, Comparison comparison) {
   switch (comparison) {
     case Comparison::LT:
       return compareIds(a, b, std::less<>());
@@ -334,6 +378,27 @@ bool compareIds(Id a, Id b, Comparison comparison) {
       return compareIds(a, b, std::greater_equal<>());
     case Comparison::GT:
       return compareIds(a, b, std::greater<>());
+    default:
+      AD_CHECK(false);
+  }
+}
+
+inline bool compareIds(Id a, Id bBegin, Id bEnd, Comparison comparison) {
+  switch (comparison) {
+    case Comparison::LT:
+      return compareIds(a, bBegin, std::less<>());
+    case Comparison::LE:
+      return compareIds(a, bEnd, std::less<>());
+    case Comparison::EQ:
+      return compareIds(a, bBegin, std::greater_equal<>()) &&
+             compareIds(a, bEnd, std::less<>());
+    case Comparison::NE:
+      return compareIds(a, bBegin, std::less<>()) ||
+             compareIds(a, bEnd, std::greater<>());
+    case Comparison::GE:
+      return compareIds(a, bBegin, std::greater_equal<>());
+    case Comparison::GT:
+      return compareIds(a, bEnd, std::greater_equal<>());
     default:
       AD_CHECK(false);
   }

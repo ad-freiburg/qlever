@@ -135,109 +135,40 @@ string Filter::getDescriptor() const {
   return std::move(os).str();
 }
 
-// _____________________________________________________________________________
-template <ResultTable::ResultType T, int WIDTH>
-void Filter::computeFilter(IdTableStatic<WIDTH>* result, size_t lhs, size_t rhs,
-                           const IdTableView<WIDTH>& input) const {
-  switch (_type) {
-    case SparqlFilter::EQ:
-      getEngine().filter(
-          input,
-          [lhs, rhs](const auto& e) {
-            return ValueReader<T>::get(e[lhs]) == ValueReader<T>::get(e[rhs]);
-          },
-          result);
-      break;
-    case SparqlFilter::NE:
-      getEngine().filter(
-          input,
-          [lhs, rhs](const auto& e) {
-            return ValueReader<T>::get(e[lhs]) != ValueReader<T>::get(e[rhs]);
-          },
-          result);
-      break;
-    case SparqlFilter::LT:
-      getEngine().filter(
-          input,
-          [lhs, rhs](const auto& e) {
-            return ValueReader<T>::get(e[lhs]) < ValueReader<T>::get(e[rhs]);
-          },
-          result);
-      break;
-    case SparqlFilter::LE:
-      getEngine().filter(
-          input,
-          [lhs, rhs](const auto& e) {
-            return ValueReader<T>::get(e[lhs]) <= ValueReader<T>::get(e[rhs]);
-          },
-          result);
-      break;
-    case SparqlFilter::GT:
-      getEngine().filter(
-          input,
-          [lhs, rhs](const auto& e) {
-            return ValueReader<T>::get(e[lhs]) > ValueReader<T>::get(e[rhs]);
-          },
-          result);
-      break;
-    case SparqlFilter::GE:
-      getEngine().filter(
-          input,
-          [lhs, rhs](const auto& e) {
-            return ValueReader<T>::get(e[lhs]) >= ValueReader<T>::get(e[rhs]);
-          },
-          result);
-      break;
-    case SparqlFilter::LANG_MATCHES:
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-               "Language filtering with a dynamic right side has not yet "
-               "been implemented.");
-      break;
-    case SparqlFilter::REGEX:
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-               "Regex filtering with a dynamic right side has not yet "
-               "been implemented.");
-      break;
-    case SparqlFilter::PREFIX:
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-               "Prefix filtering with a dynamic right side has not yet "
-               "been implemented.");
-      break;
-  }
-}
-
 template <int WIDTH>
 void Filter::computeResultDynamicValue(IdTable* dynResult, size_t lhsInd,
-                                       size_t rhsInd, const IdTable& dynInput,
-                                       ResultTable::ResultType lhsType) {
+                                       size_t rhsInd, const IdTable& dynInput) {
   const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
   IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
-  switch (lhsType) {
-    case ResultTable::ResultType::KB:
-      computeFilter<ResultTable::ResultType::KB>(&result, lhsInd, rhsInd,
-                                                 input);
+  auto throwNotSupported = [](std::string_view filterType) {
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+             absl::StrCat(filterType,
+                          " filtering with a dynamic right side has not yet "
+                          "been implemented."));
+  };
+  switch (_type) {
+    case SparqlFilter::LT:
+    case SparqlFilter::LE:
+    case SparqlFilter::EQ:
+    case SparqlFilter::NE:
+    case SparqlFilter::GT:
+    case SparqlFilter::GE: {
+      auto comparison = toComparison(_type);
+      getEngine().filter(
+          input,
+          [lhsInd, rhsInd, comparison](const auto& e) {
+            return valueIdComparators::compareIds(e[lhsInd], e[rhsInd],
+                                                  comparison);
+          },
+          &result);
       break;
-    case ResultTable::ResultType::VERBATIM:
-      computeFilter<ResultTable::ResultType::VERBATIM>(&result, lhsInd, rhsInd,
-                                                       input);
-      break;
-    case ResultTable::ResultType::FLOAT:
-      computeFilter<ResultTable::ResultType::FLOAT>(&result, lhsInd, rhsInd,
-                                                    input);
-      break;
-    case ResultTable::ResultType::LOCAL_VOCAB:
-      computeFilter<ResultTable::ResultType::LOCAL_VOCAB>(&result, lhsInd,
-                                                          rhsInd, input);
-      break;
-    case ResultTable::ResultType::TEXT:
-      computeFilter<ResultTable::ResultType::TEXT>(&result, lhsInd, rhsInd,
-                                                   input);
-      break;
-    default:
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-               "Tried to compute a filter on an unknown result type " +
-                   std::to_string(static_cast<int>(lhsType)));
-      break;
+    }
+    case SparqlFilter::LANG_MATCHES:
+      throwNotSupported("Language");
+    case SparqlFilter::REGEX:
+      throwNotSupported("Regex");
+    case SparqlFilter::PREFIX:
+      throwNotSupported("Prefix");
   }
   *dynResult = result.moveToDynamic();
 }
@@ -260,8 +191,7 @@ void Filter::computeResult(ResultTable* result) {
   if (_rhs[0] == '?') {
     size_t rhsInd = _subtree->getVariableColumn(_rhs);
     CALL_FIXED_SIZE_1(width, computeResultDynamicValue, &result->_idTable,
-                      lhsInd, rhsInd, subRes->_idTable,
-                      subRes->getResultType(lhsInd));
+                      lhsInd, rhsInd, subRes->_idTable);
   } else {
     // compare the left column to a fixed value
     CALL_FIXED_SIZE_1(width, computeResultFixedValue, result, subRes);
@@ -271,7 +201,7 @@ void Filter::computeResult(ResultTable* result) {
 }
 
 // _____________________________________________________________________________
-template <ResultTable::ResultType T, int WIDTH, bool INVERSE>
+template <int WIDTH>
 void Filter::computeFilterRange(IdTableStatic<WIDTH>* res, size_t lhs,
                                 Id rhs_lower, Id rhs_upper,
                                 const IdTableView<WIDTH>& input,
@@ -281,37 +211,56 @@ void Filter::computeFilterRange(IdTableStatic<WIDTH>* res, size_t lhs,
   if (lhs_is_sorted) {
     // The input data is sorted, use binary search to locate the first
     // and last element that match rhs and copy the range.
+    switch (_type) {
+      case SparqlFilter::LT:
+      case SparqlFilter::LE:
+      case SparqlFilter::EQ:
+      case SparqlFilter::NE:
+      case SparqlFilter::GT:
+      case SparqlFilter::GE: {
+        const auto comparison = toComparison(_type);
+        if (lhs_is_sorted) {
+          auto accessColumnLambda = [lhs](const auto& idTable, auto i) {
+            return idTable(i, lhs);
+          };
 
-    const auto& lower = std::lower_bound(input.begin(), input.end(), rhs_lower,
-                                         [lhs](const auto& l, const auto& r) {
-                                           return ValueReader<T>::get(l[lhs]) <
-                                                  ValueReader<T>::get(r);
-                                         });
-    const auto& upper = std::lower_bound(
-        lower, input.end(), rhs_upper, [lhs](const auto& l, const auto& r) {
-          return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r);
-        });
-    if constexpr (!INVERSE) {
-      res->insert(res->end(), lower, upper);
-    } else {
-      res->insert(res->end(), input.begin(), lower);
-      res->insert(res->end(), upper, res->end());
+          using Iterator = ad_utility::IteratorForAccessOperator<
+              std::decay_t<decltype(input)>, decltype(accessColumnLambda)>;
+          auto begin = Iterator{&input, 0, accessColumnLambda};
+          auto end = Iterator{&input, input.size(), accessColumnLambda};
+
+          auto testit = begin;
+          testit = end;
+
+          auto resultRanges = valueIdComparators::getRangesForIdWithEqualRange(
+              begin, end, rhs_lower, rhs_upper, comparison);
+
+          for (auto range : resultRanges) {
+            auto actualBegin = input.begin() + (range.first - begin);
+            auto actualEnd = input.begin() + (range.second - begin);
+            // TODO<joka921> Reserve the total result size for efficiency.
+            res->insert(res->end(), actualBegin, actualEnd);
+          }
+        } else {
+          getEngine().filter(
+              input,
+              [lhs, rhs_lower, rhs_upper, comparison](const auto& e) {
+                return valueIdComparators::compareIds(e[lhs], rhs_lower,
+                                                      rhs_upper, comparison);
+              },
+              res);
+        }
+        break;
+      }
+      default:
+        // This should be unreachable.
+        AD_CHECK(false);
     }
-  } else {
-    const auto inv = [&](const bool b) { return INVERSE ? !b : b; };
-    getEngine().filter(
-        input,
-        [lhs, rhs_lower, rhs_upper, &inv](const auto& e) {
-          return inv(
-              ValueReader<T>::get(e[lhs]) >= ValueReader<T>::get(rhs_lower) &&
-              ValueReader<T>::get(e[lhs]) < ValueReader<T>::get(rhs_upper));
-        },
-        res);
   }
 }
 
 // _____________________________________________________________________________
-template <ResultTable::ResultType T, int WIDTH>
+template <int WIDTH>
 void Filter::computeFilterFixedValue(
     IdTableStatic<WIDTH>* res, size_t lhs, Id rhs,
     const IdTableView<WIDTH>& input,
@@ -328,24 +277,7 @@ void Filter::computeFilterFixedValue(
     case SparqlFilter::NE:
     case SparqlFilter::GT:
     case SparqlFilter::GE: {
-      const auto comparison = [this]() -> valueIdComparators::Comparison {
-        switch (_type) {
-          case SparqlFilter::LT:
-            return valueIdComparators::Comparison::LT;
-          case SparqlFilter::LE:
-            return valueIdComparators::Comparison::LE;
-          case SparqlFilter::EQ:
-            return valueIdComparators::Comparison::EQ;
-          case SparqlFilter::NE:
-            return valueIdComparators::Comparison::NE;
-          case SparqlFilter::GT:
-            return valueIdComparators::Comparison::GT;
-          case SparqlFilter::GE:
-            return valueIdComparators::Comparison::GE;
-          default:
-            AD_CHECK(false);
-        }
-      }();
+      const auto comparison = toComparison(_type);
       if (lhs_is_sorted) {
         auto accessColumnLambda = [lhs](const auto& idTable, auto i) {
           return idTable(i, lhs);
@@ -384,10 +316,9 @@ void Filter::computeFilterFixedValue(
           input,
           [this, lhs, &subRes](const auto& e) {
             std::optional<string> entity;
-            if constexpr (T == ResultTable::ResultType::KB) {
+            if (e[lhs].getDatatype() == Datatype::VocabIndex) {
               entity = getIndex().idToOptionalString(e[lhs]);
-              (void)subRes;  // Silence unused warning
-            } else if (T == ResultTable::ResultType::LOCAL_VOCAB) {
+            } else if (e[lhs].getDatatype() == Datatype::LocalVocabIndex) {
               entity =
                   subRes->indexToOptionalString(e[lhs].getLocalVocabIndex());
             }
@@ -401,7 +332,7 @@ void Filter::computeFilterFixedValue(
     case SparqlFilter::PREFIX:
       // Check if the prefix filter can be applied. Use the regex filter
       // otherwise.
-      if constexpr (T == ResultTable::ResultType::KB) {
+      {
         // remove the leading '^' symbol
         // TODO<joka921> Is this a "columnIndex"?
         ad_utility::HashMap<UnknownIndex, vector<string>> lhsRhsMap;
@@ -537,14 +468,14 @@ void Filter::computeFilterFixedValue(
           input,
           [self_regex, &lhs, &subRes, this](const auto& e) {
             std::optional<string> entity;
-            if constexpr (T == ResultTable::ResultType::KB) {
+            if (e[lhs].getDatatype() == Datatype::VocabIndex) {
               entity = getIndex().idToOptionalString(e[lhs]);
-            } else if (T == ResultTable::ResultType::LOCAL_VOCAB) {
+            } else if (e[lhs].getDatatype() == Datatype::LocalVocabIndex) {
               entity =
                   subRes->indexToOptionalString(e[lhs].getLocalVocabIndex());
             }
-            (void)subRes;  // Silence unused warning.
-            (void)this;
+            // TODO<joka921> Should this be true or false? There is a similar
+            // place for the prefix filter.
             if (!entity) {
               return true;
             }
@@ -682,49 +613,11 @@ void Filter::computeResultFixedValue(
   // TODO<joka921> handle the case where we have multiple "equal" IDs because of
   // The sort level for Literals and IDs (the `rhs_for_upper...` variable is
   // then set
-  /*
-  if (apply_range_filter) {
-    if (resultType != ResultTable::ResultType::KB) {
-      AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-               "Applying a range filter where datatype is not KB, this "
-               "indicates a programming error, please report this");
-    }
-    if (range_filter_inverse) {
-      computeFilterRange<ResultTable::ResultType::KB, WIDTH, true>(
-          &result, lhs, rhs, rhs_upper_for_range, input, subRes);
-    } else {
-      computeFilterRange<ResultTable::ResultType::KB, WIDTH, false>(
-          &result, lhs, rhs, rhs_upper_for_range, input, subRes);
-    }
+  if (rhs_upper_for_range.has_value()) {
+    computeFilterRange(&result, lhs, rhs, rhs_upper_for_range.value(), input,
+                       subRes);
   } else {
-   */
-  switch (resultType) {
-    case ResultTable::ResultType::KB:
-      computeFilterFixedValue<ResultTable::ResultType::KB>(&result, lhs, rhs,
-                                                           input, subRes);
-      break;
-    case ResultTable::ResultType::VERBATIM:
-      computeFilterFixedValue<ResultTable::ResultType::VERBATIM>(
-          &result, lhs, rhs, input, subRes);
-      break;
-    case ResultTable::ResultType::FLOAT:
-      computeFilterFixedValue<ResultTable::ResultType::FLOAT>(&result, lhs, rhs,
-                                                              input, subRes);
-      break;
-    case ResultTable::ResultType::LOCAL_VOCAB:
-      computeFilterFixedValue<ResultTable::ResultType::LOCAL_VOCAB>(
-          &result, lhs, rhs, input, subRes);
-      break;
-    case ResultTable::ResultType::TEXT:
-      computeFilterFixedValue<ResultTable::ResultType::TEXT>(&result, lhs, rhs,
-                                                             input, subRes);
-      break;
-    default:
-      AD_THROW(
-          ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-          "Tried to compute a filter on an unknown result type " +
-              std::to_string(static_cast<int>(subRes->getResultType(lhs))));
-      break;
+    computeFilterFixedValue(&result, lhs, rhs, input, subRes);
   }
   LOG(DEBUG) << "Filter result computation done." << endl;
   resultTable->_idTable = result.moveToDynamic();

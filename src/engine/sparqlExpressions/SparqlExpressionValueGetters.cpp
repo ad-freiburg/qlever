@@ -13,7 +13,7 @@
 using namespace sparqlExpression::detail;
 // _____________________________________________________________________________
 double NumericValueGetter::operator()(StrongIdWithResultType strongId,
-                                      EvaluationContext* context) const {
+                                      EvaluationContext*) const {
   const Id id = strongId._id._value;
   switch (id.getDatatype()) {
     case Datatype::Double:
