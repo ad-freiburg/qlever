@@ -298,6 +298,47 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
   AD_CHECK(false);
 }
 
+bool compareIds(Id a, Id b, auto comparator) {
+  auto isNumeric = [](Id id) {
+    return id.getDatatype() == Datatype::Double ||
+           id.getDatatype() == Datatype::Int;
+  };
+  bool compatible =
+      (a.getDatatype() == b.getDatatype()) || (isNumeric(a) && isNumeric(b));
+  if (!compatible) {
+    return false;
+  }
+
+  auto visitor = [comparator](const auto& aValue, const auto& bValue) -> bool {
+    if constexpr (requires() { std::invoke(comparator, aValue, bValue); }) {
+      return std::invoke(comparator, aValue, bValue);
+    } else {
+      AD_CHECK(false);
+    }
+  };
+
+  return ValueId::visitBinary(visitor, a, b);
+}
+
+bool compareIds(Id a, Id b, Comparison comparison) {
+  switch (comparison) {
+    case Comparison::LT:
+      return compareIds(a, b, std::less<>());
+    case Comparison::LE:
+      return compareIds(a, b, std::less_equal<>());
+    case Comparison::EQ:
+      return compareIds(a, b, std::equal_to<>());
+    case Comparison::NE:
+      return compareIds(a, b, std::not_equal_to<>());
+    case Comparison::GE:
+      return compareIds(a, b, std::greater_equal<>());
+    case Comparison::GT:
+      return compareIds(a, b, std::greater<>());
+    default:
+      AD_CHECK(false);
+  }
+}
+
 }  // namespace valueIdComparators
 
 #endif  // QLEVER_VALUEIDCOMPARATORS_H

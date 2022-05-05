@@ -1097,7 +1097,8 @@ void Index::readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
   for (size_t i = 0; i < result.size(); ++i) {
     // TODO<joka921> handle the strong ID types properly.
     if constexpr (requires(T t) { t.getBits(); }) {
-      result[i] = codebook[result[i].getBits()];
+      result[i] = Id::makeFromVocabIndex(
+          VocabIndex::make(codebook[result[i].getBits()].getBits()));
     } else {
       result[i] = codebook[result[i]];
     }

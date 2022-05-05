@@ -49,8 +49,22 @@ class IteratorForAccessOperator {
 
  public:
   IteratorForAccessOperator() = default;
-  IteratorForAccessOperator(RandomAccessContainerPtr vec, index_type index)
-      : _vector{vec}, _index{index} {}
+  IteratorForAccessOperator(RandomAccessContainerPtr vec, index_type index,
+                            Accessor accessor = Accessor{})
+      : _vector{vec}, _index{index}, _accessor{std::move(accessor)} {}
+
+  IteratorForAccessOperator(const IteratorForAccessOperator&) = default;
+
+  /// Lambdas don't have assignment operators, but several STL algorithms need
+  /// iterators to be assignable.
+  // Todo<joka921> Create an abstraction (makeAssignableLambda).
+  IteratorForAccessOperator& operator=(const IteratorForAccessOperator& other) {
+    _vector = other._vector;
+    _index = other._index;
+    std::destroy_at(&_accessor);
+    std::construct_at(&_accessor, other._accessor);
+    return *this;
+  }
 
   auto operator<=>(const IteratorForAccessOperator& rhs) const {
     return (_index <=> rhs._index);

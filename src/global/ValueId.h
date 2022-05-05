@@ -225,7 +225,19 @@ class ValueId {
         return std::invoke(visitor, getLocalVocabIndex());
       case Datatype::TextRecordIndex:
         return std::invoke(visitor, getTextRecordIndex());
+      default:
+        AD_CHECK(false);
     }
+  }
+
+  template <typename Visitor>
+  static decltype(auto) visitBinary(Visitor&& visitor, ValueId a, ValueId b) {
+    return a.visit([&](const auto& aValue) {
+      auto innerVisitor = [&](const auto& bValue) {
+        return std::invoke(visitor, aValue, bValue);
+      };
+      return b.visit(innerVisitor);
+    });
   }
 
   /// This operator is only for debugging and testing. It returns a
