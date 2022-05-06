@@ -218,12 +218,12 @@ TEST(ValueIdComparators, IndexTypes) {
     for (size_t i = 0; i < 200; ++i) {
       auto begin = beginOfDatatype + getRandomIndex();
       auto end = beginOfDatatype + getRandomIndex();
-      if (begin > end) {
+      if (*begin > *end) {
         std::swap(begin, end);
       }
       testGetRangesForId(ids.begin(), ids.end(), *begin, isTypeMatching,
                          applyComparator);
-      if (begin == end) {
+      if (*begin == *end) {
         continue;
       }
       testGetRangesForIdWithEqualRange(ids.begin(), ids.end(), *begin, *end,
