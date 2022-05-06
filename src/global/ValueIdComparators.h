@@ -316,10 +316,16 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
   AD_CHECK(false);
 }
 
+/// Similar to `getRangesForId` above but takes a range [valueIdBegin,
+/// valueIdEnd) of Ids that are considered to be equal. `valueIdBegin` and
+/// `valueIdEnd` must have the same datatype which must be one of the index
+/// types `VocabIndex, LocalVocabIndex, ...`, otherwise an `AD_CHECK` will fail
+/// at runtime.
 template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIdWithEqualRange(
     RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
     Comparison comparison) {
+  AD_CHECK(valueIdBegin < valueIdEnd);
   // This lambda enforces the invariants `non-empty` and `sorted`.
   auto simplify = [](std::vector<std::pair<RandomIt, RandomIt>>&& result) {
     std::sort(result.begin(), result.end());
@@ -342,7 +348,10 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIdWithEqualRange(
   AD_CHECK(false);
 }
 
-bool compareIds(Id a, Id b, auto comparator) {
+namespace detail {
+
+// This function is part of the implementation of `compareIds` (see below).
+bool compareIdsImpl(ValueId a, ValueId b, auto comparator) {
   auto isNumeric = [](Id id) {
     return id.getDatatype() == Datatype::Double ||
            id.getDatatype() == Datatype::Int;
@@ -363,42 +372,53 @@ bool compareIds(Id a, Id b, auto comparator) {
 
   return ValueId::visitBinary(visitor, a, b);
 }
+}  // namespace detail
 
-inline bool compareIds(Id a, Id b, Comparison comparison) {
+// Compare two `ValueId`s by their actual value.
+// Returns true iff the following conditions are met:
+// 1. The condition aValue `comparison` bValue is fulfilled, where aValue and
+// bValue are the values contained in `a` and `b`.
+// 2. The datatype of `a` and `b` are compatible, s.t. the comparison in
+// condition one is well-defined.
+inline bool compareIds(ValueId a, ValueId b, Comparison comparison) {
   switch (comparison) {
     case Comparison::LT:
-      return compareIds(a, b, std::less<>());
+      return detail::compareIdsImpl(a, b, std::less<>());
     case Comparison::LE:
-      return compareIds(a, b, std::less_equal<>());
+      return detail::compareIdsImpl(a, b, std::less_equal<>());
     case Comparison::EQ:
-      return compareIds(a, b, std::equal_to<>());
+      return detail::compareIdsImpl(a, b, std::equal_to<>());
     case Comparison::NE:
-      return compareIds(a, b, std::not_equal_to<>());
+      return detail::compareIdsImpl(a, b, std::not_equal_to<>());
     case Comparison::GE:
-      return compareIds(a, b, std::greater_equal<>());
+      return detail::compareIdsImpl(a, b, std::greater_equal<>());
     case Comparison::GT:
-      return compareIds(a, b, std::greater<>());
+      return detail::compareIdsImpl(a, b, std::greater<>());
     default:
       AD_CHECK(false);
   }
 }
 
-inline bool compareIds(Id a, Id bBegin, Id bEnd, Comparison comparison) {
+/// Similar to `compareIds` above but takes a range [bBegin, bEnd) of Ids that
+/// are considered to be equal.
+inline bool compareIdsWithEqualRange(ValueId a, ValueId bBegin, ValueId bEnd,
+                                     Comparison comparison) {
+  AD_CHECK(bBegin < bEnd);
   switch (comparison) {
     case Comparison::LT:
-      return compareIds(a, bBegin, std::less<>());
+      return detail::compareIdsImpl(a, bBegin, std::less<>());
     case Comparison::LE:
-      return compareIds(a, bEnd, std::less<>());
+      return detail::compareIdsImpl(a, bEnd, std::less<>());
     case Comparison::EQ:
-      return compareIds(a, bBegin, std::greater_equal<>()) &&
-             compareIds(a, bEnd, std::less<>());
+      return detail::compareIdsImpl(a, bBegin, std::greater_equal<>()) &&
+             detail::compareIdsImpl(a, bEnd, std::less<>());
     case Comparison::NE:
-      return compareIds(a, bBegin, std::less<>()) ||
-             compareIds(a, bEnd, std::greater<>());
+      return detail::compareIdsImpl(a, bBegin, std::less<>()) ||
+             detail::compareIdsImpl(a, bEnd, std::greater_equal<>());
     case Comparison::GE:
-      return compareIds(a, bBegin, std::greater_equal<>());
+      return detail::compareIdsImpl(a, bBegin, std::greater_equal<>());
     case Comparison::GT:
-      return compareIds(a, bEnd, std::greater_equal<>());
+      return detail::compareIdsImpl(a, bEnd, std::greater_equal<>());
     default:
       AD_CHECK(false);
   }

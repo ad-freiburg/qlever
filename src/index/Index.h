@@ -207,8 +207,14 @@ class Index {
         return std::to_string(id.getDouble());
       case Datatype::Int:
         return std::to_string(id.getInt());
-      case Datatype::VocabIndex:
-        return _vocab.indexToOptionalString(id.getVocabIndex());
+      case Datatype::VocabIndex: {
+        auto result = _vocab.indexToOptionalString(id.getVocabIndex());
+        if (result.has_value() && result.value().starts_with(VALUE_PREFIX)) {
+          result.value() =
+              ad_utility::convertIndexWordToValueLiteral(result.value());
+        }
+        return result;
+      }
       case Datatype::LocalVocabIndex:
         // TODO:: this is why this shouldn't be here
         return std::nullopt;

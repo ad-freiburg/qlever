@@ -12,7 +12,7 @@ $(document).ready(function () {
     var ind = window.location.href.indexOf("?query=");
     if (ind > 0) {
         ind += 7;
-        var ccInd = window.location.href.indexOf("&cmd=clearcache");
+        var ccInd = window.location.href.indexOf("&cmd=clear-cache");
         if (ccInd > 0) {
             $("#clear").prop("checked", true);
         }

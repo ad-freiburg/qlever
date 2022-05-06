@@ -51,9 +51,7 @@ class Variable {
           return std::move(stream).str();
         }
         case Datatype::VocabIndex:
-          return qecIndex.getVocab()
-              .indexToOptionalString(id.getVocabIndex())
-              .value_or("");
+          return qecIndex.idToOptionalString(id).value_or("");
         case Datatype::LocalVocabIndex:
           return res.indexToOptionalString(id.getLocalVocabIndex())
               .value_or("");

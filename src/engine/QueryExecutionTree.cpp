@@ -298,8 +298,7 @@ QueryExecutionTree::toStringAndXsdType(Id id,
     case Datatype::Int:
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
     case Datatype::VocabIndex: {
-      std::optional<string> entity =
-          _qec->getIndex().getVocab().indexToOptionalString(id.getVocabIndex());
+      std::optional<string> entity = _qec->getIndex().idToOptionalString(id);
       if (!entity.has_value()) {
         return std::nullopt;
       }

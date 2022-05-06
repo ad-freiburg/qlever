@@ -12,6 +12,7 @@
 #include "../global/ValueIdComparators.h"
 #include "../parser/TurtleParser.h"
 #include "../util/Iterators.h"
+#include "../util/LambdaHelpers.h"
 #include "CallFixedSize.h"
 #include "QueryExecutionTree.h"
 
@@ -208,54 +209,52 @@ void Filter::computeFilterRange(IdTableStatic<WIDTH>* res, size_t lhs,
                                 shared_ptr<const ResultTable> subRes) const {
   bool lhs_is_sorted =
       subRes->_sortedBy.size() > 0 && subRes->_sortedBy[0] == lhs;
-  if (lhs_is_sorted) {
-    // The input data is sorted, use binary search to locate the first
-    // and last element that match rhs and copy the range.
-    switch (_type) {
-      case SparqlFilter::LT:
-      case SparqlFilter::LE:
-      case SparqlFilter::EQ:
-      case SparqlFilter::NE:
-      case SparqlFilter::GT:
-      case SparqlFilter::GE: {
-        const auto comparison = toComparison(_type);
-        if (lhs_is_sorted) {
-          auto accessColumnLambda = [lhs](const auto& idTable, auto i) {
-            return idTable(i, lhs);
-          };
+  switch (_type) {
+    case SparqlFilter::LT:
+    case SparqlFilter::LE:
+    case SparqlFilter::EQ:
+    case SparqlFilter::NE:
+    case SparqlFilter::GT:
+    case SparqlFilter::GE: {
+      const auto comparison = toComparison(_type);
+      if (lhs_is_sorted) {
+        // The input data is sorted, use binary search to locate the first
+        // and last element that match rhs and copy the range.
+        auto accessColumnLambda = ad_utility::makeAssignableLambda(
+            [lhs](const auto& idTable, auto i) { return idTable(i, lhs); });
 
-          using Iterator = ad_utility::IteratorForAccessOperator<
-              std::decay_t<decltype(input)>, decltype(accessColumnLambda)>;
-          auto begin = Iterator{&input, 0, accessColumnLambda};
-          auto end = Iterator{&input, input.size(), accessColumnLambda};
+        using Iterator =
+            ad_utility::IteratorForAccessOperator<std::decay_t<decltype(input)>,
+                                                  decltype(accessColumnLambda)>;
+        auto begin = Iterator{&input, 0, accessColumnLambda};
+        auto end = Iterator{&input, input.size(), accessColumnLambda};
 
-          auto testit = begin;
-          testit = end;
+        auto testit = begin;
+        testit = end;
 
-          auto resultRanges = valueIdComparators::getRangesForIdWithEqualRange(
-              begin, end, rhs_lower, rhs_upper, comparison);
+        auto resultRanges = valueIdComparators::getRangesForIdWithEqualRange(
+            begin, end, rhs_lower, rhs_upper, comparison);
 
-          for (auto range : resultRanges) {
-            auto actualBegin = input.begin() + (range.first - begin);
-            auto actualEnd = input.begin() + (range.second - begin);
-            // TODO<joka921> Reserve the total result size for efficiency.
-            res->insert(res->end(), actualBegin, actualEnd);
-          }
-        } else {
-          getEngine().filter(
-              input,
-              [lhs, rhs_lower, rhs_upper, comparison](const auto& e) {
-                return valueIdComparators::compareIds(e[lhs], rhs_lower,
-                                                      rhs_upper, comparison);
-              },
-              res);
+        for (auto range : resultRanges) {
+          auto actualBegin = input.begin() + (range.first - begin);
+          auto actualEnd = input.begin() + (range.second - begin);
+          // TODO<joka921> Reserve the total result size for efficiency.
+          res->insert(res->end(), actualBegin, actualEnd);
         }
-        break;
+      } else {
+        getEngine().filter(
+            input,
+            [lhs, rhs_lower, rhs_upper, comparison](const auto& e) {
+              return valueIdComparators::compareIdsWithEqualRange(
+                  e[lhs], rhs_lower, rhs_upper, comparison);
+            },
+            res);
       }
-      default:
-        // This should be unreachable.
-        AD_CHECK(false);
+      break;
     }
+    default:
+      // This should be unreachable.
+      AD_CHECK(false);
   }
 }
 
@@ -279,9 +278,8 @@ void Filter::computeFilterFixedValue(
     case SparqlFilter::GE: {
       const auto comparison = toComparison(_type);
       if (lhs_is_sorted) {
-        auto accessColumnLambda = [lhs](const auto& idTable, auto i) {
-          return idTable(i, lhs);
-        };
+        auto accessColumnLambda = ad_utility::makeAssignableLambda(
+            [lhs](const auto& idTable, auto i) { return idTable(i, lhs); });
 
         using Iterator =
             ad_utility::IteratorForAccessOperator<std::decay_t<decltype(input)>,

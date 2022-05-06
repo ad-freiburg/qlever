@@ -26,6 +26,12 @@ using AccessViaBracketOperator = decltype(accessViaBracketOperator);
  * iterators for indices `a` and `b` can be obtained from the random access
  * container (typically by `begin()` and `end()` member functions, then it must
  * be legal to call the accessor for all `i` in `[a, b)`.
+ *
+ * Note: Many STL algorithms (like `std::sort` require iterator types to be
+ * assignable. `IteratorForAccessOperator` is only assignable if the `Accessor`
+ * type is assignable. If you want to use a lambda as the accessor (which is not
+ * assignable), consider using `ad_utility::makeAssignableLambda` in
+ * `LambdaHelpers.h`.
  */
 template <typename RandomAccessContainer,
           typename Accessor = AccessViaBracketOperator, bool IsConst = true>
@@ -54,17 +60,11 @@ class IteratorForAccessOperator {
       : _vector{vec}, _index{index}, _accessor{std::move(accessor)} {}
 
   IteratorForAccessOperator(const IteratorForAccessOperator&) = default;
-
-  /// Lambdas don't have assignment operators, but several STL algorithms need
-  /// iterators to be assignable.
-  // Todo<joka921> Create an abstraction (makeAssignableLambda).
-  IteratorForAccessOperator& operator=(const IteratorForAccessOperator& other) {
-    _vector = other._vector;
-    _index = other._index;
-    std::destroy_at(&_accessor);
-    std::construct_at(&_accessor, other._accessor);
-    return *this;
-  }
+  IteratorForAccessOperator(IteratorForAccessOperator&&) noexcept = default;
+  IteratorForAccessOperator& operator=(const IteratorForAccessOperator& other) =
+      default;
+  IteratorForAccessOperator& operator=(IteratorForAccessOperator&&) noexcept =
+      default;
 
   auto operator<=>(const IteratorForAccessOperator& rhs) const {
     return (_index <=> rhs._index);
