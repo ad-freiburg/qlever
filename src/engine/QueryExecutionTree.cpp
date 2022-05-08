@@ -291,9 +291,16 @@ QueryExecutionTree::toStringAndXsdType(Id id,
     case Datatype::Undefined:
       return std::nullopt;
     case Datatype::Double: {
-      std::stringstream s;
-      s << id.getDouble();
-      return std::pair{std::move(s).str(), XSD_DECIMAL_TYPE};
+      // Format as integer if fractional part is zero, let C++ decide otherwise.
+      std::stringstream ss;
+      double d = id.getDouble();
+      double dIntPart;
+      if (std::modf(d, &dIntPart) == 0.0) {
+        ss << std::fixed << std::setprecision(0) << id.getDouble();
+      } else {
+        ss << d;
+      }
+      return std::pair{std::move(ss).str(), XSD_DECIMAL_TYPE};
     }
     case Datatype::Int:
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
