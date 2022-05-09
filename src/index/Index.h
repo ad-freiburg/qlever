@@ -656,13 +656,15 @@ class Index {
                           const ad_utility::HashMap<WordIndex, Score>& words,
                           const ad_utility::HashMap<Id, Score>& entities);
 
-  template <typename T>
+  template <typename T, typename MakeFromUint = std::identity>
   void readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
-                        vector<T>& result) const;
+                        vector<T>& result,
+                        MakeFromUint makeFromUint = MakeFromUint{}) const;
 
-  template <typename T>
+  template <typename T, typename MakeFromUint = std::identity>
   void readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
-                         vector<T>& result) const;
+                         vector<T>& result,
+                         MakeFromUint makeFromUint = MakeFromUint{}) const;
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 

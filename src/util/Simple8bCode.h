@@ -137,10 +137,12 @@ class Simple8bCode {
   // ! Decodes a list of elements using the Simple8b compression scheme.
   // ! Requires decoded to be preallocated with sufficient space,
   // ! i.e. sizeof(Numeric) * (nofElements + 239).
-  // ! The overhead is included so that no check for noundaries
+  // ! The overhead is included so that no check for boundaries
   // ! is necessary inside the decoding of a single codeword.
-  template <typename Numeric>
-  static void decode(uint64_t* encoded, size_t nofElements, Numeric* decoded) {
+  template <typename Numeric, typename MakeFromUint64 = std::identity>
+  static void decode(uint64_t* const encoded, size_t nofElements,
+                     Numeric* decoded,
+                     MakeFromUint64 makeFromUint64 = MakeFromUint64{}) {
     // Handle trivial empty case
     if (!nofElements) {
       return;
@@ -152,17 +154,8 @@ class Simple8bCode {
     while (nofElementsDone < nofElements) {
       word = encoded[nofCodeWordsDone] >> 4;
       for (size_t i(0); i < SIMPLE8B_SELECTORS[selector]._groupSize; ++i) {
-        // TODO<joka921> Hack for the IDs.
-        if constexpr (requires() { Numeric::make(0ul); }) {
-          decoded[nofElementsDone++] =
-              Numeric::make(word & SIMPLE8B_SELECTORS[selector]._mask);
-        } else if constexpr (requires() { Numeric::fromBits(0ul); }) {
-          decoded[nofElementsDone++] =
-              Numeric::fromBits(word & SIMPLE8B_SELECTORS[selector]._mask);
-        } else {
-          decoded[nofElementsDone++] =
-              word & SIMPLE8B_SELECTORS[selector]._mask;
-        }
+        decoded[nofElementsDone++] =
+            makeFromUint64(word & SIMPLE8B_SELECTORS[selector]._mask);
         word >>= SIMPLE8B_SELECTORS[selector]._itemWidth;
       }
       ++nofCodeWordsDone;

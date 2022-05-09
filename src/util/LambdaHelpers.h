@@ -19,9 +19,13 @@ struct AssignableLambdaImpl {
  public:
   explicit AssignableLambdaImpl(Lambda lambda) : _lambda{std::move(lambda)} {}
 
-  decltype(auto) operator()(auto&&... args) noexcept(noexcept(_lambda(AD_FWD(args)...))) { return _lambda(AD_FWD(args)...); }
+  decltype(auto) operator()(auto&&... args) noexcept(
+      noexcept(_lambda(AD_FWD(args)...))) {
+    return _lambda(AD_FWD(args)...);
+  }
 
-  decltype(auto) operator()(auto&&... args) const noexcept(noexcept(_lambda(AD_FWD(args)...))) {
+  decltype(auto) operator()(auto&&... args) const
+      noexcept(noexcept(_lambda(AD_FWD(args)...))) {
     return _lambda(AD_FWD(args)...);
   }
 

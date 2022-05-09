@@ -162,7 +162,7 @@ TEST(ValueIdComparators, Undefined) {
 // Similar to `testGetRanges` (see above) but tests the comparison to a range of
 // `ValueId`s that are considered equal.
 auto testGetRangesForEqualIds(auto begin, auto end, ValueId idBegin,
-                                      ValueId idEnd, auto isMatchingDatatype) {
+                              ValueId idEnd, auto isMatchingDatatype) {
   // Perform the testing for a single `Comparison`
   auto testImpl = [&]<Comparison comparison>() {
     auto ranges = getRangesForEqualIds(begin, end, idBegin, idEnd, comparison);

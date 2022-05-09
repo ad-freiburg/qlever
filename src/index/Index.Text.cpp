@@ -760,7 +760,7 @@ void Index::getWordPostingsForTerm(const string& term,
     readGapComprList(tbmd._cl._nofElements, tbmd._cl._startContextlist,
                      static_cast<size_t>(tbmd._cl._startWordlist -
                                          tbmd._cl._startContextlist),
-                     blockCids);
+                     blockCids, &TextRecordIndex::make);
     readFreqComprList(
         tbmd._cl._nofElements, tbmd._cl._startWordlist,
         static_cast<size_t>(tbmd._cl._startScorelist - tbmd._cl._startWordlist),
@@ -775,7 +775,7 @@ void Index::getWordPostingsForTerm(const string& term,
     readGapComprList(tbmd._cl._nofElements, tbmd._cl._startContextlist,
                      static_cast<size_t>(tbmd._cl._startWordlist -
                                          tbmd._cl._startContextlist),
-                     cids);
+                     cids, &TextRecordIndex::make);
     readFreqComprList(
         tbmd._cl._nofElements, tbmd._cl._startScorelist,
         static_cast<size_t>(tbmd._cl._lastByte + 1 - tbmd._cl._startScorelist),
@@ -988,12 +988,12 @@ void Index::getEntityPostingsForTerm(const string& term,
                      tbmd._entityCl._startContextlist,
                      static_cast<size_t>(tbmd._entityCl._startWordlist -
                                          tbmd._entityCl._startContextlist),
-                     cids);
+                     cids, &TextRecordIndex::make);
     readFreqComprList(tbmd._entityCl._nofElements,
                       tbmd._entityCl._startWordlist,
                       static_cast<size_t>(tbmd._entityCl._startScorelist -
                                           tbmd._entityCl._startWordlist),
-                      eids);
+                      eids, &Id::fromBits);
     readFreqComprList(tbmd._entityCl._nofElements,
                       tbmd._entityCl._startScorelist,
                       static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
@@ -1015,12 +1015,12 @@ void Index::getEntityPostingsForTerm(const string& term,
                      tbmd._entityCl._startContextlist,
                      static_cast<size_t>(tbmd._entityCl._startWordlist -
                                          tbmd._entityCl._startContextlist),
-                     eBlockCids);
+                     eBlockCids, &TextRecordIndex::make);
     readFreqComprList(tbmd._entityCl._nofElements,
                       tbmd._entityCl._startWordlist,
                       static_cast<size_t>(tbmd._entityCl._startScorelist -
                                           tbmd._entityCl._startWordlist),
-                      eBlockWids);
+                      eBlockWids, &Id::fromBits);
     readFreqComprList(tbmd._entityCl._nofElements,
                       tbmd._entityCl._startScorelist,
                       static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
@@ -1032,9 +1032,10 @@ void Index::getEntityPostingsForTerm(const string& term,
 }
 
 // _____________________________________________________________________________
-template <typename T>
+template <typename T, typename MakeFromUint>
 void Index::readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
-                             vector<T>& result) const {
+                             vector<T>& result,
+                             MakeFromUint makeFromUint) const {
   LOG(DEBUG) << "Reading gap-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
              << ", nofBytes: " << nofBytes << '\n';
@@ -1042,7 +1043,8 @@ void Index::readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
   uint64_t* encoded = new uint64_t[nofBytes / 8];
   _textIndexFile.read(encoded, nofBytes, from);
   LOG(DEBUG) << "Decoding Simple8b code...\n";
-  ad_utility::Simple8bCode::decode(encoded, nofElements, result.data());
+  ad_utility::Simple8bCode::decode(encoded, nofElements, result.data(),
+                                   makeFromUint);
   LOG(DEBUG) << "Reverting gaps to actual IDs...\n";
 
   // TODO<joka921> make this hack unnecessary, probably by a proper output
@@ -1067,9 +1069,10 @@ void Index::readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
 }
 
 // _____________________________________________________________________________
-template <typename T>
+template <typename T, typename MakeFromUint>
 void Index::readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
-                              vector<T>& result) const {
+                              vector<T>& result,
+                              MakeFromUint makeFromUint) const {
   AD_CHECK_GT(nofBytes, 0);
   LOG(DEBUG) << "Reading frequency-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
@@ -1091,7 +1094,8 @@ void Index::readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
   current += ret;
   AD_CHECK_EQ(size_t(current - from), nofBytes);
   LOG(DEBUG) << "Decoding Simple8b code...\n";
-  ad_utility::Simple8bCode::decode(encoded, nofElements, result.data());
+  ad_utility::Simple8bCode::decode(encoded, nofElements, result.data(),
+                                   makeFromUint);
   LOG(DEBUG) << "Reverting frequency encoded items to actual IDs...\n";
   result.resize(nofElements);
   for (size_t i = 0; i < result.size(); ++i) {

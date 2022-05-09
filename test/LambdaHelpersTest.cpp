@@ -3,18 +3,19 @@
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
+
 #include "../src/util/LambdaHelpers.h"
 
 TEST(MakeAssignableLambda, SimpleLambda) {
   // Non-capturing lambdas are assignable (they decay to function pointers.)
-  auto twice = [](int x) {return 2 * x;};
+  auto twice = [](int x) { return 2 * x; };
   using T = decltype(twice);
   static_assert(std::is_copy_assignable_v<T>);
   static_assert(std::is_move_assignable_v<T>);
 
   // Capturing lambdas are not assignable.
   int m = 4;
-  auto multiply = [m](int x) {return m * x;};
+  auto multiply = [m](int x) { return m * x; };
   using M = decltype(multiply);
   static_assert(!std::is_copy_assignable_v<M>);
   static_assert(!std::is_move_assignable_v<M>);
@@ -35,7 +36,8 @@ TEST(MakeAssignableLambda, SimpleLambda) {
 }
 
 TEST(MakeAssignableLambda, NonConst) {
-  auto increment = ad_utility::makeAssignableLambda([i=0]() mutable {return i++;});
+  auto increment =
+      ad_utility::makeAssignableLambda([i = 0]() mutable { return i++; });
   ASSERT_EQ(0, increment());
   ASSERT_EQ(1, increment());
 
@@ -44,7 +46,8 @@ TEST(MakeAssignableLambda, NonConst) {
   auto copy2 = increment;
   copy2 = std::move(increment);
 
-  // The internal state `i` is 2, but each of the copies gets its own copy of `i`.
+  // The internal state `i` is 2, but each of the copies gets its own copy of
+  // `i`.
   ASSERT_EQ(2, increment());
   ASSERT_EQ(2, copy());
   ASSERT_EQ(2, copy2());
@@ -55,10 +58,16 @@ TEST(MakeAssignableLambda, NonConst) {
 }
 
 TEST(MakeAssignableLambda, CopyVsMove) {
-  // The detour via `vector` guarantees that moving the capture `v` will empty it. We will use this to check whether a move actually happened.
+  // The detour via `vector` guarantees that moving the capture `v` will empty
+  // it. We will use this to check whether a move actually happened.
   auto makeString = [](const std::string& s) {
-    // Note: although there is no `mutable` here the vector will still be moved if the lambda is moved. The `mutable` only refers to the `operator()` of the lambda and not to the closure member that corresponds to the capture.
-    return ad_utility::makeAssignableLambda([v = std::vector<char>(s.begin(), s.end())]() { return std::string(v.begin(), v.end());});
+    // Note: although there is no `mutable` here the vector will still be moved
+    // if the lambda is moved. The `mutable` only refers to the `operator()` of
+    // the lambda and not to the closure member that corresponds to the capture.
+    return ad_utility::makeAssignableLambda(
+        [v = std::vector<char>(s.begin(), s.end())]() {
+          return std::string(v.begin(), v.end());
+        });
   };
 
   auto hallo = makeString("hallo");
@@ -84,7 +93,8 @@ TEST(MakeAssignableLambda, CopyVsMove) {
 
 TEST(MakeAssignableLambda, MoveOnly) {
   auto makeConstString = [](const std::string& s) {
-    return ad_utility::makeAssignableLambda([s = std::make_unique<std::string>(s)]() mutable { return s.get();});
+    return ad_utility::makeAssignableLambda(
+        [s = std::make_unique<std::string>(s)]() mutable { return s.get(); });
   };
 
   auto hallo = makeConstString("hallo");
@@ -97,5 +107,3 @@ TEST(MakeAssignableLambda, MoveOnly) {
   ASSERT_EQ("hallo", *moved());
   ASSERT_EQ(nullptr, hallo());
 }
-
-

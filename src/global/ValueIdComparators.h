@@ -263,8 +263,8 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
   return std::move(rangeFilter).getResult();
 }
 
-// This function is part of the implementation of `getRangesForEqualIds`. See the
-// documentation there.
+// This function is part of the implementation of `getRangesForEqualIds`. See
+// the documentation there.
 template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
     RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
@@ -327,23 +327,25 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
     Comparison comparison) {
   AD_CHECK(valueIdBegin < valueIdEnd);
   // This lambda enforces the invariants `non-empty` and `sorted`.
-  auto simplifyRanges = [](std::vector<std::pair<RandomIt, RandomIt>>&& result) {
-    std::sort(result.begin(), result.end());
-    // Eliminate empty ranges
-    std::erase_if(result, [](const auto& p) { return p.first == p.second; });
-    return std::move(result);
-  };
+  auto simplifyRanges =
+      [](std::vector<std::pair<RandomIt, RandomIt>>&& result) {
+        std::sort(result.begin(), result.end());
+        // Eliminate empty ranges
+        std::erase_if(result,
+                      [](const auto& p) { return p.first == p.second; });
+        return std::move(result);
+      };
   AD_CHECK(valueIdBegin.getDatatype() == valueIdEnd.getDatatype());
   switch (valueIdBegin.getDatatype()) {
     case Datatype::Double:
     case Datatype::Int:
     case Datatype::Undefined:
-    AD_CHECK(false);
+      AD_CHECK(false);
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::TextRecordIndex:
-      return simplifyRanges(detail::getRangesForIndexTypes(begin, end, valueIdBegin,
-                                                     valueIdEnd, comparison));
+      return simplifyRanges(detail::getRangesForIndexTypes(
+          begin, end, valueIdBegin, valueIdEnd, comparison));
   }
   AD_CHECK(false);
 }
@@ -402,7 +404,7 @@ inline bool compareIds(ValueId a, ValueId b, Comparison comparison) {
 /// Similar to `compareIds` above but takes a range [bBegin, bEnd) of Ids that
 /// are considered to be equal.
 inline bool compareWithEqualIds(ValueId a, ValueId bBegin, ValueId bEnd,
-                                     Comparison comparison) {
+                                Comparison comparison) {
   AD_CHECK(bBegin < bEnd);
   switch (comparison) {
     case Comparison::LT:

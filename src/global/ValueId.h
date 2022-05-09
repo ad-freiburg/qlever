@@ -230,7 +230,9 @@ class ValueId {
     }
   }
 
-  /// Similar to `visit` (see above). Extracts the values from `a` and `b` and calls `visitor(aValue, bValue)`. `visitor` must be callable for any combination of two types.
+  /// Similar to `visit` (see above). Extracts the values from `a` and `b` and
+  /// calls `visitor(aValue, bValue)`. `visitor` must be callable for any
+  /// combination of two types.
   template <typename Visitor>
   static decltype(auto) visitTwo(Visitor&& visitor, ValueId a, ValueId b) {
     return a.visit([&](const auto& aValue) {
