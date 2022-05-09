@@ -161,26 +161,25 @@ TEST(ValueIdComparators, Undefined) {
 
 // Similar to `testGetRanges` (see above) but tests the comparison to a range of
 // `ValueId`s that are considered equal.
-auto testGetRangesForIdWithEqualRange(auto begin, auto end, ValueId idBegin,
+auto testGetRangesForEqualIds(auto begin, auto end, ValueId idBegin,
                                       ValueId idEnd, auto isMatchingDatatype) {
   // Perform the testing for a single `Comparison`
   auto testImpl = [&]<Comparison comparison>() {
-    auto ranges =
-        getRangesForIdWithEqualRange(begin, end, idBegin, idEnd, comparison);
+    auto ranges = getRangesForEqualIds(begin, end, idBegin, idEnd, comparison);
     auto it = begin;
     for (auto [rangeBegin, rangeEnd] : ranges) {
       while (it != rangeBegin) {
-        ASSERT_FALSE(compareIdsWithEqualRange(*it, idBegin, idEnd, comparison));
+        ASSERT_FALSE(compareWithEqualIds(*it, idBegin, idEnd, comparison));
         ++it;
       }
       while (it != rangeEnd) {
         ASSERT_TRUE(isMatchingDatatype(*it));
-        ASSERT_TRUE(compareIdsWithEqualRange(*it, idBegin, idEnd, comparison));
+        ASSERT_TRUE(compareWithEqualIds(*it, idBegin, idEnd, comparison));
         ++it;
       }
     }
     while (it != end) {
-      ASSERT_FALSE(compareIdsWithEqualRange(*it, idBegin, idEnd, comparison));
+      ASSERT_FALSE(compareWithEqualIds(*it, idBegin, idEnd, comparison));
       ++it;
     }
   };
@@ -226,8 +225,8 @@ TEST(ValueIdComparators, IndexTypes) {
       if (*begin == *end) {
         continue;
       }
-      testGetRangesForIdWithEqualRange(ids.begin(), ids.end(), *begin, *end,
-                                       isTypeMatching);
+      testGetRangesForEqualIds(ids.begin(), ids.end(), *begin, *end,
+                               isTypeMatching);
     }
   };
 

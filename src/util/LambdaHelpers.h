@@ -10,7 +10,7 @@
 namespace ad_utility {
 
 namespace detail {
-// Helper type for `makeAssignableLambda`
+// Helper type for `makeAssignableLambda`.
 template <typename Lambda>
 struct AssignableLambdaImpl {
  private:
@@ -19,8 +19,9 @@ struct AssignableLambdaImpl {
  public:
   explicit AssignableLambdaImpl(Lambda lambda) : _lambda{std::move(lambda)} {}
 
-  decltype(auto) operator()(auto&&... args) { return _lambda(AD_FWD(args)...); }
-  decltype(auto) operator()(auto&&... args) const {
+  decltype(auto) operator()(auto&&... args) noexcept(noexcept(_lambda(AD_FWD(args)...))) { return _lambda(AD_FWD(args)...); }
+
+  decltype(auto) operator()(auto&&... args) const noexcept(noexcept(_lambda(AD_FWD(args)...))) {
     return _lambda(AD_FWD(args)...);
   }
 

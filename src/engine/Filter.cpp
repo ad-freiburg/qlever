@@ -232,7 +232,7 @@ void Filter::computeFilterRange(IdTableStatic<WIDTH>* res, size_t lhs,
         auto testit = begin;
         testit = end;
 
-        auto resultRanges = valueIdComparators::getRangesForIdWithEqualRange(
+        auto resultRanges = valueIdComparators::getRangesForEqualIds(
             begin, end, rhs_lower, rhs_upper, comparison);
 
         for (auto range : resultRanges) {
@@ -245,7 +245,7 @@ void Filter::computeFilterRange(IdTableStatic<WIDTH>* res, size_t lhs,
         getEngine().filter(
             input,
             [lhs, rhs_lower, rhs_upper, comparison](const auto& e) {
-              return valueIdComparators::compareIdsWithEqualRange(
+              return valueIdComparators::compareWithEqualIds(
                   e[lhs], rhs_lower, rhs_upper, comparison);
             },
             res);
