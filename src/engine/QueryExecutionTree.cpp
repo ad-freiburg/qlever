@@ -206,7 +206,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
     nlohmann::ordered_json binding;
     for (const auto& column : columns) {
       const auto& currentId = idTable(rowIndex, column->_columnIndex);
-      const auto& optionalValue = toStringAndXsdType(currentId, *resultTable);
+      const auto& optionalValue = idToStringAndType(currentId, *resultTable);
       if (!optionalValue.has_value()) {
         continue;
       }
@@ -284,7 +284,7 @@ void QueryExecutionTree::readFromCache() {
 
 // ___________________________________________________________________________
 std::optional<std::pair<std::string, const char*>>
-QueryExecutionTree::toStringAndXsdType(Id id,
+QueryExecutionTree::idToStringAndType(Id id,
                                        const ResultTable& resultTable) const {
   // TODO<joka921> This is one of the central methods which we have to rewrite
   switch (id.getDatatype()) {
@@ -348,7 +348,7 @@ nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
       }
       const auto& currentId = data(rowIndex, opt->_columnIndex);
       const auto& optionalStringAndXsdType =
-          toStringAndXsdType(currentId, *resultTable);
+          idToStringAndType(currentId, *resultTable);
       if (!optionalStringAndXsdType.has_value()) {
         row.emplace_back(nullptr);
         continue;

@@ -481,14 +481,14 @@ void IndexScan::computeFullScan(ResultTable* result,
   auto isTripleIgnored = [&](const auto& triple) {
     if constexpr (ad_utility::isSimilar<Permutation::SPO_T, P> ||
                   ad_utility::isSimilar<Permutation::OPS_T, P>) {
-      // Predicates are always entities from the vocabulary
+      // Predicates are always entities from the vocabulary.
       auto id = triple[1].getVocabIndex();
       return id == languagePredicateIndex ||
              (id >= taggedPredicatesRange.first &&
               id < taggedPredicatesRange.second);
     } else if constexpr (ad_utility::isSimilar<Permutation::SOP_T, P> ||
                          ad_utility::isSimilar<Permutation::OSP_T, P>) {
-      // Predicates are always entities from the vocabulary
+      // Predicates are always entities from the vocabulary.
       auto id = triple[2].getVocabIndex();
       return id == languagePredicateIndex ||
              (id >= taggedPredicatesRange.first &&

@@ -268,14 +268,12 @@ Id constantExpressionResultToId(T&& result, LocalVocab& localVocab,
     }
     return Id::makeFromLocalVocabIndex(
         LocalVocabIndex::make(localVocab.size() - 1));
-  } else if constexpr (isConstantResult<T>) {
-    // TODO<joka921> Here we could (and should) differentiate between double,
-    // int and bool.
+  } else if constexpr (std::is_same_v<double, T>) {
     return Id::makeFromDouble(static_cast<double>(result));
   } else {
-    // for Variables and StrongIdWithDatatypes we cannot get the result type at
-    // compile time.
-    static_assert(ad_utility::alwaysFalse<T>);
+    // This currently covers int and bool.
+    // TODO<joka921> represent bool in the `ValueId` class and adapt this.
+    return Id::makeFromInt(result);
   }
 }
 
