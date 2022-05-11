@@ -144,7 +144,7 @@ void Filter::computeResultDynamicValue(IdTable* dynResult, size_t lhsInd,
   auto throwNotSupported = [](std::string_view filterType) {
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
              absl::StrCat(filterType,
-                          " filtering with a dynamic right side has not yet "
+                          " filtering with a variable right side has not yet "
                           "been implemented."));
   };
   switch (_type) {
@@ -229,9 +229,6 @@ void Filter::computeFilterRange(IdTableStatic<WIDTH>* res, size_t lhs,
         auto begin = Iterator{&input, 0, accessColumnLambda};
         auto end = Iterator{&input, input.size(), accessColumnLambda};
 
-        auto testit = begin;
-        testit = end;
-
         auto resultRanges = valueIdComparators::getRangesForEqualIds(
             begin, end, rhs_lower, rhs_upper, comparison);
 
@@ -242,6 +239,7 @@ void Filter::computeFilterRange(IdTableStatic<WIDTH>* res, size_t lhs,
           res->insert(res->end(), actualBegin, actualEnd);
         }
       } else {
+        // The input is not sorted, compare each element.
         getEngine().filter(
             input,
             [lhs, rhs_lower, rhs_upper, comparison](const auto& e) {
@@ -286,9 +284,6 @@ void Filter::computeFilterFixedValue(
                                                   decltype(accessColumnLambda)>;
         auto begin = Iterator{&input, 0, accessColumnLambda};
         auto end = Iterator{&input, input.size(), accessColumnLambda};
-
-        auto testit = begin;
-        testit = end;
 
         auto resultRanges =
             valueIdComparators::getRangesForId(begin, end, rhs, comparison);
@@ -499,7 +494,7 @@ void Filter::computeResultFixedValue(
              "The str function is not yet supported within filters.");
   }
 
-  // interpret the filters right hand side
+  // Interpret the right hand side of the filters.
   size_t lhs = _subtree->getVariableColumn(_lhs);
   Id rhs;
   std::optional<Id> rhs_upper_for_range;
@@ -524,8 +519,8 @@ void Filter::computeResultFixedValue(
       } else if (rhsObject.isDouble()) {
         rhs = Id::makeFromDouble(rhsObject.getDouble());
       } else {
-        // TODO<joka921> give the tripleObject visit function, s.t. this becomes
-        // a compile time check.
+        // TODO<joka921> give the `TripleObject` a visit function such that this
+        // becomes a compile time check.
         AD_CHECK(rhsObject.isString());
         // We still need this conversion for dates
         if (ad_utility::isXsdValue(rhs_string)) {

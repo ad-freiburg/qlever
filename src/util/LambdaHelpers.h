@@ -29,13 +29,16 @@ struct AssignableLambdaImpl {
     return _lambda(AD_FWD(args)...);
   }
 
-  AssignableLambdaImpl& operator=(const AssignableLambdaImpl& other) {
+  AssignableLambdaImpl& operator=(
+      const AssignableLambdaImpl&
+          other) requires std::is_copy_constructible_v<AssignableLambdaImpl> {
     std::destroy_at(&_lambda);
     std::construct_at(&_lambda, other._lambda);
     return *this;
   }
 
-  AssignableLambdaImpl& operator=(AssignableLambdaImpl&& other) noexcept {
+  AssignableLambdaImpl& operator=(AssignableLambdaImpl&& other) noexcept
+      requires std::is_move_constructible_v<AssignableLambdaImpl> {
     std::destroy_at(&_lambda);
     std::construct_at(&_lambda, std::move(other._lambda));
     return *this;

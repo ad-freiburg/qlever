@@ -195,8 +195,6 @@ class Index {
   size_t sizeEstimate(const string& sub, const string& pred,
                       const string& obj) const;
 
-  // TODO<joka921> The following three functions have to be adapted when we
-  // have the "fancy" or "folded" Ids.
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
   std::optional<string> idToOptionalString(Id id) const {
@@ -659,7 +657,7 @@ class Index {
   template <typename T, typename MakeFromUint = std::identity>
   void readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
                         vector<T>& result,
-                        MakeFromUint makeFromUint = MakeFromUint{}) const;
+                        MakeFromUint makeFromUint64t = MakeFromUint{}) const;
 
   template <typename T, typename MakeFromUint = std::identity>
   void readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,

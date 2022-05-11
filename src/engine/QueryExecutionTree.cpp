@@ -285,7 +285,7 @@ void QueryExecutionTree::readFromCache() {
 // ___________________________________________________________________________
 std::optional<std::pair<std::string, const char*>>
 QueryExecutionTree::idToStringAndType(Id id,
-                                       const ResultTable& resultTable) const {
+                                      const ResultTable& resultTable) const {
   // TODO<joka921> This is one of the central methods which we have to rewrite
   switch (id.getDatatype()) {
     case Datatype::Undefined:

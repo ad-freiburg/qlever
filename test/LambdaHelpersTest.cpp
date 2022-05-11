@@ -48,11 +48,9 @@ TEST(MakeAssignableLambda, NonConst) {
 
   // The internal state `i` is 2, but each of the copies gets its own copy of
   // `i`.
-  ASSERT_EQ(2, increment());
   ASSERT_EQ(2, copy());
   ASSERT_EQ(2, copy2());
 
-  ASSERT_EQ(3, increment());
   ASSERT_EQ(3, copy());
   ASSERT_EQ(3, copy2());
 }
@@ -61,7 +59,7 @@ TEST(MakeAssignableLambda, CopyVsMove) {
   // The detour via `vector` guarantees that moving the capture `v` will empty
   // it. We will use this to check whether a move actually happened.
   auto makeString = [](const std::string& s) {
-    // Note: although there is no `mutable` here the vector will still be moved
+    // Note: Although there is no `mutable` here the vector will still be moved
     // if the lambda is moved. The `mutable` only refers to the `operator()` of
     // the lambda and not to the closure member that corresponds to the capture.
     return ad_utility::makeAssignableLambda(
@@ -84,14 +82,15 @@ TEST(MakeAssignableLambda, CopyVsMove) {
   ASSERT_EQ("hallo", hallo());
   ASSERT_EQ("hallo", copy());
 
+  // The move empties the (mutable) capture inside `hallo`.
   moved = std::move(hallo);
-  ASSERT_EQ("hallo", copy());
   ASSERT_EQ("hallo", moved());
-  // The move has emptied the (mutable) capture inside `hallo`.
   ASSERT_TRUE(hallo().empty());
 }
 
 TEST(MakeAssignableLambda, MoveOnly) {
+  // The return type is not copyable because it captures `unique_ptr` which is a
+  // move-only type.
   auto makeConstString = [](const std::string& s) {
     return ad_utility::makeAssignableLambda(
         [s = std::make_unique<std::string>(s)]() mutable { return s.get(); });
@@ -99,6 +98,8 @@ TEST(MakeAssignableLambda, MoveOnly) {
 
   auto hallo = makeConstString("hallo");
   ASSERT_EQ("hallo", *hallo());
+
+  static_assert(!std::is_copy_assignable_v<decltype(hallo)>);
 
   // Create objects of the proper type.
   auto moved = makeConstString("moved");

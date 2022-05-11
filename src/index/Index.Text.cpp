@@ -1032,10 +1032,10 @@ void Index::getEntityPostingsForTerm(const string& term,
 }
 
 // _____________________________________________________________________________
-template <typename T, typename MakeFromUint>
+template <typename T, typename MakeFromUint64T>
 void Index::readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
                              vector<T>& result,
-                             MakeFromUint makeFromUint) const {
+                             MakeFromUint64T makeFromUint64t) const {
   LOG(DEBUG) << "Reading gap-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
              << ", nofBytes: " << nofBytes << '\n';
@@ -1044,7 +1044,7 @@ void Index::readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
   _textIndexFile.read(encoded, nofBytes, from);
   LOG(DEBUG) << "Decoding Simple8b code...\n";
   ad_utility::Simple8bCode::decode(encoded, nofElements, result.data(),
-                                   makeFromUint);
+                                   makeFromUint64t);
   LOG(DEBUG) << "Reverting gaps to actual IDs...\n";
 
   // TODO<joka921> make this hack unnecessary, probably by a proper output
