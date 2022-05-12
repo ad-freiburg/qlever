@@ -268,8 +268,8 @@ Id constantExpressionResultToId(T&& result, LocalVocab& localVocab,
     }
     return Id::makeFromLocalVocabIndex(
         LocalVocabIndex::make(localVocab.size() - 1));
-  } else if constexpr (std::is_same_v<double, T>) {
-    return Id::makeFromDouble(static_cast<double>(result));
+  } else if constexpr (ad_utility::isSimilar<double, T>) {
+    return Id::makeFromDouble(result);
   } else {
     // This currently covers int and bool.
     // TODO<joka921> represent bool in the `ValueId` class and adapt this.
