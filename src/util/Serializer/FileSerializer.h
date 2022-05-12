@@ -13,7 +13,7 @@
 namespace ad_utility {
 namespace serialization {
 
-using SerializationPosition = off_t;
+using SerializationPosition = uint64_t;
 
 class FileWriteSerializer {
  public:
@@ -34,7 +34,13 @@ class FileWriteSerializer {
 
   void close() { _file.close(); }
 
-  SerializationPosition getCurrentPosition() const { return _file.tell(); }
+  [[nodiscard]] SerializationPosition getSerializationPosition() const {
+    return _file.tell();
+  }
+
+  void setSerializationPosition(SerializationPosition position) {
+    _file.seek(static_cast<off_t>(position), SEEK_SET);
+  }
 
   File&& file() && { return std::move(_file); }
 
@@ -46,9 +52,10 @@ class FileReadSerializer {
  public:
   static constexpr bool IsWriteSerializer = false;
 
-  FileReadSerializer(File&& file) : _file{std::move(file)} {};
+  explicit FileReadSerializer(File&& file) : _file{std::move(file)} {};
 
-  FileReadSerializer(std::string filename) : _file{filename, "r"} {
+  explicit FileReadSerializer(const std::string& filename)
+      : _file{filename, "r"} {
     AD_CHECK(_file.isOpen());
   }
 
@@ -63,7 +70,7 @@ class FileReadSerializer {
   bool isExhausted() { return _file.isAtEof(); }
 
   void setSerializationPosition(SerializationPosition position) {
-    _file.seek(position, SEEK_SET);
+    _file.seek(static_cast<off_t>(position), SEEK_SET);
   }
 
   File&& file() && { return std::move(_file); }

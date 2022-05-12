@@ -1,15 +1,14 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
-//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
-
-//
-// Created by johannes on 29.09.21.
-//
+// Copyright 2021, University of Freiburg,
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 // Nary expressions
 
 #ifndef QLEVER_NARYEXPRESSION_H
 #define QLEVER_NARYEXPRESSION_H
 
+#include "../../util/GeoSparqlHelpers.h"
 #include "./SparqlExpression.h"
 #include "./SparqlExpressionGenerators.h"
 
@@ -176,11 +175,23 @@ inline auto subtract = [](const auto& a, const auto& b) -> double {
   return a - b;
 };
 using SubtractExpression = NARY<2, FV<decltype(subtract), NumericValueGetter>>;
+
+// Basic GeoSPARQL functions (code in util/GeoSparqlHelpers.h).
+using LongitudeExpression =
+    NARY<1, FV<decltype(ad_utility::wktLongitude), StringValueGetter>>;
+using LatitudeExpression =
+    NARY<1, FV<decltype(ad_utility::wktLatitude), StringValueGetter>>;
+using DistExpression =
+    NARY<2, FV<decltype(ad_utility::wktDist), StringValueGetter>>;
+
 }  // namespace detail
 
 using detail::AddExpression;
 using detail::AndExpression;
+using detail::DistExpression;
 using detail::DivideExpression;
+using detail::LatitudeExpression;
+using detail::LongitudeExpression;
 using detail::MultiplyExpression;
 using detail::OrExpression;
 using detail::SubtractExpression;

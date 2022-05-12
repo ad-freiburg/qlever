@@ -22,8 +22,10 @@ class OrderBy : public Operation {
           std::shared_ptr<QueryExecutionTree> subtree,
           vector<pair<size_t, bool>> sortIndices);
 
-  virtual string asString(size_t indent = 0) const override;
+ protected:
+  virtual string asStringImpl(size_t indent = 0) const override;
 
+ public:
   virtual string getDescriptor() const override;
 
   virtual vector<size_t> resultSortedOn() const override;

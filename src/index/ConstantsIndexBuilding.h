@@ -19,16 +19,16 @@ static const size_t MAX_INTERNAL_LITERAL_BYTES = 1024;
 
 // How many lines are parsed at once during index creation.
 // Reduce to save RAM
-static const int NUM_TRIPLES_PER_PARTIAL_VOCAB = 100000000;
+static const int NUM_TRIPLES_PER_PARTIAL_VOCAB = 10'000'000;
 
 // How many Triples is the Buffer supposed to parse ahead.
 // If too big, the memory consumption is high, if too low we possibly lose speed
-static const size_t PARSER_BATCH_SIZE = 1000000;
+static const size_t PARSER_BATCH_SIZE = 1'000'000;
 
 // That many triples does the turtle parser have to buffer before the call to
 // getline returns (unless our input reaches EOF). This makes parsing from
 // streams faster.
-static const size_t PARSER_MIN_TRIPLES_AT_ONCE = 100000;
+static const size_t PARSER_MIN_TRIPLES_AT_ONCE = 100'000;
 
 // When reading from a file, Chunks of this size will
 // be fed to the parser at once (100 MiB)

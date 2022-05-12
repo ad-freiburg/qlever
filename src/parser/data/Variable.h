@@ -50,7 +50,8 @@ class Variable {
           stream << idTable(row, index);
           break;
         case ResultTable::ResultType::TEXT:
-          stream << qecIndex.getTextExcerpt(idTable(row, index));
+          stream << qecIndex.getTextExcerpt(
+              TextRecordIndex::make(idTable(row, index).get()));
           break;
         case ResultTable::ResultType::FLOAT: {
           float f;
@@ -59,7 +60,9 @@ class Variable {
           break;
         }
         case ResultTable::ResultType::LOCAL_VOCAB: {
-          stream << res.idToOptionalString(idTable(row, index)).value_or("");
+          stream << res.indexToOptionalString(
+                           LocalVocabIndex::make(idTable(row, index).get()))
+                        .value_or("");
           break;
         }
         default:

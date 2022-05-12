@@ -12,7 +12,7 @@ using std::string;
 MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
                                  std::shared_ptr<QueryExecutionTree> t1,
                                  std::shared_ptr<QueryExecutionTree> t2,
-                                 const vector<array<Id, 2>>& jcs)
+                                 const vector<array<ColumnIndex, 2>>& jcs)
     : Operation(qec), _joinColumns(jcs), _multiplicitiesComputed(false) {
   // Make sure subtrees are ordered so that identical queries can be identified.
   AD_CHECK_GT(jcs.size(), 0);
@@ -32,7 +32,7 @@ MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string MultiColumnJoin::asString(size_t indent) const {
+string MultiColumnJoin::asStringImpl(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
@@ -96,7 +96,7 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
                               leftResult->_resultTypes.end());
   for (size_t col = 0; col < rightResult->_idTable.cols(); col++) {
     bool isJoinColumn = false;
-    for (const std::array<Id, 2>& a : _joinColumns) {
+    for (const std::array<ColumnIndex, 2>& a : _joinColumns) {
       if (a[1] == col) {
         isJoinColumn = true;
         break;
@@ -134,7 +134,7 @@ ad_utility::HashMap<string, size_t> MultiColumnJoin::getVariableColumns()
   }();
   for (const auto& it : variableColumnsRightSorted) {
     bool isJoinColumn = false;
-    for (const std::array<Id, 2>& a : _joinColumns) {
+    for (const std::array<ColumnIndex, 2>& a : _joinColumns) {
       if (a[1] == it.second) {
         isJoinColumn = true;
         break;

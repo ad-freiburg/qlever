@@ -287,6 +287,7 @@ void QueryExecutionTree::readFromCache() {
 std::optional<std::pair<std::string, const char*>>
 QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
                                        const ResultTable& resultTable) const {
+  // TODO<joka921> This is one of the central methods which we have to rewrite
   switch (type) {
     case ResultTable::ResultType::KB: {
       std::optional<string> entity = _qec->getIndex().idToOptionalString(id);
@@ -299,9 +300,11 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
       return std::pair{std::move(entity.value()), nullptr};
     }
     case ResultTable::ResultType::VERBATIM:
-      return std::pair{std::to_string(id), XSD_INT_TYPE};
+      return std::pair{std::to_string(id.get()), XSD_INT_TYPE};
     case ResultTable::ResultType::TEXT:
-      return std::pair{_qec->getIndex().getTextExcerpt(id), nullptr};
+      return std::pair{
+          _qec->getIndex().getTextExcerpt(TextRecordIndex::make(id.get())),
+          nullptr};
     case ResultTable::ResultType::FLOAT: {
       float f;
       // TODO<LLVM 14> std::bit_cast
@@ -311,7 +314,8 @@ QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
       return std::pair{std::move(s).str(), XSD_DECIMAL_TYPE};
     }
     case ResultTable::ResultType::LOCAL_VOCAB: {
-      auto optionalString = resultTable.idToOptionalString(id);
+      auto optionalString =
+          resultTable.indexToOptionalString(LocalVocabIndex::make(id.get()));
       if (!optionalString.has_value()) {
         return std::nullopt;
       }
@@ -362,8 +366,7 @@ nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
 
 // _____________________________________________________________________________
 template <QueryExecutionTree::ExportSubFormat format>
-ad_utility::stream_generator::stream_generator
-QueryExecutionTree::generateResults(
+ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
     const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
     size_t offset) const {
   static_assert(format == ExportSubFormat::BINARY ||
@@ -423,7 +426,7 @@ QueryExecutionTree::generateResults(
             break;
           case ResultTable::ResultType::TEXT:
             co_yield _qec->getIndex().getTextExcerpt(
-                idTable(i, val._columnIndex));
+                TextRecordIndex::make(idTable(i, val._columnIndex).get()));
             break;
           case ResultTable::ResultType::FLOAT: {
             float f;
@@ -433,7 +436,8 @@ QueryExecutionTree::generateResults(
           }
           case ResultTable::ResultType::LOCAL_VOCAB: {
             co_yield resultTable
-                ->idToOptionalString(idTable(i, val._columnIndex))
+                ->indexToOptionalString(
+                    LocalVocabIndex::make(idTable(i, val._columnIndex).get()))
                 .value_or("");
             break;
           }
@@ -450,17 +454,17 @@ QueryExecutionTree::generateResults(
 
 // Instantiate template function for all enum types
 
-template ad_utility::stream_generator::stream_generator
+template ad_utility::streams::stream_generator
 QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::CSV>(
     const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
     size_t offset) const;
 
-template ad_utility::stream_generator::stream_generator
+template ad_utility::streams::stream_generator
 QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::TSV>(
     const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
     size_t offset) const;
 
-template ad_utility::stream_generator::stream_generator QueryExecutionTree::
+template ad_utility::streams::stream_generator QueryExecutionTree::
     generateResults<QueryExecutionTree::ExportSubFormat::BINARY>(
         const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
         size_t offset) const;
@@ -490,8 +494,7 @@ QueryExecutionTree::generateRdfGraph(
 }
 
 // _____________________________________________________________________________
-ad_utility::stream_generator::stream_generator
-QueryExecutionTree::writeRdfGraphTurtle(
+ad_utility::streams::stream_generator QueryExecutionTree::writeRdfGraphTurtle(
     const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
     size_t offset, std::shared_ptr<const ResultTable> res) const {
   auto generator = generateRdfGraph(constructTriples, limit, offset, res);
@@ -507,7 +510,7 @@ QueryExecutionTree::writeRdfGraphTurtle(
 
 // _____________________________________________________________________________
 template <QueryExecutionTree::ExportSubFormat format>
-ad_utility::stream_generator::stream_generator
+ad_utility::streams::stream_generator
 QueryExecutionTree::writeRdfGraphSeparatedValues(
     const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
     size_t offset, std::shared_ptr<const ResultTable> res) const {
@@ -535,17 +538,17 @@ QueryExecutionTree::writeRdfGraphSeparatedValues(
 
 // Instantiate template function for all enum types
 
-template ad_utility::stream_generator::stream_generator QueryExecutionTree::
+template ad_utility::streams::stream_generator QueryExecutionTree::
     writeRdfGraphSeparatedValues<QueryExecutionTree::ExportSubFormat::CSV>(
         const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
         size_t offset, std::shared_ptr<const ResultTable> res) const;
 
-template ad_utility::stream_generator::stream_generator QueryExecutionTree::
+template ad_utility::streams::stream_generator QueryExecutionTree::
     writeRdfGraphSeparatedValues<QueryExecutionTree::ExportSubFormat::TSV>(
         const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
         size_t offset, std::shared_ptr<const ResultTable> res) const;
 
-template ad_utility::stream_generator::stream_generator QueryExecutionTree::
+template ad_utility::streams::stream_generator QueryExecutionTree::
     writeRdfGraphSeparatedValues<QueryExecutionTree::ExportSubFormat::BINARY>(
         const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
         size_t offset, std::shared_ptr<const ResultTable> res) const;

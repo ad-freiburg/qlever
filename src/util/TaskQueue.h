@@ -5,6 +5,7 @@
 #define QLEVER_TASKQUEUE_H
 
 #include <functional>
+#include <optional>
 #include <queue>
 #include <string>
 #include <thread>

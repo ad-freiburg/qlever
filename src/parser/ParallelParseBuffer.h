@@ -41,14 +41,14 @@ class ParserBatcher {
    * return a optional that contains the next Triple from the parser.
    * @return
    */
-  std::optional<Triple> operator()() {
+  std::optional<TurtleTriple> operator()() {
     if (m_numTriplesAlreadyParsed >= m_maxNumTriples) {
       return std::nullopt;
     }
-    Triple t;
+    TurtleTriple t;
     if (m_parser->getLine(t)) {
       m_numTriplesAlreadyParsed++;
-      return std::optional(std::move(t));
+      return t;
     } else {
       m_exhaustedCallback();
       return std::nullopt;
@@ -58,7 +58,8 @@ class ParserBatcher {
   // The second requires evaluates to `true` only if the `Parser` type has a
   // getBatch() member function. The first requires enables this function only
   // if the second "requires" evaluates to true
-  std::optional<std::vector<Triple>> getBatch() requires requires(Parser p) {
+  std::optional<std::vector<TurtleTriple>> getBatch() requires requires(
+      Parser p) {
     p.getBatch();
   }
   {

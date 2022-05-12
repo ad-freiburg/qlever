@@ -2,18 +2,19 @@
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #include "./Index.h"
-#include "./MetaDataIterator.h"
+#include "./TriplesView.h"
 
 /// Dump a  certain permutation to stdout in a human-readable way as IDs, and
 /// in deterministic order
 template <typename Permutation>
 void dumpToStdout(const Permutation& permutation) {
-  MetaDataIterator it{permutation};
+  ad_utility::AllocatorWithLimit<Id> allocator{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          std::numeric_limits<uint64_t>::max())};
+  auto triples = TriplesView(permutation, allocator);
   size_t i = 0;
-  while (!it.empty()) {
-    auto triple = *it;
+  for (auto triple : triples) {
     std::cout << triple[0] << " " << triple[1] << " " << triple[2] << std::endl;
-    ++it;
     ++i;
     if (i % (1ul << 20) == 0) {
       LOG(INFO) << "Exported " << i << " relations" << std::endl;

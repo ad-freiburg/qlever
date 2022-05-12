@@ -19,7 +19,7 @@ int main(int argc, char** argv) {
   size_t numFiles = atoi(argv[2]);
 
   VocabularyMerger m;
-  std::ofstream file(basename + ".vocabulary");
+  std::ofstream file(basename + INTERNAL_VOCAB_SUFFIX);
   AD_CHECK(file.is_open());
   auto internalVocabularyAction = [&file](const auto& word) {
     file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';

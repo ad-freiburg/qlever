@@ -11,6 +11,7 @@
 #include "../src/util/Conversions.h"
 
 using std::string;
+using namespace std::literals;
 TEST(TurtleParserTest, prefixedName) {
   auto runCommonTests = [](auto& parser) {
     parser._prefixMap["wd"] = "www.wikidata.org/";
@@ -139,24 +140,38 @@ TEST(TurtleParserTest, stringParse) {
 
 TEST(TurtleParserTest, rdfLiteral) {
   std::vector<string> literals;
-  std::vector<string> expected;
-  literals.push_back("\"simpleString\"");
-  literals.push_back("\"langtag\"@en-gb");
-  literals.push_back("\"valueLong\"^^<www.xsd.org/integer>");
+  std::vector<TripleObject> expected;
+  literals.emplace_back(R"("simpleString")");
+  expected.emplace_back(R"("simpleString")");
+  literals.emplace_back(R"("langtag"@en-gb)");
+  expected.emplace_back(R"("langtag"@en-gb)");
+  literals.emplace_back("\"valueLong\"^^<www.someunknownType/integer>");
+  expected.emplace_back("\"valueLong\"^^<www.someunknownType/integer>");
+
+  literals.emplace_back(R"("42.1234"^^)"s + "<" + XSD_DOUBLE_TYPE + ">");
+  expected.emplace_back(42.1234);
+  literals.push_back(R"("-142.321"^^)"s + "<" + XSD_DECIMAL_TYPE + ">");
+  expected.emplace_back(-142.321);
+  literals.push_back(R"("-142321"^^)"s + "<" + XSD_INT_TYPE + ">");
+  expected.emplace_back(-142321);
+  literals.push_back(R"("+144321"^^)"s + "<" + XSD_INTEGER_TYPE + ">");
+  expected.emplace_back(144321);
 
   TurtleStringParser<Tokenizer> p;
-  for (const auto& s : literals) {
-    p.setInputStream(s);
+  for (size_t i = 0; i < literals.size(); ++i) {
+    const auto& literal = literals[i];
+    const auto& exp = expected[i];
+    p.setInputStream(literal);
     ASSERT_TRUE(p.rdfLiteral());
-    ASSERT_EQ(p._lastParseResult, s);
-    ASSERT_EQ(p.getPosition(), s.size());
+    ASSERT_EQ(p._lastParseResult, exp);
+    ASSERT_EQ(p.getPosition(), literal.size());
   }
 
-  p._prefixMap["xsd"] = "www.xsd.org/";
-  string s("\"valuePrefixed\"^^xsd:integer");
+  p._prefixMap["doof"] = "www.doof.org/";
+  string s("\"valuePrefixed\"^^doof:sometype");
   p.setInputStream(s);
   ASSERT_TRUE(p.rdfLiteral());
-  ASSERT_EQ(p._lastParseResult, "\"valuePrefixed\"^^<www.xsd.org/integer>");
+  ASSERT_EQ(p._lastParseResult, "\"valuePrefixed\"^^<www.doof.org/sometype>");
   ASSERT_EQ(p.getPosition(), s.size());
 }
 
@@ -192,10 +207,10 @@ TEST(TurtleParserTest, blankNodePropertyList) {
   p._activePredicate = "<p1>";
 
   string blankNodeL = "[<p2> <ob2>; <p3> <ob3>]";
-  std::vector<std::array<string, 3>> exp;
-  exp.push_back({"<s>", "<p1>", "QLever-Anon-Node:0"});
-  exp.push_back({"QLever-Anon-Node:0", "<p2>", "<ob2>"});
-  exp.push_back({"QLever-Anon-Node:0", "<p3>", "<ob3>"});
+  std::vector<TurtleTriple> exp;
+  exp.push_back({"<s>", "<p1>", TripleObject{"QLever-Anon-Node:0"}});
+  exp.push_back({"QLever-Anon-Node:0", "<p2>", TripleObject{"<ob2>"}});
+  exp.push_back({"QLever-Anon-Node:0", "<p3>", TripleObject{"<ob3>"}});
   p.setInputStream(blankNodeL);
   ASSERT_TRUE(p.blankNodePropertyList());
   ASSERT_EQ(p._triples, exp);
@@ -211,7 +226,6 @@ TEST(TurtleParserTest, object) {
   TurtleStringParser<Tokenizer> p;
   string sub = "<sub>";
   string pred = "<pred>";
-  using triple = std::array<string, 3>;
   p._activeSubject = sub;
   p._activePredicate = pred;
   p._prefixMap["b"] = "bla/";
@@ -219,14 +233,14 @@ TEST(TurtleParserTest, object) {
   p.setInputStream(iri);
   ASSERT_TRUE(p.object());
   ASSERT_EQ(p._lastParseResult, "<bla/iri>");
-  auto exp = triple{sub, pred, "<bla/iri>"};
+  auto exp = TurtleTriple{sub, pred, "<bla/iri>"};
   ASSERT_EQ(p._triples.back(), exp);
 
   string literal = "\"literal\"";
   p.setInputStream(literal);
   ASSERT_TRUE(p.object());
   ASSERT_EQ(p._lastParseResult, literal);
-  exp = triple{sub, pred, literal};
+  exp = TurtleTriple{sub, pred, literal};
   ASSERT_EQ(p._triples.back(), exp);
 
   string blank = "_:someblank";
@@ -234,7 +248,7 @@ TEST(TurtleParserTest, object) {
   ASSERT_TRUE(p.object());
   ASSERT_EQ(p._lastParseResult, "_:someblank");
 
-  exp = triple{sub, pred, "_:someblank"};
+  exp = TurtleTriple{sub, pred, "_:someblank"};
   ASSERT_EQ(p._triples.back(), exp);
 }
 
@@ -243,7 +257,7 @@ TEST(TurtleParserTest, objectList) {
   parser._activeSubject = "<s>";
   parser._activePredicate = "<p>";
   string objectL = " <ob1>, <ob2>, <ob3>";
-  std::vector<std::array<string, 3>> exp;
+  std::vector<TurtleTriple> exp;
   exp.push_back({"<s>", "<p>", "<ob1>"});
   exp.push_back({"<s>", "<p>", "<ob2>"});
   exp.push_back({"<s>", "<p>", "<ob3>"});
@@ -263,7 +277,7 @@ TEST(TurtleParserTest, predicateObjectList) {
   TurtleStringParser<Tokenizer> parser;
   parser._activeSubject = "<s>";
   string predL = "\n <p1> <ob1>;<p2> \"ob2\",\n <ob3>";
-  std::vector<std::array<string, 3>> exp;
+  std::vector<TurtleTriple> exp;
   exp.push_back({"<s>", "<p1>", "<ob1>"});
   exp.push_back({"<s>", "<p2>", "\"ob2\""});
   exp.push_back({"<s>", "<p2>", "<ob3>"});
@@ -274,27 +288,161 @@ TEST(TurtleParserTest, predicateObjectList) {
 }
 
 TEST(TurtleParserTest, numericLiteral) {
-  std::vector<std::string> literals{"2", "-2", "42.209", "-42.239", ".74"};
+  std::vector<std::string> literals{"2",   "-2",     "42.209",   "-42.239",
+                                    ".74", "2.3e12", "2.34E-14", "-0.3e2"};
+  std::vector<TripleObject> expected{2,   -2,     42.209,   -42.239,
+                                     .74, 2.3e12, 2.34e-14, -0.3e2};
 
   TurtleStringParser<Tokenizer> parser;
-  for (const auto& literal : literals) {
+  for (size_t i = 0; i < literals.size(); ++i) {
+    const auto& literal = literals[i];
     parser.setInputStream(literal);
     ASSERT_TRUE(parser.numericLiteral());
-    ASSERT_EQ(parser._lastParseResult, literal);
-    LOG(INFO) << literal << std::endl;
-    ASSERT_TRUE(ad_utility::isNumeric(literal));
-    ASSERT_FLOAT_EQ(ad_utility::convertIndexWordToFloat(
-                        ad_utility::convertNumericToIndexWord(literal)),
-                    std::strtod(literal.c_str(), nullptr));
+    ASSERT_EQ(parser._lastParseResult, expected[i]);
   }
+}
 
-  std::vector<std::string> nonWorkingLiterals{"2.3e12", "2.34e-14", "-0.3e2"};
+TEST(TurtleParserTest, numericLiteralErrorBehavior) {
+  auto assertParsingFails = [](auto& parser, std::string input) {
+    parser.setInputStream(input);
+    ASSERT_THROW(parser.parseAndReturnAllTriples(),
+                 TurtleStringParser<Tokenizer>::ParseException);
+  };
 
-  for (const auto& literal : nonWorkingLiterals) {
-    parser.setInputStream(literal);
-    ASSERT_TRUE(parser.numericLiteral());
-    ASSERT_EQ(parser._lastParseResult, literal);
-    ASSERT_THROW(ad_utility::isNumeric(literal), std::out_of_range);
+  auto parseAllTriples = [](auto& parser, std::string input) {
+    parser.setInputStream(input);
+    return parser.parseAndReturnAllTriples();
+  };
+
+  auto testTripleObjects = [&parseAllTriples]<typename T>(
+                               auto& parser, std::vector<std::string> triples,
+                               std::vector<T> expectedObjects) {
+    for (size_t i = 0; i < triples.size(); ++i) {
+      const auto& triple = triples[i];
+      std::vector<TurtleTriple> result;
+      ASSERT_NO_THROW(result = parseAllTriples(parser, triple));
+      ASSERT_EQ(result.size(), 1ul);
+      ASSERT_EQ(result[0]._object, expectedObjects[i]);
+    }
+  };
+  {
+    // Test the default mode (overflowing integers throw an exception).
+    std::vector<std::string> inputs{
+        "<a> <b> 99999999999999999999999",
+        "<a> <b> \"99999999999999999999\"^^xsd:integer",
+        "<a> <b> \"9999.0\"^^xsd:integer",
+        "<a> <b> \"-9999.0\"^^xsd:int",
+        "<a> <b> \"9999E4\"^^xsd:integer",
+        "<a> <b> \"9999E4\"^^xsd:int",
+        "<a> <b> \"kartoffelsalat\"^^xsd:integer",
+        "<a> <b> \"123kartoffel\"^^xsd:integer",
+        "<a> <b> \"kartoffelsalat\"^^xsd:double",
+        "<a> <b> \"123kartoffel\"^^xsd:decimal"};
+    TurtleStringParser<Tokenizer> parser;
+    parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+    for (const auto& input : inputs) {
+      assertParsingFails(parser, input);
+    }
+  }
+  {
+    // These all work when the datatype is double.
+    std::vector<std::string> inputs{
+        "<a> <b> 99999999999999999999999.0",
+        "<a> <b> \"-9999999999999999999999\"^^xsd:double",
+        "<a> <b> \"9999999999999999999999\"^^xsd:decimal",
+        "<a> <b> \"99999999999999999999E4\"^^xsd:double",
+        "<a> <b> \"99999999999999999999.0E4\"^^xsd:decimal"};
+    std::vector<double> expectedObjects{
+        99999999999999999999999.0, -9999999999999999999999.0,
+        9999999999999999999999.0, 99999999999999999999E4,
+        99999999999999999999E4};
+    TurtleStringParser<Tokenizer> parser;
+    parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+    testTripleObjects(parser, inputs, expectedObjects);
+  }
+  {
+    // Test the overflow to double mode.
+    std::vector<std::string> nonWorkingInputs{
+        "<a> <b> \"9999.0\"^^xsd:integer",
+        "<a> <b> \"-9999.0\"^^xsd:int",
+        "<a> <b> \"9999E4\"^^xsd:integer",
+        "<a> <b> \"9999E4\"^^xsd:int",
+        "<a> <b> \"kartoffelsalat\"^^xsd:integer",
+        "<a> <b> \"123kartoffel\"^^xsd:integer"};
+    TurtleStringParser<Tokenizer> parser;
+    parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+    parser.integerOverflowBehavior() =
+        TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+    for (const auto& input : nonWorkingInputs) {
+      assertParsingFails(parser, input);
+    }
+    std::vector<std::string> workingInputs{
+        "<a> <b> 99999999999999999999999",
+        "<a> <b> \"-99999999999999999999\"^^xsd:integer",
+    };
+    std::vector<double> expectedDoubles{99999999999999999999999.0,
+                                        -99999999999999999999.0};
+    testTripleObjects(parser, workingInputs, expectedDoubles);
+  }
+  {
+    // Test the "all integers become doubles" mode.
+    std::vector<std::string> nonWorkingInputs{
+        "<a> <b> \"kartoffelsalat\"^^xsd:integer",
+        "<a> <b> \"123kartoffel\"^^xsd:integer"};
+    TurtleStringParser<Tokenizer> parser;
+    parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+    parser.integerOverflowBehavior() =
+        TurtleParserIntegerOverflowBehavior::AllToDouble;
+    for (const auto& input : nonWorkingInputs) {
+      assertParsingFails(parser, input);
+    }
+    std::vector<std::string> workingInputs{
+        "<a> <b> \"123\"^^xsd:integer",
+        "<a> <b> 456",
+        "<a> <b> \"-9999.0\"^^xsd:integer",
+        "<a> <b> \"9999.0\"^^xsd:int",
+        "<a> <b> \"9999E4\"^^xsd:integer",
+        "<a> <b> \"9999E4\"^^xsd:int",
+        "<a> <b> 99999999999999999999999",
+        "<a> <b> \"99999999999999999999\"^^xsd:integer",
+    };
+    std::vector<double> expectedDoubles{123.0,
+                                        456.0,
+                                        -9999.0,
+                                        9999.0,
+                                        9999e4,
+                                        9999e4,
+                                        99999999999999999999999.0,
+                                        99999999999999999999.0};
+    testTripleObjects(parser, workingInputs, expectedDoubles);
+  }
+  {
+    // Test the skipping of unsupported triples with the "overflow is error"
+    // behavior.
+    std::string input{
+        "<a> <b> 123. <c> <d> 99999999999999999999999. <e> <f> 234"};
+    std::vector<TurtleTriple> expected{{"<a>", "<b>", 123},
+                                       {"<e>", "<f>", 234}};
+    TurtleStringParser<Tokenizer> parser;
+    parser.invalidLiteralsAreSkipped() = true;
+    auto result = parseAllTriples(parser, input);
+    ASSERT_EQ(result, expected);
+  }
+  {
+    // Test the skipping of unsupported triples with the "overflow to double"
+    // behavior.
+    std::string input{
+        "<a> <b> 99999999999999999999999. <c> <d> \"invalid\"^^xsd:integer. "
+        "<e> <f> 234"};
+    std::vector<TurtleTriple> expected{
+        {"<a>", "<b>", 99999999999999999999999.0}, {"<e>", "<f>", 234}};
+    TurtleStringParser<Tokenizer> parser;
+    parser._prefixMap["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+    parser.invalidLiteralsAreSkipped() = true;
+    parser.integerOverflowBehavior() =
+        TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+    auto result = parseAllTriples(parser, input);
+    ASSERT_EQ(result, expected);
   }
 }
 

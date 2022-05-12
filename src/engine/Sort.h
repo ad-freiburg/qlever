@@ -15,8 +15,10 @@ class Sort : public Operation {
   Sort(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
        size_t sortCol);
 
-  virtual string asString(size_t indent = 0) const override;
+ private:
+  virtual string asStringImpl(size_t indent = 0) const override;
 
+ public:
   virtual string getDescriptor() const override;
 
   virtual vector<size_t> resultSortedOn() const override { return {_sortCol}; }

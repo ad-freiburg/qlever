@@ -69,6 +69,7 @@ queries:
   - query: algor-start-female-born-before-1940
     type: text
     sparql: |
+      PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
       SELECT ?x ?date SCORE(?t) TEXT(?t) WHERE {
         ?x <is-a> <Scientist> .
         ?x <Date_of_birth> ?date .

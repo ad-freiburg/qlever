@@ -9,6 +9,7 @@
 
 #include "../src/global/Pattern.h"
 #include "../src/index/Index.h"
+#include "./IndexTestHelpers.h"
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
@@ -16,6 +17,8 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
           std::numeric_limits<size_t>::max())};
   return a;
 }
+
+auto I = [](auto id) { return Id::make(id); };
 
 string getStxxlConfigFileName(const string& location) {
   std::ostringstream os;
@@ -46,14 +49,16 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
   stxxlConfig.writeLine(std::move(config).str());
 }
 
-TEST(IndexTest, createFromTsvTest) {
+TEST(IndexTest, createFromTurtleTest) {
   string location = "./";
   string tail = "";
   writeStxxlConfigFile(location, tail);
   string stxxlFileName = getStxxlDiskFileName(location, tail);
 
+  std::string filename = "_testtmp2.ttl";
+
   {
-    std::fstream f("_testtmp2.tsv", std::ios_base::out);
+    std::fstream f(filename, std::ios_base::out);
 
     // Vocab:
     // 0: a
@@ -69,46 +74,46 @@ TEST(IndexTest, createFromTsvTest) {
     f.close();
 
     {
-      Index index;
+      Index index = makeIndexWithTestSettings();
       index.setOnDiskBase("_testindex");
-      index.createFromFile<TsvParser>("_testtmp2.tsv");
+      index.createFromFile<TurtleParserAuto>(filename);
     }
     Index index;
     index.createFromOnDiskIndex("_testindex");
 
-    ASSERT_TRUE(index._PSO.metaData().col0IdExists(2));
-    ASSERT_TRUE(index._PSO.metaData().col0IdExists(3));
-    ASSERT_FALSE(index._PSO.metaData().col0IdExists(1));
-    ASSERT_FALSE(index._PSO.metaData().col0IdExists(0));
-    ASSERT_FALSE(index._PSO.metaData().getMetaData(2).isFunctional());
-    ASSERT_TRUE(index._PSO.metaData().getMetaData(3).isFunctional());
+    ASSERT_TRUE(index._PSO.metaData().col0IdExists(I(2)));
+    ASSERT_TRUE(index._PSO.metaData().col0IdExists(I(3)));
+    ASSERT_FALSE(index._PSO.metaData().col0IdExists(I(1)));
+    ASSERT_FALSE(index._PSO.metaData().col0IdExists(I(0)));
+    ASSERT_FALSE(index._PSO.metaData().getMetaData(I(2)).isFunctional());
+    ASSERT_TRUE(index._PSO.metaData().getMetaData(I(3)).isFunctional());
 
-    ASSERT_TRUE(index.POS().metaData().col0IdExists(2));
-    ASSERT_TRUE(index.POS().metaData().col0IdExists(3));
-    ASSERT_FALSE(index.POS().metaData().col0IdExists(1));
-    ASSERT_FALSE(index.POS().metaData().col0IdExists(4));
-    ASSERT_TRUE(index.POS().metaData().getMetaData(2).isFunctional());
-    ASSERT_TRUE(index.POS().metaData().getMetaData(3).isFunctional());
+    ASSERT_TRUE(index.POS().metaData().col0IdExists(I(2)));
+    ASSERT_TRUE(index.POS().metaData().col0IdExists(I(3)));
+    ASSERT_FALSE(index.POS().metaData().col0IdExists(I(1)));
+    ASSERT_FALSE(index.POS().metaData().col0IdExists(I(4)));
+    ASSERT_TRUE(index.POS().metaData().getMetaData(I(2)).isFunctional());
+    ASSERT_TRUE(index.POS().metaData().getMetaData(I(3)).isFunctional());
 
     // Relation b
     // Pair index
     std::vector<std::array<Id, 2>> buffer;
-    CompressedRelationMetaData::scan(2, &buffer, index.PSO());
+    CompressedRelationMetaData::scan(I(2), &buffer, index.PSO());
     ASSERT_EQ(2ul, buffer.size());
-    ASSERT_EQ(Id(0), buffer[0][0]);
-    ASSERT_EQ(4u, buffer[0][1]);
-    ASSERT_EQ(0u, buffer[1][0]);
-    ASSERT_EQ(5u, buffer[1][1]);
+    ASSERT_EQ(I(0), buffer[0][0]);
+    ASSERT_EQ(I(4), buffer[0][1]);
+    ASSERT_EQ(I(0u), buffer[1][0]);
+    ASSERT_EQ(I(5u), buffer[1][1]);
 
     // Relation b2
-    CompressedRelationMetaData::scan(3, &buffer, index.PSO());
+    CompressedRelationMetaData::scan(I(3), &buffer, index.PSO());
     ASSERT_EQ(2ul, buffer.size());
-    ASSERT_EQ(Id(0), buffer[0][0]);
-    ASSERT_EQ(4u, buffer[0][1]);
-    ASSERT_EQ(1u, buffer[1][0]);
-    ASSERT_EQ(5u, buffer[1][1]);
+    ASSERT_EQ(I(0), buffer[0][0]);
+    ASSERT_EQ(I(4u), buffer[0][1]);
+    ASSERT_EQ(I(1u), buffer[1][0]);
+    ASSERT_EQ(I(5u), buffer[1][1]);
 
-    remove("_testtmp2.tsv");
+    ad_utility::deleteFile(filename);
     std::remove(stxxlFileName.c_str());
     remove("_testindex.index.pso");
     remove("_testindex.index.pos");
@@ -121,7 +126,7 @@ TEST(IndexTest, createFromTsvTest) {
     // b       is-a    0       .
     // c       is-a    1       .
     // c       is-a    2       .
-    std::fstream f("_testtmp2.tsv", std::ios_base::out);
+    std::fstream f(filename, std::ios_base::out);
 
     // Vocab:
     // 0: 0
@@ -143,61 +148,61 @@ TEST(IndexTest, createFromTsvTest) {
     f.close();
 
     {
-      Index index;
+      Index index = makeIndexWithTestSettings();
       index.setOnDiskBase("_testindex");
-      index.createFromFile<TsvParser>("_testtmp2.tsv");
+      index.createFromFile<TurtleParserAuto>(filename);
     }
     Index index;
     index.createFromOnDiskIndex("_testindex");
 
-    ASSERT_TRUE(index._PSO.metaData().col0IdExists(7));
-    ASSERT_FALSE(index._PSO.metaData().col0IdExists(1));
+    ASSERT_TRUE(index._PSO.metaData().col0IdExists(I(7)));
+    ASSERT_FALSE(index._PSO.metaData().col0IdExists(I(1)));
 
-    ASSERT_FALSE(index._PSO.metaData().getMetaData(7).isFunctional());
+    ASSERT_FALSE(index._PSO.metaData().getMetaData(I(7)).isFunctional());
 
-    ASSERT_TRUE(index.POS().metaData().col0IdExists(7));
-    ASSERT_FALSE(index.POS().metaData().getMetaData(7).isFunctional());
+    ASSERT_TRUE(index.POS().metaData().col0IdExists(I(7)));
+    ASSERT_FALSE(index.POS().metaData().getMetaData(I(7)).isFunctional());
 
     std::vector<std::array<Id, 2>> buffer;
     // is-a
-    CompressedRelationMetaData::scan(7, &buffer, index.PSO());
+    CompressedRelationMetaData::scan(I(7), &buffer, index.PSO());
     ASSERT_EQ(7ul, buffer.size());
     // Pair index
-    ASSERT_EQ(4u, buffer[0][0]);
-    ASSERT_EQ(0u, buffer[0][1]);
-    ASSERT_EQ(4u, buffer[1][0]);
-    ASSERT_EQ(1u, buffer[1][1]);
-    ASSERT_EQ(4u, buffer[2][0]);
-    ASSERT_EQ(2u, buffer[2][1]);
-    ASSERT_EQ(5u, buffer[3][0]);
-    ASSERT_EQ(0u, buffer[3][1]);
-    ASSERT_EQ(5u, buffer[4][0]);
-    ASSERT_EQ(3u, buffer[4][1]);
-    ASSERT_EQ(6u, buffer[5][0]);
-    ASSERT_EQ(1u, buffer[5][1]);
-    ASSERT_EQ(6u, buffer[6][0]);
-    ASSERT_EQ(2u, buffer[6][1]);
+    ASSERT_EQ(I(4u), buffer[0][0]);
+    ASSERT_EQ(I(0u), buffer[0][1]);
+    ASSERT_EQ(I(4u), buffer[1][0]);
+    ASSERT_EQ(I(1u), buffer[1][1]);
+    ASSERT_EQ(I(4u), buffer[2][0]);
+    ASSERT_EQ(I(2u), buffer[2][1]);
+    ASSERT_EQ(I(5u), buffer[3][0]);
+    ASSERT_EQ(I(0u), buffer[3][1]);
+    ASSERT_EQ(I(5u), buffer[4][0]);
+    ASSERT_EQ(I(3u), buffer[4][1]);
+    ASSERT_EQ(I(6u), buffer[5][0]);
+    ASSERT_EQ(I(1u), buffer[5][1]);
+    ASSERT_EQ(I(6u), buffer[6][0]);
+    ASSERT_EQ(I(2u), buffer[6][1]);
 
     // is-a for POS
-    CompressedRelationMetaData::scan(7, &buffer, index.POS());
+    CompressedRelationMetaData::scan(I(7), &buffer, index.POS());
     ASSERT_EQ(7ul, buffer.size());
     // Pair index
-    ASSERT_EQ(0u, buffer[0][0]);
-    ASSERT_EQ(4u, buffer[0][1]);
-    ASSERT_EQ(0u, buffer[1][0]);
-    ASSERT_EQ(5u, buffer[1][1]);
-    ASSERT_EQ(1u, buffer[2][0]);
-    ASSERT_EQ(4u, buffer[2][1]);
-    ASSERT_EQ(1u, buffer[3][0]);
-    ASSERT_EQ(6u, buffer[3][1]);
-    ASSERT_EQ(2u, buffer[4][0]);
-    ASSERT_EQ(4u, buffer[4][1]);
-    ASSERT_EQ(2u, buffer[5][0]);
-    ASSERT_EQ(6u, buffer[5][1]);
-    ASSERT_EQ(3u, buffer[6][0]);
-    ASSERT_EQ(5u, buffer[6][1]);
+    ASSERT_EQ(I(0u), buffer[0][0]);
+    ASSERT_EQ(I(4u), buffer[0][1]);
+    ASSERT_EQ(I(0u), buffer[1][0]);
+    ASSERT_EQ(I(5u), buffer[1][1]);
+    ASSERT_EQ(I(1u), buffer[2][0]);
+    ASSERT_EQ(I(4u), buffer[2][1]);
+    ASSERT_EQ(I(1u), buffer[3][0]);
+    ASSERT_EQ(I(6u), buffer[3][1]);
+    ASSERT_EQ(I(2u), buffer[4][0]);
+    ASSERT_EQ(I(4u), buffer[4][1]);
+    ASSERT_EQ(I(2u), buffer[5][0]);
+    ASSERT_EQ(I(6u), buffer[5][1]);
+    ASSERT_EQ(I(3u), buffer[6][0]);
+    ASSERT_EQ(I(5u), buffer[6][1]);
 
-    remove("_testtmp2.tsv");
+    ad_utility::deleteFile(filename);
     std::remove(stxxlFileName.c_str());
     remove("_testindex.index.pso");
     remove("_testindex.index.pos");
@@ -215,22 +220,23 @@ class CreatePatternsFixture : public testing::Test {
   }
 
   virtual ~CreatePatternsFixture() {
-    remove("_testtmppatterns.tsv");
-    std::remove(stxxlFileName.c_str());
-    remove("_testindex.index.pso");
-    remove("_testindex.index.pos");
-    remove("_testindex.index.patterns");
-    remove("stxxl.log");
-    remove("stxxl.errorlog");
+    ad_utility::deleteFile(inputFilename);
+    ad_utility::deleteFile(stxxlFileName);
+    ad_utility::deleteFile("_testindex.index.pso");
+    ad_utility::deleteFile("_testindex.index.pos");
+    ad_utility::deleteFile("_testindex.index.patterns");
+    ad_utility::deleteFile("stxxl.log");
+    ad_utility::deleteFile("stxxl.errorlog");
   }
 
   string stxxlFileName;
+  string inputFilename = "_testtmppatterns.ttl";
 };
 
 TEST_F(CreatePatternsFixture, createPatterns) {
   {
-    LOG(DEBUG) << "Testing createPatterns with tsv file..." << std::endl;
-    std::fstream f("_testtmppatterns.tsv", std::ios_base::out);
+    LOG(DEBUG) << "Testing createPatterns with ttl file..." << std::endl;
+    std::ofstream f(inputFilename);
 
     f << "<a>\t<b>\t<c>\t.\n"
          "<a>\t<b>\t<c2>\t.\n"
@@ -240,54 +246,46 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     f.close();
 
     {
-      Index index;
+      Index index = makeIndexWithTestSettings();
       index.setUsePatterns(true);
-      index._maxNumPatterns = 1;
       index.setOnDiskBase("_testindex");
-      index.createFromFile<TsvParser>("_testtmppatterns.tsv");
+      index.createFromFile<TurtleParserAuto>(inputFilename);
     }
     Index index;
     index.setUsePatterns(true);
     index.createFromOnDiskIndex("_testindex");
 
     ASSERT_EQ(2u, index.getHasPattern().size());
-    ASSERT_EQ(1u, index.getHasPredicate().size());
-    ASSERT_EQ(1u, index._patterns.size());
-    Pattern p;
-    p.push_back(3);
-    p.push_back(6);
-    const auto& ip = index._patterns[0];
-    for (size_t i = 0; i < ip.size(); i++) {
-      ASSERT_EQ(p[i], ip[i]);
+    ASSERT_EQ(0u, index.getHasPredicate().size());
+    ASSERT_EQ(2u, index._patterns.size());
+    std::vector<VocabIndex> p0;
+    std::vector<VocabIndex> p1;
+    VocabIndex idx;
+    // Pattern p0 (for subject <a>) consists of <b> and <b2)
+    ASSERT_TRUE(index.getVocab().getId("<b>", &idx));
+    p0.push_back(idx);
+    ASSERT_TRUE(index.getVocab().getId("<b2>", &idx));
+    p0.push_back(idx);
+
+    // Pattern p1 (for subject <as>) consists of <b2> and <d>)
+    p1.push_back(idx);
+    ASSERT_TRUE(index.getVocab().getId("<d>", &idx));
+    p1.push_back(idx);
+
+    auto checkPattern = [](const auto& expected, const auto& actual) {
+      for (size_t i = 0; i < actual.size(); i++) {
+        ASSERT_EQ(Id::make(expected[i].get()), actual[i]);
+      }
+    };
+
+    ASSERT_TRUE(index.getVocab().getId("<a>", &idx));
+    LOG(INFO) << idx << std::endl;
+    for (size_t i = 0; i < index.getHasPattern().size(); ++i) {
+      LOG(INFO) << index.getHasPattern()[i] << std::endl;
     }
-    ASSERT_EQ(0u, index.getHasPattern()[1]);
-    ASSERT_EQ(NO_PATTERN, index.getHasPattern()[0]);
-
-    ASSERT_FLOAT_EQ(4.0 / 2, index.getHasPredicateMultiplicityEntities());
-    ASSERT_FLOAT_EQ(4.0 / 3, index.getHasPredicateMultiplicityPredicates());
-  }
-  {
-    LOG(DEBUG) << "Testing createPatterns with existing index..." << std::endl;
-    Index index;
-    index.setUsePatterns(true);
-    index._maxNumPatterns = 1;
-    index.createFromOnDiskIndex("_testindex");
-
-    ASSERT_EQ(2u, index.getHasPattern().size());
-    ASSERT_EQ(1u, index.getHasPredicate().size());
-    ASSERT_EQ(1u, index._patterns.size());
-    Pattern p;
-    p.push_back(3);
-    p.push_back(6);
-    const auto& ip = index._patterns[0];
-    for (size_t i = 0; i < ip.size(); i++) {
-      ASSERT_EQ(p[i], ip[i]);
-    }
-    ASSERT_EQ(0u, index.getHasPattern()[1]);
-    ASSERT_EQ(NO_PATTERN, index.getHasPattern()[0]);
-
-    ASSERT_FLOAT_EQ(4.0 / 2, index.getHasPredicateMultiplicityEntities());
-    ASSERT_FLOAT_EQ(4.0 / 3, index.getHasPredicateMultiplicityPredicates());
+    checkPattern(p0, index.getPatterns()[index.getHasPattern()[idx.get()]]);
+    ASSERT_TRUE(index.getVocab().getId("<a2>", &idx));
+    checkPattern(p1, index.getPatterns()[index.getHasPattern()[idx.get()]]);
   }
 }
 
@@ -296,8 +294,9 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   string tail = "";
   writeStxxlConfigFile(location, tail);
   string stxxlFileName = getStxxlDiskFileName(location, tail);
+  string filename = "_testtmp3.ttl";
 
-  std::fstream f("_testtmp3.tsv", std::ios_base::out);
+  std::ofstream f(filename);
 
   // Vocab:
   // 0: a
@@ -313,32 +312,32 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   f.close();
 
   {
-    Index indexPrim;
+    Index indexPrim = makeIndexWithTestSettings();
     indexPrim.setOnDiskBase("_testindex2");
-    indexPrim.createFromFile<TsvParser>("_testtmp3.tsv");
+    indexPrim.createFromFile<TurtleParserAuto>(filename);
   }
 
   Index index;
   index.createFromOnDiskIndex("_testindex2");
 
-  ASSERT_TRUE(index.PSO().metaData().col0IdExists(2));
-  ASSERT_TRUE(index.PSO().metaData().col0IdExists(3));
-  ASSERT_FALSE(index.PSO().metaData().col0IdExists(1));
-  ASSERT_FALSE(index.PSO().metaData().col0IdExists(4));
-  ASSERT_FALSE(index.PSO().metaData().getMetaData(2).isFunctional());
-  ASSERT_TRUE(index.PSO().metaData().getMetaData(3).isFunctional());
+  ASSERT_TRUE(index.PSO().metaData().col0IdExists(I(2)));
+  ASSERT_TRUE(index.PSO().metaData().col0IdExists(I(3)));
+  ASSERT_FALSE(index.PSO().metaData().col0IdExists(I(1)));
+  ASSERT_FALSE(index.PSO().metaData().col0IdExists(I(4)));
+  ASSERT_FALSE(index.PSO().metaData().getMetaData(I(2)).isFunctional());
+  ASSERT_TRUE(index.PSO().metaData().getMetaData(I(3)).isFunctional());
 
-  ASSERT_TRUE(index.POS().metaData().col0IdExists(2));
-  ASSERT_TRUE(index.POS().metaData().col0IdExists(3));
-  ASSERT_FALSE(index.POS().metaData().col0IdExists(1));
-  ASSERT_FALSE(index.POS().metaData().col0IdExists(4));
-  ASSERT_TRUE(index.POS().metaData().getMetaData(2).isFunctional());
-  ASSERT_TRUE(index.POS().metaData().getMetaData(3).isFunctional());
+  ASSERT_TRUE(index.POS().metaData().col0IdExists(I(2)));
+  ASSERT_TRUE(index.POS().metaData().col0IdExists(I(3)));
+  ASSERT_FALSE(index.POS().metaData().col0IdExists(I(1)));
+  ASSERT_FALSE(index.POS().metaData().col0IdExists(I(4)));
+  ASSERT_TRUE(index.POS().metaData().getMetaData(I(2)).isFunctional());
+  ASSERT_TRUE(index.POS().metaData().getMetaData(I(3)).isFunctional());
 
-  remove("_testtmp3.tsv");
-  remove("_testindex2.index.pso");
-  remove("_testindex2.index.pos");
-  std::remove(stxxlFileName.c_str());
+  ad_utility::deleteFile(filename);
+  ad_utility::deleteFile("_testindex2.index.pso");
+  ad_utility::deleteFile("_testindex2.index.pos");
+  ad_utility::deleteFile(stxxlFileName);
 };
 
 TEST(IndexTest, scanTest) {
@@ -346,8 +345,8 @@ TEST(IndexTest, scanTest) {
   string tail = "";
   writeStxxlConfigFile(location, tail);
   string stxxlFileName = getStxxlDiskFileName(location, tail);
-
-  std::fstream f("_testtmp2.tsv", std::ios_base::out);
+  string filename = "_testtmp2.ttl";
+  std::ofstream f(filename);
 
   // Vocab:
   // 0: a
@@ -363,9 +362,9 @@ TEST(IndexTest, scanTest) {
   f.close();
   {
     {
-      Index index;
+      Index index = makeIndexWithTestSettings();
       index.setOnDiskBase("_testindex");
-      index.createFromFile<TsvParser>("_testtmp2.tsv");
+      index.createFromFile<TurtleParserAuto>(filename);
     }
 
     Index index;
@@ -376,10 +375,10 @@ TEST(IndexTest, scanTest) {
 
     index.scan("<b>", &wtl, index._PSO);
     ASSERT_EQ(2u, wtl.size());
-    ASSERT_EQ(0u, wtl[0][0]);
-    ASSERT_EQ(4u, wtl[0][1]);
-    ASSERT_EQ(0u, wtl[1][0]);
-    ASSERT_EQ(5u, wtl[1][1]);
+    ASSERT_EQ(I(0u), wtl[0][0]);
+    ASSERT_EQ(I(4u), wtl[0][1]);
+    ASSERT_EQ(I(0u), wtl[1][0]);
+    ASSERT_EQ(I(5u), wtl[1][1]);
     wtl.clear();
     index.scan("<x>", &wtl, index._PSO);
     ASSERT_EQ(0u, wtl.size());
@@ -389,10 +388,10 @@ TEST(IndexTest, scanTest) {
 
     index.scan("<b>", &wtl, index._POS);
     ASSERT_EQ(2u, wtl.size());
-    ASSERT_EQ(4u, wtl[0][0]);
-    ASSERT_EQ(0u, wtl[0][1]);
-    ASSERT_EQ(5u, wtl[1][0]);
-    ASSERT_EQ(0u, wtl[1][1]);
+    ASSERT_EQ(I(4u), wtl[0][0]);
+    ASSERT_EQ(I(0u), wtl[0][1]);
+    ASSERT_EQ(I(5u), wtl[1][0]);
+    ASSERT_EQ(I(0u), wtl[1][1]);
     wtl.clear();
     index.scan("<x>", &wtl, index._POS);
     ASSERT_EQ(0u, wtl.size());
@@ -402,21 +401,21 @@ TEST(IndexTest, scanTest) {
 
     index.scan("<b>", "<a>", &wol, index._PSO);
     ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(4u, wol[0][0]);
-    ASSERT_EQ(5u, wol[1][0]);
+    ASSERT_EQ(I(4u), wol[0][0]);
+    ASSERT_EQ(I(5u), wol[1][0]);
     wol.clear();
     index.scan("<b>", "<c>", &wol, index._PSO);
     ASSERT_EQ(0u, wol.size());
 
     index.scan("<b2>", "<c2>", &wol, index._POS);
     ASSERT_EQ(1u, wol.size());
-    ASSERT_EQ(1u, wol[0][0]);
+    ASSERT_EQ(I(1u), wol[0][0]);
   }
 
-  remove("_testtmp2.tsv");
-  std::remove(stxxlFileName.c_str());
-  remove("_testindex.index.pso");
-  remove("_testindex.index.pos");
+  ad_utility::deleteFile(filename);
+  ad_utility::deleteFile(stxxlFileName);
+  ad_utility::deleteFile("_testindex.index.pso");
+  ad_utility::deleteFile("_testindex.index.pos");
 
   // a       is-a    1       .
   // a       is-a    2       .
@@ -425,7 +424,7 @@ TEST(IndexTest, scanTest) {
   // b       is-a    0       .
   // c       is-a    1       .
   // c       is-a    2       .
-  std::fstream f2("_testtmp2.tsv", std::ios_base::out);
+  std::ofstream f2(filename);
 
   // Vocab:
   // 0: 0
@@ -448,9 +447,9 @@ TEST(IndexTest, scanTest) {
 
   {
     {
-      Index index;
+      Index index = makeIndexWithTestSettings();
       index.setOnDiskBase("_testindex");
-      index.createFromFile<TsvParser>("_testtmp2.tsv");
+      index.createFromFile<TurtleParserAuto>(filename);
     }
     Index index;
     index.createFromOnDiskIndex("_testindex");
@@ -460,81 +459,81 @@ TEST(IndexTest, scanTest) {
 
     index.scan("<is-a>", &wtl, index._PSO);
     ASSERT_EQ(7u, wtl.size());
-    ASSERT_EQ(4u, wtl[0][0]);
-    ASSERT_EQ(0u, wtl[0][1]);
-    ASSERT_EQ(4u, wtl[1][0]);
-    ASSERT_EQ(1u, wtl[1][1]);
-    ASSERT_EQ(4u, wtl[2][0]);
-    ASSERT_EQ(2u, wtl[2][1]);
-    ASSERT_EQ(5u, wtl[3][0]);
-    ASSERT_EQ(0u, wtl[3][1]);
-    ASSERT_EQ(5u, wtl[4][0]);
-    ASSERT_EQ(3u, wtl[4][1]);
-    ASSERT_EQ(6u, wtl[5][0]);
-    ASSERT_EQ(1u, wtl[5][1]);
-    ASSERT_EQ(6u, wtl[6][0]);
-    ASSERT_EQ(2u, wtl[6][1]);
+    ASSERT_EQ(I(4u), wtl[0][0]);
+    ASSERT_EQ(I(0u), wtl[0][1]);
+    ASSERT_EQ(I(4u), wtl[1][0]);
+    ASSERT_EQ(I(1u), wtl[1][1]);
+    ASSERT_EQ(I(4u), wtl[2][0]);
+    ASSERT_EQ(I(2u), wtl[2][1]);
+    ASSERT_EQ(I(5u), wtl[3][0]);
+    ASSERT_EQ(I(0u), wtl[3][1]);
+    ASSERT_EQ(I(5u), wtl[4][0]);
+    ASSERT_EQ(I(3u), wtl[4][1]);
+    ASSERT_EQ(I(6u), wtl[5][0]);
+    ASSERT_EQ(I(1u), wtl[5][1]);
+    ASSERT_EQ(I(6u), wtl[6][0]);
+    ASSERT_EQ(I(2u), wtl[6][1]);
 
     index.scan("<is-a>", &wtl, index._POS);
     ASSERT_EQ(7u, wtl.size());
-    ASSERT_EQ(0u, wtl[0][0]);
-    ASSERT_EQ(4u, wtl[0][1]);
-    ASSERT_EQ(0u, wtl[1][0]);
-    ASSERT_EQ(5u, wtl[1][1]);
-    ASSERT_EQ(1u, wtl[2][0]);
-    ASSERT_EQ(4u, wtl[2][1]);
-    ASSERT_EQ(1u, wtl[3][0]);
-    ASSERT_EQ(6u, wtl[3][1]);
-    ASSERT_EQ(2u, wtl[4][0]);
-    ASSERT_EQ(4u, wtl[4][1]);
-    ASSERT_EQ(2u, wtl[5][0]);
-    ASSERT_EQ(6u, wtl[5][1]);
-    ASSERT_EQ(3u, wtl[6][0]);
-    ASSERT_EQ(5u, wtl[6][1]);
+    ASSERT_EQ(I(0u), wtl[0][0]);
+    ASSERT_EQ(I(4u), wtl[0][1]);
+    ASSERT_EQ(I(0u), wtl[1][0]);
+    ASSERT_EQ(I(5u), wtl[1][1]);
+    ASSERT_EQ(I(1u), wtl[2][0]);
+    ASSERT_EQ(I(4u), wtl[2][1]);
+    ASSERT_EQ(I(1u), wtl[3][0]);
+    ASSERT_EQ(I(6u), wtl[3][1]);
+    ASSERT_EQ(I(2u), wtl[4][0]);
+    ASSERT_EQ(I(4u), wtl[4][1]);
+    ASSERT_EQ(I(2u), wtl[5][0]);
+    ASSERT_EQ(I(6u), wtl[5][1]);
+    ASSERT_EQ(I(3u), wtl[6][0]);
+    ASSERT_EQ(I(5u), wtl[6][1]);
 
     index.scan("<is-a>", "<0>", &wol, index._POS);
     ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(4u, wol[0][0]);
-    ASSERT_EQ(5u, wol[1][0]);
+    ASSERT_EQ(I(4u), wol[0][0]);
+    ASSERT_EQ(I(5u), wol[1][0]);
 
     wol.clear();
     index.scan("<is-a>", "<1>", &wol, index._POS);
     ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(4u, wol[0][0]);
-    ASSERT_EQ(6u, wol[1][0]);
+    ASSERT_EQ(I(4u), wol[0][0]);
+    ASSERT_EQ(I(6u), wol[1][0]);
 
     wol.clear();
     index.scan("<is-a>", "<2>", &wol, index._POS);
     ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(4u, wol[0][0]);
-    ASSERT_EQ(6u, wol[1][0]);
+    ASSERT_EQ(I(4u), wol[0][0]);
+    ASSERT_EQ(I(6u), wol[1][0]);
 
     wol.clear();
     index.scan("<is-a>", "<3>", &wol, index._POS);
     ASSERT_EQ(1u, wol.size());
-    ASSERT_EQ(5u, wol[0][0]);
+    ASSERT_EQ(I(5u), wol[0][0]);
 
     wol.clear();
     index.scan("<is-a>", "<a>", &wol, index._PSO);
     ASSERT_EQ(3u, wol.size());
-    ASSERT_EQ(0u, wol[0][0]);
-    ASSERT_EQ(1u, wol[1][0]);
-    ASSERT_EQ(2u, wol[2][0]);
+    ASSERT_EQ(I(0u), wol[0][0]);
+    ASSERT_EQ(I(1u), wol[1][0]);
+    ASSERT_EQ(I(2u), wol[2][0]);
 
     wol.clear();
     index.scan("<is-a>", "<b>", &wol, index._PSO);
     ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(0u, wol[0][0]);
-    ASSERT_EQ(3u, wol[1][0]);
+    ASSERT_EQ(I(0u), wol[0][0]);
+    ASSERT_EQ(I(3u), wol[1][0]);
 
     wol.clear();
     index.scan("<is-a>", "<c>", &wol, index._PSO);
     ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(1u, wol[0][0]);
-    ASSERT_EQ(2u, wol[1][0]);
+    ASSERT_EQ(I(1u), wol[0][0]);
+    ASSERT_EQ(I(2u), wol[1][0]);
   }
-  remove("_testtmp2.tsv");
-  std::remove(stxxlFileName.c_str());
-  remove("_testindex.index.pso");
-  remove("_testindex.index.pos");
+  ad_utility::deleteFile(filename);
+  ad_utility::deleteFile(stxxlFileName);
+  ad_utility::deleteFile("_testindex.index.pso");
+  ad_utility::deleteFile("_testindex.index.pos");
 };
