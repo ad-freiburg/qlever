@@ -232,10 +232,15 @@ void Filter::computeFilterRange(IdTableStatic<WIDTH>* res, size_t lhs,
         auto resultRanges = valueIdComparators::getRangesForEqualIds(
             begin, end, rhs_lower, rhs_upper, comparison);
 
+        auto resultSize =
+            std::accumulate(resultRanges.begin(), resultRanges.end(), 0ul,
+                            [](const auto& value, const auto& range) {
+                              return value + (range.second - range.first);
+                            });
+        res->reserve(resultSize);
         for (auto range : resultRanges) {
           auto actualBegin = input.begin() + (range.first - begin);
           auto actualEnd = input.begin() + (range.second - begin);
-          // TODO<joka921> Reserve the total result size for efficiency.
           res->insert(res->end(), actualBegin, actualEnd);
         }
       } else {
@@ -288,10 +293,16 @@ void Filter::computeFilterFixedValue(
         auto resultRanges =
             valueIdComparators::getRangesForId(begin, end, rhs, comparison);
 
+        auto resultSize =
+            std::accumulate(resultRanges.begin(), resultRanges.end(), 0ul,
+                            [](const auto& value, const auto& range) {
+                              return value + (range.second - range.first);
+                            });
+        res->reserve(resultSize);
+
         for (auto range : resultRanges) {
           auto actualBegin = input.begin() + (range.first - begin);
           auto actualEnd = input.begin() + (range.second - begin);
-          // TODO<joka921> Reserve the total result size for efficiency.
           res->insert(res->end(), actualBegin, actualEnd);
         }
       } else {
