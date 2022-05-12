@@ -45,7 +45,7 @@ endif ()
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
 ###############################
 add_subdirectory(third_party/antlr4/runtime/Cpp EXCLUDE_FROM_ALL)
-target_compile_options(antlr4_static PUBLIC -Wno-attributes -Wno-implicit-fallthrough -Wno-ambiguous-reversed-operator)
+target_compile_options(antlr4_static PRIVATE -Wno-implicit-fallthrough -Wno-attributes -Wno-ambiguous-reversed-operator)
 include_directories(third_party/antlr4/runtime/Cpp/runtime/src)
 
 ################################
@@ -181,7 +181,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
 
 set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
 add_subdirectory(third_party/re2 EXCLUDE_FROM_ALL)
-target_compile_options(re2 PUBLIC -Wno-unused-but-set-variable)
+target_compile_options(re2 PRIVATE -Wno-unused-but-set-variable)
 include_directories(SYSTEM third_party/re2)
 
 # reinstate original flags including all warnings
