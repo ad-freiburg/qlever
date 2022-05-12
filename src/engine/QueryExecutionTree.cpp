@@ -417,6 +417,7 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
             break;
           case Datatype::Int:
             co_yield id.getInt();
+            break;
           case Datatype::VocabIndex:
             co_yield _qec->getIndex()
                 .getVocab()
