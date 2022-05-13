@@ -446,7 +446,7 @@ struct GraphPatternOperation {
   };
   struct Values {
     SparqlValues _inlineValues;
-    size_t _id;
+    size_t _id = std::numeric_limits<size_t>::max();
   };
   struct GroupGraphPattern {
     ParsedQuery::GraphPattern _child;
