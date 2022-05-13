@@ -62,6 +62,7 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 // _____________________________________________________________________________
 Awaitable<void> Server::process(
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
+  co_return;
   using namespace ad_utility::httpUtils;
   ad_utility::Timer requestTimer;
   requestTimer.start();
@@ -142,9 +143,14 @@ Awaitable<void> Server::process(
   // Neither a query nor a command were specified, simply serve a file.
   // Note that `makeFileServer` returns a function.
   // The first argument is the document root, the second one is the whitelist.
-  co_await makeFileServer(".", ad_utility::HashSet<std::string>{
-                                   "index.html", "script.js",
-                                   "style.css"})(std::move(request), send);
+
+  auto fileServer = makeFileServer(
+      ".",
+      ad_utility::HashSet<std::string>{"index.html", "script.js", "style.css"})(
+      std::move(request), send);
+  // Note: `co_await makeFileServer(....)(...)` doesn't compile in g++ 11.2.0
+  // because of a bug in that compiler.
+  co_return co_await std::move(fileServer);
 }
 
 // _____________________________________________________________________________
