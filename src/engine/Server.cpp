@@ -48,8 +48,8 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
       [this](auto request, auto&& send) -> boost::asio::awaitable<void> {
     co_await process(std::move(request), send);
   };
-  auto httpServer = HttpServer{static_cast<unsigned short>(_port), "0.0.0.0",
-                               _numThreads, std::move(httpSessionHandler)};
+  auto httpServer = HttpServer(static_cast<unsigned short>(_port), "0.0.0.0",
+                               _numThreads, std::move(httpSessionHandler));
 
   // Initialize the index
   initialize(indexBaseName, useText, usePatterns, usePatternTrick,
