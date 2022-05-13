@@ -446,6 +446,7 @@ struct GraphPatternOperation {
   };
   struct Values {
     SparqlValues _inlineValues;
+    // This value will be overwritten later.
     size_t _id = std::numeric_limits<size_t>::max();
   };
   struct GroupGraphPattern {
