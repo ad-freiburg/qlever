@@ -182,3 +182,16 @@ TEST(SparqlLexer, reset) {
   lexer.expect("<cs.uni-freiburg.de/>");
   ASSERT_TRUE(lexer.getUnconsumedInput().empty());
 }
+
+TEST(SparqlLexer, peek) {
+  std::string query = "PREFIX";
+
+  SparqlLexer lexer(query);
+  ASSERT_TRUE(lexer.peek("prefix"));
+  ASSERT_EQ(std::string("prefix"),
+            lexer.getUnconsumedInput());
+
+  ASSERT_TRUE(lexer.peek(SparqlToken::Type::KEYWORD));
+  ASSERT_EQ(std::string("prefix"),
+            lexer.getUnconsumedInput());
+}

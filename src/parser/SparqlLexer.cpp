@@ -184,6 +184,23 @@ bool SparqlLexer::accept(const std::string& raw, bool match_case) {
 
 void SparqlLexer::accept() { readNext(); }
 
+bool SparqlLexer::peek(SparqlToken::Type type) {
+  if (_next.type == type) {
+    return true;
+  }
+  return false;
+}
+
+bool SparqlLexer::peek(const std::string& raw, bool match_case) {
+  if (match_case && _next.raw == raw) {
+    return true;
+  } else if (!match_case && ad_utility::getLowercaseUtf8(_next.raw) ==
+                                ad_utility::getLowercaseUtf8(raw)) {
+    return true;
+  }
+  return false;
+}
+
 void SparqlLexer::expect(SparqlToken::Type type) {
   if (_next.type != type) {
     std::ostringstream s;
