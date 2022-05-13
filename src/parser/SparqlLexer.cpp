@@ -170,7 +170,7 @@ bool SparqlLexer::accept(SparqlToken::Type type) {
   return false;
 }
 
-bool SparqlLexer::accept(const std::string& raw, bool match_case) {
+bool SparqlLexer::accept(std::string_view raw, bool match_case) {
   if (peek(raw, match_case)) {
     readNext();
     return true;
@@ -185,7 +185,7 @@ bool SparqlLexer::peek(SparqlToken::Type type) const {
   return _next.type == type;
 }
 
-bool SparqlLexer::peek(const std::string& raw, bool match_case) const {
+bool SparqlLexer::peek(std::string_view raw, bool match_case) const {
   if (match_case) {
     return _next.raw == raw;
   } else {
