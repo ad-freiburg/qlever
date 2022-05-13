@@ -145,11 +145,13 @@ Awaitable<void> Server::process(
 
   auto fileServer = makeFileServer(
       ".",
-      ad_utility::HashSet<std::string>{"index.html", "script.js", "style.css"})(
-      std::move(request), send);
-  // Note: `co_await makeFileServer(....)(...)` doesn't compile in g++ 11.2.0
-  // because of a bug in that compiler.
-  co_return co_await std::move(fileServer);
+      ad_utility::HashSet<std::string>{"index.html", "script.js", "style.css"});
+  // Note: `co_await makeFileServer(....)(...)` doesn't compile in g++ 11.2.0,
+  // probably because of a bug in that compiler.
+  // Note2: `auto fileServer = makeFileServer(...)(...);
+  //        co_await std::move(fileServer);`
+  // segfaults in clang++-13, possibly because of a bug in that compiler.
+  co_return co_await fileServer(std::move(request), send);
 }
 
 // _____________________________________________________________________________
