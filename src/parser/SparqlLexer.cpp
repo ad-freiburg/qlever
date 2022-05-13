@@ -163,7 +163,7 @@ void SparqlLexer::expandNextUntilWhitespace() {
 }
 
 bool SparqlLexer::accept(SparqlToken::Type type) {
-  if (_next.type == type) {
+  if (peek(type)) {
     readNext();
     return true;
   }
@@ -171,34 +171,27 @@ bool SparqlLexer::accept(SparqlToken::Type type) {
 }
 
 bool SparqlLexer::accept(const std::string& raw, bool match_case) {
-  if (match_case && _next.raw == raw) {
+  if (peek(raw, match_case)) {
     readNext();
     return true;
-  } else if (!match_case && ad_utility::getLowercaseUtf8(_next.raw) ==
-                                ad_utility::getLowercaseUtf8(raw)) {
-    readNext();
-    return true;
+  } else {
+    return false;
   }
-  return false;
 }
 
 void SparqlLexer::accept() { readNext(); }
 
-bool SparqlLexer::peek(SparqlToken::Type type) {
-  if (_next.type == type) {
-    return true;
-  }
-  return false;
+bool SparqlLexer::peek(SparqlToken::Type type) const {
+  return _next.type == type;
 }
 
-bool SparqlLexer::peek(const std::string& raw, bool match_case) {
-  if (match_case && _next.raw == raw) {
-    return true;
-  } else if (!match_case && ad_utility::getLowercaseUtf8(_next.raw) ==
-                                ad_utility::getLowercaseUtf8(raw)) {
-    return true;
+bool SparqlLexer::peek(const std::string& raw, bool match_case) const {
+  if (match_case) {
+    return _next.raw == raw;
+  } else {
+    return ad_utility::getLowercaseUtf8(_next.raw) ==
+           ad_utility::getLowercaseUtf8(raw);
   }
-  return false;
 }
 
 void SparqlLexer::expect(SparqlToken::Type type) {

@@ -68,8 +68,8 @@ class SparqlLexer {
   void accept();
 
   // Checks whether the next token matches but does not consume it
-  bool peek(SparqlToken::Type type);
-  bool peek(const std::string& raw, bool match_case = true);
+  bool peek(SparqlToken::Type type) const;
+  bool peek(const std::string& raw, bool match_case = true) const;
 
   // Adds all symbols up to the next whitespace to the next token
   void expandNextUntilWhitespace();
