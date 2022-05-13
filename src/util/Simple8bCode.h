@@ -139,10 +139,10 @@ class Simple8bCode {
   // ! i.e. sizeof(Numeric) * (nofElements + 239).
   // ! The overhead is included so that no check for boundaries
   // ! is necessary inside the decoding of a single codeword.
-  template <typename Numeric, typename MakeFromUint64 = std::identity>
+  template <typename Numeric, typename MakeFromUint64t = std::identity>
   static void decode(uint64_t* const encoded, size_t nofElements,
                      Numeric* decoded,
-                     MakeFromUint64 makeFromUint64 = MakeFromUint64{}) {
+                     MakeFromUint64t makeFromUint64 = MakeFromUint64t{}) {
     // Handle trivial empty case
     if (!nofElements) {
       return;

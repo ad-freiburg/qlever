@@ -271,6 +271,8 @@ Id constantExpressionResultToId(T&& result, LocalVocab& localVocab,
   } else if constexpr (ad_utility::isSimilar<double, T>) {
     return Id::makeFromDouble(result);
   } else {
+    static_assert(ad_utility::isSimilar<int64_t, T> ||
+                  ad_utility::isSimilar<Bool, T>);
     // This currently covers int and bool.
     // TODO<joka921> represent bool in the `ValueId` class and adapt this.
     return Id::makeFromInt(result);

@@ -1032,10 +1032,10 @@ void Index::getEntityPostingsForTerm(const string& term,
 }
 
 // _____________________________________________________________________________
-template <typename T, typename MakeFromUint64T>
+template <typename T, typename MakeFromUint64t>
 void Index::readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
                              vector<T>& result,
-                             MakeFromUint64T makeFromUint64t) const {
+                             MakeFromUint64t makeFromUint64t) const {
   LOG(DEBUG) << "Reading gap-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
              << ", nofBytes: " << nofBytes << '\n';
@@ -1069,10 +1069,10 @@ void Index::readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
 }
 
 // _____________________________________________________________________________
-template <typename T, typename MakeFromUint>
+template <typename T, typename MakeFromUint64t>
 void Index::readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
                               vector<T>& result,
-                              MakeFromUint makeFromUint) const {
+                              MakeFromUint64t makeFromUint) const {
   AD_CHECK_GT(nofBytes, 0);
   LOG(DEBUG) << "Reading frequency-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
