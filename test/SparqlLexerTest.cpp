@@ -188,10 +188,8 @@ TEST(SparqlLexer, peek) {
 
   SparqlLexer lexer(query);
   ASSERT_TRUE(lexer.peek("prefix"));
-  ASSERT_EQ(std::string("prefix"),
-            lexer.getUnconsumedInput());
+  ASSERT_EQ(std::string("prefix"), lexer.getUnconsumedInput());
 
   ASSERT_TRUE(lexer.peek(SparqlToken::Type::KEYWORD));
-  ASSERT_EQ(std::string("prefix"),
-            lexer.getUnconsumedInput());
+  ASSERT_EQ(std::string("prefix"), lexer.getUnconsumedInput());
 }
