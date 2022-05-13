@@ -80,7 +80,7 @@ std::string TransitivePath::getDescriptor() const {
   } else {
     os << getIndex()
               .idToOptionalString(_leftValue)
-              .value_or("#" + std::to_string(_leftValue.get()));
+              .value_or("#" + std::to_string(_leftValue.getBits()));
   }
   // The predicate.
   auto scanOperation =
@@ -97,7 +97,7 @@ std::string TransitivePath::getDescriptor() const {
   } else {
     os << getIndex()
               .idToOptionalString(_rightValue)
-              .value_or("#" + std::to_string(_rightValue.get()));
+              .value_or("#" + std::to_string(_rightValue.getBits()));
   }
   return std::move(os).str();
 }

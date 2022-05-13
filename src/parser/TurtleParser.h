@@ -368,7 +368,7 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
     this->turtleDoc();
   }
 
-  // Parse all Triples (no prefix declarations etc allowed) and return them.
+  // Parse all Triples (no prefix declarations etc. allowed) and return them.
   auto parseAndReturnAllTriples() {
     // Actually parse
     this->turtleDoc();
@@ -378,6 +378,14 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
           "Parsing failed before end of input, remaining bytes: ", d.size()));
     }
     return std::move(this->_triples);
+  }
+
+  // Parse only a single object.
+  static TripleObject parseTripleObject(std::string_view objectString) {
+    TurtleStringParser parser;
+    parser.parseUtf8String(absl::StrCat("<a> <b> ", objectString, "."));
+    AD_CHECK(parser._triples.size() == 1);
+    return std::move(parser._triples[0]._object);
   }
 
   string_view getUnparsedRemainder() const { return this->_tok.view(); }

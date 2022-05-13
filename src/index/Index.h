@@ -195,25 +195,47 @@ class Index {
   size_t sizeEstimate(const string& sub, const string& pred,
                       const string& obj) const;
 
-  // TODO<joka921> The following three functions have to be adapted when we
-  // have the "fancy" or "folded" Ids.
+  // TODO<joka921> Once we have an overview over the folding this logic should
+  // probably not be in the index class.
   std::optional<string> idToOptionalString(Id id) const {
-    if (id == ID_NO_VALUE) {
-      return std::nullopt;
+    switch (id.getDatatype()) {
+      case Datatype::Undefined:
+        return std::nullopt;
+      case Datatype::Double:
+        return std::to_string(id.getDouble());
+      case Datatype::Int:
+        return std::to_string(id.getInt());
+      case Datatype::VocabIndex: {
+        auto result = _vocab.indexToOptionalString(id.getVocabIndex());
+        if (result.has_value() && result.value().starts_with(VALUE_PREFIX)) {
+          result.value() =
+              ad_utility::convertIndexWordToValueLiteral(result.value());
+        }
+        return result;
+      }
+      case Datatype::LocalVocabIndex:
+        // TODO:: this is why this shouldn't be here
+        return std::nullopt;
+      case Datatype::TextRecordIndex:
+        return getTextExcerpt(id.getTextRecordIndex());
     }
-    return _vocab.indexToOptionalString(VocabIndex::make(id.get()));
+    // should be unreachable because the enum is exhaustive.
+    AD_CHECK(false);
   }
 
   bool getId(const string& element, Id* id) const {
+    // TODO<joka921> we should parse doubles correctly in the SparqlParser and
+    // then return the correct ids here or somewhere else.
     VocabIndex vocabId;
     auto success = getVocab().getId(element, &vocabId);
-    *id = Id::make(vocabId.get());
+    *id = Id::makeFromVocabIndex(vocabId);
     return success;
   }
 
   std::pair<Id, Id> prefix_range(const std::string& prefix) const {
+    // TODO<joka921> Do we need prefix ranges for numbers?
     auto [begin, end] = _vocab.prefix_range(prefix);
-    return {Id::make(begin.get()), Id::make(end.get())};
+    return {Id::makeFromVocabIndex(begin), Id::makeFromVocabIndex(end)};
   }
 
   const vector<PatternID>& getHasPattern() const;
@@ -632,13 +654,15 @@ class Index {
                           const ad_utility::HashMap<WordIndex, Score>& words,
                           const ad_utility::HashMap<Id, Score>& entities);
 
-  template <typename T>
-  void readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
-                        vector<T>& result) const;
+  template <typename T, typename MakeFromUint64t = std::identity>
+  void readGapComprList(
+      size_t nofElements, off_t from, size_t nofBytes, vector<T>& result,
+      MakeFromUint64t makeFromUint64t = MakeFromUint64t{}) const;
 
-  template <typename T>
-  void readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
-                         vector<T>& result) const;
+  template <typename T, typename MakeFromUint64t = std::identity>
+  void readFreqComprList(
+      size_t nofElements, off_t from, size_t nofBytes, vector<T>& result,
+      MakeFromUint64t makeFromUint = MakeFromUint64t{}) const;
 
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 

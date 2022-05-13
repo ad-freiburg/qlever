@@ -18,7 +18,9 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
   return a;
 }
 
-auto I = [](const auto& id) { return Id::make(id); };
+auto I = [](const auto& id) {
+  return Id::makeFromVocabIndex(VocabIndex::make(id));
+};
 
 TEST(UnionTest, computeUnion) {
   IdTable left(1, allocator());

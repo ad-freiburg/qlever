@@ -16,7 +16,7 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
   return a;
 }
 
-auto I = [](const auto& id) { return Id::make(id); };
+auto I = [](const auto& id) { return Id::makeFromInt(id); };
 
 // This fixture is used to create an Index for the tests.
 // The full index creation is required for initialization of the vocabularies.
@@ -83,10 +83,11 @@ TEST_F(GroupByTest, doGroupBy) {
   // There are 7 different aggregates, of which 5 (all apart from SAMPLE and
   // COUNT) react different to the 5 different ResultTypes.
 
-  Id floatBuffers[3]{Id::make(0), Id::make(0), Id::make(0)};
+  Id floatBuffers[3]{Id::makeUndefined(), Id::makeUndefined(),
+                     Id::makeUndefined()};
   float floatValues[3] = {-3, 2, 1231};
   for (int i = 0; i < 3; i++) {
-    std::memcpy(&floatBuffers[i].get(), &floatValues[i], sizeof(float));
+    floatBuffers[i] = Id::makeFromDouble(floatValues[i]);
   }
 
   // add some words to the index's vocabulary

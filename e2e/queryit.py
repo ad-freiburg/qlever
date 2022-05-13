@@ -133,12 +133,15 @@ def check_row_qlever_json(gold_row: List[Any],
         if actual and actual[0] == '"':
             actual = actual[1:actual.rfind('"')]
         matches = False
-        if isinstance(gold, int):
-            matches = int(actual) == gold
-        elif isinstance(gold, float):
-            matches = abs(gold - float(actual)) <= epsilon
-        else:
-            matches = gold == actual
+        try:
+            if isinstance(gold, int):
+                matches = int(actual) == gold
+            elif isinstance(gold, float):
+                matches = abs(gold - float(actual)) <= epsilon
+            else:
+                matches = gold == actual
+        except:
+            matches = False
 
         if not matches:
             return False

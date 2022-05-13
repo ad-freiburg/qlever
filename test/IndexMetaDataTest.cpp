@@ -10,7 +10,9 @@
 #include "../src/util/File.h"
 #include "../src/util/Serializer/FileSerializer.h"
 
-auto I = [](const auto& id) { return Id::make(id); };
+auto I = [](const auto& id) {
+  return Id::makeFromVocabIndex(VocabIndex::make(id));
+};
 
 TEST(RelationMetaDataTest, writeReadTest) {
   try {
