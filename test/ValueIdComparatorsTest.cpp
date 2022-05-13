@@ -67,17 +67,20 @@ auto testGetRangesForId(auto begin, auto end, ValueId id,
       while (it != rangeBegin) {
         ASSERT_FALSE(isMatchingDatatype(*it) &&
                      applyComparator(comparator, *it, id));
+        ASSERT_FALSE(compareIds(*it, id, comparison));
         ++it;
       }
       while (it != rangeEnd) {
         ASSERT_TRUE(isMatchingDatatype(*it) &&
                     applyComparator(comparator, *it, id));
+        ASSERT_TRUE(compareIds(*it, id, comparison));
         ++it;
       }
     }
     while (it != end) {
       ASSERT_FALSE(isMatchingDatatype(*it) &&
                    applyComparator(comparator, *it, id));
+      ASSERT_FALSE(compareIds(*it, id, comparison));
       ++it;
     }
   };
@@ -88,40 +91,6 @@ auto testGetRangesForId(auto begin, auto end, ValueId id,
   testImpl.template operator()<Comparison::NE>();
   testImpl.template operator()<Comparison::GE>();
   testImpl.template operator()<Comparison::GT>();
-}
-
-// Test that `getRangesFromId` works correctly for `ValueId`s of the unsigned
-// index types (`VocabIndex`, `TextRecordIndex`, `LocalVocabIndex`).
-TEST(ValueIdComparators, IndexTypes) {
-  auto ids = makeRandomIds();
-  std::sort(ids.begin(), ids.end(), compareByBits);
-
-  // Perform the test for a single `Datatype`.
-  auto testImpl = [&]<Datatype datatype>(auto getFromId) {
-    auto [beginOfDatatype, endOfDatatype] =
-        getRangeForDatatype(ids.begin(), ids.end(), datatype);
-    auto numEntries = endOfDatatype - beginOfDatatype;
-    AD_CHECK(numEntries > 0);
-    auto getRandomIndex = SlowRandomIntGenerator<uint64_t>(0, numEntries - 1);
-
-    auto isTypeMatching = [&](ValueId id) {
-      return id.getDatatype() == datatype;
-    };
-
-    auto applyComparator = [&](auto comparator, ValueId a, ValueId b) {
-      return comparator(std::invoke(getFromId, a), std::invoke(getFromId, b));
-    };
-
-    for (size_t i = 0; i < 200; ++i) {
-      testGetRangesForId(ids.begin(), ids.end(),
-                         *(beginOfDatatype + getRandomIndex()), isTypeMatching,
-                         applyComparator);
-    }
-  };
-
-  testImpl.operator()<Datatype::VocabIndex>(&getVocabIndex);
-  testImpl.operator()<Datatype::TextRecordIndex>(&getTextRecordIndex);
-  testImpl.operator()<Datatype::LocalVocabIndex>(&getLocalVocabIndex);
 }
 
 // Test that `getRangesFromId` works correctly for `ValueId`s of the numeric
@@ -137,8 +106,8 @@ TEST(ValueIdComparators, NumericTypes) {
     auto getRandomIndex = SlowRandomIntGenerator<uint64_t>(0, numEntries - 1);
 
     for (size_t i = 0; i < 200; ++i) {
-      testGetRangesForId(ids.begin(), ids.end(),
-                         *(beginOfDatatype + getRandomIndex()), isTypeMatching,
+      auto randomId = *(beginOfDatatype + getRandomIndex());
+      testGetRangesForId(ids.begin(), ids.end(), randomId, isTypeMatching,
                          applyComparator);
     }
   };
@@ -188,4 +157,80 @@ TEST(ValueIdComparators, Undefined) {
         getRangesForId(ids.begin(), ids.end(), undefined, comparison);
     ASSERT_TRUE(equalRange.empty());
   }
+}
+
+// Similar to `testGetRanges` (see above) but tests the comparison to a range of
+// `ValueId`s that are considered equal.
+auto testGetRangesForEqualIds(auto begin, auto end, ValueId idBegin,
+                              ValueId idEnd, auto isMatchingDatatype) {
+  // Perform the testing for a single `Comparison`
+  auto testImpl = [&]<Comparison comparison>() {
+    auto ranges = getRangesForEqualIds(begin, end, idBegin, idEnd, comparison);
+    auto it = begin;
+    for (auto [rangeBegin, rangeEnd] : ranges) {
+      while (it != rangeBegin) {
+        ASSERT_FALSE(compareWithEqualIds(*it, idBegin, idEnd, comparison));
+        ++it;
+      }
+      while (it != rangeEnd) {
+        ASSERT_TRUE(isMatchingDatatype(*it));
+        ASSERT_TRUE(compareWithEqualIds(*it, idBegin, idEnd, comparison));
+        ++it;
+      }
+    }
+    while (it != end) {
+      ASSERT_FALSE(compareWithEqualIds(*it, idBegin, idEnd, comparison));
+      ++it;
+    }
+  };
+
+  testImpl.template operator()<Comparison::LT>();
+  testImpl.template operator()<Comparison::LE>();
+  testImpl.template operator()<Comparison::EQ>();
+  testImpl.template operator()<Comparison::NE>();
+  testImpl.template operator()<Comparison::GE>();
+  testImpl.template operator()<Comparison::GT>();
+}
+
+// Test that `getRangesFromId` works correctly for `ValueId`s of the unsigned
+// index types (`VocabIndex`, `TextRecordIndex`, `LocalVocabIndex`).
+TEST(ValueIdComparators, IndexTypes) {
+  auto ids = makeRandomIds();
+  std::sort(ids.begin(), ids.end(), compareByBits);
+
+  // Perform the test for a single `Datatype`.
+  auto testImpl = [&]<Datatype datatype>(auto getFromId) {
+    auto [beginOfDatatype, endOfDatatype] =
+        getRangeForDatatype(ids.begin(), ids.end(), datatype);
+    auto numEntries = endOfDatatype - beginOfDatatype;
+    AD_CHECK(numEntries > 0);
+    auto getRandomIndex = SlowRandomIntGenerator<uint64_t>(0, numEntries - 1);
+
+    auto isTypeMatching = [&](ValueId id) {
+      return id.getDatatype() == datatype;
+    };
+
+    auto applyComparator = [&](auto comparator, ValueId a, ValueId b) {
+      return comparator(std::invoke(getFromId, a), std::invoke(getFromId, b));
+    };
+
+    for (size_t i = 0; i < 200; ++i) {
+      auto begin = beginOfDatatype + getRandomIndex();
+      auto end = beginOfDatatype + getRandomIndex();
+      if (*begin > *end) {
+        std::swap(begin, end);
+      }
+      testGetRangesForId(ids.begin(), ids.end(), *begin, isTypeMatching,
+                         applyComparator);
+      if (*begin == *end) {
+        continue;
+      }
+      testGetRangesForEqualIds(ids.begin(), ids.end(), *begin, *end,
+                               isTypeMatching);
+    }
+  };
+
+  testImpl.operator()<Datatype::VocabIndex>(&getVocabIndex);
+  testImpl.operator()<Datatype::TextRecordIndex>(&getTextRecordIndex);
+  testImpl.operator()<Datatype::LocalVocabIndex>(&getLocalVocabIndex);
 }

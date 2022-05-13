@@ -206,8 +206,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
     nlohmann::ordered_json binding;
     for (const auto& column : columns) {
       const auto& currentId = idTable(rowIndex, column->_columnIndex);
-      const auto& optionalValue =
-          toStringAndXsdType(currentId, column->_resultType, *resultTable);
+      const auto& optionalValue = idToStringAndType(currentId, *resultTable);
       if (!optionalValue.has_value()) {
         continue;
       }
@@ -285,45 +284,46 @@ void QueryExecutionTree::readFromCache() {
 
 // ___________________________________________________________________________
 std::optional<std::pair<std::string, const char*>>
-QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
-                                       const ResultTable& resultTable) const {
+QueryExecutionTree::idToStringAndType(Id id,
+                                      const ResultTable& resultTable) const {
   // TODO<joka921> This is one of the central methods which we have to rewrite
-  switch (type) {
-    case ResultTable::ResultType::KB: {
+  switch (id.getDatatype()) {
+    case Datatype::Undefined:
+      return std::nullopt;
+    case Datatype::Double: {
+      // Format as integer if fractional part is zero, let C++ decide otherwise.
+      std::stringstream ss;
+      double d = id.getDouble();
+      double dIntPart;
+      if (std::modf(d, &dIntPart) == 0.0) {
+        ss << std::fixed << std::setprecision(0) << id.getDouble();
+      } else {
+        ss << d;
+      }
+      return std::pair{std::move(ss).str(), XSD_DECIMAL_TYPE};
+    }
+    case Datatype::Int:
+      return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
+    case Datatype::VocabIndex: {
       std::optional<string> entity = _qec->getIndex().idToOptionalString(id);
       if (!entity.has_value()) {
         return std::nullopt;
       }
-      if (entity.value().starts_with(VALUE_PREFIX)) {
-        return ad_utility::convertIndexWordToLiteralAndType(entity.value());
-      }
       return std::pair{std::move(entity.value()), nullptr};
     }
-    case ResultTable::ResultType::VERBATIM:
-      return std::pair{std::to_string(id.get()), XSD_INT_TYPE};
-    case ResultTable::ResultType::TEXT:
-      return std::pair{
-          _qec->getIndex().getTextExcerpt(TextRecordIndex::make(id.get())),
-          nullptr};
-    case ResultTable::ResultType::FLOAT: {
-      float f;
-      // TODO<LLVM 14> std::bit_cast
-      std::memcpy(&f, &id, sizeof(float));
-      std::stringstream s;
-      s << f;
-      return std::pair{std::move(s).str(), XSD_DECIMAL_TYPE};
-    }
-    case ResultTable::ResultType::LOCAL_VOCAB: {
+    case Datatype::LocalVocabIndex: {
       auto optionalString =
-          resultTable.indexToOptionalString(LocalVocabIndex::make(id.get()));
+          resultTable.indexToOptionalString(id.getLocalVocabIndex());
       if (!optionalString.has_value()) {
         return std::nullopt;
       }
       return std::pair{optionalString.value(), nullptr};
     }
-    default:
-      AD_CHECK(false);
+    case Datatype::TextRecordIndex:
+      return std::pair{_qec->getIndex().getTextExcerpt(id.getTextRecordIndex()),
+                       nullptr};
   }
+  AD_CHECK(false);
 }
 
 // __________________________________________________________________________________________________________
@@ -348,7 +348,7 @@ nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
       }
       const auto& currentId = data(rowIndex, opt->_columnIndex);
       const auto& optionalStringAndXsdType =
-          toStringAndXsdType(currentId, opt->_resultType, *resultTable);
+          idToStringAndType(currentId, *resultTable);
       if (!optionalStringAndXsdType.has_value()) {
         row.emplace_back(nullptr);
         continue;
@@ -408,39 +408,29 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
     for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
       if (selectedColumnIndices[j].has_value()) {
         const auto& val = selectedColumnIndices[j].value();
-        switch (val._resultType) {
-          case ResultTable::ResultType::KB: {
-            string entity =
-                _qec->getIndex()
-                    .idToOptionalString(idTable(i, val._columnIndex))
-                    .value_or("");
-            if (entity.starts_with(VALUE_PREFIX)) {
-              co_yield ad_utility::convertIndexWordToValueLiteral(entity);
-            } else {
-              co_yield entity;
-            }
+        Id id = idTable(i, val._columnIndex);
+        switch (id.getDatatype()) {
+          case Datatype::Undefined:
             break;
-          }
-          case ResultTable::ResultType::VERBATIM:
-            co_yield idTable(i, val._columnIndex);
+          case Datatype::Double:
+            co_yield id.getDouble();
             break;
-          case ResultTable::ResultType::TEXT:
-            co_yield _qec->getIndex().getTextExcerpt(
-                TextRecordIndex::make(idTable(i, val._columnIndex).get()));
+          case Datatype::Int:
+            co_yield id.getInt();
             break;
-          case ResultTable::ResultType::FLOAT: {
-            float f;
-            std::memcpy(&f, &idTable(i, val._columnIndex), sizeof(float));
-            co_yield f;
-            break;
-          }
-          case ResultTable::ResultType::LOCAL_VOCAB: {
-            co_yield resultTable
-                ->indexToOptionalString(
-                    LocalVocabIndex::make(idTable(i, val._columnIndex).get()))
+          case Datatype::VocabIndex:
+            co_yield _qec->getIndex()
+                .getVocab()
+                .indexToOptionalString(id.getVocabIndex())
                 .value_or("");
             break;
-          }
+          case Datatype::LocalVocabIndex:
+            co_yield resultTable->indexToOptionalString(id.getLocalVocabIndex())
+                .value_or("");
+            break;
+          case Datatype::TextRecordIndex:
+            co_yield _qec->getIndex().getTextExcerpt(id.getTextRecordIndex());
+            break;
           default:
             AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
                      "Cannot deduce output type.");

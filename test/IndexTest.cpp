@@ -18,7 +18,7 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
   return a;
 }
 
-auto I = [](auto id) { return Id::make(id); };
+auto I = [](auto id) { return Id::makeFromVocabIndex(VocabIndex::make(id)); };
 
 string getStxxlConfigFileName(const string& location) {
   std::ostringstream os;
@@ -274,7 +274,7 @@ TEST_F(CreatePatternsFixture, createPatterns) {
 
     auto checkPattern = [](const auto& expected, const auto& actual) {
       for (size_t i = 0; i < actual.size(); i++) {
-        ASSERT_EQ(Id::make(expected[i].get()), actual[i]);
+        ASSERT_EQ(Id::makeFromVocabIndex(expected[i]), actual[i]);
       }
     };
 

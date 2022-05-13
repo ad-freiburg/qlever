@@ -27,7 +27,9 @@ bool vocabTestCompare(const IdPairMMapVecView& a,
   return true;
 }
 
-auto I = [](const auto& id) { return Id::make(id); };
+auto I = [](const auto& id) {
+  return Id::makeFromVocabIndex(VocabIndex::make(id));
+};
 
 // Test fixture that sets up the binary files vor partial vocabulary and
 // everything else connected with vocabulary merging.
@@ -167,8 +169,8 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   }
 
   // No language tags in text file
-  ASSERT_EQ(res._langPredLowerBound, I(0));
-  ASSERT_EQ(res._langPredUpperBound, I(0));
+  ASSERT_EQ(res._langPredLowerBound, Id::makeUndefined());
+  ASSERT_EQ(res._langPredUpperBound, Id::makeUndefined());
   // check that (external) vocabulary has the right form.
   ASSERT_TRUE(
       areBinaryFilesEqual(_pathVocabExp, _basePath + INTERNAL_VOCAB_SUFFIX));

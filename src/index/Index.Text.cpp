@@ -171,7 +171,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
       if (getVocab().getId(line._word, &eid)) {
         // Note that `entitiesInContext` is a HashMap, so the `Id`s don't have
         // to be contiguous.
-        entitiesInContext[Id::make(eid.get())] += line._score;
+        entitiesInContext[Id::makeFromVocabIndex(eid)] += line._score;
       } else {
         if (entityNotFoundErrorMsgCount < 20) {
           LOG(WARN) << "Entity from text not in KB: " << line._word << '\n';
@@ -233,8 +233,9 @@ void Index::addContextToVector(
   for (auto it = entities.begin(); it != entities.end(); ++it) {
     TextBlockIndex blockId = getEntityBlockId(it->first);
     touchedBlocks.insert(blockId);
-    writer << std::make_tuple(blockId, context, it->first.get(), it->second,
-                              false);
+    AD_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
+    writer << std::make_tuple(blockId, context, it->first.getVocabIndex().get(),
+                              it->second, false);
   }
 
   // All entities have to be written in the entity list part for each block.
@@ -248,8 +249,9 @@ void Index::addContextToVector(
       // FIX JUN 07 2017: DO add it. It's needed so that it is returned
       // as a result itself.
       // if (blockId == getEntityBlockId(it->first)) { continue; }
-      writer << std::make_tuple(blockId, context, it->first.get(), it->second,
-                                true);
+      AD_CHECK(it->first.getDatatype() == Datatype::VocabIndex);
+      writer << std::make_tuple(
+          blockId, context, it->first.getVocabIndex().get(), it->second, true);
     }
   }
 }
@@ -578,7 +580,8 @@ TextBlockIndex Index::getWordBlockId(WordIndex wordIndex) const {
 
 // _____________________________________________________________________________
 TextBlockIndex Index::getEntityBlockId(Id entityId) const {
-  return entityId.get() + _blockBoundaries.size();
+  AD_CHECK(entityId.getDatatype() == Datatype::VocabIndex);
+  return entityId.getVocabIndex().get() + _blockBoundaries.size();
 }
 
 // _____________________________________________________________________________
@@ -707,8 +710,8 @@ void Index::getContextListForWords(const string& words,
   IdTableStatic<2> result = dynResult->moveToStatic<2>();
   result.resize(cids.size());
   for (size_t i = 0; i < cids.size(); ++i) {
-    result(i, 0) = Id::make(cids[i].get());
-    result(i, 1) = Id::make(scores[i]);
+    result(i, 0) = Id::makeFromTextRecordIndex(cids[i]);
+    result(i, 1) = Id::makeFromInt(scores[i]);
   }
   *dynResult = result.moveToDynamic();
   LOG(DEBUG) << "Done with getContextListForWords.\n";
@@ -757,7 +760,7 @@ void Index::getWordPostingsForTerm(const string& term,
     readGapComprList(tbmd._cl._nofElements, tbmd._cl._startContextlist,
                      static_cast<size_t>(tbmd._cl._startWordlist -
                                          tbmd._cl._startContextlist),
-                     blockCids);
+                     blockCids, &TextRecordIndex::make);
     readFreqComprList(
         tbmd._cl._nofElements, tbmd._cl._startWordlist,
         static_cast<size_t>(tbmd._cl._startScorelist - tbmd._cl._startWordlist),
@@ -772,7 +775,7 @@ void Index::getWordPostingsForTerm(const string& term,
     readGapComprList(tbmd._cl._nofElements, tbmd._cl._startContextlist,
                      static_cast<size_t>(tbmd._cl._startWordlist -
                                          tbmd._cl._startContextlist),
-                     cids);
+                     cids, &TextRecordIndex::make);
     readFreqComprList(
         tbmd._cl._nofElements, tbmd._cl._startScorelist,
         static_cast<size_t>(tbmd._cl._lastByte + 1 - tbmd._cl._startScorelist),
@@ -985,12 +988,12 @@ void Index::getEntityPostingsForTerm(const string& term,
                      tbmd._entityCl._startContextlist,
                      static_cast<size_t>(tbmd._entityCl._startWordlist -
                                          tbmd._entityCl._startContextlist),
-                     cids);
+                     cids, &TextRecordIndex::make);
     readFreqComprList(tbmd._entityCl._nofElements,
                       tbmd._entityCl._startWordlist,
                       static_cast<size_t>(tbmd._entityCl._startScorelist -
                                           tbmd._entityCl._startWordlist),
-                      eids);
+                      eids, &Id::fromBits);
     readFreqComprList(tbmd._entityCl._nofElements,
                       tbmd._entityCl._startScorelist,
                       static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
@@ -1012,12 +1015,12 @@ void Index::getEntityPostingsForTerm(const string& term,
                      tbmd._entityCl._startContextlist,
                      static_cast<size_t>(tbmd._entityCl._startWordlist -
                                          tbmd._entityCl._startContextlist),
-                     eBlockCids);
+                     eBlockCids, &TextRecordIndex::make);
     readFreqComprList(tbmd._entityCl._nofElements,
                       tbmd._entityCl._startWordlist,
                       static_cast<size_t>(tbmd._entityCl._startScorelist -
                                           tbmd._entityCl._startWordlist),
-                      eBlockWids);
+                      eBlockWids, &Id::fromBits);
     readFreqComprList(tbmd._entityCl._nofElements,
                       tbmd._entityCl._startScorelist,
                       static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
@@ -1029,9 +1032,10 @@ void Index::getEntityPostingsForTerm(const string& term,
 }
 
 // _____________________________________________________________________________
-template <typename T>
+template <typename T, typename MakeFromUint64t>
 void Index::readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
-                             vector<T>& result) const {
+                             vector<T>& result,
+                             MakeFromUint64t makeFromUint64t) const {
   LOG(DEBUG) << "Reading gap-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
              << ", nofBytes: " << nofBytes << '\n';
@@ -1039,7 +1043,8 @@ void Index::readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
   uint64_t* encoded = new uint64_t[nofBytes / 8];
   _textIndexFile.read(encoded, nofBytes, from);
   LOG(DEBUG) << "Decoding Simple8b code...\n";
-  ad_utility::Simple8bCode::decode(encoded, nofElements, result.data());
+  ad_utility::Simple8bCode::decode(encoded, nofElements, result.data(),
+                                   makeFromUint64t);
   LOG(DEBUG) << "Reverting gaps to actual IDs...\n";
 
   // TODO<joka921> make this hack unnecessary, probably by a proper output
@@ -1064,9 +1069,10 @@ void Index::readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
 }
 
 // _____________________________________________________________________________
-template <typename T>
+template <typename T, typename MakeFromUint64t>
 void Index::readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
-                              vector<T>& result) const {
+                              vector<T>& result,
+                              MakeFromUint64t makeFromUint) const {
   AD_CHECK_GT(nofBytes, 0);
   LOG(DEBUG) << "Reading frequency-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
@@ -1088,13 +1094,15 @@ void Index::readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
   current += ret;
   AD_CHECK_EQ(size_t(current - from), nofBytes);
   LOG(DEBUG) << "Decoding Simple8b code...\n";
-  ad_utility::Simple8bCode::decode(encoded, nofElements, result.data());
+  ad_utility::Simple8bCode::decode(encoded, nofElements, result.data(),
+                                   makeFromUint);
   LOG(DEBUG) << "Reverting frequency encoded items to actual IDs...\n";
   result.resize(nofElements);
   for (size_t i = 0; i < result.size(); ++i) {
     // TODO<joka921> handle the strong ID types properly.
-    if constexpr (requires(T t) { t.get(); }) {
-      result[i] = codebook[result[i].get()];
+    if constexpr (requires(T t) { t.getBits(); }) {
+      result[i] = Id::makeFromVocabIndex(
+          VocabIndex::make(codebook[result[i].getBits()].getBits()));
     } else {
       result[i] = codebook[result[i]];
     }
@@ -1588,7 +1596,7 @@ void Index::getRhsForSingleLhs(const IdTable& in, Id lhsId,
   AD_CHECK_EQ(0, result->size());
 
   // The second entry is unused.
-  Id compareElem[] = {lhsId, Id::make(0)};
+  Id compareElem[] = {lhsId, Id::makeUndefined()};
   auto it = std::lower_bound(
       in.begin(), in.end(), compareElem,
       [](const auto& a, const auto& b) { return a[0] < b[0]; });

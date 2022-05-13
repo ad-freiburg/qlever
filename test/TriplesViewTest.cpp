@@ -6,16 +6,18 @@
 
 #include "../src/index/TriplesView.h"
 
-auto I = [](const auto& id) { return Id::make(id); };
+auto I = [](const auto& id) {
+  return Id::makeFromVocabIndex(VocabIndex::make(id));
+};
 
 // This struct mocks the structure of the actual `Permutation` types used in
 // QLever for testing the `TriplesView`.
 struct DummyPermutation {
   void scan(Id col0Id, auto* result) const {
-    result->reserve(col0Id.get());
-    for (size_t i = 0; i < col0Id.get(); ++i) {
-      result->push_back(
-          std::array{I((i + 1) * col0Id.get()), I((i + 2) * col0Id.get())});
+    result->reserve(col0Id.getVocabIndex().get());
+    for (size_t i = 0; i < col0Id.getVocabIndex().get(); ++i) {
+      result->push_back(std::array{I((i + 1) * col0Id.getVocabIndex().get()),
+                                   I((i + 2) * col0Id.getVocabIndex().get())});
     }
   }
 
@@ -44,7 +46,7 @@ std::vector<std::array<Id, 3>> expectedResult() {
   std::vector<Id> ids{I(1), I(3), I(5), I(7), I(8), I(10), I(13)};
   std::vector<std::array<Id, 3>> result;
   for (auto idComplex : ids) {
-    auto id = idComplex.get();
+    auto id = idComplex.getVocabIndex().get();
     for (size_t i = 0; i < id; ++i) {
       result.push_back(std::array{I(id), I(id * (i + 1)), I(id * (i + 2))});
     }
@@ -64,7 +66,7 @@ TEST(TriplesView, IgnoreRanges) {
   std::vector<std::array<Id, 3>> result;
   auto expected = expectedResult();
   std::erase_if(expected, [](const auto& triple) {
-    auto t = triple[0].get();
+    auto t = triple[0].getVocabIndex().get();
     return t == 1 || t == 3 || t == 7 || t == 13;
   });
   std::vector<std::pair<Id, Id>> ignoredRanges{
@@ -80,7 +82,7 @@ TEST(TriplesView, IgnoreTriples) {
   std::vector<std::array<Id, 3>> result;
   auto expected = expectedResult();
   auto isTripleIgnored = [](const auto& triple) {
-    return triple[1].get() % 2 == 0;
+    return triple[1].getVocabIndex().get() % 2 == 0;
   };
   std::erase_if(expected, isTripleIgnored);
   for (auto triple :

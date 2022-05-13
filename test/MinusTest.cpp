@@ -15,7 +15,9 @@ auto table(size_t cols) {
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1'000'000)};
   return IdTable(cols, std::move(alloc));
 }
-auto I = [](const auto& id) { return Id::make(id); };
+auto I = [](const auto& id) {
+  return Id::makeFromVocabIndex(VocabIndex::make(id));
+};
 
 TEST(EngineTest, minusTest) {
   using std::array;

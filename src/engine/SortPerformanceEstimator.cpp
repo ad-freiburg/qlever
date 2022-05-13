@@ -21,12 +21,12 @@ IdTable createRandomIdTable(
   result.setCols(numColumns);
   result.reserve(numRows);
 
-  FastRandomIntGenerator<Id::Type> generator;
+  FastRandomIntGenerator<uint32_t> generator;
 
   for (size_t i = 0; i < numRows; ++i) {
     result.push_back();
     for (size_t j = 0; j < numColumns; ++j) {
-      result(i, j) = Id::make(generator());
+      result(i, j) = Id::makeFromVocabIndex(VocabIndex::make(generator()));
     }
   }
   return result;

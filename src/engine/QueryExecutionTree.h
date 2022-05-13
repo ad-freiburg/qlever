@@ -263,8 +263,7 @@ class QueryExecutionTree {
       std::shared_ptr<const ResultTable> resultTable = nullptr) const;
 
   [[nodiscard]] std::optional<std::pair<std::string, const char*>>
-  toStringAndXsdType(Id id, ResultTable::ResultType type,
-                     const ResultTable& resultTable) const;
+  idToStringAndType(Id id, const ResultTable& resultTable) const;
 
   // Generate an RDF graph for a CONSTRUCT query.
   cppcoro::generator<StringTriple> generateRdfGraph(

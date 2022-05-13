@@ -10,62 +10,9 @@
 
 #include "../util/Exception.h"
 #include "./IndexTypes.h"
+#include "./ValueId.h"
 
-// A strong Id type that internally stores a `uint64_t` but can only be
-// explicitly converted to and from the underlying `uint64_t`
-struct Id {
-  using Type = uint64_t;
-
- private:
-  Type _data;
-
- public:
-  static Id make(Type id) noexcept { return {id}; }
-  [[nodiscard]] const Type& get() const noexcept { return _data; }
-  Type& get() noexcept { return _data; }
-
-  Id() = default;
-
-  bool operator==(const Id&) const = default;
-  auto operator<=>(const Id&) const = default;
-
-  static constexpr Id max() { return {std::numeric_limits<Type>::max()}; }
-
-  static constexpr Id min() { return {std::numeric_limits<Type>::min()}; }
-
-  template <typename H>
-  friend H AbslHashValue(H h, const Id& id) {
-    return H::combine(std::move(h), id.get());
-  }
-
-  template <typename Serializer>
-  friend void serialize(Serializer& serializer, Id& id) {
-    serializer | id._data;
-  }
-
-  // This is not only used in debug code, but also for the direct output
-  // of `VERBATIM` (integer) columns.
-  // TODO<joka921> as soon as we have the folded IDs, this should only be used
-  // for debugging with a clearer output like "ID:0".
-  friend std::ostream& operator<<(std::ostream& ostr, const Id& id) {
-    ostr << id.get();
-    return ostr;
-  }
-
- private:
-  constexpr Id(Type data) noexcept : _data{data} {}
-};
-
-namespace std {
-template <>
-struct hash<Id> {
-  uint64_t operator()(const Id& id) const {
-    return std::hash<uint64_t>{}(id.get());
-  }
-};
-}  // namespace std
-// typedef uint64_t Id;
-// using Id = ad_utility::datatypes::FancyId;
+using Id = ValueId;
 typedef uint16_t Score;
 
 // TODO<joka921> Make the following ID and index types strong.
@@ -84,8 +31,7 @@ using UnknownIndex = uint64_t;
 
 // A value to use when the result should be empty (e.g. due to an optional join)
 // The highest two values are used as sentinels.
-static const Id ID_NO_VALUE =
-    Id::make(std::numeric_limits<uint64_t>::max() - 2);
+static const Id ID_NO_VALUE = Id::makeUndefined();
 
 namespace ad_utility {
 

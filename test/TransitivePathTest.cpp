@@ -10,7 +10,9 @@
 #include "../src/engine/TransitivePath.h"
 #include "../src/global/Id.h"
 
-auto I = [](const auto& id) { return Id::make(id); };
+auto I = [](const auto& id) {
+  return Id::makeFromVocabIndex(VocabIndex::make(id));
+};
 
 // First sort both of the inputs and then ASSERT their equality. Needed for
 // results of the TransitivePath operations which have a non-deterministic order
