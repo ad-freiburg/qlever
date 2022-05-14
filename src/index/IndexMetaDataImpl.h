@@ -119,13 +119,14 @@ void IndexMetaData<MapType>::calculateExpensiveStatistics() {
 }
 
 // ___________________________________________________________________________
-template <typename Serializer, typename MapType>
-void serialize(Serializer& serializer, IndexMetaData<MapType>& metaData) {
+template <typename M>
+template <class Serializer, typename IMD>
+void IndexMetaData<M>::serialize(Serializer& serializer, IMD&& metaData) {
   // The binary format of an IndexMetaData start with an 8-byte magicNumber.
   // After this magic number, an 8-byte version number follows. Both have to
   // match.
 
-  using T = IndexMetaData<MapType>;
+  using T = std::decay_t<IMD>;
   uint64_t magicNumber = T::MAGIC_NUMBER_FOR_SERIALIZATION;
 
   serializer | magicNumber;

@@ -8,12 +8,16 @@
 #include <type_traits>
 #include <vector>
 
+#include "../TypeTraits.h"
+#include "./Serializer.h"
+
 namespace ad_utility::serialization {
-template <typename Serializer, typename T, typename Alloc>
-void serialize(Serializer& serializer, std::vector<T, Alloc>& vector) {
-  if constexpr (std::is_trivially_copyable_v<T> &&
-                std::is_default_constructible_v<T>) {
-    if constexpr (Serializer::IsWriteSerializer) {
+template <Serializer S, typename Vector>
+requires ad_utility::isVector<std::decay_t<Vector>> void serialize(
+    S& serializer, Vector&& vector) {
+  using T = typename std::decay_t<Vector>::value_type;
+  if constexpr (TriviallySerializable<T>) {
+    if constexpr (WriteSerializer<S>) {
       serializer << vector.size();
       serializer.serializeBytes(reinterpret_cast<const char*>(vector.data()),
                                 vector.size() * sizeof(T));
@@ -26,7 +30,7 @@ void serialize(Serializer& serializer, std::vector<T, Alloc>& vector) {
     }
 
   } else {
-    if constexpr (Serializer::IsWriteSerializer) {
+    if constexpr (WriteSerializer<S>) {
       serializer << vector.size();
       for (const auto& el : vector) {
         serializer << el;
@@ -45,8 +49,8 @@ void serialize(Serializer& serializer, std::vector<T, Alloc>& vector) {
 
 /// Incrementally serialize a std::vector to disk without materializing it.
 /// Call `push` for each of the elements that will become part of the vector.
-template <typename T, typename Serializer>
-requires Serializer::IsWriteSerializer class VectorIncrementalSerializer {
+template <typename T, WriteSerializer Serializer>
+class VectorIncrementalSerializer {
  private:
   Serializer _serializer;
   uint64_t _startPosition;

@@ -6,9 +6,12 @@
 
 #include <utility>
 
+#include "../TypeTraits.h"
+
 namespace ad_utility::serialization {
-template <typename Serializer, typename First, typename Second>
-void serialize(Serializer& serializer, std::pair<First, Second>& pair) {
+template <typename Serializer, typename Pair>
+requires ad_utility::isInstantiation<std::pair, std::decay_t<Pair>> void
+serialize(Serializer& serializer, Pair&& pair) {
   serializer | pair.first;
   serializer | pair.second;
 }

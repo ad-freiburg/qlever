@@ -15,6 +15,7 @@
 #include "../global/Pattern.h"
 #include "../util/MmapVector.h"
 #include "../util/Serializer/SerializeVector.h"
+#include "../util/TypeTraits.h"
 
 /// Several statistics for the patterns, as well as the functionality to
 /// serialize them.
@@ -47,7 +48,8 @@ struct PatternStatistics {
 
   /// Symmetric serialization.
   template <typename Serializer>
-  friend void serialize(Serializer& serializer, PatternStatistics& s) {
+  friend void serialize(Serializer& serializer,
+                        ad_utility::SimilarTo<PatternStatistics> auto&& s) {
     serializer | s._avgNumPredicatesPerSubject;
     serializer | s._avgNumSubjectsPerPredicate;
     serializer | s._numDistinctSubjectPredicatePairs;

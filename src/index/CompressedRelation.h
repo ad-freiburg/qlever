@@ -11,9 +11,11 @@
 #include "../global/Id.h"
 #include "../util/BufferedVector.h"
 #include "../util/File.h"
+#include "../util/Serializer/ByteBufferSerializer.h"
 #include "../util/Serializer/SerializeVector.h"
 #include "../util/Serializer/Serializer.h"
 #include "../util/Timer.h"
+#include "../util/TypeTraits.h"
 
 // The meta data of a compressed block of ID triples in an index permutation.
 struct CompressedBlockMetaData {
@@ -34,7 +36,8 @@ struct CompressedBlockMetaData {
 
 // Serialization of the block meta data.
 template <typename Serializer>
-void serialize(Serializer& s, CompressedBlockMetaData& b) {
+void serialize(Serializer& s,
+               ad_utility::SimilarTo<CompressedBlockMetaData> auto&& b) {
   s | b._offsetInFile;
   s | b._compressedSize;
   s | b._numRows;
@@ -143,7 +146,8 @@ struct CompressedRelationMetaData {
 
 // Serialization of the compressed "relation" meta data.
 template <class Serializer>
-void serialize(Serializer& s, CompressedRelationMetaData& c) {
+void serialize(Serializer& s,
+               ad_utility::SimilarTo<CompressedRelationMetaData> auto&& c) {
   s | c._col0Id;
   s | c._numRows;
   s | c._multiplicityCol1;

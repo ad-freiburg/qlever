@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "../src/index/PatternCreator.h"
+#include "../src/util/Serializer/ByteBufferSerializer.h"
 #include "../src/util/Serializer/Serializer.h"
 
 auto I = [](const auto& id) {

@@ -179,16 +179,14 @@ class IndexMetaData {
   BlocksType& blockData() { return _blockData; }
   const BlocksType& blockData() const { return _blockData; }
 
-  // Private methods.
- private:
   // Symmetric serialization function for the ad_utility::serialization module.
-  template <class Serializer, typename MapType>
-  friend void serialize(Serializer& serializer,
-                        IndexMetaData<MapType>& metaData);
+  template <class Serializer, typename IMD>
+  static void serialize(Serializer& serializer, IMD&& metaData);
 
+  /*
   size_t getNofBlocksForRelation(const Id col0Id) const;
-
   size_t getTotalBytesForRelation(Id col0Id) const;
+   */
 };
 
 // ____________________________________________________________________________

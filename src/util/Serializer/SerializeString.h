@@ -1,17 +1,20 @@
-//
-// Created by johannes on 01.05.21.
-//
+//  Copyright 2021, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SERIALIZESTRING_H
 #define QLEVER_SERIALIZESTRING_H
 
 #include <string>
 
+#include "../TypeTraits.h"
+
 namespace ad_utility::serialization {
 
-template <typename Serializer>
-void serialize(Serializer& serializer, std::string& string) {
-  if constexpr (Serializer::IsWriteSerializer) {
+template <Serializer S>
+void serialize(S& serializer,
+               ad_utility::SimilarTo<std::string> auto&& string) {
+  if constexpr (WriteSerializer<S>) {
     serializer << string.size();
     serializer.serializeBytes(string.data(), string.size());
   } else {

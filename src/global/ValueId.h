@@ -196,8 +196,8 @@ class ValueId {
 
   /// Enable the serialization of `ValueId` in the `ad_utility::serialization`
   /// framework.
-  template <typename Serializer>
-  friend void serialize(Serializer& serializer, ValueId& id) {
+  friend void serialize(auto& serializer,
+                        ad_utility::SimilarTo<ValueId> auto&& id) {
     serializer | id._bits;
   }
 

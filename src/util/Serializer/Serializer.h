@@ -2,93 +2,44 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 
-// Library for symmetric serialization
+// Library for symmetric serialization.
 
 #ifndef QLEVER_SERIALIZER_SERIALIZER
 #define QLEVER_SERIALIZER_SERIALIZER
 
-#include <algorithm>
-#include <type_traits>
-#include <vector>
-
-#include "../Exception.h"
-
+#include "../Forward.h"
+#include "../TypeTraits.h"
 namespace ad_utility::serialization {
 
 class SerializationException : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
-/**
- * Serializer that writes to a buffer of bytes.
- */
-class ByteBufferWriteSerializer {
- public:
-  constexpr static bool IsWriteSerializer = true;
-  using Storage = std::vector<char>;
-  ByteBufferWriteSerializer() = default;
-  ByteBufferWriteSerializer(const ByteBufferWriteSerializer&) = delete;
-  ByteBufferWriteSerializer& operator=(const ByteBufferWriteSerializer&) =
-      delete;
-  ByteBufferWriteSerializer(ByteBufferWriteSerializer&&) = default;
-  ByteBufferWriteSerializer& operator=(ByteBufferWriteSerializer&&) = default;
+/// Concepts for serializer types.
 
-  void serializeBytes(const char* bytePointer, size_t numBytes) {
-    _data.insert(_data.end(), bytePointer, bytePointer + numBytes);
+/// A `WriteSerializer` can write a span of bytes to some resource.
+template <typename S>
+concept WriteSerializer = requires(S s, const char* ptr, size_t numBytes) {
+  {
+    typename S::IsWriteSerializer {}
   }
-
-  void clear() { _data.clear(); }
-
-  const Storage& data() const& noexcept { return _data; }
-  Storage&& data() && { return std::move(_data); }
-
- private:
-  Storage _data;
+  ->std::same_as<std::true_type>;
+  {s.serializeBytes(ptr, numBytes)};
 };
 
-/**
- * Serializer that reads from a buffer of bytes.
- */
-class ByteBufferReadSerializer {
- public:
-  constexpr static bool IsWriteSerializer = false;
-  using Storage = std::vector<char>;
-
-  explicit ByteBufferReadSerializer(Storage data) : _data{std::move(data)} {};
-  void serializeBytes(char* bytePointer, size_t numBytes) {
-    AD_CHECK(_iterator + numBytes <= _data.end());
-    std::copy(_iterator, _iterator + numBytes, bytePointer);
-    _iterator += numBytes;
+/// A `ReadSerializer` can read to a span of bytes from some resource.
+template <typename S>
+concept ReadSerializer = requires(S s, char* ptr, size_t numBytes) {
+  {
+    typename S::IsWriteSerializer {}
   }
-
-  ByteBufferReadSerializer(const ByteBufferReadSerializer&) noexcept = delete;
-  ByteBufferReadSerializer& operator=(const ByteBufferReadSerializer&) = delete;
-  ByteBufferReadSerializer(ByteBufferReadSerializer&&) noexcept = default;
-  ByteBufferReadSerializer& operator=(ByteBufferReadSerializer&&) noexcept =
-      default;
-
-  const Storage& data() const noexcept { return _data; }
-
- private:
-  Storage _data;
-  Storage::const_iterator _iterator{_data.begin()};
+  ->std::same_as<std::false_type>;
+  {s.serializeBytes(ptr, numBytes)};
 };
 
-/**
- * Trivial serializer for basic types that simply takes all the bytes
- * from the object as data. Corresponds to a shallow copy (for example,
- * in an std::vector this would not serialize only the metadata, but
- * not the actual data).
- */
-template <typename Serializer, typename T>
-requires(std::is_arithmetic_v<std::decay_t<T>>) void serialize(
-    Serializer& serializer, T&& t) {
-  if constexpr (Serializer::IsWriteSerializer) {
-    serializer.serializeBytes(reinterpret_cast<const char*>(&t), sizeof(t));
-  } else {
-    serializer.serializeBytes(reinterpret_cast<char*>(&t), sizeof(t));
-  }
-}
+/// A `Serializer` is either a `WriteSerializer` or a `ReadSerializer`
+template <typename S>
+concept Serializer = WriteSerializer<S> || ReadSerializer<S>;
 
 /**
  * Operator that allows to write something like:
@@ -99,36 +50,106 @@ requires(std::is_arithmetic_v<std::decay_t<T>>) void serialize(
  *   ByteBufferReadSerializer reader(std::move(writer).data());
  *   int y;
  *   reader | y;
+ *
+ *   For the element `t` of type `T` on the right hand side, either a static
+ * function T::serialize(serializer, AD_FWD(t)); or a free function
+ *   serialize(serializer, AD_FWD(t));
+ *   must be available.
+ *
+ *   If both cases apply, the serialization fails with a `static_assert`. To
+ * automatically create all overloads of `serialize` for reading from a `const
+ * T&` and writing to a `T&` and to avoid that types that are implicitly
+ * convertible to `T` use `T`'s serialization function, the following syntax can
+ * be used:
+ *
+ *   void serialize(auto&& serializer, ad_utility::SimilarTo<T> auto&& t) {
+ *     serializer | t._someMember;
+ *     serializer | t._someOtherMember;
+ *     // ...
+ *   }
+ *
  */
 template <typename Serializer, typename T>
 void operator|(Serializer& serializer, T&& t) {
-  serialize(serializer, std::forward<T>(t));
+  static constexpr bool hasStaticSerialize = requires() {
+    std::decay_t<T>::serialize(serializer, AD_FWD(t));
+  };
+
+  static constexpr bool hasFreeSerialize = requires() {
+    serialize(serializer, AD_FWD(t));
+  };
+
+  if constexpr (hasStaticSerialize) {
+    std::decay_t<T>::serialize(serializer, AD_FWD(t));
+    static_assert(!hasFreeSerialize,
+                  "Encountered a type for which a free and a static "
+                  "serialization function are present, this is not supported");
+  } else if constexpr (hasFreeSerialize) {
+    serialize(serializer, AD_FWD(t));
+  } else {
+    static_assert(ad_utility::alwaysFalse<T>,
+                  "Tried to use operator| on a serializer and a type T that "
+                  "has neither a static nor a free serialize function");
+  }
 }
 
-// Serialization operator for explicitly writing to a serializer.
-template <typename Serializer, typename T>
-requires(Serializer::IsWriteSerializer) void operator<<(Serializer& serializer,
-                                                        const T& t) {
-  serialize(serializer, t);
+/// Serialization operator for explicitly writing to a serializer.
+void operator<<(WriteSerializer auto& serializer, const auto& t) {
+  serializer | t;
 }
 
-// Serialization operator for explicitly reading from a serializer.
-template <typename Serializer, typename T>
-requires(!Serializer::IsWriteSerializer) void operator>>(Serializer& serializer,
-                                                         T& t) {
-  serialize(serializer, t);
+/// Serialization operator for explicitly reading from a serializer.
+void operator>>(ReadSerializer auto& serializer, auto& t) { serializer | t; }
+
+/// Arithmetic types (the builtins like int, char, double) can be trivially
+/// serialized by just copying the bits (see below).
+/// NOTE: We cannot put this AFTER the definition of
+/// `isTrivalSerializationAllowed`, otherwise we will get a compiler error on
+/// g++.
+/// TODO<joka921> Find out, if this is a compiler bug and file a report.
+template <typename T>
+requires std::is_arithmetic_v<std::decay_t<T>> std::true_type
+allowTrivialSerialization(T) {
+  return {};
 }
 
-// Automatically allow serialization from reference to const into a
-// writeSerializer. CAREFUL: this does not enforce that the serialization
-// functions actually preserve the constness, this has to be made sure by the
-// user.
-// TODO<joka921> This leads to infinite loops if we use the << operator and have
-// no actual serialize-function. Fix this by properly defining const overloads.
-template <typename Serializer, typename T>
-requires(Serializer::IsWriteSerializer) void serialize(Serializer& serializer,
-                                                       const T& t) {
-  serialize(serializer, const_cast<T&>(t));
+/**
+ * Types for which a function `allowTrivialSerialization(t)` exists and which
+ * are trivially copyable can be serialized by simply copying the bytes. To make
+ * a user-defined type which is trivially copyable also trivially serializable
+ * declare (no need to define it) this function in the same namespace as the
+ * type or even as a friend function, for example:
+ * struct X { int x; };
+ * void allowTrivialSerialization(X);
+ *
+ * struct Y {
+ *   int y;
+ *   friend void allowTrivialSerialization(Y);
+ * };
+ *
+ * Note that this will also enable trivial serialization for types that are
+ * trivially copyable and implicitly convertible to `X` or `Y`. If this behavior
+ * is not desired, you can use the following pattern:
+ *
+ * struct Z { int z; };
+ * void allowTrivialSerialization(std::same_as<Z> auto);
+ */
+template <typename T>
+concept TriviallySerializable = requires(T t) {
+  allowTrivialSerialization(t);
+}
+&&std::is_trivially_copyable_v<std::decay_t<T>>;
+
+/// Serialize function for `TriviallySerializable` types that works by simply
+/// serializing the binary object representation.
+template <Serializer S, TriviallySerializable T>
+void serialize(S& serializer, T&& t) {
+  if constexpr (WriteSerializer<S>) {
+    serializer.serializeBytes(reinterpret_cast<const char*>(&t), sizeof(t));
+  } else {
+    static_assert(ReadSerializer<S>);
+    serializer.serializeBytes(reinterpret_cast<char*>(&t), sizeof(t));
+  }
 }
 
 }  // namespace ad_utility::serialization

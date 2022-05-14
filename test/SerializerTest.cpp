@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "../src/util/Random.h"
+#include "../src/util/Serializer/ByteBufferSerializer.h"
 #include "../src/util/Serializer/FileSerializer.h"
 #include "../src/util/Serializer/SerializeHashMap.h"
 #include "../src/util/Serializer/SerializeString.h"
@@ -13,6 +14,15 @@
 
 using namespace ad_utility;
 using namespace ad_utility::serialization;
+
+TEST(Serializer, Concepts) {
+  static_assert(ReadSerializer<ByteBufferReadSerializer>);
+  static_assert(WriteSerializer<ByteBufferWriteSerializer>);
+
+  static_assert(ReadSerializer<FileReadSerializer>);
+  static_assert(WriteSerializer<FileWriteSerializer>);
+  static_assert(ReadSerializer<CopyableFileReadSerializer>);
+}
 
 auto testWithByteBuffer = [](auto testFunction) {
   ByteBufferWriteSerializer writer;
