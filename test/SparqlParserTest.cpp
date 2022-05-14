@@ -1188,3 +1188,16 @@ TEST(ParserTest, propertyPaths) {
   }
   ASSERT_TRUE(failed);
 }
+
+TEST(ParserTest, Bind) {
+  ParsedQuery pq =
+      SparqlParser("SELECT ?a WHERE { BIND (10 - 5 as ?a) . }").parse();
+  ASSERT_TRUE(pq.hasSelectClause());
+  ASSERT_EQ(pq.children().size(), 1);
+  GraphPatternOperation child = pq.children()[0];
+  ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(child.variant_));
+  GraphPatternOperation::Bind bind =
+      get<GraphPatternOperation::Bind>(child.variant_);
+  ASSERT_EQ(bind._target, "?a");
+  ASSERT_EQ(bind._expression.getDescriptor(), "10-5");
+}
