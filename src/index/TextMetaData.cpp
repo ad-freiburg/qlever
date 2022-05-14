@@ -82,112 +82,6 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByEntityId(
 size_t TextMetaData::getBlockCount() const { return _blocks.size(); }
 
 // _____________________________________________________________________________
-ad_utility::File& operator<<(ad_utility::File& f, const TextMetaData& md) {
-  auto buf = md.getBlockCount();
-  f.write(&buf, sizeof(md.getBlockCount()));
-  for (const auto& b : md._blocks) {
-    f << b;
-  }
-  f.write(&md._nofEntities, sizeof(md._nofEntities));
-  f.write(&md._nofEntityContexts, sizeof(md._nofEntityContexts));
-  f.write(&md._nofTextRecords, sizeof(md._nofTextRecords));
-  f.write(&md._nofWordPostings, sizeof(md._nofWordPostings));
-  f.write(&md._nofEntityPostings, sizeof(md._nofEntityPostings));
-  size_t nameLength = md._name.size();
-  f.write(&nameLength, sizeof(nameLength));
-  f.write(md._name.data(), nameLength);
-  return f;
-}
-
-// _____________________________________________________________________________
-TextMetaData& TextMetaData::createFromByteBuffer(unsigned char* buffer) {
-  size_t nofBlocks = *reinterpret_cast<size_t*>(buffer);
-  off_t offset = sizeof(size_t);
-  bool stepEntity = false;
-  for (size_t i = 0; i < nofBlocks; ++i) {
-    TextBlockMetaData tbmd;
-    tbmd.createFromByteBuffer(buffer + offset);
-    offset += TextBlockMetaData::sizeOnDisk();
-    if (!stepEntity) {
-      if (_blocks.size() == 0 ||
-          _blocks.back()._lastWordId + 1 == tbmd._firstWordId) {
-        _blockUpperBoundWordIds.push_back(tbmd._lastWordId);
-      } else {
-        stepEntity = true;
-        _blockUpperBoundEntityIds.push_back(tbmd._lastWordId);
-      }
-    } else {
-      _blockUpperBoundEntityIds.push_back(tbmd._lastWordId);
-    }
-    _blocks.emplace_back(tbmd);
-  }
-  _nofEntities = *reinterpret_cast<size_t*>(buffer + offset);
-  offset += sizeof(_nofEntities);
-  _nofEntityContexts = *reinterpret_cast<size_t*>(buffer + offset);
-  offset += sizeof(_nofEntityContexts);
-  _nofTextRecords = *reinterpret_cast<size_t*>(buffer + offset);
-  offset += sizeof(_nofTextRecords);
-  _nofWordPostings = *reinterpret_cast<size_t*>(buffer + offset);
-  offset += sizeof(_nofWordPostings);
-  _nofEntityPostings = *reinterpret_cast<size_t*>(buffer + offset);
-  offset += sizeof(_nofEntityPostings);
-  size_t nameLength;
-  nameLength = *reinterpret_cast<size_t*>(buffer + offset);
-  offset += sizeof(nameLength);
-  _name.assign(reinterpret_cast<char*>(buffer + offset), nameLength);
-  return *this;
-}
-
-// _____________________________________________________________________________
-ad_utility::File& operator<<(ad_utility::File& f, const TextBlockMetaData& md) {
-  f.write(&md._firstWordId, sizeof(md._firstWordId));
-  f.write(&md._lastWordId, sizeof(md._lastWordId));
-  f << md._cl << md._entityCl;
-  return f;
-}
-
-// _____________________________________________________________________________
-TextBlockMetaData& TextBlockMetaData::createFromByteBuffer(
-    unsigned char* buffer) {
-  off_t offset = 0;
-  _firstWordId = *reinterpret_cast<uint64_t*>(buffer + offset);
-  offset += sizeof(_firstWordId);
-  _lastWordId = *reinterpret_cast<uint64_t*>(buffer + offset);
-  offset += sizeof(_lastWordId);
-  _cl.createFromByteBuffer(buffer + offset);
-  offset += ContextListMetaData::sizeOnDisk();
-  _entityCl.createFromByteBuffer(buffer + offset);
-  return *this;
-}
-
-// _____________________________________________________________________________
-ad_utility::File& operator<<(ad_utility::File& f,
-                             const ContextListMetaData& md) {
-  f.write(&md._nofElements, sizeof(md._nofElements));
-  f.write(&md._startContextlist, sizeof(md._startContextlist));
-  f.write(&md._startWordlist, sizeof(md._startWordlist));
-  f.write(&md._startScorelist, sizeof(md._startScorelist));
-  f.write(&md._lastByte, sizeof(md._lastByte));
-  return f;
-}
-
-// _____________________________________________________________________________
-ContextListMetaData& ContextListMetaData::createFromByteBuffer(
-    unsigned char* buffer) {
-  off_t offset = 0;
-  _nofElements = *reinterpret_cast<size_t*>(buffer + offset);
-  offset += sizeof(_nofElements);
-  _startContextlist = *reinterpret_cast<off_t*>(buffer + offset);
-  offset += sizeof(_startContextlist);
-  _startWordlist = *reinterpret_cast<off_t*>(buffer + offset);
-  offset += sizeof(_startWordlist);
-  _startScorelist = *reinterpret_cast<off_t*>(buffer + offset);
-  offset += sizeof(_startScorelist);
-  _lastByte = *reinterpret_cast<off_t*>(buffer + offset);
-  return *this;
-}
-
-// _____________________________________________________________________________
 string TextMetaData::statistics() const {
   std::ostringstream os;
   std::locale loc;
@@ -257,9 +151,13 @@ string TextMetaData::statistics() const {
 }
 
 // _____________________________________________________________________________
-void TextMetaData::addBlock(const TextBlockMetaData& md) {
+void TextMetaData::addBlock(const TextBlockMetaData& md, bool isEntityBlock) {
   _blocks.push_back(md);
-  _blockUpperBoundWordIds.push_back(md._lastWordId);
+  if (isEntityBlock) {
+    _blockUpperBoundEntityIds.push_back(md._lastWordId);
+  } else {
+    _blockUpperBoundWordIds.push_back(md._lastWordId);
+  }
 }
 
 // _____________________________________________________________________________
