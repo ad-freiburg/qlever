@@ -290,14 +290,8 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       // Recursively call parseWhere to parse the optional part.
       parseWhere(query, &child);
       _lexer.accept(".");
-    } else if (_lexer.accept("bind")) {
-      _lexer.expect("(");
-      GraphPatternOperation::Bind bind{parseExpressionWithAntlr(*query)};
-      _lexer.expect("as");
-      _lexer.expect(SparqlToken::Type::VARIABLE);
-      query->registerVariableVisibleInQueryBody(_lexer.current().raw);
-      bind._target = _lexer.current().raw;
-      _lexer.expect(")");
+    } else if (_lexer.peek("bind")) {
+      GraphPatternOperation::Bind bind = parseBindWithAntlr(*query);
       currentPattern->_children.emplace_back(std::move(bind));
       // The dot after a BIND is optional.
       _lexer.accept(".");
