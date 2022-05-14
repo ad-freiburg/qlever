@@ -189,6 +189,78 @@ inline void logBeastError(beast::error_code ec, char const* what) {
   LOG(ERROR) << what << ": " << ec.message() << "\n";
 }
 
+namespace detail {
+
+// This coroutine is  part of the implementation of `makeFileServer` (see
+// below). It is the actual coroutine that performs the serving of a file. Note:
+// Because of the coroutine lifetime rules, the coroutine has to get the
+// `documentRoot`,`whitelist`, `request` by value. According to the signature,
+// the `send` action might be dangling, but when using this coroutine inside the
+// `HttpServer` class template, it never is. The parameters `documentRoot` and
+// `whitelist` are currently copied for every http request, if this becomes a
+// performance problem, they might also become `shared_ptr`s.
+boost::asio::awaitable<void> makeFileServerImpl(
+    std::string documentRoot,
+    std::optional<ad_utility::HashSet<std::string>> whitelist,
+    HttpRequest auto request, auto&& send) {
+  // Make sure we can handle the method
+  if (request.method() != http::verb::get &&
+      request.method() != http::verb::head) {
+    co_await send(createBadRequestResponse(
+        "Unknown HTTP-method, only GET and HEAD requests are supported",
+        request));
+    co_return;
+  }
+
+  // Decode the path and check that it is absolute and contains no "..".
+  auto urlPath =
+      ad_utility::UrlParser::getDecodedPathAndCheck(request.target());
+  if (!urlPath.has_value()) {
+    co_await send(createBadRequestResponse(
+        "Invalid url path \"" + std::string{request.target()} + '"', request));
+    co_return;
+  }
+
+  // Check if the target is in the whitelist. The `target()` starts with a
+  // slash, entries in the whitelist don't.
+  if (whitelist.has_value() &&
+      !whitelist.value().contains(urlPath.value().substr(1))) {
+    co_await send(createNotFoundResponse(request));
+    co_return;
+  }
+
+  // Build the path to the requested file on the file system.
+  std::string filesystemPath = path_cat(documentRoot, request.target());
+  if (request.target().back() == '/') filesystemPath.append("index.html");
+
+  // Attempt to open the file.
+  beast::error_code errorCode;
+  http::file_body::value_type body;
+  body.open(filesystemPath.c_str(), beast::file_mode::scan, errorCode);
+
+  // Handle the case where the file doesn't exist.
+  if (errorCode == beast::errc::no_such_file_or_directory) {
+    co_await send(createNotFoundResponse(request));
+    co_return;
+  }
+
+  // Handle an unknown error.
+  if (errorCode) {
+    co_return co_await send(
+        createServerErrorResponse(errorCode.message(), request));
+  }
+
+  // Respond to HEAD request.
+  if (request.method() == http::verb::head) {
+    co_return co_await send(
+        createHeadResponse(body.size(), filesystemPath, request));
+  }
+  // Respond to GET request.
+  co_return co_await send(
+      createGetResponseForFile(std::move(body), filesystemPath, request));
+}
+}  // namespace detail
+
 /**
  * @brief Return a lambda which satisfies the constraints of the `HttpHandler`
  * argument in the `HttpServer` class and serves files from a specified
@@ -215,62 +287,13 @@ inline auto makeFileServer(
           whitelist = std::move(whitelist)](
              HttpRequest auto request,
              auto&& send) -> boost::asio::awaitable<void> {
-    // Make sure we can handle the method
-    if (request.method() != http::verb::get &&
-        request.method() != http::verb::head) {
-      co_await send(createBadRequestResponse(
-          "Unknown HTTP-method, only GET and HEAD requests are supported",
-          request));
-      co_return;
-    }
-
-    // Decode the path and check that it is absolute and contains no "..".
-    auto urlPath =
-        ad_utility::UrlParser::getDecodedPathAndCheck(request.target());
-    if (!urlPath.has_value()) {
-      co_await send(createBadRequestResponse(
-          "Invalid url path \"" + std::string{request.target()} + '"',
-          request));
-      co_return;
-    }
-
-    // Check if the target is in the whitelist. The `target()` starts with a
-    // slash, entries in the whitelist don't.
-    if (whitelist.has_value() &&
-        !whitelist.value().contains(urlPath.value().substr(1))) {
-      co_await send(createNotFoundResponse(request));
-      co_return;
-    }
-
-    // Build the path to the requested file on the file system.
-    std::string filesystemPath = path_cat(documentRoot, request.target());
-    if (request.target().back() == '/') filesystemPath.append("index.html");
-
-    // Attempt to open the file.
-    beast::error_code errorCode;
-    http::file_body::value_type body;
-    body.open(filesystemPath.c_str(), beast::file_mode::scan, errorCode);
-
-    // Handle the case where the file doesn't exist.
-    if (errorCode == beast::errc::no_such_file_or_directory) {
-      co_await send(createNotFoundResponse(request));
-      co_return;
-    }
-
-    // Handle an unknown error.
-    if (errorCode) {
-      co_return co_await send(
-          createServerErrorResponse(errorCode.message(), request));
-    }
-
-    // Respond to HEAD request.
-    if (request.method() == http::verb::head) {
-      co_return co_await send(
-          createHeadResponse(body.size(), filesystemPath, request));
-    }
-    // Respond to GET request.
-    co_return co_await send(
-        createGetResponseForFile(std::move(body), filesystemPath, request));
+    // We need this extra indirection because the coroutine that is returned
+    // might live longer than the lambda closure object which stores the
+    // captures `documentRoot` and `whitelist`. For details see
+    // https://devblogs.microsoft.com/oldnewthing/20211103-00/?p=105870 and
+    // https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines#Rcoro-capture
+    return detail::makeFileServerImpl(documentRoot, whitelist,
+                                      std::move(request), AD_FWD(send));
   };
 }
 
