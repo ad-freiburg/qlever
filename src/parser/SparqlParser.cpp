@@ -292,6 +292,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       _lexer.accept(".");
     } else if (_lexer.peek("bind")) {
       GraphPatternOperation::Bind bind = parseBindWithAntlr(*query);
+      query->registerVariableVisibleInQueryBody(bind._target);
       currentPattern->_children.emplace_back(std::move(bind));
       // The dot after a BIND is optional.
       _lexer.accept(".");
