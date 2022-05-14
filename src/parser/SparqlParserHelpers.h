@@ -26,11 +26,12 @@ struct ResultOfParseAndRemainingText {
 
 // ____________________________________________________________________________
 ResultOfParseAndRemainingText<sparqlExpression::SparqlExpressionPimpl>
-parseExpression(const std::string& input);
+parseExpression(const std::string& input,
+                SparqlQleverVisitor::PrefixMap prefixMap);
 
 // An `alias` in Sparql have the form (<expression> as ?variable).
 ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
-    const std::string& input);
+    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
 
 ResultOfParseAndRemainingText<ad_utility::sparql_types::Triples>
 parseConstructTemplate(const std::string& input,

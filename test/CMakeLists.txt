@@ -18,7 +18,7 @@ endfunction()
 # Then run `gtest_discover_tests` to add the tests cases from the executable.
 # Typically you should use `addAndLinkTest` (below) but this function can be used,
 # if a test binary requires multiple sources
-function(linkAndDiscoverTest basename )
+function(linkAndDiscoverTest basename)
     linkTest(${basename} ${ARGN})
     gtest_discover_tests(${basename} ${basename})
 endfunction()
@@ -52,8 +52,6 @@ addLinkAndDiscoverTest(FileTest)
 
 addLinkAndDiscoverTest(Simple8bTest)
 
-addLinkAndDiscoverTest(TsvParserTest parser)
-
 addLinkAndDiscoverTest(ContextFileParserTest parser ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(IndexMetaDataTest index)
@@ -66,7 +64,7 @@ addLinkAndDiscoverTest(EngineTest engine)
 
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
-addLinkAndDiscoverTest(ConversionsTest)
+addLinkAndDiscoverTest(ConversionsTest absl::strings)
 
 addLinkAndDiscoverTest(HashMapTest absl::flat_hash_map)
 
@@ -133,9 +131,9 @@ addLinkAndDiscoverTest(TypeTraitsTest)
 
 addLinkAndDiscoverTest(SparqlExpressionTest sparqlExpressions index)
 
-addLinkAndDiscoverTest(StreamableBodyTest engine)
+addLinkAndDiscoverTest(StreamableBodyTest)
 
-addLinkAndDiscoverTest(StreamableGeneratorTest engine)
+addLinkAndDiscoverTest(StreamableGeneratorTest)
 
 addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
@@ -145,7 +143,7 @@ addLinkAndDiscoverTest(CompactStringVectorTest)
 
 addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
-addLinkAndDiscoverTest(ContentEncodingHelperTest)
+addLinkAndDiscoverTest(ContentEncodingHelperTest absl::strings)
 
 addLinkAndDiscoverTest(VocabularyInMemoryTest vocabulary)
 
@@ -172,3 +170,25 @@ addLinkAndDiscoverTest(BackgroundStxxlSorterTest ${STXXL_LIBRARIES})
 addLinkAndDiscoverTest(ViewsTest)
 
 addLinkAndDiscoverTest(ForwardTest)
+
+addLinkAndDiscoverTest(CompressorStreamTest engine)
+
+addLinkAndDiscoverTest(AsyncStreamTest)
+
+addLinkAndDiscoverTest(TriplesViewTest)
+
+addLinkAndDiscoverTest(BitUtilsTest)
+
+addLinkAndDiscoverTest(NBitIntegerTest)
+
+addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
+
+addLinkAndDiscoverTest(DateTest)
+
+addLinkAndDiscoverTest(TripleObjectTest absl::strings)
+
+addLinkAndDiscoverTest(ValueIdTest absl::flat_hash_set)
+
+addLinkAndDiscoverTest(ValueIdComparatorsTest)
+
+addLinkAndDiscoverTest(LambdaHelpersTest)

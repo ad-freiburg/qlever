@@ -25,8 +25,10 @@ class Distinct : public Operation {
            std::shared_ptr<QueryExecutionTree> subtree,
            const vector<size_t>& keepIndices);
 
-  [[nodiscard]] string asString(size_t indent = 0) const override;
+ protected:
+  [[nodiscard]] string asStringImpl(size_t indent = 0) const override;
 
+ public:
   [[nodiscard]] string getDescriptor() const override;
 
   [[nodiscard]] vector<size_t> resultSortedOn() const override {

@@ -7,6 +7,7 @@
 #ifndef QLEVER_RANDOM_H
 #define QLEVER_RANDOM_H
 
+#include <algorithm>
 #include <array>
 #include <cstring>
 #include <random>
@@ -89,5 +90,13 @@ class RandomDoubleGenerator {
   std::default_random_engine _randomEngine;
   std::uniform_real_distribution<double> _distribution;
 };
+
+/// Randomly shuffle range denoted by `[begin, end)`
+template <typename RandomIt>
+void randomShuffle(RandomIt begin, RandomIt end) {
+  std::random_device rd;
+  std::mt19937 g(rd());
+  std::shuffle(begin, end, g);
+}
 
 #endif  // QLEVER_RANDOM_H

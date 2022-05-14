@@ -26,16 +26,24 @@ using AccessViaBracketOperator = decltype(accessViaBracketOperator);
  * iterators for indices `a` and `b` can be obtained from the random access
  * container (typically by `begin()` and `end()` member functions, then it must
  * be legal to call the accessor for all `i` in `[a, b)`.
+ *
+ * Note: Many STL algorithms (like `std::sort` require iterator types to be
+ * assignable. `IteratorForAccessOperator` is only assignable if the `Accessor`
+ * type is assignable. If you want to use a lambda as the accessor (which is not
+ * assignable), consider using `ad_utility::makeAssignableLambda` in
+ * `LambdaHelpers.h`.
  */
 template <typename RandomAccessContainer,
           typename Accessor = AccessViaBracketOperator, bool IsConst = true>
 class IteratorForAccessOperator {
  public:
   using iterator_category = std::random_access_iterator_tag;
+  using difference_type = int64_t;
   using index_type = uint64_t;
   using value_type = std::remove_reference_t<
       std::invoke_result_t<Accessor, const RandomAccessContainer&, index_type>>;
-  using difference_type = int64_t;
+  using pointer = value_type*;
+  using reference = value_type&;
 
  private:
   using RandomAccessContainerPtr =
@@ -47,10 +55,17 @@ class IteratorForAccessOperator {
 
  public:
   IteratorForAccessOperator() = default;
-  IteratorForAccessOperator(RandomAccessContainerPtr vec, index_type index)
-      : _vector{vec}, _index{index} {}
+  IteratorForAccessOperator(RandomAccessContainerPtr vec, index_type index,
+                            Accessor accessor = Accessor{})
+      : _vector{vec}, _index{index}, _accessor{std::move(accessor)} {}
 
-  // Comparisons
+  IteratorForAccessOperator(const IteratorForAccessOperator&) = default;
+  IteratorForAccessOperator(IteratorForAccessOperator&&) noexcept = default;
+  IteratorForAccessOperator& operator=(const IteratorForAccessOperator& other) =
+      default;
+  IteratorForAccessOperator& operator=(IteratorForAccessOperator&&) noexcept =
+      default;
+
   auto operator<=>(const IteratorForAccessOperator& rhs) const {
     return (_index <=> rhs._index);
   }

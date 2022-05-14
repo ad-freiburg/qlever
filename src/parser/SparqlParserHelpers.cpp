@@ -46,8 +46,9 @@ struct ParserAndVisitor {
 
 // ____________________________________________________________________________
 ResultOfParseAndRemainingText<sparqlExpression::SparqlExpressionPimpl>
-parseExpression(const std::string& input) {
-  ParserAndVisitor p{input, {}};
+parseExpression(const std::string& input,
+                SparqlQleverVisitor::PrefixMap prefixMap) {
+  ParserAndVisitor p{input, std::move(prefixMap)};
   auto resultOfParseAndRemainingText =
       p.parse<sparqlExpression::SparqlExpression::Ptr>(
           input, "expression", &SparqlAutomaticParser::expression);
@@ -60,8 +61,8 @@ parseExpression(const std::string& input) {
 
 // ____________________________________________________________________________
 ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
-    const std::string& input) {
-  ParserAndVisitor p{input, {}};
+    const std::string& input, SparqlQleverVisitor::PrefixMap prefixMap) {
+  ParserAndVisitor p{input, std::move(prefixMap)};
   return p.parse<ParsedQuery::Alias>(
       input, "alias", &SparqlAutomaticParser::aliasWithouBrackes);
 }

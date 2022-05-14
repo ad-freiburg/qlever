@@ -36,7 +36,7 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
 }
 
 // _____________________________________________________________________________
-string Join::asString(size_t indent) const {
+string Join::asStringImpl(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";

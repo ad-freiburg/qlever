@@ -99,6 +99,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return {true, std::move(label)};
   }
 
+  // Process an IRI function call. This is used in both `visitFunctionCall` and
+  // `visitIriOrFunction`.
+  antlrcpp::Any processIriFunctionCall(const std::string& iri,
+                                       std::vector<ExpressionPtr> argList);
+
  public:
   // ___________________________________________________________________________
   antlrcpp::Any visitQuery(SparqlAutomaticParser::QueryContext* ctx) override {
@@ -368,12 +373,27 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitFunctionCall(
       SparqlAutomaticParser::FunctionCallContext* ctx) override {
-    return visitChildren(ctx);
+    return processIriFunctionCall(
+        visitIri(ctx->iri()).as<std::string>(),
+        std::move(
+            visitArgList(ctx->argList()).as<std::vector<ExpressionPtr>>()));
   }
 
   antlrcpp::Any visitArgList(
       SparqlAutomaticParser::ArgListContext* ctx) override {
-    return visitChildren(ctx);
+    // If no arguments, return empty expression vector.
+    if (ctx->NIL()) {
+      return std::vector<ExpressionPtr>{};
+    }
+    // The grammar allows an optional DISTICT before the argument list (the
+    // whole list, not the individual arguments), but we currently don't support
+    // it.
+    if (ctx->DISTINCT()) {
+      throw SparqlParseException{
+          "DISTINCT for argument lists of IRI functions are not supported"};
+    }
+    // Visit the expression of each argument.
+    return visitExpressionChildren(ctx->expression());
   }
 
   antlrcpp::Any visitExpressionList(
@@ -979,10 +999,28 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       override {
     if (context->aggregate()) {
       return context->aggregate()->accept(this);
+      // TODO: Implement built-in calls according to the following examples.
+      //
+      // } else if (ad_utility::getLowercase(context->children[0]->getText()) ==
+      //            "sqr") {
+      //   if (context->expression().size() != 1) {
+      //     throw SparqlParseException{"SQR needs one argument"};
+      //   }
+      //   auto children = visitExpressionChildren(context->expression());
+      //   return createExpression<sparqlExpression::SquareExpression>(
+      //       std::move(children[0]));
+      // } else if (ad_utility::getLowercase(context->children[0]->getText()) ==
+      //            "dist") {
+      //   if (context->expression().size() != 2) {
+      //     throw SparqlParseException{"DIST needs two arguments"};
+      //   }
+      //   auto children = visitExpressionChildren(context->expression());
+      //   return createExpression<sparqlExpression::DistExpression>(
+      //       std::move(children[0]), std::move(children[1]));
     } else {
       throw SparqlParseException{
-          "aggregates like COUNT are the only 'builtInCalls' that are "
-          "supported by this parser"};
+          "Built-in function not yet implemented (only aggregates like COUNT "
+          "so far)"};
     }
   }
 
@@ -1070,16 +1108,17 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitIriOrFunction(
       SparqlAutomaticParser::IriOrFunctionContext* ctx) override {
-    if (ctx->argList()) {
-      throw SparqlParseException{
-          "calls to non-built-in functions in expressions are not supported by "
-          "this parser"};
+    // Case 1: Just an IRI.
+    if (ctx->argList() == nullptr) {
+      return ExpressionPtr{
+          std::make_unique<sparqlExpression::StringOrIriExpression>(
+              ctx->getText())};
     }
-
-    return ExpressionPtr{
-        std::make_unique<sparqlExpression::StringOrIriExpression>(
-            ctx->getText())};
-    return visitChildren(ctx);
+    // Case 2: Function call, where the function name is an IRI.
+    return processIriFunctionCall(
+        visitIri(ctx->iri()).as<std::string>(),
+        std::move(
+            visitArgList(ctx->argList()).as<std::vector<ExpressionPtr>>()));
   }
 
   antlrcpp::Any visitRdfLiteral(

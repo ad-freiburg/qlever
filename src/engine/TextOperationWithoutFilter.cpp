@@ -42,7 +42,7 @@ TextOperationWithoutFilter::getVariableColumns() const {
   return vcmap;
 }
 // _____________________________________________________________________________
-string TextOperationWithoutFilter::asString(size_t indent) const {
+string TextOperationWithoutFilter::asStringImpl(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";

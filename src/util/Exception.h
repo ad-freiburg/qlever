@@ -36,14 +36,14 @@ using std::string;
 //! Custom assert which does not abort but throws an exception
 #define AD_CHECK(condition)                                                  \
   {                                                                          \
-    if (!(condition)) {                                                      \
+    if (!(condition)) [[unlikely]] {                                         \
       AD_THROW(ad_semsearch::Exception::ASSERT_FAILED, __STRING(condition)); \
     }                                                                        \
   }  // NOLINT
 //! Assert equality, and show values if fails
 #define AD_CHECK_EQ(t1, t2)                                           \
   {                                                                   \
-    if (!((t1) == (t2))) {                                            \
+    if (!((t1) == (t2))) [[unlikely]] {                               \
       AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,                \
                __STRING(t1 == t2) << "; " << (t1) << " != " << (t2)); \
     }                                                                 \
@@ -51,7 +51,7 @@ using std::string;
 //! Assert less than, and show values if fails
 #define AD_CHECK_LT(t1, t2)                                          \
   {                                                                  \
-    if (!((t1) < (t2))) {                                            \
+    if (!((t1) < (t2))) [[unlikely]] {                               \
       AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,               \
                __STRING(t1 < t2) << "; " << (t1) << " >= " << (t2)); \
     }                                                                \
@@ -59,7 +59,7 @@ using std::string;
 //! Assert greater than, and show values if fails
 #define AD_CHECK_GT(t1, t2)                                          \
   {                                                                  \
-    if (!((t1) > (t2))) {                                            \
+    if (!((t1) > (t2))) [[unlikely]] {                               \
       AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,               \
                __STRING(t1 > t2) << "; " << (t1) << " <= " << (t2)); \
     }                                                                \
@@ -67,7 +67,7 @@ using std::string;
 //! Assert less or equal than, and show values if fails
 #define AD_CHECK_LE(t1, t2)                                          \
   {                                                                  \
-    if (!((t1) <= (t2))) {                                           \
+    if (!((t1) <= (t2))) [[unlikely]] {                              \
       AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,               \
                __STRING(t1 <= t2) << "; " << (t1) << " > " << (t2)); \
     }                                                                \
@@ -75,7 +75,7 @@ using std::string;
 //! Assert greater or equal than, and show values if fails
 #define AD_CHECK_GE(t1, t2)                                          \
   {                                                                  \
-    if (!((t1) >= (t2))) {                                           \
+    if (!((t1) >= (t2))) [[unlikely]] {                              \
       AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,               \
                __STRING(t1 >= t2) << "; " << (t1) << " < " << (t2)); \
     }                                                                \

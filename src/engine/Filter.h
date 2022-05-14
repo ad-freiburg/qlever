@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "../global/ValueIdComparators.h"
 #include "../parser/ParsedQuery.h"
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
@@ -25,8 +26,10 @@ class Filter : public Operation {
          SparqlFilter::FilterType type, string lhs, string rhs,
          vector<string> additionalLhs, vector<string> additionalPrefixes);
 
-  virtual string asString(size_t indent = 0) const override;
+ private:
+  virtual string asStringImpl(size_t indent = 0) const override;
 
+ public:
   virtual string getDescriptor() const override;
 
   virtual vector<size_t> resultSortedOn() const override {
@@ -40,7 +43,7 @@ class Filter : public Operation {
   virtual size_t getSizeEstimate() override {
     if (_type == SparqlFilter::FilterType::REGEX) {
       // TODO(jbuerklin): return a better estimate
-      return std::numeric_limits<Id>::max();
+      return std::numeric_limits<size_t>::max();
     }
     // TODO(schnelle): return a better estimate
     if (_rhs[0] == '?') {
@@ -78,7 +81,7 @@ class Filter : public Operation {
 
   virtual size_t getCostEstimate() override {
     if (_type == SparqlFilter::FilterType::REGEX) {
-      return std::numeric_limits<Id>::max();
+      return std::numeric_limits<size_t>::max();
     }
     if (isLhsSorted()) {
       // we can apply the very cheap binary sort filter
@@ -126,26 +129,17 @@ class Filter : public Operation {
     size_t lhsInd = _subtree->getVariableColumn(_lhs);
     return !subresSortedOn.empty() && subresSortedOn[0] == lhsInd;
   }
-  /**
-   * @brief Uses the result type and the filter type (_type) to apply the filter
-   * to subRes and store it in res.
-   * @return The pointer res.
-   */
-  template <ResultTable::ResultType T, int WIDTH>
-  void computeFilter(IdTableStatic<WIDTH>* dynResult, size_t lhs, size_t rhs,
-                     const IdTableView<WIDTH>& dynInput) const;
 
   template <int WIDTH>
   void computeResultDynamicValue(IdTable* dynResult, size_t lhsInd,
-                                 size_t rhsInd, const IdTable& dynInput,
-                                 ResultTable::ResultType lhsType);
+                                 size_t rhsInd, const IdTable& dynInput);
 
   /**
    * @brief Uses the result type and the filter type (_type) to apply the filter
    * to subRes and store it in res.
    * @return The pointer res.
    */
-  template <ResultTable::ResultType T, int WIDTH>
+  template <int WIDTH>
   void computeFilterFixedValue(IdTableStatic<WIDTH>* res, size_t lhs, Id rhs,
                                const IdTableView<WIDTH>& input,
                                shared_ptr<const ResultTable> subRes) const;
@@ -155,7 +149,7 @@ class Filter : public Operation {
    * to subRes and store it in res.
    *
    */
-  template <ResultTable::ResultType T, int WIDTH, bool INVERSE = false>
+  template <int WIDTH>
   void computeFilterRange(IdTableStatic<WIDTH>* res, size_t lhs, Id rhs_lower,
                           Id rhs_upper, const IdTableView<WIDTH>& input,
                           shared_ptr<const ResultTable> subRes) const;
@@ -164,23 +158,29 @@ class Filter : public Operation {
   void computeResultFixedValue(
       ResultTable* result,
       const std::shared_ptr<const ResultTable> subRes) const;
+
   virtual void computeResult(ResultTable* result) override;
 
-  /**
-   * @brief This struct handles the extraction of the data from an id based upon
-   *        the result type of the id's column.
-   */
-  template <ResultTable::ResultType T>
-  struct ValueReader {
-    static Id get(size_t in) { return in; }
-  };
-};
-
-template <>
-struct Filter::ValueReader<ResultTable::ResultType::FLOAT> {
-  static float get(size_t in) {
-    float f;
-    std::memcpy(&f, &in, sizeof(float));
-    return f;
+  // Convert a FilterType to the corresponding `Comparison`. Throws if no
+  // corresponding `Comparison` exists (supported are LE, LT, EQ, NE, GE, GT).
+  // TODO<joka921> move to cpp file.
+  static valueIdComparators::Comparison toComparison(
+      SparqlFilter::FilterType filterType) {
+    switch (filterType) {
+      case SparqlFilter::LT:
+        return valueIdComparators::Comparison::LT;
+      case SparqlFilter::LE:
+        return valueIdComparators::Comparison::LE;
+      case SparqlFilter::EQ:
+        return valueIdComparators::Comparison::EQ;
+      case SparqlFilter::NE:
+        return valueIdComparators::Comparison::NE;
+      case SparqlFilter::GT:
+        return valueIdComparators::Comparison::GT;
+      case SparqlFilter::GE:
+        return valueIdComparators::Comparison::GE;
+      default:
+        AD_CHECK(false);
+    }
   }
 };
