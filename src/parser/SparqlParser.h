@@ -71,4 +71,6 @@ class SparqlParser {
   sparqlExpression::SparqlExpressionPimpl parseExpressionWithAntlr(
       const ParsedQuery& parsedQuery);
   ParsedQuery::Alias parseAliasWithAntlr(const ParsedQuery& parsedQuery);
+  GraphPatternOperation::Bind parseBindWithAntlr(
+      const ParsedQuery& parsedQuery);
 };

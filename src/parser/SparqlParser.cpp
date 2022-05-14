@@ -985,3 +985,13 @@ ParsedQuery::Alias SparqlParser::parseAliasWithAntlr(
   _lexer.reset(std::move(resultOfParseAndRemainingText._remainingText));
   return std::move(resultOfParseAndRemainingText._resultOfParse);
 }
+
+// ________________________________________________________________________
+GraphPatternOperation::Bind SparqlParser::parseBindWithAntlr(
+    const ParsedQuery& parsedQuery) {
+  auto str = _lexer.getUnconsumedInput();
+  auto resultOfParseAndRemainingText =
+      sparqlParserHelpers::parseBind(str, getPrefixMap(parsedQuery));
+  _lexer.reset(std::move(resultOfParseAndRemainingText._remainingText));
+  return std::move(resultOfParseAndRemainingText._resultOfParse);
+}

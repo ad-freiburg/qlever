@@ -66,6 +66,13 @@ ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
   return p.parse<ParsedQuery::Alias>(
       input, "alias", &SparqlAutomaticParser::aliasWithouBrackes);
 }
+// ____________________________________________________________________________
+ResultOfParseAndRemainingText<GraphPatternOperation::Bind> parseBind(
+    const std::string& input, SparqlQleverVisitor::PrefixMap prefixMap) {
+  ParserAndVisitor p{input, std::move(prefixMap)};
+  return p.parse<GraphPatternOperation::Bind>(input, "bind",
+                                              &SparqlAutomaticParser::bind);
+}
 // _____________________________________________________________________________
 
 ResultOfParseAndRemainingText<ad_utility::sparql_types::Triples>
