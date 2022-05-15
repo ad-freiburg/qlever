@@ -45,7 +45,7 @@ endif ()
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
 ###############################
 add_subdirectory(third_party/antlr4/runtime/Cpp EXCLUDE_FROM_ALL)
-target_compile_options(antlr4_static PUBLIC -Wno-attributes -Wno-implicit-fallthrough -Wno-ambiguous-reversed-operator)
+target_compile_options(antlr4_static PRIVATE -Wno-implicit-fallthrough -Wno-attributes -Wno-ambiguous-reversed-operator)
 include_directories(third_party/antlr4/runtime/Cpp/runtime/src)
 
 ################################
@@ -93,7 +93,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra -Wno-missing-field-initializers -DGTEST_HAS_TR1_TUPLE=0 -DGTEST_USE_OWN_TR1_TUPLE=0")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
 # Enable the specification of additional warnings manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
 
@@ -181,7 +181,7 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
 
 set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
 add_subdirectory(third_party/re2 EXCLUDE_FROM_ALL)
-target_compile_options(re2 PUBLIC -Wno-unused-but-set-variable)
+target_compile_options(re2 PRIVATE -Wno-unused-but-set-variable)
 include_directories(SYSTEM third_party/re2)
 
 # reinstate original flags including all warnings

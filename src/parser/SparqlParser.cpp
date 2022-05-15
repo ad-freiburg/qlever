@@ -292,7 +292,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       _lexer.accept(".");
     } else if (_lexer.accept("bind")) {
       _lexer.expect("(");
-      GraphPatternOperation::Bind bind{parseExpressionWithAntlr(*query)};
+      GraphPatternOperation::Bind bind{parseExpressionWithAntlr(*query), ""s};
       _lexer.expect("as");
       _lexer.expect(SparqlToken::Type::VARIABLE);
       query->registerVariableVisibleInQueryBody(_lexer.current().raw);
