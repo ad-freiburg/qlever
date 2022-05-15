@@ -143,20 +143,16 @@ Awaitable<void> Server::process(
   // Note that `makeFileServer` returns a function.
   // The first argument is the document root, the second one is the whitelist.
 
-  auto fileServer = makeFileServer(
-      ".",
-      ad_utility::HashSet<std::string>{"index.html", "script.js", "style.css"});
   // Note: `co_await makeFileServer(....)(...)` doesn't compile in g++ 11.2.0,
   // probably because of the following bug:
   // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=98056
-  // Note2: `auto fileServer = makeFileServer(...)(...);
-  //        co_await std::move(fileServer);`
-  // segfaults in clang++-13 because of lifetime issues in capturing coroutine
-  // lambdas which should not be used.
-  // TODO<joka921> fix the capturing lambda `makeFileServer` to something
-  // that is safe to use.
+  // TODO<joka921> Reinstate this one-liner as soon as this bug is fixed.
 
-  co_return co_await fileServer(std::move(request), send);
+  auto serveFileRequest = makeFileServer(
+      ".",
+      ad_utility::HashSet<std::string>{"index.html", "script.js", "style.css"})(
+      std::move(request), send);
+  co_return co_await std::move(serveFileRequest);
 }
 
 // _____________________________________________________________________________
