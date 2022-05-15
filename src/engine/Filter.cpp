@@ -136,17 +136,20 @@ string Filter::getDescriptor() const {
   return std::move(os).str();
 }
 
+namespace {
+[[noreturn]] void throwNotSupported(std::string_view filterType) {
+  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+           absl::StrCat(filterType,
+                        " filtering with a variable right side has not yet "
+                        "been implemented."));
+}
+}  // namespace
+
 template <int WIDTH>
 void Filter::computeResultDynamicValue(IdTable* dynResult, size_t lhsInd,
                                        size_t rhsInd, const IdTable& dynInput) {
   const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
   IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
-  auto throwNotSupported = [](std::string_view filterType) {
-    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-             absl::StrCat(filterType,
-                          " filtering with a variable right side has not yet "
-                          "been implemented."));
-  };
   switch (_type) {
     case SparqlFilter::LT:
     case SparqlFilter::LE:
@@ -164,6 +167,10 @@ void Filter::computeResultDynamicValue(IdTable* dynResult, size_t lhsInd,
           &result);
       break;
     }
+      // Note: It is okay to have no `break` after the following cases, because
+      // `throwNotSupported` always throws and never returns. The compiler is
+      // aware of this because of the `[[noreturn]]` attribute and thus doesn't
+      // emit a fallthrough warning.
     case SparqlFilter::LANG_MATCHES:
       throwNotSupported("Language");
     case SparqlFilter::REGEX:
