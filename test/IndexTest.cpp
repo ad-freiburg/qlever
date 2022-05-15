@@ -119,7 +119,7 @@ TEST(IndexTest, createFromTurtleTest) {
       // compressed block was found via binary search that could possibly
       // contain the combination of the ids. In this example <b2> is the largest
       // predicate that occurs and <c2> is larger than the largest subject that
-      // appears with <b2>.0
+      // appears with <b2>.
       IdTable oneColBuffer{allocator()};
       oneColBuffer.setCols(1);
       index.scan("<b2>", "<c2>", &oneColBuffer, index.PSO());
