@@ -378,8 +378,8 @@ template <size_t NumOperands, typename FunctionAndValueGettersT,
       NV == 1, std::array<std::tuple_element_t<0, OriginalValueGetters>, N>,
       OriginalValueGetters>;
   Function _function;
-  ValueGetters _valueGetters;
-  std::tuple<SpecializedFunctions...> _specializedFunctions;
+  ValueGetters _valueGetters{};
+  std::tuple<SpecializedFunctions...> _specializedFunctions{};
 };
 
 /// Helper variable to decide at compile time, if a type is an

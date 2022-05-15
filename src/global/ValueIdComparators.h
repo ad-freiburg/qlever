@@ -109,7 +109,8 @@ class RangeFilter {
   // the `acceptedComparisons`
   template <Comparison... acceptedComparisons>
   void addImpl(RandomIt begin, RandomIt end) {
-    if ((... || (_comparison == acceptedComparisons))) {
+    // We use `equal_to` instead of `==` to silence a warning in clang13.
+    if ((... || std::equal_to<>{}(_comparison, acceptedComparisons))) {
       _result.emplace_back(begin, end);
     }
   }

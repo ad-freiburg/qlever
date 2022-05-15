@@ -182,3 +182,29 @@ TEST(SparqlLexer, reset) {
   lexer.expect("<cs.uni-freiburg.de/>");
   ASSERT_TRUE(lexer.getUnconsumedInput().empty());
 }
+
+TEST(SparqlLexer, PeekKeyword) {
+  std::string query = "PREFIX";
+  SparqlLexer lexer(query);
+
+  ASSERT_TRUE(lexer.peek("prefix"));
+  ASSERT_FALSE(lexer.peek("select"));
+  ASSERT_EQ(std::string("prefix"), lexer.getUnconsumedInput());
+
+  ASSERT_TRUE(lexer.peek(SparqlToken::Type::KEYWORD));
+  ASSERT_FALSE(lexer.peek(SparqlToken::Type::GROUP_BY));
+  ASSERT_EQ(std::string("prefix"), lexer.getUnconsumedInput());
+}
+
+TEST(SparqlLexer, PeekLiteral) {
+  // Test with RDF_LITERAL because these are not lowercased by the lexer
+  std::string query = R"("RDF_LITERAL")";
+  SparqlLexer lexer(query);
+
+  ASSERT_TRUE(lexer.peek(SparqlToken::Type::RDFLITERAL));
+  ASSERT_TRUE(lexer.peek("\"RDF_LITERAL\""));
+  ASSERT_TRUE(lexer.peek("\"RDF_LITERAL\"", true));
+  ASSERT_FALSE(lexer.peek("\"rdf_literal\"", true));
+  ASSERT_TRUE(lexer.peek("\"rdf_literal\"", false));
+  ASSERT_EQ(query, lexer.getUnconsumedInput());
+}
