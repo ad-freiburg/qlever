@@ -199,7 +199,7 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
     } else if (_lexer.accept("(")) {
       // Expect an alias.
       ParsedQuery::Alias a =
-          parseWithAntlr<sparqlParserHelpers::parseAlias>(*query);
+          parseWithAntlr(sparqlParserHelpers::parseAlias, *query);
       selectClause._aliases.push_back(a);
       manuallySelectedVariables.push_back(a._outVarName);
       _lexer.expect(")");
@@ -237,7 +237,7 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
     // TODO This assumes that aliases can stand in the ORDER BY
     // This is not true, only expression may stand there
     ParsedQuery::Alias a =
-        parseWithAntlr<sparqlParserHelpers::parseAlias>(*query);
+        parseWithAntlr(sparqlParserHelpers::parseAlias, *query);
     auto& selectClause = query->selectClause();
 
     for (const auto& selectedVariable :
@@ -295,7 +295,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       _lexer.accept(".");
     } else if (_lexer.peek("bind")) {
       GraphPatternOperation::Bind bind =
-          parseWithAntlr<sparqlParserHelpers::parseBind>(*query);
+          parseWithAntlr(sparqlParserHelpers::parseBind, *query);
       query->registerVariableVisibleInQueryBody(bind._target);
       currentPattern->_children.emplace_back(std::move(bind));
       // The dot after a BIND is optional.
@@ -966,13 +966,13 @@ SparqlQleverVisitor::PrefixMap getPrefixMap(const ParsedQuery& parsedQuery) {
 }  // namespace
 
 // ________________________________________________________________________
-template <auto(*F)(const std::string&, SparqlQleverVisitor::PrefixMap)>
-auto SparqlParser::parseWithAntlr(const ParsedQuery& parsedQuery)
-    -> decltype(F(std::declval<const string&>(),
+template <typename F>
+auto SparqlParser::parseWithAntlr(F f, const ParsedQuery& parsedQuery)
+    -> decltype(f(std::declval<const string&>(),
                   std::declval<SparqlQleverVisitor::PrefixMap>())
                     ._resultOfParse) {
-  auto str = _lexer.getUnconsumedInput();
-  auto resultOfParseAndRemainingText = F(str, getPrefixMap(parsedQuery));
+  auto resultOfParseAndRemainingText =
+      f(_lexer.getUnconsumedInput(), getPrefixMap(parsedQuery));
   _lexer.reset(std::move(resultOfParseAndRemainingText._remainingText));
   return std::move(resultOfParseAndRemainingText._resultOfParse);
 }

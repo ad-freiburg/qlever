@@ -69,9 +69,9 @@ class SparqlParser {
   string _query;
   SparqlFilter parseRegexFilter(bool expectKeyword);
 
-  template <auto(*V)(const string&, SparqlQleverVisitor::PrefixMap)>
-  auto parseWithAntlr(const ParsedQuery& parsedQuery)
-      -> decltype(V(std::declval<const string&>(),
+  template <typename F>
+  auto parseWithAntlr(F f, const ParsedQuery& parsedQuery)
+      -> decltype(f(std::declval<const string&>(),
                     std::declval<SparqlQleverVisitor::PrefixMap>())
                       ._resultOfParse);
 };
