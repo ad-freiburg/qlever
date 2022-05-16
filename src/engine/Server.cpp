@@ -142,9 +142,17 @@ Awaitable<void> Server::process(
   // Neither a query nor a command were specified, simply serve a file.
   // Note that `makeFileServer` returns a function.
   // The first argument is the document root, the second one is the whitelist.
-  co_await makeFileServer(".", ad_utility::HashSet<std::string>{
-                                   "index.html", "script.js",
-                                   "style.css"})(std::move(request), send);
+
+  // Note: `co_await makeFileServer(....)(...)` doesn't compile in g++ 11.2.0,
+  // probably because of the following bug:
+  // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=98056
+  // TODO<joka921> Reinstate this one-liner as soon as this bug is fixed.
+
+  auto serveFileRequest = makeFileServer(
+      ".",
+      ad_utility::HashSet<std::string>{"index.html", "script.js", "style.css"})(
+      std::move(request), send);
+  co_return co_await std::move(serveFileRequest);
 }
 
 // _____________________________________________________________________________

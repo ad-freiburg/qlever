@@ -113,6 +113,19 @@ TEST(IndexTest, createFromTurtleTest) {
     ASSERT_EQ(I(1u), buffer[1][0]);
     ASSERT_EQ(I(5u), buffer[1][1]);
 
+    {
+      // Test for a previous bug in the scan of two fixed elements: An assertion
+      // wrongly failed if the first Id existed in the permutation, but no
+      // compressed block was found via binary search that could possibly
+      // contain the combination of the ids. In this example <b2> is the largest
+      // predicate that occurs and <c2> is larger than the largest subject that
+      // appears with <b2>.
+      IdTable oneColBuffer{allocator()};
+      oneColBuffer.setCols(1);
+      index.scan("<b2>", "<c2>", &oneColBuffer, index.PSO());
+      ASSERT_EQ(oneColBuffer.size(), 0u);
+    }
+
     ad_utility::deleteFile(filename);
     std::remove(stxxlFileName.c_str());
     remove("_testindex.index.pso");
