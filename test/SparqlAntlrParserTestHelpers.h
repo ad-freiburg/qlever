@@ -48,6 +48,14 @@ std::ostream& operator<<(std::ostream& out, const VarOrTerm& varOrTerm) {
 
 // _____________________________________________________________________________
 
+std::ostream& operator<<(std::ostream& out,
+                         const GraphPatternOperation::Bind& bind) {
+  out << "Bind " << bind._expression.getDescriptor() << " as " << bind._target;
+  return out;
+}
+
+// _____________________________________________________________________________
+
 // Recursively unwrap a std::variant object, or return a pointer
 // to the argument directly if it is already unwrapped.
 
@@ -102,4 +110,11 @@ MATCHER_P(IsLiteral, value, "") {
     return literal->literal() == value;
   }
   return false;
+}
+
+// _____________________________________________________________________________
+
+MATCHER_P2(IsBind, variable, expression, "") {
+  return (arg._target == variable) &&
+         (arg._expression.getDescriptor() == expression);
 }

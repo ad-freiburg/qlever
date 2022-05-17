@@ -9,6 +9,7 @@
 #include "../util/HashMap.h"
 #include "ParsedQuery.h"
 #include "SparqlLexer.h"
+#include "sparqlParser/SparqlQleverVisitor.h"
 
 using std::string;
 
@@ -68,7 +69,9 @@ class SparqlParser {
   string _query;
   SparqlFilter parseRegexFilter(bool expectKeyword);
 
-  sparqlExpression::SparqlExpressionPimpl parseExpressionWithAntlr(
-      const ParsedQuery& parsedQuery);
-  ParsedQuery::Alias parseAliasWithAntlr(const ParsedQuery& parsedQuery);
+  template <typename F>
+  auto parseWithAntlr(F f, const ParsedQuery& parsedQuery)
+      -> decltype(f(std::declval<const string&>(),
+                    std::declval<SparqlQleverVisitor::PrefixMap>())
+                      ._resultOfParse);
 };

@@ -67,7 +67,7 @@ class SparqlLexer {
   // Accepts any token
   void accept();
 
-  // Checks whether the next token matches but does not consume it
+  // Checks whether the next token matches but does not consume it.
   [[nodiscard]] bool peek(SparqlToken::Type type) const;
   [[nodiscard]] bool peek(std::string_view raw, bool match_case = true) const;
 
