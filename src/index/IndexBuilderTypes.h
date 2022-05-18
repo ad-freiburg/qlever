@@ -8,6 +8,7 @@
 #include "../global/Id.h"
 #include "../util/Conversions.h"
 #include "../util/HashMap.h"
+#include "../util/Serializer/Serializer.h"
 #include "../util/TupleHelpers.h"
 #include "../util/TypeTraits.h"
 #include "./ConstantsIndexBuilding.h"
@@ -25,10 +26,9 @@ struct TripleComponent {
   std::string _iriOrLiteral;
   bool _isExternal = false;
 
-  friend void serialize(auto& serializer,
-                        ad_utility::SimilarTo<TripleComponent> auto&& entry) {
-    serializer | entry._iriOrLiteral;
-    serializer | entry._isExternal;
+  AD_SERIALIZE_FRIEND_FUNCTION(TripleComponent) {
+    serializer | arg._iriOrLiteral;
+    serializer | arg._isExternal;
   }
 };
 

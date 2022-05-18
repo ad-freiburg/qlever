@@ -5,25 +5,9 @@
 #ifndef QLEVER_SERIALIZESTRING_H
 #define QLEVER_SERIALIZESTRING_H
 
-#include <string>
+#include "./SerializeVector.h"
 
-#include "../TypeTraits.h"
-
-namespace ad_utility::serialization {
-
-template <Serializer S>
-void serialize(S& serializer,
-               ad_utility::SimilarTo<std::string> auto&& string) {
-  if constexpr (WriteSerializer<S>) {
-    serializer << string.size();
-    serializer.serializeBytes(string.data(), string.size());
-  } else {
-    auto size = string.size();  // just to get the right type
-    serializer >> size;
-    string.resize(size);
-    serializer.serializeBytes(string.data(), string.size());
-  }
-}
-}  // namespace ad_utility::serialization
+// The Strings and Vectors can be serialized in exactly the same way, this
+// header just exists for convenience and consistency.
 
 #endif  // QLEVER_SERIALIZESTRING_H

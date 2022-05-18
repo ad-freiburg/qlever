@@ -18,9 +18,9 @@
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
 #include "../util/ReadableNumberFact.h"
+#include "../util/Serializer/Serializer.h"
 #include "./MetaDataHandler.h"
 #include "CompressedRelation.h"
-#include "../util/Serializer/Serializer.h"
 
 using std::array;
 using std::pair;

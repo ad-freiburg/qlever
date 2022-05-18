@@ -17,7 +17,6 @@
 #include "../util/Timer.h"
 #include "../util/TypeTraits.h"
 
-
 // The meta data of a compressed block of ID triples in an index permutation.
 struct CompressedBlockMetaData {
   off_t _offsetInFile;
@@ -36,7 +35,7 @@ struct CompressedBlockMetaData {
 };
 
 // Serialization of the block meta data.
-  AD_SERIALIZE_FUNCTION(CompressedBlockMetaData) {
+AD_SERIALIZE_FUNCTION(CompressedBlockMetaData) {
   serializer | arg._offsetInFile;
   serializer | arg._compressedSize;
   serializer | arg._numRows;

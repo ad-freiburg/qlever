@@ -9,6 +9,45 @@
 
 #include "../Forward.h"
 #include "../TypeTraits.h"
+
+/**
+ * \file Serializer.h
+ * \brief Defines a generic and extendable framework for consistent
+ * serialization of arbitrary types.
+ *
+ * Serialization is defined in terms of `Serializer` types that can either write
+ * to (`WriteSerializer`) or read from (`ReadSerializer`) a resource like a
+ * buffer, file, network connection etc. This framework predefines serializers
+ * for byte buffers (in ByteBufferSerializer.h) and files (FileSerializer.h). To
+ * write a custom serializer that fulfills the `WriteSerializer` or
+ * `ReadSerializer` concept (see below) and is defined in the
+ * `ad_utility::serialization` namespace. The latter point is important to make
+ * argument-dependendent lookup word. A type `T` is called "serializable" if it
+ * can be serialized to or from a `Serializer`. A type is serializable to or
+ * from a certain serializer, if the call `serialize(serializer, t);` exists and
+ * is found. `serialize` functions are predefined for builtin arithmetic types
+ * (in this header) and for several STL types (SerializeVector.h,
+ * SerializePair.h, etc.).
+ *
+ * To make a custom type serializable you have to define the `serialize`
+ * function for this type either in the same namespace as the type or in the
+ * namespace `ad_utility::serialization`. The latter case can be used to make
+ * additional STL types serializable (inserting functions into `std` is
+ * forbidden in general). `serialize` functions should be defined using the
+ * `AD_SERIALIZE_FUNCTION` macro and its variants that can be found in this
+ * file. These macros take care of several pitfalls which one might fall into
+ * when defining the serialize functions manually (SFINAE, constness, etc.).
+ *
+ * For types that can be serialized by simply copying their bytes, you can allow
+ * trivial serialization (see below for details) instead of writing the
+ * `serialize` function.
+ *
+ * This file also defines the syntactic sugar `serializer | t` as an equivalent
+ * of `serialize(serializer, t)`.
+ *
+ * For an example usage of this serialization framework see the unit tests in
+ * `SerializerTest.h`;
+ */
 namespace ad_utility::serialization {
 
 class SerializationException : public std::runtime_error {
@@ -17,21 +56,23 @@ class SerializationException : public std::runtime_error {
 
 /// Concepts for serializer types.
 
-/// A `WriteSerializer` can write a span of bytes to some resource.
+/// A `WriteSerializer` can write from a span of bytes to some resource and has
+/// a public alias `using IsWriteSerializer = std::true_type'`.
 template <typename S>
 concept WriteSerializer = requires(S s, const char* ptr, size_t numBytes) {
   {
-    typename S::IsWriteSerializer {}
+    typename std::decay_t<S>::IsWriteSerializer {}
   }
   ->std::same_as<std::true_type>;
   {s.serializeBytes(ptr, numBytes)};
 };
 
-/// A `ReadSerializer` can read to a span of bytes from some resource.
+/// A `ReadSerializer` can read to span of bytes from some resource and has a
+/// public alias `using IsWriteSerializer = std::false_type'`.
 template <typename S>
 concept ReadSerializer = requires(S s, char* ptr, size_t numBytes) {
   {
-    typename S::IsWriteSerializer {}
+    typename std::decay_t<S>::IsWriteSerializer {}
   }
   ->std::same_as<std::false_type>;
   {s.serializeBytes(ptr, numBytes)};
@@ -41,88 +82,81 @@ concept ReadSerializer = requires(S s, char* ptr, size_t numBytes) {
 template <typename S>
 concept Serializer = WriteSerializer<S> || ReadSerializer<S>;
 
-/// If we try to reference from a const object or reference, the serializer must be a `WriteSerializer`. The following type trait can be used to check this constraint at compile time.
+/// If we try to reference from a const object or reference, the serializer must
+/// be a `WriteSerializer`. The following type trait can be used to check this
+/// constraint at compile time.
 template <Serializer S, typename T>
-static constexpr bool SerializerMatchesConstness = WriteSerializer<S> || !std::is_const_v<std::remove_reference_t<T>>;
+static constexpr bool SerializerMatchesConstness =
+    WriteSerializer<S> || !std::is_const_v<std::remove_reference_t<T>>;
 
 /**
- * Operator that allows to write something like:
+ * This macro automatically creates a free serialization function for a type.
+ * Example usage: struct X { int a; int b;
+ * }
  *
- *   ByteBufferWriteSerializer writer;
- *   int x = 42;
- *   writer | x;
- *   ByteBufferReadSerializer reader(std::move(writer).data());
- *   int y;
- *   reader | y;
+ * AD_SERIALIZE_FUNCTION(X) {
+ *   serializer | arg.a;  // serialize the `a` member of an 'X'
+ *   serializer | arg.b
+ * }
  *
- *   For the element `t` of type `T` on the right hand side, either a static
- * function T::serialize(serializer, AD_FWD(t)); or a free function
- *   serialize(serializer, AD_FWD(t));
- *   must be available.
- *
- *   If both cases apply, the serialization fails with a `static_assert`. To
- * automatically create all overloads of `serialize` for reading from a `const
- * T&` and writing to a `T&` and to avoid that types that are implicitly
- * convertible to `T` use `T`'s serialization function, the following syntax can
- * be used:
- *
- *   void serialize(auto&& serializer, ad_utility::SimilarTo<T> auto&& t) {
- *     serializer | t._someMember;
- *     serializer | t._someOtherMember;
- *     // ...
- *   }
- *
- *  An even cleaner and SFINAE-friendly interface that restricts the template to actual `Serializer`s and checks whether we don't try to read into a const variable can be created as follows:
- *
- *  template <Serializer S, ad_utility::SimilarTo<T> U> requires SerializerMatchesConstness<S, U>
- *  void serialize(S& serializer, U&& u) {
- *    serializer | u._someMember;
- *    // ...
- *  }
- *
- *  The rather verbose signature of this function can be created using the
- *  `AD_SERIALIZE_FUNCTION` macro as follows:
- *  AD_SERIALIZE_FUNCTION(T) {
- *    // defines arguments `serializer` and `arg`.
- *    serializer | arg._someMemberOfTypeT;
- *  }
- *
+ * Inside of the body there are variables `serializer` and `arg` (the element to
+ * be serialized). The `serialize` function created by this macro is found by
+ * ADL and used by this framework if the following conditions apply:
+ * - The macro is placed in the same namespace as `T` or in
+ * `ad_utility::serialization`
+ * - The first argument to `serialize` fulfills the `Serializer` concept.
+ * - The second argument to `serialize` is a `T`, `T&`, `const T&`, `T&&` etc.
+ * - The serializer is a `WriteSerializer` or the `arg` is not const.
  */
-#define AD_SERIALIZE_FUNCTION(T) \
-  template <ad_utility::serialization::Serializer S, ad_utility::SimilarTo<T> U> requires ad_utility::serialization::SerializerMatchesConstness<S, U> \
-  void serialize(S& serializer, U&& arg)
+#define AD_SERIALIZE_FUNCTION(T)                                            \
+  template <ad_utility::serialization::Serializer S,                        \
+            ad_utility::SimilarTo<T> U>                                     \
+  requires ad_utility::serialization::SerializerMatchesConstness<S, U> void \
+  serialize(S& serializer, U&& arg)
 
-#define AD_SERIALIZE_FRIEND_FUNCTION(T) \
-  template <ad_utility::serialization::Serializer S, ad_utility::SimilarTo<T> U> requires ad_utility::serialization::SerializerMatchesConstness<S, U> \
-  friend void serialize(S& serializer, U&& arg)
+/// Similar to `AD_SERIALIZE_FUNCTION` but defines a `friend` function to also
+/// access private members of a class. It is possible to declare the friend
+/// using `AD_SERIALIZE_FRIEND_FUNCTION(Type);` and to define it outside of the
+/// class with `AD_SERIALIZE_FUNCTION(Type){...}`
+#define AD_SERIALIZE_FRIEND_FUNCTION(T)                           \
+  template <ad_utility::serialization::Serializer S,              \
+            ad_utility::SimilarTo<T> U>                           \
+  requires ad_utility::serialization::SerializerMatchesConstness< \
+      S, U> friend void                                           \
+  serialize(S& serializer, U&& arg)
 
+/**
+ * Define `serialize` functions for all types that fulfill the `Constraint`.
+ * Inside the `Constraint` you have access to the types `S` (the serializer) and
+ * `T` (the type to be serialized). CAVEAT: `T` might be `Type&`, `Type&&`,
+ * `const Type&&` so you might need to use `std::decay_t`,
+ * `std::remove_reference_t` or other type traits inside the constraint. The
+ * same holds in principle for the serializer type `S` but the concepcts
+ * `Serializer` , `WriteSerializer` and `ReadSerializer` are also true for
+ * references to serializers. For an example usage see `SerializePair.h`
+ */
+#define AD_SERIALIZE_FUNCTION_PARTIAL(Constraint)                \
+  template <ad_utility::serialization::Serializer S, typename T> \
+  requires(Constraint) void serialize(S& serializer, T&& arg)
 
-template <typename Serializer, typename T>
-void operator|(Serializer& serializer, T&& t) {
-  static constexpr bool hasStaticSerialize = requires() {
-    std::decay_t<T>::serialize(serializer, AD_FWD(t));
-  };
+/// Similar to `AD_SERIALIZE_FUNCTION_PARTIAL` but only for `WriteSerializer`s.
+/// For an exmple usage see `SerializeVector.h`
+#define AD_SERIALIZE_FUNCTION_PARTIAL_WRITE(Constraint)               \
+  template <ad_utility::serialization::WriteSerializer S, typename T> \
+  requires(Constraint) void serialize(S& serializer, T&& arg)
 
-  static constexpr bool hasFreeSerialize = requires() {
-    serialize(serializer, AD_FWD(t));
-  };
+/// Similar to `AD_SERIALIZE_FUNCTION_PARTIAL` but only for `ReadSerializer`s.
+/// For an exmple usage see `SerializeVector.h`
+#define AD_SERIALIZE_FUNCTION_PARTIAL_READ(Constraint)               \
+  template <ad_utility::serialization::ReadSerializer S, typename T> \
+  requires(Constraint) void serialize(S& serializer, T&& arg)
 
-  if constexpr (hasStaticSerialize) {
-    std::decay_t<T>::serialize(serializer, AD_FWD(t));
-    static_assert(!hasFreeSerialize,
-                  "Encountered a type for which a free and a static "
-                  "serialization function are present, this is not supported");
-  } else {
-    //} else if constexpr (hasFreeSerialize) {
-    serialize(serializer, AD_FWD(t));
-  }
-    /*
-  } else {
-    static_assert(ad_utility::alwaysFalse<T>,
-                  "Tried to use operator| on a serializer and a type T that "
-                  "has neither a static nor a free serialize function");
-  }
-     */
+/**
+ * Operator that allows the short hand notation
+ * template <typename Serializer, typename T>
+ */
+void operator|(Serializer auto& serializer, auto&& t) {
+  serialize(serializer, AD_FWD(t));
 }
 
 /// Serialization operator for explicitly writing to a serializer.
@@ -131,7 +165,7 @@ void operator<<(WriteSerializer auto& serializer, const auto& t) {
 }
 
 /// Serialization operator for explicitly reading from a serializer.
-void operator>>(ReadSerializer auto& serializer, auto& t) { serializer | t; }
+void operator>>(ReadSerializer auto& serializer, auto&& t) { serializer | t; }
 
 /// Arithmetic types (the builtins like int, char, double) can be trivially
 /// serialized by just copying the bits (see below).

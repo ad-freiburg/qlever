@@ -7,13 +7,13 @@
 #include <utility>
 
 #include "../TypeTraits.h"
+#include "./Serializer.h"
 
 namespace ad_utility::serialization {
-template <typename Serializer, typename Pair>
-requires ad_utility::isInstantiation<std::pair, std::decay_t<Pair>> void
-serialize(Serializer& serializer, Pair&& pair) {
-  serializer | pair.first;
-  serializer | pair.second;
+AD_SERIALIZE_FUNCTION_PARTIAL(
+    (ad_utility::similarToInstantiation<std::pair, T>)) {
+  serializer | arg.first;
+  serializer | arg.second;
 }
 }  // namespace ad_utility::serialization
 

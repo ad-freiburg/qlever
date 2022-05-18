@@ -56,9 +56,10 @@ class MetaDataWrapperDense {
 
   // The serialization is a noop because all the data always stays on disk.
   // The initialization is done via `setup`.
-  template <typename Serializer, typename MDD>
-  static void serialize([[maybe_unused]] Serializer& serializer,
-                        [[maybe_unused]] MDD&& wrapper) {}
+  AD_SERIALIZE_FRIEND_FUNCTION(MetaDataWrapperDense) {
+    (void)serializer;
+    (void)arg;
+  }
 
   // ___________________________________________________________
   size_t size() const { return _vec.size(); }
@@ -228,18 +229,16 @@ class MetaDataWrapperHashMap {
     return _map.count(id);
   }
 
-  template <ad_utility::serialization::Serializer S, typename MDW>
-  static void serialize(S& serializer, MDW&& metaDataWrapper) {
-    serializer | metaDataWrapper._map;
+  AD_SERIALIZE_FRIEND_FUNCTION(MetaDataWrapperHashMap) {
+    serializer | arg._map;
     if constexpr (ad_utility::serialization::ReadSerializer<S>) {
-      metaDataWrapper._sortedKeys.clear();
-      metaDataWrapper._sortedKeys.reserve(metaDataWrapper.size());
-      for (const auto& [key, value] : metaDataWrapper) {
+      arg._sortedKeys.clear();
+      arg._sortedKeys.reserve(arg.size());
+      for (const auto& [key, value] : arg) {
         (void)value;  // Silence the warning about `value` being unused.
-        metaDataWrapper._sortedKeys.push_back(key);
+        arg._sortedKeys.push_back(key);
       }
-      std::sort(metaDataWrapper._sortedKeys.begin(),
-                metaDataWrapper._sortedKeys.end());
+      std::sort(arg._sortedKeys.begin(), arg._sortedKeys.end());
     }
   }
 

@@ -256,3 +256,6 @@ TEST(VectorIncrementalSerializer, SerializeInTheMiddle) {
   testIncrementalSerialization(strings);
   ad_utility::deleteFile(filename);
 }
+
+// TODO<joka921>  Add tests for the Macros that create serialization functions
+// and the different ADL cases.

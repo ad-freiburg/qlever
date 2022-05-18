@@ -117,4 +117,3 @@ void IndexMetaData<MapType>::calculateExpensiveStatistics() {
     _totalBytes += getTotalBytesForRelation(el.first);
   }
 }
-

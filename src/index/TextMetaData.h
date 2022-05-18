@@ -8,8 +8,8 @@
 
 #include "../global/Id.h"
 #include "../util/Exception.h"
-#include "../util/Serializer/Serializer.h"
 #include "../util/File.h"
+#include "../util/Serializer/Serializer.h"
 #include "../util/TypeTraits.h"
 
 using std::vector;

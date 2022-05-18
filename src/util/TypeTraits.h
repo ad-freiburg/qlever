@@ -70,8 +70,10 @@ struct FirstWrapper : public std::type_identity<T> {};
 /// instantiation of the template `SomeTemplate`. This can be used to define
 /// concepts, see below.
 template <template <typename...> typename Template, typename T>
-constexpr static bool isInstantiation =
-    detail::IsInstantiationOf<Template>::template Instantiation<T>::value;
+concept isInstantiation = detail::IsInstantiationOf<Template>::template Instantiation<T>::value;
+
+template <template <typename...> typename Template, typename T>
+concept similarToInstantiation = isInstantiation<Template, std::decay_t<T>>;
 
 /// isVector<T> is true if and only if T is an instantiation of std::vector
 template <typename T>
