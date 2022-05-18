@@ -20,6 +20,7 @@
 #include "../util/ReadableNumberFact.h"
 #include "./MetaDataHandler.h"
 #include "CompressedRelation.h"
+#include "../util/Serializer/Serializer.h"
 
 using std::array;
 using std::pair;
@@ -180,13 +181,41 @@ class IndexMetaData {
   const BlocksType& blockData() const { return _blockData; }
 
   // Symmetric serialization function for the ad_utility::serialization module.
-  template <class Serializer, typename IMD>
-  static void serialize(Serializer& serializer, IMD&& metaData);
+  AD_SERIALIZE_FRIEND_FUNCTION(IndexMetaData) {
+    // The binary format of an IndexMetaData start with an 8-byte magicNumber.
+    // After this magic number, an 8-byte version number follows. Both have to
+    // match.
 
-  /*
-  size_t getNofBlocksForRelation(const Id col0Id) const;
-  size_t getTotalBytesForRelation(Id col0Id) const;
-   */
+    using T = IndexMetaData<M>;
+    uint64_t magicNumber = T::MAGIC_NUMBER_FOR_SERIALIZATION;
+
+    serializer | magicNumber;
+
+    // This check might only become false, if we are reading from the serializer
+    if (magicNumber != T::MAGIC_NUMBER_FOR_SERIALIZATION) {
+      throw WrongFormatException(
+          "The binary format of this index is no longer supported by QLever. "
+          "Please rebuild the index.");
+    }
+
+    serializer | arg._version;
+    // This check might only become false, if we are reading from the serializer
+    if (arg.getVersion() != V_CURRENT) {
+      throw WrongFormatException(
+          "The binary format of this index is no longer supported by QLever. "
+          "Please rebuild the index.");
+    }
+
+    // Serialize the rest of the data members
+    serializer | arg._name;
+    serializer | arg._data;
+    serializer | arg._blockData;
+
+    serializer | arg._offsetAfter;
+    serializer | arg._totalElements;
+    serializer | arg._totalBytes;
+    serializer | arg._totalBlocks;
+  }
 };
 
 // ____________________________________________________________________________

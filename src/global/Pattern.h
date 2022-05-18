@@ -20,6 +20,7 @@
 #include "../util/TypeTraits.h"
 #include "../util/UninitializedAllocator.h"
 #include "Id.h"
+#
 
 typedef uint32_t PatternID;
 
@@ -192,11 +193,9 @@ class CompactVectorOfStrings {
   using const_iterator = Iterator;
 
   // Allow serialization via the ad_utility::serialization interface.
-  friend void serialize(
-      auto& serializer,
-      ad_utility::SimilarTo<CompactVectorOfStrings> auto&& c) {
-    serializer | c._data;
-    serializer | c._offsets;
+  AD_SERIALIZE_FRIEND_FUNCTION(CompactVectorOfStrings){
+    serializer | arg._data;
+    serializer | arg._offsets;
   }
 
  private:

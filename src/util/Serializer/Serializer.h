@@ -41,6 +41,10 @@ concept ReadSerializer = requires(S s, char* ptr, size_t numBytes) {
 template <typename S>
 concept Serializer = WriteSerializer<S> || ReadSerializer<S>;
 
+/// If we try to reference from a const object or reference, the serializer must be a `WriteSerializer`. The following type trait can be used to check this constraint at compile time.
+template <Serializer S, typename T>
+static constexpr bool SerializerMatchesConstness = WriteSerializer<S> || !std::is_const_v<std::remove_reference_t<T>>;
+
 /**
  * Operator that allows to write something like:
  *
@@ -68,7 +72,31 @@ concept Serializer = WriteSerializer<S> || ReadSerializer<S>;
  *     // ...
  *   }
  *
+ *  An even cleaner and SFINAE-friendly interface that restricts the template to actual `Serializer`s and checks whether we don't try to read into a const variable can be created as follows:
+ *
+ *  template <Serializer S, ad_utility::SimilarTo<T> U> requires SerializerMatchesConstness<S, U>
+ *  void serialize(S& serializer, U&& u) {
+ *    serializer | u._someMember;
+ *    // ...
+ *  }
+ *
+ *  The rather verbose signature of this function can be created using the
+ *  `AD_SERIALIZE_FUNCTION` macro as follows:
+ *  AD_SERIALIZE_FUNCTION(T) {
+ *    // defines arguments `serializer` and `arg`.
+ *    serializer | arg._someMemberOfTypeT;
+ *  }
+ *
  */
+#define AD_SERIALIZE_FUNCTION(T) \
+  template <ad_utility::serialization::Serializer S, ad_utility::SimilarTo<T> U> requires ad_utility::serialization::SerializerMatchesConstness<S, U> \
+  void serialize(S& serializer, U&& arg)
+
+#define AD_SERIALIZE_FRIEND_FUNCTION(T) \
+  template <ad_utility::serialization::Serializer S, ad_utility::SimilarTo<T> U> requires ad_utility::serialization::SerializerMatchesConstness<S, U> \
+  friend void serialize(S& serializer, U&& arg)
+
+
 template <typename Serializer, typename T>
 void operator|(Serializer& serializer, T&& t) {
   static constexpr bool hasStaticSerialize = requires() {
@@ -84,13 +112,17 @@ void operator|(Serializer& serializer, T&& t) {
     static_assert(!hasFreeSerialize,
                   "Encountered a type for which a free and a static "
                   "serialization function are present, this is not supported");
-  } else if constexpr (hasFreeSerialize) {
+  } else {
+    //} else if constexpr (hasFreeSerialize) {
     serialize(serializer, AD_FWD(t));
+  }
+    /*
   } else {
     static_assert(ad_utility::alwaysFalse<T>,
                   "Tried to use operator| on a serializer and a type T that "
                   "has neither a static nor a free serialize function");
   }
+     */
 }
 
 /// Serialization operator for explicitly writing to a serializer.

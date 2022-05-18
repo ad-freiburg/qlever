@@ -12,6 +12,7 @@
 
 #include "../util/BitUtils.h"
 #include "../util/NBitInteger.h"
+#include "../util/Serializer/Serializer.h"
 #include "./IndexTypes.h"
 
 /// The different Datatypes that a `ValueId` (see below) can encode.
@@ -196,9 +197,8 @@ class ValueId {
 
   /// Enable the serialization of `ValueId` in the `ad_utility::serialization`
   /// framework.
-  friend void serialize(auto& serializer,
-                        ad_utility::SimilarTo<ValueId> auto&& id) {
-    serializer | id._bits;
+  AD_SERIALIZE_FRIEND_FUNCTION(ValueId){
+    serializer | arg._bits;
   }
 
   /// Similar to `std::visit` for `std::variant`. First gets the datatype and

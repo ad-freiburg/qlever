@@ -17,6 +17,7 @@
 #include "../util/Timer.h"
 #include "../util/TypeTraits.h"
 
+
 // The meta data of a compressed block of ID triples in an index permutation.
 struct CompressedBlockMetaData {
   off_t _offsetInFile;
@@ -35,16 +36,14 @@ struct CompressedBlockMetaData {
 };
 
 // Serialization of the block meta data.
-template <typename Serializer>
-void serialize(Serializer& s,
-               ad_utility::SimilarTo<CompressedBlockMetaData> auto&& b) {
-  s | b._offsetInFile;
-  s | b._compressedSize;
-  s | b._numRows;
-  s | b._col0FirstId;
-  s | b._col0LastId;
-  s | b._col1FirstId;
-  s | b._col1LastId;
+  AD_SERIALIZE_FUNCTION(CompressedBlockMetaData) {
+  serializer | arg._offsetInFile;
+  serializer | arg._compressedSize;
+  serializer | arg._numRows;
+  serializer | arg._col0FirstId;
+  serializer | arg._col0LastId;
+  serializer | arg._col1FirstId;
+  serializer | arg._col1LastId;
 }
 
 // The meta data of a whole compressed "relation", where relation refers to a
@@ -145,14 +144,12 @@ struct CompressedRelationMetaData {
 };
 
 // Serialization of the compressed "relation" meta data.
-template <class Serializer>
-void serialize(Serializer& s,
-               ad_utility::SimilarTo<CompressedRelationMetaData> auto&& c) {
-  s | c._col0Id;
-  s | c._numRows;
-  s | c._multiplicityCol1;
-  s | c._multiplicityCol2;
-  s | c._offsetInBlock;
+AD_SERIALIZE_FUNCTION(CompressedRelationMetaData) {
+  serializer | arg._col0Id;
+  serializer | arg._numRows;
+  serializer | arg._multiplicityCol1;
+  serializer | arg._multiplicityCol2;
+  serializer | arg._offsetInBlock;
 }
 
 /// Manage the compression and serialization of relations during the index
