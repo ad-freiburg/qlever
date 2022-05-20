@@ -77,11 +77,12 @@ void Index::addTextFromOnDiskIndex() {
   _textIndexFile.open(string(_onDiskBase + ".text.index").c_str(), "r");
   AD_CHECK(_textIndexFile.isOpen());
   off_t metaFrom;
-  off_t metaTo = _textIndexFile.getLastOffset(&metaFrom);
-  unsigned char* buf = new unsigned char[metaTo - metaFrom];
-  _textIndexFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
-  _textMeta.createFromByteBuffer(buf);
-  delete[] buf;
+  [[maybe_unused]] off_t metaTo = _textIndexFile.getLastOffset(&metaFrom);
+  ad_utility::serialization::FileReadSerializer serializer(
+      std::move(_textIndexFile));
+  serializer.setSerializationPosition(metaFrom);
+  serializer >> _textMeta;
+  _textIndexFile = std::move(serializer).file();
   LOG(INFO) << "Reading excerpt offsets from file." << endl;
   std::ifstream f(string(_onDiskBase + ".text.docsDB").c_str());
   if (f.good()) {
@@ -273,14 +274,18 @@ void Index::createTextIndex(const string& filename, const Index::TextVec& vec) {
   for (TextVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
     if (std::get<0>(*reader) != currentBlockIndex) {
       AD_CHECK(classicPostings.size() > 0);
-      if (isEntityBlockId(currentBlockIndex)) {
+
+      bool isEntityBlock = isEntityBlockId(currentBlockIndex);
+      if (isEntityBlock) {
         ++nofEntities;
         nofEntityContexts += classicPostings.size();
       }
       ContextListMetaData classic = writePostings(out, classicPostings, true);
       ContextListMetaData entity = writePostings(out, entityPostings, false);
-      _textMeta.addBlock(TextBlockMetaData(
-          currentMinWordIndex, currentMaxWordIndex, classic, entity));
+      _textMeta.addBlock(
+          TextBlockMetaData(currentMinWordIndex, currentMaxWordIndex, classic,
+                            entity),
+          isEntityBlock);
       classicPostings.clear();
       entityPostings.clear();
       currentBlockIndex = std::get<0>(*reader);
@@ -311,7 +316,8 @@ void Index::createTextIndex(const string& filename, const Index::TextVec& vec) {
   ContextListMetaData classic = writePostings(out, classicPostings, true);
   ContextListMetaData entity = writePostings(out, entityPostings, false);
   _textMeta.addBlock(TextBlockMetaData(currentMinWordIndex, currentMaxWordIndex,
-                                       classic, entity));
+                                       classic, entity),
+                     isEntityBlockId(currentMaxWordIndex));
   _textMeta.setNofEntities(nofEntities);
   _textMeta.setNofEntityContexts(nofEntityContexts);
   classicPostings.clear();
@@ -320,7 +326,9 @@ void Index::createTextIndex(const string& filename, const Index::TextVec& vec) {
   LOG(INFO) << "Writing statistics:\n" << _textMeta.statistics() << std::endl;
 
   LOG(INFO) << "Writing Meta data to index file...\n";
-  out << _textMeta;
+  ad_utility::serialization::FileWriteSerializer serializer{std::move(out)};
+  serializer << _textMeta;
+  out = std::move(serializer).file();
   off_t startOfMeta = _textMeta.getOffsetAfter();
   out.write(&startOfMeta, sizeof(startOfMeta));
   out.close();
