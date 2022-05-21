@@ -424,6 +424,8 @@ void SparqlParser::parseWhere(ParsedQuery* query,
           query->registerVariableVisibleInQueryBody(_lexer.current().raw);
         } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
           predicate = parseLiteral(_lexer.current().raw, true);
+        } else if (_lexer.accept(SparqlToken::Type::A_RDF_TYPE_ALIAS)) {
+          predicate = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
         } else {
           // Assume the token is a predicate path. This will be verified
           // separately later.
