@@ -224,11 +224,7 @@ PropertyPath PropertyPathParser::pathPrimary() {
     PropertyPath p(PropertyPath::Operation::IRI);
     std::string_view iri_view;
     expectAny(&iri_view);
-    if (iri_view == "a") {
-      p._iri = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
-    } else {
-      p._iri = iri_view;
-    }
+    p._iri = iri_view;
     return p;
   }
 }
