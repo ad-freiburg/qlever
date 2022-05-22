@@ -83,31 +83,14 @@ size_t TextMetaData::getBlockCount() const { return _blocks.size(); }
 
 // _____________________________________________________________________________
 string TextMetaData::statistics() const {
-  // TODO: Not sure which of these we still want and why they are computed here
-  // (each time the statistics is shown) and not when the index build is done.
+  // TODO: What does totalElementsEntityLists count?
   size_t totalElementsClassicLists = 0;
-  size_t totalElementsEntityLists = 0;
-  size_t totalBytesClassicLists = 0;
-  size_t totalBytesEntityLists = 0;
-  size_t totalBytesCls = 0;
-  size_t totalBytesWls = 0;
-  size_t totalBytesSls = 0;
+  // size_t totalElementsEntityLists = 0;
   for (size_t i = 0; i < _blocks.size(); ++i) {
     const ContextListMetaData& wcl = _blocks[i]._cl;
-    const ContextListMetaData& ecl = _blocks[i]._entityCl;
-
     totalElementsClassicLists += wcl._nofElements;
-    totalElementsEntityLists += ecl._nofElements;
-
-    totalBytesClassicLists += 1 + wcl._lastByte - wcl._startContextlist;
-    totalBytesEntityLists += 1 + ecl._lastByte - ecl._startContextlist;
-
-    totalBytesCls += wcl._startWordlist - wcl._startContextlist;
-    totalBytesCls += ecl._startWordlist - ecl._startContextlist;
-    totalBytesWls += wcl._startScorelist - wcl._startWordlist;
-    totalBytesWls += ecl._startScorelist - ecl._startWordlist;
-    totalBytesSls += 1 + wcl._lastByte - wcl._startScorelist;
-    totalBytesSls += 1 + ecl._lastByte - ecl._startScorelist;
+    // const ContextListMetaData& ecl = _blocks[i]._entityCl;
+    // totalElementsEntityLists += ecl._nofElements;
   }
   // Show abbreviated statistics (like for the permutations, which used to have
   // very verbose statistics, too).
