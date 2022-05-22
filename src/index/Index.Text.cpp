@@ -1,6 +1,8 @@
-// Copyright 2015, University of Freiburg,
+// Copyright 2015 - 2022, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Authors: Björn Buchhold <buchhold@cs.uni-freiburg.de>
+//          Johannes Kalmbach <johannes.kalmbach@gmail.com>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <absl/strings/str_split.h>
 
@@ -10,23 +12,109 @@
 
 #include "../engine/CallFixedSize.h"
 #include "../parser/ContextFileParser.h"
+#include "../util/Conversions.h"
 #include "../util/Simple8bCode.h"
 #include "./FTSAlgorithms.h"
 #include "./Index.h"
 
 // _____________________________________________________________________________
+cppcoro::generator<ContextFileParser::Line> Index::contextFileLines(
+    const std::string& contextFile, bool useRdfVocabularyAsText) {
+  auto localeManager = _textVocab.getLocaleManager();
+  // ROUND 1: Read from context file aka wordsfile if not empty. Remember
+  // the last context id for the (optional) second round.
+  //
+  // TODO: For now, EITHER do this round OR the other, see the respective
+  // comment in `addTextFromContextFile` below.
+  TextRecordIndex contextId = TextRecordIndex::make(0);
+  if (!useRdfVocabularyAsText) {
+    ContextFileParser::Line line;
+    ContextFileParser p(contextFile, localeManager);
+    ad_utility::HashSet<string> items;
+    while (p.getLine(line)) {
+      contextId = line._contextId;
+      co_yield line;
+    }
+    if (contextId > TextRecordIndex::make(0)) {
+      contextId = contextId.incremented();
+    }
+  }
+  // ROUND 2: Consider RDF vocabulary as the "contexts" aka text records.
+  if (useRdfVocabularyAsText) {
+    auto isWordChar = [](char c) -> bool { return std::isalnum(c); };
+    for (VocabIndex index = VocabIndex::make(0); index.get() < _vocab.size();
+         index = index.incremented()) {
+      auto text = _vocab.at(index);
+      if (isLiteral(text)) {
+        ContextFileParser::Line entityLine{text, true, contextId, 1};
+        co_yield entityLine;
+        size_t pos = 0;
+        size_t posEnd = text.rfind('"');
+        if (posEnd == std::string::npos) posEnd = text.size();
+        while (pos < posEnd) {
+          while (pos < posEnd && !isWordChar(text[pos])) ++pos;
+          size_t posWordBegin = pos;
+          while (pos < posEnd && isWordChar(text[pos])) ++pos;
+          if (pos > posWordBegin) {
+            auto word = localeManager.getLowercaseUtf8(
+                text.substr(posWordBegin, pos - posWordBegin));
+            ContextFileParser::Line wordLine{word, false, contextId, 1};
+            co_yield wordLine;
+          }
+        }
+        contextId = contextId.incremented();
+      }
+    }
+  }
+}
+
+// _____________________________________________________________________________
 void Index::addTextFromContextFile(const string& contextFile) {
+  LOG(INFO) << std::endl;
+  LOG(INFO) << "Adding text index ..." << std::endl;
   string indexFilename = _onDiskBase + ".text.index";
-  size_t nofLines = passContextFileForVocabulary(contextFile);
+  // If `contextFile` ends with ".vocabulary", don't actually read from a file,
+  // but instead consider the IRIs and literals from the RDF vocabulary as text
+  // records.
+  //
+  // TODO: The generator `contextFileLines` above can actually both read from a
+  // file and then also consider the RDF vocabulary, we just need to add a
+  // proper command-line option to enable this. In the meantime, it's either-or.
+  bool useRdfVocabularyAsText = contextFile.ends_with(".vocabulary");
+  if (useRdfVocabularyAsText) {
+    LOG(INFO) << "Considering each IRI and literal as a text record"
+              << std::endl;
+  }
+  // We have deleted the vocabulary during the index creation to save RAM, so
+  // now we have to reload it. Also, when IndexBuilderMain is called with option
+  // -A (add text index), this is the first thing we do .
+  //
+  // NOTE: In the previous version of the code (where the only option was to
+  // read from a wordsfile), this as done in `passContextFileIntoVector`. That
+  // is, when we now call call `passContextFileForVocabulary` (which builds the
+  // text vocabulary), we already have the KB vocabular in RAM as well.
+  LOG(DEBUG) << "Reloading the RDF vocabulary ..." << std::endl;
+  _vocab = RdfsVocabulary{};
+  readConfiguration();
+  _vocab.readFromFile(
+      _onDiskBase + INTERNAL_VOCAB_SUFFIX,
+      _onDiskLiterals ? _onDiskBase + EXTERNAL_VOCAB_SUFFIX : "");
+
+  // Build the text vocabulary (first scan over the text records).
+  LOG(INFO) << "Building text vocabulary ..." << std::endl;
+  size_t nofLines =
+      passContextFileForVocabulary(contextFile, useRdfVocabularyAsText);
   _textVocab.writeToFile(_onDiskBase + ".text.vocabulary");
+
+  // Build the half-inverted lists (second scan over the text records).
+  LOG(INFO) << "Building the half-inverted index lists ..." << std::endl;
   calculateBlockBoundaries();
   TextVec v;
   v.reserve(nofLines);
-  passContextFileIntoVector(contextFile, v);
-  LOG(INFO) << "Sorting text index with " << v.size() << " items ..."
-            << std::endl;
+  passContextFileIntoVector(contextFile, useRdfVocabularyAsText, v);
+  LOG(DEBUG) << "Sorting text index, #elements = " << v.size() << std::endl;
   stxxl::sort(begin(v), end(v), SortText(), stxxlMemoryInBytes() / 3);
-  LOG(INFO) << "Sort done." << std::endl;
+  LOG(DEBUG) << "Sort done" << std::endl;
   createTextIndex(indexFilename, v);
   openTextFileHandle();
 }
@@ -73,8 +161,15 @@ void Index::buildDocsDB(const string& docsFileName) {
 
 // _____________________________________________________________________________
 void Index::addTextFromOnDiskIndex() {
+  // Read text vocabulary. TODO: Is this in RAM? I think yes. If so, it's worth
+  // mentioning in this comment here.
   _textVocab.readFromFile(_onDiskBase + ".text.vocabulary");
-  _textIndexFile.open(string(_onDiskBase + ".text.index").c_str(), "r");
+
+  // Initialize the text index.
+  std::string textIndexFileName = _onDiskBase + ".text.index";
+  LOG(INFO) << "Reading metadata from file " << textIndexFileName << " ..."
+            << std::endl;
+  _textIndexFile.open(textIndexFileName.c_str(), "r");
   AD_CHECK(_textIndexFile.isOpen());
   off_t metaFrom;
   [[maybe_unused]] off_t metaTo = _textIndexFile.getLastOffset(&metaFrom);
@@ -83,69 +178,51 @@ void Index::addTextFromOnDiskIndex() {
   serializer.setSerializationPosition(metaFrom);
   serializer >> _textMeta;
   _textIndexFile = std::move(serializer).file();
-  LOG(INFO) << "Reading excerpt offsets from file." << endl;
-  std::ifstream f(string(_onDiskBase + ".text.docsDB").c_str());
+  LOG(INFO) << "Registered text index: " << _textMeta.statistics() << std::endl;
+
+  // Initialize the text records file aka docsDB. NOTE: The search also works
+  // without this, but then there is no content to show when a text record
+  // matches. This is perfectly fine when the text records come from IRIs or
+  // literals from our RDF vocabulary.
+  std::string docsDbFileName = _onDiskBase + ".text.docsDB";
+  std::ifstream f(docsDbFileName.c_str());
   if (f.good()) {
     f.close();
-    LOG(INFO) << "Docs DB exists. Reading excerpt offsets...\n";
     _docsDB.init(string(_onDiskBase + ".text.docsDB"));
-    LOG(INFO) << "Done reading excerpt offsets." << endl;
+    LOG(INFO) << "Registered text records: #records = " << _docsDB._size
+              << std::endl;
   } else {
-    LOG(INFO) << "No Docs DB found.\n";
+    LOG(DEBUG) << "No file \"" << docsDbFileName
+               << "\" with additional text records" << std::endl;
     f.close();
   }
-  LOG(INFO) << "Registered text index: " << _textMeta.statistics() << std::endl;
 }
 
 // _____________________________________________________________________________
-size_t Index::passContextFileForVocabulary(string const& contextFile) {
-  // We have to have a configuration by now. Rereading it is necessary,
-  // because we might only add an text index to the already existing KB index.
-  // In this case we also need the correct locale settings etc.
-  readConfiguration();
-  LOG(INFO) << "Making pass over ContextFile " << contextFile
-            << " for vocabulary." << std::endl;
-  ContextFileParser::Line line;
-  ContextFileParser p(contextFile, _textVocab.getLocaleManager());
-  ad_utility::HashSet<string> items;
-  size_t i = 0;
-  while (p.getLine(line)) {
-    ++i;
+size_t Index::passContextFileForVocabulary(string const& contextFile,
+                                           bool useRdfVocabularyAsText) {
+  size_t numLines = 0;
+  ad_utility::HashSet<string> distinctWords;
+  for (auto line : contextFileLines(contextFile, useRdfVocabularyAsText)) {
+    ++numLines;
+    // LOG(INFO) << "LINE: "
+    //           << std::setw(50) << line._word << "   "
+    //           << line._isEntity << "\t"
+    //           << line._contextId.get() << "\t"
+    //           << line._score << std::endl;
     if (!line._isEntity) {
-      items.insert(line._word);
-    }
-    if (i % 10000000 == 0) {
-      LOG(INFO) << "Lines processed: " << i << '\n';
+      distinctWords.insert(line._word);
     }
   }
-  LOG(INFO) << "Pass done.\n";
-  _textVocab.createFromSet(items);
-  return i;
+  _textVocab.createFromSet(distinctWords);
+  return numLines;
 }
 
 // _____________________________________________________________________________
 void Index::passContextFileIntoVector(const string& contextFile,
+                                      bool useRdfVocabularyAsText,
                                       Index::TextVec& vec) {
-  LOG(INFO) << "Making pass over ContextFile " << contextFile
-            << " and creating stxxl vector.\n";
-  ContextFileParser::Line line;
-  ContextFileParser p(contextFile, _textVocab.getLocaleManager());
-  size_t i = 0;
-  // write using vector_bufwriter
-
-  // we have deleted the vocabulary during the index creation to save ram, so
-  // now we have to reload it,
-  LOG(INFO) << "Loading vocabulary from disk (needed for correct Ids in text "
-               "index)\n";
-  // this has to be repeated completely here because we have the possibility to
-  // only add a text index. In that case the Vocabulary has never been
-  // initialized before
-  _vocab = RdfsVocabulary{};
-  readConfiguration();
-  _vocab.readFromFile(
-      _onDiskBase + INTERNAL_VOCAB_SUFFIX,
-      _onDiskLiterals ? _onDiskBase + EXTERNAL_VOCAB_SUFFIX : "");
-
+  LOG(TRACE) << "BEGIN Index::passContextFileIntoVector" << std::endl;
   TextVec::bufwriter_type writer(vec);
   ad_utility::HashMap<WordIndex, Score> wordsInContext;
   ad_utility::HashMap<Id, Score> entitiesInContext;
@@ -153,9 +230,10 @@ void Index::passContextFileIntoVector(const string& contextFile,
   size_t nofContexts = 0;
   size_t nofWordPostings = 0;
   size_t nofEntityPostings = 0;
-
   size_t entityNotFoundErrorMsgCount = 0;
-  while (p.getLine(line)) {
+
+  size_t numLines = 0;
+  for (auto line : contextFileLines(contextFile, useRdfVocabularyAsText)) {
     if (line._contextId != currentContext) {
       ++nofContexts;
       addContextToVector(writer, currentContext, wordsInContext,
@@ -197,16 +275,14 @@ void Index::passContextFileIntoVector(const string& contextFile,
       }
       wordsInContext[wid] += line._score;
     }
-    ++i;
-    if (i % 10000000 == 0) {
-      LOG(INFO) << "Lines processed: " << i << '\n';
-    }
+    ++numLines;
   }
-  LOG(WARN)
-      << "Number of entity mentions where the entity is not part of the KB: "
-      << entityNotFoundErrorMsgCount << std::endl;
-  LOG(WARN) << "Number of total entity mentions: " << nofEntityPostings
-            << std::endl;
+  if (entityNotFoundErrorMsgCount > 0) {
+    LOG(WARN) << "Number of mentions of entities not found in the vocabulary: "
+              << entityNotFoundErrorMsgCount << std::endl;
+  }
+  LOG(DEBUG) << "Number of total entity mentions: " << nofEntityPostings
+             << std::endl;
   ++nofContexts;
   addContextToVector(writer, currentContext, wordsInContext, entitiesInContext);
   _textMeta.setNofTextRecords(nofContexts);
@@ -214,7 +290,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
   _textMeta.setNofEntityPostings(nofEntityPostings);
 
   writer.finish();
-  LOG(INFO) << "Pass done.\n";
+  LOG(TRACE) << "END Index::passContextFileIntoVector" << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -322,17 +398,18 @@ void Index::createTextIndex(const string& filename, const Index::TextVec& vec) {
   _textMeta.setNofEntityContexts(nofEntityContexts);
   classicPostings.clear();
   entityPostings.clear();
-  LOG(INFO) << "Done creating text index." << std::endl;
-  LOG(INFO) << "Writing statistics:\n" << _textMeta.statistics() << std::endl;
+  LOG(DEBUG) << "Done creating text index." << std::endl;
+  LOG(INFO) << "Statistics for text index: " << _textMeta.statistics()
+            << std::endl;
 
-  LOG(INFO) << "Writing Meta data to index file...\n";
+  LOG(DEBUG) << "Writing Meta data to index file ..." << std::endl;
   ad_utility::serialization::FileWriteSerializer serializer{std::move(out)};
   serializer << _textMeta;
   out = std::move(serializer).file();
   off_t startOfMeta = _textMeta.getOffsetAfter();
   out.write(&startOfMeta, sizeof(startOfMeta));
   out.close();
-  LOG(INFO) << "Text index done.\n";
+  LOG(INFO) << "Text index build completed" << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -456,7 +533,7 @@ static bool areFourLetterPrefixesSorted(auto comparator) {
 template <typename I, typename BlockBoundaryAction>
 void Index::calculateBlockBoundariesImpl(
     I&& index, const BlockBoundaryAction& blockBoundaryAction) {
-  LOG(INFO) << "Calculating block boundaries...\n";
+  LOG(TRACE) << "BEGIN Index::calculateBlockBoundaries" << std::endl;
   // Go through the vocabulary
   // Start a new block whenever a word is
   // 1) The last word in the corpus
@@ -553,8 +630,8 @@ void Index::calculateBlockBoundariesImpl(
   }
   blockBoundaryAction(index._textVocab.size() - 1);
   numBlocks++;
-  LOG(INFO) << "Done. #blocks = " << numBlocks
-            << ", #words = " << index._textVocab.size() << ".\n";
+  LOG(DEBUG) << "Block boundaries computed: #blocks = " << numBlocks
+             << ", #words = " << index._textVocab.size() << std::endl;
 }
 // _____________________________________________________________________________
 void Index::calculateBlockBoundaries() {

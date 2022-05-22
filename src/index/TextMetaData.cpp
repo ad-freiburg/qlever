@@ -83,17 +83,8 @@ size_t TextMetaData::getBlockCount() const { return _blocks.size(); }
 
 // _____________________________________________________________________________
 string TextMetaData::statistics() const {
-  std::ostringstream os;
-  std::locale loc;
-  ad_utility::ReadableNumberFacet facet(1);
-  std::locale locWithNumberGrouping(loc, &facet);
-  os.imbue(locWithNumberGrouping);
-  os << '\n';
-  os << "-------------------------------------------------------------------\n";
-  os << "----------------------------------\n";
-  os << "Text Index Statistics:\n";
-  os << "----------------------------------\n\n";
-  os << "# Blocks: " << _blocks.size() << '\n';
+  // TODO: Not sure which of these we still want and why they are computed here
+  // (each time the statistics is shown) and not when the index build is done.
   size_t totalElementsClassicLists = 0;
   size_t totalElementsEntityLists = 0;
   size_t totalBytesClassicLists = 0;
@@ -118,35 +109,16 @@ string TextMetaData::statistics() const {
     totalBytesSls += 1 + wcl._lastByte - wcl._startScorelist;
     totalBytesSls += 1 + ecl._lastByte - ecl._startScorelist;
   }
-  os << "-------------------------------------------------------------------\n";
-  os << "# Elements: " << totalElementsClassicLists + totalElementsEntityLists
-     << '\n';
-  os << "  thereof:\n";
-  os << "    Elements in classic lists: " << totalElementsClassicLists << '\n';
-  os << "    Elements in entity lists:  " << totalElementsEntityLists << '\n';
-  os << "-------------------------------------------------------------------\n";
-  os << "# Entities with text: " << _nofEntities << '\n';
-  os << "# Contexts for those entities: " << _nofEntityContexts << '\n';
-  os << "    Average contexts / entity: " << getAverageNofEntityContexts()
-     << '\n';
-  os << "-------------------------------------------------------------------\n";
-  os << "# Bytes: " << totalBytesClassicLists + totalBytesEntityLists << '\n';
-  os << "  thereof:\n";
-  os << "    Bytes in classic lists: " << totalBytesClassicLists << '\n';
-  os << "    Bytes in entity lists:  " << totalBytesEntityLists << '\n';
-  os << "-------------------------------------------------------------------\n";
-  os << "Breakdown:\n";
-  os << "    Bytes in context / doc lists: " << totalBytesCls << '\n';
-  os << "    Bytes in word lists:          " << totalBytesWls << '\n';
-  os << "    Bytes in score lists:         " << totalBytesSls << '\n';
-  os << "-------------------------------------------------------------------\n";
-  os << "\n";
-  os << "-------------------------------------------------------------------\n";
-  os << "Theoretical (naiive) size: "
-     << (totalElementsClassicLists + totalElementsEntityLists) *
-            (2 * sizeof(Id) + sizeof(Score))
-     << '\n';
-  os << "-------------------------------------------------------------------\n";
+  // Show abbreviated statistics (like for the permutations, which used to have
+  // very verbose statistics, too).
+  std::ostringstream os;
+  std::locale loc;
+  ad_utility::ReadableNumberFacet facet(1);
+  std::locale locWithNumberGrouping(loc, &facet);
+  os.imbue(locWithNumberGrouping);
+  os << "#records = " << _nofEntityContexts
+     << ", #words = " << totalElementsClassicLists
+     << ", #entities = " << _nofEntities << ", #blocks = " << _blocks.size();
   return std::move(os).str();
 }
 

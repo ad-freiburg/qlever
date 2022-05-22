@@ -21,6 +21,10 @@ void DocsDB::init(const string& fileName) {
 
 // _____________________________________________________________________________
 string DocsDB::getTextExcerpt(TextRecordIndex cid) const {
+  // HACK: If running without DocsDB, return empty string. Previously, the
+  // server crashed in this case.
+  if (_size == 0) return {};
+
   off_t ft[2];
   off_t& from = ft[0];
   off_t& to = ft[1];

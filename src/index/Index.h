@@ -15,6 +15,7 @@
 
 #include "../engine/ResultTable.h"
 #include "../global/Pattern.h"
+#include "../parser/ContextFileParser.h"
 #include "../parser/TurtleParser.h"
 #include "../util/BackgroundStxxlSorter.h"
 #include "../util/BufferedVector.h"
@@ -579,9 +580,23 @@ class Index {
       TripleVec& data, const vector<size_t>& actualLinesPerPartial,
       size_t linesPerPartial);
 
-  size_t passContextFileForVocabulary(const string& contextFile);
+  // Generator that returns all words in all the IRIs and literals.
+  //
+  // TODO: Use this generator for both cases (reading the text records from a
+  // file and taking the IRIs and literals as text records). The rename is to
+  // `wordInTextRecords`.
+  //
+  // TODO: So far, this is limited to the internal vocabulary (still in the
+  // testing phase, once it works, it should be easy to include the IRIs and
+  // literals from the external vocabulary as well).
+  cppcoro::generator<ContextFileParser::Line> contextFileLines(
+      const std::string& contextFile, bool useRdfVocabularyAsText);
 
-  void passContextFileIntoVector(const string& contextFile, TextVec& vec);
+  size_t passContextFileForVocabulary(const string& contextFile,
+                                      bool useRdfVocabularyAsText);
+
+  void passContextFileIntoVector(const string& contextFile,
+                                 bool useRdfVocabularyAsText, TextVec& vec);
 
   template <class MetaDataDispatcher, typename SortedTriples>
   std::optional<std::pair<typename MetaDataDispatcher::WriteType,
