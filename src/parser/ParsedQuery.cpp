@@ -78,7 +78,8 @@ string ParsedQuery::asString() const {
      << (_limit.has_value() ? std::to_string(_limit.value())
                             : "no limit specified");
   os << "\nTEXTLIMIT: "
-     << (!_textLimit.empty() ? _textLimit : "no limit specified");
+     << (_textLimit.has_value() ? std::to_string(_textLimit.value())
+                                : "no limit specified");
   os << "\nOFFSET: "
      << (_offset.has_value() ? std::to_string(_offset.value())
                              : "no offset specified");

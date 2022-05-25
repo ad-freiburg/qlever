@@ -107,7 +107,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   }
 
   SubtreePlan final = lastRow[minInd];
-  final._qet->setTextLimit(getTextLimit(pq._textLimit));
+  final._qet->setTextLimit(pq._textLimit.value_or(1));
 
   LOG(DEBUG) << "Done creating execution plan.\n";
   return *final._qet;
@@ -2339,15 +2339,6 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
 
   LOG(TRACE) << "Fill DP table done." << std::endl;
   return dpTab;
-}
-
-// _____________________________________________________________________________
-size_t QueryPlanner::getTextLimit(const string& textLimitString) const {
-  if (textLimitString.empty()) {
-    return 1;
-  } else {
-    return static_cast<size_t>(atol(textLimitString.c_str()));
-  }
 }
 
 // _____________________________________________________________________________

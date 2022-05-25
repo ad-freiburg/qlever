@@ -377,7 +377,7 @@ class ParsedQuery {
   vector<OrderKey> _orderBy;
   vector<string> _groupByVariables;
   std::optional<size_t> _limit = std::nullopt;
-  string _textLimit;
+  std::optional<size_t> _textLimit = std::nullopt;
   std::optional<size_t> _offset = std::nullopt;
   string _originalString;
 
