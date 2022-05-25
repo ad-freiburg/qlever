@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "../Exception.h"
+#include "./Serializer.h"
 
 namespace ad_utility::serialization {
 /**
@@ -17,7 +18,7 @@ namespace ad_utility::serialization {
  */
 class ByteBufferWriteSerializer {
  public:
-  using IsWriteSerializer = std::true_type;
+  using SerializerType = WriteSerializerTag;
   using Storage = std::vector<char>;
   ByteBufferWriteSerializer() = default;
   ByteBufferWriteSerializer(const ByteBufferWriteSerializer&) = delete;

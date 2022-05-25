@@ -54,15 +54,17 @@ class SerializationException : public std::runtime_error {
 };
 
 /// Concepts for serializer types.
+class WriteSerializerTag {};
+class ReadSerializerTag {};
 
 /// A `WriteSerializer` can write from a span of bytes to some resource and has
 /// a public member type `using IsWriteSerializer = std::true_type`.
 template <typename S>
 concept WriteSerializer = requires(S s, const char* ptr, size_t numBytes) {
   {
-    typename std::decay_t<S>::IsWriteSerializer {}
+    typename std::decay_t<S>::SerializerType {}
   }
-  ->std::same_as<std::true_type>;
+  ->std::same_as<WriteSerializerTag>;
   {s.serializeBytes(ptr, numBytes)};
 };
 
@@ -71,9 +73,9 @@ concept WriteSerializer = requires(S s, const char* ptr, size_t numBytes) {
 template <typename S>
 concept ReadSerializer = requires(S s, char* ptr, size_t numBytes) {
   {
-    typename std::decay_t<S>::IsWriteSerializer {}
+    typename std::decay_t<S>::SerializerType {}
   }
-  ->std::same_as<std::false_type>;
+  ->std::same_as<ReadSerializerTag>;
   {s.serializeBytes(ptr, numBytes)};
 };
 
