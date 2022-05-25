@@ -67,7 +67,7 @@ addLinkAndDiscoverTest(ContextFileParserTest parser ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(IndexMetaDataTest index)
 
-addLinkAndDiscoverTest(IndexTest index)
+addLinkAndDiscoverTestSerial(IndexTest index)
 
 addLinkAndDiscoverTest(FTSAlgorithmsTest index)
 
@@ -87,7 +87,7 @@ addLinkAndDiscoverTest(VocabularyGeneratorTest index)
 
 addLinkAndDiscoverTest(HasPredicateScanTest engine)
 
-addLinkAndDiscoverTest(MmapVectorTest)
+addLinkAndDiscoverTestSerial(MmapVectorTest)
 
 addLinkAndDiscoverTest(BufferedVectorTest)
 
