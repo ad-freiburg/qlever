@@ -39,6 +39,10 @@ ResultOfParseAndRemainingText<GraphPatternOperation::Bind> parseBind(
 ResultOfParseAndRemainingText<ad_utility::sparql_types::Triples>
 parseConstructTemplate(const std::string& input,
                        SparqlQleverVisitor::PrefixMap prefixes);
+
+ResultOfParseAndRemainingText<ParsedQuery::LimitOffsetClause>
+parseLimitOffsetClause(const std::string& input,
+                       SparqlQleverVisitor::PrefixMap prefixes);
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H

@@ -549,15 +549,11 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
           }
         }
       }
-    } else if (_lexer.accept("limit")) {
-      _lexer.expect(SparqlToken::Type::INTEGER);
-      query->_limitOffset._limit = std::stoul(_lexer.current().raw);
-    } else if (_lexer.accept("textlimit")) {
-      _lexer.expect(SparqlToken::Type::INTEGER);
-      query->_limitOffset._textLimit = std::stoul(_lexer.current().raw);
-    } else if (_lexer.accept("offset")) {
-      _lexer.expect(SparqlToken::Type::INTEGER);
-      query->_limitOffset._offset = std::stoul(_lexer.current().raw);
+    } else if (_lexer.peek("limit") || _lexer.peek("textlimit") ||
+               _lexer.peek("offset")) {
+      ParsedQuery::LimitOffsetClause limitOffsetClause =
+          parseWithAntlr(sparqlParserHelpers::parseLimitOffsetClause, *query);
+      query->_limitOffset = limitOffsetClause;
     } else if (_lexer.accept(SparqlToken::Type::GROUP_BY)) {
       _lexer.expect(SparqlToken::Type::VARIABLE);
       query->_groupByVariables.emplace_back(_lexer.current().raw);

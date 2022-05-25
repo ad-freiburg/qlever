@@ -261,14 +261,16 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       SparqlAutomaticParser::LimitOffsetClausesContext* ctx) override {
     ParsedQuery::LimitOffsetClause clause{};
     if (ctx->limitClause()) {
-      clause._limit = visitLimitClause(ctx->limitClause()).as<uint64_t>();
+      clause._limit =
+          visitLimitClause(ctx->limitClause()).as<unsigned long long>();
     }
     if (ctx->offsetClause()) {
-      clause._offset = visitOffsetClause(ctx->offsetClause()).as<uint64_t>();
+      clause._offset =
+          visitOffsetClause(ctx->offsetClause()).as<unsigned long long>();
     }
     if (ctx->textLimitClause()) {
       clause._textLimit =
-          visitTextLimitClause(ctx->textLimitClause()).as<uint64_t>();
+          visitTextLimitClause(ctx->textLimitClause()).as<unsigned long long>();
     }
     return clause;
   }
