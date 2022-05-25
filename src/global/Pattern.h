@@ -20,7 +20,6 @@
 #include "../util/TypeTraits.h"
 #include "../util/UninitializedAllocator.h"
 #include "Id.h"
-#
 
 typedef uint32_t PatternID;
 

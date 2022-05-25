@@ -10,7 +10,7 @@
 #include "./Serializer.h"
 
 namespace ad_utility::serialization {
-AD_SERIALIZE_FUNCTION_PARTIAL(
+AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     (ad_utility::similarToInstantiation<std::pair, T>)) {
   serializer | arg.first;
   serializer | arg.second;
