@@ -569,9 +569,6 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
       while (parseFilter(&query->_havingClauses, false,
                          &query->_rootGraphPattern)) {
       }
-    } else if (_lexer.accept("textlimit")) {
-      _lexer.expect(SparqlToken::Type::INTEGER);
-      query->_textLimit = std::stoi(_lexer.current().raw);
     } else {
       _lexer.accept();
       throw ParseException("Expected a solution modifier but got " +
