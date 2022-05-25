@@ -23,6 +23,12 @@ function(linkAndDiscoverTest basename)
     gtest_discover_tests(${basename} ${basename})
 endfunction()
 
+function(linkAndDiscoverTestSerial basename)
+    linkTest(${basename} ${ARGN})
+    gtest_discover_tests(${basename} ${basename} PROPERTIES RUN_SERIAL
+            TRUE)
+endfunction()
+
 # Usage: `addAndLinkTest(basename, [additionalLibraries...]`
 # Add a GTest/GMock test case that is called `basename` and compiled from a file called
 # `basename.cpp`. All tests are linked against `gmock_main` and the threading library.
@@ -31,6 +37,11 @@ endfunction()
 function(addLinkAndDiscoverTest basename)
     addTest(${basename})
     linkAndDiscoverTest(${basename} ${ARGN})
+endfunction()
+
+function(addLinkAndDiscoverTestSerial basename)
+    addTest(${basename})
+    linkAndDiscoverTestSerial(${basename} ${ARGN})
 endfunction()
 
 # Only compile and link the test, but do not run it.
