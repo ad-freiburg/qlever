@@ -113,8 +113,16 @@ orderCondition
     | ( constraint | var )
     ;
 
+//This is a departure from the Sparql Specs.
+//We're adding an additional textLimitClause but usage is similar to the specs
 limitOffsetClauses
-    :  limitClause offsetClause? | offsetClause limitClause? ;
+    : limitClause offsetClause? textLimitClause?
+    | limitClause textLimitClause? offsetClause?
+    | offsetClause limitClause? textLimitClause?
+    | offsetClause textLimitClause? limitClause?
+    | textLimitClause offsetClause? limitClause?
+    | textLimitClause limitClause? offsetClause?
+    ;
 
 
 limitClause
@@ -123,6 +131,10 @@ limitClause
 
 offsetClause
     : OFFSET integer
+    ;
+
+textLimitClause
+    : TEXTLIMIT integer
     ;
 
 valuesClause : ( VALUES dataBlock )?;
@@ -577,6 +589,7 @@ ASC : A S C;
 DESC : D E S C;
 LIMIT : L I M I T;
 OFFSET : O F F S E T;
+TEXTLIMIT: T E X T L I M I T;
 VALUES : V A L U E S;
 LOAD : L O A D;
 SILENT : S I L E N T;

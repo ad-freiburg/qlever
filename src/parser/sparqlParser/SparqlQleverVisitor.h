@@ -272,6 +272,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
+  antlrcpp::Any visitTextLimitClause(
+      SparqlAutomaticParser::TextLimitClauseContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
   antlrcpp::Any visitValuesClause(
       SparqlAutomaticParser::ValuesClauseContext* ctx) override {
     return visitChildren(ctx);
