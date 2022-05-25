@@ -368,6 +368,13 @@ class ParsedQuery {
 
   using ConstructClause = ad_utility::sparql_types::Triples;
 
+  // Represents the data returned by a limitOffsetClause
+  struct LimitOffsetClause {
+    std::optional<size_t> _limit = std::nullopt;
+    std::optional<size_t> _textLimit = std::nullopt;
+    std::optional<size_t> _offset = std::nullopt;
+  };
+
   ParsedQuery() = default;
 
   vector<SparqlPrefix> _prefixes;
@@ -376,9 +383,7 @@ class ParsedQuery {
   size_t _numGraphPatterns = 1;
   vector<OrderKey> _orderBy;
   vector<string> _groupByVariables;
-  std::optional<size_t> _limit = std::nullopt;
-  std::optional<size_t> _textLimit = std::nullopt;
-  std::optional<size_t> _offset = std::nullopt;
+  LimitOffsetClause _limitOffset{};
   string _originalString;
 
   // explicit default initialisation because the constructor

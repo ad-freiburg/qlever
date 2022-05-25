@@ -92,10 +92,11 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   // plan for this graph pattern.
   vector<SubtreePlan>& lastRow = plans.back();
 
-  if (pq._limit.has_value()) {
+  if (pq._limitOffset._limit.has_value()) {
     for (auto& plan : lastRow) {
       if (plan._qet->getRootOperation()->supportsLimit()) {
-        (plan._qet->getRootOperation()->setLimit(pq._limit.value()));
+        (plan._qet->getRootOperation()->setLimit(
+            pq._limitOffset._limit.value()));
       }
     }
   }
@@ -107,7 +108,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   }
 
   SubtreePlan final = lastRow[minInd];
-  final._qet->setTextLimit(pq._textLimit.value_or(1));
+  final._qet->setTextLimit(pq._limitOffset._textLimit.value_or(1));
 
   LOG(DEBUG) << "Done creating execution plan.\n";
   return *final._qet;
