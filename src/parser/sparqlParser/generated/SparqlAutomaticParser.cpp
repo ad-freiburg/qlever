@@ -2878,8 +2878,9 @@ tree::TerminalNode* SparqlAutomaticParser::LimitClauseContext::LIMIT() {
   return getToken(SparqlAutomaticParser::LIMIT, 0);
 }
 
-tree::TerminalNode* SparqlAutomaticParser::LimitClauseContext::INTEGER() {
-  return getToken(SparqlAutomaticParser::INTEGER, 0);
+SparqlAutomaticParser::IntegerContext*
+SparqlAutomaticParser::LimitClauseContext::integer() {
+  return getRuleContext<SparqlAutomaticParser::IntegerContext>(0);
 }
 
 size_t SparqlAutomaticParser::LimitClauseContext::getRuleIndex() const {
@@ -2924,7 +2925,7 @@ SparqlAutomaticParser::limitClause() {
     setState(438);
     match(SparqlAutomaticParser::LIMIT);
     setState(439);
-    match(SparqlAutomaticParser::INTEGER);
+    integer();
 
   } catch (RecognitionException& e) {
     _errHandler->reportError(this, e);
@@ -2946,8 +2947,9 @@ tree::TerminalNode* SparqlAutomaticParser::OffsetClauseContext::OFFSET() {
   return getToken(SparqlAutomaticParser::OFFSET, 0);
 }
 
-tree::TerminalNode* SparqlAutomaticParser::OffsetClauseContext::INTEGER() {
-  return getToken(SparqlAutomaticParser::INTEGER, 0);
+SparqlAutomaticParser::IntegerContext*
+SparqlAutomaticParser::OffsetClauseContext::integer() {
+  return getRuleContext<SparqlAutomaticParser::IntegerContext>(0);
 }
 
 size_t SparqlAutomaticParser::OffsetClauseContext::getRuleIndex() const {
@@ -2992,7 +2994,7 @@ SparqlAutomaticParser::offsetClause() {
     setState(441);
     match(SparqlAutomaticParser::OFFSET);
     setState(442);
-    match(SparqlAutomaticParser::INTEGER);
+    integer();
 
   } catch (RecognitionException& e) {
     _errHandler->reportError(this, e);
@@ -14183,9 +14185,9 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x1b7, 0x3,    0x2,    0x2,    0x2,    0x1b6,  0x1ae,  0x3,    0x2,
       0x2,   0x2,    0x1b6,  0x1b2,  0x3,    0x2,    0x2,    0x2,    0x1b7,
       0x33,  0x3,    0x2,    0x2,    0x2,    0x1b8,  0x1b9,  0x7,    0x34,
-      0x2,   0x2,    0x1b9,  0x1ba,  0x7,    0x94,   0x2,    0x2,    0x1ba,
+      0x2,   0x2,    0x1b9,  0x1ba,  0x5,    0x98,   0x4d,   0x2,    0x1ba,
       0x35,  0x3,    0x2,    0x2,    0x2,    0x1bb,  0x1bc,  0x7,    0x35,
-      0x2,   0x2,    0x1bc,  0x1bd,  0x7,    0x94,   0x2,    0x2,    0x1bd,
+      0x2,   0x2,    0x1bc,  0x1bd,  0x5,    0x98,   0x4d,   0x2,    0x1bd,
       0x37,  0x3,    0x2,    0x2,    0x2,    0x1be,  0x1bf,  0x7,    0x36,
       0x2,   0x2,    0x1bf,  0x1c1,  0x5,    0x4e,   0x28,   0x2,    0x1c0,
       0x1be, 0x3,    0x2,    0x2,    0x2,    0x1c0,  0x1c1,  0x3,    0x2,

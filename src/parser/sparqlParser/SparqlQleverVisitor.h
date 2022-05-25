@@ -591,7 +591,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitInteger(
       SparqlAutomaticParser::IntegerContext* ctx) override {
-    return visitChildren(ctx);
+    return std::stoul(ctx->getText());
   }
 
   antlrcpp::Any visitTriplesNode(

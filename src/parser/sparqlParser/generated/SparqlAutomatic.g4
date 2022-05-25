@@ -118,11 +118,11 @@ limitOffsetClauses
 
 
 limitClause
-    : LIMIT INTEGER
+    : LIMIT integer
     ;
 
 offsetClause
-    : OFFSET INTEGER
+    : OFFSET integer
     ;
 
 valuesClause : ( VALUES dataBlock )?;
