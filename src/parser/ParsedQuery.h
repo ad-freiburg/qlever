@@ -370,9 +370,9 @@ class ParsedQuery {
 
   // Represents the data returned by a limitOffsetClause
   struct LimitOffsetClause {
-    std::optional<size_t> _limit = std::nullopt;
-    std::optional<size_t> _textLimit = std::nullopt;
-    std::optional<size_t> _offset = std::nullopt;
+    std::optional<uint64_t> _limit = std::nullopt;
+    std::optional<uint64_t> _textLimit = std::nullopt;
+    std::optional<uint64_t> _offset = std::nullopt;
   };
 
   ParsedQuery() = default;

@@ -261,15 +261,14 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       SparqlAutomaticParser::LimitOffsetClausesContext* ctx) override {
     ParsedQuery::LimitOffsetClause clause{};
     if (ctx->limitClause()) {
-      clause._limit = visitLimitClause(ctx->limitClause()).as<unsigned long>();
+      clause._limit = visitLimitClause(ctx->limitClause()).as<uint64_t>();
     }
     if (ctx->offsetClause()) {
-      clause._offset =
-          visitOffsetClause(ctx->offsetClause()).as<unsigned long>();
+      clause._offset = visitOffsetClause(ctx->offsetClause()).as<uint64_t>();
     }
     if (ctx->textLimitClause()) {
       clause._textLimit =
-          visitTextLimitClause(ctx->textLimitClause()).as<unsigned long>();
+          visitTextLimitClause(ctx->textLimitClause()).as<uint64_t>();
     }
     return clause;
   }
@@ -608,7 +607,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitInteger(
       SparqlAutomaticParser::IntegerContext* ctx) override {
-    return std::stoul(ctx->getText());
+    return std::stoull(ctx->getText());
   }
 
   antlrcpp::Any visitTriplesNode(
