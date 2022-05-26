@@ -23,6 +23,10 @@ function(linkAndDiscoverTest basename)
     gtest_discover_tests(${basename} ${basename})
 endfunction()
 
+# Usage: `linkAndDiscoverTestSerial(basename, [additionalLibraries...]`
+# Similar to `linkAndDiscoverTestSerial` but also requires that the test is run serially
+# (without any of the other test cases running in parallel). This can be
+# required e.g. if several tests cases write to the same file.
 function(linkAndDiscoverTestSerial basename)
     linkTest(${basename} ${ARGN})
     gtest_discover_tests(${basename} ${basename} PROPERTIES RUN_SERIAL
@@ -39,6 +43,10 @@ function(addLinkAndDiscoverTest basename)
     linkAndDiscoverTest(${basename} ${ARGN})
 endfunction()
 
+# Usage: `addAndLinkTestSerial(basename, [additionalLibraries...]`
+# Similar to `addAndLinkTest` but also requires that the test is run serially
+# (without any of the other test cases running in parallel). This can be
+# required e.g. if several tests cases write to the same file.
 function(addLinkAndDiscoverTestSerial basename)
     addTest(${basename})
     linkAndDiscoverTestSerial(${basename} ${ARGN})
