@@ -551,9 +551,8 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
       }
     } else if (_lexer.peek("limit") || _lexer.peek("textlimit") ||
                _lexer.peek("offset")) {
-      ParsedQuery::LimitOffsetClause limitOffsetClause =
+      query->_limitOffset =
           parseWithAntlr(sparqlParserHelpers::parseLimitOffsetClause, *query);
-      query->_limitOffset = limitOffsetClause;
     } else if (_lexer.accept(SparqlToken::Type::GROUP_BY)) {
       _lexer.expect(SparqlToken::Type::VARIABLE);
       query->_groupByVariables.emplace_back(_lexer.current().raw);

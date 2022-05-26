@@ -89,6 +89,6 @@ parseLimitOffsetClause(const std::string& input,
                        SparqlQleverVisitor::PrefixMap prefixes) {
   ParserAndVisitor p{input, std::move(prefixes)};
   return p.parse<ParsedQuery::LimitOffsetClause>(
-      input, "construct template", &SparqlAutomaticParser::limitOffsetClauses);
+      input, "limit offset clause", &SparqlAutomaticParser::limitOffsetClauses);
 }
 }  // namespace sparqlParserHelpers
