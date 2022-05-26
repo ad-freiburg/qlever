@@ -74,18 +74,9 @@ string ParsedQuery::asString() const {
   os << "\nWHERE: \n";
   _rootGraphPattern.toString(os, 1);
 
-  os << "\nLIMIT: "
-     << (_limitOffset._limit.has_value()
-             ? std::to_string(_limitOffset._limit.value())
-             : "no limit specified");
-  os << "\nTEXTLIMIT: "
-     << (_limitOffset._textLimit.has_value()
-             ? std::to_string(_limitOffset._textLimit.value())
-             : "no limit specified");
-  os << "\nOFFSET: "
-     << (_limitOffset._offset.has_value()
-             ? std::to_string(_limitOffset._offset.value())
-             : "no offset specified");
+  os << "\nLIMIT: " << (_limitOffset._limit);
+  os << "\nTEXTLIMIT: " << (_limitOffset._textLimit);
+  os << "\nOFFSET: " << (_limitOffset._offset);
   if (usesSelect) {
     const auto& selectClause = this->selectClause();
     os << "\nDISTINCT modifier is " << (selectClause._distinct ? "" : "not ")

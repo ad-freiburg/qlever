@@ -221,9 +221,9 @@ class SparqlValues {
 
 // Represents the data returned by a limitOffsetClause
 struct LimitOffsetClause {
-  std::optional<uint64_t> _limit = std::nullopt;
-  std::optional<uint64_t> _textLimit = std::nullopt;
-  std::optional<uint64_t> _offset = std::nullopt;
+  uint64_t _limit = std::numeric_limits<uint64_t>::max();
+  uint64_t _textLimit = 1;
+  uint64_t _offset = 0;
 };
 
 struct GraphPatternOperation;
