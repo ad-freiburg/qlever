@@ -176,7 +176,7 @@ addLinkAndDiscoverTest(PrefixCompressorTest)
 
 addLinkAndDiscoverTest(MilestoneIdTest absl::strings)
 
-addLinkAndDiscoverTest(VocabularyOnDiskTest index)
+addLinkAndDiscoverTestSerial(VocabularyOnDiskTest index)
 
 addLinkAndDiscoverTest(VocabularyTest index)
 
