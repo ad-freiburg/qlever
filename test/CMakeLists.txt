@@ -75,6 +75,9 @@ addLinkAndDiscoverTest(ContextFileParserTest parser ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(IndexMetaDataTest index)
 
+# Stxxl currently always uses a file ./-stxxl.disk for all indices, which
+# makes it impossible to run the test cases for the Index class in parallel.
+# TODO<qup42, joka921> fix this
 addLinkAndDiscoverTestSerial(IndexTest index)
 
 addLinkAndDiscoverTest(FTSAlgorithmsTest index)
@@ -136,7 +139,11 @@ addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 
 addLinkAndDiscoverTest(SparqlAntlrParserTest parser sparqlExpressions)
 
-addLinkAndDiscoverTest(SerializerTest absl::flat_hash_map)
+# The SerializerTest uses temporary files. The tests fail when multiple test
+# cases are run in parallel. This should be fixed by using distinct filenames
+# for each test case.
+# TODO<qup42, joka921> fix this
+addLinkAndDiscoverTestSerial(SerializerTest absl::flat_hash_map)
 
 addLinkAndDiscoverTest(ParametersTest absl::flat_hash_map)
 
@@ -176,6 +183,9 @@ addLinkAndDiscoverTest(PrefixCompressorTest)
 
 addLinkAndDiscoverTest(MilestoneIdTest absl::strings)
 
+# The VocabularyOnDisk uses mmap which fails when the tests are run in
+# parallel. This should be fixed by using distinct filenames for each test case.
+# TODO<qup42, joka921> fix this
 addLinkAndDiscoverTestSerial(VocabularyOnDiskTest index)
 
 addLinkAndDiscoverTest(VocabularyTest index)
@@ -184,7 +194,10 @@ addLinkAndDiscoverTest(IteratorTest)
 
 addLinkAndDiscoverTest(PatternCreatorTest index)
 
-addLinkAndDiscoverTest(BackgroundStxxlSorterTest ${STXXL_LIBRARIES})
+# Stxxl currently always uses a file ./-stxxl.disk for all indices, which
+# makes it impossible to run the test cases for the Index class in parallel.
+# TODO<qup42, joka921> fix this
+addLinkAndDiscoverTestSerial(BackgroundStxxlSorterTest ${STXXL_LIBRARIES})
 
 addLinkAndDiscoverTest(ViewsTest)
 
