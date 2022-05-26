@@ -219,7 +219,7 @@ class SparqlValues {
   vector<vector<string>> _values;
 };
 
-// Represents the data returned by a limitOffsetClause
+// Represents the data returned by a limitOffsetClause.
 struct LimitOffsetClause {
   uint64_t _limit = std::numeric_limits<uint64_t>::max();
   uint64_t _textLimit = 1;
