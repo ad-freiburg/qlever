@@ -609,7 +609,14 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitInteger(
       SparqlAutomaticParser::IntegerContext* ctx) override {
-    return std::stoull(ctx->getText());
+    try {
+      return std::stoull(ctx->getText());
+    } catch (const std::out_of_range&) {
+      throw SparqlParseException{
+          "Integer " + ctx->getText() +
+          " does not fit"
+          " into 64bits. This is not supported by QLever."};
+    }
   }
 
   antlrcpp::Any visitTriplesNode(
