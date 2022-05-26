@@ -87,7 +87,7 @@ addLinkAndDiscoverTest(VocabularyGeneratorTest index)
 
 addLinkAndDiscoverTest(HasPredicateScanTest engine)
 
-addLinkAndDiscoverTestSerial(MmapVectorTest)
+addLinkAndDiscoverTest(MmapVectorTest)
 
 addLinkAndDiscoverTest(BufferedVectorTest)
 
