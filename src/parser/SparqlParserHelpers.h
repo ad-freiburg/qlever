@@ -40,8 +40,7 @@ ResultOfParseAndRemainingText<ad_utility::sparql_types::Triples>
 parseConstructTemplate(const std::string& input,
                        SparqlQleverVisitor::PrefixMap prefixes);
 
-ResultOfParseAndRemainingText<ParsedQuery::LimitOffsetClause>
-parseLimitOffsetClause(const std::string& input,
+ResultOfParseAndRemainingText<LimitOffsetClause> parseLimitOffsetClause(const std::string& input,
                        SparqlQleverVisitor::PrefixMap prefixes);
 }  // namespace sparqlParserHelpers
 

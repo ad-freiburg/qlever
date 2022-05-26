@@ -259,7 +259,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitLimitOffsetClauses(
       SparqlAutomaticParser::LimitOffsetClausesContext* ctx) override {
-    ParsedQuery::LimitOffsetClause clause{};
+    LimitOffsetClause clause{};
     if (ctx->limitClause()) {
       clause._limit =
           visitLimitClause(ctx->limitClause()).as<unsigned long long>();
@@ -615,7 +615,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       throw SparqlParseException{
           "Integer " + ctx->getText() +
           " does not fit"
-          " into 64bits. This is not supported by QLever."};
+          " into 64 bits. This is not supported by QLever."};
     }
   }
 

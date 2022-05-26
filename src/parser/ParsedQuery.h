@@ -219,6 +219,13 @@ class SparqlValues {
   vector<vector<string>> _values;
 };
 
+// Represents the data returned by a limitOffsetClause
+struct LimitOffsetClause {
+  std::optional<uint64_t> _limit = std::nullopt;
+  std::optional<uint64_t> _textLimit = std::nullopt;
+  std::optional<uint64_t> _offset = std::nullopt;
+};
+
 struct GraphPatternOperation;
 
 // A parsed SPARQL query. To be extended.
@@ -367,13 +374,6 @@ class ParsedQuery {
   SelectClause _selectedVarsOrAsterisk{SelectClause{}};
 
   using ConstructClause = ad_utility::sparql_types::Triples;
-
-  // Represents the data returned by a limitOffsetClause
-  struct LimitOffsetClause {
-    std::optional<uint64_t> _limit = std::nullopt;
-    std::optional<uint64_t> _textLimit = std::nullopt;
-    std::optional<uint64_t> _offset = std::nullopt;
-  };
 
   ParsedQuery() = default;
 

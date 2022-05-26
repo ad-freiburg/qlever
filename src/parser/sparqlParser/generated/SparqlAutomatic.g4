@@ -113,11 +113,11 @@ orderCondition
     | ( constraint | var )
     ;
 
-// This is an extension to the Sparql Specs.
+// This is an extension to the SPARQL Specs.
 // We're adding an additional modifier to the limitOffsetClauses. This
-// modifier `TEXTLIMIT` is for QLever's full-text index. The order of the
+// modifier `TEXTLIMIT` is used in QLever's full-text index. The order of the
 // solution modifiers does not matter, but each of them may occur at most
-// once. This behavior is the same as in standard SPARQL
+// once. This behavior is the same as in standard SPARQL.
 limitOffsetClauses
     : limitClause offsetClause? textLimitClause?
     | limitClause textLimitClause? offsetClause?
