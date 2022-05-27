@@ -200,8 +200,7 @@ TEST(Serializer, ReadAndWriteDiffers) {
     T t;
     serialization::FileReadSerializer reader{filename};
     auto& readerRef = reader;
-  readerRef:
-    wchar_t >> t;
+    readerRef >> t;
     ASSERT_FALSE(t.writing);
     ASSERT_TRUE(t.reading);
   }
