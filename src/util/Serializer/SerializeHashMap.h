@@ -7,12 +7,13 @@
 
 #include "../../util/HashMap.h"
 #include "../TypeTraits.h"
-#include "./Serializer.h"
 #include "./SerializePair.h"
+#include "./Serializer.h"
 
 namespace ad_utility::serialization {
 
-AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT((ad_utility::similarToInstantiation<ad_utility::HashMap, T>)) {
+AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
+    (ad_utility::similarToInstantiation<ad_utility::HashMap, T>)) {
   using K = typename std::decay_t<T>::key_type;
   using M = typename std::decay_t<T>::mapped_type;
   if constexpr (WriteSerializer<S>) {
@@ -27,8 +28,9 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT((ad_utility::similarToInstantiation<ad_uti
 
     arg.reserve(size);
     for (size_t i = 0; i < size; ++i) {
-      // We can't use `value_type` as it is a pair of a *const* key and a value,
-      // which would not work here because we have to write to it.
+      // We have to use `pair<T::key_type, T::mapped_type>` instead of
+      // `T::value_type` because the latter is a `pair<const key_type,
+      // mapped_type>` and we have to write to the key.
       std::pair<K, M> pair;
       serializer >> pair;
       arg.insert(std::move(pair));

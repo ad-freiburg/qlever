@@ -24,9 +24,9 @@ using ad_utility::serialization::ReadSerializer;
 using ad_utility::serialization::Serializer;
 using ad_utility::serialization::WriteSerializer;
 
-// The following Tests are also examples for the serialization module and for
+// The following tests are also examples for the serialization module and for
 // several pitfalls.
-namespace a {
+namespace testNamespaceA {
 // Free serialization function.
 struct A {
   int a;
@@ -70,8 +70,8 @@ struct D {};
 struct E {
   D d;
   AD_SERIALIZE_FRIEND_FUNCTION(E) {
-    serializer |
-        arg.d;  // ill-formed, because `D` has no `serialize()` function.
+    // Ill-formed, because `D` has no `serialize()` function.
+    serializer | arg.d;
   }
 };
 
@@ -81,22 +81,22 @@ struct F {
 struct G {
   int a;
 };
-}  // namespace a
+}  // namespace testNamespaceA
 
-namespace b {
-// F is still not serializable, because the serialization function is not in
+namespace testNamespaceB {
+// `F is not serializable because the serialization function is not in
 // F's namespace (or a parent namespace thereof)  nor in
 // `ad_utility::serialization`
-AD_SERIALIZE_FUNCTION(a::F) { serializer | arg.a; }
-}  // namespace b
+AD_SERIALIZE_FUNCTION(testNamespaceA::F) { serializer | arg.a; }
+}  // namespace testNamespaceB
 
 namespace ad_utility::serialization {
 // G is now serializable (the serialize function is in the
-// `ad_utility::serialization` namespace.
-AD_SERIALIZE_FUNCTION(a::G) { serializer | arg.a; }
+// `ad_utility::serialization` namespace).
+AD_SERIALIZE_FUNCTION(testNamespaceA::G) { serializer | arg.a; }
 }  // namespace ad_utility::serialization
 
-// Test that the claims about serializability are in fact true
+// Test that the claims about serializability are in fact true.
 template <typename T>
 static constexpr bool isReadSerializable = requires(ByteBufferReadSerializer s,
                                                     T& t) {
@@ -109,48 +109,56 @@ static constexpr bool isWriteSerializable =
 };
 
 TEST(Serializer, Serializability) {
-  static_assert(isReadSerializable<a::A>);
-  static_assert(isWriteSerializable<a::A>);
+  using testNamespaceA::A;
+  using testNamespaceA::B;
+  using testNamespaceA::C;
+  using testNamespaceA::D;
+  using testNamespaceA::E;
+  using testNamespaceA::F;
+  using testNamespaceA::G;
+  static_assert(isReadSerializable<A>);
+  static_assert(isWriteSerializable<A>);
 
   // We can serialize to and from any kind of a::A value or reference, but we
   // can only read from a serializer if the target is not const.
-  static_assert(isReadSerializable<a::A&&>);
-  static_assert(isWriteSerializable<a::A&&>);
+  static_assert(isReadSerializable<A&&>);
+  static_assert(isWriteSerializable<A&&>);
 
-  static_assert(isWriteSerializable<const a::A&>);
-  static_assert(!isReadSerializable<const a::A&>);
+  static_assert(isWriteSerializable<const A&>);
+  static_assert(!isReadSerializable<const A&>);
 
-  static_assert(isWriteSerializable<const a::A&&>);
-  static_assert(!isReadSerializable<const a::A&&>);
+  static_assert(isWriteSerializable<const A&&>);
+  static_assert(!isReadSerializable<const A&&>);
 
-  static_assert(isWriteSerializable<const a::A>);
-  static_assert(!isReadSerializable<const a::A>);
+  static_assert(isWriteSerializable<const A>);
+  static_assert(!isReadSerializable<const A>);
 
   // See the definitions above as for why or why not these are serializable.
-  static_assert(isReadSerializable<a::B>);
-  static_assert(isReadSerializable<a::C>);
-  static_assert(!isReadSerializable<a::D>);
+  static_assert(isReadSerializable<B>);
+  static_assert(isReadSerializable<C>);
+  static_assert(!isReadSerializable<D>);
+  static_assert(!isReadSerializable<F>);
+  static_assert(isReadSerializable<G>);
 
-  // E seems to be serializable according to the following SFINAE check, but
+  // E seems to be serializable according to this SFINAE check, but
   // actually instantiating the serialize function wouldn't compile because
   // one of the members is not serializable.
-  static_assert(isReadSerializable<a::E>);
-  static_assert(!isReadSerializable<a::F>);
-  static_assert(isReadSerializable<a::G>);
+  static_assert(isReadSerializable<E>);
 }
 
-// A simple example that demonstrates the use of the serializers
+// A simple example that demonstrates the use of the serializers.
 TEST(Serializer, SimpleExample) {
-  std::string filename = "simpleExample.dat";
+  using testNamespaceA::A;
+  std::string filename = "Serializer.SimpleExample.dat";
   {
-    a::A a{42, -5};
+    A a{42, -5};
     serialization::FileWriteSerializer writer{filename};
     writer << a;  // `writer | a` or `serialize(writer, a)` are equivalent;
   }
   {
     // `a` has been written to the file, the file has been closed, reopen it and
     // read.
-    a::A a;  // Uninitialized, we will read into it;
+    A a{};  // Uninitialized, we will read into it;
     serialization::FileReadSerializer reader{filename};
     reader >> a;
     // We have succesfully restored the values.
@@ -177,20 +185,21 @@ struct T {
 };
 
 TEST(Serializer, ReadAndWriteDiffers) {
-  std::string filename = "simpleExample.dat";
+  std::string filename = "Serializer.ReadAndWriteDiffers.dat";
   {
     T t;
     serialization::FileWriteSerializer writer{filename};
-    // Serialization and `if constexpr (WriteSerializer<S>)` still work when the
-    // serializer is a reference.
-    auto& writeRef = writer;
-    writeRef << t;
+    // Serialization and `if constexpr (WriteSerializer<S>)` still works when
+    // the serializer is a reference.
+    auto& writerRef = writer;
+    writerRef << t;
     ASSERT_TRUE(t.writing);
     ASSERT_FALSE(t.reading);
   }
   {
     T t;
     serialization::FileReadSerializer reader{filename};
+    auto& readerRef = reader;
     reader >> t;
     ASSERT_FALSE(t.writing);
     ASSERT_TRUE(t.reading);
@@ -202,11 +211,15 @@ TEST(Serializer, ReadAndWriteDiffers) {
 // You should write similar tests when adding custom serializers.
 TEST(Serializer, Concepts) {
   static_assert(ReadSerializer<ByteBufferReadSerializer>);
+  static_assert(!WriteSerializer<ByteBufferReadSerializer>);
   static_assert(WriteSerializer<ByteBufferWriteSerializer>);
-
+  static_assert(!ReadSerializer<ByteBufferWriteSerializer>);
   static_assert(ReadSerializer<FileReadSerializer>);
+  static_assert(!WriteSerializer<FileReadSerializer>);
   static_assert(WriteSerializer<FileWriteSerializer>);
+  static_assert(!ReadSerializer<FileWriteSerializer>);
   static_assert(ReadSerializer<CopyableFileReadSerializer>);
+  static_assert(!WriteSerializer<CopyableFileReadSerializer>);
 }
 
 // The following tests are mainly not for documentation but rather stress tests

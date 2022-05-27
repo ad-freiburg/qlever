@@ -13,40 +13,23 @@
 #include "./Serializer.h"
 
 namespace ad_utility::serialization {
-AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_READ(
+AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     (ad_utility::similarToInstantiation<std::vector, T> ||
      ad_utility::similarToInstantiation<std::basic_string, T>)) {
   using V = typename std::decay_t<T>::value_type;
-  if constexpr (TriviallySerializable<V>) {
-    auto size = arg.size();  // just to get the right type
-    serializer >> size;
+  auto size = arg.size();  // The value is ignored for `ReadSerializer`s.
+  serializer | size;
+
+  if constexpr (ReadSerializer<S>) {
     arg.resize(size);
-    serializer.serializeBytes(reinterpret_cast<char*>(arg.data()),
-                              arg.size() * sizeof(V));
-  } else {
-    auto size = arg.size();  // just to get the right type
-    serializer >> size;
-    arg.reserve(size);
-    for (size_t i = 0; i < size; ++i) {
-      arg.emplace_back();
-      serializer >> arg.back();
-    }
   }
-}
-
-AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_WRITE(
-    (ad_utility::similarToInstantiation<std::vector, T> ||
-     ad_utility::similarToInstantiation<std::basic_string, T>)) {
-  using V = typename std::decay_t<T>::value_type;
   if constexpr (TriviallySerializable<V>) {
-    serializer << arg.size();
-    serializer.serializeBytes(reinterpret_cast<const char*>(arg.data()),
+    using Ptr = std::conditional_t<ReadSerializer<S>, char*, const char*>;
+    serializer.serializeBytes(reinterpret_cast<Ptr>(arg.data()),
                               arg.size() * sizeof(V));
-
   } else {
-    serializer << arg.size();
-    for (const auto& el : arg) {
-      serializer << el;
+    for (size_t i = 0; i < size; ++i) {
+      serializer | arg[i];
     }
   }
 }
