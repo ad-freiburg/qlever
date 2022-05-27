@@ -9,6 +9,7 @@
 #include <type_traits>
 
 #include "../../src/parser/sparqlParser/SparqlQleverVisitor.h"
+#include "../src/parser/SparqlParserHelpers.h"
 #include "../src/parser/data/Types.h"
 #include "../src/parser/sparqlParser/generated/SparqlAutomaticLexer.h"
 #include "../src/util/antlr/ThrowingErrorStrategy.h"
@@ -641,4 +642,22 @@ TEST(SparqlParser, VariableWithDollarSign) {
 
   auto variable = p.parser.var()->accept(&p.visitor).as<Variable>();
   EXPECT_THAT(variable, IsVariable("?variableName"));
+}
+
+TEST(SparqlParser, Bind) {
+  {
+    string input = "BIND (10 - 5 as ?a)";
+    auto bindAndText = sparqlParserHelpers::parseBind(input, {});
+
+    EXPECT_THAT(bindAndText._resultOfParse, IsBind("?a", "10-5"));
+    EXPECT_THAT(bindAndText._remainingText, IsEmpty());
+  }
+
+  {
+    string input = "bInD (?age - 10 As ?s)";
+
+    auto bindAndText = sparqlParserHelpers::parseBind(input, {});
+    EXPECT_THAT(bindAndText._resultOfParse, IsBind("?s", "?age-10"));
+    EXPECT_THAT(bindAndText._remainingText, IsEmpty());
+  }
 }

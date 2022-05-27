@@ -11,8 +11,9 @@
 #include "Tokenizer.h"
 
 const std::string SparqlToken::TYPE_NAMES[] = {
-    "IRI",       "WS",         "KEYWORD", "VARIABLE", "SYMBOL",
-    "AGGREGATE", "RDFLITERAL", "INTEGER", "FLOAT",    "LOGICAL_OR"};
+    "IRI",    "WS",         "KEYWORD",         "VARIABLE",
+    "SYMBOL", "AGGREGATE",  "RDFLITERAL",      "INTEGER",
+    "FLOAT",  "LOGICAL_OR", "A_RDF_TYPE_ALIAS"};
 
 const std::string LANGTAG = "@[a-zA-Z]+(-[a-zA-Z0-9]+)*";
 const std::string IRIREF = "(<[^<>\"{}|^`\\\\\\[\\]\\x00-\\x20]*>)";
@@ -88,6 +89,7 @@ const SparqlLexer::RegexTokenMap& SparqlLexer::getRegexTokenMap() {
     add(SYMBOL, T::SYMBOL);
     add("(" + WS + "+)", T::WS);
     add("(#.*)", T::WS);
+    add("(a)", T::A_RDF_TYPE_ALIAS);
     return m;
   }();
   return regexTokenMap;
@@ -163,26 +165,36 @@ void SparqlLexer::expandNextUntilWhitespace() {
 }
 
 bool SparqlLexer::accept(SparqlToken::Type type) {
-  if (_next.type == type) {
+  if (peek(type)) {
     readNext();
     return true;
   }
   return false;
 }
 
-bool SparqlLexer::accept(const std::string& raw, bool match_case) {
-  if (match_case && _next.raw == raw) {
+bool SparqlLexer::accept(std::string_view raw, bool match_case) {
+  if (peek(raw, match_case)) {
     readNext();
     return true;
-  } else if (!match_case && ad_utility::getLowercaseUtf8(_next.raw) ==
-                                ad_utility::getLowercaseUtf8(raw)) {
-    readNext();
-    return true;
+  } else {
+    return false;
   }
-  return false;
 }
 
 void SparqlLexer::accept() { readNext(); }
+
+bool SparqlLexer::peek(SparqlToken::Type type) const {
+  return _next.type == type;
+}
+
+bool SparqlLexer::peek(std::string_view raw, bool match_case) const {
+  if (match_case) {
+    return _next.raw == raw;
+  } else {
+    return ad_utility::getLowercaseUtf8(_next.raw) ==
+           ad_utility::getLowercaseUtf8(raw);
+  }
+}
 
 void SparqlLexer::expect(SparqlToken::Type type) {
   if (_next.type != type) {

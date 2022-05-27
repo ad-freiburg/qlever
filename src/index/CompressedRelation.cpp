@@ -39,120 +39,120 @@ void CompressedRelationMetaData::scan(
   if constexpr (!ad_utility::isVector<IdTableImpl>) {
     AD_CHECK(result->cols() == 2);
   }
-  if (permutation._meta.col0IdExists(col0Id)) {
-    const auto& metaData = permutation._meta.getMetaData(col0Id);
+  if (!permutation._meta.col0IdExists(col0Id)) {
+    return;
+  }
+  const auto& metaData = permutation._meta.getMetaData(col0Id);
 
-    // get all the blocks where _col0FirstId <= col0Id <= _col0LastId
-    struct KeyLhs {
-      Id _col0FirstId;
-      Id _col0LastId;
-    };
-    auto [beginBlock, endBlock] = std::equal_range(
-        permutation._meta.blockData().begin(),
-        permutation._meta.blockData().end(), KeyLhs{col0Id, col0Id},
-        [](const auto& a, const auto& b) {
-          return a._col0FirstId < b._col0FirstId &&
-                 a._col0LastId < b._col0LastId;
-        });
+  // get all the blocks where _col0FirstId <= col0Id <= _col0LastId
+  struct KeyLhs {
+    Id _col0FirstId;
+    Id _col0LastId;
+  };
+  auto [beginBlock, endBlock] = std::equal_range(
+      permutation._meta.blockData().begin(),
+      permutation._meta.blockData().end(), KeyLhs{col0Id, col0Id},
+      [](const auto& a, const auto& b) {
+        return a._col0FirstId < b._col0FirstId && a._col0LastId < b._col0LastId;
+      });
 
-    // The total size of the result is now known.
-    result->resize(metaData.getNofElements());
+  // The total size of the result is now known.
+  result->resize(metaData.getNofElements());
 
-    // The position in the result, to which the next block is being
-    // decompressed.
-    auto* position = reinterpret_cast<std::array<Id, 2>*>(result->data());
+  // The position in the result, to which the next block is being
+  // decompressed.
+  auto* position = reinterpret_cast<std::array<Id, 2>*>(result->data());
 
-    // The number of Id Pairs for which we still have space
-    // in the result (only needed for checking of invariants).
-    size_t spaceLeft = result->size();
+  // The number of Id Pairs for which we still have space
+  // in the result (only needed for checking of invariants).
+  size_t spaceLeft = result->size();
 
-    // The first block might contain entries that are not part of our
-    // actual scan result.
-    bool firstBlockIsIncomplete =
-        beginBlock < endBlock &&
-        (beginBlock->_col0FirstId < col0Id || beginBlock->_col0LastId > col0Id);
-    auto lastBlock = endBlock - 1;
+  // The first block might contain entries that are not part of our
+  // actual scan result.
+  bool firstBlockIsIncomplete =
+      beginBlock < endBlock &&
+      (beginBlock->_col0FirstId < col0Id || beginBlock->_col0LastId > col0Id);
+  auto lastBlock = endBlock - 1;
 
-    bool lastBlockIsIncomplete =
-        beginBlock < lastBlock &&
-        (lastBlock->_col0FirstId < col0Id || lastBlock->_col0LastId > col0Id);
+  bool lastBlockIsIncomplete =
+      beginBlock < lastBlock &&
+      (lastBlock->_col0FirstId < col0Id || lastBlock->_col0LastId > col0Id);
 
-    // Invariant: A relation spans multiple blocks exclusively or several
-    // entities are stored completely in the same Block.
-    AD_CHECK(!firstBlockIsIncomplete || (beginBlock == lastBlock));
-    AD_CHECK(!lastBlockIsIncomplete);
-    if (firstBlockIsIncomplete) {
-      AD_CHECK(metaData._offsetInBlock != std::numeric_limits<uint64_t>::max());
+  // Invariant: A relation spans multiple blocks exclusively or several
+  // entities are stored completely in the same Block.
+  AD_CHECK(!firstBlockIsIncomplete || (beginBlock == lastBlock));
+  AD_CHECK(!lastBlockIsIncomplete);
+  if (firstBlockIsIncomplete) {
+    AD_CHECK(metaData._offsetInBlock != std::numeric_limits<uint64_t>::max());
+  }
+
+  // We have at most one block that is incomplete and thus requires trimming.
+  // Set up a lambda, that reads this block and decompresses it to
+  // the result.
+  auto readIncompleteBlock = [&](const auto& block) {
+    auto cacheKey =
+        permutation._readableName + std::to_string(block._offsetInFile);
+
+    auto uncompressedBuffer =
+        globalBlockCache()
+            .computeOnce(
+                cacheKey,
+                [&]() { return readAndDecompressBlock(block, permutation); })
+            ._resultPointer;
+
+    // Extract the part of the block that actually belongs to the relation
+    auto begin = uncompressedBuffer->begin() + metaData._offsetInBlock;
+    auto end = begin + metaData._numRows;
+    AD_CHECK(static_cast<size_t>(end - begin) <= spaceLeft);
+    std::copy(begin, end, position);
+    position += (end - begin);
+    spaceLeft -= (end - begin);
+  };
+
+  // Read the first block if it is incomplete
+  if (firstBlockIsIncomplete) {
+    readIncompleteBlock(*beginBlock);
+    ++beginBlock;
+    if (timer) {
+      timer->wlock()->checkTimeoutAndThrow("IndexScan :");
     }
+  }
 
-    // We have at most one block that is incomplete and thus requires trimming.
-    // Set up a lambda, that reads this block and decompresses it to
-    // the result.
-    auto readIncompleteBlock = [&](const auto& block) {
-      auto cacheKey =
-          permutation._readableName + std::to_string(block._offsetInFile);
-
-      auto uncompressedBuffer =
-          globalBlockCache()
-              .computeOnce(
-                  cacheKey,
-                  [&]() { return readAndDecompressBlock(block, permutation); })
-              ._resultPointer;
-
-      // Extract the part of the block that actually belongs to the relation
-      auto begin = uncompressedBuffer->begin() + metaData._offsetInBlock;
-      auto end = begin + metaData._numRows;
-      AD_CHECK(static_cast<size_t>(end - begin) <= spaceLeft);
-      std::copy(begin, end, position);
-      position += (end - begin);
-      spaceLeft -= (end - begin);
-    };
-
-    // Read the first block if it is incomplete
-    if (firstBlockIsIncomplete) {
-      readIncompleteBlock(*beginBlock);
-      ++beginBlock;
-      if (timer) {
-        timer->wlock()->checkTimeoutAndThrow("IndexScan :");
-      }
-    }
-
-    // Read all the other (complete!) blocks in parallel
-    if (beginBlock < endBlock) {
+  // Read all the other (complete!) blocks in parallel
+  if (beginBlock < endBlock) {
 #pragma omp parallel
 #pragma omp single
-      {
-        for (; beginBlock < endBlock; ++beginBlock) {
-          const auto& block = *beginBlock;
-          // Read a block from disk (serially).
-          std::vector<char> compressedBuffer =
-              readCompressedBlockFromFile(block, permutation);
+    {
+      for (; beginBlock < endBlock; ++beginBlock) {
+        const auto& block = *beginBlock;
+        // Read a block from disk (serially).
+        std::vector<char> compressedBuffer =
+            readCompressedBlockFromFile(block, permutation);
 
-          // This lambda decompresses the block that was just read to the
-          // correct position in the result.
-          auto decompressLambda = [position, &block,
-                                   compressedBuffer =
-                                       std::move(compressedBuffer)]() {
-            ad_utility::TimeBlockAndLog("Decompressing a block");
-            decompressBlock(compressedBuffer, block._numRows, position);
-          };
+        // This lambda decompresses the block that was just read to the
+        // correct position in the result.
+        auto decompressLambda = [position, &block,
+                                 compressedBuffer =
+                                     std::move(compressedBuffer)]() {
+          ad_utility::TimeBlockAndLog("Decompressing a block");
+          decompressBlock(compressedBuffer, block._numRows, position);
+        };
 
-          // The `decompressLambda` can now run in parallel
+        // The `decompressLambda` can now run in parallel
 #pragma omp task
-          {
-            if (!timer || !timer->wlock()->hasTimedOut()) {
-              decompressLambda();
-            };
-          }
-
-          // this is again serial code, set up the correct pointers
-          // for the next block;
-          spaceLeft -= block._numRows;
-          position += block._numRows;
+        {
+          if (!timer || !timer->wlock()->hasTimedOut()) {
+            decompressLambda();
+          };
         }
-        AD_CHECK(spaceLeft == 0);
-      }  // End of omp parallel region, all the decompression was handled now.
-    }
+
+        // this is again serial code, set up the correct pointers
+        // for the next block;
+        spaceLeft -= block._numRows;
+        position += block._numRows;
+      }
+      AD_CHECK(spaceLeft == 0);
+    }  // End of omp parallel region, all the decompression was handled now.
   }
 }
 
@@ -224,149 +224,152 @@ void CompressedRelationMetaData::scan(
     const Permutation& permutation,
     ad_utility::SharedConcurrentTimeoutTimer timer) {
   AD_CHECK(result->cols() == 1);
-  if (permutation._meta.col0IdExists(col0Id)) {
-    const auto& metaData = permutation._meta.getMetaData(col0Id);
 
-    // Get all the blocks  that possibly might contain our pair of col0Id and
-    // col1Id
-    struct KeyLhs {
-      Id _col0FirstId;
-      Id _col0LastId;
-      Id _col1FirstId;
-      Id _col1LastId;
-    };
+  if (!permutation._meta.col0IdExists(col0Id)) {
+    return;
+  }
+  const auto& metaData = permutation._meta.getMetaData(col0Id);
 
-    auto comp = [](const auto& a, const auto& b) {
-      bool endBeforeBegin = a._col0LastId < b._col0FirstId;
-      endBeforeBegin |=
-          (a._col0LastId == b._col0FirstId && a._col1LastId < b._col1FirstId);
-      return endBeforeBegin;
-    };
+  // Get all the blocks  that possibly might contain our pair of col0Id and
+  // col1Id
+  struct KeyLhs {
+    Id _col0FirstId;
+    Id _col0LastId;
+    Id _col1FirstId;
+    Id _col1LastId;
+  };
 
-    auto [beginBlock, endBlock] =
-        std::equal_range(permutation._meta.blockData().begin(),
-                         permutation._meta.blockData().end(),
-                         KeyLhs{col0Id, col0Id, col1Id, col1Id}, comp);
+  auto comp = [](const auto& a, const auto& b) {
+    bool endBeforeBegin = a._col0LastId < b._col0FirstId;
+    endBeforeBegin |=
+        (a._col0LastId == b._col0FirstId && a._col1LastId < b._col1FirstId);
+    return endBeforeBegin;
+  };
 
-    // Invariant: The col0Id is completely stored in a single block, or it is
-    // contained in multiple blocks that only contain this col0Id,
-    bool col0IdHasExclusiveBlocks =
-        metaData._offsetInBlock == std::numeric_limits<uint64_t>::max();
-    if (!col0IdHasExclusiveBlocks) {
-      AD_CHECK(endBlock - beginBlock == 1);
+  auto [beginBlock, endBlock] =
+      std::equal_range(permutation._meta.blockData().begin(),
+                       permutation._meta.blockData().end(),
+                       KeyLhs{col0Id, col0Id, col1Id, col1Id}, comp);
+
+  // Invariant: The col0Id is completely stored in a single block, or it is
+  // contained in multiple blocks that only contain this col0Id,
+  bool col0IdHasExclusiveBlocks =
+      metaData._offsetInBlock == std::numeric_limits<uint64_t>::max();
+  if (!col0IdHasExclusiveBlocks) {
+    // This might also be zero if no block was found at all.
+    AD_CHECK(endBlock - beginBlock <= 1);
+  }
+
+  // The first and the last block might possibly be incomplete (that is, only
+  // a part of these blocks is actually part of the result,
+  // set up a lambda which allows us to read these blocks, and returns
+  // the result as a vector.
+  auto readPossiblyIncompleteBlock = [&](const auto& block) {
+    std::vector<std::array<Id, 2>> uncompressedBuffer =
+        readAndDecompressBlock(block, permutation);
+
+    // Find the range in the block, that belongs to the same relation `col0Id`
+    bool containedInOnlyOneBlock =
+        metaData._offsetInBlock != std::numeric_limits<uint64_t>::max();
+    auto begin = uncompressedBuffer.begin();
+    if (containedInOnlyOneBlock) {
+      begin += metaData._offsetInBlock;
     }
+    auto end = containedInOnlyOneBlock ? begin + metaData._numRows
+                                       : uncompressedBuffer.end();
 
-    // The first and the last block might possibly be incomplete (that is, only
-    // a part of these blocks is actually part of the result,
-    // set up a lambda which allows us to read these blocks, and returns
-    // the result as a vector.
-    auto readPossiblyIncompleteBlock = [&](const auto& block) {
-      std::vector<std::array<Id, 2>> uncompressedBuffer =
-          readAndDecompressBlock(block, permutation);
+    // Find the range in the block, where also the col1Id matches (the second
+    // ID in the `std::array` does not matter).
+    std::tie(begin, end) = std::equal_range(
+        begin, end, std::array<Id, 2>{col1Id, Id{}},
+        [](const auto& a, const auto& b) { return a[0] < b[0]; });
 
-      // Find the range in the block, that belongs to the same relation `col0Id`
-      bool containedInOnlyOneBlock =
-          metaData._offsetInBlock != std::numeric_limits<uint64_t>::max();
-      auto begin = uncompressedBuffer.begin();
-      if (containedInOnlyOneBlock) {
-        begin += metaData._offsetInBlock;
-      }
-      auto end = containedInOnlyOneBlock ? begin + metaData._numRows
-                                         : uncompressedBuffer.end();
+    // Extract the one column result from the two column block.
+    std::vector<Id> result;
+    result.reserve(end - begin);
+    std::for_each(begin, end, [&](const auto& p) { result.push_back(p[1]); });
+    return result;
+  };
 
-      // Find the range in the block, where also the col1Id matches (the second
-      // ID in the `std::array` does not matter).
-      std::tie(begin, end) = std::equal_range(
-          begin, end, std::array<Id, 2>{col1Id, Id{}},
-          [](const auto& a, const auto& b) { return a[0] < b[0]; });
-
-      // Extract the one column result from the two column block.
-      std::vector<Id> result;
-      result.reserve(end - begin);
-      std::for_each(begin, end, [&](const auto& p) { result.push_back(p[1]); });
-      return result;
-    };
-
-    // The first and the last block might possibly be incomplete, compute
-    // and store the partial results from them.
-    std::vector<Id> firstBlockResult, lastBlockResult;
-    if (beginBlock < endBlock) {
-      firstBlockResult = readPossiblyIncompleteBlock(*beginBlock);
-      ++beginBlock;
-      if (timer) {
-        timer->wlock()->checkTimeoutAndThrow("IndexScan: ");
-      }
+  // The first and the last block might possibly be incomplete, compute
+  // and store the partial results from them.
+  std::vector<Id> firstBlockResult, lastBlockResult;
+  if (beginBlock < endBlock) {
+    firstBlockResult = readPossiblyIncompleteBlock(*beginBlock);
+    ++beginBlock;
+    if (timer) {
+      timer->wlock()->checkTimeoutAndThrow("IndexScan: ");
     }
-    if (beginBlock < endBlock) {
-      lastBlockResult = readPossiblyIncompleteBlock(*(endBlock - 1));
-      endBlock--;
-      if (timer) {
-        timer->wlock()->checkTimeoutAndThrow("IndexScan: ");
-      }
+  }
+  if (beginBlock < endBlock) {
+    lastBlockResult = readPossiblyIncompleteBlock(*(endBlock - 1));
+    endBlock--;
+    if (timer) {
+      timer->wlock()->checkTimeoutAndThrow("IndexScan: ");
     }
+  }
 
-    // Determine the total size of the result.
-    // First accumulate the complete blocks in the "middle"
-    auto totalResultSize = std::accumulate(
-        beginBlock, endBlock, 0ul, [](const auto& count, const auto& block) {
-          return count + block._numRows;
-        });
-    // Add the possibly incomplete blocks from the beginning and end;
-    totalResultSize += firstBlockResult.size() + lastBlockResult.size();
+  // Determine the total size of the result.
+  // First accumulate the complete blocks in the "middle"
+  auto totalResultSize = std::accumulate(
+      beginBlock, endBlock, 0ul, [](const auto& count, const auto& block) {
+        return count + block._numRows;
+      });
+  // Add the possibly incomplete blocks from the beginning and end;
+  totalResultSize += firstBlockResult.size() + lastBlockResult.size();
 
-    result->resize(totalResultSize);
-    Id* position = result->data();
-    size_t spaceLeft = result->size();
+  result->resize(totalResultSize);
+  Id* position = result->data();
+  size_t spaceLeft = result->size();
 
-    // Insert the first block into the result;
-    position =
-        std::copy(firstBlockResult.begin(), firstBlockResult.end(), position);
-    spaceLeft -= firstBlockResult.size();
+  // Insert the first block into the result;
+  position =
+      std::copy(firstBlockResult.begin(), firstBlockResult.end(), position);
+  spaceLeft -= firstBlockResult.size();
 
-    // Insert the complete blocks from the middle in parallel
-    if (beginBlock < endBlock) {
+  // Insert the complete blocks from the middle in parallel
+  if (beginBlock < endBlock) {
 #pragma omp parallel
 #pragma omp single
-      for (; beginBlock < endBlock; ++beginBlock) {
-        const auto& block = *beginBlock;
+    for (; beginBlock < endBlock; ++beginBlock) {
+      const auto& block = *beginBlock;
 
-        // Read the block serially
-        std::vector<char> compressedBuffer =
-            readCompressedBlockFromFile(block, permutation);
+      // Read the block serially
+      std::vector<char> compressedBuffer =
+          readCompressedBlockFromFile(block, permutation);
 
-        // A lambda that owns the compressed block decompresses it to the
-        // correct position in the result. It may safely be run in parallel
-        auto decompressLambda = [position, &block,
-                                 compressedBuffer =
-                                     std::move(compressedBuffer)]() mutable {
-          ad_utility::TimeBlockAndLog("Decompression a block");
-          std::vector<std::array<Id, 2>> uncompressedBuffer =
-              decompressBlock(compressedBuffer, block._numRows);
+      // A lambda that owns the compressed block decompresses it to the
+      // correct position in the result. It may safely be run in parallel
+      auto decompressLambda = [position, &block,
+                               compressedBuffer =
+                                   std::move(compressedBuffer)]() mutable {
+        ad_utility::TimeBlockAndLog("Decompression a block");
+        std::vector<std::array<Id, 2>> uncompressedBuffer =
+            decompressBlock(compressedBuffer, block._numRows);
 
-          // Extract the single result column from the two column block;
-          std::for_each(uncompressedBuffer.begin(), uncompressedBuffer.end(),
-                        [&](const auto& p) { *position++ = p[1]; });
-        };
+        // Extract the single result column from the two column block;
+        std::for_each(uncompressedBuffer.begin(), uncompressedBuffer.end(),
+                      [&](const auto& p) { *position++ = p[1]; });
+      };
 
-        // Register an OpenMP task that performs the decompression of this
-        // block in parallel
+      // Register an OpenMP task that performs the decompression of this
+      // block in parallel
 #pragma omp task
-        {
-          if (!timer || !timer->wlock()->hasTimedOut()) {
-            decompressLambda();
-          }
+      {
+        if (!timer || !timer->wlock()->hasTimedOut()) {
+          decompressLambda();
         }
+      }
 
-        // update the pointers
-        spaceLeft -= block._numRows;
-        position += block._numRows;
-      }  // end of parallel region
-    }
-    // Add the last block.
-    std::copy(lastBlockResult.begin(), lastBlockResult.end(), position);
-    spaceLeft -= lastBlockResult.size();
-    AD_CHECK(spaceLeft == 0);
+      // update the pointers
+      spaceLeft -= block._numRows;
+      position += block._numRows;
+    }  // end of parallel region
   }
+  // Add the last block.
+  std::copy(lastBlockResult.begin(), lastBlockResult.end(), position);
+  spaceLeft -= lastBlockResult.size();
+  AD_CHECK(spaceLeft == 0);
 }
 
 // Explicit instantiations for all six permutations

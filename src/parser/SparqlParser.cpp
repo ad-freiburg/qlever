@@ -9,6 +9,7 @@
 
 #include "./SparqlParserHelpers.h"
 #include "PropertyPathParser.h"
+#include "sparqlParser/SparqlQleverVisitor.h"
 
 using namespace std::literals::string_literals;
 
@@ -197,7 +198,8 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       manuallySelectedVariables.push_back(std::move(s).str());
     } else if (_lexer.accept("(")) {
       // Expect an alias.
-      ParsedQuery::Alias a = parseAliasWithAntlr(*query);
+      ParsedQuery::Alias a =
+          parseWithAntlr(sparqlParserHelpers::parseAlias, *query);
       selectClause._aliases.push_back(a);
       manuallySelectedVariables.push_back(a._outVarName);
       _lexer.expect(")");
@@ -234,7 +236,8 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
              _lexer.accept("(")) {
     // TODO This assumes that aliases can stand in the ORDER BY
     // This is not true, only expression may stand there
-    ParsedQuery::Alias a = parseAliasWithAntlr(*query);
+    ParsedQuery::Alias a =
+        parseWithAntlr(sparqlParserHelpers::parseAlias, *query);
     auto& selectClause = query->selectClause();
 
     for (const auto& selectedVariable :
@@ -290,14 +293,10 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       // Recursively call parseWhere to parse the optional part.
       parseWhere(query, &child);
       _lexer.accept(".");
-    } else if (_lexer.accept("bind")) {
-      _lexer.expect("(");
-      GraphPatternOperation::Bind bind{parseExpressionWithAntlr(*query)};
-      _lexer.expect("as");
-      _lexer.expect(SparqlToken::Type::VARIABLE);
-      query->registerVariableVisibleInQueryBody(_lexer.current().raw);
-      bind._target = _lexer.current().raw;
-      _lexer.expect(")");
+    } else if (_lexer.peek("bind")) {
+      GraphPatternOperation::Bind bind =
+          parseWithAntlr(sparqlParserHelpers::parseBind, *query);
+      query->registerVariableVisibleInQueryBody(bind._target);
       currentPattern->_children.emplace_back(std::move(bind));
       // The dot after a BIND is optional.
       _lexer.accept(".");
@@ -425,6 +424,8 @@ void SparqlParser::parseWhere(ParsedQuery* query,
           query->registerVariableVisibleInQueryBody(_lexer.current().raw);
         } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
           predicate = parseLiteral(_lexer.current().raw, true);
+        } else if (_lexer.accept(SparqlToken::Type::A_RDF_TYPE_ALIAS)) {
+          predicate = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
         } else {
           // Assume the token is a predicate path. This will be verified
           // separately later.
@@ -967,21 +968,13 @@ SparqlQleverVisitor::PrefixMap getPrefixMap(const ParsedQuery& parsedQuery) {
 }  // namespace
 
 // ________________________________________________________________________
-sparqlExpression::SparqlExpressionPimpl SparqlParser::parseExpressionWithAntlr(
-    const ParsedQuery& parsedQuery) {
-  auto str = _lexer.getUnconsumedInput();
+template <typename F>
+auto SparqlParser::parseWithAntlr(F f, const ParsedQuery& parsedQuery)
+    -> decltype(f(std::declval<const string&>(),
+                  std::declval<SparqlQleverVisitor::PrefixMap>())
+                    ._resultOfParse) {
   auto resultOfParseAndRemainingText =
-      sparqlParserHelpers::parseExpression(str, getPrefixMap(parsedQuery));
-  _lexer.reset(std::move(resultOfParseAndRemainingText._remainingText));
-  return std::move(resultOfParseAndRemainingText._resultOfParse);
-}
-
-// ________________________________________________________________________
-ParsedQuery::Alias SparqlParser::parseAliasWithAntlr(
-    const ParsedQuery& parsedQuery) {
-  auto str = _lexer.getUnconsumedInput();
-  auto resultOfParseAndRemainingText =
-      sparqlParserHelpers::parseAlias(str, getPrefixMap(parsedQuery));
+      f(_lexer.getUnconsumedInput(), getPrefixMap(parsedQuery));
   _lexer.reset(std::move(resultOfParseAndRemainingText._remainingText));
   return std::move(resultOfParseAndRemainingText._resultOfParse);
 }

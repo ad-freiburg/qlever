@@ -404,6 +404,10 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
   co_yield absl::StrJoin(variables, sepView);
   co_yield '\n';
 
+  constexpr auto& escapeFunction = format == ExportSubFormat::TSV
+                                       ? RdfEscaping::escapeForTsv
+                                       : RdfEscaping::escapeForCsv;
+
   for (size_t i = offset; i < upperBound; ++i) {
     for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
       if (selectedColumnIndices[j].has_value()) {
@@ -419,17 +423,20 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
             co_yield id.getInt();
             break;
           case Datatype::VocabIndex:
-            co_yield _qec->getIndex()
-                .getVocab()
-                .indexToOptionalString(id.getVocabIndex())
-                .value_or("");
+            co_yield escapeFunction(
+                _qec->getIndex()
+                    .getVocab()
+                    .indexToOptionalString(id.getVocabIndex())
+                    .value_or(""));
             break;
           case Datatype::LocalVocabIndex:
-            co_yield resultTable->indexToOptionalString(id.getLocalVocabIndex())
-                .value_or("");
+            co_yield escapeFunction(
+                resultTable->indexToOptionalString(id.getLocalVocabIndex())
+                    .value_or(""));
             break;
           case Datatype::TextRecordIndex:
-            co_yield _qec->getIndex().getTextExcerpt(id.getTextRecordIndex());
+            co_yield escapeFunction(
+                _qec->getIndex().getTextExcerpt(id.getTextRecordIndex()));
             break;
           default:
             AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,

@@ -318,7 +318,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitBind(SparqlAutomaticParser::BindContext* ctx) override {
-    return visitChildren(ctx);
+    auto expr = std::move(ctx->expression()->accept(this).as<ExpressionPtr>());
+    auto wrapper = sparqlExpression::SparqlExpressionPimpl{std::move(expr)};
+    return GraphPatternOperation::Bind{std::move(wrapper),
+                                       ctx->var()->getText()};
   }
 
   antlrcpp::Any visitInlineData(

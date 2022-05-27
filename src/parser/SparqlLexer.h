@@ -21,7 +21,8 @@ struct SparqlToken {
     RDFLITERAL,
     INTEGER,
     FLOAT,
-    LOGICAL_OR
+    LOGICAL_OR,
+    A_RDF_TYPE_ALIAS
   };
   static const std::string TYPE_NAMES[];
 
@@ -63,9 +64,13 @@ class SparqlLexer {
   [[nodiscard]] bool empty() const;
 
   bool accept(SparqlToken::Type type);
-  bool accept(const std::string& raw, bool match_case = true);
+  bool accept(std::string_view raw, bool match_case = true);
   // Accepts any token
   void accept();
+
+  // Checks whether the next token matches but does not consume it.
+  [[nodiscard]] bool peek(SparqlToken::Type type) const;
+  [[nodiscard]] bool peek(std::string_view raw, bool match_case = true) const;
 
   // Adds all symbols up to the next whitespace to the next token
   void expandNextUntilWhitespace();
