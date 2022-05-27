@@ -118,3 +118,8 @@ MATCHER_P2(IsBind, variable, expression, "") {
   return (arg._target == variable) &&
          (arg._expression.getDescriptor() == expression);
 }
+
+MATCHER_P3(IsLimitOffset, limit, textLimit, offset, "") {
+  return (arg._limit == limit) && (arg._textLimit == textLimit) &&
+         (arg._offset == offset);
+}

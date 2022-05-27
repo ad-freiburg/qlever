@@ -661,3 +661,120 @@ TEST(SparqlParser, Bind) {
     EXPECT_THAT(bindAndText._remainingText, IsEmpty());
   }
 }
+
+TEST(SparqlParser, Integer) {
+  {
+    string input = "1931";
+    ParserAndVisitor p{input};
+
+    unsigned long long result =
+        p.parser.integer()->accept(&p.visitor).as<unsigned long long>();
+    EXPECT_EQ(result, 1931ULL);
+  }
+
+  {
+    string input = "0";
+    ParserAndVisitor p{input};
+
+    unsigned long long result =
+        p.parser.integer()->accept(&p.visitor).as<unsigned long long>();
+    EXPECT_EQ(result, 0ULL);
+  }
+
+  {
+    string input = "18446744073709551615";
+    ParserAndVisitor p{input};
+
+    unsigned long long result =
+        p.parser.integer()->accept(&p.visitor).as<unsigned long long>();
+    EXPECT_EQ(result, 18446744073709551615ULL);
+  }
+
+  {
+    string input = "18446744073709551616";
+    ParserAndVisitor p{input};
+
+    EXPECT_THROW(p.parser.integer()->accept(&p.visitor), SparqlParseException);
+  }
+
+  {
+    string input = "10000000000000000000000000000000000000000";
+    ParserAndVisitor p{input};
+
+    EXPECT_THROW(p.parser.integer()->accept(&p.visitor), SparqlParseException);
+  }
+
+  {
+    string input = "-1";
+    ParserAndVisitor p{input};
+
+    EXPECT_THROW(p.parser.integer()->accept(&p.visitor),
+                 antlr4::ParseCancellationException);
+  }
+}
+
+TEST(SparqlParser, LimitOffsetClause) {
+  {
+    string input = "LIMIT 10";
+
+    sparqlParserHelpers::ResultOfParseAndRemainingText<LimitOffsetClause>
+        limitOffset = sparqlParserHelpers::parseLimitOffsetClause(input, {});
+
+    EXPECT_THAT(limitOffset._resultOfParse, IsLimitOffset(10ULL, 1ULL, 0ULL));
+    EXPECT_THAT(limitOffset._remainingText, IsEmpty());
+  }
+
+  {
+    string input = "OFFSET 31 LIMIT 12 TEXTLIMIT 14";
+
+    sparqlParserHelpers::ResultOfParseAndRemainingText<LimitOffsetClause>
+        limitOffset = sparqlParserHelpers::parseLimitOffsetClause(input, {});
+
+    EXPECT_THAT(limitOffset._resultOfParse, IsLimitOffset(12ULL, 14ULL, 31ULL));
+    EXPECT_THAT(limitOffset._remainingText, IsEmpty());
+  }
+
+  {
+    string input = "textlimit 999";
+
+    sparqlParserHelpers::ResultOfParseAndRemainingText<LimitOffsetClause>
+        limitOffset = sparqlParserHelpers::parseLimitOffsetClause(input, {});
+
+    EXPECT_THAT(limitOffset._resultOfParse,
+                IsLimitOffset(std::numeric_limits<unsigned long long>::max(),
+                              999ULL, 0ULL));
+    EXPECT_THAT(limitOffset._remainingText, IsEmpty());
+  }
+
+  {
+    string input = "LIMIT      999";
+
+    sparqlParserHelpers::ResultOfParseAndRemainingText<LimitOffsetClause>
+        limitOffset = sparqlParserHelpers::parseLimitOffsetClause(input, {});
+
+    EXPECT_THAT(limitOffset._resultOfParse, IsLimitOffset(999ULL, 1ULL, 0ULL));
+    EXPECT_THAT(limitOffset._remainingText, IsEmpty());
+  }
+
+  {
+    string input = "OFFSET 43";
+
+    sparqlParserHelpers::ResultOfParseAndRemainingText<LimitOffsetClause>
+        limitOffset = sparqlParserHelpers::parseLimitOffsetClause(input, {});
+
+    EXPECT_THAT(limitOffset._resultOfParse,
+                IsLimitOffset(std::numeric_limits<unsigned long long>::max(),
+                              1ULL, 43ULL));
+    EXPECT_THAT(limitOffset._remainingText, IsEmpty());
+  }
+
+  {
+    string input = "TEXTLIMIT 43 LIMIT 19";
+
+    sparqlParserHelpers::ResultOfParseAndRemainingText<LimitOffsetClause>
+        limitOffset = sparqlParserHelpers::parseLimitOffsetClause(input, {});
+
+    EXPECT_THAT(limitOffset._resultOfParse, IsLimitOffset(19ULL, 43ULL, 0ULL));
+    EXPECT_THAT(limitOffset._remainingText, IsEmpty());
+  }
+}
