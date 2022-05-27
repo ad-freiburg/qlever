@@ -24,8 +24,8 @@ AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     arg.resize(size);
   }
   if constexpr (TriviallySerializable<V>) {
-    using Ptr = std::conditional_t<ReadSerializer<S>, char*, const char*>;
-    serializer.serializeBytes(reinterpret_cast<Ptr>(arg.data()),
+    using CharPtr = std::conditional_t<ReadSerializer<S>, char*, const char*>;
+    serializer.serializeBytes(reinterpret_cast<CharPtr>(arg.data()),
                               arg.size() * sizeof(V));
   } else {
     for (size_t i = 0; i < size; ++i) {

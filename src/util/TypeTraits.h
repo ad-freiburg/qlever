@@ -67,8 +67,8 @@ struct FirstWrapper : public std::type_identity<T> {};
 }  // namespace detail
 
 /// The concept is fulfilled iff `T` is an
-/// instantiation of the template `TemplatedType`.
-/// Examples:
+/// instantiation of `TemplatedType`. Examples:
+///
 /// isInstantiation<std::vector, std::vector<int>> == true;
 /// isInstantiation<std::vector, const std::vector<int>&> == false;
 template <template <typename...> typename TemplatedType, typename T>
@@ -76,8 +76,8 @@ concept isInstantiation =
     detail::IsInstantiationOf<TemplatedType>::template Instantiation<T>::value;
 
 /// The concept is fulfilled iff `T` is `ad_utility::SimilarTo` an
-/// instantiation of the template `TemplatedType`.
-/// Examples:
+/// instantiation of `TemplatedType`. Examples:
+///
 /// similarToInstantiation<std::vector, std::vector<int>> == true;
 /// similarToInstantiation<std::vector, const std::vector<int>&> == true;
 template <template <typename...> typename TemplatedType, typename T>

@@ -58,7 +58,7 @@ class WriteSerializerTag {};
 class ReadSerializerTag {};
 
 /// A `WriteSerializer` can write from a span of bytes to some resource and has
-/// a public member type `using IsWriteSerializer = std::true_type`.
+/// a public member type `using SerializerType = WriteSerializerTag`.
 template <typename S>
 concept WriteSerializer = requires(S s, const char* ptr, size_t numBytes) {
   {
@@ -69,7 +69,7 @@ concept WriteSerializer = requires(S s, const char* ptr, size_t numBytes) {
 };
 
 /// A `ReadSerializer` can read to span of bytes from some resource and has a
-/// public alias `using IsWriteSerializer = std::false_type'`.
+/// public alias `using SerializerType = ReadSerializerTag'`.
 template <typename S>
 concept ReadSerializer = requires(S s, char* ptr, size_t numBytes) {
   {
@@ -142,19 +142,19 @@ static constexpr bool SerializerMatchesConstness =
  * `Serializer` , `WriteSerializer` and `ReadSerializer` are also true for
  * references to serializers. For an example usage see `SerializePair.h`.
  */
-#define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(Constraint)                \
+#define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(Constraint)        \
   template <ad_utility::serialization::Serializer S, typename T> \
   requires(Constraint) void serialize(S& serializer, T&& arg)
 
-/// Similar to `AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT` but only for `WriteSerializer`s.
-/// For an exmple usage see `SerializeVector.h`
-#define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_WRITE(Constraint)               \
+/// Similar to `AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT` but only for
+/// `WriteSerializer`s. For an exmple usage see `SerializeVector.h`
+#define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_WRITE(Constraint)       \
   template <ad_utility::serialization::WriteSerializer S, typename T> \
   requires(Constraint) void serialize(S& serializer, T&& arg)
 
-/// Similar to `AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT` but only for `ReadSerializer`s.
-/// For an example usage see `SerializeVector.h`
-#define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_READ(Constraint)               \
+/// Similar to `AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT` but only for
+/// `ReadSerializer`s. For an example usage see `SerializeVector.h`
+#define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_READ(Constraint)       \
   template <ad_utility::serialization::ReadSerializer S, typename T> \
   requires(Constraint) void serialize(S& serializer, T&& arg)
 
@@ -190,11 +190,11 @@ allowTrivialSerialization(T) {
 
 /**
  * Types for which a function `allowTrivialSerialization(t)`
- * exists and that are trivially copyable can be serialized by simply copying the bytes. To make
- * a user-defined type which is trivially copyable also trivially serializable,
- * declare (no need to define it) this function in the same namespace as the
- * type or as a friend function. For example, one can equivalently write one of
- * the following two:
+ * exists and that are trivially copyable can be serialized by simply copying
+ * the bytes. To make a user-defined type which is trivially copyable also
+ * trivially serializable, declare (no need to define it) this function in the
+ * same namespace as the type or as a friend function. For example, one can
+ * equivalently write one of the following two:
  *
  * struct X {
  *   int x;
