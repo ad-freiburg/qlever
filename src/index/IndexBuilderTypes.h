@@ -43,9 +43,9 @@ struct TripleComponentWithIndex {
   [[nodiscard]] auto& iriOrLiteral() { return _iriOrLiteral; }
 
   AD_SERIALIZE_FRIEND_FUNCTION(TripleComponentWithIndex) {
-    serializer | entry._iriOrLiteral;
-    serializer | entry._isExternal;
-    serializer | entry._index;
+    serializer | arg._iriOrLiteral;
+    serializer | arg._isExternal;
+    serializer | arg._index;
   }
 };
 

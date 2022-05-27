@@ -17,7 +17,7 @@ using SerializationPosition = uint64_t;
 
 class FileWriteSerializer {
  public:
-  using IsWriteSerializer = std::true_type;
+  using SerializerType = WriteSerializerTag;
 
   FileWriteSerializer(File&& file) : _file{std::move(file)} {};
 
@@ -50,7 +50,7 @@ class FileWriteSerializer {
 
 class FileReadSerializer {
  public:
-  using IsWriteSerializer = std::false_type;
+  using SerializerType = ReadSerializerTag;
 
   explicit FileReadSerializer(File&& file) : _file{std::move(file)} {};
 
@@ -85,11 +85,11 @@ class FileReadSerializer {
  */
 class CopyableFileReadSerializer {
  public:
-  using IsWriteSerializer = std::false_type;
-  CopyableFileReadSerializer(std::shared_ptr<File> filePtr)
+  using SerializerType = ReadSerializerTag;
+  explicit CopyableFileReadSerializer(std::shared_ptr<File> filePtr)
       : _file{std::move(filePtr)} {};
 
-  CopyableFileReadSerializer(std::string filename)
+  explicit CopyableFileReadSerializer(std::string filename)
       : _file{std::make_shared<File>(filename, "r")} {
     AD_CHECK(_file->isOpen());
   }

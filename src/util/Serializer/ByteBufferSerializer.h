@@ -45,7 +45,7 @@ class ByteBufferWriteSerializer {
  */
 class ByteBufferReadSerializer {
  public:
-  using IsWriteSerializer = std::false_type;
+  using SerializerType = ReadSerializerTag;
   using Storage = std::vector<char>;
 
   explicit ByteBufferReadSerializer(Storage data) : _data{std::move(data)} {};
