@@ -66,8 +66,7 @@ struct FirstWrapper : public std::type_identity<T> {};
 
 }  // namespace detail
 
-/// The concept is fulfilled iff `T` is an
-/// instantiation of `TemplatedType`. Examples:
+/// The concept is fulfilled iff `T` is an instantiation of `TemplatedType`. Examples:
 ///
 /// isInstantiation<std::vector, std::vector<int>> == true;
 /// isInstantiation<std::vector, const std::vector<int>&> == false;
