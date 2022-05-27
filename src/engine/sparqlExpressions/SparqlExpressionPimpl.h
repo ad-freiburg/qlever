@@ -50,8 +50,9 @@ class SparqlExpressionPimpl {
   getVariableForNonDistinctCountOrNullopt() const;
 
   // If this expression is a single variable, return that variable, else return
-  // std::nullopt. This enables some optimizations as we can directly handle
-  // these trivial "expressions" without using the `SparqlExpressions` module.
+  // std::nullopt. Knowing this enables some optimizations because we can
+  // directly handle these trivial "expressions" without using the
+  // `SparqlExpression` module.
   [[nodiscard]] std::optional<std::string> getVariableOrNullopt() const;
 
   // The implementation of these methods is small and straightforward, but
