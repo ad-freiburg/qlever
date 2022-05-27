@@ -40,7 +40,7 @@ class AllocationMemoryLeft {
   size_t free_;  // the number of free bytes
                  // throw AllocationExceedsLimitException on failure
  public:
-  AllocationMemoryLeft(size_t n) : free_(n) {}
+  explicit AllocationMemoryLeft(size_t n) : free_(n) {}
 
   // Called before memory is allocated.
   bool decrease_if_enough_left_or_return_false(size_t n) noexcept {
@@ -62,6 +62,9 @@ class AllocationMemoryLeft {
   // Called after memory is deallocated.
   void increase(size_t n) { free_ += n; }
   [[nodiscard]] size_t numFreeBytes() const { return free_; }
+
+  // Explicitly set the number of available bytes.
+  void set(size_t n) { free_ = n; }
 };
 
 /*
@@ -178,13 +181,18 @@ class AllocatorWithLimit {
       memoryLeft_.ptr()->wlock()->decrease_if_enough_left_or_throw(bytesNeeded);
     }
     // the actual allocation
-    return allocator_.allocate(n);
+    // TODO<joka921> We use "malloc" for now, to track who is not using
+    // the limit.
+    return static_cast<T*>(std::malloc(sizeof(T) * n));
+    // return allocator_.allocate(n);
   }
 
   // An allocator must have a function "deallocate" with exactly this signature.
   void deallocate(T* p, std::size_t n) {
     // free the memory
-    allocator_.deallocate(p, n);
+    // TODO<joka921> Since we use "malloc" we also have to use "free"
+    std::free(p);
+    // allocator_.deallocate(p, n);
     // Update the amount of memory left.
     memoryLeft_.ptr()->wlock()->increase(n * sizeof(T));
   }

@@ -130,9 +130,10 @@ class Synchronized {
     OnDestruction od{[&]() mutable noexcept {
       ++nextOrderedRequest_;
       l.unlock();
-      requestCv_.notify_all();
+      // requestCv_.notify_all();
     }};
-    requestCv_.wait(l, [&]() { return requestNumber == nextOrderedRequest_; });
+    // requestCv_.wait(l, [&]() { return requestNumber == nextOrderedRequest_;
+    // });
     return f(data_);
   }
 
@@ -223,7 +224,7 @@ class Synchronized {
 
   // These are used for the withWriteLockAndOrdered function
   size_t nextOrderedRequest_ = 0;
-  std::condition_variable_any requestCv_;
+  // std::condition_variable_any requestCv_;
 
   template <class S, bool b, bool c>
   friend class LockPtr;  // The LockPtr implementation requires private access

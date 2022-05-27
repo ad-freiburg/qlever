@@ -63,7 +63,7 @@ include_directories(${ICU_INCLUDE_DIR})
 # JEMALLOC
 ###################################
 if (${JEMALLOC_MANUALLY_INSTALLED})
-  link_libraries(jemalloc)
+  #link_libraries(jemalloc)
 else()
   find_package(PkgConfig)
   pkg_check_modules (JEMALLOC jemalloc)
@@ -71,7 +71,7 @@ else()
   pkg_search_module(JEMALLOC jemalloc)
   if (${JEMALLOC_FOUND})
     include_directories(${JEMALLOC_INCLUDE_DIRS})
-    link_libraries(${JEMALLOC_LIBRARIES})
+    #link_libraries(${JEMALLOC_LIBRARIES})
   else ()
     message(FATAL_ERROR "Jemalloc is required, but could not be found via
     pkg-config. If you are sure that you have installed jemalloc on your system
@@ -94,6 +94,10 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
+
+# Additional stuff to get the stacktraces
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -ggdb -no-pie -fno-pie -rdynamic")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}  -no-pie -fno-pie")
 # Enable the specification of additional warnings manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
 
@@ -213,12 +217,13 @@ else()
   set(LOGLEVEL INFO CACHE STRING "The loglevel")
 endif()
 set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TIMING TRACE)
-add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
+add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}} -DBOOST_STACKTRACE_USE_ADDR2LINE)
 
 add_subdirectory(src/parser)
 add_subdirectory(src/engine)
 add_subdirectory(src/index)
 add_subdirectory(src/util)
+add_subdirectory(src/memory)
 enable_testing()
 add_subdirectory(test)
 
@@ -234,7 +239,7 @@ add_executable(CreatePatternsMain src/index/CreatePatternsMain.cpp src/util/Cons
 target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(ServerMain src/ServerMain.cpp)
-target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
+target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} boost_program_options memory dl)
 
 add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
 target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
@@ -247,3 +252,4 @@ target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PermutationExporterMain src/index/PermutationExporterMain.cpp)
 target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_INIT})
+
