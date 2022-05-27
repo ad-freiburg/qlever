@@ -29,3 +29,4 @@ void* operator new(size_t sz) {
 }
 
 void operator delete(void* ptr) noexcept { std::free(ptr); }
+void operator delete(void* ptr, std::size_t n) noexcept { std::free(ptr); }
