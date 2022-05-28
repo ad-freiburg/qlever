@@ -96,8 +96,10 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}  -Wall -Wextra")
 
 # Additional stuff to get the stacktraces
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -ggdb -no-pie -fno-pie -rdynamic")
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}  -no-pie -fno-pie")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -ggdb -rdynamic")
+set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}")
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -ggdb -no-pie -fno-pie -rdynamic")
+# set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}  -no-pie -fno-pie")
 # Enable the specification of additional warnings manually from the commandline
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
 

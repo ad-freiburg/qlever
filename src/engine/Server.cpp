@@ -363,9 +363,11 @@ boost::asio::awaitable<void> Server::processQuery(
     // the query planning
     timeoutTimer->wlock()->start();
 
+    LOG(DEBUG) << "Start query planning ..." << std::endl;
     QueryPlanner qp(&qec);
     qp.setEnablePatternTrick(_enablePatternTrick);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
+    LOG(DEBUG) << "Done query planning" << std::endl;
     qet.isRoot() = true;  // allow pinning of the final result
     qet.recursivelySetTimeoutTimer(timeoutTimer);
     LOG(TRACE) << qet.asString() << std::endl;

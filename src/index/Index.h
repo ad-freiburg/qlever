@@ -492,7 +492,7 @@ class Index {
 
     LOG(DEBUG) << "Performing " << p._readableName << "  scan of relation "
                << col0String << " with fixed subject: " << col1String
-               << "...\n";
+               << "..." << std::endl;
 
     CompressedRelationMetaData::scan(col0Id, col1Id, result, p, timer);
   }

@@ -224,7 +224,7 @@ ad_utility::HashMap<string, size_t> IndexScan::getVariableColumns() const {
 }
 // _____________________________________________________________________________
 void IndexScan::computeResult(ResultTable* result) {
-  LOG(DEBUG) << "IndexScan result computation...\n";
+  LOG(DEBUG) << "IndexScan result computation ..." << std::endl;
 
   switch (_type) {
     case PSO_BOUND_S:
@@ -273,7 +273,7 @@ void IndexScan::computeResult(ResultTable* result) {
       computeFullScan(result, getIndex().OPS());
       break;
   }
-  LOG(DEBUG) << "IndexScan result computation done.\n";
+  LOG(DEBUG) << "IndexScan result computation done" << std::endl;
 }
 
 // _____________________________________________________________________________
