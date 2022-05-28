@@ -607,6 +607,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
+  /// Note that in the SPARQL grammar the INTEGER rule refers to positive
+  /// integers with an explicit sign.
   antlrcpp::Any visitInteger(
       SparqlAutomaticParser::IntegerContext* ctx) override {
     try {

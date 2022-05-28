@@ -16,6 +16,7 @@
 #include "SparqlAntlrParserTestHelpers.h"
 
 using namespace antlr4;
+using namespace sparqlParserHelpers;
 
 struct ParserAndVisitor {
  private:
@@ -669,7 +670,7 @@ TEST(SparqlParser, Integer) {
 
     unsigned long long result =
         p.parser.integer()->accept(&p.visitor).as<unsigned long long>();
-    EXPECT_EQ(result, 1931ULL);
+    EXPECT_EQ(result, 1931ull);
   }
 
   {
@@ -678,7 +679,7 @@ TEST(SparqlParser, Integer) {
 
     unsigned long long result =
         p.parser.integer()->accept(&p.visitor).as<unsigned long long>();
-    EXPECT_EQ(result, 0ULL);
+    EXPECT_EQ(result, 0ull);
   }
 
   {
@@ -687,7 +688,7 @@ TEST(SparqlParser, Integer) {
 
     unsigned long long result =
         p.parser.integer()->accept(&p.visitor).as<unsigned long long>();
-    EXPECT_EQ(result, 18446744073709551615ULL);
+    EXPECT_EQ(result, 18446744073709551615ull);
   }
 
   {
@@ -717,64 +718,52 @@ TEST(SparqlParser, LimitOffsetClause) {
   {
     string input = "LIMIT 10";
 
-    sparqlParserHelpers::ResultOfParseAndRemainingText<LimitOffsetClause>
-        limitOffset = sparqlParserHelpers::parseLimitOffsetClause(input, {});
+    auto limitOffset = parseLimitOffsetClause(input, {});
 
-    EXPECT_THAT(limitOffset._resultOfParse, IsLimitOffset(10ULL, 1ULL, 0ULL));
-    EXPECT_THAT(limitOffset._remainingText, IsEmpty());
+    expectCompleteParse(limitOffset, IsLimitOffset(10ull, 1ull, 0ull));
   }
 
   {
     string input = "OFFSET 31 LIMIT 12 TEXTLIMIT 14";
 
-    sparqlParserHelpers::ResultOfParseAndRemainingText<LimitOffsetClause>
-        limitOffset = sparqlParserHelpers::parseLimitOffsetClause(input, {});
+    auto limitOffset = parseLimitOffsetClause(input, {});
 
-    EXPECT_THAT(limitOffset._resultOfParse, IsLimitOffset(12ULL, 14ULL, 31ULL));
-    EXPECT_THAT(limitOffset._remainingText, IsEmpty());
+    expectCompleteParse(limitOffset, IsLimitOffset(12ull, 14ull, 31ull));
   }
 
   {
     string input = "textlimit 999";
 
-    sparqlParserHelpers::ResultOfParseAndRemainingText<LimitOffsetClause>
-        limitOffset = sparqlParserHelpers::parseLimitOffsetClause(input, {});
+    auto limitOffset = parseLimitOffsetClause(input, {});
 
-    EXPECT_THAT(limitOffset._resultOfParse,
-                IsLimitOffset(std::numeric_limits<unsigned long long>::max(),
-                              999ULL, 0ULL));
-    EXPECT_THAT(limitOffset._remainingText, IsEmpty());
+    expectCompleteParse(
+        limitOffset,
+        IsLimitOffset(std::numeric_limits<uint64_t>::max(), 999ull, 0ull));
   }
 
   {
     string input = "LIMIT      999";
 
-    sparqlParserHelpers::ResultOfParseAndRemainingText<LimitOffsetClause>
-        limitOffset = sparqlParserHelpers::parseLimitOffsetClause(input, {});
+    auto limitOffset = parseLimitOffsetClause(input, {});
 
-    EXPECT_THAT(limitOffset._resultOfParse, IsLimitOffset(999ULL, 1ULL, 0ULL));
-    EXPECT_THAT(limitOffset._remainingText, IsEmpty());
+    expectCompleteParse(limitOffset, IsLimitOffset(999ull, 1ull, 0ull));
   }
 
   {
     string input = "OFFSET 43";
 
-    sparqlParserHelpers::ResultOfParseAndRemainingText<LimitOffsetClause>
-        limitOffset = sparqlParserHelpers::parseLimitOffsetClause(input, {});
+    auto limitOffset = parseLimitOffsetClause(input, {});
 
-    EXPECT_THAT(limitOffset._resultOfParse,
-                IsLimitOffset(std::numeric_limits<unsigned long long>::max(),
-                              1ULL, 43ULL));
-    EXPECT_THAT(limitOffset._remainingText, IsEmpty());
+    expectCompleteParse(
+        limitOffset,
+        IsLimitOffset(std::numeric_limits<uint64_t>::max(), 1ull, 43ull));
   }
 
   {
     string input = "TEXTLIMIT 43 LIMIT 19";
 
-    sparqlParserHelpers::ResultOfParseAndRemainingText<LimitOffsetClause>
-        limitOffset = sparqlParserHelpers::parseLimitOffsetClause(input, {});
+    auto limitOffset = parseLimitOffsetClause(input, {});
 
-    EXPECT_THAT(limitOffset._resultOfParse, IsLimitOffset(19ULL, 43ULL, 0ULL));
-    EXPECT_THAT(limitOffset._remainingText, IsEmpty());
+    expectCompleteParse(limitOffset, IsLimitOffset(19ull, 43ull, 0ull));
   }
 }
