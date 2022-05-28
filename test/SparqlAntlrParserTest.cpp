@@ -648,18 +648,16 @@ TEST(SparqlParser, VariableWithDollarSign) {
 TEST(SparqlParser, Bind) {
   {
     string input = "BIND (10 - 5 as ?a)";
-    auto bindAndText = sparqlParserHelpers::parseBind(input, {});
+    auto bindAndText = parseBind(input, {});
 
-    EXPECT_THAT(bindAndText._resultOfParse, IsBind("?a", "10-5"));
-    EXPECT_THAT(bindAndText._remainingText, IsEmpty());
+    expectCompleteParse(bindAndText, IsBind("?a", "10-5"));
   }
 
   {
     string input = "bInD (?age - 10 As ?s)";
+    auto bindAndText = parseBind(input, {});
 
-    auto bindAndText = sparqlParserHelpers::parseBind(input, {});
-    EXPECT_THAT(bindAndText._resultOfParse, IsBind("?s", "?age-10"));
-    EXPECT_THAT(bindAndText._remainingText, IsEmpty());
+    expectCompleteParse(bindAndText, IsBind("?s", "?age-10"));
   }
 }
 
