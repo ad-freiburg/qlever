@@ -766,4 +766,21 @@ TEST(SparqlParser, LimitOffsetClause) {
 
     expectCompleteParse(limitOffset, IsLimitOffset(19ull, 43ull, 0ull));
   }
+
+  {
+    string input = "LIMIT20";
+
+    // parse* catches antlr4::ParseCancellationException and throws a
+    // std::runtime_error so this has to be checked instead.
+    EXPECT_THROW(parseLimitOffsetClause(input, {}), std::runtime_error);
+  }
+
+  {
+    string input = "Limit 10 TEXTLIMIT 20 offset 0 Limit 20";
+
+    auto limitOffset = parseLimitOffsetClause(input, {});
+
+    EXPECT_THAT(limitOffset._resultOfParse, IsLimitOffset(10ull, 20ull, 0ull));
+    EXPECT_EQ(limitOffset._remainingText, "Limit 20");
+  }
 }
