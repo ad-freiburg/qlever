@@ -5,48 +5,39 @@
 #ifndef QLEVER_SERIALIZEVECTOR_H
 #define QLEVER_SERIALIZEVECTOR_H
 
+#include <string>
 #include <type_traits>
 #include <vector>
 
-namespace ad_utility::serialization {
-template <typename Serializer, typename T, typename Alloc>
-void serialize(Serializer& serializer, std::vector<T, Alloc>& vector) {
-  if constexpr (std::is_trivially_copyable_v<T> &&
-                std::is_default_constructible_v<T>) {
-    if constexpr (Serializer::IsWriteSerializer) {
-      serializer << vector.size();
-      serializer.serializeBytes(reinterpret_cast<const char*>(vector.data()),
-                                vector.size() * sizeof(T));
-    } else {
-      auto size = vector.size();  // just to get the right type
-      serializer >> size;
-      vector.resize(size);
-      serializer.serializeBytes(reinterpret_cast<char*>(vector.data()),
-                                vector.size() * sizeof(T));
-    }
+#include "../TypeTraits.h"
+#include "./Serializer.h"
 
+namespace ad_utility::serialization {
+AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
+    (ad_utility::similarToInstantiation<std::vector, T> ||
+     ad_utility::similarToInstantiation<std::basic_string, T>)) {
+  using V = typename std::decay_t<T>::value_type;
+  auto size = arg.size();  // The value is ignored for `ReadSerializer`s.
+  serializer | size;
+
+  if constexpr (ReadSerializer<S>) {
+    arg.resize(size);
+  }
+  if constexpr (TriviallySerializable<V>) {
+    using CharPtr = std::conditional_t<ReadSerializer<S>, char*, const char*>;
+    serializer.serializeBytes(reinterpret_cast<CharPtr>(arg.data()),
+                              arg.size() * sizeof(V));
   } else {
-    if constexpr (Serializer::IsWriteSerializer) {
-      serializer << vector.size();
-      for (const auto& el : vector) {
-        serializer << el;
-      }
-    } else {
-      auto size = vector.size();  // just to get the right type
-      serializer >> size;
-      vector.reserve(size);
-      for (size_t i = 0; i < size; ++i) {
-        vector.emplace_back();
-        serializer >> vector.back();
-      }
+    for (size_t i = 0; i < size; ++i) {
+      serializer | arg[i];
     }
   }
 }
 
 /// Incrementally serialize a std::vector to disk without materializing it.
 /// Call `push` for each of the elements that will become part of the vector.
-template <typename T, typename Serializer>
-requires Serializer::IsWriteSerializer class VectorIncrementalSerializer {
+template <typename T, WriteSerializer Serializer>
+class VectorIncrementalSerializer {
  private:
   Serializer _serializer;
   uint64_t _startPosition;

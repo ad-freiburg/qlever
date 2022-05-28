@@ -8,7 +8,9 @@
 #include "../global/Id.h"
 #include "../util/Conversions.h"
 #include "../util/HashMap.h"
+#include "../util/Serializer/Serializer.h"
 #include "../util/TupleHelpers.h"
+#include "../util/TypeTraits.h"
 #include "./ConstantsIndexBuilding.h"
 #include "./StringSortComparator.h"
 
@@ -24,10 +26,9 @@ struct TripleComponent {
   std::string _iriOrLiteral;
   bool _isExternal = false;
 
-  template <typename Serializer>
-  friend void serialize(Serializer& serializer, TripleComponent& entry) {
-    serializer | entry._iriOrLiteral;
-    serializer | entry._isExternal;
+  AD_SERIALIZE_FRIEND_FUNCTION(TripleComponent) {
+    serializer | arg._iriOrLiteral;
+    serializer | arg._isExternal;
   }
 };
 
@@ -41,12 +42,10 @@ struct TripleComponentWithIndex {
   [[nodiscard]] const auto& iriOrLiteral() const { return _iriOrLiteral; }
   [[nodiscard]] auto& iriOrLiteral() { return _iriOrLiteral; }
 
-  template <typename Serializer>
-  friend void serialize(Serializer& serializer,
-                        TripleComponentWithIndex& entry) {
-    serializer | entry._iriOrLiteral;
-    serializer | entry._isExternal;
-    serializer | entry._index;
+  AD_SERIALIZE_FRIEND_FUNCTION(TripleComponentWithIndex) {
+    serializer | arg._iriOrLiteral;
+    serializer | arg._isExternal;
+    serializer | arg._index;
   }
 };
 

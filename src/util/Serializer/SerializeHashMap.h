@@ -1,33 +1,39 @@
-//
-// Created by johannes on 01.05.21.
-//
+//  Copyright 2021, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #ifndef QLEVER_SERIALIZEHASHMAP_H
 #define QLEVER_SERIALIZEHASHMAP_H
 
 #include "../../util/HashMap.h"
+#include "../TypeTraits.h"
 #include "./SerializePair.h"
+#include "./Serializer.h"
 
 namespace ad_utility::serialization {
-template <typename Serializer, class K, class V, class HashFcn, class EqualKey,
-          class Alloc>
-void serialize(Serializer& serializer,
-               ad_utility::HashMap<K, V, HashFcn, EqualKey, Alloc>& hashMap) {
-  if constexpr (Serializer::IsWriteSerializer) {
-    serializer << hashMap.size();
-    for (const auto& pair : hashMap) {
+
+AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
+    (ad_utility::similarToInstantiation<ad_utility::HashMap, T>)) {
+  using K = typename std::decay_t<T>::key_type;
+  using M = typename std::decay_t<T>::mapped_type;
+  if constexpr (WriteSerializer<S>) {
+    serializer << arg.size();
+    for (const auto& pair : arg) {
       serializer << pair;
     }
   } else {
-    hashMap.clear();
-    auto size = hashMap.size();
+    arg.clear();
+    auto size = arg.size();
     serializer >> size;
 
-    hashMap.reserve(size);
+    arg.reserve(size);
     for (size_t i = 0; i < size; ++i) {
-      std::pair<K, V> pair;
+      // We have to use `pair<T::key_type, T::mapped_type>` instead of
+      // `T::value_type` because the latter is a `pair<const key_type,
+      // mapped_type>` and we have to write to the key.
+      std::pair<K, M> pair;
       serializer >> pair;
-      hashMap.insert(std::move(pair));
+      arg.insert(std::move(pair));
     }
   }
 }

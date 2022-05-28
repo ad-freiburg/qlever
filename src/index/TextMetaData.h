@@ -9,6 +9,7 @@
 #include "../global/Id.h"
 #include "../util/Exception.h"
 #include "../util/File.h"
+#include "../util/Serializer/Serializer.h"
 #include "../util/TypeTraits.h"
 
 using std::vector;
@@ -129,17 +130,15 @@ class TextMetaData {
   vector<TextBlockMetaData> _blocks;
 
   // ___________________________________________________________________________
-  template <typename Serializer>
-  friend void serialize(Serializer& serializer,
-                        ad_utility::SimilarTo<TextMetaData> auto&& md) {
-    serializer | md._blockUpperBoundWordIds;
-    serializer | md._blockUpperBoundEntityIds;
-    serializer | md._nofEntities;
-    serializer | md._nofEntityContexts;
-    serializer | md._nofTextRecords;
-    serializer | md._nofWordPostings;
-    serializer | md._nofEntityPostings;
-    serializer | md._name;
-    serializer | md._blocks;
+  AD_SERIALIZE_FRIEND_FUNCTION(TextMetaData) {
+    serializer | arg._blockUpperBoundWordIds;
+    serializer | arg._blockUpperBoundEntityIds;
+    serializer | arg._nofEntities;
+    serializer | arg._nofEntityContexts;
+    serializer | arg._nofTextRecords;
+    serializer | arg._nofWordPostings;
+    serializer | arg._nofEntityPostings;
+    serializer | arg._name;
+    serializer | arg._blocks;
   }
 };

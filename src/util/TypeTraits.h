@@ -66,12 +66,21 @@ struct FirstWrapper : public std::type_identity<T> {};
 
 }  // namespace detail
 
-/// isInstantiation<SomeTemplate, SomeType> is true iff `SomeType` is an
-/// instantiation of the template `SomeTemplate`. This can be used to define
-/// concepts, see below.
-template <template <typename...> typename Template, typename T>
-constexpr static bool isInstantiation =
-    detail::IsInstantiationOf<Template>::template Instantiation<T>::value;
+/// The concept is fulfilled iff `T` is an instantiation of `TemplatedType`. Examples:
+///
+/// isInstantiation<std::vector, std::vector<int>> == true;
+/// isInstantiation<std::vector, const std::vector<int>&> == false;
+template <template <typename...> typename TemplatedType, typename T>
+concept isInstantiation =
+    detail::IsInstantiationOf<TemplatedType>::template Instantiation<T>::value;
+
+/// The concept is fulfilled iff `T` is `ad_utility::SimilarTo` an
+/// instantiation of `TemplatedType`. Examples:
+///
+/// similarToInstantiation<std::vector, std::vector<int>> == true;
+/// similarToInstantiation<std::vector, const std::vector<int>&> == true;
+template <template <typename...> typename TemplatedType, typename T>
+concept similarToInstantiation = isInstantiation<TemplatedType, std::decay_t<T>>;
 
 /// isVector<T> is true if and only if T is an instantiation of std::vector
 template <typename T>
