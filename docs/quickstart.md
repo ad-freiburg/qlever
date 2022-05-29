@@ -64,9 +64,12 @@ settings as explained in the previous paragraph). It takes about 20 hours on an
 AMD Ryzen 9 5900X. Note that the only difference is the basename (`wikidata`
 instead of `olympics`) and how the input files are piped into the
 `IndexBuilderMain` executable (using `bzcat` instead of `xzcat` and two files
-instead of one).
+instead of one). Also note the `ulimit -Sn 1048576`, which ensures that the
+operating system allows a sufficient number of open files (on some systems, the
+default is as low as `1024`, and for large datasets, QLever operates with more
+temporary files than that).
 
-        chmod o+w . && docker run -it --rm -v $QLEVER_HOME/qlever-indices/wikidata:/index --entrypoint bash qlever -c "cd /index && bzcat latest-all.ttl.bz2 latest-lexemes.ttl.bz2 | IndexBuilderMain -F ttl -f - -l -i wikidata -s wikidata.settings.json | tee wikidata.index-log.txt"
+        chmod o+w . && docker run -it --rm -v $QLEVER_HOME/qlever-indices/wikidata:/index --entrypoint bash qlever -c "cd /index && ulimit -Sn 1048576 && bzcat latest-all.ttl.bz2 latest-lexemes.ttl.bz2 | IndexBuilderMain -F ttl -f - -l -i wikidata -s wikidata.settings.json | tee wikidata.index-log.txt"
 
 ## Start the engine
 
