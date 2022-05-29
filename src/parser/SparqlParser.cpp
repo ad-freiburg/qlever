@@ -218,8 +218,8 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
 }
 
 // _____________________________________________________________________________
-OrderKey SparqlParser::parseOrderKey(const std::string& order,
-                                     ParsedQuery* query) {
+VariableOrderKey SparqlParser::parseOrderKey(const std::string& order,
+                                             ParsedQuery* query) {
   _lexer.expect("(");
   std::ostringstream s;
   s << order << "(";
@@ -258,7 +258,7 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
   }
   _lexer.expect(")");
   s << ")";
-  return OrderKey(std::move(s).str());
+  return VariableOrderKey(std::move(s).str());
 }
 
 // _____________________________________________________________________________
@@ -534,7 +534,7 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
       bool reached_end = false;
       while (!reached_end) {
         if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-          query->_orderBy.emplace_back(OrderKey(_lexer.current().raw));
+          query->_orderBy.emplace_back(VariableOrderKey(_lexer.current().raw));
         } else if (_lexer.accept("asc")) {
           query->_orderBy.emplace_back(parseOrderKey("ASC", query));
         } else if (_lexer.accept("desc")) {

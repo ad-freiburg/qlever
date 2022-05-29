@@ -113,10 +113,10 @@ class SparqlTriple {
   [[nodiscard]] string asString() const;
 };
 
-class OrderKey {
+class VariableOrderKey {
  public:
-  OrderKey(string key, bool desc) : _key(std::move(key)), _desc(desc) {}
-  explicit OrderKey(const string& textual) {
+  VariableOrderKey(string key, bool desc) : _key(std::move(key)), _desc(desc) {}
+  explicit VariableOrderKey(const string& textual) {
     std::string lower = ad_utility::getLowercaseUtf8(textual);
     size_t pos = 0;
     _desc = lower.starts_with("desc(");
@@ -382,7 +382,7 @@ class ParsedQuery {
   GraphPattern _rootGraphPattern;
   vector<SparqlFilter> _havingClauses;
   size_t _numGraphPatterns = 1;
-  vector<OrderKey> _orderBy;
+  vector<VariableOrderKey> _orderBy;
   vector<string> _groupByVariables;
   LimitOffsetClause _limitOffset{};
   string _originalString;
