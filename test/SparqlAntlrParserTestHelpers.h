@@ -56,6 +56,21 @@ std::ostream& operator<<(std::ostream& out,
 
 // _____________________________________________________________________________
 
+std::ostream& operator<<(std::ostream& out, const VariableOrderKey& orderkey) {
+  out << "Order " << (orderkey._desc ? "DESC" : "ASC") << " by "
+      << orderkey._key;
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out,
+                         const ExpressionOrderKey& expressionOrderKey) {
+  out << "Order " << (expressionOrderKey._desc ? "DESC" : "ASC") << " by "
+      << expressionOrderKey._expression.getDescriptor();
+  return out;
+}
+
+// _____________________________________________________________________________
+
 // Recursively unwrap a std::variant object, or return a pointer
 // to the argument directly if it is already unwrapped.
 
@@ -135,4 +150,21 @@ MATCHER_P2(IsBind, variable, expression, "") {
 MATCHER_P3(IsLimitOffset, limit, textLimit, offset, "") {
   return (arg._limit == limit) && (arg._textLimit == textLimit) &&
          (arg._offset == offset);
+}
+
+MATCHER_P2(IsVariableOrderKey, key, desc, "") {
+  if (const auto variableOrderKey =
+          unwrapVariant<OrderKey, VariableOrderKey>(arg)) {
+    return (variableOrderKey->_key == key) && (variableOrderKey->_desc == desc);
+  }
+  return false;
+}
+
+MATCHER_P2(IsExpressionOrderKey, expr, desc, "") {
+  if (const auto bindOrderKey =
+          unwrapVariant<OrderKey, ExpressionOrderKey>(arg)) {
+    return (bindOrderKey->_expression.getDescriptor() == expr) &&
+           (bindOrderKey->_desc == desc);
+  }
+  return false;
 }

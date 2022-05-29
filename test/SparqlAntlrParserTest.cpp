@@ -782,3 +782,69 @@ TEST(SparqlParser, LimitOffsetClause) {
     EXPECT_EQ(limitOffset._remainingText, "Limit 20");
   }
 }
+
+TEST(SparqlParser, OrderCondition) {
+  // var
+  {
+    string input = "?test";
+    ParserAndVisitor p{input};
+    auto orderKey =
+        p.parser.orderCondition()->accept(&p.visitor).as<OrderKey>();
+    EXPECT_THAT(orderKey, IsVariableOrderKey("?test", false));
+  }
+  // brackettedExpression
+  {
+    string input = "DESC (?foo)";
+    ParserAndVisitor p{input};
+    auto orderKey =
+        p.parser.orderCondition()->accept(&p.visitor).as<OrderKey>();
+    EXPECT_THAT(orderKey, IsVariableOrderKey("?foo", true));
+  }
+  {
+    string input = "ASC (?bar)";
+    ParserAndVisitor p{input};
+    auto orderKey =
+        p.parser.orderCondition()->accept(&p.visitor).as<OrderKey>();
+    EXPECT_THAT(orderKey, IsVariableOrderKey("?bar", false));
+  }
+  {
+    string input = "ASC(?test - 5)";
+    ParserAndVisitor p{input};
+    auto orderKey =
+        p.parser.orderCondition()->accept(&p.visitor).as<OrderKey>();
+    EXPECT_THAT(orderKey, IsExpressionOrderKey("?test-5", false));
+  }
+  {
+    string input = "DESC (10 || (5 && ?foo))";
+    ParserAndVisitor p{input};
+    auto orderKey =
+        p.parser.orderCondition()->accept(&p.visitor).as<OrderKey>();
+    EXPECT_THAT(orderKey, IsExpressionOrderKey("10||(5&&?foo)", true));
+  }
+  // constraint
+  {
+    string input = "(5 - ?mehr)";
+    ParserAndVisitor p{input};
+    auto orderKey =
+        p.parser.orderCondition()->accept(&p.visitor).as<OrderKey>();
+    EXPECT_THAT(orderKey, IsExpressionOrderKey("5-?mehr", false));
+  }
+  {
+    string input = "SUM(?i)";
+    ParserAndVisitor p{input};
+    auto orderKey =
+        p.parser.orderCondition()->accept(&p.visitor).as<OrderKey>();
+    EXPECT_THAT(orderKey, IsExpressionOrderKey("SUM(?i)", false));
+  }
+}
+
+TEST(SparqlParser, OrderClause) {
+  {
+    string input = "ORDER BY ?test DESC(?foo - 5)";
+    ParserAndVisitor p{input};
+    auto orderKeys =
+        p.parser.orderClause()->accept(&p.visitor).as<vector<OrderKey>>();
+    EXPECT_THAT(orderKeys[0], IsVariableOrderKey("?test", false));
+    EXPECT_THAT(orderKeys[1], IsExpressionOrderKey("?foo-5", true));
+  }
+}
