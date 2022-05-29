@@ -76,6 +76,19 @@ constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
   }
 }
 // _____________________________________________________________________________
+/**
+ * Ensures that the matcher matches on the result of the parsing and that the
+ * text has been fully consumed by the parser.
+ *
+ * @param resultOfParseAndText Parsing result
+ * @param matcher Matcher that must be fulfilled
+ */
+void expectCompleteParse(const auto& resultOfParseAndText, auto&& matcher) {
+  EXPECT_THAT(resultOfParseAndText._resultOfParse, matcher);
+  EXPECT_TRUE(resultOfParseAndText._remainingText.empty());
+}
+
+// _____________________________________________________________________________
 
 MATCHER_P(IsIri, value, "") {
   if (const auto iri = unwrapVariant<VarOrTerm, GraphTerm, Iri>(arg)) {
@@ -117,4 +130,9 @@ MATCHER_P(IsLiteral, value, "") {
 MATCHER_P2(IsBind, variable, expression, "") {
   return (arg._target == variable) &&
          (arg._expression.getDescriptor() == expression);
+}
+
+MATCHER_P3(IsLimitOffset, limit, textLimit, offset, "") {
+  return (arg._limit == limit) && (arg._textLimit == textLimit) &&
+         (arg._offset == offset);
 }

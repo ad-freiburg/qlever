@@ -549,15 +549,10 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
           }
         }
       }
-    } else if (_lexer.accept("limit")) {
-      _lexer.expect(SparqlToken::Type::INTEGER);
-      query->_limit = std::stoul(_lexer.current().raw);
-    } else if (_lexer.accept("textlimit")) {
-      _lexer.expect(SparqlToken::Type::INTEGER);
-      query->_textLimit = _lexer.current().raw;
-    } else if (_lexer.accept("offset")) {
-      _lexer.expect(SparqlToken::Type::INTEGER);
-      query->_offset = std::stoul(_lexer.current().raw);
+    } else if (_lexer.peek("limit") || _lexer.peek("textlimit") ||
+               _lexer.peek("offset")) {
+      query->_limitOffset =
+          parseWithAntlr(sparqlParserHelpers::parseLimitOffsetClause, *query);
     } else if (_lexer.accept(SparqlToken::Type::GROUP_BY)) {
       _lexer.expect(SparqlToken::Type::VARIABLE);
       query->_groupByVariables.emplace_back(_lexer.current().raw);
@@ -569,9 +564,6 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
       while (parseFilter(&query->_havingClauses, false,
                          &query->_rootGraphPattern)) {
       }
-    } else if (_lexer.accept("textlimit")) {
-      _lexer.expect(SparqlToken::Type::INTEGER);
-      query->_textLimit = std::stoi(_lexer.current().raw);
     } else {
       _lexer.accept();
       throw ParseException("Expected a solution modifier but got " +

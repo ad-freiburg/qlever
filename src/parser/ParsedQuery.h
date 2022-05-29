@@ -219,6 +219,13 @@ class SparqlValues {
   vector<vector<string>> _values;
 };
 
+// Represents the data returned by a limitOffsetClause.
+struct LimitOffsetClause {
+  uint64_t _limit = std::numeric_limits<uint64_t>::max();
+  uint64_t _textLimit = 1;
+  uint64_t _offset = 0;
+};
+
 struct GraphPatternOperation;
 
 // A parsed SPARQL query. To be extended.
@@ -376,9 +383,7 @@ class ParsedQuery {
   size_t _numGraphPatterns = 1;
   vector<OrderKey> _orderBy;
   vector<string> _groupByVariables;
-  std::optional<size_t> _limit = std::nullopt;
-  string _textLimit;
-  std::optional<size_t> _offset = std::nullopt;
+  LimitOffsetClause _limitOffset{};
   string _originalString;
 
   // explicit default initialisation because the constructor

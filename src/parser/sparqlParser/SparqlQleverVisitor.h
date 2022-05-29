@@ -259,17 +259,35 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitLimitOffsetClauses(
       SparqlAutomaticParser::LimitOffsetClausesContext* ctx) override {
-    return visitChildren(ctx);
+    LimitOffsetClause clause{};
+    if (ctx->limitClause()) {
+      clause._limit =
+          visitLimitClause(ctx->limitClause()).as<unsigned long long>();
+    }
+    if (ctx->offsetClause()) {
+      clause._offset =
+          visitOffsetClause(ctx->offsetClause()).as<unsigned long long>();
+    }
+    if (ctx->textLimitClause()) {
+      clause._textLimit =
+          visitTextLimitClause(ctx->textLimitClause()).as<unsigned long long>();
+    }
+    return clause;
   }
 
   antlrcpp::Any visitLimitClause(
       SparqlAutomaticParser::LimitClauseContext* ctx) override {
-    return visitChildren(ctx);
+    return visitInteger(ctx->integer());
   }
 
   antlrcpp::Any visitOffsetClause(
       SparqlAutomaticParser::OffsetClauseContext* ctx) override {
-    return visitChildren(ctx);
+    return visitInteger(ctx->integer());
+  }
+
+  antlrcpp::Any visitTextLimitClause(
+      SparqlAutomaticParser::TextLimitClauseContext* ctx) override {
+    return visitInteger(ctx->integer());
   }
 
   antlrcpp::Any visitValuesClause(
@@ -589,9 +607,18 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
+  /// Note that in the SPARQL grammar the INTEGER rule refers to positive
+  /// integers without an explicit sign.
   antlrcpp::Any visitInteger(
       SparqlAutomaticParser::IntegerContext* ctx) override {
-    return visitChildren(ctx);
+    try {
+      return std::stoull(ctx->getText());
+    } catch (const std::out_of_range&) {
+      throw SparqlParseException{
+          "Integer " + ctx->getText() +
+          " does not fit"
+          " into 64 bits. This is not supported by QLever."};
+    }
   }
 
   antlrcpp::Any visitTriplesNode(

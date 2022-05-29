@@ -16,6 +16,7 @@
 #include "SparqlAntlrParserTestHelpers.h"
 
 using namespace antlr4;
+using namespace sparqlParserHelpers;
 
 struct ParserAndVisitor {
  private:
@@ -647,17 +648,137 @@ TEST(SparqlParser, VariableWithDollarSign) {
 TEST(SparqlParser, Bind) {
   {
     string input = "BIND (10 - 5 as ?a)";
-    auto bindAndText = sparqlParserHelpers::parseBind(input, {});
+    auto bindAndText = parseBind(input, {});
 
-    EXPECT_THAT(bindAndText._resultOfParse, IsBind("?a", "10-5"));
-    EXPECT_THAT(bindAndText._remainingText, IsEmpty());
+    expectCompleteParse(bindAndText, IsBind("?a", "10-5"));
   }
 
   {
     string input = "bInD (?age - 10 As ?s)";
+    auto bindAndText = parseBind(input, {});
 
-    auto bindAndText = sparqlParserHelpers::parseBind(input, {});
-    EXPECT_THAT(bindAndText._resultOfParse, IsBind("?s", "?age-10"));
-    EXPECT_THAT(bindAndText._remainingText, IsEmpty());
+    expectCompleteParse(bindAndText, IsBind("?s", "?age-10"));
+  }
+}
+
+TEST(SparqlParser, Integer) {
+  {
+    string input = "1931";
+    ParserAndVisitor p{input};
+
+    unsigned long long result =
+        p.parser.integer()->accept(&p.visitor).as<unsigned long long>();
+    EXPECT_EQ(result, 1931ull);
+  }
+
+  {
+    string input = "0";
+    ParserAndVisitor p{input};
+
+    unsigned long long result =
+        p.parser.integer()->accept(&p.visitor).as<unsigned long long>();
+    EXPECT_EQ(result, 0ull);
+  }
+
+  {
+    string input = "18446744073709551615";
+    ParserAndVisitor p{input};
+
+    unsigned long long result =
+        p.parser.integer()->accept(&p.visitor).as<unsigned long long>();
+    EXPECT_EQ(result, 18446744073709551615ull);
+  }
+
+  {
+    string input = "18446744073709551616";
+    ParserAndVisitor p{input};
+
+    EXPECT_THROW(p.parser.integer()->accept(&p.visitor), SparqlParseException);
+  }
+
+  {
+    string input = "10000000000000000000000000000000000000000";
+    ParserAndVisitor p{input};
+
+    EXPECT_THROW(p.parser.integer()->accept(&p.visitor), SparqlParseException);
+  }
+
+  {
+    string input = "-1";
+    ParserAndVisitor p{input};
+
+    EXPECT_THROW(p.parser.integer()->accept(&p.visitor),
+                 antlr4::ParseCancellationException);
+  }
+}
+
+TEST(SparqlParser, LimitOffsetClause) {
+  {
+    string input = "LIMIT 10";
+
+    auto limitOffset = parseLimitOffsetClause(input, {});
+
+    expectCompleteParse(limitOffset, IsLimitOffset(10ull, 1ull, 0ull));
+  }
+
+  {
+    string input = "OFFSET 31 LIMIT 12 TEXTLIMIT 14";
+
+    auto limitOffset = parseLimitOffsetClause(input, {});
+
+    expectCompleteParse(limitOffset, IsLimitOffset(12ull, 14ull, 31ull));
+  }
+
+  {
+    string input = "textlimit 999";
+
+    auto limitOffset = parseLimitOffsetClause(input, {});
+
+    expectCompleteParse(
+        limitOffset,
+        IsLimitOffset(std::numeric_limits<uint64_t>::max(), 999ull, 0ull));
+  }
+
+  {
+    string input = "LIMIT      999";
+
+    auto limitOffset = parseLimitOffsetClause(input, {});
+
+    expectCompleteParse(limitOffset, IsLimitOffset(999ull, 1ull, 0ull));
+  }
+
+  {
+    string input = "OFFSET 43";
+
+    auto limitOffset = parseLimitOffsetClause(input, {});
+
+    expectCompleteParse(
+        limitOffset,
+        IsLimitOffset(std::numeric_limits<uint64_t>::max(), 1ull, 43ull));
+  }
+
+  {
+    string input = "TEXTLIMIT 43 LIMIT 19";
+
+    auto limitOffset = parseLimitOffsetClause(input, {});
+
+    expectCompleteParse(limitOffset, IsLimitOffset(19ull, 43ull, 0ull));
+  }
+
+  {
+    string input = "LIMIT20";
+
+    // parse* catches antlr4::ParseCancellationException and throws a
+    // std::runtime_error so this has to be checked instead.
+    EXPECT_THROW(parseLimitOffsetClause(input, {}), std::runtime_error);
+  }
+
+  {
+    string input = "Limit 10 TEXTLIMIT 20 offset 0 Limit 20";
+
+    auto limitOffset = parseLimitOffsetClause(input, {});
+
+    EXPECT_THAT(limitOffset._resultOfParse, IsLimitOffset(10ull, 20ull, 0ull));
+    EXPECT_EQ(limitOffset._remainingText, "Limit 20");
   }
 }

@@ -82,4 +82,12 @@ parseConstructTemplate(const std::string& input,
   return p.parse<ad_utility::sparql_types::Triples>(
       input, "construct template", &SparqlAutomaticParser::constructTemplate);
 }
+// _____________________________________________________________________________
+
+ResultOfParseAndRemainingText<LimitOffsetClause> parseLimitOffsetClause(
+    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes) {
+  ParserAndVisitor p{input, std::move(prefixes)};
+  return p.parse<LimitOffsetClause>(input, "limit offset clause",
+                                    &SparqlAutomaticParser::limitOffsetClauses);
+}
 }  // namespace sparqlParserHelpers

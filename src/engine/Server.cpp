@@ -182,9 +182,8 @@ Awaitable<json> Server::composeResponseQleverJson(
         qet.getRootOperation()->getRuntimeInfo());
 
     {
-      size_t limit =
-          std::min(query._limit.value_or(MAX_NOF_ROWS_IN_RESULT), maxSend);
-      size_t offset = query._offset.value_or(0);
+      size_t limit = std::min(query._limitOffset._limit, maxSend);
+      size_t offset = query._limitOffset._offset;
       requestTimer.cont();
       j["res"] = query.hasSelectClause()
                      ? qet.writeResultAsQLeverJson(
@@ -220,9 +219,8 @@ Awaitable<json> Server::composeResponseSparqlJson(
     shared_ptr<const ResultTable> resultTable = qet.getResult();
     requestTimer.stop();
     nlohmann::json j;
-    size_t limit =
-        std::min(query._limit.value_or(MAX_NOF_ROWS_IN_RESULT), maxSend);
-    size_t offset = query._offset.value_or(0);
+    size_t limit = std::min(query._limitOffset._limit, maxSend);
+    size_t offset = query._limitOffset._offset;
     requestTimer.cont();
     j = qet.writeResultAsSparqlJson(query.selectClause()._varsOrAsterisk, limit,
                                     offset, std::move(resultTable));
@@ -239,8 +237,8 @@ Awaitable<ad_utility::streams::stream_generator>
 Server::composeResponseSepValues(const ParsedQuery& query,
                                  const QueryExecutionTree& qet) const {
   auto compute = [&] {
-    size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
-    size_t offset = query._offset.value_or(0);
+    size_t limit = query._limitOffset._limit;
+    size_t offset = query._limitOffset._offset;
     return query.hasSelectClause()
                ? qet.generateResults<format>(
                      query.selectClause()._varsOrAsterisk, limit, offset)
@@ -259,8 +257,8 @@ ad_utility::streams::stream_generator Server::composeTurtleResponse(
         "RDF Turtle as an export format is only supported for CONSTRUCT "
         "queries"};
   }
-  size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
-  size_t offset = query._offset.value_or(0);
+  size_t limit = query._limitOffset._limit;
+  size_t offset = query._limitOffset._offset;
   return qet.writeRdfGraphTurtle(query.constructClause(), limit, offset,
                                  qet.getResult());
 }
