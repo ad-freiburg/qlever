@@ -113,6 +113,20 @@ class SparqlTriple {
   [[nodiscard]] string asString() const;
 };
 
+/// Expression that is ordered over in the orderClause.
+class ExpressionOrderKey {
+  // QLever currently does only support ordering over variables. To allow
+  // all orderConditions the corresponding expression is bound to a new
+  // variable. Ordering is then done over this variable.
+  // To which temporary and internal variable the expression is bound is only
+  // determined when building the ParsedQuery.
+ public:
+  bool _desc;
+  sparqlExpression::SparqlExpressionPimpl _expression;
+  ExpressionOrderKey(auto expression, bool desc)
+      : _desc(desc), _expression(std::move(expression)) {}
+};
+
 class VariableOrderKey {
  public:
   VariableOrderKey(string key, bool desc) : _key(std::move(key)), _desc(desc) {}
@@ -183,6 +197,9 @@ class VariableOrderKey {
   string _key;
   bool _desc;
 };
+
+// Represents an OrderKey by a Variable or Expression
+using OrderKey = std::variant<VariableOrderKey, ExpressionOrderKey>;
 
 class SparqlFilter {
  public:
