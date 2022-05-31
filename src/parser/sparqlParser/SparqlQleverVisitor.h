@@ -249,12 +249,49 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitOrderClause(
       SparqlAutomaticParser::OrderClauseContext* ctx) override {
-    return visitChildren(ctx);
+    vector<OrderKey> _orderBy;
+    vector<SparqlAutomaticParser::OrderConditionContext*> orderConditions =
+        ctx->orderCondition();
+    vector<SparqlAutomaticParser::OrderConditionContext*>::iterator
+        orderCondition;
+
+    for (orderCondition = orderConditions.begin();
+         orderCondition != orderConditions.end(); orderCondition++) {
+      _orderBy.push_back((*orderCondition)->accept(this).as<OrderKey>());
+    }
+
+    return _orderBy;
   }
 
   antlrcpp::Any visitOrderCondition(
       SparqlAutomaticParser::OrderConditionContext* ctx) override {
-    return visitChildren(ctx);
+    if (ctx->var()) {
+      return OrderKey{VariableOrderKey(ctx->var()->getText())};
+    } else if (ctx->constraint()) {
+      auto expr = sparqlExpression::SparqlExpressionPimpl{
+          std::move(visitConstraint(ctx->constraint()).as<ExpressionPtr>())};
+      bool desc = false;
+      bool exprIsVariable = expr.getVariableOrNullopt().has_value();
+      if (exprIsVariable) {
+        string var = expr.getVariableOrNullopt().value();
+        return OrderKey{VariableOrderKey(var, desc)};
+      } else {
+        return OrderKey{ExpressionOrderKey{expr, desc}};
+      }
+    } else if (ctx->brackettedExpression()) {
+      auto expr = sparqlExpression::SparqlExpressionPimpl{
+          std::move(visitBrackettedExpression(ctx->brackettedExpression())
+                        .as<ExpressionPtr>())};
+      bool desc = ctx->DESC() != nullptr;
+      auto exprIsVariable = expr.getVariableOrNullopt().has_value();
+      if (exprIsVariable) {
+        string var = expr.getVariableOrNullopt().value();
+        return OrderKey{VariableOrderKey(var, desc)};
+      } else {
+        return OrderKey{ExpressionOrderKey{expr, desc}};
+      }
+    }
+    AD_CHECK(false);  // Should be unreachable.
   }
 
   antlrcpp::Any visitLimitOffsetClauses(
