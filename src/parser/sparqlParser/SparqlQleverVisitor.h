@@ -1097,20 +1097,22 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
         distinct = true;
       }
     }
+    ExpressionPtr result;
     if (ad_utility::getLowercase(children[0]->getText()) == "count") {
-      return ExpressionPtr{std::make_unique<sparqlExpression::CountExpression>(
-          distinct, std::move(childExpression))};
+      result =
+          ExpressionPtr{std::make_unique<sparqlExpression::CountExpression>(
+              distinct, std::move(childExpression))};
     } else if (ad_utility::getLowercase(children[0]->getText()) == "sum") {
-      return ExpressionPtr{std::make_unique<sparqlExpression::SumExpression>(
+      result = ExpressionPtr{std::make_unique<sparqlExpression::SumExpression>(
           distinct, std::move(childExpression))};
     } else if (ad_utility::getLowercase(children[0]->getText()) == "max") {
-      return ExpressionPtr{std::make_unique<sparqlExpression::MaxExpression>(
+      result = ExpressionPtr{std::make_unique<sparqlExpression::MaxExpression>(
           distinct, std::move(childExpression))};
     } else if (ad_utility::getLowercase(children[0]->getText()) == "min") {
-      return ExpressionPtr{std::make_unique<sparqlExpression::MinExpression>(
+      result = ExpressionPtr{std::make_unique<sparqlExpression::MinExpression>(
           distinct, std::move(childExpression))};
     } else if (ad_utility::getLowercase(children[0]->getText()) == "avg") {
-      return ExpressionPtr{std::make_unique<sparqlExpression::AvgExpression>(
+      result = ExpressionPtr{std::make_unique<sparqlExpression::AvgExpression>(
           distinct, std::move(childExpression))};
     } else if (ad_utility::getLowercase(children[0]->getText()) ==
                "group_concat") {
@@ -1126,14 +1128,17 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
         separator = " "s;
       }
 
-      return ExpressionPtr{
+      result = ExpressionPtr{
           std::make_unique<sparqlExpression::GroupConcatExpression>(
               distinct, std::move(childExpression), std::move(separator))};
     } else {
       AD_CHECK(ad_utility::getLowercase(children[0]->getText()) == "sample");
-      return ExpressionPtr{std::make_unique<sparqlExpression::SampleExpression>(
-          distinct, std::move(childExpression))};
+      result =
+          ExpressionPtr{std::make_unique<sparqlExpression::SampleExpression>(
+              distinct, std::move(childExpression))};
     }
+    result->descriptor() = context->getText();
+    return result;
   }
 
   antlrcpp::Any visitIriOrFunction(
