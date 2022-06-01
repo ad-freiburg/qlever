@@ -313,7 +313,7 @@ int main(int argc, char** argv) {
         }
         if (filetypeDeduced) {
           LOG(INFO) << "Format of input file deduced from extension: "
-                    << ad_utility::getUppercase(filetype) << "\n";
+                    << ad_utility::getUppercase(filetype) << std::endl;
         }
         LOG(INFO) << "If this is not correct, start again using the option "
                      "--file-format (-F)"

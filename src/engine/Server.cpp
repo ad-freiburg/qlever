@@ -350,7 +350,7 @@ boost::asio::awaitable<void> Server::processQuery(
     const bool pinResult = containsParam("pinresult", "true");
     LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned)" : "")
               << ((pinResult) ? " (Result pinned)" : "") << ": " << query
-              << '\n';
+              << std::endl;
     ParsedQuery pq = SparqlParser(query).parse();
     pq.expandPrefixes();
 
@@ -474,7 +474,8 @@ boost::asio::awaitable<void> Server::processQuery(
     // was computed.
 
     LOG(INFO) << "\nRuntime Info:\n"
-              << qet.getRootOperation()->getRuntimeInfo().toString();
+              << qet.getRootOperation()->getRuntimeInfo().toString()
+              << std::endl;
   } catch (const ad_semsearch::Exception& e) {
     errorResponse = composeExceptionJson(query, e, requestTimer);
   } catch (const std::exception& e) {
