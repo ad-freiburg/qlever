@@ -474,8 +474,8 @@ boost::asio::awaitable<void> Server::processQuery(
     // was computed.
 
     LOG(DEBUG) << "\nRuntime Info:\n"
-              << qet.getRootOperation()->getRuntimeInfo().toString()
-              << std::endl;
+               << qet.getRootOperation()->getRuntimeInfo().toString()
+               << std::endl;
   } catch (const ad_semsearch::Exception& e) {
     errorResponse = composeExceptionJson(query, e, requestTimer);
   } catch (const std::exception& e) {
