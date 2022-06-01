@@ -100,7 +100,7 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     }
     if (getVariableColumns().contains(var)) {
       auto columnIndex = getVariableColumns().at(var);
-      // If remove the question mark from the variable name if requested
+      // Remove the question mark from the variable name if requested.
       if (!includeQuestionMark && var.starts_with('?')) {
         var = var.substr(1);
       }
@@ -163,7 +163,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
 
   json result;
   auto selectedVars = selectedVarsOrAsterisk.getSelectedVariables();
-  // Strip the leading '?' from the variables, it is not part of the SPARQL Json
+  // Strip the leading '?' from the variables, it is not part of the SPARQL JSON
   // output format.
   for (auto& var : selectedVars) {
     if (std::string_view{var}.starts_with('?')) {
@@ -180,9 +180,9 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   // return a json dict that describes the binding
   auto stringToBinding = [](std::string_view entitystr) -> nlohmann::json {
     nlohmann::ordered_json b;
-    // The string is an iri or literal
+    // The string is an IRI or literal.
     if (entitystr.starts_with('<')) {
-      // Strip the <> surrounding the iri
+      // Strip the <> surrounding the iri.
       b["value"] = entitystr.substr(1, entitystr.size() - 2);
       // Even if they are technically IRIs, the format needs the type to be
       // "uri".
