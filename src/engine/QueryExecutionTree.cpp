@@ -165,8 +165,11 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   auto selectedVars = selectedVarsOrAsterisk.getSelectedVariables();
   // Strip the leading '?' from the variables, it is not part of the SPARQL Json
   // output format.
-  std::transform(selectedVars.begin(), selectedVars.end(), selectedVars.begin(),
-                 [](const auto& var) { return var.substr(1); });
+  for (auto& var : selectedVars) {
+    if (std::string_view{var}.starts_with('?')) {
+      var = var.substr(1);
+    }
+  }
   result["head"]["vars"] = selectedVars;
 
   json bindings = json::array();
