@@ -86,8 +86,10 @@ def check_row_sparql_json(variables: List[str], gold_row: List[Any],
         if gold is None:
             continue
         var = variables[i]
-        if var not in actual_row and var.startswith("TEXT("):
-            var = var[5:-1]
+        # TODO<joka921> Once we have completely eliminated the redundant TEXT(?var) syntax from qlever,
+        # these additional oddities can be removed.
+        if var not in actual_row and var.startswith("TEXT(?"):
+            var = var[6:-1]
         if var not in actual_row:
             eprint("{} not contained in row {}".format(var, actual_row))
             return False
@@ -97,7 +99,7 @@ def check_row_sparql_json(variables: List[str], gold_row: List[Any],
         # This allows us to ignore double quoting trouble in checks
         target_type = "literal"
         if isinstance(gold, str) and gold.startswith('<'):
-            target_type = "iri"
+            target_type = "uri"
             gold = gold[1:-1]
         if not actual["type"] == target_type:
             return False
@@ -273,10 +275,14 @@ def test_check_sparql_json(check_dict: Dict[str, Any], result: Dict[str, Any]) -
             # sparql json
             pass
         elif check == 'selected':
+            # The startswith check is needed because of the SCORE(?t) and TEXT(?)
+            # TODO<joka921> Remove the startswith as soon as we have removed these
+            # variables from QLever
+            value = [v[1:] if v.startswith("?") else v for v in value]
             if value != result['head']['vars']:
                 eprint("selected check failed:\n" +
                        "\texpected %r, got %r" %
-                       (value, result['selected']))
+                       (value, result['head']['vars']))
                 return False
         elif check == 'res':
             gold_res = value
@@ -301,6 +307,7 @@ def test_check_sparql_json(check_dict: Dict[str, Any], result: Dict[str, Any]) -
                     found = True
                     break
             if not found:
+                eprint(result["head"]["vars"])
                 eprint("contains_row check failed:\n" +
                        "\tdid not find %r" % gold_row)
                 return False
