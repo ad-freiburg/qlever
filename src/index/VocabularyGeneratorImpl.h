@@ -267,8 +267,8 @@ void writeMappedIdsToExtVec(const auto& input,
       }
       auto iterator = map.find(curTriple[k].getVocabIndex().get());
       if (iterator == map.end()) {
-        LOG(INFO) << "not found in partial local Vocab: " << curTriple[k]
-                  << std::endl;
+        LOG(ERROR) << "not found in partial local vocabulary: " << curTriple[k]
+                   << std::endl;
         AD_CHECK(false);
       }
       mappedTriple[k] =
@@ -310,11 +310,11 @@ void writePartialIdMapToBinaryFileForMerging(
   for (const auto& singleMap : *map) {
     els.insert(end(els), begin(singleMap), end(singleMap));
   }
-  LOG(INFO) << "... sorting ..." << std::endl;
+  LOG(TRACE) << "Sorting ..." << std::endl;
 
   sortVocabVector(&els, comp, doParallelSort);
 
-  LOG(INFO) << "Done creating vocabulary." << std::endl;
+  LOG(INFO) << "Done creating vocabulary" << std::endl;
 
   writePartialVocabularyToFile(els, fileName);
 }

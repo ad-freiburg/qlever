@@ -94,7 +94,7 @@ void writeNTDispatch(std::ostream& out, const string& fileFormat,
     LOG(ERROR)
         << "Please specify a valid regex engine via the -r flag. "
            "Options are \"re2\" or \"ctre\" (The latter only works correct if "
-           "prefix names only use ascii characters but is faster."
+           "prefix names only use ASCII characters but is faster"
         << std::endl;
     exit(1);
   }
@@ -194,7 +194,7 @@ int main(int argc, char** argv) {
                 << " due to the input file's extension." << std::endl;
       LOG(INFO)
           << "If this is wrong, please manually specify the --file-format "
-             "(-F) flag."
+             "(-F) flag"
           << std::endl;
     }
   }

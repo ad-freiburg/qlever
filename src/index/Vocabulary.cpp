@@ -55,7 +55,7 @@ void Vocabulary<S, C>::writeToFile(const string& fileName) const {
   ad_utility::serialization::FileWriteSerializer file{fileName};
   _internalVocabulary.getUnderlyingVocabulary().writeToFile(fileName);
 
-  LOG(INFO) << "Done writing vocabulary to file." << std::endl;
+  LOG(INFO) << "Done writing vocabulary to file" << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -65,13 +65,13 @@ void Vocabulary<S, C>::createFromSet(
   LOG(INFO) << "Creating vocabulary from set ..." << std::endl;
   _internalVocabulary.close();
   std::vector<std::string> words(set.begin(), set.end());
-  LOG(INFO) << "... sorting ..." << std::endl;
+  LOG(TRACE) << "Sorting ..." << std::endl;
   auto totalComparison = [this](const auto& a, const auto& b) {
     return getCaseComparator()(a, b, SortLevel::TOTAL);
   };
   std::sort(begin(words), end(words), totalComparison);
   _internalVocabulary.build(words);
-  LOG(INFO) << "Done creating vocabulary." << std::endl;
+  LOG(INFO) << "Done creating vocabulary" << std::endl;
 }
 
 // _____________________________________________________________________________
