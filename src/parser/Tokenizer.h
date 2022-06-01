@@ -322,7 +322,8 @@ class Tokenizer {
       auto pos = v.find('\n');
       if (pos == string::npos) {
         // TODO: this actually should yield a n error
-        LOG(INFO) << "Warning, unfinished comment found while parsing";
+        LOG(INFO) << "Warning, unfinished comment found while parsing"
+                  << std::endl;
       } else {
         _data.remove_prefix(pos + 1);
       }
