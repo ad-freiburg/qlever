@@ -36,7 +36,8 @@ void Server::initialize(const string& indexBaseName, bool useText,
 
   // Set flag.
   _initialized = true;
-  LOG(INFO) << "The server is ready" << std::endl;
+  LOG(INFO) << "The server is ready, listening for requests on port " << _port
+            << " ..." << std::endl;
 }
 
 // _____________________________________________________________________________
