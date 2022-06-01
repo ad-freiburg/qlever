@@ -723,7 +723,7 @@ bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
                           "use --file-format mmap\n";
             auto s = std::min(size_t(1000), size_t(d.size()));
             LOG(INFO) << "Logging first 1000 unparsed characters\n";
-            LOG(INFO) << std::string_view(d.data(), s);
+            LOG(INFO) << std::string_view(d.data(), s) << std::endl;
             if (exceptionThrown) {
               throw ex;
 
@@ -753,7 +753,7 @@ bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
                         << d.size() << '\n';
               auto s = std::min(size_t(1000), size_t(d.size()));
               LOG(INFO) << "Logging first 1000 unparsed characters\n";
-              LOG(INFO) << std::string_view(d.data(), s);
+              LOG(INFO) << std::string_view(d.data(), s) << std::endl;
             }
             _isParserExhausted = true;
             break;

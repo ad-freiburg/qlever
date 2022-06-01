@@ -267,8 +267,8 @@ void writeMappedIdsToExtVec(const auto& input,
       }
       auto iterator = map.find(curTriple[k].getVocabIndex().get());
       if (iterator == map.end()) {
-        LOG(INFO) << "not found in partial local Vocab: " << curTriple[k]
-                  << '\n';
+        LOG(ERROR) << "not found in partial local vocabulary: " << curTriple[k]
+                   << std::endl;
         AD_CHECK(false);
       }
       mappedTriple[k] =
@@ -301,7 +301,7 @@ template <class Pred>
 void writePartialIdMapToBinaryFileForMerging(
     std::shared_ptr<const ItemMapArray> map, const string& fileName, Pred comp,
     const bool doParallelSort) {
-  LOG(INFO) << "Creating partial vocabulary from set ...\n";
+  LOG(INFO) << "Creating partial vocabulary from set ..." << std::endl;
   ItemVec els;
   size_t totalEls = std::accumulate(
       map->begin(), map->end(), 0,
@@ -310,11 +310,11 @@ void writePartialIdMapToBinaryFileForMerging(
   for (const auto& singleMap : *map) {
     els.insert(end(els), begin(singleMap), end(singleMap));
   }
-  LOG(INFO) << "... sorting ...\n";
+  LOG(TRACE) << "Sorting ..." << std::endl;
 
   sortVocabVector(&els, comp, doParallelSort);
 
-  LOG(INFO) << "Done creating vocabulary.\n";
+  LOG(INFO) << "Done creating vocabulary" << std::endl;
 
   writePartialVocabularyToFile(els, fileName);
 }

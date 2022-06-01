@@ -36,7 +36,8 @@ void Server::initialize(const string& indexBaseName, bool useText,
 
   // Set flag.
   _initialized = true;
-  LOG(INFO) << "The server is ready" << std::endl;
+  LOG(INFO) << "The server is ready, listening for requests on port " << _port
+            << " ..." << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -81,11 +82,11 @@ Awaitable<void> Server::process(
   if (params.contains("cmd")) {
     const auto& cmd = params.at("cmd");
     if (cmd == "stats") {
-      LOG(INFO) << "Supplying index stats..." << std::endl;
+      LOG(INFO) << "Processing command \"stats\" ..." << std::endl;
       auto response = createJsonResponse(composeStatsJson(), request);
       co_return co_await sendWithCors(std::move(response));
     } else if (cmd == "cache-stats") {
-      LOG(INFO) << "Supplying cache stats..." << std::endl;
+      LOG(INFO) << "Processing command \"cache-stats\" ..." << std::endl;
       auto response = createJsonResponse(composeCacheStatsJson(), request);
       co_return co_await sendWithCors(std::move(response));
     } else if (cmd == "clear-cache") {
@@ -349,8 +350,8 @@ boost::asio::awaitable<void> Server::processQuery(
     const bool pinSubtrees = containsParam("pinsubtrees", "true");
     const bool pinResult = containsParam("pinresult", "true");
     LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned)" : "")
-              << ((pinResult) ? " (Result pinned)" : "") << ": " << query
-              << '\n';
+              << ((pinResult) ? " (Result pinned)" : "") << ":\n"
+              << query << std::endl;
     ParsedQuery pq = SparqlParser(query).parse();
     pq.expandPrefixes();
 
@@ -473,8 +474,12 @@ boost::asio::awaitable<void> Server::processQuery(
     // Print the runtime info. This needs to be done after the query
     // was computed.
 
-    LOG(INFO) << "\nRuntime Info:\n"
-              << qet.getRootOperation()->getRuntimeInfo().toString();
+    // TODO<joka921> Also log the processing time and an identifier of the
+    // query.
+    LOG(INFO) << "Done processing query" << std::endl;
+    LOG(DEBUG) << "\nRuntime Info:\n"
+               << qet.getRootOperation()->getRuntimeInfo().toString()
+               << std::endl;
   } catch (const ad_semsearch::Exception& e) {
     errorResponse = composeExceptionJson(query, e, requestTimer);
   } catch (const std::exception& e) {
