@@ -473,7 +473,7 @@ boost::asio::awaitable<void> Server::processQuery(
     // Print the runtime info. This needs to be done after the query
     // was computed.
 
-    LOG(INFO) << "\nRuntime Info:\n"
+    LOG(DEBUG) << "\nRuntime Info:\n"
               << qet.getRootOperation()->getRuntimeInfo().toString()
               << std::endl;
   } catch (const ad_semsearch::Exception& e) {
