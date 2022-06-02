@@ -59,6 +59,8 @@ function(addAndLinkTest basename)
     linkTest(${basename} ${ARGN})
 endfunction()
 
+addLinkAndDiscoverTest(ValueIdComparatorsTest)
+
 addLinkAndDiscoverTest(SparqlParserTest parser sparqlExpressions ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(StringUtilsTest ${ICU_LIBRARIES})
@@ -67,7 +69,8 @@ addLinkAndDiscoverTest(CacheTest absl::flat_hash_map)
 
 addLinkAndDiscoverTest(ConcurrentCacheTest absl::flat_hash_map)
 
-addLinkAndDiscoverTest(FileTest)
+# This test also seems to use the same filenames and should be fixed.
+addLinkAndDiscoverTestSerial(FileTest)
 
 addLinkAndDiscoverTest(Simple8bTest)
 
@@ -100,7 +103,8 @@ addLinkAndDiscoverTest(HasPredicateScanTest engine)
 
 addLinkAndDiscoverTest(MmapVectorTest)
 
-addLinkAndDiscoverTest(BufferedVectorTest)
+# BufferedVectorTest also uses conflicting filenames.
+addLinkAndDiscoverTestSerial(BufferedVectorTest)
 
 addLinkAndDiscoverTest(UnionTest engine)
 
@@ -186,13 +190,14 @@ addLinkAndDiscoverTest(MilestoneIdTest absl::strings)
 # The VocabularyOnDisk uses mmap which fails when the tests are run in
 # parallel. This should be fixed by using distinct filenames for each test case.
 # TODO<qup42, joka921> fix this
-addLinkAndDiscoverTestSerial(VocabularyOnDiskTest index)
+addLinkAndDiscoverTest(VocabularyOnDiskTest index)
 
 addLinkAndDiscoverTest(VocabularyTest index)
 
 addLinkAndDiscoverTest(IteratorTest)
 
-addLinkAndDiscoverTest(PatternCreatorTest index)
+# Here we also seem to have race conditions on the tests
+addLinkAndDiscoverTestSerial(PatternCreatorTest index)
 
 # Stxxl currently always uses a file ./-stxxl.disk for all indices, which
 # makes it impossible to run the test cases for the Index class in parallel.
@@ -221,6 +226,6 @@ addLinkAndDiscoverTest(TripleObjectTest absl::strings)
 
 addLinkAndDiscoverTest(ValueIdTest absl::flat_hash_set)
 
-addLinkAndDiscoverTest(ValueIdComparatorsTest)
+#addLinkAndDiscoverTest(ValueIdComparatorsTest)
 
 addLinkAndDiscoverTest(LambdaHelpersTest)
