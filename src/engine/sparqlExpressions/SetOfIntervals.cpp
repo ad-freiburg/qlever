@@ -3,6 +3,7 @@
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
 #include "SetOfIntervals.h"
+#include <algorithm>
 
 namespace ad_utility {
 // ___________________________________________________________________________

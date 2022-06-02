@@ -33,6 +33,9 @@ using std::string;
 // --------------------------------------------------------------------------
 // Needed for Cygwin (will be an identical redefine  for *nixes)
 #define __STRING(x) #x
+
+//! Custom assert that will always fail and report the file and line.
+#define AD_FAIL() AD_THROW(ad_semsearch::Exception::ASSERT_FAILED, "This code should be unreachable")
 //! Custom assert which does not abort but throws an exception
 #define AD_CHECK(condition)                                                  \
   {                                                                          \
