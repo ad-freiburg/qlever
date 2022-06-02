@@ -20,15 +20,15 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [ gcc11, gcc12, clang13 ]
-        #os: [ ubuntu-latest, ubuntu-22.04 ]
+        os: [ ubuntu-latest, ubuntu-22.04 ]
         warnings: [  "-Wall -Wextra -Werror" ]
-        include:
+        exclude:
           - compiler: gcc11
-            os: ubuntu-latest
-          - compiler: gcc12
             os: ubuntu-22.04
-          - compiler: clang13
+          - compiler: gcc12
             os: ubuntu-latest
+          - compiler: clang13
+            os: ubuntu-22.04
         #exclude:
         #  - compiler: gcc11
         #    warnings: -Werror
