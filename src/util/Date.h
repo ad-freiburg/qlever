@@ -20,8 +20,9 @@ class DateOutOfRangeException : public std::runtime_error {
 namespace detail {
 // Check that `min <= element <= max`. Throw `DateOutOfRangeException` if the
 // check fails.
-inline constexpr void checkBoundsIncludingMax(const auto& element, const auto& min,
-                                    const auto& max, std::string_view name) {
+inline constexpr void checkBoundsIncludingMax(const auto& element,
+                                              const auto& min, const auto& max,
+                                              std::string_view name) {
   if (element < min || element > max) {
     std::stringstream s;
     s << name << " " << element << " is out of range.";
@@ -31,8 +32,9 @@ inline constexpr void checkBoundsIncludingMax(const auto& element, const auto& m
 
 // Check that `min <= element < max`. Throw `DateOutOfRangeException` if the
 // check fails.
-inline constexpr void checkBoundsExcludingMax(const auto& element, const auto& min,
-                                    const auto& max, std::string_view name) {
+inline constexpr void checkBoundsExcludingMax(const auto& element,
+                                              const auto& min, const auto& max,
+                                              std::string_view name) {
   if (element < min || element >= max) {
     std::stringstream s;
     s << name << " " << element << " is out of range.";
