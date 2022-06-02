@@ -1,4 +1,4 @@
-name: CMake
+name: Ubuntu20.04
 
 on:
   push:
@@ -20,7 +20,11 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [ gcc11, gcc12, clang13 ]
-        os: [ ubuntu-latest, ubuntu-22.04 ]
+        #TODO<joka921> We can run all jobs on the same queue as soon as the ubuntu-22.04
+        # runner is no longer in the beta stage. Only runners that support all the platforms
+        # will pick up a job, and so we have to wait for a very long time currently.
+        #os: [ ubuntu-latest, ubuntu-22.04 ]
+        os: [ ubuntu-latest ]
         warnings: [  "-Wall -Wextra -Werror" ]
         exclude:
           - compiler: gcc11
