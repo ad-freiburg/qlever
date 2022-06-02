@@ -47,22 +47,22 @@ jobs:
       run:  sudo apt update && sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
     - name: Install boost Ubuntu 20.04
       run : sudo add-apt-repository -y ppa:mhier/libboost-latest && sudo apt update && sudo apt install -y libboost1.74-dev
-      if : ${{ matrix.os }} == 'ubuntu-latest'
+      if : matrix.os == 'ubuntu-latest'
     - name: Install boost Ubuntu 22.04
       run : sudo apt update && sudo apt install -y libboost-all-dev
-      if : ${{ matrix.os }} == 'ubuntu-22.04'
+      if :  matrix.os == 'ubuntu-22.04'
     - name: Install gcc 11
       run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-11 g++-11
-      if : ${{ matrix.compiler }} != 'gcc12'
+      if :  matrix.compiler != 'gcc12'
     - name: Install gcc 12
       run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-11 g++-12
-      if : ${{ matrix.compiler }} == 'gcc12'
+      if :  matrix.compiler  == 'gcc12'
     - name: Install clang 13
       run: wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 13
-      if: ${{ matrix.compiler }} == 'clang13'
+      if:  matrix.compiler == 'clang13'
     - name: Install libc++-13
       run : sudo apt install -y libunwind-13-dev libc++abi-13-dev libc++-13-dev
-      if: ${{ matrix.compiler }} == 'clang13'
+      if:  matrix.compiler == 'clang13'
 
     - name: Python dependencies
       run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
