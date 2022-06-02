@@ -13,8 +13,19 @@
 // Exception that is thrown when a value for a component of the `Date`, `Time`
 // or `Datetime` classes below is out of range (e.g. the month 13, or the hour
 // 26)
-class DateOutOfRangeException : public std::runtime_error {
-  using std::runtime_error::runtime_error;
+class DateOutOfRangeException : public std::exception {
+ private:
+  std::string message_;
+
+ public:
+  DateOutOfRangeException(std::string_view name, const auto& value) {
+    std::stringstream s;
+    s << name << " " << value << " is out of range for a DateTime";
+    message_ = std::move(s).str();
+  }
+  [[nodiscard]] const char* what() const noexcept override {
+    return message_.c_str();
+  }
 };
 
 namespace detail {
@@ -24,9 +35,7 @@ inline constexpr void checkBoundsIncludingMax(const auto& element,
                                               const auto& min, const auto& max,
                                               std::string_view name) {
   if (element < min || element > max) {
-    std::stringstream s;
-    s << name << " " << element << " is out of range.";
-    throw DateOutOfRangeException{s.str()};
+      throw DateOutOfRangeException{name, element};
   }
 }
 
@@ -36,9 +45,7 @@ inline constexpr void checkBoundsExcludingMax(const auto& element,
                                               const auto& min, const auto& max,
                                               std::string_view name) {
   if (element < min || element >= max) {
-    std::stringstream s;
-    s << name << " " << element << " is out of range.";
-    throw DateOutOfRangeException{s.str()};
+    throw DateOutOfRangeException{name, element};
   }
 }
 }  // namespace detail
