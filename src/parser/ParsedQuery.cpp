@@ -546,3 +546,6 @@ void GraphPatternOperation::toString(std::ostringstream& os,
     }
   });
 }
+
+// __________________________________________________________________________
+ParsedQuery::GraphPattern::GraphPattern() : _optional(false) {}

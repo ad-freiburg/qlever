@@ -35,7 +35,7 @@ inline constexpr void checkBoundsIncludingMax(const auto& element,
                                               const auto& min, const auto& max,
                                               std::string_view name) {
   if (element < min || element > max) {
-      throw DateOutOfRangeException{name, element};
+    throw DateOutOfRangeException{name, element};
   }
 }
 
