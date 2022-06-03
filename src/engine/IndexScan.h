@@ -48,13 +48,7 @@ class IndexScan : public Operation {
   void setPredicate(const string& predicate) { _predicate = predicate; }
   const string& getPredicate() const { return _predicate; }
 
-  void setObject(const string& object) {
-    if (!ad_utility::isXsdValue(object)) {
-      _object = object;
-    } else {
-      _object = ad_utility::convertValueLiteralToIndexWord(object);
-    }
-  }
+  void setObject(const TripleObject& object) { _object = object; }
 
   virtual size_t getResultWidth() const override;
 
@@ -111,7 +105,7 @@ class IndexScan : public Operation {
   ScanType _type;
   string _subject;
   string _predicate;
-  string _object;
+  TripleObject _object;
   size_t _sizeEstimate;
   vector<float> _multiplicity;
 

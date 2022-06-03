@@ -72,7 +72,8 @@ string IndexScan::asStringImpl(size_t indent) const {
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
-  return "IndexScan " + _subject + " " + _predicate + " " + _object;
+  return "IndexScan " + _subject + " " + _predicate + " " +
+         _object.toRdfLiteral();
 }
 
 // _____________________________________________________________________________
@@ -132,91 +133,62 @@ ad_utility::HashMap<string, size_t> IndexScan::getVariableColumns() const {
   ad_utility::HashMap<string, size_t> res;
   size_t col = 0;
 
+  // Helper lambdas that add the respective triple component as the next column.
+  auto addSubject = [&]() {
+    if (_subject[0] == '?') {
+      res[_subject] = col++;
+    }
+  };
+  auto addPredicate = [&]() {
+    if (_predicate[0] == '?') {
+      res[_predicate] = col++;
+    }
+  };
+  auto addObject = [&]() {
+    if (_object.isVariable()) {
+      res[_object.getString()] = col++;
+    }
+  };
+
   switch (_type) {
     case SPO_FREE_P:
     case FULL_INDEX_SCAN_SPO:
-      if (_subject[0] == '?') {
-        res[_subject] = col++;
-      }
-      if (_predicate[0] == '?') {
-        res[_predicate] = col++;
-      }
-
-      if (_object[0] == '?') {
-        res[_object] = col++;
-      }
+      addSubject();
+      addPredicate();
+      addObject();
       return res;
     case SOP_FREE_O:
     case SOP_BOUND_O:
     case FULL_INDEX_SCAN_SOP:
-      if (_subject[0] == '?') {
-        res[_subject] = col++;
-      }
-
-      if (_object[0] == '?') {
-        res[_object] = col++;
-      }
-
-      if (_predicate[0] == '?') {
-        res[_predicate] = col++;
-      }
+      addSubject();
+      addObject();
+      addPredicate();
       return res;
     case PSO_BOUND_S:
     case PSO_FREE_S:
     case FULL_INDEX_SCAN_PSO:
-      if (_predicate[0] == '?') {
-        res[_predicate] = col++;
-      }
-      if (_subject[0] == '?') {
-        res[_subject] = col++;
-      }
-
-      if (_object[0] == '?') {
-        res[_object] = col++;
-      }
+      addPredicate();
+      addSubject();
+      addObject();
       return res;
     case POS_BOUND_O:
     case POS_FREE_O:
     case FULL_INDEX_SCAN_POS:
-      if (_predicate[0] == '?') {
-        res[_predicate] = col++;
-      }
-
-      if (_object[0] == '?') {
-        res[_object] = col++;
-      }
-
-      if (_subject[0] == '?') {
-        res[_subject] = col++;
-      }
+      addPredicate();
+      addObject();
+      addSubject();
       return res;
     case OPS_FREE_P:
     case FULL_INDEX_SCAN_OPS:
-      if (_object[0] == '?') {
-        res[_object] = col++;
-      }
-
-      if (_predicate[0] == '?') {
-        res[_predicate] = col++;
-      }
-
-      if (_subject[0] == '?') {
-        res[_subject] = col++;
-      }
+      addObject();
+      addPredicate();
+      addSubject();
       return res;
     case OSP_FREE_S:
     case FULL_INDEX_SCAN_OSP:
-      if (_object[0] == '?') {
-        res[_object] = col++;
-      }
-
-      if (_subject[0] == '?') {
-        res[_subject] = col++;
-      }
-
-      if (_predicate[0] == '?') {
-        res[_predicate] = col++;
-      }
+      addObject();
+      addSubject();
+      addPredicate();
       return res;
     default:
       AD_THROW(ad_semsearch::Exception::CHECK_FAILED, "Should be unreachable.");
@@ -330,15 +302,18 @@ size_t IndexScan::computeSizeEstimate() {
       }
     }
     if (_type == SPO_FREE_P || _type == SOP_FREE_O) {
-      return getIndex().sizeEstimate(_subject, "", "");
+      return getIndex().subjectCardinality(_subject);
     } else if (_type == POS_FREE_O || _type == PSO_FREE_S) {
-      return getIndex().sizeEstimate("", _predicate, "");
+      return getIndex().relationCardinality(_predicate);
     } else if (_type == OPS_FREE_P || _type == OSP_FREE_S) {
-      return getIndex().sizeEstimate("", "", _object);
+      return getIndex().objectCardinality(_object);
     }
-    return getIndex().sizeEstimate("", "", "");
+    // The triple consists of three variables.
+    return getIndex().getNofTriples();
   } else {
-    return 1000 + _subject.size() + _predicate.size() + _object.size();
+    // Only for test cases.
+    return 1000 + _subject.size() + _predicate.size() +
+           _object.toHumanReadableString().size();
   }
 }
 

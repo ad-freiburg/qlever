@@ -330,17 +330,24 @@ void ParsedQuery::expandPrefixes() {
             expandPrefix(trip._p, prefixMap);
             if (trip._p._operation == PropertyPath::Operation::IRI &&
                 trip._p._iri.find("in-context") != string::npos) {
-              std::vector<std::string> tokens = absl::StrSplit(trip._o, ' ');
-              trip._o = "";
-              for (size_t i = 0; i < tokens.size(); ++i) {
-                expandPrefix(tokens[i], prefixMap);
-                trip._o += tokens[i];
-                if (i + 1 < tokens.size()) {
-                  trip._o += " ";
+              if (trip._o.isString()) {
+                std::string& str = trip._o.getString();
+                std::vector<std::string> tokens = absl::StrSplit(str, ' ');
+                str = "";
+                for (size_t i = 0; i < tokens.size(); ++i) {
+                  expandPrefix(tokens[i], prefixMap);
+                  str += tokens[i];
+                  if (i + 1 < tokens.size()) {
+                    str += " ";
+                  }
                 }
+                trip._o = str;
               }
             } else {
-              expandPrefix(trip._o, prefixMap);
+              if (trip._o.isString()) {
+                std::string& str = trip._o.getString();
+                expandPrefix(str, prefixMap);
+              }
             }
           }
         }

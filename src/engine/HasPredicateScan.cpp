@@ -400,8 +400,13 @@ void HasPredicateScan::setSubject(const std::string& subject) {
   _subject = subject;
 }
 
-void HasPredicateScan::setObject(const std::string& object) {
-  _object = object;
+void HasPredicateScan::setObject(const TripleObject& object) {
+  if (!object.isString()) {
+    throw ParseException{absl::StrCat(
+        "The object of a ql:has-predicate triple must an IRI, but was \"",
+        object.toHumanReadableString(), "\"")};
+  }
+  _object = object.getString();
 }
 
 const std::string& HasPredicateScan::getObject() const { return _object; }

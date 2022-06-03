@@ -764,12 +764,11 @@ size_t Index::subjectCardinality(const string& sub) const {
 }
 
 // _____________________________________________________________________________
-size_t Index::objectCardinality(const string& obj) const {
-  Id relId;
-  // TODO<joka921> other datatypes
-  if (getId(obj, &relId)) {
-    if (this->_OSP.metaData().col0IdExists(relId)) {
-      return this->_OSP.metaData().getMetaData(relId).getNofElements();
+size_t Index::objectCardinality(const TripleObject& obj) const {
+  std::optional<Id> relId = obj.toId(getVocab());
+  if (relId.has_value()) {
+    if (this->_OSP.metaData().col0IdExists(relId.value())) {
+      return this->_OSP.metaData().getMetaData(relId.value()).getNofElements();
     }
   }
   return 0;
@@ -781,6 +780,7 @@ size_t Index::sizeEstimate(const string& sub, const string& pred,
   // One or two of the parameters have to be empty strings.
   // This determines the permutations to use.
 
+  //
   // With only one nonempty string, we can get the exact count.
   // With two, we can check if the relation is functional (return 1) or not
   // where we approximate the result size by the block size.
@@ -950,18 +950,18 @@ LangtagAndTriple Index::tripleToInternalRepresentation(TurtleTriple&& triple) {
   auto& resultTriple = result._triple;
   resultTriple[0] = std::move(triple._subject);
   resultTriple[1] = std::move(triple._predicate);
-  // TODO<joka921> As soon as we have the "folded" Ids, we simply store the
-  // numeric value.
+
+  // If the object of the triple can be directly folded into an ID, do so. Note
+  // that the actual folding is done by the `Triple
   bool objectIsString = false;
-  if (triple._object.isDouble()) {
-    resultTriple[2] = Id::makeFromDouble(triple._object.getDouble());
-  } else if (triple._object.isInt()) {
-    resultTriple[2] = Id::makeFromInt(triple._object.getInt());
+  std::optional<Id> idIfNotString = triple._object.toIdIfNotString();
+  if (idIfNotString.has_value()) {
+    resultTriple[2] = idIfNotString.value();
   } else {
-    AD_CHECK(triple._object.isString());
     resultTriple[2] = triple._object.getString();
     objectIsString = true;
   }
+
   for (auto& el : resultTriple) {
     if (!std::holds_alternative<TripleComponent>(el)) {
       continue;
@@ -972,7 +972,8 @@ LangtagAndTriple Index::tripleToInternalRepresentation(TurtleTriple&& triple) {
   size_t upperBound = 3;
   if (objectIsString) {
     auto& object = std::get<TripleComponent>(resultTriple[2])._iriOrLiteral;
-    // TODO<joka921> Actually create numeric Ids here...
+    // TODO<joka921> Also fold the dates into the Ids and then throw this code
+    // and the `convertBlaToIndexWord` functions out.
     if (ad_utility::isXsdValue(object)) {
       object = ad_utility::convertValueLiteralToIndexWord(object);
       upperBound = 2;
