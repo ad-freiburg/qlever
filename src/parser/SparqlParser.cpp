@@ -407,7 +407,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
           subject = _lexer.current().raw;
           query->registerVariableVisibleInQueryBody(_lexer.current().raw);
         } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
-          // TODO<joka921> Verify that there are now internal qlever hacks that
+          // TODO<joka921> Verify that there are no internal qlever hacks that
           // need literals in the subject position.
           throw ParseException(
               "Encountered a literal as the subject of a triple. This is "
@@ -428,8 +428,8 @@ void SparqlParser::parseWhere(ParsedQuery* query,
           predicate = _lexer.current().raw;
           query->registerVariableVisibleInQueryBody(_lexer.current().raw);
         } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
-          // TODO<joka921> Verify that there are now internal qlever hacks that
-          // need literals in the subject position.
+          // TODO<joka921> Verify that there are no internal qlever hacks that
+          // need literals in the predicate position.
           throw ParseException(
               "Encountered a literal as the predicate of a triple. This is "
               "illegal");
@@ -802,7 +802,7 @@ string SparqlParser::stripAndLowercaseKeywordLiteral(std::string_view lit) {
 // _____________________________________________________________________________
 TripleObject SparqlParser::parseLiteral(const string& literal,
                                         bool isEntireString,
-                                        size_t off /*defaults to 0*/) {
+                                        size_t off /* defaults to 0 */) {
   std::stringstream out;
   size_t pos = off;
   // The delimiter of the string. Either ' or "
