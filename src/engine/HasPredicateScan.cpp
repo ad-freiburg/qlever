@@ -403,7 +403,7 @@ void HasPredicateScan::setSubject(const std::string& subject) {
 void HasPredicateScan::setObject(const TripleObject& object) {
   if (!object.isString()) {
     throw ParseException{absl::StrCat(
-        "The object of a ql:has-predicate triple must an IRI, but was \"",
+        "The object of a ql:has-predicate triple must be an IRI, but was \"",
         object.toString(), "\"")};
   }
   _object = object.getString();

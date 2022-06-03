@@ -397,7 +397,7 @@ class Index {
   template <class PermutationImpl>
   vector<float> getMultiplicities(const TripleObject& key,
                                   const PermutationImpl& p) const {
-    std::optional<Id> keyId = key.toId(getVocab());
+    std::optional<Id> keyId = key.toValueId(getVocab());
     vector<float> res;
     if (keyId.has_value() && p._meta.col0IdExists(keyId.value())) {
       auto metaData = p._meta.getMetaData(keyId.value());
@@ -452,7 +452,7 @@ class Index {
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
     LOG(DEBUG) << "Performing " << p._readableName
                << " scan for full list for: " << key << "\n";
-    std::optional<Id> optionalId = key.toId(getVocab());
+    std::optional<Id> optionalId = key.toValueId(getVocab());
     if (optionalId.has_value()) {
       LOG(TRACE) << "Successfully got key ID.\n";
       scan(optionalId.value(), result, p, std::move(timer));
@@ -479,8 +479,8 @@ class Index {
   void scan(const TripleObject& col0String, const TripleObject& col1String,
             IdTable* result, const PermutationInfo& p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
-    std::optional<Id> col0Id = col0String.toId(getVocab());
-    std::optional<Id> col1Id = col1String.toId(getVocab());
+    std::optional<Id> col0Id = col0String.toValueId(getVocab());
+    std::optional<Id> col1Id = col1String.toValueId(getVocab());
     if (!col0Id.has_value() || !col1Id.has_value()) {
       LOG(DEBUG) << "Key " << col0String << " or key " << col1String
                  << " were not found in the vocabulary \n";

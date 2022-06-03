@@ -765,7 +765,7 @@ size_t Index::subjectCardinality(const string& sub) const {
 
 // _____________________________________________________________________________
 size_t Index::objectCardinality(const TripleObject& obj) const {
-  std::optional<Id> relId = obj.toId(getVocab());
+  std::optional<Id> relId = obj.toValueId(getVocab());
   if (relId.has_value()) {
     if (this->_OSP.metaData().col0IdExists(relId.value())) {
       return this->_OSP.metaData().getMetaData(relId.value()).getNofElements();
@@ -923,9 +923,9 @@ LangtagAndTriple Index::tripleToInternalRepresentation(TurtleTriple&& triple) {
   resultTriple[1] = std::move(triple._predicate);
 
   // If the object of the triple can be directly folded into an ID, do so. Note
-  // that the actual folding is done by the `Triple
+  // that the actual folding is done by the `TripleObject`.
   bool objectIsString = false;
-  std::optional<Id> idIfNotString = triple._object.toIdIfNotString();
+  std::optional<Id> idIfNotString = triple._object.toValueIdIfNotString();
   if (idIfNotString.has_value()) {
     resultTriple[2] = idIfNotString.value();
   } else {

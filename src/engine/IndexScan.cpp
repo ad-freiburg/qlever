@@ -73,7 +73,7 @@ string IndexScan::asStringImpl(size_t indent) const {
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
   return "IndexScan " + _subject + " " + _predicate + " " +
-         _object.toRdfLiteral();
+         _object.toString();
 }
 
 // _____________________________________________________________________________

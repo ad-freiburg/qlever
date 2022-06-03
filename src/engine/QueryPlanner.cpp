@@ -2581,7 +2581,7 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
       adjNodes.insert(_adjLists[nid].begin(), _adjLists[nid].end());
       auto& triple = _nodeMap[nid]->_triple;
       trips.push_back(triple);
-      if (triple._s == cvar && triple._o.isString() && !isVariable(triple._o)) {
+      if (triple._s == cvar && triple._o.isString() && !triple._o.isVariable()) {
         if (!wordPart.empty()) {
           wordPart += " ";
         }

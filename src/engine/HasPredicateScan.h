@@ -56,7 +56,7 @@ class HasPredicateScan : public Operation {
   void setSubtreeSubjectColumn(size_t colIndex);
   ScanType getType() const;
 
-  const string& getObject() const;
+  const std::string& getObject() const;
 
   vector<QueryExecutionTree*> getChildren() override {
     return {_subtree.get()};

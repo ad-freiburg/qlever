@@ -123,7 +123,7 @@ class TripleObject {
 
   /// Convert the `TripleObject` to an ID if it is not a string. In case of a
   /// string return `std::nullopt`.
-  [[nodiscard]] std::optional<Id> toIdIfNotString() const {
+  [[nodiscard]] std::optional<Id> toValueIdIfNotString() const {
     auto visitor = []<typename T>(const T& value) -> std::optional<Id> {
       if constexpr (std::is_same_v<T, std::string>) {
         return std::nullopt;
@@ -142,7 +142,7 @@ class TripleObject {
   /// the IDs are resolved using the `vocabulary`. If a string is not found in
   /// the vocabulary, `std::nullopt` is returned.
   template <typename Vocabulary>
-  [[nodiscard]] std::optional<Id> toId(const Vocabulary& vocabulary) const {
+  [[nodiscard]] std::optional<Id> toValueId(const Vocabulary& vocabulary) const {
     if (isString()) {
       VocabIndex idx;
       if (vocabulary.getId(getString(), &idx)) {
@@ -151,7 +151,7 @@ class TripleObject {
         return std::nullopt;
       }
     } else {
-      return toIdIfNotString();
+      return toValueIdIfNotString();
     }
   }
 
