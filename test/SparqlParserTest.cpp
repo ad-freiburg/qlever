@@ -1123,20 +1123,20 @@ TEST(ParserTest, testParseLiteral) {
   using std::string;
   // Test a basic parse of a simple xsd string
   string inp = "   \"Astronaut\"^^xsd::string  \t";
-  string ret = SparqlParser::parseLiteral(inp, true);
+  string ret = SparqlParser::parseLiteral(inp, true).getString();
   ASSERT_EQ("\"Astronaut\"^^xsd::string", ret);
 
   // Test parsing without the isEntireString check and with escaped quotation
   // marks.
   inp = R"(?a ?b "The \"Moon\""@en .)";
-  ret = SparqlParser::parseLiteral(inp, false);
+  ret = SparqlParser::parseLiteral(inp, false).getString();
   ASSERT_EQ("\"The \"Moon\"\"@en", ret);
 
   // Do a negative test for the isEntireString check
   inp = R"(?a ?b "The \"Moon\""@en .)";
   bool caught_exception = false;
   try {
-    ret = SparqlParser::parseLiteral(inp, true);
+    SparqlParser::parseLiteral(inp, true);
   } catch (const ParseException& e) {
     caught_exception = true;
   }
@@ -1144,14 +1144,14 @@ TEST(ParserTest, testParseLiteral) {
 
   // check if specifying the correct offset works
   inp = R"(?a ?b "The \"Moon\""@en)";
-  ret = SparqlParser::parseLiteral(inp, true, 6);
+  ret = SparqlParser::parseLiteral(inp, true, 6).getString();
   ASSERT_EQ("\"The \"Moon\"\"@en", ret);
 
   // Do not escape qutation marks with the isEntireString check
   inp = R"(?a ?b "The \"Moon""@en)";
   caught_exception = false;
   try {
-    ret = SparqlParser::parseLiteral(inp, true, 6);
+    SparqlParser::parseLiteral(inp, true, 6);
   } catch (const ParseException& e) {
     caught_exception = true;
   }

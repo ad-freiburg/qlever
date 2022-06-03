@@ -407,7 +407,12 @@ void SparqlParser::parseWhere(ParsedQuery* query,
           subject = _lexer.current().raw;
           query->registerVariableVisibleInQueryBody(_lexer.current().raw);
         } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
-          subject = parseLiteral(_lexer.current().raw, true);
+          // TODO<joka921> Verify that there are now internal qlever hacks that
+          // need literals in the subject position.
+          throw ParseException(
+              "Encountered a literal as the subject of a triple. This is "
+              "illegal");
+          // subject = parseLiteral(_lexer.current().raw, true);
         } else {
           _lexer.expect(SparqlToken::Type::IRI);
           subject = _lexer.current().raw;
@@ -423,7 +428,12 @@ void SparqlParser::parseWhere(ParsedQuery* query,
           predicate = _lexer.current().raw;
           query->registerVariableVisibleInQueryBody(_lexer.current().raw);
         } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
-          predicate = parseLiteral(_lexer.current().raw, true);
+          // TODO<joka921> Verify that there are now internal qlever hacks that
+          // need literals in the subject position.
+          throw ParseException(
+              "Encountered a literal as the predicate of a triple. This is "
+              "illegal");
+          // predicate = parseLiteral(_lexer.current().raw, true);
         } else if (_lexer.accept(SparqlToken::Type::A_RDF_TYPE_ALIAS)) {
           predicate = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
         } else {
@@ -438,7 +448,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         lastPredicate.clear();
       }
 
-      std::string object;
+      TripleObject object;
       if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
         object = _lexer.current().raw;
         query->registerVariableVisibleInQueryBody(_lexer.current().raw);
@@ -451,7 +461,14 @@ void SparqlParser::parseWhere(ParsedQuery* query,
 
       if (predicate == CONTAINS_WORD_PREDICATE ||
           predicate == CONTAINS_WORD_PREDICATE_NS) {
-        object = stripAndLowercaseKeywordLiteral(object);
+        // TODO<joka921, qup42> Make sure that the lowercasing of the words is
+        // also performed correctly in the ANTLR based parser. We also probably
+        // shouldn't allow anything other than plain literals without language
+        // tags or xsd types for the fulltext index.0
+        if (object.isString()) {
+          object.getString() =
+              stripAndLowercaseKeywordLiteral(object.getString());
+        }
       }
 
       SparqlTriple triple(subject, PropertyPathParser(predicate).parse(),
@@ -783,8 +800,9 @@ string SparqlParser::stripAndLowercaseKeywordLiteral(std::string_view lit) {
 }
 
 // _____________________________________________________________________________
-string SparqlParser::parseLiteral(const string& literal, bool isEntireString,
-                                  size_t off /*defaults to 0*/) {
+TripleObject SparqlParser::parseLiteral(const string& literal,
+                                        bool isEntireString,
+                                        size_t off /*defaults to 0*/) {
   std::stringstream out;
   size_t pos = off;
   // The delimiter of the string. Either ' or "
