@@ -775,35 +775,6 @@ size_t Index::objectCardinality(const TripleObject& obj) const {
 }
 
 // _____________________________________________________________________________
-size_t Index::sizeEstimate(const string& sub, const string& pred,
-                           const string& obj) const {
-  // One or two of the parameters have to be empty strings.
-  // This determines the permutations to use.
-
-  //
-  // With only one nonempty string, we can get the exact count.
-  // With two, we can check if the relation is functional (return 1) or not
-  // where we approximate the result size by the block size.
-  if (sub.size() > 0 && pred.size() == 0 && obj.size() == 0) {
-    return subjectCardinality(sub);
-  }
-  if (sub.size() == 0 && pred.size() > 0 && obj.size() == 0) {
-    return relationCardinality(pred);
-  }
-  if (sub.size() == 0 && pred.size() == 0 && obj.size() > 0) {
-    return objectCardinality(obj);
-  }
-  if (sub.size() == 0 && pred.size() == 0 && obj.size() == 0) {
-    return getNofTriples();
-  }
-  AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-           "Index::sizeEsimate called with more then one of S/P/O given. "
-           "This should never be the case anymore, "
-           " since for such SCANs we compute the result "
-           "directly and don't need an estimate anymore!");
-}
-
-// _____________________________________________________________________________
 template <class T>
 void Index::writeAsciiListFile(const string& filename, const T& ids) const {
   std::ofstream f(filename);

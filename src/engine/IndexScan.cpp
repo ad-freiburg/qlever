@@ -311,9 +311,11 @@ size_t IndexScan::computeSizeEstimate() {
     // The triple consists of three variables.
     return getIndex().getNofTriples();
   } else {
-    // Only for test cases.
-    return 1000 + _subject.size() + _predicate.size() +
-           _object.toHumanReadableString().size();
+    // Only for test cases. The handling of the objects is to make the
+    // strange query planner tests pass.
+    std::string objectStr =
+        _object.isString() ? _object.getString() : _object.toString();
+    return 1000 + _subject.size() + _predicate.size() + objectStr.size();
   }
 }
 

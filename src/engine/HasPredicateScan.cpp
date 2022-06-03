@@ -404,7 +404,7 @@ void HasPredicateScan::setObject(const TripleObject& object) {
   if (!object.isString()) {
     throw ParseException{absl::StrCat(
         "The object of a ql:has-predicate triple must an IRI, but was \"",
-        object.toHumanReadableString(), "\"")};
+        object.toString(), "\"")};
   }
   _object = object.getString();
 }

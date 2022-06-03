@@ -192,11 +192,6 @@ class Index {
 
   size_t objectCardinality(const TripleObject& obj) const;
 
-  // TODO<joka921> The arguments should be `std::optional<...>`
-  // TODO<joka921> Is this function needed anymore at all?
-  size_t sizeEstimate(const string& sub, const string& pred,
-                      const string& obj) const;
-
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
   std::optional<string> idToOptionalString(Id id) const {

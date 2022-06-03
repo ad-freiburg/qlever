@@ -155,22 +155,16 @@ class TripleObject {
     }
   }
 
-  /// Human readable output for debugging and testing.
+  /// Human readable output. Is used for debugging, testing, and for the
+  /// creation of descriptors and cache keys.
   friend std::ostream& operator<<(std::ostream& stream,
                                   const TripleObject& obj) {
-    if (obj.isString()) {
-      stream << "string:\"" << obj.getString() << '"';
-    } else if (obj.isInt()) {
-      stream << "int:" << obj.getInt();
-    } else if (obj.isDouble()) {
-      stream << "double:" << obj.getDouble();
-    } else {
-      AD_CHECK(false);
-    }
+    std::visit([&stream](const auto& value) -> void { stream << value; },
+               obj._variant);
     return stream;
   }
 
-  [[nodiscard]] std::string toHumanReadableString() const {
+  [[nodiscard]] std::string toString() const {
     std::stringstream stream;
     stream << *this;
     return std::move(stream).str();
