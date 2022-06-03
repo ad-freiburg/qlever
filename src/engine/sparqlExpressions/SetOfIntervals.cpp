@@ -4,6 +4,8 @@
 
 #include "SetOfIntervals.h"
 
+#include <algorithm>
+
 namespace ad_utility {
 // ___________________________________________________________________________
 SetOfIntervals SetOfIntervals::SortAndCheckDisjointAndNonempty(

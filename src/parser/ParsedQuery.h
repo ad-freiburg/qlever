@@ -237,8 +237,9 @@ class ParsedQuery {
   // are recursive).
   class GraphPattern {
    public:
-    // deletes the patterns children.
-    GraphPattern() : _optional(false) {}
+    // The constructor has to be implemented in the .cpp file because of the
+    // circular dependencies of `GraphPattern` and `GraphPatternOperation`
+    GraphPattern();
     // Move and copyconstructors to avoid double deletes on the trees children
     GraphPattern(GraphPattern&& other) = default;
     GraphPattern(const GraphPattern& other) = default;

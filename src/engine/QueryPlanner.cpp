@@ -1231,12 +1231,15 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           if (node._triple._p._iri == HAS_PREDICATE_PREDICATE) {
             // TODO(schnelle): Handle ?p ql:has-prediacte ?p
             // Add a has relation scan instead of a normal IndexScan
-            HasPredicateScan::ScanType scanType;
-            if (isVariable(node._triple._s)) {
-              scanType = HasPredicateScan::ScanType::FREE_S;
-            } else if (isVariable(node._triple._o)) {
-              scanType = HasPredicateScan::ScanType::FREE_O;
-            }
+            const HasPredicateScan::ScanType scanType = [&]() {
+              if (isVariable(node._triple._s)) {
+                return HasPredicateScan::ScanType::FREE_S;
+              } else if (isVariable(node._triple._o)) {
+                return HasPredicateScan::ScanType::FREE_O;
+              } else {
+                AD_FAIL();
+              }
+            }();
             auto scan = std::make_shared<HasPredicateScan>(_qec, scanType);
             scan->setSubject(node._triple._s);
             scan->setObject(node._triple._o);
