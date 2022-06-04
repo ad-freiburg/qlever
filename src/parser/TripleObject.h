@@ -2,6 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 
+#ifndef QLEVER_TRIPLEOBJECT_H
+#define QLEVER_TRIPLEOBJECT_H
+
 #include <absl/strings/str_cat.h>
 
 #include <cstdint>
@@ -9,6 +12,7 @@
 #include <variant>
 
 #include "../global/Constants.h"
+#include "../global/Id.h"
 #include "../util/Exception.h"
 #include "../util/Forward.h"
 
@@ -32,7 +36,7 @@ class TripleObject {
 
   /// Construct from `string_view`s. We need to explicitly implement this
   /// constructor because  `string_views` are not implicitly convertible to
-  /// `std::string`.
+  /// `std::string`. Note that this constructor is deliberately NOT explicit.
   TripleObject(std::string_view sv) : _variant{std::string{sv}} {}
 
   /// Defaulted copy and move constructors.
@@ -71,14 +75,20 @@ class TripleObject {
   bool operator==(const TripleObject&) const = default;
 
   /// Check which type the underlying variants hold.
-  [[nodiscard]] bool isString() const noexcept {
+  [[nodiscard]] bool isString() const {
     return std::holds_alternative<std::string>(_variant);
   }
-  [[nodiscard]] bool isDouble() const noexcept {
+  [[nodiscard]] bool isDouble() const {
     return std::holds_alternative<double>(_variant);
   }
-  [[nodiscard]] bool isInt() const noexcept {
+  [[nodiscard]] bool isInt() const {
     return std::holds_alternative<int64_t>(_variant);
+  }
+
+  /// TODO<joka921> This is a hack which has to be replaced once we have a
+  /// proper type for a variable.
+  [[nodiscard]] bool isVariable() const {
+    return isString() && getString().starts_with('?');
   }
 
   /// Access the value. If one of those methods is called but the variant
@@ -86,6 +96,9 @@ class TripleObject {
   [[nodiscard]] const std::string& getString() const {
     return std::get<std::string>(_variant);
   }
+  // Non-const overload. TODO<C++23> Deducing this.
+  std::string& getString() { return std::get<std::string>(_variant); }
+
   [[nodiscard]] const double& getDouble() const {
     return std::get<double>(_variant);
   }
@@ -108,23 +121,56 @@ class TripleObject {
     }
   }
 
-  /// Human readable output for debugging and testing.
+  /// Convert the `TripleObject` to an ID if it is not a string. In case of a
+  /// string return `std::nullopt`. This is used in `toValueId` below and during
+  /// the index building when we haven't built the vocabulary yet.
+  [[nodiscard]] std::optional<Id> toValueIdIfNotString() const {
+    auto visitor = []<typename T>(const T& value) -> std::optional<Id> {
+      if constexpr (std::is_same_v<T, std::string>) {
+        return std::nullopt;
+      } else if constexpr (std::is_same_v<T, int64_t>) {
+        return Id::makeFromInt(value);
+      } else if constexpr (std::is_same_v<T, double>) {
+        return Id::makeFromDouble(value);
+      } else {
+        static_assert(ad_utility::alwaysFalse<T>);
+      }
+    };
+    return std::visit(visitor, _variant);
+  }
+
+  /// Convert the `TripleObject` to an ID. If the `TripleObject` is a string,
+  /// the IDs are resolved using the `vocabulary`. If a string is not found in
+  /// the vocabulary, `std::nullopt` is returned.
+  template <typename Vocabulary>
+  [[nodiscard]] std::optional<Id> toValueId(
+      const Vocabulary& vocabulary) const {
+    if (isString()) {
+      VocabIndex idx;
+      if (vocabulary.getId(getString(), &idx)) {
+        return Id::makeFromVocabIndex(idx);
+      } else {
+        return std::nullopt;
+      }
+    } else {
+      return toValueIdIfNotString();
+    }
+  }
+
+  /// Human readable output. Is used for debugging, testing, and for the
+  /// creation of descriptors and cache keys.
   friend std::ostream& operator<<(std::ostream& stream,
                                   const TripleObject& obj) {
-    if (obj.isString()) {
-      stream << "string:\"" << obj.getString() << '"';
-    } else if (obj.isInt()) {
-      stream << "int:" << obj.getInt();
-    } else if (obj.isDouble()) {
-      stream << "double:" << obj.getDouble();
-    } else {
-      AD_CHECK(false);
-    }
+    std::visit([&stream](const auto& value) -> void { stream << value; },
+               obj._variant);
     return stream;
   }
-};
 
-#ifndef QLEVER_TRIPLEOBJECT_H
-#define QLEVER_TRIPLEOBJECT_H
+  [[nodiscard]] std::string toString() const {
+    std::stringstream stream;
+    stream << *this;
+    return std::move(stream).str();
+  }
+};
 
 #endif  // QLEVER_TRIPLEOBJECT_H

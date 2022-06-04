@@ -5,7 +5,7 @@
 
 #include "./TurtleParser.h"
 
-#include <string.h>
+#include <cstring>
 
 #include "../util/TaskQueue.h"
 #include "./RdfEscaping.h"
@@ -127,7 +127,6 @@ template <class T>
 bool TurtleParser<T>::objectList() {
   if (object()) {
     while (skip<TurtleTokenId::Comma>() && check(object())) {
-      continue;
     }
     return true;
   } else {

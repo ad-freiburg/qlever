@@ -37,7 +37,7 @@ class QueryPlanner {
           _variables.insert(t._p._iri);
         }
         if (isVariable(t._o)) {
-          _variables.insert(t._o);
+          _variables.insert(t._o.getString());
         }
       }
 
@@ -60,7 +60,7 @@ class QueryPlanner {
             _variables.insert(t._p._iri);
           }
           if (isVariable(t._o)) {
-            _variables.insert(t._o);
+            _variables.insert(t._o.getString());
           }
         }
       }

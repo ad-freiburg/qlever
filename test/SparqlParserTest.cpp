@@ -10,6 +10,12 @@
 #include "../src/parser/PropertyPathParser.h"
 #include "../src/parser/SparqlParser.h"
 
+const ParsedQuery pqDummy = []() {
+  ParsedQuery pq;
+  pq._prefixes.emplace_back("xsd", "<http://www.w3.org/2001/XMLSchema#>");
+  return pq;
+}();
+
 TEST(ParserTest, testParse) {
   try {
     {
@@ -978,6 +984,7 @@ TEST(ParserTest, testSolutionModifiers) {
 
   {
     auto pq = SparqlParser(
+                  "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>"
                   "SELECT DISTINCT ?movie WHERE { \n"
                   "\n"
                   "?movie <from-year> \"00-00-2000\"^^xsd:date .\n"
@@ -989,13 +996,14 @@ TEST(ParserTest, testSolutionModifiers) {
     const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
-    ASSERT_EQ(0u, pq._prefixes.size());
+    ASSERT_EQ(1u, pq._prefixes.size());
     ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectedVariables().size());
     ASSERT_EQ("?movie", selectClause._varsOrAsterisk.getSelectedVariables()[0]);
     ASSERT_EQ(2u, c._whereClauseTriples.size());
     ASSERT_EQ("?movie", c._whereClauseTriples[0]._s);
     ASSERT_EQ("<from-year>", c._whereClauseTriples[0]._p._iri);
-    ASSERT_EQ("\"00-00-2000\"^^xsd:date", c._whereClauseTriples[0]._o);
+    ASSERT_EQ("\"00-00-2000\"^^<http://www.w3.org/2001/XMLSchema#date>",
+              c._whereClauseTriples[0]._o);
     ASSERT_EQ("?movie", c._whereClauseTriples[1]._s);
     ASSERT_EQ("<directed-by>", c._whereClauseTriples[1]._p._iri);
     ASSERT_EQ("<Scott%2C%20Ridley>", c._whereClauseTriples[1]._o);
@@ -1122,36 +1130,31 @@ TEST(ParserTest, testGroupByAndAlias) {
 TEST(ParserTest, testParseLiteral) {
   using std::string;
   // Test a basic parse of a simple xsd string
-  string inp = "   \"Astronaut\"^^xsd::string  \t";
-  string ret = SparqlParser::parseLiteral(inp, true);
-  ASSERT_EQ("\"Astronaut\"^^xsd::string", ret);
+  string inp = "   \"Astronaut\"^^xsd:string  \t";
+  string ret = SparqlParser::parseLiteral(pqDummy, inp, true).getString();
+  ASSERT_EQ("\"Astronaut\"^^<http://www.w3.org/2001/XMLSchema#string>", ret);
 
-  // Test parsing without the isEntireString check and with escaped quotation
-  // marks.
-  inp = R"(?a ?b "The \"Moon\""@en .)";
-  ret = SparqlParser::parseLiteral(inp, false);
-  ASSERT_EQ("\"The \"Moon\"\"@en", ret);
+  inp = "\"1950-01-01T00:00:00\"^^xsd:dateTime";
+  ret = SparqlParser::parseLiteral(pqDummy, inp, true).getString();
+  ASSERT_EQ(
+      "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>",
+      ret);
 
-  // Do a negative test for the isEntireString check
+  // This is not a literal.
   inp = R"(?a ?b "The \"Moon\""@en .)";
   bool caught_exception = false;
   try {
-    ret = SparqlParser::parseLiteral(inp, true);
+    SparqlParser::parseLiteral(pqDummy, inp, true);
   } catch (const ParseException& e) {
     caught_exception = true;
   }
   ASSERT_TRUE(caught_exception);
 
-  // check if specifying the correct offset works
-  inp = R"(?a ?b "The \"Moon\""@en)";
-  ret = SparqlParser::parseLiteral(inp, true, 6);
-  ASSERT_EQ("\"The \"Moon\"\"@en", ret);
-
   // Do not escape qutation marks with the isEntireString check
   inp = R"(?a ?b "The \"Moon""@en)";
   caught_exception = false;
   try {
-    ret = SparqlParser::parseLiteral(inp, true, 6);
+    SparqlParser::parseLiteral(pqDummy, inp, true, 6);
   } catch (const ParseException& e) {
     caught_exception = true;
   }

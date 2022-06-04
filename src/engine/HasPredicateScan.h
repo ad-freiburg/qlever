@@ -51,7 +51,7 @@ class HasPredicateScan : public Operation {
   virtual size_t getCostEstimate() override;
 
   void setSubject(const std::string& subject);
-  void setObject(const std::string& object);
+  void setObject(const TripleObject& object);
   void setSubtree(std::shared_ptr<QueryExecutionTree> subtree);
   void setSubtreeSubjectColumn(size_t colIndex);
   ScanType getType() const;
