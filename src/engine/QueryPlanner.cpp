@@ -687,23 +687,25 @@ bool QueryPlanner::checkUsePatternTrick(
       }
 
       LOG(DEBUG) << "Using the pattern trick to answer the query." << endl;
-      *patternTrickTriple = t;
-      // remove the triple from the graph
-      curPattern._whereClauseTriples.erase(
-          curPattern._whereClauseTriples.begin() + i);
       // Transform filters on the ql:has-relation triple's object that
       // have a static rhs to having clauses
       // Filters are only scoped within a GraphPattern, so we only
       // have to  check curPattern
       auto& filters = pq->_rootGraphPattern._filters;
-      for (size_t j = 0; j < filters.size(); j++) {
-        const SparqlFilter& filter = filters[j];
-        if (filter._lhs == t._o && filter._rhs[0] != '?') {
-          pq->_havingClauses.push_back(filter);
-          filters.erase(filters.begin() + j);
-          j--;
-        }
-      }
+      auto it = std::remove_if(
+          filters.begin(), filters.end(), [&t](const SparqlFilter& filter) {
+            return filter._lhs == t._o && filter._rhs[0] != '?';
+          });
+      std::for_each(it, filters.end(), [&pq](const SparqlFilter& f) {
+        pq->_havingClauses.push_back(f);
+      });
+      filters.erase(it, filters.end());
+
+      *patternTrickTriple = t;
+      // Remove the triple from the graph. Note that this invalidates the
+      // reference `t`, so we perform this step at the very end.
+      curPattern._whereClauseTriples.erase(
+          curPattern._whereClauseTriples.begin() + i);
       return true;
     }
   }
@@ -2581,7 +2583,8 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
       adjNodes.insert(_adjLists[nid].begin(), _adjLists[nid].end());
       auto& triple = _nodeMap[nid]->_triple;
       trips.push_back(triple);
-      if (triple._s == cvar && triple._o.isString() && !triple._o.isVariable()) {
+      if (triple._s == cvar && triple._o.isString() &&
+          !triple._o.isVariable()) {
         if (!wordPart.empty()) {
           wordPart += " ";
         }
