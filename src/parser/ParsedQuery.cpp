@@ -399,6 +399,9 @@ void ParsedQuery::expandPrefix(
     } else {
       from += 2;
     }
+    for (const auto& el : prefixMap) {
+      LOG(INFO) << el.first << " " << el.second << std::endl;
+    }
     if (i != string::npos && i >= from &&
         prefixMap.contains(item.substr(from, i - from))) {
       string prefixUri = prefixMap.at(item.substr(from, i - from));
