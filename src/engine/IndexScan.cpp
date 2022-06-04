@@ -23,12 +23,12 @@ string IndexScan::asStringImpl(size_t indent) const {
          << "\"";
       break;
     case POS_BOUND_O:
-      os << "SCAN POS with P = \"" << _predicate << "\", O = \"" << _object
-         << "\"";
+      os << "SCAN POS with P = \"" << _predicate << "\", O = \""
+         << _object.toRdfLiteral() << "\"";
       break;
     case SOP_BOUND_O:
-      os << "SCAN SOP with S = \"" << _subject << "\", O = \"" << _object
-         << "\"";
+      os << "SCAN SOP with S = \"" << _subject << "\", O = \""
+         << _object.toRdfLiteral() << "\"";
       break;
     case PSO_FREE_S:
       os << "SCAN PSO with P = \"" << _predicate << "\"";
@@ -43,10 +43,10 @@ string IndexScan::asStringImpl(size_t indent) const {
       os << "SCAN SOP with S = \"" << _subject << "\"";
       break;
     case OPS_FREE_P:
-      os << "SCAN OPS with O = \"" << _object << "\"";
+      os << "SCAN OPS with O = \"" << _object.toRdfLiteral() << "\"";
       break;
     case OSP_FREE_S:
-      os << "SCAN OSP with O = \"" << _object << "\"";
+      os << "SCAN OSP with O = \"" << _object.toRdfLiteral() << "\"";
       break;
     case FULL_INDEX_SCAN_SPO:
       os << "SCAN FOR FULL INDEX SPO (DUMMY OPERATION)";
