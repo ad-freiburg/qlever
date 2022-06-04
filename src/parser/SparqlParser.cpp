@@ -453,7 +453,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         object = _lexer.current().raw;
         query->registerVariableVisibleInQueryBody(_lexer.current().raw);
       } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
-        object = parseLiteral(_lexer.current().raw, true);
+        object = parseLiteral(*query, _lexer.current().raw, true);
       } else {
         _lexer.expect(SparqlToken::Type::IRI);
         object = _lexer.current().raw;
@@ -799,84 +799,106 @@ string SparqlParser::stripAndLowercaseKeywordLiteral(std::string_view lit) {
   return std::string{lit};
 }
 
+// Helper function that converts the prefix map from `parsedQuery` (a vector of
+// pairs of prefix and IRI) to the prefix map we need for the
+// `SparqlQleverVisitor` (a hash map from prefixes to IRIs).
+namespace {
+SparqlQleverVisitor::PrefixMap getPrefixMap(const ParsedQuery& parsedQuery) {
+  SparqlQleverVisitor::PrefixMap prefixMap;
+  for (const auto& prefixDef : parsedQuery._prefixes) {
+    prefixMap[prefixDef._prefix] = prefixDef._uri;
+  }
+  return prefixMap;
+}
+}  // namespace
+
 // _____________________________________________________________________________
-TripleObject SparqlParser::parseLiteral(const string& literal,
+TripleObject SparqlParser::parseLiteral(const ParsedQuery& pq,
+                                        const string& literal,
                                         bool isEntireString,
                                         size_t off /* defaults to 0 */) {
-  std::stringstream out;
-  size_t pos = off;
-  // The delimiter of the string. Either ' or "
-  char delimiter = '"';
-  if (isEntireString) {
-    // check for a leading qutation mark
-    while (pos < literal.size() &&
-           std::isspace(static_cast<unsigned char>(literal[pos]))) {
+  auto parseLiteralAsString = [&]() -> std::string {
+    std::stringstream out;
+    size_t pos = off;
+    // The delimiter of the string. Either ' or "
+    char delimiter = '"';
+    if (isEntireString) {
+      // check for a leading qutation mark
+      while (pos < literal.size() &&
+             std::isspace(static_cast<unsigned char>(literal[pos]))) {
+        pos++;
+      }
+      if (pos == literal.size() ||
+          (literal[pos] != '"' && literal[pos] != '\'')) {
+        throw ParseException("The literal: " + literal +
+                             " does not begin with a quotation mark.");
+      }
+    }
+    while (pos < literal.size() && literal[pos] != '"' &&
+           literal[pos] != '\'') {
       pos++;
     }
-    if (pos == literal.size() ||
-        (literal[pos] != '"' && literal[pos] != '\'')) {
-      throw ParseException("The literal: " + literal +
-                           " does not begin with a quotation mark.");
+    if (pos == literal.size()) {
+      // the string does not contain a literal
+      return "";
     }
-  }
-  while (pos < literal.size() && literal[pos] != '"' && literal[pos] != '\'') {
+    delimiter = literal[pos];
+    out << '"';
     pos++;
-  }
-  if (pos == literal.size()) {
-    // the string does not contain a literal
-    return "";
-  }
-  delimiter = literal[pos];
-  out << '"';
-  pos++;
-  bool escaped = false;
-  while (pos < literal.size() && (escaped || literal[pos] != delimiter)) {
-    escaped = false;
-    if (literal[pos] == '\\' && pos + 1 < literal.size() &&
-        literal[pos + 1] == delimiter) {
-      // Allow for escaping " using \ but do not change any other form of
-      // escaping.
-      escaped = true;
-    } else {
-      out << literal[pos];
+    bool escaped = false;
+    while (pos < literal.size() && (escaped || literal[pos] != delimiter)) {
+      escaped = false;
+      if (literal[pos] == '\\' && pos + 1 < literal.size() &&
+          literal[pos + 1] == delimiter) {
+        // Allow for escaping " using \ but do not change any other form of
+        // escaping.
+        escaped = true;
+      } else {
+        out << literal[pos];
+      }
+      pos++;
     }
+    out << '"';
     pos++;
-  }
-  out << '"';
-  pos++;
-  if (pos < literal.size() && literal[pos] == '@') {
-    out << literal[pos];
-    pos++;
-    // add the language tag
-    // allow for ascii based language tags (no current language tag should
-    // contain non ascii letters).
-    while (pos < literal.size() &&
-           std::isalpha(static_cast<unsigned char>(literal[pos]))) {
+    if (pos < literal.size() && literal[pos] == '@') {
       out << literal[pos];
       pos++;
+      // add the language tag
+      // allow for ascii based language tags (no current language tag should
+      // contain non ascii letters).
+      while (pos < literal.size() &&
+             std::isalpha(static_cast<unsigned char>(literal[pos]))) {
+        out << literal[pos];
+        pos++;
+      }
     }
-  }
-  if (pos + 1 < literal.size() && literal[pos] == '^' &&
-      literal[pos + 1] == '^') {
-    // add the xsd type
-    while (pos < literal.size() &&
-           !std::isspace(static_cast<unsigned char>(literal[pos]))) {
-      out << literal[pos];
-      pos++;
+    if (pos + 1 < literal.size() && literal[pos] == '^' &&
+        literal[pos + 1] == '^') {
+      // add the xsd type
+      while (pos < literal.size() &&
+             !std::isspace(static_cast<unsigned char>(literal[pos]))) {
+        out << literal[pos];
+        pos++;
+      }
     }
-  }
-  if (isEntireString && pos < literal.size()) {
-    // check for trailing non whitespace characters
-    while (pos < literal.size() &&
-           std::isspace(static_cast<unsigned char>(literal[pos]))) {
-      pos++;
+    if (isEntireString && pos < literal.size()) {
+      // check for trailing non whitespace characters
+      while (pos < literal.size() &&
+             std::isspace(static_cast<unsigned char>(literal[pos]))) {
+        pos++;
+      }
+      if (pos < literal.size()) {
+        throw ParseException("The literal: " + literal +
+                             " was not terminated properly.");
+      }
     }
-    if (pos < literal.size()) {
-      throw ParseException("The literal: " + literal +
-                           " was not terminated properly.");
-    }
-  }
-  return std::move(out).str();
+    return std::move(out).str();
+  };
+  auto resultAsString = parseLiteralAsString();
+  // Convert the Literals to ints or doubles if they have the appropriate
+  // types.
+  ParsedQuery::expandPrefix(resultAsString, getPrefixMap(pq));
+  return TurtleStringParser<TokenizerCtre>::parseTripleObject(resultAsString);
 }
 SparqlFilter SparqlParser::parseRegexFilter(bool expectKeyword) {
   if (expectKeyword) {
@@ -963,19 +985,6 @@ GraphPatternOperation::BasicGraphPattern& SparqlParser::lastBasicPattern(
   }
   return c.back().get<GraphPatternOperation::BasicGraphPattern>();
 }
-
-// Helper function that converts the prefix map from `parsedQuery` (a vector of
-// pairs of prefix and IRI) to the prefix map we need for the
-// `SparqlQleverVisitor` (a hash map from prefixes to IRIs).
-namespace {
-SparqlQleverVisitor::PrefixMap getPrefixMap(const ParsedQuery& parsedQuery) {
-  SparqlQleverVisitor::PrefixMap prefixMap;
-  for (const auto& prefixDef : parsedQuery._prefixes) {
-    prefixMap[prefixDef._prefix] = prefixDef._uri;
-  }
-  return prefixMap;
-}
-}  // namespace
 
 // ________________________________________________________________________
 template <typename F>

@@ -442,7 +442,6 @@ class ParsedQuery {
 
   [[nodiscard]] string asString() const;
 
- private:
   static void expandPrefix(
       PropertyPath& item, const ad_utility::HashMap<string, string>& prefixMap);
   static void expandPrefix(
