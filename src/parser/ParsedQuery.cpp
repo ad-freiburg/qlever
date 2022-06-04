@@ -392,15 +392,12 @@ void ParsedQuery::expandPrefix(
       item = item.substr(secondPos + 1);
     }
 
-    size_t i = item.find(':');
+    size_t i = item.rfind(':');
     size_t from = item.find("^^");
     if (from == string::npos) {
       from = 0;
     } else {
       from += 2;
-    }
-    for (const auto& el : prefixMap) {
-      LOG(INFO) << el.first << " " << el.second << std::endl;
     }
     if (i != string::npos && i >= from &&
         prefixMap.contains(item.substr(from, i - from))) {
