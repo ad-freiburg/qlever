@@ -130,70 +130,8 @@ class ExpressionOrderKey {
 class VariableOrderKey {
  public:
   VariableOrderKey(string key, bool desc) : _key(std::move(key)), _desc(desc) {}
-  explicit VariableOrderKey(const string& textual) {
-    std::string lower = ad_utility::getLowercaseUtf8(textual);
-    size_t pos = 0;
-    _desc = lower.starts_with("desc(");
-    // skip the 'desc('
-    if (_desc) {
-      pos += 5;
-      // skip any whitespace after the opening bracket
-      while (pos < textual.size() &&
-             ::isspace(static_cast<unsigned char>(textual[pos]))) {
-        pos++;
-      }
-    }
-    // skip 'asc('
-    if (lower.starts_with("asc(")) {
-      pos += 4;
-      // skip any whitespace after the opening bracket
-      while (pos < textual.size() &&
-             ::isspace(static_cast<unsigned char>(textual[pos]))) {
-        pos++;
-      }
-    }
-    if (lower[pos] == '(') {
-      // key is an alias
-      size_t bracketDepth = 1;
-      size_t end = pos + 1;
-      while (bracketDepth > 0 && end < textual.size()) {
-        if (lower[end] == '(') {
-          bracketDepth++;
-        } else if (lower[end] == ')') {
-          bracketDepth--;
-        }
-        end++;
-      }
-      if (bracketDepth != 0) {
-        throw ParseException("Unbalanced brackets in alias order by key: " +
-                             textual);
-      }
-      _key = textual.substr(pos, end - pos);
-    } else if (lower[pos] == 's') {
-      // key is a text score
-      if (!lower.substr(pos).starts_with("score(")) {
-        throw ParseException("Expected keyword score in order by key: " +
-                             textual);
-      }
-      pos += 6;
-      size_t end = pos + 1;
-      // look for the first space or closing bracket character
-      while (end < textual.size() && textual[end] != ')' &&
-             !::isspace(static_cast<unsigned char>(textual[end]))) {
-        end++;
-      }
-      _key = "SCORE(" + textual.substr(pos, end - pos) + ")";
-    } else if (lower[pos] == '?') {
-      // key is simple variable
-      size_t end = pos + 1;
-      // look for the first space or closing bracket character
-      while (end < textual.size() && textual[end] != ')' &&
-             !::isspace(static_cast<unsigned char>(textual[end]))) {
-        end++;
-      }
-      _key = textual.substr(pos, end - pos);
-    }
-  }
+  explicit VariableOrderKey(string key)
+      : VariableOrderKey(std::move(key), false) {}
   string _key;
   bool _desc;
 };
