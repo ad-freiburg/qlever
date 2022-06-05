@@ -1111,9 +1111,6 @@ queries:
       PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
       SELECT ?s WHERE {
         ?s <Date_of_birth> "1970-05-28T17:55Z"^^xsd:dateTime
-        # Just to prove that the query is correct: the following two would work.
-        # ?s <Date_of_birth> ?date .
-        # FILTER (?date = "1970-05-28T17:55Z"^^xsd:dateTime)
       }
     checks:
       - num_cols: 1
