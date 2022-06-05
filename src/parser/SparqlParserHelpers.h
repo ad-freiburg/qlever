@@ -42,6 +42,9 @@ parseConstructTemplate(const std::string& input,
 
 ResultOfParseAndRemainingText<LimitOffsetClause> parseLimitOffsetClause(
     const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
+
+ResultOfParseAndRemainingText<vector<OrderKey>> parseOrderClause(
+    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H

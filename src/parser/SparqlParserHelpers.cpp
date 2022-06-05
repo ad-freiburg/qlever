@@ -90,4 +90,12 @@ ResultOfParseAndRemainingText<LimitOffsetClause> parseLimitOffsetClause(
   return p.parse<LimitOffsetClause>(input, "limit offset clause",
                                     &SparqlAutomaticParser::limitOffsetClauses);
 }
+// _____________________________________________________________________________
+
+ResultOfParseAndRemainingText<vector<OrderKey>> parseOrderClause(
+    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes) {
+  ParserAndVisitor p{input, std::move(prefixes)};
+  return p.parse<vector<OrderKey>>(input, "limit offset clause",
+                                   &SparqlAutomaticParser::orderClause);
+}
 }  // namespace sparqlParserHelpers

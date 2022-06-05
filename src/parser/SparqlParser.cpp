@@ -7,6 +7,7 @@
 #include <unordered_set>
 #include <variant>
 
+#include "../util/OverloadCallOperator.h"
 #include "./SparqlParserHelpers.h"
 #include "PropertyPathParser.h"
 #include "sparqlParser/SparqlQleverVisitor.h"
@@ -530,24 +531,32 @@ std::string_view SparqlParser::readTriplePart(const std::string& s,
 // _____________________________________________________________________________
 void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
   while (!_lexer.empty() && !_lexer.accept("}")) {
-    if (_lexer.accept(SparqlToken::Type::ORDER_BY)) {
-      bool reached_end = false;
-      while (!reached_end) {
-        if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-          query->_orderBy.emplace_back(VariableOrderKey(_lexer.current().raw));
-        } else if (_lexer.accept("asc")) {
-          query->_orderBy.emplace_back(parseOrderKey("ASC", query));
-        } else if (_lexer.accept("desc")) {
-          query->_orderBy.emplace_back(parseOrderKey("DESC", query));
-        } else {
-          reached_end = true;
-          if (query->_orderBy.empty()) {
-            // Need at least one statement after the order by
-            throw ParseException(
-                "Expected either a variable or ASC/DESC after "
-                "ORDER BY.");
-          }
-        }
+    if (_lexer.peek(SparqlToken::Type::ORDER_BY)) {
+      auto order_keys =
+          parseWithAntlr(sparqlParserHelpers::parseOrderClause, *query);
+
+      auto processVariableOrderKey = [&query](VariableOrderKey orderKey) {
+        query->_orderBy.push_back(std::move(orderKey));
+      };
+
+      auto processExpressionOrderKey = [&query,
+                                        this](ExpressionOrderKey orderKey) {
+        // Internal variable name to which the result of the helper bind is
+        // assigned.
+        std::string helperBindTargetVar = SOLUTION_MODIFIER_HELPER_BIND_PREFIX +
+                                          std::to_string(helperBindCounter);
+        helperBindCounter++;
+        GraphPatternOperation::Bind helperBind = GraphPatternOperation::Bind{
+            std::move(orderKey._expression), helperBindTargetVar};
+        query->registerVariableVisibleInQueryBody(helperBind._target);
+        query->_rootGraphPattern._children.emplace_back(std::move(helperBind));
+        query->_orderBy.emplace_back(helperBindTargetVar, orderKey._desc);
+      };
+
+      for (auto& orderKey : order_keys) {
+        std::visit(ad_utility::OverloadCallOperator{processVariableOrderKey,
+                                                    processExpressionOrderKey},
+                   std::move(orderKey));
       }
     } else if (_lexer.peek("limit") || _lexer.peek("textlimit") ||
                _lexer.peek("offset")) {
