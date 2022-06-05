@@ -536,11 +536,30 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
           parseWithAntlr(sparqlParserHelpers::parseOrderClause, *query);
 
       auto processVariableOrderKey = [&query](VariableOrderKey orderKey) {
+        // Check whether grouping is done and the variable being ordered by
+        // is neither grouped nor the result of an alias in the select
+        if (!query->_groupByVariables.empty() &&
+            ((std::find(query->_groupByVariables.begin(),
+                        query->_groupByVariables.end(),
+                        orderKey._key) == query->_groupByVariables.end()) &&
+             (std::find_if(query->selectClause()._aliases.begin(),
+                           query->selectClause()._aliases.end(),
+                           [&orderKey](const ParsedQuery::Alias& alias) {
+                             return alias._outVarName == orderKey._key;
+                           }) == query->selectClause()._aliases.end()))) {
+          throw ParseException(
+              "When grouping the order variable must be "
+              "grouped by!");
+        }
+
         query->_orderBy.push_back(std::move(orderKey));
       };
 
       auto processExpressionOrderKey = [&query,
                                         this](ExpressionOrderKey orderKey) {
+        if (!query->_groupByVariables.empty())
+          throw ParseException(
+              "Ordering by an expression while grouping is not supported!");
         // Internal variable name to which the result of the helper bind is
         // assigned.
         std::string helperBindTargetVar = SOLUTION_MODIFIER_HELPER_BIND_PREFIX +
