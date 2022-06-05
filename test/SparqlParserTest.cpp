@@ -922,7 +922,7 @@ TEST(ParserTest, testSolutionModifiers) {
   {
     auto pq = SparqlParser(
                   "SELECT DISTINCT ?x SCORE(?x) ?y WHERE \t {?x :myrel ?y}\n"
-                  "ORDER BY ASC(?y) DESC(SCORE(?x)) LIMIT 10 OFFSET 15")
+                  "ORDER BY ASC(?y) LIMIT 10 OFFSET 15")
                   .parse();
     pq.expandPrefixes();
     ASSERT_TRUE(pq.hasSelectClause());
@@ -936,11 +936,9 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, c._whereClauseTriples.size());
     ASSERT_EQ(10u, pq._limitOffset._limit);
     ASSERT_EQ(15u, pq._limitOffset._offset);
-    ASSERT_EQ(size_t(2), pq._orderBy.size());
+    ASSERT_EQ(size_t(1), pq._orderBy.size());
     ASSERT_EQ("?y", pq._orderBy[0]._key);
     ASSERT_FALSE(pq._orderBy[0]._desc);
-    ASSERT_EQ("SCORE(?x)", pq._orderBy[1]._key);
-    ASSERT_TRUE(pq._orderBy[1]._desc);
     ASSERT_TRUE(selectClause._distinct);
     ASSERT_FALSE(selectClause._reduced);
   }
