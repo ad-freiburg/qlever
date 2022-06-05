@@ -223,30 +223,30 @@ class QueryPlanner {
    * @brief Returns a parsed query for the property path.
    */
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromPropertyPath(
-      const std::string& left, const PropertyPath& path,
-      const std::string& right);
+      const TripleObject& left, const PropertyPath& path,
+      const TripleObject& right);
 
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromSequence(
-      const std::string& left, const PropertyPath& path,
-      const std::string& right);
+      const TripleObject& left, const PropertyPath& path,
+      const TripleObject& right);
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromAlternative(
-      const std::string& left, const PropertyPath& path,
-      const std::string& right);
+      const TripleObject& left, const PropertyPath& path,
+      const TripleObject& right);
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitive(
-      const std::string& left, const PropertyPath& path,
-      const std::string& right);
+      const TripleObject& left, const PropertyPath& path,
+      const TripleObject& right);
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitiveMin(
-      const std::string& left, const PropertyPath& path,
-      const std::string& right);
+      const TripleObject& left, const PropertyPath& path,
+      const TripleObject& right);
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitiveMax(
-      const std::string& left, const PropertyPath& path,
-      const std::string& right);
+      const TripleObject& left, const PropertyPath& path,
+      const TripleObject& right);
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromInverse(
-      const std::string& left, const PropertyPath& path,
-      const std::string& right);
+      const TripleObject& left, const PropertyPath& path,
+      const TripleObject& right);
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromIri(
-      const std::string& left, const PropertyPath& path,
-      const std::string& right);
+      const TripleObject& left, const PropertyPath& path,
+      const TripleObject& right);
 
   std::string generateUniqueVarName();
 

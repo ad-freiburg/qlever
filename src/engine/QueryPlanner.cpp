@@ -1537,7 +1537,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedFromPropertyPathTriple(
              std::move(buf).str());
   }
   std::shared_ptr<ParsedQuery::GraphPattern> pattern =
-      seedFromPropertyPath(triple._s, triple._p, triple._o.getString());
+      seedFromPropertyPath(triple._s, triple._p, triple._o);
 #if LOGLEVEL >= TRACE
   std::ostringstream out;
   pattern->toString(out, 0);
@@ -1549,8 +1549,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedFromPropertyPathTriple(
 }
 
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(
-    const std::string& left, const PropertyPath& path,
-    const std::string& right) {
+    const TripleObject& left, const PropertyPath& path,
+    const TripleObject& right) {
   switch (path._operation) {
     case PropertyPath::Operation::ALTERNATIVE:
       return seedFromAlternative(left, path, right);
@@ -1575,8 +1575,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(
 
 // _____________________________________________________________________________
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
-    const std::string& left, const PropertyPath& path,
-    const std::string& right) {
+    const TripleObject& left, const PropertyPath& path,
+    const TripleObject& right) {
   if (path._children.empty()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Tried processing a sequence property path node without any "
@@ -1626,8 +1626,10 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
 
   // Generate unique variable names that connect the nunNullChunks
   std::vector<std::string> connectionVarNames(nonNullChunks.size() + 1);
-  connectionVarNames[0] = left;
-  connectionVarNames.back() = right;
+  // TODO<joka921, kramerfl> Does it always hold that `left` and `right` are
+  // variables at this point?
+  connectionVarNames[0] = left.toString();
+  connectionVarNames.back() = right.toString();
   for (size_t i = 1; i + 1 < connectionVarNames.size(); i++) {
     connectionVarNames[i] = generateUniqueVarName();
   }
@@ -1682,8 +1684,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
       if (included_ids.empty()) {
         continue;
       }
-      std::string l = left;
-      std::string r;
+      TripleObject l = left;
+      TripleObject r;
       if (included_ids.size() > 1) {
         r = generateUniqueVarName();
       } else {
@@ -1736,8 +1738,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
 
 // _____________________________________________________________________________
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
-    const std::string& left, const PropertyPath& path,
-    const std::string& right) {
+    const TripleObject& left, const PropertyPath& path,
+    const TripleObject& right) {
   if (path._children.empty()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Tried processing an alternative property path node without any "
@@ -1767,8 +1769,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
 
 // _____________________________________________________________________________
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
-    const std::string& left, const PropertyPath& path,
-    const std::string& right) {
+    const TripleObject& left, const PropertyPath& path,
+    const TripleObject& right) {
   std::string innerLeft = generateUniqueVarName();
   std::string innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
@@ -1789,8 +1791,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
 
 // _____________________________________________________________________________
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
-    const std::string& left, const PropertyPath& path,
-    const std::string& right) {
+    const TripleObject& left, const PropertyPath& path,
+    const TripleObject& right) {
   std::string innerLeft = generateUniqueVarName();
   std::string innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
@@ -1811,8 +1813,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
 
 // _____________________________________________________________________________
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMax(
-    const std::string& left, const PropertyPath& path,
-    const std::string& right) {
+    const TripleObject& left, const PropertyPath& path,
+    const TripleObject& right) {
   std::string innerLeft = generateUniqueVarName();
   std::string innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
@@ -1833,15 +1835,15 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMax(
 
 // _____________________________________________________________________________
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromInverse(
-    const std::string& left, const PropertyPath& path,
-    const std::string& right) {
+    const TripleObject& left, const PropertyPath& path,
+    const TripleObject& right) {
   return seedFromPropertyPath(right, path._children[0], left);
 }
 
 // _____________________________________________________________________________
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromIri(
-    const std::string& left, const PropertyPath& path,
-    const std::string& right) {
+    const TripleObject& left, const PropertyPath& path,
+    const TripleObject& right) {
   std::shared_ptr<ParsedQuery::GraphPattern> p =
       std::make_shared<ParsedQuery::GraphPattern>();
   GraphPatternOperation::BasicGraphPattern basic;

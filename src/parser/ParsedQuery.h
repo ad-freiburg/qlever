@@ -99,10 +99,10 @@ std::ostream& operator<<(std::ostream& out, const PropertyPath& p);
 // Data container for parsed triples from the where clause
 class SparqlTriple {
  public:
-  SparqlTriple(string s, PropertyPath p, TripleObject o)
+  SparqlTriple(TripleObject s, PropertyPath p, TripleObject o)
       : _s(std::move(s)), _p(std::move(p)), _o(std::move(o)) {}
 
-  SparqlTriple(string s, const std::string& p_iri, TripleObject o)
+  SparqlTriple(TripleObject s, const std::string& p_iri, TripleObject o)
       : _s(std::move(s)),
         _p(PropertyPath::Operation::IRI, 0, p_iri, {}),
         _o(std::move(o)) {}
@@ -110,7 +110,7 @@ class SparqlTriple {
   bool operator==(const SparqlTriple& other) const {
     return _s == other._s && _p == other._p && _o == other._o;
   }
-  string _s;
+  TripleObject _s;
   PropertyPath _p;
   TripleObject _o;
 
@@ -477,8 +477,8 @@ struct GraphPatternOperation {
 
   struct TransPath {
     // The name of the left and right end of the transitive operation
-    std::string _left;
-    std::string _right;
+    TripleObject _left;
+    TripleObject _right;
     // The name of the left and right end of the subpath
     std::string _innerLeft;
     std::string _innerRight;
