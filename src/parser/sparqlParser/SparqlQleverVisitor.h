@@ -250,16 +250,9 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitOrderClause(
       SparqlAutomaticParser::OrderClauseContext* ctx) override {
     vector<OrderKey> _orderBy;
-    vector<SparqlAutomaticParser::OrderConditionContext*> orderConditions =
-        ctx->orderCondition();
-    vector<SparqlAutomaticParser::OrderConditionContext*>::iterator
-        orderCondition;
-
-    for (orderCondition = orderConditions.begin();
-         orderCondition != orderConditions.end(); orderCondition++) {
-      _orderBy.push_back((*orderCondition)->accept(this).as<OrderKey>());
+    for (auto* orderCondition : ctx->orderCondition()) {
+      _orderBy.push_back(visitOrderCondition(orderCondition).as<OrderKey>());
     }
-
     return _orderBy;
   }
 
@@ -276,7 +269,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
         string var = expr.getVariableOrNullopt().value();
         return OrderKey{VariableOrderKey(var, desc)};
       } else {
-        return OrderKey{ExpressionOrderKey{expr, desc}};
+        return OrderKey{ExpressionOrderKey{std::move(expr), desc}};
       }
     } else if (ctx->brackettedExpression()) {
       auto expr = sparqlExpression::SparqlExpressionPimpl{
@@ -288,10 +281,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
         string var = expr.getVariableOrNullopt().value();
         return OrderKey{VariableOrderKey(var, desc)};
       } else {
-        return OrderKey{ExpressionOrderKey{expr, desc}};
+        return OrderKey{ExpressionOrderKey{std::move(expr), desc}};
       }
     }
-    AD_CHECK(false);  // Should be unreachable.
+    AD_FAIL();  // Should be unreachable.
   }
 
   antlrcpp::Any visitLimitOffsetClauses(
