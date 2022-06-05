@@ -72,7 +72,8 @@ string IndexScan::asStringImpl(size_t indent) const {
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
-  return "IndexScan " + _subject + " " + _predicate + " " + _object.toString();
+  return "IndexScan " + _subject.toString() + " " + _predicate + " " +
+         _object.toString();
 }
 
 // _____________________________________________________________________________
@@ -134,8 +135,8 @@ ad_utility::HashMap<string, size_t> IndexScan::getVariableColumns() const {
 
   // Helper lambdas that add the respective triple component as the next column.
   auto addSubject = [&]() {
-    if (_subject[0] == '?') {
-      res[_subject] = col++;
+    if (_subject.isVariable()) {
+      res[_subject.getString()] = col++;
     }
   };
   auto addPredicate = [&]() {
@@ -300,6 +301,8 @@ size_t IndexScan::computeSizeEstimate() {
         return getResult()->size();
       }
     }
+    // TODO<joka921> Should be a oneliner
+    // getIndex().cardinality(getPermutation(), getFirstKey());
     if (_type == SPO_FREE_P || _type == SOP_FREE_O) {
       return getIndex().subjectCardinality(_subject);
     } else if (_type == POS_FREE_O || _type == PSO_FREE_S) {
@@ -312,9 +315,12 @@ size_t IndexScan::computeSizeEstimate() {
   } else {
     // Only for test cases. The handling of the objects is to make the
     // strange query planner tests pass.
+    // TODO<joka921> Code duplication.
     std::string objectStr =
         _object.isString() ? _object.getString() : _object.toString();
-    return 1000 + _subject.size() + _predicate.size() + objectStr.size();
+    std::string subjectStr =
+        _subject.isString() ? _subject.getString() : _subject.toString();
+    return 1000 + subjectStr.size() + _predicate.size() + objectStr.size();
   }
 }
 

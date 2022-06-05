@@ -1129,3 +1129,16 @@ queries:
       - num_cols: 1
       - selected: ["?s"]
       - contains_row: ["<Justin_Boyan>"]
+  - query : xsd-value-in-property-path
+    type: no-text
+    sparql: |
+      PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+      SELECT ?x WHERE {
+        ?x ^<is-a>/<Structure_Count> "1"^^xsd:int
+      }
+    checks:
+      - num_cols: 1
+      - num_rows: 31
+      - selected: ["?x"]
+      - contains_row: ["<Architect>"]
+      - contains_row: ["<Visual_Artist>"]

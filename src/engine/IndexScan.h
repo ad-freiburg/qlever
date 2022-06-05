@@ -43,7 +43,7 @@ class IndexScan : public Operation {
 
   virtual ~IndexScan() {}
 
-  void setSubject(const string& subject) { _subject = subject; }
+  void setSubject(const TripleObject& subject) { _subject = subject; }
 
   void setPredicate(const string& predicate) { _predicate = predicate; }
   const string& getPredicate() const { return _predicate; }
@@ -103,7 +103,7 @@ class IndexScan : public Operation {
 
  protected:
   ScanType _type;
-  string _subject;
+  TripleObject _subject;
   string _predicate;
   TripleObject _object;
   size_t _sizeEstimate;

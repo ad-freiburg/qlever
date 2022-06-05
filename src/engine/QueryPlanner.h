@@ -31,7 +31,7 @@ class QueryPlanner {
       Node(size_t id, const SparqlTriple& t)
           : _id(id), _triple(t), _variables(), _cvar(), _wordPart() {
         if (isVariable(t._s)) {
-          _variables.insert(t._s);
+          _variables.insert(t._s.getString());
         }
         if (isVariable(t._p)) {
           _variables.insert(t._p._iri);
@@ -54,7 +54,7 @@ class QueryPlanner {
         _variables.insert(cvar);
         for (const auto& t : trips) {
           if (isVariable(t._s)) {
-            _variables.insert(t._s);
+            _variables.insert(t._s.getString());
           }
           if (isVariable(t._p)) {
             _variables.insert(t._p._iri);

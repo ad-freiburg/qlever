@@ -752,12 +752,14 @@ size_t Index::relationCardinality(const string& relationName) const {
   return 0;
 }
 
+// TODO<joka921> There is a lot of duplication in the three cardinality
+// functions, remove it.
 // _____________________________________________________________________________
-size_t Index::subjectCardinality(const string& sub) const {
-  Id relId;
-  if (getId(sub, &relId)) {
-    if (this->_SPO.metaData().col0IdExists(relId)) {
-      return this->_SPO.metaData().getMetaData(relId).getNofElements();
+size_t Index::subjectCardinality(const TripleObject& sub) const {
+  std::optional<Id> relId = sub.toValueId(getVocab());
+  if (relId.has_value()) {
+    if (this->_SPO.metaData().col0IdExists(relId.value())) {
+      return this->_SPO.metaData().getMetaData(relId.value()).getNofElements();
     }
   }
   return 0;

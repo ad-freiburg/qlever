@@ -188,7 +188,7 @@ class Index {
   // --------------------------------------------------------------------------
   size_t relationCardinality(const string& relationName) const;
 
-  size_t subjectCardinality(const string& sub) const;
+  size_t subjectCardinality(const TripleObject& sub) const;
 
   size_t objectCardinality(const TripleObject& obj) const;
 

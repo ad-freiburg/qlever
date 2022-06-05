@@ -326,7 +326,9 @@ void ParsedQuery::expandPrefixes() {
           static_assert(
               std::is_same_v<T, GraphPatternOperation::BasicGraphPattern>);
           for (auto& trip : arg._whereClauseTriples) {
-            expandPrefix(trip._s, prefixMap);
+            if (trip._s.isString()) {
+              expandPrefix(trip._s.getString(), prefixMap);
+            }
             expandPrefix(trip._p, prefixMap);
             if (trip._p._operation == PropertyPath::Operation::IRI &&
                 trip._p._iri.find("in-context") != string::npos) {

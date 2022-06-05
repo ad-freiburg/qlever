@@ -987,7 +987,7 @@ TEST(ParserTest, testSolutionModifiers) {
                   "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>"
                   "SELECT DISTINCT ?movie WHERE { \n"
                   "\n"
-                  "?movie <from-year> \"00-00-2000\"^^xsd:date .\n"
+                  "?movie <from-year> \"2000-00-00\"^^xsd:date .\n"
                   "\n"
                   "?movie <directed-by> <Scott%2C%20Ridley> .   }  LIMIT 50")
                   .parse();
@@ -1002,7 +1002,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(2u, c._whereClauseTriples.size());
     ASSERT_EQ("?movie", c._whereClauseTriples[0]._s);
     ASSERT_EQ("<from-year>", c._whereClauseTriples[0]._p._iri);
-    ASSERT_EQ("\"00-00-2000\"^^<http://www.w3.org/2001/XMLSchema#date>",
+    ASSERT_EQ(":v:date:0000000000000002000-00-00T00:00:00",
               c._whereClauseTriples[0]._o);
     ASSERT_EQ("?movie", c._whereClauseTriples[1]._s);
     ASSERT_EQ("<directed-by>", c._whereClauseTriples[1]._p._iri);

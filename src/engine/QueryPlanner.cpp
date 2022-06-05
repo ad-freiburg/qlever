@@ -171,7 +171,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       // we only consist of triples, store them and all the bound variables.
       for (const SparqlTriple& t : v._whereClauseTriples) {
         if (isVariable(t._s)) {
-          boundVariables.insert(t._s);
+          boundVariables.insert(t._s.getString());
         }
         if (isVariable(t._p)) {
           boundVariables.insert(t._p._iri);
@@ -345,27 +345,34 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           if (isVariable(arg._left)) {
             leftVar = true;
             leftCol = sub._qet->getVariableColumn(arg._innerLeft);
-            leftColName = arg._left;
+            leftColName = arg._left.getString();
           } else {
             leftVar = false;
             leftColName = generateUniqueVarName();
             leftCol = sub._qet->getVariableColumn(arg._innerLeft);
-            if (!_qec->getIndex().getId(arg._left, &leftValue)) {
+            if (auto opt = arg._left.toValueId(_qec->getIndex().getVocab());
+                opt.has_value()) {
+              leftValue = opt.value();
+            } else {
               AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-                       "No vocabulary entry for " + arg._left);
+                       "No vocabulary entry for " + arg._left.toString());
             }
           }
+          // TODO<joka921> This is really much code duplication, get rid of it!
           if (isVariable(arg._right)) {
             rightVar = true;
             rightCol = sub._qet->getVariableColumn(arg._innerRight);
-            rightColName = arg._right;
+            rightColName = arg._right.getString();
           } else {
             rightVar = false;
             rightCol = sub._qet->getVariableColumn(arg._innerRight);
             rightColName = generateUniqueVarName();
-            if (!_qec->getIndex().getId(arg._right, &rightValue)) {
+            if (auto opt = arg._right.toValueId(_qec->getIndex().getVocab());
+                opt.has_value()) {
+              rightValue = opt.value();
+            } else {
               AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-                       "No vocabulary entry for " + arg._right);
+                       "No vocabulary entry for " + arg._right.toString());
             }
           }
           min = arg._min;
@@ -930,14 +937,15 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     for (const auto& parent : *previous) {
       // Determine the column containing the subjects for which we are
       // interested in their predicates.
-      auto it = parent._qet->getVariableColumns().find(patternTrickTriple._s);
+      auto it = parent._qet->getVariableColumns().find(
+          patternTrickTriple._s.getString());
       if (it == parent._qet->getVariableColumns().end()) {
         AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                  "The root operation of the "
                  "query excecution tree does "
                  "not contain a column for "
                  "variable " +
-                     patternTrickTriple._s +
+                     patternTrickTriple._s.toString() +
                      " required by the pattern "
                      "trick.");
       }
@@ -969,7 +977,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
                         countPred);
       added.push_back(patternTrickPlan);
     }
-  } else if (patternTrickTriple._s[0] != '?') {
+  } else if (!patternTrickTriple._s.isVariable()) {
     // The subject of the pattern trick is not a variable
     SubtreePlan patternTrickPlan(_qec);
     auto countPred =
@@ -1272,11 +1280,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             scan->precomputeSizeEstimate();
             scanTree->setOperation(QueryExecutionTree::OperationType::SCAN,
                                    scan);
-            scanTree->setVariableColumn(node._triple._s, 0);
+            scanTree->setVariableColumn(node._triple._s.getString(), 0);
             scanTree->setVariableColumn(filterVar, 1);
             auto filter = std::make_shared<Filter>(
-                _qec, scanTree, SparqlFilter::FilterType::EQ, node._triple._s,
-                filterVar, vector<string>{}, vector<string>{});
+                _qec, scanTree, SparqlFilter::FilterType::EQ,
+                node._triple._s.getString(), filterVar, vector<string>{},
+                vector<string>{});
             tree.setOperation(QueryExecutionTree::OperationType::FILTER,
                               filter);
             tree.setVariableColumns(filter->getVariableColumns());
@@ -1287,7 +1296,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             scan->setPredicate(node._triple._p._iri);
             scan->setObject(node._triple._o);
             tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-            tree.setVariableColumn(node._triple._s, 0);
+            tree.setVariableColumn(node._triple._s.getString(), 0);
           } else if (isVariable(node._triple._o)) {
             auto scan = std::make_shared<IndexScan>(
                 _qec, IndexScan::ScanType::PSO_BOUND_S);
@@ -1334,7 +1343,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               scan->setObject(node._triple._o);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-              tree.setVariableColumn(node._triple._s, 0);
+              tree.setVariableColumn(node._triple._s.getString(), 0);
               tree.setVariableColumn(node._triple._o.getString(), 1);
               seeds.push_back(plan);
             }
@@ -1350,7 +1359,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
               tree.setVariableColumn(node._triple._o.getString(), 0);
-              tree.setVariableColumn(node._triple._s, 1);
+              tree.setVariableColumn(node._triple._s.getString(), 1);
               seeds.push_back(plan);
             }
           } else if (!isVariable(node._triple._s)) {
@@ -1396,7 +1405,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               scan->setObject(node._triple._o);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-              tree.setVariableColumn(node._triple._s, 0);
+              tree.setVariableColumn(node._triple._s.getString(), 0);
               tree.setVariableColumn(node._triple._p._iri, 1);
               seeds.push_back(plan);
             }
@@ -2366,7 +2375,7 @@ QueryPlanner::TripleGraph::identifyTextCliques() const {
     if (isTextNode(i)) {
       auto& triple = _nodeMap.find(i)->second->_triple;
       auto& cvar = triple._s;
-      contextVarToTextNodesIds[cvar].push_back(i);
+      contextVarToTextNodesIds[cvar.getString()].push_back(i);
     }
   }
   return contextVarToTextNodesIds;
@@ -2595,11 +2604,13 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
         }
         wordPart += triple._o.getString();
       }
+      // TODO<joka921> Figure out what is going on here... The subject and the
+      // object of a triple are being combined into a string as it seems.
       if (triple._o == cvar && !isVariable(triple._s)) {
         if (!wordPart.empty()) {
           wordPart += " ";
         }
-        wordPart += triple._s;
+        wordPart += triple._s.toString();
       }
     }
     textNodes.emplace_back(Node(id++, cvar, wordPart, trips));
