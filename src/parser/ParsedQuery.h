@@ -501,9 +501,7 @@ struct GraphPatternOperation {
     ParsedQuery::GraphPattern _childGraphPattern;
   };
 
-  // A SPARQL Bind construct.  Currently supports either an unsigned integer or
-  // a knowledge base constant. For simplicity, we store both values instead of
-  // using a union or std::variant here.
+  // A SPARQL Bind construct.
   struct Bind {
     sparqlExpression::SparqlExpressionPimpl _expression;
     std::string _target;  // the variable to which the expression will be bound
