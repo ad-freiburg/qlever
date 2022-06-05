@@ -540,7 +540,7 @@ void Filter::computeResultFixedValue(
         // TODO<joka921> give the `TripleObject` a visit function such that this
         // becomes a compile time check.
         AD_CHECK(rhsObject.isString());
-        // We still need this conversion for dates
+        // TODO: remove this once the dates become value IDs, too.
         if (ad_utility::isXsdValue(rhs_string)) {
           rhs_string = ad_utility::convertValueLiteralToIndexWord(rhs_string);
         }

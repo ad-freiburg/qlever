@@ -7,6 +7,7 @@
 
 #include <cstring>
 
+#include "../util/Conversions.h"
 #include "../util/TaskQueue.h"
 #include "./RdfEscaping.h"
 
@@ -355,6 +356,11 @@ bool TurtleParser<T>::rdfLiteral() {
       parseDoubleConstant(strippedLiteral);
     } else {
       _lastParseResult = literalString + "^^" + _lastParseResult.getString();
+      // TODO: remove this once the dates become value IDs, too.
+      if (type == XSD_DATETIME_TYPE) {
+        _lastParseResult = ad_utility::convertValueLiteralToIndexWord(
+            _lastParseResult.getString());
+      }
     }
     return true;
   } else {

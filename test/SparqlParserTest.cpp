@@ -1136,9 +1136,7 @@ TEST(ParserTest, testParseLiteral) {
 
   inp = "\"1950-01-01T00:00:00\"^^xsd:dateTime";
   ret = SparqlParser::parseLiteral(pqDummy, inp, true).getString();
-  ASSERT_EQ(
-      "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>",
-      ret);
+  ASSERT_EQ(":v:date:0000000000000001950-01-01T00:00:00", ret);
 
   // This is not a literal.
   inp = R"(?a ?b "The \"Moon\""@en .)";
