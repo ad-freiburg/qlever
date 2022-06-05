@@ -1116,3 +1116,16 @@ queries:
       - num_cols: 1
       - selected: ["?s"]
       - contains_row: ["<Justin_Boyan>"]
+        -
+  - query : datetime_filter-find-justin-boyan
+    type: no-text
+    sparql: |
+      PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+      SELECT ?s WHERE {
+        ?s <Date_of_birth> ?d .
+        FILTER (?d = "1970-05-28T17:55Z"^^xsd:dateTime)
+      }
+    checks:
+      - num_cols: 1
+      - selected: ["?s"]
+      - contains_row: ["<Justin_Boyan>"]

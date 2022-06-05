@@ -349,6 +349,8 @@ bool TurtleParser<T>::rdfLiteral() {
     const auto& typeIri = _lastParseResult.getString();
     auto type = stripAngleBrackets(typeIri);
     std::string strippedLiteral{stripDoubleQuotes(literalString)};
+    // TODO<joka921> Add other integer types (short etc.) here, or check at
+    // least, which are required by the standard for support.
     if (type == XSD_INT_TYPE || type == XSD_INTEGER_TYPE) {
       parseIntegerConstant(strippedLiteral);
     } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
@@ -357,7 +359,8 @@ bool TurtleParser<T>::rdfLiteral() {
     } else {
       _lastParseResult = literalString + "^^" + _lastParseResult.getString();
       // TODO: remove this once the dates become value IDs, too.
-      if (type == XSD_DATETIME_TYPE) {
+      if (type == XSD_DATETIME_TYPE || type == XSD_DATE_TYPE ||
+          type == XSD_GYEAR_TYPE || type == XSD_GYEARMONTH_TYPE) {
         _lastParseResult = ad_utility::convertValueLiteralToIndexWord(
             _lastParseResult.getString());
       }

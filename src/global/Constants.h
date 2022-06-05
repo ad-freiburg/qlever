@@ -52,6 +52,11 @@ static const char VALUE_DATE_PREFIX[] = ":v:date:";
 static const char VALUE_FLOAT_PREFIX[] = ":v:float:";
 static const char XSD_DATETIME_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#dateTime";
+static const char XSD_DATE_TYPE[] = "http://www.w3.org/2001/XMLSchema#date";
+static const char XSD_GYEAR_TYPE[] = "http://www.w3.org/2001/XMLSchema#gYear";
+static const char XSD_GYEARMONTH_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#gYearMonth";
+
 static const char XSD_INT_TYPE[] = "http://www.w3.org/2001/XMLSchema#int";
 static const char XSD_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#integer";

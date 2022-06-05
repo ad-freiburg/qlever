@@ -924,46 +924,25 @@ LangtagAndTriple Index::tripleToInternalRepresentation(TurtleTriple&& triple) {
 
   // If the object of the triple can be directly folded into an ID, do so. Note
   // that the actual folding is done by the `TripleObject`.
-  bool objectIsString = false;
   std::optional<Id> idIfNotString = triple._object.toValueIdIfNotString();
+
+  // TODO<joka921> The following statement could be simplified by a helper
+  // function "optionalCast";
   if (idIfNotString.has_value()) {
     resultTriple[2] = idIfNotString.value();
   } else {
     resultTriple[2] = triple._object.getString();
-    objectIsString = true;
   }
 
   for (auto& el : resultTriple) {
     if (!std::holds_alternative<TripleComponent>(el)) {
+      // If we already have an ID, we can just continue;
       continue;
     }
+    auto& component = std::get<TripleComponent>(el);
     auto& iriOrLiteral = std::get<TripleComponent>(el)._iriOrLiteral;
     iriOrLiteral = _vocab.getLocaleManager().normalizeUtf8(iriOrLiteral);
-  }
-  size_t upperBound = 3;
-  if (objectIsString) {
-    auto& object = std::get<TripleComponent>(resultTriple[2])._iriOrLiteral;
-    // TODO<joka921> Also fold the dates into the Ids and then throw this code
-    // and the `convertBlaToIndexWord` functions out.
-    if (ad_utility::isXsdValue(object)) {
-      object = ad_utility::convertValueLiteralToIndexWord(object);
-      upperBound = 2;
-    } else if (ad_utility::isNumeric(object)) {
-      object = ad_utility::convertNumericToIndexWord(object);
-      upperBound = 2;
-    } else if (isLiteral(object)) {
-      result._langtag = decltype(_vocab)::getLanguage(object);
-    }
-  }
-
-  for (size_t k = 0; k < upperBound; ++k) {
-    // If we already have an ID, we can just continue;
-    if (!std::holds_alternative<TripleComponent>(resultTriple[k])) {
-      continue;
-    }
-    auto& component = std::get<TripleComponent>(resultTriple[k]);
-    if (_onDiskLiterals &&
-        _vocab.shouldBeExternalized(component._iriOrLiteral)) {
+    if (_onDiskLiterals && _vocab.shouldBeExternalized(iriOrLiteral)) {
       component._isExternal = true;
     }
   }

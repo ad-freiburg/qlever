@@ -540,10 +540,7 @@ void Filter::computeResultFixedValue(
         // TODO<joka921> give the `TripleObject` a visit function such that this
         // becomes a compile time check.
         AD_CHECK(rhsObject.isString());
-        // TODO: remove this once the dates become value IDs, too.
-        if (ad_utility::isXsdValue(rhs_string)) {
-          rhs_string = ad_utility::convertValueLiteralToIndexWord(rhs_string);
-        }
+        rhs_string = rhsObject.getString();
         // TODO: This is not standard conform, but currently required due to
         // our vocabulary storing iris with the greater than and
         // literals with their quotation marks.
