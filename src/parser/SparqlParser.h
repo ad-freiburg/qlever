@@ -46,9 +46,6 @@ class SparqlParser {
   void addLangFilter(const std::string& lhs, const std::string& rhs,
                      ParsedQuery::GraphPattern* pattern);
 
-  // takes either DESC or ASC as the parameter
-  VariableOrderKey parseOrderKey(const std::string& order, ParsedQuery* query);
-
   // Reads the next element of a triple (an iri, a variable, a property path,
   // etc.) out of s beginning at the current value of pos. Sets pos to the
   // position after the read value, and returns a string view of the triple part

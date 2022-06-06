@@ -116,7 +116,8 @@ class SparqlTriple {
 /// Store an expression that appeared in an ORDER BY clause.
 class ExpressionOrderKey {
  public:
-  explicit ExpressionOrderKey(auto expression, bool desc = false)
+  explicit ExpressionOrderKey(
+      sparqlExpression::SparqlExpressionPimpl expression, bool desc = false)
       : isDescending_{desc}, expression_{std::move(expression)} {}
   bool isDescending_;
   sparqlExpression::SparqlExpressionPimpl expression_;

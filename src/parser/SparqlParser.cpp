@@ -7,6 +7,7 @@
 #include <unordered_set>
 #include <variant>
 
+#include "../util/Algorithm.h"
 #include "../util/OverloadCallOperator.h"
 #include "./SparqlParserHelpers.h"
 #include "PropertyPathParser.h"
@@ -216,50 +217,6 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
   if (selectClause._varsOrAsterisk.isManuallySelectedVariables()) {
     selectClause._varsOrAsterisk.setManuallySelected(manuallySelectedVariables);
   }
-}
-
-// _____________________________________________________________________________
-VariableOrderKey SparqlParser::parseOrderKey(const std::string& order,
-                                             ParsedQuery* query) {
-  _lexer.expect("(");
-  std::ostringstream s;
-  s << order << "(";
-  if (_lexer.accept("score")) {
-    _lexer.expect("(");
-    s << "SCORE(";
-    _lexer.expect(SparqlToken::Type::VARIABLE);
-    s << _lexer.current().raw;
-    _lexer.expect(")");
-    s << ")";
-  } else if (query->hasSelectClause() &&
-             query->selectClause()
-                 ._varsOrAsterisk.isManuallySelectedVariables() &&
-             _lexer.accept("(")) {
-    // TODO This assumes that aliases can stand in the ORDER BY
-    // This is not true, only expression may stand there
-    ParsedQuery::Alias a =
-        parseWithAntlr(sparqlParserHelpers::parseAlias, *query);
-    auto& selectClause = query->selectClause();
-
-    for (const auto& selectedVariable :
-         selectClause._varsOrAsterisk.getSelectedVariables()) {
-      if (selectedVariable == a._outVarName) {
-        throw ParseException("A variable with name " + selectedVariable +
-                             " is already used, but the ORDER BY with alias " +
-                             a._expression.getDescriptor() +
-                             " tries to use it again.");
-      }
-    }
-    _lexer.expect(")");
-    s << a._outVarName;
-    selectClause._aliases.emplace_back(a);
-  } else {
-    _lexer.expect(SparqlToken::Type::VARIABLE);
-    s << _lexer.current().raw;
-  }
-  _lexer.expect(")");
-  s << ")";
-  return VariableOrderKey(std::move(s).str());
 }
 
 // _____________________________________________________________________________
@@ -538,15 +495,14 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
       auto processVariableOrderKey = [&query](VariableOrderKey orderKey) {
         // Check whether grouping is done and the variable being ordered by
         // is neither grouped nor the result of an alias in the select
-        if (!query->_groupByVariables.empty() &&
-            ((std::find(query->_groupByVariables.begin(),
-                        query->_groupByVariables.end(), orderKey.variable_) ==
-              query->_groupByVariables.end()) &&
-             (std::find_if(query->selectClause()._aliases.begin(),
-                           query->selectClause()._aliases.end(),
-                           [&orderKey](const ParsedQuery::Alias& alias) {
-                             return alias._outVarName == orderKey.variable_;
-                           }) == query->selectClause()._aliases.end()))) {
+        const vector<std::string>& groupByVariables = query->_groupByVariables;
+        if (!groupByVariables.empty() &&
+            ((!ad_utility::contains(groupByVariables, orderKey.variable_)) &&
+             (!ad_utility::contains_if(
+                 query->selectClause()._aliases,
+                 [&orderKey](const ParsedQuery::Alias& alias) {
+                   return alias._outVarName == orderKey.variable_;
+                 })))) {
           throw ParseException(
               "Variable " + orderKey.variable_ +
               " was used in an ORDER BY "
