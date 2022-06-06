@@ -57,15 +57,15 @@ std::ostream& operator<<(std::ostream& out,
 // _____________________________________________________________________________
 
 std::ostream& operator<<(std::ostream& out, const VariableOrderKey& orderkey) {
-  out << "Order " << (orderkey._desc ? "DESC" : "ASC") << " by "
-      << orderkey._key;
+  out << "Order " << (orderkey.isDescending_ ? "DESC" : "ASC") << " by "
+      << orderkey.variable_;
   return out;
 }
 
 std::ostream& operator<<(std::ostream& out,
                          const ExpressionOrderKey& expressionOrderKey) {
-  out << "Order " << (expressionOrderKey._desc ? "DESC" : "ASC") << " by "
-      << expressionOrderKey._expression.getDescriptor();
+  out << "Order " << (expressionOrderKey.isDescending_ ? "DESC" : "ASC")
+      << " by " << expressionOrderKey.expression_.getDescriptor();
   return out;
 }
 
@@ -155,7 +155,8 @@ MATCHER_P3(IsLimitOffset, limit, textLimit, offset, "") {
 MATCHER_P2(IsVariableOrderKey, key, desc, "") {
   if (const auto variableOrderKey =
           unwrapVariant<OrderKey, VariableOrderKey>(arg)) {
-    return (variableOrderKey->_key == key) && (variableOrderKey->_desc == desc);
+    return (variableOrderKey->variable_ == key) &&
+           (variableOrderKey->isDescending_ == desc);
   }
   return false;
 }
@@ -163,8 +164,8 @@ MATCHER_P2(IsVariableOrderKey, key, desc, "") {
 MATCHER_P2(IsExpressionOrderKey, expr, desc, "") {
   if (const auto bindOrderKey =
           unwrapVariant<OrderKey, ExpressionOrderKey>(arg)) {
-    return (bindOrderKey->_expression.getDescriptor() == expr) &&
-           (bindOrderKey->_desc == desc);
+    return (bindOrderKey->expression_.getDescriptor() == expr) &&
+           (bindOrderKey->isDescending_ == desc);
   }
   return false;
 }

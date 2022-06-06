@@ -1083,8 +1083,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     auto& tree = *plan._qet;
     plan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
     plan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
-    if (pq._orderBy.size() == 1 && !pq._orderBy[0]._desc) {
-      size_t col = parent._qet->getVariableColumn(pq._orderBy[0]._key);
+    if (pq._orderBy.size() == 1 && !pq._orderBy[0].isDescending_) {
+      size_t col = parent._qet->getVariableColumn(pq._orderBy[0].variable_);
       const std::vector<size_t>& previousSortedOn =
           parent._qet->resultSortedOn();
       if (!previousSortedOn.empty() && col == previousSortedOn[0]) {
@@ -1100,8 +1100,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     } else {
       vector<pair<size_t, bool>> sortIndices;
       for (auto& ord : pq._orderBy) {
-        sortIndices.emplace_back(parent._qet->getVariableColumn(ord._key),
-                                 ord._desc);
+        sortIndices.emplace_back(parent._qet->getVariableColumn(ord.variable_),
+                                 ord.isDescending_);
       }
       const std::vector<size_t>& previousSortedOn =
           parent._qet->resultSortedOn();

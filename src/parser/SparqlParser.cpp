@@ -540,36 +540,52 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
         // is neither grouped nor the result of an alias in the select
         if (!query->_groupByVariables.empty() &&
             ((std::find(query->_groupByVariables.begin(),
-                        query->_groupByVariables.end(),
-                        orderKey._key) == query->_groupByVariables.end()) &&
+                        query->_groupByVariables.end(), orderKey.variable_) ==
+              query->_groupByVariables.end()) &&
              (std::find_if(query->selectClause()._aliases.begin(),
                            query->selectClause()._aliases.end(),
                            [&orderKey](const ParsedQuery::Alias& alias) {
-                             return alias._outVarName == orderKey._key;
+                             return alias._outVarName == orderKey.variable_;
                            }) == query->selectClause()._aliases.end()))) {
           throw ParseException(
-              "When grouping the order variable must be "
-              "grouped by!");
+              "Variable " + orderKey.variable_ +
+              " was used in an ORDER BY "
+              "clause, but is neither grouped, nor created as an alias in the "
+              "SELECT clause");
         }
 
         query->_orderBy.push_back(std::move(orderKey));
       };
 
+      // QLever currently does only support ordering over variables. To allow
+      // all orderConditions the corresponding expression is bound to a new
+      // variable. Ordering is then done over this variable.
+      // To which temporary and internal variable the expression is bound is
+      // only determined when building the ParsedQuery.
       auto processExpressionOrderKey = [&query,
                                         this](ExpressionOrderKey orderKey) {
         if (!query->_groupByVariables.empty())
+          // TODO<qup42> Implement this by adding a hidden alias in the SELECT
           throw ParseException(
-              "Ordering by an expression while grouping is not supported!");
+              "Ordering by an expression while grouping is not supported by "
+              "QLever. Cause: Expression " +
+              orderKey.expression_.getDescriptor() +
+              ". Please assign this expression to a "
+              "new variable in the SELECT clause and then order by this "
+              "variable.");
         // Internal variable name to which the result of the helper bind is
         // assigned.
-        std::string helperBindTargetVar = SOLUTION_MODIFIER_HELPER_BIND_PREFIX +
-                                          std::to_string(helperBindCounter);
-        helperBindCounter++;
-        GraphPatternOperation::Bind helperBind = GraphPatternOperation::Bind{
-            std::move(orderKey._expression), helperBindTargetVar};
-        query->registerVariableVisibleInQueryBody(helperBind._target);
+        std::string helperBindTargetVar =
+            SOLUTION_MODIFIER_HELPER_BIND_PREFIX +
+            std::to_string(this->helperBindCounter_);
+        this->helperBindCounter_++;
+        GraphPatternOperation::Bind helperBind{std::move(orderKey.expression_),
+                                               helperBindTargetVar};
+        // Don't register this variable as visible because it is used
+        // internally and should not be selectable.
         query->_rootGraphPattern._children.emplace_back(std::move(helperBind));
-        query->_orderBy.emplace_back(helperBindTargetVar, orderKey._desc);
+        query->_orderBy.emplace_back(helperBindTargetVar,
+                                     orderKey.isDescending_);
       };
 
       for (auto& orderKey : order_keys) {

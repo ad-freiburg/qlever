@@ -67,7 +67,7 @@ class SparqlParser {
 
   SparqlLexer _lexer;
   string _query;
-  uint64_t helperBindCounter = 0;
+  uint64_t helperBindCounter_ = 0;
   SparqlFilter parseRegexFilter(bool expectKeyword);
 
   template <typename F>
