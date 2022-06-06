@@ -2,24 +2,40 @@
 // Chair of Algorithms and Data Structures.
 // Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 
-#pragma once
+#ifndef QLEVER_ALGORITHM_H
+#define QLEVER_ALGORITHM_H
 
 #include <concepts>
 #include <vector>
 
 namespace ad_utility {
 
-template <class T>
-inline bool contains(std::vector<T> elements, T element) {
-  return std::find(elements.begin(), elements.end(), element) != elements.end();
+/**
+ * Checks whether an element is contained in a container.
+ *
+ * @param container std::vector<T>& Elements to be searched
+ * @param element T Element to search for
+ * @return bool
+ */
+template <typename Container, typename T>
+inline bool contains(const Container& container, const T& element) {
+  return std::find(container.begin(), container.end(), element) !=
+         container.end();
 }
 
-template <typename T, typename Predicate>
-inline bool contains_if(
-    std::vector<T> elements,
-    Predicate predicate) requires std::predicate<Predicate, T> {
-  return std::find_if(elements.begin(), elements.end(), predicate) !=
-         elements.end();
+/**
+ * Checks whether an element in the container satisfies the predicate.
+ *
+ * @param container std::vector<T>& Elements to be searched
+ * @param predicate Predicate Predicate to check
+ * @return bool
+ */
+template <typename Container, typename Predicate>
+bool contains_if(const Container& container, const Predicate& predicate) {
+  return std::find_if(container.begin(), container.end(), predicate) !=
+         container.end();
 }
 
 }  // namespace ad_utility
+
+#endif  // QLEVER_ALGORITHM_H

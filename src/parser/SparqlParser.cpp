@@ -497,12 +497,12 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
         // is neither grouped nor the result of an alias in the select
         const vector<std::string>& groupByVariables = query->_groupByVariables;
         if (!groupByVariables.empty() &&
-            ((!ad_utility::contains(groupByVariables, orderKey.variable_)) &&
-             (!ad_utility::contains_if(
+            (!ad_utility::contains(groupByVariables, orderKey.variable_) &&
+             !ad_utility::contains_if(
                  query->selectClause()._aliases,
                  [&orderKey](const ParsedQuery::Alias& alias) {
                    return alias._outVarName == orderKey.variable_;
-                 })))) {
+                 }))) {
           throw ParseException(
               "Variable " + orderKey.variable_ +
               " was used in an ORDER BY "
@@ -513,32 +513,33 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
         query->_orderBy.push_back(std::move(orderKey));
       };
 
-      // QLever currently does only support ordering over variables. To allow
-      // all orderConditions the corresponding expression is bound to a new
-      // variable. Ordering is then done over this variable.
-      // To which temporary and internal variable the expression is bound is
-      // only determined when building the ParsedQuery.
+      // QLever currently only supports ordering by variables. To allow
+      // all `orderConditions`, the corresponding expression is bound to a new
+      // internal variable. Ordering is then done by this variable.
       auto processExpressionOrderKey = [&query,
                                         this](ExpressionOrderKey orderKey) {
         if (!query->_groupByVariables.empty())
-          // TODO<qup42> Implement this by adding a hidden alias in the SELECT
+          // TODO<qup42> Implement this by adding a hidden alias in the
+          //  SELECT clause.
           throw ParseException(
               "Ordering by an expression while grouping is not supported by "
-              "QLever. Cause: Expression " +
+              "QLever. (The expression is \"" +
               orderKey.expression_.getDescriptor() +
-              ". Please assign this expression to a "
+              "\"). Please assign this expression to a "
               "new variable in the SELECT clause and then order by this "
               "variable.");
         // Internal variable name to which the result of the helper bind is
         // assigned.
-        std::string helperBindTargetVar =
-            SOLUTION_MODIFIER_HELPER_BIND_PREFIX +
-            std::to_string(this->helperBindCounter_);
-        this->helperBindCounter_++;
+        std::string helperBindTargetVar = SOLUTION_MODIFIER_HELPER_BIND_PREFIX +
+                                          std::to_string(helperBindCounter_);
+        helperBindCounter_++;
         GraphPatternOperation::Bind helperBind{std::move(orderKey.expression_),
                                                helperBindTargetVar};
-        // Don't register this variable as visible because it is used
-        // internally and should not be selectable.
+        // Don't register the helperBindTargetVar as visible because it is used
+        // internally and should not be selected by SELECT *.
+        // TODO<qup42, joka921> Implement "internal" variables, that can't be
+        //  selected at all and can never interfere with variables from the
+        //  query.
         query->_rootGraphPattern._children.emplace_back(std::move(helperBind));
         query->_orderBy.emplace_back(helperBindTargetVar,
                                      orderKey.isDescending_);
