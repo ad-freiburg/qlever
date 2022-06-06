@@ -1068,40 +1068,13 @@ TEST(ParserTest, testSolutionModifiers) {
             "?a <http://schema.org/name> ?b ."
             "?a ql:has-relation ?r }"
             "GROUP BY ?r "
-            "ORDER BY ?count")
+            "ORDER BY ?concat")
             .parse();
     ASSERT_TRUE(pq.hasSelectClause());
     const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, selectClause._aliases.size());
     ASSERT_EQ("(group_concat(?r;SEPARATOR=\"Cake\") as ?concat)",
               selectClause._aliases[0].getDescriptor());
-  }
-
-  {
-    // Test for an alias in the order by statement
-    auto pq = SparqlParser(
-                  "SELECT DISTINCT ?x ?y WHERE \t {?x :myrel ?y}\n"
-                  "ORDER BY DESC((COUNT(?x) as ?count)) LIMIT 10 OFFSET 15")
-                  .parse();
-    pq.expandPrefixes();
-    ASSERT_TRUE(pq.hasSelectClause());
-    const auto& selectClause = pq.selectClause();
-    ASSERT_EQ(1u, pq.children().size());
-    const auto& c = pq.children()[0].getBasic();
-    ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(2u, selectClause._varsOrAsterisk.getSelectedVariables().size());
-    ASSERT_EQ(1u, c._whereClauseTriples.size());
-    ASSERT_EQ(10u, pq._limitOffset._limit);
-    ASSERT_EQ(15u, pq._limitOffset._offset);
-    ASSERT_EQ(1u, pq._orderBy.size());
-    ASSERT_EQ("?count", pq._orderBy[0].variable_);
-    ASSERT_TRUE(pq._orderBy[0].isDescending_);
-    ASSERT_EQ(1u, selectClause._aliases.size());
-    ASSERT_TRUE(selectClause._aliases[0]._expression.isAggregate({}));
-    ASSERT_EQ("(count(?x) as ?count)",
-              selectClause._aliases[0].getDescriptor());
-    ASSERT_TRUE(selectClause._distinct);
-    ASSERT_FALSE(selectClause._reduced);
   }
 }
 
