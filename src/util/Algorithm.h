@@ -15,9 +15,9 @@ inline bool contains(std::vector<T> elements, T element) {
 }
 
 template <typename T, typename Predicate>
-inline bool contains_if(std::vector<T> elements, Predicate predicate)
-  requires std::predicate<Predicate, T>
-{
+inline bool contains_if(
+    std::vector<T> elements,
+    Predicate predicate) requires std::predicate<Predicate, T> {
   return std::find_if(elements.begin(), elements.end(), predicate) !=
          elements.end();
 }
