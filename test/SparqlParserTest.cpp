@@ -1138,25 +1138,15 @@ TEST(ParserTest, testParseLiteral) {
   ret = SparqlParser::parseLiteral(pqDummy, inp, true).getString();
   ASSERT_EQ(":v:date:0000000000000001950-01-01T00:00:00", ret);
 
-  // This is not a literal.
+  // Check that `parseLiteral` fails on the following string, which is not a
+  // literal.
   inp = R"(?a ?b "The \"Moon\""@en .)";
-  bool caught_exception = false;
-  try {
-    SparqlParser::parseLiteral(pqDummy, inp, true);
-  } catch (const ParseException& e) {
-    caught_exception = true;
-  }
-  ASSERT_TRUE(caught_exception);
+  ASSERT_THROW(SparqlParser::parseLiteral(pqDummy, inp, true), ParseException);
 
-  // Do not escape qutation marks with the isEntireString check
+  // Do not escape quotation marks with the isEntireString check
   inp = R"(?a ?b "The \"Moon""@en)";
-  caught_exception = false;
-  try {
-    SparqlParser::parseLiteral(pqDummy, inp, true, 6);
-  } catch (const ParseException& e) {
-    caught_exception = true;
-  }
-  ASSERT_TRUE(caught_exception);
+  ASSERT_THROW(SparqlParser::parseLiteral(pqDummy, inp, true, 6),
+               ParseException);
 }
 
 TEST(ParserTest, propertyPaths) {
@@ -1184,13 +1174,7 @@ TEST(ParserTest, propertyPaths) {
 
   // Ensure whitespace is not accepted
   inp = "a | b\t / \nc";
-  bool failed = false;
-  try {
-    result = PropertyPathParser(inp).parse();
-  } catch (const ParseException& e) {
-    failed = true;
-  }
-  ASSERT_TRUE(failed);
+  ASSERT_THROW(PropertyPathParser(inp).parse(), ParseException);
 }
 
 TEST(ParserTest, Bind) {
