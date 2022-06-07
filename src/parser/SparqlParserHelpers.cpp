@@ -10,39 +10,11 @@
 namespace sparqlParserHelpers {
 using std::string;
 
-struct ParserAndVisitor {
- private:
-  string _input;
-  antlr4::ANTLRInputStream _stream{_input};
-  SparqlAutomaticLexer _lexer{&_stream};
-  antlr4::CommonTokenStream _tokens{&_lexer};
-
- public:
-  SparqlAutomaticParser _parser{&_tokens};
-  SparqlQleverVisitor _visitor;
-  explicit ParserAndVisitor(string input,
-                            SparqlQleverVisitor::PrefixMap prefixes)
-      : _input{std::move(input)}, _visitor{std::move(prefixes)} {
-    _parser.setErrorHandler(std::make_shared<ThrowingErrorStrategy>());
-  }
-
-  template <typename ResultType, typename ContextType>
-  auto parse(const std::string_view input, const std::string_view name,
-             ContextType* (SparqlAutomaticParser::*F)(void)) {
-    try {
-      auto context = (_parser.*F)();
-      auto resultOfParse =
-          std::move(context->accept(&(_visitor)).template as<ResultType>());
-
-      auto remainingString =
-          input.substr(_parser.getCurrentToken()->getStartIndex());
-      return ResultOfParseAndRemainingText{std::move(resultOfParse),
-                                           std::string{remainingString}};
-    } catch (const antlr4::ParseCancellationException& e) {
-      throw std::runtime_error{"Failed to parse " + name + ": " + e.what()};
-    }
-  }
-};
+ParserAndVisitor::ParserAndVisitor(string input,
+                                   SparqlQleverVisitor::PrefixMap prefixes)
+    : _input{std::move(input)}, _visitor{std::move(prefixes)} {
+  _parser.setErrorHandler(std::make_shared<ThrowingErrorStrategy>());
+}
 
 // ____________________________________________________________________________
 ResultOfParseAndRemainingText<sparqlExpression::SparqlExpressionPimpl>
