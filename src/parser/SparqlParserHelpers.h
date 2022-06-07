@@ -19,22 +19,22 @@ template <typename ResultOfParse>
 struct ResultOfParseAndRemainingText {
   ResultOfParseAndRemainingText(ResultOfParse&& resultOfParse,
                                 std::string&& remainingText)
-      : _resultOfParse{std::move(resultOfParse)},
-        _remainingText{std::move(remainingText)} {}
-  ResultOfParse _resultOfParse;
-  std::string _remainingText;
+      : resultOfParse_{std::move(resultOfParse)},
+        remainingText_{std::move(remainingText)} {}
+  ResultOfParse resultOfParse_;
+  std::string remainingText_;
 };
 
 struct ParserAndVisitor {
  private:
-  string _input;
-  antlr4::ANTLRInputStream _stream{_input};
-  SparqlAutomaticLexer _lexer{&_stream};
-  antlr4::CommonTokenStream _tokens{&_lexer};
+  string input_;
+  antlr4::ANTLRInputStream stream_{input_};
+  SparqlAutomaticLexer lexer_{&stream_};
+  antlr4::CommonTokenStream tokens_{&lexer_};
 
  public:
-  SparqlAutomaticParser _parser{&_tokens};
-  SparqlQleverVisitor _visitor;
+  SparqlAutomaticParser parser_{&tokens_};
+  SparqlQleverVisitor visitor_;
   explicit ParserAndVisitor(string input,
                             SparqlQleverVisitor::PrefixMap prefixes = {});
 
@@ -42,12 +42,12 @@ struct ParserAndVisitor {
   auto parse(const std::string_view input, const std::string_view name,
              ContextType* (SparqlAutomaticParser::*F)(void)) {
     try {
-      auto context = (_parser.*F)();
+      auto context = (parser_.*F)();
       auto resultOfParse =
-          std::move(context->accept(&(_visitor)).template as<ResultType>());
+          std::move(context->accept(&(visitor_)).template as<ResultType>());
 
       auto remainingString =
-          input.substr(_parser.getCurrentToken()->getStartIndex());
+          input.substr(parser_.getCurrentToken()->getStartIndex());
       return ResultOfParseAndRemainingText{std::move(resultOfParse),
                                            std::string{remainingString}};
     } catch (const antlr4::ParseCancellationException& e) {

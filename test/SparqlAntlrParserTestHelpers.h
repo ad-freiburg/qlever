@@ -99,8 +99,8 @@ constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
  * @param matcher Matcher that must be fulfilled
  */
 void expectCompleteParse(const auto& resultOfParseAndText, auto&& matcher) {
-  EXPECT_THAT(resultOfParseAndText._resultOfParse, matcher);
-  EXPECT_TRUE(resultOfParseAndText._remainingText.empty());
+  EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
+  EXPECT_TRUE(resultOfParseAndText.remainingText_.empty());
 }
 
 // _____________________________________________________________________________

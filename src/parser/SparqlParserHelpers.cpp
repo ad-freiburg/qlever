@@ -12,8 +12,8 @@ using std::string;
 
 ParserAndVisitor::ParserAndVisitor(string input,
                                    SparqlQleverVisitor::PrefixMap prefixes)
-    : _input{std::move(input)}, _visitor{std::move(prefixes)} {
-  _parser.setErrorHandler(std::make_shared<ThrowingErrorStrategy>());
+    : input_{std::move(input)}, visitor_{std::move(prefixes)} {
+  parser_.setErrorHandler(std::make_shared<ThrowingErrorStrategy>());
 }
 
 // ____________________________________________________________________________
@@ -27,8 +27,8 @@ parseExpression(const std::string& input,
 
   return ResultOfParseAndRemainingText{
       sparqlExpression::SparqlExpressionPimpl{
-          std::move(resultOfParseAndRemainingText._resultOfParse)},
-      std::move(resultOfParseAndRemainingText._remainingText)};
+          std::move(resultOfParseAndRemainingText.resultOfParse_)},
+      std::move(resultOfParseAndRemainingText.remainingText_)};
 }
 
 // ____________________________________________________________________________

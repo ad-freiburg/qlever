@@ -45,8 +45,8 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
     }
     auto parseResult =
         sparqlParserHelpers::parseConstructTemplate(str, std::move(prefixes));
-    query->_clause = std::move(parseResult._resultOfParse);
-    _lexer.reset(std::move(parseResult._remainingText));
+    query->_clause = std::move(parseResult.resultOfParse_);
+    _lexer.reset(std::move(parseResult.remainingText_));
     _lexer.expect("where");
   } else if (queryType == SELECT_QUERY) {
     parseSelect(query);
@@ -965,9 +965,9 @@ template <typename F>
 auto SparqlParser::parseWithAntlr(F f, const ParsedQuery& parsedQuery)
     -> decltype(f(std::declval<const string&>(),
                   std::declval<SparqlQleverVisitor::PrefixMap>())
-                    ._resultOfParse) {
+                    .resultOfParse_) {
   auto resultOfParseAndRemainingText =
       f(_lexer.getUnconsumedInput(), getPrefixMap(parsedQuery));
-  _lexer.reset(std::move(resultOfParseAndRemainingText._remainingText));
-  return std::move(resultOfParseAndRemainingText._resultOfParse);
+  _lexer.reset(std::move(resultOfParseAndRemainingText.remainingText_));
+  return std::move(resultOfParseAndRemainingText.resultOfParse_);
 }
