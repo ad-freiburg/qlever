@@ -1156,10 +1156,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
       return makePtr.operator()<sparqlExpression::GroupConcatExpression>(
           std::move(separator));
-    } else {
-      AD_CHECK(ad_utility::getLowercase(children[0]->getText()) == "sample");
+    } else if (ad_utility::getLowercase(children[0]->getText()) == "sample") {
       return makePtr.operator()<sparqlExpression::SampleExpression>();
     }
+    AD_FAIL()  // Should be unreachable.
   }
 
   antlrcpp::Any visitIriOrFunction(

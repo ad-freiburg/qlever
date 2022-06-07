@@ -1246,18 +1246,12 @@ TEST(ParserTest, Order) {
             .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
     EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?c", false));
-    ASSERT_EQ(pq._rootGraphPattern._children.size(), 1);
-    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
-        pq._rootGraphPattern._children[0].variant_));
   }
   {
     ParsedQuery pq =
         SparqlParser("SELECT ?x ?y WHERE { ?x :myrel ?y } ORDER BY (?x - ?y)")
             .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
-    ASSERT_EQ(pq._rootGraphPattern._children.size(), 2);
-    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
-        pq._rootGraphPattern._children[0].variant_));
     auto variant = pq._rootGraphPattern._children[1].variant_;
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
     auto helperBind = get<GraphPatternOperation::Bind>(variant);

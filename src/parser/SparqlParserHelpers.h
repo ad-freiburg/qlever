@@ -18,12 +18,12 @@ namespace sparqlParserHelpers {
 
 template <typename ResultOfParse>
 struct ResultOfParseAndRemainingText {
+  ResultOfParse resultOfParse_;
+  std::string remainingText_;
   ResultOfParseAndRemainingText(ResultOfParse&& resultOfParse,
                                 std::string&& remainingText)
       : resultOfParse_{std::move(resultOfParse)},
         remainingText_{std::move(remainingText)} {}
-  ResultOfParse resultOfParse_;
-  std::string remainingText_;
 };
 
 struct ParserAndVisitor {

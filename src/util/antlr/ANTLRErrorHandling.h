@@ -20,6 +20,11 @@ struct ThrowingErrorStrategy : public antlr4::DefaultErrorStrategy {
   }
 };
 
+/**
+ * antlr::ANTLRErrorListener that raises encountered syntaxErrors as
+ * ParseException. The line, position in the line and antlr error message are
+ * included as exception cause.
+ */
 struct ThrowingErrorListener : public antlr4::BaseErrorListener {
   void syntaxError([[maybe_unused]] antlr4::Recognizer* recognizer,
                    [[maybe_unused]] antlr4::Token* offendingSymbol, size_t line,

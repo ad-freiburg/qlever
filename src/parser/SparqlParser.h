@@ -62,11 +62,11 @@ class SparqlParser {
   GraphPatternOperation::BasicGraphPattern& lastBasicPattern(
       ParsedQuery::GraphPattern* ptr) const;
 
-  SparqlLexer _lexer;
-  string _query;
+  SparqlLexer lexer_;
+  string query_;
   // The number of additional internal variables that were added by the
   // implementation of ORDER BY as BIND+ORDER BY.
-  uint64_t helperBindCounter_ = 0;
+  uint64_t numAdditionalVariables_ = 0;
   SparqlFilter parseRegexFilter(bool expectKeyword);
 
   template <typename F>
