@@ -9,6 +9,7 @@
 #include "../src/global/Constants.h"
 #include "../src/parser/PropertyPathParser.h"
 #include "../src/parser/SparqlParser.h"
+#include "SparqlAntlrParserTestHelpers.h"
 
 TEST(ParserTest, testParse) {
   try {
@@ -1178,4 +1179,96 @@ TEST(ParserTest, Bind) {
       get<GraphPatternOperation::Bind>(child.variant_);
   ASSERT_EQ(bind._target, "?a");
   ASSERT_EQ(bind._expression.getDescriptor(), "10-5");
+}
+
+TEST(ParserTest, Order) {
+  {
+    ParsedQuery pq =
+        SparqlParser("SELECT ?x ?y WHERE { ?x :myrel ?y }").parse();
+    ASSERT_TRUE(pq._orderBy.empty());
+    ASSERT_EQ(pq._rootGraphPattern._children.size(), 1);
+    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
+        pq._rootGraphPattern._children[0].variant_));
+  }
+  {
+    ParsedQuery pq =
+        SparqlParser("SELECT ?x ?y WHERE { ?x :myrel ?y } ORDER BY ?x").parse();
+    ASSERT_EQ(pq._orderBy.size(), 1);
+    EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?x", false));
+    ASSERT_EQ(pq._rootGraphPattern._children.size(), 1);
+    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
+        pq._rootGraphPattern._children[0].variant_));
+  }
+  {
+    ParsedQuery pq =
+        SparqlParser("SELECT ?x ?y WHERE { ?x :myrel ?y } ORDER BY ASC(?y)")
+            .parse();
+    ASSERT_EQ(pq._orderBy.size(), 1);
+    EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?y", false));
+    ASSERT_EQ(pq._rootGraphPattern._children.size(), 1);
+    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
+        pq._rootGraphPattern._children[0].variant_));
+  }
+  {
+    ParsedQuery pq =
+        SparqlParser("SELECT ?x ?y WHERE { ?x :myrel ?y } ORDER BY DESC(?foo)")
+            .parse();
+    ASSERT_EQ(pq._orderBy.size(), 1);
+    EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?foo", true));
+    ASSERT_EQ(pq._rootGraphPattern._children.size(), 1);
+    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
+        pq._rootGraphPattern._children[0].variant_));
+  }
+  {
+    ParsedQuery pq =
+        SparqlParser(
+            "SELECT ?x WHERE { ?x :myrel ?y } GROUP BY ?x ORDER BY "
+            "?x")
+            .parse();
+    ASSERT_EQ(pq._orderBy.size(), 1);
+    EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?x", false));
+    ASSERT_EQ(pq._rootGraphPattern._children.size(), 1);
+    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
+        pq._rootGraphPattern._children[0].variant_));
+  }
+  {
+    EXPECT_THROW(
+        SparqlParser("SELECT ?x WHERE { ?x :myrel ?y } GROUP BY ?x ORDER BY "
+                     "?y")
+            .parse(),
+        ParseException);
+  }
+  {
+    ParsedQuery pq =
+        SparqlParser(
+            "SELECT ?x (COUNT(?y) as ?c) WHERE { ?x :myrel ?y } GROUP "
+            "BY ?x ORDER BY ?c")
+            .parse();
+    ASSERT_EQ(pq._orderBy.size(), 1);
+    EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?c", false));
+    ASSERT_EQ(pq._rootGraphPattern._children.size(), 1);
+    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
+        pq._rootGraphPattern._children[0].variant_));
+  }
+  {
+    ParsedQuery pq =
+        SparqlParser("SELECT ?x ?y WHERE { ?x :myrel ?y } ORDER BY (?x - ?y)")
+            .parse();
+    ASSERT_EQ(pq._orderBy.size(), 1);
+    ASSERT_EQ(pq._rootGraphPattern._children.size(), 2);
+    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
+        pq._rootGraphPattern._children[0].variant_));
+    auto variant = pq._rootGraphPattern._children[1].variant_;
+    ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
+    auto helperBind = get<GraphPatternOperation::Bind>(variant);
+    ASSERT_EQ(helperBind._expression.getDescriptor(), "?x-?y");
+    ASSERT_EQ(pq._orderBy[0].variable_, helperBind._target);
+  }
+  {
+    EXPECT_THROW(
+        SparqlParser("SELECT ?y WHERE { ?x :myrel ?y } GROUP BY ?y ORDER BY "
+                     "(?x - ?y)")
+            .parse(),
+        ParseException);
+  }
 }

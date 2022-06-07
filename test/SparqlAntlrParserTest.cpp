@@ -798,6 +798,7 @@ TEST(SparqlParser, OrderCondition) {
   // constraint
   expectParseExpression("(5 - ?mehr)", "5-?mehr", false);
   expectParseExpression("SUM(?i)", "SUM(?i)", false);
+  EXPECT_THROW(parseOrderCondition("ASC SCORE(?i)"), ParseException);
 }
 
 TEST(SparqlParser, OrderClause) {
