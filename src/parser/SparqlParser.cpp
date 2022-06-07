@@ -497,17 +497,17 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
         // is neither grouped nor the result of an alias in the select
         const vector<std::string>& groupByVariables = query->_groupByVariables;
         if (!groupByVariables.empty() &&
-            (!ad_utility::contains(groupByVariables, orderKey.variable_) &&
-             !ad_utility::contains_if(
-                 query->selectClause()._aliases,
-                 [&orderKey](const ParsedQuery::Alias& alias) {
-                   return alias._outVarName == orderKey.variable_;
-                 }))) {
+            !ad_utility::contains(groupByVariables, orderKey.variable_) &&
+            !ad_utility::contains_if(
+                query->selectClause()._aliases,
+                [&orderKey](const ParsedQuery::Alias& alias) {
+                  return alias._outVarName == orderKey.variable_;
+                })) {
           throw ParseException(
               "Variable " + orderKey.variable_ +
               " was used in an ORDER BY "
               "clause, but is neither grouped, nor created as an alias in the "
-              "SELECT clause");
+              "SELECT clause.");
         }
 
         query->_orderBy.push_back(std::move(orderKey));

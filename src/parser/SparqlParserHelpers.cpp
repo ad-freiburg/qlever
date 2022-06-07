@@ -4,16 +4,24 @@
 
 #include "SparqlParserHelpers.h"
 
-#include "../util/antlr/ThrowingErrorStrategy.h"
 #include "sparqlParser/generated/SparqlAutomaticLexer.h"
 
 namespace sparqlParserHelpers {
 using std::string;
 
+ParserAndVisitor::ParserAndVisitor(string input)
+    : input_{std::move(input)}, visitor_{} {
+  parser_.setErrorHandler(std::make_shared<ThrowingErrorStrategy>());
+  parser_.removeErrorListeners();
+  parser_.addErrorListener(&errorListener_);
+  lexer_.removeErrorListeners();
+  lexer_.addErrorListener(&errorListener_);
+}
+
 ParserAndVisitor::ParserAndVisitor(string input,
                                    SparqlQleverVisitor::PrefixMap prefixes)
-    : input_{std::move(input)}, visitor_{std::move(prefixes)} {
-  parser_.setErrorHandler(std::make_shared<ThrowingErrorStrategy>());
+    : ParserAndVisitor{std::move(input)} {
+  visitor_.setPrefixMapManually(std::move(prefixes));
 }
 
 // ____________________________________________________________________________

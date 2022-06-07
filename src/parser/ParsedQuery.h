@@ -116,20 +116,23 @@ class SparqlTriple {
 /// Store an expression that appeared in an ORDER BY clause.
 class ExpressionOrderKey {
  public:
-  explicit ExpressionOrderKey(
-      sparqlExpression::SparqlExpressionPimpl expression, bool desc = false)
-      : isDescending_{desc}, expression_{std::move(expression)} {}
   bool isDescending_;
   sparqlExpression::SparqlExpressionPimpl expression_;
+  // ___________________________________________________________________________
+  explicit ExpressionOrderKey(
+      sparqlExpression::SparqlExpressionPimpl expression,
+      bool isDescending = false)
+      : isDescending_{isDescending}, expression_{std::move(expression)} {}
 };
 
 /// Store a variable that appeared in an ORDER BY clause.
 class VariableOrderKey {
  public:
-  explicit VariableOrderKey(string variable, bool desc = false)
-      : variable_{std::move(variable)}, isDescending_{desc} {}
   string variable_;
   bool isDescending_;
+  // ___________________________________________________________________________
+  explicit VariableOrderKey(string variable, bool isDescending = false)
+      : variable_{std::move(variable)}, isDescending_{isDescending} {}
 };
 
 // Represents an ordering by a variable or an expression.

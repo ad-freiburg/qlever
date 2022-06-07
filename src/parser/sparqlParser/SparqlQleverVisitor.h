@@ -78,6 +78,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return result;
   }
 
+  void setPrefixMapManually(PrefixMap map) { _prefixMap = std::move(map); }
+
  private:
   // For the unit tests
   PrefixMap& prefixMap() { return _prefixMap; }
@@ -259,30 +261,25 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitOrderCondition(
       SparqlAutomaticParser::OrderConditionContext* ctx) override {
-    if (ctx->var()) {
-      return OrderKey{VariableOrderKey(ctx->var()->getText())};
-    } else if (ctx->constraint()) {
+    auto visitExprOrderKey = [this](bool isDescending,
+                                    antlr4::tree::ParseTree* context) {
       auto expr = sparqlExpression::SparqlExpressionPimpl{
-          std::move(visitConstraint(ctx->constraint()).as<ExpressionPtr>())};
-      bool isDescending = false;
-      bool exprIsVariable = expr.getVariableOrNullopt().has_value();
-      if (exprIsVariable) {
-        string var = expr.getVariableOrNullopt().value();
-        return OrderKey{VariableOrderKey(var, isDescending)};
-      } else {
-        return OrderKey{ExpressionOrderKey{std::move(expr), isDescending}};
-      }
-    } else if (ctx->brackettedExpression()) {
-      auto expr = sparqlExpression::SparqlExpressionPimpl{
-          std::move(visitBrackettedExpression(ctx->brackettedExpression())
-                        .as<ExpressionPtr>())};
-      bool isDescending = ctx->DESC() != nullptr;
+          std::move(visit(context).as<ExpressionPtr>())};
       if (auto exprIsVariable = expr.getVariableOrNullopt();
           exprIsVariable.has_value()) {
         return OrderKey{VariableOrderKey(exprIsVariable.value(), isDescending)};
       } else {
         return OrderKey{ExpressionOrderKey{std::move(expr), isDescending}};
       }
+    };
+
+    if (ctx->var()) {
+      return OrderKey{VariableOrderKey(ctx->var()->getText())};
+    } else if (ctx->constraint()) {
+      return visitExprOrderKey(false, ctx->constraint());
+    } else if (ctx->brackettedExpression()) {
+      return visitExprOrderKey(ctx->DESC() != nullptr,
+                               ctx->brackettedExpression());
     }
     AD_FAIL();  // Should be unreachable.
   }

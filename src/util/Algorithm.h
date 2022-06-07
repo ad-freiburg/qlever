@@ -5,15 +5,12 @@
 #ifndef QLEVER_ALGORITHM_H
 #define QLEVER_ALGORITHM_H
 
-#include <concepts>
-#include <vector>
-
 namespace ad_utility {
 
 /**
  * Checks whether an element is contained in a container.
  *
- * @param container std::vector<T>& Elements to be searched
+ * @param container Container& Elements to be searched
  * @param element T Element to search for
  * @return bool
  */
@@ -26,7 +23,7 @@ inline bool contains(const Container& container, const T& element) {
 /**
  * Checks whether an element in the container satisfies the predicate.
  *
- * @param container std::vector<T>& Elements to be searched
+ * @param container Container& Elements to be searched
  * @param predicate Predicate Predicate to check
  * @return bool
  */

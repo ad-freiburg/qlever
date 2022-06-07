@@ -73,5 +73,5 @@ class SparqlParser {
   auto parseWithAntlr(F f, const ParsedQuery& parsedQuery)
       -> decltype(f(std::declval<const string&>(),
                     std::declval<SparqlQleverVisitor::PrefixMap>())
-                      ._resultOfParse);
+                      .resultOfParse_);
 };

@@ -9,6 +9,7 @@
 #include <string>
 
 #include "../engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "../util/antlr/ANTLRErrorHandling.h"
 #include "./ParsedQuery.h"
 #include "sparqlParser/SparqlQleverVisitor.h"
 #include "sparqlParser/generated/SparqlAutomaticLexer.h"
@@ -31,12 +32,13 @@ struct ParserAndVisitor {
   antlr4::ANTLRInputStream stream_{input_};
   SparqlAutomaticLexer lexer_{&stream_};
   antlr4::CommonTokenStream tokens_{&lexer_};
+  ThrowingErrorListener errorListener_{};
 
  public:
   SparqlAutomaticParser parser_{&tokens_};
   SparqlQleverVisitor visitor_;
-  explicit ParserAndVisitor(string input,
-                            SparqlQleverVisitor::PrefixMap prefixes = {});
+  explicit ParserAndVisitor(string input);
+  ParserAndVisitor(string input, SparqlQleverVisitor::PrefixMap prefixes);
 
   template <typename ResultType, typename ContextType>
   auto parse(const std::string_view input, const std::string_view name,

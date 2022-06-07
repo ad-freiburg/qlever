@@ -12,7 +12,7 @@
 #include "../src/parser/SparqlParserHelpers.h"
 #include "../src/parser/data/Types.h"
 #include "../src/parser/sparqlParser/generated/SparqlAutomaticLexer.h"
-#include "../src/util/antlr/ThrowingErrorStrategy.h"
+#include "../src/util/antlr/ANTLRErrorHandling.h"
 #include "SparqlAntlrParserTestHelpers.h"
 
 using namespace antlr4;
@@ -771,64 +771,33 @@ TEST(SparqlParser, LimitOffsetClause) {
 }
 
 TEST(SparqlParser, OrderCondition) {
-  auto parseBind = [](const std::string& input,
-                      SparqlQleverVisitor::PrefixMap prefixMap) {
-    ParserAndVisitor p{input, std::move(prefixMap)};
-    return p.parse<OrderKey>(input, "bind",
+  auto parseOrderCondition = [](const std::string& input) {
+    ParserAndVisitor p{input};
+    return p.parse<OrderKey>(input, "order condition",
                              &SparqlAutomaticParser::orderCondition);
   };
+  auto expectParseVariable = [&parseOrderCondition](const string& input,
+                                                    const string& variable,
+                                                    bool isDescending) {
+    expectCompleteParse(parseOrderCondition(input),
+                        IsVariableOrderKey(variable, isDescending));
+  };
+  auto expectParseExpression = [&parseOrderCondition](const string& input,
+                                                      const string& expression,
+                                                      bool isDescending) {
+    expectCompleteParse(parseOrderCondition(input),
+                        IsExpressionOrderKey(expression, isDescending));
+  };
   // var
-  {
-    string input = "?test";
-    ParserAndVisitor p{input};
-    auto orderKey =
-        p.parser_.orderCondition()->accept(&p.visitor_).as<OrderKey>();
-    EXPECT_THAT(orderKey, IsVariableOrderKey("?test", false));
-  }
+  expectParseVariable("?test", "?test", false);
   // brackettedExpression
-  {
-    string input = "DESC (?foo)";
-    ParserAndVisitor p{input};
-    auto orderKey =
-        p.parser_.orderCondition()->accept(&p.visitor_).as<OrderKey>();
-    EXPECT_THAT(orderKey, IsVariableOrderKey("?foo", true));
-  }
-  {
-    string input = "ASC (?bar)";
-    ParserAndVisitor p{input};
-    auto orderKey =
-        p.parser_.orderCondition()->accept(&p.visitor_).as<OrderKey>();
-    EXPECT_THAT(orderKey, IsVariableOrderKey("?bar", false));
-  }
-  {
-    string input = "ASC(?test - 5)";
-    ParserAndVisitor p{input};
-    auto orderKey =
-        p.parser_.orderCondition()->accept(&p.visitor_).as<OrderKey>();
-    EXPECT_THAT(orderKey, IsExpressionOrderKey("?test-5", false));
-  }
-  {
-    string input = "DESC (10 || (5 && ?foo))";
-    ParserAndVisitor p{input};
-    auto orderKey =
-        p.parser_.orderCondition()->accept(&p.visitor_).as<OrderKey>();
-    EXPECT_THAT(orderKey, IsExpressionOrderKey("10||(5&&?foo)", true));
-  }
+  expectParseVariable("DESC (?foo)", "?foo", true);
+  expectParseVariable("ASC (?bar)", "?bar", false);
+  expectParseExpression("ASC(?test - 5)", "?test-5", false);
+  expectParseExpression("DESC (10 || (5 && ?foo))", "10||(5&&?foo)", true);
   // constraint
-  {
-    string input = "(5 - ?mehr)";
-    ParserAndVisitor p{input};
-    auto orderKey =
-        p.parser_.orderCondition()->accept(&p.visitor_).as<OrderKey>();
-    EXPECT_THAT(orderKey, IsExpressionOrderKey("5-?mehr", false));
-  }
-  {
-    string input = "SUM(?i)";
-    ParserAndVisitor p{input};
-    auto orderKey =
-        p.parser_.orderCondition()->accept(&p.visitor_).as<OrderKey>();
-    EXPECT_THAT(orderKey, IsExpressionOrderKey("SUM(?i)", false));
-  }
+  expectParseExpression("(5 - ?mehr)", "5-?mehr", false);
+  expectParseExpression("SUM(?i)", "SUM(?i)", false);
 }
 
 TEST(SparqlParser, OrderClause) {
