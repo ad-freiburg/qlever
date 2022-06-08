@@ -12,6 +12,21 @@ import yaml
 import icu
 
 
+class ErrorReportingHandler(urllib.request.BaseHandler):
+    """
+    Error handler for urllib. That doesn't throw an exception on requests with status code != 2xx.
+    The request url is instead logged to stdout.
+    """
+    handler_order = 400  # Move this handler before the default error handler
+
+    # which throws exceptions.
+
+    def http_error_default(self, req, fp, code, msg, hdrs):
+        if code != 200:
+            eprint(f"Status {code} for {req.full_url}")
+            return fp
+
+
 class Color:
     """
     Enum-like class for storing ANSI Color Codes
@@ -355,6 +370,9 @@ def main() -> None:
     inpath = sys.argv[1]
     endpoint_url = sys.argv[2]
     error_detected = False
+    # Setup urllib to handle non 2xx status codes gracefully.
+    opener = urllib.request.build_opener(ErrorReportingHandler())
+    urllib.request.install_opener(opener)
     with open(inpath, 'rb') if inpath != '-' else sys.stdin as infile:
         yaml_tree = yaml.safe_load(infile)
         queries = yaml_tree['queries']

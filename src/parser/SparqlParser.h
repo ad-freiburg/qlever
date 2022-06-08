@@ -46,9 +46,6 @@ class SparqlParser {
   void addLangFilter(const std::string& lhs, const std::string& rhs,
                      ParsedQuery::GraphPattern* pattern);
 
-  // takes either DESC or ASC as the parameter
-  OrderKey parseOrderKey(const std::string& order, ParsedQuery* query);
-
   // Reads the next element of a triple (an iri, a variable, a property path,
   // etc.) out of s beginning at the current value of pos. Sets pos to the
   // position after the read value, and returns a string view of the triple part
@@ -65,13 +62,16 @@ class SparqlParser {
   GraphPatternOperation::BasicGraphPattern& lastBasicPattern(
       ParsedQuery::GraphPattern* ptr) const;
 
-  SparqlLexer _lexer;
-  string _query;
+  SparqlLexer lexer_;
+  string query_;
+  // The number of additional internal variables that were added by the
+  // implementation of ORDER BY as BIND+ORDER BY.
+  uint64_t numAdditionalVariables_ = 0;
   SparqlFilter parseRegexFilter(bool expectKeyword);
 
   template <typename F>
   auto parseWithAntlr(F f, const ParsedQuery& parsedQuery)
       -> decltype(f(std::declval<const string&>(),
                     std::declval<SparqlQleverVisitor::PrefixMap>())
-                      ._resultOfParse);
+                      .resultOfParse_);
 };

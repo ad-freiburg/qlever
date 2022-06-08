@@ -113,76 +113,30 @@ class SparqlTriple {
   [[nodiscard]] string asString() const;
 };
 
-class OrderKey {
+/// Store an expression that appeared in an ORDER BY clause.
+class ExpressionOrderKey {
  public:
-  OrderKey(string key, bool desc) : _key(std::move(key)), _desc(desc) {}
-  explicit OrderKey(const string& textual) {
-    std::string lower = ad_utility::getLowercaseUtf8(textual);
-    size_t pos = 0;
-    _desc = lower.starts_with("desc(");
-    // skip the 'desc('
-    if (_desc) {
-      pos += 5;
-      // skip any whitespace after the opening bracket
-      while (pos < textual.size() &&
-             ::isspace(static_cast<unsigned char>(textual[pos]))) {
-        pos++;
-      }
-    }
-    // skip 'asc('
-    if (lower.starts_with("asc(")) {
-      pos += 4;
-      // skip any whitespace after the opening bracket
-      while (pos < textual.size() &&
-             ::isspace(static_cast<unsigned char>(textual[pos]))) {
-        pos++;
-      }
-    }
-    if (lower[pos] == '(') {
-      // key is an alias
-      size_t bracketDepth = 1;
-      size_t end = pos + 1;
-      while (bracketDepth > 0 && end < textual.size()) {
-        if (lower[end] == '(') {
-          bracketDepth++;
-        } else if (lower[end] == ')') {
-          bracketDepth--;
-        }
-        end++;
-      }
-      if (bracketDepth != 0) {
-        throw ParseException("Unbalanced brackets in alias order by key: " +
-                             textual);
-      }
-      _key = textual.substr(pos, end - pos);
-    } else if (lower[pos] == 's') {
-      // key is a text score
-      if (!lower.substr(pos).starts_with("score(")) {
-        throw ParseException("Expected keyword score in order by key: " +
-                             textual);
-      }
-      pos += 6;
-      size_t end = pos + 1;
-      // look for the first space or closing bracket character
-      while (end < textual.size() && textual[end] != ')' &&
-             !::isspace(static_cast<unsigned char>(textual[end]))) {
-        end++;
-      }
-      _key = "SCORE(" + textual.substr(pos, end - pos) + ")";
-    } else if (lower[pos] == '?') {
-      // key is simple variable
-      size_t end = pos + 1;
-      // look for the first space or closing bracket character
-      while (end < textual.size() && textual[end] != ')' &&
-             !::isspace(static_cast<unsigned char>(textual[end]))) {
-        end++;
-      }
-      _key = textual.substr(pos, end - pos);
-    }
-  }
-  string _key;
-  bool _desc;
+  bool isDescending_;
+  sparqlExpression::SparqlExpressionPimpl expression_;
+  // ___________________________________________________________________________
+  explicit ExpressionOrderKey(
+      sparqlExpression::SparqlExpressionPimpl expression,
+      bool isDescending = false)
+      : isDescending_{isDescending}, expression_{std::move(expression)} {}
 };
+
+/// Store a variable that appeared in an ORDER BY clause.
+class VariableOrderKey {
+ public:
+  string variable_;
+  bool isDescending_;
+  // ___________________________________________________________________________
+  explicit VariableOrderKey(string variable, bool isDescending = false)
+      : variable_{std::move(variable)}, isDescending_{isDescending} {}
+};
+
+// Represents an ordering by a variable or an expression.
+using OrderKey = std::variant<VariableOrderKey, ExpressionOrderKey>;
 
 class SparqlFilter {
  public:
@@ -382,7 +336,7 @@ class ParsedQuery {
   GraphPattern _rootGraphPattern;
   vector<SparqlFilter> _havingClauses;
   size_t _numGraphPatterns = 1;
-  vector<OrderKey> _orderBy;
+  vector<VariableOrderKey> _orderBy;
   vector<string> _groupByVariables;
   LimitOffsetClause _limitOffset{};
   string _originalString;
@@ -484,9 +438,7 @@ struct GraphPatternOperation {
     ParsedQuery::GraphPattern _childGraphPattern;
   };
 
-  // A SPARQL Bind construct.  Currently supports either an unsigned integer or
-  // a knowledge base constant. For simplicity, we store both values instead of
-  // using a union or std::variant here.
+  // A SPARQL Bind construct.
   struct Bind {
     sparqlExpression::SparqlExpressionPimpl _expression;
     std::string _target;  // the variable to which the expression will be bound

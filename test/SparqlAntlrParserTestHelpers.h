@@ -56,6 +56,21 @@ std::ostream& operator<<(std::ostream& out,
 
 // _____________________________________________________________________________
 
+std::ostream& operator<<(std::ostream& out, const VariableOrderKey& orderkey) {
+  out << "Order " << (orderkey.isDescending_ ? "DESC" : "ASC") << " by "
+      << orderkey.variable_;
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out,
+                         const ExpressionOrderKey& expressionOrderKey) {
+  out << "Order " << (expressionOrderKey.isDescending_ ? "DESC" : "ASC")
+      << " by " << expressionOrderKey.expression_.getDescriptor();
+  return out;
+}
+
+// _____________________________________________________________________________
+
 // Recursively unwrap a std::variant object, or return a pointer
 // to the argument directly if it is already unwrapped.
 
@@ -84,8 +99,8 @@ constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
  * @param matcher Matcher that must be fulfilled
  */
 void expectCompleteParse(const auto& resultOfParseAndText, auto&& matcher) {
-  EXPECT_THAT(resultOfParseAndText._resultOfParse, matcher);
-  EXPECT_TRUE(resultOfParseAndText._remainingText.empty());
+  EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
+  EXPECT_TRUE(resultOfParseAndText.remainingText_.empty());
 }
 
 // _____________________________________________________________________________
@@ -135,4 +150,22 @@ MATCHER_P2(IsBind, variable, expression, "") {
 MATCHER_P3(IsLimitOffset, limit, textLimit, offset, "") {
   return (arg._limit == limit) && (arg._textLimit == textLimit) &&
          (arg._offset == offset);
+}
+
+MATCHER_P2(IsVariableOrderKey, key, desc, "") {
+  if (const auto variableOrderKey =
+          unwrapVariant<OrderKey, VariableOrderKey>(arg)) {
+    return (variableOrderKey->variable_ == key) &&
+           (variableOrderKey->isDescending_ == desc);
+  }
+  return false;
+}
+
+MATCHER_P2(IsExpressionOrderKey, expr, desc, "") {
+  if (const auto bindOrderKey =
+          unwrapVariant<OrderKey, ExpressionOrderKey>(arg)) {
+    return (bindOrderKey->expression_.getDescriptor() == expr) &&
+           (bindOrderKey->isDescending_ == desc);
+  }
+  return false;
 }

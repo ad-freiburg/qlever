@@ -4,45 +4,30 @@
 
 #include "SparqlParserHelpers.h"
 
-#include "../util/antlr/ThrowingErrorStrategy.h"
 #include "sparqlParser/generated/SparqlAutomaticLexer.h"
 
 namespace sparqlParserHelpers {
 using std::string;
 
-struct ParserAndVisitor {
- private:
-  string _input;
-  antlr4::ANTLRInputStream _stream{_input};
-  SparqlAutomaticLexer _lexer{&_stream};
-  antlr4::CommonTokenStream _tokens{&_lexer};
+// _____________________________________________________________________________
+ParserAndVisitor::ParserAndVisitor(string input)
+    : input_{std::move(input)}, visitor_{} {
+  parser_.setErrorHandler(std::make_shared<ThrowingErrorStrategy>());
+  // The default in ANTLR is to log all errors to the console and to continue
+  // the parsing. We need to turn parse errors into exceptions instead to
+  // propagate them to the user.
+  parser_.removeErrorListeners();
+  parser_.addErrorListener(&errorListener_);
+  lexer_.removeErrorListeners();
+  lexer_.addErrorListener(&errorListener_);
+}
 
- public:
-  SparqlAutomaticParser _parser{&_tokens};
-  SparqlQleverVisitor _visitor;
-  explicit ParserAndVisitor(string input,
-                            SparqlQleverVisitor::PrefixMap prefixes)
-      : _input{std::move(input)}, _visitor{std::move(prefixes)} {
-    _parser.setErrorHandler(std::make_shared<ThrowingErrorStrategy>());
-  }
-
-  template <typename ResultType, typename ContextType>
-  auto parse(const std::string_view input, const std::string_view name,
-             ContextType* (SparqlAutomaticParser::*F)(void)) {
-    try {
-      auto context = (_parser.*F)();
-      auto resultOfParse =
-          std::move(context->accept(&(_visitor)).template as<ResultType>());
-
-      auto remainingString =
-          input.substr(_parser.getCurrentToken()->getStartIndex());
-      return ResultOfParseAndRemainingText{std::move(resultOfParse),
-                                           std::string{remainingString}};
-    } catch (const antlr4::ParseCancellationException& e) {
-      throw std::runtime_error{"Failed to parse " + name + ": " + e.what()};
-    }
-  }
-};
+// _____________________________________________________________________________
+ParserAndVisitor::ParserAndVisitor(string input,
+                                   SparqlQleverVisitor::PrefixMap prefixes)
+    : ParserAndVisitor{std::move(input)} {
+  visitor_.setPrefixMapManually(std::move(prefixes));
+}
 
 // ____________________________________________________________________________
 ResultOfParseAndRemainingText<sparqlExpression::SparqlExpressionPimpl>
@@ -55,8 +40,8 @@ parseExpression(const std::string& input,
 
   return ResultOfParseAndRemainingText{
       sparqlExpression::SparqlExpressionPimpl{
-          std::move(resultOfParseAndRemainingText._resultOfParse)},
-      std::move(resultOfParseAndRemainingText._remainingText)};
+          std::move(resultOfParseAndRemainingText.resultOfParse_)},
+      std::move(resultOfParseAndRemainingText.remainingText_)};
 }
 
 // ____________________________________________________________________________
@@ -89,5 +74,13 @@ ResultOfParseAndRemainingText<LimitOffsetClause> parseLimitOffsetClause(
   ParserAndVisitor p{input, std::move(prefixes)};
   return p.parse<LimitOffsetClause>(input, "limit offset clause",
                                     &SparqlAutomaticParser::limitOffsetClauses);
+}
+// _____________________________________________________________________________
+
+ResultOfParseAndRemainingText<vector<OrderKey>> parseOrderClause(
+    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes) {
+  ParserAndVisitor p{input, std::move(prefixes)};
+  return p.parse<vector<OrderKey>>(input, "order clause",
+                                   &SparqlAutomaticParser::orderClause);
 }
 }  // namespace sparqlParserHelpers

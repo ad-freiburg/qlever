@@ -9,19 +9,53 @@
 #include <string>
 
 #include "../engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "../util/antlr/ANTLRErrorHandling.h"
 #include "./ParsedQuery.h"
 #include "sparqlParser/SparqlQleverVisitor.h"
+#include "sparqlParser/generated/SparqlAutomaticLexer.h"
 
 namespace sparqlParserHelpers {
 
 template <typename ResultOfParse>
 struct ResultOfParseAndRemainingText {
+  ResultOfParse resultOfParse_;
+  std::string remainingText_;
   ResultOfParseAndRemainingText(ResultOfParse&& resultOfParse,
                                 std::string&& remainingText)
-      : _resultOfParse{std::move(resultOfParse)},
-        _remainingText{std::move(remainingText)} {}
-  ResultOfParse _resultOfParse;
-  std::string _remainingText;
+      : resultOfParse_{std::move(resultOfParse)},
+        remainingText_{std::move(remainingText)} {}
+};
+
+struct ParserAndVisitor {
+ private:
+  string input_;
+  antlr4::ANTLRInputStream stream_{input_};
+  SparqlAutomaticLexer lexer_{&stream_};
+  antlr4::CommonTokenStream tokens_{&lexer_};
+  ThrowingErrorListener errorListener_{};
+
+ public:
+  SparqlAutomaticParser parser_{&tokens_};
+  SparqlQleverVisitor visitor_;
+  explicit ParserAndVisitor(string input);
+  ParserAndVisitor(string input, SparqlQleverVisitor::PrefixMap prefixes);
+
+  template <typename ResultType, typename ContextType>
+  auto parse(const std::string_view input, const std::string_view name,
+             ContextType* (SparqlAutomaticParser::*F)(void)) {
+    try {
+      auto context = (parser_.*F)();
+      auto resultOfParse =
+          std::move(context->accept(&(visitor_)).template as<ResultType>());
+
+      auto remainingString =
+          input.substr(parser_.getCurrentToken()->getStartIndex());
+      return ResultOfParseAndRemainingText{std::move(resultOfParse),
+                                           std::string{remainingString}};
+    } catch (const antlr4::ParseCancellationException& e) {
+      throw std::runtime_error{"Failed to parse " + name + ": " + e.what()};
+    }
+  }
 };
 
 // ____________________________________________________________________________
@@ -41,6 +75,9 @@ parseConstructTemplate(const std::string& input,
                        SparqlQleverVisitor::PrefixMap prefixes);
 
 ResultOfParseAndRemainingText<LimitOffsetClause> parseLimitOffsetClause(
+    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
+
+ResultOfParseAndRemainingText<vector<OrderKey>> parseOrderClause(
     const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
 }  // namespace sparqlParserHelpers
 
