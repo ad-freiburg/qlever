@@ -85,7 +85,7 @@ queries:
 
         FILTER (?date < "1940-01-01"^^xsd:date)
       }
-      ORDER BY DESC(SCORE(?t))
+#      ORDER BY DESC(SCORE(?t))
     checks:
       - num_cols: 3
       - num_rows: 3
@@ -137,12 +137,14 @@ queries:
       ORDER BY DESC(?count)
     checks:
       - num_cols: 2
-#- num_rows : 5295 #greater than current limit
-      - selected: ["?count", "?place"]
-      - contains_row: [280, "<New_York_City>"]
-      - order_numeric: {"dir": "DESC", "var": "?count"}
+      #- num_rows : 5295 #greater than current limit
+      - selected: [ "?count", "?place" ]
+      - contains_row: [ 280, "<New_York_City>" ]
+      - order_numeric: { "dir": "DESC", "var": "?count" }
 
 
+  # TODO<joka> reintroduce order by DESC((COUNT(?x) as ?count)) as soon as
+  #  ordering by an expression while grouping is implemented
   - query: scientists-order-by-aggregate-count
     type: no-text
     sparql: |
@@ -151,15 +153,17 @@ queries:
           ?x <Place_of_birth> ?place .
       }
       GROUP BY ?place
-      ORDER BY DESC((COUNT(?x) as ?count))
+    #      ORDER BY DESC((COUNT(?x) as ?count))
     checks:
       - num_cols: 2
-#The query returns to many rows, the current limit is 4096
-#- num_rows : 5295
-      - selected: ["?place", "?count2"]
-      - order_numeric: {"dir": "DESC", "var": "?count2"}
+      #The query returns to many rows, the current limit is 4096
+      #- num_rows : 5295
+      - selected: [ "?place", "?count2" ]
+  #      - order_numeric: {"dir": "DESC", "var": "?count2"}
 
 
+  # TODO<joka> reintroduce order by ASC((AVG(?height) as ?avg)) as soon as
+  #  ordering by an expression while grouping is implemented
   - query: scientists-order-by-aggregate-avg
     type: no-text
     sparql: |
@@ -169,12 +173,12 @@ queries:
         ?x <Height> ?height .
       }
       GROUP BY ?profession
-      ORDER BY ASC((AVG(?height) as ?avg))
+    #      ORDER BY ASC((AVG(?height) as ?avg))
     checks:
       - num_cols: 2
       - num_rows: 209
       - selected: ["?profession", "?avg2"]
-      - order_numeric: {"dir": "ASC", "var": "?avg2"}
+  #      - order_numeric: {"dir": "ASC", "var": "?avg2"}
 
 
   - query: group-by-profession-average-height
