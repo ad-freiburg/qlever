@@ -1232,14 +1232,6 @@ TEST(ParserTest, Order) {
         pq._rootGraphPattern._children[0].variant_));
   }
   {
-    // Ordering by variables that are not grouped is not allowed.
-    EXPECT_THROW(
-        SparqlParser("SELECT ?x WHERE { ?x :myrel ?y } GROUP BY ?x ORDER BY "
-                     "?y")
-            .parse(),
-        ParseException);
-  }
-  {
     ParsedQuery pq =
         SparqlParser(
             "SELECT ?x (COUNT(?y) as ?c) WHERE { ?x :myrel ?y } GROUP "
@@ -1258,6 +1250,14 @@ TEST(ParserTest, Order) {
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
     ASSERT_EQ(helperBind._expression.getDescriptor(), "?x-?y");
     ASSERT_EQ(pq._orderBy[0].variable_, helperBind._target);
+  }
+  {
+    // Ordering by variables that are not grouped is not allowed.
+    EXPECT_THROW(
+        SparqlParser("SELECT ?x WHERE { ?x :myrel ?y } GROUP BY ?x ORDER BY "
+                     "?y")
+            .parse(),
+        ParseException);
   }
   {
     // Ordering by an expression while grouping is currently not supported.
