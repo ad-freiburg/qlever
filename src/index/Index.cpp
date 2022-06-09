@@ -794,7 +794,7 @@ template void Index::writeAsciiListFile<vector<Score>>(
     const string& filename, const vector<Score>& ids) const;
 
 // _____________________________________________________________________________
-bool Index::isLiteral(const string& object) {
+bool Index::isLiteral(const string& object) const {
   return decltype(_vocab)::isLiteral(object);
 }
 
@@ -918,7 +918,8 @@ void Index::readConfiguration() {
 }
 
 // ___________________________________________________________________________
-LangtagAndTriple Index::tripleToInternalRepresentation(TurtleTriple&& triple) {
+LangtagAndTriple Index::tripleToInternalRepresentation(
+    TurtleTriple&& triple) const {
   LangtagAndTriple result{"", {}};
   auto& resultTriple = result._triple;
   resultTriple[0] = std::move(triple._subject);
@@ -933,7 +934,7 @@ LangtagAndTriple Index::tripleToInternalRepresentation(TurtleTriple&& triple) {
   if (idIfNotString.has_value()) {
     resultTriple[2] = idIfNotString.value();
   } else {
-    resultTriple[2] = triple._object.getString();
+    resultTriple[2] = std::move(triple._object.getString());
   }
 
   for (size_t i = 0; i < 3; ++i) {
@@ -945,12 +946,12 @@ LangtagAndTriple Index::tripleToInternalRepresentation(TurtleTriple&& triple) {
     auto& component = std::get<PossiblyExternalizedIriOrLiteral>(el);
     auto& iriOrLiteral = component._iriOrLiteral;
     iriOrLiteral = _vocab.getLocaleManager().normalizeUtf8(iriOrLiteral);
+    if (_onDiskLiterals && _vocab.shouldBeExternalized(iriOrLiteral)) {
+      component._isExternal = true;
+    }
     // Only the third element (the object) might contain a language tag.
     if (i == 2 && isLiteral(iriOrLiteral)) {
       result._langtag = decltype(_vocab)::getLanguage(iriOrLiteral);
-      if (_onDiskLiterals && _vocab.shouldBeExternalized(iriOrLiteral)) {
-        component._isExternal = true;
-      }
     }
   }
   return result;

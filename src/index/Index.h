@@ -170,6 +170,7 @@ class Index {
   void addTextFromOnDiskIndex();
 
   const auto& getVocab() const { return _vocab; };
+  auto& getNonConstVocabForTesting() { return _vocab; }
 
   const auto& getTextVocab() const { return _textVocab; };
 
@@ -724,15 +725,17 @@ class Index {
 
   void getRhsForSingleLhs(const IdTable& in, Id lhsId, IdTable* result) const;
 
-  bool isLiteral(const string& object);
+  bool isLiteral(const string& object) const;
 
   bool shouldBeExternalized(const string& object);
   // convert value literals to internal representation
   // and add externalization characters if necessary.
   // Returns the language tag of spo[2] (the object) or ""
   // if there is none.
-  LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple);
+ public:
+  LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple) const;
 
+ private:
   /**
    * @brief Throws an exception if no patterns are loaded. Should be called from
    *        whithin any index method that returns data requiring the patterns
