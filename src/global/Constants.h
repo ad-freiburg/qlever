@@ -50,6 +50,9 @@ static const std::string LANGUAGE_PREDICATE = URI_PREFIX + "langtag>";
 static const char VALUE_PREFIX[] = ":v:";
 static const char VALUE_DATE_PREFIX[] = ":v:date:";
 static const char VALUE_FLOAT_PREFIX[] = ":v:float:";
+
+// TODO<joka921> Move them to their own file, make them strings, remove
+// duplications, etc.
 static const char XSD_DATETIME_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#dateTime";
 static const char XSD_DATE_TYPE[] = "http://www.w3.org/2001/XMLSchema#date";
@@ -62,8 +65,26 @@ static const char XSD_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#integer";
 static const char XSD_FLOAT_TYPE[] = "http://www.w3.org/2001/XMLSchema#float";
 static const char XSD_DOUBLE_TYPE[] = "http://www.w3.org/2001/XMLSchema#double";
+
+static const char XSD_NON_POSITIVE_INTEGER_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#nonPositiveInteger";
 static const char XSD_DECIMAL_TYPE[] =
-    "http://www.w3.org/2001/XMLSchema#decimal";
+    "http://www.w3.org/2001/XMLSchema#negativeInteger";
+static const char XSD_LONG_TYPE[] = "http://www.w3.org/2001/XMLSchema#long";
+static const char XSD_SHORT_TYPE[] = "http://www.w3.org/2001/XMLSchema#short";
+static const char XSD_BYTE_TYPE[] = "http://www.w3.org/2001/XMLSchema#byte";
+static const char XSD_NON_NEGATIVE_INTEGER_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#nonNegativeInteger";
+static const char XSD_UNSIGNED_LONG_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#unsignedLong";
+static const char XSD_UNSIGNED_INT_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#unsignedInt";
+static const char XSD_UNSIGNED_SHORT_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#unsignedShort";
+static const char XSD_UNSIGNED_BYTE_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#unsignedByte";
+static const char XSD_POSITIVE_INTEGER_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#positiveInteger";
 static const char XSD_BOOLEAN_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#boolean";
 static const char VALUE_DATE_TIME_SEPARATOR[] = "T";

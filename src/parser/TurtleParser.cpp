@@ -349,9 +349,15 @@ bool TurtleParser<T>::rdfLiteral() {
     const auto& typeIri = _lastParseResult.getString();
     auto type = stripAngleBrackets(typeIri);
     std::string strippedLiteral{stripDoubleQuotes(literalString)};
-    // TODO<joka921> Add other integer types (short etc.) here, or check at
-    // least, which are required by the standard for support.
-    if (type == XSD_INT_TYPE || type == XSD_INTEGER_TYPE) {
+    // TODO<joka921> clean this up by moving the check for the types to a
+    // separate module.
+    if (type == XSD_INT_TYPE || type == XSD_INTEGER_TYPE ||
+        type == XSD_NON_POSITIVE_INTEGER_TYPE || type == XSD_DECIMAL_TYPE ||
+        type == XSD_LONG_TYPE || type == XSD_SHORT_TYPE ||
+        type == XSD_BYTE_TYPE || type == XSD_NON_NEGATIVE_INTEGER_TYPE ||
+        type == XSD_UNSIGNED_LONG_TYPE || type == XSD_UNSIGNED_INT_TYPE ||
+        type == XSD_UNSIGNED_SHORT_TYPE || type == XSD_POSITIVE_INTEGER_TYPE ||
+        type == XSD_BOOLEAN_TYPE) {
       parseIntegerConstant(strippedLiteral);
     } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
                type == XSD_FLOAT_TYPE) {
