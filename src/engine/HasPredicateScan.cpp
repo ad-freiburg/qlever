@@ -396,7 +396,7 @@ void HasPredicateScan::computeSubqueryS(
   *dynResult = result.moveToDynamic();
 }
 
-void HasPredicateScan::setSubject(const TripleObject& subject) {
+void HasPredicateScan::setSubject(const TripleComponent& subject) {
   if (!subject.isString()) {
     throw ParseException{absl::StrCat(
         "The object of a ql:has-predicate triple must be an IRI, but was \"",
@@ -405,7 +405,7 @@ void HasPredicateScan::setSubject(const TripleObject& subject) {
   _subject = subject.getString();
 }
 
-void HasPredicateScan::setObject(const TripleObject& object) {
+void HasPredicateScan::setObject(const TripleComponent& object) {
   if (!object.isString()) {
     throw ParseException{absl::StrCat(
         "The object of a ql:has-predicate triple must be an IRI, but was \"",

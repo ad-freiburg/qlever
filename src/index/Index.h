@@ -188,9 +188,9 @@ class Index {
   // --------------------------------------------------------------------------
   size_t relationCardinality(const string& relationName) const;
 
-  size_t subjectCardinality(const TripleObject& sub) const;
+  size_t subjectCardinality(const TripleComponent& sub) const;
 
-  size_t objectCardinality(const TripleObject& obj) const;
+  size_t objectCardinality(const TripleComponent& obj) const;
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
@@ -395,7 +395,7 @@ class Index {
 
   // _____________________________________________________________________________
   template <class PermutationImpl>
-  vector<float> getMultiplicities(const TripleObject& key,
+  vector<float> getMultiplicities(const TripleComponent& key,
                                   const PermutationImpl& p) const {
     std::optional<Id> keyId = key.toValueId(getVocab());
     vector<float> res;
@@ -448,7 +448,7 @@ class Index {
    * Index class).
    */
   template <class Permutation>
-  void scan(const TripleObject& key, IdTable* result, const Permutation& p,
+  void scan(const TripleComponent& key, IdTable* result, const Permutation& p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
     LOG(DEBUG) << "Performing " << p._readableName
                << " scan for full list for: " << key << "\n";
@@ -476,8 +476,9 @@ class Index {
    */
   // _____________________________________________________________________________
   template <class PermutationInfo>
-  void scan(const TripleObject& col0String, const TripleObject& col1String,
-            IdTable* result, const PermutationInfo& p,
+  void scan(const TripleComponent& col0String,
+            const TripleComponent& col1String, IdTable* result,
+            const PermutationInfo& p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
     std::optional<Id> col0Id = col0String.toValueId(getVocab());
     std::optional<Id> col1Id = col1String.toValueId(getVocab());

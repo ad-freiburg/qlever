@@ -7,7 +7,7 @@
 
 #include "../engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "../util/HashMap.h"
-#include "./TripleObject.h"
+#include "./TripleComponent.h"
 #include "ParsedQuery.h"
 #include "SparqlLexer.h"
 #include "sparqlParser/SparqlQleverVisitor.h"
@@ -29,8 +29,9 @@ class SparqlParser {
    * If isEntireString is true an exception is thrown if the entire string
    * is not a literal (apart from any leading and trailing whitespace).
    **/
-  static TripleObject parseLiteral(const ParsedQuery& pq, const string& literal,
-                                   bool isEntireString, size_t off = 0);
+  static TripleComponent parseLiteral(const ParsedQuery& pq,
+                                      const string& literal,
+                                      bool isEntireString, size_t off = 0);
 
  private:
   void parseQuery(ParsedQuery* query, QueryType queryType);

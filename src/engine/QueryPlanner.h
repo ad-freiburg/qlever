@@ -223,30 +223,30 @@ class QueryPlanner {
    * @brief Returns a parsed query for the property path.
    */
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromPropertyPath(
-      const TripleObject& left, const PropertyPath& path,
-      const TripleObject& right);
+      const TripleComponent& left, const PropertyPath& path,
+      const TripleComponent& right);
 
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromSequence(
-      const TripleObject& left, const PropertyPath& path,
-      const TripleObject& right);
+      const TripleComponent& left, const PropertyPath& path,
+      const TripleComponent& right);
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromAlternative(
-      const TripleObject& left, const PropertyPath& path,
-      const TripleObject& right);
+      const TripleComponent& left, const PropertyPath& path,
+      const TripleComponent& right);
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitive(
-      const TripleObject& left, const PropertyPath& path,
-      const TripleObject& right);
+      const TripleComponent& left, const PropertyPath& path,
+      const TripleComponent& right);
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitiveMin(
-      const TripleObject& left, const PropertyPath& path,
-      const TripleObject& right);
+      const TripleComponent& left, const PropertyPath& path,
+      const TripleComponent& right);
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitiveMax(
-      const TripleObject& left, const PropertyPath& path,
-      const TripleObject& right);
+      const TripleComponent& left, const PropertyPath& path,
+      const TripleComponent& right);
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromInverse(
-      const TripleObject& left, const PropertyPath& path,
-      const TripleObject& right);
+      const TripleComponent& left, const PropertyPath& path,
+      const TripleComponent& right);
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromIri(
-      const TripleObject& left, const PropertyPath& path,
-      const TripleObject& right);
+      const TripleComponent& left, const PropertyPath& path,
+      const TripleComponent& right);
 
   std::string generateUniqueVarName();
 

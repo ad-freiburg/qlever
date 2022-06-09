@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 
-#ifndef QLEVER_TRIPLEOBJECT_H
-#define QLEVER_TRIPLEOBJECT_H
+#ifndef QLEVER_TRIPLECOMPONENT_H
+#define QLEVER_TRIPLECOMPONENT_H
 
 #include <absl/strings/str_cat.h>
 
@@ -17,10 +17,11 @@
 #include "../util/Forward.h"
 
 /// A wrapper around a `std::variant` that can hold the different types that the
-/// object of a triple can have in the Turtle Parser. Those currently are
-/// `double` (xsd:double and xsd:decimal), `int64_t` (xsd:int and xsd:integer)
-/// and `std::string` (IRIs and literals of any other type).
-class TripleObject {
+/// subject, predicate, or object of a triple can have in the Turtle Parser.
+/// Those currently are `double` (xsd:double and xsd:decimal), `int64_t`
+/// (xsd:int and xsd:integer) and `std::string` (variables, IRIs, and literals
+/// of any other type).
+class TripleComponent {
  private:
   // The underlying variant type.
   using Variant = std::variant<std::string, double, int64_t>;
@@ -30,18 +31,18 @@ class TripleObject {
   /// Construct from anything that is able to construct the underlying
   /// `Variant`.
   template <typename... Args>
-  requires std::is_constructible_v<Variant, Args&&...> TripleObject(
+  requires std::is_constructible_v<Variant, Args&&...> TripleComponent(
       Args&&... args)
       : _variant(AD_FWD(args)...) {}
 
   /// Construct from `string_view`s. We need to explicitly implement this
   /// constructor because  `string_views` are not implicitly convertible to
   /// `std::string`. Note that this constructor is deliberately NOT explicit.
-  TripleObject(std::string_view sv) : _variant{std::string{sv}} {}
+  TripleComponent(std::string_view sv) : _variant{std::string{sv}} {}
 
   /// Defaulted copy and move constructors.
-  TripleObject(const TripleObject&) = default;
-  TripleObject(TripleObject&&) noexcept = default;
+  TripleComponent(const TripleComponent&) = default;
+  TripleComponent(TripleComponent&&) noexcept = default;
 
   /// Assignment for types that can be directly assigned to the underlying
   /// variant.
@@ -49,30 +50,30 @@ class TripleObject {
   requires requires(Variant v, T&& t) {
     _variant = t;
   }
-  TripleObject& operator=(T&& value) {
+  TripleComponent& operator=(T&& value) {
     _variant = AD_FWD(value);
     return *this;
   }
 
   /// Assign a `std::string` to the variant that is constructed from `value`.
-  TripleObject& operator=(std::string_view value) {
+  TripleComponent& operator=(std::string_view value) {
     _variant = std::string{value};
     return *this;
   }
 
   /// Defaulted copy and move assignment.
-  TripleObject& operator=(const TripleObject&) = default;
-  TripleObject& operator=(TripleObject&&) = default;
+  TripleComponent& operator=(const TripleComponent&) = default;
+  TripleComponent& operator=(TripleComponent&&) = default;
 
-  /// Make a `TripleObject` directly comparable to the underlying types.
+  /// Make a `TripleComponent` directly comparable to the underlying types.
   template <typename T>
   requires requires(T&& t) {
     _variant == t;
   }
   bool operator==(const T& other) const { return _variant == other; }
 
-  /// Equality comparison between two `TripleObject`s.
-  bool operator==(const TripleObject&) const = default;
+  /// Equality comparison between two `TripleComponent`s.
+  bool operator==(const TripleComponent&) const = default;
 
   /// Check which type the underlying variants hold.
   [[nodiscard]] bool isString() const {
@@ -121,7 +122,7 @@ class TripleObject {
     }
   }
 
-  /// Convert the `TripleObject` to an ID if it is not a string. In case of a
+  /// Convert the `TripleComponent` to an ID if it is not a string. In case of a
   /// string return `std::nullopt`. This is used in `toValueId` below and during
   /// the index building when we haven't built the vocabulary yet.
   [[nodiscard]] std::optional<Id> toValueIdIfNotString() const {
@@ -139,9 +140,9 @@ class TripleObject {
     return std::visit(visitor, _variant);
   }
 
-  /// Convert the `TripleObject` to an ID. If the `TripleObject` is a string,
-  /// the IDs are resolved using the `vocabulary`. If a string is not found in
-  /// the vocabulary, `std::nullopt` is returned.
+  /// Convert the `TripleComponent` to an ID. If the `TripleComponent` is a
+  /// string, the IDs are resolved using the `vocabulary`. If a string is not
+  /// found in the vocabulary, `std::nullopt` is returned.
   template <typename Vocabulary>
   [[nodiscard]] std::optional<Id> toValueId(
       const Vocabulary& vocabulary) const {
@@ -160,7 +161,7 @@ class TripleObject {
   /// Human readable output. Is used for debugging, testing, and for the
   /// creation of descriptors and cache keys.
   friend std::ostream& operator<<(std::ostream& stream,
-                                  const TripleObject& obj) {
+                                  const TripleComponent& obj) {
     std::visit([&stream](const auto& value) -> void { stream << value; },
                obj._variant);
     return stream;
@@ -173,4 +174,4 @@ class TripleObject {
   }
 };
 
-#endif  // QLEVER_TRIPLEOBJECT_H
+#endif  // QLEVER_TRIPLECOMPONENT_H

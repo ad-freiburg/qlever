@@ -1558,8 +1558,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedFromPropertyPathTriple(
 }
 
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(
-    const TripleObject& left, const PropertyPath& path,
-    const TripleObject& right) {
+    const TripleComponent& left, const PropertyPath& path,
+    const TripleComponent& right) {
   switch (path._operation) {
     case PropertyPath::Operation::ALTERNATIVE:
       return seedFromAlternative(left, path, right);
@@ -1584,8 +1584,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(
 
 // _____________________________________________________________________________
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
-    const TripleObject& left, const PropertyPath& path,
-    const TripleObject& right) {
+    const TripleComponent& left, const PropertyPath& path,
+    const TripleComponent& right) {
   if (path._children.empty()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Tried processing a sequence property path node without any "
@@ -1693,8 +1693,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
       if (included_ids.empty()) {
         continue;
       }
-      TripleObject l = left;
-      TripleObject r;
+      TripleComponent l = left;
+      TripleComponent r;
       if (included_ids.size() > 1) {
         r = generateUniqueVarName();
       } else {
@@ -1747,8 +1747,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
 
 // _____________________________________________________________________________
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
-    const TripleObject& left, const PropertyPath& path,
-    const TripleObject& right) {
+    const TripleComponent& left, const PropertyPath& path,
+    const TripleComponent& right) {
   if (path._children.empty()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Tried processing an alternative property path node without any "
@@ -1778,8 +1778,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
 
 // _____________________________________________________________________________
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
-    const TripleObject& left, const PropertyPath& path,
-    const TripleObject& right) {
+    const TripleComponent& left, const PropertyPath& path,
+    const TripleComponent& right) {
   std::string innerLeft = generateUniqueVarName();
   std::string innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
@@ -1800,8 +1800,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
 
 // _____________________________________________________________________________
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
-    const TripleObject& left, const PropertyPath& path,
-    const TripleObject& right) {
+    const TripleComponent& left, const PropertyPath& path,
+    const TripleComponent& right) {
   std::string innerLeft = generateUniqueVarName();
   std::string innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
@@ -1822,8 +1822,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
 
 // _____________________________________________________________________________
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMax(
-    const TripleObject& left, const PropertyPath& path,
-    const TripleObject& right) {
+    const TripleComponent& left, const PropertyPath& path,
+    const TripleComponent& right) {
   std::string innerLeft = generateUniqueVarName();
   std::string innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
@@ -1844,15 +1844,15 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMax(
 
 // _____________________________________________________________________________
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromInverse(
-    const TripleObject& left, const PropertyPath& path,
-    const TripleObject& right) {
+    const TripleComponent& left, const PropertyPath& path,
+    const TripleComponent& right) {
   return seedFromPropertyPath(right, path._children[0], left);
 }
 
 // _____________________________________________________________________________
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromIri(
-    const TripleObject& left, const PropertyPath& path,
-    const TripleObject& right) {
+    const TripleComponent& left, const PropertyPath& path,
+    const TripleComponent& right) {
   std::shared_ptr<ParsedQuery::GraphPattern> p =
       std::make_shared<ParsedQuery::GraphPattern>();
   GraphPatternOperation::BasicGraphPattern basic;

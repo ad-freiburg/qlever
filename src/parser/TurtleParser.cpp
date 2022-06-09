@@ -238,7 +238,7 @@ void TurtleParser<T>::parseDoubleConstant(const std::string& input) {
   size_t position;
 
   bool errorOccured = false;
-  TripleObject result;
+  TripleComponent result;
   try {
     // We cannot directly store this in `_lastParseResult` because this might
     // overwrite `input`.
@@ -264,7 +264,7 @@ void TurtleParser<T>::parseIntegerConstant(const std::string& input) {
   size_t position = 0;
 
   bool errorOccured = false;
-  TripleObject result;
+  TripleComponent result;
   try {
     // We cannot directly store this in `_lastParseResult` because this might
     // overwrite `input`.
@@ -352,9 +352,10 @@ bool TurtleParser<T>::rdfLiteral() {
     // TODO<joka921> clean this up by moving the check for the types to a
     // separate module.
     if (type == XSD_INT_TYPE || type == XSD_INTEGER_TYPE ||
-        type == XSD_NON_POSITIVE_INTEGER_TYPE || type == XSD_DECIMAL_TYPE ||
-        type == XSD_LONG_TYPE || type == XSD_SHORT_TYPE ||
-        type == XSD_BYTE_TYPE || type == XSD_NON_NEGATIVE_INTEGER_TYPE ||
+        type == XSD_NON_POSITIVE_INTEGER_TYPE ||
+        type == XSD_NEGATIVE_INTEGER_TYPE || type == XSD_LONG_TYPE ||
+        type == XSD_SHORT_TYPE || type == XSD_BYTE_TYPE ||
+        type == XSD_NON_NEGATIVE_INTEGER_TYPE ||
         type == XSD_UNSIGNED_LONG_TYPE || type == XSD_UNSIGNED_INT_TYPE ||
         type == XSD_UNSIGNED_SHORT_TYPE || type == XSD_POSITIVE_INTEGER_TYPE ||
         type == XSD_BOOLEAN_TYPE) {

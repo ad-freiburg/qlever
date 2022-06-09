@@ -65,10 +65,12 @@ static const char XSD_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#integer";
 static const char XSD_FLOAT_TYPE[] = "http://www.w3.org/2001/XMLSchema#float";
 static const char XSD_DOUBLE_TYPE[] = "http://www.w3.org/2001/XMLSchema#double";
+static const char XSD_DECIMAL_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#decimal";
 
 static const char XSD_NON_POSITIVE_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#nonPositiveInteger";
-static const char XSD_DECIMAL_TYPE[] =
+static const char XSD_NEGATIVE_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#negativeInteger";
 static const char XSD_LONG_TYPE[] = "http://www.w3.org/2001/XMLSchema#long";
 static const char XSD_SHORT_TYPE[] = "http://www.w3.org/2001/XMLSchema#short";

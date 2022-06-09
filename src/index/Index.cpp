@@ -755,7 +755,7 @@ size_t Index::relationCardinality(const string& relationName) const {
 // TODO<joka921> There is a lot of duplication in the three cardinality
 // functions, remove it.
 // _____________________________________________________________________________
-size_t Index::subjectCardinality(const TripleObject& sub) const {
+size_t Index::subjectCardinality(const TripleComponent& sub) const {
   std::optional<Id> relId = sub.toValueId(getVocab());
   if (relId.has_value()) {
     if (this->_SPO.metaData().col0IdExists(relId.value())) {
@@ -766,7 +766,7 @@ size_t Index::subjectCardinality(const TripleObject& sub) const {
 }
 
 // _____________________________________________________________________________
-size_t Index::objectCardinality(const TripleObject& obj) const {
+size_t Index::objectCardinality(const TripleComponent& obj) const {
   std::optional<Id> relId = obj.toValueId(getVocab());
   if (relId.has_value()) {
     if (this->_OSP.metaData().col0IdExists(relId.value())) {
@@ -925,7 +925,7 @@ LangtagAndTriple Index::tripleToInternalRepresentation(TurtleTriple&& triple) {
   resultTriple[1] = std::move(triple._predicate);
 
   // If the object of the triple can be directly folded into an ID, do so. Note
-  // that the actual folding is done by the `TripleObject`.
+  // that the actual folding is done by the `TripleComponent`.
   std::optional<Id> idIfNotString = triple._object.toValueIdIfNotString();
 
   // TODO<joka921> The following statement could be simplified by a helper
@@ -938,11 +938,11 @@ LangtagAndTriple Index::tripleToInternalRepresentation(TurtleTriple&& triple) {
 
   for (size_t i = 0; i < 3; ++i) {
     auto& el = resultTriple[i];
-    if (!std::holds_alternative<TripleComponent>(el)) {
+    if (!std::holds_alternative<PossiblyExternalizedIriOrLiteral>(el)) {
       // If we already have an ID, we can just continue;
       continue;
     }
-    auto& component = std::get<TripleComponent>(el);
+    auto& component = std::get<PossiblyExternalizedIriOrLiteral>(el);
     auto& iriOrLiteral = component._iriOrLiteral;
     iriOrLiteral = _vocab.getLocaleManager().normalizeUtf8(iriOrLiteral);
     // Only the third element (the object) might contain a language tag.
@@ -952,229 +952,222 @@ LangtagAndTriple Index::tripleToInternalRepresentation(TurtleTriple&& triple) {
         component._isExternal = true;
       }
     }
-    return result;
+  }
+  return result;
+}
+
+// ___________________________________________________________________________
+template <class Parser>
+void Index::readIndexBuilderSettingsFromFile() {
+  json j;  // if we have no settings, we still have to initialize some default
+           // values
+  if (!_settingsFileName.empty()) {
+    std::ifstream f(_settingsFileName);
+    AD_CHECK(f.is_open());
+    f >> j;
   }
 
-  // ___________________________________________________________________________
-  template <class Parser>
-  void Index::readIndexBuilderSettingsFromFile() {
-    json j;  // if we have no settings, we still have to initialize some default
-             // values
-    if (!_settingsFileName.empty()) {
-      std::ifstream f(_settingsFileName);
-      AD_CHECK(f.is_open());
-      f >> j;
-    }
+  if (j.find("prefixes-external") != j.end()) {
+    _vocab.initializeExternalizePrefixes(j["prefixes-external"]);
+    _configurationJson["prefixes-external"] = j["prefixes-external"];
+    _onDiskLiterals = true;
+    _configurationJson["external-literals"] = true;
+  }
 
-    if (j.find("prefixes-external") != j.end()) {
-      _vocab.initializeExternalizePrefixes(j["prefixes-external"]);
-      _configurationJson["prefixes-external"] = j["prefixes-external"];
-      _onDiskLiterals = true;
-      _configurationJson["external-literals"] = true;
-    }
+  if (j.count("ignore-case")) {
+    LOG(ERROR) << ERROR_IGNORE_CASE_UNSUPPORTED << '\n';
+    throw std::runtime_error("Deprecated key \"ignore-case\" in settings JSON");
+  }
 
-    if (j.count("ignore-case")) {
-      LOG(ERROR) << ERROR_IGNORE_CASE_UNSUPPORTED << '\n';
-      throw std::runtime_error(
-          "Deprecated key \"ignore-case\" in settings JSON");
-    }
+  /**
+   * ICU uses two separate arguments for each Locale, the language ("en" or
+   * "fr"...) and the country ("GB", "CA"...). The encoding has to be known at
+   * compile time for ICU and will always be UTF-8 so it is not part of the
+   * locale setting.
+   */
 
-    /**
-     * ICU uses two separate arguments for each Locale, the language ("en" or
-     * "fr"...) and the country ("GB", "CA"...). The encoding has to be known at
-     * compile time for ICU and will always be UTF-8 so it is not part of the
-     * locale setting.
-     */
-
-    {
-      std::string lang = LOCALE_DEFAULT_LANG;
-      std::string country = LOCALE_DEFAULT_COUNTRY;
-      bool ignorePunctuation = LOCALE_DEFAULT_IGNORE_PUNCTUATION;
-      if (j.count("locale")) {
-        lang = std::string{j["locale"]["language"]};
-        country = std::string{j["locale"]["country"]};
-        ignorePunctuation = bool{j["locale"]["ignore-punctuation"]};
-      } else {
-        LOG(INFO) << "Locale was not specified in settings file, default is "
-                     "en_US"
-                  << std::endl;
-      }
-      LOG(INFO) << "You specified \"locale = " << lang << "_" << country
-                << "\" "
-                << "and \"ignore-punctuation = " << ignorePunctuation << "\""
-                << std::endl;
-
-      if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
-        LOG(WARN)
-            << "You are using Locale settings that differ from the default "
-               "language or country.\n\t"
-            << "This should work but is untested by the QLever team. If "
-               "you are running into unexpected problems,\n\t"
-            << "Please make sure to also report your used locale when "
-               "filing a bug report. Also note that changing the\n\t"
-            << "locale requires to completely rebuild the index\n";
-      }
-      _vocab.setLocale(lang, country, ignorePunctuation);
-      _textVocab.setLocale(lang, country, ignorePunctuation);
-      _configurationJson["locale"]["language"] = lang;
-      _configurationJson["locale"]["country"] = country;
-      _configurationJson["locale"]["ignore-punctuation"] = ignorePunctuation;
-    }
-
-    if (j.find("languages-internal") != j.end()) {
-      _vocab.initializeInternalizedLangs(j["languages-internal"]);
-      _configurationJson["languages-internal"] = j["languages-internal"];
-      _onDiskLiterals = true;
-      _configurationJson["external-literals"] = true;
-    }
-    if (j.count("ascii-prefixes-only")) {
-      if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
-        bool v{j["ascii-prefixes-only"]};
-        if (v) {
-          LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
-          _onlyAsciiTurtlePrefixes = true;
-        } else {
-          _onlyAsciiTurtlePrefixes = false;
-        }
-      } else {
-        LOG(WARN)
-            << "You specified the ascii-prefixes-only but a parser that is "
-               "not the Turtle stream parser. This means that this setting "
-               "is ignored."
-            << std::endl;
-      }
-    }
-
-    if (j.count("num-triples-per-batch")) {
-      _numTriplesPerBatch = size_t{j["num-triples-per-batch"]};
-      LOG(INFO)
-          << "You specified \"num-triples-per-batch = " << _numTriplesPerBatch
-          << "\", choose a lower value if the index builder runs out of memory"
-          << std::endl;
-    }
-
-    if (j.count("parser-batch-size")) {
-      _parserBatchSize = size_t{j["parser-batch-size"]};
-      LOG(INFO) << "Overriding setting parser-batch-size to "
-                << _parserBatchSize
-                << " This might influence performance during index build."
+  {
+    std::string lang = LOCALE_DEFAULT_LANG;
+    std::string country = LOCALE_DEFAULT_COUNTRY;
+    bool ignorePunctuation = LOCALE_DEFAULT_IGNORE_PUNCTUATION;
+    if (j.count("locale")) {
+      lang = std::string{j["locale"]["language"]};
+      country = std::string{j["locale"]["country"]};
+      ignorePunctuation = bool{j["locale"]["ignore-punctuation"]};
+    } else {
+      LOG(INFO) << "Locale was not specified in settings file, default is "
+                   "en_US"
                 << std::endl;
     }
+    LOG(INFO) << "You specified \"locale = " << lang << "_" << country << "\" "
+              << "and \"ignore-punctuation = " << ignorePunctuation << "\""
+              << std::endl;
 
-    std::string overflowingIntegersThrow = "overflowing-integers-throw";
-    std::string overflowingIntegersBecomeDoubles =
-        "overflowing-integers-become-doubles";
-    std::string allIntegersBecomeDoubles = "all-integers-become-doubles";
-    std::vector<std::string_view> allModes{overflowingIntegersThrow,
-                                           overflowingIntegersBecomeDoubles,
-                                           allIntegersBecomeDoubles};
-    std::string key = "parser-integer-overflow-behavior";
-    if (j.count(key)) {
-      auto value = j[key];
-      if (value == overflowingIntegersThrow) {
-        LOG(INFO) << "Integers that cannot be represented by QLever will throw "
-                     "an exception"
-                  << std::endl;
-        _turtleParserIntegerOverflowBehavior =
-            TurtleParserIntegerOverflowBehavior::Error;
-      } else if (value == overflowingIntegersBecomeDoubles) {
-        LOG(INFO) << "Integers that cannot be represented by QLever will be "
-                     "converted to doubles"
-                  << std::endl;
-        _turtleParserIntegerOverflowBehavior =
-            TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
-      } else if (value == allIntegersBecomeDoubles) {
-        LOG(INFO) << "All integers will be converted to doubles" << std::endl;
-        _turtleParserIntegerOverflowBehavior =
-            TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+    if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
+      LOG(WARN) << "You are using Locale settings that differ from the default "
+                   "language or country.\n\t"
+                << "This should work but is untested by the QLever team. If "
+                   "you are running into unexpected problems,\n\t"
+                << "Please make sure to also report your used locale when "
+                   "filing a bug report. Also note that changing the\n\t"
+                << "locale requires to completely rebuild the index\n";
+    }
+    _vocab.setLocale(lang, country, ignorePunctuation);
+    _textVocab.setLocale(lang, country, ignorePunctuation);
+    _configurationJson["locale"]["language"] = lang;
+    _configurationJson["locale"]["country"] = country;
+    _configurationJson["locale"]["ignore-punctuation"] = ignorePunctuation;
+  }
+
+  if (j.find("languages-internal") != j.end()) {
+    _vocab.initializeInternalizedLangs(j["languages-internal"]);
+    _configurationJson["languages-internal"] = j["languages-internal"];
+    _onDiskLiterals = true;
+    _configurationJson["external-literals"] = true;
+  }
+  if (j.count("ascii-prefixes-only")) {
+    if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
+      bool v{j["ascii-prefixes-only"]};
+      if (v) {
+        LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
+        _onlyAsciiTurtlePrefixes = true;
       } else {
-        AD_CHECK(std::find(allModes.begin(), allModes.end(), value) ==
-                 allModes.end());
-        LOG(ERROR) << "Invalid value for " << key << std::endl;
-        LOG(INFO) << "The currently supported values are "
-                  << absl::StrJoin(allModes, ",") << std::endl;
+        _onlyAsciiTurtlePrefixes = false;
       }
     } else {
-      _turtleParserIntegerOverflowBehavior =
-          TurtleParserIntegerOverflowBehavior::Error;
-      LOG(INFO)
-          << "Integers that cannot be represented by QLever will throw an "
-             "exception (this is the default behavior)"
-          << std::endl;
+      LOG(WARN) << "You specified the ascii-prefixes-only but a parser that is "
+                   "not the Turtle stream parser. This means that this setting "
+                   "is ignored."
+                << std::endl;
     }
   }
 
-  // ___________________________________________________________________________
-  std::future<void> Index::writeNextPartialVocabulary(
-      size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-      std::unique_ptr<ItemMapArray> items, auto localIds,
-      ad_utility::Synchronized<TripleVec::bufwriter_type>* globalWritePtr) {
-    LOG(DEBUG) << "Input triples read in this section: " << numLines
-               << std::endl;
-    LOG(DEBUG)
-        << "Triples processed, also counting internal triples added by QLever: "
-        << actualCurrentPartialSize << std::endl;
-    std::future<void> resultFuture;
-    string partialFilename =
-        _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
-    string partialCompressionFilename = _onDiskBase + TMP_BASENAME_COMPRESSION +
-                                        PARTIAL_VOCAB_FILE_NAME +
-                                        std::to_string(numFiles);
-
-    auto lambda = [localIds = std::move(localIds), globalWritePtr,
-                   items = std::move(items), vocab = &_vocab, partialFilename,
-                   partialCompressionFilename, numFiles,
-                   vocabPrefixCompressed = _vocabPrefixCompressed]() mutable {
-      auto vec = vocabMapsToVector(std::move(items));
-      const auto identicalPred = [&c = vocab->getCaseComparator()](
-                                     const auto& a, const auto& b) {
-        return c(a.second.m_splitVal, b.second.m_splitVal,
-                 decltype(_vocab)::SortLevel::TOTAL);
-      };
-      LOG(TIMING) << "Start sorting of vocabulary with #elements: "
-                  << vec.size() << std::endl;
-      sortVocabVector(&vec, identicalPred, true);
-      LOG(TIMING) << "Finished sorting of vocabulary" << std::endl;
-      auto mapping = createInternalMapping(&vec);
-      LOG(TIMING) << "Finished creating of Mapping vocabulary" << std::endl;
-      auto sz = vec.size();
-      // since now adjacent duplicates also have the same Ids, it suffices to
-      // compare those
-      vec.erase(std::unique(vec.begin(), vec.end(),
-                            [](const auto& a, const auto& b) {
-                              return a.second.m_id == b.second.m_id;
-                            }),
-                vec.end());
-      LOG(TRACE) << "Removed " << sz - vec.size()
-                 << " Duplicates from the local partial vocabularies\n";
-      // The writing to the STXXL vector has to be done in order, to
-      // make the update from local to global ids work.
-      globalWritePtr->withWriteLockAndOrdered(
-          [&](auto& writerPtr) {
-            writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
-          },
-          numFiles);
-      writePartialVocabularyToFile(vec, partialFilename);
-      if (vocabPrefixCompressed) {
-        // sort according to the actual byte values
-        LOG(TIMING) << "Start sorting of vocabulary for prefix compression"
-                    << std::endl;
-        sortVocabVector(
-            &vec,
-            [](const auto& a, const auto& b) { return a.first < b.first; },
-            false);
-        LOG(TIMING) << "Finished sorting of vocabulary for prefix compression"
-                    << std::endl;
-        LOG(TIMING) << "Remove externalized words from prefix compression"
-                    << std::endl;
-        std::erase_if(vec, [](const auto& a) {
-          return a.second.m_splitVal.isExternalized;
-        });
-        writePartialVocabularyToFile(vec, partialCompressionFilename);
-      }
-      LOG(TIMING) << "Finished writing the partial vocabulary" << std::endl;
-      vec.clear();
-    };
-
-    return std::async(std::launch::async, std::move(lambda));
+  if (j.count("num-triples-per-batch")) {
+    _numTriplesPerBatch = size_t{j["num-triples-per-batch"]};
+    LOG(INFO)
+        << "You specified \"num-triples-per-batch = " << _numTriplesPerBatch
+        << "\", choose a lower value if the index builder runs out of memory"
+        << std::endl;
   }
+
+  if (j.count("parser-batch-size")) {
+    _parserBatchSize = size_t{j["parser-batch-size"]};
+    LOG(INFO) << "Overriding setting parser-batch-size to " << _parserBatchSize
+              << " This might influence performance during index build."
+              << std::endl;
+  }
+
+  std::string overflowingIntegersThrow = "overflowing-integers-throw";
+  std::string overflowingIntegersBecomeDoubles =
+      "overflowing-integers-become-doubles";
+  std::string allIntegersBecomeDoubles = "all-integers-become-doubles";
+  std::vector<std::string_view> allModes{overflowingIntegersThrow,
+                                         overflowingIntegersBecomeDoubles,
+                                         allIntegersBecomeDoubles};
+  std::string key = "parser-integer-overflow-behavior";
+  if (j.count(key)) {
+    auto value = j[key];
+    if (value == overflowingIntegersThrow) {
+      LOG(INFO) << "Integers that cannot be represented by QLever will throw "
+                   "an exception"
+                << std::endl;
+      _turtleParserIntegerOverflowBehavior =
+          TurtleParserIntegerOverflowBehavior::Error;
+    } else if (value == overflowingIntegersBecomeDoubles) {
+      LOG(INFO) << "Integers that cannot be represented by QLever will be "
+                   "converted to doubles"
+                << std::endl;
+      _turtleParserIntegerOverflowBehavior =
+          TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+    } else if (value == allIntegersBecomeDoubles) {
+      LOG(INFO) << "All integers will be converted to doubles" << std::endl;
+      _turtleParserIntegerOverflowBehavior =
+          TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+    } else {
+      AD_CHECK(std::find(allModes.begin(), allModes.end(), value) ==
+               allModes.end());
+      LOG(ERROR) << "Invalid value for " << key << std::endl;
+      LOG(INFO) << "The currently supported values are "
+                << absl::StrJoin(allModes, ",") << std::endl;
+    }
+  } else {
+    _turtleParserIntegerOverflowBehavior =
+        TurtleParserIntegerOverflowBehavior::Error;
+    LOG(INFO) << "Integers that cannot be represented by QLever will throw an "
+                 "exception (this is the default behavior)"
+              << std::endl;
+  }
+}
+
+// ___________________________________________________________________________
+std::future<void> Index::writeNextPartialVocabulary(
+    size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
+    std::unique_ptr<ItemMapArray> items, auto localIds,
+    ad_utility::Synchronized<TripleVec::bufwriter_type>* globalWritePtr) {
+  LOG(DEBUG) << "Input triples read in this section: " << numLines << std::endl;
+  LOG(DEBUG)
+      << "Triples processed, also counting internal triples added by QLever: "
+      << actualCurrentPartialSize << std::endl;
+  std::future<void> resultFuture;
+  string partialFilename =
+      _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
+  string partialCompressionFilename = _onDiskBase + TMP_BASENAME_COMPRESSION +
+                                      PARTIAL_VOCAB_FILE_NAME +
+                                      std::to_string(numFiles);
+
+  auto lambda = [localIds = std::move(localIds), globalWritePtr,
+                 items = std::move(items), vocab = &_vocab, partialFilename,
+                 partialCompressionFilename, numFiles,
+                 vocabPrefixCompressed = _vocabPrefixCompressed]() mutable {
+    auto vec = vocabMapsToVector(std::move(items));
+    const auto identicalPred = [&c = vocab->getCaseComparator()](
+                                   const auto& a, const auto& b) {
+      return c(a.second.m_splitVal, b.second.m_splitVal,
+               decltype(_vocab)::SortLevel::TOTAL);
+    };
+    LOG(TIMING) << "Start sorting of vocabulary with #elements: " << vec.size()
+                << std::endl;
+    sortVocabVector(&vec, identicalPred, true);
+    LOG(TIMING) << "Finished sorting of vocabulary" << std::endl;
+    auto mapping = createInternalMapping(&vec);
+    LOG(TIMING) << "Finished creating of Mapping vocabulary" << std::endl;
+    auto sz = vec.size();
+    // since now adjacent duplicates also have the same Ids, it suffices to
+    // compare those
+    vec.erase(std::unique(vec.begin(), vec.end(),
+                          [](const auto& a, const auto& b) {
+                            return a.second.m_id == b.second.m_id;
+                          }),
+              vec.end());
+    LOG(TRACE) << "Removed " << sz - vec.size()
+               << " Duplicates from the local partial vocabularies\n";
+    // The writing to the STXXL vector has to be done in order, to
+    // make the update from local to global ids work.
+    globalWritePtr->withWriteLockAndOrdered(
+        [&](auto& writerPtr) {
+          writeMappedIdsToExtVec(localIds, mapping, &writerPtr);
+        },
+        numFiles);
+    writePartialVocabularyToFile(vec, partialFilename);
+    if (vocabPrefixCompressed) {
+      // sort according to the actual byte values
+      LOG(TIMING) << "Start sorting of vocabulary for prefix compression"
+                  << std::endl;
+      sortVocabVector(
+          &vec, [](const auto& a, const auto& b) { return a.first < b.first; },
+          false);
+      LOG(TIMING) << "Finished sorting of vocabulary for prefix compression"
+                  << std::endl;
+      LOG(TIMING) << "Remove externalized words from prefix compression"
+                  << std::endl;
+      std::erase_if(vec, [](const auto& a) {
+        return a.second.m_splitVal.isExternalized;
+      });
+      writePartialVocabularyToFile(vec, partialCompressionFilename);
+    }
+    LOG(TIMING) << "Finished writing the partial vocabulary" << std::endl;
+    vec.clear();
+  };
+
+  return std::async(std::launch::async, std::move(lambda));
+}

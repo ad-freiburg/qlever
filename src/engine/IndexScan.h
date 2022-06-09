@@ -43,12 +43,12 @@ class IndexScan : public Operation {
 
   virtual ~IndexScan() {}
 
-  void setSubject(const TripleObject& subject) { _subject = subject; }
+  void setSubject(const TripleComponent& subject) { _subject = subject; }
 
   void setPredicate(const string& predicate) { _predicate = predicate; }
   const string& getPredicate() const { return _predicate; }
 
-  void setObject(const TripleObject& object) { _object = object; }
+  void setObject(const TripleComponent& object) { _object = object; }
 
   virtual size_t getResultWidth() const override;
 
@@ -103,9 +103,9 @@ class IndexScan : public Operation {
 
  protected:
   ScanType _type;
-  TripleObject _subject;
+  TripleComponent _subject;
   string _predicate;
-  TripleObject _object;
+  TripleComponent _object;
   size_t _sizeEstimate;
   vector<float> _multiplicity;
 

@@ -140,7 +140,7 @@ TEST(TurtleParserTest, stringParse) {
 
 TEST(TurtleParserTest, rdfLiteral) {
   std::vector<string> literals;
-  std::vector<TripleObject> expected;
+  std::vector<TripleComponent> expected;
   literals.emplace_back(R"("simpleString")");
   expected.emplace_back(R"("simpleString")");
   literals.emplace_back(R"("langtag"@en-gb)");
@@ -208,9 +208,9 @@ TEST(TurtleParserTest, blankNodePropertyList) {
 
   string blankNodeL = "[<p2> <ob2>; <p3> <ob3>]";
   std::vector<TurtleTriple> exp;
-  exp.push_back({"<s>", "<p1>", TripleObject{"QLever-Anon-Node:0"}});
-  exp.push_back({"QLever-Anon-Node:0", "<p2>", TripleObject{"<ob2>"}});
-  exp.push_back({"QLever-Anon-Node:0", "<p3>", TripleObject{"<ob3>"}});
+  exp.push_back({"<s>", "<p1>", TripleComponent{"QLever-Anon-Node:0"}});
+  exp.push_back({"QLever-Anon-Node:0", "<p2>", TripleComponent{"<ob2>"}});
+  exp.push_back({"QLever-Anon-Node:0", "<p3>", TripleComponent{"<ob3>"}});
   p.setInputStream(blankNodeL);
   ASSERT_TRUE(p.blankNodePropertyList());
   ASSERT_EQ(p._triples, exp);
@@ -290,8 +290,8 @@ TEST(TurtleParserTest, predicateObjectList) {
 TEST(TurtleParserTest, numericLiteral) {
   std::vector<std::string> literals{"2",   "-2",     "42.209",   "-42.239",
                                     ".74", "2.3e12", "2.34E-14", "-0.3e2"};
-  std::vector<TripleObject> expected{2,   -2,     42.209,   -42.239,
-                                     .74, 2.3e12, 2.34e-14, -0.3e2};
+  std::vector<TripleComponent> expected{2,   -2,     42.209,   -42.239,
+                                        .74, 2.3e12, 2.34e-14, -0.3e2};
 
   TurtleStringParser<Tokenizer> parser;
   for (size_t i = 0; i < literals.size(); ++i) {

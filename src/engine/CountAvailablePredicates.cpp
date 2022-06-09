@@ -27,7 +27,7 @@ CountAvailablePredicates::CountAvailablePredicates(
       _countVarName("count") {}
 
 CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec,
-                                                   TripleObject entityName)
+                                                   TripleComponent entityName)
     : Operation(qec),
       _subtree(nullptr),
       _subjectColumnIndex(0),

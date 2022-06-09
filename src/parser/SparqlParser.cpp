@@ -448,7 +448,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         lastPredicate.clear();
       }
 
-      TripleObject object;
+      TripleComponent object;
       if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
         object = _lexer.current().raw;
         query->registerVariableVisibleInQueryBody(_lexer.current().raw);
@@ -813,10 +813,10 @@ SparqlQleverVisitor::PrefixMap getPrefixMap(const ParsedQuery& parsedQuery) {
 }  // namespace
 
 // _____________________________________________________________________________
-TripleObject SparqlParser::parseLiteral(const ParsedQuery& pq,
-                                        const string& literal,
-                                        bool isEntireString,
-                                        size_t off /* defaults to 0 */) {
+TripleComponent SparqlParser::parseLiteral(const ParsedQuery& pq,
+                                           const string& literal,
+                                           bool isEntireString,
+                                           size_t off /* defaults to 0 */) {
   auto parseLiteralAsString = [&]() -> std::string {
     std::stringstream out;
     size_t pos = off;

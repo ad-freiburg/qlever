@@ -75,7 +75,7 @@ class QueryExecutionTree {
   }
 
   void setVariableColumn(std::string variable, size_t columnIndex);
-  void setVariableColumn(TripleObject variable, size_t columnIndex);
+  void setVariableColumn(TripleComponent variable, size_t columnIndex);
 
   size_t getVariableColumn(const string& var) const;
 

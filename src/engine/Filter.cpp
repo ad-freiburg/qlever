@@ -530,15 +530,15 @@ void Filter::computeResultFixedValue(
         // all other filters (e.g. regexes) don't use the `Id` in `rhs`
         break;
       }
-      TripleObject rhsObject =
+      TripleComponent rhsObject =
           TurtleStringParser<TokenizerCtre>::parseTripleObject(rhs_string);
       if (rhsObject.isInt()) {
         rhs = Id::makeFromInt(rhsObject.getInt());
       } else if (rhsObject.isDouble()) {
         rhs = Id::makeFromDouble(rhsObject.getDouble());
       } else {
-        // TODO<joka921> give the `TripleObject` a visit function such that this
-        // becomes a compile time check.
+        // TODO<joka921> give the `TripleComponent` a visit function such that
+        // this becomes a compile time check.
         AD_CHECK(rhsObject.isString());
         rhs_string = rhsObject.getString();
         // TODO: This is not standard conform, but currently required due to
