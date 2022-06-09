@@ -89,7 +89,7 @@ string ParsedQuery::asString() const {
     os << "not specified";
   } else {
     for (auto& key : _orderBy) {
-      os << key._key << (key._desc ? " (DESC)" : " (ASC)") << "\t";
+      os << key.variable_ << (key.isDescending_ ? " (DESC)" : " (ASC)") << "\t";
     }
   }
   os << "\n";
