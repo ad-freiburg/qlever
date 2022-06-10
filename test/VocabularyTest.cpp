@@ -19,12 +19,12 @@ TEST(VocabularyTest, getIdForWordTest) {
   ad_utility::HashSet<std::string> s{"a", "ab", "ba", "car"};
   for (auto& v : vec) {
     v.createFromSet(s);
-    Id id;
-    ASSERT_TRUE(v.getId("ba", &id));
-    ASSERT_EQ(Id(2), id);
-    ASSERT_TRUE(v.getId("a", &id));
-    ASSERT_EQ(Id(0), id);
-    ASSERT_FALSE(v.getId("foo", &id));
+    VocabIndex idx;
+    ASSERT_TRUE(v.getId("ba", &idx));
+    ASSERT_EQ(2u, idx.get());
+    ASSERT_TRUE(v.getId("a", &idx));
+    ASSERT_EQ(0u, idx.get());
+    ASSERT_FALSE(v.getId("foo", &idx));
   }
 
   // with case insensitive ordering
@@ -32,13 +32,13 @@ TEST(VocabularyTest, getIdForWordTest) {
   voc.setLocale("en", "US", false);
   ad_utility::HashSet<string> s2{"a", "A", "Ba", "car"};
   voc.createFromSet(s2);
-  Id id;
-  ASSERT_TRUE(voc.getId("Ba", &id));
-  ASSERT_EQ(Id(2), id);
-  ASSERT_TRUE(voc.getId("a", &id));
-  ASSERT_EQ(Id(0), id);
+  VocabIndex idx;
+  ASSERT_TRUE(voc.getId("Ba", &idx));
+  ASSERT_EQ(2u, idx.get());
+  ASSERT_TRUE(voc.getId("a", &idx));
+  ASSERT_EQ(0u, idx.get());
   // getId only gets exact matches;
-  ASSERT_FALSE(voc.getId("ba", &id));
+  ASSERT_FALSE(voc.getId("ba", &idx));
 };
 
 TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
@@ -47,27 +47,27 @@ TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
                                 "wordB4"};
   v.createFromSet(s);
 
-  Id word0 = 0;
+  uint64_t word0 = 0;
   IdRange retVal;
   // Match exactly one
   ASSERT_TRUE(v.getIdRangeForFullTextPrefix("wordA1*", &retVal));
-  ASSERT_EQ(word0 + 1, retVal._first);
-  ASSERT_EQ(word0 + 1, retVal._last);
+  ASSERT_EQ(word0 + 1, retVal._first.get());
+  ASSERT_EQ(word0 + 1, retVal._last.get());
 
   // Match all
   ASSERT_TRUE(v.getIdRangeForFullTextPrefix("word*", &retVal));
-  ASSERT_EQ(word0, retVal._first);
-  ASSERT_EQ(word0 + 4, retVal._last);
+  ASSERT_EQ(word0, retVal._first.get());
+  ASSERT_EQ(word0 + 4, retVal._last.get());
 
   // Match first two
   ASSERT_TRUE(v.getIdRangeForFullTextPrefix("wordA*", &retVal));
-  ASSERT_EQ(word0, retVal._first);
-  ASSERT_EQ(word0 + 1, retVal._last);
+  ASSERT_EQ(word0, retVal._first.get());
+  ASSERT_EQ(word0 + 1, retVal._last.get());
 
   // Match last three
   ASSERT_TRUE(v.getIdRangeForFullTextPrefix("wordB*", &retVal));
-  ASSERT_EQ(word0 + 2, retVal._first);
-  ASSERT_EQ(word0 + 4, retVal._last);
+  ASSERT_EQ(word0 + 2, retVal._first.get());
+  ASSERT_EQ(word0 + 4, retVal._last.get());
 
   ASSERT_FALSE(v.getIdRangeForFullTextPrefix("foo*", &retVal));
 }
@@ -97,12 +97,12 @@ TEST(VocabularyTest, createFromSetTest) {
   s.insert("car");
   TextVocabulary v;
   v.createFromSet(s);
-  Id id;
-  ASSERT_TRUE(v.getId("ba", &id));
-  ASSERT_EQ(Id(2), id);
-  ASSERT_TRUE(v.getId("a", &id));
-  ASSERT_EQ(Id(0), id);
-  ASSERT_FALSE(v.getId("foo", &id));
+  VocabIndex idx;
+  ASSERT_TRUE(v.getId("ba", &idx));
+  ASSERT_EQ(2u, idx.get());
+  ASSERT_TRUE(v.getId("a", &idx));
+  ASSERT_EQ(0u, idx.get());
+  ASSERT_FALSE(v.getId("foo", &idx));
 };
 
 TEST(VocabularyTest, IncompleteLiterals) {
@@ -123,6 +123,6 @@ TEST(Vocabulary, PrefixFilter) {
   voc.createFromSet(s);
 
   auto x = voc.prefix_range("\"exp");
-  ASSERT_EQ(x.first, 1u);
-  ASSERT_EQ(x.second, 2u);
+  ASSERT_EQ(x.first.get(), 1u);
+  ASSERT_EQ(x.second.get(), 2u);
 }

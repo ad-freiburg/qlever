@@ -14,7 +14,7 @@ void ParallelFileBuffer::open(const string& filename) {
 }
 
 // ___________________________________________________________________________
-std::optional<std::vector<char>> ParallelFileBuffer::getNextBlock() {
+std::optional<ParallelBuffer::BufferType> ParallelFileBuffer::getNextBlock() {
   if (_eof) {
     return std::nullopt;
   }
@@ -26,7 +26,7 @@ std::optional<std::vector<char>> ParallelFileBuffer::getNextBlock() {
     return std::nullopt;
   }
   _buf.resize(numBytesRead);
-  std::optional<std::vector<char>> ret = std::move(_buf);
+  std::optional<BufferType> ret = std::move(_buf);
 
   _buf.resize(_blocksize);
   auto getNextBlock = [&file = this->_file, bs = this->_blocksize,
@@ -40,7 +40,7 @@ std::optional<std::vector<char>> ParallelFileBuffer::getNextBlock() {
 
 // ____________________________________________________________________________
 std::optional<size_t> ParallelBufferWithEndRegex::findRegexNearEnd(
-    const std::vector<char>& vec, const re2::RE2& regex) {
+    const BufferType& vec, const re2::RE2& regex) {
   size_t chunkSize = 1000;
   size_t inputSize = vec.size();
   re2::StringPiece regexResult;
@@ -73,7 +73,8 @@ std::optional<size_t> ParallelBufferWithEndRegex::findRegexNearEnd(
 }
 
 // _____________________________________________________________________________
-std::optional<std::vector<char>> ParallelBufferWithEndRegex::getNextBlock() {
+std::optional<ParallelBuffer::BufferType>
+ParallelBufferWithEndRegex::getNextBlock() {
   auto rawInput = _rawBuffer.getNextBlock();
   if (!rawInput || _exhausted) {
     _exhausted = true;
@@ -100,7 +101,7 @@ std::optional<std::vector<char>> ParallelBufferWithEndRegex::getNextBlock() {
     endPosition = rawInput->size();
     _exhausted = true;
   }
-  std::vector<char> result;
+  BufferType result;
   result.reserve(_remainder.size() + *endPosition);
   result.insert(result.end(), _remainder.begin(), _remainder.end());
   result.insert(result.end(), rawInput->begin(),

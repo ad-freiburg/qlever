@@ -8,7 +8,8 @@
 
 #include "../util/Parameters.h"
 
-static const size_t STXXL_MEMORY_TO_USE = 1024UL * 1024UL * 1024UL * 2UL;
+static const size_t DEFAULT_STXXL_MEMORY_IN_BYTES =
+    1024UL * 1024UL * 1024UL * 5UL;
 static const size_t STXXL_DISK_SIZE_INDEX_BUILDER = 1000 * 1000;
 static const size_t STXXL_DISK_SIZE_INDEX_TEST = 10;
 
@@ -17,12 +18,6 @@ static constexpr size_t DEFAULT_MEM_FOR_QUERIES_IN_GB = 4;
 static const size_t MAX_NOF_ROWS_IN_RESULT = 100000;
 static const size_t MIN_WORD_PREFIX_SIZE = 4;
 static const char PREFIX_CHAR = '*';
-static const char EXTERNALIZED_LITERALS_PREFIX_CHAR{127};
-static const std::string EXTERNALIZED_LITERALS_PREFIX{
-    EXTERNALIZED_LITERALS_PREFIX_CHAR};
-static const char EXTERNALIZED_ENTITIES_PREFIX_CHAR{static_cast<char>(128)};
-static const std::string EXTERNALIZED_ENTITIES_PREFIX{
-    EXTERNALIZED_ENTITIES_PREFIX_CHAR};
 static const size_t MAX_NOF_NODES = 64;
 static const size_t MAX_NOF_FILTERS = 64;
 
@@ -45,6 +40,9 @@ static const char INTERNAL_TEXT_MATCH_PREDICATE[] =
 static const char HAS_PREDICATE_PREDICATE[] =
     "<QLever-internal-function/has-predicate>";
 
+static const std::string SOLUTION_MODIFIER_HELPER_BIND_PREFIX =
+    "_QLever-internal-bind-";
+
 // For anonymous nodes in Turtle.
 static const std::string ANON_NODE_PREFIX = "QLever-Anon-Node";
 
@@ -58,6 +56,8 @@ static const char VALUE_FLOAT_PREFIX[] = ":v:float:";
 static const char XSD_DATETIME_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#dateTime";
 static const char XSD_INT_TYPE[] = "http://www.w3.org/2001/XMLSchema#int";
+static const char XSD_INTEGER_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#integer";
 static const char XSD_FLOAT_TYPE[] = "http://www.w3.org/2001/XMLSchema#float";
 static const char XSD_DOUBLE_TYPE[] = "http://www.w3.org/2001/XMLSchema#double";
 static const char XSD_DECIMAL_TYPE[] =
@@ -70,7 +70,9 @@ static const int DEFAULT_NOF_VALUE_EXPONENT_DIGITS = 20;
 static const int DEFAULT_NOF_VALUE_MANTISSA_DIGITS = 30;
 static const int DEFAULT_NOF_DATE_YEAR_DIGITS = 19;
 
-static const std::string MMAP_FILE_SUFFIX = ".meta-mmap";
+static const std::string INTERNAL_VOCAB_SUFFIX = ".vocabulary.internal";
+static const std::string EXTERNAL_VOCAB_SUFFIX = ".vocabulary.external";
+static const std::string MMAP_FILE_SUFFIX = ".meta";
 static const std::string CONFIGURATION_FILE = ".meta-data.json";
 static const std::string PREFIX_FILE = ".prefixes";
 
@@ -80,7 +82,7 @@ static const std::string ERROR_IGNORE_CASE_UNSUPPORTED =
     "\"locale\" key, otherwise \"en.US\" will be used as default";
 static const std::string WARNING_ASCII_ONLY_PREFIXES =
     "You specified \"ascii-prefixes-only = true\", which enables faster "
-    "parsing for well-behaved TTL files (see qlever/docs on GitHub)";
+    "parsing for well-behaved TTL files";
 // " but only works correctly if there are no escape sequences in "
 // "prefixed names (e.g., rdfs:label\\,el is not allowed), no multiline "
 // "literals, and the regex \". *\\n\" only matches at the end of a triple. "
@@ -117,6 +119,10 @@ static constexpr size_t PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE = 5;
 // When asked to make room for X ids in the cache, actually make room for X
 // times this factor.
 static constexpr double MAKE_ROOM_SLACK_FACTOR = 2;
+
+// The version of the binary format of the pattern files. Has to be increased,
+// when this format is changed.
+static constexpr uint32_t PATTERNS_FILE_VERSION = 1;
 
 inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::Double;

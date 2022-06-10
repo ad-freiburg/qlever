@@ -42,7 +42,7 @@ auto createVocabulary(const std::vector<std::string>& words) {
     writer.push(word);
   }
   writer.finish();
-  v.readFromFile(vocabularyFilename);
+  v.open(vocabularyFilename);
   ad_utility::deleteFile(vocabularyFilename);
   return v;
 }
@@ -59,6 +59,10 @@ TEST(CompressedVocabulary, AccessOperator) {
   testAccessOperatorForUnorderedVocabulary(createVocabulary);
 }
 
+TEST(CompressedVocabulary, EmptyVocabulary) {
+  testEmptyVocabulary(createVocabulary);
+}
+
 TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42",
                                        "31",    "0",     "al"};
@@ -71,7 +75,7 @@ TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
   writer.finish();
 
   VocabularyInMemory simple;
-  simple.readFromFile("vocabtmp.txt");
+  simple.open("vocabtmp.txt");
 
   ASSERT_EQ(simple.size(), words.size());
   for (size_t i = 0; i < simple.size(); ++i) {

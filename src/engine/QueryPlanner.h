@@ -289,8 +289,8 @@ class QueryPlanner {
   bool connected(const SubtreePlan& a, const SubtreePlan& b,
                  const TripleGraph& graph) const;
 
-  vector<array<Id, 2>> getJoinColumns(const SubtreePlan& a,
-                                      const SubtreePlan& b) const;
+  vector<array<ColumnIndex, 2>> getJoinColumns(const SubtreePlan& a,
+                                               const SubtreePlan& b) const;
 
   string getPruningKey(const SubtreePlan& plan,
                        const vector<size_t>& orderedOnColumns) const;
@@ -362,8 +362,6 @@ class QueryPlanner {
   vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, const vector<SparqlFilter>& fs,
       const vector<vector<SubtreePlan>>& children);
-
-  size_t getTextLimit(const string& textLimitString) const;
 
   SubtreePlan getTextLeafPlan(const TripleGraph::Node& node) const;
 

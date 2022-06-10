@@ -1,4 +1,4 @@
-FROM ubuntu:21.10 as base
+FROM ubuntu:22.04 as base
 LABEL maintainer="Johannes Kalmbach <kalmbacj@informatik.uni-freiburg.de>"
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
@@ -22,7 +22,7 @@ RUN make test
 FROM base as runtime
 WORKDIR /app
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu-dev python3-icu libgomp1 uuid-runtime
+RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu-dev python3-icu libgomp1 uuid-runtime make
 RUN apt install -y lbzip2 libjemalloc-dev libzstd-dev
 RUN apt install -y libboost1.74-dev libboost-program-options1.74-dev libboost-iostreams1.74-dev
 

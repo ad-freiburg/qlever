@@ -9,7 +9,7 @@
 #include "../Exception.h"
 #include "../StringUtils.h"
 #include "../TypeTraits.h"
-#include "../antlr/ThrowingErrorStrategy.h"
+#include "../antlr/ANTLRErrorHandling.h"
 #include "./HttpParser/AcceptHeaderQleverVisitor.h"
 #include "./HttpParser/generated/AcceptHeaderLexer.h"
 

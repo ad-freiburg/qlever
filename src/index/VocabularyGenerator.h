@@ -67,12 +67,22 @@ class VocabularyMerger {
   // represents tokens/words in a certain partial vocabulary
   struct QueueWord {
     QueueWord() = default;
-    QueueWord(string&& v, size_t file, Id word)
-        : _value(std::move(v)), _partialFileId(file), _partialWordId(word) {}
-    string _value;          // the word
+    QueueWord(TripleComponentWithIndex&& v, size_t file)
+        : _entry(std::move(v)), _partialFileId(file) {}
+    TripleComponentWithIndex _entry;  // the word, its local ID and the
+                                      // information if it will be externalized
     size_t _partialFileId;  // from which partial vocabulary did this word come
-    Id _partialWordId;  // which partial id did the word have in this partial
-    // vocabulary
+
+    [[nodiscard]] const bool& isExternal() const { return _entry.isExternal(); }
+    [[nodiscard]] bool& isExternal() { return _entry.isExternal(); }
+
+    [[nodiscard]] const std::string& iriOrLiteral() const {
+      return _entry.iriOrLiteral();
+    }
+    [[nodiscard]] std::string& iriOrLiteral() { return _entry.iriOrLiteral(); }
+
+    [[nodiscard]] const auto& id() const { return _entry._index; }
+    [[nodiscard]] auto& id() { return _entry._index; }
   };
 
   // write the queu words in the buffer to their corresponding idPairVecs.
@@ -86,12 +96,12 @@ class VocabularyMerger {
   // close all associated files and MmapVectors and reset all internal variables
   void clear() {
     _totalWritten = 0;
-    _lastWritten = "";
+    _lastTripleComponent = std::nullopt;
     _outfileExternal = std::ofstream();
     _idVecs.clear();
     _firstLangPredSeen = false;
-    _langPredLowerBound = 0;
-    _langPredUpperBound = 0;
+    _langPredLowerBound = ID_NO_VALUE;
+    _langPredUpperBound = ID_NO_VALUE;
   }
 
   // private data members
@@ -100,13 +110,14 @@ class VocabularyMerger {
   // word we see, unless it is is equal to the previous word
   size_t _totalWritten = 0;
   // keep track of the last seen word to correctly handle duplicates
-  std::string _lastWritten;
+
+  std::optional<TripleComponentWithIndex> _lastTripleComponent = std::nullopt;
   std::ofstream _outfileExternal;
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> _idVecs;
   bool _firstLangPredSeen = false;
-  Id _langPredLowerBound = 0;
-  Id _langPredUpperBound = 0;
+  Id _langPredLowerBound = ID_NO_VALUE;
+  Id _langPredUpperBound = ID_NO_VALUE;
 
   const size_t _bufferSize = 10000000;
 
@@ -140,13 +151,13 @@ ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
  * @param els  Must be sorted(at least duplicates must be adjacent) according to
  * the strings and the Ids must be unique to work correctly.
  */
-ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* els);
+ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(ItemVec* els);
 
 /**
  * @brief for each of the IdTriples in <input>: map the three Ids using the
  * <map> and write the resulting Id triple to <*writePtr>
  */
-void writeMappedIdsToExtVec(const TripleVec& input,
+void writeMappedIdsToExtVec(const auto& input,
                             const ad_utility::HashMap<Id, Id>& map,
                             TripleVec::bufwriter_type* writePtr);
 

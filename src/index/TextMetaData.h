@@ -9,6 +9,8 @@
 #include "../global/Id.h"
 #include "../util/Exception.h"
 #include "../util/File.h"
+#include "../util/Serializer/Serializer.h"
+#include "../util/TypeTraits.h"
 
 using std::vector;
 
@@ -37,26 +39,16 @@ class ContextListMetaData {
 
   bool hasMultipleWords() const { return _startScorelist > _startWordlist; }
 
-  // Restores meta data from raw memory.
-  // Needed when registering an index on startup.
-  ContextListMetaData& createFromByteBuffer(unsigned char* buffer);
-
   static constexpr size_t sizeOnDisk() {
     return sizeof(size_t) + 4 * sizeof(off_t);
   }
-
-  friend ad_utility::File& operator<<(ad_utility::File& f,
-                                      const ContextListMetaData& md);
 };
-
-ad_utility::File& operator<<(ad_utility::File& f,
-                             const ContextListMetaData& md);
 
 class TextBlockMetaData {
  public:
   TextBlockMetaData() : _firstWordId(), _lastWordId(), _cl(), _entityCl() {}
 
-  TextBlockMetaData(Id firstWordId, Id lastWordId,
+  TextBlockMetaData(WordIndex firstWordId, WordIndex lastWordId,
                     const ContextListMetaData& cl,
                     const ContextListMetaData& entityCl)
       : _firstWordId(firstWordId),
@@ -64,21 +56,15 @@ class TextBlockMetaData {
         _cl(cl),
         _entityCl(entityCl) {}
 
-  Id _firstWordId;
-  Id _lastWordId;
+  uint64_t _firstWordId;
+  uint64_t _lastWordId;
   ContextListMetaData _cl;
   ContextListMetaData _entityCl;
 
   static constexpr size_t sizeOnDisk() {
     return 2 * sizeof(Id) + 2 * ContextListMetaData::sizeOnDisk();
   }
-
-  // Restores meta data from raw memory.
-  // Needed when registering an index on startup.
-  TextBlockMetaData& createFromByteBuffer(unsigned char* buffer);
-
-  friend ad_utility::File& operator<<(ad_utility::File& f,
-                                      const TextBlockMetaData& md);
+  friend std::true_type allowTrivialSerialization(TextBlockMetaData);
 };
 
 ad_utility::File& operator<<(ad_utility::File& f, const TextBlockMetaData& md);
@@ -87,22 +73,18 @@ class TextMetaData {
  public:
   //! Get the corresponding block meta data for some word or entity Id range.
   //! Currently assumes that the range lies in a single block.
-  const TextBlockMetaData& getBlockInfoByWordRange(const Id lower,
-                                                   const Id upper) const;
+  const TextBlockMetaData& getBlockInfoByWordRange(const uint64_t lower,
+                                                   const uint64_t upper) const;
 
-  const TextBlockMetaData& getBlockInfoByEntityId(const Id eid) const;
+  const TextBlockMetaData& getBlockInfoByEntityId(const uint64_t eid) const;
 
-  bool existsTextBlockForEntityId(const Id eid) const;
+  bool existsTextBlockForEntityId(const uint64_t eid) const;
 
   size_t getBlockCount() const;
 
-  // Restores meta data from raw memory.
-  // Needed when registering an index on startup.
-  TextMetaData& createFromByteBuffer(unsigned char* buffer);
-
   string statistics() const;
 
-  void addBlock(const TextBlockMetaData& md);
+  void addBlock(const TextBlockMetaData& md, bool isEntityBlock);
 
   off_t getOffsetAfter();
 
@@ -137,8 +119,8 @@ class TextMetaData {
   };
 
  private:
-  vector<Id> _blockUpperBoundWordIds;
-  vector<Id> _blockUpperBoundEntityIds;
+  vector<uint64_t> _blockUpperBoundWordIds;
+  vector<uint64_t> _blockUpperBoundEntityIds;
   size_t _nofEntities = 0;
   size_t _nofEntityContexts = 0;
   size_t _nofTextRecords = 0;
@@ -147,8 +129,16 @@ class TextMetaData {
   string _name;
   vector<TextBlockMetaData> _blocks;
 
-  friend ad_utility::File& operator<<(ad_utility::File& f,
-                                      const TextMetaData& md);
+  // ___________________________________________________________________________
+  AD_SERIALIZE_FRIEND_FUNCTION(TextMetaData) {
+    serializer | arg._blockUpperBoundWordIds;
+    serializer | arg._blockUpperBoundEntityIds;
+    serializer | arg._nofEntities;
+    serializer | arg._nofEntityContexts;
+    serializer | arg._nofTextRecords;
+    serializer | arg._nofWordPostings;
+    serializer | arg._nofEntityPostings;
+    serializer | arg._name;
+    serializer | arg._blocks;
+  }
 };
-
-ad_utility::File& operator<<(ad_utility::File& f, const TextMetaData& md);

@@ -15,10 +15,12 @@ class TwoColumnJoin : public Operation {
   TwoColumnJoin(QueryExecutionContext* qec,
                 std::shared_ptr<QueryExecutionTree> t1,
                 std::shared_ptr<QueryExecutionTree> t2,
-                const std::vector<array<Id, 2>>& joinCols);
+                const std::vector<array<ColumnIndex, 2>>& joinCols);
 
-  virtual string asString(size_t indent = 0) const override;
+ protected:
+  virtual string asStringImpl(size_t indent = 0) const override;
 
+ public:
   virtual string getDescriptor() const override;
 
   virtual size_t getResultWidth() const override;

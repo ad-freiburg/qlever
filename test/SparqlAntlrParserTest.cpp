@@ -9,33 +9,20 @@
 #include <type_traits>
 
 #include "../../src/parser/sparqlParser/SparqlQleverVisitor.h"
+#include "../src/parser/SparqlParserHelpers.h"
 #include "../src/parser/data/Types.h"
 #include "../src/parser/sparqlParser/generated/SparqlAutomaticLexer.h"
-#include "../src/util/antlr/ThrowingErrorStrategy.h"
+#include "../src/util/antlr/ANTLRErrorHandling.h"
 #include "SparqlAntlrParserTestHelpers.h"
 
 using namespace antlr4;
-
-struct ParserAndVisitor {
- private:
-  string input;
-  ANTLRInputStream stream{input};
-  SparqlAutomaticLexer lexer{&stream};
-  CommonTokenStream tokens{&lexer};
-
- public:
-  SparqlAutomaticParser parser{&tokens};
-  SparqlQleverVisitor visitor;
-  explicit ParserAndVisitor(string toParse) : input{std::move(toParse)} {
-    parser.setErrorHandler(std::make_shared<ThrowingErrorStrategy>());
-  }
-};
+using namespace sparqlParserHelpers;
 
 template <typename T>
 void testNumericLiteral(const std::string& input, T target) {
   ParserAndVisitor p(input);
-  auto literalContext = p.parser.numericLiteral();
-  auto result = p.visitor.visitNumericLiteral(literalContext).as<T>();
+  auto literalContext = p.parser_.numericLiteral();
+  auto result = p.visitor_.visitNumericLiteral(literalContext).as<T>();
 
   if constexpr (std::is_floating_point_v<T>) {
     ASSERT_FLOAT_EQ(target, result);
@@ -68,9 +55,9 @@ TEST(SparqlParser, Prefix) {
   {
     string s = "PREFIX wd: <www.wikidata.org/>";
     ParserAndVisitor p{s};
-    auto context = p.parser.prefixDecl();
-    p.visitor.visitPrefixDecl(context);
-    const auto& m = p.visitor.prefixMap();
+    auto context = p.parser_.prefixDecl();
+    p.visitor_.visitPrefixDecl(context);
+    const auto& m = p.visitor_.prefixMap();
     ASSERT_EQ(2ul, m.size());
     ASSERT_TRUE(m.at("wd") == "<www.wikidata.org/>");
     ASSERT_EQ(m.at(""), "<>");
@@ -78,41 +65,41 @@ TEST(SparqlParser, Prefix) {
   {
     string s = "wd:bimbam";
     ParserAndVisitor p{s};
-    auto& m = p.visitor.prefixMap();
+    auto& m = p.visitor_.prefixMap();
     m["wd"] = "<www.wikidata.org/>";
 
-    auto context = p.parser.pnameLn();
-    auto result = p.visitor.visitPnameLn(context).as<string>();
+    auto context = p.parser_.pnameLn();
+    auto result = p.visitor_.visitPnameLn(context).as<string>();
     ASSERT_EQ(result, "<www.wikidata.org/bimbam>");
   }
   {
     string s = "wd:";
     ParserAndVisitor p{s};
-    auto& m = p.visitor.prefixMap();
+    auto& m = p.visitor_.prefixMap();
     m["wd"] = "<www.wikidata.org/>";
 
-    auto context = p.parser.pnameNs();
-    auto result = p.visitor.visitPnameNs(context).as<string>();
+    auto context = p.parser_.pnameNs();
+    auto result = p.visitor_.visitPnameNs(context).as<string>();
     ASSERT_EQ(result, "<www.wikidata.org/>");
   }
   {
     string s = "wd:bimbam";
     ParserAndVisitor p{s};
-    auto& m = p.visitor.prefixMap();
+    auto& m = p.visitor_.prefixMap();
     m["wd"] = "<www.wikidata.org/>";
 
-    auto context = p.parser.prefixedName();
-    auto result = p.visitor.visitPrefixedName(context).as<string>();
+    auto context = p.parser_.prefixedName();
+    auto result = p.visitor_.visitPrefixedName(context).as<string>();
     ASSERT_EQ(result, "<www.wikidata.org/bimbam>");
   }
   {
     string s = "<somethingsomething> <rest>";
     ParserAndVisitor p{s};
-    auto& m = p.visitor.prefixMap();
+    auto& m = p.visitor_.prefixMap();
     m["wd"] = "<www.wikidata.org/>";
 
-    auto context = p.parser.iriref();
-    auto result = p.visitor.visitIriref(context).as<string>();
+    auto context = p.parser_.iriref();
+    auto result = p.visitor_.visitIriref(context).as<string>();
     auto sz = context->getText().size();
 
     ASSERT_EQ(result, "<somethingsomething>");
@@ -123,18 +110,18 @@ TEST(SparqlParser, Prefix) {
 TEST(SparqlExpressionParser, First) {
   string s = "(5 * 5 ) bimbam";
   ParserAndVisitor p{s};
-  auto context = p.parser.expression();
+  auto context = p.parser_.expression();
   // This is an example on how to access a certain parsed substring.
   /*
   LOG(INFO) << context->getText() << std::endl;
-  LOG(INFO) << p.parser.getTokenStream()
+  LOG(INFO) << p.parser_.getTokenStream()
                    ->getTokenSource()
                    ->getInputStream()
                    ->toString()
             << std::endl;
-  LOG(INFO) << p.parser.getCurrentToken()->getStartIndex() << std::endl;
+  LOG(INFO) << p.parser_.getCurrentToken()->getStartIndex() << std::endl;
    */
-  auto resultAsAny = p.visitor.visitExpression(context);
+  auto resultAsAny = p.visitor_.visitExpression(context);
   auto resultAsExpression =
       std::move(resultAsAny.as<sparqlExpression::SparqlExpression::Ptr>());
 
@@ -159,8 +146,8 @@ TEST(SparqlParser, ComplexConstructQuery) {
       "WHERE {}";
   ParserAndVisitor p{input};
 
-  auto triples = p.parser.constructQuery()
-                     ->accept(&p.visitor)
+  auto triples = p.parser_.constructQuery()
+                     ->accept(&p.visitor_)
                      .as<ad_utility::sparql_types::Triples>();
   ASSERT_THAT(triples, SizeIs(11));
   auto something =
@@ -217,7 +204,7 @@ TEST(SparqlParser, GraphTermNumericLiteral) {
   string input = "1337";
   ParserAndVisitor p{input};
 
-  auto graphTerm = p.parser.graphTerm()->accept(&p.visitor).as<GraphTerm>();
+  auto graphTerm = p.parser_.graphTerm()->accept(&p.visitor_).as<GraphTerm>();
   EXPECT_THAT(graphTerm, IsLiteral("1337"));
 }
 
@@ -225,7 +212,7 @@ TEST(SparqlParser, GraphTermBooleanLiteral) {
   string input = "true";
   ParserAndVisitor p{input};
 
-  auto graphTerm = p.parser.graphTerm()->accept(&p.visitor).as<GraphTerm>();
+  auto graphTerm = p.parser_.graphTerm()->accept(&p.visitor_).as<GraphTerm>();
   EXPECT_THAT(graphTerm, IsLiteral(input));
 }
 
@@ -233,7 +220,7 @@ TEST(SparqlParser, GraphTermBlankNode) {
   string input = "[]";
   ParserAndVisitor p{input};
 
-  auto graphTerm = p.parser.graphTerm()->accept(&p.visitor).as<GraphTerm>();
+  auto graphTerm = p.parser_.graphTerm()->accept(&p.visitor_).as<GraphTerm>();
   EXPECT_THAT(graphTerm, IsBlankNode(true, "0"));
 }
 
@@ -241,7 +228,7 @@ TEST(SparqlParser, GraphTermIri) {
   string input = "<http://dummy-iri.com#fragment>";
   ParserAndVisitor p{input};
 
-  auto graphTerm = p.parser.graphTerm()->accept(&p.visitor).as<GraphTerm>();
+  auto graphTerm = p.parser_.graphTerm()->accept(&p.visitor_).as<GraphTerm>();
   EXPECT_THAT(graphTerm, IsIri(input));
 }
 
@@ -249,7 +236,7 @@ TEST(SparqlParser, GraphTermRdfLiteral) {
   string input = "\"abc\"";
   ParserAndVisitor p{input};
 
-  auto graphTerm = p.parser.graphTerm()->accept(&p.visitor).as<GraphTerm>();
+  auto graphTerm = p.parser_.graphTerm()->accept(&p.visitor_).as<GraphTerm>();
   EXPECT_THAT(graphTerm, IsLiteral(input));
 }
 
@@ -257,7 +244,7 @@ TEST(SparqlParser, GraphTermRdfNil) {
   string input = "()";
   ParserAndVisitor p{input};
 
-  auto graphTerm = p.parser.graphTerm()->accept(&p.visitor).as<GraphTerm>();
+  auto graphTerm = p.parser_.graphTerm()->accept(&p.visitor_).as<GraphTerm>();
   EXPECT_THAT(graphTerm, IsIri(nil));
 }
 
@@ -265,8 +252,8 @@ TEST(SparqlParser, RdfCollectionSingleVar) {
   string input = "( ?a )";
   ParserAndVisitor p{input};
 
-  const auto [node, triples] = p.parser.collection()
-                                   ->accept(&p.visitor)
+  const auto [node, triples] = p.parser_.collection()
+                                   ->accept(&p.visitor_)
                                    .as<ad_utility::sparql_types::Node>();
 
   EXPECT_THAT(node, IsBlankNode(true, "0"));
@@ -286,8 +273,8 @@ TEST(SparqlParser, RdfCollectionTripleVar) {
   string input = "( ?a ?b ?c )";
   ParserAndVisitor p{input};
 
-  const auto [node, triples] = p.parser.collection()
-                                   ->accept(&p.visitor)
+  const auto [node, triples] = p.parser_.collection()
+                                   ->accept(&p.visitor_)
                                    .as<ad_utility::sparql_types::Node>();
 
   EXPECT_THAT(node, IsBlankNode(true, "2"));
@@ -323,7 +310,7 @@ TEST(SparqlParser, BlankNodeAnonymous) {
   string input = "[ \t\r\n]";
   ParserAndVisitor p{input};
 
-  auto graphTerm = p.parser.blankNode()->accept(&p.visitor).as<BlankNode>();
+  auto graphTerm = p.parser_.blankNode()->accept(&p.visitor_).as<BlankNode>();
   EXPECT_THAT(graphTerm, IsBlankNode(true, "0"));
 }
 
@@ -331,7 +318,7 @@ TEST(SparqlParser, BlankNodeLabelled) {
   string input = "_:label123";
   ParserAndVisitor p{input};
 
-  auto graphTerm = p.parser.blankNode()->accept(&p.visitor).as<BlankNode>();
+  auto graphTerm = p.parser_.blankNode()->accept(&p.visitor_).as<BlankNode>();
   EXPECT_THAT(graphTerm, IsBlankNode(false, "label123"));
 }
 
@@ -339,8 +326,8 @@ TEST(SparqlParser, ConstructTemplateEmpty) {
   string input = "{}";
   ParserAndVisitor p{input};
 
-  auto triples = p.parser.constructTemplate()
-                     ->accept(&p.visitor)
+  auto triples = p.parser_.constructTemplate()
+                     ->accept(&p.visitor_)
                      .as<ad_utility::sparql_types::Triples>();
   ASSERT_THAT(triples, IsEmpty());
 }
@@ -349,8 +336,8 @@ TEST(SparqlParser, ConstructTriplesSingletonWithTerminator) {
   string input = "?a ?b ?c .";
   ParserAndVisitor p{input};
 
-  auto triples = p.parser.constructTriples()
-                     ->accept(&p.visitor)
+  auto triples = p.parser_.constructTriples()
+                     ->accept(&p.visitor_)
                      .as<ad_utility::sparql_types::Triples>();
   ASSERT_THAT(triples, SizeIs(1));
 
@@ -363,8 +350,8 @@ TEST(SparqlParser, ConstructTriplesWithTerminator) {
   string input = "?a ?b ?c . ?d ?e ?f . ?g ?h ?i .";
   ParserAndVisitor p{input};
 
-  auto triples = p.parser.constructTriples()
-                     ->accept(&p.visitor)
+  auto triples = p.parser_.constructTriples()
+                     ->accept(&p.visitor_)
                      .as<ad_utility::sparql_types::Triples>();
   ASSERT_THAT(triples, SizeIs(3));
 
@@ -385,8 +372,8 @@ TEST(SparqlParser, TriplesSameSubjectVarOrTerm) {
   string input = "?a ?b ?c";
   ParserAndVisitor p{input};
 
-  auto triples = p.parser.constructTriples()
-                     ->accept(&p.visitor)
+  auto triples = p.parser_.constructTriples()
+                     ->accept(&p.visitor_)
                      .as<ad_utility::sparql_types::Triples>();
   ASSERT_THAT(triples, SizeIs(1));
 
@@ -399,8 +386,8 @@ TEST(SparqlParser, TriplesSameSubjectTriplesNodeWithPropertyList) {
   string input = "(?a) ?b ?c";
   ParserAndVisitor p{input};
 
-  auto triples = p.parser.triplesSameSubject()
-                     ->accept(&p.visitor)
+  auto triples = p.parser_.triplesSameSubject()
+                     ->accept(&p.visitor_)
                      .as<ad_utility::sparql_types::Triples>();
   ASSERT_THAT(triples, SizeIs(3));
 
@@ -421,8 +408,8 @@ TEST(SparqlParser, TriplesSameSubjectTriplesNodeEmptyPropertyList) {
   string input = "(?a)";
   ParserAndVisitor p{input};
 
-  auto triples = p.parser.triplesSameSubject()
-                     ->accept(&p.visitor)
+  auto triples = p.parser_.triplesSameSubject()
+                     ->accept(&p.visitor_)
                      .as<ad_utility::sparql_types::Triples>();
   ASSERT_THAT(triples, SizeIs(2));
 
@@ -440,8 +427,8 @@ TEST(SparqlParser, PropertyList) {
   ParserAndVisitor p{input};
 
   const auto [tuples, triples] =
-      p.parser.propertyList()
-          ->accept(&p.visitor)
+      p.parser_.propertyList()
+          ->accept(&p.visitor_)
           .as<ad_utility::sparql_types::PropertyList>();
 
   EXPECT_THAT(triples, IsEmpty());
@@ -455,8 +442,8 @@ TEST(SparqlParser, EmptyPropertyList) {
   ParserAndVisitor p{""};
 
   const auto [tuples, triples] =
-      p.parser.propertyList()
-          ->accept(&p.visitor)
+      p.parser_.propertyList()
+          ->accept(&p.visitor_)
           .as<ad_utility::sparql_types::PropertyList>();
   ASSERT_THAT(tuples, IsEmpty());
   ASSERT_THAT(triples, IsEmpty());
@@ -467,8 +454,8 @@ TEST(SparqlParser, PropertyListNotEmptySingletonWithTerminator) {
   ParserAndVisitor p{input};
 
   const auto [tuples, triples] =
-      p.parser.propertyListNotEmpty()
-          ->accept(&p.visitor)
+      p.parser_.propertyListNotEmpty()
+          ->accept(&p.visitor_)
           .as<ad_utility::sparql_types::PropertyList>();
   EXPECT_THAT(triples, IsEmpty());
 
@@ -482,8 +469,8 @@ TEST(SparqlParser, PropertyListNotEmptyWithTerminator) {
   ParserAndVisitor p{input};
 
   const auto [tuples, triples] =
-      p.parser.propertyListNotEmpty()
-          ->accept(&p.visitor)
+      p.parser_.propertyListNotEmpty()
+          ->accept(&p.visitor_)
           .as<ad_utility::sparql_types::PropertyList>();
   EXPECT_THAT(triples, IsEmpty());
 
@@ -498,7 +485,7 @@ TEST(SparqlParser, VerbA) {
   string input = "a";
   ParserAndVisitor p{input};
 
-  auto varOrTerm = p.parser.verb()->accept(&p.visitor).as<VarOrTerm>();
+  auto varOrTerm = p.parser_.verb()->accept(&p.visitor_).as<VarOrTerm>();
   ASSERT_THAT(varOrTerm, IsIri(type));
 }
 
@@ -506,7 +493,7 @@ TEST(SparqlParser, VerbVariable) {
   string input = "?a";
   ParserAndVisitor p{input};
 
-  auto varOrTerm = p.parser.verb()->accept(&p.visitor).as<VarOrTerm>();
+  auto varOrTerm = p.parser_.verb()->accept(&p.visitor_).as<VarOrTerm>();
   ASSERT_THAT(varOrTerm, IsVariable("?a"));
 }
 
@@ -515,8 +502,8 @@ TEST(SparqlParser, ObjectListSingleton) {
   ParserAndVisitor p{input};
 
   const auto [objects, triples] =
-      p.parser.objectList()
-          ->accept(&p.visitor)
+      p.parser_.objectList()
+          ->accept(&p.visitor_)
           .as<ad_utility::sparql_types::ObjectList>();
   EXPECT_THAT(triples, IsEmpty());
 
@@ -529,8 +516,8 @@ TEST(SparqlParser, ObjectList) {
   ParserAndVisitor p{input};
 
   const auto [objects, triples] =
-      p.parser.objectList()
-          ->accept(&p.visitor)
+      p.parser_.objectList()
+          ->accept(&p.visitor_)
           .as<ad_utility::sparql_types::ObjectList>();
   EXPECT_THAT(triples, IsEmpty());
 
@@ -544,8 +531,8 @@ TEST(SparqlParser, BlankNodePropertyList) {
   string input = "[ a ?a ; a ?b ; a ?c ]";
   ParserAndVisitor p{input};
 
-  const auto [node, triples] = p.parser.blankNodePropertyList()
-                                   ->accept(&p.visitor)
+  const auto [node, triples] = p.parser_.blankNodePropertyList()
+                                   ->accept(&p.visitor_)
                                    .as<ad_utility::sparql_types::Node>();
   EXPECT_THAT(node, IsBlankNode(true, "0"));
 
@@ -568,8 +555,8 @@ TEST(SparqlParser, GraphNodeVarOrTerm) {
   string input = "?a";
   ParserAndVisitor p{input};
 
-  const auto [node, triples] = p.parser.graphNode()
-                                   ->accept(&p.visitor)
+  const auto [node, triples] = p.parser_.graphNode()
+                                   ->accept(&p.visitor_)
                                    .as<ad_utility::sparql_types::Node>();
   EXPECT_THAT(node, IsVariable("?a"));
   EXPECT_THAT(triples, IsEmpty());
@@ -579,8 +566,8 @@ TEST(SparqlParser, GraphNodeTriplesNode) {
   string input = "(?a)";
   ParserAndVisitor p{input};
 
-  const auto [node, triples] = p.parser.graphNode()
-                                   ->accept(&p.visitor)
+  const auto [node, triples] = p.parser_.graphNode()
+                                   ->accept(&p.visitor_)
                                    .as<ad_utility::sparql_types::Node>();
   EXPECT_THAT(node, IsBlankNode(true, "0"));
 
@@ -599,7 +586,7 @@ TEST(SparqlParser, VarOrTermVariable) {
   string input = "?a";
   ParserAndVisitor p{input};
 
-  auto varOrTerm = p.parser.varOrTerm()->accept(&p.visitor).as<VarOrTerm>();
+  auto varOrTerm = p.parser_.varOrTerm()->accept(&p.visitor_).as<VarOrTerm>();
   EXPECT_THAT(varOrTerm, IsVariable("?a"));
 }
 
@@ -607,7 +594,7 @@ TEST(SparqlParser, VarOrTermGraphTerm) {
   string input = "()";
   ParserAndVisitor p{input};
 
-  auto varOrTerm = p.parser.varOrTerm()->accept(&p.visitor).as<VarOrTerm>();
+  auto varOrTerm = p.parser_.varOrTerm()->accept(&p.visitor_).as<VarOrTerm>();
   EXPECT_THAT(varOrTerm, IsIri(nil));
 }
 
@@ -615,7 +602,7 @@ TEST(SparqlParser, VarOrIriVariable) {
   string input = "?a";
   ParserAndVisitor p{input};
 
-  auto varOrTerm = p.parser.varOrIri()->accept(&p.visitor).as<VarOrTerm>();
+  auto varOrTerm = p.parser_.varOrIri()->accept(&p.visitor_).as<VarOrTerm>();
   EXPECT_THAT(varOrTerm, IsVariable("?a"));
 }
 
@@ -623,7 +610,7 @@ TEST(SparqlParser, VarOrIriIri) {
   string input = "<http://testiri>";
   ParserAndVisitor p{input};
 
-  auto varOrTerm = p.parser.varOrIri()->accept(&p.visitor).as<VarOrTerm>();
+  auto varOrTerm = p.parser_.varOrIri()->accept(&p.visitor_).as<VarOrTerm>();
   EXPECT_THAT(varOrTerm, IsIri(input));
 }
 
@@ -631,7 +618,7 @@ TEST(SparqlParser, VariableWithQuestionMark) {
   string input = "?variableName";
   ParserAndVisitor p{input};
 
-  auto variable = p.parser.var()->accept(&p.visitor).as<Variable>();
+  auto variable = p.parser_.var()->accept(&p.visitor_).as<Variable>();
   EXPECT_THAT(variable, IsVariable(input));
 }
 
@@ -639,6 +626,188 @@ TEST(SparqlParser, VariableWithDollarSign) {
   string input = "$variableName";
   ParserAndVisitor p{input};
 
-  auto variable = p.parser.var()->accept(&p.visitor).as<Variable>();
+  auto variable = p.parser_.var()->accept(&p.visitor_).as<Variable>();
   EXPECT_THAT(variable, IsVariable("?variableName"));
+}
+
+TEST(SparqlParser, Bind) {
+  {
+    string input = "BIND (10 - 5 as ?a)";
+    auto bindAndText = parseBind(input, {});
+
+    expectCompleteParse(bindAndText, IsBind("?a", "10-5"));
+  }
+
+  {
+    string input = "bInD (?age - 10 As ?s)";
+    auto bindAndText = parseBind(input, {});
+
+    expectCompleteParse(bindAndText, IsBind("?s", "?age-10"));
+  }
+}
+
+TEST(SparqlParser, Integer) {
+  {
+    string input = "1931";
+    ParserAndVisitor p{input};
+
+    unsigned long long result =
+        p.parser_.integer()->accept(&p.visitor_).as<unsigned long long>();
+    EXPECT_EQ(result, 1931ull);
+  }
+
+  {
+    string input = "0";
+    ParserAndVisitor p{input};
+
+    unsigned long long result =
+        p.parser_.integer()->accept(&p.visitor_).as<unsigned long long>();
+    EXPECT_EQ(result, 0ull);
+  }
+
+  {
+    string input = "18446744073709551615";
+    ParserAndVisitor p{input};
+
+    unsigned long long result =
+        p.parser_.integer()->accept(&p.visitor_).as<unsigned long long>();
+    EXPECT_EQ(result, 18446744073709551615ull);
+  }
+
+  {
+    string input = "18446744073709551616";
+    ParserAndVisitor p{input};
+
+    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_),
+                 SparqlParseException);
+  }
+
+  {
+    string input = "10000000000000000000000000000000000000000";
+    ParserAndVisitor p{input};
+
+    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_),
+                 SparqlParseException);
+  }
+
+  {
+    string input = "-1";
+    ParserAndVisitor p{input};
+
+    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_),
+                 antlr4::ParseCancellationException);
+  }
+}
+
+TEST(SparqlParser, LimitOffsetClause) {
+  {
+    string input = "LIMIT 10";
+
+    auto limitOffset = parseLimitOffsetClause(input, {});
+
+    expectCompleteParse(limitOffset, IsLimitOffset(10ull, 1ull, 0ull));
+  }
+
+  {
+    string input = "OFFSET 31 LIMIT 12 TEXTLIMIT 14";
+
+    auto limitOffset = parseLimitOffsetClause(input, {});
+
+    expectCompleteParse(limitOffset, IsLimitOffset(12ull, 14ull, 31ull));
+  }
+
+  {
+    string input = "textlimit 999";
+
+    auto limitOffset = parseLimitOffsetClause(input, {});
+
+    expectCompleteParse(
+        limitOffset,
+        IsLimitOffset(std::numeric_limits<uint64_t>::max(), 999ull, 0ull));
+  }
+
+  {
+    string input = "LIMIT      999";
+
+    auto limitOffset = parseLimitOffsetClause(input, {});
+
+    expectCompleteParse(limitOffset, IsLimitOffset(999ull, 1ull, 0ull));
+  }
+
+  {
+    string input = "OFFSET 43";
+
+    auto limitOffset = parseLimitOffsetClause(input, {});
+
+    expectCompleteParse(
+        limitOffset,
+        IsLimitOffset(std::numeric_limits<uint64_t>::max(), 1ull, 43ull));
+  }
+
+  {
+    string input = "TEXTLIMIT 43 LIMIT 19";
+
+    auto limitOffset = parseLimitOffsetClause(input, {});
+
+    expectCompleteParse(limitOffset, IsLimitOffset(19ull, 43ull, 0ull));
+  }
+
+  {
+    string input = "LIMIT20";
+
+    // parse* catches antlr4::ParseCancellationException and throws a
+    // std::runtime_error so this has to be checked instead.
+    EXPECT_THROW(parseLimitOffsetClause(input, {}), std::runtime_error);
+  }
+
+  {
+    string input = "Limit 10 TEXTLIMIT 20 offset 0 Limit 20";
+
+    auto limitOffset = parseLimitOffsetClause(input, {});
+
+    EXPECT_THAT(limitOffset.resultOfParse_, IsLimitOffset(10ull, 20ull, 0ull));
+    EXPECT_EQ(limitOffset.remainingText_, "Limit 20");
+  }
+}
+
+TEST(SparqlParser, OrderCondition) {
+  auto parseOrderCondition = [](const std::string& input) {
+    ParserAndVisitor p{input};
+    return p.parse<OrderKey>(input, "order condition",
+                             &SparqlAutomaticParser::orderCondition);
+  };
+  auto expectParseVariable = [&parseOrderCondition](const string& input,
+                                                    const string& variable,
+                                                    bool isDescending) {
+    expectCompleteParse(parseOrderCondition(input),
+                        IsVariableOrderKey(variable, isDescending));
+  };
+  auto expectParseExpression = [&parseOrderCondition](const string& input,
+                                                      const string& expression,
+                                                      bool isDescending) {
+    expectCompleteParse(parseOrderCondition(input),
+                        IsExpressionOrderKey(expression, isDescending));
+  };
+  // var
+  expectParseVariable("?test", "?test", false);
+  // brackettedExpression
+  expectParseVariable("DESC (?foo)", "?foo", true);
+  expectParseVariable("ASC (?bar)", "?bar", false);
+  expectParseExpression("ASC(?test - 5)", "?test-5", false);
+  expectParseExpression("DESC (10 || (5 && ?foo))", "10||(5&&?foo)", true);
+  // constraint
+  expectParseExpression("(5 - ?mehr)", "5-?mehr", false);
+  expectParseExpression("SUM(?i)", "SUM(?i)", false);
+  EXPECT_THROW(parseOrderCondition("ASC SCORE(?i)"), ParseException);
+}
+
+TEST(SparqlParser, OrderClause) {
+  {
+    string input = "ORDER BY ?test DESC(?foo - 5)";
+    ParserAndVisitor p{input};
+    auto orderKeys =
+        p.parser_.orderClause()->accept(&p.visitor_).as<vector<OrderKey>>();
+    EXPECT_THAT(orderKeys[0], IsVariableOrderKey("?test", false));
+    EXPECT_THAT(orderKeys[1], IsExpressionOrderKey("?foo-5", true));
+  }
 }

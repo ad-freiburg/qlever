@@ -7,6 +7,8 @@
 
 #include <compare>
 
+#include <optional>
+
 /// A word and its index in the vocabulary from which it was obtained. A word
 /// that is larger than all words in the vocabulary is represented by
 /// `{std::nullopt, largestIndexInVocabulary + 1}`
@@ -20,8 +22,8 @@ struct WordAndIndex {
   // `std::optional<std::string_view>` and the index.
   WordAndIndex(std::optional<std::string> word, uint64_t index)
       : _word{std::move(word)}, _index{index} {}
-  WordAndIndex(const std::string& word, uint64_t index)
-      : _word{word}, _index{index} {}
+  WordAndIndex(std::string word, uint64_t index)
+      : _word{std::move(word)}, _index{index} {}
   WordAndIndex(std::optional<std::string_view> word, uint64_t index)
       : _index{index} {
     if (word.has_value()) {

@@ -9,6 +9,7 @@
 #include "../src/global/Constants.h"
 #include "../src/parser/PropertyPathParser.h"
 #include "../src/parser/SparqlParser.h"
+#include "SparqlAntlrParserTestHelpers.h"
 
 TEST(ParserTest, testParse) {
   try {
@@ -58,8 +59,8 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ("?y", triples[2]._s);
       ASSERT_EQ("nsx:rel2", triples[2]._p._iri);
       ASSERT_EQ("<http://abc.de>", triples[2]._o);
-      ASSERT_EQ(std::nullopt, pq._limit);
-      ASSERT_EQ(std::nullopt, pq._offset);
+      ASSERT_EQ(std::numeric_limits<uint64_t>::max(), pq._limitOffset._limit);
+      ASSERT_EQ(0, pq._limitOffset._offset);
     }
 
     {
@@ -94,8 +95,8 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ("?y", triples[2]._s);
       ASSERT_EQ("nsx:rel2", triples[2]._p._iri);
       ASSERT_EQ("<http://abc.de>", triples[2]._o);
-      ASSERT_EQ(std::nullopt, pq._limit);
-      ASSERT_EQ(std::nullopt, pq._offset);
+      ASSERT_EQ(std::numeric_limits<uint64_t>::max(), pq._limitOffset._limit);
+      ASSERT_EQ(0, pq._limitOffset._offset);
     }
 
     {
@@ -126,8 +127,8 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ("?y", triples[2]._s);
       ASSERT_EQ("nsx:rel2", triples[2]._p._iri);
       ASSERT_EQ("\"Hello... World\"", triples[2]._o);
-      ASSERT_EQ(std::nullopt, pq._limit);
-      ASSERT_EQ(std::nullopt, pq._offset);
+      ASSERT_EQ(std::numeric_limits<uint64_t>::max(), pq._limitOffset._limit);
+      ASSERT_EQ(0, pq._limitOffset._offset);
     }
 
     {
@@ -457,9 +458,9 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(c._whereClauseTriples[0]._p._iri, "<directed-by>");
       ASSERT_EQ(c._whereClauseTriples[0]._o, "?director");
 
-      ASSERT_EQ(10u, pq._limit);
-      ASSERT_EQ(false, pq._orderBy[0]._desc);
-      ASSERT_EQ("?movie", pq._orderBy[0]._key);
+      ASSERT_EQ(10u, pq._limitOffset._limit);
+      ASSERT_EQ(false, pq._orderBy[0].isDescending_);
+      ASSERT_EQ("?movie", pq._orderBy[0].variable_);
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(true, sc._reduced);
@@ -489,9 +490,9 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(c._whereClauseTriples[0]._p._iri, "<directed-by>");
       ASSERT_EQ(c._whereClauseTriples[0]._o, "?director");
 
-      ASSERT_EQ(10u, pq._limit);
-      ASSERT_EQ(true, pq._orderBy[0]._desc);
-      ASSERT_EQ("?movie", pq._orderBy[0]._key);
+      ASSERT_EQ(10u, pq._limitOffset._limit);
+      ASSERT_EQ(true, pq._orderBy[0].isDescending_);
+      ASSERT_EQ("?movie", pq._orderBy[0].variable_);
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(true, sc._distinct);
@@ -525,15 +526,15 @@ TEST(ParserTest, testParse) {
       const auto& c = pq.children()[0].getBasic();
       ASSERT_EQ(1u, c._whereClauseTriples.size());
       ASSERT_EQ(0, pq._rootGraphPattern._filters.size());
-      ASSERT_EQ(3u, pq._offset);
+      ASSERT_EQ(3u, pq._limitOffset._offset);
 
       ASSERT_EQ(c._whereClauseTriples[0]._s, "?movie");
       ASSERT_EQ(c._whereClauseTriples[0]._p._iri, "<directed-by>");
       ASSERT_EQ(c._whereClauseTriples[0]._o, "<Scott%2C%20Ridley>");
 
-      ASSERT_EQ(20u, pq._limit);
-      ASSERT_EQ(true, pq._orderBy[0]._desc);
-      ASSERT_EQ("?movie", pq._orderBy[0]._key);
+      ASSERT_EQ(20u, pq._limitOffset._limit);
+      ASSERT_EQ(true, pq._orderBy[0].isDescending_);
+      ASSERT_EQ("?movie", pq._orderBy[0].variable_);
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(true, sc._distinct);
@@ -556,7 +557,7 @@ TEST(ParserTest, testParse) {
                 parsed_sub_query._subquery._rootGraphPattern._filters[0]._rhs);
       ASSERT_EQ(SparqlFilter::GT,
                 parsed_sub_query._subquery._rootGraphPattern._filters[0]._type);
-      ASSERT_EQ(std::nullopt, parsed_sub_query._subquery._offset);
+      ASSERT_EQ(0, parsed_sub_query._subquery._limitOffset._offset);
 
       ASSERT_EQ(c_subquery._whereClauseTriples[0]._s, "?movie");
       ASSERT_EQ(c_subquery._whereClauseTriples[0]._p._iri, "<directed-by>");
@@ -566,9 +567,10 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(c_subquery._whereClauseTriples[1]._p._iri, "<from-year>");
       ASSERT_EQ(c_subquery._whereClauseTriples[1]._o, "?year");
 
-      ASSERT_EQ(std::nullopt, parsed_sub_query._subquery._limit);
-      ASSERT_EQ(true, parsed_sub_query._subquery._orderBy[0]._desc);
-      ASSERT_EQ("?director", parsed_sub_query._subquery._orderBy[0]._key);
+      ASSERT_EQ(std::numeric_limits<uint64_t>::max(),
+                parsed_sub_query._subquery._limitOffset._limit);
+      ASSERT_EQ(true, parsed_sub_query._subquery._orderBy[0].isDescending_);
+      ASSERT_EQ("?director", parsed_sub_query._subquery._orderBy[0].variable_);
 
       auto sc_subquery =
           get<ParsedQuery::SelectClause>(parsed_sub_query._subquery._clause);
@@ -609,15 +611,15 @@ TEST(ParserTest, testParse) {
       const auto& c = pq.children()[0].getBasic();
       ASSERT_EQ(1u, c._whereClauseTriples.size());
       ASSERT_EQ(0, pq._rootGraphPattern._filters.size());
-      ASSERT_EQ(3u, pq._offset);
+      ASSERT_EQ(3u, pq._limitOffset._offset);
 
       ASSERT_EQ(c._whereClauseTriples[0]._s, "?movie");
       ASSERT_EQ(c._whereClauseTriples[0]._p._iri, "<directed-by>");
       ASSERT_EQ(c._whereClauseTriples[0]._o, "<Scott%2C%20Ridley>");
 
-      ASSERT_EQ(20u, pq._limit);
-      ASSERT_EQ(true, pq._orderBy[0]._desc);
-      ASSERT_EQ("?movie", pq._orderBy[0]._key);
+      ASSERT_EQ(20u, pq._limitOffset._limit);
+      ASSERT_EQ(true, pq._orderBy[0].isDescending_);
+      ASSERT_EQ("?movie", pq._orderBy[0].variable_);
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(true, sc._distinct);
@@ -640,15 +642,16 @@ TEST(ParserTest, testParse) {
                 parsed_sub_query._subquery._rootGraphPattern._filters[0]._rhs);
       ASSERT_EQ(SparqlFilter::GT,
                 parsed_sub_query._subquery._rootGraphPattern._filters[0]._type);
-      ASSERT_EQ(std::nullopt, parsed_sub_query._subquery._offset);
+      ASSERT_EQ(0, parsed_sub_query._subquery._limitOffset._offset);
 
       ASSERT_EQ(c_subquery._whereClauseTriples[0]._s, "?movie");
       ASSERT_EQ(c_subquery._whereClauseTriples[0]._p._iri, "<directed-by>");
       ASSERT_EQ(c_subquery._whereClauseTriples[0]._o, "?director");
 
-      ASSERT_EQ(std::nullopt, parsed_sub_query._subquery._limit);
-      ASSERT_EQ(true, parsed_sub_query._subquery._orderBy[0]._desc);
-      ASSERT_EQ("?director", parsed_sub_query._subquery._orderBy[0]._key);
+      ASSERT_EQ(std::numeric_limits<uint64_t>::max(),
+                parsed_sub_query._subquery._limitOffset._limit);
+      ASSERT_EQ(true, parsed_sub_query._subquery._orderBy[0].isDescending_);
+      ASSERT_EQ("?director", parsed_sub_query._subquery._orderBy[0].variable_);
 
       auto sc_subquery =
           get<ParsedQuery::SelectClause>(parsed_sub_query._subquery._clause);
@@ -676,13 +679,14 @@ TEST(ParserTest, testParse) {
               ._subquery;
       ASSERT_EQ(1u, c_sub_subquery._whereClauseTriples.size());
       ASSERT_EQ(0u, aux_parsed_sub_sub_query._rootGraphPattern._filters.size());
-      ASSERT_EQ(std::nullopt, aux_parsed_sub_sub_query._offset);
+      ASSERT_EQ(0, aux_parsed_sub_sub_query._limitOffset._offset);
 
       ASSERT_EQ(c_sub_subquery._whereClauseTriples[0]._s, "?movie");
       ASSERT_EQ(c_sub_subquery._whereClauseTriples[0]._p._iri, "<from-year>");
       ASSERT_EQ(c_sub_subquery._whereClauseTriples[0]._o, "?year");
 
-      ASSERT_EQ(std::nullopt, aux_parsed_sub_sub_query._limit);
+      ASSERT_EQ(std::numeric_limits<uint64_t>::max(),
+                aux_parsed_sub_sub_query._limitOffset._limit);
       ASSERT_EQ(0u, aux_parsed_sub_sub_query._orderBy.size());
 
       auto sc_sub_subquery =
@@ -834,8 +838,8 @@ TEST(ParserTest, testExpandPrefixes) {
   ASSERT_EQ("?y", c._whereClauseTriples[2]._s);
   ASSERT_EQ("nsx:rel2", c._whereClauseTriples[2]._p._iri);
   ASSERT_EQ("<http://abc.de>", c._whereClauseTriples[2]._o);
-  ASSERT_EQ(std::nullopt, pq._limit);
-  ASSERT_EQ(std::nullopt, pq._offset);
+  ASSERT_EQ(std::numeric_limits<uint64_t>::max(), pq._limitOffset._limit);
+  ASSERT_EQ(0, pq._limitOffset._offset);
 }
 
 TEST(ParserTest, testSolutionModifiers) {
@@ -849,8 +853,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(0u, pq._prefixes.size());
     ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectedVariables().size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
-    ASSERT_EQ(std::nullopt, pq._limit);
-    ASSERT_EQ(std::nullopt, pq._offset);
+    ASSERT_EQ(std::numeric_limits<uint64_t>::max(), pq._limitOffset._limit);
+    ASSERT_EQ(0, pq._limitOffset._offset);
     ASSERT_EQ(size_t(0), pq._orderBy.size());
     ASSERT_FALSE(selectClause._distinct);
     ASSERT_FALSE(selectClause._reduced);
@@ -867,8 +871,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(1u, c._whereClauseTriples.size());
-    ASSERT_EQ(10ul, pq._limit);
-    ASSERT_EQ(std::nullopt, pq._offset);
+    ASSERT_EQ(10ul, pq._limitOffset._limit);
+    ASSERT_EQ(0, pq._limitOffset._offset);
     ASSERT_EQ(size_t(0), pq._orderBy.size());
     ASSERT_FALSE(selectClause._distinct);
     ASSERT_FALSE(selectClause._reduced);
@@ -887,8 +891,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(0u, pq._prefixes.size());
     ASSERT_EQ(1u, selectClause._varsOrAsterisk.getSelectedVariables().size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
-    ASSERT_EQ(10u, pq._limit.value_or(0));
-    ASSERT_EQ(15u, pq._offset.value_or(0));
+    ASSERT_EQ(10u, pq._limitOffset._limit);
+    ASSERT_EQ(15u, pq._limitOffset._offset);
     ASSERT_EQ(size_t(0), pq._orderBy.size());
     ASSERT_FALSE(selectClause._distinct);
     ASSERT_FALSE(selectClause._reduced);
@@ -907,40 +911,42 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(0u, pq._prefixes.size());
     ASSERT_EQ(2u, selectClause._varsOrAsterisk.getSelectedVariables().size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
-    ASSERT_EQ(10u, pq._limit.value_or(0));
-    ASSERT_EQ(15u, pq._offset.value_or(0));
+    ASSERT_EQ(10u, pq._limitOffset._limit);
+    ASSERT_EQ(15u, pq._limitOffset._offset);
     ASSERT_EQ(size_t(1), pq._orderBy.size());
-    ASSERT_EQ("?y", pq._orderBy[0]._key);
-    ASSERT_FALSE(pq._orderBy[0]._desc);
+    ASSERT_EQ("?y", pq._orderBy[0].variable_);
+    ASSERT_FALSE(pq._orderBy[0].isDescending_);
     ASSERT_TRUE(selectClause._distinct);
     ASSERT_FALSE(selectClause._reduced);
   }
 
-  {
-    auto pq = SparqlParser(
-                  "SELECT DISTINCT ?x SCORE(?x) ?y WHERE \t {?x :myrel ?y}\n"
-                  "ORDER BY ASC(?y) DESC(SCORE(?x)) LIMIT 10 OFFSET 15")
-                  .parse();
-    pq.expandPrefixes();
-    ASSERT_TRUE(pq.hasSelectClause());
-    const auto& selectClause = pq.selectClause();
-    ASSERT_EQ(1u, pq.children().size());
-    const auto& c = pq.children()[0].getBasic();
-    ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(3u, selectClause._varsOrAsterisk.getSelectedVariables().size());
-    ASSERT_EQ("SCORE(?x)",
-              selectClause._varsOrAsterisk.getSelectedVariables()[1]);
-    ASSERT_EQ(1u, c._whereClauseTriples.size());
-    ASSERT_EQ(10u, pq._limit.value_or(0));
-    ASSERT_EQ(15u, pq._offset.value_or(0));
-    ASSERT_EQ(size_t(2), pq._orderBy.size());
-    ASSERT_EQ("?y", pq._orderBy[0]._key);
-    ASSERT_FALSE(pq._orderBy[0]._desc);
-    ASSERT_EQ("SCORE(?x)", pq._orderBy[1]._key);
-    ASSERT_TRUE(pq._orderBy[1]._desc);
-    ASSERT_TRUE(selectClause._distinct);
-    ASSERT_FALSE(selectClause._reduced);
-  }
+  // TODO Figure out how to readd SCORE in a clean way.
+  //  {
+  //    auto pq = SparqlParser(
+  //                  "SELECT DISTINCT ?x SCORE(?x) ?y WHERE \t {?x :myrel
+  //                  ?y}\n" "ORDER BY ASC(?y) DESC(SCORE(?X)) LIMIT 10 OFFSET
+  //                  15") .parse();
+  //    pq.expandPrefixes();
+  //    ASSERT_TRUE(pq.hasSelectClause());
+  //    const auto& selectClause = pq.selectClause();
+  //    ASSERT_EQ(1u, pq.children().size());
+  //    const auto& c = pq.children()[0].getBasic();
+  //    ASSERT_EQ(0u, pq._prefixes.size());
+  //    ASSERT_EQ(3u,
+  //    selectClause._varsOrAsterisk.getSelectedVariables().size());
+  //    ASSERT_EQ("SCORE(?x)",
+  //              selectClause._varsOrAsterisk.getSelectedVariables()[1]);
+  //    ASSERT_EQ(1u, c._whereClauseTriples.size());
+  //    ASSERT_EQ(10u, pq._limitOffset._limit);
+  //    ASSERT_EQ(15u, pq._limitOffset._offset);
+  //    ASSERT_EQ(size_t(2), pq._orderBy.size());
+  //    ASSERT_EQ("?y", pq._orderBy[0].variable_);
+  //    ASSERT_FALSE(pq._orderBy[0].isDescending_);
+  //    ASSERT_EQ("SCORE(?x)", pq._orderBy[1].variable_);
+  //    ASSERT_TRUE(pq._orderBy[1].isDescending_);
+  //    ASSERT_TRUE(selectClause._distinct);
+  //    ASSERT_FALSE(selectClause._reduced);
+  //  }
 
   {
     auto pq = SparqlParser(
@@ -955,13 +961,13 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(0u, pq._prefixes.size());
     ASSERT_EQ(2u, selectClause._varsOrAsterisk.getSelectedVariables().size());
     ASSERT_EQ(1u, c._whereClauseTriples.size());
-    ASSERT_EQ(10u, pq._limit.value_or(0));
-    ASSERT_EQ(15u, pq._offset.value_or(0));
+    ASSERT_EQ(10u, pq._limitOffset._limit);
+    ASSERT_EQ(15u, pq._limitOffset._offset);
     ASSERT_EQ(size_t(2), pq._orderBy.size());
-    ASSERT_EQ("?x", pq._orderBy[0]._key);
-    ASSERT_TRUE(pq._orderBy[0]._desc);
-    ASSERT_EQ("?y", pq._orderBy[1]._key);
-    ASSERT_FALSE(pq._orderBy[1]._desc);
+    ASSERT_EQ("?x", pq._orderBy[0].variable_);
+    ASSERT_TRUE(pq._orderBy[0].isDescending_);
+    ASSERT_EQ("?y", pq._orderBy[1].variable_);
+    ASSERT_FALSE(pq._orderBy[1].isDescending_);
     ASSERT_FALSE(selectClause._distinct);
     ASSERT_TRUE(selectClause._reduced);
   }
@@ -970,7 +976,7 @@ TEST(ParserTest, testSolutionModifiers) {
     auto pq =
         SparqlParser("SELECT ?x ?y WHERE {?x <is-a> <Actor>} LIMIT 10").parse();
     pq.expandPrefixes();
-    ASSERT_EQ(10u, pq._limit.value_or(0));
+    ASSERT_EQ(10u, pq._limitOffset._limit);
   }
 
   {
@@ -1037,8 +1043,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq._groupByVariables.size());
     ASSERT_EQ(1u, pq._orderBy.size());
     ASSERT_EQ("?r", pq._groupByVariables[0]);
-    ASSERT_EQ("?avg", pq._orderBy[0]._key);
-    ASSERT_FALSE(pq._orderBy[0]._desc);
+    ASSERT_EQ("?avg", pq._orderBy[0].variable_);
+    ASSERT_FALSE(pq._orderBy[0].isDescending_);
   }
 
   {
@@ -1052,8 +1058,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, pq._groupByVariables.size());
     ASSERT_EQ(1u, pq._orderBy.size());
     ASSERT_EQ("?r", pq._groupByVariables[0]);
-    ASSERT_EQ("?count", pq._orderBy[0]._key);
-    ASSERT_FALSE(pq._orderBy[0]._desc);
+    ASSERT_EQ("?count", pq._orderBy[0].variable_);
+    ASSERT_FALSE(pq._orderBy[0].isDescending_);
   }
 
   {
@@ -1063,40 +1069,13 @@ TEST(ParserTest, testSolutionModifiers) {
             "?a <http://schema.org/name> ?b ."
             "?a ql:has-relation ?r }"
             "GROUP BY ?r "
-            "ORDER BY ?count")
+            "ORDER BY ?concat")
             .parse();
     ASSERT_TRUE(pq.hasSelectClause());
     const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, selectClause._aliases.size());
     ASSERT_EQ("(group_concat(?r;SEPARATOR=\"Cake\") as ?concat)",
               selectClause._aliases[0].getDescriptor());
-  }
-
-  {
-    // Test for an alias in the order by statement
-    auto pq = SparqlParser(
-                  "SELECT DISTINCT ?x ?y WHERE \t {?x :myrel ?y}\n"
-                  "ORDER BY DESC((COUNT(?x) as ?count)) LIMIT 10 OFFSET 15")
-                  .parse();
-    pq.expandPrefixes();
-    ASSERT_TRUE(pq.hasSelectClause());
-    const auto& selectClause = pq.selectClause();
-    ASSERT_EQ(1u, pq.children().size());
-    const auto& c = pq.children()[0].getBasic();
-    ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(2u, selectClause._varsOrAsterisk.getSelectedVariables().size());
-    ASSERT_EQ(1u, c._whereClauseTriples.size());
-    ASSERT_EQ(10u, pq._limit.value_or(0));
-    ASSERT_EQ(15u, pq._offset.value_or(0));
-    ASSERT_EQ(1u, pq._orderBy.size());
-    ASSERT_EQ("?count", pq._orderBy[0]._key);
-    ASSERT_TRUE(pq._orderBy[0]._desc);
-    ASSERT_EQ(1u, selectClause._aliases.size());
-    ASSERT_TRUE(selectClause._aliases[0]._expression.isAggregate({}));
-    ASSERT_EQ("(count(?x) as ?count)",
-              selectClause._aliases[0].getDescriptor());
-    ASSERT_TRUE(selectClause._distinct);
-    ASSERT_FALSE(selectClause._reduced);
   }
 }
 
@@ -1187,4 +1166,113 @@ TEST(ParserTest, propertyPaths) {
     failed = true;
   }
   ASSERT_TRUE(failed);
+}
+
+TEST(ParserTest, Bind) {
+  ParsedQuery pq =
+      SparqlParser("SELECT ?a WHERE { BIND (10 - 5 as ?a) . }").parse();
+  ASSERT_TRUE(pq.hasSelectClause());
+  ASSERT_EQ(pq.children().size(), 1);
+  GraphPatternOperation child = pq.children()[0];
+  ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(child.variant_));
+  GraphPatternOperation::Bind bind =
+      get<GraphPatternOperation::Bind>(child.variant_);
+  ASSERT_EQ(bind._target, "?a");
+  ASSERT_EQ(bind._expression.getDescriptor(), "10-5");
+}
+
+TEST(ParserTest, Order) {
+  {
+    ParsedQuery pq =
+        SparqlParser("SELECT ?x ?y WHERE { ?x :myrel ?y }").parse();
+    ASSERT_TRUE(pq._orderBy.empty());
+    ASSERT_EQ(pq._rootGraphPattern._children.size(), 1);
+    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
+        pq._rootGraphPattern._children[0].variant_));
+  }
+  {
+    ParsedQuery pq =
+        SparqlParser("SELECT ?x ?y WHERE { ?x :myrel ?y } ORDER BY ?x").parse();
+    ASSERT_EQ(pq._orderBy.size(), 1);
+    EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?x", false));
+    ASSERT_EQ(pq._rootGraphPattern._children.size(), 1);
+    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
+        pq._rootGraphPattern._children[0].variant_));
+  }
+  {
+    ParsedQuery pq =
+        SparqlParser("SELECT ?x ?y WHERE { ?x :myrel ?y } ORDER BY ASC(?y)")
+            .parse();
+    ASSERT_EQ(pq._orderBy.size(), 1);
+    EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?y", false));
+    ASSERT_EQ(pq._rootGraphPattern._children.size(), 1);
+    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
+        pq._rootGraphPattern._children[0].variant_));
+  }
+  {
+    ParsedQuery pq =
+        SparqlParser("SELECT ?x ?y WHERE { ?x :myrel ?y } ORDER BY DESC(?foo)")
+            .parse();
+    ASSERT_EQ(pq._orderBy.size(), 1);
+    EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?foo", true));
+    ASSERT_EQ(pq._rootGraphPattern._children.size(), 1);
+    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
+        pq._rootGraphPattern._children[0].variant_));
+  }
+  {
+    ParsedQuery pq =
+        SparqlParser(
+            "SELECT ?x WHERE { ?x :myrel ?y } GROUP BY ?x ORDER BY "
+            "?x")
+            .parse();
+    ASSERT_EQ(pq._orderBy.size(), 1);
+    EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?x", false));
+    ASSERT_EQ(pq._rootGraphPattern._children.size(), 1);
+    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
+        pq._rootGraphPattern._children[0].variant_));
+  }
+  {
+    ParsedQuery pq =
+        SparqlParser(
+            "SELECT ?x (COUNT(?y) as ?c) WHERE { ?x :myrel ?y } GROUP "
+            "BY ?x ORDER BY ?c")
+            .parse();
+    ASSERT_EQ(pq._orderBy.size(), 1);
+    EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?c", false));
+  }
+  {
+    ParsedQuery pq =
+        SparqlParser("SELECT ?x ?y WHERE { ?x :myrel ?y } ORDER BY (?x - ?y)")
+            .parse();
+    ASSERT_EQ(pq._orderBy.size(), 1);
+    auto variant = pq._rootGraphPattern._children[1].variant_;
+    ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
+    auto helperBind = get<GraphPatternOperation::Bind>(variant);
+    ASSERT_EQ(helperBind._expression.getDescriptor(), "?x-?y");
+    ASSERT_EQ(pq._orderBy[0].variable_, helperBind._target);
+  }
+  {
+    // Ordering by variables that are not grouped is not allowed.
+    EXPECT_THROW(
+        SparqlParser("SELECT ?x WHERE { ?x :myrel ?y } GROUP BY ?x ORDER BY "
+                     "?y")
+            .parse(),
+        ParseException);
+  }
+  {
+    // Ordering by an expression while grouping is currently not supported.
+    EXPECT_THROW(
+        SparqlParser("SELECT ?y WHERE { ?x :myrel ?y } GROUP BY ?y ORDER BY "
+                     "(?x - ?y)")
+            .parse(),
+        ParseException);
+  }
+  {
+    // Ordering by an expression while grouping is currently not supported.
+    EXPECT_THROW(
+        SparqlParser("SELECT ?y WHERE { ?x :myrel ?y } GROUP BY ?y ORDER BY "
+                     "(2 * ?y)")
+            .parse(),
+        ParseException);
+  }
 }

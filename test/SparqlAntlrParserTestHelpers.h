@@ -48,6 +48,29 @@ std::ostream& operator<<(std::ostream& out, const VarOrTerm& varOrTerm) {
 
 // _____________________________________________________________________________
 
+std::ostream& operator<<(std::ostream& out,
+                         const GraphPatternOperation::Bind& bind) {
+  out << "Bind " << bind._expression.getDescriptor() << " as " << bind._target;
+  return out;
+}
+
+// _____________________________________________________________________________
+
+std::ostream& operator<<(std::ostream& out, const VariableOrderKey& orderkey) {
+  out << "Order " << (orderkey.isDescending_ ? "DESC" : "ASC") << " by "
+      << orderkey.variable_;
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out,
+                         const ExpressionOrderKey& expressionOrderKey) {
+  out << "Order " << (expressionOrderKey.isDescending_ ? "DESC" : "ASC")
+      << " by " << expressionOrderKey.expression_.getDescriptor();
+  return out;
+}
+
+// _____________________________________________________________________________
+
 // Recursively unwrap a std::variant object, or return a pointer
 // to the argument directly if it is already unwrapped.
 
@@ -67,6 +90,19 @@ constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
     return &arg;
   }
 }
+// _____________________________________________________________________________
+/**
+ * Ensures that the matcher matches on the result of the parsing and that the
+ * text has been fully consumed by the parser.
+ *
+ * @param resultOfParseAndText Parsing result
+ * @param matcher Matcher that must be fulfilled
+ */
+void expectCompleteParse(const auto& resultOfParseAndText, auto&& matcher) {
+  EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
+  EXPECT_TRUE(resultOfParseAndText.remainingText_.empty());
+}
+
 // _____________________________________________________________________________
 
 MATCHER_P(IsIri, value, "") {
@@ -100,6 +136,36 @@ MATCHER_P(IsVariable, value, "") {
 MATCHER_P(IsLiteral, value, "") {
   if (const auto literal = unwrapVariant<VarOrTerm, GraphTerm, Literal>(arg)) {
     return literal->literal() == value;
+  }
+  return false;
+}
+
+// _____________________________________________________________________________
+
+MATCHER_P2(IsBind, variable, expression, "") {
+  return (arg._target == variable) &&
+         (arg._expression.getDescriptor() == expression);
+}
+
+MATCHER_P3(IsLimitOffset, limit, textLimit, offset, "") {
+  return (arg._limit == limit) && (arg._textLimit == textLimit) &&
+         (arg._offset == offset);
+}
+
+MATCHER_P2(IsVariableOrderKey, key, desc, "") {
+  if (const auto variableOrderKey =
+          unwrapVariant<OrderKey, VariableOrderKey>(arg)) {
+    return (variableOrderKey->variable_ == key) &&
+           (variableOrderKey->isDescending_ == desc);
+  }
+  return false;
+}
+
+MATCHER_P2(IsExpressionOrderKey, expr, desc, "") {
+  if (const auto bindOrderKey =
+          unwrapVariant<OrderKey, ExpressionOrderKey>(arg)) {
+    return (bindOrderKey->expression_.getDescriptor() == expr) &&
+           (bindOrderKey->isDescending_ == desc);
   }
   return false;
 }

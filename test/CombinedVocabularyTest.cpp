@@ -113,3 +113,8 @@ TEST(CombinedVocabulary, UpperLowerBoundAlternativeComparator) {
 TEST(CombinedVocabulary, AccessOperator) {
   testAccessOperatorForUnorderedVocabulary(createLeftAndRightVocabulary);
 }
+
+TEST(CombinedVocabulary, EmptyVocabulary) {
+  testEmptyVocabulary(createLeftAndRightVocabulary);
+  testEmptyVocabulary(createEvenOddVocabulary);
+}

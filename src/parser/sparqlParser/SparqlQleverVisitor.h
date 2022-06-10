@@ -78,6 +78,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return result;
   }
 
+  void setPrefixMapManually(PrefixMap map) { _prefixMap = std::move(map); }
+
  private:
   // For the unit tests
   PrefixMap& prefixMap() { return _prefixMap; }
@@ -98,6 +100,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     // true means automatically generated
     return {true, std::move(label)};
   }
+
+  // Process an IRI function call. This is used in both `visitFunctionCall` and
+  // `visitIriOrFunction`.
+  antlrcpp::Any processIriFunctionCall(const std::string& iri,
+                                       std::vector<ExpressionPtr> argList);
 
  public:
   // ___________________________________________________________________________
@@ -244,27 +251,70 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitOrderClause(
       SparqlAutomaticParser::OrderClauseContext* ctx) override {
-    return visitChildren(ctx);
+    vector<OrderKey> orderConditions;
+    for (auto* orderCondition : ctx->orderCondition()) {
+      orderConditions.push_back(
+          visitOrderCondition(orderCondition).as<OrderKey>());
+    }
+    return orderConditions;
   }
 
   antlrcpp::Any visitOrderCondition(
       SparqlAutomaticParser::OrderConditionContext* ctx) override {
-    return visitChildren(ctx);
+    auto visitExprOrderKey = [this](bool isDescending,
+                                    antlr4::tree::ParseTree* context) {
+      auto expr = sparqlExpression::SparqlExpressionPimpl{
+          std::move(visit(context).as<ExpressionPtr>())};
+      if (auto exprIsVariable = expr.getVariableOrNullopt();
+          exprIsVariable.has_value()) {
+        return OrderKey{VariableOrderKey(exprIsVariable.value(), isDescending)};
+      } else {
+        return OrderKey{ExpressionOrderKey{std::move(expr), isDescending}};
+      }
+    };
+
+    if (ctx->var()) {
+      return OrderKey{VariableOrderKey(ctx->var()->getText())};
+    } else if (ctx->constraint()) {
+      return visitExprOrderKey(false, ctx->constraint());
+    } else if (ctx->brackettedExpression()) {
+      return visitExprOrderKey(ctx->DESC() != nullptr,
+                               ctx->brackettedExpression());
+    }
+    AD_FAIL();  // Should be unreachable.
   }
 
   antlrcpp::Any visitLimitOffsetClauses(
       SparqlAutomaticParser::LimitOffsetClausesContext* ctx) override {
-    return visitChildren(ctx);
+    LimitOffsetClause clause{};
+    if (ctx->limitClause()) {
+      clause._limit =
+          visitLimitClause(ctx->limitClause()).as<unsigned long long>();
+    }
+    if (ctx->offsetClause()) {
+      clause._offset =
+          visitOffsetClause(ctx->offsetClause()).as<unsigned long long>();
+    }
+    if (ctx->textLimitClause()) {
+      clause._textLimit =
+          visitTextLimitClause(ctx->textLimitClause()).as<unsigned long long>();
+    }
+    return clause;
   }
 
   antlrcpp::Any visitLimitClause(
       SparqlAutomaticParser::LimitClauseContext* ctx) override {
-    return visitChildren(ctx);
+    return visitInteger(ctx->integer());
   }
 
   antlrcpp::Any visitOffsetClause(
       SparqlAutomaticParser::OffsetClauseContext* ctx) override {
-    return visitChildren(ctx);
+    return visitInteger(ctx->integer());
+  }
+
+  antlrcpp::Any visitTextLimitClause(
+      SparqlAutomaticParser::TextLimitClauseContext* ctx) override {
+    return visitInteger(ctx->integer());
   }
 
   antlrcpp::Any visitValuesClause(
@@ -313,7 +363,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitBind(SparqlAutomaticParser::BindContext* ctx) override {
-    return visitChildren(ctx);
+    auto expr = std::move(ctx->expression()->accept(this).as<ExpressionPtr>());
+    auto wrapper = sparqlExpression::SparqlExpressionPimpl{std::move(expr)};
+    return GraphPatternOperation::Bind{std::move(wrapper),
+                                       ctx->var()->getText()};
   }
 
   antlrcpp::Any visitInlineData(
@@ -368,12 +421,27 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitFunctionCall(
       SparqlAutomaticParser::FunctionCallContext* ctx) override {
-    return visitChildren(ctx);
+    return processIriFunctionCall(
+        visitIri(ctx->iri()).as<std::string>(),
+        std::move(
+            visitArgList(ctx->argList()).as<std::vector<ExpressionPtr>>()));
   }
 
   antlrcpp::Any visitArgList(
       SparqlAutomaticParser::ArgListContext* ctx) override {
-    return visitChildren(ctx);
+    // If no arguments, return empty expression vector.
+    if (ctx->NIL()) {
+      return std::vector<ExpressionPtr>{};
+    }
+    // The grammar allows an optional DISTICT before the argument list (the
+    // whole list, not the individual arguments), but we currently don't support
+    // it.
+    if (ctx->DISTINCT()) {
+      throw SparqlParseException{
+          "DISTINCT for argument lists of IRI functions are not supported"};
+    }
+    // Visit the expression of each argument.
+    return visitExpressionChildren(ctx->expression());
   }
 
   antlrcpp::Any visitExpressionList(
@@ -566,9 +634,18 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
+  /// Note that in the SPARQL grammar the INTEGER rule refers to positive
+  /// integers without an explicit sign.
   antlrcpp::Any visitInteger(
       SparqlAutomaticParser::IntegerContext* ctx) override {
-    return visitChildren(ctx);
+    try {
+      return std::stoull(ctx->getText());
+    } catch (const std::out_of_range&) {
+      throw SparqlParseException{
+          "Integer " + ctx->getText() +
+          " does not fit"
+          " into 64 bits. This is not supported by QLever."};
+    }
   }
 
   antlrcpp::Any visitTriplesNode(
@@ -979,10 +1056,28 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       override {
     if (context->aggregate()) {
       return context->aggregate()->accept(this);
+      // TODO: Implement built-in calls according to the following examples.
+      //
+      // } else if (ad_utility::getLowercase(context->children[0]->getText()) ==
+      //            "sqr") {
+      //   if (context->expression().size() != 1) {
+      //     throw SparqlParseException{"SQR needs one argument"};
+      //   }
+      //   auto children = visitExpressionChildren(context->expression());
+      //   return createExpression<sparqlExpression::SquareExpression>(
+      //       std::move(children[0]));
+      // } else if (ad_utility::getLowercase(context->children[0]->getText()) ==
+      //            "dist") {
+      //   if (context->expression().size() != 2) {
+      //     throw SparqlParseException{"DIST needs two arguments"};
+      //   }
+      //   auto children = visitExpressionChildren(context->expression());
+      //   return createExpression<sparqlExpression::DistExpression>(
+      //       std::move(children[0]), std::move(children[1]));
     } else {
       throw SparqlParseException{
-          "aggregates like COUNT are the only 'builtInCalls' that are "
-          "supported by this parser"};
+          "Built-in function not yet implemented (only aggregates like COUNT "
+          "so far)"};
     }
   }
 
@@ -1029,21 +1124,22 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
         distinct = true;
       }
     }
+    auto makePtr = [&]<typename ExpressionType>(auto&&... additionalArgs) {
+      ExpressionPtr result{std::make_unique<ExpressionType>(
+          distinct, std::move(childExpression), AD_FWD(additionalArgs)...)};
+      result->descriptor() = context->getText();
+      return result;
+    };
     if (ad_utility::getLowercase(children[0]->getText()) == "count") {
-      return ExpressionPtr{std::make_unique<sparqlExpression::CountExpression>(
-          distinct, std::move(childExpression))};
+      return makePtr.operator()<sparqlExpression::CountExpression>();
     } else if (ad_utility::getLowercase(children[0]->getText()) == "sum") {
-      return ExpressionPtr{std::make_unique<sparqlExpression::SumExpression>(
-          distinct, std::move(childExpression))};
+      return makePtr.operator()<sparqlExpression::SumExpression>();
     } else if (ad_utility::getLowercase(children[0]->getText()) == "max") {
-      return ExpressionPtr{std::make_unique<sparqlExpression::MaxExpression>(
-          distinct, std::move(childExpression))};
+      return makePtr.operator()<sparqlExpression::MaxExpression>();
     } else if (ad_utility::getLowercase(children[0]->getText()) == "min") {
-      return ExpressionPtr{std::make_unique<sparqlExpression::MinExpression>(
-          distinct, std::move(childExpression))};
+      return makePtr.operator()<sparqlExpression::MinExpression>();
     } else if (ad_utility::getLowercase(children[0]->getText()) == "avg") {
-      return ExpressionPtr{std::make_unique<sparqlExpression::AvgExpression>(
-          distinct, std::move(childExpression))};
+      return makePtr.operator()<sparqlExpression::AvgExpression>();
     } else if (ad_utility::getLowercase(children[0]->getText()) ==
                "group_concat") {
       // Use a space as a default separator
@@ -1058,28 +1154,27 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
         separator = " "s;
       }
 
-      return ExpressionPtr{
-          std::make_unique<sparqlExpression::GroupConcatExpression>(
-              distinct, std::move(childExpression), std::move(separator))};
-    } else {
-      AD_CHECK(ad_utility::getLowercase(children[0]->getText()) == "sample");
-      return ExpressionPtr{std::make_unique<sparqlExpression::SampleExpression>(
-          distinct, std::move(childExpression))};
+      return makePtr.operator()<sparqlExpression::GroupConcatExpression>(
+          std::move(separator));
+    } else if (ad_utility::getLowercase(children[0]->getText()) == "sample") {
+      return makePtr.operator()<sparqlExpression::SampleExpression>();
     }
+    AD_FAIL()  // Should be unreachable.
   }
 
   antlrcpp::Any visitIriOrFunction(
       SparqlAutomaticParser::IriOrFunctionContext* ctx) override {
-    if (ctx->argList()) {
-      throw SparqlParseException{
-          "calls to non-built-in functions in expressions are not supported by "
-          "this parser"};
+    // Case 1: Just an IRI.
+    if (ctx->argList() == nullptr) {
+      return ExpressionPtr{
+          std::make_unique<sparqlExpression::StringOrIriExpression>(
+              ctx->getText())};
     }
-
-    return ExpressionPtr{
-        std::make_unique<sparqlExpression::StringOrIriExpression>(
-            ctx->getText())};
-    return visitChildren(ctx);
+    // Case 2: Function call, where the function name is an IRI.
+    return processIriFunctionCall(
+        visitIri(ctx->iri()).as<std::string>(),
+        std::move(
+            visitArgList(ctx->argList()).as<std::vector<ExpressionPtr>>()));
   }
 
   antlrcpp::Any visitRdfLiteral(

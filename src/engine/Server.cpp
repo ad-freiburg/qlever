@@ -36,7 +36,8 @@ void Server::initialize(const string& indexBaseName, bool useText,
 
   // Set flag.
   _initialized = true;
-  LOG(INFO) << "The server is ready" << std::endl;
+  LOG(INFO) << "The server is ready, listening for requests on port " << _port
+            << " ..." << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -81,11 +82,11 @@ Awaitable<void> Server::process(
   if (params.contains("cmd")) {
     const auto& cmd = params.at("cmd");
     if (cmd == "stats") {
-      LOG(INFO) << "Supplying index stats..." << std::endl;
+      LOG(INFO) << "Processing command \"stats\" ..." << std::endl;
       auto response = createJsonResponse(composeStatsJson(), request);
       co_return co_await sendWithCors(std::move(response));
     } else if (cmd == "cache-stats") {
-      LOG(INFO) << "Supplying cache stats..." << std::endl;
+      LOG(INFO) << "Processing command \"cache-stats\" ..." << std::endl;
       auto response = createJsonResponse(composeCacheStatsJson(), request);
       co_return co_await sendWithCors(std::move(response));
     } else if (cmd == "clear-cache") {
@@ -142,9 +143,17 @@ Awaitable<void> Server::process(
   // Neither a query nor a command were specified, simply serve a file.
   // Note that `makeFileServer` returns a function.
   // The first argument is the document root, the second one is the whitelist.
-  co_await makeFileServer(".", ad_utility::HashSet<std::string>{
-                                   "index.html", "script.js",
-                                   "style.css"})(std::move(request), send);
+
+  // Note: `co_await makeFileServer(....)(...)` doesn't compile in g++ 11.2.0,
+  // probably because of the following bug:
+  // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=98056
+  // TODO<joka921> Reinstate this one-liner as soon as this bug is fixed.
+
+  auto serveFileRequest = makeFileServer(
+      ".",
+      ad_utility::HashSet<std::string>{"index.html", "script.js", "style.css"})(
+      std::move(request), send);
+  co_return co_await std::move(serveFileRequest);
 }
 
 // _____________________________________________________________________________
@@ -174,9 +183,8 @@ Awaitable<json> Server::composeResponseQleverJson(
         qet.getRootOperation()->getRuntimeInfo());
 
     {
-      size_t limit =
-          std::min(query._limit.value_or(MAX_NOF_ROWS_IN_RESULT), maxSend);
-      size_t offset = query._offset.value_or(0);
+      size_t limit = std::min(query._limitOffset._limit, maxSend);
+      size_t offset = query._limitOffset._offset;
       requestTimer.cont();
       j["res"] = query.hasSelectClause()
                      ? qet.writeResultAsQLeverJson(
@@ -212,9 +220,8 @@ Awaitable<json> Server::composeResponseSparqlJson(
     shared_ptr<const ResultTable> resultTable = qet.getResult();
     requestTimer.stop();
     nlohmann::json j;
-    size_t limit =
-        std::min(query._limit.value_or(MAX_NOF_ROWS_IN_RESULT), maxSend);
-    size_t offset = query._offset.value_or(0);
+    size_t limit = std::min(query._limitOffset._limit, maxSend);
+    size_t offset = query._limitOffset._offset;
     requestTimer.cont();
     j = qet.writeResultAsSparqlJson(query.selectClause()._varsOrAsterisk, limit,
                                     offset, std::move(resultTable));
@@ -227,12 +234,12 @@ Awaitable<json> Server::composeResponseSparqlJson(
 
 // _____________________________________________________________________________
 template <QueryExecutionTree::ExportSubFormat format>
-Awaitable<ad_utility::stream_generator::stream_generator>
+Awaitable<ad_utility::streams::stream_generator>
 Server::composeResponseSepValues(const ParsedQuery& query,
                                  const QueryExecutionTree& qet) const {
   auto compute = [&] {
-    size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
-    size_t offset = query._offset.value_or(0);
+    size_t limit = query._limitOffset._limit;
+    size_t offset = query._limitOffset._offset;
     return query.hasSelectClause()
                ? qet.generateResults<format>(
                      query.selectClause()._varsOrAsterisk, limit, offset)
@@ -244,15 +251,15 @@ Server::composeResponseSepValues(const ParsedQuery& query,
 
 // _____________________________________________________________________________
 
-ad_utility::stream_generator::stream_generator Server::composeTurtleResponse(
+ad_utility::streams::stream_generator Server::composeTurtleResponse(
     const ParsedQuery& query, const QueryExecutionTree& qet) {
   if (!query.hasConstructClause()) {
     throw std::runtime_error{
         "RDF Turtle as an export format is only supported for CONSTRUCT "
         "queries"};
   }
-  size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
-  size_t offset = query._offset.value_or(0);
+  size_t limit = query._limitOffset._limit;
+  size_t offset = query._limitOffset._offset;
   return qet.writeRdfGraphTurtle(query.constructClause(), limit, offset,
                                  qet.getResult());
 }
@@ -343,8 +350,8 @@ boost::asio::awaitable<void> Server::processQuery(
     const bool pinSubtrees = containsParam("pinsubtrees", "true");
     const bool pinResult = containsParam("pinresult", "true");
     LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned)" : "")
-              << ((pinResult) ? " (Result pinned)" : "") << ": " << query
-              << '\n';
+              << ((pinResult) ? " (Result pinned)" : "") << ":\n"
+              << query << std::endl;
     ParsedQuery pq = SparqlParser(query).parse();
     pq.expandPrefixes();
 
@@ -414,11 +421,6 @@ boost::asio::awaitable<void> Server::processQuery(
           request));
     }
 
-    using ad_utility::content_encoding::CompressionMethod;
-
-    CompressionMethod method =
-        ad_utility::content_encoding::getCompressionMethodForRequest(request);
-
     AD_CHECK(mediaType.has_value());
     switch (mediaType.value()) {
       case ad_utility::MediaType::csv: {
@@ -426,7 +428,7 @@ boost::asio::awaitable<void> Server::processQuery(
             QueryExecutionTree::ExportSubFormat::CSV>(pq, qet);
 
         auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::csv, method);
+                                         ad_utility::MediaType::csv);
         co_await send(std::move(response));
 
       } break;
@@ -435,16 +437,15 @@ boost::asio::awaitable<void> Server::processQuery(
             QueryExecutionTree::ExportSubFormat::TSV>(pq, qet);
 
         auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::tsv, method);
+                                         ad_utility::MediaType::tsv);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::octetStream: {
         auto responseGenerator = co_await composeResponseSepValues<
             QueryExecutionTree::ExportSubFormat::BINARY>(pq, qet);
 
-        auto response =
-            createOkResponse(std::move(responseGenerator), request,
-                             ad_utility::MediaType::octetStream, method);
+        auto response = createOkResponse(std::move(responseGenerator), request,
+                                         ad_utility::MediaType::octetStream);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::qleverJson: {
@@ -457,7 +458,7 @@ boost::asio::awaitable<void> Server::processQuery(
         auto responseGenerator = composeTurtleResponse(pq, qet);
 
         auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::turtle, method);
+                                         ad_utility::MediaType::turtle);
         co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::sparqlJson: {
@@ -473,8 +474,12 @@ boost::asio::awaitable<void> Server::processQuery(
     // Print the runtime info. This needs to be done after the query
     // was computed.
 
-    LOG(INFO) << "\nRuntime Info:\n"
-              << qet.getRootOperation()->getRuntimeInfo().toString();
+    // TODO<joka921> Also log the processing time and an identifier of the
+    // query.
+    LOG(INFO) << "Done processing query" << std::endl;
+    LOG(DEBUG) << "\nRuntime Info:\n"
+               << qet.getRootOperation()->getRuntimeInfo().toString()
+               << std::endl;
   } catch (const ad_semsearch::Exception& e) {
     errorResponse = composeExceptionJson(query, e, requestTimer);
   } catch (const std::exception& e) {

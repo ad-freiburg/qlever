@@ -16,7 +16,7 @@
 #include "../util/Conversions.h"
 #include "../util/Generator.h"
 #include "../util/HashSet.h"
-#include "../util/streamable_generator.h"
+#include "../util/stream_generator.h"
 #include "./Operation.h"
 #include "./QueryExecutionContext.h"
 
@@ -110,21 +110,21 @@ class QueryExecutionTree {
   // `ResultType` of the i-th `selectVariable` in the `resultTable`
   ColumnIndicesAndTypes selectedVariablesToColumnIndices(
       const SelectedVarsOrAsterisk& selectedVarsOrAsterisk,
-      const ResultTable& resultTable) const;
+      const ResultTable& resultTable, bool includeQuestionMark = true) const;
 
   template <ExportSubFormat format>
-  ad_utility::stream_generator::stream_generator generateResults(
+  ad_utility::streams::stream_generator generateResults(
       const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
       size_t offset) const;
 
   // Generate an RDF graph in turtle format for a CONSTRUCT query.
-  ad_utility::stream_generator::stream_generator writeRdfGraphTurtle(
+  ad_utility::streams::stream_generator writeRdfGraphTurtle(
       const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
       size_t offset, std::shared_ptr<const ResultTable> res) const;
 
   // Generate an RDF graph in csv/tsv format for a CONSTRUCT query.
   template <ExportSubFormat format>
-  ad_utility::stream_generator::stream_generator writeRdfGraphSeparatedValues(
+  ad_utility::streams::stream_generator writeRdfGraphSeparatedValues(
       const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
       size_t offset, std::shared_ptr<const ResultTable> res) const;
 
@@ -263,8 +263,7 @@ class QueryExecutionTree {
       std::shared_ptr<const ResultTable> resultTable = nullptr) const;
 
   [[nodiscard]] std::optional<std::pair<std::string, const char*>>
-  toStringAndXsdType(Id id, ResultTable::ResultType type,
-                     const ResultTable& resultTable) const;
+  idToStringAndType(Id id, const ResultTable& resultTable) const;
 
   // Generate an RDF graph for a CONSTRUCT query.
   cppcoro::generator<StringTriple> generateRdfGraph(

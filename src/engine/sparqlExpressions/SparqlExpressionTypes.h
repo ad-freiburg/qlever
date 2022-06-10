@@ -263,25 +263,21 @@ template <SingleExpressionResult T, typename LocalVocab>
 Id constantExpressionResultToId(T&& result, LocalVocab& localVocab,
                                 bool isRepetitionOfConstant) {
   static_assert(isConstantResult<T>);
-  constexpr static auto type = expressionResultTypeToQleverResultType<T>();
-  if constexpr (type == qlever::ResultType::VERBATIM) {
-    return Id{result};
-  } else if constexpr (type == qlever::ResultType::FLOAT) {
-    auto tmpF = static_cast<float>(result);
-    Id id = 0;
-    ;
-    std::memcpy(&id, &tmpF, sizeof(float));
-    return id;
-  } else if constexpr (type == qlever::ResultType::LOCAL_VOCAB) {
+  if constexpr (ad_utility::isSimilar<T, string>) {
     // Return the index in the local vocabulary.
     if (!isRepetitionOfConstant) {
       localVocab.push_back(std::forward<T>(result));
     }
-    return localVocab.size() - 1;
+    return Id::makeFromLocalVocabIndex(
+        LocalVocabIndex::make(localVocab.size() - 1));
+  } else if constexpr (ad_utility::isSimilar<double, T>) {
+    return Id::makeFromDouble(result);
   } else {
-    static_assert(ad_utility::alwaysFalse<T>,
-                  "The result types other than VERBATIM, FLOAT and LOCAL_VOCAB "
-                  "have to be handled differently");
+    static_assert(ad_utility::isSimilar<int64_t, T> ||
+                  ad_utility::isSimilar<Bool, T>);
+    // This currently covers int and bool.
+    // TODO<joka921> represent bool in the `ValueId` class and adapt this.
+    return Id::makeFromInt(result);
   }
 }
 
@@ -384,8 +380,8 @@ template <size_t NumOperands, typename FunctionAndValueGettersT,
       NV == 1, std::array<std::tuple_element_t<0, OriginalValueGetters>, N>,
       OriginalValueGetters>;
   Function _function;
-  ValueGetters _valueGetters;
-  std::tuple<SpecializedFunctions...> _specializedFunctions;
+  ValueGetters _valueGetters{};
+  std::tuple<SpecializedFunctions...> _specializedFunctions{};
 };
 
 /// Helper variable to decide at compile time, if a type is an

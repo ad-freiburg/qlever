@@ -103,6 +103,12 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   // plan for this graph pattern.
   vector<SubtreePlan>& lastRow = plans.back();
 
+  for (auto& plan : lastRow) {
+    if (plan._qet->getRootOperation()->supportsLimit()) {
+      (plan._qet->getRootOperation()->setLimit(pq._limitOffset._limit));
+    }
+  }
+
   AD_CHECK_GT(lastRow.size(), 0);
   auto minInd = findCheapestExecutionTree(lastRow);
   if (pq._rootGraphPattern._optional) {
@@ -110,7 +116,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   }
 
   SubtreePlan final = lastRow[minInd];
-  final._qet->setTextLimit(getTextLimit(pq._textLimit));
+  final._qet->setTextLimit(pq._limitOffset._textLimit);
 
   LOG(DEBUG) << "Done creating execution plan.\n";
   return *final._qet;
@@ -355,7 +361,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
             leftVar = false;
             leftColName = generateUniqueVarName();
             leftCol = sub._qet->getVariableColumn(arg._innerLeft);
-            if (!_qec->getIndex().getVocab().getId(arg._left, &leftValue)) {
+            if (!_qec->getIndex().getId(arg._left, &leftValue)) {
               AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                        "No vocabulary entry for " + arg._left);
             }
@@ -368,7 +374,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
             rightVar = false;
             rightCol = sub._qet->getVariableColumn(arg._innerRight);
             rightColName = generateUniqueVarName();
-            if (!_qec->getIndex().getVocab().getId(arg._right, &rightValue)) {
+            if (!_qec->getIndex().getId(arg._right, &rightValue)) {
               AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                        "No vocabulary entry for " + arg._right);
             }
@@ -1088,8 +1094,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     auto& tree = *plan._qet;
     plan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
     plan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
-    if (pq._orderBy.size() == 1 && !pq._orderBy[0]._desc) {
-      size_t col = parent._qet->getVariableColumn(pq._orderBy[0]._key);
+    if (pq._orderBy.size() == 1 && !pq._orderBy[0].isDescending_) {
+      size_t col = parent._qet->getVariableColumn(pq._orderBy[0].variable_);
       const std::vector<size_t>& previousSortedOn =
           parent._qet->resultSortedOn();
       if (!previousSortedOn.empty() && col == previousSortedOn[0]) {
@@ -1105,8 +1111,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     } else {
       vector<pair<size_t, bool>> sortIndices;
       for (auto& ord : pq._orderBy) {
-        sortIndices.emplace_back(parent._qet->getVariableColumn(ord._key),
-                                 ord._desc);
+        sortIndices.emplace_back(parent._qet->getVariableColumn(ord.variable_),
+                                 ord.isDescending_);
       }
       const std::vector<size_t>& previousSortedOn =
           parent._qet->resultSortedOn();
@@ -1236,12 +1242,15 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           if (node._triple._p._iri == HAS_PREDICATE_PREDICATE) {
             // TODO(schnelle): Handle ?p ql:has-prediacte ?p
             // Add a has relation scan instead of a normal IndexScan
-            HasPredicateScan::ScanType scanType;
-            if (isVariable(node._triple._s)) {
-              scanType = HasPredicateScan::ScanType::FREE_S;
-            } else if (isVariable(node._triple._o)) {
-              scanType = HasPredicateScan::ScanType::FREE_O;
-            }
+            const HasPredicateScan::ScanType scanType = [&]() {
+              if (isVariable(node._triple._s)) {
+                return HasPredicateScan::ScanType::FREE_S;
+              } else if (isVariable(node._triple._o)) {
+                return HasPredicateScan::ScanType::FREE_O;
+              } else {
+                AD_FAIL();
+              }
+            }();
             auto scan = std::make_shared<HasPredicateScan>(_qec, scanType);
             scan->setSubject(node._triple._s);
             scan->setObject(node._triple._o);
@@ -1954,7 +1963,7 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
   AD_CHECK(a.type != SubtreePlan::OPTIONAL || b.type != SubtreePlan::OPTIONAL);
   SubtreePlan plan(_qec);
 
-  std::vector<std::array<Id, 2>> jcs = getJoinColumns(a, b);
+  std::vector<std::array<ColumnIndex, 2>> jcs = getJoinColumns(a, b);
 
   const vector<size_t>& aSortedOn = a._qet->resultSortedOn();
   const vector<size_t>& bSortedOn = b._qet->resultSortedOn();
@@ -1974,7 +1983,7 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
   // a and b need to be ordered properly first
   vector<pair<size_t, bool>> sortIndicesA;
   vector<pair<size_t, bool>> sortIndicesB;
-  for (array<Id, 2>& jc : jcs) {
+  for (array<ColumnIndex, 2>& jc : jcs) {
     sortIndicesA.push_back(std::make_pair(jc[0], false));
     sortIndicesB.push_back(std::make_pair(jc[1], false));
   }
@@ -2008,7 +2017,7 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
 QueryPlanner::SubtreePlan QueryPlanner::minus(const SubtreePlan& a,
                                               const SubtreePlan& b) const {
   AD_CHECK(a.type != SubtreePlan::MINUS && b.type == SubtreePlan::MINUS);
-  std::vector<std::array<Id, 2>> jcs = getJoinColumns(a, b);
+  std::vector<std::array<ColumnIndex, 2>> jcs = getJoinColumns(a, b);
 
   const vector<size_t>& aSortedOn = a._qet->resultSortedOn();
   const vector<size_t>& bSortedOn = b._qet->resultSortedOn();
@@ -2028,9 +2037,9 @@ QueryPlanner::SubtreePlan QueryPlanner::minus(const SubtreePlan& a,
   // a and b need to be ordered properly first
   vector<pair<size_t, bool>> sortIndicesA;
   vector<pair<size_t, bool>> sortIndicesB;
-  for (array<Id, 2>& jc : jcs) {
-    sortIndicesA.push_back(std::make_pair(jc[0], false));
-    sortIndicesB.push_back(std::make_pair(jc[1], false));
+  for (const auto& [joinColumnA, joinColumnB] : jcs) {
+    sortIndicesA.push_back(std::make_pair(joinColumnA, false));
+    sortIndicesB.push_back(std::make_pair(joinColumnB, false));
   }
 
   SubtreePlan orderByPlanA(_qec), orderByPlanB(_qec);
@@ -2064,7 +2073,7 @@ QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
     const SubtreePlan& a, const SubtreePlan& b) const {
   SubtreePlan plan(_qec);
 
-  std::vector<std::array<Id, 2>> jcs = getJoinColumns(a, b);
+  std::vector<std::array<ColumnIndex, 2>> jcs = getJoinColumns(a, b);
 
   const vector<size_t>& aSortedOn = a._qet->resultSortedOn();
   const vector<size_t>& bSortedOn = b._qet->resultSortedOn();
@@ -2084,9 +2093,9 @@ QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
   // a and b need to be ordered properly first
   vector<pair<size_t, bool>> sortIndicesA;
   vector<pair<size_t, bool>> sortIndicesB;
-  for (array<Id, 2>& jc : jcs) {
-    sortIndicesA.push_back(std::make_pair(jc[0], false));
-    sortIndicesB.push_back(std::make_pair(jc[1], false));
+  for (const auto& [joinColumnA, joinColumnB] : jcs) {
+    sortIndicesA.push_back(std::make_pair(joinColumnA, false));
+    sortIndicesB.push_back(std::make_pair(joinColumnB, false));
   }
 
   SubtreePlan orderByPlanA(_qec), orderByPlanB(_qec);
@@ -2190,16 +2199,16 @@ bool QueryPlanner::connected(const QueryPlanner::SubtreePlan& a,
 }
 
 // _____________________________________________________________________________
-vector<array<Id, 2>> QueryPlanner::getJoinColumns(
+vector<array<ColumnIndex, 2>> QueryPlanner::getJoinColumns(
     const QueryPlanner::SubtreePlan& a,
     const QueryPlanner::SubtreePlan& b) const {
-  vector<array<Id, 2>> jcs;
+  vector<array<ColumnIndex, 2>> jcs;
   const auto& aVarCols = a._qet->getVariableColumns();
   const auto& bVarCols = b._qet->getVariableColumns();
   for (const auto& aVarCol : aVarCols) {
     auto itt = bVarCols.find(aVarCol.first);
     if (itt != bVarCols.end()) {
-      jcs.push_back(array<Id, 2>{{aVarCol.second, itt->second}});
+      jcs.push_back(array<ColumnIndex, 2>{{aVarCol.second, itt->second}});
     }
   }
   return jcs;
@@ -2342,15 +2351,6 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
 
   LOG(TRACE) << "Fill DP table done." << std::endl;
   return dpTab;
-}
-
-// _____________________________________________________________________________
-size_t QueryPlanner::getTextLimit(const string& textLimitString) const {
-  if (textLimitString.empty()) {
-    return 1;
-  } else {
-    return static_cast<size_t>(atol(textLimitString.c_str()));
-  }
 }
 
 // _____________________________________________________________________________
@@ -2840,7 +2840,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   // TODO<joka921> find out, what is ACTUALLY the use case for the triple
   // graph. Is it only meant for (questionable) performance reasons
   // or does it change the meaning.
-  vector<array<Id, 2>> jcs;
+  vector<array<ColumnIndex, 2>> jcs;
   if (tg) {
     if (connected(a, b, *tg)) {
       jcs = getJoinColumns(a, b);

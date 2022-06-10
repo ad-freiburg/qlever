@@ -96,6 +96,9 @@ class SparqlAutomaticVisitor : public antlr4::tree::AbstractParseTreeVisitor {
   virtual antlrcpp::Any visitOffsetClause(
       SparqlAutomaticParser::OffsetClauseContext* context) = 0;
 
+  virtual antlrcpp::Any visitTextLimitClause(
+      SparqlAutomaticParser::TextLimitClauseContext* context) = 0;
+
   virtual antlrcpp::Any visitValuesClause(
       SparqlAutomaticParser::ValuesClauseContext* context) = 0;
 

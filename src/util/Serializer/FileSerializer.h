@@ -13,11 +13,11 @@
 namespace ad_utility {
 namespace serialization {
 
-using SerializationPosition = off_t;
+using SerializationPosition = uint64_t;
 
 class FileWriteSerializer {
  public:
-  static constexpr bool IsWriteSerializer = true;
+  using SerializerType = WriteSerializerTag;
 
   FileWriteSerializer(File&& file) : _file{std::move(file)} {};
 
@@ -34,7 +34,13 @@ class FileWriteSerializer {
 
   void close() { _file.close(); }
 
-  SerializationPosition getCurrentPosition() const { return _file.tell(); }
+  [[nodiscard]] SerializationPosition getSerializationPosition() const {
+    return _file.tell();
+  }
+
+  void setSerializationPosition(SerializationPosition position) {
+    _file.seek(static_cast<off_t>(position), SEEK_SET);
+  }
 
   File&& file() && { return std::move(_file); }
 
@@ -44,11 +50,12 @@ class FileWriteSerializer {
 
 class FileReadSerializer {
  public:
-  static constexpr bool IsWriteSerializer = false;
+  using SerializerType = ReadSerializerTag;
 
-  FileReadSerializer(File&& file) : _file{std::move(file)} {};
+  explicit FileReadSerializer(File&& file) : _file{std::move(file)} {};
 
-  FileReadSerializer(std::string filename) : _file{filename, "r"} {
+  explicit FileReadSerializer(const std::string& filename)
+      : _file{filename, "r"} {
     AD_CHECK(_file.isOpen());
   }
 
@@ -63,7 +70,7 @@ class FileReadSerializer {
   bool isExhausted() { return _file.isAtEof(); }
 
   void setSerializationPosition(SerializationPosition position) {
-    _file.seek(position, SEEK_SET);
+    _file.seek(static_cast<off_t>(position), SEEK_SET);
   }
 
   File&& file() && { return std::move(_file); }
@@ -78,11 +85,11 @@ class FileReadSerializer {
  */
 class CopyableFileReadSerializer {
  public:
-  static constexpr bool IsWriteSerializer = false;
-  CopyableFileReadSerializer(std::shared_ptr<File> filePtr)
+  using SerializerType = ReadSerializerTag;
+  explicit CopyableFileReadSerializer(std::shared_ptr<File> filePtr)
       : _file{std::move(filePtr)} {};
 
-  CopyableFileReadSerializer(std::string filename)
+  explicit CopyableFileReadSerializer(std::string filename)
       : _file{std::make_shared<File>(filename, "r")} {
     AD_CHECK(_file->isOpen());
   }
