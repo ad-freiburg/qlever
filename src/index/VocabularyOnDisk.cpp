@@ -131,7 +131,7 @@ void VocabularyOnDisk::buildFromTextFile(const string& textFileName,
 // _____________________________________________________________________________
 void VocabularyOnDisk::open(const string& filename) {
   _file.open(filename.c_str(), "r");
-  _idsAndOffsets.open(filename + _offsetSuffix);
+  _idsAndOffsets.reuseReadOnly(filename + _offsetSuffix);
   AD_CHECK(_idsAndOffsets.size() > 0);
   _size = _idsAndOffsets.size() - 1;
   if (_size > 0) {

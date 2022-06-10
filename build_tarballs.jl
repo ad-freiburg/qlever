@@ -8,7 +8,8 @@ version = v"0.0.1"
 
 # Collection of sources required to complete build
 sources = [
-    GitSource("https://github.com/jeremiahpslewis/QLever.git", "3f9dc9321ed72c79c9aa9aa384255ca1860f3935"),
+    #GitSource("https://github.com/jeremiahpslewis/QLever.git", "3f9dc9321ed72c79c9aa9aa384255ca1860f3935"),
+    DirectorySource(".")
 ]
 
 
@@ -28,6 +29,7 @@ CMAKE_FLAGS+=(-DABSL_PROPAGATE_CXX_STD=ON)
 CMAKE_FLAGS+=(-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15)
 CMAKE_FLAGS+=(-DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror") #-Wno-dev
 cmake ${CMAKE_FLAGS[@]} .. && ninja -v
+ninja test
 cp CreatePatternsMain \
      IndexBuilderMain \
      TurtleParserMain \
