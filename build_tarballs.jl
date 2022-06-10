@@ -13,13 +13,14 @@ sources = [
 ]
 
 print("Current working directory in julia is ", pwd())
+print("Workspace is", $WORKSPACE)
 
 
 # Bash recipe for building across all platforms
 script = raw"""
 cd $WORKSPACE/srcdir/QLever/ # TODO: revert to qlever
 git submodule update --init --recursive
-mkdir build && cd build
+mkdir tmp/build && cd tmp/build
 CMAKE_FLAGS=(
     -DCMAKE_INSTALL_PREFIX=$prefix
     -DCMAKE_BUILD_TYPE=Release
