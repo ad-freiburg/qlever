@@ -23,9 +23,8 @@ print("Current working directory in julia is ", pwd())
 script = raw"""
 
 cd $WORKSPACE/srcdir/ # TODO: revert to qlever
-ls -l
 git submodule update --init --recursive
-mkdir tmp/build && cd tmp/build
+mkdir build && cd build
 CMAKE_FLAGS=(
     -DCMAKE_INSTALL_PREFIX=$prefix
     -DCMAKE_BUILD_TYPE=Release
