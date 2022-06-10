@@ -1,6 +1,6 @@
 # Note that this script can accept some limited command-line arguments, run
 # `julia build_tarballs.jl --help` to see a usage message.
-import Pdg; Pkg.add("BinaryBuilder")
+import Pkg; Pkg.add("BinaryBuilder")
 using BinaryBuilder, Pkg
 
 name = "QLever"
