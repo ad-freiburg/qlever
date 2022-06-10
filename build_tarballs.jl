@@ -13,11 +13,15 @@ sources = [
 ]
 
 print("Current working directory in julia is ", pwd())
-print("Workspace is", $WORKSPACE)
+
+mkdir("/tmp/julia_build")
+cd("/tmp/julia_build")
+print("Current working directory in julia is ", pwd())
 
 
 # Bash recipe for building across all platforms
 script = raw"""
+
 cd $WORKSPACE/srcdir/QLever/ # TODO: revert to qlever
 git submodule update --init --recursive
 mkdir tmp/build && cd tmp/build
