@@ -9,8 +9,10 @@ version = v"0.0.1"
 # Collection of sources required to complete build
 sources = [
     #GitSource("https://github.com/jeremiahpslewis/QLever.git", "3f9dc9321ed72c79c9aa9aa384255ca1860f3935"),
-    DirectorySource(".")
+    DirectorySource(pwd())
 ]
+
+@printf "Current working directory in julia is %s" pwd()
 
 
 # Bash recipe for building across all platforms
