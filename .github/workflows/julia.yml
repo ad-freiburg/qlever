@@ -1,0 +1,41 @@
+name: CMake
+
+
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    # The CMake configure and build commands are platform agnostic and should work equally
+    # well on Windows or Mac.  You can convert this to a matrix build if you need
+    # cross-platform coverage.
+    # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [gcc11]
+        os: [ ubuntu-latest ]
+        warnings: [  "-Wall -Wextra -Werror" ]
+        #exclude:
+        #  - compiler: gcc11
+        #    warnings: -Werror
+
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install Julia
+      run:  wget https://julialang-s3.julialang.org/bin/linux/x64/1.6/julia-1.6.6-linux-x86_64.tar.gz && \
+            tar xcf julia-1.6.6-linux-x86_64.tar.gz && cd julia-1.6.6
+    - name: RunBinaryBuilder
+      run:  $(pwd)/julia-1.6.6/bin/julia $(pwd)/build_tarballs.jl aarch64-apple-darwin --verbose
+
