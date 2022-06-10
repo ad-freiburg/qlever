@@ -37,6 +37,8 @@ jobs:
         version: 1.6.6
 
 
+    - name: Prepare environment
+      run : export BINARYBUILDER_AUTOMATIC_APPLE=true
     - name: RunBinaryBuilder
       run:  julia $(pwd)/build_tarballs.jl aarch64-apple-darwin --verbose
 
