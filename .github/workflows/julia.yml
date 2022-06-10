@@ -1,4 +1,4 @@
-name: CMake
+name: Julia Binary Builder
 
 
 
@@ -32,12 +32,11 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - uses: julia-actions/setup-julia@v1
+      with:
+        version: 1.6.6
 
-    - name: Install tar
-      run: sudo apt update && sudo apt install tar
-    - name: Install Julia
-      run:  wget https://julialang-s3.julialang.org/bin/linux/x64/1.6/julia-1.6.6-linux-x86_64.tar.gz && \
-            /usr/bin/tar -xcf julia-1.6.6-linux-x86_64.tar.gz && cd julia-1.6.6
+
     - name: RunBinaryBuilder
-      run:  $(pwd)/julia-1.6.6/bin/julia $(pwd)/build_tarballs.jl aarch64-apple-darwin --verbose
+      run:  julia $(pwd)/build_tarballs.jl aarch64-apple-darwin --verbose
 
