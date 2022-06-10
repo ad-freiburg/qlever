@@ -12,7 +12,7 @@ sources = [
     DirectorySource(pwd())
 ]
 
-print()"Current working directory in julia is ", pwd())
+print("Current working directory in julia is ", pwd())
 
 
 # Bash recipe for building across all platforms
