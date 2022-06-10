@@ -22,7 +22,8 @@ print("Current working directory in julia is ", pwd())
 # Bash recipe for building across all platforms
 script = raw"""
 
-cd $WORKSPACE/srcdir/QLever/ # TODO: revert to qlever
+cd $WORKSPACE/srcdir/ # TODO: revert to qlever
+ls -l
 git submodule update --init --recursive
 mkdir tmp/build && cd tmp/build
 CMAKE_FLAGS=(
