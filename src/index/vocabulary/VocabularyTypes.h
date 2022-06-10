@@ -6,7 +6,6 @@
 #define QLEVER_VOCABULARYTYPES_H
 
 #include <compare>
-
 #include <optional>
 
 /// A word and its index in the vocabulary from which it was obtained. A word

@@ -24,7 +24,6 @@
 using std::string;
 using std::vector;
 
-
 //! The HTTP Server used.
 class Server {
  public:
@@ -42,10 +41,10 @@ class Server {
         _index(),
         _engine(),
         _initialized(false)
-        // The number of server threads currently also is the number of queries
-        // that can be processed simultaneously.
-        //_queryProcessingSemaphore(numThreads)
-        {
+  // The number of server threads currently also is the number of queries
+  // that can be processed simultaneously.
+  //_queryProcessingSemaphore(numThreads)
+  {
     // TODO<joka921> Write a strong type for KB, MB, GB etc and use it
     // in the cache and the memory limit
     // Convert a number of gigabytes to the number of Ids that find in that

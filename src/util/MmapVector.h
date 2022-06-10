@@ -11,8 +11,8 @@
 
 #include "../util/Exception.h"
 #include "../util/Iterators.h"
-#include "File.h"
 #include "./OnDiskVector.h"
+#include "File.h"
 
 using std::string;
 
@@ -58,7 +58,6 @@ struct VecInfo {
   size_t _capacity;
   size_t _bytesize;
 };
-
 
 /*
 // STL-like class which implements a dynamic array (similar to std::vector)
@@ -124,9 +123,10 @@ class MmapVector {
     AD_CHECK(idx < _size);
   }
 
-  // ____________________________________________________________________________
-  T& back() { return *(_ptr + _size - 1); }
-  const T& back() const { return *(_ptr + _size - 1); }
+  //
+____________________________________________________________________________ T&
+back() { return *(_ptr + _size - 1); } const T& back() const { return *(_ptr +
+_size - 1); }
 
   // _____________________________________________________________
   std::string getFilename() const { return _filename; }
@@ -388,15 +388,14 @@ class MmapVectorTmp : public MmapVector<T> {
 };
  */
 
-template<typename T>
+template <typename T>
 using MmapVector = OnDiskVector<T>;
 
-template<typename T>
+template <typename T>
 using MmapVectorView = OnDiskVector<T>;
 
-template<typename T>
+template <typename T>
 using MmapVectorTmp = OnDiskVector<T>;
-
 
 }  // namespace ad_utility
 //#include "./MmapVectorImpl.h"

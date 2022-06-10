@@ -433,8 +433,8 @@ void CompressedRelationWriter::addRelation(
     _currentBlockData._col0LastId = col0Id;
     _currentBlockData._col1LastId = data.back()[0];
     for (const auto& entry : data) {
-      _buffer.serializeBytes(reinterpret_cast<const char*>(&entry), sizeof(entry));
-
+      _buffer.serializeBytes(reinterpret_cast<const char*>(&entry),
+                             sizeof(entry));
     }
     /*
     _buffer.serializeBytes(reinterpret_cast<const char*>(data.data()),
@@ -455,7 +455,8 @@ void CompressedRelationWriter::writeRelationToExclusiveBlocks(
 
     std::vector<std::array<Id, 2>> block;
     block.reserve(actualNumRowsPerBlock);
-    for (auto it = data.begin() + i; it < data.begin() + i + actualNumRowsPerBlock; ++it) {
+    for (auto it = data.begin() + i;
+         it < data.begin() + i + actualNumRowsPerBlock; ++it) {
       block.push_back(*it);
     }
     std::vector<char> compressedBlock = ZstdWrapper::compress(

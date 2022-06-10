@@ -20,20 +20,20 @@ constexpr void constexprBubbleSort(T& t, Compare compare) {
     for (size_t j = 0; j < t.size() - 1; ++j) {
       if (compare(t[j + 1], t[j])) {
         auto tmp = t[j];
-        t[j] = t[j+1];
-        t[j+1] = tmp;
+        t[j] = t[j + 1];
+        t[j + 1] = tmp;
         // swap also is not constexpr
-        //std::swap(t[j], t[j + 1]);
+        // std::swap(t[j], t[j + 1]);
       }
     }
   }
 }
 
-template<typename First, typename Second>
+template <typename First, typename Second>
 struct PairImpl {
   First first;
   Second second;
-  constexpr PairImpl(First f, Second s): first{f}, second(s) {}
+  constexpr PairImpl(First f, Second s) : first{f}, second(s) {}
 };
 
 /// A const and constexpr map from `Key`s to `Value`s.

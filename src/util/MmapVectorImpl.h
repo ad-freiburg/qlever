@@ -113,15 +113,14 @@ template <class T>
 void MmapVector<T>::remapLinux(size_t oldBytesize) {
 #ifdef __linux__
   // 1 is MREMAP_MAYMOVE but is this portable?
-  void* ptr =
-      mremap(static_cast<void*>(_ptr), oldBytesize, _bytesize, 1);
+  void* ptr = mremap(static_cast<void*>(_ptr), oldBytesize, _bytesize, 1);
   AD_CHECK(ptr != MAP_FAILED);
   // the filedescriptor and thus our mapping will still be valid
   // after closing, because mmap increases the count by one
   _ptr = static_cast<T*>(ptr);
   advise(_pattern);
 #else
-  (void) oldBytesize;
+  (void)oldBytesize;
 #endif
 }
 
@@ -157,7 +156,7 @@ void MmapVector<T>::adaptCapacity(size_t newCapacity) {
   writeMetaDataToEnd();
   remapLinux(oldBytesize);
 #else
-  (void) oldBytesize;
+  (void)oldBytesize;
   unmap();
   writeMetaDataToEnd();
   // renew the mapping because the file has changed

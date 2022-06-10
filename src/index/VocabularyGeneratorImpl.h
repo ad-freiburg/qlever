@@ -75,7 +75,8 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
     // Read the number of words in the partial vocabulary.
     infiles.back() >> numWordsLeftInPartialVocabulary.back();
     if (!_noIdMapsAndIgnoreExternalVocab) {
-      _idVecs.emplace_back(basename + PARTIAL_MMAP_IDS + std::to_string(i), ad_utility::CreateTag{});
+      _idVecs.emplace_back(basename + PARTIAL_MMAP_IDS + std::to_string(i),
+                           ad_utility::CreateTag{});
     }
     // Read the first entry of the vocabulary and add it to the queue.
     pushWordFromPartialVocabularyToQueue(i);
@@ -357,9 +358,10 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
 ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
     const string& mmapFilename) {
   ad_utility::HashMap<Id, Id> res;
-  //IdPairMMapVecView vec(mmapFilename);
+  // IdPairMMapVecView vec(mmapFilename);
   auto vec = IdPairMMapVecView::reuse(mmapFilename);
-  LOG(INFO) << "Reading IdMapping from file, size is: " << vec.size() << std::endl;
+  LOG(INFO) << "Reading IdMapping from file, size is: " << vec.size()
+            << std::endl;
   for (const auto& [partialId, globalId] : vec) {
     res[partialId] = globalId;
   }

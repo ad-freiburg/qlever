@@ -36,7 +36,7 @@ std::shared_ptr<T> reinterpret_pointer_cast(
       reinterpret_cast<typename std::shared_ptr<T>::element_type*>(r.get());
   return std::shared_ptr<T>{r, p};
 }
-}
+}  // namespace ad
 
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext* qec)

@@ -16,7 +16,7 @@ namespace ad_utility {
 // only push_back and clear are supported (+ all kinds of access to existing
 // elements) Can be trivially extended to complete the interface
 // The backup file is temporary and will be deleted in the destructor
-template<class T>
+template <class T>
 using BufferedVector = OnDiskVector<T>;
 
 /*

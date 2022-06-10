@@ -397,8 +397,9 @@ class TokenizerCtre {
     reset(beg, dataSize);
     bool curBetter = currentSuccess && res.size() > content.size();
 
-    return std::make_tuple(success || currentSuccess, curBetter ? idx : unusedIdx,
-                      curBetter ? res : content);
+    return std::make_tuple(success || currentSuccess,
+                           curBetter ? idx : unusedIdx,
+                           curBetter ? res : content);
   }
 
   /*
