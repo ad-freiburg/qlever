@@ -54,6 +54,10 @@ install_license LICENSE
 
 platforms = expand_cxxstring_abis(supported_platforms())
 
+print("platforms are ", platforms)
+filter!(p -> true, platforms)
+print("platforms are ", platforms)
+
 # QLever depends on FOXXLL which only builds on 64-bit systems
 # https://github.com/stxxl/foxxll/blob/a4a8aeee64743f845c5851e8b089965ea1c219d7/foxxll/common/types.hpp#L25
 filter!(p -> nbits(p) != 32, platforms)
