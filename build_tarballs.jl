@@ -10,11 +10,12 @@ version = v"0.0.1"
 sources = [
     #GitSource("https://github.com/jeremiahpslewis/QLever.git", "3f9dc9321ed72c79c9aa9aa384255ca1860f3935"),
     DirectorySource(pwd())
+    #GitSource("https://github.com/joka921/QLever.git", "25501bf6dc8670c3635b74df1bd633bc09baff36")
 ]
 
 print("Current working directory in julia is ", pwd())
 
-mkdir("/tmp/julia_build")
+mkpath("/tmp/julia_build")
 cd("/tmp/julia_build")
 print("Current working directory in julia is ", pwd())
 
@@ -23,7 +24,7 @@ print("Current working directory in julia is ", pwd())
 script = raw"""
 
 cd $WORKSPACE/srcdir/ # TODO: revert to qlever
-git submodule update --init --recursive
+#git submodule update --init --recursive
 mkdir build && cd build
 CMAKE_FLAGS=(
     -DCMAKE_INSTALL_PREFIX=$prefix
@@ -36,7 +37,7 @@ CMAKE_FLAGS+=(-DABSL_PROPAGATE_CXX_STD=ON)
 CMAKE_FLAGS+=(-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15)
 CMAKE_FLAGS+=(-DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror") #-Wno-dev
 cmake ${CMAKE_FLAGS[@]} .. && ninja -v
-ninja test
+env CTEST_OUTPUT_ON_FAILURE=1 ctest -C Release
 cp CreatePatternsMain \
      IndexBuilderMain \
      TurtleParserMain \
@@ -54,9 +55,9 @@ install_license LICENSE
 
 platforms = expand_cxxstring_abis(supported_platforms())
 
-print("platforms are ", platforms)
-filter!(p -> true, platforms)
-print("platforms are ", platforms)
+#println("platforms are ", platforms)
+#filter!(p -> false, platforms)
+#println("platforms are ", platforms)
 
 # QLever depends on FOXXLL which only builds on 64-bit systems
 # https://github.com/stxxl/foxxll/blob/a4a8aeee64743f845c5851e8b089965ea1c219d7/foxxll/common/types.hpp#L25

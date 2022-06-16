@@ -17,6 +17,10 @@ else()
     add_compile_options(-fcoroutines-ts)
 endif()
 
+# trying to trigger the build error.
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -ggdb -no-pie -fno-pie -rdynamic")
+#set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS}  -no-pie -fno-pie")
+
 ## Build targets for address sanitizer
 # AddressSanitize
 set(CMAKE_C_FLAGS_ASAN
