@@ -7,7 +7,7 @@
 
 #include <condition_variable>
 #include <mutex>
-#include <optional>
+#include <absl/types/optional.h>
 #include <queue>
 
 namespace ad_utility::data_structures {
@@ -63,14 +63,14 @@ class ThreadSafeQueue {
   /// Blocks until another thread pushes an element via push() which is
   /// hen returned or signalLastElementWasPushed() is called resulting in an
   /// empty optional, whatever happens first
-  std::optional<T> pop() {
+  absl::optional<T> pop() {
     std::unique_lock lock{_mutex};
     _pushNotification.wait(
         lock, [&] { return !_queue.empty() || _lastElementPushed; });
     if (_lastElementPushed && _queue.empty()) {
       return {};
     }
-    std::optional<T> value = std::move(_queue.front());
+    absl::optional<T> value = std::move(_queue.front());
     _queue.pop();
     lock.unlock();
     _popNotification.notify_one();

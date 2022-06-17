@@ -15,7 +15,7 @@ class Minus : public Operation {
  public:
   Minus(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> left,
         std::shared_ptr<QueryExecutionTree> right,
-        std::vector<array<size_t, 2>> matchedColumns);
+        std::vector<array<ColumnIndex, 2>> matchedColumns);
 
   // Uninitialized Object for testing the computeMinus method
   struct OnlyForTestingTag {};
@@ -58,7 +58,7 @@ class Minus : public Operation {
    **/
   template <int A_WIDTH, int B_WIDTH>
   void computeMinus(const IdTable& a, const IdTable& b,
-                    const vector<array<size_t, 2>>& matchedColumns,
+                    const vector<array<ColumnIndex, 2>>& matchedColumns,
                     IdTable* result) const;
 
  private:
@@ -69,7 +69,7 @@ class Minus : public Operation {
   template <int A_WIDTH, int B_WIDTH>
   static RowComparison isRowEqSkipFirst(
       const IdTableView<A_WIDTH>& a, const IdTableView<B_WIDTH>& b, size_t ia,
-      size_t ib, const vector<array<size_t, 2>>& matchedColumns);
+      size_t ib, const vector<array<ColumnIndex, 2>>& matchedColumns);
 
   virtual void computeResult(ResultTable* result) override;
 
@@ -77,5 +77,5 @@ class Minus : public Operation {
   std::shared_ptr<QueryExecutionTree> _right;
 
   vector<float> _multiplicities;
-  std::vector<array<size_t, 2>> _matchedColumns;
+  std::vector<array<ColumnIndex, 2>> _matchedColumns;
 };

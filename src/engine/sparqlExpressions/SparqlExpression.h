@@ -10,6 +10,7 @@
 #include <span>
 #include <variant>
 #include <vector>
+#include <absl/types/optional.h>
 
 #include "../../global/Id.h"
 #include "../../util/ConstexprSmallString.h"
@@ -77,17 +78,17 @@ class SparqlExpression {
 
   /// For the pattern trick we need to know, whether this expression
   /// is a non-distinct count of a single variable. In this case we return
-  /// the variable. Otherwise we return std::nullopt.
-  virtual std::optional<string> getVariableForNonDistinctCountOrNullopt()
+  /// the variable. Otherwise we return absl::nullopt.
+  virtual absl::optional<string> getVariableForNonDistinctCountOrNullopt()
       const {
-    return std::nullopt;
+    return absl::nullopt;
   }
 
   /// Helper function for getVariableForNonDistinctCountOrNullopt() : If this
   /// expression is a single variable, return the name of this variable.
-  /// Otherwise, return std::nullopt.
-  virtual std::optional<string> getVariableOrNullopt() const {
-    return std::nullopt;
+  /// Otherwise, return absl::nullopt.
+  virtual absl::optional<string> getVariableOrNullopt() const {
+    return absl::nullopt;
   }
 
   // __________________________________________________________________________

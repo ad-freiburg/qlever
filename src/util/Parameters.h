@@ -8,6 +8,7 @@
 #include <atomic>
 #include <functional>
 #include <tuple>
+#include <absl/types/optional.h>
 
 #include "./ConstexprMap.h"
 #include "./ConstexprSmallString.h"
@@ -50,7 +51,7 @@ struct Parameter : public ParameterBase {
 
   // This function is called each time the value is changed.
   using OnUpdateAction = std::function<void(Type)>;
-  std::optional<OnUpdateAction> _onUpdateAction = std::nullopt;
+  absl::optional<OnUpdateAction> _onUpdateAction = absl::nullopt;
 
  public:
   /// Construction is only allowed using an initial parameter value

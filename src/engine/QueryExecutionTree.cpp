@@ -107,7 +107,7 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
       exportColumns.push_back(VariableAndColumnIndex{
           var, columnIndex, resultTable.getResultType(columnIndex)});
     } else {
-      exportColumns.emplace_back(std::nullopt);
+      exportColumns.emplace_back(absl::nullopt);
       LOG(WARN) << "The variable \"" << var
                 << "\" was found in the original query, but not in the "
                    "execution tree. "
@@ -153,7 +153,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   ColumnIndicesAndTypes columns = selectedVariablesToColumnIndices(
       selectedVarsOrAsterisk, *resultTable, false);
 
-  std::erase(columns, std::nullopt);
+  std::erase(columns, absl::nullopt);
 
   if (columns.empty()) {
     return {std::vector<std::string>()};
@@ -302,13 +302,13 @@ void QueryExecutionTree::readFromCache() {
 }
 
 // ___________________________________________________________________________
-std::optional<std::pair<std::string, const char*>>
+absl::optional<std::pair<std::string, const char*>>
 QueryExecutionTree::idToStringAndType(Id id,
                                       const ResultTable& resultTable) const {
   // TODO<joka921> This is one of the central methods which we have to rewrite
   switch (id.getDatatype()) {
     case Datatype::Undefined:
-      return std::nullopt;
+      return absl::nullopt;
     case Datatype::Double: {
       // Format as integer if fractional part is zero, let C++ decide otherwise.
       std::stringstream ss;
@@ -324,9 +324,9 @@ QueryExecutionTree::idToStringAndType(Id id,
     case Datatype::Int:
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
     case Datatype::VocabIndex: {
-      std::optional<string> entity = _qec->getIndex().idToOptionalString(id);
+      absl::optional<string> entity = _qec->getIndex().idToOptionalString(id);
       if (!entity.has_value()) {
-        return std::nullopt;
+        return absl::nullopt;
       }
       return std::pair{std::move(entity.value()), nullptr};
     }
@@ -334,7 +334,7 @@ QueryExecutionTree::idToStringAndType(Id id,
       auto optionalString =
           resultTable.indexToOptionalString(id.getLocalVocabIndex());
       if (!optionalString.has_value()) {
-        return std::nullopt;
+        return absl::nullopt;
       }
       return std::pair{optionalString.value(), nullptr};
     }

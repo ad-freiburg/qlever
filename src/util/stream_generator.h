@@ -14,6 +14,7 @@
 #include "./Concepts.h"
 #include "./Coroutines.h"
 #include "./Exception.h"
+#include "./compatibility/stringstream.h"
 
 namespace ad_utility::streams {
 
@@ -36,7 +37,7 @@ class suspend_sometimes {
  public:
   explicit suspend_sometimes(const bool suspend) : _suspend{suspend} {}
   bool await_ready() const noexcept { return !_suspend; }
-  constexpr void await_suspend(std::coroutine_handle<>) const noexcept {}
+  constexpr void await_suspend(ad_std::coroutine_handle<>) const noexcept {}
   constexpr void await_resume() const noexcept {}
 };
 
@@ -94,7 +95,7 @@ class stream_generator_promise {
 
  private:
   bool isBufferLargeEnough() {
-    return _stream.view().length() >= MIN_BUFFER_SIZE;
+    return ad_std::lenthOfStringstream(_stream) >= MIN_BUFFER_SIZE;
   }
 };
 
@@ -103,7 +104,7 @@ struct stream_generator_sentinel {};
 template <size_t MIN_BUFFER_SIZE>
 class stream_generator_iterator {
   using promise_type = stream_generator_promise<MIN_BUFFER_SIZE>;
-  using coroutine_handle = std::coroutine_handle<promise_type>;
+  using coroutine_handle = ad_std::coroutine_handle<promise_type>;
 
  public:
   using iterator_category = std::input_iterator_tag;
@@ -196,7 +197,7 @@ class [[nodiscard]] basic_stream_generator {
   using value_type = typename iterator::value_type;
 
  private:
-  std::coroutine_handle<promise_type> _coroutine = nullptr;
+  ad_std::coroutine_handle<promise_type> _coroutine = nullptr;
 
   static basic_stream_generator noOpGenerator() { co_return; }
 
@@ -209,6 +210,10 @@ class [[nodiscard]] basic_stream_generator {
   }
 
   basic_stream_generator(const basic_stream_generator& other) = delete;
+
+  basic_stream_generator(
+      ad_std::coroutine_handle<promise_type> coroutine) noexcept
+      : _coroutine{coroutine} {}
 
   ~basic_stream_generator() {
     if (_coroutine) {
@@ -237,10 +242,9 @@ class [[nodiscard]] basic_stream_generator {
   }
 
  private:
-  friend class detail::stream_generator_promise<MIN_BUFFER_SIZE>;
-  explicit basic_stream_generator(
-      std::coroutine_handle<promise_type> coroutine) noexcept
-      : _coroutine{coroutine} {}
+  template <size_t B>
+  friend class detail::stream_generator_promise;
+ public:
 };
 
 namespace detail {
@@ -248,7 +252,8 @@ template <size_t MIN_BUFFER_SIZE>
 inline basic_stream_generator<MIN_BUFFER_SIZE>
 stream_generator_promise<MIN_BUFFER_SIZE>::get_return_object() noexcept {
   using coroutine_handle =
-      std::coroutine_handle<stream_generator_promise<MIN_BUFFER_SIZE>>;
+      ad_std::coroutine_handle<stream_generator_promise<MIN_BUFFER_SIZE>>;
+
   return basic_stream_generator{coroutine_handle::from_promise(*this)};
 }
 }  // namespace detail

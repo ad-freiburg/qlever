@@ -6,30 +6,30 @@
 #define QLEVER_VOCABULARYTYPES_H
 
 #include <compare>
-#include <optional>
+#include <absl/types/optional.h>
 
 /// A word and its index in the vocabulary from which it was obtained. A word
 /// that is larger than all words in the vocabulary is represented by
-/// `{std::nullopt, largestIndexInVocabulary + 1}`
+/// `{absl::nullopt, largestIndexInVocabulary + 1}`
 struct WordAndIndex {
-  std::optional<std::string> _word;
+  absl::optional<std::string> _word;
   uint64_t _index;
 
   WordAndIndex() = default;
   // Constructors that are needed to construct a word and index from one of
-  // `std::string`, `std::string_view`, `std::optional<std::string>`,
-  // `std::optional<std::string_view>` and the index.
-  WordAndIndex(std::optional<std::string> word, uint64_t index)
+  // `std::string`, `std::string_view`, `absl::optional<std::string>`,
+  // `absl::optional<std::string_view>` and the index.
+  WordAndIndex(absl::optional<std::string> word, uint64_t index)
       : _word{std::move(word)}, _index{index} {}
   WordAndIndex(std::string word, uint64_t index)
       : _word{std::move(word)}, _index{index} {}
-  WordAndIndex(std::optional<std::string_view> word, uint64_t index)
+  WordAndIndex(absl::optional<std::string_view> word, uint64_t index)
       : _index{index} {
     if (word.has_value()) {
       _word.emplace(word.value());
     }
   }
-  WordAndIndex(std::nullopt_t, uint64_t index) : _index{index} {}
+  WordAndIndex(absl::nullopt_t, uint64_t index) : _index{index} {}
 
   bool operator==(const WordAndIndex& result) const = default;
   [[nodiscard]] bool has_value() const { return _word.has_value(); }

@@ -37,13 +37,13 @@ std::vector<std::string> SparqlExpressionPimpl::getUnaggregatedVariables()
 }
 
 // ___________________________________________________________________________
-std::optional<std::string>
+absl::optional<std::string>
 SparqlExpressionPimpl::getVariableForNonDistinctCountOrNullopt() const {
   return _pimpl->getVariableForNonDistinctCountOrNullopt();
 }
 
 // ___________________________________________________________________________
-std::optional<std::string> SparqlExpressionPimpl::getVariableOrNullopt() const {
+absl::optional<std::string> SparqlExpressionPimpl::getVariableOrNullopt() const {
   return _pimpl->getVariableOrNullopt();
 }
 

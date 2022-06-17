@@ -4,7 +4,7 @@
 #pragma once
 
 #include <memory>
-#include <optional>
+#include <absl/types/optional.h>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -104,7 +104,7 @@ class QueryExecutionTree {
 
   using SelectedVarsOrAsterisk = ParsedQuery::SelectedVarsOrAsterisk;
 
-  using ColumnIndicesAndTypes = vector<std::optional<VariableAndColumnIndex>>;
+  using ColumnIndicesAndTypes = vector<absl::optional<VariableAndColumnIndex>>;
 
   // Returns a vector where the i-th element contains the column index and
   // `ResultType` of the i-th `selectVariable` in the `resultTable`
@@ -262,7 +262,7 @@ class QueryExecutionTree {
       size_t from, size_t limit, const ColumnIndicesAndTypes& columns,
       std::shared_ptr<const ResultTable> resultTable = nullptr) const;
 
-  [[nodiscard]] std::optional<std::pair<std::string, const char*>>
+  [[nodiscard]] absl::optional<std::pair<std::string, const char*>>
   idToStringAndType(Id id, const ResultTable& resultTable) const;
 
   // Generate an RDF graph for a CONSTRUCT query.

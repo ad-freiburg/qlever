@@ -5,7 +5,7 @@
 #define QLEVER_TASKQUEUE_H
 
 #include <functional>
-#include <optional>
+#include <absl/types/optional.h>
 #include <queue>
 #include <string>
 #include <thread>
@@ -103,13 +103,13 @@ class TaskQueue {
     }
   }
 
-  std::optional<Task> popManually() {
-    auto action = [&, this]() -> std::optional<Task> {
+  absl::optional<Task> popManually() {
+    auto action = [&, this]() -> absl::optional<Task> {
       std::unique_lock l{_queueMutex};
       _newTaskWasPushed.wait(
           l, [&] { return !_queuedTasks.empty() || _shutdownQueue; });
       if (_shutdownQueue && _queuedTasks.empty()) {
-        return std::nullopt;
+        return absl::nullopt;
       }
       auto task = std::move(_queuedTasks.front());
       _queuedTasks.pop();

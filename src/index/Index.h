@@ -6,7 +6,7 @@
 #include <array>
 #include <fstream>
 #include <memory>
-#include <optional>
+#include <absl/types/optional.h>
 #include <string>
 #include <stxxl/sorter>
 #include <stxxl/stream>
@@ -21,6 +21,7 @@
 #include "../util/CompressionUsingZstd/ZstdWrapper.h"
 #include "../util/File.h"
 #include "../util/Forward.h"
+#include "../util/compatibility/functional.h"
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
 #include "../util/Timer.h"
@@ -197,10 +198,10 @@ class Index {
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
-  std::optional<string> idToOptionalString(Id id) const {
+  absl::optional<string> idToOptionalString(Id id) const {
     switch (id.getDatatype()) {
       case Datatype::Undefined:
-        return std::nullopt;
+        return absl::nullopt;
       case Datatype::Double:
         return std::to_string(id.getDouble());
       case Datatype::Int:
@@ -215,7 +216,7 @@ class Index {
       }
       case Datatype::LocalVocabIndex:
         // TODO:: this is why this shouldn't be here
-        return std::nullopt;
+        return absl::nullopt;
       case Datatype::TextRecordIndex:
         return getTextExcerpt(id.getTextRecordIndex());
     }
@@ -526,7 +527,7 @@ class Index {
   bool _usePatterns;
   double _fullHasPredicateMultiplicityEntities;
   double _fullHasPredicateMultiplicityPredicates;
-  size_t _fullHasPredicateSize;
+  uint64_t _fullHasPredicateSize;
 
   size_t _parserBatchSize = PARSER_BATCH_SIZE;
   size_t _numTriplesPerBatch = NUM_TRIPLES_PER_PARTIAL_VOCAB;
@@ -584,7 +585,7 @@ class Index {
   void passContextFileIntoVector(const string& contextFile, TextVec& vec);
 
   template <class MetaDataDispatcher, typename SortedTriples>
-  std::optional<std::pair<typename MetaDataDispatcher::WriteType,
+  absl::optional<std::pair<typename MetaDataDispatcher::WriteType,
                           typename MetaDataDispatcher::WriteType>>
   createPermutationPairImpl(const string& fileName1, const string& fileName2,
                             SortedTriples&& sortedTriples, size_t c0, size_t c1,
@@ -631,7 +632,7 @@ class Index {
   // call exchangeMultiplicities as done by createPermutationPair
   // the optional is std::nullopt if vec and thus the index is empty
   template <class MetaDataDispatcher, class Comparator1, class Comparator2>
-  std::optional<std::pair<typename MetaDataDispatcher::WriteType,
+  absl::optional<std::pair<typename MetaDataDispatcher::WriteType,
                           typename MetaDataDispatcher::WriteType>>
   createPermutations(
       auto&& sortedTriples,
@@ -654,12 +655,12 @@ class Index {
                           const ad_utility::HashMap<WordIndex, Score>& words,
                           const ad_utility::HashMap<Id, Score>& entities);
 
-  template <typename T, typename MakeFromUint64t = std::identity>
+  template <typename T, typename MakeFromUint64t = ad_std::identity>
   void readGapComprList(
       size_t nofElements, off_t from, size_t nofBytes, vector<T>& result,
       MakeFromUint64t makeFromUint64t = MakeFromUint64t{}) const;
 
-  template <typename T, typename MakeFromUint64t = std::identity>
+  template <typename T, typename MakeFromUint64t = ad_std::identity>
   void readFreqComprList(
       size_t nofElements, off_t from, size_t nofBytes, vector<T>& result,
       MakeFromUint64t makeFromUint = MakeFromUint64t{}) const;

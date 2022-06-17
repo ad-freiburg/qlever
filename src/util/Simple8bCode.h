@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include "../util/compatibility/functional.h"
 
 namespace ad_utility {
 
@@ -139,7 +140,7 @@ class Simple8bCode {
   // ! i.e. sizeof(Numeric) * (nofElements + 239).
   // ! The overhead is included so that no check for boundaries
   // ! is necessary inside the decoding of a single codeword.
-  template <typename Numeric, typename MakeFromUint64t = std::identity>
+  template <typename Numeric, typename MakeFromUint64t = ad_std::identity>
   static void decode(uint64_t* const encoded, size_t nofElements,
                      Numeric* decoded,
                      MakeFromUint64t makeFromUint64 = MakeFromUint64t{}) {

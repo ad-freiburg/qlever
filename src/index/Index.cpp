@@ -10,7 +10,7 @@
 #include <cmath>
 #include <cstdio>
 #include <future>
-#include <optional>
+#include <absl/types/optional.h>
 #include <stxxl/algorithm>
 #include <stxxl/map>
 #include <unordered_map>
@@ -465,7 +465,7 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
 
 // _____________________________________________________________________________
 template <class MetaDataDispatcher, typename SortedTriples>
-std::optional<std::pair<typename MetaDataDispatcher::WriteType,
+absl::optional<std::pair<typename MetaDataDispatcher::WriteType,
                         typename MetaDataDispatcher::WriteType>>
 Index::createPermutationPairImpl(const string& fileName1,
                                  const string& fileName2,
@@ -487,7 +487,7 @@ Index::createPermutationPairImpl(const string& fileName1,
   // and POS, this is a predicate (of which "relation" is a synonym).
   LOG(INFO) << "Creating a pair of index permutations ... " << std::endl;
   size_t from = 0;
-  std::optional<Id> currentRel;
+  absl::optional<Id> currentRel;
   auto buffer = ad_utility::BufferedVector<array<Id, 2>>::create(
       fileName1 + ".tmp.mmap-buffer");
   bool functional = true;
@@ -576,7 +576,7 @@ void Index::writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
 
 // ________________________________________________________________________
 template <class MetaDataDispatcher, class Comparator1, class Comparator2>
-std::optional<std::pair<typename MetaDataDispatcher::WriteType,
+absl::optional<std::pair<typename MetaDataDispatcher::WriteType,
                         typename MetaDataDispatcher::WriteType>>
 Index::createPermutations(
     auto&& sortedTriples,

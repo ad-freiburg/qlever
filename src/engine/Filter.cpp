@@ -5,7 +5,7 @@
 #include "Filter.h"
 
 #include <algorithm>
-#include <optional>
+#include <absl/types/optional.h>
 #include <regex>
 #include <sstream>
 
@@ -326,7 +326,7 @@ void Filter::computeFilterFixedValue(
       getEngine().filter(
           input,
           [this, lhs, &subRes](const auto& e) {
-            std::optional<string> entity;
+            absl::optional<string> entity;
             if (e[lhs].getDatatype() == Datatype::VocabIndex) {
               entity = getIndex().idToOptionalString(e[lhs]);
             } else if (e[lhs].getDatatype() == Datatype::LocalVocabIndex) {
@@ -374,11 +374,11 @@ void Filter::computeFilterFixedValue(
           }
         }
 
-        const std::optional<ColumnIndex> sortedLhs =
-            [&prefixRanges, &subRes]() -> std::optional<ColumnIndex> {
+        const absl::optional<ColumnIndex> sortedLhs =
+            [&prefixRanges, &subRes]() -> absl::optional<ColumnIndex> {
           if (prefixRanges.size() > 1 || subRes->_sortedBy.empty() ||
               !prefixRanges.contains(subRes->_sortedBy[0])) {
-            return std::nullopt;
+            return absl::nullopt;
           }
           return subRes->_sortedBy[0];
         }();
@@ -478,7 +478,7 @@ void Filter::computeFilterFixedValue(
       getEngine().filter(
           input,
           [self_regex, &lhs, &subRes, this](const auto& e) {
-            std::optional<string> entity;
+            absl::optional<string> entity;
             if (e[lhs].getDatatype() == Datatype::VocabIndex) {
               entity = getIndex().idToOptionalString(e[lhs]);
             } else if (e[lhs].getDatatype() == Datatype::LocalVocabIndex) {
@@ -515,7 +515,7 @@ void Filter::computeResultFixedValue(
   // Interpret the right hand side of the filters.
   size_t lhs = _subtree->getVariableColumn(_lhs);
   Id rhs;
-  std::optional<Id> rhs_upper_for_range;
+  absl::optional<Id> rhs_upper_for_range;
   switch (subRes->getResultType(lhs)) {
       // TODO<joka921> Eliminate the "ResultType" completely
     case ResultTable::ResultType::KB:

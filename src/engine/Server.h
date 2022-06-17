@@ -132,11 +132,11 @@ class Server {
   Awaitable<json> composeResponseQleverJson(
       const ParsedQuery& query, const QueryExecutionTree& qet,
       ad_utility::Timer& requestTimer,
-      size_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
+      uint64_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
   Awaitable<json> composeResponseSparqlJson(
       const ParsedQuery& query, const QueryExecutionTree& qet,
       ad_utility::Timer& requestTimer,
-      size_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
+      uint64_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
 
   template <QueryExecutionTree::ExportSubFormat format>
   Awaitable<ad_utility::streams::stream_generator> composeResponseSepValues(
@@ -158,7 +158,7 @@ class Server {
   // Returns an awaitable of the return value of `function`
   template <typename Function, typename T = std::invoke_result_t<Function>>
   Awaitable<T> computeInNewThread(Function function) const {
-    auto acquireComputeRelease = [this, function = std::move(function)] {
+    auto acquireComputeRelease = [function = std::move(function)] {
       LOG(DEBUG) << "Acquiring new thread for query processing\n";
       //_queryProcessingSemaphore.acquire();
       ad_utility::OnDestruction f{[]() noexcept {

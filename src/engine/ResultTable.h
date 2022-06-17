@@ -6,7 +6,7 @@
 #include <array>
 #include <condition_variable>
 #include <mutex>
-#include <optional>
+#include <absl/types/optional.h>
 #include <vector>
 
 #include "../global/Id.h"
@@ -64,11 +64,11 @@ class ResultTable {
 
   virtual ~ResultTable();
 
-  std::optional<std::string> indexToOptionalString(LocalVocabIndex idx) const {
+  absl::optional<std::string> indexToOptionalString(LocalVocabIndex idx) const {
     if (idx.get() < _localVocab->size()) {
       return (*_localVocab)[idx.get()];
     }
-    return std::nullopt;
+    return absl::nullopt;
   }
 
   size_t size() const;

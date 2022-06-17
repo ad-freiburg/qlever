@@ -6,6 +6,7 @@
 
 #include <string>
 #include <string_view>
+#include <absl/types/optional.h>
 
 #include "../../global/Pattern.h"
 #include "../../util/Exception.h"
@@ -70,8 +71,8 @@ class VocabularyInMemory {
         std::lower_bound(_words.begin(), _words.end(), word, comparator) -
         _words.begin();
     result._word = result._index < _words.size()
-                       ? std::optional{_words[result._index]}
-                       : std::nullopt;
+                       ? absl::optional<std::string>{_words[result._index]}
+                       : absl::nullopt;
     return result;
   }
 
@@ -87,8 +88,8 @@ class VocabularyInMemory {
         std::upper_bound(_words.begin(), _words.end(), word, comparator) -
         _words.begin();
     result._word = result._index < _words.size()
-                       ? std::optional{_words[result._index]}
-                       : std::nullopt;
+                       ? absl::optional<std::string>{_words[result._index]}
+                       : absl::nullopt;
     return result;
   }
 

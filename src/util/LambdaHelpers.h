@@ -6,6 +6,7 @@
 #define QLEVER_LAMBDAHELPERS_H
 
 #include "./Forward.h"
+#include "./compatibility/memory.h"
 
 namespace ad_utility {
 
@@ -33,14 +34,14 @@ struct AssignableLambdaImpl {
       const AssignableLambdaImpl&
           other) requires std::is_copy_constructible_v<AssignableLambdaImpl> {
     std::destroy_at(&_lambda);
-    std::construct_at(&_lambda, other._lambda);
+    ad_std::construct_at(&_lambda, other._lambda);
     return *this;
   }
 
   AssignableLambdaImpl& operator=(AssignableLambdaImpl&& other) noexcept
       requires std::is_move_constructible_v<AssignableLambdaImpl> {
     std::destroy_at(&_lambda);
-    std::construct_at(&_lambda, std::move(other._lambda));
+    ad_std::construct_at(&_lambda, std::move(other._lambda));
     return *this;
   }
 

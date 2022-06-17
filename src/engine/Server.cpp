@@ -78,7 +78,7 @@ Awaitable<void> Server::process(
   // If there is a command like "clear_cache" which might be combined with a
   // query, track if there is such a command but no query and still send
   // a useful response.
-  std::optional<http::response<http::string_body>> responseFromCommand;
+  absl::optional<http::response<http::string_body>> responseFromCommand;
   if (params.contains("cmd")) {
     const auto& cmd = params.at("cmd");
     if (cmd == "stats") {
@@ -159,7 +159,7 @@ Awaitable<void> Server::process(
 // _____________________________________________________________________________
 Awaitable<json> Server::composeResponseQleverJson(
     const ParsedQuery& query, const QueryExecutionTree& qet,
-    ad_utility::Timer& requestTimer, size_t maxSend) const {
+    ad_utility::Timer& requestTimer, uint64_t maxSend) const {
   auto compute = [&, maxSend] {
     shared_ptr<const ResultTable> resultTable = qet.getResult();
     requestTimer.stop();
@@ -211,7 +211,7 @@ Awaitable<json> Server::composeResponseQleverJson(
 // _____________________________________________________________________________
 Awaitable<json> Server::composeResponseSparqlJson(
     const ParsedQuery& query, const QueryExecutionTree& qet,
-    ad_utility::Timer& requestTimer, size_t maxSend) const {
+    ad_utility::Timer& requestTimer, uint64_t maxSend) const {
   if (!query.hasSelectClause()) {
     throw std::runtime_error{
         "SPARQL-compliant JSON format is only supported for SELECT queries"};
@@ -329,7 +329,7 @@ boost::asio::awaitable<void> Server::processQuery(
     co_return co_await send(std::move(response));
   };
 
-  std::optional<json> errorResponse;
+  absl::optional<json> errorResponse;
 
   try {
     ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
@@ -386,7 +386,7 @@ boost::asio::awaitable<void> Server::processQuery(
       return mediaTypes;
     };
 
-    std::optional<MediaType> mediaType = std::nullopt;
+    absl::optional<MediaType> mediaType = absl::nullopt;
 
     // The explicit `action=..._export` parameter have precedence over the
     // `Accept:...` header field

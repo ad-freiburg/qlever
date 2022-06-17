@@ -87,7 +87,7 @@ std::pair<std::string, std::string> UrlParser::parseSingleKeyValuePair(
 }
 
 // _________________________________________________________________________
-std::optional<std::string> UrlParser::getDecodedPathAndCheck(
+absl::optional<std::string> UrlParser::getDecodedPathAndCheck(
     std::string_view target) noexcept {
   try {
     auto filename = parseTarget(target)._target;
@@ -95,6 +95,6 @@ std::optional<std::string> UrlParser::getDecodedPathAndCheck(
     AD_CHECK(filename.find("..") == string::npos);
     return filename;
   } catch (...) {
-    return std::nullopt;
+    return absl::nullopt;
   }
 }

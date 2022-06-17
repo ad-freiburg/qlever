@@ -11,6 +11,7 @@
 #include <compare>
 #include <string>
 #include <vector>
+#include <absl/types/optional.h>
 
 #include "../HashMap.h"
 #include "../HashSet.h"
@@ -119,7 +120,7 @@ const std::string& getType(MediaType t);
 /// If no corresponding `MediaType` exists, `std::nullopt` is returned;
 /// The comparison is case insensitive: "Application/JSON" would also
 /// match the json media type.
-[[nodiscard]] std::optional<MediaType> toMediaType(std::string_view s);
+[[nodiscard]] absl::optional<MediaType> toMediaType(std::string_view s);
 
 /// Parse the value of an `HTTP Accept` header field. Currently does not support
 /// wildcards, quality parameters and other parameters. The media types are
@@ -134,7 +135,7 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
 /// media types that appear earlier in the `supportedMediaTypes`. If none of the
 /// `supportedMediaTypes` is accepted by `acceptHeader`, then `std::nullopt`
 /// is returned.
-std::optional<MediaType> getMediaTypeFromAcceptHeader(
+absl::optional<MediaType> getMediaTypeFromAcceptHeader(
     std::string_view acceptHeader,
     const std::vector<MediaType>& supportedMediaTypes);
 

@@ -256,20 +256,20 @@ std::pair<VocabIndex, VocabIndex> Vocabulary<S, C>::prefix_range(
 // _____________________________________________________________________________
 template <typename S, typename C>
 template <typename, typename>
-const std::optional<std::string_view> Vocabulary<S, C>::operator[](
+const absl::optional<std::string_view> Vocabulary<S, C>::operator[](
     VocabIndex idx) const {
   if (idx.get() < _internalVocabulary.size()) {
     return _internalVocabulary[idx.get()];
   } else {
-    return std::nullopt;
+    return absl::nullopt;
   }
 }
-template const std::optional<std::string_view>
+template const absl::optional<std::string_view>
 TextVocabulary::operator[]<std::string, void>(VocabIndex idx) const;
 
 template <typename S, typename C>
 template <typename, typename>
-const std::optional<string> Vocabulary<S, C>::indexToOptionalString(
+const absl::optional<string> Vocabulary<S, C>::indexToOptionalString(
     VocabIndex idx) const {
   if (idx.get() < _internalVocabulary.size()) {
     return _internalVocabulary[idx.get()];
@@ -321,7 +321,7 @@ void Vocabulary<S, C>::printRangesForDatatypes() {
   }
 }
 
-template const std::optional<string> RdfsVocabulary::indexToOptionalString<
+template const absl::optional<string> RdfsVocabulary::indexToOptionalString<
     CompressedString, void>(VocabIndex idx) const;
 
 // Explicit template instantiations

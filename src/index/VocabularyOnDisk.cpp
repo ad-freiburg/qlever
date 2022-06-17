@@ -15,20 +15,20 @@
 using OffsetAndSize = VocabularyOnDisk::OffsetAndSize;
 
 // ____________________________________________________________________________
-std::optional<OffsetAndSize> VocabularyOnDisk::getOffsetAndSize(
+absl::optional<OffsetAndSize> VocabularyOnDisk::getOffsetAndSize(
     uint64_t idx) const {
   IndexAndOffset idAndDummyOffset{idx, 0};
   auto it = std::lower_bound(_idsAndOffsets.begin(), _idsAndOffsets.end(),
                              idAndDummyOffset);
   if (it >= _idsAndOffsets.end() - 1 || it->_idx != idx) {
-    return std::nullopt;
+    return absl::nullopt;
   }
   return getOffsetAndSizeForIthElement(it - _idsAndOffsets.begin());
 }
 
 // ____________________________________________________________________________
 VocabularyOnDisk::OffsetSizeId VocabularyOnDisk::getOffsetSizeIdForIthElement(
-    size_t i) const {
+    uint64_t i) const {
   AD_CHECK(i < size());
   const auto offset = _idsAndOffsets[i]._offset;
   const auto nextOffset = _idsAndOffsets[i + 1]._offset;
@@ -36,10 +36,10 @@ VocabularyOnDisk::OffsetSizeId VocabularyOnDisk::getOffsetSizeIdForIthElement(
 }
 
 // _____________________________________________________________________________
-std::optional<string> VocabularyOnDisk::operator[](uint64_t idx) const {
+absl::optional<string> VocabularyOnDisk::operator[](uint64_t idx) const {
   auto optionalOffsetAndSize = getOffsetAndSize(idx);
   if (!optionalOffsetAndSize.has_value()) {
-    return std::nullopt;
+    return absl::nullopt;
   }
 
   string result(optionalOffsetAndSize->_size, '\0');
@@ -57,7 +57,7 @@ void VocabularyOnDisk::buildFromIterable(Iterable&& it,
     ad_utility::MmapVector<IndexAndOffset> idsAndOffsets(
         fileName + _offsetSuffix, ad_utility::CreateTag{});
     uint64_t currentOffset = 0;
-    std::optional<uint64_t> previousId = std::nullopt;
+    absl::optional<uint64_t> previousId = absl::nullopt;
     for (const auto& [word, id] : it) {
       AD_CHECK(!previousId.has_value() || previousId.value() < id);
       idsAndOffsets.push_back(IndexAndOffset{id, currentOffset});

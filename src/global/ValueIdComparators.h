@@ -11,6 +11,7 @@
 #include "../index/Vocabulary.h"
 #include "../util/OverloadCallOperator.h"
 #include "./ValueId.h"
+#include <absl/base/casts.h>
 
 namespace valueIdComparators {
 /// This enum encodes the different numeric comparators LessThan, LessEqual,
@@ -133,7 +134,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForDouble(
   // In `ids` the negative number stand AFTER the positive numbers because of
   // the bitOrdering. First rotate the negative numbers to the beginning.
   auto doubleIdIsNegative = [](ValueId id) -> bool {
-    auto bits = std::bit_cast<uint64_t>(id.getDouble());
+    auto bits = absl::bit_cast<uint64_t>(id.getDouble());
     return bits & ad_utility::bitMaskForHigherBits(1);
   };
 

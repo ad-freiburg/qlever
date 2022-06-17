@@ -13,7 +13,7 @@ using std::string;
 Minus::Minus(QueryExecutionContext* qec,
              std::shared_ptr<QueryExecutionTree> left,
              std::shared_ptr<QueryExecutionTree> right,
-             std::vector<array<size_t, 2>> matchedColumns)
+             std::vector<array<ColumnIndex, 2>> matchedColumns)
     : Operation{qec},
       _left{std::move(left)},
       _right{std::move(right)},
@@ -215,7 +215,7 @@ finish:
 template <int A_WIDTH, int B_WIDTH>
 Minus::RowComparison Minus::isRowEqSkipFirst(
     const IdTableView<A_WIDTH>& a, const IdTableView<B_WIDTH>& b, size_t ia,
-    size_t ib, const vector<array<size_t, 2>>& joinColumns) {
+    size_t ib, const vector<array<ColumnIndex, 2>>& joinColumns) {
   for (size_t i = 1; i < joinColumns.size(); ++i) {
     Id va{a(ia, joinColumns[i][0])};
     Id vb{b(ib, joinColumns[i][1])};

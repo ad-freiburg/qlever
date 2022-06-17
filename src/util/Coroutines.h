@@ -29,10 +29,18 @@ struct coroutine_traits : std::coroutine_traits<T, Ts...> {};
 template <typename T = void>
 struct coroutine_handle : std::coroutine_handle<T> {};
 }  // namespace std::experimental
+namespace ad_std {
+using suspend_always = std::suspend_always;
+using suspend_never = std::suspend_never;
+
+template <typename T = void>
+using coroutine_handle = std::coroutine_handle<T>;
+}
 
 #else
 
 #ifdef __clang__
+//#error "case three"
 #include <experimental/coroutine>
 // This is technically not allowed, but it works.
 namespace std {
@@ -50,18 +58,30 @@ struct coroutine_handle : experimental::coroutine_handle<T> {
   using Base = experimental::coroutine_handle<T>;
   using Base::operator=;
   constexpr coroutine_handle(Base b) : Base{b} {}
+  constexpr operator Base() {return static_cast<Base>(*this);}
 };
 
 }  // namespace std
+
+namespace ad_std{
+ using suspend_always = std::experimental::suspend_always;
+ using suspend_never = std::experimental::suspend_never;
+
+ template <typename T = void>
+ using coroutine_handle = std::experimental::coroutine_handle<T>;
+}
 #define AD_FREIBURG_COROUTINES_EXPERIMENTAL
 #else
 // Simply include the coroutine header, no special treatment
 // necessary.
 #include <coroutine>
+namespace ad_std {
+using suspend_always = std::suspend_always;
+using suspend_never = std::suspend_never;
+template <typename T = void>
+using coroutine_handle = std::coroutine_handle<T>;
+}
 #endif
-#endif
-
-#ifdef __clang__
 #endif
 
 #endif  // QLEVER_COROUTINES_H

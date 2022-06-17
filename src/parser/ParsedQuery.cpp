@@ -6,7 +6,7 @@
 
 #include <absl/strings/str_split.h>
 
-#include <optional>
+#include <absl/types/optional.h>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -372,7 +372,7 @@ void ParsedQuery::expandPrefix(
 void ParsedQuery::expandPrefix(
     string& item, const ad_utility::HashMap<string, string>& prefixMap) {
   if (!item.starts_with("?") && !item.starts_with("<")) {
-    std::optional<string> langtag = std::nullopt;
+    absl::optional<string> langtag = absl::nullopt;
     if (item.starts_with("@")) {
       auto secondPos = item.find('@', 1);
       if (secondPos == string::npos) {

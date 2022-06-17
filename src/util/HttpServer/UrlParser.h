@@ -7,6 +7,7 @@
 
 #include <string>
 #include <string_view>
+#include <absl/types/optional.h>
 
 #include "../HashMap.h"
 
@@ -39,7 +40,7 @@ class UrlParser {
   ///  - The path must not contain `..` to escape from the document root.
   ///  - The path must be absolute (start with a slash `/`).
   ///  If the parsing or one of the checks fails, std::nullopt is returned.
-  static std::optional<std::string> getDecodedPathAndCheck(
+  static absl::optional<std::string> getDecodedPathAndCheck(
       std::string_view target) noexcept;
 
  private:

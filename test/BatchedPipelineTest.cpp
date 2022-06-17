@@ -4,13 +4,13 @@
 
 #include <gtest/gtest.h>
 
-#include <optional>
+#include <absl/types/optional.h>
 
 #include "../src/util/BatchedPipeline.h"
 
 TEST(BatcherTest, MoveOnlyCreator) {
   auto pipeline = ad_pipeline::detail::Batcher(
-      20, [ptr = std::unique_ptr<int>()]() { return std::optional(25); });
+      20, [ptr = std::unique_ptr<int>()]() { return absl::optional(25); });
   auto batch = pipeline.pickupBatch();
   ASSERT_TRUE(batch.m_isPipelineGood);
   ASSERT_EQ(20u, batch.m_content.size());
@@ -19,7 +19,7 @@ TEST(BatcherTest, MoveOnlyCreator) {
 
 TEST(BatcherTest, MoveOnlyCreator2) {
   auto pipeline = ad_pipeline::setupPipeline(
-      20, [ptr = std::make_unique<int>(23)]() { return std::optional(*ptr); });
+      20, [ptr = std::make_unique<int>(23)]() { return absl::optional(*ptr); });
   auto batch = pipeline.getNextValue();
   ASSERT_TRUE(batch);
   ASSERT_EQ(23, batch.value());
@@ -27,7 +27,7 @@ TEST(BatcherTest, MoveOnlyCreator2) {
 
 TEST(BatchedPipelineTest, BasicPipeline) {
   auto pipeline =
-      ad_pipeline::detail::Batcher(20, []() { return std::optional(25); });
+      ad_pipeline::detail::Batcher(20, []() { return absl::optional(25); });
   auto batch = pipeline.pickupBatch();
   ASSERT_TRUE(batch.m_isPipelineGood);
   ASSERT_EQ(20u, batch.m_content.size());
@@ -50,12 +50,12 @@ TEST(BatchedPipelineTest, BasicPipeline) {
   {
     auto finalPipeline = ad_pipeline::setupPipeline(
         20,
-        [i = 0]() mutable -> std::optional<int> {
+        [i = 0]() mutable -> absl::optional<int> {
           if (i < 100) {
             ++i;
-            return std::optional(i);
+            return absl::optional(i);
           }
-          return std::nullopt;
+          return absl::nullopt;
         },
         [a = 0](const auto& x) mutable {
           a += 3;
@@ -84,7 +84,7 @@ TEST(BatchedPipelineTest, BasicPipeline) {
 TEST(BatchedPipelineTest, SimpleParallelism) {
   {
     auto pipeline = ad_pipeline::detail::Batcher(
-        20, [i = 0ull]() mutable { return std::optional(i++); });
+        20, [i = 0ull]() mutable { return absl::optional(i++); });
 
     auto pipeline2 = ad_pipeline::detail::makeBatchedPipeline<3>(
         std::move(pipeline), [](const auto x) { return x * 3; });
@@ -97,7 +97,7 @@ TEST(BatchedPipelineTest, SimpleParallelism) {
   }
   {
     auto pipeline = ad_pipeline::detail::Batcher(
-        20, [i = 0ull]() mutable { return std::optional(i++); });
+        20, [i = 0ull]() mutable { return absl::optional(i++); });
 
     auto pipeline2 = ad_pipeline::detail::makeBatchedPipeline<40>(
         std::move(pipeline), [](const auto x) { return x * 3; });
@@ -112,11 +112,11 @@ TEST(BatchedPipelineTest, SimpleParallelism) {
   {
     auto pipeline = ad_pipeline::setupParallelPipeline<4>(
         20,
-        [i = 0ull]() mutable -> std::optional<size_t> {
+        [i = 0ull]() mutable -> absl::optional<size_t> {
           if (i >= 67) {
-            return std::nullopt;
+            return absl::nullopt;
           }
-          return std::optional(i++);
+          return absl::optional(i++);
         },
         [](const auto x) { return x * 3; });
 
@@ -132,7 +132,7 @@ TEST(BatchedPipelineTest, SimpleParallelism) {
 TEST(BatchedPipelineTest, BranchedParallelism) {
   {
     auto pipeline = ad_pipeline::detail::Batcher(
-        20, [i = 0ull]() mutable { return std::optional(i++); });
+        20, [i = 0ull]() mutable { return absl::optional(i++); });
 
     auto pipeline2 = ad_pipeline::detail::makeBatchedPipeline<2>(
         std::move(pipeline), [](const auto x) { return x * 3; },
@@ -149,7 +149,7 @@ TEST(BatchedPipelineTest, BranchedParallelism) {
   }
   {
     auto pipeline = ad_pipeline::detail::Batcher(
-        20, [i = 0ull]() mutable { return std::optional(i++); });
+        20, [i = 0ull]() mutable { return absl::optional(i++); });
 
     auto pipeline2 = ad_pipeline::detail::makeBatchedPipeline<40>(
         std::move(pipeline), [](const auto x) { return x * 3; });
@@ -164,11 +164,11 @@ TEST(BatchedPipelineTest, BranchedParallelism) {
   {
     auto pipeline = ad_pipeline::setupParallelPipeline<2>(
         20,
-        [i = 0ull]() mutable -> std::optional<size_t> {
+        [i = 0ull]() mutable -> absl::optional<size_t> {
           if (i >= 67) {
-            return std::nullopt;
+            return absl::nullopt;
           }
-          return std::optional(i++);
+          return absl::optional(i++);
         },
         std::tuple([](const auto x) { return x * 3; },
                    [](const auto x) { return x * 2; }));
