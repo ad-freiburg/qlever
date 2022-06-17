@@ -21,9 +21,13 @@ void DocsDB::init(const string& fileName) {
 
 // _____________________________________________________________________________
 string DocsDB::getTextExcerpt(TextRecordIndex cid) const {
-  // HACK: If running without DocsDB, return empty string. Previously, the
-  // server crashed in this case.
-  if (_size == 0) return {};
+  // If no DocsDB available, we cannot return a text excerpt for the given ID.
+  if (_size == 0) {
+    AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+             "Text records not available, start QLever with -t option and make "
+             "sure that"
+             " a file .text.docsDB exists");
+  }
 
   off_t ft[2];
   off_t& from = ft[0];

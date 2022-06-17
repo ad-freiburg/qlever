@@ -155,15 +155,16 @@ class Index {
 
   void addPatternsToExistingIndex();
 
-  // Creates an index object from an on disk index
-  // that has previously been constructed.
-  // Read necessary meta data into memory and opens file handles.
+  // Creates an index object from an on disk index that has previously been
+  // constructed. Read necessary meta data into memory and opens file handles.
   void createFromOnDiskIndex(const string& onDiskBase);
 
-  // Adds a text index to a fully initialized KB index.
-  // Reads a context file and builds the index for the first time.
-  void addTextFromContextFile(const string& contextFile);
+  // Adds a text index to a complete KB index. First reads the given context
+  // file (if file name not empty), then adds words from literals (if true).
+  void addTextFromContextFile(const string& contextFile,
+                              bool addWordsFromLiterals);
 
+  // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const string& docsFile);
 
   // Adds text index from on disk index that has previously been constructed.
@@ -580,23 +581,20 @@ class Index {
       TripleVec& data, const vector<size_t>& actualLinesPerPartial,
       size_t linesPerPartial);
 
-  // Generator that returns all words in all the IRIs and literals.
-  //
-  // TODO: Use this generator for both cases (reading the text records from a
-  // file and taking the IRIs and literals as text records). The rename is to
-  // `wordInTextRecords`.
+  // Generator that returns all words in the given context file (if not empty)
+  // and then all words in all literals (if second argument is true).
   //
   // TODO: So far, this is limited to the internal vocabulary (still in the
   // testing phase, once it works, it should be easy to include the IRIs and
   // literals from the external vocabulary as well).
-  cppcoro::generator<ContextFileParser::Line> contextFileLines(
-      const std::string& contextFile, bool useRdfVocabularyAsText);
+  cppcoro::generator<ContextFileParser::Line> wordsInTextRecords(
+      const std::string& contextFile, bool addWordsFromLiterals);
 
-  size_t passContextFileForVocabulary(const string& contextFile,
-                                      bool useRdfVocabularyAsText);
+  size_t processWordsForVocabulary(const string& contextFile,
+                                   bool addWordsFromLiterals);
 
-  void passContextFileIntoVector(const string& contextFile,
-                                 bool useRdfVocabularyAsText, TextVec& vec);
+  void processWordsForInvertedLists(const string& contextFile,
+                                    bool addWordsFromLiterals, TextVec& vec);
 
   template <class MetaDataDispatcher, typename SortedTriples>
   std::optional<std::pair<typename MetaDataDispatcher::WriteType,

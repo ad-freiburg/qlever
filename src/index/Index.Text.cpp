@@ -18,16 +18,13 @@
 #include "./Index.h"
 
 // _____________________________________________________________________________
-cppcoro::generator<ContextFileParser::Line> Index::contextFileLines(
-    const std::string& contextFile, bool useRdfVocabularyAsText) {
+cppcoro::generator<ContextFileParser::Line> Index::wordsInTextRecords(
+    const std::string& contextFile, bool addWordsFromLiterals) {
   auto localeManager = _textVocab.getLocaleManager();
-  // ROUND 1: Read from context file aka wordsfile if not empty. Remember
-  // the last context id for the (optional) second round.
-  //
-  // TODO: For now, EITHER do this round OR the other, see the respective
-  // comment in `addTextFromContextFile` below.
+  // ROUND 1: If context file aka wordsfile is not empty, read words from there.
+  // Remember the last context id for the (optional) second round.
   TextRecordIndex contextId = TextRecordIndex::make(0);
-  if (!useRdfVocabularyAsText) {
+  if (contextFile.size() > 0) {
     ContextFileParser::Line line;
     ContextFileParser p(contextFile, localeManager);
     ad_utility::HashSet<string> items;
@@ -39,8 +36,8 @@ cppcoro::generator<ContextFileParser::Line> Index::contextFileLines(
       contextId = contextId.incremented();
     }
   }
-  // ROUND 2: Consider RDF vocabulary as the "contexts" aka text records.
-  if (useRdfVocabularyAsText) {
+  // ROUND 2: Optionally, consider each literal as a text record.
+  if (addWordsFromLiterals) {
     auto isWordChar = [](char c) -> bool { return std::isalnum(c); };
     for (VocabIndex index = VocabIndex::make(0); index.get() < _vocab.size();
          index = index.incremented()) {
@@ -69,30 +66,38 @@ cppcoro::generator<ContextFileParser::Line> Index::contextFileLines(
 }
 
 // _____________________________________________________________________________
-void Index::addTextFromContextFile(const string& contextFile) {
+void Index::addTextFromContextFile(const string& contextFile,
+                                   bool addWordsFromLiterals) {
   LOG(INFO) << std::endl;
   LOG(INFO) << "Adding text index ..." << std::endl;
   string indexFilename = _onDiskBase + ".text.index";
-  // If `contextFile` ends with ".vocabulary", don't actually read from a file,
-  // but instead consider the IRIs and literals from the RDF vocabulary as text
-  // records.
+  // Either read words from given file or consider each literal as text record
+  // or both (but at least one of them, otherwise this function is not called).
   //
   // TODO: The generator `contextFileLines` above can actually both read from a
   // file and then also consider the RDF vocabulary, we just need to add a
   // proper command-line option to enable this. In the meantime, it's either-or.
-  bool useRdfVocabularyAsText = contextFile.ends_with(".vocabulary");
-  if (useRdfVocabularyAsText) {
-    LOG(INFO) << "Considering each IRI and literal as a text record"
-              << std::endl;
+  if (contextFile.size() > 0) {
+    LOG(INFO) << "Reading words from file \"" << contextFile << "\"";
+    if (addWordsFromLiterals) {
+      LOG(INFO) << ", and additionally considering each literal as a"
+                << " text record";
+    }
+    LOG(INFO) << std::endl;
+  } else if (addWordsFromLiterals) {
+    LOG(INFO) << "Considering each literal as a text record" << std::endl;
+  } else {
+    // TODO(hannah): Johannes has something better for this now, namely?
+    AD_CHECK(false);
   }
   // We have deleted the vocabulary during the index creation to save RAM, so
   // now we have to reload it. Also, when IndexBuilderMain is called with option
   // -A (add text index), this is the first thing we do .
   //
   // NOTE: In the previous version of the code (where the only option was to
-  // read from a wordsfile), this as done in `passContextFileIntoVector`. That
-  // is, when we now call call `passContextFileForVocabulary` (which builds the
-  // text vocabulary), we already have the KB vocabular in RAM as well.
+  // read from a wordsfile), this as done in `processWordsForInvertedLists`.
+  // That is, when we now call call `processWordsForVocabulary` (which builds
+  // the text vocabulary), we already have the KB vocabular in RAM as well.
   LOG(DEBUG) << "Reloading the RDF vocabulary ..." << std::endl;
   _vocab = RdfsVocabulary{};
   readConfiguration();
@@ -103,7 +108,7 @@ void Index::addTextFromContextFile(const string& contextFile) {
   // Build the text vocabulary (first scan over the text records).
   LOG(INFO) << "Building text vocabulary ..." << std::endl;
   size_t nofLines =
-      passContextFileForVocabulary(contextFile, useRdfVocabularyAsText);
+      processWordsForVocabulary(contextFile, addWordsFromLiterals);
   _textVocab.writeToFile(_onDiskBase + ".text.vocabulary");
 
   // Build the half-inverted lists (second scan over the text records).
@@ -111,7 +116,7 @@ void Index::addTextFromContextFile(const string& contextFile) {
   calculateBlockBoundaries();
   TextVec v;
   v.reserve(nofLines);
-  passContextFileIntoVector(contextFile, useRdfVocabularyAsText, v);
+  processWordsForInvertedLists(contextFile, addWordsFromLiterals, v);
   LOG(DEBUG) << "Sorting text index, #elements = " << v.size() << std::endl;
   stxxl::sort(begin(v), end(v), SortText(), stxxlMemoryInBytes() / 3);
   LOG(DEBUG) << "Sort done" << std::endl;
@@ -199,11 +204,11 @@ void Index::addTextFromOnDiskIndex() {
 }
 
 // _____________________________________________________________________________
-size_t Index::passContextFileForVocabulary(string const& contextFile,
-                                           bool useRdfVocabularyAsText) {
+size_t Index::processWordsForVocabulary(string const& contextFile,
+                                        bool addWordsFromLiterals) {
   size_t numLines = 0;
   ad_utility::HashSet<string> distinctWords;
-  for (auto line : contextFileLines(contextFile, useRdfVocabularyAsText)) {
+  for (auto line : wordsInTextRecords(contextFile, addWordsFromLiterals)) {
     ++numLines;
     // LOG(INFO) << "LINE: "
     //           << std::setw(50) << line._word << "   "
@@ -219,9 +224,9 @@ size_t Index::passContextFileForVocabulary(string const& contextFile,
 }
 
 // _____________________________________________________________________________
-void Index::passContextFileIntoVector(const string& contextFile,
-                                      bool useRdfVocabularyAsText,
-                                      Index::TextVec& vec) {
+void Index::processWordsForInvertedLists(const string& contextFile,
+                                         bool addWordsFromLiterals,
+                                         Index::TextVec& vec) {
   LOG(TRACE) << "BEGIN Index::passContextFileIntoVector" << std::endl;
   TextVec::bufwriter_type writer(vec);
   ad_utility::HashMap<WordIndex, Score> wordsInContext;
@@ -233,7 +238,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
   size_t entityNotFoundErrorMsgCount = 0;
 
   size_t numLines = 0;
-  for (auto line : contextFileLines(contextFile, useRdfVocabularyAsText)) {
+  for (auto line : wordsInTextRecords(contextFile, addWordsFromLiterals)) {
     if (line._contextId != currentContext) {
       ++nofContexts;
       addContextToVector(writer, currentContext, wordsInContext,
