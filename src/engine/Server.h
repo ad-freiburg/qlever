@@ -161,7 +161,7 @@ class Server {
     auto acquireComputeRelease = [this, function = std::move(function)] {
       LOG(DEBUG) << "Acquiring new thread for query processing\n";
       //_queryProcessingSemaphore.acquire();
-      ad_utility::OnDestruction f{[this]() noexcept {
+      ad_utility::OnDestruction f{[]() noexcept {
         try {
           //_queryProcessingSemaphore.release();
         } catch (...) {

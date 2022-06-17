@@ -7,7 +7,7 @@
 #ifndef QLEVER_SERIALIZER_SERIALIZER
 #define QLEVER_SERIALIZER_SERIALIZER
 
-#include <concepts>
+//#include <concepts>
 
 #include "../Forward.h"
 #include "../TypeTraits.h"
@@ -66,7 +66,7 @@ concept WriteSerializer = requires(S s, const char* ptr, size_t numBytes) {
   {
     typename std::decay_t<S>::SerializerType {}
   }
-  ->std::same_as<WriteSerializerTag>;
+  ->ad_utility::SimilarTo<WriteSerializerTag>;
   {s.serializeBytes(ptr, numBytes)};
 };
 
@@ -77,7 +77,7 @@ concept ReadSerializer = requires(S s, char* ptr, size_t numBytes) {
   {
     typename std::decay_t<S>::SerializerType {}
   }
-  ->std::same_as<ReadSerializerTag>;
+  ->ad_utility::SimilarTo<ReadSerializerTag>;
   {s.serializeBytes(ptr, numBytes)};
 };
 

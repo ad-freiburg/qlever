@@ -5,7 +5,8 @@
 #ifndef QLEVER_VALUEID_H
 #define QLEVER_VALUEID_H
 
-#include <bit>
+//#include <bit>
+#include <absl/base/casts.h>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -14,6 +15,7 @@
 #include "../util/NBitInteger.h"
 #include "../util/Serializer/Serializer.h"
 #include "./IndexTypes.h"
+#include <compare>
 
 /// The different Datatypes that a `ValueId` (see below) can encode.
 enum struct Datatype {
@@ -64,7 +66,7 @@ class ValueId {
   /// loss of `FoldedId`. Symmetrically, `-minPositiveDouble` is the largest
   /// double <0 that will not be rounded to zero.
   static constexpr double minPositiveDouble =
-      std::bit_cast<double>(1ull << numDatatypeBits);
+      absl::bit_cast<double>(1ull << numDatatypeBits);
 
   /// This exception is thrown if we try to store a value of an index type
   /// (VocabIndex, LocalVocabIndex, TextRecordIndex) that is larger than
@@ -127,13 +129,13 @@ class ValueId {
   /// precision of the mantissa of an IEEE double precision floating point
   /// number from 53 to 49 significant bits.
   static ValueId makeFromDouble(double d) {
-    auto shifted = std::bit_cast<T>(d) >> numDatatypeBits;
+    auto shifted = absl::bit_cast<T>(d) >> numDatatypeBits;
     return addDatatypeBits(shifted, Datatype::Double);
   }
   /// Obtain the `double` that this `ValueId` encodes. If `getDatatype() !=
   /// Double` then the result is unspecified.
   [[nodiscard]] double getDouble() const noexcept {
-    return std::bit_cast<double>(_bits << numDatatypeBits);
+    return absl::bit_cast<double>(_bits << numDatatypeBits);
   }
 
   /// Create a `ValueId` for a signed integer value. Integers in the range

@@ -13,11 +13,11 @@ sources = [
     #GitSource("https://github.com/joka921/QLever.git", "25501bf6dc8670c3635b74df1bd633bc09baff36")
 ]
 
-print("Current working directory in julia is ", pwd())
+println("Current working directory in julia is ", pwd())
 
 mkpath("/tmp/julia_build")
 cd("/tmp/julia_build")
-print("Current working directory in julia is ", pwd())
+println("Current working directory in julia is ", pwd())
 
 
 # Bash recipe for building across all platforms
@@ -34,8 +34,8 @@ CMAKE_FLAGS=(
 CMAKE_FLAGS+=(-DLOGLEVEL=DEBUG)
 CMAKE_FLAGS+=(-GNinja)
 CMAKE_FLAGS+=(-DABSL_PROPAGATE_CXX_STD=ON)
-CMAKE_FLAGS+=(-DCMAKE_OSX_DEPLOYMENT_TARGET=10.15)
-CMAKE_FLAGS+=(-DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra -Werror") #-Wno-dev
+CMAKE_FLAGS+=(-DCMAKE_OSX_DEPLOYMENT_TARGET=11.2)
+CMAKE_FLAGS+=(-DADDITIONAL_COMPILER_FLAGS="-Wall -Wextra") #-Wno-dev
 cmake ${CMAKE_FLAGS[@]} .. && ninja -v
 env CTEST_OUTPUT_ON_FAILURE=1 ctest -C Release
 cp CreatePatternsMain \
@@ -54,8 +54,6 @@ install_license LICENSE
 # platforms are passed in on the command line
 
 platforms = expand_cxxstring_abis(supported_platforms())
-
-#println("platforms are ", platforms)
 #filter!(p -> false, platforms)
 #println("platforms are ", platforms)
 
@@ -74,6 +72,9 @@ filter!(p -> !Sys.iswindows(p), platforms)
 
 # TODO: add back after debug
  filter!(p -> cxxstring_abi(p) != "cxx03", platforms)
+
+println("platforms are ", platforms)
+println("platforms are ", supported_platforms())
 
 # The products that we will ensure are always built
 products = [

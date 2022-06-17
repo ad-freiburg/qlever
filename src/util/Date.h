@@ -5,7 +5,7 @@
 #ifndef QLEVER_DATE_H
 #define QLEVER_DATE_H
 
-#include <bit>
+#include <absl/base/casts.h>
 #include <cmath>
 #include <exception>
 #include <sstream>
@@ -158,14 +158,14 @@ class Date {
   /// Convert the `Date` to a `uint64_t`. This just casts the underlying
   /// representation.
   [[nodiscard]] constexpr uint64_t toBits() const {
-    return std::bit_cast<uint64_t>(*this);
+    return absl::bit_cast<uint64_t>(*this);
   }
 
   /// Convert a `uint64_t` to a `Date`. This is only valid if the `uint64_t` was
   /// obtained via a call to `Date::toBits()`. This just casts the underlying
   /// representaion.
   static constexpr Date fromBits(uint64_t bytes) {
-    return std::bit_cast<Date>(bytes);
+    return absl::bit_cast<Date>(bytes);
   }
 
   /// Equality comparison is performed directly on the underlying

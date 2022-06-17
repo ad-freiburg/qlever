@@ -9,7 +9,7 @@
 
 #include <cmath>
 #include <limits>
-#include <numbers>
+//#include <numbers>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -19,6 +19,11 @@
 namespace ad_utility {
 
 namespace detail {
+
+// TODO<joka921> when cross-compiling for Mac using Julia's BinaryBuilder we don't have access
+// to the `<numbers`> header yet...
+// Figure out, which SDK version they are using when...
+static constexpr double pi = 3.141592653589793238462643383279502884197169399375105820974944592;
 
 static constexpr auto wktPointRegex = ctll::fixed_string(
     "^\"\\s*[Pp][Oo][Ii][Nn][Tt]\\s*\\(\\s*"
@@ -76,7 +81,7 @@ double wktDistImpl(const std::string_view point1,
   auto [lng1, lat1] = parseWktPoint(point1);
   auto [lng2, lat2] = parseWktPoint(point2);
   auto sqr = [](double x) { return x * x; };
-  auto m = std::numbers::pi / 180.0 * (lat1 + lat2) / 2.0;
+  auto m = pi / 180.0 * (lat1 + lat2) / 2.0;
   auto k1 = 111.13209 - 0.56605 * cos(2 * m) + 0.00120 * cos(4 * m);
   auto k2 = 111.41513 * cos(m) - 0.09455 * cos(3 * m) + 0.00012 * cos(5 * m);
   return sqrt(sqr(k1 * (lat1 - lat2)) + sqr(k2 * (lng1 - lng2)));
