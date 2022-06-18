@@ -78,17 +78,11 @@ void Index::addTextFromContextFile(const string& contextFile,
   // file and then also consider the RDF vocabulary, we just need to add a
   // proper command-line option to enable this. In the meantime, it's either-or.
   if (contextFile.size() > 0) {
-    LOG(INFO) << "Reading words from file \"" << contextFile << "\"";
-    if (addWordsFromLiterals) {
-      LOG(INFO) << ", and additionally considering each literal as a"
-                << " text record";
-    }
-    LOG(INFO) << std::endl;
-  } else if (addWordsFromLiterals) {
-    LOG(INFO) << "Considering each literal as a text record" << std::endl;
-  } else {
-    // TODO(hannah): Johannes has something better for this now, namely?
-    AD_CHECK(false);
+    LOG(INFO) << "Reading words from \"" << contextFile << "\"" << std::endl;
+  }
+  if (addWordsFromLiterals) {
+    LOG(INFO) << (contextFile.size() > 0 ? "Additionally c" : "C")
+              << "onsidering each literal as a text record" << std::endl;
   }
   // We have deleted the vocabulary during the index creation to save RAM, so
   // now we have to reload it. Also, when IndexBuilderMain is called with option
