@@ -39,12 +39,12 @@ class Literal {
   }
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::optional<std::string> evaluate(
+  [[nodiscard]] absl::optional<std::string> evaluate(
       [[maybe_unused]] const Context& context, ContextRole role) const {
     if (role == OBJECT) {
       return _stringRepresentation;
     }
-    return std::nullopt;
+    return absl::nullopt;
   }
 
   // ___________________________________________________________________________

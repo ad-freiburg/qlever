@@ -96,7 +96,7 @@ class VocabularyMerger {
   // close all associated files and MmapVectors and reset all internal variables
   void clear() {
     _totalWritten = 0;
-    _lastTripleComponent = std::nullopt;
+    _lastTripleComponent = absl::nullopt;
     _outfileExternal = std::ofstream();
     _idVecs.clear();
     _firstLangPredSeen = false;
@@ -111,7 +111,7 @@ class VocabularyMerger {
   size_t _totalWritten = 0;
   // keep track of the last seen word to correctly handle duplicates
 
-  std::optional<TripleComponentWithIndex> _lastTripleComponent = std::nullopt;
+  absl::optional<TripleComponentWithIndex> _lastTripleComponent = absl::nullopt;
   std::ofstream _outfileExternal;
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> _idVecs;

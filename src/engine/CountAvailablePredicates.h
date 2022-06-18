@@ -117,7 +117,7 @@ class CountAvailablePredicates : public Operation {
   std::shared_ptr<QueryExecutionTree> _subtree;
   size_t _subjectColumnIndex;
   // This can be used to aquire the predicates for a single entity
-  std::optional<std::string> _subjectEntityName;
+  absl::optional<std::string> _subjectEntityName;
   std::string _predicateVarName;
   std::string _countVarName;
 

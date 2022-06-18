@@ -630,7 +630,7 @@ class Index {
   // returns the MetaData (MmapBased or HmapBased) for this relation.
   // Careful: only multiplicities for first column is valid after call, need to
   // call exchangeMultiplicities as done by createPermutationPair
-  // the optional is std::nullopt if vec and thus the index is empty
+  // the optional is absl::nullopt if vec and thus the index is empty
   template <class MetaDataDispatcher, class Comparator1, class Comparator2>
   absl::optional<std::pair<typename MetaDataDispatcher::WriteType,
                           typename MetaDataDispatcher::WriteType>>

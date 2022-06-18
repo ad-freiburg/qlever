@@ -136,7 +136,7 @@ struct LangtagAndTriple {
  * - Takes a triple and a language tag
  * - Returns OptionalIds where the first entry are the Ids for the triple,
  *   the second and third entry are the Ids of the extra triples for the
- *   language filter implementation (or std::nullopt if there was no language
+ *   language filter implementation (or absl::nullopt if there was no language
  * tag)
  * - in the <i-th> lambda all Ids are assigned according to itemArray[i]
  * - if the argument maxNumberOfTriples is set correctly, the Id ranges assigned
@@ -167,13 +167,13 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
     itemArray[j].getId(LANGUAGE_PREDICATE);
     itemArray[j]._map.reserve(2 * maxNumberOfTriples);
   }
-  using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
+  using OptionalIds = std::array<absl::optional<std::array<Id, 3>>, 3>;
 
   /* given an index idx, returns a lambda that
    * - Takes a triple and a language tag
    * - Returns OptionalIds where the first entry are the Ids for the triple,
    *   the second and third entry are the Ids of the extra triples for the
-   *   language filter implementation (or std::nullopt if there was no language
+   *   language filter implementation (or absl::nullopt if there was no language
    * tag)
    * - All Ids are assigned according to itemArray[idx]
    */

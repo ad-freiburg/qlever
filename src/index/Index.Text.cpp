@@ -532,7 +532,7 @@ void Index::calculateBlockBoundariesImpl(
       getLengthAndPrefixSortKey(VocabIndex::make(0));
   for (size_t i = 0; i < index._textVocab.size() - 1; ++i) {
     // we need foo.value().get() because the vocab returns
-    // a std::optional<std::reference_wrapper<string>> and the "." currently
+    // a absl::optional<std::reference_wrapper<string>> and the "." currently
     // doesn't implicitly convert to a true reference (unlike function calls)
     const auto& [nextLen, nextPrefixSortKey] =
         getLengthAndPrefixSortKey(VocabIndex::make(i + 1));

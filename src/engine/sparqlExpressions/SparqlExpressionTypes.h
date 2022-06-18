@@ -310,13 +310,13 @@ struct SpecializedFunction {
     return CheckT{}.template operator()<Operands...>();
   }
 
-  // Evaluate the function on the `operands`. Return std::nullopt if the
+  // Evaluate the function on the `operands`. Return absl::nullopt if the
   // function cannot be evaluated on the `operands`
   template <typename... Operands>
-  std::optional<ExpressionResult> evaluateIfOperandsAreValid(
+  absl::optional<ExpressionResult> evaluateIfOperandsAreValid(
       Operands&&... operands) {
     if constexpr (!checkIfOperandsAreValid<Operands...>()) {
-      return std::nullopt;
+      return absl::nullopt;
     } else {
       return Function{}(std::forward<Operands>(operands)...);
     }
@@ -336,11 +336,11 @@ constexpr bool isAnySpecializedFunctionPossible(SpecializedFunctionsTuple&& tup,
 }
 
 /// Evaluate the SpecializedFunction, that matches the input. If no such
-/// function exists, return `std::nullopt`.
+/// function exists, return `absl::nullopt`.
 template <typename SpecializedFunctionsTuple, typename... Operands>
-std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
+absl::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
     SpecializedFunctionsTuple&& tup, Operands&&... operands) {
-  std::optional<ExpressionResult> result = std::nullopt;
+  absl::optional<ExpressionResult> result = absl::nullopt;
 
   auto writeToResult = [&](auto f) {
     if (!result) {

@@ -206,7 +206,7 @@ absl::optional<MediaType> getMediaTypeFromAcceptHeader(
     }
   }
 
-  // No supported `MediaType` was found, return std::nullopt.
+  // No supported `MediaType` was found, return absl::nullopt.
   return absl::nullopt;
 }
 

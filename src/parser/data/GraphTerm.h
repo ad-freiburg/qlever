@@ -19,7 +19,7 @@ class GraphTerm : public GraphTermBase {
   using GraphTermBase::GraphTermBase;
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::optional<std::string> evaluate(const Context& context,
+  [[nodiscard]] absl::optional<std::string> evaluate(const Context& context,
                                                     ContextRole role) const {
     // TODO<C++23>: remove static_cast as soon as we can visit types that
     // inherit from std::variant

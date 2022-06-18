@@ -45,13 +45,13 @@ class SparqlExpressionPimpl {
   }
 
   // If this expression is a non-distinct count of a single variable,
-  // return that variable, else return std::nullopt. This is needed by the
+  // return that variable, else return absl::nullopt. This is needed by the
   // pattern trick.
   [[nodiscard]] absl::optional<std::string>
   getVariableForNonDistinctCountOrNullopt() const;
 
   // If this expression is a single variable, return that variable, else return
-  // std::nullopt. Knowing this enables some optimizations because we can
+  // absl::nullopt. Knowing this enables some optimizations because we can
   // directly handle these trivial "expressions" without using the
   // `SparqlExpression` module.
   [[nodiscard]] absl::optional<std::string> getVariableOrNullopt() const;

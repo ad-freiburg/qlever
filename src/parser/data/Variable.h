@@ -26,7 +26,7 @@ class Variable {
   // Todo<joka921> There are several similar variants of this function across
   // the codebase. Unify them!
   // ___________________________________________________________________________
-  [[nodiscard]] std::optional<std::string> evaluate(
+  [[nodiscard]] absl::optional<std::string> evaluate(
       const Context& context, [[maybe_unused]] ContextRole role) const {
     size_t row = context._row;
     const ResultTable& res = context._res;
@@ -39,7 +39,7 @@ class Variable {
       auto id = idTable(row, index);
       switch (id.getDatatype()) {
         case Datatype::Undefined:
-          return std::nullopt;
+          return absl::nullopt;
         case Datatype::Double: {
           std::ostringstream stream;
           stream << id.getDouble();
@@ -61,7 +61,7 @@ class Variable {
       // The switch is exhaustive
       AD_CHECK(false);
     }
-    return std::nullopt;
+    return absl::nullopt;
   }
 
   // ___________________________________________________________________________

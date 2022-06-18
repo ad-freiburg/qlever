@@ -589,7 +589,7 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
 
   bool getLine(TurtleTriple* triple) override;
 
-  std::optional<std::vector<TurtleTriple>> getBatch();
+  absl::optional<std::vector<TurtleTriple>> getBatch();
 
   void printAndResetQueueStatistics() {
     LOG(TIMING) << parallelParser.getTimeStatistics() << '\n';

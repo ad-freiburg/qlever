@@ -70,7 +70,7 @@ class VocabularyOnDisk {
   void close() { _file.close(); }
 
   /// If an entry with this `idx` exists, return the corresponding string, else
-  /// `std::nullopt`
+  /// `absl::nullopt`
   absl::optional<string> operator[](uint64_t idx) const;
 
   /// Get the number of words in the vocabulary.
@@ -176,7 +176,7 @@ class VocabularyOnDisk {
   }
 
   // Get the `OffsetAndSize` for the element with the `idx`. Return
-  // `std::nullopt` if `idx` is not contained in the vocabulary.
+  // `absl::nullopt` if `idx` is not contained in the vocabulary.
   absl::optional<OffsetAndSize> getOffsetAndSize(uint64_t idx) const;
 
   // Return the `OffsetSizeId` for the element with the i-th smallest ID.

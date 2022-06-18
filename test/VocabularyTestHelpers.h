@@ -49,7 +49,7 @@ void testUpperAndLowerBound(const auto& vocab, auto makeWordLarger,
   }
 
   {
-    WordAndIndex wi{std::nullopt, maxId + 1};
+    WordAndIndex wi{absl::nullopt, maxId + 1};
     ASSERT_EQ(vocab.lower_bound(makeWordLarger(words.back()), comparator), wi);
   }
 
@@ -67,7 +67,7 @@ void testUpperAndLowerBound(const auto& vocab, auto makeWordLarger,
   }
 
   {
-    WordAndIndex wi{std::nullopt, maxId + 1};
+    WordAndIndex wi{absl::nullopt, maxId + 1};
     ASSERT_EQ(vocab.upper_bound(words.back(), comparator), wi);
   }
 };
@@ -205,7 +205,7 @@ auto testAccessOperatorForUnorderedVocabulary(auto createVocabulary) {
 auto testEmptyVocabularyWithComparator(auto createVocabulary, auto comparator) {
   auto vocab = createVocabulary(std::vector<std::string>{});
   ASSERT_EQ(0u, vocab.size());
-  WordAndIndex expected{std::nullopt, 0};
+  WordAndIndex expected{absl::nullopt, 0};
   ASSERT_EQ(expected, vocab.lower_bound("someWord", comparator));
   ASSERT_EQ(expected, vocab.upper_bound("someWord", comparator));
 }

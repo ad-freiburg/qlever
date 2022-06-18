@@ -36,14 +36,14 @@ class ParserBatcher {
   /**
    * @brief Parse the next Triple
    * If we have already parsed the maximum number of triples specified in the
-   * constructor, return std::nullopt. If the parser is exhausted and doesn't
-   * deliver any more triples, call the callback and return std::nullopt. Else
+   * constructor, return absl::nullopt. If the parser is exhausted and doesn't
+   * deliver any more triples, call the callback and return absl::nullopt. Else
    * return a optional that contains the next Triple from the parser.
    * @return
    */
-  std::optional<TurtleTriple> operator()() {
+  absl::optional<TurtleTriple> operator()() {
     if (m_numTriplesAlreadyParsed >= m_maxNumTriples) {
-      return std::nullopt;
+      return absl::nullopt;
     }
     TurtleTriple t;
     if (m_parser->getLine(t)) {
@@ -51,20 +51,20 @@ class ParserBatcher {
       return t;
     } else {
       m_exhaustedCallback();
-      return std::nullopt;
+      return absl::nullopt;
     }
   }
 
   // The second requires evaluates to `true` only if the `Parser` type has a
   // getBatch() member function. The first requires enables this function only
   // if the second "requires" evaluates to true
-  std::optional<std::vector<TurtleTriple>> getBatch() requires requires(
+  absl::optional<std::vector<TurtleTriple>> getBatch() requires requires(
       Parser p) {
     p.getBatch();
   }
   {
     if (m_numTriplesAlreadyParsed >= m_maxNumTriples) {
-      return std::nullopt;
+      return absl::nullopt;
     }
     auto opt = m_parser->getBatch();
     if (!opt) {
@@ -108,7 +108,7 @@ class ParallelParseBuffer {
   // If the buffer is exhausted blocks
   // until the (asynchronous) call to parseBatch has finished. A nullopt
   // the parser has completely parsed the file.
-  std::optional<std::array<string, 3>> getTriple() {
+  absl::optional<std::array<string, 3>> getTriple() {
     // Return our triple in the order the parser handles them to us.
     // Makes debugging easier.
     if (_buffer.size() == _bufferPosition && _isParserValid) {
@@ -128,7 +128,7 @@ class ParallelParseBuffer {
     } else {
       // we can only reach this if the buffer is exhausted and there is nothing
       // more to parse
-      return std::nullopt;
+      return absl::nullopt;
     }
   }
 

@@ -266,7 +266,7 @@ class QueryPlanner {
 
   std::vector<QueryPlanner::SubtreePlan> createJoinCandidates(
       const SubtreePlan& a, const SubtreePlan& b,
-      std::optional<TripleGraph> tg) const;
+      absl::optional<TripleGraph> tg) const;
 
   vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;

@@ -15,7 +15,7 @@ const std::string vocabFilename = "vocabulary.tmp.test.dat";
 // must have the same size.
 auto createVocabularyImpl(
     const std::vector<std::string>& words,
-    std::optional<std::vector<uint64_t>> ids = std::nullopt) {
+    absl::optional<std::vector<uint64_t>> ids = absl::nullopt) {
   VocabularyOnDisk vocabulary;
   if (!ids.has_value()) {
     vocabulary.buildFromVector(words, vocabFilename);
@@ -35,7 +35,7 @@ auto createVocabularyImpl(
 // re-initialized from disk before it is returned.
 auto createVocabularyFromDiskImpl(
     const std::vector<std::string>& words,
-    std::optional<std::vector<uint64_t>> ids = std::nullopt) {
+    absl::optional<std::vector<uint64_t>> ids = absl::nullopt) {
   { createVocabularyImpl(words, std::move(ids)); }
   VocabularyOnDisk vocabulary;
   vocabulary.open(vocabFilename);

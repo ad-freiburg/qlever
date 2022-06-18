@@ -279,7 +279,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       // know that b is from an OPTIONAL.
       for (const auto& a : lastRow) {
         for (const auto& b : v) {
-          auto vec = createJoinCandidates(a, b, std::nullopt);
+          auto vec = createJoinCandidates(a, b, absl::nullopt);
           nextCandidates.insert(nextCandidates.end(),
                                 std::make_move_iterator(vec.begin()),
                                 std::make_move_iterator(vec.end()));
@@ -2828,7 +2828,7 @@ size_t QueryPlanner::findCheapestExecutionTree(
 // _____________________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     const SubtreePlan& ain, const SubtreePlan& bin,
-    std::optional<TripleGraph> tg) const {
+    absl::optional<TripleGraph> tg) const {
   const auto& a = !isInTestMode() || ain._qet->asString() < bin._qet->asString()
                       ? ain
                       : bin;

@@ -39,7 +39,7 @@ class UrlParser {
   ///  `/target.html`. Additionally the following checks are applied:
   ///  - The path must not contain `..` to escape from the document root.
   ///  - The path must be absolute (start with a slash `/`).
-  ///  If the parsing or one of the checks fails, std::nullopt is returned.
+  ///  If the parsing or one of the checks fails, absl::nullopt is returned.
   static absl::optional<std::string> getDecodedPathAndCheck(
       std::string_view target) noexcept;
 

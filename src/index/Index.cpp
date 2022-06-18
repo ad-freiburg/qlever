@@ -257,9 +257,9 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
       auto p = ad_pipeline::setupParallelPipeline<3, NUM_PARALLEL_ITEM_MAPS>(
           _parserBatchSize,
           // when called, returns an optional to the next triple. If
-          // `linesPerPartial` triples were parsed, return std::nullopt. when
+          // `linesPerPartial` triples were parsed, return absl::nullopt. when
           // the parser is unable to deliver triples, set parserExhausted to
-          // true and return std::nullopt. this is exactly the behavior we need,
+          // true and return absl::nullopt. this is exactly the behavior we need,
           // as a first step in the parallel Pipeline.
           ParserBatcher(parser, linesPerPartial,
                         [&]() { parserExhausted = true; }),

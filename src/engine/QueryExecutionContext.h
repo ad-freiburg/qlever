@@ -60,12 +60,12 @@ class QueryResultCache : public ConcurrentLruCache {
   using ConcurrentLruCache::ConcurrentLruCache;
   const PinnedSizes& pinnedSizes() const { return _pinnedSizes; }
   PinnedSizes& pinnedSizes() { return _pinnedSizes; }
-  std::optional<size_t> getPinnedSize(const std::string& key) {
+  absl::optional<size_t> getPinnedSize(const std::string& key) {
     auto rlock = _pinnedSizes.rlock();
     if (rlock->contains(key)) {
       return rlock->at(key);
     } else {
-      return std::nullopt;
+      return absl::nullopt;
     }
   }
 };

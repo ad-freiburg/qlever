@@ -201,7 +201,7 @@ namespace detail {
 // performance problem, they might also become `shared_ptr`s.
 boost::asio::awaitable<void> makeFileServerImpl(
     std::string documentRoot,
-    std::optional<ad_utility::HashSet<std::string>> whitelist,
+    absl::optional<ad_utility::HashSet<std::string>> whitelist,
     HttpRequest auto request, auto&& send) {
   // Make sure we can handle the method
   if (request.method() != http::verb::get &&
@@ -269,12 +269,12 @@ boost::asio::awaitable<void> makeFileServerImpl(
  * @param documentRoot The path from which files are served. May be absolute or
  * relative.
  * @param whitelist Specify a whitelist of allowed filenames (e.g.
- * `{"index.html", "style.css"}`). The default value std::nullopt means, that
+ * `{"index.html", "style.css"}`). The default value absl::nullopt means, that
  *         all files from the documentRoot may be served.
  */
 inline auto makeFileServer(
     std::string documentRoot,
-    std::optional<ad_utility::HashSet<std::string>> whitelist = std::nullopt) {
+    absl::optional<ad_utility::HashSet<std::string>> whitelist = absl::nullopt) {
   // The empty path means "index.html", add this information to the whitelist.
   if (whitelist.has_value() && whitelist.value().contains("index.html")) {
     whitelist.value().insert("");

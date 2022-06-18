@@ -117,7 +117,7 @@ const std::string& toString(MediaType t);
 const std::string& getType(MediaType t);
 
 /// Convert a string like "application/json" to the appropriate media type.
-/// If no corresponding `MediaType` exists, `std::nullopt` is returned;
+/// If no corresponding `MediaType` exists, `absl::nullopt` is returned;
 /// The comparison is case insensitive: "Application/JSON" would also
 /// match the json media type.
 [[nodiscard]] absl::optional<MediaType> toMediaType(std::string_view s);
@@ -133,7 +133,7 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
 /// has the highest priority, and return this type. If several mediaTypes have
 /// the same priority (e.g. because of a wildcard in `acceptHeader`) then
 /// media types that appear earlier in the `supportedMediaTypes`. If none of the
-/// `supportedMediaTypes` is accepted by `acceptHeader`, then `std::nullopt`
+/// `supportedMediaTypes` is accepted by `acceptHeader`, then `absl::nullopt`
 /// is returned.
 absl::optional<MediaType> getMediaTypeFromAcceptHeader(
     std::string_view acceptHeader,

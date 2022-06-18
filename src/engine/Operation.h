@@ -235,5 +235,5 @@ class Operation {
   std::vector<std::string> _warnings;
 
   /// The limit from a SPARQL `LIMIT` clause.
-  std::optional<uint64_t> _limit;
+  absl::optional<uint64_t> _limit;
 };
