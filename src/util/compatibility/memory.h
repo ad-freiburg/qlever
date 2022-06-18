@@ -5,9 +5,9 @@
 #ifndef QLEVER_MEMORY_H
 #define QLEVER_MEMORY_H
 
-#include "../Forward.h"
-
 #include <memory>
+
+#include "../Forward.h"
 
 namespace ad_std {
 
@@ -18,6 +18,6 @@ T* construct_at(T* p, Args&&... args) {
   return ::new (const_cast<void*>(static_cast<const volatile void*>(p)))
       T(AD_FWD(args)...);
 }
-}
+}  // namespace ad_std
 
 #endif  // QLEVER_MEMORY_H

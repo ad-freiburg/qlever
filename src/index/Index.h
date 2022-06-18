@@ -3,10 +3,11 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <absl/types/optional.h>
+
 #include <array>
 #include <fstream>
 #include <memory>
-#include <absl/types/optional.h>
 #include <string>
 #include <stxxl/sorter>
 #include <stxxl/stream>
@@ -21,10 +22,10 @@
 #include "../util/CompressionUsingZstd/ZstdWrapper.h"
 #include "../util/File.h"
 #include "../util/Forward.h"
-#include "../util/compatibility/functional.h"
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
 #include "../util/Timer.h"
+#include "../util/compatibility/functional.h"
 #include "../util/json.h"
 #include "./CompressedRelation.h"
 #include "./ConstantsIndexBuilding.h"
@@ -586,7 +587,7 @@ class Index {
 
   template <class MetaDataDispatcher, typename SortedTriples>
   absl::optional<std::pair<typename MetaDataDispatcher::WriteType,
-                          typename MetaDataDispatcher::WriteType>>
+                           typename MetaDataDispatcher::WriteType>>
   createPermutationPairImpl(const string& fileName1, const string& fileName2,
                             SortedTriples&& sortedTriples, size_t c0, size_t c1,
                             size_t c2, auto&&... perTripleCallbacks);
@@ -633,7 +634,7 @@ class Index {
   // the optional is absl::nullopt if vec and thus the index is empty
   template <class MetaDataDispatcher, class Comparator1, class Comparator2>
   absl::optional<std::pair<typename MetaDataDispatcher::WriteType,
-                          typename MetaDataDispatcher::WriteType>>
+                           typename MetaDataDispatcher::WriteType>>
   createPermutations(
       auto&& sortedTriples,
       const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&

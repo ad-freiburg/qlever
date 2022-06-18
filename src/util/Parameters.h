@@ -5,10 +5,11 @@
 #ifndef QLEVER_PARAMETERS_H
 #define QLEVER_PARAMETERS_H
 
+#include <absl/types/optional.h>
+
 #include <atomic>
 #include <functional>
 #include <tuple>
-#include <absl/types/optional.h>
 
 #include "./ConstexprMap.h"
 #include "./ConstexprSmallString.h"

@@ -6,11 +6,12 @@
 
 #pragma once
 
+#include <absl/types/optional.h>
+
 #include <algorithm>
 #include <cassert>
 #include <fstream>
 #include <functional>
-#include <absl/types/optional.h>
 #include <string>
 #include <string_view>
 #include <vector>

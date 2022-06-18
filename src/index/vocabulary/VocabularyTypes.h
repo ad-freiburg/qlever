@@ -5,8 +5,9 @@
 #ifndef QLEVER_VOCABULARYTYPES_H
 #define QLEVER_VOCABULARYTYPES_H
 
-#include <compare>
 #include <absl/types/optional.h>
+
+#include <compare>
 
 /// A word and its index in the vocabulary from which it was obtained. A word
 /// that is larger than all words in the vocabulary is represented by

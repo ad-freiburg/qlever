@@ -10,10 +10,9 @@ namespace ad_std {
 
 inline uint64_t lenthOfStringstream(auto& stream) {
   long length = stream.tellp();
-  return length < 0 ? 0ul: static_cast<uint64_t>(length);
+  return length < 0 ? 0ul : static_cast<uint64_t>(length);
 }
 
-
-}
+}  // namespace ad_std
 
 #endif  // QLEVER_STRINGSTREAM_H

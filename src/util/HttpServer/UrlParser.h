@@ -5,9 +5,10 @@
 #ifndef QLEVER_URLPARSER_H
 #define QLEVER_URLPARSER_H
 
+#include <absl/types/optional.h>
+
 #include <string>
 #include <string_view>
-#include <absl/types/optional.h>
 
 #include "../HashMap.h"
 

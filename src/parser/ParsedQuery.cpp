@@ -5,8 +5,8 @@
 #include "ParsedQuery.h"
 
 #include <absl/strings/str_split.h>
-
 #include <absl/types/optional.h>
+
 #include <sstream>
 #include <string>
 #include <utility>

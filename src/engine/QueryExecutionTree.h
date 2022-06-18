@@ -3,8 +3,9 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
-#include <memory>
 #include <absl/types/optional.h>
+
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>

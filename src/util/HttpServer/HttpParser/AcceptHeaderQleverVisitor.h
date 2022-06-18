@@ -7,11 +7,12 @@
 
 // Generated from AcceptHeader.g4 by ANTLR 4.9.2
 
+#include <absl/types/optional.h>
+
 #include "../../Exception.h"
 #include "../MediaTypes.h"
 #include "./generated/AcceptHeaderVisitor.h"
 #include "antlr4-runtime.h"
-#include <absl/types/optional.h>
 
 /**
  * /brief Visitor class for the ANTLR-based Accept header parser. Main

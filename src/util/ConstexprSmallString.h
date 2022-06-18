@@ -76,11 +76,11 @@ struct ConstexprSmallString {
   friend std::ostream& operator<<(std::ostream& stream,
                                   const ConstexprSmallString& string) {
     // Apple clang doesn't support operator << here
-    //stream << std::string_view{string};
+    // stream << std::string_view{string};
 
     // TODO<joka921> Figure out how to make this work with apple clang...
-    //return stream.write(string._characters.data(), string.size());
-    (void) string;
+    // return stream.write(string._characters.data(), string.size());
+    (void)string;
     return stream;
   }
 };

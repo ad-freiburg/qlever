@@ -4,10 +4,10 @@
 //
 
 #pragma once
+#include <absl/types/optional.h>
 #include <re2/re2.h>
 
 #include <future>
-#include <absl/types/optional.h>
 #include <string>
 #include <vector>
 
@@ -100,7 +100,7 @@ class ParallelBufferWithEndRegex : public ParallelBuffer {
   // trivial. Returns the st Returns the number of bytes in `vec` until the end
   // of the regex match, or absl::nullopt if the regex was not found at all.
   static absl::optional<size_t> findRegexNearEnd(const BufferType& vec,
-                                                const re2::RE2& regex);
+                                                 const re2::RE2& regex);
   ParallelFileBuffer _rawBuffer{_blocksize};
   BufferType _remainder;
   re2::RE2 _endRegex;

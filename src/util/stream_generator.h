@@ -244,6 +244,7 @@ class [[nodiscard]] basic_stream_generator {
  private:
   template <size_t B>
   friend class detail::stream_generator_promise;
+
  public:
 };
 

@@ -19,10 +19,11 @@ namespace ad_utility {
 
 namespace detail {
 
-// TODO<joka921> when cross-compiling for Mac using Julia's BinaryBuilder we don't have access
-// to the `<numbers`> header yet...
-// Figure out, which SDK version they are using when...
-static constexpr double pi = 3.141592653589793238462643383279502884197169399375105820974944592;
+// TODO<joka921> when cross-compiling for Mac using Julia's BinaryBuilder we
+// don't have access to the `<numbers`> header yet... Figure out, which SDK
+// version they are using when...
+static constexpr double pi =
+    3.141592653589793238462643383279502884197169399375105820974944592;
 
 static constexpr auto wktPointRegex = ctll::fixed_string(
     "^\"\\s*[Pp][Oo][Ii][Nn][Tt]\\s*\\(\\s*"

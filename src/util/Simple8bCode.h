@@ -7,6 +7,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+
 #include "../util/compatibility/functional.h"
 
 namespace ad_utility {

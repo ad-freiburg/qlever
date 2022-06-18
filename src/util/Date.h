@@ -6,6 +6,7 @@
 #define QLEVER_DATE_H
 
 #include <absl/base/casts.h>
+
 #include <cmath>
 #include <exception>
 #include <sstream>

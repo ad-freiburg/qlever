@@ -4,9 +4,10 @@
 #ifndef QLEVER_SPARQLEXPRESSIONPIMPL_H
 #define QLEVER_SPARQLEXPRESSIONPIMPL_H
 
+#include <absl/types/optional.h>
+
 #include <memory>
 #include <vector>
-#include <absl/types/optional.h>
 
 #include "../../util/HashMap.h"
 #include "../../util/HashSet.h"

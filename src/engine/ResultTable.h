@@ -3,10 +3,11 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <absl/types/optional.h>
+
 #include <array>
 #include <condition_variable>
 #include <mutex>
-#include <absl/types/optional.h>
 #include <vector>
 
 #include "../global/Id.h"

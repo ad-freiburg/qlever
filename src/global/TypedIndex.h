@@ -5,8 +5,9 @@
 #ifndef QLEVER_TYPEDINDEX_H
 #define QLEVER_TYPEDINDEX_H
 
-#include "../util/ConstexprSmallString.h"
 #include <compare>
+
+#include "../util/ConstexprSmallString.h"
 
 namespace ad_utility {
 using IndexTag = ConstexprSmallString<30>;

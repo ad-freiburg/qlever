@@ -4,8 +4,9 @@
 
 #include "Filter.h"
 
-#include <algorithm>
 #include <absl/types/optional.h>
+
+#include <algorithm>
 #include <regex>
 #include <sstream>
 

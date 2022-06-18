@@ -2,9 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach (joka921) <johannes.kalmbach@gmail.com>
 
-#include <gtest/gtest.h>
-
 #include <absl/types/optional.h>
+#include <gtest/gtest.h>
 
 #include "../src/util/BatchedPipeline.h"
 

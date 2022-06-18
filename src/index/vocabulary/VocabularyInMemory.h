@@ -4,9 +4,10 @@
 
 #pragma once
 
+#include <absl/types/optional.h>
+
 #include <string>
 #include <string_view>
-#include <absl/types/optional.h>
 
 #include "../../global/Pattern.h"
 #include "../../util/Exception.h"

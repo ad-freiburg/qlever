@@ -9,11 +9,9 @@
 
 namespace ad_std {
 
-inline auto identityImpl = [](auto&& arg) noexcept{
-  return AD_FWD(arg);
-};
+inline auto identityImpl = [](auto&& arg) noexcept { return AD_FWD(arg); };
 using identity = decltype(identityImpl);
 
-}
+}  // namespace ad_std
 
 #endif  // QLEVER_FUNCTIONAL_H

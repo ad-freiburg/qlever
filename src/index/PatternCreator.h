@@ -11,6 +11,7 @@
 #define QLEVER_PATTERNCREATOR_H
 
 #include <absl/types/optional.h>
+
 #include "../global/Constants.h"
 #include "../global/Id.h"
 #include "../global/Pattern.h"

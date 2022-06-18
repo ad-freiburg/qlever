@@ -5,13 +5,14 @@
 #ifndef QLEVER_VALUEIDCOMPARATORS_H
 #define QLEVER_VALUEIDCOMPARATORS_H
 
+#include <absl/base/casts.h>
+
 #include <utility>
 
 #include "../engine/ResultTable.h"
 #include "../index/Vocabulary.h"
 #include "../util/OverloadCallOperator.h"
 #include "./ValueId.h"
-#include <absl/base/casts.h>
 
 namespace valueIdComparators {
 /// This enum encodes the different numeric comparators LessThan, LessEqual,

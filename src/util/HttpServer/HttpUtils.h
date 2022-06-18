@@ -272,9 +272,9 @@ boost::asio::awaitable<void> makeFileServerImpl(
  * `{"index.html", "style.css"}`). The default value absl::nullopt means, that
  *         all files from the documentRoot may be served.
  */
-inline auto makeFileServer(
-    std::string documentRoot,
-    absl::optional<ad_utility::HashSet<std::string>> whitelist = absl::nullopt) {
+inline auto makeFileServer(std::string documentRoot,
+                           absl::optional<ad_utility::HashSet<std::string>>
+                               whitelist = absl::nullopt) {
   // The empty path means "index.html", add this information to the whitelist.
   if (whitelist.has_value() && whitelist.value().contains("index.html")) {
     whitelist.value().insert("");

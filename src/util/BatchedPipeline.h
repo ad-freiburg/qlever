@@ -105,8 +105,8 @@ class Batcher {
   }
 
   /* retrieve values from the creator and store them in the Batch result.
-   * Once we have reached batchSize Elements or the creator returns absl::nullopt
-   * we return. In the latter case, result.first is false
+   * Once we have reached batchSize Elements or the creator returns
+   * absl::nullopt we return. In the latter case, result.first is false
    */
   static detail::Batch<ValueT> produceBatchInternal(size_t batchSize,
                                                     Creator* creator) {
@@ -452,8 +452,8 @@ class Interface;  // forward declaration needed below for friend declaration
  * @brief An instantiation of this templated class is created by the calls to
  * setupPipeline() and setupParallelPipeline() It supports the getNextValue()
  * interface that will return absl::optional<ValueT> for each of the completely
- * transformed elements in a pipeline and absl::nullopt once it is exhausted. See
- * the documentation of the setup* functions
+ * transformed elements in a pipeline and absl::nullopt once it is exhausted.
+ * See the documentation of the setup* functions
  */
 template <class Pipeline>
 class BatchExtractor {

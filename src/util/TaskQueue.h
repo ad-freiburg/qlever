@@ -4,8 +4,9 @@
 #ifndef QLEVER_TASKQUEUE_H
 #define QLEVER_TASKQUEUE_H
 
-#include <functional>
 #include <absl/types/optional.h>
+
+#include <functional>
 #include <queue>
 #include <string>
 #include <thread>

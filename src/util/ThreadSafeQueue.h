@@ -5,9 +5,10 @@
 #ifndef QLEVER_THREADSAFEQUEUE_H
 #define QLEVER_THREADSAFEQUEUE_H
 
+#include <absl/types/optional.h>
+
 #include <condition_variable>
 #include <mutex>
-#include <absl/types/optional.h>
 #include <queue>
 
 namespace ad_utility::data_structures {
