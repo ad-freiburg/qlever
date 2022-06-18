@@ -81,7 +81,11 @@ class Filter : public Operation {
 
   virtual size_t getCostEstimate() override {
     if (_type == SparqlFilter::FilterType::REGEX) {
-      return std::numeric_limits<size_t>::max();
+      // We assume that checking a REGEX for an element is 10 times more
+      // expensive than an "ordinary" filter check.
+      return getSizeEstimate() + 10 * _subtree->getSizeEstimate() +
+             _subtree->getCostEstimate();
+      // return std::numeric_limits<size_t>::max();
     }
     if (isLhsSorted()) {
       // we can apply the very cheap binary sort filter

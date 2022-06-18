@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "../src/util/Random.h"
+#include "../src/util/Serializer/ByteBufferSerializer.h"
 #include "../src/util/Serializer/FileSerializer.h"
 #include "../src/util/Serializer/SerializeHashMap.h"
 #include "../src/util/Serializer/SerializeString.h"
@@ -12,8 +13,218 @@
 #include "../src/util/Serializer/Serializer.h"
 
 using namespace ad_utility;
-using namespace ad_utility::serialization;
+using ad_utility::serialization::ByteBufferReadSerializer;
+using ad_utility::serialization::ByteBufferWriteSerializer;
+using ad_utility::serialization::CopyableFileReadSerializer;
+using ad_utility::serialization::FileReadSerializer;
+using ad_utility::serialization::FileWriteSerializer;
+using ad_utility::serialization::VectorIncrementalSerializer;
 
+using ad_utility::serialization::ReadSerializer;
+using ad_utility::serialization::Serializer;
+using ad_utility::serialization::WriteSerializer;
+
+// The following tests are also examples for the serialization module and for
+// several pitfalls.
+namespace testNamespaceA {
+// Free serialization function.
+struct A {
+  int a;
+  int b;
+};
+AD_SERIALIZE_FUNCTION(A) {
+  serializer | arg.a;
+  serializer | arg.b;
+}
+
+// Friend serialization function, defined inline.
+class B {
+ private:
+  int a;
+  int b;
+
+ public:
+  AD_SERIALIZE_FRIEND_FUNCTION(B) {
+    serializer | arg.a;
+    serializer | arg.b;
+  }
+};
+
+// Friend serialization function, defined outside the class
+class C {
+ private:
+  int a;
+  int b;
+
+ public:
+  AD_SERIALIZE_FRIEND_FUNCTION(C);
+};
+AD_SERIALIZE_FUNCTION(C) {
+  serializer | arg.a;
+  serializer | arg.b;
+}
+
+// D is not serializable
+struct D {};
+
+struct E {
+  D d;
+  AD_SERIALIZE_FRIEND_FUNCTION(E) {
+    // Ill-formed, because `D` has no `serialize()` function.
+    serializer | arg.d;
+  }
+};
+
+struct F {
+  int a;
+};
+struct G {
+  int a;
+};
+}  // namespace testNamespaceA
+
+namespace testNamespaceB {
+// `F is not serializable because the serialization function is not in
+// F's namespace (or a parent namespace thereof)  nor in
+// `ad_utility::serialization`
+AD_SERIALIZE_FUNCTION(testNamespaceA::F) { serializer | arg.a; }
+}  // namespace testNamespaceB
+
+namespace ad_utility::serialization {
+// G is now serializable (the serialize function is in the
+// `ad_utility::serialization` namespace).
+AD_SERIALIZE_FUNCTION(testNamespaceA::G) { serializer | arg.a; }
+}  // namespace ad_utility::serialization
+
+// Test that the claims about serializability are in fact true.
+template <typename T>
+static constexpr bool isReadSerializable = requires(ByteBufferReadSerializer s,
+                                                    T& t) {
+  serialize(s, t);
+};
+template <typename T>
+static constexpr bool isWriteSerializable =
+    requires(ByteBufferWriteSerializer s, T t) {
+  serialize(s, t);
+};
+
+TEST(Serializer, Serializability) {
+  using testNamespaceA::A;
+  using testNamespaceA::B;
+  using testNamespaceA::C;
+  using testNamespaceA::D;
+  using testNamespaceA::E;
+  using testNamespaceA::F;
+  using testNamespaceA::G;
+  static_assert(isReadSerializable<A>);
+  static_assert(isWriteSerializable<A>);
+
+  // We can serialize to and from any kind of a::A value or reference, but we
+  // can only read from a serializer if the target is not const.
+  static_assert(isReadSerializable<A&&>);
+  static_assert(isWriteSerializable<A&&>);
+
+  static_assert(isWriteSerializable<const A&>);
+  static_assert(!isReadSerializable<const A&>);
+
+  static_assert(isWriteSerializable<const A&&>);
+  static_assert(!isReadSerializable<const A&&>);
+
+  static_assert(isWriteSerializable<const A>);
+  static_assert(!isReadSerializable<const A>);
+
+  // See the definitions above as for why or why not these are serializable.
+  static_assert(isReadSerializable<B>);
+  static_assert(isReadSerializable<C>);
+  static_assert(!isReadSerializable<D>);
+  static_assert(!isReadSerializable<F>);
+  static_assert(isReadSerializable<G>);
+
+  // E seems to be serializable according to this SFINAE check, but
+  // actually instantiating the serialize function wouldn't compile because
+  // one of the members is not serializable.
+  static_assert(isReadSerializable<E>);
+}
+
+// A simple example that demonstrates the use of the serializers.
+TEST(Serializer, SimpleExample) {
+  using testNamespaceA::A;
+  std::string filename = "Serializer.SimpleExample.dat";
+  {
+    A a{42, -5};
+    serialization::FileWriteSerializer writer{filename};
+    writer << a;  // `writer | a` or `serialize(writer, a)` are equivalent;
+  }
+  {
+    // `a` has been written to the file, the file has been closed, reopen it and
+    // read.
+    A a{};  // Uninitialized, we will read into it;
+    serialization::FileReadSerializer reader{filename};
+    reader >> a;
+    // We have succesfully restored the values.
+    ASSERT_EQ(a.a, 42);
+    ASSERT_EQ(a.b, -5);
+  }
+  ad_utility::deleteFile(filename);
+}
+
+// A example that shows how different actions can be performed for reading and
+// writing;
+struct T {
+  int value = 42;
+  mutable bool writing = false;
+  bool reading = false;
+  AD_SERIALIZE_FRIEND_FUNCTION(T) {
+    serializer | arg.value;
+    if constexpr (WriteSerializer<S>) {
+      arg.writing = true;
+    } else {
+      arg.reading = true;
+    }
+  }
+};
+
+TEST(Serializer, ReadAndWriteDiffers) {
+  std::string filename = "Serializer.ReadAndWriteDiffers.dat";
+  {
+    T t;
+    serialization::FileWriteSerializer writer{filename};
+    // Serialization and `if constexpr (WriteSerializer<S>)` still works when
+    // the serializer is a reference.
+    auto& writerRef = writer;
+    writerRef << t;
+    ASSERT_TRUE(t.writing);
+    ASSERT_FALSE(t.reading);
+  }
+  {
+    T t;
+    serialization::FileReadSerializer reader{filename};
+    auto& readerRef = reader;
+    readerRef >> t;
+    ASSERT_FALSE(t.writing);
+    ASSERT_TRUE(t.reading);
+  }
+  ad_utility::deleteFile(filename);
+}
+
+// Assert that the serializers actually fulfill the `Serializer` concept.
+// You should write similar tests when adding custom serializers.
+TEST(Serializer, Concepts) {
+  static_assert(ReadSerializer<ByteBufferReadSerializer>);
+  static_assert(!WriteSerializer<ByteBufferReadSerializer>);
+  static_assert(WriteSerializer<ByteBufferWriteSerializer>);
+  static_assert(!ReadSerializer<ByteBufferWriteSerializer>);
+  static_assert(ReadSerializer<FileReadSerializer>);
+  static_assert(!WriteSerializer<FileReadSerializer>);
+  static_assert(WriteSerializer<FileWriteSerializer>);
+  static_assert(!ReadSerializer<FileWriteSerializer>);
+  static_assert(ReadSerializer<CopyableFileReadSerializer>);
+  static_assert(!WriteSerializer<CopyableFileReadSerializer>);
+}
+
+// The following tests are mainly not for documentation but rather stress tests
+// that all kinds of serializers work with all kind of builtin and user-defined
+// and arbitrary nested types.
 auto testWithByteBuffer = [](auto testFunction) {
   ByteBufferWriteSerializer writer;
   auto makeReaderFromWriter = [&writer]() {

@@ -87,7 +87,7 @@ void QueryExecutionTree::setVariableColumns(
 QueryExecutionTree::ColumnIndicesAndTypes
 QueryExecutionTree::selectedVariablesToColumnIndices(
     const SelectedVarsOrAsterisk& selectedVarsOrAsterisk,
-    const ResultTable& resultTable) const {
+    const ResultTable& resultTable, bool includeQuestionMark) const {
   ColumnIndicesAndTypes exportColumns;
 
   for (auto var : selectedVarsOrAsterisk.getSelectedVariables()) {
@@ -100,6 +100,10 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     }
     if (getVariableColumns().contains(var)) {
       auto columnIndex = getVariableColumns().at(var);
+      // Remove the question mark from the variable name if requested.
+      if (!includeQuestionMark && var.starts_with('?')) {
+        var = var.substr(1);
+      }
       exportColumns.push_back(VariableAndColumnIndex{
           var, columnIndex, resultTable.getResultType(columnIndex)});
     } else {
@@ -122,8 +126,8 @@ nlohmann::json QueryExecutionTree::writeResultAsQLeverJson(
     resultTable = getResult();
   }
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  ColumnIndicesAndTypes validIndices =
-      selectedVariablesToColumnIndices(selectedVarsOrAsterisk, *resultTable);
+  ColumnIndicesAndTypes validIndices = selectedVariablesToColumnIndices(
+      selectedVarsOrAsterisk, *resultTable, true);
   if (validIndices.empty()) {
     return {std::vector<std::string>()};
   }
@@ -144,8 +148,10 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   }
   LOG(DEBUG) << "Finished computing the query result in the ID space. "
                 "Resolving strings in result...\n";
-  ColumnIndicesAndTypes columns =
-      selectedVariablesToColumnIndices(selectedVarsOrAsterisk, *resultTable);
+
+  // Don't include the question mark in the variable names.
+  ColumnIndicesAndTypes columns = selectedVariablesToColumnIndices(
+      selectedVarsOrAsterisk, *resultTable, false);
 
   std::erase(columns, std::nullopt);
 
@@ -156,7 +162,15 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   const IdTable& idTable = resultTable->_idTable;
 
   json result;
-  result["head"]["vars"] = selectedVarsOrAsterisk.getSelectedVariables();
+  auto selectedVars = selectedVarsOrAsterisk.getSelectedVariables();
+  // Strip the leading '?' from the variables, it is not part of the SPARQL JSON
+  // output format.
+  for (auto& var : selectedVars) {
+    if (std::string_view{var}.starts_with('?')) {
+      var = var.substr(1);
+    }
+  }
+  result["head"]["vars"] = selectedVars;
 
   json bindings = json::array();
 
@@ -164,13 +178,18 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
 
   // Take a string from the vocabulary, deduce the type and
   // return a json dict that describes the binding
-  auto stringToBinding = [](const std::string& entitystr) -> nlohmann::json {
+  auto stringToBinding = [](std::string_view entitystr) -> nlohmann::json {
     nlohmann::ordered_json b;
-    // The string is an iri or literal
-    if (entitystr[0] == '<') {
-      // Strip the <> surrounding the iri
+    // The string is an IRI or literal.
+    if (entitystr.starts_with('<')) {
+      // Strip the <> surrounding the iri.
       b["value"] = entitystr.substr(1, entitystr.size() - 2);
-      b["type"] = "iri";
+      // Even if they are technically IRIs, the format needs the type to be
+      // "uri".
+      b["type"] = "uri";
+    } else if (entitystr.starts_with("_:")) {
+      b["value"] = entitystr.substr(2);
+      b["type"] = "bnode";
     } else {
       size_t quote_pos = entitystr.rfind('"');
       if (quote_pos == std::string::npos) {
@@ -377,8 +396,8 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
   // unless the result is already cached.
   shared_ptr<const ResultTable> resultTable = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  auto selectedColumnIndices =
-      selectedVariablesToColumnIndices(selectedVarsOrAsterisk, *resultTable);
+  auto selectedColumnIndices = selectedVariablesToColumnIndices(
+      selectedVarsOrAsterisk, *resultTable, true);
 
   const auto& idTable = resultTable->_idTable;
   size_t upperBound = std::min<size_t>(offset + limit, idTable.size());

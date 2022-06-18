@@ -110,7 +110,7 @@ class QueryExecutionTree {
   // `ResultType` of the i-th `selectVariable` in the `resultTable`
   ColumnIndicesAndTypes selectedVariablesToColumnIndices(
       const SelectedVarsOrAsterisk& selectedVarsOrAsterisk,
-      const ResultTable& resultTable) const;
+      const ResultTable& resultTable, bool includeQuestionMark = true) const;
 
   template <ExportSubFormat format>
   ad_utility::streams::stream_generator generateResults(

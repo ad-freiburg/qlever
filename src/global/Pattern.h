@@ -192,10 +192,9 @@ class CompactVectorOfStrings {
   using const_iterator = Iterator;
 
   // Allow serialization via the ad_utility::serialization interface.
-  template <typename Serializer>
-  friend void serialize(Serializer& s, CompactVectorOfStrings& c) {
-    s | c._data;
-    s | c._offsets;
+  AD_SERIALIZE_FRIEND_FUNCTION(CompactVectorOfStrings) {
+    serializer | arg._data;
+    serializer | arg._offsets;
   }
 
  private:

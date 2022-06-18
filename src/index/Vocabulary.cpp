@@ -35,7 +35,8 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
     if (!_isCompressed) {
       LOG(INFO) << "ERROR: trying to load externalized literals to an "
                    "uncompressed vocabulary. This is not valid and a "
-                   "programming error. Terminating\n";
+                   "programming error. Terminating"
+                << std::endl;
       AD_CHECK(false);
     }
 
@@ -297,19 +298,19 @@ template <typename, typename>
 void Vocabulary<S, C>::printRangesForDatatypes() {
   auto ranges = getRangesForDatatypes();
   auto logRange = [&](const auto& range) {
-    LOG(INFO) << range.first << " " << range.second << '\n';
+    LOG(INFO) << range.first << " " << range.second << std::endl;
     if (range.second > range.first) {
-      LOG(INFO) << indexToOptionalString(range.first).value() << '\n';
+      LOG(INFO) << indexToOptionalString(range.first).value() << std::endl;
       LOG(INFO) << indexToOptionalString(range.second.decremented()).value()
-                << '\n';
+                << std::endl;
     }
     if (range.second.get() < _internalVocabulary.size()) {
-      LOG(INFO) << indexToOptionalString(range.second).value() << '\n';
+      LOG(INFO) << indexToOptionalString(range.second).value() << std::endl;
     }
 
     if (range.first.get() > 0) {
       LOG(INFO) << indexToOptionalString(range.first.decremented()).value()
-                << '\n';
+                << std::endl;
     }
   };
 

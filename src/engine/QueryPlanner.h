@@ -363,8 +363,6 @@ class QueryPlanner {
       const TripleGraph& graph, const vector<SparqlFilter>& fs,
       const vector<vector<SubtreePlan>>& children);
 
-  size_t getTextLimit(const string& textLimitString) const;
-
   SubtreePlan getTextLeafPlan(const TripleGraph::Node& node) const;
 
   SubtreePlan optionalJoin(const SubtreePlan& a, const SubtreePlan& b) const;

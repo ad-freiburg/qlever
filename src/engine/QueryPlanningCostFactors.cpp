@@ -45,7 +45,7 @@ void QueryPlanningCostFactors::readFromFile(const string& fileName) {
     AD_CHECK_EQ(v.size(), 2);
     float factor = toFloat(v[1]);
     LOG(INFO) << "Setting cost factor: " << v[0] << " from " << _factors[v[0]]
-              << " to " << factor << '\n';
+              << " to " << factor << std::endl;
     _factors[v[0]] = factor;
   }
 }

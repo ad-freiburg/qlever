@@ -1,4 +1,4 @@
-name: CMake
+name: Native build
 
 on:
   push:
@@ -16,16 +16,23 @@ jobs:
     # well on Windows or Mac.  You can convert this to a matrix build if you need
     # cross-platform coverage.
     # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
-    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        compiler: [ gcc11, clang13 ]
-        os: [ ubuntu-latest ]
+        compiler: [ gcc11, gcc12, clang13 ]
+        #TODO<joka921> We can run all jobs on the same queue as soon as the ubuntu-22.04
+        # runner is no longer in the beta stage. Only runners that support all the platforms
+        # will pick up a job, and so we have to wait for a very long time currently.
+        os: [ ubuntu-20.04, ubuntu-22.04 ]
         warnings: [  "-Wall -Wextra -Werror" ]
-        #exclude:
-        #  - compiler: gcc11
-        #    warnings: -Werror
+        exclude:
+          - compiler: gcc11
+            os: ubuntu-22.04
+          - compiler: gcc12
+            os: ubuntu-20.04
+          - compiler: clang13
+            os: ubuntu-22.04
+    runs-on: ${{ matrix.os }}
 
 
     steps:
@@ -33,14 +40,24 @@ jobs:
 
     - name: Install dependencies
       run:  sudo apt update && sudo apt-get install -y libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
-    - name: Install boost
+    - name: Install boost Ubuntu 20.04
       run : sudo add-apt-repository -y ppa:mhier/libboost-latest && sudo apt update && sudo apt install -y libboost1.74-dev
+      if : matrix.os == 'ubuntu-20.04'
+    - name: Install boost Ubuntu 22.04
+      run : sudo apt update && sudo apt install -y libboost-all-dev
+      if :  matrix.os == 'ubuntu-22.04'
     - name: Install gcc 11
       run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-11 g++-11
+      if :  matrix.compiler != 'gcc12'
+    - name: Install gcc 12
+      run : sudo add-apt-repository ppa:ubuntu-toolchain-r/test && sudo apt update && sudo apt install -y gcc-11 g++-12
+      if :  matrix.compiler  == 'gcc12'
     - name: Install clang 13
       run: wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 13
+      if:  matrix.compiler == 'clang13'
     - name: Install libc++-13
       run : sudo apt install -y libunwind-13-dev libc++abi-13-dev libc++-13-dev
+      if:  matrix.compiler == 'clang13'
 
     - name: Python dependencies
       run: sudo apt-get install python3-yaml unzip pkg-config python3-icu

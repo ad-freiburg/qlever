@@ -92,11 +92,9 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   // plan for this graph pattern.
   vector<SubtreePlan>& lastRow = plans.back();
 
-  if (pq._limit.has_value()) {
-    for (auto& plan : lastRow) {
-      if (plan._qet->getRootOperation()->supportsLimit()) {
-        (plan._qet->getRootOperation()->setLimit(pq._limit.value()));
-      }
+  for (auto& plan : lastRow) {
+    if (plan._qet->getRootOperation()->supportsLimit()) {
+      (plan._qet->getRootOperation()->setLimit(pq._limitOffset._limit));
     }
   }
 
@@ -107,7 +105,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   }
 
   SubtreePlan final = lastRow[minInd];
-  final._qet->setTextLimit(getTextLimit(pq._textLimit));
+  final._qet->setTextLimit(pq._limitOffset._textLimit);
 
   LOG(DEBUG) << "Done creating execution plan.\n";
   return *final._qet;
@@ -1233,12 +1231,15 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           if (node._triple._p._iri == HAS_PREDICATE_PREDICATE) {
             // TODO(schnelle): Handle ?p ql:has-prediacte ?p
             // Add a has relation scan instead of a normal IndexScan
-            HasPredicateScan::ScanType scanType;
-            if (isVariable(node._triple._s)) {
-              scanType = HasPredicateScan::ScanType::FREE_S;
-            } else if (isVariable(node._triple._o)) {
-              scanType = HasPredicateScan::ScanType::FREE_O;
-            }
+            const HasPredicateScan::ScanType scanType = [&]() {
+              if (isVariable(node._triple._s)) {
+                return HasPredicateScan::ScanType::FREE_S;
+              } else if (isVariable(node._triple._o)) {
+                return HasPredicateScan::ScanType::FREE_O;
+              } else {
+                AD_FAIL();
+              }
+            }();
             auto scan = std::make_shared<HasPredicateScan>(_qec, scanType);
             scan->setSubject(node._triple._s);
             scan->setObject(node._triple._o);
@@ -2339,15 +2340,6 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
 
   LOG(TRACE) << "Fill DP table done." << std::endl;
   return dpTab;
-}
-
-// _____________________________________________________________________________
-size_t QueryPlanner::getTextLimit(const string& textLimitString) const {
-  if (textLimitString.empty()) {
-    return 1;
-  } else {
-    return static_cast<size_t>(atol(textLimitString.c_str()));
-  }
 }
 
 // _____________________________________________________________________________

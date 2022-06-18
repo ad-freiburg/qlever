@@ -6,11 +6,14 @@
 
 #include <utility>
 
+#include "../TypeTraits.h"
+#include "./Serializer.h"
+
 namespace ad_utility::serialization {
-template <typename Serializer, typename First, typename Second>
-void serialize(Serializer& serializer, std::pair<First, Second>& pair) {
-  serializer | pair.first;
-  serializer | pair.second;
+AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
+    (ad_utility::similarToInstantiation<std::pair, T>)) {
+  serializer | arg.first;
+  serializer | arg.second;
 }
 }  // namespace ad_utility::serialization
 

@@ -148,6 +148,11 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
   virtual void exitOffsetClause(
       SparqlAutomaticParser::OffsetClauseContext* /*ctx*/) override {}
 
+  virtual void enterTextLimitClause(
+      SparqlAutomaticParser::TextLimitClauseContext* /*ctx*/) override {}
+  virtual void exitTextLimitClause(
+      SparqlAutomaticParser::TextLimitClauseContext* /*ctx*/) override {}
+
   virtual void enterValuesClause(
       SparqlAutomaticParser::ValuesClauseContext* /*ctx*/) override {}
   virtual void exitValuesClause(

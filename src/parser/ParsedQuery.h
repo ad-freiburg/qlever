@@ -219,6 +219,13 @@ class SparqlValues {
   vector<vector<string>> _values;
 };
 
+// Represents the data returned by a limitOffsetClause.
+struct LimitOffsetClause {
+  uint64_t _limit = std::numeric_limits<uint64_t>::max();
+  uint64_t _textLimit = 1;
+  uint64_t _offset = 0;
+};
+
 struct GraphPatternOperation;
 
 // A parsed SPARQL query. To be extended.
@@ -230,8 +237,9 @@ class ParsedQuery {
   // are recursive).
   class GraphPattern {
    public:
-    // deletes the patterns children.
-    GraphPattern() : _optional(false) {}
+    // The constructor has to be implemented in the .cpp file because of the
+    // circular dependencies of `GraphPattern` and `GraphPatternOperation`
+    GraphPattern();
     // Move and copyconstructors to avoid double deletes on the trees children
     GraphPattern(GraphPattern&& other) = default;
     GraphPattern(const GraphPattern& other) = default;
@@ -376,9 +384,7 @@ class ParsedQuery {
   size_t _numGraphPatterns = 1;
   vector<OrderKey> _orderBy;
   vector<string> _groupByVariables;
-  std::optional<size_t> _limit = std::nullopt;
-  string _textLimit;
-  std::optional<size_t> _offset = std::nullopt;
+  LimitOffsetClause _limitOffset{};
   string _originalString;
 
   // explicit default initialisation because the constructor
