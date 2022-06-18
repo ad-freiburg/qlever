@@ -3,23 +3,23 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 
 #include <absl/strings/str_cat.h>
+#include <absl/types/variant.h>
 
 #include <cstdint>
 #include <string>
-#include <variant>
 
 #include "../global/Constants.h"
 #include "../util/Exception.h"
 #include "../util/Forward.h"
 
-/// A wrapper around a `std::variant` that can hold the different types that the
-/// object of a triple can have in the Turtle Parser. Those currently are
+/// A wrapper around a `absl::variant` that can hold the different types that
+/// the object of a triple can have in the Turtle Parser. Those currently are
 /// `double` (xsd:double and xsd:decimal), `int64_t` (xsd:int and xsd:integer)
 /// and `std::string` (IRIs and literals of any other type).
 class TripleObject {
  private:
   // The underlying variant type.
-  using Variant = std::variant<std::string, double, int64_t>;
+  using Variant = absl::variant<std::string, double, int64_t>;
   Variant _variant;
 
  public:
@@ -72,25 +72,25 @@ class TripleObject {
 
   /// Check which type the underlying variants hold.
   [[nodiscard]] bool isString() const noexcept {
-    return std::holds_alternative<std::string>(_variant);
+    return absl::holds_alternative<std::string>(_variant);
   }
   [[nodiscard]] bool isDouble() const noexcept {
-    return std::holds_alternative<double>(_variant);
+    return absl::holds_alternative<double>(_variant);
   }
   [[nodiscard]] bool isInt() const noexcept {
-    return std::holds_alternative<int64_t>(_variant);
+    return absl::holds_alternative<int64_t>(_variant);
   }
 
   /// Access the value. If one of those methods is called but the variant
   /// doesn't hold the correct type, an exception is thrown.
   [[nodiscard]] const std::string& getString() const {
-    return std::get<std::string>(_variant);
+    return absl::get<std::string>(_variant);
   }
   [[nodiscard]] const double& getDouble() const {
-    return std::get<double>(_variant);
+    return absl::get<double>(_variant);
   }
   [[nodiscard]] const int64_t& getInt() const {
-    return std::get<int64_t>(_variant);
+    return absl::get<int64_t>(_variant);
   }
 
   /// Convert to an RDF literal. `std::strings` will be emitted directly,

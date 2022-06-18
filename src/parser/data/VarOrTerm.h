@@ -4,15 +4,16 @@
 
 #pragma once
 
+#include <absl/types/variant.h>
+
 #include <string>
-#include <variant>
 
 #include "../../engine/ResultTable.h"
 #include "../../index/Index.h"
 #include "./GraphTerm.h"
 #include "./Variable.h"
 
-using VarOrTermBase = std::variant<Variable, GraphTerm>;
+using VarOrTermBase = absl::variant<Variable, GraphTerm>;
 
 class VarOrTerm : public VarOrTermBase {
  public:
@@ -20,10 +21,10 @@ class VarOrTerm : public VarOrTermBase {
 
   // ___________________________________________________________________________
   [[nodiscard]] absl::optional<std::string> evaluate(const Context& context,
-                                                    ContextRole role) const {
+                                                     ContextRole role) const {
     // TODO<C++23>: remove static_cast as soon as we can visit types that
-    // inherit from std::variant
-    return std::visit(
+    // inherit from absl::variant
+    return absl::visit(
         [&](const auto& object) { return object.evaluate(context, role); },
         static_cast<const VarOrTermBase&>(*this));
   }
@@ -31,8 +32,8 @@ class VarOrTerm : public VarOrTermBase {
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const {
     // TODO<C++23>: remove static_cast as soon as we can visit types that
-    // inherit from std::variant
-    return std::visit([&](const auto& object) { return object.toSparql(); },
-                      static_cast<const VarOrTermBase&>(*this));
+    // inherit from absl::variant
+    return absl::visit([&](const auto& object) { return object.toSparql(); },
+                       static_cast<const VarOrTermBase&>(*this));
   }
 };

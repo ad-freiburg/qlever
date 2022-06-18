@@ -7,6 +7,8 @@
 
 //#include <bit>
 #include <absl/base/casts.h>
+
+#include <compare>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -15,7 +17,6 @@
 #include "../util/NBitInteger.h"
 #include "../util/Serializer/Serializer.h"
 #include "./IndexTypes.h"
-#include <compare>
 
 /// The different Datatypes that a `ValueId` (see below) can encode.
 enum struct Datatype {
@@ -201,7 +202,7 @@ class ValueId {
   /// framework.
   AD_SERIALIZE_FRIEND_FUNCTION(ValueId) { serializer | arg._bits; }
 
-  /// Similar to `std::visit` for `std::variant`. First gets the datatype and
+  /// Similar to `absl::visit` for `absl::variant`. First gets the datatype and
   /// then calls `visitor(getTYPE)` where `getTYPE` is the correct getter method
   /// for the datatype (e.g. `getDouble` for `Datatype::Double`). Visitor must
   /// be callable with all of the possible return types of the `getTYPE`

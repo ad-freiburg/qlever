@@ -200,7 +200,7 @@ absl::optional<MediaType> getMediaTypeFromAcceptHeader(
   };
 
   for (const auto& mediaType : orderedMediaTypes) {
-    auto match = std::visit(getMediaTypeFromPart, mediaType._mediaType);
+    auto match = absl::visit(getMediaTypeFromPart, mediaType._mediaType);
     if (match.has_value()) {
       return match.value();
     }

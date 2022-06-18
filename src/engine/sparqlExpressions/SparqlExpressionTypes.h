@@ -217,7 +217,7 @@ using AllTypesAsTuple =
     ad_utility::TupleCat<ConstantTypes, ConstantTypesAsVector, OtherTypes>;
 }  // namespace detail
 
-/// An Expression result is a std::variant of all the different types from
+/// An Expression result is a absl::variant of all the different types from
 /// the expressionResultDetail namespace (see above).
 using ExpressionResult = ad_utility::TupleToVariant<detail::AllTypesAsTuple>;
 

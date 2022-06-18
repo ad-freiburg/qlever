@@ -5,12 +5,12 @@
 #include "./Index.h"
 
 #include <absl/strings/str_join.h>
+#include <absl/types/optional.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <future>
-#include <absl/types/optional.h>
 #include <stxxl/algorithm>
 #include <stxxl/map>
 #include <unordered_map>
@@ -259,8 +259,8 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
           // when called, returns an optional to the next triple. If
           // `linesPerPartial` triples were parsed, return absl::nullopt. when
           // the parser is unable to deliver triples, set parserExhausted to
-          // true and return absl::nullopt. this is exactly the behavior we need,
-          // as a first step in the parallel Pipeline.
+          // true and return absl::nullopt. this is exactly the behavior we
+          // need, as a first step in the parallel Pipeline.
           ParserBatcher(parser, linesPerPartial,
                         [&]() { parserExhausted = true; }),
           // convert each triple to the internal representation (e.g. special
@@ -466,7 +466,7 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
 // _____________________________________________________________________________
 template <class MetaDataDispatcher, typename SortedTriples>
 absl::optional<std::pair<typename MetaDataDispatcher::WriteType,
-                        typename MetaDataDispatcher::WriteType>>
+                         typename MetaDataDispatcher::WriteType>>
 Index::createPermutationPairImpl(const string& fileName1,
                                  const string& fileName2,
                                  SortedTriples&& sortedTriples, size_t c0,
@@ -577,7 +577,7 @@ void Index::writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
 // ________________________________________________________________________
 template <class MetaDataDispatcher, class Comparator1, class Comparator2>
 absl::optional<std::pair<typename MetaDataDispatcher::WriteType,
-                        typename MetaDataDispatcher::WriteType>>
+                         typename MetaDataDispatcher::WriteType>>
 Index::createPermutations(
     auto&& sortedTriples,
     const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
@@ -963,15 +963,15 @@ LangtagAndTriple Index::tripleToInternalRepresentation(TurtleTriple&& triple) {
     objectIsString = true;
   }
   for (auto& el : resultTriple) {
-    if (!std::holds_alternative<TripleComponent>(el)) {
+    if (!absl::holds_alternative<TripleComponent>(el)) {
       continue;
     }
-    auto& iriOrLiteral = std::get<TripleComponent>(el)._iriOrLiteral;
+    auto& iriOrLiteral = absl::get<TripleComponent>(el)._iriOrLiteral;
     iriOrLiteral = _vocab.getLocaleManager().normalizeUtf8(iriOrLiteral);
   }
   size_t upperBound = 3;
   if (objectIsString) {
-    auto& object = std::get<TripleComponent>(resultTriple[2])._iriOrLiteral;
+    auto& object = absl::get<TripleComponent>(resultTriple[2])._iriOrLiteral;
     // TODO<joka921> Actually create numeric Ids here...
     if (ad_utility::isXsdValue(object)) {
       object = ad_utility::convertValueLiteralToIndexWord(object);
@@ -986,10 +986,10 @@ LangtagAndTriple Index::tripleToInternalRepresentation(TurtleTriple&& triple) {
 
   for (size_t k = 0; k < upperBound; ++k) {
     // If we already have an ID, we can just continue;
-    if (!std::holds_alternative<TripleComponent>(resultTriple[k])) {
+    if (!absl::holds_alternative<TripleComponent>(resultTriple[k])) {
       continue;
     }
-    auto& component = std::get<TripleComponent>(resultTriple[k]);
+    auto& component = absl::get<TripleComponent>(resultTriple[k]);
     if (_onDiskLiterals &&
         _vocab.shouldBeExternalized(component._iriOrLiteral)) {
       component._isExternal = true;

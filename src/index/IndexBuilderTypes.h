@@ -49,7 +49,7 @@ struct TripleComponentWithIndex {
   }
 };
 
-using TripleComponentOrId = std::variant<TripleComponent, Id>;
+using TripleComponentOrId = absl::variant<TripleComponent, Id>;
 // A triple that also knows for each entry, whether this entry should be
 // part of the external vocabulary.
 using Triple = std::array<TripleComponentOrId, 3>;
@@ -91,10 +91,10 @@ struct alignas(256) ItemMapManager {
   /// If the key was seen before, return its preassigned ID. Else assign the
   /// next free ID to the string, store and return it.
   Id getId(const TripleComponentOrId& keyOrId) {
-    if (std::holds_alternative<Id>(keyOrId)) {
-      return std::get<Id>(keyOrId);
+    if (absl::holds_alternative<Id>(keyOrId)) {
+      return absl::get<Id>(keyOrId);
     }
-    const auto& key = std::get<TripleComponent>(keyOrId);
+    const auto& key = absl::get<TripleComponent>(keyOrId);
     if (!_map.count(key._iriOrLiteral)) {
       uint64_t res = _map.size() + _minId;
       _map[key._iriOrLiteral] = {
@@ -190,7 +190,7 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
         // get the Id for the tagged predicate, e.g. @en@rdfs:label
         auto langTaggedPredId =
             map.getId(ad_utility::convertToLanguageTaggedPredicate(
-                std::get<TripleComponent>(lt._triple[1])._iriOrLiteral,
+                absl::get<TripleComponent>(lt._triple[1])._iriOrLiteral,
                 lt._langtag));
         auto& spoIds = *(res[0]);  // ids of original triple
         // TODO replace the std::array by an explicit IdTriple class,

@@ -16,11 +16,12 @@
 
 #pragma once
 
+#include <absl/types/variant.h>
+
 #include <algorithm>
 #include <memory>
 #include <queue>
 #include <set>
-#include <variant>
 
 #include "./Exception.h"
 #include "./HashMap.h"
@@ -209,8 +210,8 @@ template <class Score, class Value, class Comp = std::less<>>
 class HeapBasedPQ {
  private:
   using InternalScore =
-      std::variant<std::monostate,
-                   Score>;  // monostate means "minimal key, erase immediately
+      absl::variant<std::monostate,
+                    Score>;  // monostate means "minimal key, erase immediately
   // The actual internal nodes of the Priority Queue storing the Score and the
   // Value
   struct PqNode {
@@ -236,8 +237,8 @@ class HeapBasedPQ {
     /// default constructor currently needed for the Cache
     Handle() = default;
     /// simple accessors to the associated score and value of the content
-    const Score& score() const { return std::get<Score>(mData->mScore); }
-    Score& score() { return std::get<Score>(mData->mScore); }
+    const Score& score() const { return absl::get<Score>(mData->mScore); }
+    Score& score() { return absl::get<Score>(mData->mScore); }
     const Value& value() const { return mData->mValue; }
     Value& value() { return mData->mValue; }
 

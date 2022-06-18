@@ -173,7 +173,7 @@ void GroupBy::processGroup(
     }
   };
 
-  std::visit(visitor, std::move(expressionResult));
+  absl::visit(visitor, std::move(expressionResult));
 }
 
 /**

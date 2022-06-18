@@ -6,11 +6,12 @@
 #ifndef QLEVER_SPARQLEXPRESSION_H
 #define QLEVER_SPARQLEXPRESSION_H
 
+#include <absl/types/optional.h>
+#include <absl/types/variant.h>
+
 #include <memory>
 #include <span>
-#include <variant>
 #include <vector>
-#include <absl/types/optional.h>
 
 #include "../../global/Id.h"
 #include "../../util/ConstexprSmallString.h"

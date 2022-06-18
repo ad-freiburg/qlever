@@ -43,7 +43,8 @@ SparqlExpressionPimpl::getVariableForNonDistinctCountOrNullopt() const {
 }
 
 // ___________________________________________________________________________
-absl::optional<std::string> SparqlExpressionPimpl::getVariableOrNullopt() const {
+absl::optional<std::string> SparqlExpressionPimpl::getVariableOrNullopt()
+    const {
   return _pimpl->getVariableOrNullopt();
 }
 

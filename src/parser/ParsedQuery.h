@@ -3,10 +3,11 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <absl/types/variant.h>
+
 #include <initializer_list>
 #include <string>
 #include <utility>
-#include <variant>
 #include <vector>
 
 #include "../engine/ResultType.h"
@@ -136,7 +137,7 @@ class VariableOrderKey {
 };
 
 // Represents an ordering by a variable or an expression.
-using OrderKey = std::variant<VariableOrderKey, ExpressionOrderKey>;
+using OrderKey = absl::variant<VariableOrderKey, ExpressionOrderKey>;
 
 class SparqlFilter {
  public:
@@ -273,16 +274,16 @@ class ParsedQuery {
   // selected Variables (Select ?a ?b).
   struct SelectedVarsOrAsterisk {
    private:
-    std::variant<vector<string>, char> _varsOrAsterisk;
+    absl::variant<vector<string>, char> _varsOrAsterisk;
     std::vector<string> _variablesFromQueryBody;
 
    public:
     [[nodiscard]] bool isAllVariablesSelected() const {
-      return std::holds_alternative<char>(_varsOrAsterisk);
+      return absl::holds_alternative<char>(_varsOrAsterisk);
     }
 
     [[nodiscard]] bool isManuallySelectedVariables() const {
-      return std::holds_alternative<std::vector<string>>(_varsOrAsterisk);
+      return absl::holds_alternative<std::vector<string>>(_varsOrAsterisk);
     }
 
     // Sets the Selector to 'All' (*) only if the Selector is still undefined
@@ -311,7 +312,7 @@ class ParsedQuery {
     [[nodiscard]] const auto& getSelectedVariables() const {
       return isAllVariablesSelected()
                  ? _variablesFromQueryBody
-                 : std::get<std::vector<string>>(_varsOrAsterisk);
+                 : absl::get<std::vector<string>>(_varsOrAsterisk);
       ;
     }
   };
@@ -343,30 +344,30 @@ class ParsedQuery {
 
   // explicit default initialisation because the constructor
   // of SelectClause is private
-  std::variant<SelectClause, ConstructClause> _clause{_selectedVarsOrAsterisk};
+  absl::variant<SelectClause, ConstructClause> _clause{_selectedVarsOrAsterisk};
 
   [[nodiscard]] bool hasSelectClause() const {
-    return std::holds_alternative<SelectClause>(_clause);
+    return absl::holds_alternative<SelectClause>(_clause);
   }
 
   [[nodiscard]] bool hasConstructClause() const {
-    return std::holds_alternative<ConstructClause>(_clause);
+    return absl::holds_alternative<ConstructClause>(_clause);
   }
 
   [[nodiscard]] decltype(auto) selectClause() const {
-    return std::get<SelectClause>(_clause);
+    return absl::get<SelectClause>(_clause);
   }
 
   [[nodiscard]] decltype(auto) constructClause() const {
-    return std::get<ConstructClause>(_clause);
+    return absl::get<ConstructClause>(_clause);
   }
 
   [[nodiscard]] decltype(auto) selectClause() {
-    return std::get<SelectClause>(_clause);
+    return absl::get<SelectClause>(_clause);
   }
 
   [[nodiscard]] decltype(auto) constructClause() {
-    return std::get<ConstructClause>(_clause);
+    return absl::get<ConstructClause>(_clause);
   }
 
   // Add a variable, that was found in the SubQuery body, when query has a
@@ -464,8 +465,8 @@ struct GraphPatternOperation {
     }
   };
 
-  std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-               Values, Minus>
+  absl::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
+                Values, Minus>
       variant_;
   // Construct from one of the variant types (or anything that is convertible to
   // them.
@@ -480,25 +481,25 @@ struct GraphPatternOperation {
 
   template <typename T>
   constexpr bool is() noexcept {
-    return std::holds_alternative<T>(variant_);
+    return absl::holds_alternative<T>(variant_);
   }
 
   template <typename F>
   decltype(auto) visit(F f) {
-    return std::visit(f, variant_);
+    return absl::visit(f, variant_);
   }
 
   template <typename F>
   decltype(auto) visit(F f) const {
-    return std::visit(f, variant_);
+    return absl::visit(f, variant_);
   }
   template <class T>
   constexpr T& get() {
-    return std::get<T>(variant_);
+    return absl::get<T>(variant_);
   }
   template <class T>
   [[nodiscard]] constexpr const T& get() const {
-    return std::get<T>(variant_);
+    return absl::get<T>(variant_);
   }
 
   auto& getBasic() { return get<BasicGraphPattern>(); }

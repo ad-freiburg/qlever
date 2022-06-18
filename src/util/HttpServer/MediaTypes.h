@@ -8,10 +8,11 @@
 #ifndef QLEVER_MEDIATYPES_H
 #define QLEVER_MEDIATYPES_H
 
+#include <absl/types/optional.h>
+
 #include <compare>
 #include <string>
 #include <vector>
-#include <absl/types/optional.h>
 
 #include "../HashMap.h"
 #include "../HashSet.h"
@@ -53,7 +54,7 @@ struct MediaTypeWithQuality {
     std::string _type;
   };
 
-  using Variant = std::variant<Wildcard, TypeWithWildcard, MediaType>;
+  using Variant = absl::variant<Wildcard, TypeWithWildcard, MediaType>;
   friend std::weak_ordering operator<=>(const Variant& a, const Variant& b) {
     return a.index() <=> b.index();
   }

@@ -268,7 +268,7 @@ void TurtleParser<T>::parseIntegerConstant(const std::string& input) {
   try {
     // We cannot directly store this in `_lastParseResult` because this might
     // overwrite `input`.
-    result = std::stoll(input, &position);
+    result = static_cast<int64_t>(std::stoll(input, &position));
   } catch (const std::out_of_range&) {
     if (integerOverflowBehavior() ==
         TurtleParserIntegerOverflowBehavior::OverflowingToDouble) {

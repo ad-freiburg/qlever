@@ -745,7 +745,7 @@ bool QueryPlanner::checkUsePatternTrick(
   // Check that pq does not have where clause triples or filters, but
   // contains a single subquery child
   if (root._children.size() != 1 ||
-      !std::holds_alternative<GraphPatternOperation::Subquery>(
+      !absl::holds_alternative<GraphPatternOperation::Subquery>(
           root._children[0].variant_)) {
     return false;
   }

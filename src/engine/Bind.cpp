@@ -179,7 +179,7 @@ void Bind::computeExpressionBind(
     }
   };
 
-  std::visit(visitor, std::move(expressionResult));
+  absl::visit(visitor, std::move(expressionResult));
 
   outputResultTable->_idTable = output.moveToDynamic();
 }

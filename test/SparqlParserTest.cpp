@@ -2,9 +2,8 @@
 // Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include <absl/types/variant.h>
 #include <gtest/gtest.h>
-
-#include <variant>
 
 #include "../src/global/Constants.h"
 #include "../src/parser/PropertyPathParser.h"
