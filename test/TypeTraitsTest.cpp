@@ -33,11 +33,11 @@ TEST(TypeTraits, IsInstantiation) {
 
   static_assert(isTuple<std::tuple<int>>);
   static_assert(isTuple<std::tuple<int, bool>>);
-  static_assert(!isTuple<absl::variant<int, bool>>);
+  static_assert(!isTuple<std::variant<int, bool>>);
   static_assert(!isTuple<int>);
 
-  static_assert(isVariant<absl::variant<int>>);
-  static_assert(isVariant<absl::variant<int, bool>>);
+  static_assert(isVariant<std::variant<int>>);
+  static_assert(isVariant<std::variant<int, bool>>);
   static_assert(!isVariant<std::tuple<int, bool>>);
   static_assert(!isVariant<int>);
   ASSERT_TRUE(true);
@@ -51,9 +51,9 @@ TEST(TypeTraits, Lift) {
   using LT = LiftedTuple<T1, TypeLifter>;
   static_assert(std::is_same_v<std::tuple<TypeLifter<int>>, LT>);
 
-  using V = absl::variant<int>;
+  using V = std::variant<int>;
   using LV = LiftedVariant<V, TypeLifter>;
-  static_assert(std::is_same_v<absl::variant<TypeLifter<int>>, LV>);
+  static_assert(std::is_same_v<std::variant<TypeLifter<int>>, LV>);
 
   using TT = std::tuple<int, bool, short>;
   using LTT = LiftedTuple<TT, TypeLifter>;
@@ -62,11 +62,11 @@ TEST(TypeTraits, Lift) {
           std::tuple<TypeLifter<int>, TypeLifter<bool>, TypeLifter<short>>,
           LTT>);
 
-  using VV = absl::variant<int, bool, short>;
+  using VV = std::variant<int, bool, short>;
   using LVV = LiftedVariant<VV, TypeLifter>;
   static_assert(
       std::is_same_v<
-          absl::variant<TypeLifter<int>, TypeLifter<bool>, TypeLifter<short>>,
+          std::variant<TypeLifter<int>, TypeLifter<bool>, TypeLifter<short>>,
           LVV>);
   ASSERT_TRUE(true);
 }
@@ -74,11 +74,11 @@ TEST(TypeTraits, Lift) {
 TEST(TypeTraits, TupleToVariant) {
   using T = std::tuple<int>;
   using V = TupleToVariant<T>;
-  static_assert(std::is_same_v<V, absl::variant<int>>);
+  static_assert(std::is_same_v<V, std::variant<int>>);
 
   using TT = std::tuple<int, short, bool>;
   using VV = TupleToVariant<TT>;
-  static_assert(std::is_same_v<VV, absl::variant<int, short, bool>>);
+  static_assert(std::is_same_v<VV, std::variant<int, short, bool>>);
   ASSERT_TRUE(true);
 }
 

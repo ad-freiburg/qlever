@@ -5,10 +5,9 @@
 #ifndef QLEVER_PARAMETERS_H
 #define QLEVER_PARAMETERS_H
 
-#include <absl/types/optional.h>
-
 #include <atomic>
 #include <functional>
+#include <optional>
 #include <tuple>
 
 #include "./ConstexprMap.h"
@@ -52,7 +51,7 @@ struct Parameter : public ParameterBase {
 
   // This function is called each time the value is changed.
   using OnUpdateAction = std::function<void(Type)>;
-  absl::optional<OnUpdateAction> _onUpdateAction = absl::nullopt;
+  std::optional<OnUpdateAction> _onUpdateAction = std::nullopt;
 
  public:
   /// Construction is only allowed using an initial parameter value

@@ -862,14 +862,14 @@ bool TurtleParallelParser<T>::getLine(TurtleTriple* triple) {
 }
 
 template <class T>
-absl::optional<std::vector<TurtleTriple>> TurtleParallelParser<T>::getBatch() {
+std::optional<std::vector<TurtleTriple>> TurtleParallelParser<T>::getBatch() {
   // we need a while in case there is a batch that contains no triples
   // (this should be rare, // TODO warn about this
   while (_triples.empty()) {
     auto optionalTripleTask = tripleCollector.popManually();
     if (!optionalTripleTask) {
       // everything has been parsed
-      return absl::nullopt;
+      return std::nullopt;
     }
     (*optionalTripleTask)();
   }

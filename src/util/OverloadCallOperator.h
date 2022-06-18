@@ -8,7 +8,7 @@
 namespace ad_utility {
 /**
  * @brief A struct that inherits `operator()` from all its base classes `Ts...`
- * This is useful for example in connection with `absl::visit` (see
+ * This is useful for example in connection with `std::visit` (see
  * https://en.cppreference.com/w/cpp/utility/variant/visit) or to create
  * symmetric lambdas for `std::equal_range` with heterogeneous types (see File
  * `global/ValueIdComparators.h`)

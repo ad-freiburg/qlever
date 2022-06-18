@@ -78,7 +78,7 @@ Awaitable<void> Server::process(
   // If there is a command like "clear_cache" which might be combined with a
   // query, track if there is such a command but no query and still send
   // a useful response.
-  absl::optional<http::response<http::string_body>> responseFromCommand;
+  std::optional<http::response<http::string_body>> responseFromCommand;
   if (params.contains("cmd")) {
     const auto& cmd = params.at("cmd");
     if (cmd == "stats") {
@@ -329,7 +329,7 @@ boost::asio::awaitable<void> Server::processQuery(
     co_return co_await send(std::move(response));
   };
 
-  absl::optional<json> errorResponse;
+  std::optional<json> errorResponse;
 
   try {
     ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
@@ -386,7 +386,7 @@ boost::asio::awaitable<void> Server::processQuery(
       return mediaTypes;
     };
 
-    absl::optional<MediaType> mediaType = absl::nullopt;
+    std::optional<MediaType> mediaType = std::nullopt;
 
     // The explicit `action=..._export` parameter have precedence over the
     // `Accept:...` header field

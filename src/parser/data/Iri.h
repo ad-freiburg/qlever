@@ -23,7 +23,7 @@ class Iri {
   [[nodiscard]] const std::string& iri() const { return _string; }
 
   // ___________________________________________________________________________
-  [[nodiscard]] absl::optional<std::string> evaluate(
+  [[nodiscard]] std::optional<std::string> evaluate(
       [[maybe_unused]] const Context& context,
       [[maybe_unused]] ContextRole role) const {
     return _string;

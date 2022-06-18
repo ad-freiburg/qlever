@@ -45,18 +45,18 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   v = NonNegative{boost::lexical_cast<size_t>(s)};
 }
 
-// This function is required  to use `absl::optional` in
+// This function is required  to use `std::optional` in
 // `boost::program_options`.
 template <typename T>
 void validate(boost::any& v, const std::vector<std::string>& values,
-              absl::optional<T>*, int) {
+              std::optional<T>*, int) {
   // First parse as a T
   T* dummy = nullptr;
   validate(v, values, dummy, 0);
 
-  // Wrap the T inside absl::optional
+  // Wrap the T inside std::optional
   AD_CHECK(!v.empty());
-  v = absl::optional<T>(boost::any_cast<T>(v));
+  v = std::optional<T>(boost::any_cast<T>(v));
 }
 
 /// Create `boost::program_options::value`s (command-line options) from

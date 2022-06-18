@@ -121,13 +121,13 @@ const std::string& getType(MediaType t) {
 }
 
 // ________________________________________________________________________
-absl::optional<MediaType> toMediaType(std::string_view s) {
+std::optional<MediaType> toMediaType(std::string_view s) {
   auto lowercase = ad_utility::getLowercaseUtf8(s);
   const auto& m = detail::getStringToMediaTypeMap();
   if (m.contains(lowercase)) {
     return m.at(lowercase);
   } else {
-    return absl::nullopt;
+    return std::nullopt;
   }
 }
 
@@ -168,7 +168,7 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
 }
 
 // ___________________________________________________________________________
-absl::optional<MediaType> getMediaTypeFromAcceptHeader(
+std::optional<MediaType> getMediaTypeFromAcceptHeader(
     std::string_view acceptHeader,
     const std::vector<MediaType>& supportedMediaTypes) {
   AD_CHECK(!supportedMediaTypes.empty());
@@ -180,8 +180,8 @@ absl::optional<MediaType> getMediaTypeFromAcceptHeader(
   auto orderedMediaTypes = parseAcceptHeader(acceptHeader, supportedMediaTypes);
 
   auto getMediaTypeFromPart = [&supportedMediaTypes]<typename T>(
-                                  const T& part) -> absl::optional<MediaType> {
-    const absl::optional<MediaType> noValue = absl::nullopt;
+                                  const T& part) -> std::optional<MediaType> {
+    const std::optional<MediaType> noValue = std::nullopt;
     if constexpr (ad_utility::isSimilar<T, MediaTypeWithQuality::Wildcard>) {
       return *supportedMediaTypes.begin();
     } else if constexpr (ad_utility::isSimilar<
@@ -200,14 +200,14 @@ absl::optional<MediaType> getMediaTypeFromAcceptHeader(
   };
 
   for (const auto& mediaType : orderedMediaTypes) {
-    auto match = absl::visit(getMediaTypeFromPart, mediaType._mediaType);
+    auto match = std::visit(getMediaTypeFromPart, mediaType._mediaType);
     if (match.has_value()) {
       return match.value();
     }
   }
 
-  // No supported `MediaType` was found, return absl::nullopt.
-  return absl::nullopt;
+  // No supported `MediaType` was found, return std::nullopt.
+  return std::nullopt;
 }
 
 // ______________________________________________________________________

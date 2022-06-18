@@ -49,7 +49,7 @@ struct TripleComponentWithIndex {
   }
 };
 
-using TripleComponentOrId = absl::variant<TripleComponent, Id>;
+using TripleComponentOrId = std::variant<TripleComponent, Id>;
 // A triple that also knows for each entry, whether this entry should be
 // part of the external vocabulary.
 using Triple = std::array<TripleComponentOrId, 3>;
@@ -91,10 +91,10 @@ struct alignas(256) ItemMapManager {
   /// If the key was seen before, return its preassigned ID. Else assign the
   /// next free ID to the string, store and return it.
   Id getId(const TripleComponentOrId& keyOrId) {
-    if (absl::holds_alternative<Id>(keyOrId)) {
-      return absl::get<Id>(keyOrId);
+    if (std::holds_alternative<Id>(keyOrId)) {
+      return std::get<Id>(keyOrId);
     }
-    const auto& key = absl::get<TripleComponent>(keyOrId);
+    const auto& key = std::get<TripleComponent>(keyOrId);
     if (!_map.count(key._iriOrLiteral)) {
       uint64_t res = _map.size() + _minId;
       _map[key._iriOrLiteral] = {
@@ -136,7 +136,7 @@ struct LangtagAndTriple {
  * - Takes a triple and a language tag
  * - Returns OptionalIds where the first entry are the Ids for the triple,
  *   the second and third entry are the Ids of the extra triples for the
- *   language filter implementation (or absl::nullopt if there was no language
+ *   language filter implementation (or std::nullopt if there was no language
  * tag)
  * - in the <i-th> lambda all Ids are assigned according to itemArray[i]
  * - if the argument maxNumberOfTriples is set correctly, the Id ranges assigned
@@ -167,13 +167,13 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
     itemArray[j].getId(LANGUAGE_PREDICATE);
     itemArray[j]._map.reserve(2 * maxNumberOfTriples);
   }
-  using OptionalIds = std::array<absl::optional<std::array<Id, 3>>, 3>;
+  using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
 
   /* given an index idx, returns a lambda that
    * - Takes a triple and a language tag
    * - Returns OptionalIds where the first entry are the Ids for the triple,
    *   the second and third entry are the Ids of the extra triples for the
-   *   language filter implementation (or absl::nullopt if there was no language
+   *   language filter implementation (or std::nullopt if there was no language
    * tag)
    * - All Ids are assigned according to itemArray[idx]
    */
@@ -190,7 +190,7 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
         // get the Id for the tagged predicate, e.g. @en@rdfs:label
         auto langTaggedPredId =
             map.getId(ad_utility::convertToLanguageTaggedPredicate(
-                absl::get<TripleComponent>(lt._triple[1])._iriOrLiteral,
+                std::get<TripleComponent>(lt._triple[1])._iriOrLiteral,
                 lt._langtag));
         auto& spoIds = *(res[0]);  // ids of original triple
         // TODO replace the std::array by an explicit IdTriple class,

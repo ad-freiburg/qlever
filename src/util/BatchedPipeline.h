@@ -31,10 +31,10 @@ struct Batch {
 };
 
 /*
- * The Batcher class takes a Creator (A Functor that returns a absl::optional<T>
+ * The Batcher class takes a Creator (A Functor that returns a std::optional<T>
  * and will call the creator and store the results. A call to pickupBatch will
  * return a batch of these results and trigger the concurrent calculation of the
- * next batch. Once the creator returns absl::nullopt, the Batcher will stop
+ * next batch. Once the creator returns std::nullopt, the Batcher will stop
  * calling it. The next call to produce batch will then set its first element
  * (the a flag) to false as a signal that this batcher is exhausted and return a
  * possibly incomplete batch.
@@ -106,7 +106,7 @@ class Batcher {
 
   /* retrieve values from the creator and store them in the Batch result.
    * Once we have reached batchSize Elements or the creator returns
-   * absl::nullopt we return. In the latter case, result.first is false
+   * std::nullopt we return. In the latter case, result.first is false
    */
   static detail::Batch<ValueT> produceBatchInternal(size_t batchSize,
                                                     Creator* creator) {
@@ -451,8 +451,8 @@ class Interface;  // forward declaration needed below for friend declaration
 /**
  * @brief An instantiation of this templated class is created by the calls to
  * setupPipeline() and setupParallelPipeline() It supports the getNextValue()
- * interface that will return absl::optional<ValueT> for each of the completely
- * transformed elements in a pipeline and absl::nullopt once it is exhausted.
+ * interface that will return std::optional<ValueT> for each of the completely
+ * transformed elements in a pipeline and std::nullopt once it is exhausted.
  * See the documentation of the setup* functions
  */
 template <class Pipeline>
@@ -462,11 +462,11 @@ class BatchExtractor {
   using ValueT = std::decay_t<decltype(
       std::declval<Pipeline>().pickupBatch().m_content[0])>;
 
-  /// Get the next completely transformed value from the pipeline. absl::nullopt
+  /// Get the next completely transformed value from the pipeline. std::nullopt
   /// means that all elements have been extracted and the pipeline is exhausted.
   /// Might block if the pipeline is currently busy and the internal buffer is
   /// empty
-  absl::optional<ValueT> getNextValue() {
+  std::optional<ValueT> getNextValue() {
     // we return the elements in order
     if (_buffer.size() == _bufferPosition && _isPipelineValid) {
       // we have to wait for the next parallel batch to be completed.
@@ -492,7 +492,7 @@ class BatchExtractor {
     } else {
       // we can only reach this if the pipeline is exhausted and we have reached
       // past the last element.
-      return absl::nullopt;
+      return std::nullopt;
     }
   }
 
@@ -580,14 +580,14 @@ class Interface {
  * @param batchSize the size of the batches. Might influence Performance (time
  * vs. memory consumption)
  * @param creator repeated calls to creator() must create the initial values of
- * type T_0 one at a time as absl::optional<T_0> a return value of absl::nullopt
+ * type T_0 one at a time as std::optional<T_0> a return value of std::nullopt
  * means that no more elements are created
  * @param transformers Function objects that perform the different
  * transformations in the order they are listed. The i-th transformer takes a
  * T_i&& and returns a T_{i+1}; Currently the transformers must be
  * copy-constructible
  * @return a BatchExtractor on which we can call getNextValue() to get
- * absl::optional<ReturnTypeOfLastTransformers> here also a absl::nullopt
+ * std::optional<ReturnTypeOfLastTransformers> here also a std::nullopt
  * signalizes the last value.
  */
 template <typename Creator, typename... Ts>
@@ -632,12 +632,12 @@ auto setupPipeline(size_t batchSize, Creator&& creator, Ts&&... transformers) {
  * @param batchSize the size of the batches. Might influence Performance (time
  * vs. memory consumption)
  * @param creator repeated calls to creator() must create the initial values of
- * type T_0 one at a time as absl::optional<T_0> a return value of absl::nullopt
+ * type T_0 one at a time as std::optional<T_0> a return value of std::nullopt
  * means that no more elements are created
  * @param transformers for each element either one FunctionObject or a tuple of
  * k function objects, where k is the corresponding entry in the Parallelisms.
  * @return a BatchExtractor on which we can call getNextValue() to get
- * absl::optional<ReturnTypeOfLastTransformers> here also a absl::nullopt
+ * std::optional<ReturnTypeOfLastTransformers> here also a std::nullopt
  * signalizes the last value.
  */
 template <size_t... Parallelisms, typename Creator, typename... Ts>

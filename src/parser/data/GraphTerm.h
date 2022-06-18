@@ -4,27 +4,26 @@
 
 #pragma once
 
-#include <absl/types/variant.h>
-
 #include <string>
+#include <variant>
 
 #include "./BlankNode.h"
 #include "./Context.h"
 #include "./Iri.h"
 #include "./Literal.h"
 
-using GraphTermBase = absl::variant<Literal, BlankNode, Iri>;
+using GraphTermBase = std::variant<Literal, BlankNode, Iri>;
 
 class GraphTerm : public GraphTermBase {
  public:
   using GraphTermBase::GraphTermBase;
 
   // ___________________________________________________________________________
-  [[nodiscard]] absl::optional<std::string> evaluate(const Context& context,
-                                                     ContextRole role) const {
+  [[nodiscard]] std::optional<std::string> evaluate(const Context& context,
+                                                    ContextRole role) const {
     // TODO<C++23>: remove static_cast as soon as we can visit types that
-    // inherit from absl::variant
-    return absl::visit(
+    // inherit from std::variant
+    return std::visit(
         [&](const auto& object) { return object.evaluate(context, role); },
         static_cast<const GraphTermBase&>(*this));
   }
@@ -32,8 +31,8 @@ class GraphTerm : public GraphTermBase {
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const {
     // TODO<C++23>: remove static_cast as soon as we can visit types that
-    // inherit from absl::variant
-    return absl::visit([&](const auto& object) { return object.toSparql(); },
-                       static_cast<const GraphTermBase&>(*this));
+    // inherit from std::variant
+    return std::visit([&](const auto& object) { return object.toSparql(); },
+                      static_cast<const GraphTermBase&>(*this));
   }
 };

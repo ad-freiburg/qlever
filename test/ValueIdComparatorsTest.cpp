@@ -117,7 +117,7 @@ TEST(ValueIdComparators, NumericTypes) {
   };
 
   auto applyComparator = [&](auto comparator, ValueId aId, ValueId bId) {
-    absl::variant<int64_t, double> aValue, bValue;
+    std::variant<int64_t, double> aValue, bValue;
     if (aId.getDatatype() == Datatype::Double) {
       aValue = aId.getDouble();
     } else {

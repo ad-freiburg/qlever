@@ -279,7 +279,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       // know that b is from an OPTIONAL.
       for (const auto& a : lastRow) {
         for (const auto& b : v) {
-          auto vec = createJoinCandidates(a, b, absl::nullopt);
+          auto vec = createJoinCandidates(a, b, std::nullopt);
           nextCandidates.insert(nextCandidates.end(),
                                 std::make_move_iterator(vec.begin()),
                                 std::make_move_iterator(vec.end()));
@@ -745,7 +745,7 @@ bool QueryPlanner::checkUsePatternTrick(
   // Check that pq does not have where clause triples or filters, but
   // contains a single subquery child
   if (root._children.size() != 1 ||
-      !absl::holds_alternative<GraphPatternOperation::Subquery>(
+      !std::holds_alternative<GraphPatternOperation::Subquery>(
           root._children[0].variant_)) {
     return false;
   }
@@ -2828,7 +2828,7 @@ size_t QueryPlanner::findCheapestExecutionTree(
 // _____________________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     const SubtreePlan& ain, const SubtreePlan& bin,
-    absl::optional<TripleGraph> tg) const {
+    std::optional<TripleGraph> tg) const {
   const auto& a = !isInTestMode() || ain._qet->asString() < bin._qet->asString()
                       ? ain
                       : bin;

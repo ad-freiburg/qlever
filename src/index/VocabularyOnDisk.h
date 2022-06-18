@@ -4,8 +4,7 @@
 
 #pragma once
 
-#include <absl/types/optional.h>
-
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -71,8 +70,8 @@ class VocabularyOnDisk {
   void close() { _file.close(); }
 
   /// If an entry with this `idx` exists, return the corresponding string, else
-  /// `absl::nullopt`
-  absl::optional<string> operator[](uint64_t idx) const;
+  /// `std::nullopt`
+  std::optional<string> operator[](uint64_t idx) const;
 
   /// Get the number of words in the vocabulary.
   size_t size() const { return _size; }
@@ -170,15 +169,15 @@ class VocabularyOnDisk {
   // iterator return `{nullopt, highestID + 1}`.
   [[nodiscard]] WordAndIndex iteratorToWordAndIndex(const_iterator it) const {
     if (it == end()) {
-      return {absl::nullopt, getHighestId() + 1};
+      return {std::nullopt, getHighestId() + 1};
     } else {
       return *it;
     }
   }
 
   // Get the `OffsetAndSize` for the element with the `idx`. Return
-  // `absl::nullopt` if `idx` is not contained in the vocabulary.
-  absl::optional<OffsetAndSize> getOffsetAndSize(uint64_t idx) const;
+  // `std::nullopt` if `idx` is not contained in the vocabulary.
+  std::optional<OffsetAndSize> getOffsetAndSize(uint64_t idx) const;
 
   // Return the `OffsetSizeId` for the element with the i-th smallest ID.
   // Requires that i < size().

@@ -14,19 +14,19 @@ void ParallelFileBuffer::open(const string& filename) {
 }
 
 // ___________________________________________________________________________
-absl::optional<ParallelBuffer::BufferType> ParallelFileBuffer::getNextBlock() {
+std::optional<ParallelBuffer::BufferType> ParallelFileBuffer::getNextBlock() {
   if (_eof) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   AD_CHECK(_file.isOpen() && _fut.valid());
   auto numBytesRead = _fut.get();
   if (numBytesRead == 0) {
     _eof = true;
-    return absl::nullopt;
+    return std::nullopt;
   }
   _buf.resize(numBytesRead);
-  absl::optional<BufferType> ret = std::move(_buf);
+  std::optional<BufferType> ret = std::move(_buf);
 
   _buf.resize(_blocksize);
   auto getNextBlock = [&file = this->_file, bs = this->_blocksize,
@@ -39,7 +39,7 @@ absl::optional<ParallelBuffer::BufferType> ParallelFileBuffer::getNextBlock() {
 }
 
 // ____________________________________________________________________________
-absl::optional<size_t> ParallelBufferWithEndRegex::findRegexNearEnd(
+std::optional<size_t> ParallelBufferWithEndRegex::findRegexNearEnd(
     const BufferType& vec, const re2::RE2& regex) {
   size_t chunkSize = 1000;
   size_t inputSize = vec.size();
@@ -64,7 +64,7 @@ absl::optional<size_t> ParallelBufferWithEndRegex::findRegexNearEnd(
     chunkSize = std::min(chunkSize * 2, inputSize - 1);
   }
   if (!match) {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   // regexResult.data() is a pointer to the beginning of the match, vec.data()
@@ -73,13 +73,13 @@ absl::optional<size_t> ParallelBufferWithEndRegex::findRegexNearEnd(
 }
 
 // _____________________________________________________________________________
-absl::optional<ParallelBuffer::BufferType>
+std::optional<ParallelBuffer::BufferType>
 ParallelBufferWithEndRegex::getNextBlock() {
   auto rawInput = _rawBuffer.getNextBlock();
   if (!rawInput || _exhausted) {
     _exhausted = true;
     if (_remainder.empty()) {
-      return absl::nullopt;
+      return std::nullopt;
     }
     auto copy = std::move(_remainder);
     // The C++ standard does not require that _remainder is empty after the

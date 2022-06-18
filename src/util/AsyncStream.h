@@ -52,7 +52,7 @@ cppcoro::generator<typename Range::value_type> runStreamAsync(
     }
   }};
 
-  while (absl::optional<value_type> value = queue.pop()) {
+  while (std::optional<value_type> value = queue.pop()) {
     co_yield value.value();
   }
 }

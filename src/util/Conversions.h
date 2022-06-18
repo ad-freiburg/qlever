@@ -113,7 +113,7 @@ inline string convertNumericToIndexWord(const string& val);
 //! Convert a language tag like "@en" to the corresponding entity uri
 //! for the efficient language filter
 inline string convertLangtagToEntityUri(const string& tag);
-inline absl::optional<string> convertEntityUriToLangtag(const string& word);
+inline std::optional<string> convertEntityUriToLangtag(const string& word);
 inline std::string convertToLanguageTaggedPredicate(const string& pred,
                                                     const string& langtag);
 
@@ -675,12 +675,12 @@ string convertLangtagToEntityUri(const string& tag) {
 }
 
 // _________________________________________________________
-absl::optional<string> convertEntityUriToLangtag(const string& word) {
+std::optional<string> convertEntityUriToLangtag(const string& word) {
   static const string prefix = URI_PREFIX + "@";
   if (word.starts_with(prefix)) {
     return word.substr(prefix.size(), word.size() - prefix.size() - 1);
   } else {
-    return absl::nullopt;
+    return std::nullopt;
   }
 }
 // _________________________________________________________

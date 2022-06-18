@@ -4,9 +4,8 @@
 
 #include "Filter.h"
 
-#include <absl/types/optional.h>
-
 #include <algorithm>
+#include <optional>
 #include <regex>
 #include <sstream>
 
@@ -327,7 +326,7 @@ void Filter::computeFilterFixedValue(
       getEngine().filter(
           input,
           [this, lhs, &subRes](const auto& e) {
-            absl::optional<string> entity;
+            std::optional<string> entity;
             if (e[lhs].getDatatype() == Datatype::VocabIndex) {
               entity = getIndex().idToOptionalString(e[lhs]);
             } else if (e[lhs].getDatatype() == Datatype::LocalVocabIndex) {
@@ -375,11 +374,11 @@ void Filter::computeFilterFixedValue(
           }
         }
 
-        const absl::optional<ColumnIndex> sortedLhs =
-            [&prefixRanges, &subRes]() -> absl::optional<ColumnIndex> {
+        const std::optional<ColumnIndex> sortedLhs =
+            [&prefixRanges, &subRes]() -> std::optional<ColumnIndex> {
           if (prefixRanges.size() > 1 || subRes->_sortedBy.empty() ||
               !prefixRanges.contains(subRes->_sortedBy[0])) {
-            return absl::nullopt;
+            return std::nullopt;
           }
           return subRes->_sortedBy[0];
         }();
@@ -479,7 +478,7 @@ void Filter::computeFilterFixedValue(
       getEngine().filter(
           input,
           [self_regex, &lhs, &subRes, this](const auto& e) {
-            absl::optional<string> entity;
+            std::optional<string> entity;
             if (e[lhs].getDatatype() == Datatype::VocabIndex) {
               entity = getIndex().idToOptionalString(e[lhs]);
             } else if (e[lhs].getDatatype() == Datatype::LocalVocabIndex) {
@@ -516,7 +515,7 @@ void Filter::computeResultFixedValue(
   // Interpret the right hand side of the filters.
   size_t lhs = _subtree->getVariableColumn(_lhs);
   Id rhs;
-  absl::optional<Id> rhs_upper_for_range;
+  std::optional<Id> rhs_upper_for_range;
   switch (subRes->getResultType(lhs)) {
       // TODO<joka921> Eliminate the "ResultType" completely
     case ResultTable::ResultType::KB:

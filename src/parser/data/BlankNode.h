@@ -34,7 +34,7 @@ class BlankNode {
   [[nodiscard]] const std::string& label() const { return _label; }
 
   // ___________________________________________________________________________
-  [[nodiscard]] absl::optional<std::string> evaluate(
+  [[nodiscard]] std::optional<std::string> evaluate(
       const Context& context, [[maybe_unused]] ContextRole role) const {
     std::ostringstream stream;
     stream << "_:";

@@ -3,11 +3,10 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
-#include <absl/types/optional.h>
-
 #include <array>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <stxxl/sorter>
 #include <stxxl/stream>
@@ -199,10 +198,10 @@ class Index {
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
-  absl::optional<string> idToOptionalString(Id id) const {
+  std::optional<string> idToOptionalString(Id id) const {
     switch (id.getDatatype()) {
       case Datatype::Undefined:
-        return absl::nullopt;
+        return std::nullopt;
       case Datatype::Double:
         return std::to_string(id.getDouble());
       case Datatype::Int:
@@ -217,7 +216,7 @@ class Index {
       }
       case Datatype::LocalVocabIndex:
         // TODO:: this is why this shouldn't be here
-        return absl::nullopt;
+        return std::nullopt;
       case Datatype::TextRecordIndex:
         return getTextExcerpt(id.getTextRecordIndex());
     }
@@ -586,8 +585,8 @@ class Index {
   void passContextFileIntoVector(const string& contextFile, TextVec& vec);
 
   template <class MetaDataDispatcher, typename SortedTriples>
-  absl::optional<std::pair<typename MetaDataDispatcher::WriteType,
-                           typename MetaDataDispatcher::WriteType>>
+  std::optional<std::pair<typename MetaDataDispatcher::WriteType,
+                          typename MetaDataDispatcher::WriteType>>
   createPermutationPairImpl(const string& fileName1, const string& fileName2,
                             SortedTriples&& sortedTriples, size_t c0, size_t c1,
                             size_t c2, auto&&... perTripleCallbacks);
@@ -631,10 +630,10 @@ class Index {
   // returns the MetaData (MmapBased or HmapBased) for this relation.
   // Careful: only multiplicities for first column is valid after call, need to
   // call exchangeMultiplicities as done by createPermutationPair
-  // the optional is absl::nullopt if vec and thus the index is empty
+  // the optional is std::nullopt if vec and thus the index is empty
   template <class MetaDataDispatcher, class Comparator1, class Comparator2>
-  absl::optional<std::pair<typename MetaDataDispatcher::WriteType,
-                           typename MetaDataDispatcher::WriteType>>
+  std::optional<std::pair<typename MetaDataDispatcher::WriteType,
+                          typename MetaDataDispatcher::WriteType>>
   createPermutations(
       auto&& sortedTriples,
       const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&

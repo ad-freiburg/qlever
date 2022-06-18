@@ -6,11 +6,10 @@
 #ifndef QLEVER_SPARQLEXPRESSION_H
 #define QLEVER_SPARQLEXPRESSION_H
 
-#include <absl/types/optional.h>
-#include <absl/types/variant.h>
-
 #include <memory>
+#include <optional>
 #include <span>
+#include <variant>
 #include <vector>
 
 #include "../../global/Id.h"
@@ -79,17 +78,17 @@ class SparqlExpression {
 
   /// For the pattern trick we need to know, whether this expression
   /// is a non-distinct count of a single variable. In this case we return
-  /// the variable. Otherwise we return absl::nullopt.
-  virtual absl::optional<string> getVariableForNonDistinctCountOrNullopt()
+  /// the variable. Otherwise we return std::nullopt.
+  virtual std::optional<string> getVariableForNonDistinctCountOrNullopt()
       const {
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   /// Helper function for getVariableForNonDistinctCountOrNullopt() : If this
   /// expression is a single variable, return the name of this variable.
-  /// Otherwise, return absl::nullopt.
-  virtual absl::optional<string> getVariableOrNullopt() const {
-    return absl::nullopt;
+  /// Otherwise, return std::nullopt.
+  virtual std::optional<string> getVariableOrNullopt() const {
+    return std::nullopt;
   }
 
   // __________________________________________________________________________

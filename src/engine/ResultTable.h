@@ -3,11 +3,10 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
-#include <absl/types/optional.h>
-
 #include <array>
 #include <condition_variable>
 #include <mutex>
+#include <optional>
 #include <vector>
 
 #include "../global/Id.h"
@@ -65,11 +64,11 @@ class ResultTable {
 
   virtual ~ResultTable();
 
-  absl::optional<std::string> indexToOptionalString(LocalVocabIndex idx) const {
+  std::optional<std::string> indexToOptionalString(LocalVocabIndex idx) const {
     if (idx.get() < _localVocab->size()) {
       return (*_localVocab)[idx.get()];
     }
-    return absl::nullopt;
+    return std::nullopt;
   }
 
   size_t size() const;

@@ -9,8 +9,10 @@ version = v"0.0.1"
 # Collection of sources required to complete build
 sources = [
     #GitSource("https://github.com/jeremiahpslewis/QLever.git", "3f9dc9321ed72c79c9aa9aa384255ca1860f3935"),
-    DirectorySource(pwd())
+    DirectorySource(pwd()),
     #GitSource("https://github.com/joka921/QLever.git", "25501bf6dc8670c3635b74df1bd633bc09baff36")
+    ArchiveSource("https://github.com/phracker/MacOSX-SDKs/releases/download/10.15/MacOSX10.15.sdk.tar.xz",
+                      "2408d07df7f324d3beea818585a6d990ba99587c218a3969f924dfcc4de93b62"),
 ]
 
 println("Current working directory in julia is ", pwd())
@@ -22,6 +24,17 @@ println("Current working directory in julia is ", pwd())
 
 # Bash recipe for building across all platforms
 script = raw"""
+
+if [[ "${target}" == x86_64-apple-darwin* ]]; then
+    # Work around the error: 'value' is unavailable: introduced in macOS 10.14 issue
+    export MACOSX_DEPLOYMENT_TARGET=10.15
+    # ...and install a newer SDK which supports `std::filesystem`
+    pushd $WORKSPACE/srcdir/MacOSX10.*.sdk
+    rm -rf /opt/${target}/${target}/sys-root/System
+    cp -ra usr/* "/opt/${target}/${target}/sys-root/usr/."
+    cp -ra System "/opt/${target}/${target}/sys-root/."
+    popd
+fi
 
 cd $WORKSPACE/srcdir/ # TODO: revert to qlever
 #git submodule update --init --recursive

@@ -5,10 +5,9 @@
 #ifndef QLEVER_THREADSAFEQUEUE_H
 #define QLEVER_THREADSAFEQUEUE_H
 
-#include <absl/types/optional.h>
-
 #include <condition_variable>
 #include <mutex>
+#include <optional>
 #include <queue>
 
 namespace ad_utility::data_structures {
@@ -64,14 +63,14 @@ class ThreadSafeQueue {
   /// Blocks until another thread pushes an element via push() which is
   /// hen returned or signalLastElementWasPushed() is called resulting in an
   /// empty optional, whatever happens first
-  absl::optional<T> pop() {
+  std::optional<T> pop() {
     std::unique_lock lock{_mutex};
     _pushNotification.wait(
         lock, [&] { return !_queue.empty() || _lastElementPushed; });
     if (_lastElementPushed && _queue.empty()) {
       return {};
     }
-    absl::optional<T> value = std::move(_queue.front());
+    std::optional<T> value = std::move(_queue.front());
     _queue.pop();
     lock.unlock();
     _popNotification.notify_one();

@@ -39,5 +39,5 @@ ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
     }
   };
 
-  return absl::visit(evaluator, _child->evaluate(context));
+  return std::visit(evaluator, _child->evaluate(context));
 }

@@ -5,9 +5,9 @@
 // Type traits for template metaprogramming
 
 #pragma once
-#include <absl/types/variant.h>
 #include <tuple>
 #include <utility>
+#include <variant>
 #include <vector>
 
 namespace ad_utility {
@@ -28,11 +28,11 @@ struct IsInstantiationOf {
   struct Instantiation<Template<Ts...>> : std::true_type {};
 };
 
-// Given a templated type (e.g. absl::variant<A, B, C>), provide a type where the
+// Given a templated type (e.g. std::variant<A, B, C>), provide a type where the
 // inner types are "lifted" by a given outer type.
-// Example: LiftInnerTypes<absl::variant,
-// std::vector>::TypeToLift<absl::variant<A, B, C>>::LiftedType is
-// absl::variant<std::vector<A>, std::vector<B>, std::vector<C>>
+// Example: LiftInnerTypes<std::variant,
+// std::vector>::TypeToLift<std::variant<A, B, C>>::LiftedType is
+// std::variant<std::vector<A>, std::vector<B>, std::vector<C>>
 template <template <typename...> typename Template, template <typename> typename TypeLifter>
 struct LiftInnerTypes {
   template <typename>
@@ -44,13 +44,13 @@ struct LiftInnerTypes {
   };
 };
 
-// TupleToVariantImpl<std::tuple<A, B, ...>>::type = absl::variant<A, B, C>
+// TupleToVariantImpl<std::tuple<A, B, ...>>::type = std::variant<A, B, C>
 template <typename T>
 struct TupleToVariantImpl {};
 
 template <typename... Ts>
 struct TupleToVariantImpl<std::tuple<Ts...>> {
-  using type = absl::variant<Ts...>;
+  using type = std::variant<Ts...>;
 };
 
 // Implementation for Last
@@ -90,9 +90,9 @@ constexpr static bool isVector = isInstantiation<std::vector, T>;
 template <typename T>
 constexpr static bool isTuple = isInstantiation<std::tuple, T>;
 
-/// isVariant<T> is true if and only if T is an instantiation of absl::variant
+/// isVariant<T> is true if and only if T is an instantiation of std::variant
 template <typename T>
-constexpr static bool isVariant = isInstantiation<absl::variant, T>;
+constexpr static bool isVariant = isInstantiation<std::variant, T>;
 
 /// Two types are similar, if they are the same when we remove all cv (const or
 /// volatile) qualifiers and all references
@@ -113,7 +113,7 @@ template <typename T, typename... Ts>
 constexpr static bool isTypeContainedIn<T, std::tuple<Ts...>> = (... || isSimilar<T, Ts>);
 
 template <typename T, typename... Ts>
-constexpr static bool isTypeContainedIn<T, absl::variant<Ts...>> = (... || isSimilar<T, Ts>);
+constexpr static bool isTypeContainedIn<T, std::variant<Ts...>> = (... || isSimilar<T, Ts>);
 
 template <typename T, typename... Ts>
 constexpr static bool isTypeContainedIn<T, std::pair<Ts...>> = (... || isSimilar<T, Ts>);
@@ -129,14 +129,14 @@ template <typename Tuple, template <typename> typename TypeLifter>
 requires isTuple<Tuple> using LiftedTuple =
     typename detail::LiftInnerTypes<std::tuple, TypeLifter>::template TypeToLift<Tuple>::LiftedType;
 
-/// From the type Variant (absl::variant<A, B, C....>) creates the type
-/// absl::variant<TypeLifter<A>, TypeLifter<B>,...>
+/// From the type Variant (std::variant<A, B, C....>) creates the type
+/// std::variant<TypeLifter<A>, TypeLifter<B>,...>
 template <typename Variant, template <typename> typename TypeLifter>
 requires isVariant<Variant> using LiftedVariant =
-    typename detail::LiftInnerTypes<absl::variant,
+    typename detail::LiftInnerTypes<std::variant,
                                     TypeLifter>::template TypeToLift<Variant>::LiftedType;
 
-/// From the type std::tuple<A, B, ...> makes the type absl::variant<A, B, ...>
+/// From the type std::tuple<A, B, ...> makes the type std::variant<A, B, ...>
 template <typename Tuple>
 requires isTuple<Tuple> using TupleToVariant = typename detail::TupleToVariantImpl<Tuple>::type;
 
@@ -147,15 +147,15 @@ template <typename... Tuples>
 requires(...&& isTuple<Tuples>) using TupleCat =
     decltype(std::tuple_cat(std::declval<Tuples&>()...));
 
-/// A generalized version of absl::visit that also supports non-variant parameters.
-/// Each `parameterOrVariant` of type T that is not a absl::variant is converted to a
-/// `absl::variant<T>`. Each `parameterOrVariant` that is a absl::variant is left as-is. Then
-/// absl::visit is called on the passed `Function` and the transformed parameters (which now are all
+/// A generalized version of std::visit that also supports non-variant parameters.
+/// Each `parameterOrVariant` of type T that is not a std::variant is converted to a
+/// `std::variant<T>`. Each `parameterOrVariant` that is a std::variant is left as-is. Then
+/// std::visit is called on the passed `Function` and the transformed parameters (which now are all
 /// variants). This has the effect that `Function` is called on the values contained in the passed
 /// variants and additionally with the non-variant parameters. Note that this currently only
-/// supports variant types that are direct instantiations of `absl::variant`. If you want a
-/// different behavior, etc. also visit types that inherit from absl::variant, or treat a parameter
-/// that is a absl::variant as an "ordinary" parameter to the `Function`, you cannot use this
+/// supports variant types that are direct instantiations of `std::variant`. If you want a
+/// different behavior, etc. also visit types that inherit from std::variant, or treat a parameter
+/// that is a std::variant as an "ordinary" parameter to the `Function`, you cannot use this
 /// function.
 inline auto visitWithVariantsAndParameters =
     []<typename Function, typename... ParametersOrVariants>(
@@ -164,10 +164,10 @@ inline auto visitWithVariantsAndParameters =
     if constexpr (isVariant<T>) {
       return std::forward<T>(t);
     } else {
-      return absl::variant<std::decay_t<T>>{std::forward<T>(t)};
+      return std::variant<std::decay_t<T>>{std::forward<T>(t)};
     }
   };
-  return absl::visit(f, liftToVariant(std::forward<ParametersOrVariants>(parametersOrVariants))...);
+  return std::visit(f, liftToVariant(std::forward<ParametersOrVariants>(parametersOrVariants))...);
 };
 
 /// Apply `Function f` to each element of tuple. Returns a tuple of the results.

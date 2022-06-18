@@ -4,10 +4,10 @@
 //
 
 #pragma once
-#include <absl/types/optional.h>
 #include <re2/re2.h>
 
 #include <future>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -44,9 +44,9 @@ class ParallelBuffer {
    *
    * Only valid after a call to open().
    *
-   * @return The next bytes or absl::nullopt to signal EOF.
+   * @return The next bytes or std::nullopt to signal EOF.
    */
-  virtual absl::optional<BufferType> getNextBlock() = 0;
+  virtual std::optional<BufferType> getNextBlock() = 0;
 
   const size_t& blocksize() const { return _blocksize; }
 
@@ -71,7 +71,7 @@ class ParallelFileBuffer : public ParallelBuffer {
   virtual void open(const string& filename) override;
 
   // _____________________________________________________
-  virtual absl::optional<BufferType> getNextBlock() override;
+  virtual std::optional<BufferType> getNextBlock() override;
 
  private:
   ad_utility::File _file;
@@ -89,7 +89,7 @@ class ParallelBufferWithEndRegex : public ParallelBuffer {
       : ParallelBuffer{blocksize}, _endRegex{endRegex} {}
 
   // __________________________________________________________________________
-  absl::optional<BufferType> getNextBlock() override;
+  std::optional<BufferType> getNextBlock() override;
 
   // Open the file from which the blocks are read.
   void open(const string& filename) override { _rawBuffer.open(filename); }
@@ -98,9 +98,9 @@ class ParallelBufferWithEndRegex : public ParallelBuffer {
   // Find `regex` near the end of `vec` by searching in blocks of 1000, 2000,
   // 4000... bytes. We have to do this, because "reverse" regex matching is not
   // trivial. Returns the st Returns the number of bytes in `vec` until the end
-  // of the regex match, or absl::nullopt if the regex was not found at all.
-  static absl::optional<size_t> findRegexNearEnd(const BufferType& vec,
-                                                 const re2::RE2& regex);
+  // of the regex match, or std::nullopt if the regex was not found at all.
+  static std::optional<size_t> findRegexNearEnd(const BufferType& vec,
+                                                const re2::RE2& regex);
   ParallelFileBuffer _rawBuffer{_blocksize};
   BufferType _remainder;
   re2::RE2 _endRegex;

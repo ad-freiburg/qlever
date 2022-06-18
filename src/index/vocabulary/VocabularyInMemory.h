@@ -4,8 +4,7 @@
 
 #pragma once
 
-#include <absl/types/optional.h>
-
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -72,8 +71,8 @@ class VocabularyInMemory {
         std::lower_bound(_words.begin(), _words.end(), word, comparator) -
         _words.begin();
     result._word = result._index < _words.size()
-                       ? absl::optional<std::string>{_words[result._index]}
-                       : absl::nullopt;
+                       ? std::optional<std::string>{_words[result._index]}
+                       : std::nullopt;
     return result;
   }
 
@@ -89,8 +88,8 @@ class VocabularyInMemory {
         std::upper_bound(_words.begin(), _words.end(), word, comparator) -
         _words.begin();
     result._word = result._index < _words.size()
-                       ? absl::optional<std::string>{_words[result._index]}
-                       : absl::nullopt;
+                       ? std::optional<std::string>{_words[result._index]}
+                       : std::nullopt;
     return result;
   }
 

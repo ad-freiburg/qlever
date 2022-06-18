@@ -4,9 +4,8 @@
 
 #include "./SparqlParser.h"
 
-#include <absl/types/variant.h>
-
 #include <unordered_set>
+#include <variant>
 
 #include "../util/Algorithm.h"
 #include "../util/OverloadCallOperator.h"
@@ -99,7 +98,7 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
       auto& constructClause = query->constructClause();
       for (const auto& triple : constructClause) {
         for (const auto& varOrTerm : triple) {
-          if (auto variable = absl::get_if<Variable>(&varOrTerm)) {
+          if (auto variable = std::get_if<Variable>(&varOrTerm)) {
             const auto& var = variable->name();
             if (std::find(query->_groupByVariables.begin(),
                           query->_groupByVariables.end(),
@@ -548,9 +547,9 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
       };
 
       for (auto& orderKey : order_keys) {
-        absl::visit(ad_utility::OverloadCallOperator{processVariableOrderKey,
-                                                     processExpressionOrderKey},
-                    std::move(orderKey));
+        std::visit(ad_utility::OverloadCallOperator{processVariableOrderKey,
+                                                    processExpressionOrderKey},
+                   std::move(orderKey));
       }
     } else if (lexer_.peek("limit") || lexer_.peek("textlimit") ||
                lexer_.peek("offset")) {

@@ -217,7 +217,7 @@ using AllTypesAsTuple =
     ad_utility::TupleCat<ConstantTypes, ConstantTypesAsVector, OtherTypes>;
 }  // namespace detail
 
-/// An Expression result is a absl::variant of all the different types from
+/// An Expression result is a std::variant of all the different types from
 /// the expressionResultDetail namespace (see above).
 using ExpressionResult = ad_utility::TupleToVariant<detail::AllTypesAsTuple>;
 
@@ -310,13 +310,13 @@ struct SpecializedFunction {
     return CheckT{}.template operator()<Operands...>();
   }
 
-  // Evaluate the function on the `operands`. Return absl::nullopt if the
+  // Evaluate the function on the `operands`. Return std::nullopt if the
   // function cannot be evaluated on the `operands`
   template <typename... Operands>
-  absl::optional<ExpressionResult> evaluateIfOperandsAreValid(
+  std::optional<ExpressionResult> evaluateIfOperandsAreValid(
       Operands&&... operands) {
     if constexpr (!checkIfOperandsAreValid<Operands...>()) {
-      return absl::nullopt;
+      return std::nullopt;
     } else {
       return Function{}(std::forward<Operands>(operands)...);
     }
@@ -336,11 +336,11 @@ constexpr bool isAnySpecializedFunctionPossible(SpecializedFunctionsTuple&& tup,
 }
 
 /// Evaluate the SpecializedFunction, that matches the input. If no such
-/// function exists, return `absl::nullopt`.
+/// function exists, return `std::nullopt`.
 template <typename SpecializedFunctionsTuple, typename... Operands>
-absl::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
+std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
     SpecializedFunctionsTuple&& tup, Operands&&... operands) {
-  absl::optional<ExpressionResult> result = absl::nullopt;
+  std::optional<ExpressionResult> result = std::nullopt;
 
   auto writeToResult = [&](auto f) {
     if (!result) {

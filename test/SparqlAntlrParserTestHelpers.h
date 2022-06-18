@@ -71,7 +71,7 @@ std::ostream& operator<<(std::ostream& out,
 
 // _____________________________________________________________________________
 
-// Recursively unwrap a absl::variant object, or return a pointer
+// Recursively unwrap a std::variant object, or return a pointer
 // to the argument directly if it is already unwrapped.
 
 template <typename Current, typename... Others>

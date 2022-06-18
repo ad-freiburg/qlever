@@ -6,12 +6,11 @@
 
 #pragma once
 
-#include <absl/types/optional.h>
-
 #include <algorithm>
 #include <cassert>
 #include <fstream>
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -126,13 +125,13 @@ class Vocabulary {
   //! word is not in the vocabulary.
   //! Only enabled when uncompressed which also means no externalization
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  const absl::optional<std::string_view> operator[](VocabIndex idx) const;
+  const std::optional<std::string_view> operator[](VocabIndex idx) const;
 
   //! Get the word with the given idx or an empty optional if the
   //! word is not in the vocabulary. Returns an lvalue because compressed or
   //! externalized words don't allow references
   template <typename U = StringType, typename = enable_if_compressed<U>>
-  [[nodiscard]] const absl::optional<string> indexToOptionalString(
+  [[nodiscard]] const std::optional<string> indexToOptionalString(
       VocabIndex idx) const;
 
   //! Get the word with the given idx.

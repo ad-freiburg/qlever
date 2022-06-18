@@ -10,7 +10,7 @@
 #ifndef QLEVER_PATTERNCREATOR_H
 #define QLEVER_PATTERNCREATOR_H
 
-#include <absl/types/optional.h>
+#include <optional>
 
 #include "../global/Constants.h"
 #include "../global/Id.h"
@@ -80,7 +80,7 @@ class PatternCreator {
   // Between the calls to `processTriple` we have to remember the current
   // subject (the subject of the last triple for which `processTriple` was
   // called).
-  absl::optional<VocabIndex> _currentSubjectIndex;
+  std::optional<VocabIndex> _currentSubjectIndex;
   // The pattern of `_currentSubjectIndex`. This might still be incomplete,
   // because more triples with the same subject might be pushed.
   Pattern _currentPattern;

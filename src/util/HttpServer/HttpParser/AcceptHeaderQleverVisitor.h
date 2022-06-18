@@ -7,7 +7,7 @@
 
 // Generated from AcceptHeader.g4 by ANTLR 4.9.2
 
-#include <absl/types/optional.h>
+#include <optional>
 
 #include "../../Exception.h"
 #include "../MediaTypes.h"
@@ -63,7 +63,7 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
     for (const auto& child : ctx->rangeAndParams()) {
       auto mediaType =
           child->accept(this)
-              .as<absl::optional<ad_utility::MediaTypeWithQuality>>();
+              .as<std::optional<ad_utility::MediaTypeWithQuality>>();
       if (mediaType.has_value()) {
         acceptedMediaTypes.push_back(mediaType.value());
       }
@@ -80,12 +80,12 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
 
   antlrcpp::Any visitRangeAndParams(
       AcceptHeaderParser::RangeAndParamsContext* ctx) override {
-    absl::optional<ad_utility::MediaTypeWithQuality> result = absl::nullopt;
+    std::optional<ad_utility::MediaTypeWithQuality> result = std::nullopt;
     float quality = 1.0;
     if (ctx->acceptParams()) {
       quality = ctx->acceptParams()->accept(this).as<float>();
     }
-    using V = absl::optional<ad_utility::MediaTypeWithQuality::Variant>;
+    using V = std::optional<ad_utility::MediaTypeWithQuality::Variant>;
     auto mediaRange = ctx->mediaRange()->accept(this).as<V>();
     if (mediaRange.has_value()) {
       result.emplace(ad_utility::MediaTypeWithQuality{
@@ -96,7 +96,7 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
 
   antlrcpp::Any visitMediaRange(
       AcceptHeaderParser::MediaRangeContext* ctx) override {
-    using V = absl::optional<ad_utility::MediaTypeWithQuality::Variant>;
+    using V = std::optional<ad_utility::MediaTypeWithQuality::Variant>;
     if (!ctx->subtype()) {
       if (!ctx->type()) {
         return V{ad_utility::MediaTypeWithQuality::Wildcard{}};
