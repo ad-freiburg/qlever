@@ -113,6 +113,17 @@ Awaitable<void> Server::process(
     }
   }
 
+  // Set index name (which should be better called "description") and return
+  // stats (which contain the new name). TODO: Restrict this access by a token.
+  if (params.contains("index-description")) {
+    const auto& description = params.at("index-description");
+    LOG(INFO) << "Setting index description to: \"" << description << "\""
+              << std::endl;
+    _index.setKbName(description);
+    auto response = createJsonResponse(composeStatsJson(), request);
+    co_return co_await sendWithCors(std::move(response));
+  }
+
   // TODO<joka921> Restrict this access by a token.
   // TODO<joka921> Warn about unknown parameters
   bool anyParamWasChanged = false;
