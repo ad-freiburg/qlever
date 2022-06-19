@@ -160,8 +160,7 @@ void Index::buildDocsDB(const string& docsFileName) {
 
 // _____________________________________________________________________________
 void Index::addTextFromOnDiskIndex() {
-  // Read text vocabulary. TODO: Is this in RAM? I think yes. If so, it's worth
-  // mentioning in this comment here.
+  // Read the text vocabulary (into RAM).
   _textVocab.readFromFile(_onDiskBase + ".text.vocabulary");
 
   // Initialize the text index.
