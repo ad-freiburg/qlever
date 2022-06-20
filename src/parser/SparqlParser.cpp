@@ -555,11 +555,43 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
                lexer_.peek("offset")) {
       query->_limitOffset =
           parseWithAntlr(sparqlParserHelpers::parseLimitOffsetClause, *query);
-    } else if (lexer_.accept(SparqlToken::Type::GROUP_BY)) {
-      lexer_.expect(SparqlToken::Type::VARIABLE);
-      query->_groupByVariables.emplace_back(lexer_.current().raw);
-      while (lexer_.accept(SparqlToken::Type::VARIABLE)) {
-        query->_groupByVariables.emplace_back(lexer_.current().raw);
+    } else if (lexer_.peek(SparqlToken::Type::GROUP_BY)) {
+      auto group_keys =
+          parseWithAntlr(sparqlParserHelpers::parseGroupClause, *query);
+
+      auto processVariableGroupKey = [&query](VariableGroupKey groupKey) {
+        query->_groupByVariables.push_back(std::move(groupKey.variable_));
+      };
+      auto processExpressionGroupKey = [&query,
+                                        this](ExpressionGroupKey groupKey) {
+        std::string helperBindTargetVar =
+            SOLUTION_MODIFIER_HELPER_BIND_PREFIX +
+            std::to_string(numAdditionalVariables_);
+        numAdditionalVariables_++;
+        GraphPatternOperation::Bind helperBind{std::move(groupKey.expression_),
+                                               helperBindTargetVar};
+        query->_rootGraphPattern._children.emplace_back(std::move(helperBind));
+        //        query->_groupByVariables.push_back
+        //            (GroupKey{VariableGroupKey{helperBindTargetVar}});
+        query->_groupByVariables.push_back(helperBindTargetVar);
+      };
+      auto processExpressionAliasGroupKey =
+          [&query](ExpressionAliasGroupKey groupKey) {
+            GraphPatternOperation::Bind helperBind{
+                std::move(groupKey.expression_), groupKey.variable_};
+            query->_rootGraphPattern._children.emplace_back(
+                std::move(helperBind));
+            // TODO<qup42> correct?
+            query->registerVariableVisibleInQueryBody(groupKey.variable_);
+            query->_groupByVariables.push_back(groupKey.variable_);
+          };
+
+      for (auto& orderKey : group_keys) {
+        std::visit(
+            ad_utility::OverloadCallOperator{processVariableGroupKey,
+                                             processExpressionGroupKey,
+                                             processExpressionAliasGroupKey},
+            std::move(orderKey));
       }
     } else if (lexer_.accept("having")) {
       parseFilter(&query->_havingClauses, true, &query->_rootGraphPattern);

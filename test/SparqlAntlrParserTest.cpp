@@ -811,3 +811,31 @@ TEST(SparqlParser, OrderClause) {
     EXPECT_THAT(orderKeys[1], IsExpressionOrderKey("?foo-5", true));
   }
 }
+
+TEST(SparqlParser, GroupCondition) {
+  auto parseGroupCondition = [](const std::string& input) {
+    ParserAndVisitor p{input};
+    return p.parse<GroupKey>(input, "group condition",
+                             &SparqlAutomaticParser::groupCondition);
+  };
+  auto expectParseVariable = [&parseGroupCondition](const string& input,
+                                                    const string& variable) {
+    expectCompleteParse(parseGroupCondition(input),
+                        IsVariableGroupKey(variable));
+  };
+  auto expectParseExpression =
+      [&parseGroupCondition](const string& input, const string& expression) {
+        expectCompleteParse(parseGroupCondition(input),
+                            IsExpressionGroupKey(expression));
+      };
+  auto expectParseExpressionAlias =
+      [&parseGroupCondition](const string& input, const string& expression,
+                             const string& variable) {
+        expectCompleteParse(parseGroupCondition(input),
+                            IsExpressionAliasGroupKey(expression, variable));
+      };
+  // TODO<qup42> extend tests
+  expectParseVariable("?test", "?test");
+  expectParseExpression("(?test)", "?test");
+  expectParseExpressionAlias("(?test AS ?mehr)", "?test", "?mehr");
+}

@@ -169,3 +169,28 @@ MATCHER_P2(IsExpressionOrderKey, expr, desc, "") {
   }
   return false;
 }
+
+MATCHER_P(IsVariableGroupKey, key, "") {
+  if (const auto variableGroupKey =
+          unwrapVariant<GroupKey, VariableGroupKey>(arg)) {
+    return (variableGroupKey->variable_ == key);
+  }
+  return false;
+}
+
+MATCHER_P(IsExpressionGroupKey, expr, "") {
+  if (const auto expressionGroupKey =
+          unwrapVariant<GroupKey, ExpressionGroupKey>(arg)) {
+    return (expressionGroupKey->expression_.getDescriptor() == expr);
+  }
+  return false;
+}
+
+MATCHER_P2(IsExpressionAliasGroupKey, expr, variable, "") {
+  if (const auto expressionAliasGroupKey =
+          unwrapVariant<GroupKey, ExpressionAliasGroupKey>(arg)) {
+    return (expressionAliasGroupKey->expression_.getDescriptor() == expr) &&
+           (expressionAliasGroupKey->variable_ == variable);
+  }
+  return false;
+}
