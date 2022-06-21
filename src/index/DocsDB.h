@@ -21,5 +21,5 @@ class DocsDB {
 
   mutable ad_utility::File _dbFile;
   off_t _startOfOffsets;
-  size_t _size;
+  size_t _size = 0;
 };

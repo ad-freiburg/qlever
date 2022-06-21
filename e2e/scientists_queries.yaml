@@ -239,7 +239,7 @@ queries:
       GROUP BY ?r
       ORDER BY DESC(?count)
     checks:
-      - num_rows: 156
+      - num_rows: 157
       - num_cols: 2
       - selected: ["?r", "?count"]
       - contains_row: ["<Religion>", 1185]
@@ -260,7 +260,7 @@ queries:
       GROUP BY ?r
       ORDER BY DESC(?count)
     checks:
-      - num_rows: 156
+      - num_rows: 157
       - num_cols: 2
       - selected: ["?r", "?count"]
       - contains_row: ["<Religion>", 1185]
@@ -288,7 +288,7 @@ queries:
         ?entity ql:has-predicate ?r.
       }
     checks:
-      - num_rows: 760
+      - num_rows: 761
       - num_cols: 2
       - selected: ["?entity", "?r"]
       - contains_row: ["<Geographer>", "<Profession>"]
@@ -703,11 +703,12 @@ queries:
       }
       GROUP BY ?p
     checks:
-      - num_rows: 108 
+      - num_rows: 109 
       - num_cols: 2
       - selected: ["?p", "?count"]
       - contains_row: ["<Film_appeared_in>", 56] 
       - contains_row: ["<Patent>", 2]
+      - contains_row: ["<label>", 134]
 
 
   - query : count-available-predicates-on-single-entity
@@ -718,11 +719,12 @@ queries:
       }
       GROUP BY ?p
     checks:
-      - num_rows: 35 
+      - num_rows: 36 
       - num_cols: 2
       - selected: ["?p", "?count"]
       - contains_row: ["<Hall_of_fame_induction>", 1] 
       - contains_row: ["<Weight>", 1]
+      - contains_row: ["<label>", 1]
 
 
   - query : property_path_trans_and_or
@@ -1113,3 +1115,23 @@ queries:
       - contains_row: ["<Aban_Marker_Kabraji>","<Religion>"]
       - contains_row: ["<Abd_al-Rahman_al-Sufi>","<Religion>"]
       - contains_row: ["<Aaldert_Wapstra>","<Place_of_birth>"]
+
+
+  - query: scientists-with-curie-in-their-name
+    type: text
+    sparql: |
+      SELECT ?scientist ?label WHERE {
+        ?scientist <is-a> <Scientist> .
+        ?scientist <label> ?label .
+        ?text ql:contains-entity ?label .
+        ?text ql:contains-word "curie"
+      }
+    checks:
+      - num_cols: 2
+      - num_rows: 5
+      - selected: ["?scientist", "?label"]
+      - contains_row: ["<Frédéric_Joliot-Curie>", "Frédéric_Joliot-Curie"]
+      - contains_row: ["<Irène_Joliot-Curie>", "Irène_Joliot-Curie"]
+      - contains_row: ["<Jacques_Curie>", "Jacques_Curie"]
+      - contains_row: ["<Marie_Curie>", "Marie_Curie"]
+      - contains_row: ["<Pierre_Curie>", "Pierre_Curie"]
