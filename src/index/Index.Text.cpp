@@ -6,6 +6,7 @@
 
 #include <absl/strings/str_split.h>
 
+#include <algorithm>
 #include <stxxl/algorithm>
 #include <tuple>
 #include <utility>
@@ -17,6 +18,22 @@
 #include "./FTSAlgorithms.h"
 #include "./Index.h"
 
+namespace {
+
+// Custom delimiter class for tokenization of literals using `absl::StrSplit`.
+// The `Find` function returns the next delimiter in `text` after the given
+// `pos` or an empty subtring if there is no next delimiter.
+struct LiteralsTokenizationDelimiter {
+  absl::string_view Find(absl::string_view text, size_t pos) {
+    auto isWordChar = [](char c) -> bool { return std::isalnum(c); };
+    auto found = std::find_if_not(text.begin() + pos, text.end(), isWordChar);
+    if (found == text.end()) return text.substr(text.size());
+    return {found, found + 1};
+  }
+};
+
+}  // namespace
+
 // _____________________________________________________________________________
 cppcoro::generator<ContextFileParser::Line> Index::wordsInTextRecords(
     const std::string& contextFile, bool addWordsFromLiterals) {
@@ -24,7 +41,7 @@ cppcoro::generator<ContextFileParser::Line> Index::wordsInTextRecords(
   // ROUND 1: If context file aka wordsfile is not empty, read words from there.
   // Remember the last context id for the (optional) second round.
   TextRecordIndex contextId = TextRecordIndex::make(0);
-  if (contextFile.size() > 0) {
+  if (!contextFile.empty()) {
     ContextFileParser::Line line;
     ContextFileParser p(contextFile, localeManager);
     ad_utility::HashSet<string> items;
@@ -36,31 +53,27 @@ cppcoro::generator<ContextFileParser::Line> Index::wordsInTextRecords(
       contextId = contextId.incremented();
     }
   }
-  // ROUND 2: Optionally, consider each literal as a text record.
+  // ROUND 2: Optionally, consider each literal from the interal vocabulary as a
+  // text record.
   if (addWordsFromLiterals) {
-    auto isWordChar = [](char c) -> bool { return std::isalnum(c); };
     for (VocabIndex index = VocabIndex::make(0); index.get() < _vocab.size();
          index = index.incremented()) {
       auto text = _vocab.at(index);
-      if (isLiteral(text)) {
-        ContextFileParser::Line entityLine{text, true, contextId, 1};
-        co_yield entityLine;
-        size_t pos = 0;
-        size_t posEnd = text.rfind('"');
-        if (posEnd == std::string::npos) posEnd = text.size();
-        while (pos < posEnd) {
-          while (pos < posEnd && !isWordChar(text[pos])) ++pos;
-          size_t posWordBegin = pos;
-          while (pos < posEnd && isWordChar(text[pos])) ++pos;
-          if (pos > posWordBegin) {
-            auto word = localeManager.getLowercaseUtf8(
-                text.substr(posWordBegin, pos - posWordBegin));
-            ContextFileParser::Line wordLine{word, false, contextId, 1};
-            co_yield wordLine;
-          }
-        }
-        contextId = contextId.incremented();
+      if (!isLiteral(text)) {
+        continue;
       }
+      ContextFileParser::Line entityLine{text, true, contextId, 1};
+      co_yield entityLine;
+      std::string_view textView = text;
+      textView = textView.substr(0, textView.rfind('"'));
+      textView.remove_prefix(1);
+      for (auto word : absl::StrSplit(textView, LiteralsTokenizationDelimiter{},
+                                      absl::SkipEmpty{})) {
+        auto wordNormalized = localeManager.getLowercaseUtf8(word);
+        ContextFileParser::Line wordLine{wordNormalized, false, contextId, 1};
+        co_yield wordLine;
+      }
+      contextId = contextId.incremented();
     }
   }
 }
@@ -73,15 +86,11 @@ void Index::addTextFromContextFile(const string& contextFile,
   string indexFilename = _onDiskBase + ".text.index";
   // Either read words from given file or consider each literal as text record
   // or both (but at least one of them, otherwise this function is not called).
-  //
-  // TODO: The generator `contextFileLines` above can actually both read from a
-  // file and then also consider the RDF vocabulary, we just need to add a
-  // proper command-line option to enable this. In the meantime, it's either-or.
-  if (contextFile.size() > 0) {
+  if (!contextFile.empty()) {
     LOG(INFO) << "Reading words from \"" << contextFile << "\"" << std::endl;
   }
   if (addWordsFromLiterals) {
-    LOG(INFO) << (contextFile.size() > 0 ? "Additionally c" : "C")
+    LOG(INFO) << (contextFile.empty() ? "C" : "Additionally c")
               << "onsidering each literal as a text record" << std::endl;
   }
   // We have deleted the vocabulary during the index creation to save RAM, so

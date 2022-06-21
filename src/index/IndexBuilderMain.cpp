@@ -127,7 +127,8 @@ void printUsage(char* execName) {
        << "words-file to build text index from" << endl;
   cerr << "  " << std::setw(20) << "W, words-from-literals" << std::setw(1)
        << "  "
-       << "consider all literals as text records" << endl;
+       << "consider all literals from the internal vocabulary as text records"
+       << endl;
   cerr << "  " << std::setw(20) << "A, add-text-index" << std::setw(1) << "    "
        << "Add text index to already existing kb-index" << endl;
   cerr
