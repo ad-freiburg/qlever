@@ -258,6 +258,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
         return GroupKey{ExpressionGroupKey{std::move(expr)}};
       }
     }
+    AD_FAIL();  // Should be unreachable.
   }
 
   antlrcpp::Any visitHavingClause(
