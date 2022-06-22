@@ -396,12 +396,22 @@ void HasPredicateScan::computeSubqueryS(
   *dynResult = result.moveToDynamic();
 }
 
-void HasPredicateScan::setSubject(const std::string& subject) {
-  _subject = subject;
+void HasPredicateScan::setSubject(const TripleComponent& subject) {
+  if (!subject.isString()) {
+    throw ParseException{absl::StrCat(
+        "The object of a ql:has-predicate triple must be an IRI, but was \"",
+        subject.toString(), "\"")};
+  }
+  _subject = subject.getString();
 }
 
-void HasPredicateScan::setObject(const std::string& object) {
-  _object = object;
+void HasPredicateScan::setObject(const TripleComponent& object) {
+  if (!object.isString()) {
+    throw ParseException{absl::StrCat(
+        "The object of a ql:has-predicate triple must be an IRI, but was \"",
+        object.toString(), "\"")};
+  }
+  _object = object.getString();
 }
 
 const std::string& HasPredicateScan::getObject() const { return _object; }

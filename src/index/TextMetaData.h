@@ -64,7 +64,7 @@ class TextBlockMetaData {
   static constexpr size_t sizeOnDisk() {
     return 2 * sizeof(Id) + 2 * ContextListMetaData::sizeOnDisk();
   }
-  friend std::true_type allowTrivialSerialization(TextBlockMetaData);
+  friend std::true_type allowTrivialSerialization(TextBlockMetaData, auto);
 };
 
 ad_utility::File& operator<<(ad_utility::File& f, const TextBlockMetaData& md);

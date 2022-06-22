@@ -326,21 +326,30 @@ void ParsedQuery::expandPrefixes() {
           static_assert(
               std::is_same_v<T, GraphPatternOperation::BasicGraphPattern>);
           for (auto& trip : arg._whereClauseTriples) {
-            expandPrefix(trip._s, prefixMap);
+            if (trip._s.isString()) {
+              expandPrefix(trip._s.getString(), prefixMap);
+            }
             expandPrefix(trip._p, prefixMap);
             if (trip._p._operation == PropertyPath::Operation::IRI &&
                 trip._p._iri.find("in-context") != string::npos) {
-              std::vector<std::string> tokens = absl::StrSplit(trip._o, ' ');
-              trip._o = "";
-              for (size_t i = 0; i < tokens.size(); ++i) {
-                expandPrefix(tokens[i], prefixMap);
-                trip._o += tokens[i];
-                if (i + 1 < tokens.size()) {
-                  trip._o += " ";
+              if (trip._o.isString()) {
+                std::string& str = trip._o.getString();
+                std::vector<std::string> tokens = absl::StrSplit(str, ' ');
+                str = "";
+                for (size_t i = 0; i < tokens.size(); ++i) {
+                  expandPrefix(tokens[i], prefixMap);
+                  str += tokens[i];
+                  if (i + 1 < tokens.size()) {
+                    str += " ";
+                  }
                 }
+                trip._o = str;
               }
             } else {
-              expandPrefix(trip._o, prefixMap);
+              if (trip._o.isString()) {
+                std::string& str = trip._o.getString();
+                expandPrefix(str, prefixMap);
+              }
             }
           }
         }
@@ -385,7 +394,7 @@ void ParsedQuery::expandPrefix(
       item = item.substr(secondPos + 1);
     }
 
-    size_t i = item.find(':');
+    size_t i = item.rfind(':');
     size_t from = item.find("^^");
     if (from == string::npos) {
       from = 0;

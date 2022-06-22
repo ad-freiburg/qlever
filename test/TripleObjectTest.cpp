@@ -5,14 +5,14 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/parser/TripleObject.h"
+#include "../src/parser/TripleComponent.h"
 
 using namespace std::literals;
 
 TEST(TripleObject, SetAndGetString) {
   const char* s = "someString\"%%\\";
   auto testString = [](auto input) {
-    TripleObject t{input};
+    TripleComponent t{input};
     ASSERT_TRUE(t.isString());
     ASSERT_FALSE(t.isDouble());
     ASSERT_FALSE(t.isInt());
@@ -26,7 +26,7 @@ TEST(TripleObject, SetAndGetString) {
 
 TEST(TripleObject, SetAndGetDouble) {
   double value = 83.12;
-  TripleObject object{value};
+  TripleComponent object{value};
   ASSERT_FALSE(object.isString());
   ASSERT_TRUE(object.isDouble());
   ASSERT_FALSE(object.isInt());
@@ -36,7 +36,7 @@ TEST(TripleObject, SetAndGetDouble) {
 
 TEST(TripleObject, SetAndGetInt) {
   int value = -42;
-  TripleObject object{value};
+  TripleComponent object{value};
   ASSERT_FALSE(object.isString());
   ASSERT_FALSE(object.isDouble());
   ASSERT_TRUE(object.isInt());
@@ -45,7 +45,7 @@ TEST(TripleObject, SetAndGetInt) {
 }
 
 TEST(TripleObject, AssignmentOperator) {
-  TripleObject object;
+  TripleComponent object;
   object = -12.435;
   ASSERT_TRUE(object.isDouble());
   ASSERT_EQ(object, -12.435);
@@ -67,10 +67,10 @@ TEST(TripleObject, ToRdfLiteral) {
   std::vector<std::string> strings{"plainString", "<IRI>",
                                    R"("aTypedLiteral"^^xsd::integer)"};
   for (const auto& s : strings) {
-    ASSERT_EQ(s, TripleObject{s}.toRdfLiteral());
+    ASSERT_EQ(s, TripleComponent{s}.toRdfLiteral());
   }
 
-  TripleObject object{42};
+  TripleComponent object{42};
   ASSERT_EQ(object.toRdfLiteral(),
             R"("42"^^<http://www.w3.org/2001/XMLSchema#integer>)");
 

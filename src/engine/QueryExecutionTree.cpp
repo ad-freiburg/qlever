@@ -63,9 +63,15 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
 }
 
 // _____________________________________________________________________________
-void QueryExecutionTree::setVariableColumn(const string& variable,
+void QueryExecutionTree::setVariableColumn(string variable, size_t column) {
+  _variableColumnMap[std::move(variable)] = column;
+}
+
+// _____________________________________________________________________________
+void QueryExecutionTree::setVariableColumn(TripleComponent variable,
                                            size_t column) {
-  _variableColumnMap[variable] = column;
+  AD_CHECK(variable.isVariable());
+  _variableColumnMap[std::move(variable).getString()] = column;
 }
 
 // _____________________________________________________________________________

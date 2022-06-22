@@ -176,34 +176,31 @@ void operator<<(WriteSerializer auto& serializer, const auto& t) {
 /// Serialization operator for explicitly reading from a serializer.
 void operator>>(ReadSerializer auto& serializer, auto&& t) { serializer | t; }
 
-/// Arithmetic types (the builtins like int, char, double) can be trivially
-/// serialized by just copying the bits (see below).
-/// NOTE: We cannot put this AFTER the definition of
-/// `isTrivalSerializationAllowed`, otherwise we will get a compiler error on
-/// g++.
-/// TODO<joka921> Find out, if this is a compiler bug and file a report.
-template <typename T>
-requires std::is_arithmetic_v<std::decay_t<T>> std::true_type
-allowTrivialSerialization(T) {
-  return {};
-}
-
+/// An empty struct that isn't needed by the users of this serialization
+/// framework. It is used internally to make argument-dependent lookup work.
+struct TrivialSerializationHelperTag {};
 /**
- * Types for which a function `allowTrivialSerialization(t)`
- * exists and that are trivially copyable can be serialized by simply copying
- * the bytes. To make a user-defined type which is trivially copyable also
- * trivially serializable, declare (no need to define it) this function in the
- * same namespace as the type or as a friend function. For example, one can
- * equivalently write one of the following two:
+ * Types T for which a function `allowTrivialSerialization(T,
+ * TrivialSerializationHelperTag)` exists and that are trivially copyable can be
+ * serialized by simply copying the bytes. To make a user-defined type which is
+ * trivially copyable also trivially serializable, declare (no need to define
+ * it) this function in the same namespace as the type, as a friend function, or
+ * in the namespace `ad_utility::serialization`. Types in the global namespace
+ * have to define `allowTrivialSerialization` as a friend or in
+ * `ad_utility::serialization` because of the argument-dependent lookup rules.
+ * If you want to break the dependencies between your types and this header, you
+ * can also define the second parameter to be templated.
+ *
+ * For example, one can equivalently write one of the following two:
  *
  * struct X {
  *   int x;
  * };
- * void allowTrivialSerialization(X);
+ * void allowTrivialSerialization(X, auto);
  *
  * struct Y {
  *   int y;
- *   friend void allowTrivialSerialization(Y);
+ *   friend void allowTrivialSerialization(Y, auto);
  * };
  *
  * Note that this will also enable trivial serialization for types that are
@@ -213,11 +210,15 @@ allowTrivialSerialization(T) {
  * struct Z {
  *   int z;
  * };
- * void allowTrivialSerialization(std::same_as<Z> auto);
+ * void allowTrivialSerialization(std::same_as<Z> auto, auto);
  */
 template <typename T>
-concept TriviallySerializable = requires(T t) {
-  allowTrivialSerialization(t);
+concept TriviallySerializable = requires(T t,
+                                         TrivialSerializationHelperTag tag) {
+  // The `TrivialSerializationHelperTag` lets the argument-dependent lookup also
+  // find the `allowTrivialSerialization` function if it is defined in the
+  // `ad::serialization` namespace.
+  allowTrivialSerialization(t, tag);
 }
 &&std::is_trivially_copyable_v<std::decay_t<T>>;
 
@@ -231,6 +232,14 @@ void serialize(S& serializer, T&& t) {
     static_assert(ReadSerializer<S>);
     serializer.serializeBytes(reinterpret_cast<char*>(&t), sizeof(t));
   }
+}
+
+/// Arithmetic types (the builtins like int, char, double) can be trivially
+/// serialized.
+template <typename T>
+requires std::is_arithmetic_v<std::decay_t<T>> std::true_type
+allowTrivialSerialization(T, auto) {
+  return {};
 }
 
 }  // namespace ad_utility::serialization

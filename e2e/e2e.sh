@@ -104,10 +104,11 @@ if [ ${REBUILD_THE_INDEX} == "YES" ] || ! [ -f "${INDEX}.vocabulary" ]; then
 	echo "Building index $INDEX"
 	./IndexBuilderMain -l -i "$INDEX" \
 	    -F ttl \
-		-f "$INPUT.nt" \
-		-s "$PROJECT_DIR/e2e/e2e-build-settings.json" \
-		-w "$INPUT.wordsfile.tsv" \
-		-d "$INPUT.docsfile.tsv" || bail "Building Index failed"
+	    -f "$INPUT.nt" \
+	    -s "$PROJECT_DIR/e2e/e2e-build-settings.json" \
+	    -w "$INPUT.wordsfile.tsv" \
+            -W \
+	    -d "$INPUT.docsfile.tsv" || bail "Building Index failed"
 	popd
 fi
 

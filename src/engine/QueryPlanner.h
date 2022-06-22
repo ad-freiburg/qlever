@@ -31,13 +31,13 @@ class QueryPlanner {
       Node(size_t id, const SparqlTriple& t)
           : _id(id), _triple(t), _variables(), _cvar(), _wordPart() {
         if (isVariable(t._s)) {
-          _variables.insert(t._s);
+          _variables.insert(t._s.getString());
         }
         if (isVariable(t._p)) {
           _variables.insert(t._p._iri);
         }
         if (isVariable(t._o)) {
-          _variables.insert(t._o);
+          _variables.insert(t._o.getString());
         }
       }
 
@@ -54,13 +54,13 @@ class QueryPlanner {
         _variables.insert(cvar);
         for (const auto& t : trips) {
           if (isVariable(t._s)) {
-            _variables.insert(t._s);
+            _variables.insert(t._s.getString());
           }
           if (isVariable(t._p)) {
             _variables.insert(t._p._iri);
           }
           if (isVariable(t._o)) {
-            _variables.insert(t._o);
+            _variables.insert(t._o.getString());
           }
         }
       }
@@ -223,30 +223,30 @@ class QueryPlanner {
    * @brief Returns a parsed query for the property path.
    */
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromPropertyPath(
-      const std::string& left, const PropertyPath& path,
-      const std::string& right);
+      const TripleComponent& left, const PropertyPath& path,
+      const TripleComponent& right);
 
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromSequence(
-      const std::string& left, const PropertyPath& path,
-      const std::string& right);
+      const TripleComponent& left, const PropertyPath& path,
+      const TripleComponent& right);
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromAlternative(
-      const std::string& left, const PropertyPath& path,
-      const std::string& right);
+      const TripleComponent& left, const PropertyPath& path,
+      const TripleComponent& right);
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitive(
-      const std::string& left, const PropertyPath& path,
-      const std::string& right);
+      const TripleComponent& left, const PropertyPath& path,
+      const TripleComponent& right);
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitiveMin(
-      const std::string& left, const PropertyPath& path,
-      const std::string& right);
+      const TripleComponent& left, const PropertyPath& path,
+      const TripleComponent& right);
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitiveMax(
-      const std::string& left, const PropertyPath& path,
-      const std::string& right);
+      const TripleComponent& left, const PropertyPath& path,
+      const TripleComponent& right);
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromInverse(
-      const std::string& left, const PropertyPath& path,
-      const std::string& right);
+      const TripleComponent& left, const PropertyPath& path,
+      const TripleComponent& right);
   std::shared_ptr<ParsedQuery::GraphPattern> seedFromIri(
-      const std::string& left, const PropertyPath& path,
-      const std::string& right);
+      const TripleComponent& left, const PropertyPath& path,
+      const TripleComponent& right);
 
   std::string generateUniqueVarName();
 

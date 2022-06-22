@@ -83,70 +83,25 @@ size_t TextMetaData::getBlockCount() const { return _blocks.size(); }
 
 // _____________________________________________________________________________
 string TextMetaData::statistics() const {
+  // TODO: What does totalElementsEntityLists count?
+  size_t totalElementsClassicLists = 0;
+  // size_t totalElementsEntityLists = 0;
+  for (size_t i = 0; i < _blocks.size(); ++i) {
+    const ContextListMetaData& wcl = _blocks[i]._cl;
+    totalElementsClassicLists += wcl._nofElements;
+    // const ContextListMetaData& ecl = _blocks[i]._entityCl;
+    // totalElementsEntityLists += ecl._nofElements;
+  }
+  // Show abbreviated statistics (like for the permutations, which used to have
+  // very verbose statistics, too).
   std::ostringstream os;
   std::locale loc;
   ad_utility::ReadableNumberFacet facet(1);
   std::locale locWithNumberGrouping(loc, &facet);
   os.imbue(locWithNumberGrouping);
-  os << '\n';
-  os << "-------------------------------------------------------------------\n";
-  os << "----------------------------------\n";
-  os << "Text Index Statistics:\n";
-  os << "----------------------------------\n\n";
-  os << "# Blocks: " << _blocks.size() << '\n';
-  size_t totalElementsClassicLists = 0;
-  size_t totalElementsEntityLists = 0;
-  size_t totalBytesClassicLists = 0;
-  size_t totalBytesEntityLists = 0;
-  size_t totalBytesCls = 0;
-  size_t totalBytesWls = 0;
-  size_t totalBytesSls = 0;
-  for (size_t i = 0; i < _blocks.size(); ++i) {
-    const ContextListMetaData& wcl = _blocks[i]._cl;
-    const ContextListMetaData& ecl = _blocks[i]._entityCl;
-
-    totalElementsClassicLists += wcl._nofElements;
-    totalElementsEntityLists += ecl._nofElements;
-
-    totalBytesClassicLists += 1 + wcl._lastByte - wcl._startContextlist;
-    totalBytesEntityLists += 1 + ecl._lastByte - ecl._startContextlist;
-
-    totalBytesCls += wcl._startWordlist - wcl._startContextlist;
-    totalBytesCls += ecl._startWordlist - ecl._startContextlist;
-    totalBytesWls += wcl._startScorelist - wcl._startWordlist;
-    totalBytesWls += ecl._startScorelist - ecl._startWordlist;
-    totalBytesSls += 1 + wcl._lastByte - wcl._startScorelist;
-    totalBytesSls += 1 + ecl._lastByte - ecl._startScorelist;
-  }
-  os << "-------------------------------------------------------------------\n";
-  os << "# Elements: " << totalElementsClassicLists + totalElementsEntityLists
-     << '\n';
-  os << "  thereof:\n";
-  os << "    Elements in classic lists: " << totalElementsClassicLists << '\n';
-  os << "    Elements in entity lists:  " << totalElementsEntityLists << '\n';
-  os << "-------------------------------------------------------------------\n";
-  os << "# Entities with text: " << _nofEntities << '\n';
-  os << "# Contexts for those entities: " << _nofEntityContexts << '\n';
-  os << "    Average contexts / entity: " << getAverageNofEntityContexts()
-     << '\n';
-  os << "-------------------------------------------------------------------\n";
-  os << "# Bytes: " << totalBytesClassicLists + totalBytesEntityLists << '\n';
-  os << "  thereof:\n";
-  os << "    Bytes in classic lists: " << totalBytesClassicLists << '\n';
-  os << "    Bytes in entity lists:  " << totalBytesEntityLists << '\n';
-  os << "-------------------------------------------------------------------\n";
-  os << "Breakdown:\n";
-  os << "    Bytes in context / doc lists: " << totalBytesCls << '\n';
-  os << "    Bytes in word lists:          " << totalBytesWls << '\n';
-  os << "    Bytes in score lists:         " << totalBytesSls << '\n';
-  os << "-------------------------------------------------------------------\n";
-  os << "\n";
-  os << "-------------------------------------------------------------------\n";
-  os << "Theoretical (naiive) size: "
-     << (totalElementsClassicLists + totalElementsEntityLists) *
-            (2 * sizeof(Id) + sizeof(Score))
-     << '\n';
-  os << "-------------------------------------------------------------------\n";
+  os << "#records = " << _nofEntityContexts
+     << ", #words = " << totalElementsClassicLists
+     << ", #entities = " << _nofEntities << ", #blocks = " << _blocks.size();
   return std::move(os).str();
 }
 

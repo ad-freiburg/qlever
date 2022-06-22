@@ -14,6 +14,7 @@
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
+#include "./TripleComponent.h"
 #include "ParseException.h"
 #include "data/Types.h"
 #include "data/VarOrTerm.h"
@@ -84,6 +85,9 @@ class PropertyPath {
 };
 
 inline bool isVariable(const string& elem) { return elem.starts_with("?"); }
+inline bool isVariable(const TripleComponent& elem) {
+  return elem.isString() && isVariable(elem.getString());
+}
 
 inline bool isVariable(const PropertyPath& elem) {
   return elem._operation == PropertyPath::Operation::IRI &&
@@ -95,10 +99,10 @@ std::ostream& operator<<(std::ostream& out, const PropertyPath& p);
 // Data container for parsed triples from the where clause
 class SparqlTriple {
  public:
-  SparqlTriple(string s, PropertyPath p, string o)
+  SparqlTriple(TripleComponent s, PropertyPath p, TripleComponent o)
       : _s(std::move(s)), _p(std::move(p)), _o(std::move(o)) {}
 
-  SparqlTriple(string s, const std::string& p_iri, string o)
+  SparqlTriple(TripleComponent s, const std::string& p_iri, TripleComponent o)
       : _s(std::move(s)),
         _p(PropertyPath::Operation::IRI, 0, p_iri, {}),
         _o(std::move(o)) {}
@@ -106,9 +110,9 @@ class SparqlTriple {
   bool operator==(const SparqlTriple& other) const {
     return _s == other._s && _p == other._p && _o == other._o;
   }
-  string _s;
+  TripleComponent _s;
   PropertyPath _p;
-  string _o;
+  TripleComponent _o;
 
   [[nodiscard]] string asString() const;
 };
@@ -393,7 +397,6 @@ class ParsedQuery {
 
   [[nodiscard]] string asString() const;
 
- private:
   static void expandPrefix(
       PropertyPath& item, const ad_utility::HashMap<string, string>& prefixMap);
   static void expandPrefix(
@@ -428,8 +431,8 @@ struct GraphPatternOperation {
 
   struct TransPath {
     // The name of the left and right end of the transitive operation
-    std::string _left;
-    std::string _right;
+    TripleComponent _left;
+    TripleComponent _right;
     // The name of the left and right end of the subpath
     std::string _innerLeft;
     std::string _innerRight;

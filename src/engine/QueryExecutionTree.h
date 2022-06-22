@@ -74,7 +74,8 @@ class QueryExecutionTree {
     return _type == OperationType::UNDEFINED || !_rootOperation;
   }
 
-  void setVariableColumn(const string& var, size_t i);
+  void setVariableColumn(std::string variable, size_t columnIndex);
+  void setVariableColumn(TripleComponent variable, size_t columnIndex);
 
   size_t getVariableColumn(const string& var) const;
 
