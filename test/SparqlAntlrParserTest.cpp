@@ -834,8 +834,33 @@ TEST(SparqlParser, GroupCondition) {
         expectCompleteParse(parseGroupCondition(input),
                             IsExpressionAliasGroupKey(expression, variable));
       };
-  // TODO<qup42> extend tests
+  // variable
   expectParseVariable("?test", "?test");
+  // expression without binding
   expectParseExpression("(?test)", "?test");
+  // expression with binding
   expectParseExpressionAlias("(?test AS ?mehr)", "?test", "?mehr");
+  // builtInCall
+  expectParseExpression("COUNT(?test)", "COUNT(?test)");
+  // functionCall
+  // functionCall doesn't set the Expression descriptor
+  expectParseExpression(
+      "<http://www.opengis"
+      ".net/def/function/geosparql/latitude> (?test)",
+      "");
+}
+
+TEST(SparqlParser, GroupClause) {
+  {
+    string input = "GROUP BY ?test (?foo - 10 as ?bar) COUNT(?baz)";
+    auto groupings = parseGroupClause(input, {});
+    // TODO<qup42> Possibility to integrate this case of multiple matchers into
+    // expectCompleteParse?
+    EXPECT_TRUE(groupings.remainingText_.empty());
+    EXPECT_THAT(groupings.resultOfParse_[0], IsVariableGroupKey("?test"));
+    EXPECT_THAT(groupings.resultOfParse_[1],
+                IsExpressionAliasGroupKey("?foo-10", "?bar"));
+    EXPECT_THAT(groupings.resultOfParse_[2],
+                IsExpressionGroupKey("COUNT(?baz)"));
+  }
 }

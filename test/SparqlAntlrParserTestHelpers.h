@@ -71,6 +71,26 @@ std::ostream& operator<<(std::ostream& out,
 
 // _____________________________________________________________________________
 
+std::ostream& operator<<(std::ostream& out,
+                         const ExpressionGroupKey& groupKey) {
+  out << "Group by " << groupKey.expression_.getDescriptor();
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out,
+                         const ExpressionAliasGroupKey& groupKey) {
+  out << "Group by " << groupKey.expression_.getDescriptor()
+      << " with alias as " << groupKey.variable_;
+  return out;
+}
+
+std::ostream& operator<<(std::ostream& out, const VariableGroupKey& groupKey) {
+  out << "Group by " << groupKey.variable_;
+  return out;
+}
+
+// _____________________________________________________________________________
+
 // Recursively unwrap a std::variant object, or return a pointer
 // to the argument directly if it is already unwrapped.
 
