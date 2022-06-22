@@ -108,6 +108,12 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
  public:
   // ___________________________________________________________________________
+  sparqlExpression::SparqlExpressionPimpl makeExpressionPimpl(
+      antlrcpp::Any any) {
+    return sparqlExpression::SparqlExpressionPimpl{
+        std::move(any.as<ExpressionPtr>())};
+  }
+  // ___________________________________________________________________________
   antlrcpp::Any visitQuery(SparqlAutomaticParser::QueryContext* ctx) override {
     // The prologue (BASE and PREFIX declarations)  only affects the internal
     // state of the visitor.
@@ -171,10 +177,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitAliasWithouBrackes(
       [[maybe_unused]] SparqlAutomaticParser::AliasWithouBrackesContext* ctx)
       override {
-    auto expressionPtr =
-        std::move(ctx->expression()->accept(this).as<ExpressionPtr>());
-    auto wrapper =
-        sparqlExpression::SparqlExpressionPimpl{std::move(expressionPtr)};
+    auto wrapper = makeExpressionPimpl(visit(ctx->expression()));
     return ParsedQuery::Alias{std::move(wrapper), ctx->var()->getText()};
   }
 
@@ -248,12 +251,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       auto subCtx =
           (ctx->builtInCall() ? (antlr4::tree::ParseTree*)ctx->builtInCall()
                               : (antlr4::tree::ParseTree*)ctx->functionCall());
-      auto expr = sparqlExpression::SparqlExpressionPimpl{
-          std::move(visit(subCtx).as<ExpressionPtr>())};
+      auto expr = makeExpressionPimpl(visit(subCtx));
       return GroupKey{ExpressionGroupKey{std::move(expr)}};
     } else if (ctx->expression()) {
-      auto expr = sparqlExpression::SparqlExpressionPimpl{
-          std::move(visit(ctx->expression()).as<ExpressionPtr>())};
+      auto expr = makeExpressionPimpl(visit(ctx->expression()));
       if (ctx->AS() && ctx->var()) {
         return GroupKey{
             ParsedQuery::Alias{std::move(expr), ctx->var()->getText()}};
@@ -288,8 +289,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       SparqlAutomaticParser::OrderConditionContext* ctx) override {
     auto visitExprOrderKey = [this](bool isDescending,
                                     antlr4::tree::ParseTree* context) {
-      auto expr = sparqlExpression::SparqlExpressionPimpl{
-          std::move(visit(context).as<ExpressionPtr>())};
+      auto expr = makeExpressionPimpl(visit(context));
       if (auto exprIsVariable = expr.getVariableOrNullopt();
           exprIsVariable.has_value()) {
         return OrderKey{VariableOrderKey(exprIsVariable.value(), isDescending)};
@@ -388,8 +388,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitBind(SparqlAutomaticParser::BindContext* ctx) override {
-    auto expr = std::move(ctx->expression()->accept(this).as<ExpressionPtr>());
-    auto wrapper = sparqlExpression::SparqlExpressionPimpl{std::move(expr)};
+    auto wrapper = makeExpressionPimpl(visit(ctx->expression()));
     return GraphPatternOperation::Bind{std::move(wrapper),
                                        ctx->var()->getText()};
   }
