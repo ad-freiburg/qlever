@@ -243,7 +243,9 @@ class LocaleManager {
     std::string res;
     icu::StringByteSink<std::string> sink(&res);
     UErrorCode err = U_ZERO_ERROR;
-    icu::CaseMap::utf8ToLower(_icuLocale.getName(), 0, s, sink, nullptr, err);
+    icu::CaseMap::utf8ToLower(_icuLocale.getName(), 0,
+                              icu::StringPiece(s.data(), s.size()), sink,
+                              nullptr, err);
     raise(err);
     return res;
   }
