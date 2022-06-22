@@ -258,7 +258,7 @@ int main(int argc, char** argv) {
 
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.
-  if (textIndexName.size() == 0 && wordsfile.size() > 0) {
+  if (textIndexName.empty() && wordsfile.empty() {
     textIndexName = ad_utility::getLastPartOfString(wordsfile, '/');
   }
 
