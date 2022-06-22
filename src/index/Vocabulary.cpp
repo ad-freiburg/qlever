@@ -24,7 +24,7 @@ using std::string;
 template <class S, class C>
 void Vocabulary<S, C>::readFromFile(const string& fileName,
                                     const string& extLitsFileName) {
-  LOG(INFO) << "Reading internal vocabulary from file " << fileName << " ..."
+  LOG(INFO) << "Reading vocabulary from file " << fileName << " ..."
             << std::endl;
   _internalVocabulary.close();
   ad_utility::serialization::FileReadSerializer file(fileName);
@@ -51,27 +51,25 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
 template <class S, class C>
 template <typename, typename>
 void Vocabulary<S, C>::writeToFile(const string& fileName) const {
-  LOG(INFO) << "Writing vocabulary to file " << fileName << std::endl;
+  LOG(TRACE) << "BEGIN Vocabulary::writeToFile" << std::endl;
   ad_utility::serialization::FileWriteSerializer file{fileName};
   _internalVocabulary.getUnderlyingVocabulary().writeToFile(fileName);
-
-  LOG(INFO) << "Done writing vocabulary to file" << std::endl;
+  LOG(TRACE) << "END Vocabulary::writeToFile" << std::endl;
 }
 
 // _____________________________________________________________________________
 template <class S, class C>
 void Vocabulary<S, C>::createFromSet(
     const ad_utility::HashSet<std::string>& set) {
-  LOG(INFO) << "Creating vocabulary from set ..." << std::endl;
+  LOG(DEBUG) << "BEGIN Vocabulary::createFromSet" << std::endl;
   _internalVocabulary.close();
   std::vector<std::string> words(set.begin(), set.end());
-  LOG(TRACE) << "Sorting ..." << std::endl;
   auto totalComparison = [this](const auto& a, const auto& b) {
     return getCaseComparator()(a, b, SortLevel::TOTAL);
   };
   std::sort(begin(words), end(words), totalComparison);
   _internalVocabulary.build(words);
-  LOG(INFO) << "Done creating vocabulary" << std::endl;
+  LOG(DEBUG) << "END Vocabulary::createFromSet" << std::endl;
 }
 
 // _____________________________________________________________________________

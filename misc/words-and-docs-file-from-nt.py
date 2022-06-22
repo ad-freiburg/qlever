@@ -27,6 +27,10 @@ def write_words_and_docs_file_from_nt(
                 continue
             entity = literal.group(1)
             contents = literal.group(2)
+            datatype = literal.group(3)
+            # Discard numeric literals.
+            if re.search("XMLSchema#(integer|int|double|decimal|bool)>", datatype):
+                continue
             # Write entity and words to words file.
             print("%s\t1\t%d\t1" % (entity, record_id), file = words_file)
             for word in re.split("\W+", contents):

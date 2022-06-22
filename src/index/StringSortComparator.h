@@ -239,7 +239,7 @@ class LocaleManager {
    * @param s UTF-8 encoded string
    * @return The lowercase version of s, also encoded as UTF-8
    */
-  [[nodiscard]] std::string getLowercaseUtf8(const std::string& s) const {
+  [[nodiscard]] std::string getLowercaseUtf8(const std::string_view s) const {
     std::string res;
     icu::StringByteSink<std::string> sink(&res);
     UErrorCode err = U_ZERO_ERROR;

@@ -41,6 +41,7 @@ struct option options[] = {
     {"no-patterns", no_argument, NULL, 'P'},
     {"text-index-name", required_argument, NULL, 'T'},
     {"words-by-contexts", required_argument, NULL, 'w'},
+    {"words-from-literals", no_argument, NULL, 'W'},
     {"add-text-index", no_argument, NULL, 'A'},
     {"keep-temporary-files", no_argument, NULL, 'k'},
     {"settings-file", required_argument, NULL, 's'},
@@ -123,7 +124,11 @@ void printUsage(char* execName) {
        << endl;
   cerr << "  " << std::setw(20) << "w, words-by-contexts" << std::setw(1)
        << "    "
-       << "words-file to build text index from." << endl;
+       << "words-file to build text index from" << endl;
+  cerr << "  " << std::setw(20) << "W, words-from-literals" << std::setw(1)
+       << "  "
+       << "consider all literals from the internal vocabulary as text records"
+       << endl;
   cerr << "  " << std::setw(20) << "A, add-text-index" << std::setw(1) << "    "
        << "Add text index to already existing kb-index" << endl;
   cerr
@@ -174,6 +179,7 @@ int main(int argc, char** argv) {
   bool onlyAddTextIndex = false;
   bool keepTemporaryFiles = false;
   bool loadAllPermutations = true;
+  bool addWordsFromLiterals = false;
   optind = 1;
 
   Index index;
@@ -181,7 +187,7 @@ int main(int argc, char** argv) {
   // Process command line arguments.
   while (true) {
     int c =
-        getopt_long(argc, argv, "F:f:i:w:d:lT:K:hAks:Nom:", options, nullptr);
+        getopt_long(argc, argv, "F:f:i:w:Wd:lT:K:hAks:Nom:", options, nullptr);
     if (c == -1) {
       break;
     }
@@ -195,6 +201,9 @@ int main(int argc, char** argv) {
         break;
       case 'w':
         wordsfile = optarg;
+        break;
+      case 'W':
+        addWordsFromLiterals = true;
         break;
       case 'd':
         docsfile = optarg;
@@ -340,8 +349,8 @@ int main(int argc, char** argv) {
       }
     }
 
-    if (wordsfile.size() > 0) {
-      index.addTextFromContextFile(wordsfile);
+    if (wordsfile.size() > 0 || addWordsFromLiterals) {
+      index.addTextFromContextFile(wordsfile, addWordsFromLiterals);
     }
 
     if (docsfile.size() > 0) {
