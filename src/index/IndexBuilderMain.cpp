@@ -258,16 +258,14 @@ int main(int argc, char** argv) {
 
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.
-  if (textIndexName.empty() && wordsfile.empty() {
+  if (textIndexName.empty() && !wordsfile.empty()) {
     textIndexName = ad_utility::getLastPartOfString(wordsfile, '/');
   }
 
   // If no index name was specified, take the part of the input file name after
   // the last slash.
-  if (kbIndexName.size() == 0) {
-    if (!inputFile.empty()) {
-      kbIndexName = ad_utility::getLastPartOfString(inputFile, '/');
-    }
+  if (kbIndexName.empty() && !inputFile.empty()) {
+    kbIndexName = ad_utility::getLastPartOfString(inputFile, '/');
   }
 
   if (baseName.size() == 0) {
