@@ -1136,6 +1136,7 @@ queries:
       - contains_row: ["<Marie_Curie>", "Marie_Curie"]
       - contains_row: ["<Pierre_Curie>", "Pierre_Curie"]
 
+
   - query : datetime_object-find-justin-boyan
     type: no-text
     sparql: |
@@ -1147,6 +1148,7 @@ queries:
       - num_cols: 1
       - selected: ["?s"]
       - contains_row: ["<Justin_Boyan>"]
+
 
   - query : datetime_filter-find-justin-boyan
     type: no-text

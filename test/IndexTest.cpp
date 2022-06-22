@@ -552,7 +552,7 @@ TEST(IndexTest, scanTest) {
   ad_utility::deleteFile("_testindex.index.pos");
 };
 
-// Returns true iff `args` (the first argument of `EXPECT_THAT` below holds a
+// Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
 // `PossiblyExternalizedIriOrLiteral` that matches the string `content` and the
 // bool `isExternal`.
 MATCHER_P2(IsPossiblyExternalString, content, isExternal, "") {
