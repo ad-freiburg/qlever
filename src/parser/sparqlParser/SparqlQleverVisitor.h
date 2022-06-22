@@ -245,8 +245,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       return GroupKey{VariableGroupKey(ctx->var()->getText())};
     } else if (ctx->builtInCall() || ctx->functionCall()) {
       // builtInCall and functionCall are both also an Expression
+      auto subCtx =
+          (ctx->builtInCall() ? (antlr4::tree::ParseTree*)ctx->builtInCall()
+                              : (antlr4::tree::ParseTree*)ctx->functionCall());
       auto expr = sparqlExpression::SparqlExpressionPimpl{
-          std::move(visit(ctx->builtInCall()).as<ExpressionPtr>())};
+          std::move(visit(subCtx).as<ExpressionPtr>())};
       return GroupKey{ExpressionGroupKey{std::move(expr)}};
     } else if (ctx->expression()) {
       auto expr = sparqlExpression::SparqlExpressionPimpl{
