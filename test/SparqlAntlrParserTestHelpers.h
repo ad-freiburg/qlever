@@ -77,11 +77,6 @@ std::ostream& operator<<(std::ostream& out,
   return out;
 }
 
-std::ostream& operator<<(std::ostream& out, const VariableGroupKey& groupKey) {
-  out << "Group by " << groupKey.variable_;
-  return out;
-}
-
 // _____________________________________________________________________________
 
 // Recursively unwrap a std::variant object, or return a pointer
@@ -184,9 +179,8 @@ MATCHER_P2(IsExpressionOrderKey, expr, desc, "") {
 }
 
 MATCHER_P(IsVariableGroupKey, key, "") {
-  if (const auto variableGroupKey =
-          unwrapVariant<GroupKey, VariableGroupKey>(arg)) {
-    return (variableGroupKey->variable_ == key);
+  if (const auto variableGroupKey = unwrapVariant<GroupKey, Variable>(arg)) {
+    return (variableGroupKey->name() == key);
   }
   return false;
 }

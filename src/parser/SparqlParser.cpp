@@ -559,8 +559,8 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
       auto group_keys =
           parseWithAntlr(sparqlParserHelpers::parseGroupClause, *query);
 
-      auto processVariableGroupKey = [&query](VariableGroupKey groupKey) {
-        query->_groupByVariables.push_back(std::move(groupKey.variable_));
+      auto processVariableGroupKey = [&query](const Variable& groupKey) {
+        query->_groupByVariables.push_back(groupKey.name());
       };
       auto processExpressionGroupKey = [&query,
                                         this](ExpressionGroupKey groupKey) {

@@ -143,11 +143,6 @@ struct ExpressionGroupKey {
   sparqlExpression::SparqlExpressionPimpl expression_;
 };
 
-/// Store a variable that appeared in a GROUP BY clause.
-struct VariableGroupKey {
-  string variable_;
-};
-
 class SparqlFilter {
  public:
   enum FilterType {
@@ -411,8 +406,7 @@ class ParsedQuery {
       string& item, const ad_utility::HashMap<string, string>& prefixMap);
 };
 
-using GroupKey =
-    std::variant<ExpressionGroupKey, ParsedQuery::Alias, VariableGroupKey>;
+using GroupKey = std::variant<ExpressionGroupKey, ParsedQuery::Alias, Variable>;
 
 struct GraphPatternOperation {
   struct BasicGraphPattern {
