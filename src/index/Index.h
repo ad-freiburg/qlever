@@ -172,6 +172,7 @@ class Index {
   void addTextFromOnDiskIndex();
 
   const auto& getVocab() const { return _vocab; };
+  auto& getNonConstVocabForTesting() { return _vocab; }
 
   const auto& getTextVocab() const { return _textVocab; };
 
@@ -190,12 +191,9 @@ class Index {
   // --------------------------------------------------------------------------
   size_t relationCardinality(const string& relationName) const;
 
-  size_t subjectCardinality(const string& sub) const;
+  size_t subjectCardinality(const TripleComponent& sub) const;
 
-  size_t objectCardinality(const string& obj) const;
-
-  size_t sizeEstimate(const string& sub, const string& pred,
-                      const string& obj) const;
+  size_t objectCardinality(const TripleComponent& obj) const;
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
@@ -400,12 +398,12 @@ class Index {
 
   // _____________________________________________________________________________
   template <class PermutationImpl>
-  vector<float> getMultiplicities(const string& key,
+  vector<float> getMultiplicities(const TripleComponent& key,
                                   const PermutationImpl& p) const {
-    Id keyId;
+    std::optional<Id> keyId = key.toValueId(getVocab());
     vector<float> res;
-    if (getId(key, &keyId) && p._meta.col0IdExists(keyId)) {
-      auto metaData = p._meta.getMetaData(keyId);
+    if (keyId.has_value() && p._meta.col0IdExists(keyId.value())) {
+      auto metaData = p._meta.getMetaData(keyId.value());
       res.push_back(metaData.getCol1Multiplicity());
       res.push_back(metaData.getCol2Multiplicity());
     } else {
@@ -453,14 +451,14 @@ class Index {
    * Index class).
    */
   template <class Permutation>
-  void scan(const string& key, IdTable* result, const Permutation& p,
+  void scan(const TripleComponent& key, IdTable* result, const Permutation& p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
     LOG(DEBUG) << "Performing " << p._readableName
                << " scan for full list for: " << key << "\n";
-    Id relId;
-    if (getId(key, &relId)) {
+    std::optional<Id> optionalId = key.toValueId(getVocab());
+    if (optionalId.has_value()) {
       LOG(TRACE) << "Successfully got key ID.\n";
-      scan(relId, result, p, std::move(timer));
+      scan(optionalId.value(), result, p, std::move(timer));
     }
     LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
   }
@@ -481,12 +479,13 @@ class Index {
    */
   // _____________________________________________________________________________
   template <class PermutationInfo>
-  void scan(const string& col0String, const string& col1String, IdTable* result,
+  void scan(const TripleComponent& col0String,
+            const TripleComponent& col1String, IdTable* result,
             const PermutationInfo& p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
-    Id col0Id;
-    Id col1Id;
-    if (!getId(col0String, &col0Id) || !getId(col1String, &col1Id)) {
+    std::optional<Id> col0Id = col0String.toValueId(getVocab());
+    std::optional<Id> col1Id = col1String.toValueId(getVocab());
+    if (!col0Id.has_value() || !col1Id.has_value()) {
       LOG(DEBUG) << "Key " << col0String << " or key " << col1String
                  << " were not found in the vocabulary \n";
       return;
@@ -496,7 +495,8 @@ class Index {
                << col0String << " with fixed subject: " << col1String
                << "...\n";
 
-    CompressedRelationMetaData::scan(col0Id, col1Id, result, p, timer);
+    CompressedRelationMetaData::scan(col0Id.value(), col1Id.value(), result, p,
+                                     timer);
   }
 
  private:
@@ -738,15 +738,17 @@ class Index {
 
   void getRhsForSingleLhs(const IdTable& in, Id lhsId, IdTable* result) const;
 
-  bool isLiteral(const string& object);
+  bool isLiteral(const string& object) const;
 
   bool shouldBeExternalized(const string& object);
   // convert value literals to internal representation
   // and add externalization characters if necessary.
   // Returns the language tag of spo[2] (the object) or ""
   // if there is none.
-  LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple);
+ public:
+  LangtagAndTriple tripleToInternalRepresentation(TurtleTriple&& triple) const;
 
+ private:
   /**
    * @brief Throws an exception if no patterns are loaded. Should be called from
    *        whithin any index method that returns data requiring the patterns

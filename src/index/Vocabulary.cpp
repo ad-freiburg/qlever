@@ -333,6 +333,8 @@ template void RdfsVocabulary::initializeInternalizedLangs<nlohmann::json>(
     const nlohmann::json&);
 template void RdfsVocabulary::initializeExternalizePrefixes<nlohmann::json>(
     const nlohmann::json& prefixes);
+template void RdfsVocabulary::initializeExternalizePrefixes<
+    std::vector<std::string>>(const std::vector<std::string>& prefixes);
 
 template void RdfsVocabulary::printRangesForDatatypes();
 

@@ -23,12 +23,12 @@ string IndexScan::asStringImpl(size_t indent) const {
          << "\"";
       break;
     case POS_BOUND_O:
-      os << "SCAN POS with P = \"" << _predicate << "\", O = \"" << _object
-         << "\"";
+      os << "SCAN POS with P = \"" << _predicate << "\", O = \""
+         << _object.toRdfLiteral() << "\"";
       break;
     case SOP_BOUND_O:
-      os << "SCAN SOP with S = \"" << _subject << "\", O = \"" << _object
-         << "\"";
+      os << "SCAN SOP with S = \"" << _subject << "\", O = \""
+         << _object.toRdfLiteral() << "\"";
       break;
     case PSO_FREE_S:
       os << "SCAN PSO with P = \"" << _predicate << "\"";
@@ -43,10 +43,10 @@ string IndexScan::asStringImpl(size_t indent) const {
       os << "SCAN SOP with S = \"" << _subject << "\"";
       break;
     case OPS_FREE_P:
-      os << "SCAN OPS with O = \"" << _object << "\"";
+      os << "SCAN OPS with O = \"" << _object.toRdfLiteral() << "\"";
       break;
     case OSP_FREE_S:
-      os << "SCAN OSP with O = \"" << _object << "\"";
+      os << "SCAN OSP with O = \"" << _object.toRdfLiteral() << "\"";
       break;
     case FULL_INDEX_SCAN_SPO:
       os << "SCAN FOR FULL INDEX SPO (DUMMY OPERATION)";
@@ -72,7 +72,8 @@ string IndexScan::asStringImpl(size_t indent) const {
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
-  return "IndexScan " + _subject + " " + _predicate + " " + _object;
+  return "IndexScan " + _subject.toString() + " " + _predicate + " " +
+         _object.toString();
 }
 
 // _____________________________________________________________________________
@@ -132,91 +133,62 @@ ad_utility::HashMap<string, size_t> IndexScan::getVariableColumns() const {
   ad_utility::HashMap<string, size_t> res;
   size_t col = 0;
 
+  // Helper lambdas that add the respective triple component as the next column.
+  auto addSubject = [&]() {
+    if (_subject.isVariable()) {
+      res[_subject.getString()] = col++;
+    }
+  };
+  auto addPredicate = [&]() {
+    if (_predicate[0] == '?') {
+      res[_predicate] = col++;
+    }
+  };
+  auto addObject = [&]() {
+    if (_object.isVariable()) {
+      res[_object.getString()] = col++;
+    }
+  };
+
   switch (_type) {
     case SPO_FREE_P:
     case FULL_INDEX_SCAN_SPO:
-      if (_subject[0] == '?') {
-        res[_subject] = col++;
-      }
-      if (_predicate[0] == '?') {
-        res[_predicate] = col++;
-      }
-
-      if (_object[0] == '?') {
-        res[_object] = col++;
-      }
+      addSubject();
+      addPredicate();
+      addObject();
       return res;
     case SOP_FREE_O:
     case SOP_BOUND_O:
     case FULL_INDEX_SCAN_SOP:
-      if (_subject[0] == '?') {
-        res[_subject] = col++;
-      }
-
-      if (_object[0] == '?') {
-        res[_object] = col++;
-      }
-
-      if (_predicate[0] == '?') {
-        res[_predicate] = col++;
-      }
+      addSubject();
+      addObject();
+      addPredicate();
       return res;
     case PSO_BOUND_S:
     case PSO_FREE_S:
     case FULL_INDEX_SCAN_PSO:
-      if (_predicate[0] == '?') {
-        res[_predicate] = col++;
-      }
-      if (_subject[0] == '?') {
-        res[_subject] = col++;
-      }
-
-      if (_object[0] == '?') {
-        res[_object] = col++;
-      }
+      addPredicate();
+      addSubject();
+      addObject();
       return res;
     case POS_BOUND_O:
     case POS_FREE_O:
     case FULL_INDEX_SCAN_POS:
-      if (_predicate[0] == '?') {
-        res[_predicate] = col++;
-      }
-
-      if (_object[0] == '?') {
-        res[_object] = col++;
-      }
-
-      if (_subject[0] == '?') {
-        res[_subject] = col++;
-      }
+      addPredicate();
+      addObject();
+      addSubject();
       return res;
     case OPS_FREE_P:
     case FULL_INDEX_SCAN_OPS:
-      if (_object[0] == '?') {
-        res[_object] = col++;
-      }
-
-      if (_predicate[0] == '?') {
-        res[_predicate] = col++;
-      }
-
-      if (_subject[0] == '?') {
-        res[_subject] = col++;
-      }
+      addObject();
+      addPredicate();
+      addSubject();
       return res;
     case OSP_FREE_S:
     case FULL_INDEX_SCAN_OSP:
-      if (_object[0] == '?') {
-        res[_object] = col++;
-      }
-
-      if (_subject[0] == '?') {
-        res[_subject] = col++;
-      }
-
-      if (_predicate[0] == '?') {
-        res[_predicate] = col++;
-      }
+      addObject();
+      addSubject();
+      addPredicate();
       return res;
     default:
       AD_THROW(ad_semsearch::Exception::CHECK_FAILED, "Should be unreachable.");
@@ -329,16 +301,26 @@ size_t IndexScan::computeSizeEstimate() {
         return getResult()->size();
       }
     }
+    // TODO<joka921> Should be a oneliner
+    // getIndex().cardinality(getPermutation(), getFirstKey());
     if (_type == SPO_FREE_P || _type == SOP_FREE_O) {
-      return getIndex().sizeEstimate(_subject, "", "");
+      return getIndex().subjectCardinality(_subject);
     } else if (_type == POS_FREE_O || _type == PSO_FREE_S) {
-      return getIndex().sizeEstimate("", _predicate, "");
+      return getIndex().relationCardinality(_predicate);
     } else if (_type == OPS_FREE_P || _type == OSP_FREE_S) {
-      return getIndex().sizeEstimate("", "", _object);
+      return getIndex().objectCardinality(_object);
     }
-    return getIndex().sizeEstimate("", "", "");
+    // The triple consists of three variables.
+    return getIndex().getNofTriples();
   } else {
-    return 1000 + _subject.size() + _predicate.size() + _object.size();
+    // Only for test cases. The handling of the objects is to make the
+    // strange query planner tests pass.
+    // TODO<joka921> Code duplication.
+    std::string objectStr =
+        _object.isString() ? _object.getString() : _object.toString();
+    std::string subjectStr =
+        _subject.isString() ? _subject.getString() : _subject.toString();
+    return 1000 + subjectStr.size() + _predicate.size() + objectStr.size();
   }
 }
 

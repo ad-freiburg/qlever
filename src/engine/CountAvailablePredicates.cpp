@@ -27,11 +27,11 @@ CountAvailablePredicates::CountAvailablePredicates(
       _countVarName("count") {}
 
 CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec,
-                                                   std::string entityName)
+                                                   TripleComponent entityName)
     : Operation(qec),
       _subtree(nullptr),
       _subjectColumnIndex(0),
-      _subjectEntityName(entityName),
+      _subjectEntityName(entityName.getString()),
       _predicateVarName("predicate"),
       _countVarName("count") {}
 

@@ -140,7 +140,7 @@ TEST(TurtleParserTest, stringParse) {
 
 TEST(TurtleParserTest, rdfLiteral) {
   std::vector<string> literals;
-  std::vector<TripleObject> expected;
+  std::vector<TripleComponent> expected;
   literals.emplace_back(R"("simpleString")");
   expected.emplace_back(R"("simpleString")");
   literals.emplace_back(R"("langtag"@en-gb)");
@@ -208,9 +208,9 @@ TEST(TurtleParserTest, blankNodePropertyList) {
 
   string blankNodeL = "[<p2> <ob2>; <p3> <ob3>]";
   std::vector<TurtleTriple> exp;
-  exp.push_back({"<s>", "<p1>", TripleObject{"QLever-Anon-Node:0"}});
-  exp.push_back({"QLever-Anon-Node:0", "<p2>", TripleObject{"<ob2>"}});
-  exp.push_back({"QLever-Anon-Node:0", "<p3>", TripleObject{"<ob3>"}});
+  exp.push_back({"<s>", "<p1>", TripleComponent{"QLever-Anon-Node:0"}});
+  exp.push_back({"QLever-Anon-Node:0", "<p2>", TripleComponent{"<ob2>"}});
+  exp.push_back({"QLever-Anon-Node:0", "<p3>", TripleComponent{"<ob3>"}});
   p.setInputStream(blankNodeL);
   ASSERT_TRUE(p.blankNodePropertyList());
   ASSERT_EQ(p._triples, exp);
@@ -290,8 +290,8 @@ TEST(TurtleParserTest, predicateObjectList) {
 TEST(TurtleParserTest, numericLiteral) {
   std::vector<std::string> literals{"2",   "-2",     "42.209",   "-42.239",
                                     ".74", "2.3e12", "2.34E-14", "-0.3e2"};
-  std::vector<TripleObject> expected{2,   -2,     42.209,   -42.239,
-                                     .74, 2.3e12, 2.34e-14, -0.3e2};
+  std::vector<TripleComponent> expected{2,   -2,     42.209,   -42.239,
+                                        .74, 2.3e12, 2.34e-14, -0.3e2};
 
   TurtleStringParser<Tokenizer> parser;
   for (size_t i = 0; i < literals.size(); ++i) {
@@ -400,8 +400,8 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
         "<a> <b> \"123\"^^xsd:integer",
         "<a> <b> 456",
         "<a> <b> \"-9999.0\"^^xsd:integer",
-        "<a> <b> \"9999.0\"^^xsd:int",
-        "<a> <b> \"9999E4\"^^xsd:integer",
+        "<a> <b> \"9999.0\"^^xsd:short",
+        "<a> <b> \"9999E4\"^^xsd:nonNegativeInteger",
         "<a> <b> \"9999E4\"^^xsd:int",
         "<a> <b> 99999999999999999999999",
         "<a> <b> \"99999999999999999999\"^^xsd:integer",
@@ -443,6 +443,26 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
         TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
     auto result = parseAllTriples(parser, input);
     ASSERT_EQ(result, expected);
+  }
+}
+
+TEST(TurtleParserTest, DateLiterals) {
+  std::vector<std::string> dateLiterals{
+      R"("2000-10-15"^^<)"s + XSD_DATE_TYPE + ">",
+      R"("-2014-03-16T12:13:52"^^<)"s + XSD_DATETIME_TYPE + ">",
+      R"("2084"^^<)"s + XSD_GYEAR_TYPE + ">",
+      R"("2083-12"^^<)"s + XSD_GYEARMONTH_TYPE + ">"};
+  std::vector<std::string> expected{
+      ":v:date:0000000000000002000-10-15T00:00:00",
+      ":v:date:-999999999999997985-03-16T12:13:52",
+      ":v:date:0000000000000002084-00-00T00:00:00",
+      ":v:date:0000000000000002083-12-00T00:00:00"};
+
+  for (size_t i = 0; i < dateLiterals.size(); ++i) {
+    auto object =
+        TurtleStringParser<Tokenizer>::parseTripleObject(dateLiterals[i]);
+    ASSERT_TRUE(object.isString());
+    EXPECT_EQ(object.getString(), expected[i]);
   }
 }
 

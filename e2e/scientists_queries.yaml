@@ -703,7 +703,7 @@ queries:
       }
       GROUP BY ?p
     checks:
-      - num_rows: 109 
+      - num_rows: 109
       - num_cols: 2
       - selected: ["?p", "?count"]
       - contains_row: ["<Film_appeared_in>", 56] 
@@ -719,7 +719,7 @@ queries:
       }
       GROUP BY ?p
     checks:
-      - num_rows: 36 
+      - num_rows: 36
       - num_cols: 2
       - selected: ["?p", "?count"]
       - contains_row: ["<Hall_of_fame_induction>", 1] 
@@ -1108,7 +1108,7 @@ queries:
         }
       }
     checks:
-      #The query returns to many rows, the current limit is 4096
+      #The query returns too many rows, the current limit is 4096
       - num_cols: 2
       - selected: ["?a", "?r"]
       - contains_row: ["<Aafia_Siddiqui>","<Religion>"]
@@ -1135,3 +1135,43 @@ queries:
       - contains_row: ["<Jacques_Curie>", "Jacques_Curie"]
       - contains_row: ["<Marie_Curie>", "Marie_Curie"]
       - contains_row: ["<Pierre_Curie>", "Pierre_Curie"]
+
+
+  - query : datetime_object-find-justin-boyan
+    type: no-text
+    sparql: |
+      PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+      SELECT ?s WHERE {
+        ?s <Date_of_birth> "1970-05-28T17:55Z"^^xsd:dateTime
+      }
+    checks:
+      - num_cols: 1
+      - selected: ["?s"]
+      - contains_row: ["<Justin_Boyan>"]
+
+
+  - query : datetime_filter-find-justin-boyan
+    type: no-text
+    sparql: |
+      PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+      SELECT ?s WHERE {
+        ?s <Date_of_birth> ?d .
+        FILTER (?d = "1970-05-28T17:55Z"^^xsd:dateTime)
+      }
+    checks:
+      - num_cols: 1
+      - selected: ["?s"]
+      - contains_row: ["<Justin_Boyan>"]
+  - query : xsd-value-in-property-path
+    type: no-text
+    sparql: |
+      PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+      SELECT ?x WHERE {
+        ?x ^<is-a>/<Structure_Count> "1"^^xsd:int
+      }
+    checks:
+      - num_cols: 1
+      - num_rows: 31
+      - selected: ["?x"]
+      - contains_row: ["<Architect>"]
+      - contains_row: ["<Visual_Artist>"]

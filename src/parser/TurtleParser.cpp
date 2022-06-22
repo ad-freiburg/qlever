@@ -5,8 +5,9 @@
 
 #include "./TurtleParser.h"
 
-#include <string.h>
+#include <cstring>
 
+#include "../util/Conversions.h"
 #include "../util/TaskQueue.h"
 #include "./RdfEscaping.h"
 
@@ -127,7 +128,6 @@ template <class T>
 bool TurtleParser<T>::objectList() {
   if (object()) {
     while (skip<TurtleTokenId::Comma>() && check(object())) {
-      continue;
     }
     return true;
   } else {
@@ -238,7 +238,7 @@ void TurtleParser<T>::parseDoubleConstant(const std::string& input) {
   size_t position;
 
   bool errorOccured = false;
-  TripleObject result;
+  TripleComponent result;
   try {
     // We cannot directly store this in `_lastParseResult` because this might
     // overwrite `input`.
@@ -264,7 +264,7 @@ void TurtleParser<T>::parseIntegerConstant(const std::string& input) {
   size_t position = 0;
 
   bool errorOccured = false;
-  TripleObject result;
+  TripleComponent result;
   try {
     // We cannot directly store this in `_lastParseResult` because this might
     // overwrite `input`.
@@ -349,13 +349,28 @@ bool TurtleParser<T>::rdfLiteral() {
     const auto& typeIri = _lastParseResult.getString();
     auto type = stripAngleBrackets(typeIri);
     std::string strippedLiteral{stripDoubleQuotes(literalString)};
-    if (type == XSD_INT_TYPE || type == XSD_INTEGER_TYPE) {
+    // TODO<joka921> clean this up by moving the check for the types to a
+    // separate module.
+    if (type == XSD_INT_TYPE || type == XSD_INTEGER_TYPE ||
+        type == XSD_NON_POSITIVE_INTEGER_TYPE ||
+        type == XSD_NEGATIVE_INTEGER_TYPE || type == XSD_LONG_TYPE ||
+        type == XSD_SHORT_TYPE || type == XSD_BYTE_TYPE ||
+        type == XSD_NON_NEGATIVE_INTEGER_TYPE ||
+        type == XSD_UNSIGNED_LONG_TYPE || type == XSD_UNSIGNED_INT_TYPE ||
+        type == XSD_UNSIGNED_SHORT_TYPE || type == XSD_POSITIVE_INTEGER_TYPE ||
+        type == XSD_BOOLEAN_TYPE) {
       parseIntegerConstant(strippedLiteral);
     } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
                type == XSD_FLOAT_TYPE) {
       parseDoubleConstant(strippedLiteral);
     } else {
       _lastParseResult = literalString + "^^" + _lastParseResult.getString();
+      // TODO: remove this once the dates become value IDs, too.
+      if (type == XSD_DATETIME_TYPE || type == XSD_DATE_TYPE ||
+          type == XSD_GYEAR_TYPE || type == XSD_GYEARMONTH_TYPE) {
+        _lastParseResult = ad_utility::convertValueLiteralToIndexWord(
+            _lastParseResult.getString());
+      }
     }
     return true;
   } else {

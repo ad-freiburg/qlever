@@ -35,7 +35,7 @@ $(document).ready(function () {
         var q = encodeURIComponent($("#query").val());
         var queryString = "?query=" + q;
         if ($("#clear").prop('checked')) {
-            queryString += "&cmd=clearcache";
+            queryString += "&cmd=clear-cache";
         }
         queryString += "&send=100"
         var loc = window.location.href.substr(0, window.location.href.indexOf("?"));
@@ -51,10 +51,10 @@ $(document).ready(function () {
         console.log(q);
         var queryString = "?query=" + q;
         if ($("#clear").prop('checked')) {
-            console.log("With clearcache");
-            queryString += "&cmd=clearcache";
+            console.log("With clear-cache");
+            queryString += "&cmd=clear-cache";
         } else {
-            console.log("Without clearcache");
+            console.log("Without clear-cache");
         }
         processCsvQuery(queryString)
     });
@@ -63,10 +63,10 @@ $(document).ready(function () {
         console.log(q);
         var queryString = "?query=" + q;
         if ($("#clear").prop('checked')) {
-            console.log("With clearcache");
-            queryString += "&cmd=clearcache";
+            console.log("With clear-cache");
+            queryString += "&cmd=clear-cache";
         } else {
-            console.log("Without clearcache");
+            console.log("Without clear-cache");
         }
         processTsvQuery(queryString)
     });
