@@ -552,6 +552,9 @@ TEST(IndexTest, scanTest) {
   ad_utility::deleteFile("_testindex.index.pos");
 };
 
+// Returns true if the variant that is passed in holds a
+// `PossiblyExternalizedIriOrLiteral` that matches the string `content` and the
+// bool `isExternal`
 MATCHER_P2(IsPossiblyExternalString, content, isExternal, "") {
   if (!std::holds_alternative<PossiblyExternalizedIriOrLiteral>(arg)) {
     return false;
