@@ -77,13 +77,6 @@ std::ostream& operator<<(std::ostream& out,
   return out;
 }
 
-std::ostream& operator<<(std::ostream& out,
-                         const ExpressionAliasGroupKey& groupKey) {
-  out << "Group by " << groupKey.expression_.getDescriptor()
-      << " with alias as " << groupKey.variable_;
-  return out;
-}
-
 std::ostream& operator<<(std::ostream& out, const VariableGroupKey& groupKey) {
   out << "Group by " << groupKey.variable_;
   return out;
@@ -208,9 +201,9 @@ MATCHER_P(IsExpressionGroupKey, expr, "") {
 
 MATCHER_P2(IsExpressionAliasGroupKey, expr, variable, "") {
   if (const auto expressionAliasGroupKey =
-          unwrapVariant<GroupKey, ExpressionAliasGroupKey>(arg)) {
-    return (expressionAliasGroupKey->expression_.getDescriptor() == expr) &&
-           (expressionAliasGroupKey->variable_ == variable);
+          unwrapVariant<GroupKey, ParsedQuery::Alias>(arg)) {
+    return (expressionAliasGroupKey->_expression.getDescriptor() == expr) &&
+           (expressionAliasGroupKey->_outVarName == variable);
   }
   return false;
 }

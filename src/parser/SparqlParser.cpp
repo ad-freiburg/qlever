@@ -575,16 +575,15 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
         //            (GroupKey{VariableGroupKey{helperBindTargetVar}});
         query->_groupByVariables.push_back(helperBindTargetVar);
       };
-      auto processExpressionAliasGroupKey =
-          [&query](ExpressionAliasGroupKey groupKey) {
-            GraphPatternOperation::Bind helperBind{
-                std::move(groupKey.expression_), groupKey.variable_};
-            query->_rootGraphPattern._children.emplace_back(
-                std::move(helperBind));
-            // TODO<qup42> correct?
-            query->registerVariableVisibleInQueryBody(groupKey.variable_);
-            query->_groupByVariables.push_back(groupKey.variable_);
-          };
+      auto processExpressionAliasGroupKey = [&query](
+                                                ParsedQuery::Alias groupKey) {
+        GraphPatternOperation::Bind helperBind{std::move(groupKey._expression),
+                                               groupKey._outVarName};
+        query->_rootGraphPattern._children.emplace_back(std::move(helperBind));
+        // TODO<qup42> correct?
+        query->registerVariableVisibleInQueryBody(groupKey._outVarName);
+        query->_groupByVariables.push_back(groupKey._outVarName);
+      };
 
       for (auto& orderKey : group_keys) {
         std::visit(

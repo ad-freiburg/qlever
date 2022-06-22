@@ -139,37 +139,14 @@ class VariableOrderKey {
 using OrderKey = std::variant<VariableOrderKey, ExpressionOrderKey>;
 
 /// Store an expression that appeared in a GROUP BY clause.
-class ExpressionGroupKey {
- public:
+struct ExpressionGroupKey {
   sparqlExpression::SparqlExpressionPimpl expression_;
-  // ___________________________________________________________________________
-  explicit ExpressionGroupKey(
-      sparqlExpression::SparqlExpressionPimpl expression)
-      : expression_{std::move(expression)} {}
-};
-
-/// Store an expression that is bound to a variable and appeared in a GROUP BY
-/// clause.
-class ExpressionAliasGroupKey {
- public:
-  sparqlExpression::SparqlExpressionPimpl expression_;
-  string variable_;
-  // ___________________________________________________________________________
-  explicit ExpressionAliasGroupKey(
-      sparqlExpression::SparqlExpressionPimpl expression, string variable)
-      : expression_{std::move(expression)}, variable_{std::move(variable)} {}
 };
 
 /// Store a variable that appeared in a GROUP BY clause.
-class VariableGroupKey {
- public:
+struct VariableGroupKey {
   string variable_;
-  // ___________________________________________________________________________
-  explicit VariableGroupKey(string variable) : variable_{std::move(variable)} {}
 };
-
-using GroupKey =
-    std::variant<ExpressionGroupKey, ExpressionAliasGroupKey, VariableGroupKey>;
 
 class SparqlFilter {
  public:
@@ -433,6 +410,9 @@ class ParsedQuery {
   static void expandPrefix(
       string& item, const ad_utility::HashMap<string, string>& prefixMap);
 };
+
+using GroupKey =
+    std::variant<ExpressionGroupKey, ParsedQuery::Alias, VariableGroupKey>;
 
 struct GraphPatternOperation {
   struct BasicGraphPattern {

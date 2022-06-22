@@ -242,7 +242,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitGroupCondition(
       SparqlAutomaticParser::GroupConditionContext* ctx) override {
     if (ctx->var() && !ctx->expression()) {
-      return GroupKey{VariableGroupKey(ctx->var()->getText())};
+      return GroupKey{VariableGroupKey{ctx->var()->getText()}};
     } else if (ctx->builtInCall() || ctx->functionCall()) {
       // builtInCall and functionCall are both also an Expression
       auto subCtx =
@@ -256,7 +256,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
           std::move(visit(ctx->expression()).as<ExpressionPtr>())};
       if (ctx->AS() && ctx->var()) {
         return GroupKey{
-            ExpressionAliasGroupKey{std::move(expr), ctx->var()->getText()}};
+            ParsedQuery::Alias{std::move(expr), ctx->var()->getText()}};
       } else {
         return GroupKey{ExpressionGroupKey{std::move(expr)}};
       }
