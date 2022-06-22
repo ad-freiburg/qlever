@@ -177,7 +177,7 @@ void operator<<(WriteSerializer auto& serializer, const auto& t) {
 void operator>>(ReadSerializer auto& serializer, auto&& t) { serializer | t; }
 
 /// An empty struct that isn't needed by the users of this serialization
-/// framework. It is used internally to make argument-dependent-lookup work.
+/// framework. It is used internally to make argument-dependent lookup work.
 struct TrivialSerializationHelperTag {};
 /**
  * Types T for which a function `allowTrivialSerialization(T,
@@ -191,8 +191,7 @@ struct TrivialSerializationHelperTag {};
  * If you want to break the dependencies between your types and this header, you
  * can also define the second parameter to be templated.
  *
- * For example, one can
- * equivalently write one of the following two:
+ * For example, one can equivalently write one of the following two:
  *
  * struct X {
  *   int x;
@@ -216,7 +215,7 @@ struct TrivialSerializationHelperTag {};
 template <typename T>
 concept TriviallySerializable = requires(T t,
                                          TrivialSerializationHelperTag tag) {
-  // The `TrivialSerializationHelperTag` lets the argument-dependent-lookup also
+  // The `TrivialSerializationHelperTag` lets the argument-dependent lookup also
   // find the `allowTrivialSerialization` function if it is defined in the
   // `ad::serialization` namespace.
   allowTrivialSerialization(t, tag);
