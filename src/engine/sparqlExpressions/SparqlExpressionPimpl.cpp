@@ -57,4 +57,9 @@ std::string SparqlExpressionPimpl::getCacheKey(
 const std::string& SparqlExpressionPimpl::getDescriptor() const {
   return _pimpl->descriptor();
 }
+
+// ____________________________________________________________________________
+void SparqlExpressionPimpl::setDescriptor(std::string descriptor) {
+  _pimpl->descriptor() = std::move(descriptor);
+}
 }  // namespace sparqlExpression

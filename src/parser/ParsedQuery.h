@@ -138,11 +138,6 @@ class VariableOrderKey {
 // Represents an ordering by a variable or an expression.
 using OrderKey = std::variant<VariableOrderKey, ExpressionOrderKey>;
 
-/// Store an expression that appeared in a GROUP BY clause.
-struct ExpressionGroupKey {
-  sparqlExpression::SparqlExpressionPimpl expression_;
-};
-
 class SparqlFilter {
  public:
   enum FilterType {
@@ -342,8 +337,7 @@ class ParsedQuery {
   vector<SparqlFilter> _havingClauses;
   size_t _numGraphPatterns = 1;
   vector<VariableOrderKey> _orderBy;
-  // TODO<qup42> change to VariableGroupKey?
-  vector<string> _groupByVariables;
+  vector<Variable> _groupByVariables;
   LimitOffsetClause _limitOffset{};
   string _originalString;
 
@@ -406,7 +400,8 @@ class ParsedQuery {
       string& item, const ad_utility::HashMap<string, string>& prefixMap);
 };
 
-using GroupKey = std::variant<ExpressionGroupKey, ParsedQuery::Alias, Variable>;
+using GroupKey = std::variant<sparqlExpression::SparqlExpressionPimpl,
+                              ParsedQuery::Alias, Variable>;
 
 struct GraphPatternOperation {
   struct BasicGraphPattern {

@@ -23,6 +23,7 @@ struct EvaluationContext;
 class SparqlExpressionPimpl {
  public:
   [[nodiscard]] const std::string& getDescriptor() const;
+  void setDescriptor(std::string descriptor);
 
   // Get the variables that are not aggregated by this expression.
   [[nodiscard]] std::vector<std::string> getUnaggregatedVariables() const;

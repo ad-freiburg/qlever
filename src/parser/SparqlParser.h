@@ -66,7 +66,7 @@ class SparqlParser {
   string query_;
   // The number of additional internal variables that were added by the
   // implementation of ORDER BY as BIND+ORDER BY.
-  uint64_t numAdditionalVariables_ = 0;
+  uint64_t numInternalVariables_ = 0;
   SparqlFilter parseRegexFilter(bool expectKeyword);
 
   template <typename F>
@@ -74,4 +74,6 @@ class SparqlParser {
       -> decltype(f(std::declval<const string&>(),
                     std::declval<SparqlQleverVisitor::PrefixMap>())
                       .resultOfParse_);
+  Variable addInternalBind(ParsedQuery* query,
+                           sparqlExpression::SparqlExpressionPimpl expression);
 };

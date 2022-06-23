@@ -804,11 +804,9 @@ TEST(SparqlParser, OrderCondition) {
 TEST(SparqlParser, OrderClause) {
   {
     string input = "ORDER BY ?test DESC(?foo - 5)";
-    ParserAndVisitor p{input};
-    auto orderKeys =
-        p.parser_.orderClause()->accept(&p.visitor_).as<vector<OrderKey>>();
-    EXPECT_THAT(orderKeys[0], IsVariableOrderKey("?test", false));
-    EXPECT_THAT(orderKeys[1], IsExpressionOrderKey("?foo-5", true));
+    auto orderKeys = parseOrderClause(input, {});
+    expectCompleteArrayParse(orderKeys, IsVariableOrderKey("?test", false),
+                             IsExpressionOrderKey("?foo-5", true));
   }
 }
 
@@ -845,22 +843,16 @@ TEST(SparqlParser, GroupCondition) {
   // functionCall
   // functionCall doesn't set the Expression descriptor
   expectParseExpression(
-      "<http://www.opengis"
-      ".net/def/function/geosparql/latitude> (?test)",
-      "");
+      "<http://www.opengis.net/def/function/geosparql/latitude> (?test)",
+      "<http://www.opengis.net/def/function/geosparql/latitude>(?test)");
 }
 
 TEST(SparqlParser, GroupClause) {
   {
     string input = "GROUP BY ?test (?foo - 10 as ?bar) COUNT(?baz)";
     auto groupings = parseGroupClause(input, {});
-    // TODO<qup42> Possibility to integrate this case of multiple matchers into
-    // expectCompleteParse?
-    EXPECT_TRUE(groupings.remainingText_.empty());
-    EXPECT_THAT(groupings.resultOfParse_[0], IsVariableGroupKey("?test"));
-    EXPECT_THAT(groupings.resultOfParse_[1],
-                IsExpressionAliasGroupKey("?foo-10", "?bar"));
-    EXPECT_THAT(groupings.resultOfParse_[2],
-                IsExpressionGroupKey("COUNT(?baz)"));
+    expectCompleteArrayParse(groupings, IsVariableGroupKey("?test"),
+                             IsExpressionAliasGroupKey("?foo-10", "?bar"),
+                             IsExpressionGroupKey("COUNT(?baz)"));
   }
 }

@@ -78,9 +78,10 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
           if (is_alias) {
             continue;
           }
-          if (std::find(query->_groupByVariables.begin(),
-                        query->_groupByVariables.end(),
-                        var) == query->_groupByVariables.end()) {
+          if (!ad_utility::contains_if(query->_groupByVariables,
+                                       [&var](const Variable& grouping) {
+                                         return var == grouping.name();
+                                       })) {
             throw ParseException("Variable " + var +
                                  " is selected but not "
                                  "aggregated despite the query not being "
@@ -100,9 +101,10 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
         for (const auto& varOrTerm : triple) {
           if (auto variable = std::get_if<Variable>(&varOrTerm)) {
             const auto& var = variable->name();
-            if (std::find(query->_groupByVariables.begin(),
-                          query->_groupByVariables.end(),
-                          var) == query->_groupByVariables.end()) {
+            if (!ad_utility::contains_if(query->_groupByVariables,
+                                         [&var](const Variable& grouping) {
+                                           return var == grouping.name();
+                                         })) {
               throw ParseException("Variable " + var +
                                    " is used but not "
                                    "aggregated despite the query not being "
@@ -493,11 +495,14 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
           parseWithAntlr(sparqlParserHelpers::parseOrderClause, *query);
 
       auto processVariableOrderKey = [&query](VariableOrderKey orderKey) {
-        // Check whether grouping is done and the variable being ordered by
-        // is neither grouped nor the result of an alias in the select
-        const vector<std::string>& groupByVariables = query->_groupByVariables;
+        // Check whether grouping is done. The variable being ordered by
+        // must then be either grouped or the result of an alias in the select.
+        const vector<Variable>& groupByVariables = query->_groupByVariables;
         if (!groupByVariables.empty() &&
-            !ad_utility::contains(groupByVariables, orderKey.variable_) &&
+            !ad_utility::contains_if(groupByVariables,
+                                     [&orderKey](const Variable& var) {
+                                       return orderKey.variable_ == var.name();
+                                     }) &&
             !ad_utility::contains_if(
                 query->selectClause()._aliases,
                 [&orderKey](const ParsedQuery::Alias& alias) {
@@ -528,21 +533,9 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
               "\"). Please assign this expression to a "
               "new variable in the SELECT clause and then order by this "
               "variable.");
-        // Internal variable name to which the result of the helper bind is
-        // assigned.
-        std::string helperBindTargetVar =
-            SOLUTION_MODIFIER_HELPER_BIND_PREFIX +
-            std::to_string(numAdditionalVariables_);
-        numAdditionalVariables_++;
-        GraphPatternOperation::Bind helperBind{std::move(orderKey.expression_),
-                                               helperBindTargetVar};
-        // Don't register the helperBindTargetVar as visible because it is used
-        // internally and should not be selected by SELECT *.
-        // TODO<qup42, joka921> Implement "internal" variables, that can't be
-        //  selected at all and can never interfere with variables from the
-        //  query.
-        query->_rootGraphPattern._children.emplace_back(std::move(helperBind));
-        query->_orderBy.emplace_back(helperBindTargetVar,
+        auto helperTarget =
+            addInternalBind(query, std::move(orderKey.expression_));
+        query->_orderBy.emplace_back(helperTarget.name(),
                                      orderKey.isDescending_);
       };
 
@@ -560,29 +553,20 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
           parseWithAntlr(sparqlParserHelpers::parseGroupClause, *query);
 
       auto processVariableGroupKey = [&query](const Variable& groupKey) {
-        query->_groupByVariables.push_back(groupKey.name());
+        query->_groupByVariables.emplace_back(groupKey.name());
       };
-      auto processExpressionGroupKey = [&query,
-                                        this](ExpressionGroupKey groupKey) {
-        std::string helperBindTargetVar =
-            SOLUTION_MODIFIER_HELPER_BIND_PREFIX +
-            std::to_string(numAdditionalVariables_);
-        numAdditionalVariables_++;
-        GraphPatternOperation::Bind helperBind{std::move(groupKey.expression_),
-                                               helperBindTargetVar};
-        query->_rootGraphPattern._children.emplace_back(std::move(helperBind));
-        //        query->_groupByVariables.push_back
-        //            (GroupKey{VariableGroupKey{helperBindTargetVar}});
-        query->_groupByVariables.push_back(helperBindTargetVar);
-      };
+      auto processExpressionGroupKey =
+          [&query, this](sparqlExpression::SparqlExpressionPimpl groupKey) {
+            auto helperTarget = addInternalBind(query, std::move(groupKey));
+            query->_groupByVariables.emplace_back(helperTarget.name());
+          };
       auto processExpressionAliasGroupKey = [&query](
                                                 ParsedQuery::Alias groupKey) {
         GraphPatternOperation::Bind helperBind{std::move(groupKey._expression),
                                                groupKey._outVarName};
         query->_rootGraphPattern._children.emplace_back(std::move(helperBind));
-        // TODO<qup42> correct?
         query->registerVariableVisibleInQueryBody(groupKey._outVarName);
-        query->_groupByVariables.push_back(groupKey._outVarName);
+        query->_groupByVariables.emplace_back(groupKey._outVarName);
       };
 
       for (auto& orderKey : group_keys) {
@@ -1002,4 +986,25 @@ auto SparqlParser::parseWithAntlr(F f, const ParsedQuery& parsedQuery)
       f(lexer_.getUnconsumedInput(), getPrefixMap(parsedQuery));
   lexer_.reset(std::move(resultOfParseAndRemainingText.remainingText_));
   return std::move(resultOfParseAndRemainingText.resultOfParse_);
+}
+
+// ________________________________________________________________________
+/// Generates an internal bind that binds the given expression using a bind.
+// The variable that the expression is bound to is returned.
+Variable SparqlParser::addInternalBind(
+    ParsedQuery* query, sparqlExpression::SparqlExpressionPimpl expression) {
+  // Internal variable name to which the result of the helper bind is
+  // assigned.
+  std::string helperBindTargetVar =
+      INTERNAL_VARIABLE_PREFIX + std::to_string(numInternalVariables_);
+  numInternalVariables_++;
+  GraphPatternOperation::Bind helperBind{std::move(expression),
+                                         helperBindTargetVar};
+  query->_rootGraphPattern._children.emplace_back(std::move(helperBind));
+  // Don't register the helperBindTargetVar as visible because it is used
+  // internally and should not be selected by SELECT *.
+  // TODO<qup42, joka921> Implement "internal" variables, that can't be
+  //  selected at all and can never interfere with variables from the
+  //  query.
+  return Variable{std::move(helperBindTargetVar)};
 }

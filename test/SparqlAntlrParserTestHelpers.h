@@ -71,11 +71,15 @@ std::ostream& operator<<(std::ostream& out,
 
 // _____________________________________________________________________________
 
-std::ostream& operator<<(std::ostream& out,
-                         const ExpressionGroupKey& groupKey) {
-  out << "Group by " << groupKey.expression_.getDescriptor();
+namespace sparqlExpression {
+
+std::ostream& operator<<(
+    std::ostream& out,
+    const sparqlExpression::SparqlExpressionPimpl& groupKey) {
+  out << "Group by " << groupKey.getDescriptor();
   return out;
 }
+}  // namespace sparqlExpression
 
 // _____________________________________________________________________________
 
@@ -111,6 +115,30 @@ void expectCompleteParse(const auto& resultOfParseAndText, auto&& matcher) {
   EXPECT_TRUE(resultOfParseAndText.remainingText_.empty());
 }
 
+// _____________________________________________________________________________
+/**
+ * Ensures that the matchers all match on the result of the parsing and that
+ * the text has been fully consumed by the parser.
+ *
+ * @param resultOfParseAndText Parsing result
+ * @param matchers Matcher... that must be fulfilled
+ */
+void expectCompleteArrayParse(const auto& resultOfParseAndText,
+                              auto&&... matchers) {
+  auto expect_single_element = [](auto&& result, auto matcher) {
+    EXPECT_THAT(result, matcher);
+  };
+  ASSERT_EQ(resultOfParseAndText.resultOfParse_.size(), sizeof...(matchers));
+  auto sequence = std::make_index_sequence<sizeof...(matchers)>();
+
+  auto lambda = [&]<size_t... i>(std::index_sequence<i...>) {
+    (...,
+     expect_single_element(resultOfParseAndText.resultOfParse_[i], matchers));
+  };
+
+  lambda(sequence);
+  EXPECT_TRUE(resultOfParseAndText.remainingText_.empty());
+}
 // _____________________________________________________________________________
 
 MATCHER_P(IsIri, value, "") {
@@ -187,8 +215,9 @@ MATCHER_P(IsVariableGroupKey, key, "") {
 
 MATCHER_P(IsExpressionGroupKey, expr, "") {
   if (const auto expressionGroupKey =
-          unwrapVariant<GroupKey, ExpressionGroupKey>(arg)) {
-    return (expressionGroupKey->expression_.getDescriptor() == expr);
+          unwrapVariant<GroupKey, sparqlExpression::SparqlExpressionPimpl>(
+              arg)) {
+    return (expressionGroupKey->getDescriptor() == expr);
   }
   return false;
 }

@@ -252,14 +252,15 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
           (ctx->builtInCall() ? (antlr4::tree::ParseTree*)ctx->builtInCall()
                               : (antlr4::tree::ParseTree*)ctx->functionCall());
       auto expr = makeExpressionPimpl(visit(subCtx));
-      return GroupKey{ExpressionGroupKey{std::move(expr)}};
+      expr.setDescriptor(ctx->getText());
+      return GroupKey{std::move(expr)};
     } else if (ctx->expression()) {
       auto expr = makeExpressionPimpl(visit(ctx->expression()));
       if (ctx->AS() && ctx->var()) {
         return GroupKey{
             ParsedQuery::Alias{std::move(expr), ctx->var()->getText()}};
       } else {
-        return GroupKey{ExpressionGroupKey{std::move(expr)}};
+        return GroupKey{std::move(expr)};
       }
     }
     AD_FAIL();  // Should be unreachable.
