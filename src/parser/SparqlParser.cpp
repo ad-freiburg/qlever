@@ -68,14 +68,10 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
       for (const string& var :
            selectClause._varsOrAsterisk.getSelectedVariables()) {
         if (var[0] == '?') {
-          bool is_alias = false;
-          for (const ParsedQuery::Alias& a : selectClause._aliases) {
-            if (a._outVarName == var) {
-              is_alias = true;
-              break;
-            }
-          }
-          if (is_alias) {
+          if (ad_utility::contains_if(selectClause._aliases,
+                                      [&var](const ParsedQuery::Alias& alias) {
+                                        return alias._outVarName == var;
+                                      })) {
             continue;
           }
           if (!ad_utility::contains_if(query->_groupByVariables,

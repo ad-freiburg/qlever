@@ -231,3 +231,10 @@ MATCHER_P2(IsAliasGroupKey, expr, variable, "") {
   }
   return false;
 }
+
+MATCHER_P(GroupByVariablesMatch, vars, "") {
+  vector<Variable> groupVariables = arg._groupByVariables;
+  if (groupVariables.size() != vars.size()) return false;
+  return std::equal(groupVariables.begin(), groupVariables.end(), vars.begin(),
+                    [](auto& var, auto& var1) { return var.name() == var1; });
+}
