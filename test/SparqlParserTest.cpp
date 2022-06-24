@@ -1294,7 +1294,7 @@ TEST(ParserTest, Group) {
     auto variant = pq._rootGraphPattern._children[1].variant_;
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
-    ASSERT_EQ(helperBind._expression.getDescriptor(), "?x-?y");
+    ASSERT_THAT(helperBind, IsBindExpression("?x-?y"));
     EXPECT_THAT(
         pq, GroupByVariablesMatch<vector<string>>({helperBind._target, "?x"}));
   }
@@ -1308,8 +1308,7 @@ TEST(ParserTest, Group) {
     auto variant = pq._rootGraphPattern._children[1].variant_;
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
-    ASSERT_EQ(helperBind._expression.getDescriptor(), "?x-?y");
-    ASSERT_EQ(helperBind._target, "?foo");
+    EXPECT_THAT(helperBind, IsBind("?x-?y", "?foo"));
     EXPECT_THAT(
         pq, GroupByVariablesMatch<vector<string>>({helperBind._target, "?x"}));
   }
@@ -1321,7 +1320,7 @@ TEST(ParserTest, Group) {
     auto variant = pq._rootGraphPattern._children[1].variant_;
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
-    ASSERT_EQ(helperBind._expression.getDescriptor(), "COUNT(?x)");
+    ASSERT_THAT(helperBind, IsBindExpression("COUNT(?x)"));
     EXPECT_THAT(
         pq, GroupByVariablesMatch<vector<string>>({helperBind._target, "?x"}));
   }
@@ -1335,9 +1334,10 @@ TEST(ParserTest, Group) {
     auto variant = pq._rootGraphPattern._children[1].variant_;
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
-    ASSERT_EQ(
-        helperBind._expression.getDescriptor(),
-        "<http://www.opengis.net/def/function/geosparql/latitude>(?test)");
+    ASSERT_THAT(
+        helperBind,
+        IsBindExpression(
+            "<http://www.opengis.net/def/function/geosparql/latitude>(?test)"));
     EXPECT_THAT(
         pq, GroupByVariablesMatch<vector<string>>({helperBind._target, "?x"}));
   }
