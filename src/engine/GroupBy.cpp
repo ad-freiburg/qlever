@@ -21,8 +21,8 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
             });
 
   std::transform(groupByVariables.begin(), groupByVariables.end(),
-                 _groupByVariables.begin(),
-                 [](Variable& var) { return var.name(); });
+                 std::back_inserter(_groupByVariables),
+                 [](const Variable& var) { return var.name(); });
   // sort the groupByVariables to ensure the cache key is order invariant
   std::sort(_groupByVariables.begin(), _groupByVariables.end());
 

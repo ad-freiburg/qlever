@@ -830,7 +830,7 @@ TEST(SparqlParser, GroupCondition) {
       [&parseGroupCondition](const string& input, const string& expression,
                              const string& variable) {
         expectCompleteParse(parseGroupCondition(input),
-                            IsExpressionAliasGroupKey(expression, variable));
+                            IsAliasGroupKey(expression, variable));
       };
   // variable
   expectParseVariable("?test", "?test");
@@ -841,7 +841,6 @@ TEST(SparqlParser, GroupCondition) {
   // builtInCall
   expectParseExpression("COUNT(?test)", "COUNT(?test)");
   // functionCall
-  // functionCall doesn't set the Expression descriptor
   expectParseExpression(
       "<http://www.opengis.net/def/function/geosparql/latitude> (?test)",
       "<http://www.opengis.net/def/function/geosparql/latitude>(?test)");
@@ -852,7 +851,7 @@ TEST(SparqlParser, GroupClause) {
     string input = "GROUP BY ?test (?foo - 10 as ?bar) COUNT(?baz)";
     auto groupings = parseGroupClause(input, {});
     expectCompleteArrayParse(groupings, IsVariableGroupKey("?test"),
-                             IsExpressionAliasGroupKey("?foo-10", "?bar"),
+                             IsAliasGroupKey("?foo-10", "?bar"),
                              IsExpressionGroupKey("COUNT(?baz)"));
   }
 }

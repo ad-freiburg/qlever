@@ -117,8 +117,10 @@ void expectCompleteParse(const auto& resultOfParseAndText, auto&& matcher) {
 
 // _____________________________________________________________________________
 /**
- * Ensures that the matchers all match on the result of the parsing and that
- * the text has been fully consumed by the parser.
+ * Ensures that resultOfParseAndText.resultOfParse_ is an array-like type (e.g.
+ * std::vector) the size of which is the number of specified matchers and the
+ * the i-th matcher matches resultOfParseAndText.resultOfParser_[i] and that the
+ * text has been fully consumed by the parser.
  *
  * @param resultOfParseAndText Parsing result
  * @param matchers Matcher... that must be fulfilled
@@ -207,26 +209,25 @@ MATCHER_P2(IsExpressionOrderKey, expr, desc, "") {
 }
 
 MATCHER_P(IsVariableGroupKey, key, "") {
-  if (const auto variableGroupKey = unwrapVariant<GroupKey, Variable>(arg)) {
-    return (variableGroupKey->name() == key);
+  if (const auto variable = unwrapVariant<GroupKey, Variable>(arg)) {
+    return (variable->name() == key);
   }
   return false;
 }
 
 MATCHER_P(IsExpressionGroupKey, expr, "") {
-  if (const auto expressionGroupKey =
+  if (const auto expression =
           unwrapVariant<GroupKey, sparqlExpression::SparqlExpressionPimpl>(
               arg)) {
-    return (expressionGroupKey->getDescriptor() == expr);
+    return (expression->getDescriptor() == expr);
   }
   return false;
 }
 
-MATCHER_P2(IsExpressionAliasGroupKey, expr, variable, "") {
-  if (const auto expressionAliasGroupKey =
-          unwrapVariant<GroupKey, ParsedQuery::Alias>(arg)) {
-    return (expressionAliasGroupKey->_expression.getDescriptor() == expr) &&
-           (expressionAliasGroupKey->_outVarName == variable);
+MATCHER_P2(IsAliasGroupKey, expr, variable, "") {
+  if (const auto alias = unwrapVariant<GroupKey, ParsedQuery::Alias>(arg)) {
+    return (alias->_expression.getDescriptor() == expr) &&
+           (alias->_outVarName == variable);
   }
   return false;
 }
