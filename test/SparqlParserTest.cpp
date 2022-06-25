@@ -1308,7 +1308,7 @@ TEST(ParserTest, Group) {
     auto variant = pq._rootGraphPattern._children[1].variant_;
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
-    EXPECT_THAT(helperBind, IsBind("?x-?y", "?foo"));
+    EXPECT_THAT(helperBind, IsBind("?foo", "?x-?y"));
     EXPECT_THAT(
         pq, GroupByVariablesMatch<vector<string>>({helperBind._target, "?x"}));
   }
