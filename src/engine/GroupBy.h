@@ -38,7 +38,7 @@ class GroupBy : public Operation {
    * @param groupByVariables
    * @param aliases
    */
-  GroupBy(QueryExecutionContext* qec, vector<string> groupByVariables,
+  GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
           std::vector<ParsedQuery::Alias> aliases);
 
  protected:

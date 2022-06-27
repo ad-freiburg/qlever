@@ -804,10 +804,54 @@ TEST(SparqlParser, OrderCondition) {
 TEST(SparqlParser, OrderClause) {
   {
     string input = "ORDER BY ?test DESC(?foo - 5)";
+    auto orderKeys = parseOrderClause(input, {});
+    expectCompleteArrayParse(orderKeys, IsVariableOrderKey("?test", false),
+                             IsExpressionOrderKey("?foo-5", true));
+  }
+}
+
+TEST(SparqlParser, GroupCondition) {
+  auto parseGroupCondition = [](const std::string& input) {
     ParserAndVisitor p{input};
-    auto orderKeys =
-        p.parser_.orderClause()->accept(&p.visitor_).as<vector<OrderKey>>();
-    EXPECT_THAT(orderKeys[0], IsVariableOrderKey("?test", false));
-    EXPECT_THAT(orderKeys[1], IsExpressionOrderKey("?foo-5", true));
+    return p.parse<GroupKey>(input, "group condition",
+                             &SparqlAutomaticParser::groupCondition);
+  };
+  auto expectParseVariable = [&parseGroupCondition](const string& input,
+                                                    const string& variable) {
+    expectCompleteParse(parseGroupCondition(input),
+                        IsVariableGroupKey(variable));
+  };
+  auto expectParseExpression =
+      [&parseGroupCondition](const string& input, const string& expression) {
+        expectCompleteParse(parseGroupCondition(input),
+                            IsExpressionGroupKey(expression));
+      };
+  auto expectParseExpressionAlias =
+      [&parseGroupCondition](const string& input, const string& expression,
+                             const string& variable) {
+        expectCompleteParse(parseGroupCondition(input),
+                            IsAliasGroupKey(expression, variable));
+      };
+  // variable
+  expectParseVariable("?test", "?test");
+  // expression without binding
+  expectParseExpression("(?test)", "?test");
+  // expression with binding
+  expectParseExpressionAlias("(?test AS ?mehr)", "?test", "?mehr");
+  // builtInCall
+  expectParseExpression("COUNT(?test)", "COUNT(?test)");
+  // functionCall
+  expectParseExpression(
+      "<http://www.opengis.net/def/function/geosparql/latitude> (?test)",
+      "<http://www.opengis.net/def/function/geosparql/latitude>(?test)");
+}
+
+TEST(SparqlParser, GroupClause) {
+  {
+    string input = "GROUP BY ?test (?foo - 10 as ?bar) COUNT(?baz)";
+    auto groupings = parseGroupClause(input, {});
+    expectCompleteArrayParse(groupings, IsVariableGroupKey("?test"),
+                             IsAliasGroupKey("?foo-10", "?bar"),
+                             IsExpressionGroupKey("COUNT(?baz)"));
   }
 }

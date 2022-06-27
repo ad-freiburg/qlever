@@ -503,7 +503,7 @@ bool QueryPlanner::checkUsePatternTrick(
       if (t._p._iri != HAS_PREDICATE_PREDICATE || !isVariable(t._o) ||
           (returns_counts &&
            !(counted_var_name == t._o || counted_var_name == t._s)) ||
-          pq->_groupByVariables[0] != t._o) {
+          pq->_groupByVariables[0].name() != t._o) {
         usePatternTrick = false;
         continue;
       }

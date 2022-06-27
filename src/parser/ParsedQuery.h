@@ -341,7 +341,7 @@ class ParsedQuery {
   vector<SparqlFilter> _havingClauses;
   size_t _numGraphPatterns = 1;
   vector<VariableOrderKey> _orderBy;
-  vector<string> _groupByVariables;
+  vector<Variable> _groupByVariables;
   LimitOffsetClause _limitOffset{};
   string _originalString;
 
@@ -402,6 +402,9 @@ class ParsedQuery {
   static void expandPrefix(
       string& item, const ad_utility::HashMap<string, string>& prefixMap);
 };
+
+using GroupKey = std::variant<sparqlExpression::SparqlExpressionPimpl,
+                              ParsedQuery::Alias, Variable>;
 
 struct GraphPatternOperation {
   struct BasicGraphPattern {

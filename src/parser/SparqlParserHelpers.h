@@ -79,6 +79,9 @@ ResultOfParseAndRemainingText<LimitOffsetClause> parseLimitOffsetClause(
 
 ResultOfParseAndRemainingText<vector<OrderKey>> parseOrderClause(
     const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
+
+ResultOfParseAndRemainingText<vector<GroupKey>> parseGroupClause(
+    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H

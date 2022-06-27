@@ -83,4 +83,12 @@ ResultOfParseAndRemainingText<vector<OrderKey>> parseOrderClause(
   return p.parse<vector<OrderKey>>(input, "order clause",
                                    &SparqlAutomaticParser::orderClause);
 }
+// _____________________________________________________________________________
+
+ResultOfParseAndRemainingText<vector<GroupKey>> parseGroupClause(
+    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes) {
+  ParserAndVisitor p{input, std::move(prefixes)};
+  return p.parse<vector<GroupKey>>(input, "group clause",
+                                   &SparqlAutomaticParser::groupClause);
+}
 }  // namespace sparqlParserHelpers
