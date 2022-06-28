@@ -1,10 +1,8 @@
 # QLever
 
-
 [![Build Status via Docker](https://github.com/ad-freiburg/QLever/actions/workflows/docker.yml/badge.svg)](https://github.com/ad-freiburg/QLever/actions/workflows/docker.yml)
-[![Build Status via G++10/Clang++11](https://github.com/ad-freiburg/QLever/actions/workflows/cmake.yml/badge.svg)](https://github.com/ad-freiburg/QLever/actions/workflows/cmake.yml)
-
-
+[![Native build](https://github.com/ad-freiburg/qlever/actions/workflows/native-build.yml/badge.svg)](https://github.com/ad-freiburg/qlever/actions/workflows/native-build.yml)
+[![Code Format Check](https://github.com/ad-freiburg/qlever/actions/workflows/format-check.yml/badge.svg)](https://github.com/ad-freiburg/qlever/actions/workflows/format-check.yml)
 
 QLever (pronounced "Clever") is a SPARQL engine that can efficiently index and query very large knowledge graphs with up to 100 billion triples on a single standard PC or server.
 In particular, QLever is fast for queries that involve large intermediate or final results, which are notoriously hard for engines like Blazegraph or Virtuoso.
