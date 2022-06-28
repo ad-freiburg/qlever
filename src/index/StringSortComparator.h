@@ -243,7 +243,12 @@ class LocaleManager {
     std::string res;
     icu::StringByteSink<std::string> sink(&res);
     UErrorCode err = U_ZERO_ERROR;
-    icu::CaseMap::utf8ToLower(_icuLocale.getName(), 0, s, sink, nullptr, err);
+    // The reason for the `icu::StringPiece` is that older versions of ICU (for
+    // example, the standard version on Ubuntu 18.04) do not accept an
+    // std::string_view here (newer versions do).
+    icu::CaseMap::utf8ToLower(_icuLocale.getName(), 0,
+                              icu::StringPiece(s.data(), s.size()), sink,
+                              nullptr, err);
     raise(err);
     return res;
   }

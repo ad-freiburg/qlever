@@ -613,6 +613,12 @@ void Index::createPermutationPair(
     auto&&... perTripleCallbacks) {
   auto metaData = createPermutations<MetaDataDispatcher>(
       AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
+  // Set the name of this newly created pair of `IndexMetaData` objects.
+  // NOTE: When `setKbName` was called, it set the name of _PSO._meta,
+  // _PSO._meta, ... which however are not used during index building.
+  // `getKbName` simple reads one of these names.
+  metaData.value().first.setName(getKbName());
+  metaData.value().second.setName(getKbName());
   if (metaData) {
     LOG(INFO) << "Exchanging multiplicities for " << p1._readableName << " and "
               << p2._readableName << " ..." << std::endl;
