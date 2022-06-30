@@ -67,8 +67,31 @@ Awaitable<void> Server::process(
   ad_utility::Timer requestTimer;
   requestTimer.start();
 
+  // NOTE:
+  //
+  // For a GET request, `request.method()` yields
+  // `boost::beast::http::verb::get`, `request.target()` yields the query string
+  // (starting with "/?"), and `request.body()` is empty (and can be ignored).
+  //
+  // For a POST request, `request.method()` yields
+  // `boost::beast::http::verb::post`, `request.target()` yields "/" (can be
+  // ignored), and `request.target()` yields the query string (without "/?").
+  //
   // TODO: Implement POST here, by if-elsing request.method().
-  auto filenameAndParams = ad_utility::UrlParser::parseTarget(request.target());
+  LOG(INFO) << "Request method: \"" << request.method() << "\""
+            << ", target: \"" << request.target() << "\""
+            << ", body: \"" << request.body() << "\"" << std::endl;
+  auto filenameAndParams = [&]() {
+    if (request.method() == boost::beast::http::verb::get) {
+      return ad_utility::UrlParser::parseTarget(request.target());
+    }
+    if (request.method() == boost::beast::http::verb::post) {
+      return ad_utility::UrlParser::parseTarget("\?" + request.body());
+    }
+    throw std::runtime_error("Only GET or POST requests supported");
+  }();
+  // auto filenameAndParams =
+  // ad_utility::UrlParser::parseTarget(request.target());
   const auto& params = filenameAndParams._parameters;
 
   // Lambda for sending a response asynchronously. Will be called with `co_await
