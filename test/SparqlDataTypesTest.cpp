@@ -6,7 +6,6 @@
 
 #include "../src/parser/data/VarOrTerm.h"
 
-auto I = [](const auto& id) { return Id::make(id); };
 using namespace std::string_literals;
 using ::testing::Optional;
 
@@ -209,8 +208,8 @@ TEST(SparqlDataTypesTest, VariableEvaluatesCorrectlyBasedOnContext) {
   wrapper._hashMap["?var"] = 0;
   wrapper._resultTable._resultTypes.push_back(qlever::ResultType::VERBATIM);
   wrapper._resultTable._idTable.setCols(1);
-  Id value1 = I(69);
-  Id value2 = I(420);
+  Id value1 = Id::makeFromInt(69);
+  Id value2 = Id::makeFromInt(420);
   wrapper._resultTable._idTable.push_back({value1});
   wrapper._resultTable._idTable.push_back({value2});
 
@@ -251,7 +250,7 @@ TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
   wrapper._hashMap["?var"] = 0;
   wrapper._resultTable._resultTypes.push_back(qlever::ResultType::VERBATIM);
   wrapper._resultTable._idTable.setCols(1);
-  Id value = I(69);
+  Id value = Id::makeFromInt(69);
   wrapper._resultTable._idTable.push_back({value});
 
   Variable variableKnown{"?var"};

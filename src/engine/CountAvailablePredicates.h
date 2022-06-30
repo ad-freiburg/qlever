@@ -45,7 +45,8 @@ class CountAvailablePredicates : public Operation {
    * @brief Creates a new CountAvailblePredicates operation that returns
    * predicates and their counts for the entity given by the entityName.
    */
-  CountAvailablePredicates(QueryExecutionContext* qec, std::string entityName);
+  CountAvailablePredicates(QueryExecutionContext* qec,
+                           TripleComponent entityName);
 
  protected:
   [[nodiscard]] string asStringImpl(size_t indent) const override;

@@ -13,30 +13,39 @@
 // Exception that is thrown when a value for a component of the `Date`, `Time`
 // or `Datetime` classes below is out of range (e.g. the month 13, or the hour
 // 26)
-class DateOutOfRangeException : public std::runtime_error {
-  using std::runtime_error::runtime_error;
+class DateOutOfRangeException : public std::exception {
+ private:
+  std::string message_;
+
+ public:
+  DateOutOfRangeException(std::string_view name, const auto& value) {
+    std::stringstream s;
+    s << name << " " << value << " is out of range for a DateTime";
+    message_ = std::move(s).str();
+  }
+  [[nodiscard]] const char* what() const noexcept override {
+    return message_.c_str();
+  }
 };
 
 namespace detail {
 // Check that `min <= element <= max`. Throw `DateOutOfRangeException` if the
 // check fails.
-inline void checkBoundsIncludingMax(const auto& element, const auto& min,
-                                    const auto& max, std::string_view name) {
+inline constexpr void checkBoundsIncludingMax(const auto& element,
+                                              const auto& min, const auto& max,
+                                              std::string_view name) {
   if (element < min || element > max) {
-    std::stringstream s;
-    s << name << " " << element << " is out of range.";
-    throw DateOutOfRangeException{s.str()};
+    throw DateOutOfRangeException{name, element};
   }
 }
 
 // Check that `min <= element < max`. Throw `DateOutOfRangeException` if the
 // check fails.
-inline void checkBoundsExcludingMax(const auto& element, const auto& min,
-                                    const auto& max, std::string_view name) {
+inline constexpr void checkBoundsExcludingMax(const auto& element,
+                                              const auto& min, const auto& max,
+                                              std::string_view name) {
   if (element < min || element >= max) {
-    std::stringstream s;
-    s << name << " " << element << " is out of range.";
-    throw DateOutOfRangeException{s.str()};
+    throw DateOutOfRangeException{name, element};
   }
 }
 }  // namespace detail
@@ -180,35 +189,35 @@ class Date {
   [[nodiscard]] auto getYear() const {
     return static_cast<int>(_year) + minYear;
   }
-  void setYear(int year) {
+  constexpr void setYear(int year) {
     detail::checkBoundsIncludingMax(year, minYear, maxYear, "year");
     _year = static_cast<unsigned>(year - minYear);
   }
 
   /// Getter and setter for the month.
   [[nodiscard]] int getMonth() const { return static_cast<int>(_month); }
-  void setMonth(int month) {
+  constexpr void setMonth(int month) {
     detail::checkBoundsIncludingMax(month, minMonth, int{maxMonth}, "month");
     _month = static_cast<unsigned>(month);
   }
 
   /// Getter and setter for the day.
   [[nodiscard]] int getDay() const { return static_cast<int>(_day); }
-  void setDay(int day) {
+  constexpr void setDay(int day) {
     detail::checkBoundsIncludingMax(day, minDay, int{maxDay}, "day");
     _day = static_cast<unsigned>(day);
   }
 
   /// Getter and setter for the hour.
   [[nodiscard]] int getHour() const { return static_cast<int>(_hour); }
-  void setHour(int hour) {
+  constexpr void setHour(int hour) {
     detail::checkBoundsIncludingMax(hour, minHour, int{maxHour}, "hour");
     _hour = static_cast<unsigned>(hour);
   }
 
   /// Getter and setter for the minute.
   [[nodiscard]] int getMinute() const { return static_cast<int>(_minute); }
-  void setMinute(int minute) {
+  constexpr void setMinute(int minute) {
     detail::checkBoundsIncludingMax(minute, minMinute, int{maxMinute},
                                     "minute");
     _minute = static_cast<unsigned>(minute);
@@ -218,7 +227,7 @@ class Date {
   [[nodiscard]] double getSecond() const {
     return static_cast<double>(_second) / secondMultiplier;
   }
-  void setSecond(double second) {
+  constexpr void setSecond(double second) {
     detail::checkBoundsExcludingMax(second, minSecond, maxSecond, "second");
     _second = static_cast<unsigned>(std::round(second * secondMultiplier));
   }
@@ -227,7 +236,7 @@ class Date {
   [[nodiscard]] int getTimezone() const {
     return static_cast<int>(_timezone) + minTimezone;
   }
-  void setTimezone(int timezone) {
+  constexpr void setTimezone(int timezone) {
     detail::checkBoundsIncludingMax(timezone, minTimezone, maxTimezone,
                                     "timezone");
     _timezone = static_cast<unsigned>(timezone - minTimezone);

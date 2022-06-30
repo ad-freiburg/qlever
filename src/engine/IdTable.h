@@ -1052,7 +1052,7 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA, Allocator> {
   clone() const {
     return IdTableTemplated<COLS, IdTableVectorWrapper<Allocator>, Allocator>(
         *this);
-  };
+  }
 
   // Size access
   size_t rows() const { return _size; }

@@ -12,17 +12,17 @@
 #include "./sparqlExpressions/SparqlExpression.h"
 #include "CallFixedSize.h"
 
-GroupBy::GroupBy(QueryExecutionContext* qec, vector<string> groupByVariables,
+GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
                  std::vector<ParsedQuery::Alias> aliases)
-    : Operation(qec),
-      _subtree(nullptr),
-      _groupByVariables{std::move(groupByVariables)},
-      _aliases{std::move(aliases)} {
+    : Operation(qec), _subtree(nullptr), _aliases{std::move(aliases)} {
   std::sort(_aliases.begin(), _aliases.end(),
             [](const ParsedQuery::Alias& a1, const ParsedQuery::Alias& a2) {
               return a1._outVarName < a2._outVarName;
             });
 
+  std::transform(groupByVariables.begin(), groupByVariables.end(),
+                 std::back_inserter(_groupByVariables),
+                 [](const Variable& var) { return var.name(); });
   // sort the groupByVariables to ensure the cache key is order invariant
   std::sort(_groupByVariables.begin(), _groupByVariables.end());
 

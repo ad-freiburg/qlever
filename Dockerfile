@@ -1,4 +1,4 @@
-FROM ubuntu:21.10 as base
+FROM ubuntu:22.04 as base
 LABEL maintainer="Johannes Kalmbach <kalmbacj@informatik.uni-freiburg.de>"
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8

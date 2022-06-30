@@ -8,26 +8,28 @@
 #include "../global/Id.h"
 #include "../util/Conversions.h"
 #include "../util/HashMap.h"
+#include "../util/Serializer/Serializer.h"
 #include "../util/TupleHelpers.h"
+#include "../util/TypeTraits.h"
 #include "./ConstantsIndexBuilding.h"
 #include "./StringSortComparator.h"
 
 #ifndef QLEVER_INDEXBUILDERTYPES_H
 #define QLEVER_INDEXBUILDERTYPES_H
 
-// A triple entry (subject, predicate, object) together with the information,
-// whether it should be part of the external vocabulary
-struct TripleComponent {
-  TripleComponent(std::string iriOrLiteral, bool isExternal = false)
+// An IRI or a literal together with the information, whether it should be part
+// of the external vocabulary
+struct PossiblyExternalizedIriOrLiteral {
+  PossiblyExternalizedIriOrLiteral(std::string iriOrLiteral,
+                                   bool isExternal = false)
       : _iriOrLiteral{std::move(iriOrLiteral)}, _isExternal{isExternal} {}
-  TripleComponent() = default;
+  PossiblyExternalizedIriOrLiteral() = default;
   std::string _iriOrLiteral;
   bool _isExternal = false;
 
-  template <typename Serializer>
-  friend void serialize(Serializer& serializer, TripleComponent& entry) {
-    serializer | entry._iriOrLiteral;
-    serializer | entry._isExternal;
+  AD_SERIALIZE_FRIEND_FUNCTION(PossiblyExternalizedIriOrLiteral) {
+    serializer | arg._iriOrLiteral;
+    serializer | arg._isExternal;
   }
 };
 
@@ -41,16 +43,14 @@ struct TripleComponentWithIndex {
   [[nodiscard]] const auto& iriOrLiteral() const { return _iriOrLiteral; }
   [[nodiscard]] auto& iriOrLiteral() { return _iriOrLiteral; }
 
-  template <typename Serializer>
-  friend void serialize(Serializer& serializer,
-                        TripleComponentWithIndex& entry) {
-    serializer | entry._iriOrLiteral;
-    serializer | entry._isExternal;
-    serializer | entry._index;
+  AD_SERIALIZE_FRIEND_FUNCTION(TripleComponentWithIndex) {
+    serializer | arg._iriOrLiteral;
+    serializer | arg._isExternal;
+    serializer | arg._index;
   }
 };
 
-using TripleComponentOrId = std::variant<TripleComponent, Id>;
+using TripleComponentOrId = std::variant<PossiblyExternalizedIriOrLiteral, Id>;
 // A triple that also knows for each entry, whether this entry should be
 // part of the external vocabulary.
 using Triple = std::array<TripleComponentOrId, 3>;
@@ -58,7 +58,7 @@ using Triple = std::array<TripleComponentOrId, 3>;
 // Convert a triple of `std::string` to a triple of `TripleComponents`. All
 // three entries will have `isExternal()==false` and an uninitialized ID.
 inline Triple makeTriple(std::array<std::string, 3>&& t) {
-  using T = TripleComponent;
+  using T = PossiblyExternalizedIriOrLiteral;
   return {T{t[0]}, T{t[1]}, T{t[2]}};
 }
 
@@ -95,7 +95,7 @@ struct alignas(256) ItemMapManager {
     if (std::holds_alternative<Id>(keyOrId)) {
       return std::get<Id>(keyOrId);
     }
-    const auto& key = std::get<TripleComponent>(keyOrId);
+    const auto& key = std::get<PossiblyExternalizedIriOrLiteral>(keyOrId);
     if (!_map.count(key._iriOrLiteral)) {
       uint64_t res = _map.size() + _minId;
       _map[key._iriOrLiteral] = {
@@ -103,9 +103,10 @@ struct alignas(256) ItemMapManager {
           m_comp->extractAndTransformComparable(
               key._iriOrLiteral, TripleComponentComparator::Level::IDENTICAL,
               key._isExternal)};
-      return Id::make(res);
+      return Id::makeFromVocabIndex(VocabIndex::make(res));
     } else {
-      return Id::make(_map[key._iriOrLiteral].m_id);
+      return Id::makeFromVocabIndex(
+          VocabIndex::make(_map[key._iriOrLiteral].m_id));
     }
   }
 
@@ -190,7 +191,8 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
         // get the Id for the tagged predicate, e.g. @en@rdfs:label
         auto langTaggedPredId =
             map.getId(ad_utility::convertToLanguageTaggedPredicate(
-                std::get<TripleComponent>(lt._triple[1])._iriOrLiteral,
+                std::get<PossiblyExternalizedIriOrLiteral>(lt._triple[1])
+                    ._iriOrLiteral,
                 lt._langtag));
         auto& spoIds = *(res[0]);  // ids of original triple
         // TODO replace the std::array by an explicit IdTriple class,

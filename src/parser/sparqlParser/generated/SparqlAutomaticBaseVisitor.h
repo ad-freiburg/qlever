@@ -148,6 +148,11 @@ class SparqlAutomaticBaseVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
+  virtual antlrcpp::Any visitTextLimitClause(
+      SparqlAutomaticParser::TextLimitClauseContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual antlrcpp::Any visitValuesClause(
       SparqlAutomaticParser::ValuesClauseContext* ctx) override {
     return visitChildren(ctx);

@@ -438,6 +438,9 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
       // For all triple elements find their mapping from partial to global ids.
       for (size_t k = 0; k < 3; ++k) {
         // TODO<joka921> The Maps should actually store `VocabIndex`es
+        if (curTriple[k].getDatatype() != Datatype::VocabIndex) {
+          continue;
+        }
         auto iterator = idMap.find(curTriple[k]);
         if (iterator == idMap.end()) {
           LOG(INFO) << "Not found in partial vocabulary: " << curTriple[k]
@@ -610,6 +613,12 @@ void Index::createPermutationPair(
     auto&&... perTripleCallbacks) {
   auto metaData = createPermutations<MetaDataDispatcher>(
       AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
+  // Set the name of this newly created pair of `IndexMetaData` objects.
+  // NOTE: When `setKbName` was called, it set the name of _PSO._meta,
+  // _PSO._meta, ... which however are not used during index building.
+  // `getKbName` simple reads one of these names.
+  metaData.value().first.setName(getKbName());
+  metaData.value().second.setName(getKbName());
   if (metaData) {
     LOG(INFO) << "Exchanging multiplicities for " << p1._readableName << " and "
               << p2._readableName << " ..." << std::endl;
@@ -652,8 +661,8 @@ void Index::addPatternsToExistingIndex() {
           std::numeric_limits<uint64_t>::max())};
   auto iterator = TriplesView(_SPO, allocator);
   createPatternsFromSpoTriplesView(iterator, _onDiskBase + ".index.patterns",
-                                   Id::make(langPredLowerBound.get()),
-                                   Id::make(langPredUpperBound.get()));
+                                   Id::makeFromVocabIndex(langPredLowerBound),
+                                   Id::makeFromVocabIndex(langPredUpperBound));
 }
 
 // _____________________________________________________________________________
@@ -749,55 +758,28 @@ size_t Index::relationCardinality(const string& relationName) const {
   return 0;
 }
 
+// TODO<joka921> There is a lot of duplication in the three cardinality
+// functions, remove it.
 // _____________________________________________________________________________
-size_t Index::subjectCardinality(const string& sub) const {
-  Id relId;
-  if (getId(sub, &relId)) {
-    if (this->_SPO.metaData().col0IdExists(relId)) {
-      return this->_SPO.metaData().getMetaData(relId).getNofElements();
+size_t Index::subjectCardinality(const TripleComponent& sub) const {
+  std::optional<Id> relId = sub.toValueId(getVocab());
+  if (relId.has_value()) {
+    if (this->_SPO.metaData().col0IdExists(relId.value())) {
+      return this->_SPO.metaData().getMetaData(relId.value()).getNofElements();
     }
   }
   return 0;
 }
 
 // _____________________________________________________________________________
-size_t Index::objectCardinality(const string& obj) const {
-  Id relId;
-  // TODO<joka921> other datatypes
-  if (getId(obj, &relId)) {
-    if (this->_OSP.metaData().col0IdExists(relId)) {
-      return this->_OSP.metaData().getMetaData(relId).getNofElements();
+size_t Index::objectCardinality(const TripleComponent& obj) const {
+  std::optional<Id> relId = obj.toValueId(getVocab());
+  if (relId.has_value()) {
+    if (this->_OSP.metaData().col0IdExists(relId.value())) {
+      return this->_OSP.metaData().getMetaData(relId.value()).getNofElements();
     }
   }
   return 0;
-}
-
-// _____________________________________________________________________________
-size_t Index::sizeEstimate(const string& sub, const string& pred,
-                           const string& obj) const {
-  // One or two of the parameters have to be empty strings.
-  // This determines the permutations to use.
-
-  // With only one nonempty string, we can get the exact count.
-  // With two, we can check if the relation is functional (return 1) or not
-  // where we approximate the result size by the block size.
-  if (sub.size() > 0 && pred.size() == 0 && obj.size() == 0) {
-    return subjectCardinality(sub);
-  }
-  if (sub.size() == 0 && pred.size() > 0 && obj.size() == 0) {
-    return relationCardinality(pred);
-  }
-  if (sub.size() == 0 && pred.size() == 0 && obj.size() > 0) {
-    return objectCardinality(obj);
-  }
-  if (sub.size() == 0 && pred.size() == 0 && obj.size() == 0) {
-    return getNofTriples();
-  }
-  AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-           "Index::sizeEsimate called with more then one of S/P/O given. "
-           "This should never be the case anymore, "
-           " since for such SCANs we compute the result "
-           "directly and don't need an estimate anymore!");
 }
 
 // _____________________________________________________________________________
@@ -818,7 +800,7 @@ template void Index::writeAsciiListFile<vector<Score>>(
     const string& filename, const vector<Score>& ids) const;
 
 // _____________________________________________________________________________
-bool Index::isLiteral(const string& object) {
+bool Index::isLiteral(const string& object) const {
   return decltype(_vocab)::isLiteral(object);
 }
 
@@ -942,40 +924,40 @@ void Index::readConfiguration() {
 }
 
 // ___________________________________________________________________________
-LangtagAndTriple Index::tripleToInternalRepresentation(TurtleTriple&& triple) {
+LangtagAndTriple Index::tripleToInternalRepresentation(
+    TurtleTriple&& triple) const {
   LangtagAndTriple result{"", {}};
   auto& resultTriple = result._triple;
   resultTriple[0] = std::move(triple._subject);
   resultTriple[1] = std::move(triple._predicate);
-  // TODO<joka921> As soon as we have the "folded" Ids, we simply store the
-  // numeric value.
-  resultTriple[2] = triple._object.toRdfLiteral();
-  for (auto& el : resultTriple) {
-    auto& iriOrLiteral = std::get<TripleComponent>(el)._iriOrLiteral;
-    iriOrLiteral = _vocab.getLocaleManager().normalizeUtf8(iriOrLiteral);
-  }
-  size_t upperBound = 3;
-  auto& object = std::get<TripleComponent>(resultTriple[2])._iriOrLiteral;
-  // TODO<joka921> Actually create numeric Ids here...
-  if (ad_utility::isXsdValue(object)) {
-    object = ad_utility::convertValueLiteralToIndexWord(object);
-    upperBound = 2;
-  } else if (ad_utility::isNumeric(object)) {
-    object = ad_utility::convertNumericToIndexWord(object);
-    upperBound = 2;
-  } else if (isLiteral(object)) {
-    result._langtag = decltype(_vocab)::getLanguage(object);
+
+  // If the object of the triple can be directly folded into an ID, do so. Note
+  // that the actual folding is done by the `TripleComponent`.
+  std::optional<Id> idIfNotString = triple._object.toValueIdIfNotString();
+
+  // TODO<joka921> The following statement could be simplified by a helper
+  // function "optionalCast";
+  if (idIfNotString.has_value()) {
+    resultTriple[2] = idIfNotString.value();
+  } else {
+    resultTriple[2] = std::move(triple._object.getString());
   }
 
-  for (size_t k = 0; k < upperBound; ++k) {
-    // If we already have an ID, we can just continue;
-    if (!std::holds_alternative<TripleComponent>(resultTriple[k])) {
+  for (size_t i = 0; i < 3; ++i) {
+    auto& el = resultTriple[i];
+    if (!std::holds_alternative<PossiblyExternalizedIriOrLiteral>(el)) {
+      // If we already have an ID, we can just continue;
       continue;
     }
-    auto& component = std::get<TripleComponent>(resultTriple[k]);
-    if (_onDiskLiterals &&
-        _vocab.shouldBeExternalized(component._iriOrLiteral)) {
+    auto& component = std::get<PossiblyExternalizedIriOrLiteral>(el);
+    auto& iriOrLiteral = component._iriOrLiteral;
+    iriOrLiteral = _vocab.getLocaleManager().normalizeUtf8(iriOrLiteral);
+    if (_onDiskLiterals && _vocab.shouldBeExternalized(iriOrLiteral)) {
       component._isExternal = true;
+    }
+    // Only the third element (the object) might contain a language tag.
+    if (i == 2 && isLiteral(iriOrLiteral)) {
+      result._langtag = decltype(_vocab)::getLanguage(iriOrLiteral);
     }
   }
   return result;

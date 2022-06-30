@@ -112,9 +112,9 @@ class FTSAlgorithms {
     }
     for (size_t i = from; i < toExclusive; ++i) {
       for (auto& tup : contextSubRes) {
-        res.emplace_back(concatTupleOld(eids[i], Id::make(scores[i]),
-                                        Id::make(cids[i].get()), tup,
-                                        GenSeq<I>()));
+        res.emplace_back(concatTupleOld(eids[i], Id::makeFromInt(scores[i]),
+                                        Id::makeFromTextRecordIndex(cids[i]),
+                                        tup, GenSeq<I>()));
       }
     }
   }

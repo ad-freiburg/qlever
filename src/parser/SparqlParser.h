@@ -7,8 +7,10 @@
 
 #include "../engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "../util/HashMap.h"
+#include "./TripleComponent.h"
 #include "ParsedQuery.h"
 #include "SparqlLexer.h"
+#include "sparqlParser/SparqlQleverVisitor.h"
 
 using std::string;
 
@@ -27,8 +29,9 @@ class SparqlParser {
    * If isEntireString is true an exception is thrown if the entire string
    * is not a literal (apart from any leading and trailing whitespace).
    **/
-  static string parseLiteral(const string& literal, bool isEntireString,
-                             size_t off = 0);
+  static TripleComponent parseLiteral(const ParsedQuery& pq,
+                                      const string& literal,
+                                      bool isEntireString, size_t off = 0);
 
  private:
   void parseQuery(ParsedQuery* query, QueryType queryType);
@@ -44,9 +47,6 @@ class SparqlParser {
   // Parses an expressiong of the form (?a) = "en"
   void addLangFilter(const std::string& lhs, const std::string& rhs,
                      ParsedQuery::GraphPattern* pattern);
-
-  // takes either DESC or ASC as the parameter
-  OrderKey parseOrderKey(const std::string& order, ParsedQuery* query);
 
   // Reads the next element of a triple (an iri, a variable, a property path,
   // etc.) out of s beginning at the current value of pos. Sets pos to the
@@ -64,11 +64,22 @@ class SparqlParser {
   GraphPatternOperation::BasicGraphPattern& lastBasicPattern(
       ParsedQuery::GraphPattern* ptr) const;
 
-  SparqlLexer _lexer;
-  string _query;
+  SparqlLexer lexer_;
+  string query_;
+  // The number of additional internal variables that were added by the
+  // implementation of ORDER BY as BIND+ORDER BY.
+  uint64_t numInternalVariables_ = 0;
   SparqlFilter parseRegexFilter(bool expectKeyword);
 
-  sparqlExpression::SparqlExpressionPimpl parseExpressionWithAntlr(
-      const ParsedQuery& parsedQuery);
-  ParsedQuery::Alias parseAliasWithAntlr(const ParsedQuery& parsedQuery);
+  template <typename F>
+  auto parseWithAntlr(F f, const ParsedQuery& parsedQuery)
+      -> decltype(f(std::declval<const string&>(),
+                    std::declval<SparqlQleverVisitor::PrefixMap>())
+                      .resultOfParse_);
+
+  /// Generates an internal bind that binds the given expression using a bind.
+  /// The bind is added to the query as child. The variable that the expression
+  /// is bound to is returned.
+  Variable addInternalBind(ParsedQuery* query,
+                           sparqlExpression::SparqlExpressionPimpl expression);
 };

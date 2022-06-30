@@ -12,6 +12,7 @@
 
 #include "../util/BitUtils.h"
 #include "../util/NBitInteger.h"
+#include "../util/Serializer/Serializer.h"
 #include "./IndexTypes.h"
 
 /// The different Datatypes that a `ValueId` (see below) can encode.
@@ -178,6 +179,15 @@ class ValueId {
 
   // TODO<joka921> implement dates
 
+  /// Return the smallest and largest possible `ValueId` wrt the underlying
+  /// representation
+  constexpr static ValueId min() noexcept {
+    return {std::numeric_limits<T>::min()};
+  }
+  constexpr static ValueId max() noexcept {
+    return {std::numeric_limits<T>::max()};
+  }
+
   /// Enable hashing in abseil for `ValueId` (required by `ad_utility::HashSet`
   /// and `ad_utility::HashMap`
   template <typename H>
@@ -187,10 +197,7 @@ class ValueId {
 
   /// Enable the serialization of `ValueId` in the `ad_utility::serialization`
   /// framework.
-  template <typename Serializer>
-  friend void serialize(Serializer& serializer, ValueId& id) {
-    serializer | id._bits;
-  }
+  AD_SERIALIZE_FRIEND_FUNCTION(ValueId) { serializer | arg._bits; }
 
   /// Similar to `std::visit` for `std::variant`. First gets the datatype and
   /// then calls `visitor(getTYPE)` where `getTYPE` is the correct getter method
@@ -216,7 +223,22 @@ class ValueId {
         return std::invoke(visitor, getLocalVocabIndex());
       case Datatype::TextRecordIndex:
         return std::invoke(visitor, getTextRecordIndex());
+      default:
+        AD_CHECK(false);
     }
+  }
+
+  /// Similar to `visit` (see above). Extracts the values from `a` and `b` and
+  /// calls `visitor(aValue, bValue)`. `visitor` must be callable for any
+  /// combination of two types.
+  template <typename Visitor>
+  static decltype(auto) visitTwo(Visitor&& visitor, ValueId a, ValueId b) {
+    return a.visit([&](const auto& aValue) {
+      auto innerVisitor = [&](const auto& bValue) {
+        return std::invoke(visitor, aValue, bValue);
+      };
+      return b.visit(innerVisitor);
+    });
   }
 
   /// This operator is only for debugging and testing. It returns a

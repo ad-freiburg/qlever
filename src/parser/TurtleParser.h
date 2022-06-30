@@ -24,7 +24,7 @@
 #include "../util/TaskQueue.h"
 #include "./Tokenizer.h"
 #include "./TokenizerCtre.h"
-#include "./TripleObject.h"
+#include "./TripleComponent.h"
 #include "ParallelBuffer.h"
 
 using std::string;
@@ -38,7 +38,7 @@ enum class TurtleParserIntegerOverflowBehavior {
 struct TurtleTriple {
   std::string _subject;
   std::string _predicate;
-  TripleObject _object;
+  TripleComponent _object;
 
   bool operator==(const TurtleTriple&) const = default;
 };
@@ -100,8 +100,8 @@ class TurtleParser {
 
   // The result of the last successful call to a parsing function (a function
   // named after a (non-)terminal of the Turtle grammar). We are using
-  // `TripleObject` since it can hold any parsing result, not only objects.
-  TripleObject _lastParseResult;
+  // `TripleComponent` since it can hold any parsing result, not only objects.
+  TripleComponent _lastParseResult;
 
   // Maps prefixes to their expanded form, initialized with the empty base
   // (i.e. the prefix ":" maps to the empty IRI).
@@ -368,7 +368,7 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
     this->turtleDoc();
   }
 
-  // Parse all Triples (no prefix declarations etc allowed) and return them.
+  // Parse all Triples (no prefix declarations etc. allowed) and return them.
   auto parseAndReturnAllTriples() {
     // Actually parse
     this->turtleDoc();
@@ -378,6 +378,14 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
           "Parsing failed before end of input, remaining bytes: ", d.size()));
     }
     return std::move(this->_triples);
+  }
+
+  // Parse only a single object.
+  static TripleComponent parseTripleObject(std::string_view objectString) {
+    TurtleStringParser parser;
+    parser.parseUtf8String(absl::StrCat("<a> <b> ", objectString, "."));
+    AD_CHECK(parser._triples.size() == 1);
+    return std::move(parser._triples[0]._object);
   }
 
   string_view getUnparsedRemainder() const { return this->_tok.view(); }

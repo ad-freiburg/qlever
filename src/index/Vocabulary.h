@@ -97,7 +97,7 @@ class Vocabulary {
   template <
       typename = std::enable_if_t<std::is_same_v<StringType, string> ||
                                   std::is_same_v<StringType, CompressedString>>>
-  Vocabulary(){};
+  Vocabulary() {}
   Vocabulary& operator=(Vocabulary&&) noexcept = default;
   Vocabulary(Vocabulary&&) noexcept = default;
 

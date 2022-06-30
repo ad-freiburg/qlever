@@ -29,7 +29,7 @@ TEST(MmapVectorTest, DefaultConstructor) {
 
 // ___________________________________________________________________
 TEST(MmapVectorTest, NewEmptyFileConstructor) {
-  MmapVector<int> v("_test.mmap", ad_utility::CreateTag());
+  MmapVector<int> v("_test0.mmap", ad_utility::CreateTag());
   ASSERT_EQ(size_t(0), v.size());
   ASSERT_NE(nullptr, v.data());
   ASSERT_EQ(v.begin(), v.end());
@@ -39,7 +39,7 @@ TEST(MmapVectorTest, NewEmptyFileConstructor) {
 TEST(MmapVectorTest, NewFileSizeConstructor) {
   // make sure that we get a unsignned 5000 to prevent compiler warnings
   size_t s = 5000;
-  MmapVector<int> v(s, "_test.mmap");
+  MmapVector<int> v(s, "_test1.mmap");
   ASSERT_EQ(s, v.size());
   ASSERT_LE(s, v.capacity());
   ASSERT_NE(nullptr, v.data());
@@ -49,7 +49,7 @@ TEST(MmapVectorTest, NewFileSizeConstructor) {
 // ___________________________________________________________________
 TEST(MmapVectorTest, AccessOperator) {
   {
-    MmapVector<int> v(5000, "_test.mmap");
+    MmapVector<int> v(5000, "_test2.mmap");
     for (size_t i = 0; i < 5000; i++) {
       v[i] = 5000 - i;
     }
@@ -60,7 +60,7 @@ TEST(MmapVectorTest, AccessOperator) {
     }
   }
   size_t s = 5000;
-  MmapVectorView<int> v("_test.mmap");
+  MmapVectorView<int> v("_test2.mmap");
   ASSERT_EQ(s, v.size());
   ASSERT_NE(nullptr, v.data());
   ASSERT_EQ(v.begin() + s, v.end());
@@ -73,7 +73,7 @@ TEST(MmapVectorTest, AccessOperator) {
 // ___________________________________________________________________
 TEST(MmapVectorTest, At) {
   {
-    MmapVector<int> v(5000, "_test.mmap");
+    MmapVector<int> v(5000, "_test3.mmap");
     for (int i = 0; i < 5000; i++) {
       v.at(i) = 5000 - i;
     }
@@ -86,7 +86,7 @@ TEST(MmapVectorTest, At) {
     ASSERT_THROW(v.at(5000), std::out_of_range);
   }
 
-  MmapVectorView<int> v("_test.mmap");
+  MmapVectorView<int> v("_test3.mmap");
   size_t s = 5000;
   ASSERT_EQ(s, v.size());
   ASSERT_NE(nullptr, v.data());
@@ -101,7 +101,7 @@ TEST(MmapVectorTest, At) {
 TEST(MmapVectorTest, DefaultValueConstructor) {
   // make sure that we get a unsignned 5000 to prevent compiler warnings
   size_t s = 5000;
-  MmapVector<int> v(s, 42, "_test.mmap");
+  MmapVector<int> v(s, 42, "_test4.mmap");
   ASSERT_EQ(s, v.size());
   ASSERT_LE(s, v.capacity());
   ASSERT_NE(nullptr, v.data());
@@ -120,7 +120,7 @@ TEST(MmapVectorTest, IteratorConstructor) {
   for (int i = 0; i < 5000; ++i) {
     tmpVec[i] = 5000 - i;
   }
-  MmapVector<int> v(tmpVec.begin(), tmpVec.end(), "_test.mmap");
+  MmapVector<int> v(tmpVec.begin(), tmpVec.end(), "_test5.mmap");
   ASSERT_EQ(s, v.size());
   ASSERT_LE(s, v.capacity());
   ASSERT_NE(nullptr, v.data());
@@ -134,7 +134,7 @@ TEST(MmapVectorTest, IteratorConstructor) {
 // ___________________________________________________________________
 TEST(MmapVectorTest, PushBackRvalue) {
   {
-    MmapVector<int> v(0, "_test.mmap");
+    MmapVector<int> v(0, "_test6.mmap");
     ASSERT_EQ(size_t(0), v.size());
     for (int i = 0; i < 5000; i++) {
       v.push_back(5000 - i);
@@ -151,7 +151,7 @@ TEST(MmapVectorTest, PushBackRvalue) {
 // ___________________________________________________________________
 TEST(MmapVectorTest, PushBackLvalue) {
   {
-    MmapVector<int> v(0, "_test.mmap");
+    MmapVector<int> v(0, "_test7.mmap");
     ASSERT_EQ(size_t(0), v.size());
     for (int i = 0; i < 5000; i++) {
       int tmp = 5000 - i;
@@ -175,7 +175,7 @@ TEST(MmapVectorTest, constIterators) {
     tmpVec[i] = 5000 - i;
   }
   {
-    MmapVector<int> v(tmpVec.begin(), tmpVec.end(), "_test.mmap");
+    MmapVector<int> v(tmpVec.begin(), tmpVec.end(), "_test8.mmap");
     ASSERT_EQ(s, v.size());
     ASSERT_LE(s, v.capacity());
     ASSERT_NE(nullptr, v.data());
@@ -197,7 +197,7 @@ TEST(MmapVectorTest, constIterators) {
       }
     }
   }
-  MmapVectorView<int> v("_test.mmap");
+  MmapVectorView<int> v("_test8.mmap");
   int idx = 0;
   auto it = v.cbegin();
   while (it != v.cend()) {
@@ -218,7 +218,7 @@ TEST(MmapVectorTest, nonConstIterators) {
   // make sure that we get a unsignned 5000 to prevent compiler warnings
   size_t s = 5000;
   // initialize all elements to 42
-  MmapVector<int> v(s, 42, "_test.mmap");
+  MmapVector<int> v(s, 42, "_test9.mmap");
   ASSERT_EQ(s, v.size());
   ASSERT_LE(s, v.capacity());
   ASSERT_NE(nullptr, v.data());
@@ -238,7 +238,7 @@ TEST(MmapVectorTest, Close) {
   // make sure that we get a unsignned 5000 to prevent compiler warnings
   size_t s = 5000;
   // initialize all elements to 42
-  MmapVector<int> v(s, 42, "_test.mmap");
+  MmapVector<int> v(s, 42, "_test10.mmap");
   ASSERT_EQ(s, v.size());
   ASSERT_LE(s, v.capacity());
   ASSERT_NE(nullptr, v.data());
@@ -248,7 +248,7 @@ TEST(MmapVectorTest, Close) {
   ASSERT_EQ(size_t(0), v.size());
   ASSERT_EQ(nullptr, v.data());
 
-  MmapVectorView<int> v2("_test.mmap");
+  MmapVectorView<int> v2("_test10.mmap");
   ASSERT_EQ(s, v2.size());
   ASSERT_NE(nullptr, v2.data());
   ASSERT_EQ(v2.begin() + s, v2.end());
@@ -264,7 +264,7 @@ TEST(MmapVectorTest, Reuse) {
   size_t s = 5000;
   // initialize all elements to 42
   {
-    MmapVector<int> v(s, "_test.mmap");
+    MmapVector<int> v(s, "_test11.mmap");
     ASSERT_EQ(s, v.size());
     ASSERT_LE(s, v.capacity());
     ASSERT_NE(nullptr, v.data());
@@ -274,7 +274,7 @@ TEST(MmapVectorTest, Reuse) {
     }
   }
   // v is now destroyed
-  MmapVector<int> v2("_test.mmap", ad_utility::ReuseTag());
+  MmapVector<int> v2("_test11.mmap", ad_utility::ReuseTag());
   ASSERT_EQ(s, v2.size());
   ASSERT_LE(s, v2.capacity());
   ASSERT_NE(nullptr, v2.data());
@@ -284,7 +284,7 @@ TEST(MmapVectorTest, Reuse) {
   }
 
   // v is now destroyed
-  MmapVectorView<int> v3("_test.mmap");
+  MmapVectorView<int> v3("_test11.mmap");
   ASSERT_EQ(s, v3.size());
   ASSERT_NE(nullptr, v3.data());
   ASSERT_EQ(v3.begin() + s, v3.end());
@@ -300,7 +300,7 @@ TEST(MmapVectorTest, MoveConstructor) {
   size_t s = 5000;
   {
     // initialize all elements to 42
-    MmapVector<int> v(s, "_test.mmap");
+    MmapVector<int> v(s, "_test12.mmap");
     ASSERT_EQ(s, v.size());
     ASSERT_LE(s, v.capacity());
     ASSERT_NE(nullptr, v.data());
@@ -320,7 +320,7 @@ TEST(MmapVectorTest, MoveConstructor) {
       ASSERT_EQ(v2[i], i);
     }
   }
-  MmapVectorView<int> v("_test.mmap");
+  MmapVectorView<int> v("_test12.mmap");
   ASSERT_EQ(s, v.size());
   ASSERT_NE(nullptr, v.data());
   ASSERT_EQ(v.begin() + s, v.end());
@@ -345,7 +345,7 @@ TEST(MmapVectorTest, MoveAssignment) {
   size_t s = 5000;
   {
     // initialize all elements to 42
-    MmapVector<int> v(s, "_test.mmap");
+    MmapVector<int> v(s, "_test13.mmap");
     ASSERT_EQ(s, v.size());
     ASSERT_LE(s, v.capacity());
     ASSERT_NE(nullptr, v.data());
@@ -365,7 +365,7 @@ TEST(MmapVectorTest, MoveAssignment) {
       ASSERT_EQ(v2[i], i);
     }
   }
-  MmapVectorView<int> v("_test.mmap");
+  MmapVectorView<int> v("_test13.mmap");
   ASSERT_EQ(s, v.size());
   ASSERT_NE(nullptr, v.data());
   ASSERT_EQ(v.begin() + s, v.end());

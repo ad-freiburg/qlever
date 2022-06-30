@@ -23,6 +23,7 @@ struct EvaluationContext;
 class SparqlExpressionPimpl {
  public:
   [[nodiscard]] const std::string& getDescriptor() const;
+  void setDescriptor(std::string descriptor);
 
   // Get the variables that are not aggregated by this expression.
   [[nodiscard]] std::vector<std::string> getUnaggregatedVariables() const;
@@ -48,6 +49,12 @@ class SparqlExpressionPimpl {
   // pattern trick.
   [[nodiscard]] std::optional<std::string>
   getVariableForNonDistinctCountOrNullopt() const;
+
+  // If this expression is a single variable, return that variable, else return
+  // std::nullopt. Knowing this enables some optimizations because we can
+  // directly handle these trivial "expressions" without using the
+  // `SparqlExpression` module.
+  [[nodiscard]] std::optional<std::string> getVariableOrNullopt() const;
 
   // The implementation of these methods is small and straightforward, but
   // has to be in the .cpp file because `SparqlExpression` is only forward

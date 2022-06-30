@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <cstdio>
@@ -18,7 +19,7 @@ ad_utility::AllocatorWithLimit<Id>& allocator() {
   return a;
 }
 
-auto I = [](auto id) { return Id::make(id); };
+auto I = [](auto id) { return Id::makeFromVocabIndex(VocabIndex::make(id)); };
 
 string getStxxlConfigFileName(const string& location) {
   std::ostringstream os;
@@ -112,6 +113,19 @@ TEST(IndexTest, createFromTurtleTest) {
     ASSERT_EQ(I(4u), buffer[0][1]);
     ASSERT_EQ(I(1u), buffer[1][0]);
     ASSERT_EQ(I(5u), buffer[1][1]);
+
+    {
+      // Test for a previous bug in the scan of two fixed elements: An assertion
+      // wrongly failed if the first Id existed in the permutation, but no
+      // compressed block was found via binary search that could possibly
+      // contain the combination of the ids. In this example <b2> is the largest
+      // predicate that occurs and <c2> is larger than the largest subject that
+      // appears with <b2>.
+      IdTable oneColBuffer{allocator()};
+      oneColBuffer.setCols(1);
+      index.scan("<b2>", "<c2>", &oneColBuffer, index.PSO());
+      ASSERT_EQ(oneColBuffer.size(), 0u);
+    }
 
     ad_utility::deleteFile(filename);
     std::remove(stxxlFileName.c_str());
@@ -274,7 +288,7 @@ TEST_F(CreatePatternsFixture, createPatterns) {
 
     auto checkPattern = [](const auto& expected, const auto& actual) {
       for (size_t i = 0; i < actual.size(); i++) {
-        ASSERT_EQ(Id::make(expected[i].get()), actual[i]);
+        ASSERT_EQ(Id::makeFromVocabIndex(expected[i]), actual[i]);
       }
     };
 
@@ -537,3 +551,49 @@ TEST(IndexTest, scanTest) {
   ad_utility::deleteFile("_testindex.index.pso");
   ad_utility::deleteFile("_testindex.index.pos");
 };
+
+// Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
+// `PossiblyExternalizedIriOrLiteral` that matches the string `content` and the
+// bool `isExternal`.
+MATCHER_P2(IsPossiblyExternalString, content, isExternal, "") {
+  if (!std::holds_alternative<PossiblyExternalizedIriOrLiteral>(arg)) {
+    return false;
+  }
+  const auto& el = std::get<PossiblyExternalizedIriOrLiteral>(arg);
+  return (el._iriOrLiteral == content) && (isExternal == el._isExternal);
+}
+
+TEST(IndexTest, TripleToInternalRepresentation) {
+  {
+    Index index;
+    TurtleTriple turtleTriple{"<subject>", "<predicate>", "\"literal\""};
+    LangtagAndTriple res =
+        index.tripleToInternalRepresentation(std::move(turtleTriple));
+    ASSERT_TRUE(res._langtag.empty());
+    EXPECT_THAT(res._triple[0], IsPossiblyExternalString("<subject>", false));
+    EXPECT_THAT(res._triple[1], IsPossiblyExternalString("<predicate>", false));
+    EXPECT_THAT(res._triple[2], IsPossiblyExternalString("\"literal\"", false));
+  }
+  {
+    Index index;
+    index.setOnDiskLiterals(true);
+    index.getNonConstVocabForTesting().initializeExternalizePrefixes(
+        std::vector{"<subj"s});
+    TurtleTriple turtleTriple{"<subject>", "<predicate>", "\"literal\"@fr"};
+    LangtagAndTriple res =
+        index.tripleToInternalRepresentation(std::move(turtleTriple));
+    ASSERT_EQ(res._langtag, "fr");
+    EXPECT_THAT(res._triple[0], IsPossiblyExternalString("<subject>", true));
+    EXPECT_THAT(res._triple[1], IsPossiblyExternalString("<predicate>", false));
+    // By default all languages other than English are externalized.
+    EXPECT_THAT(res._triple[2],
+                IsPossiblyExternalString("\"literal\"@fr", true));
+  }
+  {
+    Index index;
+    TurtleTriple turtleTriple{"<subject>", "<predicate>", 42.0};
+    LangtagAndTriple res =
+        index.tripleToInternalRepresentation(std::move(turtleTriple));
+    ASSERT_EQ(Id::makeFromDouble(42.0), std::get<Id>(res._triple[2]));
+  }
+}

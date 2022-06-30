@@ -94,7 +94,8 @@ void writeNTDispatch(std::ostream& out, const string& fileFormat,
     LOG(ERROR)
         << "Please specify a valid regex engine via the -r flag. "
            "Options are \"re2\" or \"ctre\" (The latter only works correct if "
-           "prefix names only use ascii characters but is faster.\n";
+           "prefix names only use ASCII characters but is faster"
+        << std::endl;
     exit(1);
   }
 }
@@ -185,23 +186,24 @@ int main(int argc, char** argv) {
       LOG(WARN)
           << " Could not deduce the type of the input knowledge-base-file by "
              "its extension. Assuming the input to be turtle. Please specify "
-             "--file-format (-F)\n";
-      LOG(WARN) << "In case this is not correct \n";
+             "--file-format (-F) if this is not correct"
+          << std::endl;
     }
     if (filetypeDeduced) {
       LOG(INFO) << "Assuming input file format to be " << fileFormat
-                << " due to the input file's extension.\n";
+                << " due to the input file's extension." << std::endl;
       LOG(INFO)
           << "If this is wrong, please manually specify the --file-format "
-             "(-F) flag.\n";
+             "(-F) flag"
+          << std::endl;
     }
   }
 
   if (inputFile.empty()) {
-    LOG(INFO) << "No input file was specified, parsing from stdin\n";
+    LOG(INFO) << "No input file was specified, parsing from stdin" << std::endl;
     inputFile = "/dev/stdin";
   } else if (inputFile == "-") {
-    LOG(INFO) << "Parsing from stdin\n";
+    LOG(INFO) << "Parsing from stdin" << std::endl;
     inputFile = "/dev/stdin";
   }
 

@@ -202,16 +202,23 @@ class HttpServer {
           beast::error_code ec;
           stream.socket().shutdown(tcp::socket::shutdown_send, ec);
         } else {
-          logBeastError(error.code(), error.what());
+          // This is the error "The socket was closed due to a timeout".
+          if (error.code() == beast::error::timeout) {
+            LOG(TRACE) << error.what() << " (code " << error.code() << ")"
+                       << std::endl;
+          } else {
+            logBeastError(error.code(), error.what());
+          }
         }
         // In case of an error, close the session by returning.
         co_return;
       } catch (const std::exception& error) {
-        LOG(ERROR) << error.what() << '\n';
+        LOG(ERROR) << error.what() << std::endl;
         co_return;
       } catch (...) {
         LOG(ERROR) << "Weird exception not inheriting from std::exception, "
-                      "this shouldn't happen \n";
+                      "this shouldn't happen"
+                   << std::endl;
         co_return;
       }
     }

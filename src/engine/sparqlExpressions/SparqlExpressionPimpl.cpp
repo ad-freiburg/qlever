@@ -43,6 +43,11 @@ SparqlExpressionPimpl::getVariableForNonDistinctCountOrNullopt() const {
 }
 
 // ___________________________________________________________________________
+std::optional<std::string> SparqlExpressionPimpl::getVariableOrNullopt() const {
+  return _pimpl->getVariableOrNullopt();
+}
+
+// ___________________________________________________________________________
 std::string SparqlExpressionPimpl::getCacheKey(
     const VariableColumnMap& variableColumnMap) const {
   return _pimpl->getCacheKey(variableColumnMap);
@@ -51,5 +56,10 @@ std::string SparqlExpressionPimpl::getCacheKey(
 // ____________________________________________________________________________
 const std::string& SparqlExpressionPimpl::getDescriptor() const {
   return _pimpl->descriptor();
+}
+
+// ____________________________________________________________________________
+void SparqlExpressionPimpl::setDescriptor(std::string descriptor) {
+  _pimpl->descriptor() = std::move(descriptor);
 }
 }  // namespace sparqlExpression

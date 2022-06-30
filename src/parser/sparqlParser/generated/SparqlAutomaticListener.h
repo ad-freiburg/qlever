@@ -135,6 +135,11 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
   virtual void exitOffsetClause(
       SparqlAutomaticParser::OffsetClauseContext* ctx) = 0;
 
+  virtual void enterTextLimitClause(
+      SparqlAutomaticParser::TextLimitClauseContext* ctx) = 0;
+  virtual void exitTextLimitClause(
+      SparqlAutomaticParser::TextLimitClauseContext* ctx) = 0;
+
   virtual void enterValuesClause(
       SparqlAutomaticParser::ValuesClauseContext* ctx) = 0;
   virtual void exitValuesClause(

@@ -36,7 +36,8 @@ void Server::initialize(const string& indexBaseName, bool useText,
 
   // Set flag.
   _initialized = true;
-  LOG(INFO) << "The server is ready" << std::endl;
+  LOG(INFO) << "The server is ready, listening for requests on port " << _port
+            << " ..." << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -70,82 +71,154 @@ Awaitable<void> Server::process(
   auto filenameAndParams = ad_utility::UrlParser::parseTarget(request.target());
   const auto& params = filenameAndParams._parameters;
 
+  // Lambda for sending a response asynchronously. Will be called with `co_await
+  // sendWithCors(...)`, see below.
   auto sendWithCors = [&send](auto response) -> boost::asio::awaitable<void> {
     response.set(http::field::access_control_allow_origin, "*");
     co_return co_await send(std::move(response));
   };
 
-  // If there is a command like "clear_cache" which might be combined with a
-  // query, track if there is such a command but no query and still send
-  // a useful response.
-  std::optional<http::response<http::string_body>> responseFromCommand;
-  if (params.contains("cmd")) {
-    const auto& cmd = params.at("cmd");
-    if (cmd == "stats") {
-      LOG(INFO) << "Supplying index stats..." << std::endl;
-      auto response = createJsonResponse(composeStatsJson(), request);
-      co_return co_await sendWithCors(std::move(response));
-    } else if (cmd == "cache-stats") {
-      LOG(INFO) << "Supplying cache stats..." << std::endl;
-      auto response = createJsonResponse(composeCacheStatsJson(), request);
-      co_return co_await sendWithCors(std::move(response));
-    } else if (cmd == "clear-cache") {
-      LOG(INFO) << "Clearing the cache, unpinned elements only" << std::endl;
-      _cache.clearUnpinnedOnly();
-      responseFromCommand =
-          createJsonResponse(composeCacheStatsJson(), request);
-    } else if (cmd == "clear-cache-complete") {
-      LOG(INFO) << "Clearing the cache completely, including unpinned elements"
-                << std::endl;
-      _cache.clearAll();
-      responseFromCommand =
-          createJsonResponse(composeCacheStatsJson(), request);
-    } else if (cmd == "get-settings") {
-      LOG(INFO) << "Supplying settings..." << std::endl;
-      json settingsJson = RuntimeParameters().toMap();
-      co_await sendWithCors(createJsonResponse(settingsJson, request));
-      co_return;
+  // Lambda that checks if a URL parameter with the given specification exists
+  // and we are allowed to perform the associated action.
+  //
+  // 1. If value is `std::nullopt`, check if the given key exists, and if yes,
+  // return the corresponding value, and `std::nullopt` otherwise.
+  //
+  // 2. If value is not `std::nullopt`, check if the given key-value pair
+  // exists, and if yes, return the value (not really needed, but just so that
+  // the interface is the same as in the first case), and `std::nullopt`
+  // otherwise.
+  //
+  // 3. If one of the two above would have returned a value, but the third
+  // argument is false, print a log message that the access to this URL
+  // parameter is denied and return `std::nullopt`.
+  auto checkParam =
+      [&params](const std::string key, std::optional<std::string> value,
+                bool accessAllowed = true) -> std::optional<std::string> {
+    // If key not found, always return std::nullopt.
+    if (!params.contains(key)) {
+      return std::nullopt;
+    }
+    // If value is given, but not equal to param value, return std::nullopt. If
+    // no value is given, set it to param value.
+    if (value == std::nullopt) {
+      value = params.at(key);
+    } else if (value != params.at(key)) {
+      return std::nullopt;
+    }
+    // At this point, we have a value. Either return it or say access denied.
+    if (accessAllowed == false) {
+      LOG(INFO) << "Access to \"" << key << "=" << value.value()
+                << "\" is denied, this URL parameter is ignored" << std::endl;
+      return std::nullopt;
     } else {
-      co_await sendWithCors(createBadRequestResponse(
-          R"(Unknown value for query parameter "cmd": ")" + cmd + '\"',
-          request));
-      co_return;
+      return value;
+    }
+  };
+  auto accessToken = checkParam("access-token", std::nullopt);
+  auto accessTokenOk = accessToken == "1622";
+  if (accessToken && !accessTokenOk) {
+    LOG(INFO) << "Access token \"access-token=" << accessToken.value() << "\""
+              << " provided, but not correct" << std::endl;
+  }
+
+  // Process all URL parameters known to QLever. If there is more than one,
+  // QLever processes all of one, but only returns the result from the last one.
+  // In particular, if there is a "query" parameter, it will be processed last
+  // and its result returned.
+  //
+  // Some parameters require that "access-token" is set correctly. If not, that
+  // parameter is ignored.
+  std::optional<http::response<http::string_body>> response;
+
+  // Execute commands (URL parameter with key "cmd").
+  if (checkParam("cmd", "stats")) {
+    LOG(INFO) << "Processing command \"stats\"" << std::endl;
+    response = createJsonResponse(composeStatsJson(), request);
+  } else if (checkParam("cmd", "cache-stats")) {
+    LOG(INFO) << "Processing command \"cache-stats\"" << std::endl;
+    response = createJsonResponse(composeCacheStatsJson(), request);
+  } else if (checkParam("cmd", "clear-cache")) {
+    LOG(INFO) << "Clearing the cache, unpinned elements only" << std::endl;
+    _cache.clearUnpinnedOnly();
+    response = createJsonResponse(composeCacheStatsJson(), request);
+  } else if (checkParam("cmd", "clear-cache-complete", accessTokenOk)) {
+    LOG(INFO) << "Clearing the cache completely, including unpinned elements"
+              << std::endl;
+    _cache.clearAll();
+    response = createJsonResponse(composeCacheStatsJson(), request);
+  } else if (checkParam("cmd", "get-settings")) {
+    LOG(INFO) << "Getting server settings" << std::endl;
+    response = createJsonResponse(RuntimeParameters().toMap(), request);
+  }
+
+  // Set description of KB index.
+  if (auto description =
+          checkParam("index-description", std::nullopt, accessTokenOk)) {
+    LOG(INFO) << "Setting index description to: \"" << description.value()
+              << "\"" << std::endl;
+    _index.setKbName(description.value());
+    response = createJsonResponse(composeStatsJson(), request);
+  }
+
+  // Set description of text index.
+  if (auto description =
+          checkParam("text-description", std::nullopt, accessTokenOk)) {
+    LOG(INFO) << "Setting text description to: \"" << description.value()
+              << "\"" << std::endl;
+    _index.setTextName(description.value());
+    response = createJsonResponse(composeStatsJson(), request);
+  }
+
+  // Set one or several of the runtime parameters.
+  for (auto key : RuntimeParameters().getKeys()) {
+    if (auto value = checkParam(key, std::nullopt, accessTokenOk)) {
+      LOG(INFO) << "Setting runtime parameter \"" << key << "\""
+                << " to value \"" << value.value() << "\"" << std::endl;
+      RuntimeParameters().set(key, value.value());
+      response = createJsonResponse(RuntimeParameters().toMap(), request);
     }
   }
 
-  // TODO<joka921> Restrict this access by a token.
-  // TODO<joka921> Warn about unknown parameters
-  bool anyParamWasChanged = false;
-  for (const auto& [key, value] : params) {
-    if (RuntimeParameters().getKeys().contains(key)) {
-      RuntimeParameters().set(key, value);
-      anyParamWasChanged = true;
+  // If "query" parameter is given, process query.
+  if (auto query = checkParam("query", std::nullopt)) {
+    if (!query.value().empty()) {
+      co_return co_await processQuery(params, requestTimer, std::move(request),
+                                      sendWithCors);
+    } else {
+      response = createBadRequestResponse(
+          "Parameter \"query\" must not have an empty value", request);
     }
   }
 
-  if (anyParamWasChanged) {
-    json settingsJson = RuntimeParameters().toMap();
-    responseFromCommand = createJsonResponse(settingsJson, request);
+  // If there was no non-empty "query", but any of the above produced a
+  // `response`, send that now.
+  if (response.has_value()) {
+    co_return co_await sendWithCors(std::move(response.value()));
   }
 
-  if (params.contains("query")) {
-    if (params.at("query").empty()) {
-      co_return co_await sendWithCors(createBadRequestResponse(
-          "Parameter \"query\" must not have an empty value", request));
-    }
-
-    co_return co_await processQuery(params, requestTimer, std::move(request),
-                                    sendWithCors);
-  } else if (responseFromCommand.has_value()) {
-    co_return co_await sendWithCors(std::move(responseFromCommand.value()));
-  }
-
-  // Neither a query nor a command were specified, simply serve a file.
-  // Note that `makeFileServer` returns a function.
-  // The first argument is the document root, the second one is the whitelist.
-  co_await makeFileServer(".", ad_utility::HashSet<std::string>{
-                                   "index.html", "script.js",
-                                   "style.css"})(std::move(request), send);
+  // At this point, none of the URL parameters was recognized by QLever. We
+  // then consider the URL parameter string as a path name and try to serve the
+  // corresponding file (though we only allow a very restricted whitelist, see
+  // below).
+  //
+  // NOTE 1: `makeFileServer` returns a function.  The first argument is the
+  // document root, the second one is the whitelist.
+  //
+  // NOTE 2: `co_await makeFileServer(....)(...)` doesn't compile in g++ 11.2.0,
+  // probably because of the following bug:
+  // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=98056
+  // TODO<joka921>: Reinstate this one-liner as soon as this bug is fixed.
+  //
+  // TODO: The file server currently does not LOG much. For example, when a file
+  // is not found, a corresponding response is returned to the requestion
+  // client, but the log says nothing about it. The place to change this would
+  // be in `src/util/HttpServer/HttpUtils.h`.
+  auto serveFileRequest = makeFileServer(
+      ".",
+      ad_utility::HashSet<std::string>{"index.html", "script.js", "style.css"})(
+      std::move(request), send);
+  co_return co_await std::move(serveFileRequest);
 }
 
 // _____________________________________________________________________________
@@ -175,9 +248,8 @@ Awaitable<json> Server::composeResponseQleverJson(
         qet.getRootOperation()->getRuntimeInfo());
 
     {
-      size_t limit =
-          std::min(query._limit.value_or(MAX_NOF_ROWS_IN_RESULT), maxSend);
-      size_t offset = query._offset.value_or(0);
+      size_t limit = std::min(query._limitOffset._limit, maxSend);
+      size_t offset = query._limitOffset._offset;
       requestTimer.cont();
       j["res"] = query.hasSelectClause()
                      ? qet.writeResultAsQLeverJson(
@@ -213,9 +285,8 @@ Awaitable<json> Server::composeResponseSparqlJson(
     shared_ptr<const ResultTable> resultTable = qet.getResult();
     requestTimer.stop();
     nlohmann::json j;
-    size_t limit =
-        std::min(query._limit.value_or(MAX_NOF_ROWS_IN_RESULT), maxSend);
-    size_t offset = query._offset.value_or(0);
+    size_t limit = std::min(query._limitOffset._limit, maxSend);
+    size_t offset = query._limitOffset._offset;
     requestTimer.cont();
     j = qet.writeResultAsSparqlJson(query.selectClause()._varsOrAsterisk, limit,
                                     offset, std::move(resultTable));
@@ -232,8 +303,8 @@ Awaitable<ad_utility::streams::stream_generator>
 Server::composeResponseSepValues(const ParsedQuery& query,
                                  const QueryExecutionTree& qet) const {
   auto compute = [&] {
-    size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
-    size_t offset = query._offset.value_or(0);
+    size_t limit = query._limitOffset._limit;
+    size_t offset = query._limitOffset._offset;
     return query.hasSelectClause()
                ? qet.generateResults<format>(
                      query.selectClause()._varsOrAsterisk, limit, offset)
@@ -252,8 +323,8 @@ ad_utility::streams::stream_generator Server::composeTurtleResponse(
         "RDF Turtle as an export format is only supported for CONSTRUCT "
         "queries"};
   }
-  size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
-  size_t offset = query._offset.value_or(0);
+  size_t limit = query._limitOffset._limit;
+  size_t offset = query._limitOffset._offset;
   return qet.writeRdfGraphTurtle(query.constructClause(), limit, offset,
                                  qet.getResult());
 }
@@ -344,8 +415,8 @@ boost::asio::awaitable<void> Server::processQuery(
     const bool pinSubtrees = containsParam("pinsubtrees", "true");
     const bool pinResult = containsParam("pinresult", "true");
     LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned)" : "")
-              << ((pinResult) ? " (Result pinned)" : "") << ": " << query
-              << '\n';
+              << ((pinResult) ? " (Result pinned)" : "") << ":\n"
+              << query << std::endl;
     ParsedQuery pq = SparqlParser(query).parse();
     pq.expandPrefixes();
 
@@ -468,8 +539,12 @@ boost::asio::awaitable<void> Server::processQuery(
     // Print the runtime info. This needs to be done after the query
     // was computed.
 
-    LOG(INFO) << "\nRuntime Info:\n"
-              << qet.getRootOperation()->getRuntimeInfo().toString();
+    // TODO<joka921> Also log the processing time and an identifier of the
+    // query.
+    LOG(INFO) << "Done processing query" << std::endl;
+    LOG(DEBUG) << "\nRuntime Info:\n"
+               << qet.getRootOperation()->getRuntimeInfo().toString()
+               << std::endl;
   } catch (const ad_semsearch::Exception& e) {
     errorResponse = composeExceptionJson(query, e, requestTimer);
   } catch (const std::exception& e) {

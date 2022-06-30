@@ -12,7 +12,10 @@
 #include "../src/engine/HasPredicateScan.h"
 #include "../src/engine/SortPerformanceEstimator.h"
 
-auto I = [](const auto& id) { return Id::make(id); };
+auto I = [](const auto& id) {
+  return Id::makeFromVocabIndex(VocabIndex::make(id));
+};
+auto Int = [](const auto& id) { return Id::makeFromInt(id); };
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
@@ -347,19 +350,19 @@ TEST(CountAvailablePredicates, patternTrickTest) {
   ASSERT_EQ(5u, result.size());
 
   ASSERT_EQ(I(0u), result(0, 0));
-  ASSERT_EQ(I(6u), result(0, 1));
+  ASSERT_EQ(Int(6u), result(0, 1));
 
   ASSERT_EQ(I(1u), result(1, 0));
-  ASSERT_EQ(I(1u), result(1, 1));
+  ASSERT_EQ(Int(1u), result(1, 1));
 
   ASSERT_EQ(I(2u), result(2, 0));
-  ASSERT_EQ(I(4u), result(2, 1));
+  ASSERT_EQ(Int(4u), result(2, 1));
 
   ASSERT_EQ(I(3u), result(3, 0));
-  ASSERT_EQ(I(6u), result(3, 1));
+  ASSERT_EQ(Int(6u), result(3, 1));
 
   ASSERT_EQ(I(4u), result(4, 0));
-  ASSERT_EQ(I(3u), result(4, 1));
+  ASSERT_EQ(Int(3u), result(4, 1));
 
   //  ASSERT_EQ(0u, result[0][0]);
   //  ASSERT_EQ(5u, result[0][1]);
@@ -393,17 +396,17 @@ TEST(CountAvailablePredicates, patternTrickTest) {
   ASSERT_EQ(5u, result.size());
 
   ASSERT_EQ(I(0u), result[0][0]);
-  ASSERT_EQ(I(6u), result[0][1]);
+  ASSERT_EQ(Int(6u), result[0][1]);
 
   ASSERT_EQ(I(1u), result[1][0]);
-  ASSERT_EQ(I(1u), result[1][1]);
+  ASSERT_EQ(Int(1u), result[1][1]);
 
   ASSERT_EQ(I(2u), result[2][0]);
-  ASSERT_EQ(I(4u), result[2][1]);
+  ASSERT_EQ(Int(4u), result[2][1]);
 
   ASSERT_EQ(I(3u), result[3][0]);
-  ASSERT_EQ(I(7u), result[3][1]);
+  ASSERT_EQ(Int(7u), result[3][1]);
 
   ASSERT_EQ(I(4u), result[4][0]);
-  ASSERT_EQ(I(3u), result[4][1]);
+  ASSERT_EQ(Int(3u), result[4][1]);
 }

@@ -24,7 +24,7 @@ using std::string;
 template <class S, class C>
 void Vocabulary<S, C>::readFromFile(const string& fileName,
                                     const string& extLitsFileName) {
-  LOG(INFO) << "Reading internal vocabulary from file " << fileName << " ..."
+  LOG(INFO) << "Reading vocabulary from file " << fileName << " ..."
             << std::endl;
   _internalVocabulary.close();
   ad_utility::serialization::FileReadSerializer file(fileName);
@@ -35,7 +35,8 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
     if (!_isCompressed) {
       LOG(INFO) << "ERROR: trying to load externalized literals to an "
                    "uncompressed vocabulary. This is not valid and a "
-                   "programming error. Terminating\n";
+                   "programming error. Terminating"
+                << std::endl;
       AD_CHECK(false);
     }
 
@@ -50,27 +51,25 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
 template <class S, class C>
 template <typename, typename>
 void Vocabulary<S, C>::writeToFile(const string& fileName) const {
-  LOG(INFO) << "Writing vocabulary to file " << fileName << "\n";
+  LOG(TRACE) << "BEGIN Vocabulary::writeToFile" << std::endl;
   ad_utility::serialization::FileWriteSerializer file{fileName};
   _internalVocabulary.getUnderlyingVocabulary().writeToFile(fileName);
-
-  LOG(INFO) << "Done writing vocabulary to file.\n";
+  LOG(TRACE) << "END Vocabulary::writeToFile" << std::endl;
 }
 
 // _____________________________________________________________________________
 template <class S, class C>
 void Vocabulary<S, C>::createFromSet(
     const ad_utility::HashSet<std::string>& set) {
-  LOG(INFO) << "Creating vocabulary from set ...\n";
+  LOG(DEBUG) << "BEGIN Vocabulary::createFromSet" << std::endl;
   _internalVocabulary.close();
   std::vector<std::string> words(set.begin(), set.end());
-  LOG(INFO) << "... sorting ...\n";
   auto totalComparison = [this](const auto& a, const auto& b) {
     return getCaseComparator()(a, b, SortLevel::TOTAL);
   };
   std::sort(begin(words), end(words), totalComparison);
   _internalVocabulary.build(words);
-  LOG(INFO) << "Done creating vocabulary.\n";
+  LOG(DEBUG) << "END Vocabulary::createFromSet" << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -299,19 +298,19 @@ template <typename, typename>
 void Vocabulary<S, C>::printRangesForDatatypes() {
   auto ranges = getRangesForDatatypes();
   auto logRange = [&](const auto& range) {
-    LOG(INFO) << range.first << " " << range.second << '\n';
+    LOG(INFO) << range.first << " " << range.second << std::endl;
     if (range.second > range.first) {
-      LOG(INFO) << indexToOptionalString(range.first).value() << '\n';
+      LOG(INFO) << indexToOptionalString(range.first).value() << std::endl;
       LOG(INFO) << indexToOptionalString(range.second.decremented()).value()
-                << '\n';
+                << std::endl;
     }
     if (range.second.get() < _internalVocabulary.size()) {
-      LOG(INFO) << indexToOptionalString(range.second).value() << '\n';
+      LOG(INFO) << indexToOptionalString(range.second).value() << std::endl;
     }
 
     if (range.first.get() > 0) {
       LOG(INFO) << indexToOptionalString(range.first.decremented()).value()
-                << '\n';
+                << std::endl;
     }
   };
 
@@ -334,6 +333,8 @@ template void RdfsVocabulary::initializeInternalizedLangs<nlohmann::json>(
     const nlohmann::json&);
 template void RdfsVocabulary::initializeExternalizePrefixes<nlohmann::json>(
     const nlohmann::json& prefixes);
+template void RdfsVocabulary::initializeExternalizePrefixes<
+    std::vector<std::string>>(const std::vector<std::string>& prefixes);
 
 template void RdfsVocabulary::printRangesForDatatypes();
 
