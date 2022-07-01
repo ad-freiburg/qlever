@@ -109,14 +109,19 @@ class Server {
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
 
+  /// Parse the path and URL parameters from the given request. Supports both
+  /// GET and POST request according to the SPARQL 1.1 standard.
+  ad_utility::UrlParser::UrlPathAndParameters getUrlPathAndParameters(
+      const ad_utility::httpUtils::HttpRequest auto& request);
+
   /// Handle a single HTTP request. Check whether a file request or a query was
   /// sent, and dispatch to functions handling these cases. This function
   /// requires the constraints for the `HttpHandler` in `HttpServer.h`.
   /// \param req The HTTP request.
   /// \param send The action that sends a http:response. (see the
   ///             `HttpServer.h` for documentation).
-  Awaitable<void> process(const ad_utility::httpUtils::HttpRequest auto& req,
-                          auto&& send);
+  Awaitable<void> process(
+      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
 
   /// Handle a http request that asks for the processing of a query.
   /// \param params The key-value-pairs  sent in the HTTP GET request. When this

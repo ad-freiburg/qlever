@@ -45,12 +45,25 @@ void Server::initialize(const string& indexBaseName, bool useText,
 // _____________________________________________________________________________
 void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
                  bool usePatternTrick, bool loadAllPermutations) {
-  // First set up the HTTP server, so that it binds to the socket, and
-  // the "socket already in use" error appears quickly.
+  using namespace ad_utility::httpUtils;
+
+  // Function that handles a request asynchronously. Catches any exception
+  // thrown inside of the `process` function and sends a "HTTP/1.1 400 Bad
+  // Request" response to the client with the error message from the exception.
   auto httpSessionHandler =
       [this](auto request, auto&& send) -> boost::asio::awaitable<void> {
-    co_await process(std::move(request), send);
+    try {
+      co_await process(std::move(request), send);
+    } catch (const std::exception& e) {
+      auto badRequestResponse =
+          createBadRequestResponse(absl::StrCat(e.what(), "\n"), request);
+      LOG(ERROR) << e.what() << std::endl;
+      co_return co_await send(std::move(badRequestResponse));
+    }
   };
+
+  // First set up the HTTP server, so that it binds to the socket, and
+  // the "socket already in use" error appears quickly.
   auto httpServer = HttpServer{static_cast<unsigned short>(_port), "0.0.0.0",
                                _numThreads, std::move(httpSessionHandler)};
 
@@ -63,113 +76,130 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 }
 
 // _____________________________________________________________________________
+ad_utility::UrlParser::UrlPathAndParameters Server::getUrlPathAndParameters(
+    const ad_utility::httpUtils::HttpRequest auto& request) {
+  if (request.method() == http::verb::get) {
+    // For a GET request, `request.target()` yields the part after the domain,
+    // which is a concatenation of the path and the query string (the query
+    // string starting with "?").
+    return ad_utility::UrlParser::parseGetRequestTarget(request.target());
+  }
+  if (request.method() == http::verb::post) {
+    // For a POST request, the content type *must* be either
+    // "application/x-www-form-urlencoded" or "application/sparql-query". In
+    // the first case, the body of the POST request contains a URL-encoded
+    // query (just like in the part of a GET request after the "?"). In the
+    // second case, the body of the POST request contains *only* the SPARQL
+    // query, but not URL-encoded, and no other URL parameters. See Sections
+    // 2.1.2 and 2.1.3 of the SPARQL 1.1 standard:
+    // https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321
+    std::string_view contentType = request.base()[http::field::content_type];
+    LOG(DEBUG) << "Content-type: \"" << contentType << "\"" << std::endl;
+    static constexpr std::string_view contentTypeUrlEncoded =
+        "application/x-www-form-urlencoded";
+    static constexpr std::string_view contentTypeSparqlQuery =
+        "application/sparql-query";
+
+    // In either of the two cases explained above, we convert the data to a
+    // format as if it came from a GET request. The second argument to
+    // `parseGetRequestTarget` says whether the function should apply URL
+    // decoding.
+    if (contentType == contentTypeUrlEncoded) {
+      return ad_utility::UrlParser::parseGetRequestTarget(
+          absl::StrCat(request.target(), "?", request.body()), true);
+    }
+    if (contentType == contentTypeSparqlQuery) {
+      return ad_utility::UrlParser::parseGetRequestTarget(
+          absl::StrCat(request.target(), "?query=", request.body()), false);
+    }
+    throw std::runtime_error(
+        absl::StrCat("POST request with content type \"", contentType,
+                     "\" not supported (must be \"", contentTypeUrlEncoded,
+                     "\" or \"", contentTypeSparqlQuery, "\")"));
+  }
+  std::ostringstream requestMethodName;
+  requestMethodName << request.method();
+  throw std::runtime_error(
+      absl::StrCat("Request method \"", requestMethodName.str(),
+                   "\" not supported (has to be GET or POST)"));
+};
+
+// _____________________________________________________________________________
 Awaitable<void> Server::process(
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
   using namespace ad_utility::httpUtils;
   ad_utility::Timer requestTimer;
   requestTimer.start();
 
-  // Parse the payload from a GET or POST request.
+  // Parse the path and the URL parameters from the given request. Both GET and
+  // POST requests are supported.
   LOG(DEBUG) << "Request method: \"" << request.method() << "\""
              << ", target: \"" << request.target() << "\""
              << ", body: \"" << request.body() << "\"" << std::endl;
-  auto filenameAndParams = [&request]() {
-    if (request.method() == http::verb::get) {
-      // For a GET request, `request.target()` yields the part after the domain,
-      // which is a concatenation of the path and the query string (the query
-      // string starting with "?").
-      return ad_utility::UrlParser::parseGetRequestTarget(request.target());
-    }
-    if (request.method() == http::verb::post) {
-      // For a POST request, the content type *must* be either
-      // "application/x-www-form-urlencoded" or "application/sparql-query". In
-      // the first case, the body of the POST request contains a URL-encoded
-      // query (just like in the part of a GET request after the "?"). In the
-      // second case, the body of the POST request contains *only* the SPARQL
-      // query, but not URL-encoded, and no other URL parameters. See Sections
-      // 2.1.2 and 2.1.3 of the SPARQL 1.1 standard:
-      // https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321
-      std::string_view contentType = request.base()[http::field::content_type];
-      LOG(DEBUG) << "Content-type: \"" << contentType << "\"" << std::endl;
-      static constexpr std::string_view contentTypeUrlEncoded =
-          "application/x-www-form-urlencoded";
-      static constexpr std::string_view contentTypeSparqlQuery =
-          "application/sparql-query";
+  const auto urlPathAndParameters = getUrlPathAndParameters(request);
+  const auto& parameters = urlPathAndParameters._parameters;
 
-      // In either of the two cases explained above, we convert the data to a
-      // format as if it came from a GET request. The second argument to
-      // `parseGetRequestTarget` says whether the function should apply URL
-      // decoding.
-      if (contentType == contentTypeUrlEncoded) {
-        return ad_utility::UrlParser::parseGetRequestTarget(
-            absl::StrCat(request.target(), "?", request.body()), true);
-      }
-      if (contentType == contentTypeSparqlQuery) {
-        return ad_utility::UrlParser::parseGetRequestTarget(
-            absl::StrCat(request.target(), "?query=", request.body()), false);
-      }
-      throw std::runtime_error(
-          absl::StrCat("Post request with content type\"", contentType,
-                       "\" not supported (must be \"", contentTypeUrlEncoded,
-                       "\" or \"", contentTypeSparqlQuery, "\""));
-    }
-    throw std::runtime_error(
-        absl::StrCat("Request method \"", request.method(),
-                     "\" not supported (has to be GET or POST)"));
-  }();
-  // auto filenameAndParams =
-  // ad_utility::UrlParser::parseTarget(request.target());
-  const auto& params = filenameAndParams._parameters;
-
-  // Lambda for sending a response asynchronously. Will be called with `co_await
-  // sendWithCors(...)`, see below.
+  // Lambda for sending a response asynchronously and with the maximally
+  // permissive CORS header (that allows the client that receives the response
+  // to do with it what it wants).
   auto sendWithCors = [&send](auto response) -> boost::asio::awaitable<void> {
     response.set(http::field::access_control_allow_origin, "*");
     co_return co_await send(std::move(response));
   };
 
-  // Lambda that checks if a URL parameter with the given specification exists
-  // and we are allowed to perform the associated action.
+  // Lambda for checking if a URL parameter exists in the request and if we are
+  // allowed to access it. If yes, return the value, otherwise return
+  // `std::nullopt`.
   //
-  // 1. If value is `std::nullopt`, check if the given key exists, and if yes,
-  // return the corresponding value, and `std::nullopt` otherwise.
-  //
-  // 2. If value is not `std::nullopt`, check if the given key-value pair
-  // exists, and if yes, return the value (not really needed, but just so that
-  // the interface is the same as in the first case), and `std::nullopt`
-  // otherwise.
-  //
-  // 3. If one of the two above would have returned a value, but the third
-  // argument is false, print a log message that the access to this URL
-  // parameter is denied and return `std::nullopt`.
-  auto checkParam =
-      [&params](const std::string key, std::optional<std::string> value,
-                bool accessAllowed = true) -> std::optional<std::string> {
-    // If key not found, always return std::nullopt.
-    if (!params.contains(key)) {
+  // If `value` is `std::nullopt`, only check if the key exists.  We need this
+  // because we have parameters like "cmd=stats", where a fixed combination of
+  // the key and value determines the kind of action, as well as parameters
+  // like "index-decription=...", where the key determines the kind of action.
+  auto checkParameter =
+      [&parameters](const std::string key, std::optional<std::string> value,
+                    bool accessAllowed = true) -> std::optional<std::string> {
+    // If the key is not found, always return std::nullopt.
+    if (!parameters.contains(key)) {
       return std::nullopt;
     }
     // If value is given, but not equal to param value, return std::nullopt. If
     // no value is given, set it to param value.
     if (value == std::nullopt) {
-      value = params.at(key);
-    } else if (value != params.at(key)) {
+      value = parameters.at(key);
+    } else if (value != parameters.at(key)) {
       return std::nullopt;
     }
     // At this point, we have a value. Either return it or say access denied.
     if (accessAllowed == false) {
-      LOG(INFO) << "Access to \"" << key << "=" << value.value()
-                << "\" is denied, this URL parameter is ignored" << std::endl;
+      LOG(INFO) << "Access to \"" << key << "=" << value.value() << "\""
+                << "requires a valid access-token"
+                << ", this URL parameter is ignored" << std::endl;
       return std::nullopt;
     } else {
       return value;
     }
   };
-  auto accessToken = checkParam("access-token", std::nullopt);
-  auto accessTokenOk = accessToken == accessToken_;
-  if (accessToken && !accessTokenOk) {
-    LOG(INFO) << "Access token \"access-token=" << accessToken.value() << "\""
-              << " provided, but not correct" << std::endl;
+
+  // Check the access token. If an access token is provided and the check fails,
+  // throw an exception and do not process any part of the query (even if the
+  // processing would have been allowed without access token).
+  auto accessToken = checkParameter("access-token", std::nullopt);
+  bool accessTokenOk = false;
+  if (accessToken) {
+    auto accessTokenProvidedMsg = absl::StrCat(
+        "Access token \"access-token=", accessToken.value(), "\" provided");
+    auto requestIgnoredMsg = ", request is ignored";
+    if (accessToken_.empty()) {
+      throw std::runtime_error(absl::StrCat(
+          accessTokenProvidedMsg,
+          " but server was started without --access-token", requestIgnoredMsg));
+    } else if (accessToken != accessToken_) {
+      throw std::runtime_error(absl::StrCat(
+          accessTokenProvidedMsg, " but not correct", requestIgnoredMsg));
+    } else {
+      LOG(DEBUG) << accessTokenProvidedMsg << " and correct" << std::endl;
+      accessTokenOk = true;
+    }
   }
 
   // Process all URL parameters known to QLever. If there is more than one,
@@ -182,29 +212,33 @@ Awaitable<void> Server::process(
   std::optional<http::response<http::string_body>> response;
 
   // Execute commands (URL parameter with key "cmd").
-  if (checkParam("cmd", "stats")) {
-    LOG(INFO) << "Processing command \"stats\"" << std::endl;
+  auto logCommand = [](std::optional<std::string>& cmd, std::string actionMsg) {
+    LOG(INFO) << "Processing command \"" << cmd.value() << "\""
+              << ": " << actionMsg << std::endl;
+  };
+  if (auto cmd = checkParameter("cmd", "stats")) {
+    logCommand(cmd, "get index statistics");
     response = createJsonResponse(composeStatsJson(), request);
-  } else if (checkParam("cmd", "cache-stats")) {
-    LOG(INFO) << "Processing command \"cache-stats\"" << std::endl;
+  } else if (auto cmd = checkParameter("cmd", "cache-stats")) {
+    logCommand(cmd, "get cache statistics");
     response = createJsonResponse(composeCacheStatsJson(), request);
-  } else if (checkParam("cmd", "clear-cache")) {
-    LOG(INFO) << "Clearing the cache, unpinned elements only" << std::endl;
+  } else if (auto cmd = checkParameter("cmd", "clear-cache")) {
+    logCommand(cmd, "clear the cache (unpinned elements only)");
     _cache.clearUnpinnedOnly();
     response = createJsonResponse(composeCacheStatsJson(), request);
-  } else if (checkParam("cmd", "clear-cache-complete", accessTokenOk)) {
-    LOG(INFO) << "Clearing the cache completely, including unpinned elements"
-              << std::endl;
+  } else if (auto cmd =
+                 checkParameter("cmd", "clear-cache-complete", accessTokenOk)) {
+    logCommand(cmd, "clear cache completely (including unpinned elements)");
     _cache.clearAll();
     response = createJsonResponse(composeCacheStatsJson(), request);
-  } else if (checkParam("cmd", "get-settings")) {
-    LOG(INFO) << "Getting server settings" << std::endl;
+  } else if (auto cmd = checkParameter("cmd", "get-settings")) {
+    logCommand(cmd, "get server settings");
     response = createJsonResponse(RuntimeParameters().toMap(), request);
   }
 
   // Set description of KB index.
   if (auto description =
-          checkParam("index-description", std::nullopt, accessTokenOk)) {
+          checkParameter("index-description", std::nullopt, accessTokenOk)) {
     LOG(INFO) << "Setting index description to: \"" << description.value()
               << "\"" << std::endl;
     _index.setKbName(description.value());
@@ -213,7 +247,7 @@ Awaitable<void> Server::process(
 
   // Set description of text index.
   if (auto description =
-          checkParam("text-description", std::nullopt, accessTokenOk)) {
+          checkParameter("text-description", std::nullopt, accessTokenOk)) {
     LOG(INFO) << "Setting text description to: \"" << description.value()
               << "\"" << std::endl;
     _index.setTextName(description.value());
@@ -222,7 +256,7 @@ Awaitable<void> Server::process(
 
   // Set one or several of the runtime parameters.
   for (auto key : RuntimeParameters().getKeys()) {
-    if (auto value = checkParam(key, std::nullopt, accessTokenOk)) {
+    if (auto value = checkParameter(key, std::nullopt, accessTokenOk)) {
       LOG(INFO) << "Setting runtime parameter \"" << key << "\""
                 << " to value \"" << value.value() << "\"" << std::endl;
       RuntimeParameters().set(key, value.value());
@@ -231,26 +265,26 @@ Awaitable<void> Server::process(
   }
 
   // If "query" parameter is given, process query.
-  if (auto query = checkParam("query", std::nullopt)) {
-    if (!query.value().empty()) {
-      co_return co_await processQuery(params, requestTimer, std::move(request),
-                                      sendWithCors);
-    } else {
-      response = createBadRequestResponse(
-          "Parameter \"query\" must not have an empty value", request);
+  if (auto query = checkParameter("query", std::nullopt)) {
+    if (query.value().empty()) {
+      throw std::runtime_error(
+          "Parameter \"query\" must not have an empty value");
     }
+    co_return co_await processQuery(parameters, requestTimer,
+                                    std::move(request), sendWithCors);
   }
 
-  // If there was no non-empty "query", but any of the above produced a
-  // `response`, send that now.
+  // If there was no "query", but any of the URL parameters processed before
+  // produced a `response`, send that now. Note that if multiple URL parameters
+  // were processed, only the `response` from the last one is sent.
   if (response.has_value()) {
     co_return co_await sendWithCors(std::move(response.value()));
   }
 
-  // At this point, none of the URL parameters was recognized by QLever. We
-  // then consider the URL parameter string as a path name and try to serve the
-  // corresponding file (though we only allow a very restricted whitelist, see
-  // below).
+  // At this point, there were either no URL paraeters or none of them were
+  // recognized by QLever. We then interpret the request as a request for a
+  // file. However, only files from a very restricted whitelist (see below) will
+  // actually be served.
   //
   // NOTE 1: `makeFileServer` returns a function.  The first argument is the
   // document root, the second one is the whitelist.

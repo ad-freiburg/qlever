@@ -63,9 +63,8 @@ int main(int argc, char** argv) {
       "The basename of the index files (required).");
   add("port,p", po::value<int>(&port)->required(),
       "The port on which HTTP requests are served (required).");
-  add("access-token,a",
-      po::value<std::string>(&accessToken)->default_value("CHANGE_ME"),
-      "Access token for restricted API calls.");
+  add("access-token,a", po::value<std::string>(&accessToken)->default_value(""),
+      "Access token for restricted API calls (default: no access).");
   add("num-simultaneous-queries,j",
       po::value<NonNegative>(&numSimultaneousQueries)->default_value(1),
       "The number of queries that can be processed simultaneously.");
