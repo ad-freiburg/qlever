@@ -36,8 +36,10 @@ void Server::initialize(const string& indexBaseName, bool useText,
 
   // Set flag.
   _initialized = true;
-  LOG(INFO) << "The server is ready, listening for requests on port " << _port
-            << " ..." << std::endl;
+  LOG(INFO) << "Access token for restricted API calls is \"" << accessToken_
+            << "\"" << std::endl;
+  LOG(INFO) << "The server is ready, listening for requests on port "
+            << std::to_string(_port) << " ..." << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -67,28 +69,53 @@ Awaitable<void> Server::process(
   ad_utility::Timer requestTimer;
   requestTimer.start();
 
-  // NOTE:
-  //
-  // For a GET request, `request.method()` yields
-  // `boost::beast::http::verb::get`, `request.target()` yields the query string
-  // (starting with "/?"), and `request.body()` is empty (and can be ignored).
-  //
-  // For a POST request, `request.method()` yields
-  // `boost::beast::http::verb::post`, `request.target()` yields "/" (can be
-  // ignored), and `request.target()` yields the query string (without "/?").
-  //
-  // TODO: Implement POST here, by if-elsing request.method().
-  LOG(INFO) << "Request method: \"" << request.method() << "\""
-            << ", target: \"" << request.target() << "\""
-            << ", body: \"" << request.body() << "\"" << std::endl;
-  auto filenameAndParams = [&]() {
-    if (request.method() == boost::beast::http::verb::get) {
-      return ad_utility::UrlParser::parseTarget(request.target());
+  // Parse the payload from a GET or POST request.
+  LOG(DEBUG) << "Request method: \"" << request.method() << "\""
+             << ", target: \"" << request.target() << "\""
+             << ", body: \"" << request.body() << "\"" << std::endl;
+  auto filenameAndParams = [&request]() {
+    if (request.method() == http::verb::get) {
+      // For a GET request, `request.target()` yields the part after the domain,
+      // which is a concatenation of the path and the query string (the query
+      // string starting with "?").
+      return ad_utility::UrlParser::parseGetRequestTarget(request.target());
     }
-    if (request.method() == boost::beast::http::verb::post) {
-      return ad_utility::UrlParser::parseTarget("\?" + request.body());
+    if (request.method() == http::verb::post) {
+      // For a POST request, the content type *must* be either
+      // "application/x-www-form-urlencoded" or "application/sparql-query". In
+      // the first case, the body of the POST request contains a URL-encoded
+      // query (just like in the part of a GET request after the "?"). In the
+      // second case, the body of the POST request contains *only* the SPARQL
+      // query, but not URL-encoded, and no other URL parameters. See Sections
+      // 2.1.2 and 2.1.3 of the SPARQL 1.1 standard:
+      // https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321
+      std::string_view contentType = request.base()[http::field::content_type];
+      LOG(DEBUG) << "Content-type: \"" << contentType << "\"" << std::endl;
+      static constexpr std::string_view contentTypeUrlEncoded =
+          "application/x-www-form-urlencoded";
+      static constexpr std::string_view contentTypeSparqlQuery =
+          "application/sparql-query";
+
+      // In either of the two cases explained above, we convert the data to a
+      // format as if it came from a GET request. The second argument to
+      // `parseGetRequestTarget` says whether the function should apply URL
+      // decoding.
+      if (contentType == contentTypeUrlEncoded) {
+        return ad_utility::UrlParser::parseGetRequestTarget(
+            absl::StrCat(request.target(), "?", request.body()), true);
+      }
+      if (contentType == contentTypeSparqlQuery) {
+        return ad_utility::UrlParser::parseGetRequestTarget(
+            absl::StrCat(request.target(), "?query=", request.body()), false);
+      }
+      throw std::runtime_error(
+          absl::StrCat("Post request with content type\"", contentType,
+                       "\" not supported (must be \"", contentTypeUrlEncoded,
+                       "\" or \"", contentTypeSparqlQuery, "\""));
     }
-    throw std::runtime_error("Only GET or POST requests supported");
+    throw std::runtime_error(
+        absl::StrCat("Request method \"", request.method(),
+                     "\" not supported (has to be GET or POST)"));
   }();
   // auto filenameAndParams =
   // ad_utility::UrlParser::parseTarget(request.target());
@@ -139,7 +166,7 @@ Awaitable<void> Server::process(
     }
   };
   auto accessToken = checkParam("access-token", std::nullopt);
-  auto accessTokenOk = accessToken == "1622";
+  auto accessTokenOk = accessToken == accessToken_;
   if (accessToken && !accessTokenOk) {
     LOG(INFO) << "Access token \"access-token=" << accessToken.value() << "\""
               << " provided, but not correct" << std::endl;

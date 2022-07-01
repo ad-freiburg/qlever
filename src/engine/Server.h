@@ -30,9 +30,11 @@ using ad_utility::Socket;
 //! The HTTP Server used.
 class Server {
  public:
-  explicit Server(const int port, const int numThreads, size_t maxMemGB)
+  explicit Server(const int port, const int numThreads, size_t maxMemGB,
+                  std::string accessToken)
       : _numThreads(numThreads),
         _port(port),
+        accessToken_(accessToken),
         _allocator{ad_utility::makeAllocationMemoryLeftThreadsafeObject(
                        maxMemGB * (1ull << 30u)),
                    [this](size_t numBytesToAllocate) {
@@ -90,6 +92,7 @@ class Server {
  private:
   const int _numThreads;
   int _port;
+  std::string accessToken_;
   QueryResultCache _cache;
   ad_utility::AllocatorWithLimit<Id> _allocator;
   SortPerformanceEstimator _sortPerformanceEstimator;
