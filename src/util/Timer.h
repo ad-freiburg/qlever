@@ -90,11 +90,11 @@ class Timer {
   inline void setMsecs(off_t msecs) { _usecs = msecs * (off_t)(1000); }
   inline void setSecs(off_t secs) { _usecs = secs * (off_t)(1000000); }
 
-  //! Time at last stop (initially zero)
-  off_t value() const { return _usecs; }            /* in microseconds */
-  off_t usecs() const { return _usecs; }            /* in microseconds */
-  off_t msecs() const { return _usecs / 1000; }     /* in milliseconds */
-  float secs() const { return _usecs / 1000000.0; } /* in seconds */
+  //! Time at last stop (initially zero).
+  off_t value() const { return _usecs; }
+  off_t usecs() const { return _usecs; }
+  off_t msecs() const { return (_usecs + 500) / 1000; }
+  float secs() const { return _usecs / 1000000.0; }
 
   // is the timer currently running
   bool isRunning() const { return _running; }

@@ -47,18 +47,32 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
                  bool usePatternTrick, bool loadAllPermutations) {
   using namespace ad_utility::httpUtils;
 
-  // Function that handles a request asynchronously. Catches any exception
-  // thrown inside of the `process` function and sends a "HTTP/1.1 400 Bad
-  // Request" response to the client with the error message from the exception.
+  // Function that handles a request asynchronously, will be passed as argument
+  // to `HttpServer` below.
   auto httpSessionHandler =
       [this](auto request, auto&& send) -> boost::asio::awaitable<void> {
+    // Version of send with maximally permissive CORS header (that allows the
+    // client that receives the response to do with it what it wants).
+    auto sendWithCors = [&send](auto response) -> boost::asio::awaitable<void> {
+      response.set(http::field::access_control_allow_origin, "*");
+      co_return co_await send(std::move(response));
+    };
+    // Process the request using the `process` method and if it throws an
+    // exception, log the error message and send a HTTP/1.1 404 Bad Request
+    // response with that message. Note that the C++ standard forbids co_await
+    // in the catch block, hence the workaround with the `exceptionErrorMsg`.
+    std::optional<std::string> exceptionErrorMsg;
+    std::optional<http::response<http::string_body>> badRequestResponse;
     try {
-      co_await process(std::move(request), send);
+      co_await process(std::move(request), sendWithCors);
     } catch (const std::exception& e) {
-      auto badRequestResponse =
-          createBadRequestResponse(absl::StrCat(e.what(), "\n"), request);
-      LOG(ERROR) << e.what() << std::endl;
-      co_return co_await send(std::move(badRequestResponse));
+      exceptionErrorMsg = e.what();
+    }
+    if (exceptionErrorMsg) {
+      LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
+      auto badRequestResponse = createBadRequestResponse(
+          absl::StrCat(exceptionErrorMsg.value(), "\n"), request);
+      co_await sendWithCors(std::move(badRequestResponse));
     }
   };
 
@@ -138,14 +152,6 @@ Awaitable<void> Server::process(
              << ", body: \"" << request.body() << "\"" << std::endl;
   const auto urlPathAndParameters = getUrlPathAndParameters(request);
   const auto& parameters = urlPathAndParameters._parameters;
-
-  // Lambda for sending a response asynchronously and with the maximally
-  // permissive CORS header (that allows the client that receives the response
-  // to do with it what it wants).
-  auto sendWithCors = [&send](auto response) -> boost::asio::awaitable<void> {
-    response.set(http::field::access_control_allow_origin, "*");
-    co_return co_await send(std::move(response));
-  };
 
   // Lambda for checking if a URL parameter exists in the request and if we are
   // allowed to access it. If yes, return the value, otherwise return
@@ -271,14 +277,14 @@ Awaitable<void> Server::process(
           "Parameter \"query\" must not have an empty value");
     }
     co_return co_await processQuery(parameters, requestTimer,
-                                    std::move(request), sendWithCors);
+                                    std::move(request), send);
   }
 
   // If there was no "query", but any of the URL parameters processed before
   // produced a `response`, send that now. Note that if multiple URL parameters
   // were processed, only the `response` from the last one is sent.
   if (response.has_value()) {
-    co_return co_await sendWithCors(std::move(response.value()));
+    co_return co_await send(std::move(response.value()));
   }
 
   // At this point, there were either no URL paraeters or none of them were
@@ -623,10 +629,11 @@ boost::asio::awaitable<void> Server::processQuery(
     // Print the runtime info. This needs to be done after the query
     // was computed.
 
-    // TODO<joka921> Also log the processing time and an identifier of the
-    // query.
-    LOG(INFO) << "Done processing query" << std::endl;
-    LOG(DEBUG) << "\nRuntime Info:\n"
+    // TODO<joka921> Also log an identifier of the query.
+    LOG(INFO) << "Done processing query and sending result"
+              << ", total time was " << requestTimer.msecs() << " ms"
+              << std::endl;
+    LOG(DEBUG) << "Runtime Info:\n"
                << qet.getRootOperation()->getRuntimeInfo().toString()
                << std::endl;
   } catch (const ad_semsearch::Exception& e) {
