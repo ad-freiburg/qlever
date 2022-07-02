@@ -58,11 +58,10 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
       co_return co_await send(std::move(response));
     };
     // Process the request using the `process` method and if it throws an
-    // exception, log the error message and send a HTTP/1.1 404 Bad Request
+    // exception, log the error message and send a HTTP/1.1 400 Bad Request
     // response with that message. Note that the C++ standard forbids co_await
     // in the catch block, hence the workaround with the `exceptionErrorMsg`.
     std::optional<std::string> exceptionErrorMsg;
-    std::optional<http::response<http::string_body>> badRequestResponse;
     try {
       co_await process(std::move(request), sendWithCors);
     } catch (const std::exception& e) {
@@ -142,6 +141,23 @@ ad_utility::UrlParser::UrlPathAndParameters Server::getUrlPathAndParameters(
 Awaitable<void> Server::process(
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send) {
   using namespace ad_utility::httpUtils;
+
+  // Log some basic information about the request. Start with an empty line so
+  // that in a low-traffic scenario (or when the query processing is very fast),
+  // we have one visual block per request in the log.
+  std::string_view contentType = request.base()[http::field::content_type];
+  std::string_view acceptHeader = request.base()[http::field::accept];
+  LOG(INFO) << std::endl;
+  LOG(INFO) << "Request received via " << request.method() << " request"
+            << (contentType.empty()
+                    ? absl::StrCat(", no content type specified")
+                    : absl::StrCat(", content type \"", contentType, "\""))
+            << (acceptHeader.empty()
+                    ? absl::StrCat(", no accept header specified")
+                    : absl::StrCat(", accept header \"", acceptHeader, "\""))
+            << std::endl;
+
+  // Start timing.
   ad_utility::Timer requestTimer;
   requestTimer.start();
 
@@ -304,6 +320,8 @@ Awaitable<void> Server::process(
   // is not found, a corresponding response is returned to the requestion
   // client, but the log says nothing about it. The place to change this would
   // be in `src/util/HttpServer/HttpUtils.h`.
+  LOG(INFO) << "Treating request target \"" << request.target() << "\""
+            << " as a request for a file with that name" << std::endl;
   auto serveFileRequest = makeFileServer(
       ".",
       ad_utility::HashSet<std::string>{"index.html", "script.js", "style.css"})(
@@ -420,8 +438,9 @@ ad_utility::streams::stream_generator Server::composeTurtleResponse(
 }
 
 // _____________________________________________________________________________
-json Server::composeExceptionJson(const string& query, const std::exception& e,
-                                  ad_utility::Timer& requestTimer) {
+json Server::composeErrorResponseJson(const string& query,
+                                      const std::string& errorMsg,
+                                      ad_utility::Timer& requestTimer) {
   requestTimer.stop();
 
   json j;
@@ -430,7 +449,7 @@ json Server::composeExceptionJson(const string& query, const std::exception& e,
   j["resultsize"] = 0;
   j["time"]["total"] = requestTimer.msecs();
   j["time"]["computeResult"] = requestTimer.msecs();
-  j["exception"] = e.what();
+  j["exception"] = errorMsg;
   return j;
 }
 
@@ -484,8 +503,11 @@ boost::asio::awaitable<void> Server::processQuery(
     co_return co_await send(std::move(response));
   };
 
-  std::optional<json> errorResponse;
-
+  // Put the whole query processing in a try-catch block. If any exception
+  // occurs, log the error message and send a JSON response with all the details
+  // to the client. Note that the C++ standard forbids co_await in the catch
+  // block, hence the workaround with the optional `exceptionErrorMsg`.
+  std::optional<std::string> exceptionErrorMsg;
   try {
     ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
         std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
@@ -504,8 +526,9 @@ boost::asio::awaitable<void> Server::processQuery(
                                              : MAX_NOF_ROWS_IN_RESULT;
     const bool pinSubtrees = containsParam("pinsubtrees", "true");
     const bool pinResult = containsParam("pinresult", "true");
-    LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned)" : "")
-              << ((pinResult) ? " (Result pinned)" : "") << ":\n"
+    LOG(INFO) << "Processing the following SPARQL query:"
+              << (pinResult ? " [pin result]" : "")
+              << (pinSubtrees ? " [pin subresults]" : "") << "\n"
               << query << std::endl;
     ParsedQuery pq = SparqlParser(query).parse();
     pq.expandPrefixes();
@@ -522,6 +545,10 @@ boost::asio::awaitable<void> Server::processQuery(
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     qet.isRoot() = true;  // allow pinning of the final result
     qet.recursivelySetTimeoutTimer(timeoutTimer);
+    requestTimer.stop();
+    LOG(INFO) << "Query planning done in " << requestTimer.msecs() << " ms"
+              << " (can include index scans)" << std::endl;
+    requestTimer.cont();
     LOG(TRACE) << qet.asString() << std::endl;
 
     using ad_utility::MediaType;
@@ -577,6 +604,8 @@ boost::asio::awaitable<void> Server::processQuery(
     }
 
     AD_CHECK(mediaType.has_value());
+    LOG(INFO) << "Requested media type of result is \""
+              << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
     switch (mediaType.value()) {
       case ad_utility::MediaType::csv: {
         auto responseGenerator = co_await composeResponseSepValues<
@@ -629,20 +658,28 @@ boost::asio::awaitable<void> Server::processQuery(
     // Print the runtime info. This needs to be done after the query
     // was computed.
 
+    // Log that we are done with the query and how long it took.
+    //
+    // NOTE: We need to explicitly stop the `requestTimer` here because in the
+    // sending code above, it is done only in some cases and not in others (in
+    // particular, not for TSV and CSV because for those, the result does not
+    // contain timing information).
+    //
     // TODO<joka921> Also log an identifier of the query.
+    requestTimer.stop();
     LOG(INFO) << "Done processing query and sending result"
               << ", total time was " << requestTimer.msecs() << " ms"
               << std::endl;
     LOG(DEBUG) << "Runtime Info:\n"
                << qet.getRootOperation()->getRuntimeInfo().toString()
                << std::endl;
-  } catch (const ad_semsearch::Exception& e) {
-    errorResponse = composeExceptionJson(query, e, requestTimer);
   } catch (const std::exception& e) {
-    errorResponse = composeExceptionJson(query, e, requestTimer);
+    exceptionErrorMsg = e.what();
   }
-  if (errorResponse.has_value()) {
-    co_return co_await sendJson(errorResponse.value(),
-                                http::status::bad_request);
+  if (exceptionErrorMsg) {
+    LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
+    auto errorResponseJson = composeErrorResponseJson(
+        query, exceptionErrorMsg.value(), requestTimer);
+    co_return co_await sendJson(errorResponseJson, http::status::bad_request);
   }
 }
