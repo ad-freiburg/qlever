@@ -56,9 +56,8 @@ void Operation::recursivelySetTimeoutTimer(
   }
 }
 
-// Get the result for the subtree rooted at this element.
-// Use existing results if they are already available, otherwise
-// trigger computation.
+// Get the result for the subtree rooted at this element. Use existing results
+// if they are already available, otherwise trigger computation.
 shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   ad_utility::Timer timer;
   timer.start();
@@ -114,6 +113,10 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
 
     timer.stop();
     createRuntimeInformation(result, timer.msecs());
+    auto resultNumRows = result._resultPointer->_resultTable->size();
+    auto resultNumCols = result._resultPointer->_resultTable->width();
+    LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
+               << resultNumCols << std::endl;
     return result._resultPointer->_resultTable;
   } catch (const ad_semsearch::AbortException& e) {
     // A child Operation was aborted, do not print the information again.

@@ -146,26 +146,20 @@ Awaitable<void> Server::process(
   // that in a low-traffic scenario (or when the query processing is very fast),
   // we have one visual block per request in the log.
   std::string_view contentType = request.base()[http::field::content_type];
-  std::string_view acceptHeader = request.base()[http::field::accept];
   LOG(INFO) << std::endl;
-  LOG(INFO) << "Request received via " << request.method() << " request"
+  LOG(INFO) << "Request received via " << request.method()
             << (contentType.empty()
                     ? absl::StrCat(", no content type specified")
                     : absl::StrCat(", content type \"", contentType, "\""))
-            << (acceptHeader.empty()
-                    ? absl::StrCat(", no accept header specified")
-                    : absl::StrCat(", accept header \"", acceptHeader, "\""))
             << std::endl;
 
   // Start timing.
   ad_utility::Timer requestTimer;
   requestTimer.start();
 
-  // Parse the path and the URL parameters from the given request. Both GET and
-  // POST requests are supported.
-  LOG(DEBUG) << "Request method: \"" << request.method() << "\""
-             << ", target: \"" << request.target() << "\""
-             << ", body: \"" << request.body() << "\"" << std::endl;
+  // Parse the path and the URL parameters from the given request. Works for GET
+  // requests as well as the two kinds of POST requests allowed by the SPARQL
+  // standard, see method `getUrlPathAndParameters`.
   const auto urlPathAndParameters = getUrlPathAndParameters(request);
   const auto& parameters = urlPathAndParameters._parameters;
 
@@ -191,15 +185,15 @@ Awaitable<void> Server::process(
     } else if (value != parameters.at(key)) {
       return std::nullopt;
     }
-    // At this point, we have a value. Either return it or say access denied.
+    // Now that we have the value, check if there is a problem with the access.
+    // If yes, we abort the query processing at this point.
     if (accessAllowed == false) {
-      LOG(INFO) << "Access to \"" << key << "=" << value.value() << "\""
-                << "requires a valid access-token"
-                << ", this URL parameter is ignored" << std::endl;
-      return std::nullopt;
-    } else {
-      return value;
+      throw std::runtime_error(absl::StrCat("Access to \"", key, "=",
+                                            value.value(), "\" denied",
+                                            " (requires a valid access token)",
+                                            ", processing of request aborted"));
     }
+    return value;
   };
 
   // Check the access token. If an access token is provided and the check fails,
@@ -258,6 +252,18 @@ Awaitable<void> Server::process(
     response = createJsonResponse(RuntimeParameters().toMap(), request);
   }
 
+  // Ping with or without messsage.
+  if (urlPathAndParameters._path == "/ping") {
+    if (auto msg = checkParameter("msg", std::nullopt)) {
+      LOG(INFO) << "Alive check with message \"" << msg.value() << "\""
+                << std::endl;
+    } else {
+      LOG(INFO) << "Alive check without message" << std::endl;
+    }
+    response = createOkResponse("This QLever server is up and running\n",
+                                request, ad_utility::MediaType::textPlain);
+  }
+
   // Set description of KB index.
   if (auto description =
           checkParameter("index-description", std::nullopt, accessTokenOk)) {
@@ -303,10 +309,16 @@ Awaitable<void> Server::process(
     co_return co_await send(std::move(response.value()));
   }
 
-  // At this point, there were either no URL paraeters or none of them were
-  // recognized by QLever. We then interpret the request as a request for a
-  // file. However, only files from a very restricted whitelist (see below) will
-  // actually be served.
+  // At this point, if there is a "?" in the query string, it means that there
+  // are URL parameters which QLever does not know or did not process.
+  if (request.target().find("?") != std::string::npos) {
+    throw std::runtime_error(
+        "Request with URL parameters, but none of them could be processed");
+  }
+
+  // At this point, we only have a path and no URL paraeters. We then interpret
+  // the request as a request for a file. However, only files from a very
+  // restricted whitelist (see below) will actually be served.
   //
   // NOTE 1: `makeFileServer` returns a function.  The first argument is the
   // document root, the second one is the whitelist.
@@ -336,6 +348,7 @@ Awaitable<json> Server::composeResponseQleverJson(
   auto compute = [&, maxSend] {
     shared_ptr<const ResultTable> resultTable = qet.getResult();
     requestTimer.stop();
+    resultTable->logResultSize();
     off_t compResultUsecs = requestTimer.usecs();
     size_t resultSize = resultTable->size();
 
@@ -391,6 +404,7 @@ Awaitable<json> Server::composeResponseSparqlJson(
   }
   auto compute = [&, maxSend] {
     shared_ptr<const ResultTable> resultTable = qet.getResult();
+    resultTable->logResultSize();
     requestTimer.stop();
     nlohmann::json j;
     size_t limit = std::min(query._limitOffset._limit, maxSend);
@@ -533,34 +547,19 @@ boost::asio::awaitable<void> Server::processQuery(
     ParsedQuery pq = SparqlParser(query).parse();
     pq.expandPrefixes();
 
-    QueryExecutionContext qec(_index, _engine, &_cache, _allocator,
-                              _sortPerformanceEstimator, pinSubtrees,
-                              pinResult);
-    // start the shared timeout timer here to also include
-    // the query planning
-    timeoutTimer->wlock()->start();
-
-    QueryPlanner qp(&qec);
-    qp.setEnablePatternTrick(_enablePatternTrick);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    qet.isRoot() = true;  // allow pinning of the final result
-    qet.recursivelySetTimeoutTimer(timeoutTimer);
-    requestTimer.stop();
-    LOG(INFO) << "Query planning done in " << requestTimer.msecs() << " ms"
-              << " (can include index scans)" << std::endl;
-    requestTimer.cont();
-    LOG(TRACE) << qet.asString() << std::endl;
-
+    // The following code block determines the media type to be used for the
+    // result. The media type is either determined by the "Accept:" header of
+    // the request or by the URL parameter "action=..." (for TSV and CSV export,
+    // for QLever-historical reasons).
     using ad_utility::MediaType;
-    // Determine the result media type.
 
-    // TODO<joka921> qleverJson should not be the default as soon
-    // as the UI explicitly requests it.
-    // TODO<joka921> Add sparqlJson as soon as it is supported.
+    // The first media type in this list is the default, if no other type is
+    // specified in the request. It's "application/sparql-results+json", as
+    // required by the SPARQL standard.
     const auto supportedMediaTypes = []() {
       static const std::vector<MediaType> mediaTypes{
-          ad_utility::MediaType::qleverJson,
           ad_utility::MediaType::sparqlJson,
+          ad_utility::MediaType::qleverJson,
           ad_utility::MediaType::tsv,
           ad_utility::MediaType::csv,
           ad_utility::MediaType::turtle,
@@ -602,10 +601,35 @@ boost::asio::awaitable<void> Server::processQuery(
                   supportedMediaTypes()),
           request));
     }
-
     AD_CHECK(mediaType.has_value());
     LOG(INFO) << "Requested media type of result is \""
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
+
+    // Do the query planning. This creates a `QueryExecutionTree`, which will
+    // then be used to process the query. Start the shared `timeoutTimer` here
+    // to also include the query planning.
+    //
+    // NOTE: This should come after determining the media type. Otherwise it
+    // might happen that the query planner runs for a while (recall that it many
+    // do index scans) and then we get an error message afterwards that a
+    // certain media type is not supported.
+    timeoutTimer->wlock()->start();
+    QueryExecutionContext qec(_index, _engine, &_cache, _allocator,
+                              _sortPerformanceEstimator, pinSubtrees,
+                              pinResult);
+    QueryPlanner qp(&qec);
+    qp.setEnablePatternTrick(_enablePatternTrick);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    qet.isRoot() = true;  // allow pinning of the final result
+    qet.recursivelySetTimeoutTimer(timeoutTimer);
+    requestTimer.stop();
+    LOG(INFO) << "Query planning done in " << requestTimer.msecs() << " ms"
+              << " (can include index scans)" << std::endl;
+    requestTimer.cont();
+    LOG(TRACE) << qet.asString() << std::endl;
+
+    // This actually processes the query and sends the result in the requested
+    // format.
     switch (mediaType.value()) {
       case ad_utility::MediaType::csv: {
         auto responseGenerator = co_await composeResponseSepValues<
