@@ -56,9 +56,8 @@ void Operation::recursivelySetTimeoutTimer(
   }
 }
 
-// Get the result for the subtree rooted at this element.
-// Use existing results if they are already available, otherwise
-// trigger computation.
+// Get the result for the subtree rooted at this element. Use existing results
+// if they are already available, otherwise trigger computation.
 shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   ad_utility::Timer timer;
   timer.start();
@@ -114,30 +113,34 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
 
     timer.stop();
     createRuntimeInformation(result, timer.msecs());
+    auto resultNumRows = result._resultPointer->_resultTable->size();
+    auto resultNumCols = result._resultPointer->_resultTable->width();
+    LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
+               << resultNumCols << std::endl;
     return result._resultPointer->_resultTable;
   } catch (const ad_semsearch::AbortException& e) {
     // A child Operation was aborted, do not print the information again.
     throw;
   } catch (const ad_utility::WaitedForResultWhichThenFailedException& e) {
+    // Here and in the following, show the detailed information (it's the
+    // runtime info) only in the DEBUG log. Note that the exception will be
+    // caught by the `processQuery` method, where the error message will be
+    // printed *and* included in an error response sent to the client.
     LOG(ERROR) << "Waited for a result from another thread which then failed"
                << endl;
-    LOG(ERROR) << asString();
+    LOG(DEBUG) << asString();
     throw ad_semsearch::AbortException(e);
   } catch (const std::exception& e) {
     // We are in the innermost level of the exception, so print
-    LOG(ERROR) << "Aborted Operation:" << endl;
-    LOG(ERROR) << asString() << endl;
-    LOG(ERROR) << e.what() << endl;
+    LOG(ERROR) << "Aborted Operation" << endl;
+    LOG(DEBUG) << asString() << endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
     throw ad_semsearch::AbortException(e);
   } catch (...) {
     // We are in the innermost level of the exception, so print
-    LOG(ERROR) << "Aborted Operation:" << endl;
-    LOG(ERROR) << asString() << endl;
-    LOG(ERROR)
-        << "Unexpected exception that is not a subclass of std::exception"
-        << endl;
+    LOG(ERROR) << "Aborted Operation" << endl;
+    LOG(DEBUG) << asString() << endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
     throw ad_semsearch::AbortException(

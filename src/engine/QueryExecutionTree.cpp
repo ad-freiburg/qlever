@@ -401,7 +401,9 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
   shared_ptr<const ResultTable> resultTable = getResult();
-  LOG(DEBUG) << "Resolving strings for finished binary result...\n";
+  resultTable->logResultSize();
+  LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
+             << std::endl;
   auto selectedColumnIndices = selectedVariablesToColumnIndices(
       selectedVarsOrAsterisk, *resultTable, true);
 
@@ -518,8 +520,10 @@ QueryExecutionTree::generateRdfGraph(
 // _____________________________________________________________________________
 ad_utility::streams::stream_generator QueryExecutionTree::writeRdfGraphTurtle(
     const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-    size_t offset, std::shared_ptr<const ResultTable> res) const {
-  auto generator = generateRdfGraph(constructTriples, limit, offset, res);
+    size_t offset, std::shared_ptr<const ResultTable> resultTable) const {
+  resultTable->logResultSize();
+  auto generator =
+      generateRdfGraph(constructTriples, limit, offset, resultTable);
   for (const auto& triple : generator) {
     co_yield triple._subject;
     co_yield ' ';
@@ -535,7 +539,7 @@ template <QueryExecutionTree::ExportSubFormat format>
 ad_utility::streams::stream_generator
 QueryExecutionTree::writeRdfGraphSeparatedValues(
     const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-    size_t offset, std::shared_ptr<const ResultTable> res) const {
+    size_t offset, std::shared_ptr<const ResultTable> resultTable) const {
   static_assert(format == ExportSubFormat::BINARY ||
                 format == ExportSubFormat::CSV ||
                 format == ExportSubFormat::TSV);
@@ -543,11 +547,13 @@ QueryExecutionTree::writeRdfGraphSeparatedValues(
     throw std::runtime_error{
         "Binary export is not supported for CONSTRUCT queries"};
   }
+  resultTable->logResultSize();
   constexpr auto& escapeFunction = format == ExportSubFormat::TSV
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
   constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
-  auto generator = generateRdfGraph(constructTriples, limit, offset, res);
+  auto generator =
+      generateRdfGraph(constructTriples, limit, offset, resultTable);
   for (auto& triple : generator) {
     co_yield escapeFunction(std::move(triple._subject));
     co_yield sep;

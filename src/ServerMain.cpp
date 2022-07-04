@@ -39,7 +39,8 @@ int main(int argc, char** argv) {
   // filled / set depending on the options.
   using ad_utility::NonNegative;
 
-  string indexBasename;
+  std::string indexBasename;
+  std::string accessToken;
   bool text = false;
   int port;
   NonNegative numSimultaneousQueries = 1;
@@ -62,6 +63,8 @@ int main(int argc, char** argv) {
       "The basename of the index files (required).");
   add("port,p", po::value<int>(&port)->required(),
       "The port on which HTTP requests are served (required).");
+  add("access-token,a", po::value<std::string>(&accessToken)->default_value(""),
+      "Access token for restricted API calls (default: no access).");
   add("num-simultaneous-queries,j",
       po::value<NonNegative>(&numSimultaneousQueries)->default_value(1),
       "The number of queries that can be processed simultaneously.");
@@ -123,7 +126,7 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, static_cast<int>(numSimultaneousQueries),
-                  memoryMaxSizeGb);
+                  memoryMaxSizeGb, std::move(accessToken));
     server.run(indexBasename, text, !noPatterns, !noPatternTrick,
                !onlyPsoAndPosPermutations);
   } catch (const std::exception& e) {

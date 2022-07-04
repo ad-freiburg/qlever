@@ -21,20 +21,24 @@ using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
 
 /*
  * \brief A Simple HttpServer, based on Boost::Beast. Its can be configured via
- * the mandatory HttpHandler parameter. \tparam HttpHandler A callable type that
- * takes two parameters, a `http::request<...>` , and a `sendAction` and returns
- * an awaitable<void> type. sendAction always is a callable that takes a
- * http::message, and returns an awaitable<void>; The behavior is then as
- * follows: as soon as the Server receives a http request, co_await
- * _httpHandler(move(request), sendAction) is called. (_httpHandler is a member
- * of type HttpHandler). The expected behavior of this call is that _httpHandler
- * takes the request, computes the corresponding `response`, and calls co_await
- * sendAction(response). The `sendAction` is needed because the `response` might
- * different types (in beast, a http::message is templated on the body type).
- *  For this reason, this approach is more flexible, than having _httpHandler
- * simply return the response. A very basic HttpHandler, which simply serves
- * files from a directory, can be obtained via
- * `ad_utility::httpUtils::makeFileServer()`.
+ * the mandatory HttpHandler parameter.
+ *
+ * \tparam HttpHandler A callable type that takes two parameters, a
+ * `http::request<...>` , and a `sendAction` and returns an awaitable<void>
+ * type. sendAction always is a callable that takes a http::message, and returns
+ * an awaitable<void>.
+ *
+ * The behavior is then as follows: as soon as the server receives a HTTP
+ * request, co_await _httpHandler(move(request), sendAction) is called.
+ * (_httpHandler is a member of type HttpHandler). The expected behavior of this
+ * call is that _httpHandler takes the request, computes the corresponding
+ * `response`, and calls co_await sendAction(response). The `sendAction` is
+ * needed because the `response` can have different types (in beast, a
+ * http::message is templated on the body type). For this reason, this approach
+ * is more flexible, than having _httpHandler simply return the response.
+ *
+ * A very basic HttpHandler, which simply serves files from a directory, can be
+ * obtained via `ad_utility::httpUtils::makeFileServer()`.
  */
 template <typename HttpHandler>
 class HttpServer {

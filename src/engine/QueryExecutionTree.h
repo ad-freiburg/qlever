@@ -23,9 +23,8 @@
 using std::shared_ptr;
 using std::string;
 
-// A query execution tree.
-// Processed bottom up, this gives an ordering to the operations
-// needed to solve a query.
+// A query execution tree. Processed bottom up, which gives an ordering to the
+// operations needed to solve a query.
 class QueryExecutionTree {
  public:
   explicit QueryExecutionTree(QueryExecutionContext* const qec);
