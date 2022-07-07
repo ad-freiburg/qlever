@@ -357,8 +357,8 @@ bool TurtleParser<T>::rdfLiteral() {
         type == XSD_SHORT_TYPE || type == XSD_BYTE_TYPE ||
         type == XSD_NON_NEGATIVE_INTEGER_TYPE ||
         type == XSD_UNSIGNED_LONG_TYPE || type == XSD_UNSIGNED_INT_TYPE ||
-        type == XSD_UNSIGNED_SHORT_TYPE || type == XSD_POSITIVE_INTEGER_TYPE ||
-        type == XSD_BOOLEAN_TYPE) {
+        type == XSD_UNSIGNED_SHORT_TYPE || type == XSD_POSITIVE_INTEGER_TYPE) {
+      // type == XSD_BOOLEAN_TYPE) {
       parseIntegerConstant(strippedLiteral);
     } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
                type == XSD_FLOAT_TYPE) {
