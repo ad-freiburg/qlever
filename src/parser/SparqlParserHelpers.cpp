@@ -91,4 +91,12 @@ ResultOfParseAndRemainingText<vector<GroupKey>> parseGroupClause(
   return p.parse<vector<GroupKey>>(input, "group clause",
                                    &SparqlAutomaticParser::groupClause);
 }
+// _____________________________________________________________________________
+
+ResultOfParseAndRemainingText<GraphPatternOperation::Values> parseValuesClause(
+    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes) {
+  ParserAndVisitor p{input, std::move(prefixes)};
+  return p.parse<GraphPatternOperation::Values>(
+      input, "values clause", &SparqlAutomaticParser::valuesClause);
+}
 }  // namespace sparqlParserHelpers

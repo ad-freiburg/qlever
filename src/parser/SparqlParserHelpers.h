@@ -82,6 +82,9 @@ ResultOfParseAndRemainingText<vector<OrderKey>> parseOrderClause(
 
 ResultOfParseAndRemainingText<vector<GroupKey>> parseGroupClause(
     const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
+
+ResultOfParseAndRemainingText<GraphPatternOperation::Values> parseValuesClause(
+    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H

@@ -345,7 +345,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitValuesClause(
       SparqlAutomaticParser::ValuesClauseContext* ctx) override {
-    return visitChildren(ctx);
+    if (ctx->dataBlock()) {
+      return visit(ctx->dataBlock()).as<GraphPatternOperation::Values>();
+    } else {
+      return NULL;
+    }
   }
 
   antlrcpp::Any visitTriplesTemplate(
@@ -401,27 +405,75 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitDataBlock(
       SparqlAutomaticParser::DataBlockContext* ctx) override {
-    return visitChildren(ctx);
+    // TODO: read through specs for correct behaviour of DataClause
+    if (ctx->inlineDataOneVar()) {
+      return GraphPatternOperation::Values{
+          std::move(visit(ctx->inlineDataOneVar()).as<SparqlValues>())};
+    } else if (ctx->inlineDataFull()) {
+      return GraphPatternOperation::Values{
+          std::move(visit(ctx->inlineDataFull()).as<SparqlValues>())};
+    }
+    AD_FAIL()  // Should be unreachable.
   }
 
   antlrcpp::Any visitInlineDataOneVar(
       SparqlAutomaticParser::InlineDataOneVarContext* ctx) override {
-    return visitChildren(ctx);
+    SparqlValues values;
+    auto var = visit(ctx->var()).as<Variable>();
+    values._variables.push_back(var.name());
+    for (auto& dataBlockValue : ctx->dataBlockValue()) {
+      values._values.push_back(
+          {std::move(visit(dataBlockValue).as<std::string>())});
+    }
+    return values;
   }
 
   antlrcpp::Any visitInlineDataFull(
       SparqlAutomaticParser::InlineDataFullContext* ctx) override {
-    return visitChildren(ctx);
+    SparqlValues values;
+    AD_CHECK_EQ(ctx->var().size(), ctx->dataBlockSingle().size());
+    for (auto& var : ctx->var()) {
+      values._variables.push_back(visit(var).as<Variable>().name());
+    }
+    for (auto& dataBlockSingle : ctx->dataBlockSingle()) {
+      values._values.push_back(
+          std::move(visit(dataBlockSingle).as<vector<std::string>>()));
+    }
+    return values;
   }
 
   antlrcpp::Any visitDataBlockSingle(
       SparqlAutomaticParser::DataBlockSingleContext* ctx) override {
-    return visitChildren(ctx);
+    vector<std::string> values;
+    for (auto& dataBlockValue : ctx->dataBlockValue()) {
+      values.push_back(std::move(visit(dataBlockValue).as<std::string>()));
+    }
+    return values;
   }
 
   antlrcpp::Any visitDataBlockValue(
       SparqlAutomaticParser::DataBlockValueContext* ctx) override {
-    return visitChildren(ctx);
+    // Return a string
+    if (ctx->iri()) {
+      return visit(ctx->iri());
+    } else if (ctx->rdfLiteral()) {
+      return visit(ctx->rdfLiteral());
+    } else if (ctx->numericLiteral()) {
+      // TODO: find out whether they are supported. they seem to be absent
+      //  from the code of the old parser.
+      throw ParseException(
+          "NumericLiteral is not supported. Received: " + ctx->getText() + ".");
+      //      return visit(ctx->numericLiteral());
+    } else if (ctx->booleanLiteral()) {
+      // TODO: find compatibility - see above comment
+      throw ParseException(
+          "BooleanLiteral is not supported. Received: " + ctx->getText() + ".");
+      //      return visit(ctx->booleanLiteral());
+    } else if (ctx->getText() == "UNDEF") {
+      // TODO: replace with token
+      return ctx->getText();
+    }
+    AD_FAIL()  // Should be unreachable.
   }
 
   antlrcpp::Any visitMinusGraphPattern(
