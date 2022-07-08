@@ -592,7 +592,9 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitVerbPath(
       SparqlAutomaticParser::VerbPathContext* ctx) override {
-    return visitChildren(ctx);
+    PropertyPath p = visit(ctx->path()).as<PropertyPath>();
+    p.computeCanBeNull();
+    return p;
   }
 
   antlrcpp::Any visitVerbSimple(
@@ -632,7 +634,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       SparqlAutomaticParser::PathAlternativeContext* ctx) override {
     std::vector<PropertyPath> paths;
     for (auto* pathSequence : ctx->pathSequence()) {
-      paths.push_back(visitChildren(pathSequence).as<PropertyPath>());
+      paths.push_back(visit(pathSequence).as<PropertyPath>());
     }
 
     if (paths.size() == 1) {
@@ -648,7 +650,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       SparqlAutomaticParser::PathSequenceContext* ctx) override {
     std::vector<PropertyPath> paths;
     for (auto* pathEltOrInverse : ctx->pathEltOrInverse()) {
-      paths.push_back(visitChildren(pathEltOrInverse).as<PropertyPath>());
+      paths.push_back(visit(pathEltOrInverse).as<PropertyPath>());
     }
 
     if (paths.size() == 1) {
@@ -662,7 +664,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitPathElt(
       SparqlAutomaticParser::PathEltContext* ctx) override {
-    PropertyPath p = visitChildren(ctx->pathPrimary()).as<PropertyPath>();
+    PropertyPath p = visit(ctx->pathPrimary()).as<PropertyPath>();
 
     if (ctx->pathMod()) {
       if (ctx->pathMod()->getText() == "+") {
@@ -689,7 +691,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitPathEltOrInverse(
       SparqlAutomaticParser::PathEltOrInverseContext* ctx) override {
-    PropertyPath p = visitChildren(ctx->pathElt()).as<PropertyPath>();
+    PropertyPath p = visit(ctx->pathElt()).as<PropertyPath>();
 
     if (ctx->negationOperator) {
       PropertyPath pp(PropertyPath::Operation::INVERSE);
@@ -714,7 +716,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       p._iri = ctx->iri()->getText();
       return p;
     } else if (ctx->path()) {
-      return visitChildren(ctx->path());
+      return visit(ctx->path());
     } else if (ctx->pathNegatedPropertySet()) {
       throw ParseException("PathNegatedPropertySet is not yet supported.");
     } else if (ctx->getText() == "a") {
