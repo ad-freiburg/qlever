@@ -242,3 +242,17 @@ MATCHER_P(GroupByVariablesMatch, vars, "") {
   return std::equal(groupVariables.begin(), groupVariables.end(), vars.begin(),
                     [](auto& var, auto& var1) { return var.name() == var1; });
 }
+
+MATCHER_P2(IsValues, vars, values, "") {
+  auto argVal = std::move(arg._inlineValues);
+  if (vars.size() != argVal._variables.size()) return false;
+  if (values.size() != argVal._values.size()) return false;
+  return std::equal(vars.begin(), vars.end(), argVal._variables.begin()) &&
+         std::equal(values.begin(), values.end(), argVal._values.begin(),
+                    [](auto& valueVector1, auto& valueVector2) {
+                      return valueVector1.size() == valueVector2.size() &&
+                             std::equal(valueVector1.begin(),
+                                        valueVector1.end(),
+                                        valueVector2.begin());
+                    });
+}

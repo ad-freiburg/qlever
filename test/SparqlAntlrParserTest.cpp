@@ -855,3 +855,12 @@ TEST(SparqlParser, GroupClause) {
                              IsExpressionGroupKey("COUNT(?baz)"));
   }
 }
+
+TEST(SparqlParser, ValuesClause) {
+  {
+    expectCompleteParse(
+        parseValuesClause("VALUES ?test { \"foo\" }", {}),
+        IsValues<vector<std::string>, vector<vector<std::string>>>(
+            {"?test"}, {{"\"foo\""}}));
+  }
+}
