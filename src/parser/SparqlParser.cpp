@@ -996,6 +996,17 @@ auto SparqlParser::parseWithAntlr(F f, const ParsedQuery& parsedQuery)
 }
 
 // ________________________________________________________________________
+/// Parses the given input with ANTLR but doesn't change the SparqlParser state.
+template <typename F>
+auto SparqlParser::parseWithAntlr(F f, const std::string& input)
+    -> decltype(f(std::declval<const string&>(),
+                  std::declval<SparqlQleverVisitor::PrefixMap>())
+                    .resultOfParse_) {
+  auto resultOfParseAndRemainingText = f(input, {});
+  return std::move(resultOfParseAndRemainingText.resultOfParse_);
+}
+
+// ________________________________________________________________________
 Variable SparqlParser::addInternalBind(
     ParsedQuery* query, sparqlExpression::SparqlExpressionPimpl expression) {
   // Internal variable name to which the result of the helper bind is
