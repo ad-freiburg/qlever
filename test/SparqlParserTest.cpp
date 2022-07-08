@@ -7,7 +7,6 @@
 #include <variant>
 
 #include "../src/global/Constants.h"
-#include "../src/parser/PropertyPathParser.h"
 #include "../src/parser/SparqlParser.h"
 #include "SparqlAntlrParserTestHelpers.h"
 

@@ -11,7 +11,6 @@ add_library(parser
         Tokenizer.h Tokenizer.cpp
         ContextFileParser.cpp ContextFileParser.h
         ParallelParseBuffer.h
-        PropertyPathParser.h PropertyPathParser.cpp
         SparqlLexer.h SparqlLexer.cpp
         TokenizerCtre.h TurtleTokenId.h
         ParallelBuffer.cpp

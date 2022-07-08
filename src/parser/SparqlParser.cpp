@@ -10,7 +10,6 @@
 #include "../util/Algorithm.h"
 #include "../util/OverloadCallOperator.h"
 #include "./SparqlParserHelpers.h"
-#include "PropertyPathParser.h"
 #include "sparqlParser/SparqlQleverVisitor.h"
 
 using namespace std::literals::string_literals;
