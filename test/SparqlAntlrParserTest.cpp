@@ -856,27 +856,95 @@ TEST(SparqlParser, GroupClause) {
   }
 }
 
-TEST(ParserTest, propertyPaths) {
+TEST(SparqlParser, propertyPaths) {
   using Op = PropertyPath::Operation;
-  std::string inp = "a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+";
-  auto res = parseVerbPathOrSimple(inp, {});
-  PropertyPath result = res.resultOfParse_;
-  PropertyPath expected = PropertyPath(
-      Op::ALTERNATIVE, 0, std::string(),
-      {PropertyPath(Op::SEQUENCE, 0, std::string(),
-                    {
-                        PropertyPath(Op::IRI, 0, "a:a", {}),
-                        PropertyPath(Op::TRANSITIVE, 0, std::string(),
-                                     {PropertyPath(Op::IRI, 0, "b:b", {})}),
-                    }),
-       PropertyPath(Op::IRI, 0, "c:c", {}),
-       PropertyPath(
-           Op::TRANSITIVE_MIN, 1, std::string(),
-           {PropertyPath(Op::SEQUENCE, 0, std::string(),
-                         {PropertyPath(Op::IRI, 0, "a:a", {}),
-                          PropertyPath(Op::IRI, 0, "b:b", {}),
-                          PropertyPath(Op::IRI, 0, "<a/b/c>", {})})})});
-  expected.computeCanBeNull();
-  expected._can_be_null = false;
-  ASSERT_EQ(expected, result);
+  // Test all the base cases.
+  {
+    // "a" is a special case. It is a valid PropertyPath.
+    // It is short for "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>".
+    PropertyPath expected = PropertyPath(
+        Op::IRI, 0, "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>", {});
+    expectCompleteParse(parseVerbPathOrSimple("a", {}),
+                        IsPropertyPath(expected));
+  }
+  { EXPECT_THROW(parseVerbPathOrSimple("b", {}), std::runtime_error); }
+  {
+    expectCompleteParse(
+        parseVerbPathOrSimple("test:foo", {}),
+        IsPropertyPath(PropertyPath(Op::IRI, 0, "test:foo", {})));
+  }
+  {
+    expectCompleteParse(parseVerbPathOrSimple("?bar", {}),
+                        IsPropertyPath(PropertyPath(Op::IRI, 0, "?bar", {})));
+  }
+  {
+    expectCompleteParse(parseVerbPathOrSimple(":", {}),
+                        IsPropertyPath(PropertyPath(Op::IRI, 0, ":", {})));
+  }
+  {
+    expectCompleteParse(
+        parseVerbPathOrSimple(
+            "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>", {}),
+        IsPropertyPath(PropertyPath(
+            Op::IRI, 0, "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
+            {})));
+  }
+  // Test the basic combinators / | (...) + * ?.
+  {
+    PropertyPath expected = PropertyPath(Op::SEQUENCE, 0, std::string(),
+                                         {PropertyPath(Op::IRI, 0, "a:a", {}),
+                                          PropertyPath(Op::IRI, 0, "a:b", {})});
+    expectCompleteParse(parseVerbPathOrSimple("a:a / a:b", {}),
+                        IsPropertyPath(expected));
+  }
+  {
+    PropertyPath expected = PropertyPath(Op::ALTERNATIVE, 0, std::string(),
+                                         {PropertyPath(Op::IRI, 0, "a:a", {}),
+                                          PropertyPath(Op::IRI, 0, "a:b", {})});
+    expectCompleteParse(parseVerbPathOrSimple("a:a | a:b", {}),
+                        IsPropertyPath(expected));
+  }
+  {
+    PropertyPath expected = PropertyPath(Op::TRANSITIVE_MIN, 1, std::string(),
+                                         {PropertyPath(Op::IRI, 0, "a:a", {})});
+    expectCompleteParse(parseVerbPathOrSimple("a:a+", {}),
+                        IsPropertyPath(expected));
+  }
+  {
+    PropertyPath expected = PropertyPath(Op::TRANSITIVE_MAX, 1, std::string(),
+                                         {PropertyPath(Op::IRI, 0, "a:a", {})});
+    expected._can_be_null = true;
+    expectCompleteParse(parseVerbPathOrSimple("a:a?", {}),
+                        IsPropertyPath(expected));
+  }
+  {
+    PropertyPath expected = PropertyPath(Op::TRANSITIVE, 0, std::string(),
+                                         {PropertyPath(Op::IRI, 0, "a:a", {})});
+    expected._can_be_null = true;
+    expectCompleteParse(parseVerbPathOrSimple("a:a*", {}),
+                        IsPropertyPath(expected));
+  }
+  // Test a bigger example that contains everything.
+  {
+    std::string inp = "a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+";
+    PropertyPath expected = PropertyPath(
+        Op::ALTERNATIVE, 0, std::string(),
+        {PropertyPath(Op::SEQUENCE, 0, std::string(),
+                      {
+                          PropertyPath(Op::IRI, 0, "a:a", {}),
+                          PropertyPath(Op::TRANSITIVE, 0, std::string(),
+                                       {PropertyPath(Op::IRI, 0, "b:b", {})}),
+                      }),
+         PropertyPath(Op::IRI, 0, "c:c", {}),
+         PropertyPath(
+             Op::TRANSITIVE_MIN, 1, std::string(),
+             {PropertyPath(Op::SEQUENCE, 0, std::string(),
+                           {PropertyPath(Op::IRI, 0, "a:a", {}),
+                            PropertyPath(Op::IRI, 0, "b:b", {}),
+                            PropertyPath(Op::IRI, 0, "<a/b/c>", {})})})});
+    expected.computeCanBeNull();
+    expected._can_be_null = false;
+    expectCompleteParse(parseVerbPathOrSimple(inp, {}),
+                        IsPropertyPath(expected));
+  }
 }
