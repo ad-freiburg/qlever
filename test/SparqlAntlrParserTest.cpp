@@ -855,3 +855,28 @@ TEST(SparqlParser, GroupClause) {
                              IsExpressionGroupKey("COUNT(?baz)"));
   }
 }
+
+TEST(ParserTest, propertyPaths) {
+  using Op = PropertyPath::Operation;
+  std::string inp = "a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+";
+  auto res = parseVerbPathOrSimple(inp, {});
+  PropertyPath result = res.resultOfParse_;
+  PropertyPath expected = PropertyPath(
+      Op::ALTERNATIVE, 0, std::string(),
+      {PropertyPath(Op::SEQUENCE, 0, std::string(),
+                    {
+                        PropertyPath(Op::IRI, 0, "a:a", {}),
+                        PropertyPath(Op::TRANSITIVE, 0, std::string(),
+                                     {PropertyPath(Op::IRI, 0, "b:b", {})}),
+                    }),
+       PropertyPath(Op::IRI, 0, "c:c", {}),
+       PropertyPath(
+           Op::TRANSITIVE_MIN, 1, std::string(),
+           {PropertyPath(Op::SEQUENCE, 0, std::string(),
+                         {PropertyPath(Op::IRI, 0, "a:a", {}),
+                          PropertyPath(Op::IRI, 0, "b:b", {}),
+                          PropertyPath(Op::IRI, 0, "<a/b/c>", {})})})});
+  expected.computeCanBeNull();
+  expected._can_be_null = false;
+  ASSERT_EQ(expected, result);
+}

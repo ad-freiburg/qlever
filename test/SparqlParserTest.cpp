@@ -1122,34 +1122,6 @@ TEST(ParserTest, testParseLiteral) {
                ParseException);
 }
 
-TEST(ParserTest, propertyPaths) {
-  using Op = PropertyPath::Operation;
-  std::string inp = "a/b*|c|(a/b/<a/b/c>)+";
-  PropertyPath result = PropertyPathParser(inp).parse();
-  PropertyPath expected = PropertyPath(
-      Op::ALTERNATIVE, 0, std::string(),
-      {PropertyPath(Op::SEQUENCE, 0, std::string(),
-                    {
-                        PropertyPath(Op::IRI, 0, "a", {}),
-                        PropertyPath(Op::TRANSITIVE, 0, std::string(),
-                                     {PropertyPath(Op::IRI, 0, "b", {})}),
-                    }),
-       PropertyPath(Op::IRI, 0, "c", {}),
-       PropertyPath(
-           Op::TRANSITIVE_MIN, 1, std::string(),
-           {PropertyPath(Op::SEQUENCE, 0, std::string(),
-                         {PropertyPath(Op::IRI, 0, "a", {}),
-                          PropertyPath(Op::IRI, 0, "b", {}),
-                          PropertyPath(Op::IRI, 0, "<a/b/c>", {})})})});
-  expected.computeCanBeNull();
-  expected._can_be_null = false;
-  ASSERT_EQ(expected, result);
-
-  // Ensure whitespace is not accepted
-  inp = "a | b\t / \nc";
-  ASSERT_THROW(PropertyPathParser(inp).parse(), ParseException);
-}
-
 TEST(ParserTest, Bind) {
   ParsedQuery pq =
       SparqlParser("SELECT ?a WHERE { BIND (10 - 5 as ?a) . }").parse();
