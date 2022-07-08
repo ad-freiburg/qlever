@@ -862,10 +862,11 @@ TEST(SparqlParser, propertyPaths) {
   {
     // "a" is a special case. It is a valid PropertyPath.
     // It is short for "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>".
-    PropertyPath expected = PropertyPath(
-        Op::IRI, 0, "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>", {});
-    expectCompleteParse(parseVerbPathOrSimple("a", {}),
-                        IsPropertyPath(expected));
+    expectCompleteParse(
+        parseVerbPathOrSimple("a", {}),
+        IsPropertyPath(PropertyPath(
+            Op::IRI, 0, "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
+            {})));
   }
   { EXPECT_THROW(parseVerbPathOrSimple("b", {}), std::runtime_error); }
   {
@@ -902,6 +903,11 @@ TEST(SparqlParser, propertyPaths) {
                                          {PropertyPath(Op::IRI, 0, "a:a", {}),
                                           PropertyPath(Op::IRI, 0, "a:b", {})});
     expectCompleteParse(parseVerbPathOrSimple("a:a | a:b", {}),
+                        IsPropertyPath(expected));
+  }
+  {
+    PropertyPath expected = PropertyPath(PropertyPath(Op::IRI, 0, "a:a", {}));
+    expectCompleteParse(parseVerbPathOrSimple("(a:a)", {}),
                         IsPropertyPath(expected));
   }
   {
