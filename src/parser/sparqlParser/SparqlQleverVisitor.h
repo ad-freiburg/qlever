@@ -602,7 +602,15 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitVerbPathOrSimple(
       SparqlAutomaticParser::VerbPathOrSimpleContext* ctx) override {
-    return visitChildren(ctx);
+    if (ctx->verbPath()) {
+      return visit(ctx->verbPath());
+    } else if (ctx->verbSimple()) {
+      auto var = visit(ctx->verbSimple()).as<Variable>();
+      PropertyPath p(PropertyPath::Operation::IRI);
+      p._iri = std::move(var.name());
+      return p;
+    }
+    AD_FAIL()  // Should be unreachable.
   }
 
   antlrcpp::Any visitObjectListPath(
@@ -616,46 +624,117 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitPath(SparqlAutomaticParser::PathContext* ctx) override {
+    // returns PropertyPath
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitPathAlternative(
       SparqlAutomaticParser::PathAlternativeContext* ctx) override {
-    return visitChildren(ctx);
+    std::vector<PropertyPath> paths;
+    for (auto* pathSequence : ctx->pathSequence()) {
+      paths.push_back(visitChildren(pathSequence).as<PropertyPath>());
+    }
+
+    if (paths.size() == 1) {
+      return paths[0];
+    } else {
+      PropertyPath p(PropertyPath::Operation::ALTERNATIVE);
+      p._children = std::move(paths);
+      return p;
+    }
   }
 
   antlrcpp::Any visitPathSequence(
       SparqlAutomaticParser::PathSequenceContext* ctx) override {
-    return visitChildren(ctx);
+    std::vector<PropertyPath> paths;
+    for (auto* pathEltOrInverse : ctx->pathEltOrInverse()) {
+      paths.push_back(visitChildren(pathEltOrInverse).as<PropertyPath>());
+    }
+
+    if (paths.size() == 1) {
+      return paths[0];
+    } else {
+      PropertyPath p(PropertyPath::Operation::SEQUENCE);
+      p._children = std::move(paths);
+      return p;
+    }
   }
 
   antlrcpp::Any visitPathElt(
       SparqlAutomaticParser::PathEltContext* ctx) override {
-    return visitChildren(ctx);
+    PropertyPath p = visitChildren(ctx->pathPrimary()).as<PropertyPath>();
+
+    if (ctx->pathMod()) {
+      if (ctx->pathMod()->getText() == "+") {
+        PropertyPath pp(PropertyPath::Operation::TRANSITIVE_MIN);
+        pp._limit = 1;
+        pp._children.push_back(p);
+        p = pp;
+      } else if (ctx->pathMod()->getText() == "?") {
+        PropertyPath pp(PropertyPath::Operation::TRANSITIVE_MAX);
+        pp._limit = 1;
+        pp._children.push_back(p);
+        p = pp;
+      } else if (ctx->pathMod()->getText() == "*") {
+        PropertyPath pp(PropertyPath::Operation::TRANSITIVE);
+        pp._children.push_back(p);
+        p = pp;
+      }
+      // TODO:
+      // Whats up with `acceptPrefix(TRANSITIVE, &transitive_count)`?
+    }
+
+    return p;
   }
 
   antlrcpp::Any visitPathEltOrInverse(
       SparqlAutomaticParser::PathEltOrInverseContext* ctx) override {
-    return visitChildren(ctx);
+    PropertyPath p = visitChildren(ctx->pathElt()).as<PropertyPath>();
+
+    if (ctx->negationOperator) {
+      PropertyPath pp(PropertyPath::Operation::INVERSE);
+      pp._children.push_back(p);
+      p = pp;
+    }
+
+    return p;
   }
 
   antlrcpp::Any visitPathMod(
       SparqlAutomaticParser::PathModContext* ctx) override {
+    // Handled in visitPathElt.
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitPathPrimary(
       SparqlAutomaticParser::PathPrimaryContext* ctx) override {
-    return visitChildren(ctx);
+    if (ctx->iri()) {
+      // Special keyword 'a'
+      PropertyPath p(PropertyPath::Operation::IRI);
+      p._iri = ctx->iri()->getText();
+      return p;
+    } else if (ctx->path()) {
+      return visitChildren(ctx->path());
+    } else if (ctx->pathNegatedPropertySet()) {
+      throw ParseException("PathNegatedPropertySet is not yet supported.");
+    } else if (ctx->getText() == "a") {
+      // Special keyword 'a'
+      PropertyPath p(PropertyPath::Operation::IRI);
+      p._iri = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
+      return p;
+    }
+    AD_FAIL()  // Should be unreachable.
   }
 
   antlrcpp::Any visitPathNegatedPropertySet(
       SparqlAutomaticParser::PathNegatedPropertySetContext* ctx) override {
+    // TODO: unsupported because of pathNegatedPropertySet?
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitPathOneInPropertySet(
       SparqlAutomaticParser::PathOneInPropertySetContext* ctx) override {
+    // TODO: unsupported because of pathNegatedPropertySet?
     return visitChildren(ctx);
   }
 

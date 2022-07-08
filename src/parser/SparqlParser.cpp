@@ -413,8 +413,10 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         }
       }
 
-      SparqlTriple triple(subject, PropertyPathParser(predicate).parse(),
-                          object);
+      SparqlTriple triple(
+          subject,
+          parseWithAntlr(sparqlParserHelpers::parseVerbPathOrSimple, predicate),
+          object);
       auto& v = lastBasicPattern(currentPattern)._whereClauseTriples;
       if (std::find(v.begin(), v.end(), triple) != v.end()) {
         LOG(INFO) << "Ignoring duplicate triple: " << subject << ' '
