@@ -7436,7 +7436,8 @@ SparqlAutomaticParser::pathEltOrInverse() {
       case SparqlAutomaticParser::T__12: {
         enterOuterAlt(_localctx, 2);
         setState(778);
-        match(SparqlAutomaticParser::T__12);
+        dynamic_cast<PathEltOrInverseContext*>(_localctx)->negationOperator =
+            match(SparqlAutomaticParser::T__12);
         setState(779);
         pathElt();
         break;

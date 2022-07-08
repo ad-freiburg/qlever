@@ -1693,6 +1693,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
   class PathEltOrInverseContext : public antlr4::ParserRuleContext {
    public:
+    antlr4::Token* negationOperator = nullptr;
     PathEltOrInverseContext(antlr4::ParserRuleContext* parent,
                             size_t invokingState);
     virtual size_t getRuleIndex() const override;
