@@ -8,25 +8,24 @@
 
 #include "../util/Parameters.h"
 
-static const size_t DEFAULT_STXXL_MEMORY_IN_BYTES =
-    1024UL * 1024UL * 1024UL * 5UL;
-static const size_t STXXL_DISK_SIZE_INDEX_BUILDER = 1000 * 1000;
+static const size_t DEFAULT_STXXL_MEMORY_IN_BYTES = 5'000'000'000UL;
+static const size_t STXXL_DISK_SIZE_INDEX_BUILDER = 1000;  // In MB.
 static const size_t STXXL_DISK_SIZE_INDEX_TEST = 10;
 
 static constexpr size_t DEFAULT_MEM_FOR_QUERIES_IN_GB = 4;
 
-static const size_t MAX_NOF_ROWS_IN_RESULT = 100000;
+static const size_t MAX_NOF_ROWS_IN_RESULT = 1'000'000;
 static const size_t MIN_WORD_PREFIX_SIZE = 4;
 static const char PREFIX_CHAR = '*';
 static const size_t MAX_NOF_NODES = 64;
 static const size_t MAX_NOF_FILTERS = 64;
 
-static const size_t BUFFER_SIZE_RELATION_SIZE = 1000 * 1000 * 1000;
-static const size_t BUFFER_SIZE_DOCSFILE_LINE = 1024 * 1024 * 100;
-static const size_t DISTINCT_LHS_PER_BLOCK = 10 * 1000;
-static const size_t USE_BLOCKS_INDEX_SIZE_TRESHOLD = 20 * 1000;
+static const size_t BUFFER_SIZE_RELATION_SIZE = 1'000'000'000;
+static const size_t BUFFER_SIZE_DOCSFILE_LINE = 100'000'000;
+static const size_t DISTINCT_LHS_PER_BLOCK = 10'000;
+static const size_t USE_BLOCKS_INDEX_SIZE_TRESHOLD = 20'000;
 
-static const size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1000 * 1000 * 1000;
+static const size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1'000'000'000;
 
 static const size_t GALLOP_THRESHOLD = 1000;
 
