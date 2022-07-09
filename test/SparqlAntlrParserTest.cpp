@@ -857,10 +857,18 @@ TEST(SparqlParser, GroupClause) {
 }
 
 TEST(SparqlParser, ValuesClause) {
-  {
-    expectCompleteParse(
-        parseValuesClause("VALUES ?test { \"foo\" }", {}),
-        IsValues<vector<std::string>, vector<vector<std::string>>>(
-            {"?test"}, {{"\"foo\""}}));
-  }
+  expectCompleteParse(
+      parseValuesClause("VALUES ?test { \"foo\" }", {}),
+      IsValues<vector<std::string>, vector<vector<std::string>>>(
+          {"?test"}, {{"\"foo\""}}));
+  EXPECT_THROW(parseValuesClause("VALUES ?test { true }", {}), ParseException);
+  EXPECT_THROW(parseValuesClause("VALUES ?test { 10.0 }", {}), ParseException);
+  expectCompleteParse(
+      parseValuesClause("VALUES ?test { UNDEF }", {}),
+      IsValues<vector<std::string>, vector<vector<std::string>>>({"?test"},
+                                                                 {{"UNDEF"}}));
+  expectCompleteParse(
+      parseValuesClause(R"(VALUES ?foo { "baz" "bar" })", {}),
+      IsValues<vector<std::string>, vector<vector<std::string>>>(
+          {"?foo"}, {{"\"baz\""}, {"\"bar\""}}));
 }
