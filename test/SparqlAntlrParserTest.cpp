@@ -857,100 +857,85 @@ TEST(SparqlParser, GroupClause) {
 }
 
 TEST(SparqlParser, propertyPaths) {
-  using Op = PropertyPath::Operation;
   // Test all the base cases.
-  {
-    // "a" is a special case. It is a valid PropertyPath.
-    // It is short for "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>".
-    expectCompleteParse(
-        parseVerbPathOrSimple("a", {}),
-        IsPropertyPath(PropertyPath(
-            Op::IRI, 0, "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
-            {})));
-  }
-  { EXPECT_THROW(parseVerbPathOrSimple("b", {}), std::runtime_error); }
-  {
-    expectCompleteParse(
-        parseVerbPathOrSimple("test:foo", {}),
-        IsPropertyPath(PropertyPath(Op::IRI, 0, "test:foo", {})));
-  }
-  {
-    expectCompleteParse(parseVerbPathOrSimple("?bar", {}),
-                        IsPropertyPath(PropertyPath(Op::IRI, 0, "?bar", {})));
-  }
-  {
-    expectCompleteParse(parseVerbPathOrSimple(":", {}),
-                        IsPropertyPath(PropertyPath(Op::IRI, 0, ":", {})));
-  }
-  {
-    expectCompleteParse(
-        parseVerbPathOrSimple(
-            "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>", {}),
-        IsPropertyPath(PropertyPath(
-            Op::IRI, 0, "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
-            {})));
-  }
+  // "a" is a special case. It is a valid PropertyPath.
+  // It is short for "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>".
+  expectCompleteParse(
+      parseVerbPathOrSimple("a", {}),
+      IsPropertyPath(PropertyPath::fromIri(
+          "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")));
+  EXPECT_THROW(parseVerbPathOrSimple("b", {}), std::runtime_error);
+  expectCompleteParse(
+      parseVerbPathOrSimple("test:foo",
+                            {{"test", "<http://www.example.com/>"}}),
+      IsPropertyPath(PropertyPath::fromIri("<http://www.example.com/foo>")));
+  expectCompleteParse(parseVerbPathOrSimple("?bar", {}),
+                      IsPropertyPath(PropertyPath::fromIri("?bar")));
+  expectCompleteParse(
+      parseVerbPathOrSimple(":", {{"", "<http://www.example.com/>"}}),
+      IsPropertyPath(PropertyPath::fromIri("<http://www.example.com/>")));
+  expectCompleteParse(
+      parseVerbPathOrSimple("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
+                            {}),
+      IsPropertyPath(PropertyPath::fromIri(
+          "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")));
   // Test the basic combinators / | (...) + * ?.
+  expectCompleteParse(
+      parseVerbPathOrSimple("a:a / a:b", {{"a", "<http://www.example.com/>"}}),
+      IsPropertyPath(PropertyPath::makeSequence(
+          {PropertyPath::fromIri("<http://www.example.com/a>"),
+           PropertyPath::fromIri("<http://www.example.com/b>")})));
+  expectCompleteParse(
+      parseVerbPathOrSimple("a:a | a:b", {{"a", "<http://www.example.com/>"}}),
+      IsPropertyPath(PropertyPath::makeAlternative(
+          {PropertyPath::fromIri("<http://www.example.com/a>"),
+           PropertyPath::fromIri("<http://www.example.com/b>")})));
+  expectCompleteParse(
+      parseVerbPathOrSimple("(a:a)", {{"a", "<http://www.example.com/>"}}),
+      IsPropertyPath(
+          PropertyPath(PropertyPath::fromIri("<http://www.example.com/a>"))));
+  expectCompleteParse(
+      parseVerbPathOrSimple("a:a+", {{"a", "<http://www.example.com/>"}}),
+      IsPropertyPath(PropertyPath::makeTransitiveMin(
+          {PropertyPath::fromIri("<http://www.example.com/a>")}, 1)));
   {
-    PropertyPath expected = PropertyPath(Op::SEQUENCE, 0, std::string(),
-                                         {PropertyPath(Op::IRI, 0, "a:a", {}),
-                                          PropertyPath(Op::IRI, 0, "a:b", {})});
-    expectCompleteParse(parseVerbPathOrSimple("a:a / a:b", {}),
-                        IsPropertyPath(expected));
-  }
-  {
-    PropertyPath expected = PropertyPath(Op::ALTERNATIVE, 0, std::string(),
-                                         {PropertyPath(Op::IRI, 0, "a:a", {}),
-                                          PropertyPath(Op::IRI, 0, "a:b", {})});
-    expectCompleteParse(parseVerbPathOrSimple("a:a | a:b", {}),
-                        IsPropertyPath(expected));
-  }
-  {
-    PropertyPath expected = PropertyPath(PropertyPath(Op::IRI, 0, "a:a", {}));
-    expectCompleteParse(parseVerbPathOrSimple("(a:a)", {}),
-                        IsPropertyPath(expected));
-  }
-  {
-    PropertyPath expected = PropertyPath(Op::TRANSITIVE_MIN, 1, std::string(),
-                                         {PropertyPath(Op::IRI, 0, "a:a", {})});
-    expectCompleteParse(parseVerbPathOrSimple("a:a+", {}),
-                        IsPropertyPath(expected));
-  }
-  {
-    PropertyPath expected = PropertyPath(Op::TRANSITIVE_MAX, 1, std::string(),
-                                         {PropertyPath(Op::IRI, 0, "a:a", {})});
+    PropertyPath expected = PropertyPath::makeTransitiveMax(
+        {PropertyPath::fromIri("<http://www.example.com/a>")}, 1);
     expected._can_be_null = true;
-    expectCompleteParse(parseVerbPathOrSimple("a:a?", {}),
-                        IsPropertyPath(expected));
+    expectCompleteParse(
+        parseVerbPathOrSimple("a:a?", {{"a", "<http://www.example.com/>"}}),
+        IsPropertyPath(expected));
   }
   {
-    PropertyPath expected = PropertyPath(Op::TRANSITIVE, 0, std::string(),
-                                         {PropertyPath(Op::IRI, 0, "a:a", {})});
+    PropertyPath expected = PropertyPath::makeTransitive(
+        {PropertyPath::fromIri("<http://www.example.com/a>")});
     expected._can_be_null = true;
-    expectCompleteParse(parseVerbPathOrSimple("a:a*", {}),
-                        IsPropertyPath(expected));
+    expectCompleteParse(
+        parseVerbPathOrSimple("a:a*", {{"a", "<http://www.example.com/>"}}),
+        IsPropertyPath(expected));
   }
   // Test a bigger example that contains everything.
   {
-    std::string inp = "a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+";
-    PropertyPath expected = PropertyPath(
-        Op::ALTERNATIVE, 0, std::string(),
-        {PropertyPath(Op::SEQUENCE, 0, std::string(),
-                      {
-                          PropertyPath(Op::IRI, 0, "a:a", {}),
-                          PropertyPath(Op::TRANSITIVE, 0, std::string(),
-                                       {PropertyPath(Op::IRI, 0, "b:b", {})}),
-                      }),
-         PropertyPath(Op::IRI, 0, "c:c", {}),
-         PropertyPath(
-             Op::TRANSITIVE_MIN, 1, std::string(),
-             {PropertyPath(Op::SEQUENCE, 0, std::string(),
-                           {PropertyPath(Op::IRI, 0, "a:a", {}),
-                            PropertyPath(Op::IRI, 0, "b:b", {}),
-                            PropertyPath(Op::IRI, 0, "<a/b/c>", {})})})});
+    PropertyPath expected = PropertyPath::makeAlternative(
+        {PropertyPath::makeSequence({
+             PropertyPath::fromIri("<http://www.example.com/a/a>"),
+             PropertyPath::makeTransitive(
+                 {PropertyPath::fromIri("<http://www.example.com/b/b>")}),
+         }),
+         PropertyPath::fromIri("<http://www.example.com/c/c>"),
+         PropertyPath::makeTransitiveMin(
+             {PropertyPath::makeSequence(
+                 {PropertyPath::fromIri("<http://www.example.com/a/a>"),
+                  PropertyPath::fromIri("<http://www.example.com/b/b>"),
+                  PropertyPath::fromIri("<a/b/c>")})},
+             1)});
     expected.computeCanBeNull();
     expected._can_be_null = false;
-    expectCompleteParse(parseVerbPathOrSimple(inp, {}),
-                        IsPropertyPath(expected));
+    expectCompleteParse(
+        parseVerbPathOrSimple("a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+",
+                              {{"a", "<http://www.example.com/a/>"},
+                               {"b", "<http://www.example.com/b/>"},
+                               {"c", "<http://www.example.com/c/>"}}),
+        IsPropertyPath(expected));
   }
 }

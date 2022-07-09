@@ -234,12 +234,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitGroupClause(
       SparqlAutomaticParser::GroupClauseContext* ctx) override {
-    vector<GroupKey> groupConditions;
-    for (auto* groupCondition : ctx->groupCondition()) {
-      groupConditions.push_back(
-          visitGroupCondition(groupCondition).as<GroupKey>());
-    }
-    return groupConditions;
+    return visitVector<GroupKey>(ctx->groupCondition());
   }
 
   antlrcpp::Any visitGroupCondition(
@@ -278,12 +273,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitOrderClause(
       SparqlAutomaticParser::OrderClauseContext* ctx) override {
-    vector<OrderKey> orderConditions;
-    for (auto* orderCondition : ctx->orderCondition()) {
-      orderConditions.push_back(
-          visitOrderCondition(orderCondition).as<OrderKey>());
-    }
-    return orderConditions;
+    return visitVector<OrderKey>(ctx->orderCondition());
   }
 
   antlrcpp::Any visitOrderCondition(
@@ -466,7 +456,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
           "DISTINCT for argument lists of IRI functions are not supported"};
     }
     // Visit the expression of each argument.
-    return visitExpressionChildren(ctx->expression());
+    return visitVector<ExpressionPtr>(ctx->expression());
   }
 
   antlrcpp::Any visitExpressionList(
@@ -592,7 +582,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitVerbPath(
       SparqlAutomaticParser::VerbPathContext* ctx) override {
-    PropertyPath p = visit(ctx->path()).as<PropertyPath>();
+    return visitTypesafe(ctx);
+  }
+
+  PropertyPath visitTypesafe(SparqlAutomaticParser::VerbPathContext* ctx) {
+    PropertyPath p = visitTypesafe(ctx->path());
     p.computeCanBeNull();
     return p;
   }
@@ -602,15 +596,21 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
+  Variable visitTypesafe(SparqlAutomaticParser::VerbSimpleContext* ctx) {
+    return visitChildren(ctx).as<Variable>();
+  }
+
   antlrcpp::Any visitVerbPathOrSimple(
       SparqlAutomaticParser::VerbPathOrSimpleContext* ctx) override {
+    return visitTypesafe(ctx);
+  }
+
+  PropertyPath visitTypesafe(
+      SparqlAutomaticParser::VerbPathOrSimpleContext* ctx) {
     if (ctx->verbPath()) {
-      return visit(ctx->verbPath());
+      return visitTypesafe(ctx->verbPath());
     } else if (ctx->verbSimple()) {
-      auto var = visit(ctx->verbSimple()).as<Variable>();
-      PropertyPath p(PropertyPath::Operation::IRI);
-      p._iri = std::move(var.name());
-      return p;
+      return PropertyPath::fromVariable(visitTypesafe(ctx->verbSimple()));
     }
     AD_FAIL()  // Should be unreachable.
   }
@@ -627,63 +627,62 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitPath(SparqlAutomaticParser::PathContext* ctx) override {
     // returns PropertyPath
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
+  }
+
+  PropertyPath visitTypesafe(SparqlAutomaticParser::PathContext* ctx) {
+    return visitChildren(ctx).as<PropertyPath>();
   }
 
   antlrcpp::Any visitPathAlternative(
       SparqlAutomaticParser::PathAlternativeContext* ctx) override {
-    std::vector<PropertyPath> paths;
-    for (auto* pathSequence : ctx->pathSequence()) {
-      paths.push_back(visit(pathSequence).as<PropertyPath>());
-    }
+    return visitTypesafe(ctx);
+  }
+
+  PropertyPath visitTypesafe(
+      SparqlAutomaticParser::PathAlternativeContext* ctx) {
+    auto paths = visitVector<PropertyPath>(ctx->pathSequence());
 
     if (paths.size() == 1) {
       return paths[0];
     } else {
-      PropertyPath p(PropertyPath::Operation::ALTERNATIVE);
-      p._children = std::move(paths);
-      return p;
+      return PropertyPath::makeAlternative(std::move(paths));
     }
   }
 
   antlrcpp::Any visitPathSequence(
       SparqlAutomaticParser::PathSequenceContext* ctx) override {
-    std::vector<PropertyPath> paths;
-    for (auto* pathEltOrInverse : ctx->pathEltOrInverse()) {
-      paths.push_back(visit(pathEltOrInverse).as<PropertyPath>());
-    }
+    return visitTypesafe(ctx);
+  }
+
+  PropertyPath visitTypesafe(SparqlAutomaticParser::PathSequenceContext* ctx) {
+    auto paths = visitVector<PropertyPath>(ctx->pathEltOrInverse());
 
     if (paths.size() == 1) {
       return paths[0];
     } else {
-      PropertyPath p(PropertyPath::Operation::SEQUENCE);
-      p._children = std::move(paths);
-      return p;
+      return PropertyPath::makeSequence(std::move(paths));
     }
   }
 
   antlrcpp::Any visitPathElt(
       SparqlAutomaticParser::PathEltContext* ctx) override {
-    PropertyPath p = visit(ctx->pathPrimary()).as<PropertyPath>();
+    return visitTypesafe(ctx);
+  }
+
+  PropertyPath visitTypesafe(SparqlAutomaticParser::PathEltContext* ctx) {
+    PropertyPath p = visitTypesafe(ctx->pathPrimary());
 
     if (ctx->pathMod()) {
       if (ctx->pathMod()->getText() == "+") {
-        PropertyPath pp(PropertyPath::Operation::TRANSITIVE_MIN);
-        pp._limit = 1;
-        pp._children.push_back(p);
-        p = pp;
+        p = PropertyPath::makeTransitiveMin(p, 1);
       } else if (ctx->pathMod()->getText() == "?") {
-        PropertyPath pp(PropertyPath::Operation::TRANSITIVE_MAX);
-        pp._limit = 1;
-        pp._children.push_back(p);
-        p = pp;
+        p = PropertyPath::makeTransitiveMax(p, 1);
       } else if (ctx->pathMod()->getText() == "*") {
-        PropertyPath pp(PropertyPath::Operation::TRANSITIVE);
-        pp._children.push_back(p);
-        p = pp;
+        p = PropertyPath::makeTransitive(p);
+      } else {
+        AD_FAIL()  // Should be unreachable.
       }
-      // TODO:
-      // Whats up with `acceptPrefix(TRANSITIVE, &transitive_count)`?
     }
 
     return p;
@@ -691,12 +690,15 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitPathEltOrInverse(
       SparqlAutomaticParser::PathEltOrInverseContext* ctx) override {
-    PropertyPath p = visit(ctx->pathElt()).as<PropertyPath>();
+    return visitTypesafe(ctx);
+  }
+
+  PropertyPath visitTypesafe(
+      SparqlAutomaticParser::PathEltOrInverseContext* ctx) {
+    PropertyPath p = visitTypesafe(ctx->pathElt());
 
     if (ctx->negationOperator) {
-      PropertyPath pp(PropertyPath::Operation::INVERSE);
-      pp._children.push_back(p);
-      p = pp;
+      p = PropertyPath::makeInverse(p);
     }
 
     return p;
@@ -710,34 +712,42 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitPathPrimary(
       SparqlAutomaticParser::PathPrimaryContext* ctx) override {
+    return visitTypesafe(ctx);
+  }
+
+  PropertyPath visitTypesafe(SparqlAutomaticParser::PathPrimaryContext* ctx) {
     if (ctx->iri()) {
-      // Special keyword 'a'
-      PropertyPath p(PropertyPath::Operation::IRI);
-      p._iri = ctx->iri()->getText();
-      return p;
+      auto iri = visit(ctx->iri()).as<std::string>();
+      return PropertyPath::fromIri(std::move(iri));
     } else if (ctx->path()) {
-      return visit(ctx->path());
+      return visitTypesafe(ctx->path());
     } else if (ctx->pathNegatedPropertySet()) {
-      throw ParseException("PathNegatedPropertySet is not yet supported.");
+      return visitTypesafe(ctx->pathNegatedPropertySet());
     } else if (ctx->getText() == "a") {
       // Special keyword 'a'
-      PropertyPath p(PropertyPath::Operation::IRI);
-      p._iri = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
-      return p;
+      return PropertyPath::fromIri(
+          std::move("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"));
     }
     AD_FAIL()  // Should be unreachable.
   }
 
   antlrcpp::Any visitPathNegatedPropertySet(
       SparqlAutomaticParser::PathNegatedPropertySetContext* ctx) override {
-    // TODO: unsupported because of pathNegatedPropertySet?
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
+  }
+
+  PropertyPath visitTypesafe(
+      SparqlAutomaticParser::PathNegatedPropertySetContext* ctx) {
+    throw ParseException(
+        "\"!\" in Paths Parts are not allowed"
+        ". PathNegatedPropertySet is not yet supported.");
   }
 
   antlrcpp::Any visitPathOneInPropertySet(
-      SparqlAutomaticParser::PathOneInPropertySetContext* ctx) override {
-    // TODO: unsupported because of pathNegatedPropertySet?
-    return visitChildren(ctx);
+      SparqlAutomaticParser::PathOneInPropertySetContext*) override {
+    throw ParseException(
+        "\"!\" and \"^\" in Paths Parts are not allowed"
+        ". PathOneInPropertySet is not yet supported.");
   }
 
   /// Note that in the SPARQL grammar the INTEGER rule refers to positive
@@ -904,13 +914,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  template <typename T>
-  std::vector<ExpressionPtr> visitExpressionChildren(
-      const std::vector<T*>& childContexts) {
-    std::vector<ExpressionPtr> children;
+  template <typename Out, typename Ctx>
+  std::vector<Out> visitVector(const std::vector<Ctx*>& childContexts) {
+    std::vector<Out> children;
     for (const auto& child : childContexts) {
-      children.emplace_back(
-          std::move(child->accept(this).template as<ExpressionPtr>()));
+      children.emplace_back(std::move(child->accept(this).template as<Out>()));
     }
     return children;
   }
@@ -932,7 +940,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       SparqlAutomaticParser::ConditionalOrExpressionContext* context) override {
     auto childContexts = context->conditionalAndExpression();
     auto children =
-        visitExpressionChildren(context->conditionalAndExpression());
+        visitVector<ExpressionPtr>(context->conditionalAndExpression());
     AD_CHECK(!children.empty());
     auto result = std::move(children.front());
     using C = sparqlExpression::OrExpression::Children;
@@ -948,8 +956,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitConditionalAndExpression(
       SparqlAutomaticParser::ConditionalAndExpressionContext* context)
       override {
-    std::vector<ExpressionPtr> children =
-        visitExpressionChildren(context->valueLogical());
+    auto children = visitVector<ExpressionPtr>(context->valueLogical());
     AD_CHECK(!children.empty());
     auto result = std::move(children.front());
     using C = sparqlExpression::AndExpression::Children;
@@ -1009,8 +1016,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitAdditiveExpression(
       SparqlAutomaticParser::AdditiveExpressionContext* context) override {
-    std::vector<ExpressionPtr> children =
-        visitExpressionChildren(context->multiplicativeExpression());
+    auto children =
+        visitVector<ExpressionPtr>(context->multiplicativeExpression());
     auto opTypes = visitOperationTags(context->children, {"+", "-"});
 
     if (!context->strangeMultiplicativeSubexprOfAdditive().empty()) {
@@ -1049,8 +1056,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitMultiplicativeExpression(
       SparqlAutomaticParser::MultiplicativeExpressionContext* context)
       override {
-    std::vector<ExpressionPtr> children =
-        visitExpressionChildren(context->unaryExpression());
+    auto children = visitVector<ExpressionPtr>(context->unaryExpression());
     auto opTypes = visitOperationTags(context->children, {"*", "/"});
 
     AD_CHECK(!children.empty());
@@ -1169,7 +1175,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       //   if (context->expression().size() != 1) {
       //     throw SparqlParseException{"SQR needs one argument"};
       //   }
-      //   auto children = visitExpressionChildren(context->expression());
+      //   auto children = visitVector<ExpressionPtr>(context->expression());
       //   return createExpression<sparqlExpression::SquareExpression>(
       //       std::move(children[0]));
       // } else if (ad_utility::getLowercase(context->children[0]->getText()) ==
@@ -1177,7 +1183,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       //   if (context->expression().size() != 2) {
       //     throw SparqlParseException{"DIST needs two arguments"};
       //   }
-      //   auto children = visitExpressionChildren(context->expression());
+      //   auto children = visitVector<ExpressionPtr>(context->expression());
       //   return createExpression<sparqlExpression::DistExpression>(
       //       std::move(children[0]), std::move(children[1]));
     } else {

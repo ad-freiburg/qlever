@@ -77,8 +77,11 @@ class SparqlParser {
                     std::declval<SparqlQleverVisitor::PrefixMap>())
                       .resultOfParse_);
 
+  /// Parses the given input with ANTLR but doesn't change the SparqlParser
+  /// state.
   template <typename F>
-  auto parseWithAntlr(F f, const std::string& input)
+  auto parseWithAntlr(F f, const std::string& input,
+                      const SparqlQleverVisitor::PrefixMap& prefixMap = {})
       -> decltype(f(std::declval<const string&>(),
                     std::declval<SparqlQleverVisitor::PrefixMap>())
                       .resultOfParse_);

@@ -997,13 +997,14 @@ auto SparqlParser::parseWithAntlr(F f, const ParsedQuery& parsedQuery)
 }
 
 // ________________________________________________________________________
-/// Parses the given input with ANTLR but doesn't change the SparqlParser state.
 template <typename F>
-auto SparqlParser::parseWithAntlr(F f, const std::string& input)
+auto SparqlParser::parseWithAntlr(
+    F f, const std::string& input,
+    const SparqlQleverVisitor::PrefixMap& prefixMap)
     -> decltype(f(std::declval<const string&>(),
                   std::declval<SparqlQleverVisitor::PrefixMap>())
                     .resultOfParse_) {
-  auto resultOfParseAndRemainingText = f(input, {});
+  auto resultOfParseAndRemainingText = f(input, prefixMap);
   return std::move(resultOfParseAndRemainingText.resultOfParse_);
 }
 

@@ -243,4 +243,6 @@ MATCHER_P(GroupByVariablesMatch, vars, "") {
                     [](auto& var, auto& var1) { return var.name() == var1; });
 }
 
+// A trivial matcher for PropertyPaths because e.g. expectCompleteParse needs
+// a matcher.
 MATCHER_P(IsPropertyPath, propertyPath, "") { return arg == propertyPath; }
