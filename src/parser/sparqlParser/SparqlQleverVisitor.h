@@ -739,15 +739,13 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   PropertyPath visitTypesafe(
       SparqlAutomaticParser::PathNegatedPropertySetContext*) {
     throw ParseException(
-        "\"!\" in Paths Parts are not allowed"
-        ". PathNegatedPropertySet is not yet supported.");
+        "\"!\" inside a property path is not supported by QLever.");
   }
 
   antlrcpp::Any visitPathOneInPropertySet(
       SparqlAutomaticParser::PathOneInPropertySetContext*) override {
     throw ParseException(
-        "\"!\" and \"^\" in Paths Parts are not allowed"
-        ". PathOneInPropertySet is not yet supported.");
+        R"("!" and "^" inside a property path is not supported by QLever.)");
   }
 
   /// Note that in the SPARQL grammar the INTEGER rule refers to positive
