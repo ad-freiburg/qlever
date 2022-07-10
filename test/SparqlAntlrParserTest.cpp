@@ -861,6 +861,8 @@ TEST(SparqlParser, ValuesClause) {
       parseValuesClause("VALUES ?test { \"foo\" }", {}),
       IsValues<vector<std::string>, vector<vector<std::string>>>(
           {"?test"}, {{"\"foo\""}}));
+  // These are not implemented yet in dataBlockValue
+  // (numericLiteral/booleanLiteral)
   EXPECT_THROW(parseValuesClause("VALUES ?test { true }", {}), ParseException);
   EXPECT_THROW(parseValuesClause("VALUES ?test { 10.0 }", {}), ParseException);
   expectCompleteParse(
@@ -871,4 +873,28 @@ TEST(SparqlParser, ValuesClause) {
       parseValuesClause(R"(VALUES ?foo { "baz" "bar" })", {}),
       IsValues<vector<std::string>, vector<vector<std::string>>>(
           {"?foo"}, {{"\"baz\""}, {"\"bar\""}}));
+  expectCompleteParse(
+      parseValuesClause(R"(VALUES ( ) { })", {}),
+      IsValues<vector<std::string>, vector<vector<std::string>>>({}, {}));
+  expectCompleteParse(
+      parseValuesClause(R"(VALUES ( ?foo ?bar ) { (<foo>) (<bar>) })", {}),
+      IsValues<vector<std::string>, vector<vector<std::string>>>(
+          {"?foo", "?bar"}, {{"<foo>"}, {"<bar>"}}));
+  expectCompleteParse(
+      parseValuesClause(R"(VALUES ( ?foo ?bar ) { (<foo> "m") ("1" <bar>) })",
+                        {}),
+      IsValues<vector<std::string>, vector<vector<std::string>>>(
+          {"?foo", "?bar"}, {{"<foo>", "\"m\""}, {"\"1\"", "<bar>"}}));
+  expectCompleteParse(
+      parseValuesClause(
+          R"(VALUES ( ?foo ?bar ) { (<foo> "m" <e>) ("1" UNDEF <bar>) })", {}),
+      IsValues<vector<std::string>, vector<vector<std::string>>>(
+          {"?foo", "?bar"},
+          {{"<foo>", "\"m\"", "<e>"}, {"\"1\"", "UNDEF", "<bar>"}}));
+  // The coresponding asserts throw ad_semsearch::Exception instead of the
+  // usual ParseException
+  EXPECT_THROW(parseValuesClause(R"(VALUES ( ?foo ) { (<foo>) (<bar>) })", {}),
+               ParseException);
+  EXPECT_THROW(parseValuesClause(R"(VALUES ( ) { (<foo>) })", {}),
+               ParseException);
 }

@@ -431,7 +431,12 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitInlineDataFull(
       SparqlAutomaticParser::InlineDataFullContext* ctx) override {
     SparqlValues values;
-    AD_CHECK_EQ(ctx->var().size(), ctx->dataBlockSingle().size());
+    if (ctx->var().size() != ctx->dataBlockSingle().size())
+      throw ParseException("The number of variables being bound to ("s +
+                           std::to_string(ctx->var().size()) +
+                           ") does not equal the number of inner clauses ("s +
+                           std::to_string(ctx->dataBlockSingle().size()) +
+                           "."s);
     for (auto& var : ctx->var()) {
       values._variables.push_back(visit(var).as<Variable>().name());
     }
