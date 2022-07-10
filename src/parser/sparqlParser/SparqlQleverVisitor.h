@@ -737,7 +737,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   PropertyPath visitTypesafe(
-      SparqlAutomaticParser::PathNegatedPropertySetContext* ctx) {
+      SparqlAutomaticParser::PathNegatedPropertySetContext*) {
     throw ParseException(
         "\"!\" in Paths Parts are not allowed"
         ". PathNegatedPropertySet is not yet supported.");

@@ -391,7 +391,9 @@ class ParsedQuery {
 
   ParsedQuery() = default;
 
-  vector<SparqlPrefix> _prefixes;
+  // The ql prefix for QLever specific additions is always defined.
+  vector<SparqlPrefix> _prefixes = {SparqlPrefix(
+      INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI)};
   GraphPattern _rootGraphPattern;
   vector<SparqlFilter> _havingClauses;
   size_t _numGraphPatterns = 1;

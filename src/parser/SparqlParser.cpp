@@ -216,6 +216,19 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
   }
 }
 
+// Helper function that converts the prefix map from `parsedQuery` (a vector of
+// pairs of prefix and IRI) to the prefix map we need for the
+// `SparqlQleverVisitor` (a hash map from prefixes to IRIs).
+namespace {
+SparqlQleverVisitor::PrefixMap getPrefixMap(const ParsedQuery& parsedQuery) {
+  SparqlQleverVisitor::PrefixMap prefixMap;
+  for (const auto& prefixDef : parsedQuery._prefixes) {
+    prefixMap[prefixDef._prefix] = prefixDef._uri;
+  }
+  return prefixMap;
+}
+}  // namespace
+
 // _____________________________________________________________________________
 void SparqlParser::parseWhere(ParsedQuery* query,
                               ParsedQuery::GraphPattern* currentPattern) {
@@ -414,7 +427,8 @@ void SparqlParser::parseWhere(ParsedQuery* query,
 
       SparqlTriple triple(
           subject,
-          parseWithAntlr(sparqlParserHelpers::parseVerbPathOrSimple, predicate),
+          parseWithAntlr(sparqlParserHelpers::parseVerbPathOrSimple, predicate,
+                         getPrefixMap(*query)),
           object);
       auto& v = lastBasicPattern(currentPattern)._whereClauseTriples;
       if (std::find(v.begin(), v.end(), triple) != v.end()) {
@@ -796,19 +810,6 @@ string SparqlParser::stripAndLowercaseKeywordLiteral(std::string_view lit) {
   }
   return std::string{lit};
 }
-
-// Helper function that converts the prefix map from `parsedQuery` (a vector of
-// pairs of prefix and IRI) to the prefix map we need for the
-// `SparqlQleverVisitor` (a hash map from prefixes to IRIs).
-namespace {
-SparqlQleverVisitor::PrefixMap getPrefixMap(const ParsedQuery& parsedQuery) {
-  SparqlQleverVisitor::PrefixMap prefixMap;
-  for (const auto& prefixDef : parsedQuery._prefixes) {
-    prefixMap[prefixDef._prefix] = prefixDef._uri;
-  }
-  return prefixMap;
-}
-}  // namespace
 
 // _____________________________________________________________________________
 TripleComponent SparqlParser::parseLiteral(const ParsedQuery& pq,
