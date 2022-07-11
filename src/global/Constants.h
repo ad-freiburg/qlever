@@ -29,6 +29,9 @@ static const size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1'000'000'000;
 
 static const size_t GALLOP_THRESHOLD = 1000;
 
+static const char INTERNAL_PREDICATE_PREFIX_NAME[] = "ql";
+static const char INTERNAL_PREDICATE_PREFIX_IRI[] =
+    "<QLever-internal-function/>";
 static const char CONTAINS_ENTITY_PREDICATE[] =
     "<QLever-internal-function/contains-entity>";
 static const char CONTAINS_WORD_PREDICATE[] =

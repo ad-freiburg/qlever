@@ -242,3 +242,7 @@ MATCHER_P(GroupByVariablesMatch, vars, "") {
   return std::equal(groupVariables.begin(), groupVariables.end(), vars.begin(),
                     [](auto& var, auto& var1) { return var.name() == var1; });
 }
+
+// A trivial matcher for PropertyPaths because e.g. expectCompleteParse needs
+// a matcher.
+MATCHER_P(IsPropertyPath, propertyPath, "") { return arg == propertyPath; }

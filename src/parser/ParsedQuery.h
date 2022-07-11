@@ -57,6 +57,61 @@ class PropertyPath {
   PropertyPath(Operation op, uint16_t limit, std::string iri,
                std::initializer_list<PropertyPath> children);
 
+  static PropertyPath fromIri(std::string iri) {
+    PropertyPath p(PropertyPath::Operation::IRI);
+    p._iri = std::move(iri);
+    return p;
+  }
+
+  static PropertyPath fromVariable(Variable var) {
+    PropertyPath p(PropertyPath::Operation::IRI);
+    p._iri = std::move(var.name());
+    return p;
+  }
+
+  static PropertyPath makeWithChildren(std::vector<PropertyPath> children,
+                                       PropertyPath::Operation op) {
+    PropertyPath p(std::move(op));
+    p._children = std::move(children);
+    return p;
+  }
+
+  static PropertyPath makeAlternative(std::vector<PropertyPath> children) {
+    return makeWithChildren(std::move(children), Operation::ALTERNATIVE);
+  }
+
+  static PropertyPath makeSequence(std::vector<PropertyPath> children) {
+    return makeWithChildren(std::move(children), Operation::SEQUENCE);
+  }
+
+  static PropertyPath makeInverse(PropertyPath child) {
+    return makeWithChildren({std::move(child)}, Operation::INVERSE);
+  }
+
+  static PropertyPath makeWithChildLimit(PropertyPath child,
+                                         uint_fast16_t limit,
+                                         PropertyPath::Operation op) {
+    PropertyPath p = makeWithChildren({std::move(child)}, op);
+    p._limit = limit;
+    return p;
+  }
+
+  static PropertyPath makeTransitiveMin(PropertyPath child,
+                                        uint_fast16_t limit) {
+    return makeWithChildLimit(std::move(child), limit,
+                              Operation::TRANSITIVE_MIN);
+  }
+
+  static PropertyPath makeTransitiveMax(PropertyPath child,
+                                        uint_fast16_t limit) {
+    return makeWithChildLimit(std::move(child), limit,
+                              Operation::TRANSITIVE_MAX);
+  }
+
+  static PropertyPath makeTransitive(PropertyPath child) {
+    return makeWithChildren({std::move(child)}, Operation::TRANSITIVE);
+  }
+
   bool operator==(const PropertyPath& other) const {
     return _operation == other._operation && _limit == other._limit &&
            _iri == other._iri && _children == other._children &&
@@ -336,7 +391,9 @@ class ParsedQuery {
 
   ParsedQuery() = default;
 
-  vector<SparqlPrefix> _prefixes;
+  // The ql prefix for QLever specific additions is always defined.
+  vector<SparqlPrefix> _prefixes = {SparqlPrefix(
+      INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI)};
   GraphPattern _rootGraphPattern;
   vector<SparqlFilter> _havingClauses;
   size_t _numGraphPatterns = 1;

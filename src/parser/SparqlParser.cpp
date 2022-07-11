@@ -10,7 +10,6 @@
 #include "../util/Algorithm.h"
 #include "../util/OverloadCallOperator.h"
 #include "./SparqlParserHelpers.h"
-#include "PropertyPathParser.h"
 #include "sparqlParser/SparqlQleverVisitor.h"
 
 using namespace std::literals::string_literals;
@@ -217,6 +216,19 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
   }
 }
 
+// Helper function that converts the prefix map from `parsedQuery` (a vector of
+// pairs of prefix and IRI) to the prefix map we need for the
+// `SparqlQleverVisitor` (a hash map from prefixes to IRIs).
+namespace {
+SparqlQleverVisitor::PrefixMap getPrefixMap(const ParsedQuery& parsedQuery) {
+  SparqlQleverVisitor::PrefixMap prefixMap;
+  for (const auto& prefixDef : parsedQuery._prefixes) {
+    prefixMap[prefixDef._prefix] = prefixDef._uri;
+  }
+  return prefixMap;
+}
+}  // namespace
+
 // _____________________________________________________________________________
 void SparqlParser::parseWhere(ParsedQuery* query,
                               ParsedQuery::GraphPattern* currentPattern) {
@@ -413,8 +425,11 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         }
       }
 
-      SparqlTriple triple(subject, PropertyPathParser(predicate).parse(),
-                          object);
+      SparqlTriple triple(
+          subject,
+          parseWithAntlr(sparqlParserHelpers::parseVerbPathOrSimple, predicate,
+                         getPrefixMap(*query)),
+          object);
       auto& v = lastBasicPattern(currentPattern)._whereClauseTriples;
       if (std::find(v.begin(), v.end(), triple) != v.end()) {
         LOG(INFO) << "Ignoring duplicate triple: " << subject << ' '
@@ -796,19 +811,6 @@ string SparqlParser::stripAndLowercaseKeywordLiteral(std::string_view lit) {
   return std::string{lit};
 }
 
-// Helper function that converts the prefix map from `parsedQuery` (a vector of
-// pairs of prefix and IRI) to the prefix map we need for the
-// `SparqlQleverVisitor` (a hash map from prefixes to IRIs).
-namespace {
-SparqlQleverVisitor::PrefixMap getPrefixMap(const ParsedQuery& parsedQuery) {
-  SparqlQleverVisitor::PrefixMap prefixMap;
-  for (const auto& prefixDef : parsedQuery._prefixes) {
-    prefixMap[prefixDef._prefix] = prefixDef._uri;
-  }
-  return prefixMap;
-}
-}  // namespace
-
 // _____________________________________________________________________________
 TripleComponent SparqlParser::parseLiteral(const ParsedQuery& pq,
                                            const string& literal,
@@ -992,6 +994,18 @@ auto SparqlParser::parseWithAntlr(F f, const ParsedQuery& parsedQuery)
   auto resultOfParseAndRemainingText =
       f(lexer_.getUnconsumedInput(), getPrefixMap(parsedQuery));
   lexer_.reset(std::move(resultOfParseAndRemainingText.remainingText_));
+  return std::move(resultOfParseAndRemainingText.resultOfParse_);
+}
+
+// ________________________________________________________________________
+template <typename F>
+auto SparqlParser::parseWithAntlr(
+    F f, const std::string& input,
+    const SparqlQleverVisitor::PrefixMap& prefixMap)
+    -> decltype(f(std::declval<const string&>(),
+                  std::declval<SparqlQleverVisitor::PrefixMap>())
+                    .resultOfParse_) {
+  auto resultOfParseAndRemainingText = f(input, prefixMap);
   return std::move(resultOfParseAndRemainingText.resultOfParse_);
 }
 
