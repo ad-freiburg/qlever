@@ -876,6 +876,7 @@ TEST(SparqlParser, ValuesClause) {
   expectValue(R"(VALUES ?foo { "baz" "bar" })", {"?foo"},
               {{"\"baz\""}, {"\"bar\""}});
   expectValuesFails(R"(VALUES ( ) { })");
+  expectValuesFails(R"(VALUES ?foo { })");
   expectValuesFails(R"(VALUES ( ?foo ) { })");
   expectValuesFails(R"(VALUES ( ?foo ?bar ) { (<foo>) (<bar>) })");
   expectValue(R"(VALUES ( ?foo ?bar ) { (<foo> <bar>) })", {"?foo", "?bar"},

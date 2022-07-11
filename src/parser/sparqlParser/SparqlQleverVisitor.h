@@ -416,6 +416,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     SparqlValues values;
     auto var = visit(ctx->var()).as<Variable>();
     values._variables.push_back(var.name());
+    if (ctx->dataBlockValue().empty())
+      throw ParseException(
+          "No values were specified in Values "
+          "clause. This is not supported by QLever. Got: " +
+          ctx->getText());
     for (auto& dataBlockValue : ctx->dataBlockValue()) {
       values._values.push_back(
           {std::move(visit(dataBlockValue).as<std::string>())});
@@ -431,6 +436,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   SparqlValues visitTypesafe(
       SparqlAutomaticParser::InlineDataFullContext* ctx) {
     SparqlValues values;
+    if (ctx->dataBlockSingle().empty())
+      throw ParseException(
+          "No values were specified in Values "
+          "clause. This is not supported by QLever. Got: " +
+          ctx->getText());
     if (ctx->NIL())
       throw ParseException(
           "No variables were specified in Values "
