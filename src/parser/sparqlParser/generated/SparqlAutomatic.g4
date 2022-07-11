@@ -296,7 +296,8 @@ pathElt
     : pathPrimary pathMod?
     ;
 pathEltOrInverse
-    : pathElt | '^' pathElt
+/* Name the '^' to be able to detect it easily. */
+    : pathElt | negationOperator='^' pathElt
     ;
 
 pathMod

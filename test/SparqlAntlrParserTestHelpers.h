@@ -71,39 +71,6 @@ std::ostream& operator<<(std::ostream& out,
 
 // _____________________________________________________________________________
 
-std::ostream& operator<<(std::ostream& out, const vector<string>& vec) {
-  out << "{ ";
-  for (auto it = vec.begin(); it != vec.end(); it++) {
-    out << "\"" << *it << "\"";
-    if (it != vec.end()) {
-      out << ", ";
-    }
-  }
-  out << " }";
-  return out;
-}
-
-std::ostream& operator<<(std::ostream& out, const vector<vector<string>>& vec) {
-  out << "{ ";
-  for (auto it = vec.begin(); it != vec.end(); it++) {
-    out << "\"" << *it << "\"";
-    if (it != vec.end()) {
-      out << ", ";
-    }
-  }
-  out << " }";
-  return out;
-}
-
-std::ostream& operator<<(std::ostream& out,
-                         const GraphPatternOperation::Values& values) {
-  out << "Values: variables " << (values._inlineValues._variables) << " values "
-      << (values._inlineValues._values);
-  return out;
-}
-
-// _____________________________________________________________________________
-
 namespace sparqlExpression {
 
 std::ostream& operator<<(
@@ -289,3 +256,7 @@ MATCHER_P2(IsValues, vars, values, "") {
                                         valueVector2.begin());
                     });
 }
+
+// A trivial matcher for PropertyPaths because e.g. expectCompleteParse needs
+// a matcher.
+MATCHER_P(IsPropertyPath, propertyPath, "") { return arg == propertyPath; }
