@@ -187,7 +187,7 @@ inlineDataFull : ( NIL | '(' var* ')' ) '{' dataBlockSingle* '}';  // factored o
 
 dataBlockSingle:( '(' dataBlockValue* ')' | NIL );  // helper rule for antlr
 
-dataBlockValue : iri | rdfLiteral | numericLiteral | booleanLiteral | 'UNDEF' ;
+dataBlockValue : iri | rdfLiteral | numericLiteral | booleanLiteral | UNDEF ;
 
 minusGraphPattern : MINUS groupGraphPattern;
 

@@ -1012,33 +1012,33 @@ SparqlAutomaticParser::constructQuery() {
         _la = _input->LA(1);
         if ((((_la & ~0x3fULL) == 0) &&
              ((1ULL << _la) & ((1ULL << SparqlAutomaticParser::T__1) |
-                               (1ULL << SparqlAutomaticParser::T__16) |
-                               (1ULL << SparqlAutomaticParser::T__28) |
-                               (1ULL << SparqlAutomaticParser::T__29))) != 0) ||
-            ((((_la - 140) & ~0x3fULL) == 0) &&
-             ((1ULL << (_la - 140)) &
-              ((1ULL << (SparqlAutomaticParser::IRI_REF - 140)) |
-               (1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
-               (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
-               (1ULL << (SparqlAutomaticParser::BLANK_NODE_LABEL - 140)) |
-               (1ULL << (SparqlAutomaticParser::VAR1 - 140)) |
-               (1ULL << (SparqlAutomaticParser::VAR2 - 140)) |
-               (1ULL << (SparqlAutomaticParser::LANGTAG - 140)) |
-               (1ULL << (SparqlAutomaticParser::INTEGER - 140)) |
-               (1ULL << (SparqlAutomaticParser::DECIMAL - 140)) |
-               (1ULL << (SparqlAutomaticParser::DOUBLE - 140)) |
-               (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 140)) |
-               (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 140)) |
-               (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 140)) |
-               (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 140)) |
-               (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 140)) |
-               (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 140)) |
-               (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 140)) |
-               (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 140)) |
-               (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 140)) |
-               (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 140)) |
-               (1ULL << (SparqlAutomaticParser::NIL - 140)) |
-               (1ULL << (SparqlAutomaticParser::ANON - 140)))) != 0)) {
+                               (1ULL << SparqlAutomaticParser::T__15) |
+                               (1ULL << SparqlAutomaticParser::T__27) |
+                               (1ULL << SparqlAutomaticParser::T__28))) != 0) ||
+            ((((_la - 139) & ~0x3fULL) == 0) &&
+             ((1ULL << (_la - 139)) &
+              ((1ULL << (SparqlAutomaticParser::IRI_REF - 139)) |
+               (1ULL << (SparqlAutomaticParser::PNAME_NS - 139)) |
+               (1ULL << (SparqlAutomaticParser::PNAME_LN - 139)) |
+               (1ULL << (SparqlAutomaticParser::BLANK_NODE_LABEL - 139)) |
+               (1ULL << (SparqlAutomaticParser::VAR1 - 139)) |
+               (1ULL << (SparqlAutomaticParser::VAR2 - 139)) |
+               (1ULL << (SparqlAutomaticParser::LANGTAG - 139)) |
+               (1ULL << (SparqlAutomaticParser::INTEGER - 139)) |
+               (1ULL << (SparqlAutomaticParser::DECIMAL - 139)) |
+               (1ULL << (SparqlAutomaticParser::DOUBLE - 139)) |
+               (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 139)) |
+               (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 139)) |
+               (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 139)) |
+               (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 139)) |
+               (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 139)) |
+               (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 139)) |
+               (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 139)) |
+               (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 139)) |
+               (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 139)) |
+               (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 139)) |
+               (1ULL << (SparqlAutomaticParser::NIL - 139)) |
+               (1ULL << (SparqlAutomaticParser::ANON - 139)))) != 0)) {
           setState(323);
           triplesTemplate();
         }
@@ -1163,14 +1163,14 @@ SparqlAutomaticParser::describeQuery() {
           setState(334);
           _errHandler->sync(this);
           _la = _input->LA(1);
-        } while (((((_la - 140) & ~0x3fULL) == 0) &&
-                  ((1ULL << (_la - 140)) &
-                   ((1ULL << (SparqlAutomaticParser::IRI_REF - 140)) |
-                    (1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
-                    (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
-                    (1ULL << (SparqlAutomaticParser::VAR1 - 140)) |
-                    (1ULL << (SparqlAutomaticParser::VAR2 - 140)) |
-                    (1ULL << (SparqlAutomaticParser::LANGTAG - 140)))) != 0));
+        } while (((((_la - 139) & ~0x3fULL) == 0) &&
+                  ((1ULL << (_la - 139)) &
+                   ((1ULL << (SparqlAutomaticParser::IRI_REF - 139)) |
+                    (1ULL << (SparqlAutomaticParser::PNAME_NS - 139)) |
+                    (1ULL << (SparqlAutomaticParser::PNAME_LN - 139)) |
+                    (1ULL << (SparqlAutomaticParser::VAR1 - 139)) |
+                    (1ULL << (SparqlAutomaticParser::VAR2 - 139)) |
+                    (1ULL << (SparqlAutomaticParser::LANGTAG - 139)))) != 0));
         break;
       }
 
@@ -1862,76 +1862,76 @@ SparqlAutomaticParser::groupClause() {
     } while (_la == SparqlAutomaticParser::T__1
 
              || _la == SparqlAutomaticParser::GROUP_CONCAT ||
-             ((((_la - 77) & ~0x3fULL) == 0) &&
-              ((1ULL << (_la - 77)) &
-               ((1ULL << (SparqlAutomaticParser::NOT - 77)) |
-                (1ULL << (SparqlAutomaticParser::STR - 77)) |
-                (1ULL << (SparqlAutomaticParser::LANG - 77)) |
-                (1ULL << (SparqlAutomaticParser::LANGMATCHES - 77)) |
-                (1ULL << (SparqlAutomaticParser::DATATYPE - 77)) |
-                (1ULL << (SparqlAutomaticParser::BOUND - 77)) |
-                (1ULL << (SparqlAutomaticParser::IRI - 77)) |
-                (1ULL << (SparqlAutomaticParser::URI - 77)) |
-                (1ULL << (SparqlAutomaticParser::BNODE - 77)) |
-                (1ULL << (SparqlAutomaticParser::RAND - 77)) |
-                (1ULL << (SparqlAutomaticParser::ABS - 77)) |
-                (1ULL << (SparqlAutomaticParser::CEIL - 77)) |
-                (1ULL << (SparqlAutomaticParser::FLOOR - 77)) |
-                (1ULL << (SparqlAutomaticParser::ROUND - 77)) |
-                (1ULL << (SparqlAutomaticParser::CONCAT - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRLEN - 77)) |
-                (1ULL << (SparqlAutomaticParser::UCASE - 77)) |
-                (1ULL << (SparqlAutomaticParser::LCASE - 77)) |
-                (1ULL << (SparqlAutomaticParser::ENCODE - 77)) |
-                (1ULL << (SparqlAutomaticParser::CONTAINS - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRSTARTS - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRENDS - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRBEFORE - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRAFTER - 77)) |
-                (1ULL << (SparqlAutomaticParser::YEAR - 77)) |
-                (1ULL << (SparqlAutomaticParser::MONTH - 77)) |
-                (1ULL << (SparqlAutomaticParser::DAY - 77)) |
-                (1ULL << (SparqlAutomaticParser::HOURS - 77)) |
-                (1ULL << (SparqlAutomaticParser::MINUTES - 77)) |
-                (1ULL << (SparqlAutomaticParser::SECONDS - 77)) |
-                (1ULL << (SparqlAutomaticParser::TIMEZONE - 77)) |
-                (1ULL << (SparqlAutomaticParser::TZ - 77)) |
-                (1ULL << (SparqlAutomaticParser::NOW - 77)) |
-                (1ULL << (SparqlAutomaticParser::UUID - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRUUID - 77)) |
-                (1ULL << (SparqlAutomaticParser::SHA1 - 77)) |
-                (1ULL << (SparqlAutomaticParser::SHA256 - 77)) |
-                (1ULL << (SparqlAutomaticParser::SHA384 - 77)) |
-                (1ULL << (SparqlAutomaticParser::SHA512 - 77)) |
-                (1ULL << (SparqlAutomaticParser::MD5 - 77)) |
-                (1ULL << (SparqlAutomaticParser::COALESCE - 77)) |
-                (1ULL << (SparqlAutomaticParser::IF - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRLANG - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRDT - 77)) |
-                (1ULL << (SparqlAutomaticParser::SAMETERM - 77)) |
-                (1ULL << (SparqlAutomaticParser::ISIRI - 77)) |
-                (1ULL << (SparqlAutomaticParser::ISURI - 77)) |
-                (1ULL << (SparqlAutomaticParser::ISBLANK - 77)) |
-                (1ULL << (SparqlAutomaticParser::ISLITERAL - 77)) |
-                (1ULL << (SparqlAutomaticParser::ISNUMERIC - 77)) |
-                (1ULL << (SparqlAutomaticParser::REGEX - 77)) |
-                (1ULL << (SparqlAutomaticParser::SUBSTR - 77)) |
-                (1ULL << (SparqlAutomaticParser::REPLACE - 77)) |
-                (1ULL << (SparqlAutomaticParser::EXISTS - 77)) |
-                (1ULL << (SparqlAutomaticParser::COUNT - 77)) |
-                (1ULL << (SparqlAutomaticParser::SUM - 77)) |
-                (1ULL << (SparqlAutomaticParser::MIN - 77)) |
-                (1ULL << (SparqlAutomaticParser::MAX - 77)) |
-                (1ULL << (SparqlAutomaticParser::AVG - 77)) |
-                (1ULL << (SparqlAutomaticParser::SAMPLE - 77)) |
-                (1ULL << (SparqlAutomaticParser::IRI_REF - 77)))) != 0) ||
-             ((((_la - 141) & ~0x3fULL) == 0) &&
-              ((1ULL << (_la - 141)) &
-               ((1ULL << (SparqlAutomaticParser::PNAME_NS - 141)) |
-                (1ULL << (SparqlAutomaticParser::PNAME_LN - 141)) |
-                (1ULL << (SparqlAutomaticParser::VAR1 - 141)) |
-                (1ULL << (SparqlAutomaticParser::VAR2 - 141)) |
-                (1ULL << (SparqlAutomaticParser::LANGTAG - 141)))) != 0));
+             ((((_la - 76) & ~0x3fULL) == 0) &&
+              ((1ULL << (_la - 76)) &
+               ((1ULL << (SparqlAutomaticParser::NOT - 76)) |
+                (1ULL << (SparqlAutomaticParser::STR - 76)) |
+                (1ULL << (SparqlAutomaticParser::LANG - 76)) |
+                (1ULL << (SparqlAutomaticParser::LANGMATCHES - 76)) |
+                (1ULL << (SparqlAutomaticParser::DATATYPE - 76)) |
+                (1ULL << (SparqlAutomaticParser::BOUND - 76)) |
+                (1ULL << (SparqlAutomaticParser::IRI - 76)) |
+                (1ULL << (SparqlAutomaticParser::URI - 76)) |
+                (1ULL << (SparqlAutomaticParser::BNODE - 76)) |
+                (1ULL << (SparqlAutomaticParser::RAND - 76)) |
+                (1ULL << (SparqlAutomaticParser::ABS - 76)) |
+                (1ULL << (SparqlAutomaticParser::CEIL - 76)) |
+                (1ULL << (SparqlAutomaticParser::FLOOR - 76)) |
+                (1ULL << (SparqlAutomaticParser::ROUND - 76)) |
+                (1ULL << (SparqlAutomaticParser::CONCAT - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRLEN - 76)) |
+                (1ULL << (SparqlAutomaticParser::UCASE - 76)) |
+                (1ULL << (SparqlAutomaticParser::LCASE - 76)) |
+                (1ULL << (SparqlAutomaticParser::ENCODE - 76)) |
+                (1ULL << (SparqlAutomaticParser::CONTAINS - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRSTARTS - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRENDS - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRBEFORE - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRAFTER - 76)) |
+                (1ULL << (SparqlAutomaticParser::YEAR - 76)) |
+                (1ULL << (SparqlAutomaticParser::MONTH - 76)) |
+                (1ULL << (SparqlAutomaticParser::DAY - 76)) |
+                (1ULL << (SparqlAutomaticParser::HOURS - 76)) |
+                (1ULL << (SparqlAutomaticParser::MINUTES - 76)) |
+                (1ULL << (SparqlAutomaticParser::SECONDS - 76)) |
+                (1ULL << (SparqlAutomaticParser::TIMEZONE - 76)) |
+                (1ULL << (SparqlAutomaticParser::TZ - 76)) |
+                (1ULL << (SparqlAutomaticParser::NOW - 76)) |
+                (1ULL << (SparqlAutomaticParser::UUID - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRUUID - 76)) |
+                (1ULL << (SparqlAutomaticParser::SHA1 - 76)) |
+                (1ULL << (SparqlAutomaticParser::SHA256 - 76)) |
+                (1ULL << (SparqlAutomaticParser::SHA384 - 76)) |
+                (1ULL << (SparqlAutomaticParser::SHA512 - 76)) |
+                (1ULL << (SparqlAutomaticParser::MD5 - 76)) |
+                (1ULL << (SparqlAutomaticParser::COALESCE - 76)) |
+                (1ULL << (SparqlAutomaticParser::IF - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRLANG - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRDT - 76)) |
+                (1ULL << (SparqlAutomaticParser::SAMETERM - 76)) |
+                (1ULL << (SparqlAutomaticParser::ISIRI - 76)) |
+                (1ULL << (SparqlAutomaticParser::ISURI - 76)) |
+                (1ULL << (SparqlAutomaticParser::ISBLANK - 76)) |
+                (1ULL << (SparqlAutomaticParser::ISLITERAL - 76)) |
+                (1ULL << (SparqlAutomaticParser::ISNUMERIC - 76)) |
+                (1ULL << (SparqlAutomaticParser::REGEX - 76)) |
+                (1ULL << (SparqlAutomaticParser::SUBSTR - 76)) |
+                (1ULL << (SparqlAutomaticParser::REPLACE - 76)) |
+                (1ULL << (SparqlAutomaticParser::EXISTS - 76)) |
+                (1ULL << (SparqlAutomaticParser::COUNT - 76)) |
+                (1ULL << (SparqlAutomaticParser::SUM - 76)) |
+                (1ULL << (SparqlAutomaticParser::MIN - 76)) |
+                (1ULL << (SparqlAutomaticParser::MAX - 76)) |
+                (1ULL << (SparqlAutomaticParser::AVG - 76)) |
+                (1ULL << (SparqlAutomaticParser::SAMPLE - 76)) |
+                (1ULL << (SparqlAutomaticParser::IRI_REF - 76)))) != 0) ||
+             ((((_la - 140) & ~0x3fULL) == 0) &&
+              ((1ULL << (_la - 140)) &
+               ((1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
+                (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
+                (1ULL << (SparqlAutomaticParser::VAR1 - 140)) |
+                (1ULL << (SparqlAutomaticParser::VAR2 - 140)) |
+                (1ULL << (SparqlAutomaticParser::LANGTAG - 140)))) != 0));
 
   } catch (RecognitionException& e) {
     _errHandler->reportError(this, e);
@@ -2209,74 +2209,74 @@ SparqlAutomaticParser::havingClause() {
     } while (_la == SparqlAutomaticParser::T__1
 
              || _la == SparqlAutomaticParser::GROUP_CONCAT ||
-             ((((_la - 77) & ~0x3fULL) == 0) &&
-              ((1ULL << (_la - 77)) &
-               ((1ULL << (SparqlAutomaticParser::NOT - 77)) |
-                (1ULL << (SparqlAutomaticParser::STR - 77)) |
-                (1ULL << (SparqlAutomaticParser::LANG - 77)) |
-                (1ULL << (SparqlAutomaticParser::LANGMATCHES - 77)) |
-                (1ULL << (SparqlAutomaticParser::DATATYPE - 77)) |
-                (1ULL << (SparqlAutomaticParser::BOUND - 77)) |
-                (1ULL << (SparqlAutomaticParser::IRI - 77)) |
-                (1ULL << (SparqlAutomaticParser::URI - 77)) |
-                (1ULL << (SparqlAutomaticParser::BNODE - 77)) |
-                (1ULL << (SparqlAutomaticParser::RAND - 77)) |
-                (1ULL << (SparqlAutomaticParser::ABS - 77)) |
-                (1ULL << (SparqlAutomaticParser::CEIL - 77)) |
-                (1ULL << (SparqlAutomaticParser::FLOOR - 77)) |
-                (1ULL << (SparqlAutomaticParser::ROUND - 77)) |
-                (1ULL << (SparqlAutomaticParser::CONCAT - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRLEN - 77)) |
-                (1ULL << (SparqlAutomaticParser::UCASE - 77)) |
-                (1ULL << (SparqlAutomaticParser::LCASE - 77)) |
-                (1ULL << (SparqlAutomaticParser::ENCODE - 77)) |
-                (1ULL << (SparqlAutomaticParser::CONTAINS - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRSTARTS - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRENDS - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRBEFORE - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRAFTER - 77)) |
-                (1ULL << (SparqlAutomaticParser::YEAR - 77)) |
-                (1ULL << (SparqlAutomaticParser::MONTH - 77)) |
-                (1ULL << (SparqlAutomaticParser::DAY - 77)) |
-                (1ULL << (SparqlAutomaticParser::HOURS - 77)) |
-                (1ULL << (SparqlAutomaticParser::MINUTES - 77)) |
-                (1ULL << (SparqlAutomaticParser::SECONDS - 77)) |
-                (1ULL << (SparqlAutomaticParser::TIMEZONE - 77)) |
-                (1ULL << (SparqlAutomaticParser::TZ - 77)) |
-                (1ULL << (SparqlAutomaticParser::NOW - 77)) |
-                (1ULL << (SparqlAutomaticParser::UUID - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRUUID - 77)) |
-                (1ULL << (SparqlAutomaticParser::SHA1 - 77)) |
-                (1ULL << (SparqlAutomaticParser::SHA256 - 77)) |
-                (1ULL << (SparqlAutomaticParser::SHA384 - 77)) |
-                (1ULL << (SparqlAutomaticParser::SHA512 - 77)) |
-                (1ULL << (SparqlAutomaticParser::MD5 - 77)) |
-                (1ULL << (SparqlAutomaticParser::COALESCE - 77)) |
-                (1ULL << (SparqlAutomaticParser::IF - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRLANG - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRDT - 77)) |
-                (1ULL << (SparqlAutomaticParser::SAMETERM - 77)) |
-                (1ULL << (SparqlAutomaticParser::ISIRI - 77)) |
-                (1ULL << (SparqlAutomaticParser::ISURI - 77)) |
-                (1ULL << (SparqlAutomaticParser::ISBLANK - 77)) |
-                (1ULL << (SparqlAutomaticParser::ISLITERAL - 77)) |
-                (1ULL << (SparqlAutomaticParser::ISNUMERIC - 77)) |
-                (1ULL << (SparqlAutomaticParser::REGEX - 77)) |
-                (1ULL << (SparqlAutomaticParser::SUBSTR - 77)) |
-                (1ULL << (SparqlAutomaticParser::REPLACE - 77)) |
-                (1ULL << (SparqlAutomaticParser::EXISTS - 77)) |
-                (1ULL << (SparqlAutomaticParser::COUNT - 77)) |
-                (1ULL << (SparqlAutomaticParser::SUM - 77)) |
-                (1ULL << (SparqlAutomaticParser::MIN - 77)) |
-                (1ULL << (SparqlAutomaticParser::MAX - 77)) |
-                (1ULL << (SparqlAutomaticParser::AVG - 77)) |
-                (1ULL << (SparqlAutomaticParser::SAMPLE - 77)) |
-                (1ULL << (SparqlAutomaticParser::IRI_REF - 77)))) != 0) ||
-             ((((_la - 141) & ~0x3fULL) == 0) &&
-              ((1ULL << (_la - 141)) &
-               ((1ULL << (SparqlAutomaticParser::PNAME_NS - 141)) |
-                (1ULL << (SparqlAutomaticParser::PNAME_LN - 141)) |
-                (1ULL << (SparqlAutomaticParser::LANGTAG - 141)))) != 0));
+             ((((_la - 76) & ~0x3fULL) == 0) &&
+              ((1ULL << (_la - 76)) &
+               ((1ULL << (SparqlAutomaticParser::NOT - 76)) |
+                (1ULL << (SparqlAutomaticParser::STR - 76)) |
+                (1ULL << (SparqlAutomaticParser::LANG - 76)) |
+                (1ULL << (SparqlAutomaticParser::LANGMATCHES - 76)) |
+                (1ULL << (SparqlAutomaticParser::DATATYPE - 76)) |
+                (1ULL << (SparqlAutomaticParser::BOUND - 76)) |
+                (1ULL << (SparqlAutomaticParser::IRI - 76)) |
+                (1ULL << (SparqlAutomaticParser::URI - 76)) |
+                (1ULL << (SparqlAutomaticParser::BNODE - 76)) |
+                (1ULL << (SparqlAutomaticParser::RAND - 76)) |
+                (1ULL << (SparqlAutomaticParser::ABS - 76)) |
+                (1ULL << (SparqlAutomaticParser::CEIL - 76)) |
+                (1ULL << (SparqlAutomaticParser::FLOOR - 76)) |
+                (1ULL << (SparqlAutomaticParser::ROUND - 76)) |
+                (1ULL << (SparqlAutomaticParser::CONCAT - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRLEN - 76)) |
+                (1ULL << (SparqlAutomaticParser::UCASE - 76)) |
+                (1ULL << (SparqlAutomaticParser::LCASE - 76)) |
+                (1ULL << (SparqlAutomaticParser::ENCODE - 76)) |
+                (1ULL << (SparqlAutomaticParser::CONTAINS - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRSTARTS - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRENDS - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRBEFORE - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRAFTER - 76)) |
+                (1ULL << (SparqlAutomaticParser::YEAR - 76)) |
+                (1ULL << (SparqlAutomaticParser::MONTH - 76)) |
+                (1ULL << (SparqlAutomaticParser::DAY - 76)) |
+                (1ULL << (SparqlAutomaticParser::HOURS - 76)) |
+                (1ULL << (SparqlAutomaticParser::MINUTES - 76)) |
+                (1ULL << (SparqlAutomaticParser::SECONDS - 76)) |
+                (1ULL << (SparqlAutomaticParser::TIMEZONE - 76)) |
+                (1ULL << (SparqlAutomaticParser::TZ - 76)) |
+                (1ULL << (SparqlAutomaticParser::NOW - 76)) |
+                (1ULL << (SparqlAutomaticParser::UUID - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRUUID - 76)) |
+                (1ULL << (SparqlAutomaticParser::SHA1 - 76)) |
+                (1ULL << (SparqlAutomaticParser::SHA256 - 76)) |
+                (1ULL << (SparqlAutomaticParser::SHA384 - 76)) |
+                (1ULL << (SparqlAutomaticParser::SHA512 - 76)) |
+                (1ULL << (SparqlAutomaticParser::MD5 - 76)) |
+                (1ULL << (SparqlAutomaticParser::COALESCE - 76)) |
+                (1ULL << (SparqlAutomaticParser::IF - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRLANG - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRDT - 76)) |
+                (1ULL << (SparqlAutomaticParser::SAMETERM - 76)) |
+                (1ULL << (SparqlAutomaticParser::ISIRI - 76)) |
+                (1ULL << (SparqlAutomaticParser::ISURI - 76)) |
+                (1ULL << (SparqlAutomaticParser::ISBLANK - 76)) |
+                (1ULL << (SparqlAutomaticParser::ISLITERAL - 76)) |
+                (1ULL << (SparqlAutomaticParser::ISNUMERIC - 76)) |
+                (1ULL << (SparqlAutomaticParser::REGEX - 76)) |
+                (1ULL << (SparqlAutomaticParser::SUBSTR - 76)) |
+                (1ULL << (SparqlAutomaticParser::REPLACE - 76)) |
+                (1ULL << (SparqlAutomaticParser::EXISTS - 76)) |
+                (1ULL << (SparqlAutomaticParser::COUNT - 76)) |
+                (1ULL << (SparqlAutomaticParser::SUM - 76)) |
+                (1ULL << (SparqlAutomaticParser::MIN - 76)) |
+                (1ULL << (SparqlAutomaticParser::MAX - 76)) |
+                (1ULL << (SparqlAutomaticParser::AVG - 76)) |
+                (1ULL << (SparqlAutomaticParser::SAMPLE - 76)) |
+                (1ULL << (SparqlAutomaticParser::IRI_REF - 76)))) != 0) ||
+             ((((_la - 140) & ~0x3fULL) == 0) &&
+              ((1ULL << (_la - 140)) &
+               ((1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
+                (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
+                (1ULL << (SparqlAutomaticParser::LANGTAG - 140)))) != 0));
 
   } catch (RecognitionException& e) {
     _errHandler->reportError(this, e);
@@ -2427,76 +2427,76 @@ SparqlAutomaticParser::orderClause() {
                                 (1ULL << SparqlAutomaticParser::GROUP_CONCAT) |
                                 (1ULL << SparqlAutomaticParser::ASC) |
                                 (1ULL << SparqlAutomaticParser::DESC))) != 0) ||
-             ((((_la - 77) & ~0x3fULL) == 0) &&
-              ((1ULL << (_la - 77)) &
-               ((1ULL << (SparqlAutomaticParser::NOT - 77)) |
-                (1ULL << (SparqlAutomaticParser::STR - 77)) |
-                (1ULL << (SparqlAutomaticParser::LANG - 77)) |
-                (1ULL << (SparqlAutomaticParser::LANGMATCHES - 77)) |
-                (1ULL << (SparqlAutomaticParser::DATATYPE - 77)) |
-                (1ULL << (SparqlAutomaticParser::BOUND - 77)) |
-                (1ULL << (SparqlAutomaticParser::IRI - 77)) |
-                (1ULL << (SparqlAutomaticParser::URI - 77)) |
-                (1ULL << (SparqlAutomaticParser::BNODE - 77)) |
-                (1ULL << (SparqlAutomaticParser::RAND - 77)) |
-                (1ULL << (SparqlAutomaticParser::ABS - 77)) |
-                (1ULL << (SparqlAutomaticParser::CEIL - 77)) |
-                (1ULL << (SparqlAutomaticParser::FLOOR - 77)) |
-                (1ULL << (SparqlAutomaticParser::ROUND - 77)) |
-                (1ULL << (SparqlAutomaticParser::CONCAT - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRLEN - 77)) |
-                (1ULL << (SparqlAutomaticParser::UCASE - 77)) |
-                (1ULL << (SparqlAutomaticParser::LCASE - 77)) |
-                (1ULL << (SparqlAutomaticParser::ENCODE - 77)) |
-                (1ULL << (SparqlAutomaticParser::CONTAINS - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRSTARTS - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRENDS - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRBEFORE - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRAFTER - 77)) |
-                (1ULL << (SparqlAutomaticParser::YEAR - 77)) |
-                (1ULL << (SparqlAutomaticParser::MONTH - 77)) |
-                (1ULL << (SparqlAutomaticParser::DAY - 77)) |
-                (1ULL << (SparqlAutomaticParser::HOURS - 77)) |
-                (1ULL << (SparqlAutomaticParser::MINUTES - 77)) |
-                (1ULL << (SparqlAutomaticParser::SECONDS - 77)) |
-                (1ULL << (SparqlAutomaticParser::TIMEZONE - 77)) |
-                (1ULL << (SparqlAutomaticParser::TZ - 77)) |
-                (1ULL << (SparqlAutomaticParser::NOW - 77)) |
-                (1ULL << (SparqlAutomaticParser::UUID - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRUUID - 77)) |
-                (1ULL << (SparqlAutomaticParser::SHA1 - 77)) |
-                (1ULL << (SparqlAutomaticParser::SHA256 - 77)) |
-                (1ULL << (SparqlAutomaticParser::SHA384 - 77)) |
-                (1ULL << (SparqlAutomaticParser::SHA512 - 77)) |
-                (1ULL << (SparqlAutomaticParser::MD5 - 77)) |
-                (1ULL << (SparqlAutomaticParser::COALESCE - 77)) |
-                (1ULL << (SparqlAutomaticParser::IF - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRLANG - 77)) |
-                (1ULL << (SparqlAutomaticParser::STRDT - 77)) |
-                (1ULL << (SparqlAutomaticParser::SAMETERM - 77)) |
-                (1ULL << (SparqlAutomaticParser::ISIRI - 77)) |
-                (1ULL << (SparqlAutomaticParser::ISURI - 77)) |
-                (1ULL << (SparqlAutomaticParser::ISBLANK - 77)) |
-                (1ULL << (SparqlAutomaticParser::ISLITERAL - 77)) |
-                (1ULL << (SparqlAutomaticParser::ISNUMERIC - 77)) |
-                (1ULL << (SparqlAutomaticParser::REGEX - 77)) |
-                (1ULL << (SparqlAutomaticParser::SUBSTR - 77)) |
-                (1ULL << (SparqlAutomaticParser::REPLACE - 77)) |
-                (1ULL << (SparqlAutomaticParser::EXISTS - 77)) |
-                (1ULL << (SparqlAutomaticParser::COUNT - 77)) |
-                (1ULL << (SparqlAutomaticParser::SUM - 77)) |
-                (1ULL << (SparqlAutomaticParser::MIN - 77)) |
-                (1ULL << (SparqlAutomaticParser::MAX - 77)) |
-                (1ULL << (SparqlAutomaticParser::AVG - 77)) |
-                (1ULL << (SparqlAutomaticParser::SAMPLE - 77)) |
-                (1ULL << (SparqlAutomaticParser::IRI_REF - 77)))) != 0) ||
-             ((((_la - 141) & ~0x3fULL) == 0) &&
-              ((1ULL << (_la - 141)) &
-               ((1ULL << (SparqlAutomaticParser::PNAME_NS - 141)) |
-                (1ULL << (SparqlAutomaticParser::PNAME_LN - 141)) |
-                (1ULL << (SparqlAutomaticParser::VAR1 - 141)) |
-                (1ULL << (SparqlAutomaticParser::VAR2 - 141)) |
-                (1ULL << (SparqlAutomaticParser::LANGTAG - 141)))) != 0));
+             ((((_la - 76) & ~0x3fULL) == 0) &&
+              ((1ULL << (_la - 76)) &
+               ((1ULL << (SparqlAutomaticParser::NOT - 76)) |
+                (1ULL << (SparqlAutomaticParser::STR - 76)) |
+                (1ULL << (SparqlAutomaticParser::LANG - 76)) |
+                (1ULL << (SparqlAutomaticParser::LANGMATCHES - 76)) |
+                (1ULL << (SparqlAutomaticParser::DATATYPE - 76)) |
+                (1ULL << (SparqlAutomaticParser::BOUND - 76)) |
+                (1ULL << (SparqlAutomaticParser::IRI - 76)) |
+                (1ULL << (SparqlAutomaticParser::URI - 76)) |
+                (1ULL << (SparqlAutomaticParser::BNODE - 76)) |
+                (1ULL << (SparqlAutomaticParser::RAND - 76)) |
+                (1ULL << (SparqlAutomaticParser::ABS - 76)) |
+                (1ULL << (SparqlAutomaticParser::CEIL - 76)) |
+                (1ULL << (SparqlAutomaticParser::FLOOR - 76)) |
+                (1ULL << (SparqlAutomaticParser::ROUND - 76)) |
+                (1ULL << (SparqlAutomaticParser::CONCAT - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRLEN - 76)) |
+                (1ULL << (SparqlAutomaticParser::UCASE - 76)) |
+                (1ULL << (SparqlAutomaticParser::LCASE - 76)) |
+                (1ULL << (SparqlAutomaticParser::ENCODE - 76)) |
+                (1ULL << (SparqlAutomaticParser::CONTAINS - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRSTARTS - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRENDS - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRBEFORE - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRAFTER - 76)) |
+                (1ULL << (SparqlAutomaticParser::YEAR - 76)) |
+                (1ULL << (SparqlAutomaticParser::MONTH - 76)) |
+                (1ULL << (SparqlAutomaticParser::DAY - 76)) |
+                (1ULL << (SparqlAutomaticParser::HOURS - 76)) |
+                (1ULL << (SparqlAutomaticParser::MINUTES - 76)) |
+                (1ULL << (SparqlAutomaticParser::SECONDS - 76)) |
+                (1ULL << (SparqlAutomaticParser::TIMEZONE - 76)) |
+                (1ULL << (SparqlAutomaticParser::TZ - 76)) |
+                (1ULL << (SparqlAutomaticParser::NOW - 76)) |
+                (1ULL << (SparqlAutomaticParser::UUID - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRUUID - 76)) |
+                (1ULL << (SparqlAutomaticParser::SHA1 - 76)) |
+                (1ULL << (SparqlAutomaticParser::SHA256 - 76)) |
+                (1ULL << (SparqlAutomaticParser::SHA384 - 76)) |
+                (1ULL << (SparqlAutomaticParser::SHA512 - 76)) |
+                (1ULL << (SparqlAutomaticParser::MD5 - 76)) |
+                (1ULL << (SparqlAutomaticParser::COALESCE - 76)) |
+                (1ULL << (SparqlAutomaticParser::IF - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRLANG - 76)) |
+                (1ULL << (SparqlAutomaticParser::STRDT - 76)) |
+                (1ULL << (SparqlAutomaticParser::SAMETERM - 76)) |
+                (1ULL << (SparqlAutomaticParser::ISIRI - 76)) |
+                (1ULL << (SparqlAutomaticParser::ISURI - 76)) |
+                (1ULL << (SparqlAutomaticParser::ISBLANK - 76)) |
+                (1ULL << (SparqlAutomaticParser::ISLITERAL - 76)) |
+                (1ULL << (SparqlAutomaticParser::ISNUMERIC - 76)) |
+                (1ULL << (SparqlAutomaticParser::REGEX - 76)) |
+                (1ULL << (SparqlAutomaticParser::SUBSTR - 76)) |
+                (1ULL << (SparqlAutomaticParser::REPLACE - 76)) |
+                (1ULL << (SparqlAutomaticParser::EXISTS - 76)) |
+                (1ULL << (SparqlAutomaticParser::COUNT - 76)) |
+                (1ULL << (SparqlAutomaticParser::SUM - 76)) |
+                (1ULL << (SparqlAutomaticParser::MIN - 76)) |
+                (1ULL << (SparqlAutomaticParser::MAX - 76)) |
+                (1ULL << (SparqlAutomaticParser::AVG - 76)) |
+                (1ULL << (SparqlAutomaticParser::SAMPLE - 76)) |
+                (1ULL << (SparqlAutomaticParser::IRI_REF - 76)))) != 0) ||
+             ((((_la - 140) & ~0x3fULL) == 0) &&
+              ((1ULL << (_la - 140)) &
+               ((1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
+                (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
+                (1ULL << (SparqlAutomaticParser::VAR1 - 140)) |
+                (1ULL << (SparqlAutomaticParser::VAR2 - 140)) |
+                (1ULL << (SparqlAutomaticParser::LANGTAG - 140)))) != 0));
 
   } catch (RecognitionException& e) {
     _errHandler->reportError(this, e);
@@ -3337,33 +3337,33 @@ SparqlAutomaticParser::triplesTemplate() {
       _la = _input->LA(1);
       if ((((_la & ~0x3fULL) == 0) &&
            ((1ULL << _la) & ((1ULL << SparqlAutomaticParser::T__1) |
-                             (1ULL << SparqlAutomaticParser::T__16) |
-                             (1ULL << SparqlAutomaticParser::T__28) |
-                             (1ULL << SparqlAutomaticParser::T__29))) != 0) ||
-          ((((_la - 140) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 140)) &
-            ((1ULL << (SparqlAutomaticParser::IRI_REF - 140)) |
-             (1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
-             (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
-             (1ULL << (SparqlAutomaticParser::BLANK_NODE_LABEL - 140)) |
-             (1ULL << (SparqlAutomaticParser::VAR1 - 140)) |
-             (1ULL << (SparqlAutomaticParser::VAR2 - 140)) |
-             (1ULL << (SparqlAutomaticParser::LANGTAG - 140)) |
-             (1ULL << (SparqlAutomaticParser::INTEGER - 140)) |
-             (1ULL << (SparqlAutomaticParser::DECIMAL - 140)) |
-             (1ULL << (SparqlAutomaticParser::DOUBLE - 140)) |
-             (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 140)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 140)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 140)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 140)) |
-             (1ULL << (SparqlAutomaticParser::NIL - 140)) |
-             (1ULL << (SparqlAutomaticParser::ANON - 140)))) != 0)) {
+                             (1ULL << SparqlAutomaticParser::T__15) |
+                             (1ULL << SparqlAutomaticParser::T__27) |
+                             (1ULL << SparqlAutomaticParser::T__28))) != 0) ||
+          ((((_la - 139) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 139)) &
+            ((1ULL << (SparqlAutomaticParser::IRI_REF - 139)) |
+             (1ULL << (SparqlAutomaticParser::PNAME_NS - 139)) |
+             (1ULL << (SparqlAutomaticParser::PNAME_LN - 139)) |
+             (1ULL << (SparqlAutomaticParser::BLANK_NODE_LABEL - 139)) |
+             (1ULL << (SparqlAutomaticParser::VAR1 - 139)) |
+             (1ULL << (SparqlAutomaticParser::VAR2 - 139)) |
+             (1ULL << (SparqlAutomaticParser::LANGTAG - 139)) |
+             (1ULL << (SparqlAutomaticParser::INTEGER - 139)) |
+             (1ULL << (SparqlAutomaticParser::DECIMAL - 139)) |
+             (1ULL << (SparqlAutomaticParser::DOUBLE - 139)) |
+             (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 139)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 139)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 139)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 139)) |
+             (1ULL << (SparqlAutomaticParser::NIL - 139)) |
+             (1ULL << (SparqlAutomaticParser::ANON - 139)))) != 0)) {
         setState(489);
         triplesTemplate();
       }
@@ -3448,9 +3448,9 @@ SparqlAutomaticParser::groupGraphPattern() {
       case SparqlAutomaticParser::T__1:
       case SparqlAutomaticParser::T__3:
       case SparqlAutomaticParser::T__4:
-      case SparqlAutomaticParser::T__16:
+      case SparqlAutomaticParser::T__15:
+      case SparqlAutomaticParser::T__27:
       case SparqlAutomaticParser::T__28:
-      case SparqlAutomaticParser::T__29:
       case SparqlAutomaticParser::VALUES:
       case SparqlAutomaticParser::GRAPH:
       case SparqlAutomaticParser::OPTIONAL:
@@ -3578,33 +3578,33 @@ SparqlAutomaticParser::groupGraphPatternSub() {
     _la = _input->LA(1);
     if ((((_la & ~0x3fULL) == 0) &&
          ((1ULL << _la) & ((1ULL << SparqlAutomaticParser::T__1) |
-                           (1ULL << SparqlAutomaticParser::T__16) |
-                           (1ULL << SparqlAutomaticParser::T__28) |
-                           (1ULL << SparqlAutomaticParser::T__29))) != 0) ||
-        ((((_la - 140) & ~0x3fULL) == 0) &&
-         ((1ULL << (_la - 140)) &
-          ((1ULL << (SparqlAutomaticParser::IRI_REF - 140)) |
-           (1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
-           (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
-           (1ULL << (SparqlAutomaticParser::BLANK_NODE_LABEL - 140)) |
-           (1ULL << (SparqlAutomaticParser::VAR1 - 140)) |
-           (1ULL << (SparqlAutomaticParser::VAR2 - 140)) |
-           (1ULL << (SparqlAutomaticParser::LANGTAG - 140)) |
-           (1ULL << (SparqlAutomaticParser::INTEGER - 140)) |
-           (1ULL << (SparqlAutomaticParser::DECIMAL - 140)) |
-           (1ULL << (SparqlAutomaticParser::DOUBLE - 140)) |
-           (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 140)) |
-           (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 140)) |
-           (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 140)) |
-           (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 140)) |
-           (1ULL << (SparqlAutomaticParser::NIL - 140)) |
-           (1ULL << (SparqlAutomaticParser::ANON - 140)))) != 0)) {
+                           (1ULL << SparqlAutomaticParser::T__15) |
+                           (1ULL << SparqlAutomaticParser::T__27) |
+                           (1ULL << SparqlAutomaticParser::T__28))) != 0) ||
+        ((((_la - 139) & ~0x3fULL) == 0) &&
+         ((1ULL << (_la - 139)) &
+          ((1ULL << (SparqlAutomaticParser::IRI_REF - 139)) |
+           (1ULL << (SparqlAutomaticParser::PNAME_NS - 139)) |
+           (1ULL << (SparqlAutomaticParser::PNAME_LN - 139)) |
+           (1ULL << (SparqlAutomaticParser::BLANK_NODE_LABEL - 139)) |
+           (1ULL << (SparqlAutomaticParser::VAR1 - 139)) |
+           (1ULL << (SparqlAutomaticParser::VAR2 - 139)) |
+           (1ULL << (SparqlAutomaticParser::LANGTAG - 139)) |
+           (1ULL << (SparqlAutomaticParser::INTEGER - 139)) |
+           (1ULL << (SparqlAutomaticParser::DECIMAL - 139)) |
+           (1ULL << (SparqlAutomaticParser::DOUBLE - 139)) |
+           (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 139)) |
+           (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 139)) |
+           (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 139)) |
+           (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 139)) |
+           (1ULL << (SparqlAutomaticParser::NIL - 139)) |
+           (1ULL << (SparqlAutomaticParser::ANON - 139)))) != 0)) {
       setState(501);
       triplesBlock();
     }
@@ -3614,14 +3614,14 @@ SparqlAutomaticParser::groupGraphPatternSub() {
     while (_la == SparqlAutomaticParser::T__3
 
            || _la == SparqlAutomaticParser::VALUES ||
-           ((((_la - 68) & ~0x3fULL) == 0) &&
-            ((1ULL << (_la - 68)) &
-             ((1ULL << (SparqlAutomaticParser::GRAPH - 68)) |
-              (1ULL << (SparqlAutomaticParser::OPTIONAL - 68)) |
-              (1ULL << (SparqlAutomaticParser::SERVICE - 68)) |
-              (1ULL << (SparqlAutomaticParser::BIND - 68)) |
-              (1ULL << (SparqlAutomaticParser::MINUS - 68)) |
-              (1ULL << (SparqlAutomaticParser::FILTER - 68)))) != 0)) {
+           ((((_la - 67) & ~0x3fULL) == 0) &&
+            ((1ULL << (_la - 67)) &
+             ((1ULL << (SparqlAutomaticParser::GRAPH - 67)) |
+              (1ULL << (SparqlAutomaticParser::OPTIONAL - 67)) |
+              (1ULL << (SparqlAutomaticParser::SERVICE - 67)) |
+              (1ULL << (SparqlAutomaticParser::BIND - 67)) |
+              (1ULL << (SparqlAutomaticParser::MINUS - 67)) |
+              (1ULL << (SparqlAutomaticParser::FILTER - 67)))) != 0)) {
       setState(504);
       graphPatternNotTriples();
       setState(506);
@@ -3638,33 +3638,33 @@ SparqlAutomaticParser::groupGraphPatternSub() {
       _la = _input->LA(1);
       if ((((_la & ~0x3fULL) == 0) &&
            ((1ULL << _la) & ((1ULL << SparqlAutomaticParser::T__1) |
-                             (1ULL << SparqlAutomaticParser::T__16) |
-                             (1ULL << SparqlAutomaticParser::T__28) |
-                             (1ULL << SparqlAutomaticParser::T__29))) != 0) ||
-          ((((_la - 140) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 140)) &
-            ((1ULL << (SparqlAutomaticParser::IRI_REF - 140)) |
-             (1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
-             (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
-             (1ULL << (SparqlAutomaticParser::BLANK_NODE_LABEL - 140)) |
-             (1ULL << (SparqlAutomaticParser::VAR1 - 140)) |
-             (1ULL << (SparqlAutomaticParser::VAR2 - 140)) |
-             (1ULL << (SparqlAutomaticParser::LANGTAG - 140)) |
-             (1ULL << (SparqlAutomaticParser::INTEGER - 140)) |
-             (1ULL << (SparqlAutomaticParser::DECIMAL - 140)) |
-             (1ULL << (SparqlAutomaticParser::DOUBLE - 140)) |
-             (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 140)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 140)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 140)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 140)) |
-             (1ULL << (SparqlAutomaticParser::NIL - 140)) |
-             (1ULL << (SparqlAutomaticParser::ANON - 140)))) != 0)) {
+                             (1ULL << SparqlAutomaticParser::T__15) |
+                             (1ULL << SparqlAutomaticParser::T__27) |
+                             (1ULL << SparqlAutomaticParser::T__28))) != 0) ||
+          ((((_la - 139) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 139)) &
+            ((1ULL << (SparqlAutomaticParser::IRI_REF - 139)) |
+             (1ULL << (SparqlAutomaticParser::PNAME_NS - 139)) |
+             (1ULL << (SparqlAutomaticParser::PNAME_LN - 139)) |
+             (1ULL << (SparqlAutomaticParser::BLANK_NODE_LABEL - 139)) |
+             (1ULL << (SparqlAutomaticParser::VAR1 - 139)) |
+             (1ULL << (SparqlAutomaticParser::VAR2 - 139)) |
+             (1ULL << (SparqlAutomaticParser::LANGTAG - 139)) |
+             (1ULL << (SparqlAutomaticParser::INTEGER - 139)) |
+             (1ULL << (SparqlAutomaticParser::DECIMAL - 139)) |
+             (1ULL << (SparqlAutomaticParser::DOUBLE - 139)) |
+             (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 139)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 139)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 139)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 139)) |
+             (1ULL << (SparqlAutomaticParser::NIL - 139)) |
+             (1ULL << (SparqlAutomaticParser::ANON - 139)))) != 0)) {
         setState(508);
         triplesBlock();
       }
@@ -3755,33 +3755,33 @@ SparqlAutomaticParser::triplesBlock() {
       _la = _input->LA(1);
       if ((((_la & ~0x3fULL) == 0) &&
            ((1ULL << _la) & ((1ULL << SparqlAutomaticParser::T__1) |
-                             (1ULL << SparqlAutomaticParser::T__16) |
-                             (1ULL << SparqlAutomaticParser::T__28) |
-                             (1ULL << SparqlAutomaticParser::T__29))) != 0) ||
-          ((((_la - 140) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 140)) &
-            ((1ULL << (SparqlAutomaticParser::IRI_REF - 140)) |
-             (1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
-             (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
-             (1ULL << (SparqlAutomaticParser::BLANK_NODE_LABEL - 140)) |
-             (1ULL << (SparqlAutomaticParser::VAR1 - 140)) |
-             (1ULL << (SparqlAutomaticParser::VAR2 - 140)) |
-             (1ULL << (SparqlAutomaticParser::LANGTAG - 140)) |
-             (1ULL << (SparqlAutomaticParser::INTEGER - 140)) |
-             (1ULL << (SparqlAutomaticParser::DECIMAL - 140)) |
-             (1ULL << (SparqlAutomaticParser::DOUBLE - 140)) |
-             (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 140)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 140)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 140)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 140)) |
-             (1ULL << (SparqlAutomaticParser::NIL - 140)) |
-             (1ULL << (SparqlAutomaticParser::ANON - 140)))) != 0)) {
+                             (1ULL << SparqlAutomaticParser::T__15) |
+                             (1ULL << SparqlAutomaticParser::T__27) |
+                             (1ULL << SparqlAutomaticParser::T__28))) != 0) ||
+          ((((_la - 139) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 139)) &
+            ((1ULL << (SparqlAutomaticParser::IRI_REF - 139)) |
+             (1ULL << (SparqlAutomaticParser::PNAME_NS - 139)) |
+             (1ULL << (SparqlAutomaticParser::PNAME_LN - 139)) |
+             (1ULL << (SparqlAutomaticParser::BLANK_NODE_LABEL - 139)) |
+             (1ULL << (SparqlAutomaticParser::VAR1 - 139)) |
+             (1ULL << (SparqlAutomaticParser::VAR2 - 139)) |
+             (1ULL << (SparqlAutomaticParser::LANGTAG - 139)) |
+             (1ULL << (SparqlAutomaticParser::INTEGER - 139)) |
+             (1ULL << (SparqlAutomaticParser::DECIMAL - 139)) |
+             (1ULL << (SparqlAutomaticParser::DOUBLE - 139)) |
+             (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 139)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 139)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 139)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 139)) |
+             (1ULL << (SparqlAutomaticParser::NIL - 139)) |
+             (1ULL << (SparqlAutomaticParser::ANON - 139)))) != 0)) {
         setState(518);
         triplesBlock();
       }
@@ -4504,29 +4504,30 @@ SparqlAutomaticParser::inlineDataOneVar() {
     setState(566);
     _errHandler->sync(this);
     _la = _input->LA(1);
-    while ((((_la & ~0x3fULL) == 0) &&
-            ((1ULL << _la) & ((1ULL << SparqlAutomaticParser::T__6) |
-                              (1ULL << SparqlAutomaticParser::T__28) |
-                              (1ULL << SparqlAutomaticParser::T__29))) != 0) ||
-           ((((_la - 140) & ~0x3fULL) == 0) &&
-            ((1ULL << (_la - 140)) &
-             ((1ULL << (SparqlAutomaticParser::IRI_REF - 140)) |
-              (1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
-              (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
-              (1ULL << (SparqlAutomaticParser::LANGTAG - 140)) |
-              (1ULL << (SparqlAutomaticParser::INTEGER - 140)) |
-              (1ULL << (SparqlAutomaticParser::DECIMAL - 140)) |
-              (1ULL << (SparqlAutomaticParser::DOUBLE - 140)) |
-              (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 140)) |
-              (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 140)) |
-              (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 140)) |
-              (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 140)) |
-              (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 140)) |
-              (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 140)) |
-              (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 140)) |
-              (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 140)) |
-              (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 140)) |
-              (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 140)))) !=
+    while (((((_la - 28) & ~0x3fULL) == 0) &&
+            ((1ULL << (_la - 28)) &
+             ((1ULL << (SparqlAutomaticParser::T__27 - 28)) |
+              (1ULL << (SparqlAutomaticParser::T__28 - 28)) |
+              (1ULL << (SparqlAutomaticParser::UNDEF - 28)))) != 0) ||
+           ((((_la - 139) & ~0x3fULL) == 0) &&
+            ((1ULL << (_la - 139)) &
+             ((1ULL << (SparqlAutomaticParser::IRI_REF - 139)) |
+              (1ULL << (SparqlAutomaticParser::PNAME_NS - 139)) |
+              (1ULL << (SparqlAutomaticParser::PNAME_LN - 139)) |
+              (1ULL << (SparqlAutomaticParser::LANGTAG - 139)) |
+              (1ULL << (SparqlAutomaticParser::INTEGER - 139)) |
+              (1ULL << (SparqlAutomaticParser::DECIMAL - 139)) |
+              (1ULL << (SparqlAutomaticParser::DOUBLE - 139)) |
+              (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 139)) |
+              (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 139)) |
+              (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 139)) |
+              (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 139)) |
+              (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 139)) |
+              (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 139)) |
+              (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 139)) |
+              (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 139)) |
+              (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 139)) |
+              (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 139)))) !=
                 0)) {
       setState(563);
       dataBlockValue();
@@ -4745,30 +4746,31 @@ SparqlAutomaticParser::dataBlockSingle() {
         _errHandler->sync(this);
         _la = _input->LA(1);
         while (
-            (((_la & ~0x3fULL) == 0) &&
-             ((1ULL << _la) & ((1ULL << SparqlAutomaticParser::T__6) |
-                               (1ULL << SparqlAutomaticParser::T__28) |
-                               (1ULL << SparqlAutomaticParser::T__29))) != 0) ||
-            ((((_la - 140) & ~0x3fULL) == 0) &&
-             ((1ULL << (_la - 140)) &
-              ((1ULL << (SparqlAutomaticParser::IRI_REF - 140)) |
-               (1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
-               (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
-               (1ULL << (SparqlAutomaticParser::LANGTAG - 140)) |
-               (1ULL << (SparqlAutomaticParser::INTEGER - 140)) |
-               (1ULL << (SparqlAutomaticParser::DECIMAL - 140)) |
-               (1ULL << (SparqlAutomaticParser::DOUBLE - 140)) |
-               (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 140)) |
-               (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 140)) |
-               (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 140)) |
-               (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 140)) |
-               (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 140)) |
-               (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 140)) |
-               (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 140)) |
-               (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 140)) |
-               (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 140)) |
+            ((((_la - 28) & ~0x3fULL) == 0) &&
+             ((1ULL << (_la - 28)) &
+              ((1ULL << (SparqlAutomaticParser::T__27 - 28)) |
+               (1ULL << (SparqlAutomaticParser::T__28 - 28)) |
+               (1ULL << (SparqlAutomaticParser::UNDEF - 28)))) != 0) ||
+            ((((_la - 139) & ~0x3fULL) == 0) &&
+             ((1ULL << (_la - 139)) &
+              ((1ULL << (SparqlAutomaticParser::IRI_REF - 139)) |
+               (1ULL << (SparqlAutomaticParser::PNAME_NS - 139)) |
+               (1ULL << (SparqlAutomaticParser::PNAME_LN - 139)) |
+               (1ULL << (SparqlAutomaticParser::LANGTAG - 139)) |
+               (1ULL << (SparqlAutomaticParser::INTEGER - 139)) |
+               (1ULL << (SparqlAutomaticParser::DECIMAL - 139)) |
+               (1ULL << (SparqlAutomaticParser::DOUBLE - 139)) |
+               (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 139)) |
+               (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 139)) |
+               (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 139)) |
+               (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 139)) |
+               (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 139)) |
+               (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 139)) |
+               (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 139)) |
+               (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 139)) |
+               (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 139)) |
                (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 -
-                         140)))) != 0)) {
+                         139)))) != 0)) {
           setState(592);
           dataBlockValue();
           setState(597);
@@ -4824,6 +4826,10 @@ SparqlAutomaticParser::DataBlockValueContext::numericLiteral() {
 SparqlAutomaticParser::BooleanLiteralContext*
 SparqlAutomaticParser::DataBlockValueContext::booleanLiteral() {
   return getRuleContext<SparqlAutomaticParser::BooleanLiteralContext>(0);
+}
+
+tree::TerminalNode* SparqlAutomaticParser::DataBlockValueContext::UNDEF() {
+  return getToken(SparqlAutomaticParser::UNDEF, 0);
 }
 
 size_t SparqlAutomaticParser::DataBlockValueContext::getRuleIndex() const {
@@ -4902,18 +4908,18 @@ SparqlAutomaticParser::dataBlockValue() {
         break;
       }
 
-      case SparqlAutomaticParser::T__28:
-      case SparqlAutomaticParser::T__29: {
+      case SparqlAutomaticParser::T__27:
+      case SparqlAutomaticParser::T__28: {
         enterOuterAlt(_localctx, 4);
         setState(605);
         booleanLiteral();
         break;
       }
 
-      case SparqlAutomaticParser::T__6: {
+      case SparqlAutomaticParser::UNDEF: {
         enterOuterAlt(_localctx, 5);
         setState(606);
-        match(SparqlAutomaticParser::T__6);
+        match(SparqlAutomaticParser::UNDEF);
         break;
       }
 
@@ -5483,9 +5489,9 @@ SparqlAutomaticParser::ArgListContext* SparqlAutomaticParser::argList() {
         setState(641);
         _errHandler->sync(this);
         _la = _input->LA(1);
-        while (_la == SparqlAutomaticParser::T__7) {
+        while (_la == SparqlAutomaticParser::T__6) {
           setState(637);
-          match(SparqlAutomaticParser::T__7);
+          match(SparqlAutomaticParser::T__6);
           setState(638);
           expression();
           setState(643);
@@ -5589,9 +5595,9 @@ SparqlAutomaticParser::expressionList() {
         setState(655);
         _errHandler->sync(this);
         _la = _input->LA(1);
-        while (_la == SparqlAutomaticParser::T__7) {
+        while (_la == SparqlAutomaticParser::T__6) {
           setState(651);
-          match(SparqlAutomaticParser::T__7);
+          match(SparqlAutomaticParser::T__6);
           setState(652);
           expression();
           setState(657);
@@ -5676,33 +5682,33 @@ SparqlAutomaticParser::constructTemplate() {
     _la = _input->LA(1);
     if ((((_la & ~0x3fULL) == 0) &&
          ((1ULL << _la) & ((1ULL << SparqlAutomaticParser::T__1) |
-                           (1ULL << SparqlAutomaticParser::T__16) |
-                           (1ULL << SparqlAutomaticParser::T__28) |
-                           (1ULL << SparqlAutomaticParser::T__29))) != 0) ||
-        ((((_la - 140) & ~0x3fULL) == 0) &&
-         ((1ULL << (_la - 140)) &
-          ((1ULL << (SparqlAutomaticParser::IRI_REF - 140)) |
-           (1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
-           (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
-           (1ULL << (SparqlAutomaticParser::BLANK_NODE_LABEL - 140)) |
-           (1ULL << (SparqlAutomaticParser::VAR1 - 140)) |
-           (1ULL << (SparqlAutomaticParser::VAR2 - 140)) |
-           (1ULL << (SparqlAutomaticParser::LANGTAG - 140)) |
-           (1ULL << (SparqlAutomaticParser::INTEGER - 140)) |
-           (1ULL << (SparqlAutomaticParser::DECIMAL - 140)) |
-           (1ULL << (SparqlAutomaticParser::DOUBLE - 140)) |
-           (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 140)) |
-           (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 140)) |
-           (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 140)) |
-           (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 140)) |
-           (1ULL << (SparqlAutomaticParser::NIL - 140)) |
-           (1ULL << (SparqlAutomaticParser::ANON - 140)))) != 0)) {
+                           (1ULL << SparqlAutomaticParser::T__15) |
+                           (1ULL << SparqlAutomaticParser::T__27) |
+                           (1ULL << SparqlAutomaticParser::T__28))) != 0) ||
+        ((((_la - 139) & ~0x3fULL) == 0) &&
+         ((1ULL << (_la - 139)) &
+          ((1ULL << (SparqlAutomaticParser::IRI_REF - 139)) |
+           (1ULL << (SparqlAutomaticParser::PNAME_NS - 139)) |
+           (1ULL << (SparqlAutomaticParser::PNAME_LN - 139)) |
+           (1ULL << (SparqlAutomaticParser::BLANK_NODE_LABEL - 139)) |
+           (1ULL << (SparqlAutomaticParser::VAR1 - 139)) |
+           (1ULL << (SparqlAutomaticParser::VAR2 - 139)) |
+           (1ULL << (SparqlAutomaticParser::LANGTAG - 139)) |
+           (1ULL << (SparqlAutomaticParser::INTEGER - 139)) |
+           (1ULL << (SparqlAutomaticParser::DECIMAL - 139)) |
+           (1ULL << (SparqlAutomaticParser::DOUBLE - 139)) |
+           (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 139)) |
+           (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 139)) |
+           (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 139)) |
+           (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 139)) |
+           (1ULL << (SparqlAutomaticParser::NIL - 139)) |
+           (1ULL << (SparqlAutomaticParser::ANON - 139)))) != 0)) {
       setState(663);
       constructTriples();
     }
@@ -5790,33 +5796,33 @@ SparqlAutomaticParser::constructTriples() {
       _la = _input->LA(1);
       if ((((_la & ~0x3fULL) == 0) &&
            ((1ULL << _la) & ((1ULL << SparqlAutomaticParser::T__1) |
-                             (1ULL << SparqlAutomaticParser::T__16) |
-                             (1ULL << SparqlAutomaticParser::T__28) |
-                             (1ULL << SparqlAutomaticParser::T__29))) != 0) ||
-          ((((_la - 140) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 140)) &
-            ((1ULL << (SparqlAutomaticParser::IRI_REF - 140)) |
-             (1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
-             (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
-             (1ULL << (SparqlAutomaticParser::BLANK_NODE_LABEL - 140)) |
-             (1ULL << (SparqlAutomaticParser::VAR1 - 140)) |
-             (1ULL << (SparqlAutomaticParser::VAR2 - 140)) |
-             (1ULL << (SparqlAutomaticParser::LANGTAG - 140)) |
-             (1ULL << (SparqlAutomaticParser::INTEGER - 140)) |
-             (1ULL << (SparqlAutomaticParser::DECIMAL - 140)) |
-             (1ULL << (SparqlAutomaticParser::DOUBLE - 140)) |
-             (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 140)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 140)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 140)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 140)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 140)) |
-             (1ULL << (SparqlAutomaticParser::NIL - 140)) |
-             (1ULL << (SparqlAutomaticParser::ANON - 140)))) != 0)) {
+                             (1ULL << SparqlAutomaticParser::T__15) |
+                             (1ULL << SparqlAutomaticParser::T__27) |
+                             (1ULL << SparqlAutomaticParser::T__28))) != 0) ||
+          ((((_la - 139) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 139)) &
+            ((1ULL << (SparqlAutomaticParser::IRI_REF - 139)) |
+             (1ULL << (SparqlAutomaticParser::PNAME_NS - 139)) |
+             (1ULL << (SparqlAutomaticParser::PNAME_LN - 139)) |
+             (1ULL << (SparqlAutomaticParser::BLANK_NODE_LABEL - 139)) |
+             (1ULL << (SparqlAutomaticParser::VAR1 - 139)) |
+             (1ULL << (SparqlAutomaticParser::VAR2 - 139)) |
+             (1ULL << (SparqlAutomaticParser::LANGTAG - 139)) |
+             (1ULL << (SparqlAutomaticParser::INTEGER - 139)) |
+             (1ULL << (SparqlAutomaticParser::DECIMAL - 139)) |
+             (1ULL << (SparqlAutomaticParser::DOUBLE - 139)) |
+             (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 139)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 139)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 139)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 139)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 139)) |
+             (1ULL << (SparqlAutomaticParser::NIL - 139)) |
+             (1ULL << (SparqlAutomaticParser::ANON - 139)))) != 0)) {
         setState(670);
         constructTriples();
       }
@@ -5899,8 +5905,8 @@ SparqlAutomaticParser::triplesSameSubject() {
     setState(681);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
+      case SparqlAutomaticParser::T__27:
       case SparqlAutomaticParser::T__28:
-      case SparqlAutomaticParser::T__29:
       case SparqlAutomaticParser::IRI_REF:
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
@@ -5932,7 +5938,7 @@ SparqlAutomaticParser::triplesSameSubject() {
       }
 
       case SparqlAutomaticParser::T__1:
-      case SparqlAutomaticParser::T__16: {
+      case SparqlAutomaticParser::T__15: {
         enterOuterAlt(_localctx, 2);
         setState(678);
         triplesNode();
@@ -6010,15 +6016,15 @@ SparqlAutomaticParser::propertyList() {
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if (_la == SparqlAutomaticParser::T__9 ||
-        ((((_la - 140) & ~0x3fULL) == 0) &&
-         ((1ULL << (_la - 140)) &
-          ((1ULL << (SparqlAutomaticParser::IRI_REF - 140)) |
-           (1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
-           (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
-           (1ULL << (SparqlAutomaticParser::VAR1 - 140)) |
-           (1ULL << (SparqlAutomaticParser::VAR2 - 140)) |
-           (1ULL << (SparqlAutomaticParser::LANGTAG - 140)))) != 0)) {
+    if (_la == SparqlAutomaticParser::T__8 ||
+        ((((_la - 139) & ~0x3fULL) == 0) &&
+         ((1ULL << (_la - 139)) &
+          ((1ULL << (SparqlAutomaticParser::IRI_REF - 139)) |
+           (1ULL << (SparqlAutomaticParser::PNAME_NS - 139)) |
+           (1ULL << (SparqlAutomaticParser::PNAME_LN - 139)) |
+           (1ULL << (SparqlAutomaticParser::VAR1 - 139)) |
+           (1ULL << (SparqlAutomaticParser::VAR2 - 139)) |
+           (1ULL << (SparqlAutomaticParser::LANGTAG - 139)))) != 0)) {
       setState(683);
       propertyListNotEmpty();
     }
@@ -6108,22 +6114,22 @@ SparqlAutomaticParser::propertyListNotEmpty() {
     setState(696);
     _errHandler->sync(this);
     _la = _input->LA(1);
-    while (_la == SparqlAutomaticParser::T__8) {
+    while (_la == SparqlAutomaticParser::T__7) {
       setState(688);
-      match(SparqlAutomaticParser::T__8);
+      match(SparqlAutomaticParser::T__7);
       setState(692);
       _errHandler->sync(this);
 
       _la = _input->LA(1);
-      if (_la == SparqlAutomaticParser::T__9 ||
-          ((((_la - 140) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 140)) &
-            ((1ULL << (SparqlAutomaticParser::IRI_REF - 140)) |
-             (1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
-             (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
-             (1ULL << (SparqlAutomaticParser::VAR1 - 140)) |
-             (1ULL << (SparqlAutomaticParser::VAR2 - 140)) |
-             (1ULL << (SparqlAutomaticParser::LANGTAG - 140)))) != 0)) {
+      if (_la == SparqlAutomaticParser::T__8 ||
+          ((((_la - 139) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 139)) &
+            ((1ULL << (SparqlAutomaticParser::IRI_REF - 139)) |
+             (1ULL << (SparqlAutomaticParser::PNAME_NS - 139)) |
+             (1ULL << (SparqlAutomaticParser::PNAME_LN - 139)) |
+             (1ULL << (SparqlAutomaticParser::VAR1 - 139)) |
+             (1ULL << (SparqlAutomaticParser::VAR2 - 139)) |
+             (1ULL << (SparqlAutomaticParser::LANGTAG - 139)))) != 0)) {
         setState(689);
         verb();
         setState(690);
@@ -6207,10 +6213,10 @@ SparqlAutomaticParser::VerbContext* SparqlAutomaticParser::verb() {
         break;
       }
 
-      case SparqlAutomaticParser::T__9: {
+      case SparqlAutomaticParser::T__8: {
         enterOuterAlt(_localctx, 2);
         setState(700);
-        match(SparqlAutomaticParser::T__9);
+        match(SparqlAutomaticParser::T__8);
         break;
       }
 
@@ -6288,9 +6294,9 @@ SparqlAutomaticParser::ObjectListContext* SparqlAutomaticParser::objectList() {
     setState(708);
     _errHandler->sync(this);
     _la = _input->LA(1);
-    while (_la == SparqlAutomaticParser::T__7) {
+    while (_la == SparqlAutomaticParser::T__6) {
       setState(704);
-      match(SparqlAutomaticParser::T__7);
+      match(SparqlAutomaticParser::T__6);
       setState(705);
       objectR();
       setState(710);
@@ -6442,8 +6448,8 @@ SparqlAutomaticParser::triplesSameSubjectPath() {
     setState(719);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
+      case SparqlAutomaticParser::T__27:
       case SparqlAutomaticParser::T__28:
-      case SparqlAutomaticParser::T__29:
       case SparqlAutomaticParser::IRI_REF:
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
@@ -6475,7 +6481,7 @@ SparqlAutomaticParser::triplesSameSubjectPath() {
       }
 
       case SparqlAutomaticParser::T__1:
-      case SparqlAutomaticParser::T__16: {
+      case SparqlAutomaticParser::T__15: {
         enterOuterAlt(_localctx, 2);
         setState(716);
         triplesNodePath();
@@ -6556,17 +6562,17 @@ SparqlAutomaticParser::propertyListPath() {
     _la = _input->LA(1);
     if ((((_la & ~0x3fULL) == 0) &&
          ((1ULL << _la) & ((1ULL << SparqlAutomaticParser::T__1) |
-                           (1ULL << SparqlAutomaticParser::T__9) |
-                           (1ULL << SparqlAutomaticParser::T__12) |
-                           (1ULL << SparqlAutomaticParser::T__15))) != 0) ||
-        ((((_la - 140) & ~0x3fULL) == 0) &&
-         ((1ULL << (_la - 140)) &
-          ((1ULL << (SparqlAutomaticParser::IRI_REF - 140)) |
-           (1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
-           (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
-           (1ULL << (SparqlAutomaticParser::VAR1 - 140)) |
-           (1ULL << (SparqlAutomaticParser::VAR2 - 140)) |
-           (1ULL << (SparqlAutomaticParser::LANGTAG - 140)))) != 0)) {
+                           (1ULL << SparqlAutomaticParser::T__8) |
+                           (1ULL << SparqlAutomaticParser::T__11) |
+                           (1ULL << SparqlAutomaticParser::T__14))) != 0) ||
+        ((((_la - 139) & ~0x3fULL) == 0) &&
+         ((1ULL << (_la - 139)) &
+          ((1ULL << (SparqlAutomaticParser::IRI_REF - 139)) |
+           (1ULL << (SparqlAutomaticParser::PNAME_NS - 139)) |
+           (1ULL << (SparqlAutomaticParser::PNAME_LN - 139)) |
+           (1ULL << (SparqlAutomaticParser::VAR1 - 139)) |
+           (1ULL << (SparqlAutomaticParser::VAR2 - 139)) |
+           (1ULL << (SparqlAutomaticParser::LANGTAG - 139)))) != 0)) {
       setState(721);
       propertyListPathNotEmpty();
     }
@@ -6666,26 +6672,26 @@ SparqlAutomaticParser::propertyListPathNotEmpty() {
     setState(734);
     _errHandler->sync(this);
     _la = _input->LA(1);
-    while (_la == SparqlAutomaticParser::T__8) {
+    while (_la == SparqlAutomaticParser::T__7) {
       setState(726);
-      match(SparqlAutomaticParser::T__8);
+      match(SparqlAutomaticParser::T__7);
       setState(730);
       _errHandler->sync(this);
 
       _la = _input->LA(1);
       if ((((_la & ~0x3fULL) == 0) &&
            ((1ULL << _la) & ((1ULL << SparqlAutomaticParser::T__1) |
-                             (1ULL << SparqlAutomaticParser::T__9) |
-                             (1ULL << SparqlAutomaticParser::T__12) |
-                             (1ULL << SparqlAutomaticParser::T__15))) != 0) ||
-          ((((_la - 140) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 140)) &
-            ((1ULL << (SparqlAutomaticParser::IRI_REF - 140)) |
-             (1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
-             (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
-             (1ULL << (SparqlAutomaticParser::VAR1 - 140)) |
-             (1ULL << (SparqlAutomaticParser::VAR2 - 140)) |
-             (1ULL << (SparqlAutomaticParser::LANGTAG - 140)))) != 0)) {
+                             (1ULL << SparqlAutomaticParser::T__8) |
+                             (1ULL << SparqlAutomaticParser::T__11) |
+                             (1ULL << SparqlAutomaticParser::T__14))) != 0) ||
+          ((((_la - 139) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 139)) &
+            ((1ULL << (SparqlAutomaticParser::IRI_REF - 139)) |
+             (1ULL << (SparqlAutomaticParser::PNAME_NS - 139)) |
+             (1ULL << (SparqlAutomaticParser::PNAME_LN - 139)) |
+             (1ULL << (SparqlAutomaticParser::VAR1 - 139)) |
+             (1ULL << (SparqlAutomaticParser::VAR2 - 139)) |
+             (1ULL << (SparqlAutomaticParser::LANGTAG - 139)))) != 0)) {
         setState(727);
         verbPathOrSimple();
         setState(728);
@@ -6889,9 +6895,9 @@ SparqlAutomaticParser::verbPathOrSimple() {
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::T__1:
-      case SparqlAutomaticParser::T__9:
-      case SparqlAutomaticParser::T__12:
-      case SparqlAutomaticParser::T__15:
+      case SparqlAutomaticParser::T__8:
+      case SparqlAutomaticParser::T__11:
+      case SparqlAutomaticParser::T__14:
       case SparqlAutomaticParser::IRI_REF:
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
@@ -6983,9 +6989,9 @@ SparqlAutomaticParser::objectListPath() {
     setState(750);
     _errHandler->sync(this);
     _la = _input->LA(1);
-    while (_la == SparqlAutomaticParser::T__7) {
+    while (_la == SparqlAutomaticParser::T__6) {
       setState(746);
-      match(SparqlAutomaticParser::T__7);
+      match(SparqlAutomaticParser::T__6);
       setState(747);
       objectPath();
       setState(752);
@@ -7188,9 +7194,9 @@ SparqlAutomaticParser::pathAlternative() {
     setState(762);
     _errHandler->sync(this);
     _la = _input->LA(1);
-    while (_la == SparqlAutomaticParser::T__10) {
+    while (_la == SparqlAutomaticParser::T__9) {
       setState(758);
-      match(SparqlAutomaticParser::T__10);
+      match(SparqlAutomaticParser::T__9);
       setState(759);
       pathSequence();
       setState(764);
@@ -7269,9 +7275,9 @@ SparqlAutomaticParser::pathSequence() {
     setState(770);
     _errHandler->sync(this);
     _la = _input->LA(1);
-    while (_la == SparqlAutomaticParser::T__11) {
+    while (_la == SparqlAutomaticParser::T__10) {
       setState(766);
-      match(SparqlAutomaticParser::T__11);
+      match(SparqlAutomaticParser::T__10);
       setState(767);
       pathEltOrInverse();
       setState(772);
@@ -7352,8 +7358,8 @@ SparqlAutomaticParser::PathEltContext* SparqlAutomaticParser::pathElt() {
     _la = _input->LA(1);
     if ((((_la & ~0x3fULL) == 0) &&
          ((1ULL << _la) & ((1ULL << SparqlAutomaticParser::T__0) |
-                           (1ULL << SparqlAutomaticParser::T__13) |
-                           (1ULL << SparqlAutomaticParser::T__14))) != 0)) {
+                           (1ULL << SparqlAutomaticParser::T__12) |
+                           (1ULL << SparqlAutomaticParser::T__13))) != 0)) {
       setState(774);
       pathMod();
     }
@@ -7421,8 +7427,8 @@ SparqlAutomaticParser::pathEltOrInverse() {
     _errHandler->sync(this);
     switch (_input->LA(1)) {
       case SparqlAutomaticParser::T__1:
-      case SparqlAutomaticParser::T__9:
-      case SparqlAutomaticParser::T__15:
+      case SparqlAutomaticParser::T__8:
+      case SparqlAutomaticParser::T__14:
       case SparqlAutomaticParser::IRI_REF:
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
@@ -7433,11 +7439,11 @@ SparqlAutomaticParser::pathEltOrInverse() {
         break;
       }
 
-      case SparqlAutomaticParser::T__12: {
+      case SparqlAutomaticParser::T__11: {
         enterOuterAlt(_localctx, 2);
         setState(778);
         dynamic_cast<PathEltOrInverseContext*>(_localctx)->negationOperator =
-            match(SparqlAutomaticParser::T__12);
+            match(SparqlAutomaticParser::T__11);
         setState(779);
         pathElt();
         break;
@@ -7506,8 +7512,8 @@ SparqlAutomaticParser::PathModContext* SparqlAutomaticParser::pathMod() {
     _la = _input->LA(1);
     if (!((((_la & ~0x3fULL) == 0) &&
            ((1ULL << _la) & ((1ULL << SparqlAutomaticParser::T__0) |
-                             (1ULL << SparqlAutomaticParser::T__13) |
-                             (1ULL << SparqlAutomaticParser::T__14))) != 0))) {
+                             (1ULL << SparqlAutomaticParser::T__12) |
+                             (1ULL << SparqlAutomaticParser::T__13))) != 0))) {
       _errHandler->recoverInline(this);
     } else {
       _errHandler->reportMatch(this);
@@ -7597,17 +7603,17 @@ SparqlAutomaticParser::pathPrimary() {
         break;
       }
 
-      case SparqlAutomaticParser::T__9: {
+      case SparqlAutomaticParser::T__8: {
         enterOuterAlt(_localctx, 2);
         setState(785);
-        match(SparqlAutomaticParser::T__9);
+        match(SparqlAutomaticParser::T__8);
         break;
       }
 
-      case SparqlAutomaticParser::T__15: {
+      case SparqlAutomaticParser::T__14: {
         enterOuterAlt(_localctx, 3);
         setState(786);
-        match(SparqlAutomaticParser::T__15);
+        match(SparqlAutomaticParser::T__14);
         setState(787);
         pathNegatedPropertySet();
         break;
@@ -7701,8 +7707,8 @@ SparqlAutomaticParser::pathNegatedPropertySet() {
     setState(807);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
-      case SparqlAutomaticParser::T__9:
-      case SparqlAutomaticParser::T__12:
+      case SparqlAutomaticParser::T__8:
+      case SparqlAutomaticParser::T__11:
       case SparqlAutomaticParser::IRI_REF:
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
@@ -7721,23 +7727,23 @@ SparqlAutomaticParser::pathNegatedPropertySet() {
         _errHandler->sync(this);
 
         _la = _input->LA(1);
-        if (_la == SparqlAutomaticParser::T__9
+        if (_la == SparqlAutomaticParser::T__8
 
-            || _la == SparqlAutomaticParser::T__12 ||
-            ((((_la - 140) & ~0x3fULL) == 0) &&
-             ((1ULL << (_la - 140)) &
-              ((1ULL << (SparqlAutomaticParser::IRI_REF - 140)) |
-               (1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
-               (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
-               (1ULL << (SparqlAutomaticParser::LANGTAG - 140)))) != 0)) {
+            || _la == SparqlAutomaticParser::T__11 ||
+            ((((_la - 139) & ~0x3fULL) == 0) &&
+             ((1ULL << (_la - 139)) &
+              ((1ULL << (SparqlAutomaticParser::IRI_REF - 139)) |
+               (1ULL << (SparqlAutomaticParser::PNAME_NS - 139)) |
+               (1ULL << (SparqlAutomaticParser::PNAME_LN - 139)) |
+               (1ULL << (SparqlAutomaticParser::LANGTAG - 139)))) != 0)) {
           setState(796);
           pathOneInPropertySet();
           setState(801);
           _errHandler->sync(this);
           _la = _input->LA(1);
-          while (_la == SparqlAutomaticParser::T__10) {
+          while (_la == SparqlAutomaticParser::T__9) {
             setState(797);
-            match(SparqlAutomaticParser::T__10);
+            match(SparqlAutomaticParser::T__9);
             setState(798);
             pathOneInPropertySet();
             setState(803);
@@ -7828,17 +7834,17 @@ SparqlAutomaticParser::pathOneInPropertySet() {
         break;
       }
 
-      case SparqlAutomaticParser::T__9: {
+      case SparqlAutomaticParser::T__8: {
         enterOuterAlt(_localctx, 2);
         setState(810);
-        match(SparqlAutomaticParser::T__9);
+        match(SparqlAutomaticParser::T__8);
         break;
       }
 
-      case SparqlAutomaticParser::T__12: {
+      case SparqlAutomaticParser::T__11: {
         enterOuterAlt(_localctx, 3);
         setState(811);
-        match(SparqlAutomaticParser::T__12);
+        match(SparqlAutomaticParser::T__11);
         setState(814);
         _errHandler->sync(this);
         switch (_input->LA(1)) {
@@ -7851,9 +7857,9 @@ SparqlAutomaticParser::pathOneInPropertySet() {
             break;
           }
 
-          case SparqlAutomaticParser::T__9: {
+          case SparqlAutomaticParser::T__8: {
             setState(813);
-            match(SparqlAutomaticParser::T__9);
+            match(SparqlAutomaticParser::T__8);
             break;
           }
 
@@ -8002,7 +8008,7 @@ SparqlAutomaticParser::triplesNode() {
         break;
       }
 
-      case SparqlAutomaticParser::T__16: {
+      case SparqlAutomaticParser::T__15: {
         enterOuterAlt(_localctx, 2);
         setState(821);
         blankNodePropertyList();
@@ -8078,11 +8084,11 @@ SparqlAutomaticParser::blankNodePropertyList() {
   try {
     enterOuterAlt(_localctx, 1);
     setState(824);
-    match(SparqlAutomaticParser::T__16);
+    match(SparqlAutomaticParser::T__15);
     setState(825);
     propertyListNotEmpty();
     setState(826);
-    match(SparqlAutomaticParser::T__17);
+    match(SparqlAutomaticParser::T__16);
 
   } catch (RecognitionException& e) {
     _errHandler->reportError(this, e);
@@ -8159,7 +8165,7 @@ SparqlAutomaticParser::triplesNodePath() {
         break;
       }
 
-      case SparqlAutomaticParser::T__16: {
+      case SparqlAutomaticParser::T__15: {
         enterOuterAlt(_localctx, 2);
         setState(829);
         blankNodePropertyListPath();
@@ -8238,11 +8244,11 @@ SparqlAutomaticParser::blankNodePropertyListPath() {
   try {
     enterOuterAlt(_localctx, 1);
     setState(832);
-    match(SparqlAutomaticParser::T__16);
+    match(SparqlAutomaticParser::T__15);
     setState(833);
     propertyListPathNotEmpty();
     setState(834);
-    match(SparqlAutomaticParser::T__17);
+    match(SparqlAutomaticParser::T__16);
 
   } catch (RecognitionException& e) {
     _errHandler->reportError(this, e);
@@ -8323,33 +8329,33 @@ SparqlAutomaticParser::CollectionContext* SparqlAutomaticParser::collection() {
     } while (
         (((_la & ~0x3fULL) == 0) &&
          ((1ULL << _la) & ((1ULL << SparqlAutomaticParser::T__1) |
-                           (1ULL << SparqlAutomaticParser::T__16) |
-                           (1ULL << SparqlAutomaticParser::T__28) |
-                           (1ULL << SparqlAutomaticParser::T__29))) != 0) ||
-        ((((_la - 140) & ~0x3fULL) == 0) &&
-         ((1ULL << (_la - 140)) &
-          ((1ULL << (SparqlAutomaticParser::IRI_REF - 140)) |
-           (1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
-           (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
-           (1ULL << (SparqlAutomaticParser::BLANK_NODE_LABEL - 140)) |
-           (1ULL << (SparqlAutomaticParser::VAR1 - 140)) |
-           (1ULL << (SparqlAutomaticParser::VAR2 - 140)) |
-           (1ULL << (SparqlAutomaticParser::LANGTAG - 140)) |
-           (1ULL << (SparqlAutomaticParser::INTEGER - 140)) |
-           (1ULL << (SparqlAutomaticParser::DECIMAL - 140)) |
-           (1ULL << (SparqlAutomaticParser::DOUBLE - 140)) |
-           (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 140)) |
-           (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 140)) |
-           (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 140)) |
-           (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 140)) |
-           (1ULL << (SparqlAutomaticParser::NIL - 140)) |
-           (1ULL << (SparqlAutomaticParser::ANON - 140)))) != 0));
+                           (1ULL << SparqlAutomaticParser::T__15) |
+                           (1ULL << SparqlAutomaticParser::T__27) |
+                           (1ULL << SparqlAutomaticParser::T__28))) != 0) ||
+        ((((_la - 139) & ~0x3fULL) == 0) &&
+         ((1ULL << (_la - 139)) &
+          ((1ULL << (SparqlAutomaticParser::IRI_REF - 139)) |
+           (1ULL << (SparqlAutomaticParser::PNAME_NS - 139)) |
+           (1ULL << (SparqlAutomaticParser::PNAME_LN - 139)) |
+           (1ULL << (SparqlAutomaticParser::BLANK_NODE_LABEL - 139)) |
+           (1ULL << (SparqlAutomaticParser::VAR1 - 139)) |
+           (1ULL << (SparqlAutomaticParser::VAR2 - 139)) |
+           (1ULL << (SparqlAutomaticParser::LANGTAG - 139)) |
+           (1ULL << (SparqlAutomaticParser::INTEGER - 139)) |
+           (1ULL << (SparqlAutomaticParser::DECIMAL - 139)) |
+           (1ULL << (SparqlAutomaticParser::DOUBLE - 139)) |
+           (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 139)) |
+           (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 139)) |
+           (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 139)) |
+           (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 139)) |
+           (1ULL << (SparqlAutomaticParser::NIL - 139)) |
+           (1ULL << (SparqlAutomaticParser::ANON - 139)))) != 0));
     setState(842);
     match(SparqlAutomaticParser::T__2);
 
@@ -8433,33 +8439,33 @@ SparqlAutomaticParser::collectionPath() {
     } while (
         (((_la & ~0x3fULL) == 0) &&
          ((1ULL << _la) & ((1ULL << SparqlAutomaticParser::T__1) |
-                           (1ULL << SparqlAutomaticParser::T__16) |
-                           (1ULL << SparqlAutomaticParser::T__28) |
-                           (1ULL << SparqlAutomaticParser::T__29))) != 0) ||
-        ((((_la - 140) & ~0x3fULL) == 0) &&
-         ((1ULL << (_la - 140)) &
-          ((1ULL << (SparqlAutomaticParser::IRI_REF - 140)) |
-           (1ULL << (SparqlAutomaticParser::PNAME_NS - 140)) |
-           (1ULL << (SparqlAutomaticParser::PNAME_LN - 140)) |
-           (1ULL << (SparqlAutomaticParser::BLANK_NODE_LABEL - 140)) |
-           (1ULL << (SparqlAutomaticParser::VAR1 - 140)) |
-           (1ULL << (SparqlAutomaticParser::VAR2 - 140)) |
-           (1ULL << (SparqlAutomaticParser::LANGTAG - 140)) |
-           (1ULL << (SparqlAutomaticParser::INTEGER - 140)) |
-           (1ULL << (SparqlAutomaticParser::DECIMAL - 140)) |
-           (1ULL << (SparqlAutomaticParser::DOUBLE - 140)) |
-           (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 140)) |
-           (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 140)) |
-           (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 140)) |
-           (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 140)) |
-           (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 140)) |
-           (1ULL << (SparqlAutomaticParser::NIL - 140)) |
-           (1ULL << (SparqlAutomaticParser::ANON - 140)))) != 0));
+                           (1ULL << SparqlAutomaticParser::T__15) |
+                           (1ULL << SparqlAutomaticParser::T__27) |
+                           (1ULL << SparqlAutomaticParser::T__28))) != 0) ||
+        ((((_la - 139) & ~0x3fULL) == 0) &&
+         ((1ULL << (_la - 139)) &
+          ((1ULL << (SparqlAutomaticParser::IRI_REF - 139)) |
+           (1ULL << (SparqlAutomaticParser::PNAME_NS - 139)) |
+           (1ULL << (SparqlAutomaticParser::PNAME_LN - 139)) |
+           (1ULL << (SparqlAutomaticParser::BLANK_NODE_LABEL - 139)) |
+           (1ULL << (SparqlAutomaticParser::VAR1 - 139)) |
+           (1ULL << (SparqlAutomaticParser::VAR2 - 139)) |
+           (1ULL << (SparqlAutomaticParser::LANGTAG - 139)) |
+           (1ULL << (SparqlAutomaticParser::INTEGER - 139)) |
+           (1ULL << (SparqlAutomaticParser::DECIMAL - 139)) |
+           (1ULL << (SparqlAutomaticParser::DOUBLE - 139)) |
+           (1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 139)) |
+           (1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 139)) |
+           (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 139)) |
+           (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 139)) |
+           (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 139)) |
+           (1ULL << (SparqlAutomaticParser::NIL - 139)) |
+           (1ULL << (SparqlAutomaticParser::ANON - 139)))) != 0));
     setState(850);
     match(SparqlAutomaticParser::T__2);
 
@@ -8529,8 +8535,8 @@ SparqlAutomaticParser::GraphNodeContext* SparqlAutomaticParser::graphNode() {
     setState(854);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
+      case SparqlAutomaticParser::T__27:
       case SparqlAutomaticParser::T__28:
-      case SparqlAutomaticParser::T__29:
       case SparqlAutomaticParser::IRI_REF:
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
@@ -8560,7 +8566,7 @@ SparqlAutomaticParser::GraphNodeContext* SparqlAutomaticParser::graphNode() {
       }
 
       case SparqlAutomaticParser::T__1:
-      case SparqlAutomaticParser::T__16: {
+      case SparqlAutomaticParser::T__15: {
         enterOuterAlt(_localctx, 2);
         setState(853);
         triplesNode();
@@ -8638,8 +8644,8 @@ SparqlAutomaticParser::graphNodePath() {
     setState(858);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
+      case SparqlAutomaticParser::T__27:
       case SparqlAutomaticParser::T__28:
-      case SparqlAutomaticParser::T__29:
       case SparqlAutomaticParser::IRI_REF:
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
@@ -8669,7 +8675,7 @@ SparqlAutomaticParser::graphNodePath() {
       }
 
       case SparqlAutomaticParser::T__1:
-      case SparqlAutomaticParser::T__16: {
+      case SparqlAutomaticParser::T__15: {
         enterOuterAlt(_localctx, 2);
         setState(857);
         triplesNodePath();
@@ -8754,8 +8760,8 @@ SparqlAutomaticParser::VarOrTermContext* SparqlAutomaticParser::varOrTerm() {
         break;
       }
 
+      case SparqlAutomaticParser::T__27:
       case SparqlAutomaticParser::T__28:
-      case SparqlAutomaticParser::T__29:
       case SparqlAutomaticParser::IRI_REF:
       case SparqlAutomaticParser::PNAME_NS:
       case SparqlAutomaticParser::PNAME_LN:
@@ -9067,8 +9073,8 @@ SparqlAutomaticParser::GraphTermContext* SparqlAutomaticParser::graphTerm() {
         break;
       }
 
-      case SparqlAutomaticParser::T__28:
-      case SparqlAutomaticParser::T__29: {
+      case SparqlAutomaticParser::T__27:
+      case SparqlAutomaticParser::T__28: {
         enterOuterAlt(_localctx, 4);
         setState(873);
         booleanLiteral();
@@ -9236,9 +9242,9 @@ SparqlAutomaticParser::conditionalOrExpression() {
     setState(885);
     _errHandler->sync(this);
     _la = _input->LA(1);
-    while (_la == SparqlAutomaticParser::T__18) {
+    while (_la == SparqlAutomaticParser::T__17) {
       setState(881);
-      match(SparqlAutomaticParser::T__18);
+      match(SparqlAutomaticParser::T__17);
       setState(882);
       conditionalAndExpression();
       setState(887);
@@ -9323,9 +9329,9 @@ SparqlAutomaticParser::conditionalAndExpression() {
     setState(893);
     _errHandler->sync(this);
     _la = _input->LA(1);
-    while (_la == SparqlAutomaticParser::T__19) {
+    while (_la == SparqlAutomaticParser::T__18) {
       setState(889);
-      match(SparqlAutomaticParser::T__19);
+      match(SparqlAutomaticParser::T__18);
       setState(890);
       valueLogical();
       setState(895);
@@ -9486,7 +9492,7 @@ SparqlAutomaticParser::relationalExpression() {
         _input, 106, _ctx)) {
       case 1: {
         setState(899);
-        match(SparqlAutomaticParser::T__20);
+        match(SparqlAutomaticParser::T__19);
         setState(900);
         numericExpression();
         break;
@@ -9494,7 +9500,7 @@ SparqlAutomaticParser::relationalExpression() {
 
       case 2: {
         setState(901);
-        match(SparqlAutomaticParser::T__21);
+        match(SparqlAutomaticParser::T__20);
         setState(902);
         numericExpression();
         break;
@@ -9508,7 +9514,7 @@ SparqlAutomaticParser::relationalExpression() {
 
       case 4: {
         setState(904);
-        match(SparqlAutomaticParser::T__22);
+        match(SparqlAutomaticParser::T__21);
         setState(905);
         numericExpression();
         break;
@@ -9516,7 +9522,7 @@ SparqlAutomaticParser::relationalExpression() {
 
       case 5: {
         setState(906);
-        match(SparqlAutomaticParser::T__23);
+        match(SparqlAutomaticParser::T__22);
         setState(907);
         numericExpression();
         break;
@@ -9524,7 +9530,7 @@ SparqlAutomaticParser::relationalExpression() {
 
       case 6: {
         setState(908);
-        match(SparqlAutomaticParser::T__24);
+        match(SparqlAutomaticParser::T__23);
         setState(909);
         numericExpression();
         break;
@@ -9710,17 +9716,17 @@ SparqlAutomaticParser::additiveExpression() {
         setState(925);
         _errHandler->sync(this);
         switch (_input->LA(1)) {
-          case SparqlAutomaticParser::T__13: {
+          case SparqlAutomaticParser::T__12: {
             setState(920);
-            match(SparqlAutomaticParser::T__13);
+            match(SparqlAutomaticParser::T__12);
             setState(921);
             multiplicativeExpression();
             break;
           }
 
-          case SparqlAutomaticParser::T__25: {
+          case SparqlAutomaticParser::T__24: {
             setState(922);
-            match(SparqlAutomaticParser::T__25);
+            match(SparqlAutomaticParser::T__24);
             setState(923);
             multiplicativeExpression();
             break;
@@ -9860,7 +9866,7 @@ SparqlAutomaticParser::strangeMultiplicativeSubexprOfAdditive() {
     _la = _input->LA(1);
     while (_la == SparqlAutomaticParser::T__0
 
-           || _la == SparqlAutomaticParser::T__11) {
+           || _la == SparqlAutomaticParser::T__10) {
       setState(938);
       _errHandler->sync(this);
       switch (_input->LA(1)) {
@@ -9872,9 +9878,9 @@ SparqlAutomaticParser::strangeMultiplicativeSubexprOfAdditive() {
           break;
         }
 
-        case SparqlAutomaticParser::T__11: {
+        case SparqlAutomaticParser::T__10: {
           setState(936);
-          match(SparqlAutomaticParser::T__11);
+          match(SparqlAutomaticParser::T__10);
           setState(937);
           unaryExpression();
           break;
@@ -9968,7 +9974,7 @@ SparqlAutomaticParser::multiplicativeExpression() {
     _la = _input->LA(1);
     while (_la == SparqlAutomaticParser::T__0
 
-           || _la == SparqlAutomaticParser::T__11) {
+           || _la == SparqlAutomaticParser::T__10) {
       setState(948);
       _errHandler->sync(this);
       switch (_input->LA(1)) {
@@ -9980,9 +9986,9 @@ SparqlAutomaticParser::multiplicativeExpression() {
           break;
         }
 
-        case SparqlAutomaticParser::T__11: {
+        case SparqlAutomaticParser::T__10: {
           setState(946);
-          match(SparqlAutomaticParser::T__11);
+          match(SparqlAutomaticParser::T__10);
           setState(947);
           unaryExpression();
           break;
@@ -10058,36 +10064,36 @@ SparqlAutomaticParser::unaryExpression() {
     setState(960);
     _errHandler->sync(this);
     switch (_input->LA(1)) {
-      case SparqlAutomaticParser::T__15: {
+      case SparqlAutomaticParser::T__14: {
         enterOuterAlt(_localctx, 1);
         setState(953);
-        match(SparqlAutomaticParser::T__15);
+        match(SparqlAutomaticParser::T__14);
         setState(954);
         primaryExpression();
         break;
       }
 
-      case SparqlAutomaticParser::T__13: {
+      case SparqlAutomaticParser::T__12: {
         enterOuterAlt(_localctx, 2);
         setState(955);
-        match(SparqlAutomaticParser::T__13);
+        match(SparqlAutomaticParser::T__12);
         setState(956);
         primaryExpression();
         break;
       }
 
-      case SparqlAutomaticParser::T__25: {
+      case SparqlAutomaticParser::T__24: {
         enterOuterAlt(_localctx, 3);
         setState(957);
-        match(SparqlAutomaticParser::T__25);
+        match(SparqlAutomaticParser::T__24);
         setState(958);
         primaryExpression();
         break;
       }
 
       case SparqlAutomaticParser::T__1:
+      case SparqlAutomaticParser::T__27:
       case SparqlAutomaticParser::T__28:
-      case SparqlAutomaticParser::T__29:
       case SparqlAutomaticParser::GROUP_CONCAT:
       case SparqlAutomaticParser::NOT:
       case SparqlAutomaticParser::STR:
@@ -10379,8 +10385,8 @@ SparqlAutomaticParser::primaryExpression() {
         break;
       }
 
-      case SparqlAutomaticParser::T__28:
-      case SparqlAutomaticParser::T__29: {
+      case SparqlAutomaticParser::T__27:
+      case SparqlAutomaticParser::T__28: {
         enterOuterAlt(_localctx, 6);
         setState(967);
         booleanLiteral();
@@ -10827,7 +10833,7 @@ SparqlAutomaticParser::builtInCall() {
         setState(988);
         expression();
         setState(989);
-        match(SparqlAutomaticParser::T__7);
+        match(SparqlAutomaticParser::T__6);
         setState(990);
         expression();
         setState(991);
@@ -11044,11 +11050,11 @@ SparqlAutomaticParser::builtInCall() {
         setState(1062);
         match(SparqlAutomaticParser::ENCODE);
         setState(1063);
-        match(SparqlAutomaticParser::T__26);
+        match(SparqlAutomaticParser::T__25);
         setState(1064);
         match(SparqlAutomaticParser::FOR);
         setState(1065);
-        match(SparqlAutomaticParser::T__26);
+        match(SparqlAutomaticParser::T__25);
         setState(1066);
         match(SparqlAutomaticParser::URI);
         setState(1067);
@@ -11069,7 +11075,7 @@ SparqlAutomaticParser::builtInCall() {
         setState(1073);
         expression();
         setState(1074);
-        match(SparqlAutomaticParser::T__7);
+        match(SparqlAutomaticParser::T__6);
         setState(1075);
         expression();
         setState(1076);
@@ -11086,7 +11092,7 @@ SparqlAutomaticParser::builtInCall() {
         setState(1080);
         expression();
         setState(1081);
-        match(SparqlAutomaticParser::T__7);
+        match(SparqlAutomaticParser::T__6);
         setState(1082);
         expression();
         setState(1083);
@@ -11103,7 +11109,7 @@ SparqlAutomaticParser::builtInCall() {
         setState(1087);
         expression();
         setState(1088);
-        match(SparqlAutomaticParser::T__7);
+        match(SparqlAutomaticParser::T__6);
         setState(1089);
         expression();
         setState(1090);
@@ -11120,7 +11126,7 @@ SparqlAutomaticParser::builtInCall() {
         setState(1094);
         expression();
         setState(1095);
-        match(SparqlAutomaticParser::T__7);
+        match(SparqlAutomaticParser::T__6);
         setState(1096);
         expression();
         setState(1097);
@@ -11137,7 +11143,7 @@ SparqlAutomaticParser::builtInCall() {
         setState(1101);
         expression();
         setState(1102);
-        match(SparqlAutomaticParser::T__7);
+        match(SparqlAutomaticParser::T__6);
         setState(1103);
         expression();
         setState(1104);
@@ -11359,11 +11365,11 @@ SparqlAutomaticParser::builtInCall() {
         setState(1181);
         expression();
         setState(1182);
-        match(SparqlAutomaticParser::T__7);
+        match(SparqlAutomaticParser::T__6);
         setState(1183);
         expression();
         setState(1184);
-        match(SparqlAutomaticParser::T__7);
+        match(SparqlAutomaticParser::T__6);
         setState(1185);
         expression();
         setState(1186);
@@ -11380,7 +11386,7 @@ SparqlAutomaticParser::builtInCall() {
         setState(1190);
         expression();
         setState(1191);
-        match(SparqlAutomaticParser::T__7);
+        match(SparqlAutomaticParser::T__6);
         setState(1192);
         expression();
         setState(1193);
@@ -11397,7 +11403,7 @@ SparqlAutomaticParser::builtInCall() {
         setState(1197);
         expression();
         setState(1198);
-        match(SparqlAutomaticParser::T__7);
+        match(SparqlAutomaticParser::T__6);
         setState(1199);
         expression();
         setState(1200);
@@ -11414,7 +11420,7 @@ SparqlAutomaticParser::builtInCall() {
         setState(1204);
         expression();
         setState(1205);
-        match(SparqlAutomaticParser::T__7);
+        match(SparqlAutomaticParser::T__6);
         setState(1206);
         expression();
         setState(1207);
@@ -11589,16 +11595,16 @@ SparqlAutomaticParser::regexExpression() {
     setState(1241);
     expression();
     setState(1242);
-    match(SparqlAutomaticParser::T__7);
+    match(SparqlAutomaticParser::T__6);
     setState(1243);
     expression();
     setState(1246);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if (_la == SparqlAutomaticParser::T__7) {
+    if (_la == SparqlAutomaticParser::T__6) {
       setState(1244);
-      match(SparqlAutomaticParser::T__7);
+      match(SparqlAutomaticParser::T__6);
       setState(1245);
       expression();
     }
@@ -11683,16 +11689,16 @@ SparqlAutomaticParser::substringExpression() {
     setState(1252);
     expression();
     setState(1253);
-    match(SparqlAutomaticParser::T__7);
+    match(SparqlAutomaticParser::T__6);
     setState(1254);
     expression();
     setState(1257);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if (_la == SparqlAutomaticParser::T__7) {
+    if (_la == SparqlAutomaticParser::T__6) {
       setState(1255);
-      match(SparqlAutomaticParser::T__7);
+      match(SparqlAutomaticParser::T__6);
       setState(1256);
       expression();
     }
@@ -11779,20 +11785,20 @@ SparqlAutomaticParser::strReplaceExpression() {
     setState(1263);
     expression();
     setState(1264);
-    match(SparqlAutomaticParser::T__7);
+    match(SparqlAutomaticParser::T__6);
     setState(1265);
     expression();
     setState(1266);
-    match(SparqlAutomaticParser::T__7);
+    match(SparqlAutomaticParser::T__6);
     setState(1267);
     expression();
     setState(1270);
     _errHandler->sync(this);
 
     _la = _input->LA(1);
-    if (_la == SparqlAutomaticParser::T__7) {
+    if (_la == SparqlAutomaticParser::T__6) {
       setState(1268);
-      match(SparqlAutomaticParser::T__7);
+      match(SparqlAutomaticParser::T__6);
       setState(1269);
       expression();
     }
@@ -12069,11 +12075,11 @@ SparqlAutomaticParser::AggregateContext* SparqlAutomaticParser::aggregate() {
           }
 
           case SparqlAutomaticParser::T__1:
-          case SparqlAutomaticParser::T__13:
-          case SparqlAutomaticParser::T__15:
-          case SparqlAutomaticParser::T__25:
+          case SparqlAutomaticParser::T__12:
+          case SparqlAutomaticParser::T__14:
+          case SparqlAutomaticParser::T__24:
+          case SparqlAutomaticParser::T__27:
           case SparqlAutomaticParser::T__28:
-          case SparqlAutomaticParser::T__29:
           case SparqlAutomaticParser::GROUP_CONCAT:
           case SparqlAutomaticParser::NOT:
           case SparqlAutomaticParser::STR:
@@ -12292,13 +12298,13 @@ SparqlAutomaticParser::AggregateContext* SparqlAutomaticParser::aggregate() {
         _errHandler->sync(this);
 
         _la = _input->LA(1);
-        if (_la == SparqlAutomaticParser::T__8) {
+        if (_la == SparqlAutomaticParser::T__7) {
           setState(1337);
-          match(SparqlAutomaticParser::T__8);
+          match(SparqlAutomaticParser::T__7);
           setState(1338);
           match(SparqlAutomaticParser::SEPARATOR);
           setState(1339);
-          match(SparqlAutomaticParser::T__20);
+          match(SparqlAutomaticParser::T__19);
           setState(1340);
           string();
         }
@@ -12476,7 +12482,7 @@ SparqlAutomaticParser::RdfLiteralContext* SparqlAutomaticParser::rdfLiteral() {
 
       case 2: {
         setState(1353);
-        match(SparqlAutomaticParser::T__27);
+        match(SparqlAutomaticParser::T__26);
         setState(1354);
         iri();
         break;
@@ -12669,11 +12675,11 @@ SparqlAutomaticParser::numericLiteralUnsigned() {
     enterOuterAlt(_localctx, 1);
     setState(1362);
     _la = _input->LA(1);
-    if (!(((((_la - 147) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 147)) &
-            ((1ULL << (SparqlAutomaticParser::INTEGER - 147)) |
-             (1ULL << (SparqlAutomaticParser::DECIMAL - 147)) |
-             (1ULL << (SparqlAutomaticParser::DOUBLE - 147)))) != 0))) {
+    if (!(((((_la - 146) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 146)) &
+            ((1ULL << (SparqlAutomaticParser::INTEGER - 146)) |
+             (1ULL << (SparqlAutomaticParser::DECIMAL - 146)) |
+             (1ULL << (SparqlAutomaticParser::DOUBLE - 146)))) != 0))) {
       _errHandler->recoverInline(this);
     } else {
       _errHandler->reportMatch(this);
@@ -12757,11 +12763,11 @@ SparqlAutomaticParser::numericLiteralPositive() {
     enterOuterAlt(_localctx, 1);
     setState(1364);
     _la = _input->LA(1);
-    if (!(((((_la - 150) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 150)) &
-            ((1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 150)) |
-             (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 150)) |
-             (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 150)))) !=
+    if (!(((((_la - 149) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 149)) &
+            ((1ULL << (SparqlAutomaticParser::INTEGER_POSITIVE - 149)) |
+             (1ULL << (SparqlAutomaticParser::DECIMAL_POSITIVE - 149)) |
+             (1ULL << (SparqlAutomaticParser::DOUBLE_POSITIVE - 149)))) !=
                0))) {
       _errHandler->recoverInline(this);
     } else {
@@ -12846,11 +12852,11 @@ SparqlAutomaticParser::numericLiteralNegative() {
     enterOuterAlt(_localctx, 1);
     setState(1366);
     _la = _input->LA(1);
-    if (!(((((_la - 153) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 153)) &
-            ((1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 153)) |
-             (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 153)) |
-             (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 153)))) !=
+    if (!(((((_la - 152) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 152)) &
+            ((1ULL << (SparqlAutomaticParser::INTEGER_NEGATIVE - 152)) |
+             (1ULL << (SparqlAutomaticParser::DECIMAL_NEGATIVE - 152)) |
+             (1ULL << (SparqlAutomaticParser::DOUBLE_NEGATIVE - 152)))) !=
                0))) {
       _errHandler->recoverInline(this);
     } else {
@@ -12916,9 +12922,9 @@ SparqlAutomaticParser::booleanLiteral() {
     enterOuterAlt(_localctx, 1);
     setState(1368);
     _la = _input->LA(1);
-    if (!(_la == SparqlAutomaticParser::T__28
+    if (!(_la == SparqlAutomaticParser::T__27
 
-          || _la == SparqlAutomaticParser::T__29)) {
+          || _la == SparqlAutomaticParser::T__28)) {
       _errHandler->recoverInline(this);
     } else {
       _errHandler->reportMatch(this);
@@ -13000,12 +13006,12 @@ SparqlAutomaticParser::StringContext* SparqlAutomaticParser::string() {
     enterOuterAlt(_localctx, 1);
     setState(1370);
     _la = _input->LA(1);
-    if (!(((((_la - 157) & ~0x3fULL) == 0) &&
-           ((1ULL << (_la - 157)) &
-            ((1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 157)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 157)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 157)) |
-             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 157)))) !=
+    if (!(((((_la - 156) & ~0x3fULL) == 0) &&
+           ((1ULL << (_la - 156)) &
+            ((1ULL << (SparqlAutomaticParser::STRING_LITERAL1 - 156)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL2 - 156)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG1 - 156)) |
+             (1ULL << (SparqlAutomaticParser::STRING_LITERAL_LONG2 - 156)))) !=
                0))) {
       _errHandler->recoverInline(this);
     } else {
@@ -13089,7 +13095,7 @@ SparqlAutomaticParser::IriContext* SparqlAutomaticParser::iri() {
       setState(1372);
       match(SparqlAutomaticParser::LANGTAG);
       setState(1373);
-      match(SparqlAutomaticParser::T__30);
+      match(SparqlAutomaticParser::T__29);
     }
     setState(1378);
     _errHandler->sync(this);
@@ -13596,13 +13602,12 @@ std::vector<std::string> SparqlAutomaticParser::_ruleNames = {
     "pnameNs"};
 
 std::vector<std::string> SparqlAutomaticParser::_literalNames = {
-    "",     "'*'",  "'('", "')'",  "'{'",  "'}'",    "'.'",     "'UNDEF'",
-    "','",  "';'",  "'a'", "'|'",  "'/'",  "'^'",    "'+'",     "'\u003F'",
-    "'!'",  "'['",  "']'", "'||'", "'&&'", "'='",    "'!='",    "'>'",
-    "'<='", "'>='", "'-'", "'_'",  "'^^'", "'true'", "'false'", "'@'"};
+    "",     "'*'", "'('",  "')'",  "'{'",    "'}'",     "'.'",      "','",
+    "';'",  "'a'", "'|'",  "'/'",  "'^'",    "'+'",     "'\u003F'", "'!'",
+    "'['",  "']'", "'||'", "'&&'", "'='",    "'!='",    "'>'",      "'<='",
+    "'>='", "'-'", "'_'",  "'^^'", "'true'", "'false'", "'@'"};
 
 std::vector<std::string> SparqlAutomaticParser::_symbolicNames = {
-    "",
     "",
     "",
     "",
@@ -13798,7 +13803,7 @@ SparqlAutomaticParser::Initializer::Initializer() {
 
   static const uint16_t serializedATNSegment0[] = {
       0x3,   0x608b, 0xa72a, 0x8133, 0xb9ed, 0x417c, 0x3be7, 0x7786, 0x5964,
-      0x3,   0xaf,   0x573,  0x4,    0x2,    0x9,    0x2,    0x4,    0x3,
+      0x3,   0xae,   0x573,  0x4,    0x2,    0x9,    0x2,    0x4,    0x3,
       0x9,   0x3,    0x4,    0x4,    0x9,    0x4,    0x4,    0x5,    0x9,
       0x5,   0x4,    0x6,    0x9,    0x6,    0x4,    0x7,    0x9,    0x7,
       0x4,   0x8,    0x9,    0x8,    0x4,    0x9,    0x9,    0x9,    0x4,
@@ -14140,12 +14145,12 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0xbe,  0xc0,   0xc2,   0xc4,   0xc6,   0xc8,   0xca,   0xcc,   0xce,
       0xd0,  0xd2,   0xd4,   0xd6,   0xd8,   0xda,   0xdc,   0xde,   0xe0,
       0xe2,  0xe4,   0xe6,   0xe8,   0xea,   0xec,   0xee,   0xf0,   0xf2,
-      0xf4,  0x2,    0xc,    0x3,    0x2,    0x25,   0x26,   0x3,    0x2,
-      0x32,  0x33,   0x4,    0x2,    0x3,    0x3,    0x10,   0x11,   0x3,
-      0x2,   0x92,   0x93,   0x3,    0x2,    0x95,   0x97,   0x3,    0x2,
-      0x98,  0x9a,   0x3,    0x2,    0x9b,   0x9d,   0x3,    0x2,    0x1f,
-      0x20,  0x3,    0x2,    0x9f,   0xa2,   0x4,    0x2,    0x91,   0x91,
-      0xa5,  0xa5,   0x2,    0x5e5,  0x2,    0xf6,   0x3,    0x2,    0x2,
+      0xf4,  0x2,    0xc,    0x3,    0x2,    0x24,   0x25,   0x3,    0x2,
+      0x31,  0x32,   0x4,    0x2,    0x3,    0x3,    0xf,    0x10,   0x3,
+      0x2,   0x91,   0x92,   0x3,    0x2,    0x94,   0x96,   0x3,    0x2,
+      0x97,  0x99,   0x3,    0x2,    0x9a,   0x9c,   0x3,    0x2,    0x1e,
+      0x1f,  0x3,    0x2,    0x9e,   0xa1,   0x4,    0x2,    0x90,   0x90,
+      0xa4,  0xa4,   0x2,    0x5e5,  0x2,    0xf6,   0x3,    0x2,    0x2,
       0x2,   0x4,    0x104,  0x3,    0x2,    0x2,    0x2,    0x6,    0x107,
       0x3,   0x2,    0x2,    0x2,    0x8,    0x10a,  0x3,    0x2,    0x2,
       0x2,   0xa,    0x10e,  0x3,    0x2,    0x2,    0x2,    0xc,    0x118,
@@ -14241,10 +14246,10 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x103,  0x106,  0x3,    0x2,    0x2,    0x2,    0x104,  0x102,
       0x3,   0x2,    0x2,    0x2,    0x104,  0x105,  0x3,    0x2,    0x2,
       0x2,   0x105,  0x5,    0x3,    0x2,    0x2,    0x2,    0x106,  0x104,
-      0x3,   0x2,    0x2,    0x2,    0x107,  0x108,  0x7,    0x22,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x107,  0x108,  0x7,    0x21,   0x2,
       0x2,   0x108,  0x109,  0x5,    0xf0,   0x79,   0x2,    0x109,  0x7,
-      0x3,   0x2,    0x2,    0x2,    0x10a,  0x10b,  0x7,    0x23,   0x2,
-      0x2,   0x10b,  0x10c,  0x7,    0x8f,   0x2,    0x2,    0x10c,  0x10d,
+      0x3,   0x2,    0x2,    0x2,    0x10a,  0x10b,  0x7,    0x22,   0x2,
+      0x2,   0x10b,  0x10c,  0x7,    0x8e,   0x2,    0x2,    0x10c,  0x10d,
       0x5,   0xf0,   0x79,   0x2,    0x10d,  0x9,    0x3,    0x2,    0x2,
       0x2,   0x10e,  0x112,  0x5,    0xe,    0x8,    0x2,    0x10f,  0x111,
       0x5,   0x1a,   0xe,    0x2,    0x110,  0x10f,  0x3,    0x2,    0x2,
@@ -14257,7 +14262,7 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x119,  0x11a,  0x5,    0x22,   0x12,   0x2,    0x11a,  0x11b,
       0x5,   0x24,   0x13,   0x2,    0x11b,  0x11c,  0x5,    0x3a,   0x1e,
       0x2,   0x11c,  0xd,    0x3,    0x2,    0x2,    0x2,    0x11d,  0x11f,
-      0x7,   0x24,   0x2,    0x2,    0x11e,  0x120,  0x9,    0x2,    0x2,
+      0x7,   0x23,   0x2,    0x2,    0x11e,  0x120,  0x9,    0x2,    0x2,
       0x2,   0x11f,  0x11e,  0x3,    0x2,    0x2,    0x2,    0x11f,  0x120,
       0x3,   0x2,    0x2,    0x2,    0x120,  0x128,  0x3,    0x2,    0x2,
       0x2,   0x121,  0x124,  0x5,    0xb0,   0x59,   0x2,    0x122,  0x124,
@@ -14271,9 +14276,9 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x12a,  0x12b,  0x7,    0x4,    0x2,    0x2,    0x12b,  0x12c,
       0x5,   0x12,   0xa,    0x2,    0x12c,  0x12d,  0x7,    0x5,    0x2,
       0x2,   0x12d,  0x11,   0x3,    0x2,    0x2,    0x2,    0x12e,  0x12f,
-      0x5,   0xb4,   0x5b,   0x2,    0x12f,  0x130,  0x7,    0x27,   0x2,
+      0x5,   0xb4,   0x5b,   0x2,    0x12f,  0x130,  0x7,    0x26,   0x2,
       0x2,   0x130,  0x131,  0x5,    0xb0,   0x59,   0x2,    0x131,  0x13,
-      0x3,   0x2,    0x2,    0x2,    0x132,  0x14a,  0x7,    0x28,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x132,  0x14a,  0x7,    0x27,   0x2,
       0x2,   0x133,  0x137,  0x5,    0x68,   0x35,   0x2,    0x134,  0x136,
       0x5,   0x1a,   0xe,    0x2,    0x135,  0x134,  0x3,    0x2,    0x2,
       0x2,   0x136,  0x139,  0x3,    0x2,    0x2,    0x2,    0x137,  0x135,
@@ -14286,14 +14291,14 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x3,   0x2,    0x2,    0x2,    0x140,  0x13e,  0x3,    0x2,    0x2,
       0x2,   0x140,  0x141,  0x3,    0x2,    0x2,    0x2,    0x141,  0x143,
       0x3,   0x2,    0x2,    0x2,    0x142,  0x140,  0x3,    0x2,    0x2,
-      0x2,   0x143,  0x144,  0x7,    0x29,   0x2,    0x2,    0x144,  0x146,
+      0x2,   0x143,  0x144,  0x7,    0x28,   0x2,    0x2,    0x144,  0x146,
       0x7,   0x6,    0x2,    0x2,    0x145,  0x147,  0x5,    0x3c,   0x1f,
       0x2,   0x146,  0x145,  0x3,    0x2,    0x2,    0x2,    0x146,  0x147,
       0x3,   0x2,    0x2,    0x2,    0x147,  0x148,  0x3,    0x2,    0x2,
       0x2,   0x148,  0x149,  0x7,    0x7,    0x2,    0x2,    0x149,  0x14b,
       0x5,   0x24,   0x13,   0x2,    0x14a,  0x133,  0x3,    0x2,    0x2,
       0x2,   0x14a,  0x140,  0x3,    0x2,    0x2,    0x2,    0x14b,  0x15,
-      0x3,   0x2,    0x2,    0x2,    0x14c,  0x153,  0x7,    0x2a,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x14c,  0x153,  0x7,    0x29,   0x2,
       0x2,   0x14d,  0x14f,  0x5,    0xae,   0x58,   0x2,    0x14e,  0x14d,
       0x3,   0x2,    0x2,    0x2,    0x14f,  0x150,  0x3,    0x2,    0x2,
       0x2,   0x150,  0x14e,  0x3,    0x2,    0x2,    0x2,    0x150,  0x151,
@@ -14309,7 +14314,7 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x15c,  0x15b,  0x3,    0x2,    0x2,    0x2,    0x15c,  0x15d,
       0x3,   0x2,    0x2,    0x2,    0x15d,  0x15e,  0x3,    0x2,    0x2,
       0x2,   0x15e,  0x15f,  0x5,    0x24,   0x13,   0x2,    0x15f,  0x17,
-      0x3,   0x2,    0x2,    0x2,    0x160,  0x164,  0x7,    0x2b,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x160,  0x164,  0x7,    0x2a,   0x2,
       0x2,   0x161,  0x163,  0x5,    0x1a,   0xe,    0x2,    0x162,  0x161,
       0x3,   0x2,    0x2,    0x2,    0x163,  0x166,  0x3,    0x2,    0x2,
       0x2,   0x164,  0x162,  0x3,    0x2,    0x2,    0x2,    0x164,  0x165,
@@ -14317,15 +14322,15 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x166,  0x164,  0x3,    0x2,    0x2,    0x2,    0x167,  0x168,
       0x5,   0x22,   0x12,   0x2,    0x168,  0x169,  0x5,    0x24,   0x13,
       0x2,   0x169,  0x19,   0x3,    0x2,    0x2,    0x2,    0x16a,  0x16d,
-      0x7,   0x2c,   0x2,    0x2,    0x16b,  0x16e,  0x5,    0x1c,   0xf,
+      0x7,   0x2b,   0x2,    0x2,    0x16b,  0x16e,  0x5,    0x1c,   0xf,
       0x2,   0x16c,  0x16e,  0x5,    0x1e,   0x10,   0x2,    0x16d,  0x16b,
       0x3,   0x2,    0x2,    0x2,    0x16d,  0x16c,  0x3,    0x2,    0x2,
       0x2,   0x16e,  0x1b,   0x3,    0x2,    0x2,    0x2,    0x16f,  0x170,
       0x5,   0x20,   0x11,   0x2,    0x170,  0x1d,   0x3,    0x2,    0x2,
-      0x2,   0x171,  0x172,  0x7,    0x2d,   0x2,    0x2,    0x172,  0x173,
+      0x2,   0x171,  0x172,  0x7,    0x2c,   0x2,    0x2,    0x172,  0x173,
       0x5,   0x20,   0x11,   0x2,    0x173,  0x1f,   0x3,    0x2,    0x2,
       0x2,   0x174,  0x175,  0x5,    0xea,   0x76,   0x2,    0x175,  0x21,
-      0x3,   0x2,    0x2,    0x2,    0x176,  0x178,  0x7,    0x29,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x176,  0x178,  0x7,    0x28,   0x2,
       0x2,   0x177,  0x176,  0x3,    0x2,    0x2,    0x2,    0x177,  0x178,
       0x3,   0x2,    0x2,    0x2,    0x178,  0x179,  0x3,    0x2,    0x2,
       0x2,   0x179,  0x17a,  0x5,    0x3e,   0x20,   0x2,    0x17a,  0x23,
@@ -14340,14 +14345,14 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x3,   0x2,    0x2,    0x2,    0x184,  0x186,  0x5,    0x32,   0x1a,
       0x2,   0x185,  0x184,  0x3,    0x2,    0x2,    0x2,    0x185,  0x186,
       0x3,   0x2,    0x2,    0x2,    0x186,  0x25,   0x3,    0x2,    0x2,
-      0x2,   0x187,  0x189,  0x7,    0x2e,   0x2,    0x2,    0x188,  0x18a,
+      0x2,   0x187,  0x189,  0x7,    0x2d,   0x2,    0x2,    0x188,  0x18a,
       0x5,   0x28,   0x15,   0x2,    0x189,  0x188,  0x3,    0x2,    0x2,
       0x2,   0x18a,  0x18b,  0x3,    0x2,    0x2,    0x2,    0x18b,  0x189,
       0x3,   0x2,    0x2,    0x2,    0x18b,  0x18c,  0x3,    0x2,    0x2,
       0x2,   0x18c,  0x27,   0x3,    0x2,    0x2,    0x2,    0x18d,  0x199,
       0x5,   0xcc,   0x67,   0x2,    0x18e,  0x199,  0x5,    0x62,   0x32,
       0x2,   0x18f,  0x190,  0x7,    0x4,    0x2,    0x2,    0x190,  0x193,
-      0x5,   0xb4,   0x5b,   0x2,    0x191,  0x192,  0x7,    0x27,   0x2,
+      0x5,   0xb4,   0x5b,   0x2,    0x191,  0x192,  0x7,    0x26,   0x2,
       0x2,   0x192,  0x194,  0x5,    0xb0,   0x59,   0x2,    0x193,  0x191,
       0x3,   0x2,    0x2,    0x2,    0x193,  0x194,  0x3,    0x2,    0x2,
       0x2,   0x194,  0x195,  0x3,    0x2,    0x2,    0x2,    0x195,  0x196,
@@ -14356,13 +14361,13 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x3,   0x2,    0x2,    0x2,    0x198,  0x18e,  0x3,    0x2,    0x2,
       0x2,   0x198,  0x18f,  0x3,    0x2,    0x2,    0x2,    0x198,  0x197,
       0x3,   0x2,    0x2,    0x2,    0x199,  0x29,   0x3,    0x2,    0x2,
-      0x2,   0x19a,  0x19c,  0x7,    0x30,   0x2,    0x2,    0x19b,  0x19d,
+      0x2,   0x19a,  0x19c,  0x7,    0x2f,   0x2,    0x2,    0x19b,  0x19d,
       0x5,   0x2c,   0x17,   0x2,    0x19c,  0x19b,  0x3,    0x2,    0x2,
       0x2,   0x19d,  0x19e,  0x3,    0x2,    0x2,    0x2,    0x19e,  0x19c,
       0x3,   0x2,    0x2,    0x2,    0x19e,  0x19f,  0x3,    0x2,    0x2,
       0x2,   0x19f,  0x2b,   0x3,    0x2,    0x2,    0x2,    0x1a0,  0x1a1,
       0x5,   0x60,   0x31,   0x2,    0x1a1,  0x2d,   0x3,    0x2,    0x2,
-      0x2,   0x1a2,  0x1a4,  0x7,    0x31,   0x2,    0x2,    0x1a3,  0x1a5,
+      0x2,   0x1a2,  0x1a4,  0x7,    0x30,   0x2,    0x2,    0x1a3,  0x1a5,
       0x5,   0x30,   0x19,   0x2,    0x1a4,  0x1a3,  0x3,    0x2,    0x2,
       0x2,   0x1a5,  0x1a6,  0x3,    0x2,    0x2,    0x2,    0x1a6,  0x1a4,
       0x3,   0x2,    0x2,    0x2,    0x1a6,  0x1a7,  0x3,    0x2,    0x2,
@@ -14414,13 +14419,13 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x3,   0x2,    0x2,    0x2,    0x1da,  0x1c5,  0x3,    0x2,    0x2,
       0x2,   0x1da,  0x1cc,  0x3,    0x2,    0x2,    0x2,    0x1da,  0x1d3,
       0x3,   0x2,    0x2,    0x2,    0x1db,  0x33,   0x3,    0x2,    0x2,
-      0x2,   0x1dc,  0x1dd,  0x7,    0x34,   0x2,    0x2,    0x1dd,  0x1de,
+      0x2,   0x1dc,  0x1dd,  0x7,    0x33,   0x2,    0x2,    0x1dd,  0x1de,
       0x5,   0x9a,   0x4e,   0x2,    0x1de,  0x35,   0x3,    0x2,    0x2,
-      0x2,   0x1df,  0x1e0,  0x7,    0x35,   0x2,    0x2,    0x1e0,  0x1e1,
+      0x2,   0x1df,  0x1e0,  0x7,    0x34,   0x2,    0x2,    0x1e0,  0x1e1,
       0x5,   0x9a,   0x4e,   0x2,    0x1e1,  0x37,   0x3,    0x2,    0x2,
-      0x2,   0x1e2,  0x1e3,  0x7,    0x36,   0x2,    0x2,    0x1e3,  0x1e4,
+      0x2,   0x1e2,  0x1e3,  0x7,    0x35,   0x2,    0x2,    0x1e3,  0x1e4,
       0x5,   0x9a,   0x4e,   0x2,    0x1e4,  0x39,   0x3,    0x2,    0x2,
-      0x2,   0x1e5,  0x1e6,  0x7,    0x37,   0x2,    0x2,    0x1e6,  0x1e8,
+      0x2,   0x1e5,  0x1e6,  0x7,    0x36,   0x2,    0x2,    0x1e6,  0x1e8,
       0x5,   0x50,   0x29,   0x2,    0x1e7,  0x1e5,  0x3,    0x2,    0x2,
       0x2,   0x1e7,  0x1e8,  0x3,    0x2,    0x2,    0x2,    0x1e8,  0x3b,
       0x3,   0x2,    0x2,    0x2,    0x1e9,  0x1ee,  0x5,    0x6c,   0x37,
@@ -14465,21 +14470,21 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x215,  0x212,  0x3,    0x2,    0x2,    0x2,    0x215,  0x213,
       0x3,   0x2,    0x2,    0x2,    0x215,  0x214,  0x3,    0x2,    0x2,
       0x2,   0x216,  0x45,   0x3,    0x2,    0x2,    0x2,    0x217,  0x218,
-      0x7,   0x48,   0x2,    0x2,    0x218,  0x219,  0x5,    0x3e,   0x20,
+      0x7,   0x47,   0x2,    0x2,    0x218,  0x219,  0x5,    0x3e,   0x20,
       0x2,   0x219,  0x47,   0x3,    0x2,    0x2,    0x2,    0x21a,  0x21b,
-      0x7,   0x46,   0x2,    0x2,    0x21b,  0x21c,  0x5,    0xae,   0x58,
+      0x7,   0x45,   0x2,    0x2,    0x21b,  0x21c,  0x5,    0xae,   0x58,
       0x2,   0x21c,  0x21d,  0x5,    0x3e,   0x20,   0x2,    0x21d,  0x49,
-      0x3,   0x2,    0x2,    0x2,    0x21e,  0x220,  0x7,    0x49,   0x2,
-      0x2,   0x21f,  0x221,  0x7,    0x39,   0x2,    0x2,    0x220,  0x21f,
+      0x3,   0x2,    0x2,    0x2,    0x21e,  0x220,  0x7,    0x48,   0x2,
+      0x2,   0x21f,  0x221,  0x7,    0x38,   0x2,    0x2,    0x220,  0x21f,
       0x3,   0x2,    0x2,    0x2,    0x220,  0x221,  0x3,    0x2,    0x2,
       0x2,   0x221,  0x222,  0x3,    0x2,    0x2,    0x2,    0x222,  0x223,
       0x5,   0xae,   0x58,   0x2,    0x223,  0x224,  0x5,    0x3e,   0x20,
       0x2,   0x224,  0x4b,   0x3,    0x2,    0x2,    0x2,    0x225,  0x226,
-      0x7,   0x4a,   0x2,    0x2,    0x226,  0x227,  0x7,    0x4,    0x2,
+      0x7,   0x49,   0x2,    0x2,    0x226,  0x227,  0x7,    0x4,    0x2,
       0x2,   0x227,  0x228,  0x5,    0xb4,   0x5b,   0x2,    0x228,  0x229,
-      0x7,   0x27,   0x2,    0x2,    0x229,  0x22a,  0x5,    0xb0,   0x59,
+      0x7,   0x26,   0x2,    0x2,    0x229,  0x22a,  0x5,    0xb0,   0x59,
       0x2,   0x22a,  0x22b,  0x7,    0x5,    0x2,    0x2,    0x22b,  0x4d,
-      0x3,   0x2,    0x2,    0x2,    0x22c,  0x22d,  0x7,    0x37,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x22c,  0x22d,  0x7,    0x36,   0x2,
       0x2,   0x22d,  0x22e,  0x5,    0x50,   0x29,   0x2,    0x22e,  0x4f,
       0x3,   0x2,    0x2,    0x2,    0x22f,  0x232,  0x5,    0x52,   0x2a,
       0x2,   0x230,  0x232,  0x5,    0x54,   0x2b,   0x2,    0x231,  0x22f,
@@ -14492,7 +14497,7 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x3,   0x2,    0x2,    0x2,    0x239,  0x23b,  0x3,    0x2,    0x2,
       0x2,   0x23a,  0x238,  0x3,    0x2,    0x2,    0x2,    0x23b,  0x23c,
       0x7,   0x7,    0x2,    0x2,    0x23c,  0x53,   0x3,    0x2,    0x2,
-      0x2,   0x23d,  0x247,  0x7,    0xa4,   0x2,    0x2,    0x23e,  0x242,
+      0x2,   0x23d,  0x247,  0x7,    0xa3,   0x2,    0x2,    0x23e,  0x242,
       0x7,   0x4,    0x2,    0x2,    0x23f,  0x241,  0x5,    0xb0,   0x59,
       0x2,   0x240,  0x23f,  0x3,    0x2,    0x2,    0x2,    0x241,  0x244,
       0x3,   0x2,    0x2,    0x2,    0x242,  0x240,  0x3,    0x2,    0x2,
@@ -14513,25 +14518,25 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x255,  0x253,  0x3,    0x2,    0x2,    0x2,    0x255,  0x256,
       0x3,   0x2,    0x2,    0x2,    0x256,  0x258,  0x3,    0x2,    0x2,
       0x2,   0x257,  0x255,  0x3,    0x2,    0x2,    0x2,    0x258,  0x25b,
-      0x7,   0x5,    0x2,    0x2,    0x259,  0x25b,  0x7,    0xa4,   0x2,
+      0x7,   0x5,    0x2,    0x2,    0x259,  0x25b,  0x7,    0xa3,   0x2,
       0x2,   0x25a,  0x251,  0x3,    0x2,    0x2,    0x2,    0x25a,  0x259,
       0x3,   0x2,    0x2,    0x2,    0x25b,  0x57,   0x3,    0x2,    0x2,
       0x2,   0x25c,  0x262,  0x5,    0xea,   0x76,   0x2,    0x25d,  0x262,
       0x5,   0xdc,   0x6f,   0x2,    0x25e,  0x262,  0x5,    0xde,   0x70,
       0x2,   0x25f,  0x262,  0x5,    0xe6,   0x74,   0x2,    0x260,  0x262,
-      0x7,   0x9,    0x2,    0x2,    0x261,  0x25c,  0x3,    0x2,    0x2,
+      0x7,   0x4a,   0x2,    0x2,    0x261,  0x25c,  0x3,    0x2,    0x2,
       0x2,   0x261,  0x25d,  0x3,    0x2,    0x2,    0x2,    0x261,  0x25e,
       0x3,   0x2,    0x2,    0x2,    0x261,  0x25f,  0x3,    0x2,    0x2,
       0x2,   0x261,  0x260,  0x3,    0x2,    0x2,    0x2,    0x262,  0x59,
-      0x3,   0x2,    0x2,    0x2,    0x263,  0x264,  0x7,    0x4c,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x263,  0x264,  0x7,    0x4b,   0x2,
       0x2,   0x264,  0x265,  0x5,    0x3e,   0x20,   0x2,    0x265,  0x5b,
       0x3,   0x2,    0x2,    0x2,    0x266,  0x26b,  0x5,    0x3e,   0x20,
-      0x2,   0x267,  0x268,  0x7,    0x4d,   0x2,    0x2,    0x268,  0x26a,
+      0x2,   0x267,  0x268,  0x7,    0x4c,   0x2,    0x2,    0x268,  0x26a,
       0x5,   0x3e,   0x20,   0x2,    0x269,  0x267,  0x3,    0x2,    0x2,
       0x2,   0x26a,  0x26d,  0x3,    0x2,    0x2,    0x2,    0x26b,  0x269,
       0x3,   0x2,    0x2,    0x2,    0x26b,  0x26c,  0x3,    0x2,    0x2,
       0x2,   0x26c,  0x5d,   0x3,    0x2,    0x2,    0x2,    0x26d,  0x26b,
-      0x3,   0x2,    0x2,    0x2,    0x26e,  0x26f,  0x7,    0x4e,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x26e,  0x26f,  0x7,    0x4d,   0x2,
       0x2,   0x26f,  0x270,  0x5,    0x60,   0x31,   0x2,    0x270,  0x5f,
       0x3,   0x2,    0x2,    0x2,    0x271,  0x275,  0x5,    0xca,   0x66,
       0x2,   0x272,  0x275,  0x5,    0xcc,   0x67,   0x2,    0x273,  0x275,
@@ -14540,12 +14545,12 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x3,   0x2,    0x2,    0x2,    0x275,  0x61,   0x3,    0x2,    0x2,
       0x2,   0x276,  0x277,  0x5,    0xea,   0x76,   0x2,    0x277,  0x278,
       0x5,   0x64,   0x33,   0x2,    0x278,  0x63,   0x3,    0x2,    0x2,
-      0x2,   0x279,  0x289,  0x7,    0xa4,   0x2,    0x2,    0x27a,  0x27c,
-      0x7,   0x4,    0x2,    0x2,    0x27b,  0x27d,  0x7,    0x25,   0x2,
+      0x2,   0x279,  0x289,  0x7,    0xa3,   0x2,    0x2,    0x27a,  0x27c,
+      0x7,   0x4,    0x2,    0x2,    0x27b,  0x27d,  0x7,    0x24,   0x2,
       0x2,   0x27c,  0x27b,  0x3,    0x2,    0x2,    0x2,    0x27c,  0x27d,
       0x3,   0x2,    0x2,    0x2,    0x27d,  0x27e,  0x3,    0x2,    0x2,
       0x2,   0x27e,  0x283,  0x5,    0xb4,   0x5b,   0x2,    0x27f,  0x280,
-      0x7,   0xa,    0x2,    0x2,    0x280,  0x282,  0x5,    0xb4,   0x5b,
+      0x7,   0x9,    0x2,    0x2,    0x280,  0x282,  0x5,    0xb4,   0x5b,
       0x2,   0x281,  0x27f,  0x3,    0x2,    0x2,    0x2,    0x282,  0x285,
       0x3,   0x2,    0x2,    0x2,    0x283,  0x281,  0x3,    0x2,    0x2,
       0x2,   0x283,  0x284,  0x3,    0x2,    0x2,    0x2,    0x284,  0x286,
@@ -14553,9 +14558,9 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x286,  0x287,  0x7,    0x5,    0x2,    0x2,    0x287,  0x289,
       0x3,   0x2,    0x2,    0x2,    0x288,  0x279,  0x3,    0x2,    0x2,
       0x2,   0x288,  0x27a,  0x3,    0x2,    0x2,    0x2,    0x289,  0x65,
-      0x3,   0x2,    0x2,    0x2,    0x28a,  0x297,  0x7,    0xa4,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x28a,  0x297,  0x7,    0xa3,   0x2,
       0x2,   0x28b,  0x28c,  0x7,    0x4,    0x2,    0x2,    0x28c,  0x291,
-      0x5,   0xb4,   0x5b,   0x2,    0x28d,  0x28e,  0x7,    0xa,    0x2,
+      0x5,   0xb4,   0x5b,   0x2,    0x28d,  0x28e,  0x7,    0x9,    0x2,
       0x2,   0x28e,  0x290,  0x5,    0xb4,   0x5b,   0x2,    0x28f,  0x28d,
       0x3,   0x2,    0x2,    0x2,    0x290,  0x293,  0x3,    0x2,    0x2,
       0x2,   0x291,  0x28f,  0x3,    0x2,    0x2,    0x2,    0x291,  0x292,
@@ -14585,7 +14590,7 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x2ae,  0x2af,  0x3,    0x2,    0x2,    0x2,    0x2af,  0x6f,
       0x3,   0x2,    0x2,    0x2,    0x2b0,  0x2b1,  0x5,    0x72,   0x3a,
       0x2,   0x2b1,  0x2ba,  0x5,    0x74,   0x3b,   0x2,    0x2b2,  0x2b6,
-      0x7,   0xb,    0x2,    0x2,    0x2b3,  0x2b4,  0x5,    0x72,   0x3a,
+      0x7,   0xa,    0x2,    0x2,    0x2b3,  0x2b4,  0x5,    0x72,   0x3a,
       0x2,   0x2b4,  0x2b5,  0x5,    0x74,   0x3b,   0x2,    0x2b5,  0x2b7,
       0x3,   0x2,    0x2,    0x2,    0x2b6,  0x2b3,  0x3,    0x2,    0x2,
       0x2,   0x2b6,  0x2b7,  0x3,    0x2,    0x2,    0x2,    0x2b7,  0x2b9,
@@ -14594,10 +14599,10 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x3,   0x2,    0x2,    0x2,    0x2ba,  0x2bb,  0x3,    0x2,    0x2,
       0x2,   0x2bb,  0x71,   0x3,    0x2,    0x2,    0x2,    0x2bc,  0x2ba,
       0x3,   0x2,    0x2,    0x2,    0x2bd,  0x2c0,  0x5,    0xae,   0x58,
-      0x2,   0x2be,  0x2c0,  0x7,    0xc,    0x2,    0x2,    0x2bf,  0x2bd,
+      0x2,   0x2be,  0x2c0,  0x7,    0xb,    0x2,    0x2,    0x2bf,  0x2bd,
       0x3,   0x2,    0x2,    0x2,    0x2bf,  0x2be,  0x3,    0x2,    0x2,
       0x2,   0x2c0,  0x73,   0x3,    0x2,    0x2,    0x2,    0x2c1,  0x2c6,
-      0x5,   0x76,   0x3c,   0x2,    0x2c2,  0x2c3,  0x7,    0xa,    0x2,
+      0x5,   0x76,   0x3c,   0x2,    0x2c2,  0x2c3,  0x7,    0x9,    0x2,
       0x2,   0x2c3,  0x2c5,  0x5,    0x76,   0x3c,   0x2,    0x2c4,  0x2c2,
       0x3,   0x2,    0x2,    0x2,    0x2c5,  0x2c8,  0x3,    0x2,    0x2,
       0x2,   0x2c6,  0x2c4,  0x3,    0x2,    0x2,    0x2,    0x2c6,  0x2c7,
@@ -14614,7 +14619,7 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x3,   0x2,    0x2,    0x2,    0x2d4,  0x2d5,  0x3,    0x2,    0x2,
       0x2,   0x2d5,  0x7b,   0x3,    0x2,    0x2,    0x2,    0x2d6,  0x2d7,
       0x5,   0x82,   0x42,   0x2,    0x2d7,  0x2e0,  0x5,    0x84,   0x43,
-      0x2,   0x2d8,  0x2dc,  0x7,    0xb,    0x2,    0x2,    0x2d9,  0x2da,
+      0x2,   0x2d8,  0x2dc,  0x7,    0xa,    0x2,    0x2,    0x2d9,  0x2da,
       0x5,   0x82,   0x42,   0x2,    0x2da,  0x2db,  0x5,    0x74,   0x3b,
       0x2,   0x2db,  0x2dd,  0x3,    0x2,    0x2,    0x2,    0x2dc,  0x2d9,
       0x3,   0x2,    0x2,    0x2,    0x2dc,  0x2dd,  0x3,    0x2,    0x2,
@@ -14629,7 +14634,7 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x2e8,  0x2ea,  0x5,    0x80,   0x41,   0x2,    0x2e9,  0x2e7,
       0x3,   0x2,    0x2,    0x2,    0x2e9,  0x2e8,  0x3,    0x2,    0x2,
       0x2,   0x2ea,  0x83,   0x3,    0x2,    0x2,    0x2,    0x2eb,  0x2f0,
-      0x5,   0x86,   0x44,   0x2,    0x2ec,  0x2ed,  0x7,    0xa,    0x2,
+      0x5,   0x86,   0x44,   0x2,    0x2ec,  0x2ed,  0x7,    0x9,    0x2,
       0x2,   0x2ed,  0x2ef,  0x5,    0x86,   0x44,   0x2,    0x2ee,  0x2ec,
       0x3,   0x2,    0x2,    0x2,    0x2ef,  0x2f2,  0x3,    0x2,    0x2,
       0x2,   0x2f0,  0x2ee,  0x3,    0x2,    0x2,    0x2,    0x2f0,  0x2f1,
@@ -14638,13 +14643,13 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x5,   0xaa,   0x56,   0x2,    0x2f4,  0x87,   0x3,    0x2,    0x2,
       0x2,   0x2f5,  0x2f6,  0x5,    0x8a,   0x46,   0x2,    0x2f6,  0x89,
       0x3,   0x2,    0x2,    0x2,    0x2f7,  0x2fc,  0x5,    0x8c,   0x47,
-      0x2,   0x2f8,  0x2f9,  0x7,    0xd,    0x2,    0x2,    0x2f9,  0x2fb,
+      0x2,   0x2f8,  0x2f9,  0x7,    0xc,    0x2,    0x2,    0x2f9,  0x2fb,
       0x5,   0x8c,   0x47,   0x2,    0x2fa,  0x2f8,  0x3,    0x2,    0x2,
       0x2,   0x2fb,  0x2fe,  0x3,    0x2,    0x2,    0x2,    0x2fc,  0x2fa,
       0x3,   0x2,    0x2,    0x2,    0x2fc,  0x2fd,  0x3,    0x2,    0x2,
       0x2,   0x2fd,  0x8b,   0x3,    0x2,    0x2,    0x2,    0x2fe,  0x2fc,
       0x3,   0x2,    0x2,    0x2,    0x2ff,  0x304,  0x5,    0x90,   0x49,
-      0x2,   0x300,  0x301,  0x7,    0xe,    0x2,    0x2,    0x301,  0x303,
+      0x2,   0x300,  0x301,  0x7,    0xd,    0x2,    0x2,    0x301,  0x303,
       0x5,   0x90,   0x49,   0x2,    0x302,  0x300,  0x3,    0x2,    0x2,
       0x2,   0x303,  0x306,  0x3,    0x2,    0x2,    0x2,    0x304,  0x302,
       0x3,   0x2,    0x2,    0x2,    0x304,  0x305,  0x3,    0x2,    0x2,
@@ -14653,13 +14658,13 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x308,  0x30a,  0x5,    0x92,   0x4a,   0x2,    0x309,  0x308,
       0x3,   0x2,    0x2,    0x2,    0x309,  0x30a,  0x3,    0x2,    0x2,
       0x2,   0x30a,  0x8f,   0x3,    0x2,    0x2,    0x2,    0x30b,  0x30f,
-      0x5,   0x8e,   0x48,   0x2,    0x30c,  0x30d,  0x7,    0xf,    0x2,
+      0x5,   0x8e,   0x48,   0x2,    0x30c,  0x30d,  0x7,    0xe,    0x2,
       0x2,   0x30d,  0x30f,  0x5,    0x8e,   0x48,   0x2,    0x30e,  0x30b,
       0x3,   0x2,    0x2,    0x2,    0x30e,  0x30c,  0x3,    0x2,    0x2,
       0x2,   0x30f,  0x91,   0x3,    0x2,    0x2,    0x2,    0x310,  0x311,
       0x9,   0x4,    0x2,    0x2,    0x311,  0x93,   0x3,    0x2,    0x2,
       0x2,   0x312,  0x31b,  0x5,    0xea,   0x76,   0x2,    0x313,  0x31b,
-      0x7,   0xc,    0x2,    0x2,    0x314,  0x315,  0x7,    0x12,   0x2,
+      0x7,   0xb,    0x2,    0x2,    0x314,  0x315,  0x7,    0x11,   0x2,
       0x2,   0x315,  0x31b,  0x5,    0x96,   0x4c,   0x2,    0x316,  0x317,
       0x7,   0x4,    0x2,    0x2,    0x317,  0x318,  0x5,    0x88,   0x45,
       0x2,   0x318,  0x319,  0x7,    0x5,    0x2,    0x2,    0x319,  0x31b,
@@ -14669,7 +14674,7 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x31b,  0x95,   0x3,    0x2,    0x2,    0x2,    0x31c,  0x32a,
       0x5,   0x98,   0x4d,   0x2,    0x31d,  0x326,  0x7,    0x4,    0x2,
       0x2,   0x31e,  0x323,  0x5,    0x98,   0x4d,   0x2,    0x31f,  0x320,
-      0x7,   0xd,    0x2,    0x2,    0x320,  0x322,  0x5,    0x98,   0x4d,
+      0x7,   0xc,    0x2,    0x2,    0x320,  0x322,  0x5,    0x98,   0x4d,
       0x2,   0x321,  0x31f,  0x3,    0x2,    0x2,    0x2,    0x322,  0x325,
       0x3,   0x2,    0x2,    0x2,    0x323,  0x321,  0x3,    0x2,    0x2,
       0x2,   0x323,  0x324,  0x3,    0x2,    0x2,    0x2,    0x324,  0x327,
@@ -14679,27 +14684,27 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x328,  0x32a,  0x7,    0x5,    0x2,    0x2,    0x329,  0x31c,
       0x3,   0x2,    0x2,    0x2,    0x329,  0x31d,  0x3,    0x2,    0x2,
       0x2,   0x32a,  0x97,   0x3,    0x2,    0x2,    0x2,    0x32b,  0x333,
-      0x5,   0xea,   0x76,   0x2,    0x32c,  0x333,  0x7,    0xc,    0x2,
-      0x2,   0x32d,  0x330,  0x7,    0xf,    0x2,    0x2,    0x32e,  0x331,
-      0x5,   0xea,   0x76,   0x2,    0x32f,  0x331,  0x7,    0xc,    0x2,
+      0x5,   0xea,   0x76,   0x2,    0x32c,  0x333,  0x7,    0xb,    0x2,
+      0x2,   0x32d,  0x330,  0x7,    0xe,    0x2,    0x2,    0x32e,  0x331,
+      0x5,   0xea,   0x76,   0x2,    0x32f,  0x331,  0x7,    0xb,    0x2,
       0x2,   0x330,  0x32e,  0x3,    0x2,    0x2,    0x2,    0x330,  0x32f,
       0x3,   0x2,    0x2,    0x2,    0x331,  0x333,  0x3,    0x2,    0x2,
       0x2,   0x332,  0x32b,  0x3,    0x2,    0x2,    0x2,    0x332,  0x32c,
       0x3,   0x2,    0x2,    0x2,    0x332,  0x32d,  0x3,    0x2,    0x2,
       0x2,   0x333,  0x99,   0x3,    0x2,    0x2,    0x2,    0x334,  0x335,
-      0x7,   0x95,   0x2,    0x2,    0x335,  0x9b,   0x3,    0x2,    0x2,
+      0x7,   0x94,   0x2,    0x2,    0x335,  0x9b,   0x3,    0x2,    0x2,
       0x2,   0x336,  0x339,  0x5,    0xa4,   0x53,   0x2,    0x337,  0x339,
       0x5,   0x9e,   0x50,   0x2,    0x338,  0x336,  0x3,    0x2,    0x2,
       0x2,   0x338,  0x337,  0x3,    0x2,    0x2,    0x2,    0x339,  0x9d,
-      0x3,   0x2,    0x2,    0x2,    0x33a,  0x33b,  0x7,    0x13,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x33a,  0x33b,  0x7,    0x12,   0x2,
       0x2,   0x33b,  0x33c,  0x5,    0x70,   0x39,   0x2,    0x33c,  0x33d,
-      0x7,   0x14,   0x2,    0x2,    0x33d,  0x9f,   0x3,    0x2,    0x2,
+      0x7,   0x13,   0x2,    0x2,    0x33d,  0x9f,   0x3,    0x2,    0x2,
       0x2,   0x33e,  0x341,  0x5,    0xa6,   0x54,   0x2,    0x33f,  0x341,
       0x5,   0xa2,   0x52,   0x2,    0x340,  0x33e,  0x3,    0x2,    0x2,
       0x2,   0x340,  0x33f,  0x3,    0x2,    0x2,    0x2,    0x341,  0xa1,
-      0x3,   0x2,    0x2,    0x2,    0x342,  0x343,  0x7,    0x13,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x342,  0x343,  0x7,    0x12,   0x2,
       0x2,   0x343,  0x344,  0x5,    0x7c,   0x3f,   0x2,    0x344,  0x345,
-      0x7,   0x14,   0x2,    0x2,    0x345,  0xa3,   0x3,    0x2,    0x2,
+      0x7,   0x13,   0x2,    0x2,    0x345,  0xa3,   0x3,    0x2,    0x2,
       0x2,   0x346,  0x348,  0x7,    0x4,    0x2,    0x2,    0x347,  0x349,
       0x5,   0xa8,   0x55,   0x2,    0x348,  0x347,  0x3,    0x2,    0x2,
       0x2,   0x349,  0x34a,  0x3,    0x2,    0x2,    0x2,    0x34a,  0x348,
@@ -14730,20 +14735,20 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x5,   0xea,   0x76,   0x2,    0x369,  0x36f,  0x5,    0xdc,   0x6f,
       0x2,   0x36a,  0x36f,  0x5,    0xde,   0x70,   0x2,    0x36b,  0x36f,
       0x5,   0xe6,   0x74,   0x2,    0x36c,  0x36f,  0x5,    0xee,   0x78,
-      0x2,   0x36d,  0x36f,  0x7,    0xa4,   0x2,    0x2,    0x36e,  0x368,
+      0x2,   0x36d,  0x36f,  0x7,    0xa3,   0x2,    0x2,    0x36e,  0x368,
       0x3,   0x2,    0x2,    0x2,    0x36e,  0x369,  0x3,    0x2,    0x2,
       0x2,   0x36e,  0x36a,  0x3,    0x2,    0x2,    0x2,    0x36e,  0x36b,
       0x3,   0x2,    0x2,    0x2,    0x36e,  0x36c,  0x3,    0x2,    0x2,
       0x2,   0x36e,  0x36d,  0x3,    0x2,    0x2,    0x2,    0x36f,  0xb3,
       0x3,   0x2,    0x2,    0x2,    0x370,  0x371,  0x5,    0xb6,   0x5c,
       0x2,   0x371,  0xb5,   0x3,    0x2,    0x2,    0x2,    0x372,  0x377,
-      0x5,   0xb8,   0x5d,   0x2,    0x373,  0x374,  0x7,    0x15,   0x2,
+      0x5,   0xb8,   0x5d,   0x2,    0x373,  0x374,  0x7,    0x14,   0x2,
       0x2,   0x374,  0x376,  0x5,    0xb8,   0x5d,   0x2,    0x375,  0x373,
       0x3,   0x2,    0x2,    0x2,    0x376,  0x379,  0x3,    0x2,    0x2,
       0x2,   0x377,  0x375,  0x3,    0x2,    0x2,    0x2,    0x377,  0x378,
       0x3,   0x2,    0x2,    0x2,    0x378,  0xb7,   0x3,    0x2,    0x2,
       0x2,   0x379,  0x377,  0x3,    0x2,    0x2,    0x2,    0x37a,  0x37f,
-      0x5,   0xba,   0x5e,   0x2,    0x37b,  0x37c,  0x7,    0x16,   0x2,
+      0x5,   0xba,   0x5e,   0x2,    0x37b,  0x37c,  0x7,    0x15,   0x2,
       0x2,   0x37c,  0x37e,  0x5,    0xba,   0x5e,   0x2,    0x37d,  0x37b,
       0x3,   0x2,    0x2,    0x2,    0x37e,  0x381,  0x3,    0x2,    0x2,
       0x2,   0x37f,  0x37d,  0x3,    0x2,    0x2,    0x2,    0x37f,  0x380,
@@ -14751,16 +14756,16 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x381,  0x37f,  0x3,    0x2,    0x2,    0x2,    0x382,  0x383,
       0x5,   0xbc,   0x5f,   0x2,    0x383,  0xbb,   0x3,    0x2,    0x2,
       0x2,   0x384,  0x395,  0x5,    0xbe,   0x60,   0x2,    0x385,  0x386,
-      0x7,   0x17,   0x2,    0x2,    0x386,  0x396,  0x5,    0xbe,   0x60,
-      0x2,   0x387,  0x388,  0x7,    0x18,   0x2,    0x2,    0x388,  0x396,
+      0x7,   0x16,   0x2,    0x2,    0x386,  0x396,  0x5,    0xbe,   0x60,
+      0x2,   0x387,  0x388,  0x7,    0x17,   0x2,    0x2,    0x388,  0x396,
       0x5,   0xbe,   0x60,   0x2,    0x389,  0x396,  0x5,    0xbe,   0x60,
-      0x2,   0x38a,  0x38b,  0x7,    0x19,   0x2,    0x2,    0x38b,  0x396,
-      0x5,   0xbe,   0x60,   0x2,    0x38c,  0x38d,  0x7,    0x1a,   0x2,
+      0x2,   0x38a,  0x38b,  0x7,    0x18,   0x2,    0x2,    0x38b,  0x396,
+      0x5,   0xbe,   0x60,   0x2,    0x38c,  0x38d,  0x7,    0x19,   0x2,
       0x2,   0x38d,  0x396,  0x5,    0xbe,   0x60,   0x2,    0x38e,  0x38f,
-      0x7,   0x1b,   0x2,    0x2,    0x38f,  0x396,  0x5,    0xbe,   0x60,
-      0x2,   0x390,  0x391,  0x7,    0x50,   0x2,    0x2,    0x391,  0x396,
-      0x5,   0x66,   0x34,   0x2,    0x392,  0x393,  0x7,    0x4f,   0x2,
-      0x2,   0x393,  0x394,  0x7,    0x50,   0x2,    0x2,    0x394,  0x396,
+      0x7,   0x1a,   0x2,    0x2,    0x38f,  0x396,  0x5,    0xbe,   0x60,
+      0x2,   0x390,  0x391,  0x7,    0x4f,   0x2,    0x2,    0x391,  0x396,
+      0x5,   0x66,   0x34,   0x2,    0x392,  0x393,  0x7,    0x4e,   0x2,
+      0x2,   0x393,  0x394,  0x7,    0x4f,   0x2,    0x2,    0x394,  0x396,
       0x5,   0x66,   0x34,   0x2,    0x395,  0x385,  0x3,    0x2,    0x2,
       0x2,   0x395,  0x387,  0x3,    0x2,    0x2,    0x2,    0x395,  0x389,
       0x3,   0x2,    0x2,    0x2,    0x395,  0x38a,  0x3,    0x2,    0x2,
@@ -14770,8 +14775,8 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x3,   0x2,    0x2,    0x2,    0x396,  0xbd,   0x3,    0x2,    0x2,
       0x2,   0x397,  0x398,  0x5,    0xc0,   0x61,   0x2,    0x398,  0xbf,
       0x3,   0x2,    0x2,    0x2,    0x399,  0x3a1,  0x5,    0xc4,   0x63,
-      0x2,   0x39a,  0x39b,  0x7,    0x10,   0x2,    0x2,    0x39b,  0x3a0,
-      0x5,   0xc4,   0x63,   0x2,    0x39c,  0x39d,  0x7,    0x1c,   0x2,
+      0x2,   0x39a,  0x39b,  0x7,    0xf,    0x2,    0x2,    0x39b,  0x3a0,
+      0x5,   0xc4,   0x63,   0x2,    0x39c,  0x39d,  0x7,    0x1b,   0x2,
       0x2,   0x39d,  0x3a0,  0x5,    0xc4,   0x63,   0x2,    0x39e,  0x3a0,
       0x5,   0xc2,   0x62,   0x2,    0x39f,  0x39a,  0x3,    0x2,    0x2,
       0x2,   0x39f,  0x39c,  0x3,    0x2,    0x2,    0x2,    0x39f,  0x39e,
@@ -14783,7 +14788,7 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x3a6,  0x3a4,  0x3,    0x2,    0x2,    0x2,    0x3a6,  0x3a5,
       0x3,   0x2,    0x2,    0x2,    0x3a7,  0x3ae,  0x3,    0x2,    0x2,
       0x2,   0x3a8,  0x3a9,  0x7,    0x3,    0x2,    0x2,    0x3a9,  0x3ad,
-      0x5,   0xc6,   0x64,   0x2,    0x3aa,  0x3ab,  0x7,    0xe,    0x2,
+      0x5,   0xc6,   0x64,   0x2,    0x3aa,  0x3ab,  0x7,    0xd,    0x2,
       0x2,   0x3ab,  0x3ad,  0x5,    0xc6,   0x64,   0x2,    0x3ac,  0x3a8,
       0x3,   0x2,    0x2,    0x2,    0x3ac,  0x3aa,  0x3,    0x2,    0x2,
       0x2,   0x3ad,  0x3b0,  0x3,    0x2,    0x2,    0x2,    0x3ae,  0x3ac,
@@ -14791,16 +14796,16 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x3af,  0xc3,   0x3,    0x2,    0x2,    0x2,    0x3b0,  0x3ae,
       0x3,   0x2,    0x2,    0x2,    0x3b1,  0x3b8,  0x5,    0xc6,   0x64,
       0x2,   0x3b2,  0x3b3,  0x7,    0x3,    0x2,    0x2,    0x3b3,  0x3b7,
-      0x5,   0xc6,   0x64,   0x2,    0x3b4,  0x3b5,  0x7,    0xe,    0x2,
+      0x5,   0xc6,   0x64,   0x2,    0x3b4,  0x3b5,  0x7,    0xd,    0x2,
       0x2,   0x3b5,  0x3b7,  0x5,    0xc6,   0x64,   0x2,    0x3b6,  0x3b2,
       0x3,   0x2,    0x2,    0x2,    0x3b6,  0x3b4,  0x3,    0x2,    0x2,
       0x2,   0x3b7,  0x3ba,  0x3,    0x2,    0x2,    0x2,    0x3b8,  0x3b6,
       0x3,   0x2,    0x2,    0x2,    0x3b8,  0x3b9,  0x3,    0x2,    0x2,
       0x2,   0x3b9,  0xc5,   0x3,    0x2,    0x2,    0x2,    0x3ba,  0x3b8,
-      0x3,   0x2,    0x2,    0x2,    0x3bb,  0x3bc,  0x7,    0x12,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x3bb,  0x3bc,  0x7,    0x11,   0x2,
       0x2,   0x3bc,  0x3c3,  0x5,    0xc8,   0x65,   0x2,    0x3bd,  0x3be,
-      0x7,   0x10,   0x2,    0x2,    0x3be,  0x3c3,  0x5,    0xc8,   0x65,
-      0x2,   0x3bf,  0x3c0,  0x7,    0x1c,   0x2,    0x2,    0x3c0,  0x3c3,
+      0x7,   0xf,    0x2,    0x2,    0x3be,  0x3c3,  0x5,    0xc8,   0x65,
+      0x2,   0x3bf,  0x3c0,  0x7,    0x1b,   0x2,    0x2,    0x3c0,  0x3c3,
       0x5,   0xc8,   0x65,   0x2,    0x3c1,  0x3c3,  0x5,    0xc8,   0x65,
       0x2,   0x3c2,  0x3bb,  0x3,    0x2,    0x2,    0x2,    0x3c2,  0x3bd,
       0x3,   0x2,    0x2,    0x2,    0x3c2,  0x3bf,  0x3,    0x2,    0x2,
@@ -14819,176 +14824,176 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x3ce,  0x3cf,  0x5,    0xb4,   0x5b,   0x2,    0x3cf,  0x3d0,
       0x7,   0x5,    0x2,    0x2,    0x3d0,  0xcb,   0x3,    0x2,    0x2,
       0x2,   0x3d1,  0x4d8,  0x5,    0xd8,   0x6d,   0x2,    0x3d2,  0x3d3,
-      0x7,   0x51,   0x2,    0x2,    0x3d3,  0x3d4,  0x7,    0x4,    0x2,
+      0x7,   0x50,   0x2,    0x2,    0x3d3,  0x3d4,  0x7,    0x4,    0x2,
       0x2,   0x3d4,  0x3d5,  0x5,    0xb4,   0x5b,   0x2,    0x3d5,  0x3d6,
       0x7,   0x5,    0x2,    0x2,    0x3d6,  0x4d8,  0x3,    0x2,    0x2,
-      0x2,   0x3d7,  0x3d8,  0x7,    0x52,   0x2,    0x2,    0x3d8,  0x3d9,
+      0x2,   0x3d7,  0x3d8,  0x7,    0x51,   0x2,    0x2,    0x3d8,  0x3d9,
       0x7,   0x4,    0x2,    0x2,    0x3d9,  0x3da,  0x5,    0xb4,   0x5b,
       0x2,   0x3da,  0x3db,  0x7,    0x5,    0x2,    0x2,    0x3db,  0x4d8,
-      0x3,   0x2,    0x2,    0x2,    0x3dc,  0x3dd,  0x7,    0x53,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x3dc,  0x3dd,  0x7,    0x52,   0x2,
       0x2,   0x3dd,  0x3de,  0x7,    0x4,    0x2,    0x2,    0x3de,  0x3df,
-      0x5,   0xb4,   0x5b,   0x2,    0x3df,  0x3e0,  0x7,    0xa,    0x2,
+      0x5,   0xb4,   0x5b,   0x2,    0x3df,  0x3e0,  0x7,    0x9,    0x2,
       0x2,   0x3e0,  0x3e1,  0x5,    0xb4,   0x5b,   0x2,    0x3e1,  0x3e2,
       0x7,   0x5,    0x2,    0x2,    0x3e2,  0x4d8,  0x3,    0x2,    0x2,
-      0x2,   0x3e3,  0x3e4,  0x7,    0x54,   0x2,    0x2,    0x3e4,  0x3e5,
+      0x2,   0x3e3,  0x3e4,  0x7,    0x53,   0x2,    0x2,    0x3e4,  0x3e5,
       0x7,   0x4,    0x2,    0x2,    0x3e5,  0x3e6,  0x5,    0xb4,   0x5b,
       0x2,   0x3e6,  0x3e7,  0x7,    0x5,    0x2,    0x2,    0x3e7,  0x4d8,
-      0x3,   0x2,    0x2,    0x2,    0x3e8,  0x3e9,  0x7,    0x55,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x3e8,  0x3e9,  0x7,    0x54,   0x2,
       0x2,   0x3e9,  0x3ea,  0x7,    0x4,    0x2,    0x2,    0x3ea,  0x3eb,
       0x5,   0xb0,   0x59,   0x2,    0x3eb,  0x3ec,  0x7,    0x5,    0x2,
       0x2,   0x3ec,  0x4d8,  0x3,    0x2,    0x2,    0x2,    0x3ed,  0x3ee,
-      0x7,   0x56,   0x2,    0x2,    0x3ee,  0x3ef,  0x7,    0x4,    0x2,
+      0x7,   0x55,   0x2,    0x2,    0x3ee,  0x3ef,  0x7,    0x4,    0x2,
       0x2,   0x3ef,  0x3f0,  0x5,    0xb4,   0x5b,   0x2,    0x3f0,  0x3f1,
       0x7,   0x5,    0x2,    0x2,    0x3f1,  0x4d8,  0x3,    0x2,    0x2,
-      0x2,   0x3f2,  0x3f3,  0x7,    0x57,   0x2,    0x2,    0x3f3,  0x3f4,
+      0x2,   0x3f2,  0x3f3,  0x7,    0x56,   0x2,    0x2,    0x3f3,  0x3f4,
       0x7,   0x4,    0x2,    0x2,    0x3f4,  0x3f5,  0x5,    0xb4,   0x5b,
       0x2,   0x3f5,  0x3f6,  0x7,    0x5,    0x2,    0x2,    0x3f6,  0x4d8,
-      0x3,   0x2,    0x2,    0x2,    0x3f7,  0x3fd,  0x7,    0x58,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x3f7,  0x3fd,  0x7,    0x57,   0x2,
       0x2,   0x3f8,  0x3f9,  0x7,    0x4,    0x2,    0x2,    0x3f9,  0x3fa,
       0x5,   0xb4,   0x5b,   0x2,    0x3fa,  0x3fb,  0x7,    0x5,    0x2,
       0x2,   0x3fb,  0x3fe,  0x3,    0x2,    0x2,    0x2,    0x3fc,  0x3fe,
-      0x7,   0xa4,   0x2,    0x2,    0x3fd,  0x3f8,  0x3,    0x2,    0x2,
+      0x7,   0xa3,   0x2,    0x2,    0x3fd,  0x3f8,  0x3,    0x2,    0x2,
       0x2,   0x3fd,  0x3fc,  0x3,    0x2,    0x2,    0x2,    0x3fe,  0x4d8,
-      0x3,   0x2,    0x2,    0x2,    0x3ff,  0x400,  0x7,    0x59,   0x2,
-      0x2,   0x400,  0x4d8,  0x7,    0xa4,   0x2,    0x2,    0x401,  0x402,
-      0x7,   0x5a,   0x2,    0x2,    0x402,  0x403,  0x7,    0x4,    0x2,
+      0x3,   0x2,    0x2,    0x2,    0x3ff,  0x400,  0x7,    0x58,   0x2,
+      0x2,   0x400,  0x4d8,  0x7,    0xa3,   0x2,    0x2,    0x401,  0x402,
+      0x7,   0x59,   0x2,    0x2,    0x402,  0x403,  0x7,    0x4,    0x2,
       0x2,   0x403,  0x404,  0x5,    0xb4,   0x5b,   0x2,    0x404,  0x405,
       0x7,   0x5,    0x2,    0x2,    0x405,  0x4d8,  0x3,    0x2,    0x2,
-      0x2,   0x406,  0x407,  0x7,    0x5b,   0x2,    0x2,    0x407,  0x408,
+      0x2,   0x406,  0x407,  0x7,    0x5a,   0x2,    0x2,    0x407,  0x408,
       0x7,   0x4,    0x2,    0x2,    0x408,  0x409,  0x5,    0xb4,   0x5b,
       0x2,   0x409,  0x40a,  0x7,    0x5,    0x2,    0x2,    0x40a,  0x4d8,
-      0x3,   0x2,    0x2,    0x2,    0x40b,  0x40c,  0x7,    0x5c,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x40b,  0x40c,  0x7,    0x5b,   0x2,
       0x2,   0x40c,  0x40d,  0x7,    0x4,    0x2,    0x2,    0x40d,  0x40e,
       0x5,   0xb4,   0x5b,   0x2,    0x40e,  0x40f,  0x7,    0x5,    0x2,
       0x2,   0x40f,  0x4d8,  0x3,    0x2,    0x2,    0x2,    0x410,  0x411,
-      0x7,   0x5d,   0x2,    0x2,    0x411,  0x412,  0x7,    0x4,    0x2,
+      0x7,   0x5c,   0x2,    0x2,    0x411,  0x412,  0x7,    0x4,    0x2,
       0x2,   0x412,  0x413,  0x5,    0xb4,   0x5b,   0x2,    0x413,  0x414,
       0x7,   0x5,    0x2,    0x2,    0x414,  0x4d8,  0x3,    0x2,    0x2,
-      0x2,   0x415,  0x416,  0x7,    0x5e,   0x2,    0x2,    0x416,  0x4d8,
+      0x2,   0x415,  0x416,  0x7,    0x5d,   0x2,    0x2,    0x416,  0x4d8,
       0x5,   0x66,   0x34,   0x2,    0x417,  0x4d8,  0x5,    0xd0,   0x69,
-      0x2,   0x418,  0x419,  0x7,    0x5f,   0x2,    0x2,    0x419,  0x41a,
+      0x2,   0x418,  0x419,  0x7,    0x5e,   0x2,    0x2,    0x419,  0x41a,
       0x7,   0x4,    0x2,    0x2,    0x41a,  0x41b,  0x5,    0xb4,   0x5b,
       0x2,   0x41b,  0x41c,  0x7,    0x5,    0x2,    0x2,    0x41c,  0x4d8,
       0x3,   0x2,    0x2,    0x2,    0x41d,  0x4d8,  0x5,    0xd2,   0x6a,
-      0x2,   0x41e,  0x41f,  0x7,    0x60,   0x2,    0x2,    0x41f,  0x420,
+      0x2,   0x41e,  0x41f,  0x7,    0x5f,   0x2,    0x2,    0x41f,  0x420,
       0x7,   0x4,    0x2,    0x2,    0x420,  0x421,  0x5,    0xb4,   0x5b,
       0x2,   0x421,  0x422,  0x7,    0x5,    0x2,    0x2,    0x422,  0x4d8,
-      0x3,   0x2,    0x2,    0x2,    0x423,  0x424,  0x7,    0x61,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x423,  0x424,  0x7,    0x60,   0x2,
       0x2,   0x424,  0x425,  0x7,    0x4,    0x2,    0x2,    0x425,  0x426,
       0x5,   0xb4,   0x5b,   0x2,    0x426,  0x427,  0x7,    0x5,    0x2,
       0x2,   0x427,  0x4d8,  0x3,    0x2,    0x2,    0x2,    0x428,  0x429,
-      0x7,   0x62,   0x2,    0x2,    0x429,  0x42a,  0x7,    0x1d,   0x2,
-      0x2,   0x42a,  0x42b,  0x7,    0x63,   0x2,    0x2,    0x42b,  0x42c,
-      0x7,   0x1d,   0x2,    0x2,    0x42c,  0x42d,  0x7,    0x57,   0x2,
+      0x7,   0x61,   0x2,    0x2,    0x429,  0x42a,  0x7,    0x1c,   0x2,
+      0x2,   0x42a,  0x42b,  0x7,    0x62,   0x2,    0x2,    0x42b,  0x42c,
+      0x7,   0x1c,   0x2,    0x2,    0x42c,  0x42d,  0x7,    0x56,   0x2,
       0x2,   0x42d,  0x42e,  0x7,    0x4,    0x2,    0x2,    0x42e,  0x42f,
       0x5,   0xb4,   0x5b,   0x2,    0x42f,  0x430,  0x7,    0x5,    0x2,
       0x2,   0x430,  0x4d8,  0x3,    0x2,    0x2,    0x2,    0x431,  0x432,
-      0x7,   0x64,   0x2,    0x2,    0x432,  0x433,  0x7,    0x4,    0x2,
+      0x7,   0x63,   0x2,    0x2,    0x432,  0x433,  0x7,    0x4,    0x2,
       0x2,   0x433,  0x434,  0x5,    0xb4,   0x5b,   0x2,    0x434,  0x435,
-      0x7,   0xa,    0x2,    0x2,    0x435,  0x436,  0x5,    0xb4,   0x5b,
+      0x7,   0x9,    0x2,    0x2,    0x435,  0x436,  0x5,    0xb4,   0x5b,
       0x2,   0x436,  0x437,  0x7,    0x5,    0x2,    0x2,    0x437,  0x4d8,
-      0x3,   0x2,    0x2,    0x2,    0x438,  0x439,  0x7,    0x65,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x438,  0x439,  0x7,    0x64,   0x2,
       0x2,   0x439,  0x43a,  0x7,    0x4,    0x2,    0x2,    0x43a,  0x43b,
-      0x5,   0xb4,   0x5b,   0x2,    0x43b,  0x43c,  0x7,    0xa,    0x2,
+      0x5,   0xb4,   0x5b,   0x2,    0x43b,  0x43c,  0x7,    0x9,    0x2,
       0x2,   0x43c,  0x43d,  0x5,    0xb4,   0x5b,   0x2,    0x43d,  0x43e,
       0x7,   0x5,    0x2,    0x2,    0x43e,  0x4d8,  0x3,    0x2,    0x2,
-      0x2,   0x43f,  0x440,  0x7,    0x66,   0x2,    0x2,    0x440,  0x441,
+      0x2,   0x43f,  0x440,  0x7,    0x65,   0x2,    0x2,    0x440,  0x441,
       0x7,   0x4,    0x2,    0x2,    0x441,  0x442,  0x5,    0xb4,   0x5b,
-      0x2,   0x442,  0x443,  0x7,    0xa,    0x2,    0x2,    0x443,  0x444,
+      0x2,   0x442,  0x443,  0x7,    0x9,    0x2,    0x2,    0x443,  0x444,
       0x5,   0xb4,   0x5b,   0x2,    0x444,  0x445,  0x7,    0x5,    0x2,
       0x2,   0x445,  0x4d8,  0x3,    0x2,    0x2,    0x2,    0x446,  0x447,
-      0x7,   0x67,   0x2,    0x2,    0x447,  0x448,  0x7,    0x4,    0x2,
+      0x7,   0x66,   0x2,    0x2,    0x447,  0x448,  0x7,    0x4,    0x2,
       0x2,   0x448,  0x449,  0x5,    0xb4,   0x5b,   0x2,    0x449,  0x44a,
-      0x7,   0xa,    0x2,    0x2,    0x44a,  0x44b,  0x5,    0xb4,   0x5b,
+      0x7,   0x9,    0x2,    0x2,    0x44a,  0x44b,  0x5,    0xb4,   0x5b,
       0x2,   0x44b,  0x44c,  0x7,    0x5,    0x2,    0x2,    0x44c,  0x4d8,
-      0x3,   0x2,    0x2,    0x2,    0x44d,  0x44e,  0x7,    0x68,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x44d,  0x44e,  0x7,    0x67,   0x2,
       0x2,   0x44e,  0x44f,  0x7,    0x4,    0x2,    0x2,    0x44f,  0x450,
-      0x5,   0xb4,   0x5b,   0x2,    0x450,  0x451,  0x7,    0xa,    0x2,
+      0x5,   0xb4,   0x5b,   0x2,    0x450,  0x451,  0x7,    0x9,    0x2,
       0x2,   0x451,  0x452,  0x5,    0xb4,   0x5b,   0x2,    0x452,  0x453,
       0x7,   0x5,    0x2,    0x2,    0x453,  0x4d8,  0x3,    0x2,    0x2,
-      0x2,   0x454,  0x455,  0x7,    0x69,   0x2,    0x2,    0x455,  0x456,
+      0x2,   0x454,  0x455,  0x7,    0x68,   0x2,    0x2,    0x455,  0x456,
       0x7,   0x4,    0x2,    0x2,    0x456,  0x457,  0x5,    0xb4,   0x5b,
       0x2,   0x457,  0x458,  0x7,    0x5,    0x2,    0x2,    0x458,  0x4d8,
-      0x3,   0x2,    0x2,    0x2,    0x459,  0x45a,  0x7,    0x6a,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x459,  0x45a,  0x7,    0x69,   0x2,
       0x2,   0x45a,  0x45b,  0x7,    0x4,    0x2,    0x2,    0x45b,  0x45c,
       0x5,   0xb4,   0x5b,   0x2,    0x45c,  0x45d,  0x7,    0x5,    0x2,
       0x2,   0x45d,  0x4d8,  0x3,    0x2,    0x2,    0x2,    0x45e,  0x45f,
-      0x7,   0x6b,   0x2,    0x2,    0x45f,  0x460,  0x7,    0x4,    0x2,
+      0x7,   0x6a,   0x2,    0x2,    0x45f,  0x460,  0x7,    0x4,    0x2,
       0x2,   0x460,  0x461,  0x5,    0xb4,   0x5b,   0x2,    0x461,  0x462,
       0x7,   0x5,    0x2,    0x2,    0x462,  0x4d8,  0x3,    0x2,    0x2,
-      0x2,   0x463,  0x464,  0x7,    0x6c,   0x2,    0x2,    0x464,  0x465,
+      0x2,   0x463,  0x464,  0x7,    0x6b,   0x2,    0x2,    0x464,  0x465,
       0x7,   0x4,    0x2,    0x2,    0x465,  0x466,  0x5,    0xb4,   0x5b,
       0x2,   0x466,  0x467,  0x7,    0x5,    0x2,    0x2,    0x467,  0x4d8,
-      0x3,   0x2,    0x2,    0x2,    0x468,  0x469,  0x7,    0x6d,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x468,  0x469,  0x7,    0x6c,   0x2,
       0x2,   0x469,  0x46a,  0x7,    0x4,    0x2,    0x2,    0x46a,  0x46b,
       0x5,   0xb4,   0x5b,   0x2,    0x46b,  0x46c,  0x7,    0x5,    0x2,
       0x2,   0x46c,  0x4d8,  0x3,    0x2,    0x2,    0x2,    0x46d,  0x46e,
-      0x7,   0x6e,   0x2,    0x2,    0x46e,  0x46f,  0x7,    0x4,    0x2,
+      0x7,   0x6d,   0x2,    0x2,    0x46e,  0x46f,  0x7,    0x4,    0x2,
       0x2,   0x46f,  0x470,  0x5,    0xb4,   0x5b,   0x2,    0x470,  0x471,
       0x7,   0x5,    0x2,    0x2,    0x471,  0x4d8,  0x3,    0x2,    0x2,
-      0x2,   0x472,  0x473,  0x7,    0x6f,   0x2,    0x2,    0x473,  0x474,
+      0x2,   0x472,  0x473,  0x7,    0x6e,   0x2,    0x2,    0x473,  0x474,
       0x7,   0x4,    0x2,    0x2,    0x474,  0x475,  0x5,    0xb4,   0x5b,
       0x2,   0x475,  0x476,  0x7,    0x5,    0x2,    0x2,    0x476,  0x4d8,
-      0x3,   0x2,    0x2,    0x2,    0x477,  0x478,  0x7,    0x70,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x477,  0x478,  0x7,    0x6f,   0x2,
       0x2,   0x478,  0x479,  0x7,    0x4,    0x2,    0x2,    0x479,  0x47a,
       0x5,   0xb4,   0x5b,   0x2,    0x47a,  0x47b,  0x7,    0x5,    0x2,
       0x2,   0x47b,  0x4d8,  0x3,    0x2,    0x2,    0x2,    0x47c,  0x47d,
-      0x7,   0x71,   0x2,    0x2,    0x47d,  0x4d8,  0x7,    0xa4,   0x2,
-      0x2,   0x47e,  0x47f,  0x7,    0x72,   0x2,    0x2,    0x47f,  0x4d8,
-      0x7,   0xa4,   0x2,    0x2,    0x480,  0x481,  0x7,    0x73,   0x2,
-      0x2,   0x481,  0x4d8,  0x7,    0xa4,   0x2,    0x2,    0x482,  0x483,
-      0x7,   0x78,   0x2,    0x2,    0x483,  0x484,  0x7,    0x4,    0x2,
+      0x7,   0x70,   0x2,    0x2,    0x47d,  0x4d8,  0x7,    0xa3,   0x2,
+      0x2,   0x47e,  0x47f,  0x7,    0x71,   0x2,    0x2,    0x47f,  0x4d8,
+      0x7,   0xa3,   0x2,    0x2,    0x480,  0x481,  0x7,    0x72,   0x2,
+      0x2,   0x481,  0x4d8,  0x7,    0xa3,   0x2,    0x2,    0x482,  0x483,
+      0x7,   0x77,   0x2,    0x2,    0x483,  0x484,  0x7,    0x4,    0x2,
       0x2,   0x484,  0x485,  0x5,    0xb4,   0x5b,   0x2,    0x485,  0x486,
       0x7,   0x5,    0x2,    0x2,    0x486,  0x4d8,  0x3,    0x2,    0x2,
-      0x2,   0x487,  0x488,  0x7,    0x74,   0x2,    0x2,    0x488,  0x489,
+      0x2,   0x487,  0x488,  0x7,    0x73,   0x2,    0x2,    0x488,  0x489,
       0x7,   0x4,    0x2,    0x2,    0x489,  0x48a,  0x5,    0xb4,   0x5b,
       0x2,   0x48a,  0x48b,  0x7,    0x5,    0x2,    0x2,    0x48b,  0x4d8,
-      0x3,   0x2,    0x2,    0x2,    0x48c,  0x48d,  0x7,    0x75,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x48c,  0x48d,  0x7,    0x74,   0x2,
       0x2,   0x48d,  0x48e,  0x7,    0x4,    0x2,    0x2,    0x48e,  0x48f,
       0x5,   0xb4,   0x5b,   0x2,    0x48f,  0x490,  0x7,    0x5,    0x2,
       0x2,   0x490,  0x4d8,  0x3,    0x2,    0x2,    0x2,    0x491,  0x492,
-      0x7,   0x76,   0x2,    0x2,    0x492,  0x493,  0x7,    0x4,    0x2,
+      0x7,   0x75,   0x2,    0x2,    0x492,  0x493,  0x7,    0x4,    0x2,
       0x2,   0x493,  0x494,  0x5,    0xb4,   0x5b,   0x2,    0x494,  0x495,
       0x7,   0x5,    0x2,    0x2,    0x495,  0x4d8,  0x3,    0x2,    0x2,
-      0x2,   0x496,  0x497,  0x7,    0x77,   0x2,    0x2,    0x497,  0x498,
+      0x2,   0x496,  0x497,  0x7,    0x76,   0x2,    0x2,    0x497,  0x498,
       0x7,   0x4,    0x2,    0x2,    0x498,  0x499,  0x5,    0xb4,   0x5b,
       0x2,   0x499,  0x49a,  0x7,    0x5,    0x2,    0x2,    0x49a,  0x4d8,
-      0x3,   0x2,    0x2,    0x2,    0x49b,  0x49c,  0x7,    0x79,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x49b,  0x49c,  0x7,    0x78,   0x2,
       0x2,   0x49c,  0x4d8,  0x5,    0x66,   0x34,   0x2,    0x49d,  0x49e,
-      0x7,   0x7a,   0x2,    0x2,    0x49e,  0x49f,  0x7,    0x4,    0x2,
+      0x7,   0x79,   0x2,    0x2,    0x49e,  0x49f,  0x7,    0x4,    0x2,
       0x2,   0x49f,  0x4a0,  0x5,    0xb4,   0x5b,   0x2,    0x4a0,  0x4a1,
-      0x7,   0xa,    0x2,    0x2,    0x4a1,  0x4a2,  0x5,    0xb4,   0x5b,
-      0x2,   0x4a2,  0x4a3,  0x7,    0xa,    0x2,    0x2,    0x4a3,  0x4a4,
+      0x7,   0x9,    0x2,    0x2,    0x4a1,  0x4a2,  0x5,    0xb4,   0x5b,
+      0x2,   0x4a2,  0x4a3,  0x7,    0x9,    0x2,    0x2,    0x4a3,  0x4a4,
       0x5,   0xb4,   0x5b,   0x2,    0x4a4,  0x4a5,  0x7,    0x5,    0x2,
       0x2,   0x4a5,  0x4d8,  0x3,    0x2,    0x2,    0x2,    0x4a6,  0x4a7,
-      0x7,   0x7b,   0x2,    0x2,    0x4a7,  0x4a8,  0x7,    0x4,    0x2,
+      0x7,   0x7a,   0x2,    0x2,    0x4a7,  0x4a8,  0x7,    0x4,    0x2,
       0x2,   0x4a8,  0x4a9,  0x5,    0xb4,   0x5b,   0x2,    0x4a9,  0x4aa,
-      0x7,   0xa,    0x2,    0x2,    0x4aa,  0x4ab,  0x5,    0xb4,   0x5b,
+      0x7,   0x9,    0x2,    0x2,    0x4aa,  0x4ab,  0x5,    0xb4,   0x5b,
       0x2,   0x4ab,  0x4ac,  0x7,    0x5,    0x2,    0x2,    0x4ac,  0x4d8,
-      0x3,   0x2,    0x2,    0x2,    0x4ad,  0x4ae,  0x7,    0x7c,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x4ad,  0x4ae,  0x7,    0x7b,   0x2,
       0x2,   0x4ae,  0x4af,  0x7,    0x4,    0x2,    0x2,    0x4af,  0x4b0,
-      0x5,   0xb4,   0x5b,   0x2,    0x4b0,  0x4b1,  0x7,    0xa,    0x2,
+      0x5,   0xb4,   0x5b,   0x2,    0x4b0,  0x4b1,  0x7,    0x9,    0x2,
       0x2,   0x4b1,  0x4b2,  0x5,    0xb4,   0x5b,   0x2,    0x4b2,  0x4b3,
       0x7,   0x5,    0x2,    0x2,    0x4b3,  0x4d8,  0x3,    0x2,    0x2,
-      0x2,   0x4b4,  0x4b5,  0x7,    0x7d,   0x2,    0x2,    0x4b5,  0x4b6,
+      0x2,   0x4b4,  0x4b5,  0x7,    0x7c,   0x2,    0x2,    0x4b5,  0x4b6,
       0x7,   0x4,    0x2,    0x2,    0x4b6,  0x4b7,  0x5,    0xb4,   0x5b,
-      0x2,   0x4b7,  0x4b8,  0x7,    0xa,    0x2,    0x2,    0x4b8,  0x4b9,
+      0x2,   0x4b7,  0x4b8,  0x7,    0x9,    0x2,    0x2,    0x4b8,  0x4b9,
       0x5,   0xb4,   0x5b,   0x2,    0x4b9,  0x4ba,  0x7,    0x5,    0x2,
       0x2,   0x4ba,  0x4d8,  0x3,    0x2,    0x2,    0x2,    0x4bb,  0x4bc,
-      0x7,   0x7e,   0x2,    0x2,    0x4bc,  0x4bd,  0x7,    0x4,    0x2,
+      0x7,   0x7d,   0x2,    0x2,    0x4bc,  0x4bd,  0x7,    0x4,    0x2,
       0x2,   0x4bd,  0x4be,  0x5,    0xb4,   0x5b,   0x2,    0x4be,  0x4bf,
       0x7,   0x5,    0x2,    0x2,    0x4bf,  0x4d8,  0x3,    0x2,    0x2,
-      0x2,   0x4c0,  0x4c1,  0x7,    0x7f,   0x2,    0x2,    0x4c1,  0x4c2,
+      0x2,   0x4c0,  0x4c1,  0x7,    0x7e,   0x2,    0x2,    0x4c1,  0x4c2,
       0x7,   0x4,    0x2,    0x2,    0x4c2,  0x4c3,  0x5,    0xb4,   0x5b,
       0x2,   0x4c3,  0x4c4,  0x7,    0x5,    0x2,    0x2,    0x4c4,  0x4d8,
-      0x3,   0x2,    0x2,    0x2,    0x4c5,  0x4c6,  0x7,    0x80,   0x2,
+      0x3,   0x2,    0x2,    0x2,    0x4c5,  0x4c6,  0x7,    0x7f,   0x2,
       0x2,   0x4c6,  0x4c7,  0x7,    0x4,    0x2,    0x2,    0x4c7,  0x4c8,
       0x5,   0xb4,   0x5b,   0x2,    0x4c8,  0x4c9,  0x7,    0x5,    0x2,
       0x2,   0x4c9,  0x4d8,  0x3,    0x2,    0x2,    0x2,    0x4ca,  0x4cb,
-      0x7,   0x81,   0x2,    0x2,    0x4cb,  0x4cc,  0x7,    0x4,    0x2,
+      0x7,   0x80,   0x2,    0x2,    0x4cb,  0x4cc,  0x7,    0x4,    0x2,
       0x2,   0x4cc,  0x4cd,  0x5,    0xb4,   0x5b,   0x2,    0x4cd,  0x4ce,
       0x7,   0x5,    0x2,    0x2,    0x4ce,  0x4d8,  0x3,    0x2,    0x2,
-      0x2,   0x4cf,  0x4d0,  0x7,    0x82,   0x2,    0x2,    0x4d0,  0x4d1,
+      0x2,   0x4cf,  0x4d0,  0x7,    0x81,   0x2,    0x2,    0x4d0,  0x4d1,
       0x7,   0x4,    0x2,    0x2,    0x4d1,  0x4d2,  0x5,    0xb4,   0x5b,
       0x2,   0x4d2,  0x4d3,  0x7,    0x5,    0x2,    0x2,    0x4d3,  0x4d8,
       0x3,   0x2,    0x2,    0x2,    0x4d4,  0x4d8,  0x5,    0xce,   0x68,
@@ -15031,81 +15036,81 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x4d7,  0x4d4,  0x3,    0x2,    0x2,    0x2,    0x4d7,  0x4d5,
       0x3,   0x2,    0x2,    0x2,    0x4d7,  0x4d6,  0x3,    0x2,    0x2,
       0x2,   0x4d8,  0xcd,   0x3,    0x2,    0x2,    0x2,    0x4d9,  0x4da,
-      0x7,   0x83,   0x2,    0x2,    0x4da,  0x4db,  0x7,    0x4,    0x2,
+      0x7,   0x82,   0x2,    0x2,    0x4da,  0x4db,  0x7,    0x4,    0x2,
       0x2,   0x4db,  0x4dc,  0x5,    0xb4,   0x5b,   0x2,    0x4dc,  0x4dd,
-      0x7,   0xa,    0x2,    0x2,    0x4dd,  0x4e0,  0x5,    0xb4,   0x5b,
-      0x2,   0x4de,  0x4df,  0x7,    0xa,    0x2,    0x2,    0x4df,  0x4e1,
+      0x7,   0x9,    0x2,    0x2,    0x4dd,  0x4e0,  0x5,    0xb4,   0x5b,
+      0x2,   0x4de,  0x4df,  0x7,    0x9,    0x2,    0x2,    0x4df,  0x4e1,
       0x5,   0xb4,   0x5b,   0x2,    0x4e0,  0x4de,  0x3,    0x2,    0x2,
       0x2,   0x4e0,  0x4e1,  0x3,    0x2,    0x2,    0x2,    0x4e1,  0x4e2,
       0x3,   0x2,    0x2,    0x2,    0x4e2,  0x4e3,  0x7,    0x5,    0x2,
       0x2,   0x4e3,  0xcf,   0x3,    0x2,    0x2,    0x2,    0x4e4,  0x4e5,
-      0x7,   0x84,   0x2,    0x2,    0x4e5,  0x4e6,  0x7,    0x4,    0x2,
+      0x7,   0x83,   0x2,    0x2,    0x4e5,  0x4e6,  0x7,    0x4,    0x2,
       0x2,   0x4e6,  0x4e7,  0x5,    0xb4,   0x5b,   0x2,    0x4e7,  0x4e8,
-      0x7,   0xa,    0x2,    0x2,    0x4e8,  0x4eb,  0x5,    0xb4,   0x5b,
-      0x2,   0x4e9,  0x4ea,  0x7,    0xa,    0x2,    0x2,    0x4ea,  0x4ec,
+      0x7,   0x9,    0x2,    0x2,    0x4e8,  0x4eb,  0x5,    0xb4,   0x5b,
+      0x2,   0x4e9,  0x4ea,  0x7,    0x9,    0x2,    0x2,    0x4ea,  0x4ec,
       0x5,   0xb4,   0x5b,   0x2,    0x4eb,  0x4e9,  0x3,    0x2,    0x2,
       0x2,   0x4eb,  0x4ec,  0x3,    0x2,    0x2,    0x2,    0x4ec,  0x4ed,
       0x3,   0x2,    0x2,    0x2,    0x4ed,  0x4ee,  0x7,    0x5,    0x2,
       0x2,   0x4ee,  0xd1,   0x3,    0x2,    0x2,    0x2,    0x4ef,  0x4f0,
-      0x7,   0x85,   0x2,    0x2,    0x4f0,  0x4f1,  0x7,    0x4,    0x2,
+      0x7,   0x84,   0x2,    0x2,    0x4f0,  0x4f1,  0x7,    0x4,    0x2,
       0x2,   0x4f1,  0x4f2,  0x5,    0xb4,   0x5b,   0x2,    0x4f2,  0x4f3,
-      0x7,   0xa,    0x2,    0x2,    0x4f3,  0x4f4,  0x5,    0xb4,   0x5b,
-      0x2,   0x4f4,  0x4f5,  0x7,    0xa,    0x2,    0x2,    0x4f5,  0x4f8,
-      0x5,   0xb4,   0x5b,   0x2,    0x4f6,  0x4f7,  0x7,    0xa,    0x2,
+      0x7,   0x9,    0x2,    0x2,    0x4f3,  0x4f4,  0x5,    0xb4,   0x5b,
+      0x2,   0x4f4,  0x4f5,  0x7,    0x9,    0x2,    0x2,    0x4f5,  0x4f8,
+      0x5,   0xb4,   0x5b,   0x2,    0x4f6,  0x4f7,  0x7,    0x9,    0x2,
       0x2,   0x4f7,  0x4f9,  0x5,    0xb4,   0x5b,   0x2,    0x4f8,  0x4f6,
       0x3,   0x2,    0x2,    0x2,    0x4f8,  0x4f9,  0x3,    0x2,    0x2,
       0x2,   0x4f9,  0x4fa,  0x3,    0x2,    0x2,    0x2,    0x4fa,  0x4fb,
       0x7,   0x5,    0x2,    0x2,    0x4fb,  0xd3,   0x3,    0x2,    0x2,
-      0x2,   0x4fc,  0x4fd,  0x7,    0x86,   0x2,    0x2,    0x4fd,  0x4fe,
+      0x2,   0x4fc,  0x4fd,  0x7,    0x85,   0x2,    0x2,    0x4fd,  0x4fe,
       0x5,   0x3e,   0x20,   0x2,    0x4fe,  0xd5,   0x3,    0x2,    0x2,
-      0x2,   0x4ff,  0x500,  0x7,    0x4f,   0x2,    0x2,    0x500,  0x501,
-      0x7,   0x86,   0x2,    0x2,    0x501,  0x502,  0x5,    0x3e,   0x20,
+      0x2,   0x4ff,  0x500,  0x7,    0x4e,   0x2,    0x2,    0x500,  0x501,
+      0x7,   0x85,   0x2,    0x2,    0x501,  0x502,  0x5,    0x3e,   0x20,
       0x2,   0x502,  0xd7,   0x3,    0x2,    0x2,    0x2,    0x503,  0x504,
-      0x7,   0x87,   0x2,    0x2,    0x504,  0x506,  0x7,    0x4,    0x2,
-      0x2,   0x505,  0x507,  0x7,    0x25,   0x2,    0x2,    0x506,  0x505,
+      0x7,   0x86,   0x2,    0x2,    0x504,  0x506,  0x7,    0x4,    0x2,
+      0x2,   0x505,  0x507,  0x7,    0x24,   0x2,    0x2,    0x506,  0x505,
       0x3,   0x2,    0x2,    0x2,    0x506,  0x507,  0x3,    0x2,    0x2,
       0x2,   0x507,  0x50a,  0x3,    0x2,    0x2,    0x2,    0x508,  0x50b,
       0x7,   0x3,    0x2,    0x2,    0x509,  0x50b,  0x5,    0xb4,   0x5b,
       0x2,   0x50a,  0x508,  0x3,    0x2,    0x2,    0x2,    0x50a,  0x509,
       0x3,   0x2,    0x2,    0x2,    0x50b,  0x50c,  0x3,    0x2,    0x2,
       0x2,   0x50c,  0x544,  0x7,    0x5,    0x2,    0x2,    0x50d,  0x50e,
-      0x7,   0x88,   0x2,    0x2,    0x50e,  0x510,  0x7,    0x4,    0x2,
-      0x2,   0x50f,  0x511,  0x7,    0x25,   0x2,    0x2,    0x510,  0x50f,
+      0x7,   0x87,   0x2,    0x2,    0x50e,  0x510,  0x7,    0x4,    0x2,
+      0x2,   0x50f,  0x511,  0x7,    0x24,   0x2,    0x2,    0x510,  0x50f,
       0x3,   0x2,    0x2,    0x2,    0x510,  0x511,  0x3,    0x2,    0x2,
       0x2,   0x511,  0x512,  0x3,    0x2,    0x2,    0x2,    0x512,  0x513,
       0x5,   0xb4,   0x5b,   0x2,    0x513,  0x514,  0x7,    0x5,    0x2,
       0x2,   0x514,  0x544,  0x3,    0x2,    0x2,    0x2,    0x515,  0x516,
-      0x7,   0x89,   0x2,    0x2,    0x516,  0x518,  0x7,    0x4,    0x2,
-      0x2,   0x517,  0x519,  0x7,    0x25,   0x2,    0x2,    0x518,  0x517,
+      0x7,   0x88,   0x2,    0x2,    0x516,  0x518,  0x7,    0x4,    0x2,
+      0x2,   0x517,  0x519,  0x7,    0x24,   0x2,    0x2,    0x518,  0x517,
       0x3,   0x2,    0x2,    0x2,    0x518,  0x519,  0x3,    0x2,    0x2,
       0x2,   0x519,  0x51a,  0x3,    0x2,    0x2,    0x2,    0x51a,  0x51b,
       0x5,   0xb4,   0x5b,   0x2,    0x51b,  0x51c,  0x7,    0x5,    0x2,
       0x2,   0x51c,  0x544,  0x3,    0x2,    0x2,    0x2,    0x51d,  0x51e,
-      0x7,   0x8a,   0x2,    0x2,    0x51e,  0x520,  0x7,    0x4,    0x2,
-      0x2,   0x51f,  0x521,  0x7,    0x25,   0x2,    0x2,    0x520,  0x51f,
+      0x7,   0x89,   0x2,    0x2,    0x51e,  0x520,  0x7,    0x4,    0x2,
+      0x2,   0x51f,  0x521,  0x7,    0x24,   0x2,    0x2,    0x520,  0x51f,
       0x3,   0x2,    0x2,    0x2,    0x520,  0x521,  0x3,    0x2,    0x2,
       0x2,   0x521,  0x522,  0x3,    0x2,    0x2,    0x2,    0x522,  0x523,
       0x5,   0xb4,   0x5b,   0x2,    0x523,  0x524,  0x7,    0x5,    0x2,
       0x2,   0x524,  0x544,  0x3,    0x2,    0x2,    0x2,    0x525,  0x526,
-      0x7,   0x8b,   0x2,    0x2,    0x526,  0x528,  0x7,    0x4,    0x2,
-      0x2,   0x527,  0x529,  0x7,    0x25,   0x2,    0x2,    0x528,  0x527,
+      0x7,   0x8a,   0x2,    0x2,    0x526,  0x528,  0x7,    0x4,    0x2,
+      0x2,   0x527,  0x529,  0x7,    0x24,   0x2,    0x2,    0x528,  0x527,
       0x3,   0x2,    0x2,    0x2,    0x528,  0x529,  0x3,    0x2,    0x2,
       0x2,   0x529,  0x52a,  0x3,    0x2,    0x2,    0x2,    0x52a,  0x52b,
       0x5,   0xb4,   0x5b,   0x2,    0x52b,  0x52c,  0x7,    0x5,    0x2,
       0x2,   0x52c,  0x544,  0x3,    0x2,    0x2,    0x2,    0x52d,  0x52e,
-      0x7,   0x8c,   0x2,    0x2,    0x52e,  0x530,  0x7,    0x4,    0x2,
-      0x2,   0x52f,  0x531,  0x7,    0x25,   0x2,    0x2,    0x530,  0x52f,
+      0x7,   0x8b,   0x2,    0x2,    0x52e,  0x530,  0x7,    0x4,    0x2,
+      0x2,   0x52f,  0x531,  0x7,    0x24,   0x2,    0x2,    0x530,  0x52f,
       0x3,   0x2,    0x2,    0x2,    0x530,  0x531,  0x3,    0x2,    0x2,
       0x2,   0x531,  0x532,  0x3,    0x2,    0x2,    0x2,    0x532,  0x533,
       0x5,   0xb4,   0x5b,   0x2,    0x533,  0x534,  0x7,    0x5,    0x2,
       0x2,   0x534,  0x544,  0x3,    0x2,    0x2,    0x2,    0x535,  0x536,
-      0x7,   0x2f,   0x2,    0x2,    0x536,  0x538,  0x7,    0x4,    0x2,
-      0x2,   0x537,  0x539,  0x7,    0x25,   0x2,    0x2,    0x538,  0x537,
+      0x7,   0x2e,   0x2,    0x2,    0x536,  0x538,  0x7,    0x4,    0x2,
+      0x2,   0x537,  0x539,  0x7,    0x24,   0x2,    0x2,    0x538,  0x537,
       0x3,   0x2,    0x2,    0x2,    0x538,  0x539,  0x3,    0x2,    0x2,
       0x2,   0x539,  0x53a,  0x3,    0x2,    0x2,    0x2,    0x53a,  0x53f,
-      0x5,   0xb4,   0x5b,   0x2,    0x53b,  0x53c,  0x7,    0xb,    0x2,
-      0x2,   0x53c,  0x53d,  0x7,    0x8d,   0x2,    0x2,    0x53d,  0x53e,
-      0x7,   0x17,   0x2,    0x2,    0x53e,  0x540,  0x5,    0xe8,   0x75,
+      0x5,   0xb4,   0x5b,   0x2,    0x53b,  0x53c,  0x7,    0xa,    0x2,
+      0x2,   0x53c,  0x53d,  0x7,    0x8c,   0x2,    0x2,    0x53d,  0x53e,
+      0x7,   0x16,   0x2,    0x2,    0x53e,  0x540,  0x5,    0xe8,   0x75,
       0x2,   0x53f,  0x53b,  0x3,    0x2,    0x2,    0x2,    0x53f,  0x540,
       0x3,   0x2,    0x2,    0x2,    0x540,  0x541,  0x3,    0x2,    0x2,
       0x2,   0x541,  0x542,  0x7,    0x5,    0x2,    0x2,    0x542,  0x544,
@@ -15119,7 +15124,7 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x547,  0x546,  0x3,    0x2,    0x2,    0x2,    0x547,  0x548,
       0x3,   0x2,    0x2,    0x2,    0x548,  0xdb,   0x3,    0x2,    0x2,
       0x2,   0x549,  0x54d,  0x5,    0xe8,   0x75,   0x2,    0x54a,  0x54e,
-      0x7,   0x94,   0x2,    0x2,    0x54b,  0x54c,  0x7,    0x1e,   0x2,
+      0x7,   0x93,   0x2,    0x2,    0x54b,  0x54c,  0x7,    0x1d,   0x2,
       0x2,   0x54c,  0x54e,  0x5,    0xea,   0x76,   0x2,    0x54d,  0x54a,
       0x3,   0x2,    0x2,    0x2,    0x54d,  0x54b,  0x3,    0x2,    0x2,
       0x2,   0x54d,  0x54e,  0x3,    0x2,    0x2,    0x2,    0x54e,  0xdd,
@@ -15135,7 +15140,7 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x2,   0x55a,  0x55b,  0x9,    0x9,    0x2,    0x2,    0x55b,  0xe7,
       0x3,   0x2,    0x2,    0x2,    0x55c,  0x55d,  0x9,    0xa,    0x2,
       0x2,   0x55d,  0xe9,   0x3,    0x2,    0x2,    0x2,    0x55e,  0x55f,
-      0x7,   0x94,   0x2,    0x2,    0x55f,  0x561,  0x7,    0x21,   0x2,
+      0x7,   0x93,   0x2,    0x2,    0x55f,  0x561,  0x7,    0x20,   0x2,
       0x2,   0x560,  0x55e,  0x3,    0x2,    0x2,    0x2,    0x560,  0x561,
       0x3,   0x2,    0x2,    0x2,    0x561,  0x564,  0x3,    0x2,    0x2,
       0x2,   0x562,  0x565,  0x5,    0xf0,   0x79,   0x2,    0x563,  0x565,
@@ -15146,10 +15151,10 @@ SparqlAutomaticParser::Initializer::Initializer() {
       0x3,   0x2,    0x2,    0x2,    0x568,  0x567,  0x3,    0x2,    0x2,
       0x2,   0x569,  0xed,   0x3,    0x2,    0x2,    0x2,    0x56a,  0x56b,
       0x9,   0xb,    0x2,    0x2,    0x56b,  0xef,   0x3,    0x2,    0x2,
-      0x2,   0x56c,  0x56d,  0x7,    0x8e,   0x2,    0x2,    0x56d,  0xf1,
-      0x3,   0x2,    0x2,    0x2,    0x56e,  0x56f,  0x7,    0x90,   0x2,
+      0x2,   0x56c,  0x56d,  0x7,    0x8d,   0x2,    0x2,    0x56d,  0xf1,
+      0x3,   0x2,    0x2,    0x2,    0x56e,  0x56f,  0x7,    0x8f,   0x2,
       0x2,   0x56f,  0xf3,   0x3,    0x2,    0x2,    0x2,    0x570,  0x571,
-      0x7,   0x8f,   0x2,    0x2,    0x571,  0xf5,   0x3,    0x2,    0x2,
+      0x7,   0x8e,   0x2,    0x2,    0x571,  0xf5,   0x3,    0x2,    0x2,
       0x2,   0x8b,   0xfb,   0x102,  0x104,  0x112,  0x11f,  0x123,  0x125,
       0x128, 0x137,  0x140,  0x146,  0x14a,  0x150,  0x153,  0x158,  0x15c,
       0x164, 0x16d,  0x177,  0x17c,  0x17f,  0x182,  0x185,  0x18b,  0x193,

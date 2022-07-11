@@ -302,7 +302,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         }
 
         currentPattern->_children.emplace_back(std::move(subq));
-        // The closing bracked } is consumed by the subquery
+        // The closing bracket } is consumed by the subquery
         lexer_.accept(".");
       } else {
         // union
@@ -330,12 +330,12 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       lexer_.accept(".");
     } else if (lexer_.peek("values")) {
       auto values =
-          parseWithAntlr(sparqlParserHelpers::parseValuesClause, *query);
-      for (auto& variable : values._inlineValues._variables) {
+          parseWithAntlr(sparqlParserHelpers::parseValuesClause, *query)
+              .value();
+      for (const auto& variable : values._inlineValues._variables) {
         query->registerVariableVisibleInQueryBody(variable);
       }
-      currentPattern->_children.emplace_back(
-          GraphPatternOperation::Values{std::move(values)});
+      currentPattern->_children.emplace_back(std::move(values));
       lexer_.accept(".");
     } else {
       std::string subject;

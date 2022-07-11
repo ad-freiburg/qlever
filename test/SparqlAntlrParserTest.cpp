@@ -678,16 +678,14 @@ TEST(SparqlParser, Integer) {
     string input = "18446744073709551616";
     ParserAndVisitor p{input};
 
-    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_),
-                 SparqlParseException);
+    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_), ParseException);
   }
 
   {
     string input = "10000000000000000000000000000000000000000";
     ParserAndVisitor p{input};
 
-    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_),
-                 SparqlParseException);
+    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_), ParseException);
   }
 
   {
@@ -856,47 +854,38 @@ TEST(SparqlParser, GroupClause) {
   }
 }
 
+namespace {
+template <typename Exception = ParseException>
+void expectValuesFails(const string& input) {
+  EXPECT_THROW(parseValuesClause(input, {}), Exception) << input;
+}
+}  // namespace
+
 TEST(SparqlParser, ValuesClause) {
-  expectCompleteParse(
-      parseValuesClause("VALUES ?test { \"foo\" }", {}),
-      IsValues<vector<std::string>, vector<vector<std::string>>>(
-          {"?test"}, {{"\"foo\""}}));
+  auto expectValue = [](const string& input, const vector<string>& expectedVars,
+                        const vector<vector<string>>& expectedVals) {
+    expectCompleteParse(parseValuesClause(input, {}),
+                        IsValues(expectedVars, expectedVals));
+  };
+  expectValue("VALUES ?test { \"foo\" }", {"?test"}, {{"\"foo\""}});
   // These are not implemented yet in dataBlockValue
   // (numericLiteral/booleanLiteral)
-  EXPECT_THROW(parseValuesClause("VALUES ?test { true }", {}), ParseException);
-  EXPECT_THROW(parseValuesClause("VALUES ?test { 10.0 }", {}), ParseException);
-  expectCompleteParse(
-      parseValuesClause("VALUES ?test { UNDEF }", {}),
-      IsValues<vector<std::string>, vector<vector<std::string>>>({"?test"},
-                                                                 {{"UNDEF"}}));
-  expectCompleteParse(
-      parseValuesClause(R"(VALUES ?foo { "baz" "bar" })", {}),
-      IsValues<vector<std::string>, vector<vector<std::string>>>(
-          {"?foo"}, {{"\"baz\""}, {"\"bar\""}}));
-  expectCompleteParse(
-      parseValuesClause(R"(VALUES ( ) { })", {}),
-      IsValues<vector<std::string>, vector<vector<std::string>>>({}, {}));
-  expectCompleteParse(
-      parseValuesClause(R"(VALUES ( ?foo ?bar ) { (<foo>) (<bar>) })", {}),
-      IsValues<vector<std::string>, vector<vector<std::string>>>(
-          {"?foo", "?bar"}, {{"<foo>"}, {"<bar>"}}));
-  expectCompleteParse(
-      parseValuesClause(R"(VALUES ( ?foo ?bar ) { (<foo> "m") ("1" <bar>) })",
-                        {}),
-      IsValues<vector<std::string>, vector<vector<std::string>>>(
-          {"?foo", "?bar"}, {{"<foo>", "\"m\""}, {"\"1\"", "<bar>"}}));
-  expectCompleteParse(
-      parseValuesClause(
-          R"(VALUES ( ?foo ?bar ) { (<foo> "m" <e>) ("1" UNDEF <bar>) })", {}),
-      IsValues<vector<std::string>, vector<vector<std::string>>>(
-          {"?foo", "?bar"},
-          {{"<foo>", "\"m\"", "<e>"}, {"\"1\"", "UNDEF", "<bar>"}}));
-  // The coresponding asserts throw ad_semsearch::Exception instead of the
-  // usual ParseException
-  EXPECT_THROW(parseValuesClause(R"(VALUES ( ?foo ) { (<foo>) (<bar>) })", {}),
-               ParseException);
-  EXPECT_THROW(parseValuesClause(R"(VALUES ( ) { (<foo>) })", {}),
-               ParseException);
+  expectValuesFails("VALUES ?test { true }");
+  expectValuesFails("VALUES ?test { 10.0 }");
+  expectValuesFails("VALUES ?test { UNDEF }");
+  expectValue(R"(VALUES ?foo { "baz" "bar" })", {"?foo"},
+              {{"\"baz\""}, {"\"bar\""}});
+  expectValuesFails(R"(VALUES ( ) { })");
+  expectValuesFails(R"(VALUES ( ?foo ) { })");
+  expectValuesFails(R"(VALUES ( ?foo ?bar ) { (<foo>) (<bar>) })");
+  expectValue(R"(VALUES ( ?foo ?bar ) { (<foo> <bar>) })", {"?foo", "?bar"},
+              {{"<foo>", "<bar>"}});
+  expectValue(R"(VALUES ( ?foo ?bar ) { (<foo> "m") ("1" <bar>) })",
+              {"?foo", "?bar"}, {{"<foo>", "\"m\""}, {"\"1\"", "<bar>"}});
+  expectValue(R"(VALUES ( ?foo ?bar ) { (<foo> "m") (<bar> <e>) ("1" "f") })",
+              {"?foo", "?bar"},
+              {{"<foo>", "\"m\""}, {"<bar>", "<e>"}, {"\"1\"", "\"f\""}});
+  expectValuesFails(R"(VALUES ( ) { (<foo>) })");
 }
 
 TEST(SparqlParser, propertyPaths) {
@@ -961,10 +950,10 @@ TEST(SparqlParser, propertyPaths) {
   {
     PropertyPath expected = PropertyPath::makeAlternative(
         {PropertyPath::makeSequence({
-                                        PropertyPath::fromIri("<http://www.example.com/a/a>"),
-                                        PropertyPath::makeTransitive(
-                                            {PropertyPath::fromIri("<http://www.example.com/b/b>")}),
-                                    }),
+             PropertyPath::fromIri("<http://www.example.com/a/a>"),
+             PropertyPath::makeTransitive(
+                 {PropertyPath::fromIri("<http://www.example.com/b/b>")}),
+         }),
          PropertyPath::fromIri("<http://www.example.com/c/c>"),
          PropertyPath::makeTransitiveMin(
              {PropertyPath::makeSequence(

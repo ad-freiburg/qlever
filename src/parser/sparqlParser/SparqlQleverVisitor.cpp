@@ -19,7 +19,7 @@ antlrcpp::Any SparqlQleverVisitor::processIriFunctionCall(
     static std::array<std::string, 6> wordForNumArgs = {
         "no", "one", "two", "three", "four", "five"};
     if (argList.size() != numArgs) {
-      throw SparqlParseException{absl::StrCat(
+      throw ParseException{absl::StrCat(
           "Function ", prefix, functionName, " takes ",
           numArgs < 5 ? wordForNumArgs[numArgs] : std::to_string(numArgs),
           numArgs == 1 ? " argument" : " arguments")};
@@ -47,5 +47,5 @@ antlrcpp::Any SparqlQleverVisitor::processIriFunctionCall(
           std::move(argList[0]));
     }
   }
-  throw SparqlParseException{"Function \"" + iri + "\" not supported"};
+  throw ParseException{"Function \"" + iri + "\" not supported"};
 }
