@@ -23,14 +23,6 @@
 #include "antlr4-runtime.h"
 #include "generated/SparqlAutomaticVisitor.h"
 
-class SparqlParseException : public std::exception {
-  string _message;
-
- public:
-  SparqlParseException(std::string message) : _message{std::move(message)} {}
-  const char* what() const noexcept override { return _message.c_str(); }
-};
-
 template <typename T>
 class Reversed {
   T& _iterable;
@@ -124,8 +116,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     if (ctx->constructQuery()) {
       return ctx->constructQuery()->accept(this);
     }
-    throw SparqlParseException{
-        "QLever only supports select and construct queries"};
+    throw ParseException{"QLever only supports select and construct queries"};
   }
 
   // ___________________________________________________________________________
@@ -184,7 +175,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitConstructQuery(
       SparqlAutomaticParser::ConstructQueryContext* ctx) override {
     if (!ctx->datasetClause().empty()) {
-      throw SparqlParseException{"Datasets are not supported"};
+      throw ParseException{"Datasets are not supported"};
     }
     if (ctx->constructTemplate()) {
       return ctx->constructTemplate()->accept(this);
@@ -335,7 +326,16 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitValuesClause(
       SparqlAutomaticParser::ValuesClauseContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
+  }
+
+  std::optional<GraphPatternOperation::Values> visitTypesafe(
+      SparqlAutomaticParser::ValuesClauseContext* ctx) {
+    if (ctx->dataBlock()) {
+      return visitTypesafe(ctx->dataBlock());
+    } else {
+      return std::nullopt;
+    }
   }
 
   antlrcpp::Any visitTriplesTemplate(
@@ -391,27 +391,121 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitDataBlock(
       SparqlAutomaticParser::DataBlockContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
+  }
+
+  GraphPatternOperation::Values visitTypesafe(
+      SparqlAutomaticParser::DataBlockContext* ctx) {
+    if (ctx->inlineDataOneVar()) {
+      return GraphPatternOperation::Values{
+          std::move(visit(ctx->inlineDataOneVar()).as<SparqlValues>())};
+    } else if (ctx->inlineDataFull()) {
+      return GraphPatternOperation::Values{
+          std::move(visit(ctx->inlineDataFull()).as<SparqlValues>())};
+    }
+    AD_FAIL()  // Should be unreachable.
   }
 
   antlrcpp::Any visitInlineDataOneVar(
       SparqlAutomaticParser::InlineDataOneVarContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
+  }
+
+  SparqlValues visitTypesafe(
+      SparqlAutomaticParser::InlineDataOneVarContext* ctx) {
+    SparqlValues values;
+    auto var = visit(ctx->var()).as<Variable>();
+    values._variables.push_back(var.name());
+    if (ctx->dataBlockValue().empty())
+      throw ParseException(
+          "No values were specified in Values "
+          "clause. This is not supported by QLever. Got: " +
+          ctx->getText());
+    for (auto& dataBlockValue : ctx->dataBlockValue()) {
+      values._values.push_back(
+          {std::move(visit(dataBlockValue).as<std::string>())});
+    }
+    return values;
   }
 
   antlrcpp::Any visitInlineDataFull(
       SparqlAutomaticParser::InlineDataFullContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
+  }
+
+  SparqlValues visitTypesafe(
+      SparqlAutomaticParser::InlineDataFullContext* ctx) {
+    SparqlValues values;
+    if (ctx->dataBlockSingle().empty())
+      throw ParseException(
+          "No values were specified in Values "
+          "clause. This is not supported by QLever. Got: " +
+          ctx->getText());
+    if (ctx->NIL())
+      throw ParseException(
+          "No variables were specified in Values "
+          "clause. This is not supported by QLever. Got: " +
+          ctx->getText());
+    for (auto& var : ctx->var()) {
+      values._variables.push_back(visit(var).as<Variable>().name());
+    }
+    values._values = visitVector<vector<std::string>>(ctx->dataBlockSingle());
+    if (std::any_of(values._values.begin(), values._values.end(),
+                    [numVars = values._variables.size()](const auto& inner) {
+                      return inner.size() != numVars;
+                    })) {
+      throw ParseException(
+          "The number of values in every data block must "
+          "match the number of variables in a values clause. Got: " +
+          ctx->getText());
+    }
+    return values;
   }
 
   antlrcpp::Any visitDataBlockSingle(
       SparqlAutomaticParser::DataBlockSingleContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
+  }
+
+  vector<std::string> visitTypesafe(
+      SparqlAutomaticParser::DataBlockSingleContext* ctx) {
+    if (ctx->NIL())
+      throw ParseException(
+          "No values were specified in DataBlock."
+          "This is not supported by QLever. Got: " +
+          ctx->getText());
+    return visitVector<std::string>(ctx->dataBlockValue());
   }
 
   antlrcpp::Any visitDataBlockValue(
       SparqlAutomaticParser::DataBlockValueContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
+  }
+
+  std::string visitTypesafe(SparqlAutomaticParser::DataBlockValueContext* ctx) {
+    // Return a string
+    if (ctx->iri()) {
+      return visit(ctx->iri()).as<std::string>();
+    } else if (ctx->rdfLiteral()) {
+      return visit(ctx->rdfLiteral()).as<std::string>();
+    } else if (ctx->numericLiteral()) {
+      // TODO implement
+      throw ParseException(
+          "Numbers in values clauses are not supported. Got: " +
+          ctx->getText() + ".");
+    } else if (ctx->booleanLiteral()) {
+      // TODO implement
+      throw ParseException(
+          "Booleans in values clauses are not supported. Got: " +
+          ctx->getText() + ".");
+    } else if (ctx->UNDEF()) {
+      // TODO implement
+      throw ParseException(
+          "UNDEF in values clauses is not supported. Got: " + ctx->getText() +
+          ""
+          ".");
+    }
+    AD_FAIL()  // Should be unreachable.
   }
 
   antlrcpp::Any visitMinusGraphPattern(
@@ -452,7 +546,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     // whole list, not the individual arguments), but we currently don't support
     // it.
     if (ctx->DISTINCT()) {
-      throw SparqlParseException{
+      throw ParseException{
           "DISTINCT for argument lists of IRI functions are not supported"};
     }
     // Visit the expression of each argument.
@@ -544,7 +638,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       return VarOrTerm{
           GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"}}};
     }
-    throw SparqlParseException{"Invalid verb "s + ctx->getText()};
+    throw ParseException{"Invalid verb "s + ctx->getText()};
   }
 
   antlrcpp::Any visitObjectList(
@@ -755,10 +849,9 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     try {
       return std::stoull(ctx->getText());
     } catch (const std::out_of_range&) {
-      throw SparqlParseException{
-          "Integer " + ctx->getText() +
-          " does not fit"
-          " into 64 bits. This is not supported by QLever."};
+      throw ParseException{"Integer " + ctx->getText() +
+                           " does not fit"
+                           " into 64 bits. This is not supported by QLever."};
     }
   }
 
@@ -1171,7 +1264,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       // } else if (ad_utility::getLowercase(context->children[0]->getText()) ==
       //            "sqr") {
       //   if (context->expression().size() != 1) {
-      //     throw SparqlParseException{"SQR needs one argument"};
+      //     throw ParseException{"SQR needs one argument"};
       //   }
       //   auto children = visitVector<ExpressionPtr>(context->expression());
       //   return createExpression<sparqlExpression::SquareExpression>(
@@ -1179,13 +1272,13 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       // } else if (ad_utility::getLowercase(context->children[0]->getText()) ==
       //            "dist") {
       //   if (context->expression().size() != 2) {
-      //     throw SparqlParseException{"DIST needs two arguments"};
+      //     throw ParseException{"DIST needs two arguments"};
       //   }
       //   auto children = visitVector<ExpressionPtr>(context->expression());
       //   return createExpression<sparqlExpression::DistExpression>(
       //       std::move(children[0]), std::move(children[1]));
     } else {
-      throw SparqlParseException{
+      throw ParseException{
           "Built-in function not yet implemented (only aggregates like COUNT "
           "so far)"};
     }
@@ -1221,7 +1314,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     // the only case that there is no child expression is COUNT(*), so we can
     // check this outside the if below.
     if (!context->expression()) {
-      throw SparqlParseException{
+      throw ParseException{
           "This parser currently doesn't support COUNT(*), please specify an "
           "explicit expression for the COUNT"};
     }
@@ -1384,7 +1477,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     auto pnLocal = text.substr(pos + 1);
     if (!_prefixMap.contains(pnameNS)) {
       // TODO<joka921> : proper name
-      throw SparqlParseException{
+      throw ParseException{
           ""
           "Prefix " +
           pnameNS + " was not registered using a PREFIX declaration"};
@@ -1401,7 +1494,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     auto prefix = text.substr(0, text.length() - 1);
     if (!_prefixMap.contains(prefix)) {
       // TODO<joka921> : proper name
-      throw SparqlParseException{
+      throw ParseException{
           ""
           "Prefix " +
           prefix + " was not registered using a PREFIX declaration"};

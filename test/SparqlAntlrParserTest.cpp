@@ -678,16 +678,14 @@ TEST(SparqlParser, Integer) {
     string input = "18446744073709551616";
     ParserAndVisitor p{input};
 
-    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_),
-                 SparqlParseException);
+    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_), ParseException);
   }
 
   {
     string input = "10000000000000000000000000000000000000000";
     ParserAndVisitor p{input};
 
-    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_),
-                 SparqlParseException);
+    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_), ParseException);
   }
 
   {
@@ -854,6 +852,41 @@ TEST(SparqlParser, GroupClause) {
                              IsAliasGroupKey("?foo-10", "?bar"),
                              IsExpressionGroupKey("COUNT(?baz)"));
   }
+}
+
+namespace {
+template <typename Exception = ParseException>
+void expectValuesFails(const string& input) {
+  EXPECT_THROW(parseValuesClause(input, {}), Exception) << input;
+}
+}  // namespace
+
+TEST(SparqlParser, ValuesClause) {
+  auto expectValue = [](const string& input, const vector<string>& expectedVars,
+                        const vector<vector<string>>& expectedVals) {
+    expectCompleteParse(parseValuesClause(input, {}),
+                        IsValues(expectedVars, expectedVals));
+  };
+  expectValue("VALUES ?test { \"foo\" }", {"?test"}, {{"\"foo\""}});
+  // These are not implemented yet in dataBlockValue
+  // (numericLiteral/booleanLiteral)
+  expectValuesFails("VALUES ?test { true }");
+  expectValuesFails("VALUES ?test { 10.0 }");
+  expectValuesFails("VALUES ?test { UNDEF }");
+  expectValue(R"(VALUES ?foo { "baz" "bar" })", {"?foo"},
+              {{"\"baz\""}, {"\"bar\""}});
+  expectValuesFails(R"(VALUES ( ) { })");
+  expectValuesFails(R"(VALUES ?foo { })");
+  expectValuesFails(R"(VALUES ( ?foo ) { })");
+  expectValuesFails(R"(VALUES ( ?foo ?bar ) { (<foo>) (<bar>) })");
+  expectValue(R"(VALUES ( ?foo ?bar ) { (<foo> <bar>) })", {"?foo", "?bar"},
+              {{"<foo>", "<bar>"}});
+  expectValue(R"(VALUES ( ?foo ?bar ) { (<foo> "m") ("1" <bar>) })",
+              {"?foo", "?bar"}, {{"<foo>", "\"m\""}, {"\"1\"", "<bar>"}});
+  expectValue(R"(VALUES ( ?foo ?bar ) { (<foo> "m") (<bar> <e>) ("1" "f") })",
+              {"?foo", "?bar"},
+              {{"<foo>", "\"m\""}, {"<bar>", "<e>"}, {"\"1\"", "\"f\""}});
+  expectValuesFails(R"(VALUES ( ) { (<foo>) })");
 }
 
 TEST(SparqlParser, propertyPaths) {

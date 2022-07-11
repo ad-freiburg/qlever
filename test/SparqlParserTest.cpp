@@ -362,7 +362,9 @@ TEST(ParserTest, testParse) {
           pq.children()[0].get<GraphPatternOperation::Values>()._inlineValues;
       vector<string> vvars = {"?citytype"};
       ASSERT_EQ(vvars, values1._variables);
-      vector<vector<string>> vvals = {{"wd:Q515"}, {"wd:Q262166"}};
+      vector<vector<string>> vvals = {
+          {"<http://www.wikidata.org/entity/Q515>"},
+          {"<http://www.wikidata.org/entity/Q262166>"}};
       ASSERT_EQ(vvals, values1._values);
     }
 

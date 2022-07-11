@@ -56,6 +56,21 @@ struct ParserAndVisitor {
       throw std::runtime_error{"Failed to parse " + name + ": " + e.what()};
     }
   }
+
+  template <typename ContextType>
+  auto parseTypesafe(const std::string_view input, const std::string_view name,
+                     ContextType* (SparqlAutomaticParser::*F)(void)) {
+    try {
+      auto resultOfParse = visitor_.visitTypesafe(std::invoke(F, parser_));
+
+      auto remainingString =
+          input.substr(parser_.getCurrentToken()->getStartIndex());
+      return ResultOfParseAndRemainingText{std::move(resultOfParse),
+                                           std::string{remainingString}};
+    } catch (const antlr4::ParseCancellationException& e) {
+      throw std::runtime_error{"Failed to parse " + name + ": " + e.what()};
+    }
+  }
 };
 
 // ____________________________________________________________________________
@@ -82,6 +97,10 @@ ResultOfParseAndRemainingText<vector<OrderKey>> parseOrderClause(
 
 ResultOfParseAndRemainingText<vector<GroupKey>> parseGroupClause(
     const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
+
+ResultOfParseAndRemainingText<std::optional<GraphPatternOperation::Values>>
+parseValuesClause(const std::string& input,
+                  SparqlQleverVisitor::PrefixMap prefixes);
 
 ResultOfParseAndRemainingText<PropertyPath> parseVerbPathOrSimple(
     const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);

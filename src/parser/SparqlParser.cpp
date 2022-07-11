@@ -302,7 +302,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         }
 
         currentPattern->_children.emplace_back(std::move(subq));
-        // The closing bracked } is consumed by the subquery
+        // The closing bracket } is consumed by the subquery
         lexer_.accept(".");
       } else {
         // union
@@ -328,45 +328,14 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       parseFilter(&currentPattern->_filters, true, currentPattern);
       // A filter may have an optional dot after it
       lexer_.accept(".");
-    } else if (lexer_.accept("values")) {
-      SparqlValues values;
-      if (lexer_.accept("(")) {
-        // values with several variables
-        while (lexer_.accept(SparqlToken::Type::VARIABLE)) {
-          values._variables.push_back(lexer_.current().raw);
-          query->registerVariableVisibleInQueryBody(lexer_.current().raw);
-        }
-        lexer_.expect(")");
-        lexer_.expect("{");
-        while (lexer_.accept("(")) {
-          values._values.emplace_back(values._variables.size());
-          for (size_t i = 0; i < values._variables.size(); i++) {
-            if (!lexer_.accept(SparqlToken::Type::RDFLITERAL)) {
-              lexer_.expect(SparqlToken::Type::IRI);
-            }
-            values._values.back()[i] = lexer_.current().raw;
-          }
-          lexer_.expect(")");
-        }
-        lexer_.expect("}");
-      } else if (lexer_.accept(SparqlToken::Type::VARIABLE)) {
-        // values with a single variable
-        values._variables.push_back(lexer_.current().raw);
-        query->registerVariableVisibleInQueryBody(lexer_.current().raw);
-        lexer_.expect("{");
-        while (lexer_.accept(SparqlToken::Type::IRI) ||
-               lexer_.accept(SparqlToken::Type::RDFLITERAL)) {
-          values._values.emplace_back(1);
-          values._values.back()[0] = lexer_.current().raw;
-        }
-        lexer_.expect("}");
-      } else {
-        throw ParseException(
-            "Expected either a single or a set of variables "
-            "after VALUES");
+    } else if (lexer_.peek("values")) {
+      auto values =
+          parseWithAntlr(sparqlParserHelpers::parseValuesClause, *query)
+              .value();
+      for (const auto& variable : values._inlineValues._variables) {
+        query->registerVariableVisibleInQueryBody(variable);
       }
-      currentPattern->_children.emplace_back(
-          GraphPatternOperation::Values{std::move(values)});
+      currentPattern->_children.emplace_back(std::move(values));
       lexer_.accept(".");
     } else {
       std::string subject;

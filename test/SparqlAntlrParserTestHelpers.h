@@ -69,6 +69,14 @@ std::ostream& operator<<(std::ostream& out,
   return out;
 }
 
+std::ostream& operator<<(std::ostream& out,
+                         const GraphPatternOperation::Values& values) {
+  out << "Values: variables "
+      << ::testing::PrintToString(values._inlineValues._variables) << " values "
+      << ::testing::PrintToString(values._inlineValues._values);
+  return out;
+}
+
 // _____________________________________________________________________________
 
 namespace sparqlExpression {
@@ -241,6 +249,11 @@ MATCHER_P(GroupByVariablesMatch, vars, "") {
   if (groupVariables.size() != vars.size()) return false;
   return std::equal(groupVariables.begin(), groupVariables.end(), vars.begin(),
                     [](auto& var, auto& var1) { return var.name() == var1; });
+}
+
+MATCHER_P2(IsValues, vars, values, "") {
+  return (arg.value()._inlineValues._variables == vars) &&
+         (arg.value()._inlineValues._values == values);
 }
 
 // A trivial matcher for PropertyPaths because e.g. expectCompleteParse needs

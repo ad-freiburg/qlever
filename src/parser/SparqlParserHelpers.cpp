@@ -93,10 +93,19 @@ ResultOfParseAndRemainingText<vector<GroupKey>> parseGroupClause(
 }
 // _____________________________________________________________________________
 
+ResultOfParseAndRemainingText<std::optional<GraphPatternOperation::Values>>
+parseValuesClause(const std::string& input,
+                  SparqlQleverVisitor::PrefixMap prefixes) {
+  ParserAndVisitor p{input, std::move(prefixes)};
+  return p.parseTypesafe(input, "values clause",
+                         &SparqlAutomaticParser::valuesClause);
+}
+// _____________________________________________________________________________
+
 ResultOfParseAndRemainingText<PropertyPath> parseVerbPathOrSimple(
     const std::string& input, SparqlQleverVisitor::PrefixMap prefixes) {
   ParserAndVisitor p{input, std::move(prefixes)};
-  return p.parse<PropertyPath>(input, "verb path or simple",
-                               &SparqlAutomaticParser::verbPathOrSimple);
+  return p.parseTypesafe(input, "verb path or simple",
+                         &SparqlAutomaticParser::verbPathOrSimple);
 }
 }  // namespace sparqlParserHelpers
