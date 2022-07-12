@@ -52,9 +52,14 @@ template <typename T>
 concept Arithmetic = std::integral<T> || std::floating_point<T>;
 
 template <typename A, typename B>
+concept BothVariables =
+    std::is_same_v<Variable, A>&& std::is_same_v<Variable, B>;
+
+template <typename A, typename B>
 concept Compatible = (Arithmetic<A> && Arithmetic<B>) ||
                      (std::is_same_v<std::string, A> &&
-                      std::is_same_v<std::string, B>);
+                      std::is_same_v<std::string, B>) ||
+                     BothVariables<A, B>;
 
 template <typename A, typename B>
 concept Incompatible = (Arithmetic<A> && std::is_same_v<B, std::string>) ||
@@ -70,32 +75,42 @@ struct ValueTypeImpl<VectorWithMemoryLimit<T>> {
   using type = T;
 };
 
-template<typename T>
+template <typename T>
 using ValueType = typename ValueTypeImpl<T>::type;
 
 static_assert(std::is_same_v<double, ValueType<VectorWithMemoryLimit<double>>>);
 
-static_assert(Compatible<ValueType<VectorWithMemoryLimit<double>>, ValueType<double>>);
+static_assert(
+    Compatible<ValueType<VectorWithMemoryLimit<double>>, ValueType<double>>);
 template <typename T>
 concept Boolean =
     std::is_same_v<T, Bool> || std::is_same_v<T, ad_utility::SetOfIntervals> ||
     std::is_same_v<VectorWithMemoryLimit<Bool>, T>;
 
-template <Comparison Comp, typename A, typename B> requires Compatible<ValueType<A>, ValueType<B>>
-ExpressionResult evaluateR(A a, B b, EvaluationContext* context) {
+template <Comparison Comp, typename A, typename B>
+requires Compatible<ValueType<A>, ValueType<B>> ExpressionResult
+evaluateR(A a, B b, EvaluationContext* context) {
   auto targetSize = sparqlExpression::detail::getResultSize(*context, a, b);
-  constexpr static bool resultIsConstant = (isConstantResult<A> && isConstantResult<B>);
+  constexpr static bool resultIsConstant =
+      (isConstantResult<A> && isConstantResult<B>);
   VectorWithMemoryLimit<Bool> result{context->_allocator};
   result.reserve(targetSize);
 
-  auto generatorA = sparqlExpression::detail::resultGenerator(std::move(a), targetSize);
-  auto generatorB = sparqlExpression::detail::resultGenerator(std::move(b), targetSize);
+  auto generatorA = sparqlExpression::detail::makeGenerator(
+      std::move(a), targetSize, context);
+  auto generatorB = sparqlExpression::detail::makeGenerator(
+      std::move(b), targetSize, context);
 
   auto itA = generatorA.begin();
   auto itB = generatorB.begin();
 
   for (size_t i = 0; i < targetSize; ++i) {
-    result.push_back(applyComparison<Comp>(*itA, *itB));
+    if constexpr (BothVariables<A, B>) {
+      result.push_back(valueIdComparators::compareIds(itA->_id._value,
+                                                      itB->_id._value, Comp));
+    } else {
+      result.push_back(applyComparison<Comp>(*itA, *itB));
+    }
     ++itA;
     ++itB;
   }
@@ -117,47 +132,41 @@ template <Comparison, typename A, typename B>
 }
 
 template <Comparison, typename A, typename B>
-requires Incompatible<A, B> Bool evaluateR(const A&, const B&,
-                                           EvaluationContext*) {
-  return false;
-}
-
-template <Comparison, typename A, typename B>
-requires Incompatible<A, B> Bool evaluateR(const VectorWithMemoryLimit<A>&,
-                                           const B&, EvaluationContext*) {
-  return false;
-}
-
-template <Comparison, typename A, typename B>
-requires Incompatible<A, B> Bool evaluateR(const A&,
-                                           const VectorWithMemoryLimit<B>&,
-                                           EvaluationContext*) {
-  return false;
-}
-
-template <Comparison, typename A, typename B>
-requires Incompatible<A, B> Bool evaluateR(const VectorWithMemoryLimit<A>&,
-                                           const VectorWithMemoryLimit<B>&,
-                                           EvaluationContext*) {
+requires Incompatible<ValueType<A>, ValueType<B>> Bool
+evaluateR(const A&, const B&, EvaluationContext*) {
   return false;
 }
 
 template <Comparison Comp>
-VectorWithMemoryLimit<Bool> evaluateR(const Variable& a, const Variable& b,
-                                      EvaluationContext* context) {
+ExpressionResult evaluateWithBinarySearch(const Variable& a, ValueId idB,
+                                          std::optional<ValueId> idBUpper,
+                                          EvaluationContext* context) {
   auto idxA = getIndexForVariable(a, context);
-  auto idxB = getIndexForVariable(b, context);
 
-  VectorWithMemoryLimit<Bool> result{context->_allocator};
-  result.reserve(context->_endIndex - context->_beginIndex);
+  auto accessColumnLambda = ad_utility::makeAssignableLambda(
+      [idxA](const auto& idTable, auto i) { return idTable(i, idxA); });
 
-  // TODO<joka921> Use the CALL_FIXED_SIZE optimization here
-  for (auto i = context->_beginIndex; i < context->_endIndex; ++i) {
-    auto idA = context->_inputTable(i, idxA);
-    auto idB = context->_inputTable(i, idxB);
-    result.push_back(valueIdComparators::compareIds(idA, idB, Comp));
+  using Iterator = ad_utility::IteratorForAccessOperator<
+      std::decay_t<decltype(context->_inputTable)>,
+      decltype(accessColumnLambda)>;
+  auto begin =
+      Iterator{&context->_inputTable, context->_beginIndex, accessColumnLambda};
+  auto end =
+      Iterator{&context->_inputTable, context->_endIndex, accessColumnLambda};
+
+  const auto resultRanges = [&]() {
+    if (idBUpper) {
+      return valueIdComparators::getRangesForEqualIds(begin, end, idB,
+                                                      idBUpper.value(), Comp);
+    } else {
+      return valueIdComparators::getRangesForId(begin, end, idB, Comp);
+    }
+  }();
+  ad_utility::SetOfIntervals s;
+  for (const auto& [rangeBegin, rangeEnd] : resultRanges) {
+    s._intervals.emplace_back(rangeBegin - begin, rangeEnd - begin);
   }
-  return result;
+  return s;
 }
 
 template <Comparison Comp, Arithmetic B>
@@ -175,24 +184,7 @@ ExpressionResult evaluateR(const Variable& a, const B& b,
   }();
   const auto& cols = context->_columnsByWhichResultIsSorted;
   if (!cols.empty() && cols[0] == idxA) {
-    auto accessColumnLambda = ad_utility::makeAssignableLambda(
-        [idxA](const auto& idTable, auto i) { return idTable(i, idxA); });
-
-    using Iterator = ad_utility::IteratorForAccessOperator<
-        std::decay_t<decltype(context->_inputTable)>,
-        decltype(accessColumnLambda)>;
-    auto begin = Iterator{&context->_inputTable, context->_beginIndex,
-                          accessColumnLambda};
-    auto end =
-        Iterator{&context->_inputTable, context->_endIndex, accessColumnLambda};
-
-    auto resultRanges =
-        valueIdComparators::getRangesForId(begin, end, idB, Comp);
-    ad_utility::SetOfIntervals s;
-    for (const auto& [rangeBegin, rangeEnd] : resultRanges) {
-      s._intervals.emplace_back(rangeBegin - begin, rangeEnd - begin);
-    }
-    return s;
+    return evaluateWithBinarySearch<Comp>(a, idB, std::nullopt, context);
   }
 
   VectorWithMemoryLimit<Bool> result{context->_allocator};
@@ -225,24 +217,7 @@ ExpressionResult evaluateR(const Variable& a, const std::string& b,
 
   const auto& cols = context->_columnsByWhichResultIsSorted;
   if (!cols.empty() && cols[0] == idxA) {
-    auto accessColumnLambda = ad_utility::makeAssignableLambda(
-        [idxA](const auto& idTable, auto i) { return idTable(i, idxA); });
-
-    using Iterator = ad_utility::IteratorForAccessOperator<
-        std::decay_t<decltype(context->_inputTable)>,
-        decltype(accessColumnLambda)>;
-    auto begin = Iterator{&context->_inputTable, context->_beginIndex,
-                          accessColumnLambda};
-    auto end =
-        Iterator{&context->_inputTable, context->_endIndex, accessColumnLambda};
-
-    auto resultRanges = valueIdComparators::getRangesForEqualIds(
-        begin, end, lower, upper, Comp);
-    ad_utility::SetOfIntervals s;
-    for (const auto& [rangeBegin, rangeEnd] : resultRanges) {
-      s._intervals.emplace_back(rangeBegin - begin, rangeEnd - begin);
-    }
-    return s;
+    return evaluateWithBinarySearch<Comp>(a, lower, upper, context);
   }
 
   VectorWithMemoryLimit<Bool> result{context->_allocator};
@@ -290,13 +265,6 @@ Bool evaluateR(const VectorWithMemoryLimit<T>&, const Variable&,
   throw std::runtime_error("Not implemented, TODO");
 }
 
-/*
-template <Comparison, typename T>
-Bool evaluateR(const T&, const auto&, EvaluationContext*) {
-  static_assert(ad_utility::alwaysFalse<T>);
-  throw std::runtime_error("Not implemented, TODO");
-}
- */
 }  // namespace
 
 namespace sparqlExpression::relational {
@@ -306,8 +274,7 @@ ExpressionResult RelationalExpression<Comp>::evaluate(
   auto resA = _children[0]->evaluate(context);
   auto resB = _children[1]->evaluate(context);
 
-  auto visitor = [this, context](auto a,
-                                 auto b) -> ExpressionResult {
+  auto visitor = [this, context](auto a, auto b) -> ExpressionResult {
     return evaluateR<Comp>(std::move(a), std::move(b), context);
   };
 
