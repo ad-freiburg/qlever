@@ -7,6 +7,8 @@
 #include "../src/engine/sparqlExpressions/LiteralExpression.h"
 #include "../src/engine/sparqlExpressions/NaryExpression.h"
 #include "../src/engine/sparqlExpressions/SparqlExpression.h"
+#include "../src/engine/sparqlExpressions/RelationalExpressions.h"
+
 
 using namespace sparqlExpression;
 
@@ -216,4 +218,25 @@ TEST(SparqlExpression, PlusAndMinus) {
   testMultiply(bTimesD, b, d);
   testDivide(bByD, b, d);
   testDivide(dByB, d, b);
+}
+
+TEST(SparqlExpression, LessThan) {
+  auto three = std::make_unique<DummyExpression>(3);
+  auto four = std::make_unique<DummyExpression>(4.2);
+
+  QueryExecutionContext* qec = nullptr;
+  auto expr = LessThanExpression{{std::move(three), std::move(four)}};
+
+  ad_utility::AllocatorWithLimit<Id> alloc{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
+  sparqlExpression::VariableToColumnAndResultTypeMap map;
+  ResultTable::LocalVocab localVocab;
+  IdTable table{alloc};
+
+  sparqlExpression::EvaluationContext context{*qec, map, table, alloc,
+                                              localVocab};
+
+  auto res = expr.evaluate(&context);
+  ASSERT_TRUE(std::get<Bool>(res));
+
 }
