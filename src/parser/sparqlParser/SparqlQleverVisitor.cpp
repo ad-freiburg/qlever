@@ -3,10 +3,11 @@
 // Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include "SparqlQleverVisitor.h"
-#include "../../engine/sparqlExpressions/RelationalExpressions.h"
 
 #include <string>
 #include <vector>
+
+#include "../../engine/sparqlExpressions/RelationalExpressions.h"
 
 using namespace sparqlExpression;
 // ___________________________________________________________________________
@@ -52,11 +53,13 @@ antlrcpp::Any SparqlQleverVisitor::processIriFunctionCall(
   throw ParseException{"Function \"" + iri + "\" not supported"};
 }
 // ___________________________________________________________________________
-auto SparqlQleverVisitor::visitTypesafe(SparqlAutomaticParser::RelationalExpressionContext* ctx) -> ExpressionPtr {
+auto SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::RelationalExpressionContext* ctx) -> ExpressionPtr {
   auto children = visitVector<ExpressionPtr>(ctx->numericExpression());
 
   if (ctx->expressionList()) {
-    throw ParseException{"IN/ NOT IN in expressions is currently not supported by QLever."};
+    throw ParseException{
+        "IN/ NOT IN in expressions is currently not supported by QLever."};
   }
   AD_CHECK(children.size() == 1 || children.size() == 2);
   if (children.size() == 1) {
@@ -64,15 +67,16 @@ auto SparqlQleverVisitor::visitTypesafe(SparqlAutomaticParser::RelationalExpress
   }
 
   auto make = [&]<typename Expr>() {
-    return createExpression<Expr>(std::move(children[0]), std::move(children[1]));
+    return createExpression<Expr>(std::move(children[0]),
+                                  std::move(children[1]));
   };
   std::string relation = ctx->children[1]->getText();
-   if (relation == "=") {
-     return make.operator()<EqualExpression>();
-   } else if (relation == "!=") {
-     return make.operator()<NotEqualExpression>();
-   } else if (relation == "<") {
-     return make.operator()<LessThanExpression>();
+  if (relation == "=") {
+    return make.operator()<EqualExpression>();
+  } else if (relation == "!=") {
+    return make.operator()<NotEqualExpression>();
+  } else if (relation == "<") {
+    return make.operator()<LessThanExpression>();
   } else if (relation == ">") {
     return make.operator()<GreaterThanExpression>();
   } else if (relation == "<=") {

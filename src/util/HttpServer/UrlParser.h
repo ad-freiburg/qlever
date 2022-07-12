@@ -6,6 +6,7 @@
 #ifndef QLEVER_URLPARSER_H
 #define QLEVER_URLPARSER_H
 
+#include <optional>
 #include <string>
 #include <string_view>
 
