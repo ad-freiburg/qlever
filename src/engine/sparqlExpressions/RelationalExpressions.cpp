@@ -5,6 +5,7 @@
 #include "RelationalExpressions.h"
 
 #include "../../util/LambdaHelpers.h"
+#include "./SparqlExpressionGenerators.h"
 
 using namespace sparqlExpression;
 
@@ -60,44 +61,50 @@ concept Incompatible = (Arithmetic<A> && std::is_same_v<B, std::string>) ||
                        (Arithmetic<B> && std::is_same_v<std::string, A>);
 
 template <typename T>
+struct ValueTypeImpl {
+  using type = T;
+};
+
+template <typename T>
+struct ValueTypeImpl<VectorWithMemoryLimit<T>> {
+  using type = T;
+};
+
+template<typename T>
+using ValueType = typename ValueTypeImpl<T>::type;
+
+static_assert(std::is_same_v<double, ValueType<VectorWithMemoryLimit<double>>>);
+
+static_assert(Compatible<ValueType<VectorWithMemoryLimit<double>>, ValueType<double>>);
+template <typename T>
 concept Boolean =
     std::is_same_v<T, Bool> || std::is_same_v<T, ad_utility::SetOfIntervals> ||
     std::is_same_v<VectorWithMemoryLimit<Bool>, T>;
 
-template <Comparison Comp, typename A, typename B>
-requires Compatible<A, B> Bool evaluateR(const A& a, const B& b,
-                                         EvaluationContext*) {
-  return applyComparison<Comp>(a, b);
-}
+template <Comparison Comp, typename A, typename B> requires Compatible<ValueType<A>, ValueType<B>>
+ExpressionResult evaluateR(A a, B b, EvaluationContext* context) {
+  auto targetSize = sparqlExpression::detail::getResultSize(*context, a, b);
+  constexpr static bool resultIsConstant = (isConstantResult<A> && isConstantResult<B>);
+  VectorWithMemoryLimit<Bool> result{context->_allocator};
+  result.reserve(targetSize);
 
-template <Comparison Comp, typename A, typename B>
-requires Compatible<A, B> VectorWithMemoryLimit<Bool> evaluateR(
-    const VectorWithMemoryLimit<A>& a, const B& b, EvaluationContext* context) {
-  VectorWithMemoryLimit<Bool> result(context->_allocator);
-  result.reserve(a.size());
-  for (const auto& x : a) {
-    result.push_back(applyComparison<Comp>(x, b));
+  auto generatorA = sparqlExpression::detail::resultGenerator(std::move(a), targetSize);
+  auto generatorB = sparqlExpression::detail::resultGenerator(std::move(b), targetSize);
+
+  auto itA = generatorA.begin();
+  auto itB = generatorB.begin();
+
+  for (size_t i = 0; i < targetSize; ++i) {
+    result.push_back(applyComparison<Comp>(*itA, *itB));
+    ++itA;
+    ++itB;
   }
-  return result;
-}
 
-template <Comparison Comp, typename A, typename B>
-requires Compatible<A, B> VectorWithMemoryLimit<Bool> evaluateR(
-    const A& a, const VectorWithMemoryLimit<B>& b, EvaluationContext* context) {
-  return evaluateR<getComplement(Comp)>(b, a, context);
-}
-
-template <Comparison Comp, typename A, typename B>
-requires Compatible<A, B> VectorWithMemoryLimit<Bool> evaluateR(
-    const VectorWithMemoryLimit<A>& a, const VectorWithMemoryLimit<B>& b,
-    EvaluationContext* context) {
-  VectorWithMemoryLimit<Bool> result(context->_allocator);
-  result.reserve(a.size());
-  AD_CHECK(a.size() == b.size());
-  for (size_t i = 0; i < a.size(); ++i) {
-    result.push_back(applyComparison<Comp>(a[i], b[i]));
+  if constexpr (resultIsConstant) {
+    return result[0];
+  } else {
+    return result;
   }
-  return result;
 }
 
 template <Comparison, typename A, typename B>
@@ -299,12 +306,12 @@ ExpressionResult RelationalExpression<Comp>::evaluate(
   auto resA = _children[0]->evaluate(context);
   auto resB = _children[1]->evaluate(context);
 
-  auto visitor = [this, context](const auto& a,
-                                 const auto& b) -> ExpressionResult {
-    return evaluateR<Comp>(a, b, context);
+  auto visitor = [this, context](auto a,
+                                 auto b) -> ExpressionResult {
+    return evaluateR<Comp>(std::move(a), std::move(b), context);
   };
 
-  return std::visit(visitor, resA, resB);
+  return std::visit(visitor, std::move(resA), std::move(resB));
 }
 
 template <Comparison Comp>
