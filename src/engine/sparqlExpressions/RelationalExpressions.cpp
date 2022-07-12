@@ -50,26 +50,29 @@ constexpr Comparison getComplement(Comparison comp) {
 template <typename T>
 concept Arithmetic = std::integral<T> || std::floating_point<T>;
 
-template<typename A, typename B>
-concept Compatible = (Arithmetic<A> && Arithmetic<B>) || (std::is_same_v<std::string, A> && std::is_same_v<std::string, B>);
+template <typename A, typename B>
+concept Compatible = (Arithmetic<A> && Arithmetic<B>) ||
+                     (std::is_same_v<std::string, A> &&
+                      std::is_same_v<std::string, B>);
 
-template<typename A, typename B>
-concept Incompatible = (Arithmetic<A> && std::is_same_v<B, std::string>) || (Arithmetic<A> && std::is_same_v<std::string, B>);
+template <typename A, typename B>
+concept Incompatible = (Arithmetic<A> && std::is_same_v<B, std::string>) ||
+                       (Arithmetic<B> && std::is_same_v<std::string, A>);
 
 template <typename T>
 concept Boolean =
     std::is_same_v<T, Bool> || std::is_same_v<T, ad_utility::SetOfIntervals> ||
     std::is_same_v<VectorWithMemoryLimit<Bool>, T>;
 
-template <Comparison Comp, typename A, typename B> requires Compatible<A, B>
-Bool evaluateR(const A& a, const B& b, EvaluationContext*) {
+template <Comparison Comp, typename A, typename B>
+requires Compatible<A, B> Bool evaluateR(const A& a, const B& b,
+                                         EvaluationContext*) {
   return applyComparison<Comp>(a, b);
 }
 
-template <Comparison Comp, typename A, typename B> requires Compatible<A, B>
-VectorWithMemoryLimit<Bool> evaluateR(const VectorWithMemoryLimit<A>& a,
-                                      const B& b,
-                                      EvaluationContext* context) {
+template <Comparison Comp, typename A, typename B>
+requires Compatible<A, B> VectorWithMemoryLimit<Bool> evaluateR(
+    const VectorWithMemoryLimit<A>& a, const B& b, EvaluationContext* context) {
   VectorWithMemoryLimit<Bool> result(context->_allocator);
   result.reserve(a.size());
   for (const auto& x : a) {
@@ -78,17 +81,16 @@ VectorWithMemoryLimit<Bool> evaluateR(const VectorWithMemoryLimit<A>& a,
   return result;
 }
 
-template <Comparison Comp, typename A, typename B> requires Compatible<A, B>
-VectorWithMemoryLimit<Bool> evaluateR(const A& a,
-                                      const VectorWithMemoryLimit<B>& b,
-                                      EvaluationContext* context) {
+template <Comparison Comp, typename A, typename B>
+requires Compatible<A, B> VectorWithMemoryLimit<Bool> evaluateR(
+    const A& a, const VectorWithMemoryLimit<B>& b, EvaluationContext* context) {
   return evaluateR<getComplement(Comp)>(b, a, context);
 }
 
-template <Comparison Comp, typename A, typename B> requires Compatible<A, B>
-VectorWithMemoryLimit<Bool> evaluateR(const VectorWithMemoryLimit<A>& a,
-                                      const VectorWithMemoryLimit<B>& b,
-                                      EvaluationContext* context) {
+template <Comparison Comp, typename A, typename B>
+requires Compatible<A, B> VectorWithMemoryLimit<Bool> evaluateR(
+    const VectorWithMemoryLimit<A>& a, const VectorWithMemoryLimit<B>& b,
+    EvaluationContext* context) {
   VectorWithMemoryLimit<Bool> result(context->_allocator);
   result.reserve(a.size());
   AD_CHECK(a.size() == b.size());
@@ -107,26 +109,31 @@ template <Comparison, typename A, typename B>
       "boolean arguments");
 }
 
-template<Comparison, typename A, typename B> requires Incompatible<A, B>
-Bool evaluateR(const A&, const B&, EvaluationContext*) {
+template <Comparison, typename A, typename B>
+requires Incompatible<A, B> Bool evaluateR(const A&, const B&,
+                                           EvaluationContext*) {
   return false;
 }
 
-template<Comparison, typename A, typename B> requires Incompatible<A, B>
-Bool evaluateR(const VectorWithMemoryLimit<A>&, const B&, EvaluationContext*) {
+template <Comparison, typename A, typename B>
+requires Incompatible<A, B> Bool evaluateR(const VectorWithMemoryLimit<A>&,
+                                           const B&, EvaluationContext*) {
   return false;
 }
 
-template<Comparison, typename A, typename B> requires Incompatible<A, B>
-Bool evaluateR(const A&, const VectorWithMemoryLimit<B>&, EvaluationContext*) {
+template <Comparison, typename A, typename B>
+requires Incompatible<A, B> Bool evaluateR(const A&,
+                                           const VectorWithMemoryLimit<B>&,
+                                           EvaluationContext*) {
   return false;
 }
 
-template<Comparison, typename A, typename B> requires Incompatible<A, B>
-Bool evaluateR(const VectorWithMemoryLimit<A>&, const VectorWithMemoryLimit<B>&, EvaluationContext*) {
+template <Comparison, typename A, typename B>
+requires Incompatible<A, B> Bool evaluateR(const VectorWithMemoryLimit<A>&,
+                                           const VectorWithMemoryLimit<B>&,
+                                           EvaluationContext*) {
   return false;
 }
-
 
 template <Comparison Comp>
 VectorWithMemoryLimit<Bool> evaluateR(const Variable& a, const Variable& b,
@@ -258,8 +265,21 @@ Bool evaluateR(const StrongIdWithResultType&, const auto&, EvaluationContext*) {
   throw std::runtime_error("Not implemented, TODO");
 }
 
-template <Comparison, typename T> requires (!std::is_same_v<StrongIdWithResultType, T>)
-Bool evaluateR(const T&, const StrongIdWithResultType&, EvaluationContext*) {
+template <Comparison, typename T>
+requires(!std::is_same_v<StrongIdWithResultType, T>) Bool
+    evaluateR(const T&, const StrongIdWithResultType&, EvaluationContext*) {
+  throw std::runtime_error("Not implemented, TODO");
+}
+
+template <Comparison, typename T>
+Bool evaluateR(const Variable&, const VectorWithMemoryLimit<T>&,
+               EvaluationContext*) {
+  throw std::runtime_error("Not implemented, TODO");
+}
+
+template <Comparison, typename T>
+Bool evaluateR(const VectorWithMemoryLimit<T>&, const Variable&,
+               EvaluationContext*) {
   throw std::runtime_error("Not implemented, TODO");
 }
 
