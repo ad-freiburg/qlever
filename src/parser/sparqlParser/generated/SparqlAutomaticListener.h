@@ -42,10 +42,10 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
   virtual void enterAlias(SparqlAutomaticParser::AliasContext* ctx) = 0;
   virtual void exitAlias(SparqlAutomaticParser::AliasContext* ctx) = 0;
 
-  virtual void enterAliasWithouBrackes(
-      SparqlAutomaticParser::AliasWithouBrackesContext* ctx) = 0;
-  virtual void exitAliasWithouBrackes(
-      SparqlAutomaticParser::AliasWithouBrackesContext* ctx) = 0;
+  virtual void enterAliasWithoutBrackets(
+      SparqlAutomaticParser::AliasWithoutBracketsContext* ctx) = 0;
+  virtual void exitAliasWithoutBrackets(
+      SparqlAutomaticParser::AliasWithoutBracketsContext* ctx) = 0;
 
   virtual void enterConstructQuery(
       SparqlAutomaticParser::ConstructQueryContext* ctx) = 0;

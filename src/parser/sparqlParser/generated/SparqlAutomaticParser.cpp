@@ -721,7 +721,8 @@ SparqlAutomaticParser::selectClause() {
 
       case SparqlAutomaticParser::T__0: {
         setState(293);
-        match(SparqlAutomaticParser::T__0);
+        dynamic_cast<SelectClauseContext*>(_localctx)->asterisk =
+            match(SparqlAutomaticParser::T__0);
         break;
       }
 
@@ -745,9 +746,9 @@ SparqlAutomaticParser::AliasContext::AliasContext(ParserRuleContext* parent,
                                                   size_t invokingState)
     : ParserRuleContext(parent, invokingState) {}
 
-SparqlAutomaticParser::AliasWithouBrackesContext*
-SparqlAutomaticParser::AliasContext::aliasWithouBrackes() {
-  return getRuleContext<SparqlAutomaticParser::AliasWithouBrackesContext>(0);
+SparqlAutomaticParser::AliasWithoutBracketsContext*
+SparqlAutomaticParser::AliasContext::aliasWithoutBrackets() {
+  return getRuleContext<SparqlAutomaticParser::AliasWithoutBracketsContext>(0);
 }
 
 size_t SparqlAutomaticParser::AliasContext::getRuleIndex() const {
@@ -791,7 +792,7 @@ SparqlAutomaticParser::AliasContext* SparqlAutomaticParser::alias() {
     setState(296);
     match(SparqlAutomaticParser::T__1);
     setState(297);
-    aliasWithouBrackes();
+    aliasWithoutBrackets();
     setState(298);
     match(SparqlAutomaticParser::T__2);
 
@@ -804,56 +805,58 @@ SparqlAutomaticParser::AliasContext* SparqlAutomaticParser::alias() {
   return _localctx;
 }
 
-//----------------- AliasWithouBrackesContext
+//----------------- AliasWithoutBracketsContext
 //------------------------------------------------------------------
 
-SparqlAutomaticParser::AliasWithouBrackesContext::AliasWithouBrackesContext(
+SparqlAutomaticParser::AliasWithoutBracketsContext::AliasWithoutBracketsContext(
     ParserRuleContext* parent, size_t invokingState)
     : ParserRuleContext(parent, invokingState) {}
 
 SparqlAutomaticParser::ExpressionContext*
-SparqlAutomaticParser::AliasWithouBrackesContext::expression() {
+SparqlAutomaticParser::AliasWithoutBracketsContext::expression() {
   return getRuleContext<SparqlAutomaticParser::ExpressionContext>(0);
 }
 
-tree::TerminalNode* SparqlAutomaticParser::AliasWithouBrackesContext::AS() {
+tree::TerminalNode* SparqlAutomaticParser::AliasWithoutBracketsContext::AS() {
   return getToken(SparqlAutomaticParser::AS, 0);
 }
 
 SparqlAutomaticParser::VarContext*
-SparqlAutomaticParser::AliasWithouBrackesContext::var() {
+SparqlAutomaticParser::AliasWithoutBracketsContext::var() {
   return getRuleContext<SparqlAutomaticParser::VarContext>(0);
 }
 
-size_t SparqlAutomaticParser::AliasWithouBrackesContext::getRuleIndex() const {
-  return SparqlAutomaticParser::RuleAliasWithouBrackes;
+size_t SparqlAutomaticParser::AliasWithoutBracketsContext::getRuleIndex()
+    const {
+  return SparqlAutomaticParser::RuleAliasWithoutBrackets;
 }
 
-void SparqlAutomaticParser::AliasWithouBrackesContext::enterRule(
+void SparqlAutomaticParser::AliasWithoutBracketsContext::enterRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->enterAliasWithouBrackes(this);
+  if (parserListener != nullptr)
+    parserListener->enterAliasWithoutBrackets(this);
 }
 
-void SparqlAutomaticParser::AliasWithouBrackesContext::exitRule(
+void SparqlAutomaticParser::AliasWithoutBracketsContext::exitRule(
     tree::ParseTreeListener* listener) {
   auto parserListener = dynamic_cast<SparqlAutomaticListener*>(listener);
-  if (parserListener != nullptr) parserListener->exitAliasWithouBrackes(this);
+  if (parserListener != nullptr) parserListener->exitAliasWithoutBrackets(this);
 }
 
-antlrcpp::Any SparqlAutomaticParser::AliasWithouBrackesContext::accept(
+antlrcpp::Any SparqlAutomaticParser::AliasWithoutBracketsContext::accept(
     tree::ParseTreeVisitor* visitor) {
   if (auto parserVisitor = dynamic_cast<SparqlAutomaticVisitor*>(visitor))
-    return parserVisitor->visitAliasWithouBrackes(this);
+    return parserVisitor->visitAliasWithoutBrackets(this);
   else
     return visitor->visitChildren(this);
 }
 
-SparqlAutomaticParser::AliasWithouBrackesContext*
-SparqlAutomaticParser::aliasWithouBrackes() {
-  AliasWithouBrackesContext* _localctx =
-      _tracker.createInstance<AliasWithouBrackesContext>(_ctx, getState());
-  enterRule(_localctx, 16, SparqlAutomaticParser::RuleAliasWithouBrackes);
+SparqlAutomaticParser::AliasWithoutBracketsContext*
+SparqlAutomaticParser::aliasWithoutBrackets() {
+  AliasWithoutBracketsContext* _localctx =
+      _tracker.createInstance<AliasWithoutBracketsContext>(_ctx, getState());
+  enterRule(_localctx, 16, SparqlAutomaticParser::RuleAliasWithoutBrackets);
 
 #if __cplusplus > 201703L
   auto onExit = finally([=, this] {
@@ -13486,7 +13489,7 @@ std::vector<std::string> SparqlAutomaticParser::_ruleNames = {
     "subSelect",
     "selectClause",
     "alias",
-    "aliasWithouBrackes",
+    "aliasWithoutBrackets",
     "constructQuery",
     "describeQuery",
     "askQuery",

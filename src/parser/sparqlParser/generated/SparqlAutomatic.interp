@@ -357,7 +357,7 @@ selectQuery
 subSelect
 selectClause
 alias
-aliasWithouBrackes
+aliasWithoutBrackets
 constructQuery
 describeQuery
 askQuery

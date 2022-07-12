@@ -53,8 +53,8 @@ class SparqlAutomaticBaseVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  virtual antlrcpp::Any visitAliasWithouBrackes(
-      SparqlAutomaticParser::AliasWithouBrackesContext* ctx) override {
+  virtual antlrcpp::Any visitAliasWithoutBrackets(
+      SparqlAutomaticParser::AliasWithoutBracketsContext* ctx) override {
     return visitChildren(ctx);
   }
 

@@ -49,7 +49,7 @@ ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
     const std::string& input, SparqlQleverVisitor::PrefixMap prefixMap) {
   ParserAndVisitor p{input, std::move(prefixMap)};
   return p.parse<ParsedQuery::Alias>(
-      input, "alias", &SparqlAutomaticParser::aliasWithouBrackes);
+      input, "alias", &SparqlAutomaticParser::aliasWithoutBrackets);
 }
 // ____________________________________________________________________________
 ResultOfParseAndRemainingText<GraphPatternOperation::Bind> parseBind(
@@ -107,5 +107,13 @@ ResultOfParseAndRemainingText<PropertyPath> parseVerbPathOrSimple(
   ParserAndVisitor p{input, std::move(prefixes)};
   return p.parseTypesafe(input, "verb path or simple",
                          &SparqlAutomaticParser::verbPathOrSimple);
+}
+// _____________________________________________________________________________
+
+ResultOfParseAndRemainingText<ParsedQuery::SelectClause> parseSelectClause(
+    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes) {
+  ParserAndVisitor p{input, std::move(prefixes)};
+  return p.parseTypesafe(input, "selectClause",
+                         &SparqlAutomaticParser::selectClause);
 }
 }  // namespace sparqlParserHelpers

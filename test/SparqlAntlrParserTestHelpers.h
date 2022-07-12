@@ -259,3 +259,14 @@ MATCHER_P2(IsValues, vars, values, "") {
 // A trivial matcher for PropertyPaths because e.g. expectCompleteParse needs
 // a matcher.
 MATCHER_P(IsPropertyPath, propertyPath, "") { return arg == propertyPath; }
+
+MATCHER_P2(IsAsteriskSelect, distinct, reduced, "") {
+  return arg._distinct == distinct && arg._reduced == reduced &&
+         arg._varsOrAsterisk.isAllVariablesSelected() && arg._aliases.empty();
+}
+
+MATCHER_P3(IsVariablesSelect, distinct, reduced, variables, "") {
+  return arg._distinct == distinct && arg._reduced == reduced &&
+         arg._varsOrAsterisk.getSelectedVariables() == variables &&
+         arg._aliases.empty();
+}

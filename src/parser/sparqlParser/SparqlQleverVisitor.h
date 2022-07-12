@@ -156,17 +156,50 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitSelectClause(
       SparqlAutomaticParser::SelectClauseContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
+  }
+
+  ParsedQuery::SelectClause visitTypesafe(
+      SparqlAutomaticParser::SelectClauseContext* ctx) {
+    ParsedQuery::SelectClause select;
+
+    if (ctx->DISTINCT()) {
+      select._distinct = true;
+    } else if (ctx->REDUCED()) {
+      select._reduced = true;
+    }
+
+    if (ctx->asterisk) {
+      select._varsOrAsterisk.setAllVariablesSelected();
+    } else {
+      std::vector<std::string> selectedVariables;
+      // TODO may mix up order of selected variables
+      for (auto& var : ctx->var()) {
+        selectedVariables.push_back(visitTypesafe(var).name());
+      }
+      for (auto& alias : ctx->alias()) {
+        ParsedQuery::Alias a = visitTypesafe(alias);
+        selectedVariables.push_back(a._outVarName);
+        select._aliases.push_back(std::move(a));
+      }
+      select._varsOrAsterisk.setManuallySelected(std::move(selectedVariables));
+    }
+
+    return select;
   }
 
   antlrcpp::Any visitAlias(SparqlAutomaticParser::AliasContext* ctx) override {
-    // A SPARQL alias has only one child, namely the contents within
-    // parentheses.
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
 
-  antlrcpp::Any visitAliasWithouBrackes(
-      [[maybe_unused]] SparqlAutomaticParser::AliasWithouBrackesContext* ctx)
+  ParsedQuery::Alias visitTypesafe(SparqlAutomaticParser::AliasContext* ctx) {
+    // A SPARQL alias has only one child, namely the contents within
+    // parentheses.
+    return visitChildren(ctx).as<ParsedQuery::Alias>();
+  }
+
+  antlrcpp::Any visitAliasWithoutBrackets(
+      [[maybe_unused]] SparqlAutomaticParser::AliasWithoutBracketsContext* ctx)
       override {
     auto wrapper = makeExpressionPimpl(visit(ctx->expression()));
     return ParsedQuery::Alias{std::move(wrapper), ctx->var()->getText()};
@@ -957,6 +990,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitVar(SparqlAutomaticParser::VarContext* ctx) override {
+    return visitTypesafe(ctx);
+  }
+
+  Variable visitTypesafe(SparqlAutomaticParser::VarContext* ctx) {
     return Variable{ctx->getText()};
   }
 

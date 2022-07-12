@@ -191,7 +191,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
     RuleSubSelect = 5,
     RuleSelectClause = 6,
     RuleAlias = 7,
-    RuleAliasWithouBrackes = 8,
+    RuleAliasWithoutBrackets = 8,
     RuleConstructQuery = 9,
     RuleDescribeQuery = 10,
     RuleAskQuery = 11,
@@ -326,7 +326,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
   class SubSelectContext;
   class SelectClauseContext;
   class AliasContext;
-  class AliasWithouBrackesContext;
+  class AliasWithoutBracketsContext;
   class ConstructQueryContext;
   class DescribeQueryContext;
   class AskQueryContext;
@@ -552,6 +552,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
   class SelectClauseContext : public antlr4::ParserRuleContext {
    public:
+    antlr4::Token* asterisk = nullptr;
     SelectClauseContext(antlr4::ParserRuleContext* parent,
                         size_t invokingState);
     virtual size_t getRuleIndex() const override;
@@ -576,7 +577,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
    public:
     AliasContext(antlr4::ParserRuleContext* parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    AliasWithouBrackesContext* aliasWithouBrackes();
+    AliasWithoutBracketsContext* aliasWithoutBrackets();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
@@ -587,10 +588,10 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
   AliasContext* alias();
 
-  class AliasWithouBrackesContext : public antlr4::ParserRuleContext {
+  class AliasWithoutBracketsContext : public antlr4::ParserRuleContext {
    public:
-    AliasWithouBrackesContext(antlr4::ParserRuleContext* parent,
-                              size_t invokingState);
+    AliasWithoutBracketsContext(antlr4::ParserRuleContext* parent,
+                                size_t invokingState);
     virtual size_t getRuleIndex() const override;
     ExpressionContext* expression();
     antlr4::tree::TerminalNode* AS();
@@ -603,7 +604,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
         antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
-  AliasWithouBrackesContext* aliasWithouBrackes();
+  AliasWithoutBracketsContext* aliasWithoutBrackets();
 
   class ConstructQueryContext : public antlr4::ParserRuleContext {
    public:
