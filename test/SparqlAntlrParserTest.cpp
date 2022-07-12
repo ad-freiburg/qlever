@@ -988,6 +988,13 @@ TEST(SparqlParser, SelectClause) {
         parseSelectClause(input, {}),
         IsVariablesSelect(distinct, reduced, std::move(variables)));
   };
+  using Alias = std::pair<string, string>;
+  auto expectSelect = [](const string& input,
+                         std::vector<std::variant<Variable, Alias>> selection,
+                         bool distinct = false, bool reduced = false) {
+    expectCompleteParse(parseSelectClause(input, {}),
+                        IsSelect(distinct, reduced, std::move(selection)));
+  };
 
   expectCompleteParse(parseSelectClause("SELECT *", {}),
                       IsAsteriskSelect(false, false));
@@ -1004,4 +1011,10 @@ TEST(SparqlParser, SelectClause) {
                         false);
   expectVariablesSelect("SELECT REDUCED ?foo ?bar ?baz",
                         {"?foo", "?bar", "?baz"}, false, true);
+  expectSelect("SELECT (10 as ?foo) ?bar",
+               {Alias{"10", "?foo"}, Variable{"?bar"}});
+  expectSelect("SELECT DISTINCT (5 - 10 as ?m)", {Alias{"5-10", "?m"}}, true,
+               false);
+  expectSelect("SELECT (5 - 10 as ?m) ?foo (10 as ?bar)",
+               {Alias{"5-10", "?m"}, Variable{"?foo"}, Alias{"10", "?bar"}});
 }

@@ -13,6 +13,7 @@
 //#include "../../engine/sparqlExpressions/RelationalExpression.h"
 #include "../../engine/sparqlExpressions/SampleExpression.h"
 #include "../../util/HashMap.h"
+#include "../../util/OverloadCallOperator.h"
 #include "../../util/StringUtils.h"
 #include "../ParsedQuery.h"
 #include "../RdfEscaping.h"
@@ -173,19 +174,39 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       select._varsOrAsterisk.setAllVariablesSelected();
     } else {
       std::vector<std::string> selectedVariables;
-      // TODO may mix up order of selected variables
-      for (auto& var : ctx->var()) {
-        selectedVariables.push_back(visitTypesafe(var).name());
-      }
-      for (auto& alias : ctx->alias()) {
-        ParsedQuery::Alias a = visitTypesafe(alias);
-        selectedVariables.push_back(a._outVarName);
-        select._aliases.push_back(std::move(a));
+
+      auto processVariable = [&selectedVariables](const Variable& var) {
+        selectedVariables.push_back(var.name());
+      };
+      auto processAlias = [&selectedVariables,
+                           &select](ParsedQuery::Alias alias) {
+        selectedVariables.push_back(alias._outVarName);
+        select._aliases.push_back(std::move(alias));
+      };
+
+      for (auto& varOrAlias : ctx->varOrAlias()) {
+        std::visit(
+            ad_utility::OverloadCallOperator{processVariable, processAlias},
+            visitTypesafe(varOrAlias));
       }
       select._varsOrAsterisk.setManuallySelected(std::move(selectedVariables));
     }
 
     return select;
+  }
+
+  antlrcpp::Any visitVarOrAlias(
+      SparqlAutomaticParser::VarOrAliasContext* ctx) override {
+    return visitTypesafe(ctx);
+  }
+
+  std::variant<Variable, ParsedQuery::Alias> visitTypesafe(
+      SparqlAutomaticParser::VarOrAliasContext* ctx) {
+    if (ctx->var())
+      return visitTypesafe(ctx->var());
+    else if (ctx->alias())
+      return visitTypesafe(ctx->alias());
+    AD_FAIL();  // Should be unreachable.
   }
 
   antlrcpp::Any visitAlias(SparqlAutomaticParser::AliasContext* ctx) override {
@@ -195,7 +216,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   ParsedQuery::Alias visitTypesafe(SparqlAutomaticParser::AliasContext* ctx) {
     // A SPARQL alias has only one child, namely the contents within
     // parentheses.
-    return visitChildren(ctx).as<ParsedQuery::Alias>();
+    return visit(ctx->aliasWithoutBrackets()).as<ParsedQuery::Alias>();
   }
 
   antlrcpp::Any visitAliasWithoutBrackets(

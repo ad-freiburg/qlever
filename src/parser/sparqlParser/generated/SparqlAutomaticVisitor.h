@@ -36,6 +36,9 @@ class SparqlAutomaticVisitor : public antlr4::tree::AbstractParseTreeVisitor {
   virtual antlrcpp::Any visitSelectClause(
       SparqlAutomaticParser::SelectClauseContext* context) = 0;
 
+  virtual antlrcpp::Any visitVarOrAlias(
+      SparqlAutomaticParser::VarOrAliasContext* context) = 0;
+
   virtual antlrcpp::Any visitAlias(
       SparqlAutomaticParser::AliasContext* context) = 0;
 

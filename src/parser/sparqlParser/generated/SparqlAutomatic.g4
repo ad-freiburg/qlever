@@ -61,9 +61,12 @@ selectQuery : selectClause datasetClause* whereClause solutionModifier;
 subSelect : selectClause whereClause solutionModifier valuesClause;
 
 selectClause
-    : SELECT ( DISTINCT | REDUCED)? ( ( var | alias )+ | asterisk='*' )
+    : SELECT ( DISTINCT | REDUCED)? ( varOrAlias+ | asterisk='*' )
     // extracted the alias rule for easier visiting.
     ;
+
+varOrAlias: var | alias; // NOT part of sparql, extracted from selectClause to
+// preserve the order of the selections
 
 alias: ( '(' aliasWithoutBrackets ')' ) ;  // NOT part of sparql, for easier antlr parsing
 

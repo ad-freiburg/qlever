@@ -48,6 +48,11 @@ class SparqlAutomaticBaseVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
+  virtual antlrcpp::Any visitVarOrAlias(
+      SparqlAutomaticParser::VarOrAliasContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual antlrcpp::Any visitAlias(
       SparqlAutomaticParser::AliasContext* ctx) override {
     return visitChildren(ctx);

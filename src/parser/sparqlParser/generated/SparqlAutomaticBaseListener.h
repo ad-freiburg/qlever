@@ -48,6 +48,11 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
   virtual void exitSelectClause(
       SparqlAutomaticParser::SelectClauseContext* /*ctx*/) override {}
 
+  virtual void enterVarOrAlias(
+      SparqlAutomaticParser::VarOrAliasContext* /*ctx*/) override {}
+  virtual void exitVarOrAlias(
+      SparqlAutomaticParser::VarOrAliasContext* /*ctx*/) override {}
+
   virtual void enterAlias(
       SparqlAutomaticParser::AliasContext* /*ctx*/) override {}
   virtual void exitAlias(

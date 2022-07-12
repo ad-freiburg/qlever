@@ -39,6 +39,11 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
   virtual void exitSelectClause(
       SparqlAutomaticParser::SelectClauseContext* ctx) = 0;
 
+  virtual void enterVarOrAlias(
+      SparqlAutomaticParser::VarOrAliasContext* ctx) = 0;
+  virtual void exitVarOrAlias(
+      SparqlAutomaticParser::VarOrAliasContext* ctx) = 0;
+
   virtual void enterAlias(SparqlAutomaticParser::AliasContext* ctx) = 0;
   virtual void exitAlias(SparqlAutomaticParser::AliasContext* ctx) = 0;
 
