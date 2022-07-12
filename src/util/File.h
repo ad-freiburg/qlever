@@ -267,10 +267,13 @@ class File {
  * @brief Delete the file at a given path
  * @param path
  */
-inline void deleteFile(const std::filesystem::path& path) {
+inline void deleteFile(const std::filesystem::path& path,
+                       bool warnOnFailure = true) {
   if (!std::filesystem::remove(path)) {
-    LOG(WARN) << "Deletion of file '" << path << "' was not successful"
-              << std::endl;
+    if (warnOnFailure) {
+      LOG(WARN) << "Deletion of file '" << path << "' was not successful"
+                << std::endl;
+    }
   }
 }
 

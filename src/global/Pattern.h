@@ -81,7 +81,7 @@ struct Pattern {
 
   size_t size() const { return _data.size(); }
 
-  void push_back(const Id i) { _data.push_back(i); }
+  void push_back(value_type i) { _data.push_back(i); }
 
   void clear() { _data.clear(); }
 
@@ -89,9 +89,9 @@ struct Pattern {
   ref back() { return _data.back(); }
   bool empty() { return _data.empty(); }
 
-  const Id* data() const { return _data.data(); }
+  const value_type* data() const { return _data.data(); }
 
-  std::vector<Id> _data;
+  std::vector<value_type> _data;
 };
 
 namespace detail {
@@ -192,10 +192,9 @@ class CompactVectorOfStrings {
   using const_iterator = Iterator;
 
   // Allow serialization via the ad_utility::serialization interface.
-  template <typename Serializer>
-  friend void serialize(Serializer& s, CompactVectorOfStrings& c) {
-    s | c._data;
-    s | c._offsets;
+  AD_SERIALIZE_FRIEND_FUNCTION(CompactVectorOfStrings) {
+    serializer | arg._data;
+    serializer | arg._offsets;
   }
 
  private:

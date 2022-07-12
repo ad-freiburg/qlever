@@ -63,9 +63,15 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
 }
 
 // _____________________________________________________________________________
-void QueryExecutionTree::setVariableColumn(const string& variable,
+void QueryExecutionTree::setVariableColumn(string variable, size_t column) {
+  _variableColumnMap[std::move(variable)] = column;
+}
+
+// _____________________________________________________________________________
+void QueryExecutionTree::setVariableColumn(TripleComponent variable,
                                            size_t column) {
-  _variableColumnMap[variable] = column;
+  AD_CHECK(variable.isVariable());
+  _variableColumnMap[std::move(variable).getString()] = column;
 }
 
 // _____________________________________________________________________________
@@ -87,7 +93,7 @@ void QueryExecutionTree::setVariableColumns(
 QueryExecutionTree::ColumnIndicesAndTypes
 QueryExecutionTree::selectedVariablesToColumnIndices(
     const SelectedVarsOrAsterisk& selectedVarsOrAsterisk,
-    const ResultTable& resultTable) const {
+    const ResultTable& resultTable, bool includeQuestionMark) const {
   ColumnIndicesAndTypes exportColumns;
 
   for (auto var : selectedVarsOrAsterisk.getSelectedVariables()) {
@@ -100,6 +106,10 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     }
     if (getVariableColumns().contains(var)) {
       auto columnIndex = getVariableColumns().at(var);
+      // Remove the question mark from the variable name if requested.
+      if (!includeQuestionMark && var.starts_with('?')) {
+        var = var.substr(1);
+      }
       exportColumns.push_back(VariableAndColumnIndex{
           var, columnIndex, resultTable.getResultType(columnIndex)});
     } else {
@@ -122,8 +132,8 @@ nlohmann::json QueryExecutionTree::writeResultAsQLeverJson(
     resultTable = getResult();
   }
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  ColumnIndicesAndTypes validIndices =
-      selectedVariablesToColumnIndices(selectedVarsOrAsterisk, *resultTable);
+  ColumnIndicesAndTypes validIndices = selectedVariablesToColumnIndices(
+      selectedVarsOrAsterisk, *resultTable, true);
   if (validIndices.empty()) {
     return {std::vector<std::string>()};
   }
@@ -144,8 +154,10 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   }
   LOG(DEBUG) << "Finished computing the query result in the ID space. "
                 "Resolving strings in result...\n";
-  ColumnIndicesAndTypes columns =
-      selectedVariablesToColumnIndices(selectedVarsOrAsterisk, *resultTable);
+
+  // Don't include the question mark in the variable names.
+  ColumnIndicesAndTypes columns = selectedVariablesToColumnIndices(
+      selectedVarsOrAsterisk, *resultTable, false);
 
   std::erase(columns, std::nullopt);
 
@@ -156,7 +168,15 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   const IdTable& idTable = resultTable->_idTable;
 
   json result;
-  result["head"]["vars"] = selectedVarsOrAsterisk.getSelectedVariables();
+  auto selectedVars = selectedVarsOrAsterisk.getSelectedVariables();
+  // Strip the leading '?' from the variables, it is not part of the SPARQL JSON
+  // output format.
+  for (auto& var : selectedVars) {
+    if (std::string_view{var}.starts_with('?')) {
+      var = var.substr(1);
+    }
+  }
+  result["head"]["vars"] = selectedVars;
 
   json bindings = json::array();
 
@@ -164,13 +184,18 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
 
   // Take a string from the vocabulary, deduce the type and
   // return a json dict that describes the binding
-  auto stringToBinding = [](const std::string& entitystr) -> nlohmann::json {
+  auto stringToBinding = [](std::string_view entitystr) -> nlohmann::json {
     nlohmann::ordered_json b;
-    // The string is an iri or literal
-    if (entitystr[0] == '<') {
-      // Strip the <> surrounding the iri
+    // The string is an IRI or literal.
+    if (entitystr.starts_with('<')) {
+      // Strip the <> surrounding the iri.
       b["value"] = entitystr.substr(1, entitystr.size() - 2);
-      b["type"] = "iri";
+      // Even if they are technically IRIs, the format needs the type to be
+      // "uri".
+      b["type"] = "uri";
+    } else if (entitystr.starts_with("_:")) {
+      b["value"] = entitystr.substr(2);
+      b["type"] = "bnode";
     } else {
       size_t quote_pos = entitystr.rfind('"');
       if (quote_pos == std::string::npos) {
@@ -206,8 +231,7 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
     nlohmann::ordered_json binding;
     for (const auto& column : columns) {
       const auto& currentId = idTable(rowIndex, column->_columnIndex);
-      const auto& optionalValue =
-          toStringAndXsdType(currentId, column->_resultType, *resultTable);
+      const auto& optionalValue = idToStringAndType(currentId, *resultTable);
       if (!optionalValue.has_value()) {
         continue;
       }
@@ -285,41 +309,46 @@ void QueryExecutionTree::readFromCache() {
 
 // ___________________________________________________________________________
 std::optional<std::pair<std::string, const char*>>
-QueryExecutionTree::toStringAndXsdType(Id id, ResultTable::ResultType type,
-                                       const ResultTable& resultTable) const {
-  switch (type) {
-    case ResultTable::ResultType::KB: {
+QueryExecutionTree::idToStringAndType(Id id,
+                                      const ResultTable& resultTable) const {
+  // TODO<joka921> This is one of the central methods which we have to rewrite
+  switch (id.getDatatype()) {
+    case Datatype::Undefined:
+      return std::nullopt;
+    case Datatype::Double: {
+      // Format as integer if fractional part is zero, let C++ decide otherwise.
+      std::stringstream ss;
+      double d = id.getDouble();
+      double dIntPart;
+      if (std::modf(d, &dIntPart) == 0.0) {
+        ss << std::fixed << std::setprecision(0) << id.getDouble();
+      } else {
+        ss << d;
+      }
+      return std::pair{std::move(ss).str(), XSD_DECIMAL_TYPE};
+    }
+    case Datatype::Int:
+      return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
+    case Datatype::VocabIndex: {
       std::optional<string> entity = _qec->getIndex().idToOptionalString(id);
       if (!entity.has_value()) {
         return std::nullopt;
       }
-      if (entity.value().starts_with(VALUE_PREFIX)) {
-        return ad_utility::convertIndexWordToLiteralAndType(entity.value());
-      }
       return std::pair{std::move(entity.value()), nullptr};
     }
-    case ResultTable::ResultType::VERBATIM:
-      return std::pair{std::to_string(id), XSD_INT_TYPE};
-    case ResultTable::ResultType::TEXT:
-      return std::pair{_qec->getIndex().getTextExcerpt(id), nullptr};
-    case ResultTable::ResultType::FLOAT: {
-      float f;
-      // TODO<LLVM 14> std::bit_cast
-      std::memcpy(&f, &id, sizeof(float));
-      std::stringstream s;
-      s << f;
-      return std::pair{std::move(s).str(), XSD_DECIMAL_TYPE};
-    }
-    case ResultTable::ResultType::LOCAL_VOCAB: {
-      auto optionalString = resultTable.idToOptionalString(id);
+    case Datatype::LocalVocabIndex: {
+      auto optionalString =
+          resultTable.indexToOptionalString(id.getLocalVocabIndex());
       if (!optionalString.has_value()) {
         return std::nullopt;
       }
       return std::pair{optionalString.value(), nullptr};
     }
-    default:
-      AD_CHECK(false);
+    case Datatype::TextRecordIndex:
+      return std::pair{_qec->getIndex().getTextExcerpt(id.getTextRecordIndex()),
+                       nullptr};
   }
+  AD_CHECK(false);
 }
 
 // __________________________________________________________________________________________________________
@@ -344,7 +373,7 @@ nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
       }
       const auto& currentId = data(rowIndex, opt->_columnIndex);
       const auto& optionalStringAndXsdType =
-          toStringAndXsdType(currentId, opt->_resultType, *resultTable);
+          idToStringAndType(currentId, *resultTable);
       if (!optionalStringAndXsdType.has_value()) {
         row.emplace_back(nullptr);
         continue;
@@ -372,9 +401,11 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
   shared_ptr<const ResultTable> resultTable = getResult();
-  LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  auto selectedColumnIndices =
-      selectedVariablesToColumnIndices(selectedVarsOrAsterisk, *resultTable);
+  resultTable->logResultSize();
+  LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
+             << std::endl;
+  auto selectedColumnIndices = selectedVariablesToColumnIndices(
+      selectedVarsOrAsterisk, *resultTable, true);
 
   const auto& idTable = resultTable->_idTable;
   size_t upperBound = std::min<size_t>(offset + limit, idTable.size());
@@ -400,42 +431,40 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
   co_yield absl::StrJoin(variables, sepView);
   co_yield '\n';
 
+  constexpr auto& escapeFunction = format == ExportSubFormat::TSV
+                                       ? RdfEscaping::escapeForTsv
+                                       : RdfEscaping::escapeForCsv;
+
   for (size_t i = offset; i < upperBound; ++i) {
     for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
       if (selectedColumnIndices[j].has_value()) {
         const auto& val = selectedColumnIndices[j].value();
-        switch (val._resultType) {
-          case ResultTable::ResultType::KB: {
-            string entity =
+        Id id = idTable(i, val._columnIndex);
+        switch (id.getDatatype()) {
+          case Datatype::Undefined:
+            break;
+          case Datatype::Double:
+            co_yield id.getDouble();
+            break;
+          case Datatype::Int:
+            co_yield id.getInt();
+            break;
+          case Datatype::VocabIndex:
+            co_yield escapeFunction(
                 _qec->getIndex()
-                    .idToOptionalString(idTable(i, val._columnIndex))
-                    .value_or("");
-            if (entity.starts_with(VALUE_PREFIX)) {
-              co_yield ad_utility::convertIndexWordToValueLiteral(entity);
-            } else {
-              co_yield entity;
-            }
+                    .getVocab()
+                    .indexToOptionalString(id.getVocabIndex())
+                    .value_or(""));
             break;
-          }
-          case ResultTable::ResultType::VERBATIM:
-            co_yield idTable(i, val._columnIndex);
+          case Datatype::LocalVocabIndex:
+            co_yield escapeFunction(
+                resultTable->indexToOptionalString(id.getLocalVocabIndex())
+                    .value_or(""));
             break;
-          case ResultTable::ResultType::TEXT:
-            co_yield _qec->getIndex().getTextExcerpt(
-                idTable(i, val._columnIndex));
+          case Datatype::TextRecordIndex:
+            co_yield escapeFunction(
+                _qec->getIndex().getTextExcerpt(id.getTextRecordIndex()));
             break;
-          case ResultTable::ResultType::FLOAT: {
-            float f;
-            std::memcpy(&f, &idTable(i, val._columnIndex), sizeof(float));
-            co_yield f;
-            break;
-          }
-          case ResultTable::ResultType::LOCAL_VOCAB: {
-            co_yield resultTable
-                ->idToOptionalString(idTable(i, val._columnIndex))
-                .value_or("");
-            break;
-          }
           default:
             AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
                      "Cannot deduce output type.");
@@ -491,8 +520,10 @@ QueryExecutionTree::generateRdfGraph(
 // _____________________________________________________________________________
 ad_utility::streams::stream_generator QueryExecutionTree::writeRdfGraphTurtle(
     const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-    size_t offset, std::shared_ptr<const ResultTable> res) const {
-  auto generator = generateRdfGraph(constructTriples, limit, offset, res);
+    size_t offset, std::shared_ptr<const ResultTable> resultTable) const {
+  resultTable->logResultSize();
+  auto generator =
+      generateRdfGraph(constructTriples, limit, offset, resultTable);
   for (const auto& triple : generator) {
     co_yield triple._subject;
     co_yield ' ';
@@ -508,7 +539,7 @@ template <QueryExecutionTree::ExportSubFormat format>
 ad_utility::streams::stream_generator
 QueryExecutionTree::writeRdfGraphSeparatedValues(
     const ad_utility::sparql_types::Triples& constructTriples, size_t limit,
-    size_t offset, std::shared_ptr<const ResultTable> res) const {
+    size_t offset, std::shared_ptr<const ResultTable> resultTable) const {
   static_assert(format == ExportSubFormat::BINARY ||
                 format == ExportSubFormat::CSV ||
                 format == ExportSubFormat::TSV);
@@ -516,11 +547,13 @@ QueryExecutionTree::writeRdfGraphSeparatedValues(
     throw std::runtime_error{
         "Binary export is not supported for CONSTRUCT queries"};
   }
+  resultTable->logResultSize();
   constexpr auto& escapeFunction = format == ExportSubFormat::TSV
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
   constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
-  auto generator = generateRdfGraph(constructTriples, limit, offset, res);
+  auto generator =
+      generateRdfGraph(constructTriples, limit, offset, resultTable);
   for (auto& triple : generator) {
     co_yield escapeFunction(std::move(triple._subject));
     co_yield sep;

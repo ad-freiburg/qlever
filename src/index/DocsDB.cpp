@@ -20,11 +20,19 @@ void DocsDB::init(const string& fileName) {
 }
 
 // _____________________________________________________________________________
-string DocsDB::getTextExcerpt(Id cid) const {
+string DocsDB::getTextExcerpt(TextRecordIndex cid) const {
+  // If no DocsDB available, we cannot return a text excerpt for the given ID.
+  if (_size == 0) {
+    AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+             "Text records not available, start QLever with -t option and make "
+             "sure that"
+             " a file .text.docsDB exists");
+  }
+
   off_t ft[2];
   off_t& from = ft[0];
   off_t& to = ft[1];
-  off_t at = _startOfOffsets + cid * sizeof(off_t);
+  off_t at = _startOfOffsets + cid.get() * sizeof(off_t);
   at += _dbFile.read(ft, sizeof(ft), at);
   while (to == from) {
     at += _dbFile.read(&to, sizeof(off_t), at);

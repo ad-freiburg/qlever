@@ -17,9 +17,9 @@ using std::vector;
 class DocsDB {
  public:
   void init(const string& fileName);
-  string getTextExcerpt(Id cid) const;
+  string getTextExcerpt(TextRecordIndex cid) const;
 
   mutable ad_utility::File _dbFile;
   off_t _startOfOffsets;
-  size_t _size;
+  size_t _size = 0;
 };

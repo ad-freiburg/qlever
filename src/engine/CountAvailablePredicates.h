@@ -45,10 +45,13 @@ class CountAvailablePredicates : public Operation {
    * @brief Creates a new CountAvailblePredicates operation that returns
    * predicates and their counts for the entity given by the entityName.
    */
-  CountAvailablePredicates(QueryExecutionContext* qec, std::string entityName);
+  CountAvailablePredicates(QueryExecutionContext* qec,
+                           TripleComponent entityName);
 
-  [[nodiscard]] string asString(size_t indent) const override;
+ protected:
+  [[nodiscard]] string asStringImpl(size_t indent) const override;
 
+ public:
   [[nodiscard]] string getDescriptor() const override;
 
   [[nodiscard]] size_t getResultWidth() const override;
@@ -103,13 +106,13 @@ class CountAvailablePredicates : public Operation {
       const IdTable& input, IdTable* result,
       const vector<PatternID>& hasPattern,
       const CompactVectorOfStrings<Id>& hasPredicate,
-      const CompactVectorOfStrings<size_t>& patterns, size_t subjectColumn,
+      const CompactVectorOfStrings<Id>& patterns, size_t subjectColumn,
       RuntimeInformation* runtimeInfo);
 
   static void computePatternTrickAllEntities(
       IdTable* result, const vector<PatternID>& hasPattern,
       const CompactVectorOfStrings<Id>& hasPredicate,
-      const CompactVectorOfStrings<size_t>& patterns);
+      const CompactVectorOfStrings<Id>& patterns);
 
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;

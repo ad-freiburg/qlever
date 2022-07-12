@@ -41,11 +41,13 @@ struct option options[] = {
     {"no-patterns", no_argument, NULL, 'P'},
     {"text-index-name", required_argument, NULL, 'T'},
     {"words-by-contexts", required_argument, NULL, 'w'},
+    {"words-from-literals", no_argument, NULL, 'W'},
     {"add-text-index", no_argument, NULL, 'A'},
     {"keep-temporary-files", no_argument, NULL, 'k'},
     {"settings-file", required_argument, NULL, 's'},
     {"no-compressed-vocabulary", no_argument, NULL, 'N'},
     {"only-pso-and-pos-permutations", no_argument, NULL, 'o'},
+    {"stxxl-memory-gb", required_argument, NULL, 'm'},
     {NULL, 0, NULL, 0}};
 
 string getStxxlConfigFileName(const string& location) {
@@ -122,7 +124,11 @@ void printUsage(char* execName) {
        << endl;
   cerr << "  " << std::setw(20) << "w, words-by-contexts" << std::setw(1)
        << "    "
-       << "words-file to build text index from." << endl;
+       << "words-file to build text index from" << endl;
+  cerr << "  " << std::setw(20) << "W, words-from-literals" << std::setw(1)
+       << "  "
+       << "consider all literals from the internal vocabulary as text records"
+       << endl;
   cerr << "  " << std::setw(20) << "A, add-text-index" << std::setw(1) << "    "
        << "Add text index to already existing kb-index" << endl;
   cerr
@@ -142,6 +148,11 @@ void printUsage(char* execName) {
   cerr << "  " << std::setw(20) << "o, only-pos-and-pso-permutations"
        << std::setw(1) << "    "
        << "Only load PSO and POS permutations" << endl;
+  cerr << "  " << std::setw(20) << "m, stxxl-memory-gb" << std::setw(1)
+       << "    "
+       << "The amount of memory to use for sorting during the index build. "
+          "Decrease if the index builder runs out of memory."
+       << endl;
   cerr.copyfmt(cerrState);
 }
 
@@ -168,10 +179,15 @@ int main(int argc, char** argv) {
   bool onlyAddTextIndex = false;
   bool keepTemporaryFiles = false;
   bool loadAllPermutations = true;
+  bool addWordsFromLiterals = false;
   optind = 1;
+
+  Index index;
+
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "F:f:i:w:d:lT:K:hAks:No", options, nullptr);
+    int c =
+        getopt_long(argc, argv, "F:f:i:w:Wd:lT:K:hAks:Nom:", options, nullptr);
     if (c == -1) {
       break;
     }
@@ -185,6 +201,9 @@ int main(int argc, char** argv) {
         break;
       case 'w':
         wordsfile = optarg;
+        break;
+      case 'W':
+        addWordsFromLiterals = true;
         break;
       case 'd':
         docsfile = optarg;
@@ -222,6 +241,10 @@ int main(int argc, char** argv) {
       case 'o':
         loadAllPermutations = false;
         break;
+      case 'm':
+        index.stxxlMemoryInBytes() =
+            1024ul * 1024ul * 1024ul * std::strtoul(optarg, nullptr, 10);
+        break;
       default:
         cerr << endl
              << "! ERROR in processing options (getopt returned '" << c
@@ -233,14 +256,16 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (textIndexName.size() == 0 && wordsfile.size() > 0) {
+  // If no text index name was specified, take the part of the wordsfile after
+  // the last slash.
+  if (textIndexName.empty() && !wordsfile.empty()) {
     textIndexName = ad_utility::getLastPartOfString(wordsfile, '/');
   }
 
-  if (kbIndexName.size() == 0) {
-    if (!inputFile.empty()) {
-      kbIndexName = ad_utility::getLastPartOfString(inputFile, '/');
-    }
+  // If no index name was specified, take the part of the input file name after
+  // the last slash.
+  if (kbIndexName.empty() && !inputFile.empty()) {
+    kbIndexName = ad_utility::getLastPartOfString(inputFile, '/');
   }
 
   if (baseName.size() == 0) {
@@ -261,7 +286,6 @@ int main(int argc, char** argv) {
     string stxxlFileName = getStxxlDiskFileName(location, tail);
     LOG(TRACE) << "done." << std::endl;
 
-    Index index;
     index.setKbName(kbIndexName);
     index.setTextName(textIndexName);
     index.setUsePatterns(usePatterns);
@@ -300,7 +324,7 @@ int main(int argc, char** argv) {
         }
         if (filetypeDeduced) {
           LOG(INFO) << "Format of input file deduced from extension: "
-                    << ad_utility::getUppercase(filetype) << "\n";
+                    << ad_utility::getUppercase(filetype) << std::endl;
         }
         LOG(INFO) << "If this is not correct, start again using the option "
                      "--file-format (-F)"
@@ -311,10 +335,6 @@ int main(int argc, char** argv) {
         LOG(DEBUG) << "Parsing uncompressed TTL from: " << inputFile
                    << std::endl;
         index.createFromFile<TurtleParserAuto>(inputFile);
-      } else if (filetype == "tsv") {
-        LOG(DEBUG) << "Parsing uncompressed TSV from: " << inputFile
-                   << std::endl;
-        index.createFromFile<TsvParser>(inputFile);
       } else if (filetype == "nt") {
         LOG(DEBUG) << "Parsing uncompressed N-Triples from: " << inputFile
                    << " (using the Turtle parser)" << std::endl;
@@ -325,15 +345,14 @@ int main(int argc, char** argv) {
                    << "streams)" << std::endl;
         index.createFromFile<TurtleMmapParser<Tokenizer>>(inputFile);
       } else {
-        LOG(ERROR) << "File format must be one of: tsv nt ttl mmap"
-                   << std::endl;
+        LOG(ERROR) << "File format must be one of: nt ttl mmap" << std::endl;
         printUsage(argv[0]);
         exit(1);
       }
     }
 
-    if (wordsfile.size() > 0) {
-      index.addTextFromContextFile(wordsfile);
+    if (wordsfile.size() > 0 || addWordsFromLiterals) {
+      index.addTextFromContextFile(wordsfile, addWordsFromLiterals);
     }
 
     if (docsfile.size() > 0) {

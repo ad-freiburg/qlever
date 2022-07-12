@@ -28,8 +28,10 @@ class HasPredicateScan : public Operation {
 
   HasPredicateScan(QueryExecutionContext* qec, ScanType type);
 
-  virtual string asString(size_t indent = 0) const override;
+ private:
+  virtual string asStringImpl(size_t indent = 0) const override;
 
+ public:
   virtual string getDescriptor() const override;
 
   virtual size_t getResultWidth() const override;
@@ -48,8 +50,8 @@ class HasPredicateScan : public Operation {
 
   virtual size_t getCostEstimate() override;
 
-  void setSubject(const std::string& subject);
-  void setObject(const std::string& object);
+  void setSubject(const TripleComponent& subject);
+  void setObject(const TripleComponent& object);
   void setSubtree(std::shared_ptr<QueryExecutionTree> subtree);
   void setSubtreeSubjectColumn(size_t colIndex);
   ScanType getType() const;
@@ -61,12 +63,12 @@ class HasPredicateScan : public Operation {
   }
 
   // These are made static and public mainly for easier testing
-  static void computeFreeS(ResultTable* result, size_t objectId,
+  static void computeFreeS(ResultTable* result, Id objectId,
                            const std::vector<PatternID>& hasPattern,
                            const CompactVectorOfStrings<Id>& hasPredicate,
                            const CompactVectorOfStrings<Id>& patterns);
 
-  static void computeFreeO(ResultTable* result, size_t subjectId,
+  static void computeFreeO(ResultTable* result, Id subjectId,
                            const std::vector<PatternID>& hasPattern,
                            const CompactVectorOfStrings<Id>& hasPredicate,
                            const CompactVectorOfStrings<Id>& patterns);

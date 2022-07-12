@@ -15,11 +15,12 @@
 using OffsetAndSize = VocabularyOnDisk::OffsetAndSize;
 
 // ____________________________________________________________________________
-std::optional<OffsetAndSize> VocabularyOnDisk::getOffsetAndSize(Id id) const {
-  IdAndOffset idAndDummyOffset{id, 0};
+std::optional<OffsetAndSize> VocabularyOnDisk::getOffsetAndSize(
+    uint64_t idx) const {
+  IndexAndOffset idAndDummyOffset{idx, 0};
   auto it = std::lower_bound(_idsAndOffsets.begin(), _idsAndOffsets.end(),
                              idAndDummyOffset);
-  if (it >= _idsAndOffsets.end() - 1 || it->_id != id) {
+  if (it >= _idsAndOffsets.end() - 1 || it->_idx != idx) {
     return std::nullopt;
   }
   return getOffsetAndSizeForIthElement(it - _idsAndOffsets.begin());
@@ -31,12 +32,12 @@ VocabularyOnDisk::OffsetSizeId VocabularyOnDisk::getOffsetSizeIdForIthElement(
   AD_CHECK(i < size());
   const auto offset = _idsAndOffsets[i]._offset;
   const auto nextOffset = _idsAndOffsets[i + 1]._offset;
-  return OffsetSizeId{offset, nextOffset - offset, _idsAndOffsets[i]._id};
+  return OffsetSizeId{offset, nextOffset - offset, _idsAndOffsets[i]._idx};
 }
 
 // _____________________________________________________________________________
-std::optional<string> VocabularyOnDisk::operator[](Id id) const {
-  auto optionalOffsetAndSize = getOffsetAndSize(id);
+std::optional<string> VocabularyOnDisk::operator[](uint64_t idx) const {
+  auto optionalOffsetAndSize = getOffsetAndSize(idx);
   if (!optionalOffsetAndSize.has_value()) {
     return std::nullopt;
   }
@@ -53,13 +54,13 @@ void VocabularyOnDisk::buildFromIterable(Iterable&& it,
                                          const string& fileName) {
   {
     _file.open(fileName.c_str(), "w");
-    ad_utility::MmapVector<IdAndOffset> idsAndOffsets(fileName + _offsetSuffix,
-                                                      ad_utility::CreateTag{});
+    ad_utility::MmapVector<IndexAndOffset> idsAndOffsets(
+        fileName + _offsetSuffix, ad_utility::CreateTag{});
     uint64_t currentOffset = 0;
     std::optional<uint64_t> previousId = std::nullopt;
     for (const auto& [word, id] : it) {
       AD_CHECK(!previousId.has_value() || previousId.value() < id);
-      idsAndOffsets.push_back(IdAndOffset{id, currentOffset});
+      idsAndOffsets.push_back(IndexAndOffset{id, currentOffset});
       currentOffset += _file.write(word.data(), word.size());
       previousId = id;
     }
@@ -68,9 +69,9 @@ void VocabularyOnDisk::buildFromIterable(Iterable&& it,
     // vocabulary.
     if (previousId.has_value()) {
       idsAndOffsets.push_back(
-          IdAndOffset{previousId.value() + 1, currentOffset});
+          IndexAndOffset{previousId.value() + 1, currentOffset});
     } else {
-      idsAndOffsets.push_back(IdAndOffset{_highestId + 1, currentOffset});
+      idsAndOffsets.push_back(IndexAndOffset{_highestIdx + 1, currentOffset});
     }
     _file.close();
   }  // After this close, the destructor of MmapVector is called, whoch dumps
@@ -134,7 +135,7 @@ void VocabularyOnDisk::open(const string& filename) {
   AD_CHECK(_idsAndOffsets.size() > 0);
   _size = _idsAndOffsets.size() - 1;
   if (_size > 0) {
-    _highestId = (*(end() - 1))._index;
+    _highestIdx = (*(end() - 1))._index;
   }
 }
 

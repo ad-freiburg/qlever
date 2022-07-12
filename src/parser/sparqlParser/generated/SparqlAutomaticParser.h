@@ -38,27 +38,27 @@ class SparqlAutomaticParser : public antlr4::Parser {
     T__27 = 28,
     T__28 = 29,
     T__29 = 30,
-    T__30 = 31,
-    BASE = 32,
-    PREFIX = 33,
-    SELECT = 34,
-    DISTINCT = 35,
-    REDUCED = 36,
-    AS = 37,
-    CONSTRUCT = 38,
-    WHERE = 39,
-    DESCRIBE = 40,
-    ASK = 41,
-    FROM = 42,
-    NAMED = 43,
-    GROUPBY = 44,
-    GROUP_CONCAT = 45,
-    HAVING = 46,
-    ORDERBY = 47,
-    ASC = 48,
-    DESC = 49,
-    LIMIT = 50,
-    OFFSET = 51,
+    BASE = 31,
+    PREFIX = 32,
+    SELECT = 33,
+    DISTINCT = 34,
+    REDUCED = 35,
+    AS = 36,
+    CONSTRUCT = 37,
+    WHERE = 38,
+    DESCRIBE = 39,
+    ASK = 40,
+    FROM = 41,
+    NAMED = 42,
+    GROUPBY = 43,
+    GROUP_CONCAT = 44,
+    HAVING = 45,
+    ORDERBY = 46,
+    ASC = 47,
+    DESC = 48,
+    LIMIT = 49,
+    OFFSET = 50,
+    TEXTLIMIT = 51,
     VALUES = 52,
     LOAD = 53,
     SILENT = 54,
@@ -210,100 +210,101 @@ class SparqlAutomaticParser : public antlr4::Parser {
     RuleLimitOffsetClauses = 24,
     RuleLimitClause = 25,
     RuleOffsetClause = 26,
-    RuleValuesClause = 27,
-    RuleTriplesTemplate = 28,
-    RuleGroupGraphPattern = 29,
-    RuleGroupGraphPatternSub = 30,
-    RuleTriplesBlock = 31,
-    RuleGraphPatternNotTriples = 32,
-    RuleOptionalGraphPattern = 33,
-    RuleGraphGraphPattern = 34,
-    RuleServiceGraphPattern = 35,
-    RuleBind = 36,
-    RuleInlineData = 37,
-    RuleDataBlock = 38,
-    RuleInlineDataOneVar = 39,
-    RuleInlineDataFull = 40,
-    RuleDataBlockSingle = 41,
-    RuleDataBlockValue = 42,
-    RuleMinusGraphPattern = 43,
-    RuleGroupOrUnionGraphPattern = 44,
-    RuleFilterR = 45,
-    RuleConstraint = 46,
-    RuleFunctionCall = 47,
-    RuleArgList = 48,
-    RuleExpressionList = 49,
-    RuleConstructTemplate = 50,
-    RuleConstructTriples = 51,
-    RuleTriplesSameSubject = 52,
-    RulePropertyList = 53,
-    RulePropertyListNotEmpty = 54,
-    RuleVerb = 55,
-    RuleObjectList = 56,
-    RuleObjectR = 57,
-    RuleTriplesSameSubjectPath = 58,
-    RulePropertyListPath = 59,
-    RulePropertyListPathNotEmpty = 60,
-    RuleVerbPath = 61,
-    RuleVerbSimple = 62,
-    RuleVerbPathOrSimple = 63,
-    RuleObjectListPath = 64,
-    RuleObjectPath = 65,
-    RulePath = 66,
-    RulePathAlternative = 67,
-    RulePathSequence = 68,
-    RulePathElt = 69,
-    RulePathEltOrInverse = 70,
-    RulePathMod = 71,
-    RulePathPrimary = 72,
-    RulePathNegatedPropertySet = 73,
-    RulePathOneInPropertySet = 74,
-    RuleInteger = 75,
-    RuleTriplesNode = 76,
-    RuleBlankNodePropertyList = 77,
-    RuleTriplesNodePath = 78,
-    RuleBlankNodePropertyListPath = 79,
-    RuleCollection = 80,
-    RuleCollectionPath = 81,
-    RuleGraphNode = 82,
-    RuleGraphNodePath = 83,
-    RuleVarOrTerm = 84,
-    RuleVarOrIri = 85,
-    RuleVar = 86,
-    RuleGraphTerm = 87,
-    RuleExpression = 88,
-    RuleConditionalOrExpression = 89,
-    RuleConditionalAndExpression = 90,
-    RuleValueLogical = 91,
-    RuleRelationalExpression = 92,
-    RuleNumericExpression = 93,
-    RuleAdditiveExpression = 94,
-    RuleStrangeMultiplicativeSubexprOfAdditive = 95,
-    RuleMultiplicativeExpression = 96,
-    RuleUnaryExpression = 97,
-    RulePrimaryExpression = 98,
-    RuleBrackettedExpression = 99,
-    RuleBuiltInCall = 100,
-    RuleRegexExpression = 101,
-    RuleSubstringExpression = 102,
-    RuleStrReplaceExpression = 103,
-    RuleExistsFunc = 104,
-    RuleNotExistsFunc = 105,
-    RuleAggregate = 106,
-    RuleIriOrFunction = 107,
-    RuleRdfLiteral = 108,
-    RuleNumericLiteral = 109,
-    RuleNumericLiteralUnsigned = 110,
-    RuleNumericLiteralPositive = 111,
-    RuleNumericLiteralNegative = 112,
-    RuleBooleanLiteral = 113,
-    RuleString = 114,
-    RuleIri = 115,
-    RulePrefixedName = 116,
-    RuleBlankNode = 117,
-    RuleIriref = 118,
-    RulePnameLn = 119,
-    RulePnameNs = 120
+    RuleTextLimitClause = 27,
+    RuleValuesClause = 28,
+    RuleTriplesTemplate = 29,
+    RuleGroupGraphPattern = 30,
+    RuleGroupGraphPatternSub = 31,
+    RuleTriplesBlock = 32,
+    RuleGraphPatternNotTriples = 33,
+    RuleOptionalGraphPattern = 34,
+    RuleGraphGraphPattern = 35,
+    RuleServiceGraphPattern = 36,
+    RuleBind = 37,
+    RuleInlineData = 38,
+    RuleDataBlock = 39,
+    RuleInlineDataOneVar = 40,
+    RuleInlineDataFull = 41,
+    RuleDataBlockSingle = 42,
+    RuleDataBlockValue = 43,
+    RuleMinusGraphPattern = 44,
+    RuleGroupOrUnionGraphPattern = 45,
+    RuleFilterR = 46,
+    RuleConstraint = 47,
+    RuleFunctionCall = 48,
+    RuleArgList = 49,
+    RuleExpressionList = 50,
+    RuleConstructTemplate = 51,
+    RuleConstructTriples = 52,
+    RuleTriplesSameSubject = 53,
+    RulePropertyList = 54,
+    RulePropertyListNotEmpty = 55,
+    RuleVerb = 56,
+    RuleObjectList = 57,
+    RuleObjectR = 58,
+    RuleTriplesSameSubjectPath = 59,
+    RulePropertyListPath = 60,
+    RulePropertyListPathNotEmpty = 61,
+    RuleVerbPath = 62,
+    RuleVerbSimple = 63,
+    RuleVerbPathOrSimple = 64,
+    RuleObjectListPath = 65,
+    RuleObjectPath = 66,
+    RulePath = 67,
+    RulePathAlternative = 68,
+    RulePathSequence = 69,
+    RulePathElt = 70,
+    RulePathEltOrInverse = 71,
+    RulePathMod = 72,
+    RulePathPrimary = 73,
+    RulePathNegatedPropertySet = 74,
+    RulePathOneInPropertySet = 75,
+    RuleInteger = 76,
+    RuleTriplesNode = 77,
+    RuleBlankNodePropertyList = 78,
+    RuleTriplesNodePath = 79,
+    RuleBlankNodePropertyListPath = 80,
+    RuleCollection = 81,
+    RuleCollectionPath = 82,
+    RuleGraphNode = 83,
+    RuleGraphNodePath = 84,
+    RuleVarOrTerm = 85,
+    RuleVarOrIri = 86,
+    RuleVar = 87,
+    RuleGraphTerm = 88,
+    RuleExpression = 89,
+    RuleConditionalOrExpression = 90,
+    RuleConditionalAndExpression = 91,
+    RuleValueLogical = 92,
+    RuleRelationalExpression = 93,
+    RuleNumericExpression = 94,
+    RuleAdditiveExpression = 95,
+    RuleStrangeMultiplicativeSubexprOfAdditive = 96,
+    RuleMultiplicativeExpression = 97,
+    RuleUnaryExpression = 98,
+    RulePrimaryExpression = 99,
+    RuleBrackettedExpression = 100,
+    RuleBuiltInCall = 101,
+    RuleRegexExpression = 102,
+    RuleSubstringExpression = 103,
+    RuleStrReplaceExpression = 104,
+    RuleExistsFunc = 105,
+    RuleNotExistsFunc = 106,
+    RuleAggregate = 107,
+    RuleIriOrFunction = 108,
+    RuleRdfLiteral = 109,
+    RuleNumericLiteral = 110,
+    RuleNumericLiteralUnsigned = 111,
+    RuleNumericLiteralPositive = 112,
+    RuleNumericLiteralNegative = 113,
+    RuleBooleanLiteral = 114,
+    RuleString = 115,
+    RuleIri = 116,
+    RulePrefixedName = 117,
+    RuleBlankNode = 118,
+    RuleIriref = 119,
+    RulePnameLn = 120,
+    RulePnameNs = 121
   };
 
   explicit SparqlAutomaticParser(antlr4::TokenStream* input);
@@ -344,6 +345,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
   class LimitOffsetClausesContext;
   class LimitClauseContext;
   class OffsetClauseContext;
+  class TextLimitClauseContext;
   class ValuesClauseContext;
   class TriplesTemplateContext;
   class GroupGraphPatternContext;
@@ -884,6 +886,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
     virtual size_t getRuleIndex() const override;
     LimitClauseContext* limitClause();
     OffsetClauseContext* offsetClause();
+    TextLimitClauseContext* textLimitClause();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
@@ -899,7 +902,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
     LimitClauseContext(antlr4::ParserRuleContext* parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode* LIMIT();
-    antlr4::tree::TerminalNode* INTEGER();
+    IntegerContext* integer();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
@@ -916,7 +919,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
                         size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode* OFFSET();
-    antlr4::tree::TerminalNode* INTEGER();
+    IntegerContext* integer();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
@@ -926,6 +929,23 @@ class SparqlAutomaticParser : public antlr4::Parser {
   };
 
   OffsetClauseContext* offsetClause();
+
+  class TextLimitClauseContext : public antlr4::ParserRuleContext {
+   public:
+    TextLimitClauseContext(antlr4::ParserRuleContext* parent,
+                           size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode* TEXTLIMIT();
+    IntegerContext* integer();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual antlrcpp::Any accept(
+        antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  TextLimitClauseContext* textLimitClause();
 
   class ValuesClauseContext : public antlr4::ParserRuleContext {
    public:
@@ -1206,6 +1226,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
     RdfLiteralContext* rdfLiteral();
     NumericLiteralContext* numericLiteral();
     BooleanLiteralContext* booleanLiteral();
+    antlr4::tree::TerminalNode* UNDEF();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
@@ -1672,6 +1693,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
   class PathEltOrInverseContext : public antlr4::ParserRuleContext {
    public:
+    antlr4::Token* negationOperator = nullptr;
     PathEltOrInverseContext(antlr4::ParserRuleContext* parent,
                             size_t invokingState);
     virtual size_t getRuleIndex() const override;

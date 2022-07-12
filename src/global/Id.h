@@ -9,13 +9,29 @@
 #include <limits>
 
 #include "../util/Exception.h"
+#include "./IndexTypes.h"
+#include "./ValueId.h"
 
-typedef uint64_t Id;
+using Id = ValueId;
 typedef uint16_t Score;
+
+// TODO<joka921> Make the following ID and index types strong.
+using ColumnIndex = uint64_t;
+
+// TODO<joka921> The following IDs only appear within the text index in the
+// `Index` class, so they should not be public.
+using WordIndex = uint64_t;
+using WordOrEntityIndex = uint64_t;
+using TextBlockIndex = uint64_t;
+using CompressionCode = uint64_t;
+
+// Integers, that are probably not integers but strong IDs or indices, but their
+// true nature is still to be discovered.
+using UnknownIndex = uint64_t;
 
 // A value to use when the result should be empty (e.g. due to an optional join)
 // The highest two values are used as sentinels.
-static const Id ID_NO_VALUE = std::numeric_limits<Id>::max() - 2;
+static const Id ID_NO_VALUE = Id::makeUndefined();
 
 namespace ad_utility {
 

@@ -104,15 +104,16 @@ if [ ${REBUILD_THE_INDEX} == "YES" ] || ! [ -f "${INDEX}.vocabulary" ]; then
 	echo "Building index $INDEX"
 	./IndexBuilderMain -l -i "$INDEX" \
 	    -F ttl \
-		-f "$INPUT.nt" \
-		-s "$PROJECT_DIR/e2e/e2e-build-settings.json" \
-		-w "$INPUT.wordsfile.tsv" \
-		-d "$INPUT.docsfile.tsv" || bail "Building Index failed"
+	    -f "$INPUT.nt" \
+	    -s "$PROJECT_DIR/e2e/e2e-build-settings.json" \
+	    -w "$INPUT.wordsfile.tsv" \
+            -W \
+	    -d "$INPUT.docsfile.tsv" || bail "Building Index failed"
 	popd
 fi
 
-# Launch the Server using the freshly baked index. Can't simply use a subshell here because
-# then we can't easily get the SERVER_PID out of that subshell
+# Launch the Server using the freshly baked index. Can't simply use a subshell
+# here because then we can't easily get the SERVER_PID out of that subshell
 pushd "$BINARY_DIR"
 echo "Launching server from path $(pwd)"
 ./ServerMain -i "$INDEX" -p 9099 -m 1 -t &> server_log.txt &

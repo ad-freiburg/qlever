@@ -18,9 +18,19 @@ endfunction()
 # Then run `gtest_discover_tests` to add the tests cases from the executable.
 # Typically you should use `addAndLinkTest` (below) but this function can be used,
 # if a test binary requires multiple sources
-function(linkAndDiscoverTest basename )
+function(linkAndDiscoverTest basename)
     linkTest(${basename} ${ARGN})
     gtest_discover_tests(${basename} ${basename})
+endfunction()
+
+# Usage: `linkAndDiscoverTestSerial(basename, [additionalLibraries...]`
+# Similar to `linkAndDiscoverTestSerial` but also requires that the test is run serially
+# (without any of the other test cases running in parallel). This can be
+# required e.g. if several tests cases write to the same file.
+function(linkAndDiscoverTestSerial basename)
+    linkTest(${basename} ${ARGN})
+    gtest_discover_tests(${basename} ${basename} PROPERTIES RUN_SERIAL
+            TRUE)
 endfunction()
 
 # Usage: `addAndLinkTest(basename, [additionalLibraries...]`
@@ -33,12 +43,23 @@ function(addLinkAndDiscoverTest basename)
     linkAndDiscoverTest(${basename} ${ARGN})
 endfunction()
 
+# Usage: `addAndLinkTestSerial(basename, [additionalLibraries...]`
+# Similar to `addAndLinkTest` but also requires that the test is run serially
+# (without any of the other test cases running in parallel). This can be
+# required e.g. if several tests cases write to the same file.
+function(addLinkAndDiscoverTestSerial basename)
+    addTest(${basename})
+    linkAndDiscoverTestSerial(${basename} ${ARGN})
+endfunction()
+
 # Only compile and link the test, but do not run it.
 # Usage: Same as for the two functions above.
 function(addAndLinkTest basename)
     addTest(${basename})
     linkTest(${basename} ${ARGN})
 endfunction()
+
+addLinkAndDiscoverTest(ValueIdComparatorsTest)
 
 addLinkAndDiscoverTest(SparqlParserTest parser sparqlExpressions ${ICU_LIBRARIES})
 
@@ -48,17 +69,19 @@ addLinkAndDiscoverTest(CacheTest absl::flat_hash_map)
 
 addLinkAndDiscoverTest(ConcurrentCacheTest absl::flat_hash_map)
 
-addLinkAndDiscoverTest(FileTest)
+# This test also seems to use the same filenames and should be fixed.
+addLinkAndDiscoverTestSerial(FileTest)
 
 addLinkAndDiscoverTest(Simple8bTest)
-
-addLinkAndDiscoverTest(TsvParserTest parser)
 
 addLinkAndDiscoverTest(ContextFileParserTest parser ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(IndexMetaDataTest index)
 
-addLinkAndDiscoverTest(IndexTest index)
+# Stxxl currently always uses a file ./-stxxl.disk for all indices, which
+# makes it impossible to run the test cases for the Index class in parallel.
+# TODO<qup42, joka921> fix this
+addLinkAndDiscoverTestSerial(IndexTest index)
 
 addLinkAndDiscoverTest(FTSAlgorithmsTest index)
 
@@ -66,7 +89,7 @@ addLinkAndDiscoverTest(EngineTest engine)
 
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
-addLinkAndDiscoverTest(ConversionsTest)
+addLinkAndDiscoverTest(ConversionsTest absl::strings)
 
 addLinkAndDiscoverTest(HashMapTest absl::flat_hash_map)
 
@@ -80,7 +103,8 @@ addLinkAndDiscoverTest(HasPredicateScanTest engine)
 
 addLinkAndDiscoverTest(MmapVectorTest)
 
-addLinkAndDiscoverTest(BufferedVectorTest)
+# BufferedVectorTest also uses conflicting filenames.
+addLinkAndDiscoverTestSerial(BufferedVectorTest)
 
 addLinkAndDiscoverTest(UnionTest engine)
 
@@ -119,7 +143,11 @@ addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 
 addLinkAndDiscoverTest(SparqlAntlrParserTest parser sparqlExpressions)
 
-addLinkAndDiscoverTest(SerializerTest absl::flat_hash_map)
+# The SerializerTest uses temporary files. The tests fail when multiple test
+# cases are run in parallel. This should be fixed by using distinct filenames
+# for each test case.
+# TODO<qup42, joka921> fix this
+addLinkAndDiscoverTestSerial(SerializerTest absl::flat_hash_map)
 
 addLinkAndDiscoverTest(ParametersTest absl::flat_hash_map)
 
@@ -159,15 +187,22 @@ addLinkAndDiscoverTest(PrefixCompressorTest)
 
 addLinkAndDiscoverTest(MilestoneIdTest absl::strings)
 
+# The VocabularyOnDisk uses mmap which fails when the tests are run in
+# parallel. This should be fixed by using distinct filenames for each test case.
+# TODO<qup42, joka921> fix this
 addLinkAndDiscoverTest(VocabularyOnDiskTest index)
 
 addLinkAndDiscoverTest(VocabularyTest index)
 
 addLinkAndDiscoverTest(IteratorTest)
 
-addLinkAndDiscoverTest(PatternCreatorTest index)
+# Here we also seem to have race conditions on the tests
+addLinkAndDiscoverTestSerial(PatternCreatorTest index)
 
-addLinkAndDiscoverTest(BackgroundStxxlSorterTest ${STXXL_LIBRARIES})
+# Stxxl currently always uses a file ./-stxxl.disk for all indices, which
+# makes it impossible to run the test cases for the Index class in parallel.
+# TODO<qup42, joka921> fix this
+addLinkAndDiscoverTestSerial(BackgroundStxxlSorterTest ${STXXL_LIBRARIES})
 
 addLinkAndDiscoverTest(ViewsTest)
 
@@ -176,3 +211,21 @@ addLinkAndDiscoverTest(ForwardTest)
 addLinkAndDiscoverTest(CompressorStreamTest engine)
 
 addLinkAndDiscoverTest(AsyncStreamTest)
+
+addLinkAndDiscoverTest(TriplesViewTest)
+
+addLinkAndDiscoverTest(BitUtilsTest)
+
+addLinkAndDiscoverTest(NBitIntegerTest)
+
+addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
+
+addLinkAndDiscoverTest(DateTest)
+
+addLinkAndDiscoverTest(TripleObjectTest absl::strings)
+
+addLinkAndDiscoverTest(ValueIdTest absl::flat_hash_set)
+
+#addLinkAndDiscoverTest(ValueIdComparatorsTest)
+
+addLinkAndDiscoverTest(LambdaHelpersTest)

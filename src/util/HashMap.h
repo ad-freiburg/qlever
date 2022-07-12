@@ -11,9 +11,6 @@ namespace ad_utility {
 // Wrapper for HashMaps to be used everywhere throughout code for the semantic
 // search. This wrapper interface is not designed to be complete from the
 // beginning. Feel free to extend it at need.
-template <class K, class V,
-          class HashFcn = absl::container_internal::hash_default_hash<K>,
-          class EqualKey = absl::container_internal::hash_default_eq<K>,
-          class Alloc = std::allocator<std::pair<const K, V>>>
-using HashMap = absl::flat_hash_map<K, V, HashFcn, EqualKey, Alloc>;
+template <typename... Ts>
+using HashMap = absl::flat_hash_map<Ts...>;
 }  // namespace ad_utility

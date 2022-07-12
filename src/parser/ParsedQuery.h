@@ -14,6 +14,7 @@
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
+#include "./TripleComponent.h"
 #include "ParseException.h"
 #include "data/Types.h"
 #include "data/VarOrTerm.h"
@@ -56,6 +57,61 @@ class PropertyPath {
   PropertyPath(Operation op, uint16_t limit, std::string iri,
                std::initializer_list<PropertyPath> children);
 
+  static PropertyPath fromIri(std::string iri) {
+    PropertyPath p(PropertyPath::Operation::IRI);
+    p._iri = std::move(iri);
+    return p;
+  }
+
+  static PropertyPath fromVariable(Variable var) {
+    PropertyPath p(PropertyPath::Operation::IRI);
+    p._iri = std::move(var.name());
+    return p;
+  }
+
+  static PropertyPath makeWithChildren(std::vector<PropertyPath> children,
+                                       PropertyPath::Operation op) {
+    PropertyPath p(std::move(op));
+    p._children = std::move(children);
+    return p;
+  }
+
+  static PropertyPath makeAlternative(std::vector<PropertyPath> children) {
+    return makeWithChildren(std::move(children), Operation::ALTERNATIVE);
+  }
+
+  static PropertyPath makeSequence(std::vector<PropertyPath> children) {
+    return makeWithChildren(std::move(children), Operation::SEQUENCE);
+  }
+
+  static PropertyPath makeInverse(PropertyPath child) {
+    return makeWithChildren({std::move(child)}, Operation::INVERSE);
+  }
+
+  static PropertyPath makeWithChildLimit(PropertyPath child,
+                                         uint_fast16_t limit,
+                                         PropertyPath::Operation op) {
+    PropertyPath p = makeWithChildren({std::move(child)}, op);
+    p._limit = limit;
+    return p;
+  }
+
+  static PropertyPath makeTransitiveMin(PropertyPath child,
+                                        uint_fast16_t limit) {
+    return makeWithChildLimit(std::move(child), limit,
+                              Operation::TRANSITIVE_MIN);
+  }
+
+  static PropertyPath makeTransitiveMax(PropertyPath child,
+                                        uint_fast16_t limit) {
+    return makeWithChildLimit(std::move(child), limit,
+                              Operation::TRANSITIVE_MAX);
+  }
+
+  static PropertyPath makeTransitive(PropertyPath child) {
+    return makeWithChildren({std::move(child)}, Operation::TRANSITIVE);
+  }
+
   bool operator==(const PropertyPath& other) const {
     return _operation == other._operation && _limit == other._limit &&
            _iri == other._iri && _children == other._children &&
@@ -84,6 +140,9 @@ class PropertyPath {
 };
 
 inline bool isVariable(const string& elem) { return elem.starts_with("?"); }
+inline bool isVariable(const TripleComponent& elem) {
+  return elem.isString() && isVariable(elem.getString());
+}
 
 inline bool isVariable(const PropertyPath& elem) {
   return elem._operation == PropertyPath::Operation::IRI &&
@@ -95,10 +154,10 @@ std::ostream& operator<<(std::ostream& out, const PropertyPath& p);
 // Data container for parsed triples from the where clause
 class SparqlTriple {
  public:
-  SparqlTriple(string s, PropertyPath p, string o)
+  SparqlTriple(TripleComponent s, PropertyPath p, TripleComponent o)
       : _s(std::move(s)), _p(std::move(p)), _o(std::move(o)) {}
 
-  SparqlTriple(string s, const std::string& p_iri, string o)
+  SparqlTriple(TripleComponent s, const std::string& p_iri, TripleComponent o)
       : _s(std::move(s)),
         _p(PropertyPath::Operation::IRI, 0, p_iri, {}),
         _o(std::move(o)) {}
@@ -106,83 +165,37 @@ class SparqlTriple {
   bool operator==(const SparqlTriple& other) const {
     return _s == other._s && _p == other._p && _o == other._o;
   }
-  string _s;
+  TripleComponent _s;
   PropertyPath _p;
-  string _o;
+  TripleComponent _o;
 
   [[nodiscard]] string asString() const;
 };
 
-class OrderKey {
+/// Store an expression that appeared in an ORDER BY clause.
+class ExpressionOrderKey {
  public:
-  OrderKey(string key, bool desc) : _key(std::move(key)), _desc(desc) {}
-  explicit OrderKey(const string& textual) {
-    std::string lower = ad_utility::getLowercaseUtf8(textual);
-    size_t pos = 0;
-    _desc = lower.starts_with("desc(");
-    // skip the 'desc('
-    if (_desc) {
-      pos += 5;
-      // skip any whitespace after the opening bracket
-      while (pos < textual.size() &&
-             ::isspace(static_cast<unsigned char>(textual[pos]))) {
-        pos++;
-      }
-    }
-    // skip 'asc('
-    if (lower.starts_with("asc(")) {
-      pos += 4;
-      // skip any whitespace after the opening bracket
-      while (pos < textual.size() &&
-             ::isspace(static_cast<unsigned char>(textual[pos]))) {
-        pos++;
-      }
-    }
-    if (lower[pos] == '(') {
-      // key is an alias
-      size_t bracketDepth = 1;
-      size_t end = pos + 1;
-      while (bracketDepth > 0 && end < textual.size()) {
-        if (lower[end] == '(') {
-          bracketDepth++;
-        } else if (lower[end] == ')') {
-          bracketDepth--;
-        }
-        end++;
-      }
-      if (bracketDepth != 0) {
-        throw ParseException("Unbalanced brackets in alias order by key: " +
-                             textual);
-      }
-      _key = textual.substr(pos, end - pos);
-    } else if (lower[pos] == 's') {
-      // key is a text score
-      if (!lower.substr(pos).starts_with("score(")) {
-        throw ParseException("Expected keyword score in order by key: " +
-                             textual);
-      }
-      pos += 6;
-      size_t end = pos + 1;
-      // look for the first space or closing bracket character
-      while (end < textual.size() && textual[end] != ')' &&
-             !::isspace(static_cast<unsigned char>(textual[end]))) {
-        end++;
-      }
-      _key = "SCORE(" + textual.substr(pos, end - pos) + ")";
-    } else if (lower[pos] == '?') {
-      // key is simple variable
-      size_t end = pos + 1;
-      // look for the first space or closing bracket character
-      while (end < textual.size() && textual[end] != ')' &&
-             !::isspace(static_cast<unsigned char>(textual[end]))) {
-        end++;
-      }
-      _key = textual.substr(pos, end - pos);
-    }
-  }
-  string _key;
-  bool _desc;
+  bool isDescending_;
+  sparqlExpression::SparqlExpressionPimpl expression_;
+  // ___________________________________________________________________________
+  explicit ExpressionOrderKey(
+      sparqlExpression::SparqlExpressionPimpl expression,
+      bool isDescending = false)
+      : isDescending_{isDescending}, expression_{std::move(expression)} {}
 };
+
+/// Store a variable that appeared in an ORDER BY clause.
+class VariableOrderKey {
+ public:
+  string variable_;
+  bool isDescending_;
+  // ___________________________________________________________________________
+  explicit VariableOrderKey(string variable, bool isDescending = false)
+      : variable_{std::move(variable)}, isDescending_{isDescending} {}
+};
+
+// Represents an ordering by a variable or an expression.
+using OrderKey = std::variant<VariableOrderKey, ExpressionOrderKey>;
 
 class SparqlFilter {
  public:
@@ -219,6 +232,13 @@ class SparqlValues {
   vector<vector<string>> _values;
 };
 
+// Represents the data returned by a limitOffsetClause.
+struct LimitOffsetClause {
+  uint64_t _limit = std::numeric_limits<uint64_t>::max();
+  uint64_t _textLimit = 1;
+  uint64_t _offset = 0;
+};
+
 struct GraphPatternOperation;
 
 // A parsed SPARQL query. To be extended.
@@ -230,8 +250,9 @@ class ParsedQuery {
   // are recursive).
   class GraphPattern {
    public:
-    // deletes the patterns children.
-    GraphPattern() : _optional(false) {}
+    // The constructor has to be implemented in the .cpp file because of the
+    // circular dependencies of `GraphPattern` and `GraphPatternOperation`
+    GraphPattern();
     // Move and copyconstructors to avoid double deletes on the trees children
     GraphPattern(GraphPattern&& other) = default;
     GraphPattern(const GraphPattern& other) = default;
@@ -370,15 +391,15 @@ class ParsedQuery {
 
   ParsedQuery() = default;
 
-  vector<SparqlPrefix> _prefixes;
+  // The ql prefix for QLever specific additions is always defined.
+  vector<SparqlPrefix> _prefixes = {SparqlPrefix(
+      INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI)};
   GraphPattern _rootGraphPattern;
   vector<SparqlFilter> _havingClauses;
   size_t _numGraphPatterns = 1;
-  vector<OrderKey> _orderBy;
-  vector<string> _groupByVariables;
-  std::optional<size_t> _limit = std::nullopt;
-  string _textLimit;
-  std::optional<size_t> _offset = std::nullopt;
+  vector<VariableOrderKey> _orderBy;
+  vector<Variable> _groupByVariables;
+  LimitOffsetClause _limitOffset{};
   string _originalString;
 
   // explicit default initialisation because the constructor
@@ -433,12 +454,14 @@ class ParsedQuery {
 
   [[nodiscard]] string asString() const;
 
- private:
   static void expandPrefix(
       PropertyPath& item, const ad_utility::HashMap<string, string>& prefixMap);
   static void expandPrefix(
       string& item, const ad_utility::HashMap<string, string>& prefixMap);
 };
+
+using GroupKey = std::variant<sparqlExpression::SparqlExpressionPimpl,
+                              ParsedQuery::Alias, Variable>;
 
 struct GraphPatternOperation {
   struct BasicGraphPattern {
@@ -446,7 +469,8 @@ struct GraphPatternOperation {
   };
   struct Values {
     SparqlValues _inlineValues;
-    size_t _id;
+    // This value will be overwritten later.
+    size_t _id = std::numeric_limits<size_t>::max();
   };
   struct GroupGraphPattern {
     ParsedQuery::GraphPattern _child;
@@ -467,8 +491,8 @@ struct GraphPatternOperation {
 
   struct TransPath {
     // The name of the left and right end of the transitive operation
-    std::string _left;
-    std::string _right;
+    TripleComponent _left;
+    TripleComponent _right;
     // The name of the left and right end of the subpath
     std::string _innerLeft;
     std::string _innerRight;
@@ -477,9 +501,7 @@ struct GraphPatternOperation {
     ParsedQuery::GraphPattern _childGraphPattern;
   };
 
-  // A SPARQL Bind construct.  Currently supports either an unsigned integer or
-  // a knowledge base constant. For simplicity, we store both values instead of
-  // using a union or std::variant here.
+  // A SPARQL Bind construct.
   struct Bind {
     sparqlExpression::SparqlExpressionPimpl _expression;
     std::string _target;  // the variable to which the expression will be bound

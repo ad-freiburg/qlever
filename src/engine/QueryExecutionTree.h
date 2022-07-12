@@ -23,9 +23,8 @@
 using std::shared_ptr;
 using std::string;
 
-// A query execution tree.
-// Processed bottom up, this gives an ordering to the operations
-// needed to solve a query.
+// A query execution tree. Processed bottom up, which gives an ordering to the
+// operations needed to solve a query.
 class QueryExecutionTree {
  public:
   explicit QueryExecutionTree(QueryExecutionContext* const qec);
@@ -74,7 +73,8 @@ class QueryExecutionTree {
     return _type == OperationType::UNDEFINED || !_rootOperation;
   }
 
-  void setVariableColumn(const string& var, size_t i);
+  void setVariableColumn(std::string variable, size_t columnIndex);
+  void setVariableColumn(TripleComponent variable, size_t columnIndex);
 
   size_t getVariableColumn(const string& var) const;
 
@@ -110,7 +110,7 @@ class QueryExecutionTree {
   // `ResultType` of the i-th `selectVariable` in the `resultTable`
   ColumnIndicesAndTypes selectedVariablesToColumnIndices(
       const SelectedVarsOrAsterisk& selectedVarsOrAsterisk,
-      const ResultTable& resultTable) const;
+      const ResultTable& resultTable, bool includeQuestionMark = true) const;
 
   template <ExportSubFormat format>
   ad_utility::streams::stream_generator generateResults(
@@ -263,8 +263,7 @@ class QueryExecutionTree {
       std::shared_ptr<const ResultTable> resultTable = nullptr) const;
 
   [[nodiscard]] std::optional<std::pair<std::string, const char*>>
-  toStringAndXsdType(Id id, ResultTable::ResultType type,
-                     const ResultTable& resultTable) const;
+  idToStringAndType(Id id, const ResultTable& resultTable) const;
 
   // Generate an RDF graph for a CONSTRUCT query.
   cppcoro::generator<StringTriple> generateRdfGraph(

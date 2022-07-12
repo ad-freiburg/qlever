@@ -1,18 +1,23 @@
-
-
-//  Copyright 2021, University of Freiburg,
-//  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+// Copyright 2022, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include "UrlParser.h"
 
 #include "../Exception.h"
+
 using namespace ad_utility;
 
-using std::string;
 // _____________________________________________________________________________
-string UrlParser::applyPercentDecoding(std::string_view url) {
-  string decoded;
+std::string UrlParser::applyPercentDecoding(std::string_view url,
+                                            bool urlDecode) {
+  // If not decoding wanted, just convert to `std::string`.
+  if (urlDecode == false) {
+    return std::string{url};
+  }
+  // Otherwise resolve all %XX.
+  std::string decoded;
   for (size_t i = 0; i < url.size(); ++i) {
     if (url[i] == '+') {
       decoded += ' ';
@@ -45,27 +50,42 @@ string UrlParser::applyPercentDecoding(std::string_view url) {
 }
 
 // ___________________________________________________________________________
-UrlParser::UrlTarget UrlParser::parseTarget(std::string_view target) {
-  static constexpr auto npos = std::string_view::npos;
-  UrlTarget result;
+UrlParser::UrlPathAndParameters UrlParser::parseGetRequestTarget(
+    std::string_view target, bool urlDecode) {
+  UrlPathAndParameters result;
 
-  target = target.substr(0, target.find('#'));
+  // Remove everything after # (including it). Does nothing if there is no #.
+  // Don't do this is `urlDecode == false` because in that case, the given
+  // string contains an unencode SPARQL query, which frequently contains a # as
+  // a regular character.
+  if (urlDecode == true) {
+    target = target.substr(0, target.find('#'));
+  }
+
+  // Set `_path` and remove it from `target`. If there is no query string (part
+  // starting with "?"), we are done at this point.
   size_t index = target.find('?');
-  result._target = target.substr(0, index);
-  if (index == npos) {
+  result._path = target.substr(0, index);
+  if (index == std::string::npos) {
     return result;
   }
   target.remove_prefix(index + 1);
+
+  // Parse the query string and store the result in a hash map. Throw an error
+  // if the same key appears twice in the query string. Note that this excludes
+  // having two "cmd=..." parameters, although that would be meaningful (though
+  // not necessary) to support.
   while (true) {
     auto next = target.find('&');
-    auto paramAndValue = parseSingleKeyValuePair(target.substr(0, next));
+    auto paramAndValue =
+        parseSingleKeyValuePair(target.substr(0, next), urlDecode);
     auto [iterator, isNewElement] =
         result._parameters.insert(std::move(paramAndValue));
     if (!isNewElement) {
       AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
                "Duplicate HTTP parameter: " + iterator->first);
     }
-    if (next == npos) {
+    if (next == std::string::npos) {
       break;
     }
     target.remove_prefix(next + 1);
@@ -75,14 +95,14 @@ UrlParser::UrlTarget UrlParser::parseTarget(std::string_view target) {
 
 // ____________________________________________________________________________
 std::pair<std::string, std::string> UrlParser::parseSingleKeyValuePair(
-    std::string_view input) {
+    std::string_view input, bool urlDecode) {
   size_t posOfEq = input.find('=');
   if (posOfEq == std::string_view::npos) {
     AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
              "Parameter without \"=\" in HTTP Request. " + std::string{input});
   }
-  std::string param{applyPercentDecoding(input.substr(0, posOfEq))};
-  std::string value{applyPercentDecoding(input.substr(posOfEq + 1))};
+  std::string param{applyPercentDecoding(input.substr(0, posOfEq), urlDecode)};
+  std::string value{applyPercentDecoding(input.substr(posOfEq + 1), urlDecode)};
   return {std::move(param), std::move(value)};
 }
 
@@ -90,7 +110,7 @@ std::pair<std::string, std::string> UrlParser::parseSingleKeyValuePair(
 std::optional<std::string> UrlParser::getDecodedPathAndCheck(
     std::string_view target) noexcept {
   try {
-    auto filename = parseTarget(target)._target;
+    auto filename = parseGetRequestTarget(target)._path;
     AD_CHECK(filename.starts_with('/'));
     AD_CHECK(filename.find("..") == string::npos);
     return filename;

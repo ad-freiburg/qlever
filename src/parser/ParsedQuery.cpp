@@ -74,14 +74,9 @@ string ParsedQuery::asString() const {
   os << "\nWHERE: \n";
   _rootGraphPattern.toString(os, 1);
 
-  os << "\nLIMIT: "
-     << (_limit.has_value() ? std::to_string(_limit.value())
-                            : "no limit specified");
-  os << "\nTEXTLIMIT: "
-     << (!_textLimit.empty() ? _textLimit : "no limit specified");
-  os << "\nOFFSET: "
-     << (_offset.has_value() ? std::to_string(_offset.value())
-                             : "no offset specified");
+  os << "\nLIMIT: " << (_limitOffset._limit);
+  os << "\nTEXTLIMIT: " << (_limitOffset._textLimit);
+  os << "\nOFFSET: " << (_limitOffset._offset);
   if (usesSelect) {
     const auto& selectClause = this->selectClause();
     os << "\nDISTINCT modifier is " << (selectClause._distinct ? "" : "not ")
@@ -94,7 +89,7 @@ string ParsedQuery::asString() const {
     os << "not specified";
   } else {
     for (auto& key : _orderBy) {
-      os << key._key << (key._desc ? " (DESC)" : " (ASC)") << "\t";
+      os << key.variable_ << (key.isDescending_ ? " (DESC)" : " (ASC)") << "\t";
     }
   }
   os << "\n";
@@ -331,21 +326,30 @@ void ParsedQuery::expandPrefixes() {
           static_assert(
               std::is_same_v<T, GraphPatternOperation::BasicGraphPattern>);
           for (auto& trip : arg._whereClauseTriples) {
-            expandPrefix(trip._s, prefixMap);
+            if (trip._s.isString()) {
+              expandPrefix(trip._s.getString(), prefixMap);
+            }
             expandPrefix(trip._p, prefixMap);
             if (trip._p._operation == PropertyPath::Operation::IRI &&
                 trip._p._iri.find("in-context") != string::npos) {
-              std::vector<std::string> tokens = absl::StrSplit(trip._o, ' ');
-              trip._o = "";
-              for (size_t i = 0; i < tokens.size(); ++i) {
-                expandPrefix(tokens[i], prefixMap);
-                trip._o += tokens[i];
-                if (i + 1 < tokens.size()) {
-                  trip._o += " ";
+              if (trip._o.isString()) {
+                std::string& str = trip._o.getString();
+                std::vector<std::string> tokens = absl::StrSplit(str, ' ');
+                str = "";
+                for (size_t i = 0; i < tokens.size(); ++i) {
+                  expandPrefix(tokens[i], prefixMap);
+                  str += tokens[i];
+                  if (i + 1 < tokens.size()) {
+                    str += " ";
+                  }
                 }
+                trip._o = str;
               }
             } else {
-              expandPrefix(trip._o, prefixMap);
+              if (trip._o.isString()) {
+                std::string& str = trip._o.getString();
+                expandPrefix(str, prefixMap);
+              }
             }
           }
         }
@@ -390,7 +394,7 @@ void ParsedQuery::expandPrefix(
       item = item.substr(secondPos + 1);
     }
 
-    size_t i = item.find(':');
+    size_t i = item.rfind(':');
     size_t from = item.find("^^");
     if (from == string::npos) {
       from = 0;
@@ -551,3 +555,6 @@ void GraphPatternOperation::toString(std::ostringstream& os,
     }
   });
 }
+
+// __________________________________________________________________________
+ParsedQuery::GraphPattern::GraphPattern() : _optional(false) {}

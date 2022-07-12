@@ -11,9 +11,11 @@
 #include "../global/Id.h"
 #include "../util/BufferedVector.h"
 #include "../util/File.h"
+#include "../util/Serializer/ByteBufferSerializer.h"
 #include "../util/Serializer/SerializeVector.h"
 #include "../util/Serializer/Serializer.h"
 #include "../util/Timer.h"
+#include "../util/TypeTraits.h"
 
 // The meta data of a compressed block of ID triples in an index permutation.
 struct CompressedBlockMetaData {
@@ -33,15 +35,14 @@ struct CompressedBlockMetaData {
 };
 
 // Serialization of the block meta data.
-template <typename Serializer>
-void serialize(Serializer& s, CompressedBlockMetaData& b) {
-  s | b._offsetInFile;
-  s | b._compressedSize;
-  s | b._numRows;
-  s | b._col0FirstId;
-  s | b._col0LastId;
-  s | b._col1FirstId;
-  s | b._col1LastId;
+AD_SERIALIZE_FUNCTION(CompressedBlockMetaData) {
+  serializer | arg._offsetInFile;
+  serializer | arg._compressedSize;
+  serializer | arg._numRows;
+  serializer | arg._col0FirstId;
+  serializer | arg._col0LastId;
+  serializer | arg._col1FirstId;
+  serializer | arg._col1LastId;
 }
 
 // The meta data of a whole compressed "relation", where relation refers to a
@@ -58,7 +59,7 @@ struct CompressedRelationMetaData {
   // the uncompressed sequence of triples).  Otherwise, this "relation" is
   // stored in one or several blocks of its own, and we set `_offsetInBlock` to
   // `Id(-1)`.
-  Id _offsetInBlock = Id(-1);
+  uint64_t _offsetInBlock = std::numeric_limits<uint64_t>::max();
 
   size_t getNofElements() const { return _numRows; }
 
@@ -72,9 +73,11 @@ struct CompressedRelationMetaData {
 
   // A special value for an "empty" or "nonexisting" meta data. This is needed
   // for the mmap-based meta data.
+  // TODO<joka921> Can we throw this out?
   static CompressedRelationMetaData emptyMetaData() {
+    auto id = ID_NO_VALUE;
     size_t m = size_t(-1);
-    return CompressedRelationMetaData{m, m, 0, 0, m};
+    return CompressedRelationMetaData{id, m, 0, 0, m};
   }
 
   // Two of these are equal if all members are equal.
@@ -140,13 +143,12 @@ struct CompressedRelationMetaData {
 };
 
 // Serialization of the compressed "relation" meta data.
-template <class Serializer>
-void serialize(Serializer& s, CompressedRelationMetaData& c) {
-  s | c._col0Id;
-  s | c._numRows;
-  s | c._multiplicityCol1;
-  s | c._multiplicityCol2;
-  s | c._offsetInBlock;
+AD_SERIALIZE_FUNCTION(CompressedRelationMetaData) {
+  serializer | arg._col0Id;
+  serializer | arg._numRows;
+  serializer | arg._multiplicityCol1;
+  serializer | arg._multiplicityCol2;
+  serializer | arg._offsetInBlock;
 }
 
 /// Manage the compression and serialization of relations during the index

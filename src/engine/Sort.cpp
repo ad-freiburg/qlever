@@ -20,7 +20,7 @@ Sort::Sort(QueryExecutionContext* qec,
     : Operation(qec), _subtree(std::move(subtree)), _sortCol(sortCol) {}
 
 // _____________________________________________________________________________
-string Sort::asString(size_t indent) const {
+string Sort::asStringImpl(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";

@@ -4,6 +4,8 @@
 
 #include "./Index.h"
 
+#include <absl/strings/str_join.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -14,7 +16,6 @@
 #include <unordered_map>
 
 #include "../parser/ParallelParseBuffer.h"
-#include "../parser/TsvParser.h"
 #include "../util/BatchedPipeline.h"
 #include "../util/CompressionUsingZstd/ZstdWrapper.h"
 #include "../util/Conversions.h"
@@ -94,7 +95,7 @@ void Index::createFromFile(const string& filename) {
   string indexFilename = _onDiskBase + ".index";
   _configurationJson["external-literals"] = _onDiskLiterals;
 
-  initializeVocabularySettingsBuild<Parser>();
+  readIndexBuilderSettingsFromFile<Parser>();
 
   IndexBuilderDataAsPsoSorter indexBuilderData;
   if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
@@ -159,7 +160,7 @@ void Index::createFromFile(const string& filename) {
   // case any of the permutations fail.
   writeConfiguration();
 
-  StxxlSorter<SortBySPO> spoSorter{STXXL_MEMORY_TO_USE};
+  StxxlSorter<SortBySPO> spoSorter{stxxlMemoryInBytes() / 5};
   auto& psoSorter = *indexBuilderData.psoSorter;
   // For the first permutation, perform a unique.
   auto uniqueSorter = ad_utility::uniqueView(psoSorter.sortedView());
@@ -173,7 +174,7 @@ void Index::createFromFile(const string& filename) {
 
   if (_loadAllPermutations) {
     // After the SPO permutation, create patterns if so desired.
-    StxxlSorter<SortByOSP> ospSorter{STXXL_MEMORY_TO_USE};
+    StxxlSorter<SortByOSP> ospSorter{stxxlMemoryInBytes() / 5};
     if (_usePatterns) {
       PatternCreator patternCreator{_onDiskBase + ".index.patterns"};
       auto pushTripleToPatterns = [&patternCreator,
@@ -215,7 +216,6 @@ void Index::createFromFile(const string& filename) {
 }
 
 // Explicit instantiations.
-template void Index::createFromFile<TsvParser>(const string& filename);
 template void Index::createFromFile<TurtleStreamParser<Tokenizer>>(
     const string& filename);
 template void Index::createFromFile<TurtleMmapParser<Tokenizer>>(
@@ -229,6 +229,8 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
   LOG(INFO) << "Processing input triples from " << filename << " ..."
             << std::endl;
   auto parser = std::make_shared<Parser>(filename);
+  parser->integerOverflowBehavior() = _turtleParserIntegerOverflowBehavior;
+  parser->invalidLiteralsAreSkipped() = _turtleParserSkipIllegalLiterals;
   std::unique_ptr<TripleVec> idTriples(new TripleVec());
   ad_utility::Synchronized<TripleVec::bufwriter_type> writer(*idTriples);
   bool parserExhausted = false;
@@ -263,7 +265,7 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
                         [&]() { parserExhausted = true; }),
           // convert each triple to the internal representation (e.g. special
           // values for Numbers, externalized literals, etc.)
-          [this](std::array<std::string, 3>&& t) -> LangtagAndTriple {
+          [this](TurtleTriple&& t) -> LangtagAndTriple {
             return tripleToInternalRepresentation(std::move(t));
           },
 
@@ -415,7 +417,7 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
 
   // Iterate over all partial vocabularies.
   TripleVec::bufreader_type reader(data);
-  auto resultPtr = std::make_unique<PsoSorter>(STXXL_MEMORY_TO_USE);
+  auto resultPtr = std::make_unique<PsoSorter>(stxxlMemoryInBytes() / 5);
   auto& result = *resultPtr;
   size_t i = 0;
   for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();
@@ -435,12 +437,17 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
 
       // For all triple elements find their mapping from partial to global ids.
       for (size_t k = 0; k < 3; ++k) {
+        // TODO<joka921> The Maps should actually store `VocabIndex`es
+        if (curTriple[k].getDatatype() != Datatype::VocabIndex) {
+          continue;
+        }
         auto iterator = idMap.find(curTriple[k]);
         if (iterator == idMap.end()) {
           LOG(INFO) << "Not found in partial vocabulary: " << curTriple[k]
                     << std::endl;
           AD_CHECK(false);
         }
+        // TODO<joka921> at some point we have to check for out of range.
         curTriple[k] = iterator->second;
       }
 
@@ -486,7 +493,7 @@ Index::createPermutationPairImpl(const string& fileName1,
   bool functional = true;
   size_t distinctCol1 = 0;
   size_t sizeOfRelation = 0;
-  Id lastLhs = std::numeric_limits<Id>::max();
+  Id lastLhs = ID_NO_VALUE;
   uint64_t totalNumTriples = 0;
   for (auto triple : sortedTriples) {
     if (!currentRel.has_value()) {
@@ -516,7 +523,7 @@ Index::createPermutationPairImpl(const string& fileName1,
         distinctCol1++;
       }
     }
-    buffer.push_back(array<Id, 2>{{triple[c1], triple[c2]}});
+    buffer.push_back({triple[c1], triple[c2]});
     lastLhs = triple[c1];
   }
   if (from < totalNumTriples) {
@@ -606,6 +613,12 @@ void Index::createPermutationPair(
     auto&&... perTripleCallbacks) {
   auto metaData = createPermutations<MetaDataDispatcher>(
       AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
+  // Set the name of this newly created pair of `IndexMetaData` objects.
+  // NOTE: When `setKbName` was called, it set the name of _PSO._meta,
+  // _PSO._meta, ... which however are not used during index building.
+  // `getKbName` simple reads one of these names.
+  metaData.value().first.setName(getKbName());
+  metaData.value().second.setName(getKbName());
   if (metaData) {
     LOG(INFO) << "Exchanging multiplicities for " << p1._readableName << " and "
               << p2._readableName << " ..." << std::endl;
@@ -640,9 +653,16 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
   auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
-  auto iterator = TriplesView(_SPO);
+  // We only iterate over the SPO permutation which typically only has few
+  // triples per subject, so it should be safe to not apply a memory limit here.
+  AD_CHECK(false);
+  ad_utility::AllocatorWithLimit<Id> allocator{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          std::numeric_limits<uint64_t>::max())};
+  auto iterator = TriplesView(_SPO, allocator);
   createPatternsFromSpoTriplesView(iterator, _onDiskBase + ".index.patterns",
-                                   langPredLowerBound, langPredUpperBound);
+                                   Id::makeFromVocabIndex(langPredLowerBound),
+                                   Id::makeFromVocabIndex(langPredUpperBound));
 }
 
 // _____________________________________________________________________________
@@ -730,7 +750,7 @@ size_t Index::relationCardinality(const string& relationName) const {
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
   Id relId;
-  if (_vocab.getId(relationName, &relId)) {
+  if (getId(relationName, &relId)) {
     if (this->_PSO.metaData().col0IdExists(relId)) {
       return this->_PSO.metaData().getMetaData(relId).getNofElements();
     }
@@ -738,54 +758,28 @@ size_t Index::relationCardinality(const string& relationName) const {
   return 0;
 }
 
+// TODO<joka921> There is a lot of duplication in the three cardinality
+// functions, remove it.
 // _____________________________________________________________________________
-size_t Index::subjectCardinality(const string& sub) const {
-  Id relId;
-  if (_vocab.getId(sub, &relId)) {
-    if (this->_SPO.metaData().col0IdExists(relId)) {
-      return this->_SPO.metaData().getMetaData(relId).getNofElements();
+size_t Index::subjectCardinality(const TripleComponent& sub) const {
+  std::optional<Id> relId = sub.toValueId(getVocab());
+  if (relId.has_value()) {
+    if (this->_SPO.metaData().col0IdExists(relId.value())) {
+      return this->_SPO.metaData().getMetaData(relId.value()).getNofElements();
     }
   }
   return 0;
 }
 
 // _____________________________________________________________________________
-size_t Index::objectCardinality(const string& obj) const {
-  Id relId;
-  if (_vocab.getId(obj, &relId)) {
-    if (this->_OSP.metaData().col0IdExists(relId)) {
-      return this->_OSP.metaData().getMetaData(relId).getNofElements();
+size_t Index::objectCardinality(const TripleComponent& obj) const {
+  std::optional<Id> relId = obj.toValueId(getVocab());
+  if (relId.has_value()) {
+    if (this->_OSP.metaData().col0IdExists(relId.value())) {
+      return this->_OSP.metaData().getMetaData(relId.value()).getNofElements();
     }
   }
   return 0;
-}
-
-// _____________________________________________________________________________
-size_t Index::sizeEstimate(const string& sub, const string& pred,
-                           const string& obj) const {
-  // One or two of the parameters have to be empty strings.
-  // This determines the permutations to use.
-
-  // With only one nonempty string, we can get the exact count.
-  // With two, we can check if the relation is functional (return 1) or not
-  // where we approximate the result size by the block size.
-  if (sub.size() > 0 && pred.size() == 0 && obj.size() == 0) {
-    return subjectCardinality(sub);
-  }
-  if (sub.size() == 0 && pred.size() > 0 && obj.size() == 0) {
-    return relationCardinality(pred);
-  }
-  if (sub.size() == 0 && pred.size() == 0 && obj.size() > 0) {
-    return objectCardinality(obj);
-  }
-  if (sub.size() == 0 && pred.size() == 0 && obj.size() == 0) {
-    return getNofTriples();
-  }
-  AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-           "Index::sizeEsimate called with more then one of S/P/O given. "
-           "This should never be the case anymore, "
-           " since for such SCANs we compute the result "
-           "directly and don't need an estimate anymore!");
 }
 
 // _____________________________________________________________________________
@@ -806,7 +800,7 @@ template void Index::writeAsciiListFile<vector<Score>>(
     const string& filename, const vector<Score>& ids) const;
 
 // _____________________________________________________________________________
-bool Index::isLiteral(const string& object) {
+bool Index::isLiteral(const string& object) const {
   return decltype(_vocab)::isLiteral(object);
 }
 
@@ -931,36 +925,47 @@ void Index::readConfiguration() {
 
 // ___________________________________________________________________________
 LangtagAndTriple Index::tripleToInternalRepresentation(
-    std::array<std::string, 3>&& tripleIn) {
-  LangtagAndTriple res{"", makeTriple(std::move(tripleIn))};
-  auto& spo = res._triple;
-  for (auto& el : spo) {
-    el._iriOrLiteral =
-        _vocab.getLocaleManager().normalizeUtf8(el._iriOrLiteral);
-  }
-  size_t upperBound = 3;
-  auto& object = spo[2]._iriOrLiteral;
-  if (ad_utility::isXsdValue(object)) {
-    object = ad_utility::convertValueLiteralToIndexWord(object);
-    upperBound = 2;
-  } else if (ad_utility::isNumeric(object)) {
-    object = ad_utility::convertNumericToIndexWord(object);
-    upperBound = 2;
-  } else if (isLiteral(object)) {
-    res._langtag = decltype(_vocab)::getLanguage(object);
+    TurtleTriple&& triple) const {
+  LangtagAndTriple result{"", {}};
+  auto& resultTriple = result._triple;
+  resultTriple[0] = std::move(triple._subject);
+  resultTriple[1] = std::move(triple._predicate);
+
+  // If the object of the triple can be directly folded into an ID, do so. Note
+  // that the actual folding is done by the `TripleComponent`.
+  std::optional<Id> idIfNotString = triple._object.toValueIdIfNotString();
+
+  // TODO<joka921> The following statement could be simplified by a helper
+  // function "optionalCast";
+  if (idIfNotString.has_value()) {
+    resultTriple[2] = idIfNotString.value();
+  } else {
+    resultTriple[2] = std::move(triple._object.getString());
   }
 
-  for (size_t k = 0; k < upperBound; ++k) {
-    if (_onDiskLiterals && _vocab.shouldBeExternalized(spo[k]._iriOrLiteral)) {
-      spo[k]._isExternal = true;
+  for (size_t i = 0; i < 3; ++i) {
+    auto& el = resultTriple[i];
+    if (!std::holds_alternative<PossiblyExternalizedIriOrLiteral>(el)) {
+      // If we already have an ID, we can just continue;
+      continue;
+    }
+    auto& component = std::get<PossiblyExternalizedIriOrLiteral>(el);
+    auto& iriOrLiteral = component._iriOrLiteral;
+    iriOrLiteral = _vocab.getLocaleManager().normalizeUtf8(iriOrLiteral);
+    if (_onDiskLiterals && _vocab.shouldBeExternalized(iriOrLiteral)) {
+      component._isExternal = true;
+    }
+    // Only the third element (the object) might contain a language tag.
+    if (i == 2 && isLiteral(iriOrLiteral)) {
+      result._langtag = decltype(_vocab)::getLanguage(iriOrLiteral);
     }
   }
-  return res;
+  return result;
 }
 
 // ___________________________________________________________________________
 template <class Parser>
-void Index::initializeVocabularySettingsBuild() {
+void Index::readIndexBuilderSettingsFromFile() {
   json j;  // if we have no settings, we still have to initialize some default
            // values
   if (!_settingsFileName.empty()) {
@@ -1056,6 +1061,47 @@ void Index::initializeVocabularySettingsBuild() {
     _parserBatchSize = size_t{j["parser-batch-size"]};
     LOG(INFO) << "Overriding setting parser-batch-size to " << _parserBatchSize
               << " This might influence performance during index build."
+              << std::endl;
+  }
+
+  std::string overflowingIntegersThrow = "overflowing-integers-throw";
+  std::string overflowingIntegersBecomeDoubles =
+      "overflowing-integers-become-doubles";
+  std::string allIntegersBecomeDoubles = "all-integers-become-doubles";
+  std::vector<std::string_view> allModes{overflowingIntegersThrow,
+                                         overflowingIntegersBecomeDoubles,
+                                         allIntegersBecomeDoubles};
+  std::string key = "parser-integer-overflow-behavior";
+  if (j.count(key)) {
+    auto value = j[key];
+    if (value == overflowingIntegersThrow) {
+      LOG(INFO) << "Integers that cannot be represented by QLever will throw "
+                   "an exception"
+                << std::endl;
+      _turtleParserIntegerOverflowBehavior =
+          TurtleParserIntegerOverflowBehavior::Error;
+    } else if (value == overflowingIntegersBecomeDoubles) {
+      LOG(INFO) << "Integers that cannot be represented by QLever will be "
+                   "converted to doubles"
+                << std::endl;
+      _turtleParserIntegerOverflowBehavior =
+          TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+    } else if (value == allIntegersBecomeDoubles) {
+      LOG(INFO) << "All integers will be converted to doubles" << std::endl;
+      _turtleParserIntegerOverflowBehavior =
+          TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
+    } else {
+      AD_CHECK(std::find(allModes.begin(), allModes.end(), value) ==
+               allModes.end());
+      LOG(ERROR) << "Invalid value for " << key << std::endl;
+      LOG(INFO) << "The currently supported values are "
+                << absl::StrJoin(allModes, ",") << std::endl;
+    }
+  } else {
+    _turtleParserIntegerOverflowBehavior =
+        TurtleParserIntegerOverflowBehavior::Error;
+    LOG(INFO) << "Integers that cannot be represented by QLever will throw an "
+                 "exception (this is the default behavior)"
               << std::endl;
   }
 }

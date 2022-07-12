@@ -1,8 +1,11 @@
-//
-// Created by johannes on 12.05.21.
-//
+// Copyright 2022, University of Freiburg,
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
+
+#include <string>
 
 #include "../src/engine/sparqlExpressions/LiteralExpression.h"
 #include "../src/engine/sparqlExpressions/NaryExpression.h"

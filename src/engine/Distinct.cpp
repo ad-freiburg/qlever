@@ -21,7 +21,7 @@ Distinct::Distinct(QueryExecutionContext* qec,
     : Operation(qec), _subtree(subtree), _keepIndices(keepIndices) {}
 
 // _____________________________________________________________________________
-string Distinct::asString(size_t indent) const {
+string Distinct::asStringImpl(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";

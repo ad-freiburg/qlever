@@ -8,67 +8,69 @@
 #include "../global/Id.h"
 #include "../util/Conversions.h"
 #include "../util/HashMap.h"
+#include "../util/Serializer/Serializer.h"
 #include "../util/TupleHelpers.h"
+#include "../util/TypeTraits.h"
 #include "./ConstantsIndexBuilding.h"
 #include "./StringSortComparator.h"
 
 #ifndef QLEVER_INDEXBUILDERTYPES_H
 #define QLEVER_INDEXBUILDERTYPES_H
 
-// A triple entry (subject, predicate, object) together with the information,
-// whether it should be part of the external vocabulary
-struct TripleComponent {
-  TripleComponent(std::string iriOrLiteral, bool isExternal = false)
+// An IRI or a literal together with the information, whether it should be part
+// of the external vocabulary
+struct PossiblyExternalizedIriOrLiteral {
+  PossiblyExternalizedIriOrLiteral(std::string iriOrLiteral,
+                                   bool isExternal = false)
       : _iriOrLiteral{std::move(iriOrLiteral)}, _isExternal{isExternal} {}
-  TripleComponent() = default;
+  PossiblyExternalizedIriOrLiteral() = default;
   std::string _iriOrLiteral;
   bool _isExternal = false;
 
-  template <typename Serializer>
-  friend void serialize(Serializer& serializer, TripleComponent& entry) {
-    serializer | entry._iriOrLiteral;
-    serializer | entry._isExternal;
+  AD_SERIALIZE_FRIEND_FUNCTION(PossiblyExternalizedIriOrLiteral) {
+    serializer | arg._iriOrLiteral;
+    serializer | arg._isExternal;
   }
 };
 
-struct TripleComponentWithId {
+struct TripleComponentWithIndex {
   std::string _iriOrLiteral;
   bool _isExternal = false;
-  uint64_t _id = 0;
+  uint64_t _index = 0;
 
   [[nodiscard]] const auto& isExternal() const { return _isExternal; }
   [[nodiscard]] auto& isExternal() { return _isExternal; }
   [[nodiscard]] const auto& iriOrLiteral() const { return _iriOrLiteral; }
   [[nodiscard]] auto& iriOrLiteral() { return _iriOrLiteral; }
 
-  template <typename Serializer>
-  friend void serialize(Serializer& serializer, TripleComponentWithId& entry) {
-    serializer | entry._iriOrLiteral;
-    serializer | entry._isExternal;
-    serializer | entry._id;
+  AD_SERIALIZE_FRIEND_FUNCTION(TripleComponentWithIndex) {
+    serializer | arg._iriOrLiteral;
+    serializer | arg._isExternal;
+    serializer | arg._index;
   }
 };
 
+using TripleComponentOrId = std::variant<PossiblyExternalizedIriOrLiteral, Id>;
 // A triple that also knows for each entry, whether this entry should be
 // part of the external vocabulary.
-using Triple = std::array<TripleComponent, 3>;
+using Triple = std::array<TripleComponentOrId, 3>;
 
 // Convert a triple of `std::string` to a triple of `TripleComponents`. All
 // three entries will have `isExternal()==false` and an uninitialized ID.
 inline Triple makeTriple(std::array<std::string, 3>&& t) {
-  using T = TripleComponent;
+  using T = PossiblyExternalizedIriOrLiteral;
   return {T{t[0]}, T{t[1]}, T{t[2]}};
 }
 
-/// named value type for the ItemMap
-struct IdAndSplitVal {
-  Id m_id;
+/// The index of a word and the corresponding `SplitVal`.
+struct LocalVocabIndexAndSplitVal {
+  uint64_t m_id;
   TripleComponentComparator::SplitVal m_splitVal;
 };
 
-using ItemMap = ad_utility::HashMap<std::string, IdAndSplitVal>;
+using ItemMap = ad_utility::HashMap<std::string, LocalVocabIndexAndSplitVal>;
 using ItemMapArray = std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS>;
-using ItemVec = std::vector<std::pair<std::string, IdAndSplitVal>>;
+using ItemVec = std::vector<std::pair<std::string, LocalVocabIndexAndSplitVal>>;
 
 /**
  * Manage a HashMap of string->Id to create unique Ids for strings.
@@ -78,7 +80,7 @@ using ItemVec = std::vector<std::pair<std::string, IdAndSplitVal>>;
 // Align each ItemMapManager on its own cache line to avoid false sharing.
 struct alignas(256) ItemMapManager {
   /// Construct by assigning the minimum ID that should be returned by the map.
-  explicit ItemMapManager(Id minId, const TripleComponentComparator* cmp)
+  explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp)
       : _map(), _minId(minId), m_comp(cmp) {}
   /// Minimum Id is 0
   ItemMapManager() = default;
@@ -89,17 +91,22 @@ struct alignas(256) ItemMapManager {
 
   /// If the key was seen before, return its preassigned ID. Else assign the
   /// next free ID to the string, store and return it.
-  Id getId(const TripleComponent& key) {
+  Id getId(const TripleComponentOrId& keyOrId) {
+    if (std::holds_alternative<Id>(keyOrId)) {
+      return std::get<Id>(keyOrId);
+    }
+    const auto& key = std::get<PossiblyExternalizedIriOrLiteral>(keyOrId);
     if (!_map.count(key._iriOrLiteral)) {
-      Id res = _map.size() + _minId;
+      uint64_t res = _map.size() + _minId;
       _map[key._iriOrLiteral] = {
           res,
           m_comp->extractAndTransformComparable(
               key._iriOrLiteral, TripleComponentComparator::Level::IDENTICAL,
               key._isExternal)};
-      return res;
+      return Id::makeFromVocabIndex(VocabIndex::make(res));
     } else {
-      return _map[key._iriOrLiteral].m_id;
+      return Id::makeFromVocabIndex(
+          VocabIndex::make(_map[key._iriOrLiteral].m_id));
     }
   }
 
@@ -108,7 +115,7 @@ struct alignas(256) ItemMapManager {
     return {getId(t[0]), getId(t[1]), getId(t[2])};
   }
   ItemMap _map;
-  Id _minId = 0;
+  uint64_t _minId = 0;
   const TripleComponentComparator* m_comp = nullptr;
 };
 
@@ -184,7 +191,9 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
         // get the Id for the tagged predicate, e.g. @en@rdfs:label
         auto langTaggedPredId =
             map.getId(ad_utility::convertToLanguageTaggedPredicate(
-                lt._triple[1]._iriOrLiteral, lt._langtag));
+                std::get<PossiblyExternalizedIriOrLiteral>(lt._triple[1])
+                    ._iriOrLiteral,
+                lt._langtag));
         auto& spoIds = *(res[0]);  // ids of original triple
         // TODO replace the std::array by an explicit IdTriple class,
         //  then the emplace calls don't need the explicit type.

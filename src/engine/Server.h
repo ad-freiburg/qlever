@@ -30,9 +30,11 @@ using ad_utility::Socket;
 //! The HTTP Server used.
 class Server {
  public:
-  explicit Server(const int port, const int numThreads, size_t maxMemGB)
+  explicit Server(const int port, const int numThreads, size_t maxMemGB,
+                  std::string accessToken)
       : _numThreads(numThreads),
         _port(port),
+        accessToken_(accessToken),
         _allocator{ad_utility::makeAllocationMemoryLeftThreadsafeObject(
                        maxMemGB * (1ull << 30u)),
                    [this](size_t numBytesToAllocate) {
@@ -90,6 +92,7 @@ class Server {
  private:
   const int _numThreads;
   int _port;
+  std::string accessToken_;
   QueryResultCache _cache;
   ad_utility::AllocatorWithLimit<Id> _allocator;
   SortPerformanceEstimator _sortPerformanceEstimator;
@@ -106,14 +109,19 @@ class Server {
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
 
+  /// Parse the path and URL parameters from the given request. Supports both
+  /// GET and POST request according to the SPARQL 1.1 standard.
+  ad_utility::UrlParser::UrlPathAndParameters getUrlPathAndParameters(
+      const ad_utility::httpUtils::HttpRequest auto& request);
+
   /// Handle a single HTTP request. Check whether a file request or a query was
   /// sent, and dispatch to functions handling these cases. This function
   /// requires the constraints for the `HttpHandler` in `HttpServer.h`.
   /// \param req The HTTP request.
   /// \param send The action that sends a http:response. (see the
   ///             `HttpServer.h` for documentation).
-  Awaitable<void> process(const ad_utility::httpUtils::HttpRequest auto& req,
-                          auto&& send);
+  Awaitable<void> process(
+      const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
 
   /// Handle a http request that asks for the processing of a query.
   /// \param params The key-value-pairs  sent in the HTTP GET request. When this
@@ -141,8 +149,9 @@ class Server {
   Awaitable<ad_utility::streams::stream_generator> composeResponseSepValues(
       const ParsedQuery& query, const QueryExecutionTree& qet) const;
 
-  static json composeExceptionJson(const string& query, const std::exception& e,
-                                   ad_utility::Timer& requestTimer);
+  static json composeErrorResponseJson(const string& query,
+                                       const std::string& errorMsg,
+                                       ad_utility::Timer& requestTimer);
 
   static ad_utility::streams::stream_generator composeTurtleResponse(
       const ParsedQuery& query, const QueryExecutionTree& qet);

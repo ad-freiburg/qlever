@@ -30,7 +30,7 @@ Minus::Minus(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string Minus::asString(size_t indent) const {
+string Minus::asStringImpl(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
@@ -108,7 +108,7 @@ size_t Minus::getCostEstimate() {
 // _____________________________________________________________________________
 template <int A_WIDTH, int B_WIDTH>
 void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
-                         const vector<array<Id, 2>>& joinColumns,
+                         const vector<array<ColumnIndex, 2>>& joinColumns,
                          IdTable* dynResult) const {
   // Substract dynB from dynA. The result should be all result mappings mu
   // for which all result mappings mu' in dynB are not compatible (one value

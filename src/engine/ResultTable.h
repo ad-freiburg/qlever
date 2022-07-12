@@ -64,17 +64,24 @@ class ResultTable {
 
   virtual ~ResultTable();
 
-  std::optional<std::string> idToOptionalString(Id id) const {
-    if (id < _localVocab->size()) {
-      return (*_localVocab)[id];
-    } else if (id == ID_NO_VALUE) {
-      return std::nullopt;
+  std::optional<std::string> indexToOptionalString(LocalVocabIndex idx) const {
+    if (idx.get() < _localVocab->size()) {
+      return (*_localVocab)[idx.get()];
     }
     return std::nullopt;
   }
 
   size_t size() const;
   size_t width() const { return _idTable.cols(); }
+
+  // Log to INFO the size of this result.
+  //
+  // NOTE: Due to the current sub-optimal design of `Server::processQuery`, we
+  // need the same message in multiple places and so instead of duplicating the
+  // message, we should have a method for it.
+  void logResultSize() const {
+    LOG(INFO) << "Result has size " << size() << " x " << width() << std::endl;
+  }
 
   void clear();
 

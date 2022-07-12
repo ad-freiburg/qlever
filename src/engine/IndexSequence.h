@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstdlib>
 
 // Code to generate index sequences used in the optimized, precompiled
 // join methods, for example. For reference:

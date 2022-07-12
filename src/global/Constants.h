@@ -8,27 +8,30 @@
 
 #include "../util/Parameters.h"
 
-static const size_t STXXL_MEMORY_TO_USE = 1024UL * 1024UL * 1024UL * 2UL;
-static const size_t STXXL_DISK_SIZE_INDEX_BUILDER = 1000 * 1000;
+static const size_t DEFAULT_STXXL_MEMORY_IN_BYTES = 5'000'000'000UL;
+static const size_t STXXL_DISK_SIZE_INDEX_BUILDER = 1000;  // In MB.
 static const size_t STXXL_DISK_SIZE_INDEX_TEST = 10;
 
 static constexpr size_t DEFAULT_MEM_FOR_QUERIES_IN_GB = 4;
 
-static const size_t MAX_NOF_ROWS_IN_RESULT = 100000;
+static const size_t MAX_NOF_ROWS_IN_RESULT = 1'000'000;
 static const size_t MIN_WORD_PREFIX_SIZE = 4;
 static const char PREFIX_CHAR = '*';
 static const size_t MAX_NOF_NODES = 64;
 static const size_t MAX_NOF_FILTERS = 64;
 
-static const size_t BUFFER_SIZE_RELATION_SIZE = 1000 * 1000 * 1000;
-static const size_t BUFFER_SIZE_DOCSFILE_LINE = 1024 * 1024 * 100;
-static const size_t DISTINCT_LHS_PER_BLOCK = 10 * 1000;
-static const size_t USE_BLOCKS_INDEX_SIZE_TRESHOLD = 20 * 1000;
+static const size_t BUFFER_SIZE_RELATION_SIZE = 1'000'000'000;
+static const size_t BUFFER_SIZE_DOCSFILE_LINE = 100'000'000;
+static const size_t DISTINCT_LHS_PER_BLOCK = 10'000;
+static const size_t USE_BLOCKS_INDEX_SIZE_TRESHOLD = 20'000;
 
-static const size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1000 * 1000 * 1000;
+static const size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1'000'000'000;
 
 static const size_t GALLOP_THRESHOLD = 1000;
 
+static const char INTERNAL_PREDICATE_PREFIX_NAME[] = "ql";
+static const char INTERNAL_PREDICATE_PREFIX_IRI[] =
+    "<QLever-internal-function/>";
 static const char CONTAINS_ENTITY_PREDICATE[] =
     "<QLever-internal-function/contains-entity>";
 static const char CONTAINS_WORD_PREDICATE[] =
@@ -38,6 +41,9 @@ static const char INTERNAL_TEXT_MATCH_PREDICATE[] =
     "<QLever-internal-function/text>";
 static const char HAS_PREDICATE_PREDICATE[] =
     "<QLever-internal-function/has-predicate>";
+
+static const std::string INTERNAL_VARIABLE_PREFIX =
+    "?_QLever_internal_variable_";
 
 // For anonymous nodes in Turtle.
 static const std::string ANON_NODE_PREFIX = "QLever-Anon-Node";
@@ -49,13 +55,43 @@ static const std::string LANGUAGE_PREDICATE = URI_PREFIX + "langtag>";
 static const char VALUE_PREFIX[] = ":v:";
 static const char VALUE_DATE_PREFIX[] = ":v:date:";
 static const char VALUE_FLOAT_PREFIX[] = ":v:float:";
+
+// TODO<joka921> Move them to their own file, make them strings, remove
+// duplications, etc.
 static const char XSD_DATETIME_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#dateTime";
+static const char XSD_DATE_TYPE[] = "http://www.w3.org/2001/XMLSchema#date";
+static const char XSD_GYEAR_TYPE[] = "http://www.w3.org/2001/XMLSchema#gYear";
+static const char XSD_GYEARMONTH_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#gYearMonth";
+
 static const char XSD_INT_TYPE[] = "http://www.w3.org/2001/XMLSchema#int";
+static const char XSD_INTEGER_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#integer";
 static const char XSD_FLOAT_TYPE[] = "http://www.w3.org/2001/XMLSchema#float";
 static const char XSD_DOUBLE_TYPE[] = "http://www.w3.org/2001/XMLSchema#double";
 static const char XSD_DECIMAL_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#decimal";
+
+static const char XSD_NON_POSITIVE_INTEGER_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#nonPositiveInteger";
+static const char XSD_NEGATIVE_INTEGER_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#negativeInteger";
+static const char XSD_LONG_TYPE[] = "http://www.w3.org/2001/XMLSchema#long";
+static const char XSD_SHORT_TYPE[] = "http://www.w3.org/2001/XMLSchema#short";
+static const char XSD_BYTE_TYPE[] = "http://www.w3.org/2001/XMLSchema#byte";
+static const char XSD_NON_NEGATIVE_INTEGER_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#nonNegativeInteger";
+static const char XSD_UNSIGNED_LONG_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#unsignedLong";
+static const char XSD_UNSIGNED_INT_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#unsignedInt";
+static const char XSD_UNSIGNED_SHORT_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#unsignedShort";
+static const char XSD_UNSIGNED_BYTE_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#unsignedByte";
+static const char XSD_POSITIVE_INTEGER_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#positiveInteger";
 static const char XSD_BOOLEAN_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#boolean";
 static const char VALUE_DATE_TIME_SEPARATOR[] = "T";

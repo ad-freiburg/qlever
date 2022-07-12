@@ -5,8 +5,9 @@
 
 #include "./TurtleParser.h"
 
-#include <string.h>
+#include <cstring>
 
+#include "../util/Conversions.h"
 #include "../util/TaskQueue.h"
 #include "./RdfEscaping.h"
 
@@ -31,10 +32,10 @@ bool TurtleParser<T>::prefixID() {
         check(skip<TurtleTokenId::Dot>())) {
       // strip  the angled brackes <bla> -> bla
       _prefixMap[_activePrefix] =
-          _lastParseResult.substr(1, _lastParseResult.size() - 2);
+          stripAngleBrackets(_lastParseResult.getString());
       return true;
     } else {
-      raise("prefixID");
+      raise("Parsing @prefix definition failed");
     }
   } else {
     return false;
@@ -46,10 +47,10 @@ template <class T>
 bool TurtleParser<T>::base() {
   if (skip<TurtleTokenId::TurtleBase>()) {
     if (iriref() && check(skip<TurtleTokenId::Dot>())) {
-      _prefixMap[""] = _lastParseResult.substr(1, _lastParseResult.size() - 2);
+      _prefixMap[""] = stripAngleBrackets(_lastParseResult.getString());
       return true;
     } else {
-      raise("base");
+      raise("Parsing @base definition failed");
     }
   } else {
     return false;
@@ -62,10 +63,10 @@ bool TurtleParser<T>::sparqlPrefix() {
   if (skip<TurtleTokenId::SparqlPrefix>()) {
     if (pnameNS() && iriref()) {
       _prefixMap[_activePrefix] =
-          _lastParseResult.substr(1, _lastParseResult.size() - 2);
+          stripAngleBrackets(_lastParseResult.getString());
       return true;
     } else {
-      raise("sparqlPrefix");
+      raise("Parsing PREFIX definition failed");
     }
   } else {
     return false;
@@ -77,10 +78,10 @@ template <class T>
 bool TurtleParser<T>::sparqlBase() {
   if (skip<TurtleTokenId::SparqlBase>()) {
     if (iriref()) {
-      _prefixMap[""] = _lastParseResult.substr(1, _lastParseResult.size() - 2);
+      _prefixMap[""] = stripAngleBrackets(_lastParseResult.getString());
       return true;
     } else {
-      raise("sparqlBase");
+      raise("Parsing BASE definition failed");
     }
   } else {
     return false;
@@ -94,7 +95,7 @@ bool TurtleParser<T>::triples() {
     if (predicateObjectList()) {
       return true;
     } else {
-      raise("triples");
+      raise("Parsing predicate or object failed");
     }
   } else {
     if (blankNodePropertyList()) {
@@ -127,7 +128,6 @@ template <class T>
 bool TurtleParser<T>::objectList() {
   if (object()) {
     while (skip<TurtleTokenId::Comma>() && check(object())) {
-      continue;
     }
     return true;
   } else {
@@ -159,7 +159,7 @@ bool TurtleParser<T>::predicateSpecialA() {
 template <class T>
 bool TurtleParser<T>::subject() {
   if (blankNode() || iri() || collection()) {
-    _activeSubject = _lastParseResult;
+    _activeSubject = _lastParseResult.getString();
     return true;
   } else {
     return false;
@@ -170,7 +170,7 @@ bool TurtleParser<T>::subject() {
 template <class T>
 bool TurtleParser<T>::predicate() {
   if (iri()) {
-    _activePredicate = _lastParseResult;
+    _activePredicate = _lastParseResult.getString();
     return true;
   } else {
     return false;
@@ -228,8 +228,68 @@ bool TurtleParser<T>::collection() {
   if (!skip<TurtleTokenId::OpenRound>()) {
     return false;
   }
-  raise("We do not know how to handle collections in QLever yet\n");
+  raise("The QLever turtle parser cannot handle collections yet");
   // TODO<joka921> understand collections
+}
+
+// ____________________________________________________________________________
+template <class T>
+void TurtleParser<T>::parseDoubleConstant(const std::string& input) {
+  size_t position;
+
+  bool errorOccured = false;
+  TripleComponent result;
+  try {
+    // We cannot directly store this in `_lastParseResult` because this might
+    // overwrite `input`.
+    result = std::stod(input, &position);
+  } catch (const std::exception& e) {
+    errorOccured = true;
+  }
+  if (errorOccured || position != input.size()) {
+    auto errorMessage = absl::StrCat(
+        "Value ", input, " could not be parsed as a floating point value");
+    raiseOrIgnoreTriple(errorMessage);
+  }
+  _lastParseResult = result;
+}
+
+// ____________________________________________________________________________
+template <class T>
+void TurtleParser<T>::parseIntegerConstant(const std::string& input) {
+  if (integerOverflowBehavior() ==
+      TurtleParserIntegerOverflowBehavior::AllToDouble) {
+    return parseDoubleConstant(input);
+  }
+  size_t position = 0;
+
+  bool errorOccured = false;
+  TripleComponent result;
+  try {
+    // We cannot directly store this in `_lastParseResult` because this might
+    // overwrite `input`.
+    result = std::stoll(input, &position);
+  } catch (const std::out_of_range&) {
+    if (integerOverflowBehavior() ==
+        TurtleParserIntegerOverflowBehavior::OverflowingToDouble) {
+      return parseDoubleConstant(input);
+    } else {
+      auto errorMessage = absl::StrCat(
+          "Value ", input,
+          " cannot be represented as an integer value inside QLever, "
+          "make it a xsd:decimal/xsd:double literal or specify "
+          "\"parser-integer-overflow-behavior\"");
+      raiseOrIgnoreTriple(errorMessage);
+    }
+  } catch (const std::invalid_argument& e) {
+    errorOccured = true;
+  }
+  if (errorOccured || position != input.size()) {
+    auto errorMessage = absl::StrCat(
+        "Value ", input, " could not be parsed as an integer value");
+    raiseOrIgnoreTriple(errorMessage);
+  }
+  _lastParseResult = result;
 }
 
 // ______________________________________________________________________
@@ -240,22 +300,81 @@ bool TurtleParser<T>::numericLiteral() {
 
 // ______________________________________________________________________
 template <class T>
+bool TurtleParser<T>::integer() {
+  if (parseTerminal<TurtleTokenId::Integer>()) {
+    parseIntegerConstant(_lastParseResult.getString());
+    return true;
+  } else {
+    return false;
+  }
+}
+
+// ______________________________________________________________________
+template <class T>
+bool TurtleParser<T>::decimal() {
+  if (parseTerminal<TurtleTokenId::Decimal>()) {
+    parseDoubleConstant(_lastParseResult.getString());
+    return true;
+  } else {
+    return false;
+  }
+}
+
+// _______________________________________________________________________
+template <class T>
+bool TurtleParser<T>::doubleParse() {
+  if (parseTerminal<TurtleTokenId::Double>()) {
+    parseDoubleConstant(_lastParseResult.getString());
+    return true;
+  } else {
+    return false;
+  }
+}
+
+// ______________________________________________________________________
+template <class T>
 bool TurtleParser<T>::rdfLiteral() {
   if (!stringParse()) {
     return false;
   }
-  auto literalString = _lastParseResult =
-      RdfEscaping::normalizeRDFLiteral(_lastParseResult);
+  _lastParseResult =
+      RdfEscaping::normalizeRDFLiteral(_lastParseResult.getString());
+  std::string literalString = _lastParseResult.getString();
   if (langtag()) {
-    _lastParseResult = literalString + _lastParseResult;
+    _lastParseResult = literalString + _lastParseResult.getString();
     return true;
     // TODO<joka921> this allows spaces here since the ^^ is unique in the
     // sparql syntax. is this correct?
   } else if (skip<TurtleTokenId::DoubleCircumflex>() && check(iri())) {
-    _lastParseResult = literalString + "^^" + _lastParseResult;
+    const auto& typeIri = _lastParseResult.getString();
+    auto type = stripAngleBrackets(typeIri);
+    std::string strippedLiteral{stripDoubleQuotes(literalString)};
+    // TODO<joka921> clean this up by moving the check for the types to a
+    // separate module.
+    if (type == XSD_INT_TYPE || type == XSD_INTEGER_TYPE ||
+        type == XSD_NON_POSITIVE_INTEGER_TYPE ||
+        type == XSD_NEGATIVE_INTEGER_TYPE || type == XSD_LONG_TYPE ||
+        type == XSD_SHORT_TYPE || type == XSD_BYTE_TYPE ||
+        type == XSD_NON_NEGATIVE_INTEGER_TYPE ||
+        type == XSD_UNSIGNED_LONG_TYPE || type == XSD_UNSIGNED_INT_TYPE ||
+        type == XSD_UNSIGNED_SHORT_TYPE || type == XSD_POSITIVE_INTEGER_TYPE) {
+      // type == XSD_BOOLEAN_TYPE) {
+      parseIntegerConstant(strippedLiteral);
+    } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
+               type == XSD_FLOAT_TYPE) {
+      parseDoubleConstant(strippedLiteral);
+    } else {
+      _lastParseResult = literalString + "^^" + _lastParseResult.getString();
+      // TODO: remove this once the dates become value IDs, too.
+      if (type == XSD_DATETIME_TYPE || type == XSD_DATE_TYPE ||
+          type == XSD_GYEAR_TYPE || type == XSD_GYEARMONTH_TYPE) {
+        _lastParseResult = ad_utility::convertValueLiteralToIndexWord(
+            _lastParseResult.getString());
+      }
+    }
     return true;
   } else {
-    // it is okay to neither have a langtag nor a xsd datatype
+    // It is okay to neither have a langtag nor an XSD datatype.
     return true;
   }
 }
@@ -266,7 +385,7 @@ bool TurtleParser<T>::booleanLiteral() {
   if (parseTerminal<TurtleTokenId::True>() ||
       parseTerminal<TurtleTokenId::False>()) {
     _lastParseResult =
-        '"' + _lastParseResult + "\"^^<" + XSD_BOOLEAN_TYPE + '>';
+        '"' + _lastParseResult.getString() + "\"^^<" + XSD_BOOLEAN_TYPE + '>';
     return true;
   } else {
     return false;
@@ -313,7 +432,7 @@ bool TurtleParser<T>::stringParse() {
     return false;
   }
   if (endPos == string::npos) {
-    raise("unterminated string Literal");
+    raise("Unterminated string literal");
   }
   // also include the quotation marks in the word
   // TODO <joka921> how do we have to translate multiline strings for QLever?
@@ -343,8 +462,9 @@ bool TurtleParser<T>::prefixedName() {
     }
     parseTerminal<TurtleTokenId::PnLocal, false>();
   }
-  _lastParseResult = '<' + expandPrefix(_activePrefix) +
-                     RdfEscaping::unescapePrefixedIri(_lastParseResult) + '>';
+  _lastParseResult =
+      '<' + expandPrefix(_activePrefix) +
+      RdfEscaping::unescapePrefixedIri(_lastParseResult.getString()) + '>';
   return true;
 }
 
@@ -382,7 +502,8 @@ template <class T>
 bool TurtleParser<T>::pnameNS() {
   if (parseTerminal<TurtleTokenId::PnameNS>()) {
     // this also includes a ":" which we do not need, hence the "-1"
-    _activePrefix = _lastParseResult.substr(0, _lastParseResult.size() - 1);
+    _activePrefix = _lastParseResult.getString().substr(
+        0, _lastParseResult.getString().size() - 1);
     _lastParseResult = "";
     return true;
   } else {
@@ -422,15 +543,15 @@ bool TurtleParser<T>::pnameLnRelaxed() {
 template <class T>
 bool TurtleParser<T>::iriref() {
   if constexpr (UseRelaxedParsing) {
-    // manually check if the input starts with "<" and then find the next ">"
+    // Manually check if the input starts with "<" and then find the next ">"
     // this might accept invalid irirefs but is faster than checking the
-    // complete regexes
+    // complete regexes.
     _tok.skipWhitespaceAndComments();
     auto view = _tok.view();
     if (view.starts_with('<')) {
       auto endPos = view.find_first_of("> \n");
       if (endPos == string::npos || view[endPos] != '>') {
-        raise("Iriref");
+        raise("Parsing IRI ref (IRI without prefix) failed");
       } else {
         _tok.remove_prefix(endPos + 1);
         _lastParseResult =
@@ -444,7 +565,8 @@ bool TurtleParser<T>::iriref() {
     if (!parseTerminal<TurtleTokenId::Iriref>()) {
       return false;
     }
-    _lastParseResult = RdfEscaping::unescapeIriref(_lastParseResult);
+    _lastParseResult =
+        RdfEscaping::unescapeIriref(_lastParseResult.getString());
     return true;
   }
 }
@@ -481,7 +603,7 @@ bool TurtleStreamParser<T>::resetStateAndRead(
   this->_triples.resize(b._numTriples);
   this->_tok.reset(b._tokenizerPosition, b._tokenizerSize);
 
-  std::vector<char> buf;
+  ParallelBuffer::BufferType buf;
 
   // Used for a more informative error message when a parse error occurs (see
   // function "raise").
@@ -510,7 +632,7 @@ void TurtleMmapParser<T>::initialize(const string& filename) {
   size_t size = f.sizeOfFile();
   LOG(INFO) << "mapping " << size << " bytes" << std::endl;
   const int fd = f.getFileDescriptor();
-  void* ptr = mmap(0, size, PROT_READ, MAP_SHARED, fd, 0);
+  void* ptr = mmap(nullptr, size, PROT_READ, MAP_SHARED, fd, 0);
   AD_CHECK(ptr != MAP_FAILED);
   f.close();
   _dataSize = size;
@@ -520,7 +642,7 @@ void TurtleMmapParser<T>::initialize(const string& filename) {
 }
 
 template <class T>
-bool TurtleMmapParser<T>::getLine(std::array<string, 3>* triple) {
+bool TurtleMmapParser<T>::getLine(TurtleTriple* triple) {
   if (_triples.empty()) {
     // always try to parse a batch of triples at once to make up for the
     // relatively expensive backup calls.
@@ -573,7 +695,7 @@ void TurtleStreamParser<T>::initialize(const string& filename) {
 }
 
 template <class T>
-bool TurtleStreamParser<T>::getLine(std::array<string, 3>* triple) {
+bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
   if (_triples.empty()) {
     // if parsing the line fails because our buffer ends before the end of
     // the next statement we need to be able to recover
@@ -616,7 +738,7 @@ bool TurtleStreamParser<T>::getLine(std::array<string, 3>* triple) {
                           "use --file-format mmap\n";
             auto s = std::min(size_t(1000), size_t(d.size()));
             LOG(INFO) << "Logging first 1000 unparsed characters\n";
-            LOG(INFO) << std::string_view(d.data(), s);
+            LOG(INFO) << std::string_view(d.data(), s) << std::endl;
             if (exceptionThrown) {
               throw ex;
 
@@ -646,7 +768,7 @@ bool TurtleStreamParser<T>::getLine(std::array<string, 3>* triple) {
                         << d.size() << '\n';
               auto s = std::min(size_t(1000), size_t(d.size()));
               LOG(INFO) << "Logging first 1000 unparsed characters\n";
-              LOG(INFO) << std::string_view(d.data(), s);
+              LOG(INFO) << std::string_view(d.data(), s) << std::endl;
             }
             _isParserExhausted = true;
             break;
@@ -675,7 +797,7 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
     throw std::runtime_error("Could not read from the input file or stream");
   }
   TurtleStringParser<Tokenizer_T> declarationParser{};
-  declarationParser.setInputStream(*batch);
+  declarationParser.setInputStream(std::move(*batch));
   while (declarationParser.parseDirectiveManually()) {
   }
   this->_prefixMap = std::move(declarationParser.getPrefixMap());
@@ -710,16 +832,17 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
         inputBatch = std::move(nextOptional.value());
       }
       auto batchSize = inputBatch.size();
-      auto parseBatch = [this, parsePosition, batch = std::move(inputBatch)]() {
+      auto parseBatch = [this, parsePosition,
+                         batch = std::move(inputBatch)]() mutable {
         TurtleStringParser<Tokenizer_T> parser;
         parser._prefixMap = this->_prefixMap;
         parser.setPositionOffset(parsePosition);
         parser.setInputStream(std::move(batch));
         // TODO: raise error message if a prefix parsing fails;
         // TODO: handle exceptions in threads;
-        std::vector<Triple> triples = parser.parseAndReturnAllTriples();
+        std::vector<TurtleTriple> triples = parser.parseAndReturnAllTriples();
 
-        tripleCollector.push([triples = std::move(triples), this]() {
+        tripleCollector.push([triples = std::move(triples), this]() mutable {
           _triples = std::move(triples);
         });
       };
@@ -732,7 +855,7 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
 }
 
 template <class T>
-bool TurtleParallelParser<T>::getLine(std::array<string, 3>* triple) {
+bool TurtleParallelParser<T>::getLine(TurtleTriple* triple) {
   // If the current batch is out of _triples get the next batch of triples.
   // We need a while loop instead of a simple if in case there is a batch that
   // contains no triples. (Theoretically this might happen, and it is safer this
@@ -754,8 +877,7 @@ bool TurtleParallelParser<T>::getLine(std::array<string, 3>* triple) {
 }
 
 template <class T>
-std::optional<std::vector<std::array<string, 3>>>
-TurtleParallelParser<T>::getBatch() {
+std::optional<std::vector<TurtleTriple>> TurtleParallelParser<T>::getBatch() {
   // we need a while in case there is a batch that contains no triples
   // (this should be rare, // TODO warn about this
   while (_triples.empty()) {

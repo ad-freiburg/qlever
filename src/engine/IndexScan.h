@@ -30,8 +30,10 @@ class IndexScan : public Operation {
     FULL_INDEX_SCAN_OPS = 14
   };
 
-  virtual string asString(size_t indent = 0) const override;
+ private:
+  virtual string asStringImpl(size_t indent = 0) const override;
 
+ public:
   virtual string getDescriptor() const override;
 
   IndexScan(QueryExecutionContext* qec, ScanType type)
@@ -41,18 +43,12 @@ class IndexScan : public Operation {
 
   virtual ~IndexScan() {}
 
-  void setSubject(const string& subject) { _subject = subject; }
+  void setSubject(const TripleComponent& subject) { _subject = subject; }
 
   void setPredicate(const string& predicate) { _predicate = predicate; }
   const string& getPredicate() const { return _predicate; }
 
-  void setObject(const string& object) {
-    if (!ad_utility::isXsdValue(object)) {
-      _object = object;
-    } else {
-      _object = ad_utility::convertValueLiteralToIndexWord(object);
-    }
-  }
+  void setObject(const TripleComponent& object) { _object = object; }
 
   virtual size_t getResultWidth() const override;
 
@@ -88,13 +84,28 @@ class IndexScan : public Operation {
   virtual ad_utility::HashMap<string, size_t> getVariableColumns()
       const override;
 
+  // Currently only the full scans support a limit clause.
+  [[nodiscard]] bool supportsLimit() const override {
+    switch (_type) {
+      case FULL_INDEX_SCAN_SPO:
+      case FULL_INDEX_SCAN_SOP:
+      case FULL_INDEX_SCAN_PSO:
+      case FULL_INDEX_SCAN_POS:
+      case FULL_INDEX_SCAN_OSP:
+      case FULL_INDEX_SCAN_OPS:
+        return true;
+      default:
+        return false;
+    }
+  }
+
   ScanType getType() const { return _type; }
 
  protected:
   ScanType _type;
-  string _subject;
+  TripleComponent _subject;
   string _predicate;
-  string _object;
+  TripleComponent _object;
   size_t _sizeEstimate;
   vector<float> _multiplicity;
 
@@ -119,6 +130,8 @@ class IndexScan : public Operation {
   void computeOPSfreeP(ResultTable* result) const;
 
   void computeOSPfreeS(ResultTable* result) const;
+
+  void computeFullScan(ResultTable* result, const auto& Permutation) const;
 
   size_t computeSizeEstimate();
 };

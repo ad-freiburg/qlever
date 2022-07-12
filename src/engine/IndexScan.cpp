@@ -7,10 +7,12 @@
 #include <sstream>
 #include <string>
 
+#include "../index/TriplesView.h"
+
 using std::string;
 
 // _____________________________________________________________________________
-string IndexScan::asString(size_t indent) const {
+string IndexScan::asStringImpl(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << ' ';
@@ -21,12 +23,12 @@ string IndexScan::asString(size_t indent) const {
          << "\"";
       break;
     case POS_BOUND_O:
-      os << "SCAN POS with P = \"" << _predicate << "\", O = \"" << _object
-         << "\"";
+      os << "SCAN POS with P = \"" << _predicate << "\", O = \""
+         << _object.toRdfLiteral() << "\"";
       break;
     case SOP_BOUND_O:
-      os << "SCAN SOP with S = \"" << _subject << "\", O = \"" << _object
-         << "\"";
+      os << "SCAN SOP with S = \"" << _subject << "\", O = \""
+         << _object.toRdfLiteral() << "\"";
       break;
     case PSO_FREE_S:
       os << "SCAN PSO with P = \"" << _predicate << "\"";
@@ -41,10 +43,10 @@ string IndexScan::asString(size_t indent) const {
       os << "SCAN SOP with S = \"" << _subject << "\"";
       break;
     case OPS_FREE_P:
-      os << "SCAN OPS with O = \"" << _object << "\"";
+      os << "SCAN OPS with O = \"" << _object.toRdfLiteral() << "\"";
       break;
     case OSP_FREE_S:
-      os << "SCAN OSP with O = \"" << _object << "\"";
+      os << "SCAN OSP with O = \"" << _object.toRdfLiteral() << "\"";
       break;
     case FULL_INDEX_SCAN_SPO:
       os << "SCAN FOR FULL INDEX SPO (DUMMY OPERATION)";
@@ -70,7 +72,8 @@ string IndexScan::asString(size_t indent) const {
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
-  return "IndexScan " + _subject + " " + _predicate + " " + _object;
+  return "IndexScan " + _subject.toString() + " " + _predicate + " " +
+         _object.toString();
 }
 
 // _____________________________________________________________________________
@@ -130,91 +133,62 @@ ad_utility::HashMap<string, size_t> IndexScan::getVariableColumns() const {
   ad_utility::HashMap<string, size_t> res;
   size_t col = 0;
 
+  // Helper lambdas that add the respective triple component as the next column.
+  auto addSubject = [&]() {
+    if (_subject.isVariable()) {
+      res[_subject.getString()] = col++;
+    }
+  };
+  auto addPredicate = [&]() {
+    if (_predicate[0] == '?') {
+      res[_predicate] = col++;
+    }
+  };
+  auto addObject = [&]() {
+    if (_object.isVariable()) {
+      res[_object.getString()] = col++;
+    }
+  };
+
   switch (_type) {
     case SPO_FREE_P:
     case FULL_INDEX_SCAN_SPO:
-      if (_subject[0] == '?') {
-        res[_subject] = col++;
-      }
-      if (_predicate[0] == '?') {
-        res[_predicate] = col++;
-      }
-
-      if (_object[0] == '?') {
-        res[_object] = col++;
-      }
+      addSubject();
+      addPredicate();
+      addObject();
       return res;
     case SOP_FREE_O:
     case SOP_BOUND_O:
     case FULL_INDEX_SCAN_SOP:
-      if (_subject[0] == '?') {
-        res[_subject] = col++;
-      }
-
-      if (_object[0] == '?') {
-        res[_object] = col++;
-      }
-
-      if (_predicate[0] == '?') {
-        res[_predicate] = col++;
-      }
+      addSubject();
+      addObject();
+      addPredicate();
       return res;
     case PSO_BOUND_S:
     case PSO_FREE_S:
     case FULL_INDEX_SCAN_PSO:
-      if (_predicate[0] == '?') {
-        res[_predicate] = col++;
-      }
-      if (_subject[0] == '?') {
-        res[_subject] = col++;
-      }
-
-      if (_object[0] == '?') {
-        res[_object] = col++;
-      }
+      addPredicate();
+      addSubject();
+      addObject();
       return res;
     case POS_BOUND_O:
     case POS_FREE_O:
     case FULL_INDEX_SCAN_POS:
-      if (_predicate[0] == '?') {
-        res[_predicate] = col++;
-      }
-
-      if (_object[0] == '?') {
-        res[_object] = col++;
-      }
-
-      if (_subject[0] == '?') {
-        res[_subject] = col++;
-      }
+      addPredicate();
+      addObject();
+      addSubject();
       return res;
     case OPS_FREE_P:
     case FULL_INDEX_SCAN_OPS:
-      if (_object[0] == '?') {
-        res[_object] = col++;
-      }
-
-      if (_predicate[0] == '?') {
-        res[_predicate] = col++;
-      }
-
-      if (_subject[0] == '?') {
-        res[_subject] = col++;
-      }
+      addObject();
+      addPredicate();
+      addSubject();
       return res;
     case OSP_FREE_S:
     case FULL_INDEX_SCAN_OSP:
-      if (_object[0] == '?') {
-        res[_object] = col++;
-      }
-
-      if (_subject[0] == '?') {
-        res[_subject] = col++;
-      }
-
-      if (_predicate[0] == '?') {
-        res[_predicate] = col++;
-      }
+      addObject();
+      addSubject();
+      addPredicate();
       return res;
     default:
       AD_THROW(ad_semsearch::Exception::CHECK_FAILED, "Should be unreachable.");
@@ -253,14 +227,23 @@ void IndexScan::computeResult(ResultTable* result) {
       computeOPSfreeP(result);
       break;
     case FULL_INDEX_SCAN_SPO:
+      computeFullScan(result, getIndex().SPO());
+      break;
     case FULL_INDEX_SCAN_SOP:
+      computeFullScan(result, getIndex().SOP());
+      break;
     case FULL_INDEX_SCAN_PSO:
+      computeFullScan(result, getIndex().PSO());
+      break;
     case FULL_INDEX_SCAN_POS:
+      computeFullScan(result, getIndex().POS());
+      break;
     case FULL_INDEX_SCAN_OSP:
+      computeFullScan(result, getIndex().OSP());
+      break;
     case FULL_INDEX_SCAN_OPS:
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-               "Asked to execute a scan for the full index. "
-               "This should never happen.");
+      computeFullScan(result, getIndex().OPS());
+      break;
   }
   LOG(DEBUG) << "IndexScan result computation done.\n";
 }
@@ -318,16 +301,26 @@ size_t IndexScan::computeSizeEstimate() {
         return getResult()->size();
       }
     }
+    // TODO<joka921> Should be a oneliner
+    // getIndex().cardinality(getPermutation(), getFirstKey());
     if (_type == SPO_FREE_P || _type == SOP_FREE_O) {
-      return getIndex().sizeEstimate(_subject, "", "");
+      return getIndex().subjectCardinality(_subject);
     } else if (_type == POS_FREE_O || _type == PSO_FREE_S) {
-      return getIndex().sizeEstimate("", _predicate, "");
+      return getIndex().relationCardinality(_predicate);
     } else if (_type == OPS_FREE_P || _type == OSP_FREE_S) {
-      return getIndex().sizeEstimate("", "", _object);
+      return getIndex().objectCardinality(_object);
     }
-    return getIndex().sizeEstimate("", "", "");
+    // The triple consists of three variables.
+    return getIndex().getNofTriples();
   } else {
-    return 1000 + _subject.size() + _predicate.size() + _object.size();
+    // Only for test cases. The handling of the objects is to make the
+    // strange query planner tests pass.
+    // TODO<joka921> Code duplication.
+    std::string objectStr =
+        _object.isString() ? _object.getString() : _object.toString();
+    std::string subjectStr =
+        _subject.isString() ? _subject.getString() : _subject.toString();
+    return 1000 + subjectStr.size() + _predicate.size() + objectStr.size();
   }
 }
 
@@ -438,4 +431,75 @@ void IndexScan::determineMultiplicities() {
     }
   }
   assert(_multiplicity.size() >= 1 || _multiplicity.size() <= 3);
+}
+
+void IndexScan::computeFullScan(ResultTable* result,
+                                const auto& Permutation) const {
+  std::vector<std::pair<Id, Id>> ignoredRanges;
+  using P = decltype(Permutation);
+
+  auto literalRange = getIndex().getVocab().prefix_range("\"");
+  auto taggedPredicatesRange = getIndex().getVocab().prefix_range("@");
+  VocabIndex languagePredicateIndex;
+  bool success =
+      getIndex().getVocab().getId(LANGUAGE_PREDICATE, &languagePredicateIndex);
+  AD_CHECK(success);
+
+  // TODO<joka921> lift `prefixRange` to Index and ID
+  if (ad_utility::isSimilar<Permutation::SPO_T, P> ||
+      ad_utility::isSimilar<Permutation::SOP_T, P>) {
+    ignoredRanges.push_back({Id::makeFromVocabIndex(literalRange.first),
+                             Id::makeFromVocabIndex(literalRange.second)});
+  } else if (ad_utility::isSimilar<Permutation::PSO_T, P> ||
+             ad_utility::isSimilar<Permutation::POS_T, P>) {
+    ignoredRanges.push_back(
+        {Id::makeFromVocabIndex(taggedPredicatesRange.first),
+         Id::makeFromVocabIndex(taggedPredicatesRange.second)});
+    ignoredRanges.emplace_back(
+        Id::makeFromVocabIndex(languagePredicateIndex),
+        Id::makeFromVocabIndex(languagePredicateIndex.incremented()));
+  }
+
+  auto isTripleIgnored = [&](const auto& triple) {
+    if constexpr (ad_utility::isSimilar<Permutation::SPO_T, P> ||
+                  ad_utility::isSimilar<Permutation::OPS_T, P>) {
+      // Predicates are always entities from the vocabulary.
+      auto id = triple[1].getVocabIndex();
+      return id == languagePredicateIndex ||
+             (id >= taggedPredicatesRange.first &&
+              id < taggedPredicatesRange.second);
+    } else if constexpr (ad_utility::isSimilar<Permutation::SOP_T, P> ||
+                         ad_utility::isSimilar<Permutation::OSP_T, P>) {
+      // Predicates are always entities from the vocabulary.
+      auto id = triple[2].getVocabIndex();
+      return id == languagePredicateIndex ||
+             (id >= taggedPredicatesRange.first &&
+              id < taggedPredicatesRange.second);
+    }
+    return false;
+  };
+
+  result->_idTable.setCols(3);
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
+  result->_sortedBy = {0, 1, 2};
+
+  uint64_t resultSize = getIndex().getNofTriples();
+  if (getLimit().has_value() && getLimit() < resultSize) {
+    resultSize = getLimit().value();
+  }
+  result->_idTable.reserve(resultSize);
+  auto table = result->_idTable.moveToStatic<3>();
+  size_t i = 0;
+  for (const auto& triple :
+       TriplesView(Permutation, getExecutionContext()->getAllocator(),
+                   ignoredRanges, isTripleIgnored)) {
+    if (i >= resultSize) {
+      break;
+    }
+    table.push_back(triple);
+    ++i;
+  }
+  result->_idTable = table.moveToDynamic();
 }
