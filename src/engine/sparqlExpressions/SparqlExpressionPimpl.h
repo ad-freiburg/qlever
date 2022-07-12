@@ -5,6 +5,7 @@
 #define QLEVER_SPARQLEXPRESSIONPIMPL_H
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "../../util/HashMap.h"

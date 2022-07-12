@@ -9,9 +9,8 @@
 
 #include "../src/engine/sparqlExpressions/LiteralExpression.h"
 #include "../src/engine/sparqlExpressions/NaryExpression.h"
-#include "../src/engine/sparqlExpressions/SparqlExpression.h"
 #include "../src/engine/sparqlExpressions/RelationalExpressions.h"
-
+#include "../src/engine/sparqlExpressions/SparqlExpression.h"
 
 using namespace sparqlExpression;
 
@@ -241,5 +240,4 @@ TEST(SparqlExpression, LessThan) {
 
   auto res = expr.evaluate(&context);
   ASSERT_TRUE(std::get<Bool>(res));
-
 }

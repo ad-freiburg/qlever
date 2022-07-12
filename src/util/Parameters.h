@@ -6,6 +6,7 @@
 #define QLEVER_PARAMETERS_H
 
 #include <atomic>
+#include <optional>
 #include <tuple>
 
 #include "./ConstexprMap.h"

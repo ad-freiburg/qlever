@@ -196,6 +196,17 @@ struct Variable {
   bool operator==(const Variable&) const = default;
 };
 
+// ____________________________________________________________________________
+inline size_t getIndexForVariable(const Variable& var,
+                                  const EvaluationContext* context) {
+  const auto& map = context->_variableToColumnAndResultTypeMap;
+  if (!map.contains(var._variable)) {
+    throw std::runtime_error(absl::StrCat(
+        "Variable ", var._variable, " was not found in input to expression."));
+  }
+  return map.at(var._variable).first;
+}
+
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
 /// the row indices in which a boolean expression evaluates to "true". Constant
@@ -316,7 +327,9 @@ struct SpecializedFunction {
     if (!checkIfOperandsAreValid<Operands...>(operands...)) {
       return std::nullopt;
     } else {
-      if constexpr (requires{Function{}(std::forward<Operands>(operands)...);}) {
+      if constexpr (requires {
+                      Function{}(std::forward<Operands>(operands)...);
+                    }) {
         return Function{}(std::forward<Operands>(operands)...);
       } else {
         AD_CHECK(false);
