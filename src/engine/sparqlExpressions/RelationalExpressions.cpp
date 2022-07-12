@@ -4,6 +4,8 @@
 
 #include "RelationalExpressions.h"
 
+#include "../../util/LambdaHelpers.h"
+
 using namespace sparqlExpression;
 
 namespace {
@@ -26,6 +28,22 @@ bool applyComparison(const auto& a, const auto& b) {
     return a > b;
   } else {
     static_assert(ad_utility::alwaysFalse<Dummy>);
+  }
+}
+
+constexpr Comparison getComplement(Comparison comp) {
+  switch (comp) {
+    case Comparison::LE:
+      return Comparison::GE;
+    case Comparison::LT:
+      return Comparison::GT;
+    case Comparison::EQ:
+    case Comparison::NE:
+      return comp;
+    case Comparison::GE:
+      return Comparison::LE;
+    case Comparison::GT:
+      return Comparison::LT;
   }
 }
 
@@ -54,12 +72,20 @@ VectorWithMemoryLimit<Bool> evaluateR(const VectorWithMemoryLimit<T>& a,
   return result;
 }
 
+template <Comparison Comp, Arithmetic T>
+VectorWithMemoryLimit<Bool> evaluateR(const Arithmetic auto& a,
+                                      const VectorWithMemoryLimit<T>& b,
+                                      EvaluationContext* context) {
+  return evaluateR<getComplement(Comp)>(b, a, context);
+}
+
 template <Comparison, typename A, typename B>
     Bool evaluateR(const A&, const B&,
                    EvaluationContext*) requires Boolean<A> ||
     Boolean<B> {
   throw std::runtime_error(
-      "Relational expressions like <, >, == are currently not supported");
+      "Relational expressions like <, >, == are currently not supported for "
+      "boolean arguments");
 }
 
 template <Comparison Comp>
@@ -78,6 +104,113 @@ VectorWithMemoryLimit<Bool> evaluateR(const Variable& a, const Variable& b,
     result.push_back(valueIdComparators::compareIds(idA, idB, Comp));
   }
   return result;
+}
+
+template <Comparison Comp, Arithmetic B>
+ExpressionResult evaluateR(const Variable& a, const B& b,
+                           EvaluationContext* context) {
+  auto idxA = getIndexForVariable(a, context);
+
+  const ValueId idB = [&b]() {
+    if constexpr (std::is_integral_v<B>) {
+      return ValueId::makeFromInt(b);
+    } else {
+      static_assert(std::is_floating_point_v<B>);
+      return ValueId::makeFromDouble(b);
+    }
+  }();
+  const auto& cols = context->_columnsByWhichResultIsSorted;
+  if (!cols.empty() && cols[0] == idxA) {
+    auto accessColumnLambda = ad_utility::makeAssignableLambda(
+        [idxA](const auto& idTable, auto i) { return idTable(i, idxA); });
+
+    using Iterator = ad_utility::IteratorForAccessOperator<
+        std::decay_t<decltype(context->_inputTable)>,
+        decltype(accessColumnLambda)>;
+    auto begin = Iterator{&context->_inputTable, context->_beginIndex,
+                          accessColumnLambda};
+    auto end =
+        Iterator{&context->_inputTable, context->_endIndex, accessColumnLambda};
+
+    auto resultRanges =
+        valueIdComparators::getRangesForId(begin, end, idB, Comp);
+    ad_utility::SetOfIntervals s;
+    for (const auto& [rangeBegin, rangeEnd] : resultRanges) {
+      s._intervals.emplace_back(rangeBegin - begin, rangeEnd - begin);
+    }
+    return s;
+  }
+
+  VectorWithMemoryLimit<Bool> result{context->_allocator};
+  result.reserve(context->_endIndex - context->_beginIndex);
+
+  // TODO<joka921> Use the CALL_FIXED_SIZE optimization here
+  for (auto i = context->_beginIndex; i < context->_endIndex; ++i) {
+    auto idA = context->_inputTable(i, idxA);
+    result.push_back(valueIdComparators::compareIds(idA, idB, Comp));
+  }
+  return result;
+}
+
+template <Comparison Comp>
+ExpressionResult evaluateR(const Arithmetic auto& a, const Variable& b,
+                           EvaluationContext* context) {
+  return evaluateR<getComplement(Comp)>(b, a, context);
+}
+
+template <Comparison Comp>
+ExpressionResult evaluateR(const Variable& a, const std::string& b,
+                           EvaluationContext* context) {
+  auto idxA = getIndexForVariable(a, context);
+
+  auto level = TripleComponentComparator::Level::QUARTERNARY;
+  const ValueId lower = Id::makeFromVocabIndex(
+      context->_qec.getIndex().getVocab().lower_bound(b, level));
+  const ValueId upper = Id::makeFromVocabIndex(
+      context->_qec.getIndex().getVocab().upper_bound(b, level));
+
+  const auto& cols = context->_columnsByWhichResultIsSorted;
+  if (!cols.empty() && cols[0] == idxA) {
+    auto accessColumnLambda = ad_utility::makeAssignableLambda(
+        [idxA](const auto& idTable, auto i) { return idTable(i, idxA); });
+
+    using Iterator = ad_utility::IteratorForAccessOperator<
+        std::decay_t<decltype(context->_inputTable)>,
+        decltype(accessColumnLambda)>;
+    auto begin = Iterator{&context->_inputTable, context->_beginIndex,
+                          accessColumnLambda};
+    auto end =
+        Iterator{&context->_inputTable, context->_endIndex, accessColumnLambda};
+
+    auto resultRanges = valueIdComparators::getRangesForEqualIds(
+        begin, end, lower, upper, Comp);
+    ad_utility::SetOfIntervals s;
+    for (const auto& [rangeBegin, rangeEnd] : resultRanges) {
+      s._intervals.emplace_back(rangeBegin - begin, rangeEnd - begin);
+    }
+    return s;
+  }
+
+  VectorWithMemoryLimit<Bool> result{context->_allocator};
+  result.reserve(context->_endIndex - context->_beginIndex);
+
+  // TODO<joka921> Use the CALL_FIXED_SIZE optimization here
+  for (auto i = context->_beginIndex; i < context->_endIndex; ++i) {
+    auto idA = context->_inputTable(i, idxA);
+
+    // TODO<joka921> This can definitely be optimized by only looking at the
+    // bit values of the IDs!
+    // Also it is not quite correct, because it ignores the unicode RANGE
+    // TODO<joka921> Should the unicode behavior be somewhat configurable?
+    result.push_back(valueIdComparators::compareIds(idA, lower, Comp));
+  }
+  return result;
+}
+
+template <Comparison Comp>
+ExpressionResult evaluateR(const std::string& a, const Variable& b,
+                           EvaluationContext* context) {
+  return evaluateR<getComplement(Comp)>(b, a, context);
 }
 
 template <Comparison>
