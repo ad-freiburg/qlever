@@ -7,11 +7,14 @@
 #include <array>
 #include <vector>
 
+#include "../PropertyPath.h"
 #include "./VarOrTerm.h"
 
 namespace ad_utility::sparql_types {
 using Objects = std::vector<VarOrTerm>;
 using Tuples = std::vector<std::array<VarOrTerm, 2>>;
+using PathTuple = std::pair<PropertyPath, VarOrTerm>;
+using PathTuples = std::vector<PathTuple>;
 using Triples = std::vector<std::array<VarOrTerm, 3>>;
 using Node = std::pair<VarOrTerm, Triples>;
 using ObjectList = std::pair<Objects, Triples>;

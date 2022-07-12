@@ -103,7 +103,6 @@ string SparqlPrefix::asString() const {
   return std::move(os).str();
 }
 
-
 // _____________________________________________________________________________
 string SparqlTriple::asString() const {
   std::ostringstream os;

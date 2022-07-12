@@ -108,4 +108,21 @@ ResultOfParseAndRemainingText<PropertyPath> parseVerbPathOrSimple(
   return p.parseTypesafe(input, "verb path or simple",
                          &SparqlAutomaticParser::verbPathOrSimple);
 }
+// _____________________________________________________________________________
+
+ResultOfParseAndRemainingText<ad_utility::sparql_types::PathTuples>
+parsePropertyListPathNotEmpty(const std::string& input,
+                              SparqlQleverVisitor::PrefixMap prefixes) {
+  ParserAndVisitor p{input, std::move(prefixes)};
+  return p.parseTypesafe(input, "propertyListPathNotEmpty",
+                         &SparqlAutomaticParser::propertyListPathNotEmpty);
+}
+// _____________________________________________________________________________
+
+ResultOfParseAndRemainingText<vector<SparqlTriple>> parseTriplesSameSubjectPath(
+    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes) {
+  ParserAndVisitor p{input, std::move(prefixes)};
+  return p.parseTypesafe(input, "triplesSameSubjectPath",
+                         &SparqlAutomaticParser::triplesSameSubjectPath);
+}
 }  // namespace sparqlParserHelpers

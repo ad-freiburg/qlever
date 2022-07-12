@@ -43,6 +43,7 @@ class Reversed {
 class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   using Objects = ad_utility::sparql_types::Objects;
   using Tuples = ad_utility::sparql_types::Tuples;
+  using PathTuples = ad_utility::sparql_types::PathTuples;
   using Triples = ad_utility::sparql_types::Triples;
   using Node = ad_utility::sparql_types::Node;
   using ObjectList = ad_utility::sparql_types::ObjectList;
@@ -643,6 +644,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitObjectList(
       SparqlAutomaticParser::ObjectListContext* ctx) override {
+    return visitTypesafe(ctx);
+  }
+
+  ObjectList visitTypesafe(SparqlAutomaticParser::ObjectListContext* ctx) {
     Objects objects;
     Triples additionalTriples;
     auto objectContexts = ctx->objectR();
@@ -661,17 +666,62 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitTriplesSameSubjectPath(
       SparqlAutomaticParser::TriplesSameSubjectPathContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
+  }
+
+  vector<SparqlTriple> visitTypesafe(
+      SparqlAutomaticParser::TriplesSameSubjectPathContext* ctx) {
+    vector<SparqlTriple> triples;
+    if (ctx->varOrTerm()) {
+      auto var = visitTypesafe(ctx->varOrTerm());
+      auto tuples = visitTypesafe(ctx->propertyListPathNotEmpty());
+      for (auto& tuple : tuples) {
+        triples.emplace_back(var.toSparql(), tuple.first,
+                             tuple.second.toSparql());
+      }
+    } else if (ctx->triplesNodePath()) {
+      // TODO implement
+      visit(ctx->triplesNodePath());
+    }
+    return triples;
   }
 
   antlrcpp::Any visitPropertyListPath(
       SparqlAutomaticParser::PropertyListPathContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
+  }
+
+  PathTuples visitTypesafe(
+      SparqlAutomaticParser::PropertyListPathContext* ctx) {
+    return ctx->propertyListPathNotEmpty()
+               ? visitTypesafe(ctx->propertyListPathNotEmpty())
+               : PathTuples{};
   }
 
   antlrcpp::Any visitPropertyListPathNotEmpty(
       SparqlAutomaticParser::PropertyListPathNotEmptyContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
+  }
+
+  PathTuples visitTypesafe(
+      SparqlAutomaticParser::PropertyListPathNotEmptyContext* ctx) {
+    PathTuples t;
+    vector<PropertyPath> ps =
+        visitVector<PropertyPath>(ctx->verbPathOrSimple());
+    ObjectList ol = visitTypesafe(ctx->objectListPath());
+    vector<ObjectList> iol = visitVector<ObjectList>(ctx->objectList());
+    AD_CHECK_EQ(ps.size(), iol.size() + 1);
+    for (auto& object : ol.first) {
+      t.push_back({ps[0], std::move(object)});
+    }
+    ps.erase(ps.begin());
+    for (auto& iiol : iol) {
+      for (auto& object : iiol.first) {
+        t.push_back({ps[0], std::move(object)});
+      }
+      ps.erase(ps.begin());
+    }
+    return t;
   }
 
   antlrcpp::Any visitVerbPath(
@@ -711,7 +761,12 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitObjectListPath(
       SparqlAutomaticParser::ObjectListPathContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
+  }
+
+  ObjectList visitTypesafe(SparqlAutomaticParser::ObjectListPathContext* ctx) {
+    // The second parameter is ignored because no further triples are supported.
+    return ObjectList{visitVector<VarOrTerm>(ctx->objectPath()), {}};
   }
 
   antlrcpp::Any visitObjectPath(
@@ -879,8 +934,9 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitBlankNodePropertyListPath(
-      SparqlAutomaticParser::BlankNodePropertyListPathContext* ctx) override {
-    return visitChildren(ctx);
+      SparqlAutomaticParser::BlankNodePropertyListPathContext*) override {
+    // TODO: implement
+    throw ParseException("( ... ) in triples are not yet supported by QLever.");
   }
 
   antlrcpp::Any visitCollection(
@@ -911,8 +967,9 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitCollectionPath(
-      SparqlAutomaticParser::CollectionPathContext* ctx) override {
-    return visitChildren(ctx);
+      SparqlAutomaticParser::CollectionPathContext*) override {
+    // TODO: implement
+    throw ParseException("( ... ) in triples are not yet supported by QLever.");
   }
 
   antlrcpp::Any visitGraphNode(
@@ -927,11 +984,24 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitGraphNodePath(
       SparqlAutomaticParser::GraphNodePathContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
+  }
+
+  VarOrTerm visitTypesafe(SparqlAutomaticParser::GraphNodePathContext* ctx) {
+    if (ctx->varOrTerm()) {
+      return visitTypesafe(ctx->varOrTerm());
+    } else if (ctx->triplesNodePath()) {
+      visitTriplesNodePath(ctx->triplesNodePath());
+    }
+    AD_FAIL()  // Should be unreachable.
   }
 
   antlrcpp::Any visitVarOrTerm(
       SparqlAutomaticParser::VarOrTermContext* ctx) override {
+    return visitTypesafe(ctx);
+  }
+
+  VarOrTerm visitTypesafe(SparqlAutomaticParser::VarOrTermContext* ctx) {
     if (ctx->var()) {
       return VarOrTerm{ctx->var()->accept(this).as<Variable>()};
     }
