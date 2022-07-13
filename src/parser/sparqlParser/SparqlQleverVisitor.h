@@ -161,39 +161,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   ParsedQuery::SelectClause visitTypesafe(
-      SparqlAutomaticParser::SelectClauseContext* ctx) {
-    ParsedQuery::SelectClause select;
-
-    if (ctx->DISTINCT()) {
-      select._distinct = true;
-    } else if (ctx->REDUCED()) {
-      select._reduced = true;
-    }
-
-    if (ctx->asterisk) {
-      select._varsOrAsterisk.setAllVariablesSelected();
-    } else {
-      std::vector<std::string> selectedVariables;
-
-      auto processVariable = [&selectedVariables](const Variable& var) {
-        selectedVariables.push_back(var.name());
-      };
-      auto processAlias = [&selectedVariables,
-                           &select](ParsedQuery::Alias alias) {
-        selectedVariables.push_back(alias._outVarName);
-        select._aliases.push_back(std::move(alias));
-      };
-
-      for (auto& varOrAlias : ctx->varOrAlias()) {
-        std::visit(
-            ad_utility::OverloadCallOperator{processVariable, processAlias},
-            visitTypesafe(varOrAlias));
-      }
-      select._varsOrAsterisk.setManuallySelected(std::move(selectedVariables));
-    }
-
-    return select;
-  }
+      SparqlAutomaticParser::SelectClauseContext* ctx);
 
   antlrcpp::Any visitVarOrAlias(
       SparqlAutomaticParser::VarOrAliasContext* ctx) override {
@@ -201,30 +169,21 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   std::variant<Variable, ParsedQuery::Alias> visitTypesafe(
-      SparqlAutomaticParser::VarOrAliasContext* ctx) {
-    if (ctx->var())
-      return visitTypesafe(ctx->var());
-    else if (ctx->alias())
-      return visitTypesafe(ctx->alias());
-    AD_FAIL();  // Should be unreachable.
-  }
+      SparqlAutomaticParser::VarOrAliasContext* ctx);
 
   antlrcpp::Any visitAlias(SparqlAutomaticParser::AliasContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ParsedQuery::Alias visitTypesafe(SparqlAutomaticParser::AliasContext* ctx) {
-    // A SPARQL alias has only one child, namely the contents within
-    // parentheses.
-    return visit(ctx->aliasWithoutBrackets()).as<ParsedQuery::Alias>();
-  }
+  ParsedQuery::Alias visitTypesafe(SparqlAutomaticParser::AliasContext* ctx);
 
   antlrcpp::Any visitAliasWithoutBrackets(
-      [[maybe_unused]] SparqlAutomaticParser::AliasWithoutBracketsContext* ctx)
-      override {
-    auto wrapper = makeExpressionPimpl(visit(ctx->expression()));
-    return ParsedQuery::Alias{std::move(wrapper), ctx->var()->getText()};
+      SparqlAutomaticParser::AliasWithoutBracketsContext* ctx) override {
+    return visitTypesafe(ctx);
   }
+
+  ParsedQuery::Alias visitTypesafe(
+      SparqlAutomaticParser::AliasWithoutBracketsContext* ctx);
 
   antlrcpp::Any visitConstructQuery(
       SparqlAutomaticParser::ConstructQueryContext* ctx) override {
@@ -1014,9 +973,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  Variable visitTypesafe(SparqlAutomaticParser::VarContext* ctx) {
-    return Variable{ctx->getText()};
-  }
+  Variable visitTypesafe(SparqlAutomaticParser::VarContext* ctx);
 
   antlrcpp::Any visitGraphTerm(
       SparqlAutomaticParser::GraphTermContext* ctx) override {
