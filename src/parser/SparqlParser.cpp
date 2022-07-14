@@ -234,7 +234,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       lexer_.accept(".");
     } else if (lexer_.accept("{")) {
       // Subquery or union
-      if (lexer_.accept("select")) {
+      if (lexer_.peek("select")) {
         // subquery
         // create the subquery operation
         GraphPatternOperation::Subquery subq;

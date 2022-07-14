@@ -201,7 +201,7 @@ TEST(ParserTest, testParse) {
     {
       auto pq = SparqlParser(
                     "PREFIX : <>\n"
-                    "SELECT ?x ?y ?z TEXT(?c) SCORE(?c) ?c WHERE {\n"
+                    "SELECT ?x ?y ?z ?c ?ql_textscore_c ?c WHERE {\n"
                     "?x :is-a :Politician .\n"
                     "?c ql:contains-entity ?x .\n"
                     "?c ql:contains-word \"friend\" .\n"

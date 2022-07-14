@@ -955,7 +955,7 @@ TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
 TEST(QueryExecutionTreeTest, testTextQuerySE) {
   try {
     ParsedQuery pq = SparqlParser(
-                         "SELECT TEXT(?c) \n "
+                         "SELECT ?c \n "
                          "WHERE  {?c ql:contains-word \"search engine\"}")
                          .parse();
     pq.expandPrefixes();
@@ -979,7 +979,7 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
   try {
     ParsedQuery pq = SparqlParser(
                          "PREFIX : <>\n"
-                         "SELECT ?x ?y TEXT(?c)\n "
+                         "SELECT ?x ?y ?c\n "
                          "WHERE \t {"
                          "?x :Place_of_birth ?y ."
                          "?y :Contained_by :Europe ."
