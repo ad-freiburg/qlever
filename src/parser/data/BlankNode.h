@@ -55,4 +55,8 @@ class BlankNode {
     stream << _label;
     return stream.str();
   }
+
+  inline bool operator==(const BlankNode& other) const {
+    return _label == other._label && _generated == other._generated;
+  }
 };

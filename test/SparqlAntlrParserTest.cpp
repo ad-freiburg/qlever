@@ -972,3 +972,30 @@ TEST(SparqlParser, propertyPaths) {
         IsPropertyPath(expected));
   }
 }
+
+namespace {
+template <typename Exception = ParseException>
+void expectPropertyListPathFails(const string& input) {
+  EXPECT_THROW(parsePropertyListPathNotEmpty(input, {}), Exception) << input;
+}
+}  // namespace
+
+TEST(SparqlParser, propertyListPathNotEmpty) {
+  auto expectPropertyListPath =
+      [](const string& input,
+         const std::vector<std::pair<PropertyPath, VarOrTerm>>& expected) {
+        expectCompleteParse(parsePropertyListPathNotEmpty(input, {}),
+                            IsPropertyListPathNotEmpty(expected));
+      };
+  expectPropertyListPath("<bar> ?foo",
+                         {{PropertyPath::fromIri("<bar>"), Variable{"?foo"}}});
+  expectPropertyListPath("<bar> ?foo ; <mehr> ?f",
+                         {{PropertyPath::fromIri("<bar>"), Variable{"?foo"}},
+                          {PropertyPath::fromIri("<mehr>"), Variable{"?f"}}});
+  expectPropertyListPath("<bar> ?foo , ?baz",
+                         {{PropertyPath::fromIri("<bar>"), Variable{"?foo"}},
+                          {PropertyPath::fromIri("<bar>"), Variable{"?baz"}}});
+  // Currently unsupported by QLever
+  expectPropertyListPathFails("<bar> ( ?foo ?baz )");
+  expectPropertyListPathFails("<bar> [ <foo> ?bar ]");
+}

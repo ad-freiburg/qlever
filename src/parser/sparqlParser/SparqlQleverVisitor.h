@@ -706,20 +706,26 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   PathTuples visitTypesafe(
       SparqlAutomaticParser::PropertyListPathNotEmptyContext* ctx) {
     PathTuples t;
-    vector<PropertyPath> ps =
+    vector<PropertyPath> verbPathOrSimples =
         visitVector<PropertyPath>(ctx->verbPathOrSimple());
-    ObjectList ol = visitTypesafe(ctx->objectListPath());
-    vector<ObjectList> iol = visitVector<ObjectList>(ctx->objectList());
-    AD_CHECK_EQ(ps.size(), iol.size() + 1);
-    for (auto& object : ol.first) {
-      t.push_back({ps[0], std::move(object)});
+    ObjectList objectListPath = visitTypesafe(ctx->objectListPath());
+
+    // mandatory verbPathOrSimple ObjectListPath block
+    for (auto& object : objectListPath.first) {
+      t.push_back({verbPathOrSimples[0], std::move(object)});
     }
-    ps.erase(ps.begin());
-    for (auto& iiol : iol) {
-      for (auto& object : iiol.first) {
-        t.push_back({ps[0], std::move(object)});
+    verbPathOrSimples.erase(verbPathOrSimples.begin());
+
+    // optional ( ';' ( verbPathOrSimple objectList )? )* block
+    vector<ObjectList> objectLists = visitVector<ObjectList>(ctx->objectList());
+    AD_CHECK_EQ(verbPathOrSimples.size(),
+                objectLists.size());  // remaining number of verbPathOrSimple
+                                      // must be equal to length of objectList
+    for (auto& objectList : objectLists) {
+      for (auto& object : objectList.first) {
+        t.push_back({verbPathOrSimples[0], std::move(object)});
       }
-      ps.erase(ps.begin());
+      verbPathOrSimples.erase(verbPathOrSimples.begin());
     }
     return t;
   }

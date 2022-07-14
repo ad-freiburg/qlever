@@ -31,4 +31,8 @@ class Iri {
 
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const { return _string; }
+
+  inline bool operator==(const Iri& other) const {
+    return iri() == other.iri();
+  }
 };

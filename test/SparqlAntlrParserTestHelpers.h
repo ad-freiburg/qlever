@@ -259,3 +259,8 @@ MATCHER_P2(IsValues, vars, values, "") {
 // A trivial matcher for PropertyPaths because e.g. expectCompleteParse needs
 // a matcher.
 MATCHER_P(IsPropertyPath, propertyPath, "") { return arg == propertyPath; }
+
+MATCHER_P(IsPropertyListPathNotEmpty, propertyListPath, "") {
+  // propertyListPath: std::vector<std::pair<PropertyPath, VarOrTerm>>
+  return arg == propertyListPath;
+}
