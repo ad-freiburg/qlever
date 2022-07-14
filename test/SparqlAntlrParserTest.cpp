@@ -999,3 +999,33 @@ TEST(SparqlParser, propertyListPathNotEmpty) {
   expectPropertyListPathFails("<bar> ( ?foo ?baz )");
   expectPropertyListPathFails("<bar> [ <foo> ?bar ]");
 }
+
+namespace {
+template <typename Exception = ParseException>
+void expectTriplesSameSubjectPathFails(const string& input) {
+  EXPECT_THROW(parseTriplesSameSubjectPath(input, {}), Exception) << input;
+}
+}  // namespace
+
+TEST(SparqlParser, triplesSameSubjectPath) {
+  auto expectTriplesSameSubjectPath =
+      [](const string& input, const std::vector<SparqlTriple>& triples) {
+        expectCompleteParse(parseTriplesSameSubjectPath(input, {}),
+                            IsTriplesSameSubjectPath(triples));
+      };
+  expectTriplesSameSubjectPath("?foo <bar> ?baz", {{"?foo", "<bar>", "?baz"}});
+  expectTriplesSameSubjectPath(
+      "?foo <bar> ?baz ; <mehr> ?t",
+      {{"?foo", "<bar>", "?baz"}, {"?foo", "<mehr>", "?t"}});
+  expectTriplesSameSubjectPath(
+      "?foo <bar> ?baz , ?t",
+      {{"?foo", "<bar>", "?baz"}, {"?foo", "<bar>", "?t"}});
+  expectTriplesSameSubjectPath("?foo <bar> ?baz , ?t ; <mehr> ?d",
+                               {{"?foo", "<bar>", "?baz"},
+                                {"?foo", "<bar>", "?t"},
+                                {"?foo", "<mehr>", "?d"}});
+  expectTriplesSameSubjectPath("?foo <bar> ?baz ; <mehr> ?t , ?d",
+                               {{"?foo", "<bar>", "?baz"},
+                                {"?foo", "<mehr>", "?t"},
+                                {"?foo", "<mehr>", "?d"}});
+}

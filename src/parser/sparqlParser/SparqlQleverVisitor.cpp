@@ -49,3 +49,65 @@ antlrcpp::Any SparqlQleverVisitor::processIriFunctionCall(
   }
   throw ParseException{"Function \"" + iri + "\" not supported"};
 }
+
+// ___________________________________________________________________________
+namespace {
+string stripAndLowercaseKeywordLiteral(std::string_view lit) {
+  if (lit.size() > 2 && lit[0] == '"' && lit.back() == '"') {
+    auto stripped = lit.substr(1, lit.size() - 2);
+    return ad_utility::getLowercaseUtf8(stripped);
+  }
+  return std::string{lit};
+}
+
+// ___________________________________________________________________________
+template <typename Current, typename... Others>
+constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
+    const auto& arg) {
+  if constexpr (sizeof...(Others) > 0) {
+    if constexpr (ad_utility::isSimilar<decltype(arg), Current>) {
+      if (const auto ptr = std::get_if<ad_utility::First<Others...>>(&arg)) {
+        return unwrapVariant<Others...>(*ptr);
+      }
+      return nullptr;
+    } else {
+      return unwrapVariant<Others...>(arg);
+    }
+  } else {
+    return &arg;
+  }
+}
+}  // namespace
+
+// ___________________________________________________________________________
+using PathTuples = ad_utility::sparql_types::PathTuples;
+PathTuples SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::PropertyListPathNotEmptyContext* ctx) {
+  PathTuples tuples;
+  vector<PropertyPath> verbPathOrSimples =
+      visitVector<PropertyPath>(ctx->verbPathOrSimple());
+  vector<ObjectList> objectLists = visitVector<ObjectList>(ctx->objectList());
+  // The predicates are one vector. The objects are split up into a single
+  // object and a vector. Join them into a single vector.
+  objectLists.insert(objectLists.begin(), visitTypesafe(ctx->objectListPath()));
+
+  AD_CHECK_EQ(verbPathOrSimples.size(),
+              objectLists.size());  // number of verbPathOrSimple
+  // must be equal to length of objectList + objectListPath
+  // TODO use zip-style approach once C++ supports ranges
+  for (size_t i = 0; i < verbPathOrSimples.size(); i++) {
+    PropertyPath current = std::move(verbPathOrSimples.at(i));
+    for (auto& object : objectLists.at(i).first) {
+      if (current.asString() == CONTAINS_WORD_PREDICATE ||
+          // TODO _NS no longer needed?
+          current.asString() == CONTAINS_WORD_PREDICATE_NS) {
+        if (const Literal* literal =
+                unwrapVariant<VarOrTerm, GraphTerm, Literal>(object)) {
+          object = Literal{stripAndLowercaseKeywordLiteral(literal->literal())};
+        }
+      }
+      tuples.push_back({current, std::move(object)});
+    }
+  }
+  return tuples;
+}

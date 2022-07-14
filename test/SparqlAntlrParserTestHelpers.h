@@ -260,7 +260,11 @@ MATCHER_P2(IsValues, vars, values, "") {
 // a matcher.
 MATCHER_P(IsPropertyPath, propertyPath, "") { return arg == propertyPath; }
 
+// Trivial matcher for PathTuples for use e.g. with expectCompleteParse
 MATCHER_P(IsPropertyListPathNotEmpty, propertyListPath, "") {
-  // propertyListPath: std::vector<std::pair<PropertyPath, VarOrTerm>>
   return arg == propertyListPath;
 }
+
+// Trivial matcher for vector<SparqlTriples> for use e.g. with
+// expectCompleteParse
+MATCHER_P(IsTriplesSameSubjectPath, triples, "") { return arg == triples; }

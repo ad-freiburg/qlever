@@ -704,31 +704,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   PathTuples visitTypesafe(
-      SparqlAutomaticParser::PropertyListPathNotEmptyContext* ctx) {
-    PathTuples t;
-    vector<PropertyPath> verbPathOrSimples =
-        visitVector<PropertyPath>(ctx->verbPathOrSimple());
-    ObjectList objectListPath = visitTypesafe(ctx->objectListPath());
-
-    // mandatory verbPathOrSimple ObjectListPath block
-    for (auto& object : objectListPath.first) {
-      t.push_back({verbPathOrSimples[0], std::move(object)});
-    }
-    verbPathOrSimples.erase(verbPathOrSimples.begin());
-
-    // optional ( ';' ( verbPathOrSimple objectList )? )* block
-    vector<ObjectList> objectLists = visitVector<ObjectList>(ctx->objectList());
-    AD_CHECK_EQ(verbPathOrSimples.size(),
-                objectLists.size());  // remaining number of verbPathOrSimple
-                                      // must be equal to length of objectList
-    for (auto& objectList : objectLists) {
-      for (auto& object : objectList.first) {
-        t.push_back({verbPathOrSimples[0], std::move(object)});
-      }
-      verbPathOrSimples.erase(verbPathOrSimples.begin());
-    }
-    return t;
-  }
+      SparqlAutomaticParser::PropertyListPathNotEmptyContext* ctx);
 
   antlrcpp::Any visitVerbPath(
       SparqlAutomaticParser::VerbPathContext* ctx) override {
