@@ -7,7 +7,7 @@ queries:
   - query: relativ-star-scientists
     type: text
     sparql: |
-      SELECT ?x TEXT(?t) WHERE {
+      SELECT ?x ?t WHERE {
           ?x <is-a> <Scientist> .
           ?t ql:contains-entity ?x .
           ?t ql:contains-word "relati*"
@@ -16,7 +16,7 @@ queries:
     checks:
       - num_cols: 2
       - num_rows: 1653
-      - selected: [ "?x", "TEXT(?t)" ]
+      - selected: [ "?x", "?t" ]
       - contains_row:
           - "<Albert_Einstein>"
           - "He realized, however, that the principle of relativity could also be extended
@@ -32,7 +32,7 @@ queries:
   - query: relativ-star-scientists-from-ulm  # should use TextOperationWithFilter
     type: text
     sparql: |
-      SELECT ?x TEXT(?t) WHERE {
+      SELECT ?x ?t WHERE {
           ?x <is-a> <Scientist> .
           ?x <Place_of_birth> <Ulm> .
           ?t ql:contains-entity ?x .
@@ -42,7 +42,7 @@ queries:
     checks:
       - num_cols: 2
       - num_rows: 1
-      - selected: [ "?x", "TEXT(?t)" ]
+      - selected: [ "?x", "?t" ]
       - contains_row:
           - "<Albert_Einstein>"
           - "He realized, however, that the principle of relativity could also be extended
@@ -76,7 +76,7 @@ queries:
     type: text
     sparql: |
       PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-      SELECT ?x ?date TEXT(?t) WHERE {
+      SELECT ?x ?date ?t WHERE {
         ?x <is-a> <Scientist> .
         ?x <Date_of_birth> ?date .
         ?x <Gender> <Female> .
