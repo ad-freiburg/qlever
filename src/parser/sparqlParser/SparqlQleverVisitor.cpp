@@ -50,6 +50,7 @@ antlrcpp::Any SparqlQleverVisitor::processIriFunctionCall(
   throw ParseException{"Function \"" + iri + "\" not supported"};
 }
 
+// ____________________________________________________________________________________
 ParsedQuery::SelectClause SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::SelectClauseContext* ctx) {
   ParsedQuery::SelectClause select;
@@ -84,6 +85,7 @@ ParsedQuery::SelectClause SparqlQleverVisitor::visitTypesafe(
   return select;
 }
 
+// ____________________________________________________________________________________
 std::variant<Variable, ParsedQuery::Alias> SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::VarOrAliasContext* ctx) {
   if (ctx->var())
@@ -93,19 +95,22 @@ std::variant<Variable, ParsedQuery::Alias> SparqlQleverVisitor::visitTypesafe(
   AD_FAIL();  // Should be unreachable.
 }
 
+// ____________________________________________________________________________________
 ParsedQuery::Alias SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::AliasContext* ctx) {
   // A SPARQL alias has only one child, namely the contents within
   // parentheses.
-  return visit(ctx->aliasWithoutBrackets()).as<ParsedQuery::Alias>();
+  return visitTypesafe(ctx->aliasWithoutBrackets());
 }
 
+// ____________________________________________________________________________________
 ParsedQuery::Alias SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::AliasWithoutBracketsContext* ctx) {
   auto wrapper = makeExpressionPimpl(visit(ctx->expression()));
   return ParsedQuery::Alias{std::move(wrapper), ctx->var()->getText()};
 }
 
+// ____________________________________________________________________________________
 Variable SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::VarContext* ctx) {
   return Variable{ctx->getText()};
