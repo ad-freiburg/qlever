@@ -4,7 +4,6 @@
 #pragma once
 
 #include <initializer_list>
-#include <ranges>
 #include <string>
 #include <utility>
 #include <variant>
