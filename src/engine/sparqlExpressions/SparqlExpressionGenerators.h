@@ -75,8 +75,8 @@ resultGenerator(T vector, size_t numItems) {
 inline cppcoro::generator<StrongIdWithResultType> resultGenerator(
     StrongIdsWithResultType ids, size_t targetSize) {
   AD_CHECK(targetSize == ids.size());
-  for (const auto& strongId : ids._ids) {
-    co_yield StrongIdWithResultType{strongId, ids._type};
+  for (auto strongId : ids._ids) {
+    co_yield strongId;
   }
 }
 
@@ -106,8 +106,7 @@ auto makeGenerator(Input&& input, [[maybe_unused]] size_t numItems,
   if constexpr (ad_utility::isSimilar<Variable, Input>) {
     // TODO: Also directly write a generator that lazily gets the Ids in chunks.
     StrongIdsWithResultType inputWithVariableResolved{
-        getIdsFromVariable(std::forward<Input>(input), context),
-        context->_variableToColumnAndResultTypeMap.at(input._variable).second};
+        getIdsFromVariable(std::forward<Input>(input), context)};
     return resultGenerator(std::move(inputWithVariableResolved), numItems);
   } else {
     return resultGenerator(std::forward<Input>(input), numItems);

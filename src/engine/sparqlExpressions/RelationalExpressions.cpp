@@ -14,7 +14,10 @@ namespace {
 using valueIdComparators::Comparison;
 
 template <valueIdComparators::Comparison Comp, typename Dummy = int>
-bool applyComparison(const auto& a, const auto& b) {
+bool applyComparison(const auto& a, const auto& b) requires requires {
+  a <= b;
+}
+{
   if constexpr (Comp == valueIdComparators::Comparison::LT) {
     return a < b;
   } else if constexpr (Comp == valueIdComparators::Comparison::LE) {
@@ -56,10 +59,31 @@ concept BothVariables =
     std::is_same_v<Variable, A>&& std::is_same_v<Variable, B>;
 
 template <typename A, typename B>
+concept VariableAndVectorImpl = std::is_same_v<Variable, A> &&
+                                (Arithmetic<B> || std::is_same_v<ValueId, B>);
+
+template <typename A, typename B>
+concept VariableAndVector =
+    VariableAndVectorImpl<A, B> || VariableAndVectorImpl<B, A>;
+
+template <typename A, typename B>
+concept NeitherString =
+    !std::is_same_v<A, std::string> && !std::is_same_v<B, std::string>;
+template <typename A, typename B>
+concept anyStrongId = (std::is_same_v<ValueId, A> ||
+                       std::is_same_v<ValueId, B>)&&NeitherString<A, B>;
+
+template <typename T>
+concept Boolean =
+    std::is_same_v<T, Bool> || std::is_same_v<T, ad_utility::SetOfIntervals> ||
+    std::is_same_v<VectorWithMemoryLimit<Bool>, T>;
+
+template <typename A, typename B>
 concept Compatible = (Arithmetic<A> && Arithmetic<B>) ||
                      (std::is_same_v<std::string, A> &&
                       std::is_same_v<std::string, B>) ||
-                     BothVariables<A, B>;
+                     BothVariables<A, B> || VariableAndVector<A, B> ||
+                     anyStrongId<A, B> && !Boolean<A> && !Boolean<B>;
 
 template <typename A, typename B>
 concept Incompatible = (Arithmetic<A> && std::is_same_v<B, std::string>) ||
@@ -82,10 +106,6 @@ static_assert(std::is_same_v<double, ValueType<VectorWithMemoryLimit<double>>>);
 
 static_assert(
     Compatible<ValueType<VectorWithMemoryLimit<double>>, ValueType<double>>);
-template <typename T>
-concept Boolean =
-    std::is_same_v<T, Bool> || std::is_same_v<T, ad_utility::SetOfIntervals> ||
-    std::is_same_v<VectorWithMemoryLimit<Bool>, T>;
 
 template <Comparison Comp, typename A, typename B>
 requires Compatible<ValueType<A>, ValueType<B>> ExpressionResult
@@ -105,9 +125,10 @@ evaluateR(A a, B b, EvaluationContext* context) {
   auto itB = generatorB.begin();
 
   for (size_t i = 0; i < targetSize; ++i) {
-    if constexpr (BothVariables<A, B>) {
-      result.push_back(valueIdComparators::compareIds(itA->_id._value,
-                                                      itB->_id._value, Comp));
+    if constexpr (requires {
+                    valueIdComparators::compareIds(*itA, *itB, Comp);
+                  }) {
+      result.push_back(valueIdComparators::compareIds(*itA, *itB, Comp));
     } else {
       result.push_back(applyComparison<Comp>(*itA, *itB));
     }
@@ -243,24 +264,37 @@ ExpressionResult evaluateR(const std::string& a, const Variable& b,
 }
 
 template <Comparison>
-Bool evaluateR(const StrongIdWithResultType&, const auto&, EvaluationContext*) {
-  throw std::runtime_error("Not implemented, TODO");
-}
-
-template <Comparison, typename T>
-requires(!std::is_same_v<StrongIdWithResultType, T>) Bool
-    evaluateR(const T&, const StrongIdWithResultType&, EvaluationContext*) {
-  throw std::runtime_error("Not implemented, TODO");
-}
-
-template <Comparison, typename T>
-Bool evaluateR(const Variable&, const VectorWithMemoryLimit<T>&,
+Bool evaluateR(const StrongIdWithResultType&, const std::string&,
                EvaluationContext*) {
   throw std::runtime_error("Not implemented, TODO");
 }
 
-template <Comparison, typename T>
-Bool evaluateR(const VectorWithMemoryLimit<T>&, const Variable&,
+template <Comparison>
+Bool evaluateR(const std::string&, const StrongIdWithResultType&,
+               EvaluationContext*) {
+  throw std::runtime_error("Not implemented, TODO");
+}
+
+template <Comparison>
+Bool evaluateR(const Variable&, const VectorWithMemoryLimit<std::string>&,
+               EvaluationContext*) {
+  throw std::runtime_error("Not implemented, TODO");
+}
+
+template <Comparison>
+Bool evaluateR(const VectorWithMemoryLimit<std::string>&, const Variable&,
+               EvaluationContext*) {
+  throw std::runtime_error("Not implemented, TODO");
+}
+
+template <Comparison>
+Bool evaluateR(const ValueId&, const VectorWithMemoryLimit<std::string>&,
+               EvaluationContext*) {
+  throw std::runtime_error("Not implemented, TODO");
+}
+
+template <Comparison>
+Bool evaluateR(const VectorWithMemoryLimit<std::string>&, const ValueId&,
                EvaluationContext*) {
   throw std::runtime_error("Not implemented, TODO");
 }

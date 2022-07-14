@@ -51,6 +51,8 @@ class VectorWithMemoryLimit
 
 /// A strong type for Ids from the knowledge base to distinguish them from plain
 /// integers.
+using StrongId = ValueId;
+/*
 struct StrongId {
   Id _value;
   friend auto operator<=>(const StrongId&, const StrongId&) = default;
@@ -61,6 +63,7 @@ struct StrongId {
     return H::combine(std::move(h), id._value);
   }
 };
+ */
 
 /// A simple wrapper around a bool that prevents the strangely-behaving
 /// std::vector<bool> optimization.
@@ -103,6 +106,9 @@ namespace sparqlExpression {
 
 /// A StrongId and its type. The type is needed to get the actual value from the
 /// knowledge base.
+
+using StrongIdWithResultType = ValueId;
+/*
 struct StrongIdWithResultType {
   StrongId _id;
   ResultTable::ResultType _type;
@@ -115,11 +121,11 @@ struct StrongIdWithResultType {
     return H::combine(std::move(h), id._id, id._type);
   }
 };
+ */
 
 /// A list of StrongIds that all have the same datatype.
 struct StrongIdsWithResultType {
-  VectorWithMemoryLimit<StrongId> _ids;
-  ResultTable::ResultType _type;
+  VectorWithMemoryLimit<Id> _ids;
   size_t size() const { return _ids.size(); }
 };
 

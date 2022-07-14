@@ -211,7 +211,8 @@ inline auto minLambdaForAllTypes = []<SingleExpressionResult T>(const T& a,
                 ad_utility::isSimilar<T, std::string>) {
     return std::min(a, b);
   } else if constexpr (ad_utility::isSimilar<T, StrongIdWithResultType>) {
-    return a._id < b._id ? a : b;
+    // TODO<joka921> is this semantically correct for ValueIds?
+    return a < b ? a : b;
   } else {
     return ad_utility::alwaysFalse<T>;
   }
@@ -231,7 +232,8 @@ inline auto maxLambdaForAllTypes = []<SingleExpressionResult T>(const T& a,
                 ad_utility::isSimilar<T, std::string>) {
     return std::max(a, b);
   } else if constexpr (ad_utility::isSimilar<T, StrongIdWithResultType>) {
-    return a._id > b._id ? a : b;
+    // TODO<joka921> correct semantics for valueIds?
+    return a > b ? a : b;
   } else {
     return ad_utility::alwaysFalse<T>;
   }

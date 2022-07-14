@@ -29,10 +29,7 @@ ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
       contextForSingleValue._endIndex = contextForSingleValue._beginIndex + 1;
       auto idOfFirstAsVector =
           detail::getIdsFromVariable(childResult, &contextForSingleValue);
-      return StrongIdWithResultType{
-          idOfFirstAsVector[0],
-          context->_variableToColumnAndResultTypeMap.at(childResult._variable)
-              .second};
+      return StrongIdWithResultType(idOfFirstAsVector[0]);
     } else {
       static_assert(isConstantResult<T>);
       return childResult;

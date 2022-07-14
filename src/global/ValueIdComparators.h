@@ -427,6 +427,26 @@ inline bool compareWithEqualIds(ValueId a, ValueId bBegin, ValueId bEnd,
   }
 }
 
+// ____________________________________________________________________________
+inline bool compareIds(ValueId a, double b, Comparison comparison) {
+  return compareIds(a, ValueId::makeFromDouble(b), comparison);
+}
+
+// ____________________________________________________________________________
+inline bool compareIds(double a, ValueId b, Comparison comparison) {
+  return compareIds(ValueId::makeFromDouble(a), b, comparison);
+}
+
+// ____________________________________________________________________________
+inline bool compareIds(ValueId a, int64_t b, Comparison comparison) {
+  return compareIds(a, ValueId::makeFromInt(b), comparison);
+}
+
+// ____________________________________________________________________________
+inline bool compareIds(int64_t a, ValueId b, Comparison comparison) {
+  return compareIds(ValueId::makeFromInt(a), b, comparison);
+}
+
 }  // namespace valueIdComparators
 
 #endif  // QLEVER_VALUEIDCOMPARATORS_H
