@@ -33,7 +33,7 @@ TextOperationWithoutFilter::getVariableColumns() const {
   ad_utility::HashMap<string, size_t> vcmap;
   size_t index = 0;
   vcmap[_cvar] = index++;
-  vcmap["SCORE(" + _cvar + ")"] = index++;
+  vcmap[absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, _cvar.substr(1))] = index++;
   for (const auto& var : _variables) {
     if (var != _cvar) {
       vcmap[var] = index++;

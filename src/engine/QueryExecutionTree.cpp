@@ -92,29 +92,24 @@ void QueryExecutionTree::setVariableColumns(
 // ___________________________________________________________________________
 QueryExecutionTree::ColumnIndicesAndTypes
 QueryExecutionTree::selectedVariablesToColumnIndices(
-    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk,
-    const ResultTable& resultTable, bool includeQuestionMark) const {
+    const SelectClause& selectedVarsOrAsterisk, const ResultTable& resultTable,
+    bool includeQuestionMark) const {
   ColumnIndicesAndTypes exportColumns;
 
-  for (auto var : selectedVarsOrAsterisk.getSelectedVariables()) {
-    // TODO: The TEXT(?variable) syntax is redundant and will probably removed
-    //  when we have a proper SPARQL parser.
-    constexpr std::string_view prefix = "TEXT(";
-    constexpr size_t prefixLength = prefix.length();
-    if (var.starts_with(prefix)) {
-      var = var.substr(prefixLength, var.rfind(')') - prefixLength);
-    }
-    if (getVariableColumns().contains(var)) {
-      auto columnIndex = getVariableColumns().at(var);
+  for (const auto& var : selectedVarsOrAsterisk.getSelectedVariables()) {
+    std::string varString = var.name();
+    if (getVariableColumns().contains(varString)) {
+      auto columnIndex = getVariableColumns().at(varString);
       // Remove the question mark from the variable name if requested.
-      if (!includeQuestionMark && var.starts_with('?')) {
-        var = var.substr(1);
+      if (!includeQuestionMark && varString.starts_with('?')) {
+        varString = varString.substr(1);
       }
-      exportColumns.push_back(VariableAndColumnIndex{
-          var, columnIndex, resultTable.getResultType(columnIndex)});
+      exportColumns.push_back(
+          VariableAndColumnIndex{std::move(varString), columnIndex,
+                                 resultTable.getResultType(columnIndex)});
     } else {
       exportColumns.emplace_back(std::nullopt);
-      LOG(WARN) << "The variable \"" << var
+      LOG(WARN) << "The variable \"" << varString
                 << "\" was found in the original query, but not in the "
                    "execution tree. "
                    "This is likely a bug\n";
@@ -125,8 +120,8 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
 
 // _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeResultAsQLeverJson(
-    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
-    size_t offset, shared_ptr<const ResultTable> resultTable) const {
+    const SelectClause& selectedVarsOrAsterisk, size_t limit, size_t offset,
+    shared_ptr<const ResultTable> resultTable) const {
   // They may trigger computation (but does not have to).
   if (!resultTable) {
     resultTable = getResult();
@@ -144,8 +139,8 @@ nlohmann::json QueryExecutionTree::writeResultAsQLeverJson(
 
 // _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
-    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
-    size_t offset, shared_ptr<const ResultTable> resultTable) const {
+    const SelectClause& selectedVarsOrAsterisk, size_t limit, size_t offset,
+    shared_ptr<const ResultTable> resultTable) const {
   using nlohmann::json;
 
   // This might trigger the actual query processing.
@@ -168,7 +163,14 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   const IdTable& idTable = resultTable->_idTable;
 
   json result;
-  auto selectedVars = selectedVarsOrAsterisk.getSelectedVariables();
+  std::vector<std::string> selectedVars = [&]() {
+    const auto& v = selectedVarsOrAsterisk.getSelectedVariables();
+    std::vector<std::string> result;
+    for (const auto& var : v) {
+      result.push_back(var.name());
+    }
+    return result;
+  }();
   // Strip the leading '?' from the variables, it is not part of the SPARQL JSON
   // output format.
   for (auto& var : selectedVars) {
@@ -392,7 +394,7 @@ nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
 // _____________________________________________________________________________
 template <QueryExecutionTree::ExportSubFormat format>
 ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
-    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    const SelectClause& selectedVarsOrAsterisk, size_t limit,
     size_t offset) const {
   static_assert(format == ExportSubFormat::BINARY ||
                 format == ExportSubFormat::CSV ||
@@ -427,7 +429,8 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
   static constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
   constexpr std::string_view sepView{&sep, 1};
   // Print header line
-  const auto& variables = selectedVarsOrAsterisk.getSelectedVariables();
+  const auto& variables =
+      selectedVarsOrAsterisk.getSelectedVariablesAsStrings();
   co_yield absl::StrJoin(variables, sepView);
   co_yield '\n';
 
@@ -480,17 +483,17 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
 
 template ad_utility::streams::stream_generator
 QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::CSV>(
-    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    const SelectClause& selectedVarsOrAsterisk, size_t limit,
     size_t offset) const;
 
 template ad_utility::streams::stream_generator
 QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::TSV>(
-    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+    const SelectClause& selectedVarsOrAsterisk, size_t limit,
     size_t offset) const;
 
 template ad_utility::streams::stream_generator QueryExecutionTree::
     generateResults<QueryExecutionTree::ExportSubFormat::BINARY>(
-        const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+        const SelectClause& selectedVarsOrAsterisk, size_t limit,
         size_t offset) const;
 
 // _____________________________________________________________________________

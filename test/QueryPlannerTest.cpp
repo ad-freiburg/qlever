@@ -955,7 +955,7 @@ TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
 TEST(QueryExecutionTreeTest, testTextQuerySE) {
   try {
     ParsedQuery pq = SparqlParser(
-                         "SELECT TEXT(?c) \n "
+                         "SELECT ?c \n "
                          "WHERE  {?c ql:contains-word \"search engine\"}")
                          .parse();
     pq.expandPrefixes();
@@ -979,7 +979,7 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
   try {
     ParsedQuery pq = SparqlParser(
                          "PREFIX : <>\n"
-                         "SELECT ?x ?y TEXT(?c)\n "
+                         "SELECT ?x ?y ?c\n "
                          "WHERE \t {"
                          "?x :Place_of_birth ?y ."
                          "?y :Contained_by :Europe ."
@@ -1000,7 +1000,8 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
         "  }\n   filtered on column 1\n  qet-width: 4 \n}",
         qet.asString());
     ASSERT_EQ(0u, qet.getVariableColumn("?c"));
-    ASSERT_EQ(1u, qet.getVariableColumn("SCORE(?c)"));
+    ASSERT_EQ(1u, qet.getVariableColumn(
+                      absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, "c")));
     ASSERT_EQ(2u, qet.getVariableColumn("?y"));
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
