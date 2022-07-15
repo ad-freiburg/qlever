@@ -338,81 +338,49 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       currentPattern->_children.emplace_back(std::move(values));
       lexer_.accept(".");
     } else {
-      std::string subject;
-      if (lastSubject.empty()) {
-        if (lexer_.accept(SparqlToken::Type::VARIABLE)) {
-          subject = lexer_.current().raw;
-          query->registerVariableVisibleInQueryBody(lexer_.current().raw);
-        } else {
-          lexer_.expect(SparqlToken::Type::IRI);
-          subject = lexer_.current().raw;
+      // TODO cleanup
+      auto var = [](const Variable& var) { return var.name(); };
+      auto graphTerm = [](const GraphTerm& term) { return term.toSparql(); };
+      auto path = [](const PropertyPath& path) { return path.asString(); };
+      auto varOrTerm = [](VarOrTerm varOrTerm) {
+        if (Variable* var = std::get_if<Variable>(&varOrTerm)) {
+          return var->name();
+        } else if (GraphTerm* term = std::get_if<GraphTerm>(&varOrTerm)) {
+          return term->toSparql();
         }
-      } else {
-        subject = lastSubject;
-        lastSubject.clear();
-      }
+        AD_FAIL();  // Should be unreachable
+      };
+      auto varOrPath =
+          [&var, &path](const ad_utility::sparql_types::VarOrPath& varOrPath) {
+            return std::visit(ad_utility::OverloadCallOperator{var, path},
+                              varOrPath);
+          };
 
-      std::string predicate;
-      if (lastPredicate.empty()) {
-        if (lexer_.accept(SparqlToken::Type::VARIABLE)) {
-          predicate = lexer_.current().raw;
-          query->registerVariableVisibleInQueryBody(lexer_.current().raw);
-        } else if (lexer_.accept(SparqlToken::Type::A_RDF_TYPE_ALIAS)) {
-          predicate = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
-        } else {
-          // Assume the token is a predicate path. This will be verified
-          // separately later.
-          lexer_.expandNextUntilWhitespace();
-          lexer_.accept();
-          predicate = lexer_.current().raw;
-        }
-      } else {
-        predicate = lastPredicate;
-        lastPredicate.clear();
-      }
-
-      TripleComponent object;
-      if (lexer_.accept(SparqlToken::Type::VARIABLE)) {
-        object = lexer_.current().raw;
-        query->registerVariableVisibleInQueryBody(lexer_.current().raw);
-      } else if (lexer_.accept(SparqlToken::Type::RDFLITERAL)) {
-        object = parseLiteral(*query, lexer_.current().raw, true);
-      } else {
-        lexer_.expect(SparqlToken::Type::IRI);
-        object = lexer_.current().raw;
-      }
-
-      if (predicate == CONTAINS_WORD_PREDICATE ||
-          predicate == CONTAINS_WORD_PREDICATE_NS) {
-        // TODO<joka921, qup42> Make sure that the lowercasing of the words is
-        // also performed correctly in the ANTLR based parser. We also probably
-        // shouldn't allow anything other than plain literals without language
-        // tags or xsd types for the fulltext index.0
-        if (object.isString()) {
-          object.getString() =
-              stripAndLowercaseKeywordLiteral(object.getString());
-        }
-      }
-
-      SparqlTriple triple(
-          subject,
-          parseWithAntlr(sparqlParserHelpers::parseVerbPathOrSimple, predicate,
-                         getPrefixMap(*query)),
-          object);
+      vector<ad_utility::sparql_types::PathTriple> triples = parseWithAntlr(
+          sparqlParserHelpers::parseTriplesSameSubjectPath, *query);
       auto& v = lastBasicPattern(currentPattern)._whereClauseTriples;
-      if (std::find(v.begin(), v.end(), triple) != v.end()) {
-        LOG(INFO) << "Ignoring duplicate triple: " << subject << ' '
-                  << predicate << ' ' << object << std::endl;
-      } else {
-        v.push_back(triple);
+      for (auto& triple : triples) {
+        if (Variable* subject = std::get_if<Variable>(&get<0>(triple))) {
+          query->registerVariableVisibleInQueryBody(subject->name());
+        }
+        if (Variable* predicate = std::get_if<Variable>(&get<1>(triple))) {
+          query->registerVariableVisibleInQueryBody(predicate->name());
+        }
+        if (Variable* object = std::get_if<Variable>(&get<2>(triple))) {
+          query->registerVariableVisibleInQueryBody(object->name());
+        }
+        SparqlTriple sparqlTriple = {varOrTerm(get<0>(triple)),
+                                     varOrPath(get<1>(triple)),
+                                     varOrTerm(get<2>(triple))};
+        if (std::find(v.begin(), v.end(), sparqlTriple) != v.end()) {
+          LOG(INFO) << "Ignoring duplicate triple: " << sparqlTriple._s << ' '
+                    << sparqlTriple._p << ' ' << sparqlTriple._o << std::endl;
+        } else {
+          v.emplace_back(std::move(sparqlTriple));
+        }
       }
 
-      if (lexer_.accept(";")) {
-        lastSubject = subject;
-      } else if (lexer_.accept(",")) {
-        lastSubject = subject;
-        lastPredicate = predicate;
-      } else if (lexer_.accept("}")) {
+      if (lexer_.accept("}")) {
         break;
       } else {
         lexer_.expect(".");

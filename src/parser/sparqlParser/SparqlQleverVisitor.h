@@ -44,6 +44,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   using Objects = ad_utility::sparql_types::Objects;
   using Tuples = ad_utility::sparql_types::Tuples;
   using PathTuples = ad_utility::sparql_types::PathTuples;
+  using PathTriple = ad_utility::sparql_types::PathTriple;
   using Triples = ad_utility::sparql_types::Triples;
   using Node = ad_utility::sparql_types::Node;
   using ObjectList = ad_utility::sparql_types::ObjectList;
@@ -669,15 +670,14 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  vector<SparqlTriple> visitTypesafe(
+  vector<PathTriple> visitTypesafe(
       SparqlAutomaticParser::TriplesSameSubjectPathContext* ctx) {
-    vector<SparqlTriple> triples;
+    vector<PathTriple> triples;
     if (ctx->varOrTerm()) {
       auto var = visitTypesafe(ctx->varOrTerm());
       auto tuples = visitTypesafe(ctx->propertyListPathNotEmpty());
       for (auto& tuple : tuples) {
-        triples.emplace_back(var.toSparql(), tuple.first,
-                             tuple.second.toSparql());
+        triples.emplace_back(var, tuple.first, tuple.second);
       }
     } else if (ctx->triplesNodePath()) {
       // TODO implement
@@ -731,12 +731,12 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  PropertyPath visitTypesafe(
+  ad_utility::sparql_types::VarOrPath visitTypesafe(
       SparqlAutomaticParser::VerbPathOrSimpleContext* ctx) {
     if (ctx->verbPath()) {
       return visitTypesafe(ctx->verbPath());
     } else if (ctx->verbSimple()) {
-      return PropertyPath::fromVariable(visitTypesafe(ctx->verbSimple()));
+      return visitTypesafe(ctx->verbSimple());
     }
     AD_FAIL()  // Should be unreachable.
   }

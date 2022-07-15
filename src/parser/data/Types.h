@@ -5,6 +5,7 @@
 #pragma once
 
 #include <array>
+#include <tuple>
 #include <vector>
 
 #include "../PropertyPath.h"
@@ -13,9 +14,11 @@
 namespace ad_utility::sparql_types {
 using Objects = std::vector<VarOrTerm>;
 using Tuples = std::vector<std::array<VarOrTerm, 2>>;
-using PathTuple = std::pair<PropertyPath, VarOrTerm>;
+using VarOrPath = std::variant<Variable, PropertyPath>;
+using PathTuple = std::pair<VarOrPath, VarOrTerm>;
 using PathTuples = std::vector<PathTuple>;
 using Triples = std::vector<std::array<VarOrTerm, 3>>;
+using PathTriple = std::tuple<VarOrTerm, VarOrPath, VarOrTerm>;
 using Node = std::pair<VarOrTerm, Triples>;
 using ObjectList = std::pair<Objects, Triples>;
 using PropertyList = std::pair<Tuples, Triples>;

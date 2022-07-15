@@ -1014,7 +1014,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(2u, c._whereClauseTriples.size());
     ASSERT_EQ("?movie", c._whereClauseTriples[0]._s);
     ASSERT_EQ("<from-year>", c._whereClauseTriples[0]._p._iri);
-    ASSERT_EQ(":v:date:0000000000000002000-00-00T00:00:00",
+    ASSERT_EQ("\"2000-00-00\"^^<http://www.w3.org/2001/XMLSchema#date>",
               c._whereClauseTriples[0]._o);
     ASSERT_EQ("?movie", c._whereClauseTriples[1]._s);
     ASSERT_EQ("<directed-by>", c._whereClauseTriples[1]._p._iri);

@@ -84,8 +84,8 @@ using PathTuples = ad_utility::sparql_types::PathTuples;
 PathTuples SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PropertyListPathNotEmptyContext* ctx) {
   PathTuples tuples;
-  vector<PropertyPath> verbPathOrSimples =
-      visitVector<PropertyPath>(ctx->verbPathOrSimple());
+  vector<ad_utility::sparql_types::VarOrPath> verbPathOrSimples =
+      visitVector<ad_utility::sparql_types::VarOrPath>(ctx->verbPathOrSimple());
   vector<ObjectList> objectLists = visitVector<ObjectList>(ctx->objectList());
   // The predicates are one vector. The objects are split up into a single
   // object and a vector. Join them into a single vector.
@@ -96,17 +96,21 @@ PathTuples SparqlQleverVisitor::visitTypesafe(
   // must be equal to length of objectList + objectListPath
   // TODO use zip-style approach once C++ supports ranges
   for (size_t i = 0; i < verbPathOrSimples.size(); i++) {
-    PropertyPath current = std::move(verbPathOrSimples.at(i));
+    ad_utility::sparql_types::VarOrPath predicate =
+        std::move(verbPathOrSimples.at(i));
     for (auto& object : objectLists.at(i).first) {
-      if (current.asString() == CONTAINS_WORD_PREDICATE ||
-          // TODO _NS no longer needed?
-          current.asString() == CONTAINS_WORD_PREDICATE_NS) {
-        if (const Literal* literal =
-                unwrapVariant<VarOrTerm, GraphTerm, Literal>(object)) {
-          object = Literal{stripAndLowercaseKeywordLiteral(literal->literal())};
+      if (PropertyPath* path = std::get_if<PropertyPath>(&predicate)) {
+        if (path->asString() == CONTAINS_WORD_PREDICATE ||
+            // TODO _NS no longer needed?
+            path->asString() == CONTAINS_WORD_PREDICATE_NS) {
+          if (const Literal* literal =
+                  unwrapVariant<VarOrTerm, GraphTerm, Literal>(object)) {
+            object =
+                Literal{stripAndLowercaseKeywordLiteral(literal->literal())};
+          }
         }
       }
-      tuples.push_back({current, std::move(object)});
+      tuples.push_back({predicate, std::move(object)});
     }
   }
   return tuples;

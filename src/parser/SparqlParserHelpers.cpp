@@ -102,8 +102,9 @@ parseValuesClause(const std::string& input,
 }
 // _____________________________________________________________________________
 
-ResultOfParseAndRemainingText<PropertyPath> parseVerbPathOrSimple(
-    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes) {
+ResultOfParseAndRemainingText<ad_utility::sparql_types::VarOrPath>
+parseVerbPathOrSimple(const std::string& input,
+                      SparqlQleverVisitor::PrefixMap prefixes) {
   ParserAndVisitor p{input, std::move(prefixes)};
   return p.parseTypesafe(input, "verb path or simple",
                          &SparqlAutomaticParser::verbPathOrSimple);
@@ -119,8 +120,9 @@ parsePropertyListPathNotEmpty(const std::string& input,
 }
 // _____________________________________________________________________________
 
-ResultOfParseAndRemainingText<vector<SparqlTriple>> parseTriplesSameSubjectPath(
-    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes) {
+ResultOfParseAndRemainingText<vector<ad_utility::sparql_types::PathTriple>>
+parseTriplesSameSubjectPath(const std::string& input,
+                            SparqlQleverVisitor::PrefixMap prefixes) {
   ParserAndVisitor p{input, std::move(prefixes)};
   return p.parseTypesafe(input, "triplesSameSubjectPath",
                          &SparqlAutomaticParser::triplesSameSubjectPath);
