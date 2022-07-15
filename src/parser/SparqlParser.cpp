@@ -25,9 +25,10 @@ ParsedQuery SparqlParser::parse() {
   parsePrologue(&result);
   if (lexer_.accept("construct")) {
     parseQuery(&result, CONSTRUCT_QUERY);
-  } else {
-    lexer_.expect("select");
+  } else if (lexer_.peek("select")) {
     parseQuery(&result, SELECT_QUERY);
+  } else {
+    throw ParseException("Query must either be a SELECT or CONSTRUCT.");
   }
   lexer_.expectEmpty();
 
@@ -160,60 +161,10 @@ void SparqlParser::addPrefix(const string& key, const string& value,
 
 // _____________________________________________________________________________
 void SparqlParser::parseSelect(ParsedQuery* query) {
-  auto& selectClause = query->selectClause();
-  if (lexer_.accept("distinct")) {
-    selectClause._distinct = true;
-  }
-  if (lexer_.accept("reduced")) {
-    selectClause._reduced = true;
-  }
-  if (lexer_.accept("*")) {
-    selectClause._varsOrAsterisk.setAllVariablesSelected();
-  }
-  std::vector<std::string> manuallySelectedVariables;
-  while (!lexer_.accept("where")) {
-    if (selectClause._varsOrAsterisk.isAllVariablesSelected()) {
-      throw ParseException("Keyword WHERE expected after SELECT '*'");
-    }
-    if (lexer_.accept(SparqlToken::Type::VARIABLE)) {
-      manuallySelectedVariables.push_back(lexer_.current().raw);
-    } else if (lexer_.accept("text")) {
-      lexer_.expect("(");
-      std::ostringstream s;
-      s << "TEXT(";
-      lexer_.expect(SparqlToken::Type::VARIABLE);
-      s << lexer_.current().raw;
-      lexer_.expect(")");
-      s << ")";
-      manuallySelectedVariables.push_back(std::move(s).str());
-    } else if (lexer_.accept("score")) {
-      lexer_.expect("(");
-      std::ostringstream s;
-      s << "SCORE(";
-      lexer_.expect(SparqlToken::Type::VARIABLE);
-      s << lexer_.current().raw;
-      lexer_.expect(")");
-      s << ")";
-      manuallySelectedVariables.push_back(std::move(s).str());
-    } else if (lexer_.accept("(")) {
-      // Expect an alias.
-      ParsedQuery::Alias a =
-          parseWithAntlr(sparqlParserHelpers::parseAlias, *query);
-      selectClause._aliases.push_back(a);
-      manuallySelectedVariables.push_back(a._outVarName);
-      lexer_.expect(")");
-    } else {
-      lexer_.accept();
-      throw ParseException("Error in SELECT: unexpected token: " +
-                           lexer_.current().raw);
-    }
-    if (lexer_.empty()) {
-      throw ParseException("Keyword WHERE expected after SELECT.");
-    }
-  }
-  if (selectClause._varsOrAsterisk.isManuallySelectedVariables()) {
-    selectClause._varsOrAsterisk.setManuallySelected(manuallySelectedVariables);
-  }
+  query->_clause =
+      parseWithAntlr(sparqlParserHelpers::parseSelectClause, *query);
+  lexer_.expect("where");  // Still parsed with old parser. Expects WHERE
+                           // keyword to be consumed.
 }
 
 // Helper function that converts the prefix map from `parsedQuery` (a vector of
@@ -283,7 +234,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       lexer_.accept(".");
     } else if (lexer_.accept("{")) {
       // Subquery or union
-      if (lexer_.accept("select")) {
+      if (lexer_.peek("select")) {
         // subquery
         // create the subquery operation
         GraphPatternOperation::Subquery subq;

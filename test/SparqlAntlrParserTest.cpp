@@ -972,3 +972,49 @@ TEST(SparqlParser, propertyPaths) {
         IsPropertyPath(expected));
   }
 }
+
+namespace {
+template <typename Exception = ParseException>
+void expectSelectFails(const string& input) {
+  EXPECT_THROW(parseSelectClause(input, {}), Exception) << input;
+}
+}  // namespace
+
+TEST(SparqlParser, SelectClause) {
+  auto expectVariablesSelect = [](const string& input,
+                                  std::vector<std::string> variables,
+                                  bool distinct = false, bool reduced = false) {
+    expectCompleteParse(
+        parseSelectClause(input, {}),
+        IsVariablesSelect(distinct, reduced, std::move(variables)));
+  };
+  using Alias = std::pair<string, string>;
+  auto expectSelect = [](const string& input,
+                         std::vector<std::variant<Variable, Alias>> selection,
+                         bool distinct = false, bool reduced = false) {
+    expectCompleteParse(parseSelectClause(input, {}),
+                        IsSelect(distinct, reduced, std::move(selection)));
+  };
+
+  expectCompleteParse(parseSelectClause("SELECT *", {}),
+                      IsAsteriskSelect(false, false));
+  expectCompleteParse(parseSelectClause("SELECT DISTINCT *", {}),
+                      IsAsteriskSelect(true, false));
+  expectCompleteParse(parseSelectClause("SELECT REDUCED *", {}),
+                      IsAsteriskSelect(false, true));
+  expectSelectFails("SELECT DISTINCT REDUCED *");
+  expectSelectFails<std::runtime_error>(
+      "SELECT");  // Lexer throws the error instead of the parser
+  expectVariablesSelect("SELECT ?foo", {"?foo"});
+  expectVariablesSelect("SELECT ?foo ?baz ?bar", {"?foo", "?baz", "?bar"});
+  expectVariablesSelect("SELECT DISTINCT ?foo ?bar", {"?foo", "?bar"}, true,
+                        false);
+  expectVariablesSelect("SELECT REDUCED ?foo ?bar ?baz",
+                        {"?foo", "?bar", "?baz"}, false, true);
+  expectSelect("SELECT (10 as ?foo) ?bar",
+               {Alias{"10", "?foo"}, Variable{"?bar"}});
+  expectSelect("SELECT DISTINCT (5 - 10 as ?m)", {Alias{"5-10", "?m"}}, true,
+               false);
+  expectSelect("SELECT (5 - 10 as ?m) ?foo (10 as ?bar)",
+               {Alias{"5-10", "?m"}, Variable{"?foo"}, Alias{"10", "?bar"}});
+}

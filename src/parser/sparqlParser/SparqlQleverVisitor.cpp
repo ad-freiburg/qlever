@@ -49,3 +49,69 @@ antlrcpp::Any SparqlQleverVisitor::processIriFunctionCall(
   }
   throw ParseException{"Function \"" + iri + "\" not supported"};
 }
+
+// ____________________________________________________________________________________
+ParsedQuery::SelectClause SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::SelectClauseContext* ctx) {
+  ParsedQuery::SelectClause select;
+
+  select._distinct = static_cast<bool>(ctx->DISTINCT());
+  select._reduced = static_cast<bool>(ctx->REDUCED());
+
+  if (ctx->asterisk) {
+    select._varsOrAsterisk.setAllVariablesSelected();
+  } else {
+    // TODO: remove select._aliases and let the manuallySelectedVariables accept
+    // the variant<Variable, Alias> directly. Then all this code goes away
+    std::vector<std::string> selectedVariables;
+
+    auto processVariable = [&selectedVariables](const Variable& var) {
+      selectedVariables.push_back(var.name());
+    };
+    auto processAlias = [&selectedVariables,
+                         &select](ParsedQuery::Alias alias) {
+      selectedVariables.push_back(alias._outVarName);
+      select._aliases.push_back(std::move(alias));
+    };
+
+    for (auto& varOrAlias : ctx->varOrAlias()) {
+      std::visit(
+          ad_utility::OverloadCallOperator{processVariable, processAlias},
+          visitTypesafe(varOrAlias));
+    }
+    select._varsOrAsterisk.setManuallySelected(std::move(selectedVariables));
+  }
+
+  return select;
+}
+
+// ____________________________________________________________________________________
+std::variant<Variable, ParsedQuery::Alias> SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::VarOrAliasContext* ctx) {
+  if (ctx->var())
+    return visitTypesafe(ctx->var());
+  else if (ctx->alias())
+    return visitTypesafe(ctx->alias());
+  AD_FAIL();  // Should be unreachable.
+}
+
+// ____________________________________________________________________________________
+ParsedQuery::Alias SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::AliasContext* ctx) {
+  // A SPARQL alias has only one child, namely the contents within
+  // parentheses.
+  return visitTypesafe(ctx->aliasWithoutBrackets());
+}
+
+// ____________________________________________________________________________________
+ParsedQuery::Alias SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::AliasWithoutBracketsContext* ctx) {
+  auto wrapper = makeExpressionPimpl(visit(ctx->expression()));
+  return ParsedQuery::Alias{std::move(wrapper), ctx->var()->getText()};
+}
+
+// ____________________________________________________________________________________
+Variable SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::VarContext* ctx) {
+  return Variable{ctx->getText()};
+}

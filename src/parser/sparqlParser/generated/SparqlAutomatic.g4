@@ -61,12 +61,16 @@ selectQuery : selectClause datasetClause* whereClause solutionModifier;
 subSelect : selectClause whereClause solutionModifier valuesClause;
 
 selectClause
-    : SELECT ( DISTINCT | REDUCED)? ( ( var | alias )+ | '*' )  // extracted the alias rule for easier visiting.
+    : SELECT ( DISTINCT | REDUCED)? ( varOrAlias+ | asterisk='*' )
+    // extracted the alias rule for easier visiting.
     ;
 
-alias: ( '(' aliasWithouBrackes ')' ) ;  // NOT part of sparql, for easier antlr parsing
+varOrAlias: var | alias; // NOT part of sparql, extracted from selectClause to
+// preserve the order of the selections
 
-aliasWithouBrackes : ( expression AS var ); // Needed for  interaction between old and new parser
+alias: ( '(' aliasWithoutBrackets ')' ) ;  // NOT part of sparql, for easier antlr parsing
+
+aliasWithoutBrackets : ( expression AS var ); // Needed for interaction between old and new parser
 
 constructQuery : CONSTRUCT ( constructTemplate datasetClause* whereClause solutionModifier | datasetClause* WHERE '{' triplesTemplate? '}' solutionModifier );
 

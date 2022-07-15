@@ -104,6 +104,9 @@ parseValuesClause(const std::string& input,
 
 ResultOfParseAndRemainingText<PropertyPath> parseVerbPathOrSimple(
     const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
+
+ResultOfParseAndRemainingText<ParsedQuery::SelectClause> parseSelectClause(
+    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H

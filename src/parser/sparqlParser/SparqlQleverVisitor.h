@@ -13,6 +13,7 @@
 //#include "../../engine/sparqlExpressions/RelationalExpression.h"
 #include "../../engine/sparqlExpressions/SampleExpression.h"
 #include "../../util/HashMap.h"
+#include "../../util/OverloadCallOperator.h"
 #include "../../util/StringUtils.h"
 #include "../ParsedQuery.h"
 #include "../RdfEscaping.h"
@@ -156,21 +157,33 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitSelectClause(
       SparqlAutomaticParser::SelectClauseContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  ParsedQuery::SelectClause visitTypesafe(
+      SparqlAutomaticParser::SelectClauseContext* ctx);
+
+  antlrcpp::Any visitVarOrAlias(
+      SparqlAutomaticParser::VarOrAliasContext* ctx) override {
+    return visitTypesafe(ctx);
+  }
+
+  std::variant<Variable, ParsedQuery::Alias> visitTypesafe(
+      SparqlAutomaticParser::VarOrAliasContext* ctx);
 
   antlrcpp::Any visitAlias(SparqlAutomaticParser::AliasContext* ctx) override {
-    // A SPARQL alias has only one child, namely the contents within
-    // parentheses.
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
 
-  antlrcpp::Any visitAliasWithouBrackes(
-      [[maybe_unused]] SparqlAutomaticParser::AliasWithouBrackesContext* ctx)
-      override {
-    auto wrapper = makeExpressionPimpl(visit(ctx->expression()));
-    return ParsedQuery::Alias{std::move(wrapper), ctx->var()->getText()};
+  ParsedQuery::Alias visitTypesafe(SparqlAutomaticParser::AliasContext* ctx);
+
+  antlrcpp::Any visitAliasWithoutBrackets(
+      SparqlAutomaticParser::AliasWithoutBracketsContext* ctx) override {
+    return visitTypesafe(ctx);
   }
+
+  ParsedQuery::Alias visitTypesafe(
+      SparqlAutomaticParser::AliasWithoutBracketsContext* ctx);
 
   antlrcpp::Any visitConstructQuery(
       SparqlAutomaticParser::ConstructQueryContext* ctx) override {
@@ -957,8 +970,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitVar(SparqlAutomaticParser::VarContext* ctx) override {
-    return Variable{ctx->getText()};
+    return visitTypesafe(ctx);
   }
+
+  Variable visitTypesafe(SparqlAutomaticParser::VarContext* ctx);
 
   antlrcpp::Any visitGraphTerm(
       SparqlAutomaticParser::GraphTermContext* ctx) override {

@@ -201,7 +201,7 @@ TEST(ParserTest, testParse) {
     {
       auto pq = SparqlParser(
                     "PREFIX : <>\n"
-                    "SELECT ?x ?y ?z TEXT(?c) SCORE(?c) ?c WHERE {\n"
+                    "SELECT ?x ?y ?z ?c ?ql_textscore_c ?c WHERE {\n"
                     "?x :is-a :Politician .\n"
                     "?c ql:contains-entity ?x .\n"
                     "?c ql:contains-word \"friend\" .\n"
@@ -1089,7 +1089,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_TRUE(pq.hasSelectClause());
     const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, selectClause._aliases.size());
-    ASSERT_EQ("(group_concat(?r;SEPARATOR=\"Cake\") as ?concat)",
+    ASSERT_EQ("(GROUP_CONCAT(?r;SEPARATOR=\"Cake\") as ?concat)",
               selectClause._aliases[0].getDescriptor());
   }
 }
@@ -1105,7 +1105,7 @@ TEST(ParserTest, testGroupByAndAlias) {
   ASSERT_EQ("?count", selectClause._varsOrAsterisk.getSelectedVariables()[0]);
   ASSERT_EQ(1u, selectClause._aliases.size());
   ASSERT_TRUE(selectClause._aliases[0]._expression.isAggregate({}));
-  ASSERT_EQ("(count(?a) as ?count)", selectClause._aliases[0].getDescriptor());
+  ASSERT_EQ("(COUNT(?a) as ?count)", selectClause._aliases[0].getDescriptor());
   EXPECT_THAT(pq, GroupByVariablesMatch<vector<string>>({"?b"}));
 }
 
