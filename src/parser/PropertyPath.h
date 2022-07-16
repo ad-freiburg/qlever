@@ -1,6 +1,6 @@
 // Copyright 2022, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
+// Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 #pragma once
 
 #include <initializer_list>
@@ -90,11 +90,7 @@ class PropertyPath {
     return makeWithChildren({std::move(child)}, Operation::TRANSITIVE);
   }
 
-  bool operator==(const PropertyPath& other) const {
-    return _operation == other._operation && _limit == other._limit &&
-           _iri == other._iri && _children == other._children &&
-           _can_be_null == other._can_be_null;
-  }
+  bool operator==(const PropertyPath& other) const = default;
 
   void writeToStream(std::ostream& out) const;
   [[nodiscard]] std::string asString() const;

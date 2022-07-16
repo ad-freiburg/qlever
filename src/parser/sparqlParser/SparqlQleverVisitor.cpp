@@ -99,6 +99,8 @@ PathTuples SparqlQleverVisitor::visitTypesafe(
     ad_utility::sparql_types::VarOrPath predicate =
         std::move(verbPathOrSimples.at(i));
     for (auto& object : objectLists.at(i).first) {
+      // TODO The fulltext index should perform the splitting of its keywords,
+      //  and not the SparqlParser.
       if (PropertyPath* path = std::get_if<PropertyPath>(&predicate)) {
         if (path->asString() == CONTAINS_WORD_PREDICATE ||
             // TODO _NS no longer needed?

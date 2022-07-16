@@ -1,3 +1,6 @@
+// Copyright 2022, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 #include "PropertyPath.h"
 
 // _____________________________________________________________________________

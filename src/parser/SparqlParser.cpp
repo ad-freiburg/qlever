@@ -369,6 +369,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         if (Variable* object = std::get_if<Variable>(&get<2>(triple))) {
           query->registerVariableVisibleInQueryBody(object->name());
         }
+        // TODO SparqlTriple and PathTriple should be merged into one type.
         SparqlTriple sparqlTriple = {varOrTerm(get<0>(triple)),
                                      varOrPath(get<1>(triple)),
                                      varOrTerm(get<2>(triple))};

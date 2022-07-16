@@ -890,88 +890,73 @@ TEST(SparqlParser, ValuesClause) {
 }
 
 TEST(SparqlParser, propertyPaths) {
-  auto expectVerbPathOrSimple =
-      [](const string& input,
-         const ad_utility::sparql_types::VarOrPath& expected,
-         SparqlQleverVisitor::PrefixMap prefixMap = {}) {
-        expectCompleteParse(parseVerbPathOrSimple(input, std::move(prefixMap)),
-                            IsPropertyPath(expected));
-      };
+  auto expectPathOrVar = [](const string& input,
+                            const ad_utility::sparql_types::VarOrPath& expected,
+                            SparqlQleverVisitor::PrefixMap prefixMap = {}) {
+    expectCompleteParse(parseVerbPathOrSimple(input, std::move(prefixMap)),
+                        testing::Eq(expected));
+  };
+  auto Iri = &PropertyPath::fromIri;
+  auto Sequence = &PropertyPath::makeSequence;
+  auto Alternative = &PropertyPath::makeAlternative;
+  auto Transitive = &PropertyPath::makeTransitive;
+  auto TransitiveMin = &PropertyPath::makeTransitiveMin;
+  auto TransitiveMax = &PropertyPath::makeTransitiveMax;
   // Test all the base cases.
   // "a" is a special case. It is a valid PropertyPath.
   // It is short for "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>".
-  expectVerbPathOrSimple(
-      "a", PropertyPath::fromIri(
-               "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"));
+  expectPathOrVar("a",
+                  Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"));
   EXPECT_THROW(parseVerbPathOrSimple("b", {}), std::runtime_error);
-  expectVerbPathOrSimple("test:foo",
-                         PropertyPath::fromIri("<http://www.example.com/foo>"),
-                         {{"test", "<http://www.example.com/>"}});
-  expectVerbPathOrSimple("?bar", Variable{"?bar"});
-  expectVerbPathOrSimple(":",
-                         PropertyPath::fromIri("<http://www.example.com/>"),
-                         {{"", "<http://www.example.com/>"}});
-  expectVerbPathOrSimple(
-      "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
-      PropertyPath::fromIri(
-          "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"));
+  expectPathOrVar("test:foo", Iri("<http://www.example.com/foo>"),
+                  {{"test", "<http://www.example.com/>"}});
+  expectPathOrVar("?bar", Variable{"?bar"});
+  expectPathOrVar(":", Iri("<http://www.example.com/>"),
+                  {{"", "<http://www.example.com/>"}});
+  expectPathOrVar("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
+                  Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"));
   // Test the basic combinators / | (...) + * ?.
-  expectVerbPathOrSimple(
-      "a:a / a:b",
-      PropertyPath::makeSequence(
-          {PropertyPath::fromIri("<http://www.example.com/a>"),
-           PropertyPath::fromIri("<http://www.example.com/b>")}),
-      {{"a", "<http://www.example.com/>"}});
-  expectVerbPathOrSimple(
-      "a:a | a:b",
-      PropertyPath::makeAlternative(
-          {PropertyPath::fromIri("<http://www.example.com/a>"),
-           PropertyPath::fromIri("<http://www.example.com/b>")}),
-      {{"a", "<http://www.example.com/>"}});
-  expectVerbPathOrSimple(
-      "(a:a)",
-      PropertyPath(PropertyPath::fromIri("<http://www.example.com/a>")),
-      {{"a", "<http://www.example.com/>"}});
-  expectVerbPathOrSimple(
-      "a:a+",
-      PropertyPath::makeTransitiveMin(
-          {PropertyPath::fromIri("<http://www.example.com/a>")}, 1),
-      {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("a:a / a:b",
+                  Sequence({Iri("<http://www.example.com/a>"),
+                            Iri("<http://www.example.com/b>")}),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("a:a | a:b",
+                  Alternative({Iri("<http://www.example.com/a>"),
+                               Iri("<http://www.example.com/b>")}),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("(a:a)", Iri("<http://www.example.com/a>"),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("a:a+", TransitiveMin({Iri("<http://www.example.com/a>")}, 1),
+                  {{"a", "<http://www.example.com/>"}});
   {
-    PropertyPath expected = PropertyPath::makeTransitiveMax(
-        {PropertyPath::fromIri("<http://www.example.com/a>")}, 1);
+    PropertyPath expected =
+        TransitiveMax({Iri("<http://www.example.com/a>")}, 1);
     expected._can_be_null = true;
-    expectVerbPathOrSimple("a:a?", expected,
-                           {{"a", "<http://www.example.com/>"}});
+    expectPathOrVar("a:a?", expected, {{"a", "<http://www.example.com/>"}});
   }
   {
-    PropertyPath expected = PropertyPath::makeTransitive(
-        {PropertyPath::fromIri("<http://www.example.com/a>")});
+    PropertyPath expected = Transitive({Iri("<http://www.example.com/a>")});
     expected._can_be_null = true;
-    expectVerbPathOrSimple("a:a*", expected,
-                           {{"a", "<http://www.example.com/>"}});
+    expectPathOrVar("a:a*", expected, {{"a", "<http://www.example.com/>"}});
   }
   // Test a bigger example that contains everything.
   {
-    PropertyPath expected = PropertyPath::makeAlternative(
-        {PropertyPath::makeSequence({
-             PropertyPath::fromIri("<http://www.example.com/a/a>"),
-             PropertyPath::makeTransitive(
-                 {PropertyPath::fromIri("<http://www.example.com/b/b>")}),
+    PropertyPath expected = Alternative(
+        {Sequence({
+             Iri("<http://www.example.com/a/a>"),
+             Transitive({Iri("<http://www.example.com/b/b>")}),
          }),
-         PropertyPath::fromIri("<http://www.example.com/c/c>"),
-         PropertyPath::makeTransitiveMin(
-             {PropertyPath::makeSequence(
-                 {PropertyPath::fromIri("<http://www.example.com/a/a>"),
-                  PropertyPath::fromIri("<http://www.example.com/b/b>"),
-                  PropertyPath::fromIri("<a/b/c>")})},
+         Iri("<http://www.example.com/c/c>"),
+         TransitiveMin(
+             {Sequence({Iri("<http://www.example.com/a/a>"),
+                        Iri("<http://www.example.com/b/b>"), Iri("<a/b/c>")})},
              1)});
     expected.computeCanBeNull();
     expected._can_be_null = false;
-    expectVerbPathOrSimple("a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+", expected,
-                           {{"a", "<http://www.example.com/a/>"},
-                            {"b", "<http://www.example.com/b/>"},
-                            {"c", "<http://www.example.com/c/>"}});
+    expectPathOrVar("a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+", expected,
+                    {{"a", "<http://www.example.com/a/>"},
+                     {"b", "<http://www.example.com/b/>"},
+                     {"c", "<http://www.example.com/c/>"}});
   }
 }
 
@@ -985,18 +970,19 @@ void expectPropertyListPathFails(const string& input) {
 TEST(SparqlParser, propertyListPathNotEmpty) {
   auto expectPropertyListPath =
       [](const string& input,
-         const std::vector<ad_utility::sparql_types::PathTuple>& expected) {
+         const std::vector<ad_utility::sparql_types::PredicateAndObject>&
+             expected) {
         expectCompleteParse(parsePropertyListPathNotEmpty(input, {}),
-                            IsPropertyListPathNotEmpty(expected));
+                            testing::Eq(expected));
       };
-  expectPropertyListPath("<bar> ?foo",
-                         {{PropertyPath::fromIri("<bar>"), Variable{"?foo"}}});
-  expectPropertyListPath("<bar> ?foo ; <mehr> ?f",
-                         {{PropertyPath::fromIri("<bar>"), Variable{"?foo"}},
-                          {PropertyPath::fromIri("<mehr>"), Variable{"?f"}}});
-  expectPropertyListPath("<bar> ?foo , ?baz",
-                         {{PropertyPath::fromIri("<bar>"), Variable{"?foo"}},
-                          {PropertyPath::fromIri("<bar>"), Variable{"?baz"}}});
+  auto Iri = &PropertyPath::fromIri;
+  expectPropertyListPath("<bar> ?foo", {{Iri("<bar>"), Variable{"?foo"}}});
+  expectPropertyListPath(
+      "<bar> ?foo ; <mehr> ?f",
+      {{Iri("<bar>"), Variable{"?foo"}}, {Iri("<mehr>"), Variable{"?f"}}});
+  expectPropertyListPath(
+      "<bar> ?foo , ?baz",
+      {{Iri("<bar>"), Variable{"?foo"}}, {Iri("<bar>"), Variable{"?baz"}}});
   // Currently unsupported by QLever
   expectPropertyListPathFails("<bar> ( ?foo ?baz )");
   expectPropertyListPathFails("<bar> [ <foo> ?bar ]");
@@ -1010,31 +996,27 @@ void expectTriplesSameSubjectPathFails(const string& input) {
 }  // namespace
 
 TEST(SparqlParser, triplesSameSubjectPath) {
-  auto expectTriplesSameSubjectPath =
+  auto expectTriples =
       [](const string& input,
          const std::vector<ad_utility::sparql_types::PathTriple>& triples) {
         expectCompleteParse(parseTriplesSameSubjectPath(input, {}),
-                            IsTriplesSameSubjectPath(triples));
+                            testing::Eq(triples));
       };
-  expectTriplesSameSubjectPath(
-      "?foo <bar> ?baz",
-      {{Variable{"?foo"}, PropertyPath::fromIri("<bar>"), Variable{"?baz"}}});
-  expectTriplesSameSubjectPath(
-      "?foo <bar> ?baz ; <mehr> ?t",
-      {{Variable{"?foo"}, PropertyPath::fromIri("<bar>"), Variable{"?baz"}},
-       {Variable{"?foo"}, PropertyPath::fromIri("<mehr>"), Variable{"?t"}}});
-  expectTriplesSameSubjectPath(
-      "?foo <bar> ?baz , ?t",
-      {{Variable{"?foo"}, PropertyPath::fromIri("<bar>"), Variable{"?baz"}},
-       {Variable{"?foo"}, PropertyPath::fromIri("<bar>"), Variable{"?t"}}});
-  expectTriplesSameSubjectPath(
-      "?foo <bar> ?baz , ?t ; <mehr> ?d",
-      {{Variable{"?foo"}, PropertyPath::fromIri("<bar>"), Variable{"?baz"}},
-       {Variable{"?foo"}, PropertyPath::fromIri("<bar>"), Variable{"?t"}},
-       {Variable{"?foo"}, PropertyPath::fromIri("<mehr>"), Variable{"?d"}}});
-  expectTriplesSameSubjectPath(
-      "?foo <bar> ?baz ; <mehr> ?t , ?d",
-      {{Variable{"?foo"}, PropertyPath::fromIri("<bar>"), Variable{"?baz"}},
-       {Variable{"?foo"}, PropertyPath::fromIri("<mehr>"), Variable{"?t"}},
-       {Variable{"?foo"}, PropertyPath::fromIri("<mehr>"), Variable{"?d"}}});
+  auto Iri = &PropertyPath::fromIri;
+  using Var = Variable;
+  expectTriples("?foo <bar> ?baz", {{Var{"?foo"}, Iri("<bar>"), Var{"?baz"}}});
+  expectTriples("?foo <bar> ?baz ; <mehr> ?t",
+                {{Var{"?foo"}, Iri("<bar>"), Var{"?baz"}},
+                 {Var{"?foo"}, Iri("<mehr>"), Var{"?t"}}});
+  expectTriples("?foo <bar> ?baz , ?t",
+                {{Var{"?foo"}, Iri("<bar>"), Var{"?baz"}},
+                 {Var{"?foo"}, Iri("<bar>"), Var{"?t"}}});
+  expectTriples("?foo <bar> ?baz , ?t ; <mehr> ?d",
+                {{Var{"?foo"}, Iri("<bar>"), Var{"?baz"}},
+                 {Var{"?foo"}, Iri("<bar>"), Var{"?t"}},
+                 {Var{"?foo"}, Iri("<mehr>"), Var{"?d"}}});
+  expectTriples("?foo <bar> ?baz ; <mehr> ?t , ?d",
+                {{Var{"?foo"}, Iri("<bar>"), Var{"?baz"}},
+                 {Var{"?foo"}, Iri("<mehr>"), Var{"?t"}},
+                 {Var{"?foo"}, Iri("<mehr>"), Var{"?d"}}});
 }

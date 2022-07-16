@@ -71,7 +71,5 @@ class Variable {
   // ___________________________________________________________________________
   [[nodiscard]] const std::string& name() const { return _name; }
 
-  inline bool operator==(const Variable& other) const {
-    return name() == other.name();
-  }
+  bool operator==(const Variable& other) const = default;
 };

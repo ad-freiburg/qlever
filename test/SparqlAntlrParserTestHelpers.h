@@ -255,16 +255,3 @@ MATCHER_P2(IsValues, vars, values, "") {
   return (arg.value()._inlineValues._variables == vars) &&
          (arg.value()._inlineValues._values == values);
 }
-
-// A trivial matcher for PropertyPaths because e.g. expectCompleteParse needs
-// a matcher.
-MATCHER_P(IsPropertyPath, propertyPath, "") { return arg == propertyPath; }
-
-// Trivial matcher for PathTuples for use e.g. with expectCompleteParse
-MATCHER_P(IsPropertyListPathNotEmpty, propertyListPath, "") {
-  return arg == propertyListPath;
-}
-
-// Trivial matcher for vector<SparqlTriples> for use e.g. with
-// expectCompleteParse
-MATCHER_P(IsTriplesSameSubjectPath, triples, "") { return arg == triples; }

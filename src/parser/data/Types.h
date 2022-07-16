@@ -15,8 +15,8 @@ namespace ad_utility::sparql_types {
 using Objects = std::vector<VarOrTerm>;
 using Tuples = std::vector<std::array<VarOrTerm, 2>>;
 using VarOrPath = std::variant<Variable, PropertyPath>;
-using PathTuple = std::pair<VarOrPath, VarOrTerm>;
-using PathTuples = std::vector<PathTuple>;
+using PredicateAndObject = std::pair<VarOrPath, VarOrTerm>;
+using PathTuples = std::vector<PredicateAndObject>;
 using Triples = std::vector<std::array<VarOrTerm, 3>>;
 using PathTriple = std::tuple<VarOrTerm, VarOrPath, VarOrTerm>;
 using Node = std::pair<VarOrTerm, Triples>;
