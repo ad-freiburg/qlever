@@ -43,6 +43,7 @@ class Reversed {
 class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   using Objects = ad_utility::sparql_types::Objects;
   using Tuples = ad_utility::sparql_types::Tuples;
+  using PredicateAndObject = ad_utility::sparql_types::PredicateAndObject;
   using PathTuples = ad_utility::sparql_types::PathTuples;
   using PathTriple = ad_utility::sparql_types::PathTriple;
   using Triples = ad_utility::sparql_types::Triples;
@@ -684,6 +685,20 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     }
     return triples;
   }
+
+  antlrcpp::Any visitTupleWithoutPath(
+      SparqlAutomaticParser::TupleWithoutPathContext* ctx) override {
+    return visitTypesafe(ctx);
+  }
+
+  PathTuples visitTypesafe(SparqlAutomaticParser::TupleWithoutPathContext* ctx);
+
+  antlrcpp::Any visitTupleWithPath(
+      SparqlAutomaticParser::TupleWithPathContext* ctx) override {
+    return visitTypesafe(ctx);
+  }
+
+  PathTuples visitTypesafe(SparqlAutomaticParser::TupleWithPathContext* ctx);
 
   void throwCollectionsAndBlankNodePathsNotSupported(auto* ctx) {
     throw ParseException(

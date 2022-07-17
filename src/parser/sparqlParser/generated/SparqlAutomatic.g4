@@ -252,7 +252,7 @@ propertyListPath
     ;
 
 propertyListPathNotEmpty
-    : verbPathOrSimple objectListPath ( ';' ( verbPathOrSimple objectList )? )*
+    : tupleWithPath ( ';' ( tupleWithoutPath )? )*
     ;
 
 verbPath
@@ -261,6 +261,14 @@ verbPath
 
 verbSimple
     : var
+    ;
+
+tupleWithoutPath
+    : verbPathOrSimple objectList
+    ;
+
+tupleWithPath
+    : verbPathOrSimple objectListPath
     ;
 
 /*

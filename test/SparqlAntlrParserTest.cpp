@@ -1002,21 +1002,27 @@ TEST(SparqlParser, triplesSameSubjectPath) {
         expectCompleteParse(parseTriplesSameSubjectPath(input, {}),
                             testing::Eq(triples));
       };
-  auto Iri = &PropertyPath::fromIri;
+  auto PathIri = &PropertyPath::fromIri;
   using Var = Variable;
-  expectTriples("?foo <bar> ?baz", {{Var{"?foo"}, Iri("<bar>"), Var{"?baz"}}});
+  expectTriples("?foo <bar> ?baz",
+                {{Var{"?foo"}, PathIri("<bar>"), Var{"?baz"}}});
   expectTriples("?foo <bar> ?baz ; <mehr> ?t",
-                {{Var{"?foo"}, Iri("<bar>"), Var{"?baz"}},
-                 {Var{"?foo"}, Iri("<mehr>"), Var{"?t"}}});
+                {{Var{"?foo"}, PathIri("<bar>"), Var{"?baz"}},
+                 {Var{"?foo"}, PathIri("<mehr>"), Var{"?t"}}});
   expectTriples("?foo <bar> ?baz , ?t",
-                {{Var{"?foo"}, Iri("<bar>"), Var{"?baz"}},
-                 {Var{"?foo"}, Iri("<bar>"), Var{"?t"}}});
+                {{Var{"?foo"}, PathIri("<bar>"), Var{"?baz"}},
+                 {Var{"?foo"}, PathIri("<bar>"), Var{"?t"}}});
   expectTriples("?foo <bar> ?baz , ?t ; <mehr> ?d",
-                {{Var{"?foo"}, Iri("<bar>"), Var{"?baz"}},
-                 {Var{"?foo"}, Iri("<bar>"), Var{"?t"}},
-                 {Var{"?foo"}, Iri("<mehr>"), Var{"?d"}}});
+                {{Var{"?foo"}, PathIri("<bar>"), Var{"?baz"}},
+                 {Var{"?foo"}, PathIri("<bar>"), Var{"?t"}},
+                 {Var{"?foo"}, PathIri("<mehr>"), Var{"?d"}}});
   expectTriples("?foo <bar> ?baz ; <mehr> ?t , ?d",
-                {{Var{"?foo"}, Iri("<bar>"), Var{"?baz"}},
-                 {Var{"?foo"}, Iri("<mehr>"), Var{"?t"}},
-                 {Var{"?foo"}, Iri("<mehr>"), Var{"?d"}}});
+                {{Var{"?foo"}, PathIri("<bar>"), Var{"?baz"}},
+                 {Var{"?foo"}, PathIri("<mehr>"), Var{"?t"}},
+                 {Var{"?foo"}, PathIri("<mehr>"), Var{"?d"}}});
+  expectTriples("<foo> <bar> ?baz ; ?mehr \"a\"",
+                {{Iri("<foo>"), PathIri("<bar>"), Var{"?baz"}},
+                 {Iri("<foo>"), Var("?mehr"), Literal("\"a\"")}});
+  expectTriples("_:1 <bar> ?baz",
+                {{BlankNode(false, "1"), PathIri("<bar>"), Var{"?baz"}}});
 }

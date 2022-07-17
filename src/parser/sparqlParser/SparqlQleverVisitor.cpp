@@ -81,39 +81,50 @@ constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
 
 // ___________________________________________________________________________
 using PathTuples = ad_utility::sparql_types::PathTuples;
+using VarOrPath = ad_utility::sparql_types::VarOrPath;
+using ObjectList = ad_utility::sparql_types::ObjectList;
 PathTuples SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PropertyListPathNotEmptyContext* ctx) {
-  PathTuples tuples;
-  vector<ad_utility::sparql_types::VarOrPath> verbPathOrSimples =
-      visitVector<ad_utility::sparql_types::VarOrPath>(ctx->verbPathOrSimple());
-  vector<ObjectList> objectLists = visitVector<ObjectList>(ctx->objectList());
-  // The predicates are one vector. The objects are split up into a single
-  // object and a vector. Join them into a single vector.
-  objectLists.insert(objectLists.begin(), visitTypesafe(ctx->objectListPath()));
-
-  AD_CHECK_EQ(verbPathOrSimples.size(),
-              objectLists.size());  // number of verbPathOrSimple
-  // must be equal to length of objectList + objectListPath
-  // TODO use zip-style approach once C++ supports ranges
-  for (size_t i = 0; i < verbPathOrSimples.size(); i++) {
-    ad_utility::sparql_types::VarOrPath predicate =
-        std::move(verbPathOrSimples.at(i));
-    for (auto& object : objectLists.at(i).first) {
-      // TODO The fulltext index should perform the splitting of its keywords,
-      //  and not the SparqlParser.
-      if (PropertyPath* path = std::get_if<PropertyPath>(&predicate)) {
-        if (path->asString() == CONTAINS_WORD_PREDICATE ||
-            // TODO _NS no longer needed?
-            path->asString() == CONTAINS_WORD_PREDICATE_NS) {
-          if (const Literal* literal =
-                  unwrapVariant<VarOrTerm, GraphTerm, Literal>(object)) {
-            object =
-                Literal{stripAndLowercaseKeywordLiteral(literal->literal())};
-          }
-        }
-      }
-      tuples.push_back({predicate, std::move(object)});
-    }
+  PathTuples tuples = visitTypesafe(ctx->tupleWithPath());
+  vector<PathTuples> tuplesWithoutPaths =
+      visitVector<PathTuples>(ctx->tupleWithoutPath());
+  for (auto& tuplesWithoutPath : tuplesWithoutPaths) {
+    tuples.insert(tuples.end(), tuplesWithoutPath.begin(),
+                  tuplesWithoutPath.end());
   }
   return tuples;
+}
+
+PathTuples joinPredicateAndObject(VarOrPath predicate, ObjectList objectList) {
+  PathTuples tuples;
+  for (auto& object : objectList.first) {
+    // TODO The fulltext index should perform the splitting of its keywords,
+    //  and not the SparqlParser.
+    if (PropertyPath* path = std::get_if<PropertyPath>(&predicate)) {
+      if (path->asString() == CONTAINS_WORD_PREDICATE ||
+          // TODO _NS no longer needed?
+          path->asString() == CONTAINS_WORD_PREDICATE_NS) {
+        if (const Literal* literal =
+                unwrapVariant<VarOrTerm, GraphTerm, Literal>(object)) {
+          object = Literal{stripAndLowercaseKeywordLiteral(literal->literal())};
+        }
+      }
+    }
+    tuples.push_back({predicate, std::move(object)});
+  }
+  return tuples;
+}
+
+PathTuples SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::TupleWithoutPathContext* ctx) {
+  VarOrPath predicate = visitTypesafe(ctx->verbPathOrSimple());
+  ObjectList objectList = visitTypesafe(ctx->objectList());
+  return joinPredicateAndObject(predicate, objectList);
+}
+
+PathTuples SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::TupleWithPathContext* ctx) {
+  VarOrPath predicate = visitTypesafe(ctx->verbPathOrSimple());
+  ObjectList objectList = visitTypesafe(ctx->objectListPath());
+  return joinPredicateAndObject(predicate, objectList);
 }
