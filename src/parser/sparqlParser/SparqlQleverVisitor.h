@@ -343,13 +343,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   std::optional<GraphPatternOperation::Values> visitTypesafe(
-      SparqlAutomaticParser::ValuesClauseContext* ctx) {
-    if (ctx->dataBlock()) {
-      return visitTypesafe(ctx->dataBlock());
-    } else {
-      return std::nullopt;
-    }
-  }
+      SparqlAutomaticParser::ValuesClauseContext* ctx);
 
   antlrcpp::Any visitTriplesTemplate(
       SparqlAutomaticParser::TriplesTemplateContext* ctx) override {
@@ -399,8 +393,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitInlineData(
       SparqlAutomaticParser::InlineDataContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  GraphPatternOperation::Values visitTypesafe(
+      SparqlAutomaticParser::InlineDataContext* ctx);
 
   antlrcpp::Any visitDataBlock(
       SparqlAutomaticParser::DataBlockContext* ctx) override {
@@ -408,16 +405,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   GraphPatternOperation::Values visitTypesafe(
-      SparqlAutomaticParser::DataBlockContext* ctx) {
-    if (ctx->inlineDataOneVar()) {
-      return GraphPatternOperation::Values{
-          std::move(visit(ctx->inlineDataOneVar()).as<SparqlValues>())};
-    } else if (ctx->inlineDataFull()) {
-      return GraphPatternOperation::Values{
-          std::move(visit(ctx->inlineDataFull()).as<SparqlValues>())};
-    }
-    AD_FAIL()  // Should be unreachable.
-  }
+      SparqlAutomaticParser::DataBlockContext* ctx);
 
   antlrcpp::Any visitInlineDataOneVar(
       SparqlAutomaticParser::InlineDataOneVarContext* ctx) override {

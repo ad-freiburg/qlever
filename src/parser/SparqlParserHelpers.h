@@ -98,9 +98,9 @@ ResultOfParseAndRemainingText<vector<OrderKey>> parseOrderClause(
 ResultOfParseAndRemainingText<vector<GroupKey>> parseGroupClause(
     const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
 
-ResultOfParseAndRemainingText<std::optional<GraphPatternOperation::Values>>
-parseValuesClause(const std::string& input,
-                  SparqlQleverVisitor::PrefixMap prefixes);
+ResultOfParseAndRemainingText<GraphPatternOperation::Values>
+parseInlineDataClause(const std::string& input,
+                      SparqlQleverVisitor::PrefixMap prefixes);
 
 ResultOfParseAndRemainingText<PropertyPath> parseVerbPathOrSimple(
     const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);

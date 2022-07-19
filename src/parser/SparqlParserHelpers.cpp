@@ -93,12 +93,12 @@ ResultOfParseAndRemainingText<vector<GroupKey>> parseGroupClause(
 }
 // _____________________________________________________________________________
 
-ResultOfParseAndRemainingText<std::optional<GraphPatternOperation::Values>>
-parseValuesClause(const std::string& input,
-                  SparqlQleverVisitor::PrefixMap prefixes) {
+ResultOfParseAndRemainingText<GraphPatternOperation::Values>
+parseInlineDataClause(const std::string& input,
+                      SparqlQleverVisitor::PrefixMap prefixes) {
   ParserAndVisitor p{input, std::move(prefixes)};
-  return p.parseTypesafe(input, "values clause",
-                         &SparqlAutomaticParser::valuesClause);
+  return p.parseTypesafe(input, "inline data",
+                         &SparqlAutomaticParser::inlineData);
 }
 // _____________________________________________________________________________
 

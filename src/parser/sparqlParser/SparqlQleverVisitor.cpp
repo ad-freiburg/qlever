@@ -115,3 +115,32 @@ Variable SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::VarContext* ctx) {
   return Variable{ctx->getText()};
 }
+
+// ____________________________________________________________________________________
+GraphPatternOperation::Values SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::InlineDataContext* ctx) {
+  return visitTypesafe(ctx->dataBlock());
+}
+
+// ____________________________________________________________________________________
+GraphPatternOperation::Values SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::DataBlockContext* ctx) {
+  if (ctx->inlineDataOneVar()) {
+    return GraphPatternOperation::Values{
+        std::move(visit(ctx->inlineDataOneVar()).as<SparqlValues>())};
+  } else if (ctx->inlineDataFull()) {
+    return GraphPatternOperation::Values{
+        std::move(visit(ctx->inlineDataFull()).as<SparqlValues>())};
+  }
+  AD_FAIL()  // Should be unreachable.
+}
+
+// ____________________________________________________________________________________
+std::optional<GraphPatternOperation::Values> SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::ValuesClauseContext* ctx) {
+  if (ctx->dataBlock()) {
+    return visitTypesafe(ctx->dataBlock());
+  } else {
+    return std::nullopt;
+  }
+}
