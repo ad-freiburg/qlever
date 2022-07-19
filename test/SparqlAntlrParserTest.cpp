@@ -856,37 +856,41 @@ TEST(SparqlParser, GroupClause) {
 
 namespace {
 template <typename Exception = ParseException>
-void expectValuesFails(const string& input) {
-  EXPECT_THROW(parseValuesClause(input, {}), Exception) << input;
+void expectInlineDataFails(const string& input) {
+  EXPECT_THROW(parseInlineDataClause(input, {}), Exception) << input;
 }
 }  // namespace
 
-TEST(SparqlParser, ValuesClause) {
-  auto expectValue = [](const string& input, const vector<string>& expectedVars,
-                        const vector<vector<string>>& expectedVals) {
-    expectCompleteParse(parseValuesClause(input, {}),
-                        IsValues(expectedVars, expectedVals));
+TEST(SparqlParser, InlineData) {
+  auto expectInlineData = [](const string& input,
+                             const vector<string>& expectedVars,
+                             const vector<vector<string>>& expectedVals) {
+    expectCompleteParse(parseInlineDataClause(input, {}),
+                        IsInlineData(expectedVars, expectedVals));
   };
-  expectValue("VALUES ?test { \"foo\" }", {"?test"}, {{"\"foo\""}});
+  expectInlineData("VALUES ?test { \"foo\" }", {"?test"}, {{"\"foo\""}});
   // These are not implemented yet in dataBlockValue
   // (numericLiteral/booleanLiteral)
-  expectValuesFails("VALUES ?test { true }");
-  expectValuesFails("VALUES ?test { 10.0 }");
-  expectValuesFails("VALUES ?test { UNDEF }");
-  expectValue(R"(VALUES ?foo { "baz" "bar" })", {"?foo"},
-              {{"\"baz\""}, {"\"bar\""}});
-  expectValuesFails(R"(VALUES ( ) { })");
-  expectValuesFails(R"(VALUES ?foo { })");
-  expectValuesFails(R"(VALUES ( ?foo ) { })");
-  expectValuesFails(R"(VALUES ( ?foo ?bar ) { (<foo>) (<bar>) })");
-  expectValue(R"(VALUES ( ?foo ?bar ) { (<foo> <bar>) })", {"?foo", "?bar"},
-              {{"<foo>", "<bar>"}});
-  expectValue(R"(VALUES ( ?foo ?bar ) { (<foo> "m") ("1" <bar>) })",
-              {"?foo", "?bar"}, {{"<foo>", "\"m\""}, {"\"1\"", "<bar>"}});
-  expectValue(R"(VALUES ( ?foo ?bar ) { (<foo> "m") (<bar> <e>) ("1" "f") })",
-              {"?foo", "?bar"},
-              {{"<foo>", "\"m\""}, {"<bar>", "<e>"}, {"\"1\"", "\"f\""}});
-  expectValuesFails(R"(VALUES ( ) { (<foo>) })");
+  expectInlineDataFails("VALUES ?test { true }");
+  expectInlineDataFails("VALUES ?test { 10.0 }");
+  expectInlineDataFails("VALUES ?test { UNDEF }");
+  // There must always be a block present for InlineData
+  expectInlineDataFails<std::runtime_error>("");
+  expectInlineData(R"(VALUES ?foo { "baz" "bar" })", {"?foo"},
+                   {{"\"baz\""}, {"\"bar\""}});
+  expectInlineDataFails(R"(VALUES ( ) { })");
+  expectInlineDataFails(R"(VALUES ?foo { })");
+  expectInlineDataFails(R"(VALUES ( ?foo ) { })");
+  expectInlineDataFails(R"(VALUES ( ?foo ?bar ) { (<foo>) (<bar>) })");
+  expectInlineData(R"(VALUES ( ?foo ?bar ) { (<foo> <bar>) })",
+                   {"?foo", "?bar"}, {{"<foo>", "<bar>"}});
+  expectInlineData(R"(VALUES ( ?foo ?bar ) { (<foo> "m") ("1" <bar>) })",
+                   {"?foo", "?bar"}, {{"<foo>", "\"m\""}, {"\"1\"", "<bar>"}});
+  expectInlineData(
+      R"(VALUES ( ?foo ?bar ) { (<foo> "m") (<bar> <e>) ("1" "f") })",
+      {"?foo", "?bar"},
+      {{"<foo>", "\"m\""}, {"<bar>", "<e>"}, {"\"1\"", "\"f\""}});
+  expectInlineDataFails(R"(VALUES ( ) { (<foo>) })");
 }
 
 TEST(SparqlParser, propertyPaths) {
