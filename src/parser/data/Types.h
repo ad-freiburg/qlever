@@ -18,7 +18,13 @@ using VarOrPath = std::variant<Variable, PropertyPath>;
 using PredicateAndObject = std::pair<VarOrPath, VarOrTerm>;
 using PathTuples = std::vector<PredicateAndObject>;
 using Triples = std::vector<std::array<VarOrTerm, 3>>;
-using PathTriple = std::tuple<VarOrTerm, VarOrPath, VarOrTerm>;
+struct TripleWithPropertyPath {
+  VarOrTerm subject_;
+  VarOrPath predicate_;
+  VarOrTerm object_;
+
+  bool operator==(const TripleWithPropertyPath&) const = default;
+};
 using Node = std::pair<VarOrTerm, Triples>;
 using ObjectList = std::pair<Objects, Triples>;
 using PropertyList = std::pair<Tuples, Triples>;

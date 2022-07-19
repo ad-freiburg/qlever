@@ -998,7 +998,8 @@ void expectTriplesSameSubjectPathFails(const string& input) {
 TEST(SparqlParser, triplesSameSubjectPath) {
   auto expectTriples =
       [](const string& input,
-         const std::vector<ad_utility::sparql_types::PathTriple>& triples) {
+         const std::vector<ad_utility::sparql_types::TripleWithPropertyPath>&
+             triples) {
         expectCompleteParse(parseTriplesSameSubjectPath(input, {}),
                             testing::Eq(triples));
       };

@@ -110,7 +110,8 @@ ResultOfParseAndRemainingText<ad_utility::sparql_types::PathTuples>
 parsePropertyListPathNotEmpty(const std::string& input,
                               SparqlQleverVisitor::PrefixMap prefixes);
 
-ResultOfParseAndRemainingText<vector<ad_utility::sparql_types::PathTriple>>
+ResultOfParseAndRemainingText<
+    vector<ad_utility::sparql_types::TripleWithPropertyPath>>
 parseTriplesSameSubjectPath(const std::string& input,
                             SparqlQleverVisitor::PrefixMap prefixes);
 }  // namespace sparqlParserHelpers

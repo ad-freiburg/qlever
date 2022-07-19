@@ -45,7 +45,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   using Tuples = ad_utility::sparql_types::Tuples;
   using PredicateAndObject = ad_utility::sparql_types::PredicateAndObject;
   using PathTuples = ad_utility::sparql_types::PathTuples;
-  using PathTriple = ad_utility::sparql_types::PathTriple;
+  using TripleWithPropertyPath =
+      ad_utility::sparql_types::TripleWithPropertyPath;
   using Triples = ad_utility::sparql_types::Triples;
   using Node = ad_utility::sparql_types::Node;
   using ObjectList = ad_utility::sparql_types::ObjectList;
@@ -671,9 +672,9 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  vector<PathTriple> visitTypesafe(
+  vector<TripleWithPropertyPath> visitTypesafe(
       SparqlAutomaticParser::TriplesSameSubjectPathContext* ctx) {
-    vector<PathTriple> triples;
+    vector<TripleWithPropertyPath> triples;
     if (ctx->varOrTerm()) {
       auto subject = visitTypesafe(ctx->varOrTerm());
       auto tuples = visitTypesafe(ctx->propertyListPathNotEmpty());

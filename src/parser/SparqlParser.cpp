@@ -356,23 +356,25 @@ void SparqlParser::parseWhere(ParsedQuery* query,
                               varOrPath);
           };
 
-      vector<ad_utility::sparql_types::PathTriple> triples = parseWithAntlr(
-          sparqlParserHelpers::parseTriplesSameSubjectPath, *query);
+      vector<ad_utility::sparql_types::TripleWithPropertyPath> triples =
+          parseWithAntlr(sparqlParserHelpers::parseTriplesSameSubjectPath,
+                         *query);
       auto& v = lastBasicPattern(currentPattern)._whereClauseTriples;
       for (auto& triple : triples) {
-        if (Variable* subject = std::get_if<Variable>(&get<0>(triple))) {
+        if (Variable* subject = std::get_if<Variable>(&triple.subject_)) {
           query->registerVariableVisibleInQueryBody(subject->name());
         }
-        if (Variable* predicate = std::get_if<Variable>(&get<1>(triple))) {
+        if (Variable* predicate = std::get_if<Variable>(&triple.predicate_)) {
           query->registerVariableVisibleInQueryBody(predicate->name());
         }
-        if (Variable* object = std::get_if<Variable>(&get<2>(triple))) {
+        if (Variable* object = std::get_if<Variable>(&triple.object_)) {
           query->registerVariableVisibleInQueryBody(object->name());
         }
-        // TODO SparqlTriple and PathTriple should be merged into one type.
-        SparqlTriple sparqlTriple = {varOrTerm(get<0>(triple)),
-                                     varOrPath(get<1>(triple)),
-                                     varOrTerm(get<2>(triple))};
+        // TODO SparqlTriple and TripleWithPropertyPath should be merged into
+        // one type.
+        SparqlTriple sparqlTriple = {varOrTerm(triple.subject_),
+                                     varOrPath(triple.predicate_),
+                                     varOrTerm(triple.object_)};
         if (std::find(v.begin(), v.end(), sparqlTriple) != v.end()) {
           LOG(INFO) << "Ignoring duplicate triple: " << sparqlTriple._s << ' '
                     << sparqlTriple._p << ' ' << sparqlTriple._o << std::endl;
