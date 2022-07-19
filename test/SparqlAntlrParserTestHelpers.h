@@ -251,7 +251,7 @@ MATCHER_P(GroupByVariablesMatch, vars, "") {
                     [](auto& var, auto& var1) { return var.name() == var1; });
 }
 
-MATCHER_P2(IsInlineData, vars, values, "") {
+MATCHER_P2(IsValues, vars, values, "") {
   return (arg._inlineValues._variables == vars) &&
          (arg._inlineValues._values == values);
 }

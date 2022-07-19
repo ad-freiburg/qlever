@@ -281,7 +281,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       lexer_.accept(".");
     } else if (lexer_.peek("values")) {
       auto values =
-          parseWithAntlr(sparqlParserHelpers::parseInlineDataClause, *query);
+          parseWithAntlr(sparqlParserHelpers::parseInlineData, *query);
       for (const auto& variable : values._inlineValues._variables) {
         query->registerVariableVisibleInQueryBody(variable);
       }

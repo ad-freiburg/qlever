@@ -93,9 +93,16 @@ ResultOfParseAndRemainingText<vector<GroupKey>> parseGroupClause(
 }
 // _____________________________________________________________________________
 
-ResultOfParseAndRemainingText<GraphPatternOperation::Values>
-parseInlineDataClause(const std::string& input,
-                      SparqlQleverVisitor::PrefixMap prefixes) {
+ResultOfParseAndRemainingText<GraphPatternOperation::Values> parseDataBlock(
+    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes) {
+  ParserAndVisitor p{input, std::move(prefixes)};
+  return p.parseTypesafe(input, "data block",
+                         &SparqlAutomaticParser::dataBlock);
+}
+// _____________________________________________________________________________
+
+ResultOfParseAndRemainingText<GraphPatternOperation::Values> parseInlineData(
+    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes) {
   ParserAndVisitor p{input, std::move(prefixes)};
   return p.parseTypesafe(input, "inline data",
                          &SparqlAutomaticParser::inlineData);
