@@ -601,7 +601,7 @@ TEST(SparqlParser, VarOrTermGraphTerm) {
 TEST(SparqlParser, Iri) {
   auto expectIri = [](const string& input, string iri,
                       SparqlQleverVisitor::PrefixMap prefixMap = {}) {
-    // parse by hand here to not pollute the SparqlParserHelpers
+    // Parse "by hand" in order not to pollute the `SparqlParserHelpers`.
     ParserAndVisitor p{input, std::move(prefixMap)};
     expectCompleteParse(
         p.parseTypesafe(input, "iri", &SparqlAutomaticParser::iri),

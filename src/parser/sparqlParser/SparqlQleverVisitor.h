@@ -1446,16 +1446,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  string visitTypesafe(SparqlAutomaticParser::IriContext* ctx) {
-    string langtag =
-        ctx->PREFIX_LANGTAG() ? ctx->PREFIX_LANGTAG()->getText() : "";
-    if (ctx->iriref()) {
-      return langtag + visitIriref(ctx->iriref()).as<string>();
-    } else {
-      AD_CHECK(ctx->prefixedName())
-      return langtag + visitPrefixedName(ctx->prefixedName()).as<string>();
-    }
-  }
+  string visitTypesafe(SparqlAutomaticParser::IriContext* ctx);
 
   antlrcpp::Any visitIriref(
       SparqlAutomaticParser::IrirefContext* ctx) override {

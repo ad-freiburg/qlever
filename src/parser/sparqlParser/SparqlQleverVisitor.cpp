@@ -115,3 +115,16 @@ Variable SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::VarContext* ctx) {
   return Variable{ctx->getText()};
 }
+
+// ____________________________________________________________________________________
+string SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::IriContext* ctx) {
+  string langtag =
+      ctx->PREFIX_LANGTAG() ? ctx->PREFIX_LANGTAG()->getText() : "";
+  if (ctx->iriref()) {
+    return langtag + visitIriref(ctx->iriref()).as<string>();
+  } else {
+    AD_CHECK(ctx->prefixedName())
+    return langtag + visitPrefixedName(ctx->prefixedName()).as<string>();
+  }
+}
