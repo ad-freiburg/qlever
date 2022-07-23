@@ -340,15 +340,23 @@ void SparqlParser::parseWhere(ParsedQuery* query,
     } else {
       // TODO cleanup
       auto var = [](const Variable& var) { return var.name(); };
+      auto iri = [](const Iri& iri) { return TripleComponent{iri.toSparql()}; };
+      auto blankNode = [](const BlankNode& blankNode) -> TripleComponent {
+        return blankNode.toSparql();
+      };
+      auto literal = [](const Literal& literal) {
+        return TurtleStringParser<TokenizerCtre>::parseTripleObject(
+            literal.toSparql());
+      };
+      auto graphTerm1 = [&iri, &blankNode, &literal](const GraphTerm& term) {
+        return term.visit(
+            ad_utility::OverloadCallOperator{iri, blankNode, literal});
+      };
       auto graphTerm = [](const GraphTerm& term) { return term.toSparql(); };
       auto path = [](const PropertyPath& path) { return path.asString(); };
-      auto varOrTerm = [](VarOrTerm varOrTerm) {
-        if (Variable* var = std::get_if<Variable>(&varOrTerm)) {
-          return var->name();
-        } else if (GraphTerm* term = std::get_if<GraphTerm>(&varOrTerm)) {
-          return term->toSparql();
-        }
-        AD_FAIL();  // Should be unreachable
+      auto varOrTerm = [&var, &graphTerm](VarOrTerm varOrTerm) {
+        return varOrTerm.visit(
+            ad_utility::OverloadCallOperator{var, graphTerm});
       };
       auto varOrPath =
           [&var, &path](const ad_utility::sparql_types::VarOrPath& varOrPath) {
