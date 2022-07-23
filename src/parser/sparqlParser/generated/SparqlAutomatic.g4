@@ -551,8 +551,7 @@ string
     ;
 
 iri
-    : (LANGTAG '@')? (iriref
-    | prefixedName)
+    : (PREFIX_LANGTAG)? (iriref | prefixedName)
     ;
 
 prefixedName
@@ -712,6 +711,10 @@ VAR2
 
 LANGTAG
     : '@' ('a'..'z' | 'A' .. 'Z')+ ('-' ('a'..'z' | 'A' .. 'Z' | DIGIT)+)*
+    ;
+
+PREFIX_LANGTAG
+    : LANGTAG '@'
     ;
 
 INTEGER

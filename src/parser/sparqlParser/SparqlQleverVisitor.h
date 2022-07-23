@@ -1443,7 +1443,12 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitIri(SparqlAutomaticParser::IriContext* ctx) override {
-    string langtag = ctx->LANGTAG() ? ctx->LANGTAG()->getText() + '@' : "";
+    return visitTypesafe(ctx);
+  }
+
+  string visitTypesafe(SparqlAutomaticParser::IriContext* ctx) {
+    string langtag =
+        ctx->PREFIX_LANGTAG() ? ctx->PREFIX_LANGTAG()->getText() : "";
     if (ctx->iriref()) {
       return langtag + visitIriref(ctx->iriref()).as<string>();
     } else {

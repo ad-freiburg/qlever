@@ -598,6 +598,29 @@ TEST(SparqlParser, VarOrTermGraphTerm) {
   EXPECT_THAT(varOrTerm, IsIri(nil));
 }
 
+TEST(SparqlParser, Iri) {
+  auto expectIri = [](const string& input, string iri,
+                      SparqlQleverVisitor::PrefixMap prefixMap = {}) {
+    // parse by hand here to not pollute the SparqlParserHelpers
+    ParserAndVisitor p{input, std::move(prefixMap)};
+    expectCompleteParse(
+        p.parseTypesafe(input, "iri", &SparqlAutomaticParser::iri),
+        testing::Eq(std::move(iri)));
+  };
+  expectIri("rdfs:label", "<http://www.w3.org/2000/01/rdf-schema#label>",
+            {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});
+  expectIri(
+      "rdfs:label", "<http://www.w3.org/2000/01/rdf-schema#label>",
+      {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}, {"foo", "<bar#>"}});
+  expectIri("<http://www.w3.org/2000/01/rdf-schema>",
+            "<http://www.w3.org/2000/01/rdf-schema>", {});
+  expectIri("@en@rdfs:label",
+            "@en@<http://www.w3.org/2000/01/rdf-schema#label>",
+            {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});
+  expectIri("@en@<http://www.w3.org/2000/01/rdf-schema>",
+            "@en@<http://www.w3.org/2000/01/rdf-schema>", {});
+}
+
 TEST(SparqlParser, VarOrIriVariable) {
   string input = "?a";
   ParserAndVisitor p{input};
@@ -897,6 +920,12 @@ TEST(SparqlParser, propertyPaths) {
       parseVerbPathOrSimple("a", {}),
       IsPropertyPath(PropertyPath::fromIri(
           "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")));
+  expectCompleteParse(
+      parseVerbPathOrSimple(
+          "@en@rdfs:label",
+          {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}}),
+      IsPropertyPath(PropertyPath::fromIri(
+          "@en@<http://www.w3.org/2000/01/rdf-schema#label>")));
   EXPECT_THROW(parseVerbPathOrSimple("b", {}), std::runtime_error);
   expectCompleteParse(
       parseVerbPathOrSimple("test:foo",
