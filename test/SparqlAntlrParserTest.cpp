@@ -893,7 +893,9 @@ TEST(SparqlParser, DataBlock) {
 namespace {
 template <typename Exception = ParseException>
 void expectInlineDataFails(const string& input) {
-  EXPECT_THROW(parseInlineData(input, {}), Exception) << input;
+  EXPECT_THROW(parseInlineData(input, SparqlQleverVisitor::PrefixMap{}),
+               Exception)
+      << input;
 }
 }  // namespace
 
@@ -901,8 +903,9 @@ TEST(SparqlParser, InlineData) {
   auto expectInlineData = [](const string& input,
                              const vector<string>& expectedVars,
                              const vector<vector<string>>& expectedVals) {
-    expectCompleteParse(parseInlineData(input, {}),
-                        IsValues(expectedVars, expectedVals));
+    expectCompleteParse(
+        parseInlineData(input, SparqlQleverVisitor::PrefixMap{}),
+        IsValues(expectedVars, expectedVals));
   };
   expectInlineData("VALUES ?test { \"foo\" }", {"?test"}, {{"\"foo\""}});
   // There must always be a block present for InlineData

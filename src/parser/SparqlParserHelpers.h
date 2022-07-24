@@ -101,14 +101,23 @@ ResultOfParseAndRemainingText<vector<GroupKey>> parseGroupClause(
 ResultOfParseAndRemainingText<GraphPatternOperation::Values> parseDataBlock(
     const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
 
-ResultOfParseAndRemainingText<GraphPatternOperation::Values> parseInlineData(
-    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
-
 ResultOfParseAndRemainingText<PropertyPath> parseVerbPathOrSimple(
     const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
 
 ResultOfParseAndRemainingText<ParsedQuery::SelectClause> parseSelectClause(
     const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
+
+inline auto parseFront = []<typename ContextType>(
+                             ContextType* (SparqlAutomaticParser::*F)(void),
+                             const std::string& error, const std::string& input,
+                             SparqlQleverVisitor::PrefixMap prefixes) {
+  ParserAndVisitor p{input, std::move(prefixes)};
+  return p.parseTypesafe(input, error, F);
+};
+
+inline auto parseInlineData = std::bind_front(
+    parseFront, &SparqlAutomaticParser::inlineData, "inline data");
+
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H

@@ -101,14 +101,6 @@ ResultOfParseAndRemainingText<GraphPatternOperation::Values> parseDataBlock(
 }
 // _____________________________________________________________________________
 
-ResultOfParseAndRemainingText<GraphPatternOperation::Values> parseInlineData(
-    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes) {
-  ParserAndVisitor p{input, std::move(prefixes)};
-  return p.parseTypesafe(input, "inline data",
-                         &SparqlAutomaticParser::inlineData);
-}
-// _____________________________________________________________________________
-
 ResultOfParseAndRemainingText<PropertyPath> parseVerbPathOrSimple(
     const std::string& input, SparqlQleverVisitor::PrefixMap prefixes) {
   ParserAndVisitor p{input, std::move(prefixes)};
