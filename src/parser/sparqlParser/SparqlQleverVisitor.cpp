@@ -126,11 +126,9 @@ GraphPatternOperation::Values SparqlQleverVisitor::visitTypesafe(
 GraphPatternOperation::Values SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::DataBlockContext* ctx) {
   if (ctx->inlineDataOneVar()) {
-    return GraphPatternOperation::Values{
-        std::move(visit(ctx->inlineDataOneVar()).as<SparqlValues>())};
+    return {visitTypesafe(ctx->inlineDataOneVar())};
   } else if (ctx->inlineDataFull()) {
-    return GraphPatternOperation::Values{
-        std::move(visit(ctx->inlineDataFull()).as<SparqlValues>())};
+    return {visitTypesafe(ctx->inlineDataFull())};
   }
   AD_FAIL()  // Should be unreachable.
 }

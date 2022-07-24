@@ -871,11 +871,13 @@ TEST(SparqlParser, DataBlock) {
   expectDataBlock("?test { \"foo\" }", {"?test"}, {{"\"foo\""}});
   // These are not implemented yet in dataBlockValue
   // (numericLiteral/booleanLiteral)
+  // TODO<joka921/qup42> implement
   expectDataBlockFails("?test { true }");
   expectDataBlockFails("?test { 10.0 }");
   expectDataBlockFails("?test { UNDEF }");
   expectDataBlock(R"(?foo { "baz" "bar" })", {"?foo"},
                   {{"\"baz\""}, {"\"bar\""}});
+  // TODO<joka921/qup42> implement
   expectDataBlockFails(R"(( ) { })");
   expectDataBlockFails(R"(?foo { })");
   expectDataBlockFails(R"(( ?foo ) { })");
@@ -887,6 +889,7 @@ TEST(SparqlParser, DataBlock) {
   expectDataBlock(R"(( ?foo ?bar ) { (<foo> "m") (<bar> <e>) ("1" "f") })",
                   {"?foo", "?bar"},
                   {{"<foo>", "\"m\""}, {"<bar>", "<e>"}, {"\"1\"", "\"f\""}});
+  // TODO<joka921/qup42> implement
   expectDataBlockFails(R"(( ) { (<foo>) })");
 }
 

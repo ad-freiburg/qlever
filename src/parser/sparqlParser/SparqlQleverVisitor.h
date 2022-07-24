@@ -415,7 +415,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   SparqlValues visitTypesafe(
       SparqlAutomaticParser::InlineDataOneVarContext* ctx) {
     SparqlValues values;
-    auto var = visit(ctx->var()).as<Variable>();
+    auto var = visitTypesafe(ctx->var());
     values._variables.push_back(var.name());
     if (ctx->dataBlockValue().empty())
       throw ParseException(
@@ -423,8 +423,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
           "clause. This is not supported by QLever. Got: " +
           ctx->getText());
     for (auto& dataBlockValue : ctx->dataBlockValue()) {
-      values._values.push_back(
-          {std::move(visit(dataBlockValue).as<std::string>())});
+      values._values.push_back({visitTypesafe(dataBlockValue)});
     }
     return values;
   }
@@ -448,7 +447,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
           "clause. This is not supported by QLever. Got: " +
           ctx->getText());
     for (auto& var : ctx->var()) {
-      values._variables.push_back(visit(var).as<Variable>().name());
+      values._variables.push_back(visitTypesafe(var).name());
     }
     values._values = visitVector<vector<std::string>>(ctx->dataBlockSingle());
     if (std::any_of(values._values.begin(), values._values.end(),
