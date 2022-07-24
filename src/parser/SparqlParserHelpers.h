@@ -74,49 +74,46 @@ struct ParserAndVisitor {
 };
 
 // ____________________________________________________________________________
-ResultOfParseAndRemainingText<sparqlExpression::SparqlExpressionPimpl>
-parseExpression(const std::string& input,
-                SparqlQleverVisitor::PrefixMap prefixMap);
-
-// An `alias` in Sparql have the form (<expression> as ?variable).
-ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
-    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
-
-ResultOfParseAndRemainingText<GraphPatternOperation::Bind> parseBind(
-    const std::string& input, SparqlQleverVisitor::PrefixMap prefixMap);
-
-ResultOfParseAndRemainingText<ad_utility::sparql_types::Triples>
-parseConstructTemplate(const std::string& input,
-                       SparqlQleverVisitor::PrefixMap prefixes);
-
-ResultOfParseAndRemainingText<LimitOffsetClause> parseLimitOffsetClause(
-    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
-
-ResultOfParseAndRemainingText<vector<OrderKey>> parseOrderClause(
-    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
-
-ResultOfParseAndRemainingText<vector<GroupKey>> parseGroupClause(
-    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
-
-ResultOfParseAndRemainingText<GraphPatternOperation::Values> parseDataBlock(
-    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
-
-ResultOfParseAndRemainingText<PropertyPath> parseVerbPathOrSimple(
-    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
-
-ResultOfParseAndRemainingText<ParsedQuery::SelectClause> parseSelectClause(
-    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
-
 inline auto parseFront = []<typename ContextType>(
                              ContextType* (SparqlAutomaticParser::*F)(void),
                              const std::string& error, const std::string& input,
-                             SparqlQleverVisitor::PrefixMap prefixes) {
+                             SparqlQleverVisitor::PrefixMap prefixes = {}) {
   ParserAndVisitor p{input, std::move(prefixes)};
   return p.parseTypesafe(input, error, F);
 };
 
 inline auto parseInlineData = std::bind_front(
     parseFront, &SparqlAutomaticParser::inlineData, "inline data");
+
+inline auto parseExpression = std::bind_front(
+    parseFront, &SparqlAutomaticParser::expression, "expression");
+
+inline auto parseBind =
+    std::bind_front(parseFront, &SparqlAutomaticParser::bind, "bind");
+
+inline auto parseConstructTemplate =
+    std::bind_front(parseFront, &SparqlAutomaticParser::constructTemplate,
+                    "construct template");
+
+inline auto parseLimitOffsetClause =
+    std::bind_front(parseFront, &SparqlAutomaticParser::limitOffsetClauses,
+                    "limit offset clause");
+
+inline auto parseOrderClause = std::bind_front(
+    parseFront, &SparqlAutomaticParser::orderClause, "order clause");
+
+inline auto parseGroupClause = std::bind_front(
+    parseFront, &SparqlAutomaticParser::groupClause, "group clause");
+
+inline auto parseDataBlock = std::bind_front(
+    parseFront, &SparqlAutomaticParser::dataBlock, "data block");
+
+inline auto parseVerbPathOrSimple =
+    std::bind_front(parseFront, &SparqlAutomaticParser::verbPathOrSimple,
+                    "verb path or simple");
+
+inline auto parseSelectClause = std::bind_front(
+    parseFront, &SparqlAutomaticParser::selectClause, "selectClause");
 
 }  // namespace sparqlParserHelpers
 

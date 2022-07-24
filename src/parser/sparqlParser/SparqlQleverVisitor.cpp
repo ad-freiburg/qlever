@@ -117,6 +117,13 @@ Variable SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
+GraphPatternOperation::Bind SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::BindContext* ctx) {
+  auto wrapper = makeExpressionPimpl(visit(ctx->expression()));
+  return GraphPatternOperation::Bind{std::move(wrapper), ctx->var()->getText()};
+}
+
+// ____________________________________________________________________________________
 GraphPatternOperation::Values SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::InlineDataContext* ctx) {
   return visitTypesafe(ctx->dataBlock());
@@ -141,4 +148,50 @@ std::optional<GraphPatternOperation::Values> SparqlQleverVisitor::visitTypesafe(
   } else {
     return std::nullopt;
   }
+}
+
+// ____________________________________________________________________________________
+sparqlExpression::SparqlExpression::Ptr SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::ExpressionContext* ctx) {
+  return std::move(visitConditionalOrExpression(ctx->conditionalOrExpression())
+                       .as<sparqlExpression::SparqlExpression::Ptr>());
+}
+
+// ____________________________________________________________________________________
+LimitOffsetClause SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::LimitOffsetClausesContext* ctx) {
+  LimitOffsetClause clause{};
+  if (ctx->limitClause()) {
+    clause._limit =
+        visitLimitClause(ctx->limitClause()).as<unsigned long long>();
+  }
+  if (ctx->offsetClause()) {
+    clause._offset =
+        visitOffsetClause(ctx->offsetClause()).as<unsigned long long>();
+  }
+  if (ctx->textLimitClause()) {
+    clause._textLimit =
+        visitTextLimitClause(ctx->textLimitClause()).as<unsigned long long>();
+  }
+  return clause;
+}
+
+// ____________________________________________________________________________________
+vector<OrderKey> SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::OrderClauseContext* ctx) {
+  return visitVector<OrderKey>(ctx->orderCondition());
+}
+
+// ____________________________________________________________________________________
+vector<GroupKey> SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::GroupClauseContext* ctx) {
+  return visitVector<GroupKey>(ctx->groupCondition());
+}
+
+// ____________________________________________________________________________________
+SparqlQleverVisitor::Triples SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::ConstructTemplateContext* ctx) {
+  return ctx->constructTriples()
+             ? ctx->constructTriples()->accept(this).as<Triples>()
+             : Triples{};
 }

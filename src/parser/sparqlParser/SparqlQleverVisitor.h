@@ -238,8 +238,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitGroupClause(
       SparqlAutomaticParser::GroupClauseContext* ctx) override {
-    return visitVector<GroupKey>(ctx->groupCondition());
+    return visitTypesafe(ctx);
   }
+
+  vector<GroupKey> visitTypesafe(
+      SparqlAutomaticParser::GroupClauseContext* ctx);
 
   antlrcpp::Any visitGroupCondition(
       SparqlAutomaticParser::GroupConditionContext* ctx) override {
@@ -277,8 +280,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitOrderClause(
       SparqlAutomaticParser::OrderClauseContext* ctx) override {
-    return visitVector<OrderKey>(ctx->orderCondition());
+    return visitTypesafe(ctx);
   }
+
+  vector<OrderKey> visitTypesafe(
+      SparqlAutomaticParser::OrderClauseContext* ctx);
 
   antlrcpp::Any visitOrderCondition(
       SparqlAutomaticParser::OrderConditionContext* ctx) override {
@@ -306,21 +312,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitLimitOffsetClauses(
       SparqlAutomaticParser::LimitOffsetClausesContext* ctx) override {
-    LimitOffsetClause clause{};
-    if (ctx->limitClause()) {
-      clause._limit =
-          visitLimitClause(ctx->limitClause()).as<unsigned long long>();
-    }
-    if (ctx->offsetClause()) {
-      clause._offset =
-          visitOffsetClause(ctx->offsetClause()).as<unsigned long long>();
-    }
-    if (ctx->textLimitClause()) {
-      clause._textLimit =
-          visitTextLimitClause(ctx->textLimitClause()).as<unsigned long long>();
-    }
-    return clause;
+    return visitTypesafe(ctx);
   }
+
+  LimitOffsetClause visitTypesafe(
+      SparqlAutomaticParser::LimitOffsetClausesContext* ctx);
 
   antlrcpp::Any visitLimitClause(
       SparqlAutomaticParser::LimitClauseContext* ctx) override {
@@ -386,10 +382,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitBind(SparqlAutomaticParser::BindContext* ctx) override {
-    auto wrapper = makeExpressionPimpl(visit(ctx->expression()));
-    return GraphPatternOperation::Bind{std::move(wrapper),
-                                       ctx->var()->getText()};
+    return visitTypesafe(ctx);
   }
+
+  GraphPatternOperation::Bind visitTypesafe(
+      SparqlAutomaticParser::BindContext* ctx);
 
   antlrcpp::Any visitInlineData(
       SparqlAutomaticParser::InlineDataContext* ctx) override {
@@ -560,9 +557,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitConstructTemplate(
       SparqlAutomaticParser::ConstructTemplateContext* ctx) override {
-    return ctx->constructTriples() ? ctx->constructTriples()->accept(this)
-                                   : Triples{};
+    return visitTypesafe(ctx);
   }
+
+  Triples visitTypesafe(SparqlAutomaticParser::ConstructTemplateContext* ctx);
 
   antlrcpp::Any visitConstructTriples(
       SparqlAutomaticParser::ConstructTriplesContext* ctx) override {
@@ -1004,8 +1002,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitExpression(
       SparqlAutomaticParser::ExpressionContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  sparqlExpression::SparqlExpression::Ptr visitTypesafe(
+      SparqlAutomaticParser::ExpressionContext* ctx);
 
   template <typename Out, typename Ctx>
   std::vector<Out> visitVector(const std::vector<Ctx*>& childContexts) {
@@ -1253,7 +1254,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitBrackettedExpression(
       SparqlAutomaticParser::BrackettedExpressionContext* context) override {
-    return visitExpression(context->expression());
+    return visitTypesafe(context->expression());
   }
 
   antlrcpp::Any visitBuiltInCall(
