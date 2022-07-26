@@ -1460,7 +1460,14 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitRdfLiteral(
       SparqlAutomaticParser::RdfLiteralContext* ctx) override {
-    return ctx->getText();
+    string ret = ctx->string()->getText();
+    if (ctx->LANGTAG()) {
+      ret += ctx->LANGTAG()->getText();
+    } else if (ctx->iri()) {
+      // TODO<qup42> replace with visitTypesafe once #708 is merged
+      ret += ("^^" + visit(ctx->iri()).as<std::string>());
+    }
+    return ret;
   }
 
   antlrcpp::Any visitNumericLiteral(

@@ -338,48 +338,62 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       currentPattern->_children.emplace_back(std::move(values));
       lexer_.accept(".");
     } else {
-      // TODO cleanup
-      auto var = [](const Variable& var) { return var.name(); };
       auto iri = [](const Iri& iri) { return TripleComponent{iri.toSparql()}; };
       auto blankNode = [](const BlankNode& blankNode) -> TripleComponent {
         return blankNode.toSparql();
       };
       auto literal = [](const Literal& literal) {
-        return TurtleStringParser<TokenizerCtre>::parseTripleObject(
-            literal.toSparql());
+        // Problem: ql:contains-word causes the " to be stripped.
+        // TODO: Move stripAndLowercaseKeywordLiteral out to this point or
+        //  rewrite the Turtle Parser s.t. this code can be integrated into the
+        //  visitor. In this case the turtle parser should output the
+        //  corresponding modell class.
+        if (literal.toSparql()[0] == '"') {
+          return TurtleStringParser<TokenizerCtre>::parseTripleObject(
+              literal.toSparql());
+        } else {
+          return TripleComponent{literal.toSparql()};
+        }
       };
-      auto graphTerm1 = [&iri, &blankNode, &literal](const GraphTerm& term) {
+      auto graphTerm = [&iri, &blankNode, &literal](const GraphTerm& term) {
         return term.visit(
             ad_utility::OverloadCallOperator{iri, blankNode, literal});
       };
-      auto graphTerm = [](const GraphTerm& term) { return term.toSparql(); };
-      auto path = [](const PropertyPath& path) { return path.asString(); };
-      auto varOrTerm = [&var, &graphTerm](VarOrTerm varOrTerm) {
-        return varOrTerm.visit(
-            ad_utility::OverloadCallOperator{var, graphTerm});
+      auto varTriple = [](const Variable& var) {
+        return TripleComponent{var.name()};
       };
+      auto varOrTerm = [&varTriple, &graphTerm](VarOrTerm varOrTerm) {
+        return varOrTerm.visit(
+            ad_utility::OverloadCallOperator{varTriple, graphTerm});
+      };
+
+      auto varPath = [](const Variable& var) {
+        return PropertyPath::fromVariable(var);
+      };
+      auto path = [](const PropertyPath& path) { return path; };
       auto varOrPath =
-          [&var, &path](const ad_utility::sparql_types::VarOrPath& varOrPath) {
-            return std::visit(ad_utility::OverloadCallOperator{var, path},
+          [&varPath,
+           &path](const ad_utility::sparql_types::VarOrPath& varOrPath) {
+            return std::visit(ad_utility::OverloadCallOperator{varPath, path},
                               varOrPath);
           };
+
+      auto registerIfVariable = [&query](auto* variant) {
+        if (Variable* variable = std::get_if<Variable>(variant)) {
+          query->registerVariableVisibleInQueryBody(variable->name());
+        }
+      };
 
       vector<ad_utility::sparql_types::TripleWithPropertyPath> triples =
           parseWithAntlr(sparqlParserHelpers::parseTriplesSameSubjectPath,
                          *query);
       auto& v = lastBasicPattern(currentPattern)._whereClauseTriples;
       for (auto& triple : triples) {
-        if (Variable* subject = std::get_if<Variable>(&triple.subject_)) {
-          query->registerVariableVisibleInQueryBody(subject->name());
-        }
-        if (Variable* predicate = std::get_if<Variable>(&triple.predicate_)) {
-          query->registerVariableVisibleInQueryBody(predicate->name());
-        }
-        if (Variable* object = std::get_if<Variable>(&triple.object_)) {
-          query->registerVariableVisibleInQueryBody(object->name());
-        }
+        registerIfVariable(&triple.subject_);
+        registerIfVariable(&triple.predicate_);
+        registerIfVariable(&triple.object_);
         // TODO SparqlTriple and TripleWithPropertyPath should be merged into
-        // one type.
+        //  one type.
         SparqlTriple sparqlTriple = {varOrTerm(triple.subject_),
                                      varOrPath(triple.predicate_),
                                      varOrTerm(triple.object_)};
