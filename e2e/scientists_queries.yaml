@@ -1175,3 +1175,53 @@ queries:
       - selected: ["?x"]
       - contains_row: ["<Architect>"]
       - contains_row: ["<Visual_Artist>"]
+
+  - query: select_group_alias
+    type: no-text
+    sparql: |
+      SELECT ?job1 (COUNT(?person) as ?number) WHERE {
+        ?person <is-a> ?job .
+      }
+      GROUP BY (?job as ?job1)
+    checks:
+      - num_cols: 2
+      - num_rows: 1031
+      - selected: ["?job1", "?number"]
+      - contains_row: ["<Scientist>", 19361]
+      - contains_row: ["<Award_Winner>", 3551]
+  - query: select_group_number
+    type: no-text
+    sparql: |
+      SELECT (COUNT(?scientist) as ?count) ?height WHERE {
+        ?scientist <Height> ?height .
+      }
+      GROUP BY ?height
+    checks:
+      - num_cols: 2
+      - num_rows: 47
+      - selected: ["?count", "?height"]
+      - contains_row: [12, 1.78]
+      - contains_row: [1, 1.784]
+  - query: select_group_expression
+    type: no-text
+    sparql: |
+      SELECT (COUNT(?scientist) as ?count) WHERE {
+        ?scientist <Height> ?height .
+      }
+      GROUP BY (?height * ?height - 10)
+    checks:
+      - num_cols: 1
+      - num_rows: 47
+      - selected: [ "?count" ]
+      - contains_row: [ 12 ]
+      - contains_row: [ 1 ]
+  # TODO: support this
+  #- query: select_group_builtInCall
+  #  type: no-text
+  #  sparql: |
+  #    SELECT (COUNT(?scientist) as ?count) WHERE {
+  #      ?scientist <label> ?label .
+  #    }
+  #    GROUP BY SUBSTR(?scientist, 0, 2)
+  #  checks:
+  #    - selected: ["?count"]
