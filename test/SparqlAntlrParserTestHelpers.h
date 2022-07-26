@@ -252,8 +252,10 @@ MATCHER_P(GroupByVariablesMatch, vars, "") {
 }
 
 MATCHER_P2(IsValues, vars, values, "") {
-  return (arg.value()._inlineValues._variables == vars) &&
-         (arg.value()._inlineValues._values == values);
+  // TODO Refactor GraphPatternOperation::Values / SparqlValues s.t. this
+  //  becomes a trivial Eq matcher.
+  return (arg._inlineValues._variables == vars) &&
+         (arg._inlineValues._values == values);
 }
 
 // A trivial matcher for PropertyPaths because e.g. expectCompleteParse needs
