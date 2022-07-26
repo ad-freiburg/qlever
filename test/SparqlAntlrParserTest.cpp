@@ -109,8 +109,6 @@ TEST(SparqlParser, Prefix) {
 
 TEST(SparqlExpressionParser, First) {
   string s = "(5 * 5 ) bimbam";
-  ParserAndVisitor p{s};
-  auto context = p.parser_.expression();
   // This is an example on how to access a certain parsed substring.
   /*
   LOG(INFO) << context->getText() << std::endl;
@@ -121,9 +119,9 @@ TEST(SparqlExpressionParser, First) {
             << std::endl;
   LOG(INFO) << p.parser_.getCurrentToken()->getStartIndex() << std::endl;
    */
-  auto resultAsAny = p.visitor_.visitExpression(context);
-  auto resultAsExpression =
-      std::move(resultAsAny.as<sparqlExpression::SparqlExpression::Ptr>());
+  auto resultofParse = parseExpression(s);
+  EXPECT_EQ(resultofParse.remainingText_.length(), 6);
+  auto resultAsExpression = std::move(resultofParse.resultOfParse_);
 
   QueryExecutionContext* qec = nullptr;
   sparqlExpression::VariableToColumnAndResultTypeMap map;
@@ -633,14 +631,14 @@ TEST(SparqlParser, VariableWithDollarSign) {
 TEST(SparqlParser, Bind) {
   {
     string input = "BIND (10 - 5 as ?a)";
-    auto bindAndText = parseBind(input, {});
+    auto bindAndText = parseBind(input);
 
     expectCompleteParse(bindAndText, IsBind("?a", "10-5"));
   }
 
   {
     string input = "bInD (?age - 10 As ?s)";
-    auto bindAndText = parseBind(input, {});
+    auto bindAndText = parseBind(input);
 
     expectCompleteParse(bindAndText, IsBind("?s", "?age-10"));
   }
@@ -701,7 +699,7 @@ TEST(SparqlParser, LimitOffsetClause) {
   {
     string input = "LIMIT 10";
 
-    auto limitOffset = parseLimitOffsetClause(input, {});
+    auto limitOffset = parseLimitOffsetClause(input);
 
     expectCompleteParse(limitOffset, IsLimitOffset(10ull, 1ull, 0ull));
   }
@@ -709,7 +707,7 @@ TEST(SparqlParser, LimitOffsetClause) {
   {
     string input = "OFFSET 31 LIMIT 12 TEXTLIMIT 14";
 
-    auto limitOffset = parseLimitOffsetClause(input, {});
+    auto limitOffset = parseLimitOffsetClause(input);
 
     expectCompleteParse(limitOffset, IsLimitOffset(12ull, 14ull, 31ull));
   }
@@ -717,7 +715,7 @@ TEST(SparqlParser, LimitOffsetClause) {
   {
     string input = "textlimit 999";
 
-    auto limitOffset = parseLimitOffsetClause(input, {});
+    auto limitOffset = parseLimitOffsetClause(input);
 
     expectCompleteParse(
         limitOffset,
@@ -727,7 +725,7 @@ TEST(SparqlParser, LimitOffsetClause) {
   {
     string input = "LIMIT      999";
 
-    auto limitOffset = parseLimitOffsetClause(input, {});
+    auto limitOffset = parseLimitOffsetClause(input);
 
     expectCompleteParse(limitOffset, IsLimitOffset(999ull, 1ull, 0ull));
   }
@@ -735,7 +733,7 @@ TEST(SparqlParser, LimitOffsetClause) {
   {
     string input = "OFFSET 43";
 
-    auto limitOffset = parseLimitOffsetClause(input, {});
+    auto limitOffset = parseLimitOffsetClause(input);
 
     expectCompleteParse(
         limitOffset,
@@ -745,7 +743,7 @@ TEST(SparqlParser, LimitOffsetClause) {
   {
     string input = "TEXTLIMIT 43 LIMIT 19";
 
-    auto limitOffset = parseLimitOffsetClause(input, {});
+    auto limitOffset = parseLimitOffsetClause(input);
 
     expectCompleteParse(limitOffset, IsLimitOffset(19ull, 43ull, 0ull));
   }
@@ -755,13 +753,13 @@ TEST(SparqlParser, LimitOffsetClause) {
 
     // parse* catches antlr4::ParseCancellationException and throws a
     // std::runtime_error so this has to be checked instead.
-    EXPECT_THROW(parseLimitOffsetClause(input, {}), std::runtime_error);
+    EXPECT_THROW(parseLimitOffsetClause(input), std::runtime_error);
   }
 
   {
     string input = "Limit 10 TEXTLIMIT 20 offset 0 Limit 20";
 
-    auto limitOffset = parseLimitOffsetClause(input, {});
+    auto limitOffset = parseLimitOffsetClause(input);
 
     EXPECT_THAT(limitOffset.resultOfParse_, IsLimitOffset(10ull, 20ull, 0ull));
     EXPECT_EQ(limitOffset.remainingText_, "Limit 20");
@@ -802,7 +800,7 @@ TEST(SparqlParser, OrderCondition) {
 TEST(SparqlParser, OrderClause) {
   {
     string input = "ORDER BY ?test DESC(?foo - 5)";
-    auto orderKeys = parseOrderClause(input, {});
+    auto orderKeys = parseOrderClause(input);
     expectCompleteArrayParse(orderKeys, IsVariableOrderKey("?test", false),
                              IsExpressionOrderKey("?foo-5", true));
   }
@@ -847,7 +845,7 @@ TEST(SparqlParser, GroupCondition) {
 TEST(SparqlParser, GroupClause) {
   {
     string input = "GROUP BY ?test (?foo - 10 as ?bar) COUNT(?baz)";
-    auto groupings = parseGroupClause(input, {});
+    auto groupings = parseGroupClause(input);
     expectCompleteArrayParse(groupings, IsVariableGroupKey("?test"),
                              IsAliasGroupKey("?foo-10", "?bar"),
                              IsExpressionGroupKey("COUNT(?baz)"));
@@ -856,79 +854,110 @@ TEST(SparqlParser, GroupClause) {
 
 namespace {
 template <typename Exception = ParseException>
-void expectValuesFails(const string& input) {
-  EXPECT_THROW(parseValuesClause(input, {}), Exception) << input;
+void expectDataBlockFails(const string& input) {
+  EXPECT_THROW(parseDataBlock(input), Exception) << input;
 }
 }  // namespace
 
-TEST(SparqlParser, ValuesClause) {
-  auto expectValue = [](const string& input, const vector<string>& expectedVars,
-                        const vector<vector<string>>& expectedVals) {
-    expectCompleteParse(parseValuesClause(input, {}),
+TEST(SparqlParser, DataBlock) {
+  auto expectDataBlock = [](const string& input,
+                            const vector<string>& expectedVars,
+                            const vector<vector<string>>& expectedVals) {
+    expectCompleteParse(parseDataBlock(input),
                         IsValues(expectedVars, expectedVals));
   };
-  expectValue("VALUES ?test { \"foo\" }", {"?test"}, {{"\"foo\""}});
+  expectDataBlock("?test { \"foo\" }", {"?test"}, {{"\"foo\""}});
   // These are not implemented yet in dataBlockValue
   // (numericLiteral/booleanLiteral)
-  expectValuesFails("VALUES ?test { true }");
-  expectValuesFails("VALUES ?test { 10.0 }");
-  expectValuesFails("VALUES ?test { UNDEF }");
-  expectValue(R"(VALUES ?foo { "baz" "bar" })", {"?foo"},
-              {{"\"baz\""}, {"\"bar\""}});
-  expectValuesFails(R"(VALUES ( ) { })");
-  expectValuesFails(R"(VALUES ?foo { })");
-  expectValuesFails(R"(VALUES ( ?foo ) { })");
-  expectValuesFails(R"(VALUES ( ?foo ?bar ) { (<foo>) (<bar>) })");
-  expectValue(R"(VALUES ( ?foo ?bar ) { (<foo> <bar>) })", {"?foo", "?bar"},
-              {{"<foo>", "<bar>"}});
-  expectValue(R"(VALUES ( ?foo ?bar ) { (<foo> "m") ("1" <bar>) })",
-              {"?foo", "?bar"}, {{"<foo>", "\"m\""}, {"\"1\"", "<bar>"}});
-  expectValue(R"(VALUES ( ?foo ?bar ) { (<foo> "m") (<bar> <e>) ("1" "f") })",
-              {"?foo", "?bar"},
-              {{"<foo>", "\"m\""}, {"<bar>", "<e>"}, {"\"1\"", "\"f\""}});
-  expectValuesFails(R"(VALUES ( ) { (<foo>) })");
+  // TODO<joka921/qup42> implement
+  expectDataBlockFails("?test { true }");
+  expectDataBlockFails("?test { 10.0 }");
+  expectDataBlockFails("?test { UNDEF }");
+  expectDataBlock(R"(?foo { "baz" "bar" })", {"?foo"},
+                  {{"\"baz\""}, {"\"bar\""}});
+  // TODO<joka921/qup42> implement
+  expectDataBlockFails(R"(( ) { })");
+  expectDataBlockFails(R"(?foo { })");
+  expectDataBlockFails(R"(( ?foo ) { })");
+  expectDataBlockFails(R"(( ?foo ?bar ) { (<foo>) (<bar>) })");
+  expectDataBlock(R"(( ?foo ?bar ) { (<foo> <bar>) })", {"?foo", "?bar"},
+                  {{"<foo>", "<bar>"}});
+  expectDataBlock(R"(( ?foo ?bar ) { (<foo> "m") ("1" <bar>) })",
+                  {"?foo", "?bar"}, {{"<foo>", "\"m\""}, {"\"1\"", "<bar>"}});
+  expectDataBlock(R"(( ?foo ?bar ) { (<foo> "m") (<bar> <e>) ("1" "f") })",
+                  {"?foo", "?bar"},
+                  {{"<foo>", "\"m\""}, {"<bar>", "<e>"}, {"\"1\"", "\"f\""}});
+  // TODO<joka921/qup42> implement
+  expectDataBlockFails(R"(( ) { (<foo>) })");
+}
+
+namespace {
+template <typename Exception = ParseException>
+void expectInlineDataFails(const string& input) {
+  EXPECT_THROW(parseInlineData(input, SparqlQleverVisitor::PrefixMap{}),
+               Exception)
+      << input;
+}
+}  // namespace
+
+TEST(SparqlParser, InlineData) {
+  auto expectInlineData = [](const string& input,
+                             const vector<string>& expectedVars,
+                             const vector<vector<string>>& expectedVals) {
+    expectCompleteParse(
+        parseInlineData(input, SparqlQleverVisitor::PrefixMap{}),
+        IsValues(expectedVars, expectedVals));
+  };
+  expectInlineData("VALUES ?test { \"foo\" }", {"?test"}, {{"\"foo\""}});
+  // There must always be a block present for InlineData
+  expectInlineDataFails<std::runtime_error>("");
 }
 
 TEST(SparqlParser, propertyPaths) {
+  using PrefixMap = SparqlQleverVisitor::PrefixMap;
   // Test all the base cases.
   // "a" is a special case. It is a valid PropertyPath.
   // It is short for "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>".
   expectCompleteParse(
-      parseVerbPathOrSimple("a", {}),
+      parseVerbPathOrSimple("a"),
       IsPropertyPath(PropertyPath::fromIri(
           "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")));
-  EXPECT_THROW(parseVerbPathOrSimple("b", {}), std::runtime_error);
+  EXPECT_THROW(parseVerbPathOrSimple("b"), std::runtime_error);
   expectCompleteParse(
       parseVerbPathOrSimple("test:foo",
-                            {{"test", "<http://www.example.com/>"}}),
+                            PrefixMap{{"test", "<http://www.example.com/>"}}),
       IsPropertyPath(PropertyPath::fromIri("<http://www.example.com/foo>")));
-  expectCompleteParse(parseVerbPathOrSimple("?bar", {}),
+  expectCompleteParse(parseVerbPathOrSimple("?bar"),
                       IsPropertyPath(PropertyPath::fromIri("?bar")));
   expectCompleteParse(
-      parseVerbPathOrSimple(":", {{"", "<http://www.example.com/>"}}),
+      parseVerbPathOrSimple(":", PrefixMap{{"", "<http://www.example.com/>"}}),
       IsPropertyPath(PropertyPath::fromIri("<http://www.example.com/>")));
   expectCompleteParse(
-      parseVerbPathOrSimple("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
-                            {}),
+      parseVerbPathOrSimple(
+          "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"),
       IsPropertyPath(PropertyPath::fromIri(
           "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")));
   // Test the basic combinators / | (...) + * ?.
   expectCompleteParse(
-      parseVerbPathOrSimple("a:a / a:b", {{"a", "<http://www.example.com/>"}}),
+      parseVerbPathOrSimple("a:a / a:b",
+                            PrefixMap{{"a", "<http://www.example.com/>"}}),
       IsPropertyPath(PropertyPath::makeSequence(
           {PropertyPath::fromIri("<http://www.example.com/a>"),
            PropertyPath::fromIri("<http://www.example.com/b>")})));
   expectCompleteParse(
-      parseVerbPathOrSimple("a:a | a:b", {{"a", "<http://www.example.com/>"}}),
+      parseVerbPathOrSimple("a:a | a:b",
+                            PrefixMap{{"a", "<http://www.example.com/>"}}),
       IsPropertyPath(PropertyPath::makeAlternative(
           {PropertyPath::fromIri("<http://www.example.com/a>"),
            PropertyPath::fromIri("<http://www.example.com/b>")})));
   expectCompleteParse(
-      parseVerbPathOrSimple("(a:a)", {{"a", "<http://www.example.com/>"}}),
+      parseVerbPathOrSimple("(a:a)",
+                            PrefixMap{{"a", "<http://www.example.com/>"}}),
       IsPropertyPath(
           PropertyPath(PropertyPath::fromIri("<http://www.example.com/a>"))));
   expectCompleteParse(
-      parseVerbPathOrSimple("a:a+", {{"a", "<http://www.example.com/>"}}),
+      parseVerbPathOrSimple("a:a+",
+                            PrefixMap{{"a", "<http://www.example.com/>"}}),
       IsPropertyPath(PropertyPath::makeTransitiveMin(
           {PropertyPath::fromIri("<http://www.example.com/a>")}, 1)));
   {
@@ -936,7 +965,8 @@ TEST(SparqlParser, propertyPaths) {
         {PropertyPath::fromIri("<http://www.example.com/a>")}, 1);
     expected._can_be_null = true;
     expectCompleteParse(
-        parseVerbPathOrSimple("a:a?", {{"a", "<http://www.example.com/>"}}),
+        parseVerbPathOrSimple("a:a?",
+                              PrefixMap{{"a", "<http://www.example.com/>"}}),
         IsPropertyPath(expected));
   }
   {
@@ -944,7 +974,8 @@ TEST(SparqlParser, propertyPaths) {
         {PropertyPath::fromIri("<http://www.example.com/a>")});
     expected._can_be_null = true;
     expectCompleteParse(
-        parseVerbPathOrSimple("a:a*", {{"a", "<http://www.example.com/>"}}),
+        parseVerbPathOrSimple("a:a*",
+                              PrefixMap{{"a", "<http://www.example.com/>"}}),
         IsPropertyPath(expected));
   }
   // Test a bigger example that contains everything.
@@ -966,9 +997,9 @@ TEST(SparqlParser, propertyPaths) {
     expected._can_be_null = false;
     expectCompleteParse(
         parseVerbPathOrSimple("a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+",
-                              {{"a", "<http://www.example.com/a/>"},
-                               {"b", "<http://www.example.com/b/>"},
-                               {"c", "<http://www.example.com/c/>"}}),
+                              PrefixMap{{"a", "<http://www.example.com/a/>"},
+                                        {"b", "<http://www.example.com/b/>"},
+                                        {"c", "<http://www.example.com/c/>"}}),
         IsPropertyPath(expected));
   }
 }
@@ -976,7 +1007,7 @@ TEST(SparqlParser, propertyPaths) {
 namespace {
 template <typename Exception = ParseException>
 void expectSelectFails(const string& input) {
-  EXPECT_THROW(parseSelectClause(input, {}), Exception) << input;
+  EXPECT_THROW(parseSelectClause(input), Exception) << input;
 }
 }  // namespace
 
@@ -985,22 +1016,22 @@ TEST(SparqlParser, SelectClause) {
                                   std::vector<std::string> variables,
                                   bool distinct = false, bool reduced = false) {
     expectCompleteParse(
-        parseSelectClause(input, {}),
+        parseSelectClause(input),
         IsVariablesSelect(distinct, reduced, std::move(variables)));
   };
   using Alias = std::pair<string, string>;
   auto expectSelect = [](const string& input,
                          std::vector<std::variant<Variable, Alias>> selection,
                          bool distinct = false, bool reduced = false) {
-    expectCompleteParse(parseSelectClause(input, {}),
+    expectCompleteParse(parseSelectClause(input),
                         IsSelect(distinct, reduced, std::move(selection)));
   };
 
-  expectCompleteParse(parseSelectClause("SELECT *", {}),
+  expectCompleteParse(parseSelectClause("SELECT *"),
                       IsAsteriskSelect(false, false));
-  expectCompleteParse(parseSelectClause("SELECT DISTINCT *", {}),
+  expectCompleteParse(parseSelectClause("SELECT DISTINCT *"),
                       IsAsteriskSelect(true, false));
-  expectCompleteParse(parseSelectClause("SELECT REDUCED *", {}),
+  expectCompleteParse(parseSelectClause("SELECT REDUCED *"),
                       IsAsteriskSelect(false, true));
   expectSelectFails("SELECT DISTINCT REDUCED *");
   expectSelectFails<std::runtime_error>(
