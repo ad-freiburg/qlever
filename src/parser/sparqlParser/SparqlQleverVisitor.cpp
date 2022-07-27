@@ -195,3 +195,64 @@ SparqlQleverVisitor::Triples SparqlQleverVisitor::visitTypesafe(
              ? ctx->constructTriples()->accept(this).as<Triples>()
              : Triples{};
 }
+
+// ____________________________________________________________________________________
+string SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::IriContext* ctx) {
+  string langtag =
+      ctx->PREFIX_LANGTAG() ? ctx->PREFIX_LANGTAG()->getText() : "";
+  if (ctx->iriref()) {
+    return langtag + visitTypesafe(ctx->iriref());
+  } else {
+    AD_CHECK(ctx->prefixedName())
+    return langtag + visitTypesafe(ctx->prefixedName());
+  }
+}
+
+// ____________________________________________________________________________________
+string SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::IrirefContext* ctx) {
+  return RdfEscaping::unescapeIriref(ctx->getText());
+}
+
+// ____________________________________________________________________________________
+string SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::PrefixedNameContext* ctx) {
+  if (ctx->pnameLn()) {
+    return visitTypesafe(ctx->pnameLn());
+  } else {
+    AD_CHECK(ctx->pnameNs());
+    return visitTypesafe(ctx->pnameNs());
+  }
+}
+
+// ____________________________________________________________________________________
+string SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::PnameLnContext* ctx) {
+  string text = ctx->getText();
+  auto pos = text.find(':');
+  auto pnameNS = text.substr(0, pos);
+  auto pnLocal = text.substr(pos + 1);
+  if (!_prefixMap.contains(pnameNS)) {
+    // TODO<joka921> : proper name
+    throw ParseException{"Prefix " + pnameNS +
+                         " was not registered using a PREFIX declaration"};
+  }
+  auto inner = _prefixMap[pnameNS];
+  // strip the trailing ">"
+  inner = inner.substr(0, inner.size() - 1);
+  return inner + RdfEscaping::unescapePrefixedIri(pnLocal) + ">";
+}
+
+// ____________________________________________________________________________________
+string SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::PnameNsContext* ctx) {
+  auto text = ctx->getText();
+  auto prefix = text.substr(0, text.length() - 1);
+  if (!_prefixMap.contains(prefix)) {
+    // TODO<joka921> : proper name
+    throw ParseException{"Prefix " + prefix +
+                         " was not registered using a PREFIX declaration"};
+  }
+  return _prefixMap[prefix];
+}

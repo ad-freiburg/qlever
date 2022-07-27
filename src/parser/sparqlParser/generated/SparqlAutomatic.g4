@@ -551,8 +551,7 @@ string
     ;
 
 iri
-    : (LANGTAG '@')? (iriref
-    | prefixedName)
+    : (PREFIX_LANGTAG)? (iriref | prefixedName)
     ;
 
 prefixedName
@@ -712,6 +711,13 @@ VAR2
 
 LANGTAG
     : '@' ('a'..'z' | 'A' .. 'Z')+ ('-' ('a'..'z' | 'A' .. 'Z' | DIGIT)+)*
+    ;
+
+// The PREFIX_LANGTAG is an extension of the SPARQL standard that allows IRIs
+// like @en@rdfs:label which are used in QLever's implementation of language
+// filters.
+PREFIX_LANGTAG
+    : LANGTAG '@'
     ;
 
 INTEGER

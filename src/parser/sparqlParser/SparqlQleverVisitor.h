@@ -131,7 +131,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   // ___________________________________________________________________________
   antlrcpp::Any visitBaseDecl(
       SparqlAutomaticParser::BaseDeclContext* ctx) override {
-    _prefixMap[""] = visitIriref(ctx->iriref()).as<string>();
+    _prefixMap[""] = visitTypesafe(ctx->iriref());
     return nullptr;
   }
 
@@ -141,7 +141,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     auto text = ctx->PNAME_NS()->getText();
     // Strip trailing ':'.
     _prefixMap[text.substr(0, text.length() - 1)] =
-        visitIriref(ctx->iriref()).as<string>();
+        visitTypesafe(ctx->iriref());
     return nullptr;
   }
 
@@ -1431,30 +1431,24 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitIri(SparqlAutomaticParser::IriContext* ctx) override {
-    string langtag = ctx->LANGTAG() ? ctx->LANGTAG()->getText() + '@' : "";
-    if (ctx->iriref()) {
-      return langtag + visitIriref(ctx->iriref()).as<string>();
-    } else {
-      AD_CHECK(ctx->prefixedName())
-      return langtag + visitPrefixedName(ctx->prefixedName()).as<string>();
-    }
+    return visitTypesafe(ctx);
   }
+
+  string visitTypesafe(SparqlAutomaticParser::IriContext* ctx);
 
   antlrcpp::Any visitIriref(
       SparqlAutomaticParser::IrirefContext* ctx) override {
-    return RdfEscaping::unescapeIriref(ctx->getText());
+    return visitTypesafe(ctx);
   }
+
+  string visitTypesafe(SparqlAutomaticParser::IrirefContext* ctx);
 
   antlrcpp::Any visitPrefixedName(
       SparqlAutomaticParser::PrefixedNameContext* ctx) override {
-    if (ctx->pnameLn()) {
-      return visitPnameLn(ctx->pnameLn());
-    } else {
-      AD_CHECK(ctx->pnameNs());
-      return visitPnameNs(ctx->pnameNs());
-    }
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  string visitTypesafe(SparqlAutomaticParser::PrefixedNameContext* ctx);
 
   antlrcpp::Any visitBlankNode(
       SparqlAutomaticParser::BlankNodeContext* ctx) override {
@@ -1474,34 +1468,15 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitPnameLn(
       SparqlAutomaticParser::PnameLnContext* ctx) override {
-    string text = ctx->getText();
-    auto pos = text.find(':');
-    auto pnameNS = text.substr(0, pos);
-    auto pnLocal = text.substr(pos + 1);
-    if (!_prefixMap.contains(pnameNS)) {
-      // TODO<joka921> : proper name
-      throw ParseException{
-          ""
-          "Prefix " +
-          pnameNS + " was not registered using a PREFIX declaration"};
-    }
-    auto inner = _prefixMap[pnameNS];
-    // strip the trailing ">"
-    inner = inner.substr(0, inner.size() - 1);
-    return inner + RdfEscaping::unescapePrefixedIri(pnLocal) + ">";
+    return visitTypesafe(ctx);
   }
+
+  string visitTypesafe(SparqlAutomaticParser::PnameLnContext* ctx);
 
   antlrcpp::Any visitPnameNs(
       SparqlAutomaticParser::PnameNsContext* ctx) override {
-    auto text = ctx->getText();
-    auto prefix = text.substr(0, text.length() - 1);
-    if (!_prefixMap.contains(prefix)) {
-      // TODO<joka921> : proper name
-      throw ParseException{
-          ""
-          "Prefix " +
-          prefix + " was not registered using a PREFIX declaration"};
-    }
-    return _prefixMap[prefix];
+    return visitTypesafe(ctx);
   }
+
+  string visitTypesafe(SparqlAutomaticParser::PnameNsContext* ctx);
 };

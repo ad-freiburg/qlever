@@ -69,7 +69,7 @@ TEST(SparqlParser, Prefix) {
     m["wd"] = "<www.wikidata.org/>";
 
     auto context = p.parser_.pnameLn();
-    auto result = p.visitor_.visitPnameLn(context).as<string>();
+    auto result = p.visitor_.visitTypesafe(context);
     ASSERT_EQ(result, "<www.wikidata.org/bimbam>");
   }
   {
@@ -89,7 +89,7 @@ TEST(SparqlParser, Prefix) {
     m["wd"] = "<www.wikidata.org/>";
 
     auto context = p.parser_.prefixedName();
-    auto result = p.visitor_.visitPrefixedName(context).as<string>();
+    auto result = p.visitor_.visitTypesafe(context);
     ASSERT_EQ(result, "<www.wikidata.org/bimbam>");
   }
   {
@@ -99,7 +99,7 @@ TEST(SparqlParser, Prefix) {
     m["wd"] = "<www.wikidata.org/>";
 
     auto context = p.parser_.iriref();
-    auto result = p.visitor_.visitIriref(context).as<string>();
+    auto result = p.visitor_.visitTypesafe(context);
     auto sz = context->getText().size();
 
     ASSERT_EQ(result, "<somethingsomething>");
@@ -596,6 +596,30 @@ TEST(SparqlParser, VarOrTermGraphTerm) {
   EXPECT_THAT(varOrTerm, IsIri(nil));
 }
 
+TEST(SparqlParser, Iri) {
+  auto expectIri = [](const string& input, const string& iri,
+                      SparqlQleverVisitor::PrefixMap prefixMap = {}) {
+    // TODO<qup42> replace with curried parse... in `SparqlParserHelpers.h`
+    // Parse "by hand" in order not to pollute the `SparqlParserHelpers`.
+    ParserAndVisitor p{input, std::move(prefixMap)};
+    expectCompleteParse(
+        p.parseTypesafe(input, "iri", &SparqlAutomaticParser::iri),
+        testing::Eq(iri));
+  };
+  expectIri("rdfs:label", "<http://www.w3.org/2000/01/rdf-schema#label>",
+            {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});
+  expectIri(
+      "rdfs:label", "<http://www.w3.org/2000/01/rdf-schema#label>",
+      {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}, {"foo", "<bar#>"}});
+  expectIri("<http://www.w3.org/2000/01/rdf-schema>",
+            "<http://www.w3.org/2000/01/rdf-schema>", {});
+  expectIri("@en@rdfs:label",
+            "@en@<http://www.w3.org/2000/01/rdf-schema#label>",
+            {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});
+  expectIri("@en@<http://www.w3.org/2000/01/rdf-schema>",
+            "@en@<http://www.w3.org/2000/01/rdf-schema>", {});
+}
+
 TEST(SparqlParser, VarOrIriVariable) {
   string input = "?a";
   ParserAndVisitor p{input};
@@ -922,6 +946,12 @@ TEST(SparqlParser, propertyPaths) {
       parseVerbPathOrSimple("a"),
       IsPropertyPath(PropertyPath::fromIri(
           "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")));
+  expectCompleteParse(
+      parseVerbPathOrSimple(
+          "@en@rdfs:label",
+          PrefixMap{{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}}),
+      IsPropertyPath(PropertyPath::fromIri(
+          "@en@<http://www.w3.org/2000/01/rdf-schema#label>")));
   EXPECT_THROW(parseVerbPathOrSimple("b"), std::runtime_error);
   expectCompleteParse(
       parseVerbPathOrSimple("test:foo",
