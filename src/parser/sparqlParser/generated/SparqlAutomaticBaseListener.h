@@ -48,15 +48,20 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
   virtual void exitSelectClause(
       SparqlAutomaticParser::SelectClauseContext* /*ctx*/) override {}
 
+  virtual void enterVarOrAlias(
+      SparqlAutomaticParser::VarOrAliasContext* /*ctx*/) override {}
+  virtual void exitVarOrAlias(
+      SparqlAutomaticParser::VarOrAliasContext* /*ctx*/) override {}
+
   virtual void enterAlias(
       SparqlAutomaticParser::AliasContext* /*ctx*/) override {}
   virtual void exitAlias(
       SparqlAutomaticParser::AliasContext* /*ctx*/) override {}
 
-  virtual void enterAliasWithouBrackes(
-      SparqlAutomaticParser::AliasWithouBrackesContext* /*ctx*/) override {}
-  virtual void exitAliasWithouBrackes(
-      SparqlAutomaticParser::AliasWithouBrackesContext* /*ctx*/) override {}
+  virtual void enterAliasWithoutBrackets(
+      SparqlAutomaticParser::AliasWithoutBracketsContext* /*ctx*/) override {}
+  virtual void exitAliasWithoutBrackets(
+      SparqlAutomaticParser::AliasWithoutBracketsContext* /*ctx*/) override {}
 
   virtual void enterConstructQuery(
       SparqlAutomaticParser::ConstructQueryContext* /*ctx*/) override {}

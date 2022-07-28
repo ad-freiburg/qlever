@@ -74,46 +74,55 @@ struct ParserAndVisitor {
 };
 
 // ____________________________________________________________________________
-ResultOfParseAndRemainingText<sparqlExpression::SparqlExpressionPimpl>
-parseExpression(const std::string& input,
-                SparqlQleverVisitor::PrefixMap prefixMap);
+inline auto parseFront = []<typename ContextType>(
+                             ContextType* (SparqlAutomaticParser::*F)(void),
+                             const std::string& error, const std::string& input,
+                             SparqlQleverVisitor::PrefixMap prefixes = {}) {
+  ParserAndVisitor p{input, std::move(prefixes)};
+  return p.parseTypesafe(input, error, F);
+};
 
-// An `alias` in Sparql have the form (<expression> as ?variable).
-ResultOfParseAndRemainingText<ParsedQuery::Alias> parseAlias(
-    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
+inline auto parseInlineData = std::bind_front(
+    parseFront, &SparqlAutomaticParser::inlineData, "inline data");
 
-ResultOfParseAndRemainingText<GraphPatternOperation::Bind> parseBind(
-    const std::string& input, SparqlQleverVisitor::PrefixMap prefixMap);
+inline auto parseExpression = std::bind_front(
+    parseFront, &SparqlAutomaticParser::expression, "expression");
 
-ResultOfParseAndRemainingText<ad_utility::sparql_types::Triples>
-parseConstructTemplate(const std::string& input,
-                       SparqlQleverVisitor::PrefixMap prefixes);
+inline auto parseBind =
+    std::bind_front(parseFront, &SparqlAutomaticParser::bind, "bind");
 
-ResultOfParseAndRemainingText<LimitOffsetClause> parseLimitOffsetClause(
-    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
+inline auto parseConstructTemplate =
+    std::bind_front(parseFront, &SparqlAutomaticParser::constructTemplate,
+                    "construct template");
 
-ResultOfParseAndRemainingText<vector<OrderKey>> parseOrderClause(
-    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
+inline auto parseLimitOffsetClause =
+    std::bind_front(parseFront, &SparqlAutomaticParser::limitOffsetClauses,
+                    "limit offset clause");
 
-ResultOfParseAndRemainingText<vector<GroupKey>> parseGroupClause(
-    const std::string& input, SparqlQleverVisitor::PrefixMap prefixes);
+inline auto parseOrderClause = std::bind_front(
+    parseFront, &SparqlAutomaticParser::orderClause, "order clause");
 
-ResultOfParseAndRemainingText<std::optional<GraphPatternOperation::Values>>
-parseValuesClause(const std::string& input,
-                  SparqlQleverVisitor::PrefixMap prefixes);
+inline auto parseGroupClause = std::bind_front(
+    parseFront, &SparqlAutomaticParser::groupClause, "group clause");
 
-ResultOfParseAndRemainingText<ad_utility::sparql_types::VarOrPath>
-parseVerbPathOrSimple(const std::string& input,
-                      SparqlQleverVisitor::PrefixMap prefixes);
+inline auto parseDataBlock = std::bind_front(
+    parseFront, &SparqlAutomaticParser::dataBlock, "data block");
 
-ResultOfParseAndRemainingText<ad_utility::sparql_types::PathTuples>
-parsePropertyListPathNotEmpty(const std::string& input,
-                              SparqlQleverVisitor::PrefixMap prefixes);
+inline auto parseVerbPathOrSimple =
+    std::bind_front(parseFront, &SparqlAutomaticParser::verbPathOrSimple,
+                    "verb path or simple");
 
-ResultOfParseAndRemainingText<
-    vector<ad_utility::sparql_types::TripleWithPropertyPath>>
-parseTriplesSameSubjectPath(const std::string& input,
-                            SparqlQleverVisitor::PrefixMap prefixes);
+inline auto parseSelectClause = std::bind_front(
+    parseFront, &SparqlAutomaticParser::selectClause, "selectClause");
+
+inline auto parsePropertyListPathNotEmpty = std::bind_front(
+    parseFront, &SparqlAutomaticParser::propertyListPathNotEmpty,
+    "propertyListPathNotEmpty");
+
+inline auto parseTriplesSameSubjectPath =
+    std::bind_front(parseFront, &SparqlAutomaticParser::triplesSameSubjectPath,
+                    "triplesSameSubjectPath");
+
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H
