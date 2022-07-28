@@ -677,7 +677,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       auto subject = visitTypesafe(ctx->varOrTerm());
       auto tuples = visitTypesafe(ctx->propertyListPathNotEmpty());
       for (auto& tuple : tuples) {
-        triples.emplace_back(subject, tuple.first, tuple.second);
+        triples.push_back(
+            TripleWithPropertyPath{subject, tuple.first, tuple.second});
       }
     } else if (ctx->triplesNodePath()) {
       throwCollectionsAndBlankNodePathsNotSupported(ctx->triplesNodePath());
