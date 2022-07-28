@@ -648,17 +648,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  ObjectList visitTypesafe(SparqlAutomaticParser::ObjectListContext* ctx) {
-    Objects objects;
-    Triples additionalTriples;
-    auto objectContexts = ctx->objectR();
-    for (auto& objectContext : objectContexts) {
-      auto graphNode = objectContext->accept(this).as<Node>();
-      appendVector(additionalTriples, std::move(graphNode.second));
-      objects.push_back(std::move(graphNode.first));
-    }
-    return ObjectList{std::move(objects), std::move(additionalTriples)};
-  }
+  ObjectList visitTypesafe(SparqlAutomaticParser::ObjectListContext* ctx);
 
   antlrcpp::Any visitObjectR(
       SparqlAutomaticParser::ObjectRContext* ctx) override {
@@ -671,20 +661,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   vector<TripleWithPropertyPath> visitTypesafe(
-      SparqlAutomaticParser::TriplesSameSubjectPathContext* ctx) {
-    vector<TripleWithPropertyPath> triples;
-    if (ctx->varOrTerm()) {
-      auto subject = visitTypesafe(ctx->varOrTerm());
-      auto tuples = visitTypesafe(ctx->propertyListPathNotEmpty());
-      for (auto& tuple : tuples) {
-        triples.push_back(
-            TripleWithPropertyPath{subject, tuple.first, tuple.second});
-      }
-    } else if (ctx->triplesNodePath()) {
-      throwCollectionsAndBlankNodePathsNotSupported(ctx->triplesNodePath());
-    }
-    return triples;
-  }
+      SparqlAutomaticParser::TriplesSameSubjectPathContext* ctx);
 
   antlrcpp::Any visitTupleWithoutPath(
       SparqlAutomaticParser::TupleWithoutPathContext* ctx) override {
@@ -713,13 +690,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   std::optional<PathTuples> visitTypesafe(
-      SparqlAutomaticParser::PropertyListPathContext* ctx) {
-    if (ctx->propertyListPathNotEmpty()) {
-      return visitTypesafe(ctx->propertyListPathNotEmpty());
-    } else {
-      return std::nullopt;
-    }
-  }
+      SparqlAutomaticParser::PropertyListPathContext* ctx);
 
   antlrcpp::Any visitPropertyListPathNotEmpty(
       SparqlAutomaticParser::PropertyListPathNotEmptyContext* ctx) override {
@@ -734,20 +705,14 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  PropertyPath visitTypesafe(SparqlAutomaticParser::VerbPathContext* ctx) {
-    PropertyPath p = visitTypesafe(ctx->path());
-    p.computeCanBeNull();
-    return p;
-  }
+  PropertyPath visitTypesafe(SparqlAutomaticParser::VerbPathContext* ctx);
 
   antlrcpp::Any visitVerbSimple(
       SparqlAutomaticParser::VerbSimpleContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  Variable visitTypesafe(SparqlAutomaticParser::VerbSimpleContext* ctx) {
-    return visitChildren(ctx).as<Variable>();
-  }
+  Variable visitTypesafe(SparqlAutomaticParser::VerbSimpleContext* ctx);
 
   antlrcpp::Any visitVerbPathOrSimple(
       SparqlAutomaticParser::VerbPathOrSimpleContext* ctx) override {
@@ -755,25 +720,14 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   ad_utility::sparql_types::VarOrPath visitTypesafe(
-      SparqlAutomaticParser::VerbPathOrSimpleContext* ctx) {
-    if (ctx->verbPath()) {
-      return visitTypesafe(ctx->verbPath());
-    } else if (ctx->verbSimple()) {
-      return visitTypesafe(ctx->verbSimple());
-    }
-    AD_FAIL()  // Should be unreachable.
-  }
+      SparqlAutomaticParser::VerbPathOrSimpleContext* ctx);
 
   antlrcpp::Any visitObjectListPath(
       SparqlAutomaticParser::ObjectListPathContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ObjectList visitTypesafe(SparqlAutomaticParser::ObjectListPathContext* ctx) {
-    // The second parameter is empty because collections and blank not paths,
-    // which might add additional triples, are currently not supported.
-    return ObjectList{visitVector<VarOrTerm>(ctx->objectPath()), {}};
-  }
+  ObjectList visitTypesafe(SparqlAutomaticParser::ObjectListPathContext* ctx);
 
   antlrcpp::Any visitObjectPath(
       SparqlAutomaticParser::ObjectPathContext* ctx) override {
@@ -785,9 +739,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  PropertyPath visitTypesafe(SparqlAutomaticParser::PathContext* ctx) {
-    return visitTypesafe(ctx->pathAlternative());
-  }
+  PropertyPath visitTypesafe(SparqlAutomaticParser::PathContext* ctx);
 
   antlrcpp::Any visitPathAlternative(
       SparqlAutomaticParser::PathAlternativeContext* ctx) override {
@@ -795,53 +747,21 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   PropertyPath visitTypesafe(
-      SparqlAutomaticParser::PathAlternativeContext* ctx) {
-    auto paths = visitVector<PropertyPath>(ctx->pathSequence());
-
-    if (paths.size() == 1) {
-      return paths[0];
-    } else {
-      return PropertyPath::makeAlternative(std::move(paths));
-    }
-  }
+      SparqlAutomaticParser::PathAlternativeContext* ctx);
 
   antlrcpp::Any visitPathSequence(
       SparqlAutomaticParser::PathSequenceContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  PropertyPath visitTypesafe(SparqlAutomaticParser::PathSequenceContext* ctx) {
-    auto paths = visitVector<PropertyPath>(ctx->pathEltOrInverse());
-
-    if (paths.size() == 1) {
-      return paths[0];
-    } else {
-      return PropertyPath::makeSequence(std::move(paths));
-    }
-  }
+  PropertyPath visitTypesafe(SparqlAutomaticParser::PathSequenceContext* ctx);
 
   antlrcpp::Any visitPathElt(
       SparqlAutomaticParser::PathEltContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  PropertyPath visitTypesafe(SparqlAutomaticParser::PathEltContext* ctx) {
-    PropertyPath p = visitTypesafe(ctx->pathPrimary());
-
-    if (ctx->pathMod()) {
-      if (ctx->pathMod()->getText() == "+") {
-        p = PropertyPath::makeTransitiveMin(p, 1);
-      } else if (ctx->pathMod()->getText() == "?") {
-        p = PropertyPath::makeTransitiveMax(p, 1);
-      } else if (ctx->pathMod()->getText() == "*") {
-        p = PropertyPath::makeTransitive(p);
-      } else {
-        AD_FAIL()  // Should be unreachable.
-      }
-    }
-
-    return p;
-  }
+  PropertyPath visitTypesafe(SparqlAutomaticParser::PathEltContext* ctx);
 
   antlrcpp::Any visitPathEltOrInverse(
       SparqlAutomaticParser::PathEltOrInverseContext* ctx) override {
@@ -849,15 +769,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   PropertyPath visitTypesafe(
-      SparqlAutomaticParser::PathEltOrInverseContext* ctx) {
-    PropertyPath p = visitTypesafe(ctx->pathElt());
-
-    if (ctx->negationOperator) {
-      p = PropertyPath::makeInverse(p);
-    }
-
-    return p;
-  }
+      SparqlAutomaticParser::PathEltOrInverseContext* ctx);
 
   antlrcpp::Any visitPathMod(
       SparqlAutomaticParser::PathModContext* ctx) override {
@@ -870,21 +782,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  PropertyPath visitTypesafe(SparqlAutomaticParser::PathPrimaryContext* ctx) {
-    if (ctx->iri()) {
-      auto iri = visit(ctx->iri()).as<std::string>();
-      return PropertyPath::fromIri(std::move(iri));
-    } else if (ctx->path()) {
-      return visitTypesafe(ctx->path());
-    } else if (ctx->pathNegatedPropertySet()) {
-      return visitTypesafe(ctx->pathNegatedPropertySet());
-    } else if (ctx->getText() == "a") {
-      // Special keyword 'a'
-      return PropertyPath::fromIri(
-          std::move("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"));
-    }
-    AD_FAIL()  // Should be unreachable.
-  }
+  PropertyPath visitTypesafe(SparqlAutomaticParser::PathPrimaryContext* ctx);
 
   antlrcpp::Any visitPathNegatedPropertySet(
       SparqlAutomaticParser::PathNegatedPropertySetContext* ctx) override {
@@ -892,10 +790,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   PropertyPath visitTypesafe(
-      SparqlAutomaticParser::PathNegatedPropertySetContext*) {
-    throw ParseException(
-        "\"!\" inside a property path is not supported by QLever.");
-  }
+      SparqlAutomaticParser::PathNegatedPropertySetContext*);
 
   antlrcpp::Any visitPathOneInPropertySet(
       SparqlAutomaticParser::PathOneInPropertySetContext*) override {
@@ -993,32 +888,14 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  VarOrTerm visitTypesafe(SparqlAutomaticParser::GraphNodePathContext* ctx) {
-    if (ctx->varOrTerm()) {
-      return visitTypesafe(ctx->varOrTerm());
-    } else if (ctx->triplesNodePath()) {
-      throwCollectionsAndBlankNodePathsNotSupported(ctx->triplesNodePath());
-      AD_FAIL()  // Should be unreachable.
-    }
-    AD_FAIL()  // Should be unreachable.
-  }
+  VarOrTerm visitTypesafe(SparqlAutomaticParser::GraphNodePathContext* ctx);
 
   antlrcpp::Any visitVarOrTerm(
       SparqlAutomaticParser::VarOrTermContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  VarOrTerm visitTypesafe(SparqlAutomaticParser::VarOrTermContext* ctx) {
-    if (ctx->var()) {
-      return VarOrTerm{ctx->var()->accept(this).as<Variable>()};
-    }
-    if (ctx->graphTerm()) {
-      return VarOrTerm{ctx->graphTerm()->accept(this).as<GraphTerm>()};
-    }
-
-    // invalid grammar
-    AD_CHECK(false);
-  }
+  VarOrTerm visitTypesafe(SparqlAutomaticParser::VarOrTermContext* ctx);
 
   antlrcpp::Any visitVarOrIri(
       SparqlAutomaticParser::VarOrIriContext* ctx) override {
