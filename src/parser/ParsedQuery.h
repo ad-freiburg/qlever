@@ -375,7 +375,7 @@ class ParsedQuery {
       setManuallySelected(std::move(v));
     }
 
-    void setManuallySelected(std::vector<VarOrAlias> varsOrAliases) {
+    void setManuallySelected(const std::vector<VarOrAlias>& varsOrAliases) {
       VarsAndAliases v;
       auto processVariable = [&v](Variable var) {
         v._vars.push_back(std::move(var));
