@@ -264,7 +264,7 @@ MATCHER_P(IsPropertyPath, propertyPath, "") { return arg == propertyPath; }
 
 MATCHER_P2(IsAsteriskSelect, distinct, reduced, "") {
   return arg._distinct == distinct && arg._reduced == reduced &&
-         arg.isAllVariablesSelected() && arg.getAliases().empty();
+         arg.isAsterisk() && arg.getAliases().empty();
 }
 
 MATCHER_P3(IsVariablesSelect, distinct, reduced, variables, "") {

@@ -467,13 +467,13 @@ bool QueryPlanner::checkUsePatternTrick(
   bool returns_counts = aliases.size() == 1;
 
   // These will only be set if the query returns the count of predicates
-  // The varialbe the COUNT alias counts
+  // The variable the COUNT alias counts
   std::string counted_var_name;
   // The variable holding the counts
   std::string count_var_name;
 
   if (returns_counts) {
-    // There has to be a single count alias
+    // We have already verified above that there is exactly one alias.
     const ParsedQuery::Alias& alias = aliases.front();
     auto countVariable =
         alias._expression.getVariableForNonDistinctCountOrNullopt();
@@ -511,7 +511,7 @@ bool QueryPlanner::checkUsePatternTrick(
 
       // Check that all selected variables are outputs of
       // CountAvailablePredicates
-      if (selectClause.isAllVariablesSelected()) {
+      if (selectClause.isAsterisk()) {
         return false;
       }
 
@@ -586,13 +586,10 @@ bool QueryPlanner::checkUsePatternTrick(
               return;
             }
             const auto& selectClause = arg._subquery.selectClause();
-            if (selectClause.isManuallySelectedVariables()) {
-              for (const auto& v :
-                   selectClause.getSelectedVariablesAsStrings()) {
-                if (v == t._o) {
-                  usePatternTrick = false;
-                  break;
-                }
+            for (const auto& v : selectClause.getSelectedVariablesAsStrings()) {
+              if (v == t._o) {
+                usePatternTrick = false;
+                break;
               }
             }
           } else if constexpr (std::is_same_v<T, GraphPatternOperation::Bind>) {
@@ -641,13 +638,11 @@ bool QueryPlanner::checkUsePatternTrick(
                 return;
               }
               const auto& selectClause = arg._subquery.selectClause();
-              if (selectClause.isManuallySelectedVariables()) {
-                for (const auto& v :
-                     selectClause.getSelectedVariablesAsStrings()) {
-                  if (v == t._o) {
-                    usePatternTrick = false;
-                    break;
-                  }
+              for (const auto& v :
+                   selectClause.getSelectedVariablesAsStrings()) {
+                if (v == t._o) {
+                  usePatternTrick = false;
+                  break;
                 }
               }
             } else if constexpr (std::is_same_v<T, GraphPatternOperation::
@@ -853,19 +848,14 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
     vector<size_t> keepIndices;
     ad_utility::HashSet<size_t> indDone;
     const auto& colMap = parent._qet->getVariableColumns();
-    if (selectClause.isManuallySelectedVariables()) {
-      for (const auto& var : selectClause.getSelectedVariablesAsStrings()) {
-        auto it = colMap.find(var);
-        if (it == colMap.end() && var.starts_with(TEXTSCORE_VARIABLE_PREFIX)) {
-          auto cVar = "?" + var.substr(TEXTSCORE_VARIABLE_PREFIX.size());
-          it = colMap.find(cVar);
-        }
-        if (it != colMap.end()) {
-          auto ind = it->second;
-          if (indDone.count(ind) == 0) {
-            keepIndices.push_back(ind);
-            indDone.insert(ind);
-          }
+    for (const auto& var : selectClause.getSelectedVariablesAsStrings()) {
+      // There used to be a special treatment for `?ql_textscore_` variables
+      // which was considered a bug.
+      if (auto it = colMap.find(var); it != colMap.end()) {
+        auto ind = it->second;
+        if (indDone.count(ind) == 0) {
+          keepIndices.push_back(ind);
+          indDone.insert(ind);
         }
       }
     }

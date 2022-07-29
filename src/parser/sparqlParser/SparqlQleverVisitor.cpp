@@ -62,7 +62,7 @@ ParsedQuery::SelectClause SparqlQleverVisitor::visitTypesafe(
     select.setAllVariablesSelected();
   } else {
     using VarOrAlias = std::variant<Variable, ParsedQuery::Alias>;
-    select.setManuallySelected(visitVector<VarOrAlias>(ctx->varOrAlias()));
+    select.setSelected(visitVector<VarOrAlias>(ctx->varOrAlias()));
   }
   return select;
 }

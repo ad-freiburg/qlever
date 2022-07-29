@@ -109,13 +109,12 @@ class QueryExecutionTree {
   // Returns a vector where the i-th element contains the column index and
   // `ResultType` of the i-th `selectVariable` in the `resultTable`
   ColumnIndicesAndTypes selectedVariablesToColumnIndices(
-      const SelectClause& selectedVarsOrAsterisk,
-      const ResultTable& resultTable, bool includeQuestionMark = true) const;
+      const SelectClause& selectClause, const ResultTable& resultTable,
+      bool includeQuestionMark = true) const;
 
   template <ExportSubFormat format>
   ad_utility::streams::stream_generator generateResults(
-      const SelectClause& selectedVarsOrAsterisk, size_t limit,
-      size_t offset) const;
+      const SelectClause& selectClause, size_t limit, size_t offset) const;
 
   // Generate an RDF graph in turtle format for a CONSTRUCT query.
   ad_utility::streams::stream_generator writeRdfGraphTurtle(
@@ -138,7 +137,7 @@ class QueryExecutionTree {
       shared_ptr<const ResultTable> resultTable = nullptr) const;
 
   nlohmann::json writeResultAsSparqlJson(
-      const SelectClause& selectedVarsOrAsterisk, size_t limit, size_t offset,
+      const SelectClause& selectClause, size_t limit, size_t offset,
       shared_ptr<const ResultTable> preComputedResult = nullptr) const;
 
   const std::vector<size_t>& resultSortedOn() const {

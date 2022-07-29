@@ -92,11 +92,11 @@ void QueryExecutionTree::setVariableColumns(
 // ___________________________________________________________________________
 QueryExecutionTree::ColumnIndicesAndTypes
 QueryExecutionTree::selectedVariablesToColumnIndices(
-    const SelectClause& selectedVarsOrAsterisk, const ResultTable& resultTable,
+    const SelectClause& selectClause, const ResultTable& resultTable,
     bool includeQuestionMark) const {
   ColumnIndicesAndTypes exportColumns;
 
-  for (const auto& var : selectedVarsOrAsterisk.getSelectedVariables()) {
+  for (const auto& var : selectClause.getSelectedVariables()) {
     std::string varString = var.name();
     if (getVariableColumns().contains(varString)) {
       auto columnIndex = getVariableColumns().at(varString);
@@ -111,8 +111,7 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
       exportColumns.emplace_back(std::nullopt);
       LOG(WARN) << "The variable \"" << varString
                 << "\" was found in the original query, but not in the "
-                   "execution tree. "
-                   "This is likely a bug\n";
+                   "execution tree. This is likely a bug\n";
     }
   }
   return exportColumns;
@@ -120,15 +119,15 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
 
 // _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeResultAsQLeverJson(
-    const SelectClause& selectedVarsOrAsterisk, size_t limit, size_t offset,
+    const SelectClause& selectClause, size_t limit, size_t offset,
     shared_ptr<const ResultTable> resultTable) const {
   // They may trigger computation (but does not have to).
   if (!resultTable) {
     resultTable = getResult();
   }
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  ColumnIndicesAndTypes validIndices = selectedVariablesToColumnIndices(
-      selectedVarsOrAsterisk, *resultTable, true);
+  ColumnIndicesAndTypes validIndices =
+      selectedVariablesToColumnIndices(selectClause, *resultTable, true);
   if (validIndices.empty()) {
     return {std::vector<std::string>()};
   }
@@ -139,7 +138,7 @@ nlohmann::json QueryExecutionTree::writeResultAsQLeverJson(
 
 // _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
-    const SelectClause& selectedVarsOrAsterisk, size_t limit, size_t offset,
+    const SelectClause& selectClause, size_t limit, size_t offset,
     shared_ptr<const ResultTable> resultTable) const {
   using nlohmann::json;
 
@@ -151,8 +150,8 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
                 "Resolving strings in result...\n";
 
   // Don't include the question mark in the variable names.
-  ColumnIndicesAndTypes columns = selectedVariablesToColumnIndices(
-      selectedVarsOrAsterisk, *resultTable, false);
+  ColumnIndicesAndTypes columns =
+      selectedVariablesToColumnIndices(selectClause, *resultTable, false);
 
   std::erase(columns, std::nullopt);
 
@@ -163,14 +162,8 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   const IdTable& idTable = resultTable->_idTable;
 
   json result;
-  std::vector<std::string> selectedVars = [&]() {
-    const auto& v = selectedVarsOrAsterisk.getSelectedVariables();
-    std::vector<std::string> result;
-    for (const auto& var : v) {
-      result.push_back(var.name());
-    }
-    return result;
-  }();
+  std::vector<std::string> selectedVars =
+      selectClause.getSelectedVariablesAsStrings();
   // Strip the leading '?' from the variables, it is not part of the SPARQL JSON
   // output format.
   for (auto& var : selectedVars) {
@@ -394,8 +387,7 @@ nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
 // _____________________________________________________________________________
 template <QueryExecutionTree::ExportSubFormat format>
 ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
-    const SelectClause& selectedVarsOrAsterisk, size_t limit,
-    size_t offset) const {
+    const SelectClause& selectClause, size_t limit, size_t offset) const {
   static_assert(format == ExportSubFormat::BINARY ||
                 format == ExportSubFormat::CSV ||
                 format == ExportSubFormat::TSV);
@@ -406,8 +398,8 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
   resultTable->logResultSize();
   LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
              << std::endl;
-  auto selectedColumnIndices = selectedVariablesToColumnIndices(
-      selectedVarsOrAsterisk, *resultTable, true);
+  auto selectedColumnIndices =
+      selectedVariablesToColumnIndices(selectClause, *resultTable, true);
 
   const auto& idTable = resultTable->_idTable;
   size_t upperBound = std::min<size_t>(offset + limit, idTable.size());
@@ -429,8 +421,7 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
   static constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
   constexpr std::string_view sepView{&sep, 1};
   // Print header line
-  const auto& variables =
-      selectedVarsOrAsterisk.getSelectedVariablesAsStrings();
+  const auto& variables = selectClause.getSelectedVariablesAsStrings();
   co_yield absl::StrJoin(variables, sepView);
   co_yield '\n';
 
@@ -483,18 +474,15 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
 
 template ad_utility::streams::stream_generator
 QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::CSV>(
-    const SelectClause& selectedVarsOrAsterisk, size_t limit,
-    size_t offset) const;
+    const SelectClause& selectClause, size_t limit, size_t offset) const;
 
 template ad_utility::streams::stream_generator
 QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::TSV>(
-    const SelectClause& selectedVarsOrAsterisk, size_t limit,
-    size_t offset) const;
+    const SelectClause& selectClause, size_t limit, size_t offset) const;
 
 template ad_utility::streams::stream_generator QueryExecutionTree::
     generateResults<QueryExecutionTree::ExportSubFormat::BINARY>(
-        const SelectClause& selectedVarsOrAsterisk, size_t limit,
-        size_t offset) const;
+        const SelectClause& selectClause, size_t limit, size_t offset) const;
 
 // _____________________________________________________________________________
 

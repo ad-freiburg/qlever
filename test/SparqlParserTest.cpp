@@ -22,7 +22,6 @@ TEST(ParserTest, testParse) {
       auto pq = SparqlParser("SELECT ?x WHERE {?x ?y ?z}").parse();
       ASSERT_TRUE(pq.hasSelectClause());
       const auto& selectClause = pq.selectClause();
-      ASSERT_GT(pq.asString().size(), 0u);
       ASSERT_EQ(1u, pq._prefixes.size());
       ASSERT_EQ(1u, selectClause.getSelectedVariables().size());
       ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
@@ -475,7 +474,7 @@ TEST(ParserTest, testParse) {
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(true, sc._reduced);
-      ASSERT_EQ(true, sc.isAllVariablesSelected());
+      ASSERT_EQ(true, sc.isAsterisk());
 
       vector<string> vvars = {"?movie", "?director"};
       ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
@@ -507,7 +506,7 @@ TEST(ParserTest, testParse) {
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(true, sc._distinct);
-      ASSERT_EQ(true, sc.isAllVariablesSelected());
+      ASSERT_EQ(true, sc.isAsterisk());
 
       vector<string> vvars = {"?movie", "?director"};
       ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
@@ -549,7 +548,7 @@ TEST(ParserTest, testParse) {
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(true, sc._distinct);
-      ASSERT_EQ(true, sc.isAllVariablesSelected());
+      ASSERT_EQ(true, sc.isAsterisk());
 
       vector<string> vvars = {"?movie", "?director", "?year"};
       ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
@@ -587,7 +586,7 @@ TEST(ParserTest, testParse) {
           get<ParsedQuery::SelectClause>(parsed_sub_query._subquery._clause);
       ASSERT_EQ(false, sc_subquery._distinct);
       ASSERT_EQ(false, sc_subquery._reduced);
-      ASSERT_EQ(true, sc_subquery.isAllVariablesSelected());
+      ASSERT_EQ(true, sc_subquery.isAsterisk());
       vector<string> vvars_subquery = {"?movie", "?director", "?year"};
       ASSERT_EQ(vvars_subquery, sc_subquery.getSelectedVariablesAsStrings());
     }
@@ -633,7 +632,7 @@ TEST(ParserTest, testParse) {
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
       ASSERT_EQ(true, sc._distinct);
-      ASSERT_EQ(true, sc.isAllVariablesSelected());
+      ASSERT_EQ(true, sc.isAsterisk());
 
       vector<string> vvars = {"?movie", "?director", "?year"};
       ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
@@ -667,7 +666,7 @@ TEST(ParserTest, testParse) {
           get<ParsedQuery::SelectClause>(parsed_sub_query._subquery._clause);
       ASSERT_EQ(false, sc_subquery._distinct);
       ASSERT_EQ(false, sc_subquery._reduced);
-      ASSERT_EQ(true, sc_subquery.isAllVariablesSelected());
+      ASSERT_EQ(true, sc_subquery.isAsterisk());
       vector<string> vvars_subquery = {"?movie", "?director", "?year"};
       ASSERT_EQ(vvars_subquery, sc_subquery.getSelectedVariablesAsStrings());
 
@@ -702,7 +701,7 @@ TEST(ParserTest, testParse) {
           get<ParsedQuery::SelectClause>(aux_parsed_sub_sub_query._clause);
       ASSERT_EQ(false, sc_sub_subquery._distinct);
       ASSERT_EQ(false, sc_sub_subquery._reduced);
-      ASSERT_EQ(true, sc_sub_subquery.isManuallySelectedVariables());
+      ASSERT_EQ(false, sc_sub_subquery.isAsterisk());
       vector<string> vvars_sub_subquery = {"?year"};
       ASSERT_EQ(vvars_sub_subquery,
                 sc_sub_subquery.getSelectedVariablesAsStrings());

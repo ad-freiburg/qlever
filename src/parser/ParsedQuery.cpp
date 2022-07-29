@@ -33,7 +33,7 @@ string ParsedQuery::asString() const {
   os << "\n}";
 
   bool usesSelect = hasSelectClause();
-  bool usesAsterisk = usesSelect && selectClause().isAllVariablesSelected();
+  bool usesAsterisk = usesSelect && !selectClause().isAsterisk();
 
   if (usesSelect) {
     const auto& selectClause = this->selectClause();
@@ -41,7 +41,8 @@ string ParsedQuery::asString() const {
     os << "\nSELECT: {\n\t";
     // TODO<joka921> is this needed?
     /*
-    os << absl::StrJoin(selectClause._varsOrAsterisk.getSelectedVariables(),
+    os <<
+    absl::StrJoin(selectClause._varsAndAliasesOrAsterisk.getSelectedVariables(),
                         ", ");
                         */
     os << "\n}";

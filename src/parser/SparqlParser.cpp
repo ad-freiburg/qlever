@@ -61,8 +61,7 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
   parseSolutionModifiers(query);
 
   if (!query->_groupByVariables.empty()) {
-    if (query->hasSelectClause() &&
-        query->selectClause().isManuallySelectedVariables()) {
+    if (query->hasSelectClause() && !query->selectClause().isAsterisk()) {
       const auto& selectClause = query->selectClause();
       // Check if all selected variables are either aggregated or
       for (const string& var : selectClause.getSelectedVariablesAsStrings()) {
@@ -85,8 +84,7 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
           }
         }
       }
-    } else if (query->hasSelectClause() &&
-               query->selectClause().isAllVariablesSelected()) {
+    } else if (query->hasSelectClause() && query->selectClause().isAsterisk()) {
       throw ParseException(
           "GROUP BY is not allowed when all variables are selected via SELECT "
           "*");
@@ -119,11 +117,12 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
   }
   const auto& selectClause = query->selectClause();
 
+  // TODO<joka921> The following check should be directly in the
+  // `SelectClause` class (in the `setSelected` member).
   ad_utility::HashMap<std::string, size_t> variable_counts;
-  if (selectClause.isManuallySelectedVariables()) {
-    for (const std::string& s : selectClause.getSelectedVariablesAsStrings()) {
-      variable_counts[s]++;
-    }
+
+  for (const std::string& s : selectClause.getSelectedVariablesAsStrings()) {
+    variable_counts[s]++;
   }
 
   for (const ParsedQuery::Alias& a : selectClause.getAliases()) {

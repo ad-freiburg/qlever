@@ -342,7 +342,7 @@ class ParsedQuery {
 
   // Represents either "all Variables" (Select *) or a list of explicitly
   // selected Variables (Select ?a ?b).
-  // Represents the Select Clause with all the possible outcomes
+  // Represents the SELECT clause with all the possible outcomes
   struct SelectClause {
     bool _reduced = false;
     bool _distinct = false;
@@ -352,30 +352,26 @@ class ParsedQuery {
       std::vector<Variable> _vars;
       std::vector<Alias> _aliases;
     };
-    std::variant<VarsAndAliases, char> _varsOrAsterisk;
+    std::variant<VarsAndAliases, char> _varsAndAliasesOrAsterisk;
     std::vector<Variable> _variablesFromQueryBody;
 
    public:
-    [[nodiscard]] bool isAllVariablesSelected() const {
-      return std::holds_alternative<char>(_varsOrAsterisk);
-    }
-
-    [[nodiscard]] bool isManuallySelectedVariables() const {
-      return !isAllVariablesSelected();
+    [[nodiscard]] bool isAsterisk() const {
+      return std::holds_alternative<char>(_varsAndAliasesOrAsterisk);
     }
 
     // Sets the Selector to 'All' (*) only if the Selector is still undefined
-    void setAllVariablesSelected() { _varsOrAsterisk = '*'; }
+    void setAllVariablesSelected() { _varsAndAliasesOrAsterisk = '*'; }
 
     // Sets the Selector with the variables manually defined
     // Ex: Select var_1 (...) var_n
-    void setManuallySelected(std::vector<Variable> variables) {
+    void setSelected(std::vector<Variable> variables) {
       std::vector<VarOrAlias> v(std::make_move_iterator(variables.begin()),
                                 std::make_move_iterator(variables.end()));
-      setManuallySelected(std::move(v));
+      setSelected(v);
     }
 
-    void setManuallySelected(const std::vector<VarOrAlias>& varsOrAliases) {
+    void setSelected(std::vector<VarOrAlias> varsOrAliases) {
       VarsAndAliases v;
       auto processVariable = [&v](Variable var) {
         v._vars.push_back(std::move(var));
@@ -390,12 +386,12 @@ class ParsedQuery {
             ad_utility::OverloadCallOperator{processVariable, processAlias},
             std::move(el));
       }
-      _varsOrAsterisk = std::move(v);
+      _varsAndAliasesOrAsterisk = std::move(v);
     }
 
     // Add a variable, that was found in the query body. The added variables
     // will only be used if `isAsterisk` is true.
-    void registerVariableVisibleInQueryBody(const Variable& variable) {
+    void addVariableForAsterisk(const Variable& variable) {
       if (!ad_utility::contains(_variablesFromQueryBody, variable)) {
         _variablesFromQueryBody.emplace_back(variable);
       }
@@ -406,9 +402,9 @@ class ParsedQuery {
     // or
     // explicit variables selection (Select 'var_1' ... 'var_n')
     [[nodiscard]] const std::vector<Variable>& getSelectedVariables() const {
-      return isAllVariablesSelected()
+      return isAsterisk()
                  ? _variablesFromQueryBody
-                 : std::get<VarsAndAliases>(_varsOrAsterisk)._vars;
+                 : std::get<VarsAndAliases>(_varsAndAliasesOrAsterisk)._vars;
     }
     [[nodiscard]] std::vector<std::string> getSelectedVariablesAsStrings()
         const {
@@ -424,10 +420,10 @@ class ParsedQuery {
     [[nodiscard]] const std::vector<Alias>& getAliases() const {
       static const std::vector<Alias> emptyDummy;
       // Aliases are always manually specified
-      if (isAllVariablesSelected()) {
+      if (isAsterisk()) {
         return emptyDummy;
       } else {
-        return std::get<VarsAndAliases>(_varsOrAsterisk)._aliases;
+        return std::get<VarsAndAliases>(_varsAndAliasesOrAsterisk)._aliases;
       }
     }
   };
@@ -482,7 +478,7 @@ class ParsedQuery {
   [[maybe_unused]] bool registerVariableVisibleInQueryBody(
       const Variable& variable) {
     if (!hasSelectClause()) return false;
-    selectClause().registerVariableVisibleInQueryBody(variable);
+    selectClause().addVariableForAsterisk(variable);
     return true;
   }
 
