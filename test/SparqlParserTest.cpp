@@ -1084,7 +1084,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_TRUE(pq.hasSelectClause());
     const auto& aliases = pq.selectClause().getAliases();
     ASSERT_EQ(1u, aliases.size());
-    ASSERT_EQ("(group_concat(?r;SEPARATOR=\"Cake\") as ?concat)",
+    ASSERT_EQ("(GROUP_CONCAT(?r;SEPARATOR=\"Cake\") as ?concat)",
               aliases[0].getDescriptor());
   }
 }
@@ -1102,7 +1102,7 @@ TEST(ParserTest, testGroupByAndAlias) {
   const auto& aliases = selectClause.getAliases();
   ASSERT_EQ(1u, aliases.size());
   ASSERT_TRUE(aliases[0]._expression.isAggregate({}));
-  ASSERT_EQ("(count(?a) as ?count)", aliases[0].getDescriptor());
+  ASSERT_EQ("(COUNT(?a) as ?count)", aliases[0].getDescriptor());
   EXPECT_THAT(pq, GroupByVariablesMatch<vector<string>>({"?b"}));
 }
 
