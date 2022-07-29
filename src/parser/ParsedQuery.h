@@ -342,7 +342,7 @@ class ParsedQuery {
 
   // Represents either "all Variables" (Select *) or a list of explicitly
   // selected Variables (Select ?a ?b).
-  // Represents the SELECT clause with all the possible outcomes
+  // Represents the SELECT clause with all the possible outcomes.
   struct SelectClause {
     bool _reduced = false;
     bool _distinct = false;
@@ -360,11 +360,9 @@ class ParsedQuery {
       return std::holds_alternative<char>(_varsAndAliasesOrAsterisk);
     }
 
-    // Sets the Selector to 'All' (*) only if the Selector is still undefined
-    void setAllVariablesSelected() { _varsAndAliasesOrAsterisk = '*'; }
+    // Set the selector to '*'.
+    void setAsterisk() { _varsAndAliasesOrAsterisk = '*'; }
 
-    // Sets the Selector with the variables manually defined
-    // Ex: Select var_1 (...) var_n
     void setSelected(std::vector<Variable> variables) {
       std::vector<VarOrAlias> v(std::make_move_iterator(variables.begin()),
                                 std::make_move_iterator(variables.end()));
@@ -389,7 +387,7 @@ class ParsedQuery {
       _varsAndAliasesOrAsterisk = std::move(v);
     }
 
-    // Add a variable, that was found in the query body. The added variables
+    // Add a variable that was found in the query body. The added variables
     // will only be used if `isAsterisk` is true.
     void addVariableForAsterisk(const Variable& variable) {
       if (!ad_utility::contains(_variablesFromQueryBody, variable)) {

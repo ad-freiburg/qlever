@@ -467,7 +467,7 @@ bool QueryPlanner::checkUsePatternTrick(
   bool returns_counts = aliases.size() == 1;
 
   // These will only be set if the query returns the count of predicates
-  // The variable the COUNT alias counts
+  // The variable the COUNT alias counts.
   std::string counted_var_name;
   // The variable holding the counts
   std::string count_var_name;

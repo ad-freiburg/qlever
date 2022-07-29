@@ -111,7 +111,8 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
       exportColumns.emplace_back(std::nullopt);
       LOG(WARN) << "The variable \"" << varString
                 << "\" was found in the original query, but not in the "
-                   "execution tree. This is likely a bug\n";
+                   "execution tree. This is likely a bug"
+                << std::endl;
     }
   }
   return exportColumns;

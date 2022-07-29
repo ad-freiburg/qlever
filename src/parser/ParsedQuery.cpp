@@ -33,7 +33,7 @@ string ParsedQuery::asString() const {
   os << "\n}";
 
   bool usesSelect = hasSelectClause();
-  bool usesAsterisk = usesSelect && !selectClause().isAsterisk();
+  bool usesAsterisk = usesSelect && selectClause().isAsterisk();
 
   if (usesSelect) {
     const auto& selectClause = this->selectClause();

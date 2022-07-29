@@ -59,7 +59,7 @@ ParsedQuery::SelectClause SparqlQleverVisitor::visitTypesafe(
   select._reduced = static_cast<bool>(ctx->REDUCED());
 
   if (ctx->asterisk) {
-    select.setAllVariablesSelected();
+    select.setAsterisk();
   } else {
     using VarOrAlias = std::variant<Variable, ParsedQuery::Alias>;
     select.setSelected(visitVector<VarOrAlias>(ctx->varOrAlias()));

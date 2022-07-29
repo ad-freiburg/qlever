@@ -119,6 +119,9 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
 
   // TODO<joka921> The following check should be directly in the
   // `SelectClause` class (in the `setSelected` member).
+
+  // TODO<joka921> Is this even the correct way to check this? we should also
+  // verify that the variable is new (not even visible in the query body).
   ad_utility::HashMap<std::string, size_t> variable_counts;
 
   for (const std::string& s : selectClause.getSelectedVariablesAsStrings()) {
