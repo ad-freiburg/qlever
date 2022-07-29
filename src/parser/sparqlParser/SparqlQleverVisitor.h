@@ -52,6 +52,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
  public:
   using PrefixMap = ad_utility::HashMap<string, string>;
+  using Parser = SparqlAutomaticParser;
   const PrefixMap& prefixMap() const { return _prefixMap; }
   SparqlQleverVisitor() = default;
   SparqlQleverVisitor(PrefixMap prefixMap) : _prefixMap{std::move(prefixMap)} {}
@@ -112,7 +113,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return sparqlExpression::SparqlExpressionPimpl{std::move(any)};
   }
   // ___________________________________________________________________________
-  antlrcpp::Any visitQuery(SparqlAutomaticParser::QueryContext* ctx) override {
+  antlrcpp::Any visitQuery(Parser::QueryContext* ctx) override {
     // The prologue (BASE and PREFIX declarations)  only affects the internal
     // state of the visitor.
     visitPrologue(ctx->prologue());
@@ -126,73 +127,64 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   // ___________________________________________________________________________
-  antlrcpp::Any visitPrologue(
-      SparqlAutomaticParser::PrologueContext* ctx) override {
+  antlrcpp::Any visitPrologue(Parser::PrologueContext* ctx) override {
     // Default implementation is ok here, simply handle all PREFIX and BASE
     // declarations.
     return visitChildren(ctx);
   }
 
   // ___________________________________________________________________________
-  antlrcpp::Any visitBaseDecl(
-      SparqlAutomaticParser::BaseDeclContext* ctx) override {
+  antlrcpp::Any visitBaseDecl(Parser::BaseDeclContext* ctx) override {
     visitTypesafe(ctx);
     return nullptr;
   }
 
-  void visitTypesafe(SparqlAutomaticParser::BaseDeclContext* ctx);
+  void visitTypesafe(Parser::BaseDeclContext* ctx);
 
   // ___________________________________________________________________________
-  antlrcpp::Any visitPrefixDecl(
-      SparqlAutomaticParser::PrefixDeclContext* ctx) override {
+  antlrcpp::Any visitPrefixDecl(Parser::PrefixDeclContext* ctx) override {
     visitTypesafe(ctx);
     return nullptr;
   }
 
-  void visitTypesafe(SparqlAutomaticParser::PrefixDeclContext* ctx);
+  void visitTypesafe(Parser::PrefixDeclContext* ctx);
 
-  antlrcpp::Any visitSelectQuery(
-      SparqlAutomaticParser::SelectQueryContext* ctx) override {
+  antlrcpp::Any visitSelectQuery(Parser::SelectQueryContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitSubSelect(
-      SparqlAutomaticParser::SubSelectContext* ctx) override {
+  antlrcpp::Any visitSubSelect(Parser::SubSelectContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitSelectClause(
-      SparqlAutomaticParser::SelectClauseContext* ctx) override {
+  antlrcpp::Any visitSelectClause(Parser::SelectClauseContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ParsedQuery::SelectClause visitTypesafe(
-      SparqlAutomaticParser::SelectClauseContext* ctx);
+  ParsedQuery::SelectClause visitTypesafe(Parser::SelectClauseContext* ctx);
 
-  antlrcpp::Any visitVarOrAlias(
-      SparqlAutomaticParser::VarOrAliasContext* ctx) override {
+  antlrcpp::Any visitVarOrAlias(Parser::VarOrAliasContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
   std::variant<Variable, ParsedQuery::Alias> visitTypesafe(
-      SparqlAutomaticParser::VarOrAliasContext* ctx);
+      Parser::VarOrAliasContext* ctx);
 
-  antlrcpp::Any visitAlias(SparqlAutomaticParser::AliasContext* ctx) override {
+  antlrcpp::Any visitAlias(Parser::AliasContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ParsedQuery::Alias visitTypesafe(SparqlAutomaticParser::AliasContext* ctx);
+  ParsedQuery::Alias visitTypesafe(Parser::AliasContext* ctx);
 
   antlrcpp::Any visitAliasWithoutBrackets(
-      SparqlAutomaticParser::AliasWithoutBracketsContext* ctx) override {
+      Parser::AliasWithoutBracketsContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ParsedQuery::Alias visitTypesafe(
-      SparqlAutomaticParser::AliasWithoutBracketsContext* ctx);
+  ParsedQuery::Alias visitTypesafe(Parser::AliasWithoutBracketsContext* ctx);
 
   antlrcpp::Any visitConstructQuery(
-      SparqlAutomaticParser::ConstructQueryContext* ctx) override {
+      Parser::ConstructQueryContext* ctx) override {
     if (!ctx->datasetClause().empty()) {
       throw ParseException{"Datasets are not supported"};
     }
@@ -202,519 +194,465 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitDescribeQuery(
-      SparqlAutomaticParser::DescribeQueryContext* ctx) override {
+  antlrcpp::Any visitDescribeQuery(Parser::DescribeQueryContext* ctx) override {
     // TODO: unsupported
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitAskQuery(
-      SparqlAutomaticParser::AskQueryContext* ctx) override {
+  antlrcpp::Any visitAskQuery(Parser::AskQueryContext* ctx) override {
     // TODO: unsupported
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitDatasetClause(
-      SparqlAutomaticParser::DatasetClauseContext* ctx) override {
+  antlrcpp::Any visitDatasetClause(Parser::DatasetClauseContext* ctx) override {
     // TODO: unsupported
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitDefaultGraphClause(
-      SparqlAutomaticParser::DefaultGraphClauseContext* ctx) override {
+      Parser::DefaultGraphClauseContext* ctx) override {
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitNamedGraphClause(
-      SparqlAutomaticParser::NamedGraphClauseContext* ctx) override {
+      Parser::NamedGraphClauseContext* ctx) override {
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitSourceSelector(
-      SparqlAutomaticParser::SourceSelectorContext* ctx) override {
+      Parser::SourceSelectorContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitWhereClause(
-      SparqlAutomaticParser::WhereClauseContext* ctx) override {
+  antlrcpp::Any visitWhereClause(Parser::WhereClauseContext* ctx) override {
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitSolutionModifier(
-      SparqlAutomaticParser::SolutionModifierContext* ctx) override {
+      Parser::SolutionModifierContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitGroupClause(
-      SparqlAutomaticParser::GroupClauseContext* ctx) override {
+  antlrcpp::Any visitGroupClause(Parser::GroupClauseContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  vector<GroupKey> visitTypesafe(
-      SparqlAutomaticParser::GroupClauseContext* ctx);
+  vector<GroupKey> visitTypesafe(Parser::GroupClauseContext* ctx);
 
   antlrcpp::Any visitGroupCondition(
-      SparqlAutomaticParser::GroupConditionContext* ctx) override {
+      Parser::GroupConditionContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  GroupKey visitTypesafe(SparqlAutomaticParser::GroupConditionContext* ctx);
+  GroupKey visitTypesafe(Parser::GroupConditionContext* ctx);
 
-  antlrcpp::Any visitHavingClause(
-      SparqlAutomaticParser::HavingClauseContext* ctx) override {
+  antlrcpp::Any visitHavingClause(Parser::HavingClauseContext* ctx) override {
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitHavingCondition(
-      SparqlAutomaticParser::HavingConditionContext* ctx) override {
+      Parser::HavingConditionContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitOrderClause(
-      SparqlAutomaticParser::OrderClauseContext* ctx) override {
+  antlrcpp::Any visitOrderClause(Parser::OrderClauseContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  vector<OrderKey> visitTypesafe(
-      SparqlAutomaticParser::OrderClauseContext* ctx);
+  vector<OrderKey> visitTypesafe(Parser::OrderClauseContext* ctx);
 
   antlrcpp::Any visitOrderCondition(
-      SparqlAutomaticParser::OrderConditionContext* ctx) override {
+      Parser::OrderConditionContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  OrderKey visitTypesafe(SparqlAutomaticParser::OrderConditionContext* ctx);
+  OrderKey visitTypesafe(Parser::OrderConditionContext* ctx);
 
   antlrcpp::Any visitLimitOffsetClauses(
-      SparqlAutomaticParser::LimitOffsetClausesContext* ctx) override {
+      Parser::LimitOffsetClausesContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  LimitOffsetClause visitTypesafe(
-      SparqlAutomaticParser::LimitOffsetClausesContext* ctx);
+  LimitOffsetClause visitTypesafe(Parser::LimitOffsetClausesContext* ctx);
 
-  antlrcpp::Any visitLimitClause(
-      SparqlAutomaticParser::LimitClauseContext* ctx) override {
+  antlrcpp::Any visitLimitClause(Parser::LimitClauseContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  unsigned long long int visitTypesafe(
-      SparqlAutomaticParser::LimitClauseContext* ctx);
+  unsigned long long int visitTypesafe(Parser::LimitClauseContext* ctx);
 
-  antlrcpp::Any visitOffsetClause(
-      SparqlAutomaticParser::OffsetClauseContext* ctx) override {
+  antlrcpp::Any visitOffsetClause(Parser::OffsetClauseContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  unsigned long long int visitTypesafe(
-      SparqlAutomaticParser::OffsetClauseContext* ctx);
+  unsigned long long int visitTypesafe(Parser::OffsetClauseContext* ctx);
 
   antlrcpp::Any visitTextLimitClause(
-      SparqlAutomaticParser::TextLimitClauseContext* ctx) override {
+      Parser::TextLimitClauseContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  unsigned long long int visitTypesafe(
-      SparqlAutomaticParser::TextLimitClauseContext* ctx);
+  unsigned long long int visitTypesafe(Parser::TextLimitClauseContext* ctx);
 
-  antlrcpp::Any visitValuesClause(
-      SparqlAutomaticParser::ValuesClauseContext* ctx) override {
+  antlrcpp::Any visitValuesClause(Parser::ValuesClauseContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
   std::optional<GraphPatternOperation::Values> visitTypesafe(
-      SparqlAutomaticParser::ValuesClauseContext* ctx);
+      Parser::ValuesClauseContext* ctx);
 
   antlrcpp::Any visitTriplesTemplate(
-      SparqlAutomaticParser::TriplesTemplateContext* ctx) override {
+      Parser::TriplesTemplateContext* ctx) override {
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitGroupGraphPattern(
-      SparqlAutomaticParser::GroupGraphPatternContext* ctx) override {
+      Parser::GroupGraphPatternContext* ctx) override {
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitGroupGraphPatternSub(
-      SparqlAutomaticParser::GroupGraphPatternSubContext* ctx) override {
+      Parser::GroupGraphPatternSubContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitTriplesBlock(
-      SparqlAutomaticParser::TriplesBlockContext* ctx) override {
+  antlrcpp::Any visitTriplesBlock(Parser::TriplesBlockContext* ctx) override {
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitGraphPatternNotTriples(
-      SparqlAutomaticParser::GraphPatternNotTriplesContext* ctx) override {
+      Parser::GraphPatternNotTriplesContext* ctx) override {
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitOptionalGraphPattern(
-      SparqlAutomaticParser::OptionalGraphPatternContext* ctx) override {
+      Parser::OptionalGraphPatternContext* ctx) override {
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitGraphGraphPattern(
-      SparqlAutomaticParser::GraphGraphPatternContext* ctx) override {
+      Parser::GraphGraphPatternContext* ctx) override {
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitServiceGraphPattern(
-      SparqlAutomaticParser::ServiceGraphPatternContext* ctx) override {
+      Parser::ServiceGraphPatternContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitBind(SparqlAutomaticParser::BindContext* ctx) override {
+  antlrcpp::Any visitBind(Parser::BindContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  GraphPatternOperation::Bind visitTypesafe(
-      SparqlAutomaticParser::BindContext* ctx);
+  GraphPatternOperation::Bind visitTypesafe(Parser::BindContext* ctx);
 
-  antlrcpp::Any visitInlineData(
-      SparqlAutomaticParser::InlineDataContext* ctx) override {
+  antlrcpp::Any visitInlineData(Parser::InlineDataContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  GraphPatternOperation::Values visitTypesafe(
-      SparqlAutomaticParser::InlineDataContext* ctx);
+  GraphPatternOperation::Values visitTypesafe(Parser::InlineDataContext* ctx);
 
-  antlrcpp::Any visitDataBlock(
-      SparqlAutomaticParser::DataBlockContext* ctx) override {
+  antlrcpp::Any visitDataBlock(Parser::DataBlockContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  GraphPatternOperation::Values visitTypesafe(
-      SparqlAutomaticParser::DataBlockContext* ctx);
+  GraphPatternOperation::Values visitTypesafe(Parser::DataBlockContext* ctx);
 
   antlrcpp::Any visitInlineDataOneVar(
-      SparqlAutomaticParser::InlineDataOneVarContext* ctx) override {
+      Parser::InlineDataOneVarContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  SparqlValues visitTypesafe(
-      SparqlAutomaticParser::InlineDataOneVarContext* ctx);
+  SparqlValues visitTypesafe(Parser::InlineDataOneVarContext* ctx);
 
   antlrcpp::Any visitInlineDataFull(
-      SparqlAutomaticParser::InlineDataFullContext* ctx) override {
+      Parser::InlineDataFullContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  SparqlValues visitTypesafe(SparqlAutomaticParser::InlineDataFullContext* ctx);
+  SparqlValues visitTypesafe(Parser::InlineDataFullContext* ctx);
 
   antlrcpp::Any visitDataBlockSingle(
-      SparqlAutomaticParser::DataBlockSingleContext* ctx) override {
+      Parser::DataBlockSingleContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  vector<std::string> visitTypesafe(
-      SparqlAutomaticParser::DataBlockSingleContext* ctx);
+  vector<std::string> visitTypesafe(Parser::DataBlockSingleContext* ctx);
 
   antlrcpp::Any visitDataBlockValue(
-      SparqlAutomaticParser::DataBlockValueContext* ctx) override {
+      Parser::DataBlockValueContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  std::string visitTypesafe(SparqlAutomaticParser::DataBlockValueContext* ctx);
+  std::string visitTypesafe(Parser::DataBlockValueContext* ctx);
 
   antlrcpp::Any visitMinusGraphPattern(
-      SparqlAutomaticParser::MinusGraphPatternContext* ctx) override {
+      Parser::MinusGraphPatternContext* ctx) override {
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitGroupOrUnionGraphPattern(
-      SparqlAutomaticParser::GroupOrUnionGraphPatternContext* ctx) override {
+      Parser::GroupOrUnionGraphPatternContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitFilterR(
-      SparqlAutomaticParser::FilterRContext* ctx) override {
+  antlrcpp::Any visitFilterR(Parser::FilterRContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitConstraint(
-      SparqlAutomaticParser::ConstraintContext* ctx) override {
+  antlrcpp::Any visitConstraint(Parser::ConstraintContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitFunctionCall(
-      SparqlAutomaticParser::FunctionCallContext* ctx) override {
+  antlrcpp::Any visitFunctionCall(Parser::FunctionCallContext* ctx) override {
     return processIriFunctionCall(
         visitIri(ctx->iri()).as<std::string>(),
         std::move(
             visitArgList(ctx->argList()).as<std::vector<ExpressionPtr>>()));
   }
 
-  antlrcpp::Any visitArgList(
-      SparqlAutomaticParser::ArgListContext* ctx) override {
+  antlrcpp::Any visitArgList(Parser::ArgListContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  vector<ExpressionPtr> visitTypesafe(
-      SparqlAutomaticParser::ArgListContext* ctx);
+  vector<ExpressionPtr> visitTypesafe(Parser::ArgListContext* ctx);
 
   antlrcpp::Any visitExpressionList(
-      SparqlAutomaticParser::ExpressionListContext* ctx) override {
+      Parser::ExpressionListContext* ctx) override {
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitConstructTemplate(
-      SparqlAutomaticParser::ConstructTemplateContext* ctx) override {
+      Parser::ConstructTemplateContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  Triples visitTypesafe(SparqlAutomaticParser::ConstructTemplateContext* ctx);
+  Triples visitTypesafe(Parser::ConstructTemplateContext* ctx);
 
   antlrcpp::Any visitConstructTriples(
-      SparqlAutomaticParser::ConstructTriplesContext* ctx) override {
+      Parser::ConstructTriplesContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  Triples visitTypesafe(SparqlAutomaticParser::ConstructTriplesContext* ctx);
+  Triples visitTypesafe(Parser::ConstructTriplesContext* ctx);
 
   antlrcpp::Any visitTriplesSameSubject(
-      SparqlAutomaticParser::TriplesSameSubjectContext* ctx) override {
+      Parser::TriplesSameSubjectContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  Triples visitTypesafe(SparqlAutomaticParser::TriplesSameSubjectContext* ctx);
+  Triples visitTypesafe(Parser::TriplesSameSubjectContext* ctx);
 
-  antlrcpp::Any visitPropertyList(
-      SparqlAutomaticParser::PropertyListContext* ctx) override {
+  antlrcpp::Any visitPropertyList(Parser::PropertyListContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  PropertyList visitTypesafe(SparqlAutomaticParser::PropertyListContext* ctx);
+  PropertyList visitTypesafe(Parser::PropertyListContext* ctx);
 
   antlrcpp::Any visitPropertyListNotEmpty(
-      SparqlAutomaticParser::PropertyListNotEmptyContext* ctx) override {
+      Parser::PropertyListNotEmptyContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  PropertyList visitTypesafe(
-      SparqlAutomaticParser::PropertyListNotEmptyContext* ctx);
+  PropertyList visitTypesafe(Parser::PropertyListNotEmptyContext* ctx);
 
-  antlrcpp::Any visitVerb(SparqlAutomaticParser::VerbContext* ctx) override {
+  antlrcpp::Any visitVerb(Parser::VerbContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  VarOrTerm visitTypesafe(SparqlAutomaticParser::VerbContext* ctx);
+  VarOrTerm visitTypesafe(Parser::VerbContext* ctx);
 
-  antlrcpp::Any visitObjectList(
-      SparqlAutomaticParser::ObjectListContext* ctx) override {
+  antlrcpp::Any visitObjectList(Parser::ObjectListContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ObjectList visitTypesafe(SparqlAutomaticParser::ObjectListContext* ctx);
+  ObjectList visitTypesafe(Parser::ObjectListContext* ctx);
 
-  antlrcpp::Any visitObjectR(
-      SparqlAutomaticParser::ObjectRContext* ctx) override {
+  antlrcpp::Any visitObjectR(Parser::ObjectRContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  Node visitTypesafe(SparqlAutomaticParser::ObjectRContext* ctx);
+  Node visitTypesafe(Parser::ObjectRContext* ctx);
 
   antlrcpp::Any visitTriplesSameSubjectPath(
-      SparqlAutomaticParser::TriplesSameSubjectPathContext* ctx) override {
+      Parser::TriplesSameSubjectPathContext* ctx) override {
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitPropertyListPath(
-      SparqlAutomaticParser::PropertyListPathContext* ctx) override {
+      Parser::PropertyListPathContext* ctx) override {
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitPropertyListPathNotEmpty(
-      SparqlAutomaticParser::PropertyListPathNotEmptyContext* ctx) override {
+      Parser::PropertyListPathNotEmptyContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitVerbPath(
-      SparqlAutomaticParser::VerbPathContext* ctx) override {
+  antlrcpp::Any visitVerbPath(Parser::VerbPathContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  PropertyPath visitTypesafe(SparqlAutomaticParser::VerbPathContext* ctx);
+  PropertyPath visitTypesafe(Parser::VerbPathContext* ctx);
 
-  antlrcpp::Any visitVerbSimple(
-      SparqlAutomaticParser::VerbSimpleContext* ctx) override {
+  antlrcpp::Any visitVerbSimple(Parser::VerbSimpleContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  Variable visitTypesafe(SparqlAutomaticParser::VerbSimpleContext* ctx);
+  Variable visitTypesafe(Parser::VerbSimpleContext* ctx);
 
   antlrcpp::Any visitVerbPathOrSimple(
-      SparqlAutomaticParser::VerbPathOrSimpleContext* ctx) override {
+      Parser::VerbPathOrSimpleContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  PropertyPath visitTypesafe(
-      SparqlAutomaticParser::VerbPathOrSimpleContext* ctx);
+  PropertyPath visitTypesafe(Parser::VerbPathOrSimpleContext* ctx);
 
   antlrcpp::Any visitObjectListPath(
-      SparqlAutomaticParser::ObjectListPathContext* ctx) override {
+      Parser::ObjectListPathContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitObjectPath(
-      SparqlAutomaticParser::ObjectPathContext* ctx) override {
+  antlrcpp::Any visitObjectPath(Parser::ObjectPathContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitPath(SparqlAutomaticParser::PathContext* ctx) override {
+  antlrcpp::Any visitPath(Parser::PathContext* ctx) override {
     // returns PropertyPath
     return visitTypesafe(ctx);
   }
 
-  PropertyPath visitTypesafe(SparqlAutomaticParser::PathContext* ctx);
+  PropertyPath visitTypesafe(Parser::PathContext* ctx);
 
   antlrcpp::Any visitPathAlternative(
-      SparqlAutomaticParser::PathAlternativeContext* ctx) override {
+      Parser::PathAlternativeContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  PropertyPath visitTypesafe(
-      SparqlAutomaticParser::PathAlternativeContext* ctx);
+  PropertyPath visitTypesafe(Parser::PathAlternativeContext* ctx);
 
-  antlrcpp::Any visitPathSequence(
-      SparqlAutomaticParser::PathSequenceContext* ctx) override {
+  antlrcpp::Any visitPathSequence(Parser::PathSequenceContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  PropertyPath visitTypesafe(SparqlAutomaticParser::PathSequenceContext* ctx);
+  PropertyPath visitTypesafe(Parser::PathSequenceContext* ctx);
 
-  antlrcpp::Any visitPathElt(
-      SparqlAutomaticParser::PathEltContext* ctx) override {
+  antlrcpp::Any visitPathElt(Parser::PathEltContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  PropertyPath visitTypesafe(SparqlAutomaticParser::PathEltContext* ctx);
+  PropertyPath visitTypesafe(Parser::PathEltContext* ctx);
 
   antlrcpp::Any visitPathEltOrInverse(
-      SparqlAutomaticParser::PathEltOrInverseContext* ctx) override {
+      Parser::PathEltOrInverseContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  PropertyPath visitTypesafe(
-      SparqlAutomaticParser::PathEltOrInverseContext* ctx);
+  PropertyPath visitTypesafe(Parser::PathEltOrInverseContext* ctx);
 
-  antlrcpp::Any visitPathMod(
-      SparqlAutomaticParser::PathModContext* ctx) override {
+  antlrcpp::Any visitPathMod(Parser::PathModContext* ctx) override {
     // Handled in visitPathElt.
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitPathPrimary(
-      SparqlAutomaticParser::PathPrimaryContext* ctx) override {
+  antlrcpp::Any visitPathPrimary(Parser::PathPrimaryContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  PropertyPath visitTypesafe(SparqlAutomaticParser::PathPrimaryContext* ctx);
+  PropertyPath visitTypesafe(Parser::PathPrimaryContext* ctx);
 
   antlrcpp::Any visitPathNegatedPropertySet(
-      SparqlAutomaticParser::PathNegatedPropertySetContext* ctx) override {
+      Parser::PathNegatedPropertySetContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  PropertyPath visitTypesafe(
-      SparqlAutomaticParser::PathNegatedPropertySetContext*);
+  PropertyPath visitTypesafe(Parser::PathNegatedPropertySetContext*);
 
   antlrcpp::Any visitPathOneInPropertySet(
-      SparqlAutomaticParser::PathOneInPropertySetContext*) override {
+      Parser::PathOneInPropertySetContext*) override {
     throw ParseException(
         R"("!" and "^" inside a property path is not supported by QLever.)");
   }
 
   /// Note that in the SPARQL grammar the INTEGER rule refers to positive
   /// integers without an explicit sign.
-  antlrcpp::Any visitInteger(
-      SparqlAutomaticParser::IntegerContext* ctx) override {
+  antlrcpp::Any visitInteger(Parser::IntegerContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  unsigned long long int visitTypesafe(
-      SparqlAutomaticParser::IntegerContext* ctx);
+  unsigned long long int visitTypesafe(Parser::IntegerContext* ctx);
 
-  antlrcpp::Any visitTriplesNode(
-      SparqlAutomaticParser::TriplesNodeContext* ctx) override {
+  antlrcpp::Any visitTriplesNode(Parser::TriplesNodeContext* ctx) override {
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitBlankNodePropertyList(
-      SparqlAutomaticParser::BlankNodePropertyListContext* ctx) override {
+      Parser::BlankNodePropertyListContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  Node visitTypesafe(SparqlAutomaticParser::BlankNodePropertyListContext* ctx);
+  Node visitTypesafe(Parser::BlankNodePropertyListContext* ctx);
 
   antlrcpp::Any visitTriplesNodePath(
-      SparqlAutomaticParser::TriplesNodePathContext* ctx) override {
+      Parser::TriplesNodePathContext* ctx) override {
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitBlankNodePropertyListPath(
-      SparqlAutomaticParser::BlankNodePropertyListPathContext* ctx) override {
+      Parser::BlankNodePropertyListPathContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitCollection(
-      SparqlAutomaticParser::CollectionContext* ctx) override {
+  antlrcpp::Any visitCollection(Parser::CollectionContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  Node visitTypesafe(SparqlAutomaticParser::CollectionContext* ctx);
+  Node visitTypesafe(Parser::CollectionContext* ctx);
 
   antlrcpp::Any visitCollectionPath(
-      SparqlAutomaticParser::CollectionPathContext* ctx) override {
+      Parser::CollectionPathContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitGraphNode(
-      SparqlAutomaticParser::GraphNodeContext* ctx) override {
+  antlrcpp::Any visitGraphNode(Parser::GraphNodeContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  Node visitTypesafe(SparqlAutomaticParser::GraphNodeContext* ctx);
+  Node visitTypesafe(Parser::GraphNodeContext* ctx);
 
-  antlrcpp::Any visitGraphNodePath(
-      SparqlAutomaticParser::GraphNodePathContext* ctx) override {
+  antlrcpp::Any visitGraphNodePath(Parser::GraphNodePathContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitVarOrTerm(
-      SparqlAutomaticParser::VarOrTermContext* ctx) override {
+  antlrcpp::Any visitVarOrTerm(Parser::VarOrTermContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  VarOrTerm visitTypesafe(SparqlAutomaticParser::VarOrTermContext* ctx);
+  VarOrTerm visitTypesafe(Parser::VarOrTermContext* ctx);
 
-  antlrcpp::Any visitVarOrIri(
-      SparqlAutomaticParser::VarOrIriContext* ctx) override {
+  antlrcpp::Any visitVarOrIri(Parser::VarOrIriContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  VarOrTerm visitTypesafe(SparqlAutomaticParser::VarOrIriContext* ctx);
+  VarOrTerm visitTypesafe(Parser::VarOrIriContext* ctx);
 
-  antlrcpp::Any visitVar(SparqlAutomaticParser::VarContext* ctx) override {
+  antlrcpp::Any visitVar(Parser::VarContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  Variable visitTypesafe(SparqlAutomaticParser::VarContext* ctx);
+  Variable visitTypesafe(Parser::VarContext* ctx);
 
-  antlrcpp::Any visitGraphTerm(
-      SparqlAutomaticParser::GraphTermContext* ctx) override {
+  antlrcpp::Any visitGraphTerm(Parser::GraphTermContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  GraphTerm visitTypesafe(SparqlAutomaticParser::GraphTermContext* ctx);
+  GraphTerm visitTypesafe(Parser::GraphTermContext* ctx);
 
-  antlrcpp::Any visitExpression(
-      SparqlAutomaticParser::ExpressionContext* ctx) override {
+  antlrcpp::Any visitExpression(Parser::ExpressionContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ExpressionPtr visitTypesafe(SparqlAutomaticParser::ExpressionContext* ctx);
+  ExpressionPtr visitTypesafe(Parser::ExpressionContext* ctx);
 
   template <typename Out, typename Ctx>
   std::vector<Out> visitVector(const std::vector<Ctx*>& childContexts) {
@@ -739,43 +677,38 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitConditionalOrExpression(
-      SparqlAutomaticParser::ConditionalOrExpressionContext* ctx) override {
+      Parser::ConditionalOrExpressionContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ExpressionPtr visitTypesafe(
-      SparqlAutomaticParser::ConditionalOrExpressionContext* ctx);
+  ExpressionPtr visitTypesafe(Parser::ConditionalOrExpressionContext* ctx);
 
   antlrcpp::Any visitConditionalAndExpression(
-      SparqlAutomaticParser::ConditionalAndExpressionContext* ctx) override {
+      Parser::ConditionalAndExpressionContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ExpressionPtr visitTypesafe(
-      SparqlAutomaticParser::ConditionalAndExpressionContext* ctx);
+  ExpressionPtr visitTypesafe(Parser::ConditionalAndExpressionContext* ctx);
 
-  antlrcpp::Any visitValueLogical(
-      SparqlAutomaticParser::ValueLogicalContext* ctx) override {
+  antlrcpp::Any visitValueLogical(Parser::ValueLogicalContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ExpressionPtr visitTypesafe(SparqlAutomaticParser::ValueLogicalContext* ctx);
+  ExpressionPtr visitTypesafe(Parser::ValueLogicalContext* ctx);
 
   antlrcpp::Any visitRelationalExpression(
-      SparqlAutomaticParser::RelationalExpressionContext* ctx) override {
+      Parser::RelationalExpressionContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ExpressionPtr visitTypesafe(
-      SparqlAutomaticParser::RelationalExpressionContext* ctx);
+  ExpressionPtr visitTypesafe(Parser::RelationalExpressionContext* ctx);
 
   antlrcpp::Any visitNumericExpression(
-      SparqlAutomaticParser::NumericExpressionContext* ctx) override {
+      Parser::NumericExpressionContext* ctx) override {
     return std::move(visitChildren(ctx).as<ExpressionPtr>());
   }
 
-  ExpressionPtr visitTypesafe(
-      SparqlAutomaticParser::NumericExpressionContext* ctx);
+  ExpressionPtr visitTypesafe(Parser::NumericExpressionContext* ctx);
 
   template <typename Expr>
   ExpressionPtr createExpression(auto... children) {
@@ -784,112 +717,100 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitAdditiveExpression(
-      SparqlAutomaticParser::AdditiveExpressionContext* ctx) override {
+      Parser::AdditiveExpressionContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ExpressionPtr visitTypesafe(
-      SparqlAutomaticParser::AdditiveExpressionContext* ctx);
+  ExpressionPtr visitTypesafe(Parser::AdditiveExpressionContext* ctx);
 
   antlrcpp::Any visitStrangeMultiplicativeSubexprOfAdditive(
-      SparqlAutomaticParser::StrangeMultiplicativeSubexprOfAdditiveContext*
-          context) override {
+      Parser::StrangeMultiplicativeSubexprOfAdditiveContext* context) override {
     return visitChildren(context);
   }
 
   antlrcpp::Any visitMultiplicativeExpression(
-      SparqlAutomaticParser::MultiplicativeExpressionContext* ctx) override {
+      Parser::MultiplicativeExpressionContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ExpressionPtr visitTypesafe(
-      SparqlAutomaticParser::MultiplicativeExpressionContext* ctx);
+  ExpressionPtr visitTypesafe(Parser::MultiplicativeExpressionContext* ctx);
 
   antlrcpp::Any visitUnaryExpression(
-      SparqlAutomaticParser::UnaryExpressionContext* ctx) override {
+      Parser::UnaryExpressionContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ExpressionPtr visitTypesafe(
-      SparqlAutomaticParser::UnaryExpressionContext* ctx);
+  ExpressionPtr visitTypesafe(Parser::UnaryExpressionContext* ctx);
 
   antlrcpp::Any visitPrimaryExpression(
-      SparqlAutomaticParser::PrimaryExpressionContext* ctx) override {
+      Parser::PrimaryExpressionContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ExpressionPtr visitTypesafe(
-      SparqlAutomaticParser::PrimaryExpressionContext* ctx);
+  ExpressionPtr visitTypesafe(Parser::PrimaryExpressionContext* ctx);
 
   antlrcpp::Any visitBrackettedExpression(
-      SparqlAutomaticParser::BrackettedExpressionContext* ctx) override {
+      Parser::BrackettedExpressionContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ExpressionPtr visitTypesafe(
-      SparqlAutomaticParser::BrackettedExpressionContext* ctx);
+  ExpressionPtr visitTypesafe(Parser::BrackettedExpressionContext* ctx);
 
   antlrcpp::Any visitBuiltInCall(
-      [[maybe_unused]] SparqlAutomaticParser::BuiltInCallContext* ctx)
-      override {
+      [[maybe_unused]] Parser::BuiltInCallContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ExpressionPtr visitTypesafe(SparqlAutomaticParser::BuiltInCallContext* ctx);
+  ExpressionPtr visitTypesafe(Parser::BuiltInCallContext* ctx);
 
   antlrcpp::Any visitRegexExpression(
-      SparqlAutomaticParser::RegexExpressionContext* context) override {
+      Parser::RegexExpressionContext* context) override {
     return visitChildren(context);
   }
 
   antlrcpp::Any visitSubstringExpression(
-      SparqlAutomaticParser::SubstringExpressionContext* context) override {
+      Parser::SubstringExpressionContext* context) override {
     return visitChildren(context);
   }
 
   antlrcpp::Any visitStrReplaceExpression(
-      SparqlAutomaticParser::StrReplaceExpressionContext* context) override {
+      Parser::StrReplaceExpressionContext* context) override {
     return visitChildren(context);
   }
 
-  antlrcpp::Any visitExistsFunc(
-      SparqlAutomaticParser::ExistsFuncContext* ctx) override {
+  antlrcpp::Any visitExistsFunc(Parser::ExistsFuncContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitNotExistsFunc(
-      SparqlAutomaticParser::NotExistsFuncContext* ctx) override {
+  antlrcpp::Any visitNotExistsFunc(Parser::NotExistsFuncContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitAggregate(
-      SparqlAutomaticParser::AggregateContext* ctx) override {
+  antlrcpp::Any visitAggregate(Parser::AggregateContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ExpressionPtr visitTypesafe(SparqlAutomaticParser::AggregateContext* ctx);
+  ExpressionPtr visitTypesafe(Parser::AggregateContext* ctx);
 
-  antlrcpp::Any visitIriOrFunction(
-      SparqlAutomaticParser::IriOrFunctionContext* ctx) override {
+  antlrcpp::Any visitIriOrFunction(Parser::IriOrFunctionContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ExpressionPtr visitTypesafe(SparqlAutomaticParser::IriOrFunctionContext* ctx);
+  ExpressionPtr visitTypesafe(Parser::IriOrFunctionContext* ctx);
 
-  antlrcpp::Any visitRdfLiteral(
-      SparqlAutomaticParser::RdfLiteralContext* ctx) override {
+  antlrcpp::Any visitRdfLiteral(Parser::RdfLiteralContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  std::string visitTypesafe(SparqlAutomaticParser::RdfLiteralContext* ctx);
+  std::string visitTypesafe(Parser::RdfLiteralContext* ctx);
 
   antlrcpp::Any visitNumericLiteral(
-      SparqlAutomaticParser::NumericLiteralContext* ctx) override {
+      Parser::NumericLiteralContext* ctx) override {
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitNumericLiteralUnsigned(
-      SparqlAutomaticParser::NumericLiteralUnsignedContext* ctx) override {
+      Parser::NumericLiteralUnsignedContext* ctx) override {
     // TODO: refactor to return variant
     if (ctx->INTEGER()) {
       return std::stoull(ctx->getText());
@@ -899,7 +820,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitNumericLiteralPositive(
-      SparqlAutomaticParser::NumericLiteralPositiveContext* ctx) override {
+      Parser::NumericLiteralPositiveContext* ctx) override {
     if (ctx->INTEGER_POSITIVE()) {
       return std::stoull(ctx->getText());
     } else {
@@ -908,7 +829,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitNumericLiteralNegative(
-      SparqlAutomaticParser::NumericLiteralNegativeContext* ctx) override {
+      Parser::NumericLiteralNegativeContext* ctx) override {
     if (ctx->INTEGER_NEGATIVE()) {
       return std::stoll(ctx->getText());
     } else {
@@ -917,55 +838,49 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitBooleanLiteral(
-      SparqlAutomaticParser::BooleanLiteralContext* ctx) override {
+      Parser::BooleanLiteralContext* ctx) override {
     return ctx->getText() == "true";
   }
 
-  bool visitTypesafe(SparqlAutomaticParser::BooleanLiteralContext* ctx);
+  bool visitTypesafe(Parser::BooleanLiteralContext* ctx);
 
-  antlrcpp::Any visitString(
-      SparqlAutomaticParser::StringContext* ctx) override {
+  antlrcpp::Any visitString(Parser::StringContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitIri(SparqlAutomaticParser::IriContext* ctx) override {
+  antlrcpp::Any visitIri(Parser::IriContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  string visitTypesafe(SparqlAutomaticParser::IriContext* ctx);
+  string visitTypesafe(Parser::IriContext* ctx);
 
-  antlrcpp::Any visitIriref(
-      SparqlAutomaticParser::IrirefContext* ctx) override {
+  antlrcpp::Any visitIriref(Parser::IrirefContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  string visitTypesafe(SparqlAutomaticParser::IrirefContext* ctx);
+  string visitTypesafe(Parser::IrirefContext* ctx);
 
-  antlrcpp::Any visitPrefixedName(
-      SparqlAutomaticParser::PrefixedNameContext* ctx) override {
+  antlrcpp::Any visitPrefixedName(Parser::PrefixedNameContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  string visitTypesafe(SparqlAutomaticParser::PrefixedNameContext* ctx);
+  string visitTypesafe(Parser::PrefixedNameContext* ctx);
 
-  antlrcpp::Any visitBlankNode(
-      SparqlAutomaticParser::BlankNodeContext* ctx) override {
+  antlrcpp::Any visitBlankNode(Parser::BlankNodeContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  BlankNode visitTypesafe(SparqlAutomaticParser::BlankNodeContext* ctx);
+  BlankNode visitTypesafe(Parser::BlankNodeContext* ctx);
 
-  antlrcpp::Any visitPnameLn(
-      SparqlAutomaticParser::PnameLnContext* ctx) override {
+  antlrcpp::Any visitPnameLn(Parser::PnameLnContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  string visitTypesafe(SparqlAutomaticParser::PnameLnContext* ctx);
+  string visitTypesafe(Parser::PnameLnContext* ctx);
 
-  antlrcpp::Any visitPnameNs(
-      SparqlAutomaticParser::PnameNsContext* ctx) override {
+  antlrcpp::Any visitPnameNs(Parser::PnameNsContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  string visitTypesafe(SparqlAutomaticParser::PnameNsContext* ctx);
+  string visitTypesafe(Parser::PnameNsContext* ctx);
 };

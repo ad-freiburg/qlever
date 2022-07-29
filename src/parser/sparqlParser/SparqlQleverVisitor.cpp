@@ -13,10 +13,12 @@ using ObjectList = ad_utility::sparql_types::ObjectList;
 using PropertyList = ad_utility::sparql_types::PropertyList;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
 
+using Visitor = SparqlQleverVisitor;
+using Parser = SparqlAutomaticParser;
+
 // ___________________________________________________________________________
-antlrcpp::Any SparqlQleverVisitor::processIriFunctionCall(
-    const std::string& iri,
-    std::vector<SparqlQleverVisitor::ExpressionPtr> argList) {
+antlrcpp::Any Visitor::processIriFunctionCall(
+    const std::string& iri, std::vector<Visitor::ExpressionPtr> argList) {
   // Lambda that checks the number of arguments and throws an error if it's
   // not right.
   auto checkNumArgs = [&argList](const std::string_view prefix,
@@ -57,8 +59,8 @@ antlrcpp::Any SparqlQleverVisitor::processIriFunctionCall(
 }
 
 // ____________________________________________________________________________________
-ParsedQuery::SelectClause SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::SelectClauseContext* ctx) {
+ParsedQuery::SelectClause Visitor::visitTypesafe(
+    Parser::SelectClauseContext* ctx) {
   ParsedQuery::SelectClause select;
 
   select._distinct = static_cast<bool>(ctx->DISTINCT());
@@ -92,8 +94,8 @@ ParsedQuery::SelectClause SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-std::variant<Variable, ParsedQuery::Alias> SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::VarOrAliasContext* ctx) {
+std::variant<Variable, ParsedQuery::Alias> Visitor::visitTypesafe(
+    Parser::VarOrAliasContext* ctx) {
   if (ctx->var())
     return visitTypesafe(ctx->var());
   else if (ctx->alias())
@@ -102,42 +104,39 @@ std::variant<Variable, ParsedQuery::Alias> SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-ParsedQuery::Alias SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::AliasContext* ctx) {
+ParsedQuery::Alias Visitor::visitTypesafe(Parser::AliasContext* ctx) {
   // A SPARQL alias has only one child, namely the contents within
   // parentheses.
   return visitTypesafe(ctx->aliasWithoutBrackets());
 }
 
 // ____________________________________________________________________________________
-ParsedQuery::Alias SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::AliasWithoutBracketsContext* ctx) {
+ParsedQuery::Alias Visitor::visitTypesafe(
+    Parser::AliasWithoutBracketsContext* ctx) {
   auto wrapper = makeExpressionPimpl(visitTypesafe(ctx->expression()));
   return ParsedQuery::Alias{std::move(wrapper), ctx->var()->getText()};
 }
 
 // ____________________________________________________________________________________
-Variable SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::VarContext* ctx) {
+Variable Visitor::visitTypesafe(Parser::VarContext* ctx) {
   return Variable{ctx->getText()};
 }
 
 // ____________________________________________________________________________________
-GraphPatternOperation::Bind SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::BindContext* ctx) {
+GraphPatternOperation::Bind Visitor::visitTypesafe(Parser::BindContext* ctx) {
   auto wrapper = makeExpressionPimpl(visitTypesafe(ctx->expression()));
   return GraphPatternOperation::Bind{std::move(wrapper), ctx->var()->getText()};
 }
 
 // ____________________________________________________________________________________
-GraphPatternOperation::Values SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::InlineDataContext* ctx) {
+GraphPatternOperation::Values Visitor::visitTypesafe(
+    Parser::InlineDataContext* ctx) {
   return visitTypesafe(ctx->dataBlock());
 }
 
 // ____________________________________________________________________________________
-GraphPatternOperation::Values SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::DataBlockContext* ctx) {
+GraphPatternOperation::Values Visitor::visitTypesafe(
+    Parser::DataBlockContext* ctx) {
   if (ctx->inlineDataOneVar()) {
     return {visitTypesafe(ctx->inlineDataOneVar())};
   } else if (ctx->inlineDataFull()) {
@@ -147,8 +146,8 @@ GraphPatternOperation::Values SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-std::optional<GraphPatternOperation::Values> SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::ValuesClauseContext* ctx) {
+std::optional<GraphPatternOperation::Values> Visitor::visitTypesafe(
+    Parser::ValuesClauseContext* ctx) {
   if (ctx->dataBlock()) {
     return visitTypesafe(ctx->dataBlock());
   } else {
@@ -157,14 +156,14 @@ std::optional<GraphPatternOperation::Values> SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-sparqlExpression::SparqlExpression::Ptr SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::ExpressionContext* ctx) {
+sparqlExpression::SparqlExpression::Ptr Visitor::visitTypesafe(
+    Parser::ExpressionContext* ctx) {
   return visitTypesafe(ctx->conditionalOrExpression());
 }
 
 // ____________________________________________________________________________________
-LimitOffsetClause SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::LimitOffsetClausesContext* ctx) {
+LimitOffsetClause Visitor::visitTypesafe(
+    Parser::LimitOffsetClausesContext* ctx) {
   LimitOffsetClause clause{};
   if (ctx->limitClause()) {
     clause._limit = visitTypesafe(ctx->limitClause());
@@ -179,27 +178,23 @@ LimitOffsetClause SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-vector<OrderKey> SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::OrderClauseContext* ctx) {
+vector<OrderKey> Visitor::visitTypesafe(Parser::OrderClauseContext* ctx) {
   return visitVector<OrderKey>(ctx->orderCondition());
 }
 
 // ____________________________________________________________________________________
-vector<GroupKey> SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::GroupClauseContext* ctx) {
+vector<GroupKey> Visitor::visitTypesafe(Parser::GroupClauseContext* ctx) {
   return visitVector<GroupKey>(ctx->groupCondition());
 }
 
 // ____________________________________________________________________________________
-SparqlQleverVisitor::Triples SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::ConstructTemplateContext* ctx) {
+Visitor::Triples Visitor::visitTypesafe(Parser::ConstructTemplateContext* ctx) {
   return ctx->constructTriples() ? visitTypesafe(ctx->constructTriples())
                                  : Triples{};
 }
 
 // ____________________________________________________________________________________
-string SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::IriContext* ctx) {
+string Visitor::visitTypesafe(Parser::IriContext* ctx) {
   string langtag =
       ctx->PREFIX_LANGTAG() ? ctx->PREFIX_LANGTAG()->getText() : "";
   if (ctx->iriref()) {
@@ -211,14 +206,12 @@ string SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-string SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::IrirefContext* ctx) {
+string Visitor::visitTypesafe(Parser::IrirefContext* ctx) {
   return RdfEscaping::unescapeIriref(ctx->getText());
 }
 
 // ____________________________________________________________________________________
-string SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::PrefixedNameContext* ctx) {
+string Visitor::visitTypesafe(Parser::PrefixedNameContext* ctx) {
   if (ctx->pnameLn()) {
     return visitTypesafe(ctx->pnameLn());
   } else {
@@ -228,8 +221,7 @@ string SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-string SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::PnameLnContext* ctx) {
+string Visitor::visitTypesafe(Parser::PnameLnContext* ctx) {
   string text = ctx->getText();
   auto pos = text.find(':');
   auto pnameNS = text.substr(0, pos);
@@ -246,8 +238,7 @@ string SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-string SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::PnameNsContext* ctx) {
+string Visitor::visitTypesafe(Parser::PnameNsContext* ctx) {
   auto text = ctx->getText();
   auto prefix = text.substr(0, text.length() - 1);
   if (!_prefixMap.contains(prefix)) {
@@ -259,22 +250,19 @@ string SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-void SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::BaseDeclContext* ctx) {
+void Visitor::visitTypesafe(Parser::BaseDeclContext* ctx) {
   _prefixMap[""] = visitTypesafe(ctx->iriref());
 }
 
 // ____________________________________________________________________________________
-void SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::PrefixDeclContext* ctx) {
+void Visitor::visitTypesafe(Parser::PrefixDeclContext* ctx) {
   auto text = ctx->PNAME_NS()->getText();
   // Strip trailing ':'.
   _prefixMap[text.substr(0, text.length() - 1)] = visitTypesafe(ctx->iriref());
 }
 
 // ____________________________________________________________________________________
-GroupKey SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::GroupConditionContext* ctx) {
+GroupKey Visitor::visitTypesafe(Parser::GroupConditionContext* ctx) {
   if (ctx->var() && !ctx->expression()) {
     return GroupKey{Variable{ctx->var()->getText()}};
   } else if (ctx->builtInCall() || ctx->functionCall()) {
@@ -299,8 +287,7 @@ GroupKey SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-OrderKey SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::OrderConditionContext* ctx) {
+OrderKey Visitor::visitTypesafe(Parser::OrderConditionContext* ctx) {
   auto visitExprOrderKey = [this](bool isDescending,
                                   antlr4::tree::ParseTree* context) {
     auto expr = makeExpressionPimpl(visit(context));
@@ -324,26 +311,24 @@ OrderKey SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-unsigned long long int SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::LimitClauseContext* ctx) {
+unsigned long long int Visitor::visitTypesafe(Parser::LimitClauseContext* ctx) {
   return visitTypesafe(ctx->integer());
 }
 
 // ____________________________________________________________________________________
-unsigned long long int SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::OffsetClauseContext* ctx) {
+unsigned long long int Visitor::visitTypesafe(
+    Parser::OffsetClauseContext* ctx) {
   return visitTypesafe(ctx->integer());
 }
 
 // ____________________________________________________________________________________
-unsigned long long int SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::TextLimitClauseContext* ctx) {
+unsigned long long int Visitor::visitTypesafe(
+    Parser::TextLimitClauseContext* ctx) {
   return visitTypesafe(ctx->integer());
 }
 
 // ____________________________________________________________________________________
-SparqlValues SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::InlineDataOneVarContext* ctx) {
+SparqlValues Visitor::visitTypesafe(Parser::InlineDataOneVarContext* ctx) {
   SparqlValues values;
   auto var = visitTypesafe(ctx->var());
   values._variables.push_back(var.name());
@@ -359,8 +344,7 @@ SparqlValues SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-SparqlValues SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::InlineDataFullContext* ctx) {
+SparqlValues Visitor::visitTypesafe(Parser::InlineDataFullContext* ctx) {
   SparqlValues values;
   if (ctx->dataBlockSingle().empty())
     throw ParseException(
@@ -389,8 +373,8 @@ SparqlValues SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-vector<std::string> SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::DataBlockSingleContext* ctx) {
+vector<std::string> Visitor::visitTypesafe(
+    Parser::DataBlockSingleContext* ctx) {
   if (ctx->NIL())
     throw ParseException(
         "No values were specified in DataBlock."
@@ -400,8 +384,7 @@ vector<std::string> SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-std::string SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::DataBlockValueContext* ctx) {
+std::string Visitor::visitTypesafe(Parser::DataBlockValueContext* ctx) {
   // Return a string
   if (ctx->iri()) {
     return visitTypesafe(ctx->iri());
@@ -426,8 +409,8 @@ std::string SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-vector<SparqlQleverVisitor::ExpressionPtr> SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::ArgListContext* ctx) {
+vector<Visitor::ExpressionPtr> Visitor::visitTypesafe(
+    Parser::ArgListContext* ctx) {
   // If no arguments, return empty expression vector.
   if (ctx->NIL()) {
     return std::vector<ExpressionPtr>{};
@@ -444,8 +427,7 @@ vector<SparqlQleverVisitor::ExpressionPtr> SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-Triples SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::ConstructTriplesContext* ctx) {
+Triples Visitor::visitTypesafe(Parser::ConstructTriplesContext* ctx) {
   auto result = visitTypesafe(ctx->triplesSameSubject());
   if (ctx->constructTriples()) {
     auto newTriples = visitTypesafe(ctx->constructTriples());
@@ -455,8 +437,7 @@ Triples SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-Triples SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::TriplesSameSubjectContext* ctx) {
+Triples Visitor::visitTypesafe(Parser::TriplesSameSubjectContext* ctx) {
   Triples triples;
   if (ctx->varOrTerm()) {
     VarOrTerm subject = visitTypesafe(ctx->varOrTerm());
@@ -484,16 +465,14 @@ Triples SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-PropertyList SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::PropertyListContext* ctx) {
+PropertyList Visitor::visitTypesafe(Parser::PropertyListContext* ctx) {
   return ctx->propertyListNotEmpty()
              ? visitTypesafe(ctx->propertyListNotEmpty())
              : PropertyList{Tuples{}, Triples{}};
 }
 
 // ____________________________________________________________________________________
-PropertyList SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::PropertyListNotEmptyContext* ctx) {
+PropertyList Visitor::visitTypesafe(Parser::PropertyListNotEmptyContext* ctx) {
   Tuples triplesWithoutSubject;
   Triples additionalTriples;
   auto verbs = ctx->verb();
@@ -512,8 +491,7 @@ PropertyList SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-VarOrTerm SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::VerbContext* ctx) {
+VarOrTerm Visitor::visitTypesafe(Parser::VerbContext* ctx) {
   if (ctx->varOrIri()) {
     return visitTypesafe(ctx->varOrIri());
   }
@@ -526,8 +504,7 @@ VarOrTerm SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-ObjectList SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::ObjectListContext* ctx) {
+ObjectList Visitor::visitTypesafe(Parser::ObjectListContext* ctx) {
   Objects objects;
   Triples additionalTriples;
   auto objectContexts = ctx->objectR();
@@ -540,28 +517,24 @@ ObjectList SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-Node SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::ObjectRContext* ctx) {
+Node Visitor::visitTypesafe(Parser::ObjectRContext* ctx) {
   return visitTypesafe(ctx->graphNode());
 }
 
 // ____________________________________________________________________________________
-PropertyPath SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::VerbPathContext* ctx) {
+PropertyPath Visitor::visitTypesafe(Parser::VerbPathContext* ctx) {
   PropertyPath p = visitTypesafe(ctx->path());
   p.computeCanBeNull();
   return p;
 }
 
 // ____________________________________________________________________________________
-Variable SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::VerbSimpleContext* ctx) {
+Variable Visitor::visitTypesafe(Parser::VerbSimpleContext* ctx) {
   return visitTypesafe(ctx->var());
 }
 
 // ____________________________________________________________________________________
-PropertyPath SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::VerbPathOrSimpleContext* ctx) {
+PropertyPath Visitor::visitTypesafe(Parser::VerbPathOrSimpleContext* ctx) {
   if (ctx->verbPath()) {
     return visitTypesafe(ctx->verbPath());
   } else if (ctx->verbSimple()) {
@@ -571,14 +544,12 @@ PropertyPath SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-PropertyPath SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::PathContext* ctx) {
+PropertyPath Visitor::visitTypesafe(Parser::PathContext* ctx) {
   return visitTypesafe(ctx->pathAlternative());
 }
 
 // ____________________________________________________________________________________
-PropertyPath SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::PathAlternativeContext* ctx) {
+PropertyPath Visitor::visitTypesafe(Parser::PathAlternativeContext* ctx) {
   auto paths = visitVector<PropertyPath>(ctx->pathSequence());
 
   if (paths.size() == 1) {
@@ -589,8 +560,7 @@ PropertyPath SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-PropertyPath SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::PathSequenceContext* ctx) {
+PropertyPath Visitor::visitTypesafe(Parser::PathSequenceContext* ctx) {
   auto paths = visitVector<PropertyPath>(ctx->pathEltOrInverse());
 
   if (paths.size() == 1) {
@@ -601,8 +571,7 @@ PropertyPath SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-PropertyPath SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::PathEltContext* ctx) {
+PropertyPath Visitor::visitTypesafe(Parser::PathEltContext* ctx) {
   PropertyPath p = visitTypesafe(ctx->pathPrimary());
 
   if (ctx->pathMod()) {
@@ -621,8 +590,7 @@ PropertyPath SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-PropertyPath SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::PathEltOrInverseContext* ctx) {
+PropertyPath Visitor::visitTypesafe(Parser::PathEltOrInverseContext* ctx) {
   PropertyPath p = visitTypesafe(ctx->pathElt());
 
   if (ctx->negationOperator) {
@@ -633,8 +601,7 @@ PropertyPath SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-PropertyPath SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::PathPrimaryContext* ctx) {
+PropertyPath Visitor::visitTypesafe(Parser::PathPrimaryContext* ctx) {
   if (ctx->iri()) {
     auto iri = visitTypesafe(ctx->iri());
     return PropertyPath::fromIri(std::move(iri));
@@ -651,15 +618,13 @@ PropertyPath SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-PropertyPath SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::PathNegatedPropertySetContext*) {
+PropertyPath Visitor::visitTypesafe(Parser::PathNegatedPropertySetContext*) {
   throw ParseException(
       "\"!\" inside a property path is not supported by QLever.");
 }
 
 // ____________________________________________________________________________________
-unsigned long long int SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::IntegerContext* ctx) {
+unsigned long long int Visitor::visitTypesafe(Parser::IntegerContext* ctx) {
   try {
     return std::stoull(ctx->getText());
   } catch (const std::out_of_range&) {
@@ -670,8 +635,7 @@ unsigned long long int SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-Node SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::BlankNodePropertyListContext* ctx) {
+Node Visitor::visitTypesafe(Parser::BlankNodePropertyListContext* ctx) {
   VarOrTerm var{GraphTerm{newBlankNode()}};
   Triples triples;
   auto propertyList = visitTypesafe(ctx->propertyListNotEmpty());
@@ -683,8 +647,7 @@ Node SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-Node SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::CollectionContext* ctx) {
+Node Visitor::visitTypesafe(Parser::CollectionContext* ctx) {
   Triples triples;
   VarOrTerm nextElement{
       GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}}};
@@ -711,8 +674,7 @@ Node SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-Node SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::GraphNodeContext* ctx) {
+Node Visitor::visitTypesafe(Parser::GraphNodeContext* ctx) {
   if (ctx->varOrTerm()) {
     return Node{visitTypesafe(ctx->varOrTerm()), Triples{}};
   } else if (ctx->triplesNode()) {
@@ -722,8 +684,7 @@ Node SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-VarOrTerm SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::VarOrTermContext* ctx) {
+VarOrTerm Visitor::visitTypesafe(Parser::VarOrTermContext* ctx) {
   if (ctx->var()) {
     return VarOrTerm{visitTypesafe(ctx->var())};
   }
@@ -736,8 +697,7 @@ VarOrTerm SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-VarOrTerm SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::VarOrIriContext* ctx) {
+VarOrTerm Visitor::visitTypesafe(Parser::VarOrIriContext* ctx) {
   if (ctx->var()) {
     return VarOrTerm{visitTypesafe(ctx->var())};
   }
@@ -749,8 +709,7 @@ VarOrTerm SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-GraphTerm SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::GraphTermContext* ctx) {
+GraphTerm Visitor::visitTypesafe(Parser::GraphTermContext* ctx) {
   if (ctx->numericLiteral()) {
     auto literalAny = visitNumericLiteral(ctx->numericLiteral());
     try {
@@ -789,8 +748,8 @@ GraphTerm SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-ExpressionPtr SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::ConditionalOrExpressionContext* ctx) {
+ExpressionPtr Visitor::visitTypesafe(
+    Parser::ConditionalOrExpressionContext* ctx) {
   auto childContexts = ctx->conditionalAndExpression();
   auto children = visitVector<ExpressionPtr>(ctx->conditionalAndExpression());
   AD_CHECK(!children.empty());
@@ -806,8 +765,8 @@ ExpressionPtr SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-ExpressionPtr SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::ConditionalAndExpressionContext* ctx) {
+ExpressionPtr Visitor::visitTypesafe(
+    Parser::ConditionalAndExpressionContext* ctx) {
   auto children = visitVector<ExpressionPtr>(ctx->valueLogical());
   AD_CHECK(!children.empty());
   auto result = std::move(children.front());
@@ -822,14 +781,12 @@ ExpressionPtr SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-ExpressionPtr SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::ValueLogicalContext* ctx) {
+ExpressionPtr Visitor::visitTypesafe(Parser::ValueLogicalContext* ctx) {
   return visitTypesafe(ctx->relationalExpression());
 }
 
 // ____________________________________________________________________________________
-ExpressionPtr SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::RelationalExpressionContext* ctx) {
+ExpressionPtr Visitor::visitTypesafe(Parser::RelationalExpressionContext* ctx) {
   auto childContexts = ctx->numericExpression();
 
   if (childContexts.size() == 1) {
@@ -857,14 +814,12 @@ ExpressionPtr SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-ExpressionPtr SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::NumericExpressionContext* ctx) {
+ExpressionPtr Visitor::visitTypesafe(Parser::NumericExpressionContext* ctx) {
   return visitTypesafe(ctx->additiveExpression());
 }
 
 // ____________________________________________________________________________________
-ExpressionPtr SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::AdditiveExpressionContext* ctx) {
+ExpressionPtr Visitor::visitTypesafe(Parser::AdditiveExpressionContext* ctx) {
   auto children = visitVector<ExpressionPtr>(ctx->multiplicativeExpression());
   auto opTypes = visitOperationTags(ctx->children, {"+", "-"});
 
@@ -897,8 +852,8 @@ ExpressionPtr SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-ExpressionPtr SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::MultiplicativeExpressionContext* ctx) {
+ExpressionPtr Visitor::visitTypesafe(
+    Parser::MultiplicativeExpressionContext* ctx) {
   auto children = visitVector<ExpressionPtr>(ctx->unaryExpression());
   auto opTypes = visitOperationTags(ctx->children, {"*", "/"});
 
@@ -925,8 +880,7 @@ ExpressionPtr SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-ExpressionPtr SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::UnaryExpressionContext* ctx) {
+ExpressionPtr Visitor::visitTypesafe(Parser::UnaryExpressionContext* ctx) {
   auto child = visitTypesafe(ctx->primaryExpression());
   if (ctx->children[0]->getText() == "-") {
     return createExpression<sparqlExpression::UnaryMinusExpression>(
@@ -941,8 +895,7 @@ ExpressionPtr SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-ExpressionPtr SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::PrimaryExpressionContext* ctx) {
+ExpressionPtr Visitor::visitTypesafe(Parser::PrimaryExpressionContext* ctx) {
   if (ctx->builtInCall()) {
     return visitTypesafe(ctx->builtInCall());
   }
@@ -1001,14 +954,13 @@ ExpressionPtr SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-ExpressionPtr SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::BrackettedExpressionContext* ctx) {
+ExpressionPtr Visitor::visitTypesafe(Parser::BrackettedExpressionContext* ctx) {
   return visitTypesafe(ctx->expression());
 }
 
 // ____________________________________________________________________________________
-ExpressionPtr SparqlQleverVisitor::visitTypesafe(
-    [[maybe_unused]] SparqlAutomaticParser::BuiltInCallContext* ctx) {
+ExpressionPtr Visitor::visitTypesafe(
+    [[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   if (ctx->aggregate()) {
     return visitTypesafe(ctx->aggregate());
     // TODO: Implement built-in calls according to the following examples.
@@ -1037,8 +989,7 @@ ExpressionPtr SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-ExpressionPtr SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::AggregateContext* ctx) {
+ExpressionPtr Visitor::visitTypesafe(Parser::AggregateContext* ctx) {
   // the only case that there is no child expression is COUNT(*), so we can
   // check this outside the if below.
   if (!ctx->expression()) {
@@ -1093,8 +1044,7 @@ ExpressionPtr SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-ExpressionPtr SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::IriOrFunctionContext* ctx) {
+ExpressionPtr Visitor::visitTypesafe(Parser::IriOrFunctionContext* ctx) {
   // Case 1: Just an IRI.
   if (ctx->argList() == nullptr) {
     return ExpressionPtr{
@@ -1108,20 +1058,17 @@ ExpressionPtr SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-std::string SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::RdfLiteralContext* ctx) {
+std::string Visitor::visitTypesafe(Parser::RdfLiteralContext* ctx) {
   return ctx->getText();
 }
 
 // ____________________________________________________________________________________
-bool SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::BooleanLiteralContext* ctx) {
+bool Visitor::visitTypesafe(Parser::BooleanLiteralContext* ctx) {
   return ctx->getText() == "true";
 }
 
 // ____________________________________________________________________________________
-BlankNode SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::BlankNodeContext* ctx) {
+BlankNode Visitor::visitTypesafe(Parser::BlankNodeContext* ctx) {
   if (ctx->ANON()) {
     return newBlankNode();
   }
