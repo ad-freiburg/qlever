@@ -193,9 +193,8 @@ vector<GroupKey> SparqlQleverVisitor::visitTypesafe(
 // ____________________________________________________________________________________
 SparqlQleverVisitor::Triples SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::ConstructTemplateContext* ctx) {
-  return ctx->constructTriples()
-             ? ctx->constructTriples()->accept(this).as<Triples>()
-             : Triples{};
+  return ctx->constructTriples() ? visitTypesafe(ctx->constructTriples())
+                                 : Triples{};
 }
 
 // ____________________________________________________________________________________
@@ -327,19 +326,19 @@ OrderKey SparqlQleverVisitor::visitTypesafe(
 // ____________________________________________________________________________________
 unsigned long long int SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::LimitClauseContext* ctx) {
-  return visitInteger(ctx->integer()).as<unsigned long long int>();
+  return visitTypesafe(ctx->integer());
 }
 
 // ____________________________________________________________________________________
 unsigned long long int SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::OffsetClauseContext* ctx) {
-  return visitInteger(ctx->integer()).as<unsigned long long int>();
+  return visitTypesafe(ctx->integer());
 }
 
 // ____________________________________________________________________________________
 unsigned long long int SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::TextLimitClauseContext* ctx) {
-  return visitInteger(ctx->integer()).as<unsigned long long int>();
+  return visitTypesafe(ctx->integer());
 }
 
 // ____________________________________________________________________________________
@@ -405,9 +404,9 @@ std::string SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::DataBlockValueContext* ctx) {
   // Return a string
   if (ctx->iri()) {
-    return visit(ctx->iri()).as<std::string>();
+    return visitTypesafe(ctx->iri());
   } else if (ctx->rdfLiteral()) {
-    return visit(ctx->rdfLiteral()).as<std::string>();
+    return visitTypesafe(ctx->rdfLiteral());
   } else if (ctx->numericLiteral()) {
     // TODO implement
     throw ParseException("Numbers in values clauses are not supported. Got: " +
@@ -447,9 +446,9 @@ vector<SparqlQleverVisitor::ExpressionPtr> SparqlQleverVisitor::visitTypesafe(
 // ____________________________________________________________________________________
 Triples SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::ConstructTriplesContext* ctx) {
-  auto result = ctx->triplesSameSubject()->accept(this).as<Triples>();
+  auto result = visitTypesafe(ctx->triplesSameSubject());
   if (ctx->constructTriples()) {
-    auto newTriples = ctx->constructTriples()->accept(this).as<Triples>();
+    auto newTriples = visitTypesafe(ctx->constructTriples());
     appendVector(result, std::move(newTriples));
   }
   return result;
@@ -460,19 +459,18 @@ Triples SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::TriplesSameSubjectContext* ctx) {
   Triples triples;
   if (ctx->varOrTerm()) {
-    VarOrTerm subject = ctx->varOrTerm()->accept(this).as<VarOrTerm>();
+    VarOrTerm subject = visitTypesafe(ctx->varOrTerm());
     AD_CHECK(ctx->propertyListNotEmpty());
-    auto propertyList =
-        ctx->propertyListNotEmpty()->accept(this).as<PropertyList>();
+    auto propertyList = visitTypesafe(ctx->propertyListNotEmpty());
     for (auto& tuple : propertyList.first) {
       triples.push_back({subject, std::move(tuple[0]), std::move(tuple[1])});
     }
     appendVector(triples, std::move(propertyList.second));
   } else if (ctx->triplesNode()) {
-    auto tripleNodes = ctx->triplesNode()->accept(this).as<Node>();
+    auto tripleNodes = visitTriplesNode(ctx->triplesNode()).as<Node>();
     appendVector(triples, std::move(tripleNodes.second));
     AD_CHECK(ctx->propertyList());
-    auto propertyList = ctx->propertyList()->accept(this).as<PropertyList>();
+    auto propertyList = visitTypesafe(ctx->propertyList());
     for (auto& tuple : propertyList.first) {
       triples.push_back(
           {tripleNodes.first, std::move(tuple[0]), std::move(tuple[1])});
@@ -489,7 +487,7 @@ Triples SparqlQleverVisitor::visitTypesafe(
 PropertyList SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PropertyListContext* ctx) {
   return ctx->propertyListNotEmpty()
-             ? ctx->propertyListNotEmpty()->accept(this).as<PropertyList>()
+             ? visitTypesafe(ctx->propertyListNotEmpty())
              : PropertyList{Tuples{}, Triples{}};
 }
 
@@ -502,8 +500,8 @@ PropertyList SparqlQleverVisitor::visitTypesafe(
   auto objectLists = ctx->objectList();
   for (size_t i = 0; i < verbs.size(); i++) {
     // TODO use zip-style approach once C++ supports ranges
-    auto objectList = objectLists.at(i)->accept(this).as<ObjectList>();
-    auto verb = verbs.at(i)->accept(this).as<VarOrTerm>();
+    auto objectList = visitTypesafe(objectLists.at(i));
+    auto verb = visitTypesafe(verbs.at(i));
     for (auto& object : objectList.first) {
       triplesWithoutSubject.push_back({verb, std::move(object)});
     }
@@ -517,7 +515,7 @@ PropertyList SparqlQleverVisitor::visitTypesafe(
 VarOrTerm SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::VerbContext* ctx) {
   if (ctx->varOrIri()) {
-    return ctx->varOrIri()->accept(this).as<VarOrTerm>();
+    return visitTypesafe(ctx->varOrIri());
   }
   if (ctx->getText() == "a") {
     // Special keyword 'a'
@@ -534,7 +532,7 @@ ObjectList SparqlQleverVisitor::visitTypesafe(
   Triples additionalTriples;
   auto objectContexts = ctx->objectR();
   for (auto& objectContext : objectContexts) {
-    auto graphNode = objectContext->accept(this).as<Node>();
+    auto graphNode = visitTypesafe(objectContext);
     appendVector(additionalTriples, std::move(graphNode.second));
     objects.push_back(std::move(graphNode.first));
   }
@@ -558,7 +556,7 @@ PropertyPath SparqlQleverVisitor::visitTypesafe(
 // ____________________________________________________________________________________
 Variable SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::VerbSimpleContext* ctx) {
-  return visitChildren(ctx).as<Variable>();
+  return visitTypesafe(ctx->var());
 }
 
 // ____________________________________________________________________________________
@@ -575,7 +573,7 @@ PropertyPath SparqlQleverVisitor::visitTypesafe(
 // ____________________________________________________________________________________
 PropertyPath SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PathContext* ctx) {
-  return visitChildren(ctx).as<PropertyPath>();
+  return visitTypesafe(ctx->pathAlternative());
 }
 
 // ____________________________________________________________________________________
@@ -638,7 +636,7 @@ PropertyPath SparqlQleverVisitor::visitTypesafe(
 PropertyPath SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PathPrimaryContext* ctx) {
   if (ctx->iri()) {
-    auto iri = visit(ctx->iri()).as<std::string>();
+    auto iri = visitTypesafe(ctx->iri());
     return PropertyPath::fromIri(std::move(iri));
   } else if (ctx->path()) {
     return visitTypesafe(ctx->path());
@@ -676,8 +674,7 @@ Node SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::BlankNodePropertyListContext* ctx) {
   VarOrTerm var{GraphTerm{newBlankNode()}};
   Triples triples;
-  auto propertyList =
-      ctx->propertyListNotEmpty()->accept(this).as<PropertyList>();
+  auto propertyList = visitTypesafe(ctx->propertyListNotEmpty());
   for (auto& tuple : propertyList.first) {
     triples.push_back({var, std::move(tuple[0]), std::move(tuple[1])});
   }
@@ -694,7 +691,7 @@ Node SparqlQleverVisitor::visitTypesafe(
   auto nodes = ctx->graphNode();
   for (auto context : Reversed{nodes}) {
     VarOrTerm currentVar{GraphTerm{newBlankNode()}};
-    auto graphNode = context->accept(this).as<Node>();
+    auto graphNode = visitTypesafe(context);
 
     triples.push_back(
         {currentVar,
@@ -717,9 +714,9 @@ Node SparqlQleverVisitor::visitTypesafe(
 Node SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::GraphNodeContext* ctx) {
   if (ctx->varOrTerm()) {
-    return Node{ctx->varOrTerm()->accept(this).as<VarOrTerm>(), Triples{}};
+    return Node{visitTypesafe(ctx->varOrTerm()), Triples{}};
   } else if (ctx->triplesNode()) {
-    return ctx->triplesNode()->accept(this).as<Node>();
+    return visitTriplesNode(ctx->triplesNode()).as<Node>();
   }
   AD_CHECK(false);
 }
@@ -728,10 +725,10 @@ Node SparqlQleverVisitor::visitTypesafe(
 VarOrTerm SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::VarOrTermContext* ctx) {
   if (ctx->var()) {
-    return VarOrTerm{ctx->var()->accept(this).as<Variable>()};
+    return VarOrTerm{visitTypesafe(ctx->var())};
   }
   if (ctx->graphTerm()) {
-    return VarOrTerm{ctx->graphTerm()->accept(this).as<GraphTerm>()};
+    return VarOrTerm{visitTypesafe(ctx->graphTerm())};
   }
 
   // invalid grammar
@@ -742,11 +739,10 @@ VarOrTerm SparqlQleverVisitor::visitTypesafe(
 VarOrTerm SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::VarOrIriContext* ctx) {
   if (ctx->var()) {
-    return VarOrTerm{ctx->var()->accept(this).as<Variable>()};
+    return VarOrTerm{visitTypesafe(ctx->var())};
   }
   if (ctx->iri()) {
-    return VarOrTerm{
-        GraphTerm{Iri{ctx->iri()->accept(this).as<std::string>()}}};
+    return VarOrTerm{GraphTerm{Iri{visitTypesafe(ctx->iri())}}};
   }
   // invalid grammar
   AD_CHECK(false);
@@ -775,17 +771,16 @@ GraphTerm SparqlQleverVisitor::visitTypesafe(
     AD_CHECK(false);
   }
   if (ctx->booleanLiteral()) {
-    return GraphTerm{Literal{ctx->booleanLiteral()->accept(this).as<bool>()}};
+    return GraphTerm{Literal{visitTypesafe(ctx->booleanLiteral())}};
   }
   if (ctx->blankNode()) {
-    return GraphTerm{ctx->blankNode()->accept(this).as<BlankNode>()};
+    return GraphTerm{visitTypesafe(ctx->blankNode())};
   }
   if (ctx->iri()) {
-    return GraphTerm{Iri{ctx->iri()->accept(this).as<std::string>()}};
+    return GraphTerm{Iri{visitTypesafe(ctx->iri())}};
   }
   if (ctx->rdfLiteral()) {
-    return GraphTerm{
-        Literal{ctx->rdfLiteral()->accept(this).as<std::string>()}};
+    return GraphTerm{Literal{visitTypesafe(ctx->rdfLiteral())}};
   }
   if (ctx->NIL()) {
     return GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}};
@@ -838,8 +833,7 @@ ExpressionPtr SparqlQleverVisitor::visitTypesafe(
   auto childContexts = ctx->numericExpression();
 
   if (childContexts.size() == 1) {
-    return std::move(
-        visitNumericExpression(childContexts[0]).as<ExpressionPtr>());
+    return visitTypesafe(childContexts[0]);
   }
   if (false) {
     // TODO<joka921> Once we have reviewed and merged the EqualsExpression,
@@ -933,8 +927,7 @@ ExpressionPtr SparqlQleverVisitor::visitTypesafe(
 // ____________________________________________________________________________________
 ExpressionPtr SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::UnaryExpressionContext* ctx) {
-  auto child = std::move(
-      visitPrimaryExpression(ctx->primaryExpression()).as<ExpressionPtr>());
+  auto child = visitTypesafe(ctx->primaryExpression());
   if (ctx->children[0]->getText() == "-") {
     return createExpression<sparqlExpression::UnaryMinusExpression>(
         std::move(child));
@@ -951,7 +944,7 @@ ExpressionPtr SparqlQleverVisitor::visitTypesafe(
 ExpressionPtr SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PrimaryExpressionContext* ctx) {
   if (ctx->builtInCall()) {
-    return std::move(ctx->builtInCall()->accept(this).as<ExpressionPtr>());
+    return visitTypesafe(ctx->builtInCall());
   }
   if (ctx->rdfLiteral()) {
     // TODO<joka921> : handle strings with value datatype that are
@@ -961,13 +954,11 @@ ExpressionPtr SparqlQleverVisitor::visitTypesafe(
             ctx->rdfLiteral()->getText())};
   }
   if (ctx->iriOrFunction()) {
-    return std::move(
-        visitIriOrFunction(ctx->iriOrFunction()).as<ExpressionPtr>());
+    return visitTypesafe(ctx->iriOrFunction());
   }
 
   if (ctx->brackettedExpression()) {
-    return std::move(visitBrackettedExpression(ctx->brackettedExpression())
-                         .as<ExpressionPtr>());
+    return visitTypesafe(ctx->brackettedExpression());
   }
 
   // TODO<joka921> Refactor s.t. try/catch becomes if/else here
@@ -995,7 +986,7 @@ ExpressionPtr SparqlQleverVisitor::visitTypesafe(
   }
 
   if (ctx->booleanLiteral()) {
-    auto b = visitBooleanLiteral(ctx->booleanLiteral()).as<bool>();
+    auto b = visitTypesafe(ctx->booleanLiteral());
     return ExpressionPtr{std::make_unique<sparqlExpression::BoolExpression>(b)};
   }
 
@@ -1019,7 +1010,7 @@ ExpressionPtr SparqlQleverVisitor::visitTypesafe(
 ExpressionPtr SparqlQleverVisitor::visitTypesafe(
     [[maybe_unused]] SparqlAutomaticParser::BuiltInCallContext* ctx) {
   if (ctx->aggregate()) {
-    return std::move(ctx->aggregate()->accept(this).as<ExpressionPtr>());
+    return visitTypesafe(ctx->aggregate());
     // TODO: Implement built-in calls according to the following examples.
     //
     // } else if (ad_utility::getLowercase(ctx->children[0]->getText()) ==
@@ -1055,8 +1046,7 @@ ExpressionPtr SparqlQleverVisitor::visitTypesafe(
         "This parser currently doesn't support COUNT(*), please specify an "
         "explicit expression for the COUNT"};
   }
-  auto childExpression =
-      std::move(ctx->expression()->accept(this).as<ExpressionPtr>());
+  auto childExpression = visitTypesafe(ctx->expression());
   auto children = ctx->children;
   bool distinct = false;
   for (const auto& child : children) {
@@ -1112,12 +1102,9 @@ ExpressionPtr SparqlQleverVisitor::visitTypesafe(
             ctx->getText())};
   }
   // Case 2: Function call, where the function name is an IRI.
-  return std::move(
-      processIriFunctionCall(
-          visitIri(ctx->iri()).as<std::string>(),
-          std::move(
-              visitArgList(ctx->argList()).as<std::vector<ExpressionPtr>>()))
-          .as<ExpressionPtr>());
+  return std::move(processIriFunctionCall(visitTypesafe(ctx->iri()),
+                                          visitTypesafe(ctx->argList()))
+                       .as<ExpressionPtr>());
 }
 
 // ____________________________________________________________________________________
