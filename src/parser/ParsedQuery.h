@@ -34,6 +34,8 @@ class SparqlPrefix {
   string _uri;
 
   [[nodiscard]] string asString() const;
+
+  bool operator==(const SparqlPrefix&) const = default;
 };
 
 class PropertyPath {

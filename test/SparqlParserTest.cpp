@@ -1314,3 +1314,13 @@ TEST(ParserTest, Group) {
         ParseException);
   }
 }
+
+TEST(ParserTest, Prefix) {
+  ParsedQuery pq =
+      SparqlParser(
+          "PREFIX descriptor: <foo> SELECT ?var WHERE { ?var <bar> <foo> }")
+          .parse();
+  ASSERT_EQ(pq._prefixes.size(), 2);
+  ASSERT_EQ(pq._prefixes[0], SparqlPrefix("ql", "<QLever-internal-function/>"));
+  ASSERT_EQ(pq._prefixes[1], SparqlPrefix("descriptor", "<foo>"));
+}
