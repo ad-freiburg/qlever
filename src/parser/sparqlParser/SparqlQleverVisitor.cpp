@@ -59,29 +59,11 @@ ParsedQuery::SelectClause SparqlQleverVisitor::visitTypesafe(
   select._reduced = static_cast<bool>(ctx->REDUCED());
 
   if (ctx->asterisk) {
-    select._varsOrAsterisk.setAllVariablesSelected();
+    select.setAsterisk();
   } else {
-    // TODO: remove select._aliases and let the manuallySelectedVariables accept
-    // the variant<Variable, Alias> directly. Then all this code goes away
-    std::vector<std::string> selectedVariables;
-
-    auto processVariable = [&selectedVariables](const Variable& var) {
-      selectedVariables.push_back(var.name());
-    };
-    auto processAlias = [&selectedVariables,
-                         &select](ParsedQuery::Alias alias) {
-      selectedVariables.push_back(alias._outVarName);
-      select._aliases.push_back(std::move(alias));
-    };
-
-    for (auto& varOrAlias : ctx->varOrAlias()) {
-      std::visit(
-          ad_utility::OverloadCallOperator{processVariable, processAlias},
-          visitTypesafe(varOrAlias));
-    }
-    select._varsOrAsterisk.setManuallySelected(std::move(selectedVariables));
+    using VarOrAlias = std::variant<Variable, ParsedQuery::Alias>;
+    select.setSelected(visitVector<VarOrAlias>(ctx->varOrAlias()));
   }
-
   return select;
 }
 

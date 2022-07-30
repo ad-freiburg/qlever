@@ -264,32 +264,31 @@ MATCHER_P(IsPropertyPath, propertyPath, "") { return arg == propertyPath; }
 
 MATCHER_P2(IsAsteriskSelect, distinct, reduced, "") {
   return arg._distinct == distinct && arg._reduced == reduced &&
-         arg._varsOrAsterisk.isAllVariablesSelected() && arg._aliases.empty();
+         arg.isAsterisk() && arg.getAliases().empty();
 }
 
 MATCHER_P3(IsVariablesSelect, distinct, reduced, variables, "") {
   return arg._distinct == distinct && arg._reduced == reduced &&
-         arg._varsOrAsterisk.getSelectedVariables() == variables &&
-         arg._aliases.empty();
+         arg.getSelectedVariablesAsStrings() == variables &&
+         arg.getAliases().empty();
 }
 
 MATCHER_P3(IsSelect, distinct, reduced, selection, "") {
-  vector<string> selectedVariables = arg._varsOrAsterisk.getSelectedVariables();
+  const auto& selectedVariables = arg.getSelectedVariables();
   if (selection.size() != selectedVariables.size()) return false;
   size_t alias_counter = 0;
   for (size_t i = 0; i < selection.size(); i++) {
     if (holds_alternative<Variable>(selection[i])) {
-      if (get<Variable>(selection[i]).name() != selectedVariables[i])
-        return false;
+      if (get<Variable>(selection[i]) != selectedVariables[i]) return false;
     } else {
       auto pair = get<std::pair<string, string>>(selection[i]);
       if (pair.first !=
-              arg._aliases[alias_counter]._expression.getDescriptor() ||
-          pair.second != arg._aliases[alias_counter++]._outVarName ||
-          pair.second != selectedVariables[i])
+              arg.getAliases()[alias_counter]._expression.getDescriptor() ||
+          pair.second != arg.getAliases()[alias_counter++]._outVarName ||
+          pair.second != selectedVariables[i].name())
         return false;
     }
   }
   return arg._distinct == distinct && arg._reduced == reduced &&
-         arg._aliases.size() == alias_counter;
+         arg.getAliases().size() == alias_counter;
 }
