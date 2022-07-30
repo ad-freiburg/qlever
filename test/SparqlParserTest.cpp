@@ -870,10 +870,11 @@ TEST(ParserTest, testLiterals) {
   ASSERT_EQ(2u, pq._prefixes.size());
   ASSERT_TRUE(selectClause._varsOrAsterisk.isAllVariablesSelected());
   ASSERT_EQ(2u, c._whereClauseTriples.size());
-  ASSERT_EQ("true", c._whereClauseTriples[0]._s);
+  ASSERT_EQ("\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
+            c._whereClauseTriples[0]._s);
   ASSERT_EQ("<test:myrel>", c._whereClauseTriples[0]._p._iri);
-  ASSERT_EQ("10", c._whereClauseTriples[0]._o);
-  ASSERT_EQ("10.2", c._whereClauseTriples[1]._s);
+  ASSERT_EQ(10, c._whereClauseTriples[0]._o);
+  ASSERT_EQ(10.2, c._whereClauseTriples[1]._s);
   ASSERT_EQ("<test:myrel>", c._whereClauseTriples[1]._p._iri);
   ASSERT_EQ(":v:date:0000000000000002000-00-00T00:00:00",
             c._whereClauseTriples[1]._o);

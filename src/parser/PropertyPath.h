@@ -55,11 +55,19 @@ class PropertyPath {
   }
 
   static PropertyPath makeAlternative(std::vector<PropertyPath> children) {
-    return makeWithChildren(std::move(children), Operation::ALTERNATIVE);
+    if (children.size() == 1) {
+      return std::move(children.front());
+    } else {
+      return makeWithChildren(std::move(children), Operation::ALTERNATIVE);
+    }
   }
 
   static PropertyPath makeSequence(std::vector<PropertyPath> children) {
-    return makeWithChildren(std::move(children), Operation::SEQUENCE);
+    if (children.size() == 1) {
+      return std::move(children.front());
+    } else {
+      return makeWithChildren(std::move(children), Operation::SEQUENCE);
+    }
   }
 
   static PropertyPath makeInverse(PropertyPath child) {

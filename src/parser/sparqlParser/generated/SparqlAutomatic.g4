@@ -267,6 +267,7 @@ verbSimple
     : var
     ;
 
+/* Helper rules to make parsing of propertyListPathNotEmpty easier. */
 tupleWithoutPath
     : verbPathOrSimple objectList
     ;

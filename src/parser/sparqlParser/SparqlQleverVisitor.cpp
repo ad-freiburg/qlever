@@ -87,18 +87,22 @@ using TripleWithPropertyPath = ad_utility::sparql_types::TripleWithPropertyPath;
 
 vector<TripleWithPropertyPath> SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::TriplesSameSubjectPathContext* ctx) {
-  vector<TripleWithPropertyPath> triples;
   if (ctx->varOrTerm()) {
+    vector<TripleWithPropertyPath> triples;
     auto subject = visitTypesafe(ctx->varOrTerm());
     auto tuples = visitTypesafe(ctx->propertyListPathNotEmpty());
-    for (auto& tuple : tuples) {
-      triples.push_back(
-          TripleWithPropertyPath{subject, tuple.first, tuple.second});
+    for (auto& [predicate, object] : tuples) {
+      // TODO<clang,c++20> clang does not yet support emplace_back for
+      // aggregates.
+      triples.push_back(TripleWithPropertyPath{subject, std::move(predicate),
+                                               std::move(object)});
     }
+    return triples;
   } else if (ctx->triplesNodePath()) {
     throwCollectionsAndBlankNodePathsNotSupported(ctx->triplesNodePath());
+  } else {
+    AD_FAIL()  // Should be unreachable.
   }
-  return triples;
 }
 
 // ___________________________________________________________________________
@@ -115,6 +119,7 @@ std::optional<PathTuples> SparqlQleverVisitor::visitTypesafe(
 PropertyPath SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::VerbPathContext* ctx) {
   PropertyPath p = visitTypesafe(ctx->path());
+  // TODO move computeCanBeNull into PropertyPath constructor.
   p.computeCanBeNull();
   return p;
 }
@@ -130,7 +135,8 @@ ObjectList SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::ObjectListPathContext* ctx) {
   // The second parameter is empty because collections and blank not paths,
   // which might add additional triples, are currently not supported.
-  return ObjectList{visitVector<VarOrTerm>(ctx->objectPath()), {}};
+  // When this is implemented they will be returned by visit(ObjectPathContext).
+  return {visitVector<VarOrTerm>(ctx->objectPath()), {}};
 }
 
 // ___________________________________________________________________________
@@ -142,36 +148,22 @@ PropertyPath SparqlQleverVisitor::visitTypesafe(
 // ___________________________________________________________________________
 PropertyPath SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PathAlternativeContext* ctx) {
-  auto paths = visitVector<PropertyPath>(ctx->pathSequence());
-
-  if (paths.size() == 1) {
-    return paths[0];
-  } else {
-    return PropertyPath::makeAlternative(std::move(paths));
-  }
+  return PropertyPath::makeAlternative(
+      visitVector<PropertyPath>(ctx->pathSequence()));
 }
 
 // ___________________________________________________________________________
 PropertyPath SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PathSequenceContext* ctx) {
-  auto paths = visitVector<PropertyPath>(ctx->pathEltOrInverse());
-
-  if (paths.size() == 1) {
-    return paths[0];
-  } else {
-    return PropertyPath::makeSequence(std::move(paths));
-  }
+  return PropertyPath::makeSequence(
+      visitVector<PropertyPath>(ctx->pathEltOrInverse()));
 }
 
 // ___________________________________________________________________________
 ad_utility::sparql_types::VarOrPath SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::VerbPathOrSimpleContext* ctx) {
-  if (ctx->verbPath()) {
-    return visitTypesafe(ctx->verbPath());
-  } else if (ctx->verbSimple()) {
-    return visitTypesafe(ctx->verbSimple());
-  }
-  AD_FAIL()  // Should be unreachable.
+  return visitAlternative<ad_utility::sparql_types::VarOrPath>(
+      ctx->verbPath(), ctx->verbSimple());
 }
 
 // ___________________________________________________________________________
@@ -193,12 +185,13 @@ PropertyPath SparqlQleverVisitor::visitTypesafe(
   PropertyPath p = visitTypesafe(ctx->pathPrimary());
 
   if (ctx->pathMod()) {
+    // TODO move case distinction +/*/? into PropertyPath.
     if (ctx->pathMod()->getText() == "+") {
-      p = PropertyPath::makeTransitiveMin(p, 1);
+      p = PropertyPath::makeTransitiveMin(std::move(p), 1);
     } else if (ctx->pathMod()->getText() == "?") {
-      p = PropertyPath::makeTransitiveMax(p, 1);
+      p = PropertyPath::makeTransitiveMax(std::move(p), 1);
     } else if (ctx->pathMod()->getText() == "*") {
-      p = PropertyPath::makeTransitive(p);
+      p = PropertyPath::makeTransitive(std::move(p));
     } else {
       AD_FAIL()  // Should be unreachable.
     }
@@ -213,7 +206,7 @@ PropertyPath SparqlQleverVisitor::visitTypesafe(
   PropertyPath p = visitTypesafe(ctx->pathElt());
 
   if (ctx->negationOperator) {
-    p = PropertyPath::makeInverse(p);
+    p = PropertyPath::makeInverse(std::move(p));
   }
 
   return p;
@@ -223,8 +216,7 @@ PropertyPath SparqlQleverVisitor::visitTypesafe(
 PropertyPath SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PathPrimaryContext* ctx) {
   if (ctx->iri()) {
-    auto iri = visit(ctx->iri()).as<std::string>();
-    return PropertyPath::fromIri(std::move(iri));
+    return PropertyPath::fromIri(visitTypesafe(ctx->iri()));
   } else if (ctx->path()) {
     return visitTypesafe(ctx->path());
   } else if (ctx->pathNegatedPropertySet()) {
@@ -251,9 +243,9 @@ VarOrTerm SparqlQleverVisitor::visitTypesafe(
     return visitTypesafe(ctx->varOrTerm());
   } else if (ctx->triplesNodePath()) {
     throwCollectionsAndBlankNodePathsNotSupported(ctx->triplesNodePath());
+  } else {
     AD_FAIL()  // Should be unreachable.
   }
-  AD_FAIL()  // Should be unreachable.
 }
 
 // ____________________________________________________________________________________
@@ -261,13 +253,11 @@ VarOrTerm SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::VarOrTermContext* ctx) {
   if (ctx->var()) {
     return VarOrTerm{ctx->var()->accept(this).as<Variable>()};
-  }
-  if (ctx->graphTerm()) {
+  } else if (ctx->graphTerm()) {
     return VarOrTerm{ctx->graphTerm()->accept(this).as<GraphTerm>()};
+  } else {
+    AD_FAIL()  // Should be unreachable.
   }
-
-  // invalid grammar
-  AD_CHECK(false);
 }
 
 // ____________________________________________________________________________________
@@ -468,6 +458,7 @@ SparqlQleverVisitor::Triples SparqlQleverVisitor::visitTypesafe(
 // ____________________________________________________________________________________
 string SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::IriContext* ctx) {
+  // TODO return an IRI, not a std::string.
   string langtag =
       ctx->PREFIX_LANGTAG() ? ctx->PREFIX_LANGTAG()->getText() : "";
   if (ctx->iriref()) {
@@ -524,4 +515,18 @@ string SparqlQleverVisitor::visitTypesafe(
                          " was not registered using a PREFIX declaration"};
   }
   return _prefixMap[prefix];
+}
+
+// ____________________________________________________________________________________
+template <typename Out, typename FirstContext, typename... Context>
+Out SparqlQleverVisitor::visitAlternative(FirstContext ctx, Context... ctxs) {
+  if (ctx)
+    return {visitTypesafe(ctx)};
+  else
+    return visitAlternative<Out>(ctxs...);
+}
+
+template <typename Out>
+Out SparqlQleverVisitor::visitAlternative() {
+  AD_FAIL()  // Should be unreachable.
 }

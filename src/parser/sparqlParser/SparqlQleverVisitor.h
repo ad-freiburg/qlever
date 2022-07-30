@@ -677,7 +677,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   PathTuples visitTypesafe(SparqlAutomaticParser::TupleWithPathContext* ctx);
 
-  void throwCollectionsAndBlankNodePathsNotSupported(auto* ctx) {
+  [[noreturn]] void throwCollectionsAndBlankNodePathsNotSupported(auto* ctx) {
     throw ParseException(
         "( ... ) and [ ... ] in triples are not yet supported by QLever. "
         "Got: " +
@@ -1441,4 +1441,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   string visitTypesafe(SparqlAutomaticParser::PnameNsContext* ctx);
+
+  template <typename Out, typename FirstContext, typename... Context>
+  Out visitAlternative(FirstContext ctx, Context... ctxs);
+
+  template <typename Out>
+  Out visitAlternative();
 };

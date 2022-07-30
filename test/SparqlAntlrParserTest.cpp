@@ -1078,6 +1078,7 @@ TEST(SparqlParser, triplesSameSubjectPath) {
                  {Iri("<foo>"), Var("?mehr"), Literal("\"a\"")}});
   expectTriples("_:1 <bar> ?baz",
                 {{BlankNode(false, "1"), PathIri("<bar>"), Var{"?baz"}}});
+  // TODO: more tests
 }
 
 namespace {

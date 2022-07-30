@@ -288,6 +288,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       currentPattern->_children.emplace_back(std::move(values));
       lexer_.accept(".");
     } else {
+      // TODO: Make TripleComponent constructible from these types.
       auto iri = [](const Iri& iri) { return TripleComponent{iri.toSparql()}; };
       auto blankNode = [](const BlankNode& blankNode) -> TripleComponent {
         return blankNode.toSparql();
@@ -298,10 +299,10 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         //  rewrite the Turtle Parser s.t. this code can be integrated into the
         //  visitor. In this case the turtle parser should output the
         //  corresponding modell class.
-        if (literal.toSparql()[0] == '"') {
+        try {
           return TurtleStringParser<TokenizerCtre>::parseTripleObject(
               literal.toSparql());
-        } else {
+        } catch (const TurtleStringParser<TokenizerCtre>::ParseException&) {
           return TripleComponent{literal.toSparql()};
         }
       };
