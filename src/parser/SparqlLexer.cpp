@@ -76,13 +76,13 @@ const SparqlLexer::RegexTokenMap& SparqlLexer::getRegexTokenMap() {
     auto add = [&m](const std::string& regex, T type) {
       m.push_back(std::make_pair(std::make_unique<re2::RE2>(regex), type));
     };
+    add(IRI, T::IRI);
     add(KEYWORD, T::KEYWORD);
     add(GROUP_BY, T::GROUP_BY);
     add(ORDER_BY, T::ORDER_BY);
     add(AGGREGATE, T::AGGREGATE);
     add(LOGICAL_OR, T::LOGICAL_OR);
     add(VARIABLE, T::VARIABLE);
-    add(IRI, T::IRI);
     add("(" + RDFLITERAL + ")", T::RDFLITERAL);
     add(FLOAT, T::FLOAT);
     add(INTEGER, T::INTEGER);
