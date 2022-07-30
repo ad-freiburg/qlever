@@ -61,14 +61,12 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
   parseSolutionModifiers(query);
 
   if (!query->_groupByVariables.empty()) {
-    if (query->hasSelectClause() &&
-        query->selectClause()._varsOrAsterisk.isManuallySelectedVariables()) {
+    if (query->hasSelectClause() && !query->selectClause().isAsterisk()) {
       const auto& selectClause = query->selectClause();
       // Check if all selected variables are either aggregated or
-      for (const string& var :
-           selectClause._varsOrAsterisk.getSelectedVariables()) {
+      for (const string& var : selectClause.getSelectedVariablesAsStrings()) {
         if (var[0] == '?') {
-          if (ad_utility::contains_if(selectClause._aliases,
+          if (ad_utility::contains_if(selectClause.getAliases(),
                                       [&var](const ParsedQuery::Alias& alias) {
                                         return alias._outVarName == var;
                                       })) {
@@ -86,8 +84,7 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
           }
         }
       }
-    } else if (query->hasSelectClause() &&
-               query->selectClause()._varsOrAsterisk.isAllVariablesSelected()) {
+    } else if (query->hasSelectClause() && query->selectClause().isAsterisk()) {
       throw ParseException(
           "GROUP BY is not allowed when all variables are selected via SELECT "
           "*");
@@ -120,15 +117,18 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
   }
   const auto& selectClause = query->selectClause();
 
+  // TODO<joka921> The following check should be directly in the
+  // `SelectClause` class (in the `setSelected` member).
+
+  // TODO<joka921> Is this even the correct way to check this? we should also
+  // verify that the variable is new (not even visible in the query body).
   ad_utility::HashMap<std::string, size_t> variable_counts;
-  if (selectClause._varsOrAsterisk.isManuallySelectedVariables()) {
-    for (const std::string& s :
-         selectClause._varsOrAsterisk.getSelectedVariables()) {
-      variable_counts[s]++;
-    }
+
+  for (const std::string& s : selectClause.getSelectedVariablesAsStrings()) {
+    variable_counts[s]++;
   }
 
-  for (const ParsedQuery::Alias& a : selectClause._aliases) {
+  for (const ParsedQuery::Alias& a : selectClause.getAliases()) {
     // The variable was already added to the selected variables while
     // parsing the alias, thus it should appear exactly once
     if (variable_counts[a._outVarName] > 1) {
@@ -215,7 +215,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
     } else if (lexer_.peek("bind")) {
       GraphPatternOperation::Bind bind =
           parseWithAntlr(sparqlParserHelpers::parseBind, *query);
-      query->registerVariableVisibleInQueryBody(bind._target);
+      query->registerVariableVisibleInQueryBody(Variable{bind._target});
       currentPattern->_children.emplace_back(std::move(bind));
       // The dot after a BIND is optional.
       lexer_.accept(".");
@@ -244,10 +244,8 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         // Add the variables from the subquery that are visible to the outside
         // (because they were selected, or because of a SELECT *) to the outer
         // query.
-        ParsedQuery::SelectedVarsOrAsterisk varsOrAsteriskFromSubquery =
-            subq._subquery.selectClause()._varsOrAsterisk;
-        auto selectedVariablesFromSubquery =
-            varsOrAsteriskFromSubquery.getSelectedVariables();
+        const auto& selectedVariablesFromSubquery =
+            subq._subquery.selectClause().getSelectedVariables();
         for (const auto& variable : selectedVariablesFromSubquery) {
           query->registerVariableVisibleInQueryBody(variable);
         }
@@ -283,7 +281,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       auto values =
           parseWithAntlr(sparqlParserHelpers::parseInlineData, *query);
       for (const auto& variable : values._inlineValues._variables) {
-        query->registerVariableVisibleInQueryBody(variable);
+        query->registerVariableVisibleInQueryBody(Variable{variable});
       }
       currentPattern->_children.emplace_back(std::move(values));
       lexer_.accept(".");
@@ -331,7 +329,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
 
       auto registerIfVariable = [&query](auto* variant) {
         if (Variable* variable = std::get_if<Variable>(variant)) {
-          query->registerVariableVisibleInQueryBody(variable->name());
+          query->registerVariableVisibleInQueryBody(*variable);
         }
       };
 
@@ -431,7 +429,7 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
                                        return orderKey.variable_ == var.name();
                                      }) &&
             !ad_utility::contains_if(
-                query->selectClause()._aliases,
+                query->selectClause().getAliases(),
                 [&orderKey](const ParsedQuery::Alias& alias) {
                   return alias._outVarName == orderKey.variable_;
                 })) {
@@ -491,7 +489,8 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
         GraphPatternOperation::Bind helperBind{std::move(groupKey._expression),
                                                groupKey._outVarName};
         query->_rootGraphPattern._children.emplace_back(std::move(helperBind));
-        query->registerVariableVisibleInQueryBody(groupKey._outVarName);
+        query->registerVariableVisibleInQueryBody(
+            Variable{groupKey._outVarName});
         query->_groupByVariables.emplace_back(groupKey._outVarName);
       };
 

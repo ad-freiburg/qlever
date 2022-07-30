@@ -33,26 +33,25 @@ string ParsedQuery::asString() const {
   os << "\n}";
 
   bool usesSelect = hasSelectClause();
-  bool usesAsterisk =
-      usesSelect && selectClause()._varsOrAsterisk.isAllVariablesSelected();
+  bool usesAsterisk = usesSelect && selectClause().isAsterisk();
 
   if (usesSelect) {
     const auto& selectClause = this->selectClause();
     // SELECT
     os << "\nSELECT: {\n\t";
-    os << absl::StrJoin(selectClause._varsOrAsterisk.getSelectedVariables(),
+    // TODO<joka921> is this needed?
+    /*
+    os <<
+    absl::StrJoin(selectClause._varsAndAliasesOrAsterisk.getSelectedVariables(),
                         ", ");
+                        */
     os << "\n}";
 
     // ALIASES
     os << "\nALIASES: {\n\t";
     if (!usesAsterisk) {
-      for (size_t i = 0; i < selectClause._aliases.size(); ++i) {
-        const Alias& alias = selectClause._aliases[i];
-        os << alias._expression.getDescriptor();
-        if (i + 1 < selectClause._aliases.size()) {
-          os << "\n\t";
-        }
+      for (const auto& alias : selectClause.getAliases()) {
+        os << alias._expression.getDescriptor() << "\n\t";
       }
       os << "{";
     }
