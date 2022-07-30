@@ -340,6 +340,16 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
   virtual void exitVerbSimple(
       SparqlAutomaticParser::VerbSimpleContext* /*ctx*/) override {}
 
+  virtual void enterTupleWithoutPath(
+      SparqlAutomaticParser::TupleWithoutPathContext* /*ctx*/) override {}
+  virtual void exitTupleWithoutPath(
+      SparqlAutomaticParser::TupleWithoutPathContext* /*ctx*/) override {}
+
+  virtual void enterTupleWithPath(
+      SparqlAutomaticParser::TupleWithPathContext* /*ctx*/) override {}
+  virtual void exitTupleWithPath(
+      SparqlAutomaticParser::TupleWithPathContext* /*ctx*/) override {}
+
   virtual void enterVerbPathOrSimple(
       SparqlAutomaticParser::VerbPathOrSimpleContext* /*ctx*/) override {}
   virtual void exitVerbPathOrSimple(

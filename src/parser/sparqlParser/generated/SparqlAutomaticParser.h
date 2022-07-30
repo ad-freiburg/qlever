@@ -248,64 +248,66 @@ class SparqlAutomaticParser : public antlr4::Parser {
     RulePropertyListPathNotEmpty = 62,
     RuleVerbPath = 63,
     RuleVerbSimple = 64,
-    RuleVerbPathOrSimple = 65,
-    RuleObjectListPath = 66,
-    RuleObjectPath = 67,
-    RulePath = 68,
-    RulePathAlternative = 69,
-    RulePathSequence = 70,
-    RulePathElt = 71,
-    RulePathEltOrInverse = 72,
-    RulePathMod = 73,
-    RulePathPrimary = 74,
-    RulePathNegatedPropertySet = 75,
-    RulePathOneInPropertySet = 76,
-    RuleInteger = 77,
-    RuleTriplesNode = 78,
-    RuleBlankNodePropertyList = 79,
-    RuleTriplesNodePath = 80,
-    RuleBlankNodePropertyListPath = 81,
-    RuleCollection = 82,
-    RuleCollectionPath = 83,
-    RuleGraphNode = 84,
-    RuleGraphNodePath = 85,
-    RuleVarOrTerm = 86,
-    RuleVarOrIri = 87,
-    RuleVar = 88,
-    RuleGraphTerm = 89,
-    RuleExpression = 90,
-    RuleConditionalOrExpression = 91,
-    RuleConditionalAndExpression = 92,
-    RuleValueLogical = 93,
-    RuleRelationalExpression = 94,
-    RuleNumericExpression = 95,
-    RuleAdditiveExpression = 96,
-    RuleStrangeMultiplicativeSubexprOfAdditive = 97,
-    RuleMultiplicativeExpression = 98,
-    RuleUnaryExpression = 99,
-    RulePrimaryExpression = 100,
-    RuleBrackettedExpression = 101,
-    RuleBuiltInCall = 102,
-    RuleRegexExpression = 103,
-    RuleSubstringExpression = 104,
-    RuleStrReplaceExpression = 105,
-    RuleExistsFunc = 106,
-    RuleNotExistsFunc = 107,
-    RuleAggregate = 108,
-    RuleIriOrFunction = 109,
-    RuleRdfLiteral = 110,
-    RuleNumericLiteral = 111,
-    RuleNumericLiteralUnsigned = 112,
-    RuleNumericLiteralPositive = 113,
-    RuleNumericLiteralNegative = 114,
-    RuleBooleanLiteral = 115,
-    RuleString = 116,
-    RuleIri = 117,
-    RulePrefixedName = 118,
-    RuleBlankNode = 119,
-    RuleIriref = 120,
-    RulePnameLn = 121,
-    RulePnameNs = 122
+    RuleTupleWithoutPath = 65,
+    RuleTupleWithPath = 66,
+    RuleVerbPathOrSimple = 67,
+    RuleObjectListPath = 68,
+    RuleObjectPath = 69,
+    RulePath = 70,
+    RulePathAlternative = 71,
+    RulePathSequence = 72,
+    RulePathElt = 73,
+    RulePathEltOrInverse = 74,
+    RulePathMod = 75,
+    RulePathPrimary = 76,
+    RulePathNegatedPropertySet = 77,
+    RulePathOneInPropertySet = 78,
+    RuleInteger = 79,
+    RuleTriplesNode = 80,
+    RuleBlankNodePropertyList = 81,
+    RuleTriplesNodePath = 82,
+    RuleBlankNodePropertyListPath = 83,
+    RuleCollection = 84,
+    RuleCollectionPath = 85,
+    RuleGraphNode = 86,
+    RuleGraphNodePath = 87,
+    RuleVarOrTerm = 88,
+    RuleVarOrIri = 89,
+    RuleVar = 90,
+    RuleGraphTerm = 91,
+    RuleExpression = 92,
+    RuleConditionalOrExpression = 93,
+    RuleConditionalAndExpression = 94,
+    RuleValueLogical = 95,
+    RuleRelationalExpression = 96,
+    RuleNumericExpression = 97,
+    RuleAdditiveExpression = 98,
+    RuleStrangeMultiplicativeSubexprOfAdditive = 99,
+    RuleMultiplicativeExpression = 100,
+    RuleUnaryExpression = 101,
+    RulePrimaryExpression = 102,
+    RuleBrackettedExpression = 103,
+    RuleBuiltInCall = 104,
+    RuleRegexExpression = 105,
+    RuleSubstringExpression = 106,
+    RuleStrReplaceExpression = 107,
+    RuleExistsFunc = 108,
+    RuleNotExistsFunc = 109,
+    RuleAggregate = 110,
+    RuleIriOrFunction = 111,
+    RuleRdfLiteral = 112,
+    RuleNumericLiteral = 113,
+    RuleNumericLiteralUnsigned = 114,
+    RuleNumericLiteralPositive = 115,
+    RuleNumericLiteralNegative = 116,
+    RuleBooleanLiteral = 117,
+    RuleString = 118,
+    RuleIri = 119,
+    RulePrefixedName = 120,
+    RuleBlankNode = 121,
+    RuleIriref = 122,
+    RulePnameLn = 123,
+    RulePnameNs = 124
   };
 
   explicit SparqlAutomaticParser(antlr4::TokenStream* input);
@@ -384,6 +386,8 @@ class SparqlAutomaticParser : public antlr4::Parser {
   class PropertyListPathNotEmptyContext;
   class VerbPathContext;
   class VerbSimpleContext;
+  class TupleWithoutPathContext;
+  class TupleWithPathContext;
   class VerbPathOrSimpleContext;
   class ObjectListPathContext;
   class ObjectPathContext;
@@ -1549,11 +1553,9 @@ class SparqlAutomaticParser : public antlr4::Parser {
     PropertyListPathNotEmptyContext(antlr4::ParserRuleContext* parent,
                                     size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    std::vector<VerbPathOrSimpleContext*> verbPathOrSimple();
-    VerbPathOrSimpleContext* verbPathOrSimple(size_t i);
-    ObjectListPathContext* objectListPath();
-    std::vector<ObjectListContext*> objectList();
-    ObjectListContext* objectList(size_t i);
+    TupleWithPathContext* tupleWithPath();
+    std::vector<TupleWithoutPathContext*> tupleWithoutPath();
+    TupleWithoutPathContext* tupleWithoutPath(size_t i);
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
@@ -1593,6 +1595,40 @@ class SparqlAutomaticParser : public antlr4::Parser {
   };
 
   VerbSimpleContext* verbSimple();
+
+  class TupleWithoutPathContext : public antlr4::ParserRuleContext {
+   public:
+    TupleWithoutPathContext(antlr4::ParserRuleContext* parent,
+                            size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    VerbPathOrSimpleContext* verbPathOrSimple();
+    ObjectListContext* objectList();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual antlrcpp::Any accept(
+        antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  TupleWithoutPathContext* tupleWithoutPath();
+
+  class TupleWithPathContext : public antlr4::ParserRuleContext {
+   public:
+    TupleWithPathContext(antlr4::ParserRuleContext* parent,
+                         size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    VerbPathOrSimpleContext* verbPathOrSimple();
+    ObjectListPathContext* objectListPath();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual antlrcpp::Any accept(
+        antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  TupleWithPathContext* tupleWithPath();
 
   class VerbPathOrSimpleContext : public antlr4::ParserRuleContext {
    public:

@@ -11,9 +11,9 @@
 #include "Tokenizer.h"
 
 const std::string SparqlToken::TYPE_NAMES[] = {
-    "IRI",    "WS",         "KEYWORD",         "VARIABLE",
-    "SYMBOL", "AGGREGATE",  "RDFLITERAL",      "INTEGER",
-    "FLOAT",  "LOGICAL_OR", "A_RDF_TYPE_ALIAS"};
+    "IRI",    "WS",         "KEYWORD",          "VARIABLE",
+    "SYMBOL", "AGGREGATE",  "RDFLITERAL",       "INTEGER",
+    "FLOAT",  "LOGICAL_OR", "A_RDF_TYPE_ALIAS", "BOOLEAN_LITERAL"};
 
 const std::string LANGTAG = "@[a-zA-Z]+(-[a-zA-Z0-9]+)*";
 const std::string IRIREF = "(<[^<>\"{}|^`\\\\\\[\\]\\x00-\\x20]*>)";
@@ -90,6 +90,7 @@ const SparqlLexer::RegexTokenMap& SparqlLexer::getRegexTokenMap() {
     add("(" + WS + "+)", T::WS);
     add("(#.*)", T::WS);
     add("(a)", T::A_RDF_TYPE_ALIAS);
+    add("((true)|(false))", T::BOOLEAN_LITERAL);
     return m;
   }();
   return regexTokenMap;

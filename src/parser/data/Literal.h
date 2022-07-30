@@ -49,4 +49,6 @@ class Literal {
 
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const { return _stringRepresentation; }
+
+  bool operator==(const Literal& other) const = default;
 };

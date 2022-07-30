@@ -115,6 +115,14 @@ inline auto parseVerbPathOrSimple =
 inline auto parseSelectClause = std::bind_front(
     parseFront, &SparqlAutomaticParser::selectClause, "selectClause");
 
+inline auto parsePropertyListPathNotEmpty = std::bind_front(
+    parseFront, &SparqlAutomaticParser::propertyListPathNotEmpty,
+    "propertyListPathNotEmpty");
+
+inline auto parseTriplesSameSubjectPath =
+    std::bind_front(parseFront, &SparqlAutomaticParser::triplesSameSubjectPath,
+                    "triplesSameSubjectPath");
+
 inline auto parsePrologue =
     std::bind_front(parseFront, &SparqlAutomaticParser::prologue, "prologue");
 

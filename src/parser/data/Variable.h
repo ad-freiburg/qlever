@@ -9,6 +9,7 @@
 
 #include "../../engine/ResultTable.h"
 #include "../../index/Index.h"
+#include "Context.h"
 
 class Variable {
   std::string _name;
