@@ -142,21 +142,11 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
 
 // _____________________________________________________________________________
 void SparqlParser::parsePrologue(ParsedQuery* query) {
-  while (lexer_.accept("prefix")) {
-    lexer_.expect(SparqlToken::Type::IRI);
-    string key = lexer_.current().raw;
-    lexer_.expect(SparqlToken::Type::IRI);
-    string value = lexer_.current().raw;
-    addPrefix(key, value, query);
-  }
-}
-
-// _____________________________________________________________________________
-void SparqlParser::addPrefix(const string& key, const string& value,
-                             ParsedQuery* query) {
-  // Remove the trailing : from the key
-  SparqlPrefix p{key.substr(0, key.size() - 1), value};
-  query->_prefixes.emplace_back(p);
+  vector<SparqlPrefix> prefixes =
+      parseWithAntlr(sparqlParserHelpers::parsePrologue, *query);
+  query->_prefixes.insert(query->_prefixes.end(),
+                          std::make_move_iterator(prefixes.begin()),
+                          std::make_move_iterator(prefixes.end()));
 }
 
 // _____________________________________________________________________________

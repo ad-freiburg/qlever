@@ -56,17 +56,13 @@ TEST(SparqlParser, Prefix) {
     string s = "PREFIX wd: <www.wikidata.org/>";
     ParserAndVisitor p{s};
     auto context = p.parser_.prefixDecl();
-    p.visitor_.visitPrefixDecl(context);
-    const auto& m = p.visitor_.prefixMap();
-    ASSERT_EQ(2ul, m.size());
-    ASSERT_TRUE(m.at("wd") == "<www.wikidata.org/>");
-    ASSERT_EQ(m.at(""), "<>");
+    auto prefix = p.visitor_.visitTypesafe(context);
+    ASSERT_EQ(prefix, SparqlPrefix("wd", "<www.wikidata.org/>"));
   }
   {
     string s = "wd:bimbam";
-    ParserAndVisitor p{s};
-    auto& m = p.visitor_.prefixMap();
-    m["wd"] = "<www.wikidata.org/>";
+    SparqlQleverVisitor::PrefixMap m{{"wd", "<www.wikidata.org/>"}};
+    ParserAndVisitor p{s, m};
 
     auto context = p.parser_.pnameLn();
     auto result = p.visitor_.visitTypesafe(context);
@@ -74,19 +70,17 @@ TEST(SparqlParser, Prefix) {
   }
   {
     string s = "wd:";
-    ParserAndVisitor p{s};
-    auto& m = p.visitor_.prefixMap();
-    m["wd"] = "<www.wikidata.org/>";
+    SparqlQleverVisitor::PrefixMap m{{"wd", "<www.wikidata.org/>"}};
+    ParserAndVisitor p{s, m};
 
     auto context = p.parser_.pnameNs();
-    auto result = p.visitor_.visitPnameNs(context).as<string>();
+    auto result = p.visitor_.visitTypesafe(context);
     ASSERT_EQ(result, "<www.wikidata.org/>");
   }
   {
     string s = "wd:bimbam";
-    ParserAndVisitor p{s};
-    auto& m = p.visitor_.prefixMap();
-    m["wd"] = "<www.wikidata.org/>";
+    SparqlQleverVisitor::PrefixMap m{{"wd", "<www.wikidata.org/>"}};
+    ParserAndVisitor p{s, m};
 
     auto context = p.parser_.prefixedName();
     auto result = p.visitor_.visitTypesafe(context);
@@ -94,9 +88,8 @@ TEST(SparqlParser, Prefix) {
   }
   {
     string s = "<somethingsomething> <rest>";
-    ParserAndVisitor p{s};
-    auto& m = p.visitor_.prefixMap();
-    m["wd"] = "<www.wikidata.org/>";
+    SparqlQleverVisitor::PrefixMap m{{"wd", "<www.wikidata.org/>"}};
+    ParserAndVisitor p{s, m};
 
     auto context = p.parser_.iriref();
     auto result = p.visitor_.visitTypesafe(context);

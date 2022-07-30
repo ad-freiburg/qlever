@@ -115,6 +115,9 @@ inline auto parseVerbPathOrSimple =
 inline auto parseSelectClause = std::bind_front(
     parseFront, &SparqlAutomaticParser::selectClause, "selectClause");
 
+inline auto parsePrologue =
+    std::bind_front(parseFront, &SparqlAutomaticParser::prologue, "prologue");
+
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H

@@ -52,7 +52,6 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
  public:
   using PrefixMap = ad_utility::HashMap<string, string>;
-  const PrefixMap& prefixMap() const { return _prefixMap; }
   SparqlQleverVisitor() = default;
   SparqlQleverVisitor(PrefixMap prefixMap) : _prefixMap{std::move(prefixMap)} {}
   using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
@@ -74,10 +73,6 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   void setPrefixMapManually(PrefixMap map) { _prefixMap = std::move(map); }
 
  private:
-  // For the unit tests
-  PrefixMap& prefixMap() { return _prefixMap; }
-  FRIEND_TEST(SparqlParser, Prefix);
-
   PrefixMap _prefixMap{{"", "<>"}};
 
   template <typename T>
@@ -128,22 +123,24 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
+  vector<SparqlPrefix> visitTypesafe(
+      SparqlAutomaticParser::PrologueContext* ctx);
+
   // ___________________________________________________________________________
   antlrcpp::Any visitBaseDecl(
       SparqlAutomaticParser::BaseDeclContext* ctx) override {
-    _prefixMap[""] = visitTypesafe(ctx->iriref());
-    return nullptr;
+    return visitTypesafe(ctx);
   }
+
+  SparqlPrefix visitTypesafe(SparqlAutomaticParser::BaseDeclContext* ctx);
 
   // ___________________________________________________________________________
   antlrcpp::Any visitPrefixDecl(
       SparqlAutomaticParser::PrefixDeclContext* ctx) override {
-    auto text = ctx->PNAME_NS()->getText();
-    // Strip trailing ':'.
-    _prefixMap[text.substr(0, text.length() - 1)] =
-        visitTypesafe(ctx->iriref());
-    return nullptr;
+    return visitTypesafe(ctx);
   }
+
+  SparqlPrefix visitTypesafe(SparqlAutomaticParser::PrefixDeclContext* ctx);
 
   antlrcpp::Any visitSelectQuery(
       SparqlAutomaticParser::SelectQueryContext* ctx) override {

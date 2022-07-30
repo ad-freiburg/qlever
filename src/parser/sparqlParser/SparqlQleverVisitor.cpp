@@ -51,6 +51,28 @@ antlrcpp::Any SparqlQleverVisitor::processIriFunctionCall(
 }
 
 // ____________________________________________________________________________________
+vector<SparqlPrefix> SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::PrologueContext* ctx) {
+  vector<SparqlPrefix> decls = visitVector<SparqlPrefix>(ctx->baseDecl());
+  appendVector(decls, visitVector<SparqlPrefix>(ctx->prefixDecl()));
+  return decls;
+}
+
+// ____________________________________________________________________________________
+SparqlPrefix SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::BaseDeclContext* ctx) {
+  return SparqlPrefix{"", visitTypesafe(ctx->iriref())};
+}
+
+// ____________________________________________________________________________________
+SparqlPrefix SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::PrefixDeclContext* ctx) {
+  auto text = ctx->PNAME_NS()->getText();
+  return SparqlPrefix{text.substr(0, text.length() - 1),
+                      visitTypesafe(ctx->iriref())};
+}
+
+// ____________________________________________________________________________________
 ParsedQuery::SelectClause SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::SelectClauseContext* ctx) {
   ParsedQuery::SelectClause select;

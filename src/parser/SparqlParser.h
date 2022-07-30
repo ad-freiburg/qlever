@@ -40,7 +40,6 @@ class SparqlParser {
   void parseWhere(ParsedQuery* query,
                   ParsedQuery::GraphPattern* currentPattern = nullptr);
   void parseSolutionModifiers(ParsedQuery* query);
-  void addPrefix(const string& key, const string& value, ParsedQuery* query);
   // Returns true if it found a filter
   bool parseFilter(vector<SparqlFilter>* _filters, bool failOnNoFilter = true,
                    ParsedQuery::GraphPattern* pattern = nullptr);
