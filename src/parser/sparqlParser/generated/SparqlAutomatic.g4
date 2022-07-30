@@ -256,7 +256,7 @@ propertyListPath
     ;
 
 propertyListPathNotEmpty
-    : verbPathOrSimple objectListPath ( ';' ( verbPathOrSimple objectList )? )*
+    : tupleWithPath ( ';' ( tupleWithoutPath )? )*
     ;
 
 verbPath
@@ -265,6 +265,15 @@ verbPath
 
 verbSimple
     : var
+    ;
+
+/* Helper rules to make parsing of propertyListPathNotEmpty easier. */
+tupleWithoutPath
+    : verbPathOrSimple objectList
+    ;
+
+tupleWithPath
+    : verbPathOrSimple objectListPath
     ;
 
 /*

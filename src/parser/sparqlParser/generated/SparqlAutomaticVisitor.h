@@ -210,6 +210,12 @@ class SparqlAutomaticVisitor : public antlr4::tree::AbstractParseTreeVisitor {
   virtual antlrcpp::Any visitVerbSimple(
       SparqlAutomaticParser::VerbSimpleContext* context) = 0;
 
+  virtual antlrcpp::Any visitTupleWithoutPath(
+      SparqlAutomaticParser::TupleWithoutPathContext* context) = 0;
+
+  virtual antlrcpp::Any visitTupleWithPath(
+      SparqlAutomaticParser::TupleWithPathContext* context) = 0;
+
   virtual antlrcpp::Any visitVerbPathOrSimple(
       SparqlAutomaticParser::VerbPathOrSimpleContext* context) = 0;
 

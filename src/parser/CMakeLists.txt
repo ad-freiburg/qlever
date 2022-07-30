@@ -14,5 +14,7 @@ add_library(parser
         SparqlLexer.h SparqlLexer.cpp
         TokenizerCtre.h TurtleTokenId.h
         ParallelBuffer.cpp
-        SparqlParserHelpers.h SparqlParserHelpers.cpp TripleComponent.h)
+        SparqlParserHelpers.h SparqlParserHelpers.cpp
+        TripleComponent.h
+        PropertyPath.h PropertyPath.cpp)
 target_link_libraries(parser sparqlParser sparqlExpressions rdfEscaping re2 absl::flat_hash_map util)

@@ -338,6 +338,16 @@ class SparqlAutomaticBaseVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
+  virtual antlrcpp::Any visitTupleWithoutPath(
+      SparqlAutomaticParser::TupleWithoutPathContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual antlrcpp::Any visitTupleWithPath(
+      SparqlAutomaticParser::TupleWithPathContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual antlrcpp::Any visitVerbPathOrSimple(
       SparqlAutomaticParser::VerbPathOrSimpleContext* ctx) override {
     return visitChildren(ctx);

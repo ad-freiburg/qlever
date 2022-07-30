@@ -311,6 +311,16 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
   virtual void exitVerbSimple(
       SparqlAutomaticParser::VerbSimpleContext* ctx) = 0;
 
+  virtual void enterTupleWithoutPath(
+      SparqlAutomaticParser::TupleWithoutPathContext* ctx) = 0;
+  virtual void exitTupleWithoutPath(
+      SparqlAutomaticParser::TupleWithoutPathContext* ctx) = 0;
+
+  virtual void enterTupleWithPath(
+      SparqlAutomaticParser::TupleWithPathContext* ctx) = 0;
+  virtual void exitTupleWithPath(
+      SparqlAutomaticParser::TupleWithPathContext* ctx) = 0;
+
   virtual void enterVerbPathOrSimple(
       SparqlAutomaticParser::VerbPathOrSimpleContext* ctx) = 0;
   virtual void exitVerbPathOrSimple(
