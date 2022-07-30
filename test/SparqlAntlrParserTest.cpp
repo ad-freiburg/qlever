@@ -1078,7 +1078,12 @@ TEST(SparqlParser, triplesSameSubjectPath) {
                  {Iri("<foo>"), Var("?mehr"), Literal("\"a\"")}});
   expectTriples("_:1 <bar> ?baz",
                 {{BlankNode(false, "1"), PathIri("<bar>"), Var{"?baz"}}});
-  // TODO: more tests
+  expectTriples("10.0 <bar> true",
+                {{Literal(10.0), PathIri("<bar>"), Literal(true)}});
+  expectTriples(
+      "<foo> <QLever-internal-function/contains-word> \"Berlin Freiburg\"",
+      {{Iri("<foo>"), PathIri("<QLever-internal-function/contains-word>"),
+        Literal("berlin freiburg")}});
 }
 
 namespace {
