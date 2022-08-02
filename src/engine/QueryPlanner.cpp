@@ -206,7 +206,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
         // TODO<joka921> : should we make this setVariableColumns call a part
         // of setOperation in the queryExecutionTree, since it is invariant?
-        plan._qet->setVariableColumns(op->getVariableColumns());
         plan._qet->setOperation(QueryExecutionTree::OperationType::BIND, op);
         candidatePlans.back().push_back(std::move(plan));
       }
@@ -317,7 +316,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         SubtreePlan candidate(_qec);
         auto unionOp = std::make_shared<Union>(_qec, left._qet, right._qet);
         QueryExecutionTree& tree = *candidate._qet;
-        tree.setVariableColumns(unionOp->getVariableColumns());
         tree.setOperation(QueryExecutionTree::UNION, unionOp);
         joinCandidates(std::vector{std::move(candidate)});
       } else if constexpr (std::is_same_v<T, GraphPatternOperation::Subquery>) {
@@ -382,8 +380,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
               rightValue, leftColName, rightColName, min, max);
           candidatesOut.emplace_back(_qec);
           QueryExecutionTree& tree = *candidatesOut.back()._qet;
-          tree.setVariableColumns(static_cast<TransitivePath*>(transOp.get())
-                                      ->getVariableColumns());
           tree.setOperation(QueryExecutionTree::TRANSITIVE_PATH, transOp);
         }
         joinCandidates(std::move(candidatesOut));
@@ -394,7 +390,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
             std::make_shared<Values>(_qec, arg._inlineValues);
         valuesPlan._qet->setOperation(QueryExecutionTree::OperationType::VALUES,
                                       op);
-        valuesPlan._qet->setVariableColumns(op->getVariableColumns());
         joinCandidates(std::vector{std::move(valuesPlan)});
 
       } else if constexpr (std::is_same_v<T, GraphPatternOperation::Bind>) {
@@ -871,18 +866,15 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
       auto distinct =
           std::make_shared<Distinct>(_qec, parent._qet, keepIndices);
       distinctPlan._qet->setOperation(QueryExecutionTree::DISTINCT, distinct);
-      distinctPlan._qet->setVariableColumns(distinct->getVariableColumns());
       distinctPlan._qet->setContextVars(parent._qet->getContextVars());
     } else {
       if (keepIndices.size() == 1) {
         auto tree = std::make_shared<QueryExecutionTree>(_qec);
         auto sort = std::make_shared<Sort>(_qec, parent._qet, keepIndices[0]);
-        tree->setVariableColumns(parent._qet->getVariableColumns());
         tree->setOperation(QueryExecutionTree::SORT, sort);
         tree->setContextVars(parent._qet->getContextVars());
         auto distinct = std::make_shared<Distinct>(_qec, tree, keepIndices);
         distinctPlan._qet->setOperation(QueryExecutionTree::DISTINCT, distinct);
-        distinctPlan._qet->setVariableColumns(distinct->getVariableColumns());
         distinctPlan._qet->setContextVars(parent._qet->getContextVars());
       } else {
         auto tree = std::make_shared<QueryExecutionTree>(_qec);
@@ -891,12 +883,10 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
           obCols.emplace_back(std::make_pair(i, false));
         }
         auto ob = std::make_shared<OrderBy>(_qec, parent._qet, obCols);
-        tree->setVariableColumns(parent._qet->getVariableColumns());
         tree->setOperation(QueryExecutionTree::ORDER_BY, ob);
         tree->setContextVars(parent._qet->getContextVars());
         auto distinct = std::make_shared<Distinct>(_qec, tree, keepIndices);
         distinctPlan._qet->setOperation(QueryExecutionTree::DISTINCT, distinct);
-        distinctPlan._qet->setVariableColumns(distinct->getVariableColumns());
         distinctPlan._qet->setContextVars(parent._qet->getContextVars());
       }
     }
@@ -946,7 +936,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
       if (!isSorted) {
         auto orderByOp =
             std::make_shared<OrderBy>(_qec, parent._qet, sortIndices);
-        orderByPlan._qet->setVariableColumns(parent._qet->getVariableColumns());
         orderByPlan._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByOp);
       }
       SubtreePlan patternTrickPlan(_qec);
@@ -956,7 +945,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
       countPred->setVarNames(patternTrickTriple._o.getString(),
                              aliases[0]._outVarName);
       QueryExecutionTree& tree = *patternTrickPlan._qet;
-      tree.setVariableColumns(countPred->getVariableColumns());
       tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
                         countPred);
       added.push_back(patternTrickPlan);
@@ -970,7 +958,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     countPred->setVarNames(patternTrickTriple._o.getString(),
                            aliases[0]._outVarName);
     QueryExecutionTree& tree = *patternTrickPlan._qet;
-    tree.setVariableColumns(countPred->getVariableColumns());
     tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
                       countPred);
     added.push_back(patternTrickPlan);
@@ -987,7 +974,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
                              generateUniqueVarName());
     }
     QueryExecutionTree& tree = *patternTrickPlan._qet;
-    tree.setVariableColumns(countPred->getVariableColumns());
     tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
                       countPred);
     added.push_back(patternTrickPlan);
@@ -1006,7 +992,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getHavingRow(
     for (const SparqlFilter& filter : pq._havingClauses) {
       SubtreePlan plan(_qec);
       auto& tree = *plan._qet;
-      tree.setVariableColumns(parent._qet->getVariableColumns());
       tree.setOperation(QueryExecutionTree::FILTER,
                         createFilterOperation(filter, parent));
       tree.setContextVars(parent._qet->getContextVars());
@@ -1054,13 +1039,11 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
       // Create an order by operation as required by the group by
       auto orderBy = std::make_shared<OrderBy>(_qec, parent._qet, sortColumns);
       QueryExecutionTree& orderByTree = *orderByPlan._qet;
-      orderByTree.setVariableColumns(parent._qet->getVariableColumns());
       orderByTree.setOperation(QueryExecutionTree::ORDER_BY, orderBy);
       groupBy->setSubtree(orderByPlan._qet);
     } else
       groupBy->setSubtree(parent._qet);
 
-    groupByTree.setVariableColumns(groupBy->getVariableColumns());
     groupByTree.setOperation(QueryExecutionTree::GROUP_BY, groupBy);
     added.push_back(groupByPlan);
   }
@@ -1087,7 +1070,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
         added.push_back(parent);
       } else {
         auto sort = std::make_shared<Sort>(_qec, parent._qet, col);
-        tree.setVariableColumns(parent._qet->getVariableColumns());
         tree.setOperation(QueryExecutionTree::SORT, sort);
         tree.setContextVars(parent._qet->getContextVars());
         added.push_back(plan);
@@ -1110,7 +1092,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
         added.push_back(parent);
       } else {
         auto ob = std::make_shared<OrderBy>(_qec, parent._qet, sortIndices);
-        tree.setVariableColumns(parent._qet->getVariableColumns());
         tree.setOperation(QueryExecutionTree::ORDER_BY, ob);
         tree.setContextVars(parent._qet->getContextVars());
 
@@ -1240,7 +1221,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             scan->setObject(node._triple._o);
             tree.setOperation(
                 QueryExecutionTree::OperationType::HAS_RELATION_SCAN, scan);
-            tree.setVariableColumns(scan->getVariableColumns());
           } else if (isVariable(node._triple._s) &&
                      isVariable(node._triple._o) &&
                      node._triple._s == node._triple._o) {
@@ -1264,15 +1244,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             scan->precomputeSizeEstimate();
             scanTree->setOperation(QueryExecutionTree::OperationType::SCAN,
                                    scan);
-            scanTree->setVariableColumn(node._triple._s.getString(), 0);
-            scanTree->setVariableColumn(filterVar, 1);
             auto filter = std::make_shared<Filter>(
                 _qec, scanTree, SparqlFilter::FilterType::EQ,
                 node._triple._s.getString(), filterVar, vector<string>{},
                 vector<string>{});
             tree.setOperation(QueryExecutionTree::OperationType::FILTER,
                               filter);
-            tree.setVariableColumns(filter->getVariableColumns());
           } else if (isVariable(node._triple._s)) {
             auto scan = std::make_shared<IndexScan>(
                 _qec, IndexScan::ScanType::POS_BOUND_O);
@@ -1280,7 +1257,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             scan->setPredicate(node._triple._p._iri);
             scan->setObject(node._triple._o);
             tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-            tree.setVariableColumn(node._triple._s.getString(), 0);
           } else if (isVariable(node._triple._o)) {
             auto scan = std::make_shared<IndexScan>(
                 _qec, IndexScan::ScanType::PSO_BOUND_S);
@@ -1288,7 +1264,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             scan->setPredicate(node._triple._p._iri);
             scan->setObject(node._triple._o);
             tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-            tree.setVariableColumn(node._triple._o.getString(), 0);
           } else {
             assert(isVariable(node._triple._p));
             auto scan = std::make_shared<IndexScan>(
@@ -1297,7 +1272,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             scan->setPredicate(node._triple._p._iri);
             scan->setObject(node._triple._o);
             tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-            tree.setVariableColumn(node._triple._p._iri, 0);
           }
           seeds.push_back(plan);
         } else if (node._variables.size() == 2) {
@@ -1313,7 +1287,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             scan->setObject(node._triple._o);
             tree.setOperation(
                 QueryExecutionTree::OperationType::HAS_RELATION_SCAN, scan);
-            tree.setVariableColumns(scan->getVariableColumns());
             seeds.push_back(plan);
           } else if (!isVariable(node._triple._p._iri)) {
             {
@@ -1327,8 +1300,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               scan->setObject(node._triple._o);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-              tree.setVariableColumn(node._triple._s.getString(), 0);
-              tree.setVariableColumn(node._triple._o.getString(), 1);
               seeds.push_back(plan);
             }
             {
@@ -1342,8 +1313,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               scan->setObject(node._triple._o);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-              tree.setVariableColumn(node._triple._o.getString(), 0);
-              tree.setVariableColumn(node._triple._s.getString(), 1);
               seeds.push_back(plan);
             }
           } else if (!isVariable(node._triple._s)) {
@@ -1358,8 +1327,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               scan->setObject(node._triple._o);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-              tree.setVariableColumn(node._triple._p._iri, 0);
-              tree.setVariableColumn(node._triple._o.getString(), 1);
               seeds.push_back(plan);
             }
             {
@@ -1373,8 +1340,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               scan->setObject(node._triple._o);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-              tree.setVariableColumn(node._triple._o.getString(), 0);
-              tree.setVariableColumn(node._triple._p._iri, 1);
               seeds.push_back(plan);
             }
           } else if (!isVariable(node._triple._o)) {
@@ -1389,8 +1354,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               scan->setObject(node._triple._o);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-              tree.setVariableColumn(node._triple._s.getString(), 0);
-              tree.setVariableColumn(node._triple._p._iri, 1);
               seeds.push_back(plan);
             }
             {
@@ -1404,8 +1367,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               scan->setObject(node._triple._o);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-              tree.setVariableColumn(node._triple._p._iri, 0);
-              tree.setVariableColumn(node._triple._s, 1);
               seeds.push_back(plan);
             }
           }
@@ -1421,9 +1382,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
                   _qec, IndexScan::ScanType::FULL_INDEX_SCAN_SPO);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-              tree.setVariableColumn(node._triple._s, 0);
-              tree.setVariableColumn(node._triple._p._iri, 1);
-              tree.setVariableColumn(node._triple._o.getString(), 2);
               seeds.push_back(plan);
             }
             // SOP
@@ -1435,9 +1393,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
                   _qec, IndexScan::ScanType::FULL_INDEX_SCAN_SOP);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-              tree.setVariableColumn(node._triple._s, 0);
-              tree.setVariableColumn(node._triple._o.getString(), 1);
-              tree.setVariableColumn(node._triple._p._iri, 2);
               seeds.push_back(plan);
             }
             // PSO
@@ -1449,9 +1404,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
                   _qec, IndexScan::ScanType::FULL_INDEX_SCAN_PSO);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-              tree.setVariableColumn(node._triple._p._iri, 0);
-              tree.setVariableColumn(node._triple._s, 1);
-              tree.setVariableColumn(node._triple._o.getString(), 2);
               seeds.push_back(plan);
             }
             // POS
@@ -1463,9 +1415,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
                   _qec, IndexScan::ScanType::FULL_INDEX_SCAN_POS);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-              tree.setVariableColumn(node._triple._p._iri, 0);
-              tree.setVariableColumn(node._triple._o.getString(), 1);
-              tree.setVariableColumn(node._triple._s, 2);
               seeds.push_back(plan);
             }
             // OSP
@@ -1477,9 +1426,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
                   _qec, IndexScan::ScanType::FULL_INDEX_SCAN_OSP);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-              tree.setVariableColumn(node._triple._o.getString(), 0);
-              tree.setVariableColumn(node._triple._s, 1);
-              tree.setVariableColumn(node._triple._p._iri, 2);
               seeds.push_back(plan);
             }
             // OPS
@@ -1491,9 +1437,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
                   _qec, IndexScan::ScanType::FULL_INDEX_SCAN_OPS);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-              tree.setVariableColumn(node._triple._o.getString(), 0);
-              tree.setVariableColumn(node._triple._p._iri, 1);
-              tree.setVariableColumn(node._triple._s, 2);
               seeds.push_back(plan);
             }
           } else {
@@ -1879,7 +1822,6 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
       _qec, node._wordPart, node._variables, node._cvar);
   tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER,
                     textOp);
-  tree.setVariableColumns(textOp->getVariableColumns());
   tree.addContextVar(node._cvar);
   return plan;
 }
@@ -1980,11 +1922,9 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
   auto orderByB = std::make_shared<OrderBy>(_qec, b._qet, sortIndicesB);
 
   if (!aSorted) {
-    orderByPlanA._qet->setVariableColumns(a._qet->getVariableColumns());
     orderByPlanA._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByA);
   }
   if (!bSorted) {
-    orderByPlanB._qet->setVariableColumns(b._qet->getVariableColumns());
     orderByPlanB._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByB);
   }
 
@@ -1993,7 +1933,6 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
       a.type == SubtreePlan::OPTIONAL, bSorted ? b._qet : orderByPlanB._qet,
       b.type == SubtreePlan::OPTIONAL, jcs);
   QueryExecutionTree& tree = *plan._qet;
-  tree.setVariableColumns(join->getVariableColumns());
   tree.setOperation(QueryExecutionTree::OPTIONAL_JOIN, join);
 
   plan.type = SubtreePlan::BASIC;
@@ -2034,11 +1973,9 @@ QueryPlanner::SubtreePlan QueryPlanner::minus(const SubtreePlan& a,
   auto orderByB = std::make_shared<OrderBy>(_qec, b._qet, sortIndicesB);
 
   if (!aSorted) {
-    orderByPlanA._qet->setVariableColumns(a._qet->getVariableColumns());
     orderByPlanA._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByA);
   }
   if (!bSorted) {
-    orderByPlanB._qet->setVariableColumns(b._qet->getVariableColumns());
     orderByPlanB._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByB);
   }
 
@@ -2048,7 +1985,6 @@ QueryPlanner::SubtreePlan QueryPlanner::minus(const SubtreePlan& a,
       std::make_shared<Minus>(_qec, aSorted ? a._qet : orderByPlanA._qet,
                               bSorted ? b._qet : orderByPlanB._qet, jcs);
   QueryExecutionTree& tree = *plan._qet;
-  tree.setVariableColumns(join->getVariableColumns());
   tree.setOperation(QueryExecutionTree::MINUS, join);
 
   plan.type = SubtreePlan::BASIC;
@@ -2090,11 +2026,9 @@ QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
   auto orderByB = std::make_shared<OrderBy>(_qec, b._qet, sortIndicesB);
 
   if (!aSorted) {
-    orderByPlanA._qet->setVariableColumns(a._qet->getVariableColumns());
     orderByPlanA._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByA);
   }
   if (!bSorted) {
-    orderByPlanB._qet->setVariableColumns(b._qet->getVariableColumns());
     orderByPlanB._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByB);
   }
 
@@ -2108,7 +2042,6 @@ QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
 
   auto join = std::make_shared<MultiColumnJoin>(_qec, actualA, actualB, jcs);
   QueryExecutionTree& tree = *plan._qet;
-  tree.setVariableColumns(join->getVariableColumns());
   tree.setOperation(QueryExecutionTree::MULTICOLUMN_JOIN, join);
 
   return plan;
@@ -2275,7 +2208,6 @@ void QueryPlanner::applyFiltersIfPossible(
         auto& tree = *newPlan._qet;
         tree.setOperation(QueryExecutionTree::FILTER,
                           createFilterOperation(filters[i], row[n]));
-        tree.setVariableColumns(row[n]._qet->getVariableColumns());
         tree.setContextVars(row[n]._qet->getContextVars());
         if (replace) {
           row[n] = newPlan;
@@ -2914,7 +2846,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
           sortIndices.emplace_back(
               std::make_pair(jcs[(c + 1) % 2][(0 + swap) % 2], false));
           auto orderBy = std::make_shared<OrderBy>(_qec, a._qet, sortIndices);
-          left->setVariableColumns(a._qet->getVariableColumns());
           left->setOperation(QueryExecutionTree::ORDER_BY, orderBy);
         }
         const vector<size_t>& bSortedOn = b._qet->resultSortedOn();
@@ -2930,7 +2861,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
           sortIndices.emplace_back(
               std::make_pair(jcs[(c + 1) % 2][(1 + swap) % 2], false));
           auto orderBy = std::make_shared<OrderBy>(_qec, b._qet, sortIndices);
-          right->setVariableColumns(b._qet->getVariableColumns());
           right->setOperation(QueryExecutionTree::ORDER_BY, orderBy);
         }
         // TODO(florian): consider replacing this with a multicolumn join.
@@ -2938,7 +2868,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
         SubtreePlan plan(_qec);
         auto& tree = *plan._qet;
         auto join = std::make_shared<TwoColumnJoin>(_qec, left, right, jcs);
-        tree.setVariableColumns(join->getVariableColumns());
         tree.setOperation(QueryExecutionTree::TWO_COL_JOIN, join);
         // TODO<joka921>: shouldn't we |= the filters here to avoid duplicate
         // filtering when it might hurt (although filters are always cheap).
@@ -2996,7 +2925,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
           filterPlan._qet, otherPlanJc);
       tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITH_FILTER,
                         textOp);
-      tree.setVariableColumns(textOp->getVariableColumns());
       tree.setContextVars(filterPlan._qet->getContextVars());
       tree.addContextVar(noFilter.getCVar());
       candidates.push_back(std::move(plan));
@@ -3056,7 +2984,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
         scan->setObject(static_cast<HasPredicateScan*>(
                             hasPredicateScan->getRootOperation().get())
                             ->getObject());
-        tree.setVariableColumns(scan->getVariableColumns());
         tree.setOperation(QueryExecutionTree::HAS_RELATION_SCAN, scan);
         plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
         plan.addAllNodes(b._idsOfIncludedNodes);
@@ -3104,7 +3031,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
           }
           auto sort = std::make_shared<Sort>(_qec, other, jcs[0][0]);
           auto sortedOther = std::make_shared<QueryExecutionTree>(_qec);
-          sortedOther->setVariableColumns(other->getVariableColumns());
           sortedOther->setContextVars(other->getContextVars());
           sortedOther->setOperation(QueryExecutionTree::SORT, sort);
           other = sortedOther;
@@ -3113,7 +3039,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
         SubtreePlan plan{_qec};
         QueryExecutionTree& tree = *plan._qet;
         auto newpath = srcpath->bindLeftSide(other, otherCol);
-        tree.setVariableColumns(newpath->getVariableColumns());
         tree.setOperation(QueryExecutionTree::TRANSITIVE_PATH, newpath);
         plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
         plan.addAllNodes(b._idsOfIncludedNodes);
@@ -3160,7 +3085,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
           }
           auto sort = std::make_shared<Sort>(_qec, other, jcs[0][0]);
           auto sortedOther = std::make_shared<QueryExecutionTree>(_qec);
-          sortedOther->setVariableColumns(other->getVariableColumns());
           sortedOther->setContextVars(other->getContextVars());
           sortedOther->setOperation(QueryExecutionTree::SORT, sort);
           other = sortedOther;
@@ -3169,7 +3093,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
         SubtreePlan plan{_qec};
         auto& tree = *plan._qet;
         auto newpath = srcpath->bindRightSide(other, otherCol);
-        tree.setVariableColumns(newpath->getVariableColumns());
         tree.setOperation(QueryExecutionTree::TRANSITIVE_PATH, newpath);
         plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
         plan.addAllNodes(b._idsOfIncludedNodes);
@@ -3197,7 +3120,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
         return candidates;
       }
       auto sort = std::make_shared<Sort>(_qec, a._qet, jcs[0][0]);
-      left->setVariableColumns(a._qet->getVariableColumns());
       left->setContextVars(a._qet->getContextVars());
       left->setOperation(QueryExecutionTree::SORT, sort);
     }
@@ -3212,7 +3134,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
         return candidates;
       }
       auto sort = std::make_shared<Sort>(_qec, b._qet, jcs[0][1]);
-      right->setVariableColumns(b._qet->getVariableColumns());
       right->setContextVars(b._qet->getContextVars());
       right->setOperation(QueryExecutionTree::SORT, sort);
     }
@@ -3222,7 +3143,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     SubtreePlan plan{_qec};
     auto& tree = *plan._qet;
     auto join = std::make_shared<Join>(_qec, left, right, jcs[0][0], jcs[0][1]);
-    tree.setVariableColumns(join->getVariableColumns());
     tree.setContextVars(join->getContextVars());
     tree.setOperation(QueryExecutionTree::JOIN, join);
     plan._idsOfIncludedNodes = a._idsOfIncludedNodes;

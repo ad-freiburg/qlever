@@ -20,7 +20,6 @@ using std::string;
 // _____________________________________________________________________________
 QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
     : _qec(qec),
-      _variableColumnMap(),
       _rootOperation(nullptr),
       _type(OperationType::UNDEFINED),
       _contextVars(),
@@ -63,30 +62,15 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
 }
 
 // _____________________________________________________________________________
-void QueryExecutionTree::setVariableColumn(string variable, size_t column) {
-  _variableColumnMap[std::move(variable)] = column;
-}
-
-// _____________________________________________________________________________
-void QueryExecutionTree::setVariableColumn(TripleComponent variable,
-                                           size_t column) {
-  AD_CHECK(variable.isVariable());
-  _variableColumnMap[std::move(variable).getString()] = column;
-}
-
-// _____________________________________________________________________________
 size_t QueryExecutionTree::getVariableColumn(const string& variable) const {
-  if (_variableColumnMap.count(variable) == 0) {
+  AD_CHECK(_rootOperation);
+  // TODO<joka921> unnecessary copies here...
+  const auto& varCols = _rootOperation->getVariableColumns();
+  if (!varCols.contains(variable)) {
     AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
              "Variable could not be mapped to result column. Var: " + variable);
   }
-  return _variableColumnMap.find(variable)->second;
-}
-
-// _____________________________________________________________________________
-void QueryExecutionTree::setVariableColumns(
-    ad_utility::HashMap<string, size_t> const& map) {
-  _variableColumnMap = map;
+  return varCols.find(variable)->second;
 }
 
 // ___________________________________________________________________________
@@ -288,7 +272,8 @@ bool QueryExecutionTree::knownEmptyResult() {
 
 // _____________________________________________________________________________
 bool QueryExecutionTree::varCovered(string var) const {
-  return _variableColumnMap.count(var) > 0;
+  AD_CHECK(_rootOperation);
+  return _rootOperation->getVariableColumns().contains(var);
 }
 
 // _______________________________________________________________________

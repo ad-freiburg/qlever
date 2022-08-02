@@ -61,8 +61,10 @@ class QueryExecutionTree {
 
   const QueryExecutionContext* getQec() const { return _qec; }
 
-  const ad_utility::HashMap<string, size_t>& getVariableColumns() const {
-    return _variableColumnMap;
+  // TODO<joka921> make this a const&
+  ad_utility::HashMap<string, size_t> getVariableColumns() const {
+    AD_CHECK(_rootOperation);
+    return _rootOperation->getVariableColumns();
   }
 
   std::shared_ptr<Operation> getRootOperation() const { return _rootOperation; }
@@ -73,12 +75,7 @@ class QueryExecutionTree {
     return _type == OperationType::UNDEFINED || !_rootOperation;
   }
 
-  void setVariableColumn(std::string variable, size_t columnIndex);
-  void setVariableColumn(TripleComponent variable, size_t columnIndex);
-
   size_t getVariableColumn(const string& var) const;
-
-  void setVariableColumns(const ad_utility::HashMap<string, size_t>& map);
 
   void setContextVars(const std::unordered_set<string>& set) {
     _contextVars = set;
@@ -220,7 +217,6 @@ class QueryExecutionTree {
 
  private:
   QueryExecutionContext* _qec;  // No ownership
-  ad_utility::HashMap<string, size_t> _variableColumnMap;
   std::shared_ptr<Operation>
       _rootOperation;  // Owned child. Will be deleted at deconstruction.
   OperationType _type;
