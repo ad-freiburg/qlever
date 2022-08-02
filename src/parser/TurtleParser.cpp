@@ -525,7 +525,7 @@ bool TurtleParser<T>::pnameLnRelaxed() {
   // these can also be part of a collection etc.
   // find any character that can end a pnameLn when assuming that no
   // escape sequences were used
-  auto posEnd = view.find_first_of(" \n,;", pos);
+  auto posEnd = view.find_first_of(" \t\r\n,;", pos);
   if (posEnd == string::npos) {
     // make tests work
     posEnd = view.size();
