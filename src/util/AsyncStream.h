@@ -46,7 +46,7 @@ cppcoro::generator<typename Range::value_type> runStreamAsync(
   ad_utility::OnDestruction cleanup{[&] {
     queue.disablePush();
     thread.join();
-    // Only rethrow an exception if no stack unwinding is in progress
+    // Only throw an exception if no stack unwinding is in progress
     // to avoid crashes because of multiple active exceptions.
     if (!std::uncaught_exceptions() && exception) {
       // This exception will only be thrown once all the values that were
