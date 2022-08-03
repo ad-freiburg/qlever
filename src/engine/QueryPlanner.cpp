@@ -1235,12 +1235,10 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             std::string filterVar = generateUniqueVarName();
 
             auto scanTree = std::make_shared<QueryExecutionTree>(_qec);
+            auto scanTriple = node._triple;
+            scanTriple._o = filterVar;
             auto scan = std::make_shared<IndexScan>(
-                _qec, IndexScan::ScanType::PSO_FREE_S);
-            scan->setSubject(node._triple._s);
-
-            scan->setPredicate(node._triple._p._iri);
-            scan->setObject(filterVar);
+                _qec, IndexScan::ScanType::PSO_FREE_S, scanTriple);
             scan->precomputeSizeEstimate();
             scanTree->setOperation(QueryExecutionTree::OperationType::SCAN,
                                    scan);
@@ -1252,25 +1250,16 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
                               filter);
           } else if (isVariable(node._triple._s)) {
             auto scan = std::make_shared<IndexScan>(
-                _qec, IndexScan::ScanType::POS_BOUND_O);
-            scan->setSubject(node._triple._s);
-            scan->setPredicate(node._triple._p._iri);
-            scan->setObject(node._triple._o);
+                _qec, IndexScan::ScanType::POS_BOUND_O, node._triple);
             tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
           } else if (isVariable(node._triple._o)) {
             auto scan = std::make_shared<IndexScan>(
-                _qec, IndexScan::ScanType::PSO_BOUND_S);
-            scan->setSubject(node._triple._s);
-            scan->setPredicate(node._triple._p._iri);
-            scan->setObject(node._triple._o);
+                _qec, IndexScan::ScanType::PSO_BOUND_S, node._triple);
             tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
           } else {
             assert(isVariable(node._triple._p));
             auto scan = std::make_shared<IndexScan>(
-                _qec, IndexScan::ScanType::SOP_BOUND_O);
-            scan->setSubject(node._triple._s);
-            scan->setPredicate(node._triple._p._iri);
-            scan->setObject(node._triple._o);
+                _qec, IndexScan::ScanType::SOP_BOUND_O,node._triple);
             tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
           }
           seeds.push_back(plan);
@@ -1294,10 +1283,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               plan._idsOfIncludedNodes |= (uint64_t(1) << i);
               auto& tree = *plan._qet;
               auto scan = std::make_shared<IndexScan>(
-                  _qec, IndexScan::ScanType::PSO_FREE_S);
-              scan->setSubject(node._triple._s);
-              scan->setPredicate(node._triple._p._iri);
-              scan->setObject(node._triple._o);
+                  _qec, IndexScan::ScanType::PSO_FREE_S, node._triple);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
               seeds.push_back(plan);
@@ -1307,10 +1293,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               plan._idsOfIncludedNodes |= (uint64_t(1) << i);
               auto& tree = *plan._qet;
               auto scan = std::make_shared<IndexScan>(
-                  _qec, IndexScan::ScanType::POS_FREE_O);
-              scan->setSubject(node._triple._s);
-              scan->setPredicate(node._triple._p._iri);
-              scan->setObject(node._triple._o);
+                  _qec, IndexScan::ScanType::POS_FREE_O, node._triple);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
               seeds.push_back(plan);
@@ -1321,10 +1304,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               plan._idsOfIncludedNodes |= (uint64_t(1) << i);
               auto& tree = *plan._qet;
               auto scan = std::make_shared<IndexScan>(
-                  _qec, IndexScan::ScanType::SPO_FREE_P);
-              scan->setSubject(node._triple._s);
-              scan->setPredicate(node._triple._p._iri);
-              scan->setObject(node._triple._o);
+                  _qec, IndexScan::ScanType::SPO_FREE_P, node._triple);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
               seeds.push_back(plan);
@@ -1334,10 +1314,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               plan._idsOfIncludedNodes |= (uint64_t(1) << i);
               auto& tree = *plan._qet;
               auto scan = std::make_shared<IndexScan>(
-                  _qec, IndexScan::ScanType::SOP_FREE_O);
-              scan->setSubject(node._triple._s);
-              scan->setPredicate(node._triple._p._iri);
-              scan->setObject(node._triple._o);
+                  _qec, IndexScan::ScanType::SOP_FREE_O, node._triple);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
               seeds.push_back(plan);
@@ -1348,10 +1325,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               plan._idsOfIncludedNodes |= (uint64_t(1) << i);
               auto& tree = *plan._qet;
               auto scan = std::make_shared<IndexScan>(
-                  _qec, IndexScan::ScanType::OSP_FREE_S);
-              scan->setSubject(node._triple._s);
-              scan->setPredicate(node._triple._p._iri);
-              scan->setObject(node._triple._o);
+                  _qec, IndexScan::ScanType::OSP_FREE_S, node._triple);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
               seeds.push_back(plan);
@@ -1361,10 +1335,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               plan._idsOfIncludedNodes |= (uint64_t(1) << i);
               auto& tree = *plan._qet;
               auto scan = std::make_shared<IndexScan>(
-                  _qec, IndexScan::ScanType::OPS_FREE_P);
-              scan->setSubject(node._triple._s);
-              scan->setPredicate(node._triple._p._iri);
-              scan->setObject(node._triple._o);
+                  _qec, IndexScan::ScanType::OPS_FREE_P, node._triple);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
               seeds.push_back(plan);
@@ -1379,7 +1350,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               plan._idsOfIncludedNodes |= (uint64_t(1) << i);
               auto& tree = *plan._qet;
               auto scan = std::make_shared<IndexScan>(
-                  _qec, IndexScan::ScanType::FULL_INDEX_SCAN_SPO);
+                  _qec, IndexScan::ScanType::FULL_INDEX_SCAN_SPO, node._triple);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
               seeds.push_back(plan);
@@ -1390,7 +1361,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               plan._idsOfIncludedNodes |= (uint64_t(1) << i);
               auto& tree = *plan._qet;
               auto scan = std::make_shared<IndexScan>(
-                  _qec, IndexScan::ScanType::FULL_INDEX_SCAN_SOP);
+                  _qec, IndexScan::ScanType::FULL_INDEX_SCAN_SOP, node._triple);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
               seeds.push_back(plan);
@@ -1401,7 +1372,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               plan._idsOfIncludedNodes |= (uint64_t(1) << i);
               auto& tree = *plan._qet;
               auto scan = std::make_shared<IndexScan>(
-                  _qec, IndexScan::ScanType::FULL_INDEX_SCAN_PSO);
+                  _qec, IndexScan::ScanType::FULL_INDEX_SCAN_PSO, node._triple);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
               seeds.push_back(plan);
@@ -1412,7 +1383,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               plan._idsOfIncludedNodes |= (uint64_t(1) << i);
               auto& tree = *plan._qet;
               auto scan = std::make_shared<IndexScan>(
-                  _qec, IndexScan::ScanType::FULL_INDEX_SCAN_POS);
+                  _qec, IndexScan::ScanType::FULL_INDEX_SCAN_POS, node._triple);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
               seeds.push_back(plan);
@@ -1423,7 +1394,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               plan._idsOfIncludedNodes |= (uint64_t(1) << i);
               auto& tree = *plan._qet;
               auto scan = std::make_shared<IndexScan>(
-                  _qec, IndexScan::ScanType::FULL_INDEX_SCAN_OSP);
+                  _qec, IndexScan::ScanType::FULL_INDEX_SCAN_OSP, node._triple);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
               seeds.push_back(plan);
@@ -1434,7 +1405,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               plan._idsOfIncludedNodes |= (uint64_t(1) << i);
               auto& tree = *plan._qet;
               auto scan = std::make_shared<IndexScan>(
-                  _qec, IndexScan::ScanType::FULL_INDEX_SCAN_OPS);
+                  _qec, IndexScan::ScanType::FULL_INDEX_SCAN_OPS, node._triple);
               scan->precomputeSizeEstimate();
               tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
               seeds.push_back(plan);
