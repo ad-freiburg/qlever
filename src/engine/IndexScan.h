@@ -5,9 +5,9 @@
 
 #include <string>
 
+#include "../parser/ParsedQuery.h"
 #include "../util/Conversions.h"
 #include "./Operation.h"
-#include "../parser/ParsedQuery.h"
 
 using std::string;
 
@@ -37,7 +37,8 @@ class IndexScan : public Operation {
  public:
   virtual string getDescriptor() const override;
 
-  IndexScan(QueryExecutionContext* qec, ScanType type, const SparqlTriple& triple)
+  IndexScan(QueryExecutionContext* qec, ScanType type,
+            const SparqlTriple& triple)
       : Operation(qec),
         _type(type),
         _sizeEstimate(std::numeric_limits<size_t>::max()) {
@@ -45,6 +46,7 @@ class IndexScan : public Operation {
     AD_CHECK(triple._p._operation == PropertyPath::Operation::IRI);
     setPredicate(triple._p._iri);
     setObject(triple._o);
+    precomputeSizeEstimate();
   }
 
   virtual ~IndexScan() {}

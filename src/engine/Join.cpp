@@ -151,7 +151,7 @@ ad_utility::HashMap<string, size_t> Join::getVariableColumns() const {
   if (!isFullScanDummy(_left) && !isFullScanDummy(_right)) {
     retVal = _left->getVariableColumns();
     size_t leftSize = _left->getResultWidth();
-    for (const auto& [variable, column] :_right->getVariableColumns()){
+    for (const auto& [variable, column] : _right->getVariableColumns()) {
       if (column < _rightJoinCol) {
         retVal[variable] = leftSize + column;
       }
@@ -163,7 +163,7 @@ ad_utility::HashMap<string, size_t> Join::getVariableColumns() const {
     if (isFullScanDummy(_right)) {
       retVal = _left->getVariableColumns();
       size_t leftSize = _left->getResultWidth();
-      for (const auto& [variable, column] : _right->getVariableColumns()){
+      for (const auto& [variable, column] : _right->getVariableColumns()) {
         // Skip the first col for the dummy
         if (column != 0) {
           retVal[variable] = leftSize + column - 1;
@@ -176,7 +176,7 @@ ad_utility::HashMap<string, size_t> Join::getVariableColumns() const {
           retVal[variable] = column - 1;
         }
       }
-      for (const auto& [variable, column]: _right->getVariableColumns()) {
+      for (const auto& [variable, column] : _right->getVariableColumns()) {
         retVal[variable] = 2 + column;
       }
     }
