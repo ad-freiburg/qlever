@@ -55,4 +55,6 @@ class BlankNode {
     stream << _label;
     return stream.str();
   }
+
+  bool operator==(const BlankNode& other) const = default;
 };

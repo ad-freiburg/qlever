@@ -11,11 +11,14 @@
 
 #include "../engine/ResultType.h"
 #include "../engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "../util/Algorithm.h"
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
+#include "../util/OverloadCallOperator.h"
 #include "../util/StringUtils.h"
 #include "./TripleComponent.h"
 #include "ParseException.h"
+#include "PropertyPath.h"
 #include "data/Types.h"
 #include "data/VarOrTerm.h"
 
@@ -32,111 +35,6 @@ class SparqlPrefix {
   string _uri;
 
   [[nodiscard]] string asString() const;
-};
-
-class PropertyPath {
- public:
-  enum class Operation {
-    SEQUENCE,
-    ALTERNATIVE,
-    TRANSITIVE,
-    TRANSITIVE_MIN,  // e.g. +
-    TRANSITIVE_MAX,  // e.g. *n or ?
-    INVERSE,
-    IRI
-  };
-
-  PropertyPath()
-      : _operation(Operation::IRI),
-        _limit(0),
-        _iri(),
-        _children(),
-        _can_be_null(false) {}
-  explicit PropertyPath(Operation op)
-      : _operation(op), _limit(0), _iri(), _children(), _can_be_null(false) {}
-  PropertyPath(Operation op, uint16_t limit, std::string iri,
-               std::initializer_list<PropertyPath> children);
-
-  static PropertyPath fromIri(std::string iri) {
-    PropertyPath p(PropertyPath::Operation::IRI);
-    p._iri = std::move(iri);
-    return p;
-  }
-
-  static PropertyPath fromVariable(Variable var) {
-    PropertyPath p(PropertyPath::Operation::IRI);
-    p._iri = std::move(var.name());
-    return p;
-  }
-
-  static PropertyPath makeWithChildren(std::vector<PropertyPath> children,
-                                       PropertyPath::Operation op) {
-    PropertyPath p(std::move(op));
-    p._children = std::move(children);
-    return p;
-  }
-
-  static PropertyPath makeAlternative(std::vector<PropertyPath> children) {
-    return makeWithChildren(std::move(children), Operation::ALTERNATIVE);
-  }
-
-  static PropertyPath makeSequence(std::vector<PropertyPath> children) {
-    return makeWithChildren(std::move(children), Operation::SEQUENCE);
-  }
-
-  static PropertyPath makeInverse(PropertyPath child) {
-    return makeWithChildren({std::move(child)}, Operation::INVERSE);
-  }
-
-  static PropertyPath makeWithChildLimit(PropertyPath child,
-                                         uint_fast16_t limit,
-                                         PropertyPath::Operation op) {
-    PropertyPath p = makeWithChildren({std::move(child)}, op);
-    p._limit = limit;
-    return p;
-  }
-
-  static PropertyPath makeTransitiveMin(PropertyPath child,
-                                        uint_fast16_t limit) {
-    return makeWithChildLimit(std::move(child), limit,
-                              Operation::TRANSITIVE_MIN);
-  }
-
-  static PropertyPath makeTransitiveMax(PropertyPath child,
-                                        uint_fast16_t limit) {
-    return makeWithChildLimit(std::move(child), limit,
-                              Operation::TRANSITIVE_MAX);
-  }
-
-  static PropertyPath makeTransitive(PropertyPath child) {
-    return makeWithChildren({std::move(child)}, Operation::TRANSITIVE);
-  }
-
-  bool operator==(const PropertyPath& other) const {
-    return _operation == other._operation && _limit == other._limit &&
-           _iri == other._iri && _children == other._children &&
-           _can_be_null == other._can_be_null;
-  }
-
-  void writeToStream(std::ostream& out) const;
-  [[nodiscard]] std::string asString() const;
-
-  void computeCanBeNull();
-
-  Operation _operation;
-  // For the limited transitive operations
-  uint_fast16_t _limit;
-
-  // In case of an iri
-  std::string _iri;
-
-  std::vector<PropertyPath> _children;
-
-  /**
-   * True iff this property path is either a transitive path with minimum length
-   * of 0, or if all of this transitive path's children can be null.
-   */
-  bool _can_be_null;
 };
 
 inline bool isVariable(const string& elem) { return elem.starts_with("?"); }
@@ -326,39 +224,69 @@ class ParsedQuery {
     [[nodiscard]] std::string getDescriptor() const {
       return "(" + _expression.getDescriptor() + " as " + _outVarName + ")";
     }
+    bool operator==(const Alias& other) const {
+      return _expression.getDescriptor() == other._expression.getDescriptor() &&
+             _outVarName == other._outVarName;
+    }
+
+    [[nodiscard]] const std::string& targetVariable() const {
+      return _outVarName;
+    }
   };
+
+  using VarOrAlias = std::variant<Variable, Alias>;
 
   // Represents either "all Variables" (Select *) or a list of explicitly
   // selected Variables (Select ?a ?b).
-  struct SelectedVarsOrAsterisk {
+  // Represents the SELECT clause with all the possible outcomes.
+  struct SelectClause {
+    bool _reduced = false;
+    bool _distinct = false;
+
    private:
-    std::variant<vector<string>, char> _varsOrAsterisk;
-    std::vector<string> _variablesFromQueryBody;
+    struct VarsAndAliases {
+      std::vector<Variable> _vars;
+      std::vector<Alias> _aliases;
+    };
+    std::variant<VarsAndAliases, char> _varsAndAliasesOrAsterisk;
+    std::vector<Variable> _variablesFromQueryBody;
 
    public:
-    [[nodiscard]] bool isAllVariablesSelected() const {
-      return std::holds_alternative<char>(_varsOrAsterisk);
+    [[nodiscard]] bool isAsterisk() const {
+      return std::holds_alternative<char>(_varsAndAliasesOrAsterisk);
     }
 
-    [[nodiscard]] bool isManuallySelectedVariables() const {
-      return std::holds_alternative<std::vector<string>>(_varsOrAsterisk);
+    // Set the selector to '*'.
+    void setAsterisk() { _varsAndAliasesOrAsterisk = '*'; }
+
+    void setSelected(std::vector<Variable> variables) {
+      std::vector<VarOrAlias> v(std::make_move_iterator(variables.begin()),
+                                std::make_move_iterator(variables.end()));
+      setSelected(v);
     }
 
-    // Sets the Selector to 'All' (*) only if the Selector is still undefined
-    void setAllVariablesSelected() { _varsOrAsterisk = '*'; }
+    void setSelected(std::vector<VarOrAlias> varsOrAliases) {
+      VarsAndAliases v;
+      auto processVariable = [&v](Variable var) {
+        v._vars.push_back(std::move(var));
+      };
+      auto processAlias = [&v](Alias alias) {
+        v._vars.emplace_back(alias._outVarName);
+        v._aliases.push_back(std::move(alias));
+      };
 
-    // Sets the Selector with the variables manually defined
-    // Ex: Select var_1 (...) var_n
-    void setManuallySelected(std::vector<string> variables) {
-      _varsOrAsterisk = std::move(variables);
+      for (auto& el : varsOrAliases) {
+        std::visit(
+            ad_utility::OverloadCallOperator{processVariable, processAlias},
+            std::move(el));
+      }
+      _varsAndAliasesOrAsterisk = std::move(v);
     }
 
-    // Add a variable, that was found in the query body. The added variables
+    // Add a variable that was found in the query body. The added variables
     // will only be used if `isAsterisk` is true.
-    void registerVariableVisibleInQueryBody(const string& variable) {
-      if (!(std::find(_variablesFromQueryBody.begin(),
-                      _variablesFromQueryBody.end(),
-                      variable) != _variablesFromQueryBody.end())) {
+    void addVariableForAsterisk(const Variable& variable) {
+      if (!ad_utility::contains(_variablesFromQueryBody, variable)) {
         _variablesFromQueryBody.emplace_back(variable);
       }
     }
@@ -367,22 +295,31 @@ class ParsedQuery {
     // Select All (Select '*')
     // or
     // explicit variables selection (Select 'var_1' ... 'var_n')
-    [[nodiscard]] const auto& getSelectedVariables() const {
-      return isAllVariablesSelected()
+    [[nodiscard]] const std::vector<Variable>& getSelectedVariables() const {
+      return isAsterisk()
                  ? _variablesFromQueryBody
-                 : std::get<std::vector<string>>(_varsOrAsterisk);
-      ;
+                 : std::get<VarsAndAliases>(_varsAndAliasesOrAsterisk)._vars;
     }
-  };
+    [[nodiscard]] std::vector<std::string> getSelectedVariablesAsStrings()
+        const {
+      std::vector<std::string> result;
+      const auto& vars = getSelectedVariables();
+      result.reserve(vars.size());
+      for (const auto& var : vars) {
+        result.push_back(var.name());
+      }
+      return result;
+    }
 
-  // Represents the Select Clause with all the possible outcomes
-  struct SelectClause {
-    // `_aliases` will be empty if Selector '*' is present.
-    // This means, that there is a `SELECT *` clause in the query.
-    std::vector<Alias> _aliases;
-    SelectedVarsOrAsterisk _varsOrAsterisk;
-    bool _reduced = false;
-    bool _distinct = false;
+    [[nodiscard]] const std::vector<Alias>& getAliases() const {
+      static const std::vector<Alias> emptyDummy;
+      // Aliases are always manually specified
+      if (isAsterisk()) {
+        return emptyDummy;
+      } else {
+        return std::get<VarsAndAliases>(_varsAndAliasesOrAsterisk)._aliases;
+      }
+    }
   };
 
   SelectClause _selectedVarsOrAsterisk{SelectClause{}};
@@ -433,9 +370,9 @@ class ParsedQuery {
   // Add a variable, that was found in the SubQuery body, when query has a
   // Select Clause
   [[maybe_unused]] bool registerVariableVisibleInQueryBody(
-      const string& variable) {
+      const Variable& variable) {
     if (!hasSelectClause()) return false;
-    selectClause()._varsOrAsterisk.registerVariableVisibleInQueryBody(variable);
+    selectClause().addVariableForAsterisk(variable);
     return true;
   }
 

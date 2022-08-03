@@ -44,6 +44,10 @@ class Reversed {
 class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   using Objects = ad_utility::sparql_types::Objects;
   using Tuples = ad_utility::sparql_types::Tuples;
+  using PredicateAndObject = ad_utility::sparql_types::PredicateAndObject;
+  using PathTuples = ad_utility::sparql_types::PathTuples;
+  using TripleWithPropertyPath =
+      ad_utility::sparql_types::TripleWithPropertyPath;
   using Triples = ad_utility::sparql_types::Triples;
   using Node = ad_utility::sparql_types::Node;
   using ObjectList = ad_utility::sparql_types::ObjectList;
@@ -476,18 +480,46 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitTriplesSameSubjectPath(
       Parser::TriplesSameSubjectPathContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
+  }
+
+  vector<TripleWithPropertyPath> visitTypesafe(
+      Parser::TriplesSameSubjectPathContext* ctx);
+
+  antlrcpp::Any visitTupleWithoutPath(
+      Parser::TupleWithoutPathContext* ctx) override {
+    return visitTypesafe(ctx);
+  }
+
+  PathTuples visitTypesafe(Parser::TupleWithoutPathContext* ctx);
+
+  antlrcpp::Any visitTupleWithPath(Parser::TupleWithPathContext* ctx) override {
+    return visitTypesafe(ctx);
+  }
+
+  PathTuples visitTypesafe(Parser::TupleWithPathContext* ctx);
+
+  [[noreturn]] void throwCollectionsAndBlankNodePathsNotSupported(auto* ctx) {
+    throw ParseException(
+        "( ... ) and [ ... ] in triples are not yet supported by QLever. "
+        "Got: " +
+        ctx->getText());
   }
 
   antlrcpp::Any visitPropertyListPath(
       Parser::PropertyListPathContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  std::optional<PathTuples> visitTypesafe(
+      SparqlAutomaticParser::PropertyListPathContext* ctx);
 
   antlrcpp::Any visitPropertyListPathNotEmpty(
       Parser::PropertyListPathNotEmptyContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  PathTuples visitTypesafe(Parser::PropertyListPathNotEmptyContext* ctx);
 
   antlrcpp::Any visitVerbPath(Parser::VerbPathContext* ctx) override {
     return visitTypesafe(ctx);
@@ -506,12 +538,15 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  PropertyPath visitTypesafe(Parser::VerbPathOrSimpleContext* ctx);
+  ad_utility::sparql_types::VarOrPath visitTypesafe(
+      Parser::VerbPathOrSimpleContext* ctx);
 
   antlrcpp::Any visitObjectListPath(
       Parser::ObjectListPathContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  ObjectList visitTypesafe(Parser::ObjectListPathContext* ctx);
 
   antlrcpp::Any visitObjectPath(Parser::ObjectPathContext* ctx) override {
     return visitChildren(ctx);
@@ -600,7 +635,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitBlankNodePropertyListPath(
       Parser::BlankNodePropertyListPathContext* ctx) override {
-    return visitChildren(ctx);
+    throwCollectionsAndBlankNodePathsNotSupported(ctx);
+    AD_FAIL()  // Should be unreachable.
   }
 
   antlrcpp::Any visitCollection(Parser::CollectionContext* ctx) override {
@@ -611,7 +647,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitCollectionPath(
       Parser::CollectionPathContext* ctx) override {
-    return visitChildren(ctx);
+    throwCollectionsAndBlankNodePathsNotSupported(ctx);
+    AD_FAIL()  // Should be unreachable.
   }
 
   antlrcpp::Any visitGraphNode(Parser::GraphNodeContext* ctx) override {
@@ -623,6 +660,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitGraphNodePath(Parser::GraphNodePathContext* ctx) override {
     return visitChildren(ctx);
   }
+
+  VarOrTerm visitTypesafe(Parser::GraphNodePathContext* ctx);
 
   antlrcpp::Any visitVarOrTerm(Parser::VarOrTermContext* ctx) override {
     return visitTypesafe(ctx);
@@ -883,4 +922,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   string visitTypesafe(Parser::PnameNsContext* ctx);
+
+  template <typename Out, typename FirstContext, typename... Context>
+  Out visitAlternative(FirstContext ctx, Context... ctxs);
+
+  template <typename Out>
+  Out visitAlternative();
 };

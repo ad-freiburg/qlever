@@ -358,8 +358,7 @@ Awaitable<json> Server::composeResponseQleverJson(
     j["status"] = "OK";
     j["warnings"] = qet.collectWarnings();
     if (query.hasSelectClause()) {
-      j["selected"] =
-          query.selectClause()._varsOrAsterisk.getSelectedVariables();
+      j["selected"] = query.selectClause().getSelectedVariablesAsStrings();
     } else {
       j["selected"] =
           std::vector<std::string>{"?subject", "?predicate", "?object"};
@@ -372,12 +371,12 @@ Awaitable<json> Server::composeResponseQleverJson(
       size_t limit = std::min(query._limitOffset._limit, maxSend);
       size_t offset = query._limitOffset._offset;
       requestTimer.cont();
-      j["res"] = query.hasSelectClause()
-                     ? qet.writeResultAsQLeverJson(
-                           query.selectClause()._varsOrAsterisk, limit, offset,
-                           std::move(resultTable))
-                     : qet.writeRdfGraphJson(query.constructClause(), limit,
-                                             offset, std::move(resultTable));
+      j["res"] =
+          query.hasSelectClause()
+              ? qet.writeResultAsQLeverJson(query.selectClause(), limit, offset,
+                                            std::move(resultTable))
+              : qet.writeRdfGraphJson(query.constructClause(), limit, offset,
+                                      std::move(resultTable));
       requestTimer.stop();
     }
     j["resultsize"] = query.hasSelectClause() ? resultSize : j["res"].size();
@@ -410,8 +409,8 @@ Awaitable<json> Server::composeResponseSparqlJson(
     size_t limit = std::min(query._limitOffset._limit, maxSend);
     size_t offset = query._limitOffset._offset;
     requestTimer.cont();
-    j = qet.writeResultAsSparqlJson(query.selectClause()._varsOrAsterisk, limit,
-                                    offset, std::move(resultTable));
+    j = qet.writeResultAsSparqlJson(query.selectClause(), limit, offset,
+                                    std::move(resultTable));
 
     requestTimer.stop();
     return j;
@@ -428,8 +427,8 @@ Server::composeResponseSepValues(const ParsedQuery& query,
     size_t limit = query._limitOffset._limit;
     size_t offset = query._limitOffset._offset;
     return query.hasSelectClause()
-               ? qet.generateResults<format>(
-                     query.selectClause()._varsOrAsterisk, limit, offset)
+               ? qet.generateResults<format>(query.selectClause(), limit,
+                                             offset)
                : qet.writeRdfGraphSeparatedValues<format>(
                      query.constructClause(), limit, offset, qet.getResult());
   };

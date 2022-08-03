@@ -12,6 +12,9 @@ using Node = ad_utility::sparql_types::Node;
 using ObjectList = ad_utility::sparql_types::ObjectList;
 using PropertyList = ad_utility::sparql_types::PropertyList;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
+using PathTuples = ad_utility::sparql_types::PathTuples;
+using VarOrPath = ad_utility::sparql_types::VarOrPath;
+using TripleWithPropertyPath = ad_utility::sparql_types::TripleWithPropertyPath;
 
 using Visitor = SparqlQleverVisitor;
 using Parser = SparqlAutomaticParser;
@@ -58,6 +61,56 @@ antlrcpp::Any Visitor::processIriFunctionCall(
   throw ParseException{"Function \"" + iri + "\" not supported"};
 }
 
+// ___________________________________________________________________________
+namespace {
+string stripAndLowercaseKeywordLiteral(std::string_view lit) {
+  if (lit.size() > 2 && lit[0] == '"' && lit.back() == '"') {
+    auto stripped = lit.substr(1, lit.size() - 2);
+    return ad_utility::getLowercaseUtf8(stripped);
+  }
+  return std::string{lit};
+}
+
+// ___________________________________________________________________________
+template <typename Current, typename... Others>
+constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
+    const auto& arg) {
+  if constexpr (sizeof...(Others) > 0) {
+    if constexpr (ad_utility::isSimilar<decltype(arg), Current>) {
+      if (const auto ptr = std::get_if<ad_utility::First<Others...>>(&arg)) {
+        return unwrapVariant<Others...>(*ptr);
+      }
+      return nullptr;
+    } else {
+      return unwrapVariant<Others...>(arg);
+    }
+  } else {
+    return &arg;
+  }
+}
+}  // namespace
+
+// ___________________________________________________________________________
+PathTuples joinPredicateAndObject(VarOrPath predicate, ObjectList objectList) {
+  PathTuples tuples;
+  for (auto& object : objectList.first) {
+    // TODO The fulltext index should perform the splitting of its keywords,
+    //  and not the SparqlParser.
+    if (PropertyPath* path = std::get_if<PropertyPath>(&predicate)) {
+      if (path->asString() == CONTAINS_WORD_PREDICATE ||
+          // TODO _NS no longer needed?
+          path->asString() == CONTAINS_WORD_PREDICATE_NS) {
+        if (const Literal* literal =
+                unwrapVariant<VarOrTerm, GraphTerm, Literal>(object)) {
+          object = Literal{stripAndLowercaseKeywordLiteral(literal->literal())};
+        }
+      }
+    }
+    tuples.push_back({predicate, std::move(object)});
+  }
+  return tuples;
+}
+
 // ____________________________________________________________________________________
 ParsedQuery::SelectClause Visitor::visitTypesafe(
     Parser::SelectClauseContext* ctx) {
@@ -67,29 +120,11 @@ ParsedQuery::SelectClause Visitor::visitTypesafe(
   select._reduced = static_cast<bool>(ctx->REDUCED());
 
   if (ctx->asterisk) {
-    select._varsOrAsterisk.setAllVariablesSelected();
+    select.setAsterisk();
   } else {
-    // TODO: remove select._aliases and let the manuallySelectedVariables accept
-    // the variant<Variable, Alias> directly. Then all this code goes away
-    std::vector<std::string> selectedVariables;
-
-    auto processVariable = [&selectedVariables](const Variable& var) {
-      selectedVariables.push_back(var.name());
-    };
-    auto processAlias = [&selectedVariables,
-                         &select](ParsedQuery::Alias alias) {
-      selectedVariables.push_back(alias._outVarName);
-      select._aliases.push_back(std::move(alias));
-    };
-
-    for (auto& varOrAlias : ctx->varOrAlias()) {
-      std::visit(
-          ad_utility::OverloadCallOperator{processVariable, processAlias},
-          visitTypesafe(varOrAlias));
-    }
-    select._varsOrAsterisk.setManuallySelected(std::move(selectedVariables));
+    using VarOrAlias = std::variant<Variable, ParsedQuery::Alias>;
+    select.setSelected(visitVector<VarOrAlias>(ctx->varOrAlias()));
   }
-
   return select;
 }
 
@@ -195,6 +230,7 @@ Visitor::Triples Visitor::visitTypesafe(Parser::ConstructTemplateContext* ctx) {
 
 // ____________________________________________________________________________________
 string Visitor::visitTypesafe(Parser::IriContext* ctx) {
+  // TODO return an IRI, not a std::string.
   string langtag =
       ctx->PREFIX_LANGTAG() ? ctx->PREFIX_LANGTAG()->getText() : "";
   if (ctx->iriref()) {
@@ -521,9 +557,54 @@ Node Visitor::visitTypesafe(Parser::ObjectRContext* ctx) {
   return visitTypesafe(ctx->graphNode());
 }
 
+// ___________________________________________________________________________
+vector<TripleWithPropertyPath> SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::TriplesSameSubjectPathContext* ctx) {
+  if (ctx->varOrTerm()) {
+    vector<TripleWithPropertyPath> triples;
+    auto subject = visitTypesafe(ctx->varOrTerm());
+    auto tuples = visitTypesafe(ctx->propertyListPathNotEmpty());
+    for (auto& [predicate, object] : tuples) {
+      // TODO<clang,c++20> clang does not yet support emplace_back for
+      // aggregates.
+      triples.push_back(TripleWithPropertyPath{subject, std::move(predicate),
+                                               std::move(object)});
+    }
+    return triples;
+  } else if (ctx->triplesNodePath()) {
+    throwCollectionsAndBlankNodePathsNotSupported(ctx->triplesNodePath());
+  } else {
+    AD_FAIL()  // Should be unreachable.
+  }
+}
+
+// ___________________________________________________________________________
+std::optional<PathTuples> SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::PropertyListPathContext* ctx) {
+  if (ctx->propertyListPathNotEmpty()) {
+    return visitTypesafe(ctx->propertyListPathNotEmpty());
+  } else {
+    return std::nullopt;
+  }
+}
+
+// ___________________________________________________________________________
+PathTuples SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::PropertyListPathNotEmptyContext* ctx) {
+  PathTuples tuples = visitTypesafe(ctx->tupleWithPath());
+  vector<PathTuples> tuplesWithoutPaths =
+      visitVector<PathTuples>(ctx->tupleWithoutPath());
+  for (auto& tuplesWithoutPath : tuplesWithoutPaths) {
+    tuples.insert(tuples.end(), tuplesWithoutPath.begin(),
+                  tuplesWithoutPath.end());
+  }
+  return tuples;
+}
+
 // ____________________________________________________________________________________
 PropertyPath Visitor::visitTypesafe(Parser::VerbPathContext* ctx) {
   PropertyPath p = visitTypesafe(ctx->path());
+  // TODO move computeCanBeNull into PropertyPath constructor.
   p.computeCanBeNull();
   return p;
 }
@@ -534,13 +615,34 @@ Variable Visitor::visitTypesafe(Parser::VerbSimpleContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-PropertyPath Visitor::visitTypesafe(Parser::VerbPathOrSimpleContext* ctx) {
-  if (ctx->verbPath()) {
-    return visitTypesafe(ctx->verbPath());
-  } else if (ctx->verbSimple()) {
-    return PropertyPath::fromVariable(visitTypesafe(ctx->verbSimple()));
-  }
-  AD_FAIL()  // Should be unreachable.
+PathTuples SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::TupleWithoutPathContext* ctx) {
+  VarOrPath predicate = visitTypesafe(ctx->verbPathOrSimple());
+  ObjectList objectList = visitTypesafe(ctx->objectList());
+  return joinPredicateAndObject(predicate, objectList);
+}
+
+// ____________________________________________________________________________________
+PathTuples SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::TupleWithPathContext* ctx) {
+  VarOrPath predicate = visitTypesafe(ctx->verbPathOrSimple());
+  ObjectList objectList = visitTypesafe(ctx->objectListPath());
+  return joinPredicateAndObject(predicate, objectList);
+}
+
+// ____________________________________________________________________________________
+VarOrPath Visitor::visitTypesafe(Parser::VerbPathOrSimpleContext* ctx) {
+  return visitAlternative<ad_utility::sparql_types::VarOrPath>(
+      ctx->verbPath(), ctx->verbSimple());
+}
+
+// ___________________________________________________________________________
+ObjectList SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::ObjectListPathContext* ctx) {
+  // The second parameter is empty because collections and blank not paths,
+  // which might add additional triples, are currently not supported.
+  // When this is implemented they will be returned by visit(ObjectPathContext).
+  return {visitVector<VarOrTerm>(ctx->objectPath()), {}};
 }
 
 // ____________________________________________________________________________________
@@ -550,24 +652,14 @@ PropertyPath Visitor::visitTypesafe(Parser::PathContext* ctx) {
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visitTypesafe(Parser::PathAlternativeContext* ctx) {
-  auto paths = visitVector<PropertyPath>(ctx->pathSequence());
-
-  if (paths.size() == 1) {
-    return paths[0];
-  } else {
-    return PropertyPath::makeAlternative(std::move(paths));
-  }
+  return PropertyPath::makeAlternative(
+      visitVector<PropertyPath>(ctx->pathSequence()));
 }
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visitTypesafe(Parser::PathSequenceContext* ctx) {
-  auto paths = visitVector<PropertyPath>(ctx->pathEltOrInverse());
-
-  if (paths.size() == 1) {
-    return paths[0];
-  } else {
-    return PropertyPath::makeSequence(std::move(paths));
-  }
+  return PropertyPath::makeSequence(
+      visitVector<PropertyPath>(ctx->pathEltOrInverse()));
 }
 
 // ____________________________________________________________________________________
@@ -575,6 +667,7 @@ PropertyPath Visitor::visitTypesafe(Parser::PathEltContext* ctx) {
   PropertyPath p = visitTypesafe(ctx->pathPrimary());
 
   if (ctx->pathMod()) {
+    // TODO move case distinction +/*/? into PropertyPath.
     if (ctx->pathMod()->getText() == "+") {
       p = PropertyPath::makeTransitiveMin(p, 1);
     } else if (ctx->pathMod()->getText() == "?") {
@@ -594,7 +687,7 @@ PropertyPath Visitor::visitTypesafe(Parser::PathEltOrInverseContext* ctx) {
   PropertyPath p = visitTypesafe(ctx->pathElt());
 
   if (ctx->negationOperator) {
-    p = PropertyPath::makeInverse(p);
+    p = PropertyPath::makeInverse(std::move(p));
   }
 
   return p;
@@ -603,8 +696,7 @@ PropertyPath Visitor::visitTypesafe(Parser::PathEltOrInverseContext* ctx) {
 // ____________________________________________________________________________________
 PropertyPath Visitor::visitTypesafe(Parser::PathPrimaryContext* ctx) {
   if (ctx->iri()) {
-    auto iri = visitTypesafe(ctx->iri());
-    return PropertyPath::fromIri(std::move(iri));
+    return PropertyPath::fromIri(visitTypesafe(ctx->iri()));
   } else if (ctx->path()) {
     return visitTypesafe(ctx->path());
   } else if (ctx->pathNegatedPropertySet()) {
@@ -684,16 +776,27 @@ Node Visitor::visitTypesafe(Parser::GraphNodeContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+VarOrTerm SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::GraphNodePathContext* ctx) {
+  if (ctx->varOrTerm()) {
+    return visitTypesafe(ctx->varOrTerm());
+  } else if (ctx->triplesNodePath()) {
+    throwCollectionsAndBlankNodePathsNotSupported(ctx->triplesNodePath());
+  } else {
+    AD_FAIL()  // Should be unreachable.
+  }
+}
+
+// ____________________________________________________________________________________
 VarOrTerm Visitor::visitTypesafe(Parser::VarOrTermContext* ctx) {
   if (ctx->var()) {
     return VarOrTerm{visitTypesafe(ctx->var())};
   }
   if (ctx->graphTerm()) {
     return VarOrTerm{visitTypesafe(ctx->graphTerm())};
+  } else {
+    AD_FAIL()  // Should be unreachable.
   }
-
-  // invalid grammar
-  AD_CHECK(false);
 }
 
 // ____________________________________________________________________________________
@@ -1059,7 +1162,13 @@ ExpressionPtr Visitor::visitTypesafe(Parser::IriOrFunctionContext* ctx) {
 
 // ____________________________________________________________________________________
 std::string Visitor::visitTypesafe(Parser::RdfLiteralContext* ctx) {
-  return ctx->getText();
+  string ret = ctx->string()->getText();
+  if (ctx->LANGTAG()) {
+    ret += ctx->LANGTAG()->getText();
+  } else if (ctx->iri()) {
+    ret += ("^^" + visitTypesafe(ctx->iri()));
+  }
+  return ret;
 }
 
 // ____________________________________________________________________________________
@@ -1081,4 +1190,18 @@ BlankNode Visitor::visitTypesafe(Parser::BlankNodeContext* ctx) {
   }
   // invalid grammar
   AD_CHECK(false);
+}
+
+// ____________________________________________________________________________________
+template <typename Out, typename FirstContext, typename... Context>
+Out SparqlQleverVisitor::visitAlternative(FirstContext ctx, Context... ctxs) {
+  if (ctx)
+    return {visitTypesafe(ctx)};
+  else
+    return visitAlternative<Out>(ctxs...);
+}
+
+template <typename Out>
+Out SparqlQleverVisitor::visitAlternative() {
+  AD_FAIL()  // Should be unreachable.
 }

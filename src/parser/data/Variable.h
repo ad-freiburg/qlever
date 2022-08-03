@@ -9,6 +9,7 @@
 
 #include "../../engine/ResultTable.h"
 #include "../../index/Index.h"
+#include "Context.h"
 
 class Variable {
   std::string _name;
@@ -69,4 +70,9 @@ class Variable {
 
   // ___________________________________________________________________________
   [[nodiscard]] const std::string& name() const { return _name; }
+
+  // Needed for consistency with the `Alias` class.
+  [[nodiscard]] const std::string& targetVariable() const { return _name; }
+
+  bool operator==(const Variable&) const = default;
 };
