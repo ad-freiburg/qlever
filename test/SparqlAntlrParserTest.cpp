@@ -52,51 +52,20 @@ TEST(SparqlParser, NumericLiterals) {
 }
 
 TEST(SparqlParser, Prefix) {
-  {
-    string s = "PREFIX wd: <www.wikidata.org/>";
-    ParserAndVisitor p{s};
-    auto context = p.parser_.prefixDecl();
-    auto prefix = p.visitor_.visitTypesafe(context);
-    ASSERT_EQ(prefix, SparqlPrefix("wd", "<www.wikidata.org/>"));
-  }
-  {
-    string s = "wd:bimbam";
-    SparqlQleverVisitor::PrefixMap m{{"wd", "<www.wikidata.org/>"}};
-    ParserAndVisitor p{s, m};
+  SparqlQleverVisitor::PrefixMap prefixMap{{"wd", "<www.wikidata.org/>"}};
 
-    auto context = p.parser_.pnameLn();
-    auto result = p.visitor_.visitTypesafe(context);
-    ASSERT_EQ(result, "<www.wikidata.org/bimbam>");
-  }
+  expectCompleteParse(parsePrefixDecl("PREFIX wd: <www.wikidata.org/>"),
+                      testing::Eq(SparqlPrefix("wd", "<www.wikidata.org/>")));
+  expectCompleteParse(parsePnameLn("wd:bimbam", prefixMap),
+                      testing::Eq("<www.wikidata.org/bimbam>"));
+  expectCompleteParse(parsePnameNs("wd:", prefixMap),
+                      testing::Eq("<www.wikidata.org/>"));
+  expectCompleteParse(parsePrefixedName("wd:bimbam", prefixMap),
+                      testing::Eq("<www.wikidata.org/bimbam>"));
   {
-    string s = "wd:";
-    SparqlQleverVisitor::PrefixMap m{{"wd", "<www.wikidata.org/>"}};
-    ParserAndVisitor p{s, m};
-
-    auto context = p.parser_.pnameNs();
-    auto result = p.visitor_.visitTypesafe(context);
-    ASSERT_EQ(result, "<www.wikidata.org/>");
-  }
-  {
-    string s = "wd:bimbam";
-    SparqlQleverVisitor::PrefixMap m{{"wd", "<www.wikidata.org/>"}};
-    ParserAndVisitor p{s, m};
-
-    auto context = p.parser_.prefixedName();
-    auto result = p.visitor_.visitTypesafe(context);
-    ASSERT_EQ(result, "<www.wikidata.org/bimbam>");
-  }
-  {
-    string s = "<somethingsomething> <rest>";
-    SparqlQleverVisitor::PrefixMap m{{"wd", "<www.wikidata.org/>"}};
-    ParserAndVisitor p{s, m};
-
-    auto context = p.parser_.iriref();
-    auto result = p.visitor_.visitTypesafe(context);
-    auto sz = context->getText().size();
-
-    ASSERT_EQ(result, "<somethingsomething>");
-    ASSERT_EQ(sz, 20u);
+    auto result = parseIriref("<somethingsomething> <rest>", prefixMap);
+    ASSERT_EQ(result.resultOfParse_, "<somethingsomething>");
+    ASSERT_EQ(result.remainingText_, "<rest>");
   }
 }
 

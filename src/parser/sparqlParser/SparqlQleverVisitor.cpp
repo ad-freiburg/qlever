@@ -310,25 +310,32 @@ PathTuples SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
+[[noreturn]] void throwBaseDeclNotSupported(
+    SparqlAutomaticParser::BaseDeclContext* ctx) {
+  throw ParseException("BaseDecl is not supported. Got: " + ctx->getText());
+}
+
+// ____________________________________________________________________________________
 vector<SparqlPrefix> SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PrologueContext* ctx) {
-  vector<SparqlPrefix> decls = visitVector<SparqlPrefix>(ctx->baseDecl());
-  appendVector(decls, visitVector<SparqlPrefix>(ctx->prefixDecl()));
-  return decls;
+  if (!ctx->baseDecl().empty()) {
+    throwBaseDeclNotSupported(ctx->baseDecl(0));
+  }
+  return visitVector<SparqlPrefix>(ctx->prefixDecl());
 }
 
 // ____________________________________________________________________________________
 SparqlPrefix SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::BaseDeclContext* ctx) {
-  return SparqlPrefix{"", visitTypesafe(ctx->iriref())};
+  throwBaseDeclNotSupported(ctx);
 }
 
 // ____________________________________________________________________________________
 SparqlPrefix SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PrefixDeclContext* ctx) {
   auto text = ctx->PNAME_NS()->getText();
-  return SparqlPrefix{text.substr(0, text.length() - 1),
-                      visitTypesafe(ctx->iriref())};
+  // Remove the ':' at the end of the PNAME_NS
+  return {text.substr(0, text.length() - 1), visitTypesafe(ctx->iriref())};
 }
 
 // ____________________________________________________________________________________
