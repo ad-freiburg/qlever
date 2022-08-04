@@ -28,6 +28,12 @@ using std::string;
 class QueryExecutionTree {
  public:
   explicit QueryExecutionTree(QueryExecutionContext* const qec);
+  template <typename Op>
+  QueryExecutionTree(QueryExecutionContext* const qec,
+                     std::shared_ptr<Op> operation)
+      : QueryExecutionTree(qec) {
+    setOperation(std::move(operation));
+  }
 
   enum OperationType {
     UNDEFINED = 0,
@@ -57,6 +63,9 @@ class QueryExecutionTree {
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
 
+  template <typename Op>
+  void setOperation(std::shared_ptr<Op>);
+
   string asString(size_t indent = 0);
 
   const QueryExecutionContext* getQec() const { return _qec; }
@@ -70,6 +79,10 @@ class QueryExecutionTree {
   std::shared_ptr<Operation> getRootOperation() const { return _rootOperation; }
 
   const OperationType& getType() const { return _type; }
+
+  // Is the root operation of this tree a `IndexScan` operation.
+  // This is the only query for a concrete type that is actually used.
+  bool isIndexScan() const;
 
   bool isEmpty() const {
     return _type == OperationType::UNDEFINED || !_rootOperation;

@@ -27,6 +27,21 @@
 #include "Union.h"
 #include "Values.h"
 
+// All the operations take a `QueryExecutionContext` as a first argument.
+// Todo: Continue the comment.
+template <typename Operation>
+std::shared_ptr<QueryExecutionTree> makeExecutionTree(
+    QueryExecutionContext* qec, auto&&... args) {
+  return std::make_shared<QueryExecutionTree>(
+      qec, std::make_shared<Operation>(qec, AD_FWD(args)...));
+}
+
+template <typename Operation>
+QueryPlanner::SubtreePlan makeSubtreePlan(QueryExecutionContext* qec,
+                                          auto&&... args) {
+  return {qec, std::make_shared<Operation>(qec, AD_FWD(args)...)};
+}
+
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext* qec)
     : _qec(qec), _internalVarCount(0), _enablePatternTrick(true) {}
@@ -201,12 +216,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       candidatePlans.emplace_back();
       for (const auto& a : lastRow) {
         // create a copy of the Bind prototype and add the corresponding subtree
-        SubtreePlan plan(_qec);
-        std::shared_ptr<Bind> op = std::make_shared<Bind>(_qec, a._qet, v);
+        SubtreePlan plan = makeSubtreePlan<Bind>(_qec, a._qet, v);
         plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
-        // TODO<joka921> : should we make this setVariableColumns call a part
-        // of setOperation in the queryExecutionTree, since it is invariant?
-        plan._qet->setOperation(QueryExecutionTree::OperationType::BIND, op);
         candidatePlans.back().push_back(std::move(plan));
       }
       return;
@@ -313,10 +324,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         SubtreePlan right = optimizeSingle(&arg._child2);
 
         // create a new subtree plan
-        SubtreePlan candidate(_qec);
-        auto unionOp = std::make_shared<Union>(_qec, left._qet, right._qet);
-        QueryExecutionTree& tree = *candidate._qet;
-        tree.setOperation(QueryExecutionTree::UNION, unionOp);
+        SubtreePlan candidate =
+            makeSubtreePlan<Union>(_qec, left._qet, right._qet);
         joinCandidates(std::vector{std::move(candidate)});
       } else if constexpr (std::is_same_v<T, GraphPatternOperation::Subquery>) {
         // TODO<joka921> We currently do not optimize across subquery borders
@@ -375,21 +384,16 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           }
           min = arg._min;
           max = arg._max;
-          auto transOp = std::make_shared<TransitivePath>(
+          auto plan = makeSubtreePlan<TransitivePath>(
               _qec, sub._qet, leftVar, rightVar, leftCol, rightCol, leftValue,
               rightValue, leftColName, rightColName, min, max);
-          candidatesOut.emplace_back(_qec);
-          QueryExecutionTree& tree = *candidatesOut.back()._qet;
-          tree.setOperation(QueryExecutionTree::TRANSITIVE_PATH, transOp);
+          candidatesOut.push_back(std::move(plan));
         }
         joinCandidates(std::move(candidatesOut));
 
       } else if constexpr (std::is_same_v<T, GraphPatternOperation::Values>) {
-        SubtreePlan valuesPlan(_qec);
-        std::shared_ptr<Values> op =
-            std::make_shared<Values>(_qec, arg._inlineValues);
-        valuesPlan._qet->setOperation(QueryExecutionTree::OperationType::VALUES,
-                                      op);
+        SubtreePlan valuesPlan =
+            makeSubtreePlan<Values>(_qec, arg._inlineValues);
         joinCandidates(std::vector{std::move(valuesPlan)});
 
       } else if constexpr (std::is_same_v<T, GraphPatternOperation::Bind>) {
@@ -869,24 +873,20 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
       distinctPlan._qet->setContextVars(parent._qet->getContextVars());
     } else {
       if (keepIndices.size() == 1) {
-        auto tree = std::make_shared<QueryExecutionTree>(_qec);
-        auto sort = std::make_shared<Sort>(_qec, parent._qet, keepIndices[0]);
-        tree->setOperation(QueryExecutionTree::SORT, sort);
+        auto tree = makeExecutionTree<Sort>(_qec, parent._qet, keepIndices[0]);
         tree->setContextVars(parent._qet->getContextVars());
-        auto distinct = std::make_shared<Distinct>(_qec, tree, keepIndices);
-        distinctPlan._qet->setOperation(QueryExecutionTree::DISTINCT, distinct);
+        distinctPlan._qet =
+            makeExecutionTree<Distinct>(_qec, tree, keepIndices);
         distinctPlan._qet->setContextVars(parent._qet->getContextVars());
       } else {
-        auto tree = std::make_shared<QueryExecutionTree>(_qec);
         vector<pair<size_t, bool>> obCols;
         for (auto& i : keepIndices) {
           obCols.emplace_back(std::make_pair(i, false));
         }
-        auto ob = std::make_shared<OrderBy>(_qec, parent._qet, obCols);
-        tree->setOperation(QueryExecutionTree::ORDER_BY, ob);
+        auto tree = makeExecutionTree<OrderBy>(_qec, parent._qet, obCols);
         tree->setContextVars(parent._qet->getContextVars());
-        auto distinct = std::make_shared<Distinct>(_qec, tree, keepIndices);
-        distinctPlan._qet->setOperation(QueryExecutionTree::DISTINCT, distinct);
+        distinctPlan._qet =
+            makeExecutionTree<Distinct>(_qec, tree, keepIndices);
         distinctPlan._qet->setContextVars(parent._qet->getContextVars());
       }
     }
@@ -1234,13 +1234,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             // variable + Filter. Works in both directions
             std::string filterVar = generateUniqueVarName();
 
-            auto scanTree = std::make_shared<QueryExecutionTree>(_qec);
             auto scanTriple = node._triple;
             scanTriple._o = filterVar;
             auto scan = std::make_shared<IndexScan>(
                 _qec, IndexScan::ScanType::PSO_FREE_S, scanTriple);
-            scanTree->setOperation(QueryExecutionTree::OperationType::SCAN,
-                                   scan);
+            auto scanTree =
+                std::make_shared<QueryExecutionTree>(_qec, std::move(scan));
             auto filter = std::make_shared<Filter>(
                 _qec, scanTree, SparqlFilter::FilterType::EQ,
                 node._triple._s.getString(), filterVar, vector<string>{},

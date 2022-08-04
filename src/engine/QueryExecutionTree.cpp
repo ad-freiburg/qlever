@@ -12,8 +12,15 @@
 #include <utility>
 
 #include "../parser/RdfEscaping.h"
+#include "./Bind.h"
+#include "./IndexScan.h"
 #include "./OrderBy.h"
 #include "./Sort.h"
+#include "./Distinct.h"
+#include "./OrderBy.h"
+#include "./Values.h"
+#include "./Union.h"
+#include "./TransitivePath.h"
 
 using std::string;
 
@@ -572,3 +579,42 @@ nlohmann::json QueryExecutionTree::writeRdfGraphJson(
   }
   return jsonArray;
 }
+
+bool QueryExecutionTree::isIndexScan() const {
+  return dynamic_cast<IndexScan*>(_rootOperation.get()) != nullptr;
+}
+
+template <typename Op>
+void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
+  if constexpr (std::is_same_v<Op, IndexScan>) {
+    _type = SCAN;
+  } else if constexpr (std::is_same_v<Op, Union>) {
+    _type = UNION;
+  } else if constexpr (std::is_same_v<Op, Bind>) {
+    _type = BIND;
+  } else if constexpr (std::is_same_v<Op, Sort>) {
+    _type = SORT;
+  } else if constexpr (std::is_same_v<Op, Distinct>) {
+    _type = DISTINCT;
+  } else if constexpr (std::is_same_v<Op, Values>) {
+    _type = VALUES;
+  } else if constexpr (std::is_same_v<Op, TransitivePath>) {
+    _type = TRANSITIVE_PATH;
+  } else if constexpr (std::is_same_v<Op, OrderBy>) {
+    _type = ORDER_BY;
+
+  } else {
+    static_assert(ad_utility::alwaysFalse<Op>,
+                  "New type of operation that was not yet registered");
+  }
+  _rootOperation = std::move(operation);
+}
+
+template void QueryExecutionTree::setOperation(std::shared_ptr<IndexScan>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<Union>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<Bind>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<Sort>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<Distinct>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<Values>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<TransitivePath>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<OrderBy>);
