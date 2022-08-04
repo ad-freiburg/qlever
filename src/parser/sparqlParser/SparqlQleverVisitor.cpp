@@ -9,6 +9,7 @@
 
 using namespace ad_utility::sparql_types;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
+using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
 using SelectClause = ParsedQuery::SelectClause;
 using Alias = ParsedQuery::Alias;
 using Bind = GraphPatternOperation::Bind;
@@ -18,7 +19,7 @@ using Visitor = SparqlQleverVisitor;
 using Parser = SparqlAutomaticParser;
 
 // ___________________________________________________________________________
-antlrcpp::Any Visitor::processIriFunctionCall(
+ExpressionPtr Visitor::processIriFunctionCall(
     const std::string& iri, std::vector<ExpressionPtr> argList) {
   // Lambda that checks the number of arguments and throws an error if it's
   // not right.
@@ -144,8 +145,7 @@ Alias Visitor::visitTypesafe(Parser::AliasContext* ctx) {
 
 // ____________________________________________________________________________________
 Alias Visitor::visitTypesafe(Parser::AliasWithoutBracketsContext* ctx) {
-  auto wrapper = makeExpressionPimpl(visitTypesafe(ctx->expression()));
-  return {std::move(wrapper), ctx->var()->getText()};
+  return {{visitTypesafe(ctx->expression())}, ctx->var()->getText()};
 }
 
 // ____________________________________________________________________________________
@@ -155,8 +155,7 @@ Variable Visitor::visitTypesafe(Parser::VarContext* ctx) {
 
 // ____________________________________________________________________________________
 Bind Visitor::visitTypesafe(Parser::BindContext* ctx) {
-  auto wrapper = makeExpressionPimpl(visitTypesafe(ctx->expression()));
-  return {std::move(wrapper), ctx->var()->getText()};
+  return {{visitTypesafe(ctx->expression())}, ctx->var()->getText()};
 }
 
 // ____________________________________________________________________________________
@@ -292,19 +291,19 @@ void Visitor::visitTypesafe(Parser::PrefixDeclContext* ctx) {
 
 // ____________________________________________________________________________________
 GroupKey Visitor::visitTypesafe(Parser::GroupConditionContext* ctx) {
+  auto makeExpression = [&ctx, this]<typename Ctx>(Ctx* subCtx) -> GroupKey {
+    auto expr = SparqlExpressionPimpl{visitTypesafe(subCtx)};
+    expr.setDescriptor(ctx->getText());
+    return {std::move(expr)};
+  };
   if (ctx->var() && !ctx->expression()) {
     return {Variable{ctx->var()->getText()}};
   } else if (ctx->builtInCall() || ctx->functionCall()) {
     // builtInCall and functionCall are both also an Expression
-    auto subCtx =
-        (ctx->builtInCall() ? (antlr4::tree::ParseTree*)ctx->builtInCall()
-                            : (antlr4::tree::ParseTree*)ctx->functionCall());
-    // TODO: extract + template
-    auto expr = makeExpressionPimpl(visit(subCtx));
-    expr.setDescriptor(ctx->getText());
-    return {std::move(expr)};
+    return (ctx->builtInCall() ? makeExpression(ctx->builtInCall())
+                               : makeExpression(ctx->functionCall()));
   } else if (ctx->expression()) {
-    auto expr = makeExpressionPimpl(visitTypesafe(ctx->expression()));
+    auto expr = SparqlExpressionPimpl{visitTypesafe(ctx->expression())};
     if (ctx->AS() && ctx->var()) {
       return {Alias{std::move(expr), ctx->var()->getText()}};
     } else {
@@ -316,9 +315,9 @@ GroupKey Visitor::visitTypesafe(Parser::GroupConditionContext* ctx) {
 
 // ____________________________________________________________________________________
 OrderKey Visitor::visitTypesafe(Parser::OrderConditionContext* ctx) {
-  auto visitExprOrderKey =
-      [this](bool isDescending, antlr4::tree::ParseTree* context) -> OrderKey {
-    auto expr = makeExpressionPimpl(visit(context));
+  auto visitExprOrderKey = [this]<typename Ctx>(bool isDescending,
+                                                Ctx* context) -> OrderKey {
+    auto expr = SparqlExpressionPimpl{visitTypesafe(context)};
     if (auto exprIsVariable = expr.getVariableOrNullopt();
         exprIsVariable.has_value()) {
       return {VariableOrderKey(exprIsVariable.value(), isDescending)};
@@ -434,6 +433,18 @@ std::string Visitor::visitTypesafe(Parser::DataBlockValueContext* ctx) {
         ".");
   }
   AD_FAIL()  // Should be unreachable.
+}
+
+// ____________________________________________________________________________________
+ExpressionPtr Visitor::visitTypesafe(Parser::ConstraintContext* ctx) {
+  return visitAlternative<ExpressionPtr>(
+      ctx->brackettedExpression(), ctx->builtInCall(), ctx->functionCall());
+}
+
+// ____________________________________________________________________________________
+ExpressionPtr Visitor::visitTypesafe(Parser::FunctionCallContext* ctx) {
+  return processIriFunctionCall(visitTypesafe(ctx->iri()),
+                                visitTypesafe(ctx->argList()));
 }
 
 // ____________________________________________________________________________________
@@ -1143,9 +1154,8 @@ ExpressionPtr Visitor::visitTypesafe(Parser::IriOrFunctionContext* ctx) {
         ctx->getText())};
   }
   // Case 2: Function call, where the function name is an IRI.
-  return std::move(processIriFunctionCall(visitTypesafe(ctx->iri()),
-                                          visitTypesafe(ctx->argList()))
-                       .as<ExpressionPtr>());
+  return processIriFunctionCall(visitTypesafe(ctx->iri()),
+                                visitTypesafe(ctx->argList()));
 }
 
 // ____________________________________________________________________________________

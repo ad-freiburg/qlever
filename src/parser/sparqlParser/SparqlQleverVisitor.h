@@ -102,20 +102,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   // Process an IRI function call. This is used in both `visitFunctionCall` and
   // `visitIriOrFunction`.
-  Any processIriFunctionCall(const std::string& iri,
-                             std::vector<ExpressionPtr> argList);
+  ExpressionPtr processIriFunctionCall(const std::string& iri,
+                                       std::vector<ExpressionPtr> argList);
 
  public:
-  // ___________________________________________________________________________
-  sparqlExpression::SparqlExpressionPimpl makeExpressionPimpl(Any any) {
-    return sparqlExpression::SparqlExpressionPimpl{
-        std::move(any.as<ExpressionPtr>())};
-  }
-  // ___________________________________________________________________________
-  sparqlExpression::SparqlExpressionPimpl makeExpressionPimpl(
-      ExpressionPtr any) {
-    return sparqlExpression::SparqlExpressionPimpl{std::move(any)};
-  }
   // ___________________________________________________________________________
   Any visitQuery(Parser::QueryContext* ctx) override {
     // The prologue (BASE and PREFIX declarations)  only affects the internal
@@ -387,15 +377,16 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   Any visitConstraint(Parser::ConstraintContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
 
+  ExpressionPtr visitTypesafe(Parser::ConstraintContext* ctx);
+
   Any visitFunctionCall(Parser::FunctionCallContext* ctx) override {
-    return processIriFunctionCall(
-        visitIri(ctx->iri()).as<std::string>(),
-        std::move(
-            visitArgList(ctx->argList()).as<std::vector<ExpressionPtr>>()));
+    return visitTypesafe(ctx);
   }
+
+  ExpressionPtr visitTypesafe(SparqlAutomaticParser::FunctionCallContext* ctx);
 
   Any visitArgList(Parser::ArgListContext* ctx) override {
     return visitTypesafe(ctx);
