@@ -1346,7 +1346,8 @@ TEST(ParserTest, Prefix) {
       SparqlParser(
           "PREFIX descriptor: <foo> SELECT ?var WHERE { ?var <bar> <foo> }")
           .parse();
-  ASSERT_EQ(pq._prefixes.size(), 2);
-  ASSERT_EQ(pq._prefixes[0], SparqlPrefix("ql", "<QLever-internal-function/>"));
-  ASSERT_EQ(pq._prefixes[1], SparqlPrefix("descriptor", "<foo>"));
+  ASSERT_THAT(pq._prefixes,
+              testing::UnorderedElementsAre(
+                  SparqlPrefix{"ql", "<QLever-internal-function/>"},
+                  SparqlPrefix{"descriptor", "<foo>"}));
 }
