@@ -316,12 +316,17 @@ PathTuples SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-vector<SparqlPrefix> SparqlQleverVisitor::visitTypesafe(
+SparqlQleverVisitor::PrefixMap SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PrologueContext* ctx) {
   if (!ctx->baseDecl().empty()) {
     throwBaseDeclNotSupported(ctx->baseDecl(0));
   }
-  return visitVector<SparqlPrefix>(ctx->prefixDecl());
+  for (const auto& prefix : ctx->prefixDecl()) {
+    visitTypesafe(prefix);
+  }
+  // TODO: we return a part of our internal state here. This will go away when
+  //  queries can be parsed completely with ANTLR.
+  return _prefixMap;
 }
 
 // ____________________________________________________________________________________
@@ -335,7 +340,10 @@ SparqlPrefix SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PrefixDeclContext* ctx) {
   auto text = ctx->PNAME_NS()->getText();
   // Remove the ':' at the end of the PNAME_NS
-  return {text.substr(0, text.length() - 1), visitTypesafe(ctx->iriref())};
+  auto prefixLabel = text.substr(0, text.length() - 1);
+  auto prefixIri = visitTypesafe(ctx->iriref());
+  _prefixMap[prefixLabel] = prefixIri;
+  return {prefixLabel, prefixIri};
 }
 
 // ____________________________________________________________________________________

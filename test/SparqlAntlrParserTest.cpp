@@ -54,6 +54,15 @@ TEST(SparqlParser, NumericLiterals) {
 TEST(SparqlParser, Prefix) {
   SparqlQleverVisitor::PrefixMap prefixMap{{"wd", "<www.wikidata.org/>"}};
 
+  {
+    ParserAndVisitor p{"PREFIX wd: <www.wikidata.org/>"};
+    auto defaultPrefixes = p.visitor_.prefixMap();
+    ASSERT_EQ(defaultPrefixes.size(), 0);
+    p.visitor_.visitTypesafe(p.parser_.prefixDecl());
+    auto prefixes = p.visitor_.prefixMap();
+    ASSERT_EQ(prefixes.size(), 1);
+    ASSERT_EQ(prefixes.at("wd"), "<www.wikidata.org/>");
+  }
   expectCompleteParse(parsePrefixDecl("PREFIX wd: <www.wikidata.org/>"),
                       testing::Eq(SparqlPrefix("wd", "<www.wikidata.org/>")));
   expectCompleteParse(parsePnameLn("wd:bimbam", prefixMap),

@@ -3,14 +3,12 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
-
 #include "../../engine/sparqlExpressions/AggregateExpression.h"
 #include "../../engine/sparqlExpressions/GroupConcatExpression.h"
 #include "../../engine/sparqlExpressions/LiteralExpression.h"
 #include "../../engine/sparqlExpressions/NaryExpression.h"
 #include "../../engine/sparqlExpressions/SparqlExpressionPimpl.h"
-//#include "../../engine/sparqlExpressions/RelationalExpression.h"
+// #include "../../engine/sparqlExpressions/RelationalExpression.h"
 #include "../../engine/sparqlExpressions/SampleExpression.h"
 #include "../../util/HashMap.h"
 #include "../../util/OverloadCallOperator.h"
@@ -56,6 +54,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
  public:
   using PrefixMap = ad_utility::HashMap<string, string>;
+  const PrefixMap& prefixMap() const { return _prefixMap; }
   SparqlQleverVisitor() = default;
   SparqlQleverVisitor(PrefixMap prefixMap) : _prefixMap{std::move(prefixMap)} {}
   using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
@@ -77,7 +76,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   void setPrefixMapManually(PrefixMap map) { _prefixMap = std::move(map); }
 
  private:
-  PrefixMap _prefixMap{{"", "<>"}};
+  PrefixMap _prefixMap{};
 
   template <typename T>
   void appendVector(std::vector<T>& destination, std::vector<T>&& source) {
@@ -122,13 +121,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   // ___________________________________________________________________________
   antlrcpp::Any visitPrologue(
       SparqlAutomaticParser::PrologueContext* ctx) override {
-    // Default implementation is ok here, simply handle all PREFIX and BASE
-    // declarations.
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
 
-  vector<SparqlPrefix> visitTypesafe(
-      SparqlAutomaticParser::PrologueContext* ctx);
+  PrefixMap visitTypesafe(SparqlAutomaticParser::PrologueContext* ctx);
 
   // ___________________________________________________________________________
   antlrcpp::Any visitBaseDecl(
@@ -141,6 +137,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   // ___________________________________________________________________________
   antlrcpp::Any visitPrefixDecl(
       SparqlAutomaticParser::PrefixDeclContext* ctx) override {
+    // This function only changes the state and the return is only for testing.
     return visitTypesafe(ctx);
   }
 
