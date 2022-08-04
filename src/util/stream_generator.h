@@ -77,7 +77,12 @@ class stream_generator_promise {
     return suspend_sometimes{isBufferLargeEnough()};
   }
 
-  void unhandled_exception() { _exception = std::current_exception(); *_externalException = _exception;}
+  void unhandled_exception() {
+    _exception = std::current_exception();
+    if (_externalException) {
+      *_externalException = _exception;
+    }
+  }
 
   constexpr void return_void() const noexcept {}
 
@@ -93,7 +98,7 @@ class stream_generator_promise {
     }
   }
 
-  void registerExternalException(std::exception_ptr* ptr) {
+  void assignExceptionToThisPointer(std::exception_ptr* ptr) {
     _externalException = ptr;
   }
 
@@ -241,12 +246,12 @@ class [[nodiscard]] basic_stream_generator {
     return detail::stream_generator_sentinel{};
   }
 
-  void rethrow_if_exception() {
-    _coroutine.promise().rethrow_if_exception();
-  }
-
-  void registerExternalException(std::exception_ptr* ptr) {
-    _coroutine.promise().registerExternalException(ptr);
+  // When an exception occurs while iterating, that exception will (in addition
+  // to being thrown "normally") be stored at `*ptr`. This can be used to access
+  // exceptions that occured inside a `stream_generator`, even after the
+  // `stream_generator` was destroyed.
+  void assignExceptionToThisPointer(std::exception_ptr* ptr) {
+    _coroutine.promise().assignExceptionToThisPointer(ptr);
   }
 
  private:
