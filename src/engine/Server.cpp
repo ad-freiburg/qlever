@@ -643,9 +643,18 @@ boost::asio::awaitable<void> Server::processQuery(
         auto responseGenerator = co_await composeResponseSepValues<
             QueryExecutionTree::ExportSubFormat::TSV>(pq, qet);
 
-        auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::tsv);
-        co_await send(std::move(response));
+        std::exception_ptr exception;
+        responseGenerator.registerExternalException(&exception);
+        try {
+          auto response = createOkResponse(std::move(responseGenerator),
+                                           request, ad_utility::MediaType::tsv);
+          co_await send(std::move(response));
+        } catch(...) {
+          if (exception) {
+            std::rethrow_exception(exception);
+          }
+          throw;
+        }
       } break;
       case ad_utility::MediaType::octetStream: {
         auto responseGenerator = co_await composeResponseSepValues<
