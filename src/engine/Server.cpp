@@ -418,6 +418,28 @@ Awaitable<json> Server::composeResponseSparqlJson(
   return computeInNewThread(compute);
 }
 
+// _______________________________________________________________________
+Awaitable<ad_utility::streams::stream_generator>
+Server::composeStreamableResponse(ad_utility::MediaType type,
+                                  const ParsedQuery& query,
+                                  const QueryExecutionTree& qet) const {
+  // TODO<joka921> Clean this up by removing the (unused) `ExportSubFormat`
+  // enum, And maybe by a `switch-constexpr`-abstraction
+  if (type == ad_utility::MediaType::csv) {
+    co_return co_await composeResponseSepValues<
+        QueryExecutionTree::ExportSubFormat::CSV>(query, qet);
+  } else if (type == ad_utility::MediaType::tsv) {
+    co_return co_await composeResponseSepValues<
+        QueryExecutionTree::ExportSubFormat::TSV>(query, qet);
+  } else if (type == ad_utility::MediaType::octetStream) {
+    co_return co_await composeResponseSepValues<
+        QueryExecutionTree::ExportSubFormat::BINARY>(query, qet);
+  } else if (type == ad_utility::MediaType::turtle) {
+    co_return composeTurtleResponse(query, qet);
+  }
+  AD_FAIL();
+}
+
 // _____________________________________________________________________________
 template <QueryExecutionTree::ExportSubFormat format>
 Awaitable<ad_utility::streams::stream_generator>
@@ -627,46 +649,47 @@ boost::asio::awaitable<void> Server::processQuery(
     requestTimer.cont();
     LOG(TRACE) << qet.asString() << std::endl;
 
+    // Common code for sending responses for the streamable media types
+    // (tsv, csv, octet-stream, turtle).
+    auto sendStreamableResponse =
+        [&](ad_utility::MediaType mediaType) -> Awaitable<void> {
+      auto responseGenerator =
+          co_await composeStreamableResponse(mediaType, pq, qet);
+
+      // The `streamable_body` that is used internally turns all exceptions that
+      // occur while generating the rults into "broken pipe". We store the
+      // actual exceptions and manually rethrow them to propagate the correct
+      // error messages to the user.
+      // TODO<joka921> What happens, when part of the TSV export has already
+      // been sent and an exception occurs after that?
+      std::exception_ptr exceptionPtr;
+      responseGenerator.assignExceptionToThisPointer(&exceptionPtr);
+      try {
+        auto response =
+            createOkResponse(std::move(responseGenerator), request, mediaType);
+        co_await send(std::move(response));
+      } catch (...) {
+        if (exceptionPtr) {
+          std::rethrow_exception(exceptionPtr);
+        }
+        throw;
+      }
+    };
+
     // This actually processes the query and sends the result in the requested
     // format.
     switch (mediaType.value()) {
-      case ad_utility::MediaType::csv: {
-        auto responseGenerator = co_await composeResponseSepValues<
-            QueryExecutionTree::ExportSubFormat::CSV>(pq, qet);
-
-        auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::csv);
-        co_await send(std::move(response));
-
-      } break;
-      case ad_utility::MediaType::tsv: {
-        auto responseGenerator = co_await composeResponseSepValues<
-            QueryExecutionTree::ExportSubFormat::TSV>(pq, qet);
-
-        auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::tsv);
-        co_await send(std::move(response));
-      } break;
-      case ad_utility::MediaType::octetStream: {
-        auto responseGenerator = co_await composeResponseSepValues<
-            QueryExecutionTree::ExportSubFormat::BINARY>(pq, qet);
-
-        auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::octetStream);
-        co_await send(std::move(response));
+      case ad_utility::MediaType::csv:
+      case ad_utility::MediaType::tsv:
+      case ad_utility::MediaType::octetStream:
+      case ad_utility::MediaType::turtle: {
+        co_await sendStreamableResponse(mediaType.value());
       } break;
       case ad_utility::MediaType::qleverJson: {
         // Normal case: JSON response
         auto responseString =
             co_await composeResponseQleverJson(pq, qet, requestTimer, maxSend);
         co_await sendJson(std::move(responseString));
-      } break;
-      case ad_utility::MediaType::turtle: {
-        auto responseGenerator = composeTurtleResponse(pq, qet);
-
-        auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::turtle);
-        co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::sparqlJson: {
         auto responseString =

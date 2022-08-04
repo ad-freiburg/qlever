@@ -60,6 +60,12 @@ class ThreadSafeQueue {
     _popNotification.notify_all();
   }
 
+  /// Always call `disablePush` on destruction. This makes sure that worker
+  /// threads that pop from the queue always see std::nullopt, even if the
+  /// threads that push to the queue exit via an exception or if the explicit
+  /// call to `disablePush` is missing.
+  ~ThreadSafeQueue() { disablePush(); }
+
   /// Blocks until another thread pushes an element via push() which is
   /// hen returned or signalLastElementWasPushed() is called resulting in an
   /// empty optional, whatever happens first

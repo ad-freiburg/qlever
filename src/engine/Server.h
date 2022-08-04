@@ -145,6 +145,13 @@ class Server {
       ad_utility::Timer& requestTimer,
       size_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
 
+  // Wrapper method for all the different export formats (specified via `type`)
+  // that return a `stream_generator`. Can currently only be used for tsv, csv,
+  // octet-stream and turtle output.
+  Awaitable<ad_utility::streams::stream_generator> composeStreamableResponse(
+      ad_utility::MediaType type, const ParsedQuery& query,
+      const QueryExecutionTree& qet) const;
+
   template <QueryExecutionTree::ExportSubFormat format>
   Awaitable<ad_utility::streams::stream_generator> composeResponseSepValues(
       const ParsedQuery& query, const QueryExecutionTree& qet) const;
