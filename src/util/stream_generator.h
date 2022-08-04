@@ -247,7 +247,7 @@ class [[nodiscard]] basic_stream_generator {
   }
 
   // When an exception occurs while iterating, that exception will (in addition
-  // to being thrown "normally") be stored at `*ptr`. This can be used to access
+  // to being thrown "normally") be stored in `*ptr`. This can be used to access
   // exceptions that occured inside a `stream_generator`, even after the
   // `stream_generator` was destroyed.
   void assignExceptionToThisPointer(std::exception_ptr* ptr) {

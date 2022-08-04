@@ -649,7 +649,8 @@ boost::asio::awaitable<void> Server::processQuery(
     requestTimer.cont();
     LOG(TRACE) << qet.asString() << std::endl;
 
-    // Define common code for sending TSV and CSV responses.
+    // Define common code for sending responses for the streamable media types
+    // (tsv, csv, octet-stream, turtle)
     auto sendStreamableResponse =
         [&](ad_utility::MediaType mediaType) -> Awaitable<void> {
       auto responseGenerator =
