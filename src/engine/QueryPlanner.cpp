@@ -867,9 +867,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
       isSorted = isSorted && resultSortedOn[i] == keepIndices[i];
     }
     if (isSorted) {
-      auto distinct =
-          std::make_shared<Distinct>(_qec, parent._qet, keepIndices);
-      distinctPlan._qet->setOperation(QueryExecutionTree::DISTINCT, distinct);
+      distinctPlan._qet =
+          makeExecutionTree<Distinct>(_qec, parent._qet, keepIndices);
       distinctPlan._qet->setContextVars(parent._qet->getContextVars());
     } else {
       if (keepIndices.size() == 1) {
@@ -932,12 +931,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
       vector<pair<size_t, bool>> sortIndices = {
           std::make_pair(subjectColumn, false)};
 
-      SubtreePlan orderByPlan(_qec);
-      if (!isSorted) {
-        auto orderByOp =
-            std::make_shared<OrderBy>(_qec, parent._qet, sortIndices);
-        orderByPlan._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByOp);
-      }
+      SubtreePlan orderByPlan =
+          makeSubtreePlan<OrderBy>(_qec, parent._qet, sortIndices);
       SubtreePlan patternTrickPlan(_qec);
       auto countPred = std::make_shared<CountAvailablePredicates>(
           _qec, isSorted ? parent._qet : orderByPlan._qet, subjectColumn);
@@ -1033,18 +1028,14 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
     for (size_t i = 0; inputSorted && i < sortColumns.size(); i++) {
       inputSorted = sortColumns[i].first == inputSortedOn[i];
     }
-    // Create the plan here to avoid it falling out of context early
-    SubtreePlan orderByPlan(_qec);
     if (!sortColumns.empty() && !inputSorted) {
       // Create an order by operation as required by the group by
-      auto orderBy = std::make_shared<OrderBy>(_qec, parent._qet, sortColumns);
-      QueryExecutionTree& orderByTree = *orderByPlan._qet;
-      orderByTree.setOperation(QueryExecutionTree::ORDER_BY, orderBy);
-      groupBy->setSubtree(orderByPlan._qet);
+      groupBy->setSubtree(
+          makeExecutionTree<OrderBy>(_qec, parent._qet, sortColumns));
     } else
       groupBy->setSubtree(parent._qet);
 
-    groupByTree.setOperation(QueryExecutionTree::GROUP_BY, groupBy);
+    groupByTree.setOperation(groupBy);
     added.push_back(groupByPlan);
   }
   return added;
@@ -1058,7 +1049,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
   added.reserve(previous.size());
   for (const auto& parent : previous) {
     SubtreePlan plan(_qec);
-    auto& tree = *plan._qet;
+    auto& tree = plan._qet;
     plan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
     plan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
     if (pq._orderBy.size() == 1 && !pq._orderBy[0].isDescending_) {
@@ -1069,9 +1060,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
         // Already sorted perfectly
         added.push_back(parent);
       } else {
-        auto sort = std::make_shared<Sort>(_qec, parent._qet, col);
-        tree.setOperation(QueryExecutionTree::SORT, sort);
-        tree.setContextVars(parent._qet->getContextVars());
+        tree = makeExecutionTree<Sort>(_qec, parent._qet, col);
+        tree->setContextVars(parent._qet->getContextVars());
         added.push_back(plan);
       }
     } else {
@@ -1091,10 +1081,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
         // Already sorted perfectly
         added.push_back(parent);
       } else {
-        auto ob = std::make_shared<OrderBy>(_qec, parent._qet, sortIndices);
-        tree.setOperation(QueryExecutionTree::ORDER_BY, ob);
-        tree.setContextVars(parent._qet->getContextVars());
-
+        tree = makeExecutionTree<OrderBy>(_qec, parent._qet, sortIndices);
+        tree->setContextVars(parent._qet->getContextVars());
         added.push_back(plan);
       }
     }

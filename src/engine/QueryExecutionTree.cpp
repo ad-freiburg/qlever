@@ -20,6 +20,7 @@
 #include "./TransitivePath.h"
 #include "./Union.h"
 #include "./Values.h"
+#include "./GroupBy.h"
 
 using std::string;
 
@@ -601,6 +602,8 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
     _type = TRANSITIVE_PATH;
   } else if constexpr (std::is_same_v<Op, OrderBy>) {
     _type = ORDER_BY;
+  } else if constexpr (std::is_same_v<Op, GroupBy>) {
+    _type = GROUP_BY;
 
   } else {
     static_assert(ad_utility::alwaysFalse<Op>,
@@ -617,3 +620,4 @@ template void QueryExecutionTree::setOperation(std::shared_ptr<Distinct>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Values>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<TransitivePath>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<OrderBy>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<GroupBy>);
