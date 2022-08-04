@@ -154,10 +154,6 @@ class QueryExecutionTree {
     return _rootOperation->getResultSortedOn();
   }
 
-  bool isContextvar(const string& var) const {
-    return _contextVars.count(var) > 0;
-  }
-
   void addContextVar(const string& var) { _contextVars.insert(var); }
 
   void setTextLimit(size_t limit) {
