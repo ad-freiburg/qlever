@@ -579,9 +579,7 @@ nlohmann::json QueryExecutionTree::writeRdfGraphJson(
   return jsonArray;
 }
 
-bool QueryExecutionTree::isIndexScan() const {
-  return dynamic_cast<IndexScan*>(_rootOperation.get()) != nullptr;
-}
+bool QueryExecutionTree::isIndexScan() const { return _type == SCAN; }
 
 template <typename Op>
 void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {

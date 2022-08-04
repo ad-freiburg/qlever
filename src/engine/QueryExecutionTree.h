@@ -80,8 +80,8 @@ class QueryExecutionTree {
 
   const OperationType& getType() const { return _type; }
 
-  // Is the root operation of this tree a `IndexScan` operation.
-  // This is the only query for a concrete type that is actually used.
+  // Is the root operation of this tree an `IndexScan` operation.
+  // This is the only query for a concrete type that is frequently used.
   bool isIndexScan() const;
 
   bool isEmpty() const {
