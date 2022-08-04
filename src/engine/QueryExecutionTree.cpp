@@ -14,13 +14,13 @@
 #include "../parser/RdfEscaping.h"
 #include "./Bind.h"
 #include "./Distinct.h"
+#include "./GroupBy.h"
 #include "./IndexScan.h"
 #include "./OrderBy.h"
 #include "./Sort.h"
 #include "./TransitivePath.h"
 #include "./Union.h"
 #include "./Values.h"
-#include "./GroupBy.h"
 
 using std::string;
 
@@ -29,7 +29,6 @@ QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
     : _qec(qec),
       _rootOperation(nullptr),
       _type(OperationType::UNDEFINED),
-      _contextVars(),
       _asString(),
       _sizeEstimate(std::numeric_limits<size_t>::max()) {}
 

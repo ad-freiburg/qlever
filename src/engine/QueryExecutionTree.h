@@ -90,14 +90,6 @@ class QueryExecutionTree {
 
   size_t getVariableColumn(const string& var) const;
 
-  void setContextVars(const std::unordered_set<string>& set) {
-    _contextVars = set;
-  }
-
-  const std::unordered_set<string>& getContextVars() const {
-    return _contextVars;
-  }
-
   size_t getResultWidth() const { return _rootOperation->getResultWidth(); }
 
   shared_ptr<const ResultTable> getResult() const {
@@ -153,8 +145,6 @@ class QueryExecutionTree {
   const std::vector<size_t>& resultSortedOn() const {
     return _rootOperation->getResultSortedOn();
   }
-
-  void addContextVar(const string& var) { _contextVars.insert(var); }
 
   void setTextLimit(size_t limit) {
     _rootOperation->setTextLimit(limit);
@@ -229,7 +219,6 @@ class QueryExecutionTree {
   std::shared_ptr<Operation>
       _rootOperation;  // Owned child. Will be deleted at deconstruction.
   OperationType _type;
-  std::unordered_set<string> _contextVars;
   string _asString;
   size_t _indent = 0;  // the indent with which the _asString repr was formatted
   size_t _sizeEstimate;

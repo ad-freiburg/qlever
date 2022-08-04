@@ -202,14 +202,6 @@ vector<size_t> Join::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-std::unordered_set<string> Join::getContextVars() const {
-  auto cvars = _left->getContextVars();
-  cvars.insert(_right->getContextVars().begin(),
-               _right->getContextVars().end());
-  return cvars;
-}
-
-// _____________________________________________________________________________
 float Join::getMultiplicity(size_t col) {
   if (_multiplicities.size() == 0) {
     computeSizeEstimateAndMultiplicities();

@@ -869,24 +869,19 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
     if (isSorted) {
       distinctPlan._qet =
           makeExecutionTree<Distinct>(_qec, parent._qet, keepIndices);
-      distinctPlan._qet->setContextVars(parent._qet->getContextVars());
     } else {
       if (keepIndices.size() == 1) {
         auto tree = makeExecutionTree<Sort>(_qec, parent._qet, keepIndices[0]);
-        tree->setContextVars(parent._qet->getContextVars());
         distinctPlan._qet =
             makeExecutionTree<Distinct>(_qec, tree, keepIndices);
-        distinctPlan._qet->setContextVars(parent._qet->getContextVars());
       } else {
         vector<pair<size_t, bool>> obCols;
         for (auto& i : keepIndices) {
           obCols.emplace_back(std::make_pair(i, false));
         }
         auto tree = makeExecutionTree<OrderBy>(_qec, parent._qet, obCols);
-        tree->setContextVars(parent._qet->getContextVars());
         distinctPlan._qet =
             makeExecutionTree<Distinct>(_qec, tree, keepIndices);
-        distinctPlan._qet->setContextVars(parent._qet->getContextVars());
       }
     }
     added.push_back(distinctPlan);
@@ -989,7 +984,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getHavingRow(
       auto& tree = *plan._qet;
       tree.setOperation(QueryExecutionTree::FILTER,
                         createFilterOperation(filter, parent));
-      tree.setContextVars(parent._qet->getContextVars());
       filtered = plan;
     }
     added.push_back(filtered);
@@ -1061,7 +1055,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
         added.push_back(parent);
       } else {
         tree = makeExecutionTree<Sort>(_qec, parent._qet, col);
-        tree->setContextVars(parent._qet->getContextVars());
         added.push_back(plan);
       }
     } else {
@@ -1082,7 +1075,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
         added.push_back(parent);
       } else {
         tree = makeExecutionTree<OrderBy>(_qec, parent._qet, sortIndices);
-        tree->setContextVars(parent._qet->getContextVars());
         added.push_back(plan);
       }
     }
@@ -1767,7 +1759,6 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
       _qec, node._wordPart, node._variables, node._cvar);
   tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER,
                     textOp);
-  tree.addContextVar(node._cvar);
   return plan;
 }
 
@@ -2153,7 +2144,6 @@ void QueryPlanner::applyFiltersIfPossible(
         auto& tree = *newPlan._qet;
         tree.setOperation(QueryExecutionTree::FILTER,
                           createFilterOperation(filters[i], row[n]));
-        tree.setContextVars(row[n]._qet->getContextVars());
         if (replace) {
           row[n] = newPlan;
         } else {
@@ -2870,8 +2860,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
           filterPlan._qet, otherPlanJc);
       tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITH_FILTER,
                         textOp);
-      tree.setContextVars(filterPlan._qet->getContextVars());
-      tree.addContextVar(noFilter.getCVar());
       candidates.push_back(std::move(plan));
     }
     // Skip if we have two dummies
@@ -2976,7 +2964,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
           }
           auto sort = std::make_shared<Sort>(_qec, other, jcs[0][0]);
           auto sortedOther = std::make_shared<QueryExecutionTree>(_qec);
-          sortedOther->setContextVars(other->getContextVars());
           sortedOther->setOperation(QueryExecutionTree::SORT, sort);
           other = sortedOther;
         }
@@ -3030,7 +3017,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
           }
           auto sort = std::make_shared<Sort>(_qec, other, jcs[0][0]);
           auto sortedOther = std::make_shared<QueryExecutionTree>(_qec);
-          sortedOther->setContextVars(other->getContextVars());
           sortedOther->setOperation(QueryExecutionTree::SORT, sort);
           other = sortedOther;
         }
@@ -3065,7 +3051,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
         return candidates;
       }
       auto sort = std::make_shared<Sort>(_qec, a._qet, jcs[0][0]);
-      left->setContextVars(a._qet->getContextVars());
       left->setOperation(QueryExecutionTree::SORT, sort);
     }
     const vector<size_t>& bSortedOn = b._qet->resultSortedOn();
@@ -3079,7 +3064,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
         return candidates;
       }
       auto sort = std::make_shared<Sort>(_qec, b._qet, jcs[0][1]);
-      right->setContextVars(b._qet->getContextVars());
       right->setOperation(QueryExecutionTree::SORT, sort);
     }
 
@@ -3088,7 +3072,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     SubtreePlan plan{_qec};
     auto& tree = *plan._qet;
     auto join = std::make_shared<Join>(_qec, left, right, jcs[0][0], jcs[0][1]);
-    tree.setContextVars(join->getContextVars());
     tree.setOperation(QueryExecutionTree::JOIN, join);
     plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
     plan.addAllNodes(b._idsOfIncludedNodes);
