@@ -7,21 +7,19 @@
 #include <string>
 #include <vector>
 
-using Triples = ad_utility::sparql_types::Triples;
-using Node = ad_utility::sparql_types::Node;
-using ObjectList = ad_utility::sparql_types::ObjectList;
-using PropertyList = ad_utility::sparql_types::PropertyList;
+using namespace ad_utility::sparql_types;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
-using PathTuples = ad_utility::sparql_types::PathTuples;
-using VarOrPath = ad_utility::sparql_types::VarOrPath;
-using TripleWithPropertyPath = ad_utility::sparql_types::TripleWithPropertyPath;
+using SelectClause = ParsedQuery::SelectClause;
+using Alias = ParsedQuery::Alias;
+using Bind = GraphPatternOperation::Bind;
+using Values = GraphPatternOperation::Values;
 
 using Visitor = SparqlQleverVisitor;
 using Parser = SparqlAutomaticParser;
 
 // ___________________________________________________________________________
 antlrcpp::Any Visitor::processIriFunctionCall(
-    const std::string& iri, std::vector<Visitor::ExpressionPtr> argList) {
+    const std::string& iri, std::vector<ExpressionPtr> argList) {
   // Lambda that checks the number of arguments and throws an error if it's
   // not right.
   auto checkNumArgs = [&argList](const std::string_view prefix,
@@ -112,9 +110,8 @@ PathTuples joinPredicateAndObject(VarOrPath predicate, ObjectList objectList) {
 }
 
 // ____________________________________________________________________________________
-ParsedQuery::SelectClause Visitor::visitTypesafe(
-    Parser::SelectClauseContext* ctx) {
-  ParsedQuery::SelectClause select;
+SelectClause Visitor::visitTypesafe(Parser::SelectClauseContext* ctx) {
+  SelectClause select;
 
   select._distinct = static_cast<bool>(ctx->DISTINCT());
   select._reduced = static_cast<bool>(ctx->REDUCED());
@@ -122,14 +119,14 @@ ParsedQuery::SelectClause Visitor::visitTypesafe(
   if (ctx->asterisk) {
     select.setAsterisk();
   } else {
-    using VarOrAlias = std::variant<Variable, ParsedQuery::Alias>;
+    using VarOrAlias = std::variant<Variable, Alias>;
     select.setSelected(visitVector<VarOrAlias>(ctx->varOrAlias()));
   }
   return select;
 }
 
 // ____________________________________________________________________________________
-std::variant<Variable, ParsedQuery::Alias> Visitor::visitTypesafe(
+std::variant<Variable, Alias> Visitor::visitTypesafe(
     Parser::VarOrAliasContext* ctx) {
   if (ctx->var())
     return visitTypesafe(ctx->var());
@@ -139,17 +136,16 @@ std::variant<Variable, ParsedQuery::Alias> Visitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-ParsedQuery::Alias Visitor::visitTypesafe(Parser::AliasContext* ctx) {
+Alias Visitor::visitTypesafe(Parser::AliasContext* ctx) {
   // A SPARQL alias has only one child, namely the contents within
   // parentheses.
   return visitTypesafe(ctx->aliasWithoutBrackets());
 }
 
 // ____________________________________________________________________________________
-ParsedQuery::Alias Visitor::visitTypesafe(
-    Parser::AliasWithoutBracketsContext* ctx) {
+Alias Visitor::visitTypesafe(Parser::AliasWithoutBracketsContext* ctx) {
   auto wrapper = makeExpressionPimpl(visitTypesafe(ctx->expression()));
-  return ParsedQuery::Alias{std::move(wrapper), ctx->var()->getText()};
+  return {std::move(wrapper), ctx->var()->getText()};
 }
 
 // ____________________________________________________________________________________
@@ -158,20 +154,18 @@ Variable Visitor::visitTypesafe(Parser::VarContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-GraphPatternOperation::Bind Visitor::visitTypesafe(Parser::BindContext* ctx) {
+Bind Visitor::visitTypesafe(Parser::BindContext* ctx) {
   auto wrapper = makeExpressionPimpl(visitTypesafe(ctx->expression()));
-  return GraphPatternOperation::Bind{std::move(wrapper), ctx->var()->getText()};
+  return {std::move(wrapper), ctx->var()->getText()};
 }
 
 // ____________________________________________________________________________________
-GraphPatternOperation::Values Visitor::visitTypesafe(
-    Parser::InlineDataContext* ctx) {
+Values Visitor::visitTypesafe(Parser::InlineDataContext* ctx) {
   return visitTypesafe(ctx->dataBlock());
 }
 
 // ____________________________________________________________________________________
-GraphPatternOperation::Values Visitor::visitTypesafe(
-    Parser::DataBlockContext* ctx) {
+Values Visitor::visitTypesafe(Parser::DataBlockContext* ctx) {
   if (ctx->inlineDataOneVar()) {
     return {visitTypesafe(ctx->inlineDataOneVar())};
   } else if (ctx->inlineDataFull()) {
@@ -181,8 +175,7 @@ GraphPatternOperation::Values Visitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-std::optional<GraphPatternOperation::Values> Visitor::visitTypesafe(
-    Parser::ValuesClauseContext* ctx) {
+std::optional<Values> Visitor::visitTypesafe(Parser::ValuesClauseContext* ctx) {
   if (ctx->dataBlock()) {
     return visitTypesafe(ctx->dataBlock());
   } else {
@@ -300,7 +293,7 @@ void Visitor::visitTypesafe(Parser::PrefixDeclContext* ctx) {
 // ____________________________________________________________________________________
 GroupKey Visitor::visitTypesafe(Parser::GroupConditionContext* ctx) {
   if (ctx->var() && !ctx->expression()) {
-    return GroupKey{Variable{ctx->var()->getText()}};
+    return {Variable{ctx->var()->getText()}};
   } else if (ctx->builtInCall() || ctx->functionCall()) {
     // builtInCall and functionCall are both also an Expression
     auto subCtx =
@@ -309,14 +302,13 @@ GroupKey Visitor::visitTypesafe(Parser::GroupConditionContext* ctx) {
     // TODO: extract + template
     auto expr = makeExpressionPimpl(visit(subCtx));
     expr.setDescriptor(ctx->getText());
-    return GroupKey{std::move(expr)};
+    return {std::move(expr)};
   } else if (ctx->expression()) {
     auto expr = makeExpressionPimpl(visitTypesafe(ctx->expression()));
     if (ctx->AS() && ctx->var()) {
-      return GroupKey{
-          ParsedQuery::Alias{std::move(expr), ctx->var()->getText()}};
+      return {Alias{std::move(expr), ctx->var()->getText()}};
     } else {
-      return GroupKey{std::move(expr)};
+      return {std::move(expr)};
     }
   }
   AD_FAIL();  // Should be unreachable.
@@ -324,19 +316,19 @@ GroupKey Visitor::visitTypesafe(Parser::GroupConditionContext* ctx) {
 
 // ____________________________________________________________________________________
 OrderKey Visitor::visitTypesafe(Parser::OrderConditionContext* ctx) {
-  auto visitExprOrderKey = [this](bool isDescending,
-                                  antlr4::tree::ParseTree* context) {
+  auto visitExprOrderKey =
+      [this](bool isDescending, antlr4::tree::ParseTree* context) -> OrderKey {
     auto expr = makeExpressionPimpl(visit(context));
     if (auto exprIsVariable = expr.getVariableOrNullopt();
         exprIsVariable.has_value()) {
-      return OrderKey{VariableOrderKey(exprIsVariable.value(), isDescending)};
+      return {VariableOrderKey(exprIsVariable.value(), isDescending)};
     } else {
-      return OrderKey{ExpressionOrderKey{std::move(expr), isDescending}};
+      return {ExpressionOrderKey{std::move(expr), isDescending}};
     }
   };
 
   if (ctx->var()) {
-    return OrderKey{VariableOrderKey(ctx->var()->getText())};
+    return {VariableOrderKey(ctx->var()->getText())};
   } else if (ctx->constraint()) {
     return visitExprOrderKey(false, ctx->constraint());
   } else if (ctx->brackettedExpression()) {
@@ -522,8 +514,7 @@ PropertyList Visitor::visitTypesafe(Parser::PropertyListNotEmptyContext* ctx) {
     }
     appendVector(additionalTriples, std::move(objectList.second));
   }
-  return PropertyList{std::move(triplesWithoutSubject),
-                      std::move(additionalTriples)};
+  return {std::move(triplesWithoutSubject), std::move(additionalTriples)};
 }
 
 // ____________________________________________________________________________________
@@ -533,7 +524,7 @@ VarOrTerm Visitor::visitTypesafe(Parser::VerbContext* ctx) {
   }
   if (ctx->getText() == "a") {
     // Special keyword 'a'
-    return VarOrTerm{
+    return {
         GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"}}};
   }
   throw ParseException{"Invalid verb "s + ctx->getText()};
@@ -549,7 +540,7 @@ ObjectList Visitor::visitTypesafe(Parser::ObjectListContext* ctx) {
     appendVector(additionalTriples, std::move(graphNode.second));
     objects.push_back(std::move(graphNode.first));
   }
-  return ObjectList{std::move(objects), std::move(additionalTriples)};
+  return {std::move(objects), std::move(additionalTriples)};
 }
 
 // ____________________________________________________________________________________
@@ -735,7 +726,7 @@ Node Visitor::visitTypesafe(Parser::BlankNodePropertyListContext* ctx) {
     triples.push_back({var, std::move(tuple[0]), std::move(tuple[1])});
   }
   appendVector(triples, std::move(propertyList.second));
-  return Node{std::move(var), std::move(triples)};
+  return {std::move(var), std::move(triples)};
 }
 
 // ____________________________________________________________________________________
@@ -762,13 +753,13 @@ Node Visitor::visitTypesafe(Parser::CollectionContext* ctx) {
 
     appendVector(triples, std::move(graphNode.second));
   }
-  return Node{std::move(nextElement), std::move(triples)};
+  return {std::move(nextElement), std::move(triples)};
 }
 
 // ____________________________________________________________________________________
 Node Visitor::visitTypesafe(Parser::GraphNodeContext* ctx) {
   if (ctx->varOrTerm()) {
-    return Node{visitTypesafe(ctx->varOrTerm()), Triples{}};
+    return {visitTypesafe(ctx->varOrTerm()), Triples{}};
   } else if (ctx->triplesNode()) {
     return visitTriplesNode(ctx->triplesNode()).as<Node>();
   }
@@ -790,10 +781,10 @@ VarOrTerm SparqlQleverVisitor::visitTypesafe(
 // ____________________________________________________________________________________
 VarOrTerm Visitor::visitTypesafe(Parser::VarOrTermContext* ctx) {
   if (ctx->var()) {
-    return VarOrTerm{visitTypesafe(ctx->var())};
+    return {visitTypesafe(ctx->var())};
   }
   if (ctx->graphTerm()) {
-    return VarOrTerm{visitTypesafe(ctx->graphTerm())};
+    return {visitTypesafe(ctx->graphTerm())};
   } else {
     AD_FAIL()  // Should be unreachable.
   }
@@ -802,10 +793,10 @@ VarOrTerm Visitor::visitTypesafe(Parser::VarOrTermContext* ctx) {
 // ____________________________________________________________________________________
 VarOrTerm Visitor::visitTypesafe(Parser::VarOrIriContext* ctx) {
   if (ctx->var()) {
-    return VarOrTerm{visitTypesafe(ctx->var())};
+    return {visitTypesafe(ctx->var())};
   }
   if (ctx->iri()) {
-    return VarOrTerm{GraphTerm{Iri{visitTypesafe(ctx->iri())}}};
+    return {GraphTerm{Iri{visitTypesafe(ctx->iri())}}};
   }
   // invalid grammar
   AD_CHECK(false);
@@ -817,35 +808,35 @@ GraphTerm Visitor::visitTypesafe(Parser::GraphTermContext* ctx) {
     auto literalAny = visitNumericLiteral(ctx->numericLiteral());
     try {
       auto intLiteral = literalAny.as<unsigned long long>();
-      return GraphTerm{Literal{intLiteral}};
+      return {Literal{intLiteral}};
     } catch (...) {
     }
     try {
       auto intLiteral = literalAny.as<long long>();
-      return GraphTerm{Literal{intLiteral}};
+      return {Literal{intLiteral}};
     } catch (...) {
     }
     try {
       auto intLiteral = literalAny.as<double>();
-      return GraphTerm{Literal{intLiteral}};
+      return {Literal{intLiteral}};
     } catch (...) {
     }
     AD_CHECK(false);
   }
   if (ctx->booleanLiteral()) {
-    return GraphTerm{Literal{visitTypesafe(ctx->booleanLiteral())}};
+    return {Literal{visitTypesafe(ctx->booleanLiteral())}};
   }
   if (ctx->blankNode()) {
-    return GraphTerm{visitTypesafe(ctx->blankNode())};
+    return {visitTypesafe(ctx->blankNode())};
   }
   if (ctx->iri()) {
-    return GraphTerm{Iri{visitTypesafe(ctx->iri())}};
+    return {Iri{visitTypesafe(ctx->iri())}};
   }
   if (ctx->rdfLiteral()) {
-    return GraphTerm{Literal{visitTypesafe(ctx->rdfLiteral())}};
+    return {Literal{visitTypesafe(ctx->rdfLiteral())}};
   }
   if (ctx->NIL()) {
-    return GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}};
+    return {Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}};
   }
   AD_CHECK(false);
 }
@@ -1005,9 +996,8 @@ ExpressionPtr Visitor::visitTypesafe(Parser::PrimaryExpressionContext* ctx) {
   if (ctx->rdfLiteral()) {
     // TODO<joka921> : handle strings with value datatype that are
     // not in the knowledge base correctly.
-    return ExpressionPtr{
-        std::make_unique<sparqlExpression::StringOrIriExpression>(
-            ctx->rdfLiteral()->getText())};
+    return {std::make_unique<sparqlExpression::StringOrIriExpression>(
+        ctx->rdfLiteral()->getText())};
   }
   if (ctx->iriOrFunction()) {
     return visitTypesafe(ctx->iriOrFunction());
@@ -1022,19 +1012,19 @@ ExpressionPtr Visitor::visitTypesafe(Parser::PrimaryExpressionContext* ctx) {
     auto literalAny = visitNumericLiteral(ctx->numericLiteral());
     try {
       auto intLiteral = literalAny.as<unsigned long long>();
-      return ExpressionPtr{std::make_unique<sparqlExpression::IntExpression>(
+      return {std::make_unique<sparqlExpression::IntExpression>(
           static_cast<int64_t>(intLiteral))};
     } catch (...) {
     }
     try {
       auto intLiteral = literalAny.as<long long>();
-      return ExpressionPtr{std::make_unique<sparqlExpression::IntExpression>(
+      return {std::make_unique<sparqlExpression::IntExpression>(
           static_cast<int64_t>(intLiteral))};
     } catch (...) {
     }
     try {
       auto intLiteral = literalAny.as<double>();
-      return ExpressionPtr{std::make_unique<sparqlExpression::DoubleExpression>(
+      return {std::make_unique<sparqlExpression::DoubleExpression>(
           static_cast<double>(intLiteral))};
     } catch (...) {
     }
@@ -1043,14 +1033,13 @@ ExpressionPtr Visitor::visitTypesafe(Parser::PrimaryExpressionContext* ctx) {
 
   if (ctx->booleanLiteral()) {
     auto b = visitTypesafe(ctx->booleanLiteral());
-    return ExpressionPtr{std::make_unique<sparqlExpression::BoolExpression>(b)};
+    return {std::make_unique<sparqlExpression::BoolExpression>(b)};
   }
 
   if (ctx->var()) {
     sparqlExpression::Variable v;
     v._variable = ctx->var()->getText();
-    return ExpressionPtr{
-        std::make_unique<sparqlExpression::VariableExpression>(v)};
+    return {std::make_unique<sparqlExpression::VariableExpression>(v)};
   }
   // We should have returned by now
   AD_CHECK(false);
@@ -1150,9 +1139,8 @@ ExpressionPtr Visitor::visitTypesafe(Parser::AggregateContext* ctx) {
 ExpressionPtr Visitor::visitTypesafe(Parser::IriOrFunctionContext* ctx) {
   // Case 1: Just an IRI.
   if (ctx->argList() == nullptr) {
-    return ExpressionPtr{
-        std::make_unique<sparqlExpression::StringOrIriExpression>(
-            ctx->getText())};
+    return {std::make_unique<sparqlExpression::StringOrIriExpression>(
+        ctx->getText())};
   }
   // Case 2: Function call, where the function name is an IRI.
   return std::move(processIriFunctionCall(visitTypesafe(ctx->iri()),
@@ -1186,7 +1174,7 @@ BlankNode Visitor::visitTypesafe(Parser::BlankNodeContext* ctx) {
     constexpr size_t length = std::string_view{"_:"}.length();
     const string label = ctx->BLANK_NODE_LABEL()->getText().substr(length);
     // false means the query explicitly contains a blank node label
-    return BlankNode{false, label};
+    return {false, label};
   }
   // invalid grammar
   AD_CHECK(false);
