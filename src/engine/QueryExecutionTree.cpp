@@ -13,14 +13,13 @@
 
 #include "../parser/RdfEscaping.h"
 #include "./Bind.h"
+#include "./Distinct.h"
 #include "./IndexScan.h"
 #include "./OrderBy.h"
 #include "./Sort.h"
-#include "./Distinct.h"
-#include "./OrderBy.h"
-#include "./Values.h"
-#include "./Union.h"
 #include "./TransitivePath.h"
+#include "./Union.h"
+#include "./Values.h"
 
 using std::string;
 
