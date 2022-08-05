@@ -28,6 +28,12 @@ using std::string;
 class QueryExecutionTree {
  public:
   explicit QueryExecutionTree(QueryExecutionContext* const qec);
+  template <typename Op>
+  QueryExecutionTree(QueryExecutionContext* const qec,
+                     std::shared_ptr<Op> operation)
+      : QueryExecutionTree(qec) {
+    setOperation(std::move(operation));
+  }
 
   enum OperationType {
     UNDEFINED = 0,
@@ -57,36 +63,32 @@ class QueryExecutionTree {
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
 
+  template <typename Op>
+  void setOperation(std::shared_ptr<Op>);
+
   string asString(size_t indent = 0);
 
   const QueryExecutionContext* getQec() const { return _qec; }
 
-  const ad_utility::HashMap<string, size_t>& getVariableColumns() const {
-    return _variableColumnMap;
+  // TODO<joka921> make this a const&
+  ad_utility::HashMap<string, size_t> getVariableColumns() const {
+    AD_CHECK(_rootOperation);
+    return _rootOperation->getVariableColumns();
   }
 
   std::shared_ptr<Operation> getRootOperation() const { return _rootOperation; }
 
   const OperationType& getType() const { return _type; }
 
+  // Is the root operation of this tree an `IndexScan` operation.
+  // This is the only query for a concrete type that is frequently used.
+  bool isIndexScan() const;
+
   bool isEmpty() const {
     return _type == OperationType::UNDEFINED || !_rootOperation;
   }
 
-  void setVariableColumn(std::string variable, size_t columnIndex);
-  void setVariableColumn(TripleComponent variable, size_t columnIndex);
-
   size_t getVariableColumn(const string& var) const;
-
-  void setVariableColumns(const ad_utility::HashMap<string, size_t>& map);
-
-  void setContextVars(const std::unordered_set<string>& set) {
-    _contextVars = set;
-  }
-
-  const std::unordered_set<string>& getContextVars() const {
-    return _contextVars;
-  }
 
   size_t getResultWidth() const { return _rootOperation->getResultWidth(); }
 
@@ -143,12 +145,6 @@ class QueryExecutionTree {
   const std::vector<size_t>& resultSortedOn() const {
     return _rootOperation->getResultSortedOn();
   }
-
-  bool isContextvar(const string& var) const {
-    return _contextVars.count(var) > 0;
-  }
-
-  void addContextVar(const string& var) { _contextVars.insert(var); }
 
   void setTextLimit(size_t limit) {
     _rootOperation->setTextLimit(limit);
@@ -220,11 +216,9 @@ class QueryExecutionTree {
 
  private:
   QueryExecutionContext* _qec;  // No ownership
-  ad_utility::HashMap<string, size_t> _variableColumnMap;
   std::shared_ptr<Operation>
       _rootOperation;  // Owned child. Will be deleted at deconstruction.
   OperationType _type;
-  std::unordered_set<string> _contextVars;
   string _asString;
   size_t _indent = 0;  // the indent with which the _asString repr was formatted
   size_t _sizeEstimate;

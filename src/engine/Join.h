@@ -38,8 +38,6 @@ class Join : public Operation {
 
   ad_utility::HashMap<string, size_t> getVariableColumns() const override;
 
-  std::unordered_set<string> getContextVars() const;
-
   virtual void setTextLimit(size_t limit) override {
     _left->setTextLimit(limit);
     _right->setTextLimit(limit);
