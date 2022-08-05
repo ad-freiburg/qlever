@@ -894,3 +894,9 @@ Variable SparqlParser::addInternalBind(
   //  query.
   return Variable{std::move(targetVariable)};
 }
+
+// _____________________________________________________________________________
+SparqlFilter SparqlParser::parseFilterExpression(const string& filterContent) {
+  SparqlParser parser(filterContent);
+  return parser.parseFilter(true).value();
+}

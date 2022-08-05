@@ -23,6 +23,11 @@ class SparqlParser {
   explicit SparqlParser(const string& query);
   ParsedQuery parse();
 
+  /// Parse the Expression of a filter statement (without the `FILTER` keyword.
+  /// This helper method is needed, as long the set of expressions supported
+  /// by  FILTERs and BIND/GROUP BY is not the same.
+  static SparqlFilter parseFilterExpression(const string& filterContent);
+
   /**
    * @brief This method looks for the first string literal it can find and
    * parses it. During the parsing any escaped characters are resolved (e.g. \")

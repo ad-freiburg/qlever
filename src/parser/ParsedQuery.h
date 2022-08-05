@@ -119,6 +119,8 @@ class SparqlFilter {
   bool _regexIgnoreCase = false;
   // True if the str function was applied to the left side.
   bool _lhsAsString = false;
+
+  bool operator==(const SparqlFilter&) const = default;
 };
 
 // Represents a VALUES statement in the query.
