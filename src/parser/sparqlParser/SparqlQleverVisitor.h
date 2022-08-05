@@ -3,14 +3,12 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
-
 #include "../../engine/sparqlExpressions/AggregateExpression.h"
 #include "../../engine/sparqlExpressions/GroupConcatExpression.h"
 #include "../../engine/sparqlExpressions/LiteralExpression.h"
 #include "../../engine/sparqlExpressions/NaryExpression.h"
 #include "../../engine/sparqlExpressions/SparqlExpressionPimpl.h"
-//#include "../../engine/sparqlExpressions/RelationalExpression.h"
+// #include "../../engine/sparqlExpressions/RelationalExpression.h"
 #include "../../engine/sparqlExpressions/SampleExpression.h"
 #include "../../util/HashMap.h"
 #include "../../util/OverloadCallOperator.h"
@@ -78,11 +76,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   void setPrefixMapManually(PrefixMap map) { _prefixMap = std::move(map); }
 
  private:
-  // For the unit tests
-  PrefixMap& prefixMap() { return _prefixMap; }
-  FRIEND_TEST(SparqlParser, Prefix);
-
-  PrefixMap _prefixMap{{"", "<>"}};
+  PrefixMap _prefixMap{};
 
   template <typename T>
   void appendVector(std::vector<T>& destination, std::vector<T>&& source) {
@@ -127,27 +121,27 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   // ___________________________________________________________________________
   antlrcpp::Any visitPrologue(
       SparqlAutomaticParser::PrologueContext* ctx) override {
-    // Default implementation is ok here, simply handle all PREFIX and BASE
-    // declarations.
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  PrefixMap visitTypesafe(SparqlAutomaticParser::PrologueContext* ctx);
 
   // ___________________________________________________________________________
   antlrcpp::Any visitBaseDecl(
       SparqlAutomaticParser::BaseDeclContext* ctx) override {
-    _prefixMap[""] = visitTypesafe(ctx->iriref());
-    return nullptr;
+    return visitTypesafe(ctx);
   }
+
+  SparqlPrefix visitTypesafe(SparqlAutomaticParser::BaseDeclContext* ctx);
 
   // ___________________________________________________________________________
   antlrcpp::Any visitPrefixDecl(
       SparqlAutomaticParser::PrefixDeclContext* ctx) override {
-    auto text = ctx->PNAME_NS()->getText();
-    // Strip trailing ':'.
-    _prefixMap[text.substr(0, text.length() - 1)] =
-        visitTypesafe(ctx->iriref());
-    return nullptr;
+    // This function only changes the state and the return is only for testing.
+    return visitTypesafe(ctx);
   }
+
+  SparqlPrefix visitTypesafe(SparqlAutomaticParser::PrefixDeclContext* ctx);
 
   antlrcpp::Any visitSelectQuery(
       SparqlAutomaticParser::SelectQueryContext* ctx) override {

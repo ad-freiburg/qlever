@@ -47,12 +47,13 @@ TEST(ParserTest, testParse) {
       const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
       ASSERT_EQ(3u, triples.size());
 
-      ASSERT_EQ(INTERNAL_PREDICATE_PREFIX_NAME, pq._prefixes[0]._prefix);
-      ASSERT_EQ(INTERNAL_PREDICATE_PREFIX_IRI, pq._prefixes[0]._uri);
-      ASSERT_EQ("", pq._prefixes[1]._prefix);
-      ASSERT_EQ("<http://rdf.myprefix.com/>", pq._prefixes[1]._uri);
-      ASSERT_EQ("ns", pq._prefixes[2]._prefix);
-      ASSERT_EQ("<http://rdf.myprefix.com/ns/>", pq._prefixes[2]._uri);
+      ASSERT_THAT(pq._prefixes,
+                  testing::UnorderedElementsAre(
+                      SparqlPrefix{INTERNAL_PREDICATE_PREFIX_NAME,
+                                   INTERNAL_PREDICATE_PREFIX_IRI},
+                      SparqlPrefix{"", "<http://rdf.myprefix.com/>"},
+                      SparqlPrefix{"ns", "<http://rdf.myprefix.com/ns/>"},
+                      SparqlPrefix{"xxx", "<http://rdf.myprefix.com/xxx/>"}));
       ASSERT_EQ(Variable{"?x"}, selectClause2.getSelectedVariables()[0]);
       ASSERT_EQ(Variable{"?z"}, selectClause2.getSelectedVariables()[1]);
       ASSERT_EQ("?x", triples[0]._s);
@@ -85,12 +86,13 @@ TEST(ParserTest, testParse) {
       const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
       ASSERT_EQ(3u, triples.size());
 
-      ASSERT_EQ(INTERNAL_PREDICATE_PREFIX_NAME, pq._prefixes[0]._prefix);
-      ASSERT_EQ(INTERNAL_PREDICATE_PREFIX_IRI, pq._prefixes[0]._uri);
-      ASSERT_EQ("", pq._prefixes[1]._prefix);
-      ASSERT_EQ("<http://rdf.myprefix.com/>", pq._prefixes[1]._uri);
-      ASSERT_EQ("ns", pq._prefixes[2]._prefix);
-      ASSERT_EQ("<http://rdf.myprefix.com/ns/>", pq._prefixes[2]._uri);
+      ASSERT_THAT(pq._prefixes,
+                  testing::UnorderedElementsAre(
+                      SparqlPrefix{INTERNAL_PREDICATE_PREFIX_NAME,
+                                   INTERNAL_PREDICATE_PREFIX_IRI},
+                      SparqlPrefix{"", "<http://rdf.myprefix.com/>"},
+                      SparqlPrefix{"ns", "<http://rdf.myprefix.com/ns/>"},
+                      SparqlPrefix{"xxx", "<http://rdf.myprefix.com/xxx/>"}));
       ASSERT_EQ(Variable{"?x"}, selectClause.getSelectedVariables()[0]);
       ASSERT_EQ(Variable{"?z"}, selectClause.getSelectedVariables()[1]);
       ASSERT_EQ("?x", triples[0]._s);
@@ -827,13 +829,13 @@ TEST(ParserTest, testExpandPrefixes) {
   ASSERT_EQ(4u, pq._prefixes.size());
   ASSERT_EQ(2u, selectClause.getSelectedVariables().size());
   ASSERT_EQ(3u, c._whereClauseTriples.size());
-  ASSERT_EQ(INTERNAL_PREDICATE_PREFIX_NAME, pq._prefixes[0]._prefix);
-  ASSERT_EQ(INTERNAL_PREDICATE_PREFIX_IRI, pq._prefixes[0]._uri);
-  ASSERT_EQ("ns", pq._prefixes[2]._prefix);
-  ASSERT_EQ("", pq._prefixes[1]._prefix);
-  ASSERT_EQ("<http://rdf.myprefix.com/>", pq._prefixes[1]._uri);
-  ASSERT_EQ("ns", pq._prefixes[2]._prefix);
-  ASSERT_EQ("<http://rdf.myprefix.com/ns/>", pq._prefixes[2]._uri);
+  ASSERT_THAT(pq._prefixes,
+              testing::UnorderedElementsAre(
+                  SparqlPrefix{INTERNAL_PREDICATE_PREFIX_NAME,
+                               INTERNAL_PREDICATE_PREFIX_IRI},
+                  SparqlPrefix{"", "<http://rdf.myprefix.com/>"},
+                  SparqlPrefix{"ns", "<http://rdf.myprefix.com/ns/>"},
+                  SparqlPrefix{"xxx", "<http://rdf.myprefix.com/xxx/>"}));
   ASSERT_EQ(Variable{"?x"}, selectClause.getSelectedVariables()[0]);
   ASSERT_EQ(Variable{"?z"}, selectClause.getSelectedVariables()[1]);
   ASSERT_EQ("?x", c._whereClauseTriples[0]._s);
@@ -1337,4 +1339,15 @@ TEST(ParserTest, Group) {
             .parse(),
         ParseException);
   }
+}
+
+TEST(ParserTest, Prefix) {
+  ParsedQuery pq =
+      SparqlParser(
+          "PREFIX descriptor: <foo> SELECT ?var WHERE { ?var <bar> <foo> }")
+          .parse();
+  ASSERT_THAT(pq._prefixes,
+              testing::UnorderedElementsAre(
+                  SparqlPrefix{"ql", "<QLever-internal-function/>"},
+                  SparqlPrefix{"descriptor", "<foo>"}));
 }
