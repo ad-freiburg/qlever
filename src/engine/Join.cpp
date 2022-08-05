@@ -151,37 +151,33 @@ ad_utility::HashMap<string, size_t> Join::getVariableColumns() const {
   if (!isFullScanDummy(_left) && !isFullScanDummy(_right)) {
     retVal = _left->getVariableColumns();
     size_t leftSize = _left->getResultWidth();
-    for (auto it = _right->getVariableColumns().begin();
-         it != _right->getVariableColumns().end(); ++it) {
-      if (it->second < _rightJoinCol) {
-        retVal[it->first] = leftSize + it->second;
+    for (const auto& [variable, column] : _right->getVariableColumns()) {
+      if (column < _rightJoinCol) {
+        retVal[variable] = leftSize + column;
       }
-      if (it->second > _rightJoinCol) {
-        retVal[it->first] = leftSize + it->second - 1;
+      if (column > _rightJoinCol) {
+        retVal[variable] = leftSize + column - 1;
       }
     }
   } else {
     if (isFullScanDummy(_right)) {
       retVal = _left->getVariableColumns();
       size_t leftSize = _left->getResultWidth();
-      for (auto it = _right->getVariableColumns().begin();
-           it != _right->getVariableColumns().end(); ++it) {
+      for (const auto& [variable, column] : _right->getVariableColumns()) {
         // Skip the first col for the dummy
-        if (it->second != 0) {
-          retVal[it->first] = leftSize + it->second - 1;
+        if (column != 0) {
+          retVal[variable] = leftSize + column - 1;
         }
       }
     } else {
-      for (auto it = _left->getVariableColumns().begin();
-           it != _left->getVariableColumns().end(); ++it) {
+      for (const auto& [variable, column] : _left->getVariableColumns()) {
         // Skip+drop the first col for the dummy and subtract one from others.
-        if (it->second != 0) {
-          retVal[it->first] = it->second - 1;
+        if (column != 0) {
+          retVal[variable] = column - 1;
         }
       }
-      for (auto it = _right->getVariableColumns().begin();
-           it != _right->getVariableColumns().end(); ++it) {
-        retVal[it->first] = 2 + it->second;
+      for (const auto& [variable, column] : _right->getVariableColumns()) {
+        retVal[variable] = 2 + column;
       }
     }
   }
@@ -203,14 +199,6 @@ vector<size_t> Join::resultSortedOn() const {
   } else {
     return {2 + _rightJoinCol};
   }
-}
-
-// _____________________________________________________________________________
-std::unordered_set<string> Join::getContextVars() const {
-  auto cvars = _left->getContextVars();
-  cvars.insert(_right->getContextVars().begin(),
-               _right->getContextVars().end());
-  return cvars;
 }
 
 // _____________________________________________________________________________

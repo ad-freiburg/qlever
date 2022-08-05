@@ -35,6 +35,8 @@ class SparqlPrefix {
   string _uri;
 
   [[nodiscard]] string asString() const;
+
+  bool operator==(const SparqlPrefix&) const = default;
 };
 
 inline bool isVariable(const string& elem) { return elem.starts_with("?"); }

@@ -52,58 +52,29 @@ TEST(SparqlParser, NumericLiterals) {
 }
 
 TEST(SparqlParser, Prefix) {
+  SparqlQleverVisitor::PrefixMap prefixMap{{"wd", "<www.wikidata.org/>"}};
+
   {
-    string s = "PREFIX wd: <www.wikidata.org/>";
-    ParserAndVisitor p{s};
-    auto context = p.parser_.prefixDecl();
-    p.visitor_.visitPrefixDecl(context);
-    const auto& m = p.visitor_.prefixMap();
-    ASSERT_EQ(2ul, m.size());
-    ASSERT_TRUE(m.at("wd") == "<www.wikidata.org/>");
-    ASSERT_EQ(m.at(""), "<>");
+    ParserAndVisitor p{"PREFIX wd: <www.wikidata.org/>"};
+    auto defaultPrefixes = p.visitor_.prefixMap();
+    ASSERT_EQ(defaultPrefixes.size(), 0);
+    p.visitor_.visitTypesafe(p.parser_.prefixDecl());
+    auto prefixes = p.visitor_.prefixMap();
+    ASSERT_EQ(prefixes.size(), 1);
+    ASSERT_EQ(prefixes.at("wd"), "<www.wikidata.org/>");
   }
+  expectCompleteParse(parsePrefixDecl("PREFIX wd: <www.wikidata.org/>"),
+                      testing::Eq(SparqlPrefix("wd", "<www.wikidata.org/>")));
+  expectCompleteParse(parsePnameLn("wd:bimbam", prefixMap),
+                      testing::Eq("<www.wikidata.org/bimbam>"));
+  expectCompleteParse(parsePnameNs("wd:", prefixMap),
+                      testing::Eq("<www.wikidata.org/>"));
+  expectCompleteParse(parsePrefixedName("wd:bimbam", prefixMap),
+                      testing::Eq("<www.wikidata.org/bimbam>"));
   {
-    string s = "wd:bimbam";
-    ParserAndVisitor p{s};
-    auto& m = p.visitor_.prefixMap();
-    m["wd"] = "<www.wikidata.org/>";
-
-    auto context = p.parser_.pnameLn();
-    auto result = p.visitor_.visitTypesafe(context);
-    ASSERT_EQ(result, "<www.wikidata.org/bimbam>");
-  }
-  {
-    string s = "wd:";
-    ParserAndVisitor p{s};
-    auto& m = p.visitor_.prefixMap();
-    m["wd"] = "<www.wikidata.org/>";
-
-    auto context = p.parser_.pnameNs();
-    auto result = p.visitor_.visitPnameNs(context).as<string>();
-    ASSERT_EQ(result, "<www.wikidata.org/>");
-  }
-  {
-    string s = "wd:bimbam";
-    ParserAndVisitor p{s};
-    auto& m = p.visitor_.prefixMap();
-    m["wd"] = "<www.wikidata.org/>";
-
-    auto context = p.parser_.prefixedName();
-    auto result = p.visitor_.visitTypesafe(context);
-    ASSERT_EQ(result, "<www.wikidata.org/bimbam>");
-  }
-  {
-    string s = "<somethingsomething> <rest>";
-    ParserAndVisitor p{s};
-    auto& m = p.visitor_.prefixMap();
-    m["wd"] = "<www.wikidata.org/>";
-
-    auto context = p.parser_.iriref();
-    auto result = p.visitor_.visitTypesafe(context);
-    auto sz = context->getText().size();
-
-    ASSERT_EQ(result, "<somethingsomething>");
-    ASSERT_EQ(sz, 20u);
+    auto result = parseIriref("<somethingsomething> <rest>", prefixMap);
+    ASSERT_EQ(result.resultOfParse_, "<somethingsomething>");
+    ASSERT_EQ(result.remainingText_, "<rest>");
   }
 }
 
