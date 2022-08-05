@@ -510,7 +510,7 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
           auto& filter = filterOpt.value();
           if (filter._type == SparqlFilter::LANG_MATCHES) {
             throw ParseException(
-                "Language filters in having clauses are currently not "
+                "Language filter in HAVING clause currently not "
                 "supported by QLever");
           }
           query->_havingClauses.push_back(std::move(filter));
@@ -521,6 +521,7 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
         }
       };
       addHavingFilter(true);
+      // Add remaining filters.
       while (addHavingFilter(false)) {
       }
     } else {
@@ -661,11 +662,6 @@ std::optional<SparqlFilter> SparqlParser::parseFilter(bool failOnNoFilter) {
   }
   expectClose();
   return std::nullopt;
-}
-
-void SparqlParser::addLangFilter(const std::string& lhs, const std::string& rhs,
-                                 ParsedQuery::GraphPattern* pattern) {
-  pattern->addLanguageFilter(lhs, rhs);
 }
 
 // _____________________________________________________________________________

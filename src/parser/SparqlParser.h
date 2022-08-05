@@ -46,9 +46,6 @@ class SparqlParser {
   void parseSolutionModifiers(ParsedQuery* query);
   // Returns true if it found a filter
   std::optional<SparqlFilter> parseFilter(bool failOnNoFilter = true);
-  // Parses an expressiong of the form (?a) = "en"
-  void addLangFilter(const std::string& lhs, const std::string& rhs,
-                     ParsedQuery::GraphPattern* pattern);
 
   // Reads the next element of a triple (an iri, a variable, a property path,
   // etc.) out of s beginning at the current value of pos. Sets pos to the

@@ -166,6 +166,8 @@ class ParsedQuery {
     // pattern
     void recomputeIds(size_t* id_count = nullptr);
 
+    // Modify query to take care of language filter. `lhs` is the variable,
+    // `rhs` is the language.
     void addLanguageFilter(const std::string& lhs, const std::string& rhs);
 
     bool _optional;

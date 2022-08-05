@@ -446,8 +446,8 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const std::string& lhs,
                                                   const std::string& rhs) {
   auto langTag = rhs.substr(1, rhs.size() - 2);
   // First find a suitable triple for the given variable. It
-  // must use a predicate that is not a variable or complex
-  // predicate path
+  // must use a predicate that is neither a variable nor a complex
+  // predicate path.
   if (_children.empty() ||
       !_children.back().is<GraphPatternOperation::BasicGraphPattern>()) {
     _children.emplace_back(GraphPatternOperation::BasicGraphPattern{});
@@ -457,7 +457,7 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const std::string& lhs,
                 ._whereClauseTriples;
   auto it = std::find_if(t.begin(), t.end(), [&lhs](const auto& tr) {
     // TODO<joka921> Also apply the efficient language filter for
-    // property paths like "rdfs:label|skos:altLabel"
+    // property paths like "rdfs:label|skos:altLabel".
     return tr._o == lhs && (tr._p._operation == PropertyPath::Operation::IRI &&
                             !isVariable(tr._p));
   });
@@ -470,9 +470,9 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const std::string& lhs,
     PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
     taggedPredicate._iri = LANGUAGE_PREDICATE;
     SparqlTriple triple(lhs, taggedPredicate, langEntity);
-    // Quadratic in number of triples in query.
-    // Shouldn't be a problem here, though.
-    // Could use a (hash)-set instead of vector.
+    // This `find` is linear in the number of triples (per language filter).
+    // This shouldn't be a problem here, though. If needed, we could use a
+    // (hash)-set instead of a vector.
     if (std::find(t.begin(), t.end(), triple) != t.end()) {
       LOG(DEBUG) << "Ignoring duplicate triple: lang(" << lhs << ") = " << rhs
                  << std::endl;
