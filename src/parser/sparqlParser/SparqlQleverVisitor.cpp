@@ -111,6 +111,21 @@ PathTuples joinPredicateAndObject(VarOrPath predicate, ObjectList objectList) {
 }
 
 // ____________________________________________________________________________________
+std::variant<ParsedQuery, Triples> Visitor::visitTypesafe(
+    Parser::QueryContext* ctx) {
+  // The prologue (BASE and PREFIX declarations)  only affects the internal
+  // state of the visitor.
+  visitTypesafe(ctx->prologue());
+  if (ctx->selectQuery()) {
+    return visitTypesafe(ctx->selectQuery());
+  }
+  if (ctx->constructQuery()) {
+    return visitTypesafe(ctx->constructQuery());
+  }
+  throw ParseException{"QLever only supports select and construct queries"};
+}
+
+// ____________________________________________________________________________________
 SelectClause Visitor::visitTypesafe(Parser::SelectClauseContext* ctx) {
   SelectClause select;
 
@@ -146,6 +161,20 @@ Alias Visitor::visitTypesafe(Parser::AliasContext* ctx) {
 // ____________________________________________________________________________________
 Alias Visitor::visitTypesafe(Parser::AliasWithoutBracketsContext* ctx) {
   return {{visitTypesafe(ctx->expression())}, ctx->var()->getText()};
+}
+
+// ____________________________________________________________________________________
+Triples Visitor::visitTypesafe(Parser::ConstructQueryContext* ctx) {
+  if (!ctx->datasetClause().empty()) {
+    throw ParseException{"Datasets are not supported"};
+  }
+  // TODO: once where clause is supported also process whereClause and
+  // solutionModifiers
+  if (ctx->constructTemplate()) {
+    return visitTypesafe(ctx->constructTemplate());
+  } else {
+    return {};
+  }
 }
 
 // ____________________________________________________________________________________
@@ -315,7 +344,7 @@ SparqlPrefix SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-ParsedQuery visitTypesafe(Parser::SelectQueryContext* ctx) {
+ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
   throw ParseException("SelectQuery is not yet supported. Got: " +
                        ctx->getText());
 }

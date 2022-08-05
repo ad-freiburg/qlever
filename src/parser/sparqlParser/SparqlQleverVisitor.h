@@ -102,17 +102,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
  public:
   // ___________________________________________________________________________
   Any visitQuery(Parser::QueryContext* ctx) override {
-    // The prologue (BASE and PREFIX declarations)  only affects the internal
-    // state of the visitor.
-    visitPrologue(ctx->prologue());
-    if (ctx->selectQuery()) {
-      return visitSelectQuery(ctx->selectQuery());
-    }
-    if (ctx->constructQuery()) {
-      return ctx->constructQuery()->accept(this);
-    }
-    throw ParseException{"QLever only supports select and construct queries"};
+    return visitTypesafe(ctx);
   }
+
+  std::variant<ParsedQuery, Triples> visitTypesafe(Parser::QueryContext* ctx);
 
   // ___________________________________________________________________________
   Any visitPrologue(Parser::PrologueContext* ctx) override {
@@ -137,8 +130,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   SparqlPrefix visitTypesafe(Parser::PrefixDeclContext* ctx);
 
   Any visitSelectQuery(Parser::SelectQueryContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  [[noreturn]] ParsedQuery visitTypesafe(Parser::SelectQueryContext* ctx);
 
   Any visitSubSelect(Parser::SubSelectContext* ctx) override {
     return visitChildren(ctx);
@@ -171,14 +166,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   ParsedQuery::Alias visitTypesafe(Parser::AliasWithoutBracketsContext* ctx);
 
   Any visitConstructQuery(Parser::ConstructQueryContext* ctx) override {
-    if (!ctx->datasetClause().empty()) {
-      throw ParseException{"Datasets are not supported"};
-    }
-    if (ctx->constructTemplate()) {
-      return ctx->constructTemplate()->accept(this);
-    }
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  Triples visitTypesafe(Parser::ConstructQueryContext* ctx);
 
   Any visitDescribeQuery(Parser::DescribeQueryContext* ctx) override {
     // TODO: unsupported
@@ -694,7 +685,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   ExpressionPtr visitTypesafe(Parser::RelationalExpressionContext* ctx);
 
   Any visitNumericExpression(Parser::NumericExpressionContext* ctx) override {
-    return std::move(visitChildren(ctx).as<ExpressionPtr>());
+    return visitTypesafe(ctx);
   }
 
   ExpressionPtr visitTypesafe(Parser::NumericExpressionContext* ctx);
@@ -805,6 +796,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   Any visitNumericLiteralPositive(
       Parser::NumericLiteralPositiveContext* ctx) override {
+    // TODO: refactor to return variant
     if (ctx->INTEGER_POSITIVE()) {
       return std::stoull(ctx->getText());
     } else {
@@ -814,6 +806,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   Any visitNumericLiteralNegative(
       Parser::NumericLiteralNegativeContext* ctx) override {
+    // TODO: refactor to return variant
     if (ctx->INTEGER_NEGATIVE()) {
       return std::stoll(ctx->getText());
     } else {
@@ -822,7 +815,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   Any visitBooleanLiteral(Parser::BooleanLiteralContext* ctx) override {
-    return ctx->getText() == "true";
+    return visitTypesafe(ctx);
   }
 
   bool visitTypesafe(Parser::BooleanLiteralContext* ctx);

@@ -56,7 +56,6 @@ ParsedQuery SparqlParser::parse() {
 void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
   if (queryType == CONSTRUCT_QUERY) {
     auto str = lexer_.getUnconsumedInput();
-    // TODO: replace with getPrefixMap
     SparqlQleverVisitor::PrefixMap prefixes;
     for (const auto& prefix : query->_prefixes) {
       prefixes[prefix._prefix] = prefix._uri;
