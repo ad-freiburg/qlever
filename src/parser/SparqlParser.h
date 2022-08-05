@@ -23,9 +23,9 @@ class SparqlParser {
   explicit SparqlParser(const string& query);
   ParsedQuery parse();
 
-  /// Parse the Expression of a filter statement (without the `FILTER` keyword.
-  /// This helper method is needed, as long the set of expressions supported
-  /// by  FILTERs and BIND/GROUP BY is not the same.
+  /// Parse the expression of a filter statement (without the `FILTER` keyword).
+  /// This helper method is needed as long as the set of expressions supported
+  /// by FILTER and BIND/GROUP BY is not the same.
   static SparqlFilter parseFilterExpression(const string& filterContent);
 
   /**
