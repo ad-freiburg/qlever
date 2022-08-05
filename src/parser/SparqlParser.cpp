@@ -272,7 +272,12 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       }
     } else if (lexer_.accept("filter")) {
       // append to the global filters of the pattern.
-      parseFilter(&currentPattern->_filters, true, currentPattern);
+      SparqlFilter filter = parseFilter(true).value();
+      if (filter._type == SparqlFilter::LANG_MATCHES) {
+        currentPattern->addLanguageFilter(filter._lhs, filter._rhs);
+      } else {
+        currentPattern->_filters.push_back(std::move(filter));
+      }
       // A filter may have an optional dot after it
       lexer_.accept(".");
     } else if (lexer_.peek("values")) {
@@ -499,9 +504,25 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
             std::move(orderKey));
       }
     } else if (lexer_.accept("having")) {
-      parseFilter(&query->_havingClauses, true, &query->_rootGraphPattern);
-      while (parseFilter(&query->_havingClauses, false,
-                         &query->_rootGraphPattern)) {
+      auto addHavingFilter = [&](bool failOnNoFilter) {
+        auto filterOpt = parseFilter(failOnNoFilter);
+        if (filterOpt.has_value()) {
+          auto& filter = filterOpt.value();
+          if (filter._type == SparqlFilter::LANG_MATCHES) {
+            throw ParseException(
+                "Language filter in HAVING clause currently not "
+                "supported by QLever");
+          }
+          query->_havingClauses.push_back(std::move(filter));
+          return true;
+        } else {
+          AD_CHECK(!failOnNoFilter);
+          return false;
+        }
+      };
+      addHavingFilter(true);
+      // Add remaining filters.
+      while (addHavingFilter(false)) {
       }
     } else {
       lexer_.accept();
@@ -512,9 +533,7 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
 }
 
 // _____________________________________________________________________________
-bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
-                               bool failOnNoFilter,
-                               ParsedQuery::GraphPattern* pattern) {
+std::optional<SparqlFilter> SparqlParser::parseFilter(bool failOnNoFilter) {
   size_t numParentheses = 0;
   while (lexer_.accept("(")) {
     numParentheses++;
@@ -534,8 +553,7 @@ bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
     lexer_.expect(SparqlToken::Type::RDFLITERAL);
     std::string rhs = lexer_.current().raw;
     expectClose();
-    addLangFilter(lhs, rhs, pattern);
-    return true;
+    return SparqlFilter{SparqlFilter::LANG_MATCHES, lhs, rhs};
   } else if (lexer_.accept("langmatches")) {
     lexer_.expect("(");
     lexer_.expect("lang");
@@ -547,8 +565,7 @@ bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
     lexer_.expect(SparqlToken::Type::RDFLITERAL);
     std::string rhs = lexer_.current().raw;
     expectClose();
-    addLangFilter(lhs, rhs, pattern);
-    return true;
+    return SparqlFilter{SparqlFilter::LANG_MATCHES, lhs, rhs};
   } else if (lexer_.accept("regex")) {
     std::vector<SparqlFilter> v;
     v.push_back(parseRegexFilter(false));
@@ -569,32 +586,8 @@ bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
       v[0]._additionalLhs.push_back(std::move(it->_lhs));
       v[0]._additionalPrefixes.push_back(std::move(it->_rhs));
     }
-    _filters->push_back(v[0]);
     expectClose();
-    return true;
-  } else if (lexer_.accept("prefix")) {
-    lexer_.expect("(");
-    SparqlFilter f1;
-    SparqlFilter f2;
-    f1._type = SparqlFilter::GE;
-    f2._type = SparqlFilter::LT;
-    // Do prefix filtering by using two filters (one testing >=, the other =)
-    lexer_.expect(SparqlToken::Type::VARIABLE);
-    f1._lhs = lexer_.current().raw;
-    f2._lhs = f1._lhs;
-    lexer_.expect(",");
-    lexer_.expect(SparqlToken::Type::RDFLITERAL);
-    f1._rhs = lexer_.current().raw;
-    f2._rhs = f1._lhs;
-    f1._rhs = f1._rhs.substr(0, f1._rhs.size() - 1) + " ";
-    f2._rhs = f2._rhs.substr(0, f2._rhs.size() - 2);
-    f2._rhs += f1._rhs[f1._rhs.size() - 2] + 1;
-    f2._rhs += f1._rhs[f1._rhs.size() - 1];
-    _filters->emplace_back(f1);
-    _filters->emplace_back(f2);
-    lexer_.expect(")");
-    expectClose();
-    return true;
+    return v[0];
   } else if (numParentheses) {
     SparqlFilter f;
     if (lexer_.accept("str")) {
@@ -661,55 +654,14 @@ bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
                            " is not a valid right hand side for a filter.");
     }
     expectClose();
-    _filters->emplace_back(f);
-    return true;
+    return f;
 
   } else if (failOnNoFilter) {
     lexer_.accept();
     throw ParseException("Expected a filter but got " + lexer_.current().raw);
   }
   expectClose();
-  return false;
-}
-
-void SparqlParser::addLangFilter(const std::string& lhs, const std::string& rhs,
-                                 ParsedQuery::GraphPattern* pattern) {
-  auto langTag = rhs.substr(1, rhs.size() - 2);
-  // First find a suitable triple for the given variable. It
-  // must use a predicate that is not a variable or complex
-  // predicate path
-  auto& t = lastBasicPattern(pattern)._whereClauseTriples;
-  auto it = std::find_if(t.begin(), t.end(), [&lhs](const auto& tr) {
-    return tr._o == lhs && (tr._p._operation == PropertyPath::Operation::IRI &&
-                            !isVariable(tr._p));
-  });
-  if (it == t.end()) {
-    LOG(DEBUG) << "language filter variable " + lhs +
-                      " did not appear as object in any suitable "
-                      "triple. "
-                      "Using literal-to-language predicate instead.\n";
-    auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
-    PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
-    taggedPredicate._iri = LANGUAGE_PREDICATE;
-    SparqlTriple triple(lhs, taggedPredicate, langEntity);
-    // Quadratic in number of triples in query.
-    // Shouldn't be a problem here, though.
-    // Could use a (hash)-set instead of vector.
-    if (std::find(t.begin(), t.end(), triple) != t.end()) {
-      LOG(DEBUG) << "Ignoring duplicate triple: lang(" << lhs << ") = " << rhs
-                 << std::endl;
-    } else {
-      t.push_back(triple);
-    }
-  } else {
-    // replace the triple
-    PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
-    taggedPredicate._iri = '@' + langTag + '@' + it->_p._iri;
-    SparqlTriple taggedTriple(it->_s, taggedPredicate, it->_o);
-    LOG(DEBUG) << "replacing predicate " << it->_p.asString() << " with "
-               << taggedTriple._p.asString() << std::endl;
-    *it = taggedTriple;
-  }
+  return std::nullopt;
 }
 
 // _____________________________________________________________________________
@@ -944,4 +896,10 @@ Variable SparqlParser::addInternalBind(
   //  selected at all and can never interfere with variables from the
   //  query.
   return Variable{std::move(targetVariable)};
+}
+
+// _____________________________________________________________________________
+SparqlFilter SparqlParser::parseFilterExpression(const string& filterContent) {
+  SparqlParser parser(filterContent);
+  return parser.parseFilter(true).value();
 }

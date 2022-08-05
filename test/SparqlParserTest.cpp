@@ -1351,3 +1351,43 @@ TEST(ParserTest, Prefix) {
                   SparqlPrefix{"ql", "<QLever-internal-function/>"},
                   SparqlPrefix{"descriptor", "<foo>"}));
 }
+
+TEST(ParserTest, ParseFilterExpression) {
+  auto f = SparqlParser::parseFilterExpression("(LANG(?x) = \"en\")");
+  ASSERT_EQ(f, (SparqlFilter{SparqlFilter::LANG_MATCHES, "?x", "\"en\""}));
+
+  f = SparqlParser::parseFilterExpression("(?x <= 42.3)");
+  ASSERT_EQ(f, (SparqlFilter{SparqlFilter::LE, "?x", "42.3"}));
+}
+
+TEST(ParserTest, LanguageFilterPostProcessing) {
+  {
+    ParsedQuery q =
+        SparqlParser(
+            "SELECT * WHERE {?x <label> ?y . FILTER (LANG(?y) = \"en\")}")
+            .parse();
+    ASSERT_TRUE(q._rootGraphPattern._filters.empty());
+    const auto& triples =
+        q._rootGraphPattern._children[0].getBasic()._whereClauseTriples;
+    ASSERT_EQ(1u, triples.size());
+    ASSERT_EQ((SparqlTriple{"?x", PropertyPath::fromIri("@en@<label>"), "?y"}),
+              triples[0]);
+  }
+  {
+    ParsedQuery q =
+        SparqlParser(
+            "SELECT * WHERE {<somebody> ?p ?y . FILTER (LANG(?y) = \"en\")}")
+            .parse();
+    ASSERT_TRUE(q._rootGraphPattern._filters.empty());
+    const auto& triples =
+        q._rootGraphPattern._children[0].getBasic()._whereClauseTriples;
+    ASSERT_EQ(2u, triples.size());
+    ASSERT_EQ((SparqlTriple{"<somebody>", PropertyPath::fromIri("?p"), "?y"}),
+              triples[0]);
+    ASSERT_EQ(
+        (SparqlTriple{
+            "?y", PropertyPath::fromIri("<QLever-internal-function/langtag>"),
+            "<QLever-internal-function/@en>"}),
+        triples[1]);
+  }
+}

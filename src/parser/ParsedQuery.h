@@ -116,11 +116,13 @@ class SparqlFilter {
   FilterType _type;
   string _lhs;
   string _rhs;
-  vector<string> _additionalLhs;
-  vector<string> _additionalPrefixes;
+  vector<string> _additionalLhs = {};
+  vector<string> _additionalPrefixes = {};
   bool _regexIgnoreCase = false;
   // True if the str function was applied to the left side.
   bool _lhsAsString = false;
+
+  bool operator==(const SparqlFilter&) const = default;
 };
 
 // Represents a VALUES statement in the query.
@@ -163,6 +165,10 @@ class ParsedQuery {
     // Traverses the graph pattern tree and assigns a unique id to every graph
     // pattern
     void recomputeIds(size_t* id_count = nullptr);
+
+    // Modify query to take care of language filter. `lhs` is the variable,
+    // `rhs` is the language.
+    void addLanguageFilter(const std::string& lhs, const std::string& rhs);
 
     bool _optional;
     /**

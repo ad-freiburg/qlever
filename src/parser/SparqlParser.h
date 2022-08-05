@@ -23,6 +23,11 @@ class SparqlParser {
   explicit SparqlParser(const string& query);
   ParsedQuery parse();
 
+  /// Parse the expression of a filter statement (without the `FILTER` keyword).
+  /// This helper method is needed as long as the set of expressions supported
+  /// by FILTER and BIND/GROUP BY is not the same.
+  static SparqlFilter parseFilterExpression(const string& filterContent);
+
   /**
    * @brief This method looks for the first string literal it can find and
    * parses it. During the parsing any escaped characters are resolved (e.g. \")
@@ -40,11 +45,7 @@ class SparqlParser {
                   ParsedQuery::GraphPattern* currentPattern = nullptr);
   void parseSolutionModifiers(ParsedQuery* query);
   // Returns true if it found a filter
-  bool parseFilter(vector<SparqlFilter>* _filters, bool failOnNoFilter = true,
-                   ParsedQuery::GraphPattern* pattern = nullptr);
-  // Parses an expressiong of the form (?a) = "en"
-  void addLangFilter(const std::string& lhs, const std::string& rhs,
-                     ParsedQuery::GraphPattern* pattern);
+  std::optional<SparqlFilter> parseFilter(bool failOnNoFilter = true);
 
   // Reads the next element of a triple (an iri, a variable, a property path,
   // etc.) out of s beginning at the current value of pos. Sets pos to the
