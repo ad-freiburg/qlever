@@ -42,8 +42,7 @@ class SparqlParser {
   void parseSolutionModifiers(ParsedQuery* query);
   void addPrefix(const string& key, const string& value, ParsedQuery* query);
   // Returns true if it found a filter
-  bool parseFilter(vector<SparqlFilter>* _filters, bool failOnNoFilter = true,
-                   ParsedQuery::GraphPattern* pattern = nullptr);
+  std::optional<SparqlFilter> parseFilter(bool failOnNoFilter = true);
   // Parses an expressiong of the form (?a) = "en"
   void addLangFilter(const std::string& lhs, const std::string& rhs,
                      ParsedQuery::GraphPattern* pattern);

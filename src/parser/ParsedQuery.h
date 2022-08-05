@@ -162,6 +162,8 @@ class ParsedQuery {
     // pattern
     void recomputeIds(size_t* id_count = nullptr);
 
+    void addLanguageFilter(const std::string& lhs, const std::string& rhs);
+
     bool _optional;
     /**
      * @brief A id that is unique for the ParsedQuery. Ids are guaranteed to

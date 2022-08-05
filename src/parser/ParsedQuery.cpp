@@ -441,3 +441,51 @@ void GraphPatternOperation::toString(std::ostringstream& os,
 
 // __________________________________________________________________________
 ParsedQuery::GraphPattern::GraphPattern() : _optional(false) {}
+
+void ParsedQuery::GraphPattern::addLanguageFilter(const std::string& lhs,
+                                                  const std::string& rhs) {
+  auto langTag = rhs.substr(1, rhs.size() - 2);
+  // First find a suitable triple for the given variable. It
+  // must use a predicate that is not a variable or complex
+  // predicate path
+  if (_children.empty() ||
+      !_children.back().is<GraphPatternOperation::BasicGraphPattern>()) {
+    _children.emplace_back(GraphPatternOperation::BasicGraphPattern{});
+  }
+  auto& t = _children.back()
+                .get<GraphPatternOperation::BasicGraphPattern>()
+                ._whereClauseTriples;
+  auto it = std::find_if(t.begin(), t.end(), [&lhs](const auto& tr) {
+    // TODO<joka921> Also apply the efficient language filter for
+    // property paths like "rdfs:label|skos:altLabel"
+    return tr._o == lhs && (tr._p._operation == PropertyPath::Operation::IRI &&
+                            !isVariable(tr._p));
+  });
+  if (it == t.end()) {
+    LOG(DEBUG) << "language filter variable " + lhs +
+                      " did not appear as object in any suitable "
+                      "triple. "
+                      "Using literal-to-language predicate instead.\n";
+    auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
+    PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
+    taggedPredicate._iri = LANGUAGE_PREDICATE;
+    SparqlTriple triple(lhs, taggedPredicate, langEntity);
+    // Quadratic in number of triples in query.
+    // Shouldn't be a problem here, though.
+    // Could use a (hash)-set instead of vector.
+    if (std::find(t.begin(), t.end(), triple) != t.end()) {
+      LOG(DEBUG) << "Ignoring duplicate triple: lang(" << lhs << ") = " << rhs
+                 << std::endl;
+    } else {
+      t.push_back(triple);
+    }
+  } else {
+    // replace the triple
+    PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
+    taggedPredicate._iri = '@' + langTag + '@' + it->_p._iri;
+    SparqlTriple taggedTriple(it->_s, taggedPredicate, it->_o);
+    LOG(DEBUG) << "replacing predicate " << it->_p.asString() << " with "
+               << taggedTriple._p.asString() << std::endl;
+    *it = taggedTriple;
+  }
+}
