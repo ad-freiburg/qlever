@@ -3,14 +3,12 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
-
 #include "../../engine/sparqlExpressions/AggregateExpression.h"
 #include "../../engine/sparqlExpressions/GroupConcatExpression.h"
 #include "../../engine/sparqlExpressions/LiteralExpression.h"
 #include "../../engine/sparqlExpressions/NaryExpression.h"
 #include "../../engine/sparqlExpressions/SparqlExpressionPimpl.h"
-//#include "../../engine/sparqlExpressions/RelationalExpression.h"
+// #include "../../engine/sparqlExpressions/RelationalExpression.h"
 #include "../../engine/sparqlExpressions/SampleExpression.h"
 #include "../../util/HashMap.h"
 #include "../../util/OverloadCallOperator.h"
@@ -80,11 +78,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   void setPrefixMapManually(PrefixMap map) { _prefixMap = std::move(map); }
 
  private:
-  // For the unit tests
-  PrefixMap& prefixMap() { return _prefixMap; }
-  FRIEND_TEST(SparqlParser, Prefix);
-
-  PrefixMap _prefixMap{{"", "<>"}};
+  PrefixMap _prefixMap{};
 
   template <typename T>
   void appendVector(std::vector<T>& destination, std::vector<T>&& source) {
@@ -122,26 +116,25 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   // ___________________________________________________________________________
   Any visitPrologue(Parser::PrologueContext* ctx) override {
-    // Default implementation is ok here, simply handle all PREFIX and BASE
-    // declarations.
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  PrefixMap visitTypesafe(SparqlAutomaticParser::PrologueContext* ctx);
 
   // ___________________________________________________________________________
   Any visitBaseDecl(Parser::BaseDeclContext* ctx) override {
-    visitTypesafe(ctx);
-    return nullptr;
+    return visitTypesafe(ctx);
   }
 
-  void visitTypesafe(Parser::BaseDeclContext* ctx);
+  SparqlPrefix visitTypesafe(Parser::BaseDeclContext* ctx);
 
   // ___________________________________________________________________________
   Any visitPrefixDecl(Parser::PrefixDeclContext* ctx) override {
-    visitTypesafe(ctx);
-    return nullptr;
+    // This function only changes the state and the return is only for testing.
+    return visitTypesafe(ctx);
   }
 
-  void visitTypesafe(Parser::PrefixDeclContext* ctx);
+  SparqlPrefix visitTypesafe(Parser::PrefixDeclContext* ctx);
 
   Any visitSelectQuery(Parser::SelectQueryContext* ctx) override {
     return visitChildren(ctx);

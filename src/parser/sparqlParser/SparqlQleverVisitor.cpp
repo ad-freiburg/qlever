@@ -278,15 +278,46 @@ string Visitor::visitTypesafe(Parser::PnameNsContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visitTypesafe(Parser::BaseDeclContext* ctx) {
-  _prefixMap[""] = visitTypesafe(ctx->iriref());
+[[noreturn]] void throwBaseDeclNotSupported(
+    SparqlAutomaticParser::BaseDeclContext* ctx) {
+  throw ParseException("BaseDecl is not supported. Got: " + ctx->getText());
 }
 
 // ____________________________________________________________________________________
-void Visitor::visitTypesafe(Parser::PrefixDeclContext* ctx) {
+SparqlQleverVisitor::PrefixMap SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::PrologueContext* ctx) {
+  if (!ctx->baseDecl().empty()) {
+    throwBaseDeclNotSupported(ctx->baseDecl(0));
+  }
+  for (const auto& prefix : ctx->prefixDecl()) {
+    visitTypesafe(prefix);
+  }
+  // TODO: we return a part of our internal state here. This will go away when
+  //  queries can be parsed completely with ANTLR.
+  return _prefixMap;
+}
+
+// ____________________________________________________________________________________
+SparqlPrefix SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::BaseDeclContext* ctx) {
+  throwBaseDeclNotSupported(ctx);
+}
+
+// ____________________________________________________________________________________
+SparqlPrefix SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::PrefixDeclContext* ctx) {
   auto text = ctx->PNAME_NS()->getText();
-  // Strip trailing ':'.
-  _prefixMap[text.substr(0, text.length() - 1)] = visitTypesafe(ctx->iriref());
+  // Remove the ':' at the end of the PNAME_NS
+  auto prefixLabel = text.substr(0, text.length() - 1);
+  auto prefixIri = visitTypesafe(ctx->iriref());
+  _prefixMap[prefixLabel] = prefixIri;
+  return {prefixLabel, prefixIri};
+}
+
+// ____________________________________________________________________________________
+ParsedQuery visitTypesafe(Parser::SelectQueryContext* ctx) {
+  throw ParseException("SelectQuery is not yet supported. Got: " +
+                       ctx->getText());
 }
 
 // ____________________________________________________________________________________

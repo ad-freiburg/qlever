@@ -35,12 +35,10 @@ class SparqlParser {
 
  private:
   void parseQuery(ParsedQuery* query, QueryType queryType);
-  void parsePrologue(ParsedQuery* query);
   void parseSelect(ParsedQuery* query);
   void parseWhere(ParsedQuery* query,
                   ParsedQuery::GraphPattern* currentPattern = nullptr);
   void parseSolutionModifiers(ParsedQuery* query);
-  void addPrefix(const string& key, const string& value, ParsedQuery* query);
   // Returns true if it found a filter
   bool parseFilter(vector<SparqlFilter>* _filters, bool failOnNoFilter = true,
                    ParsedQuery::GraphPattern* pattern = nullptr);
@@ -71,8 +69,15 @@ class SparqlParser {
   uint64_t numInternalVariables_ = 0;
   SparqlFilter parseRegexFilter(bool expectKeyword);
 
+  // Parse the clause with the prefixes of the given ParsedQuery.
   template <typename F>
   auto parseWithAntlr(F f, const ParsedQuery& parsedQuery)
+      -> decltype(f(std::declval<const string&>(),
+                    std::declval<SparqlQleverVisitor::PrefixMap>())
+                      .resultOfParse_);
+  // Parse the clause with the given explicitly specified prefixes.
+  template <typename F>
+  auto parseWithAntlr(F f, SparqlQleverVisitor::PrefixMap prefixMap)
       -> decltype(f(std::declval<const string&>(),
                     std::declval<SparqlQleverVisitor::PrefixMap>())
                       .resultOfParse_);

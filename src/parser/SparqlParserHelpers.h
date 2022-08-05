@@ -123,6 +123,24 @@ inline auto parseTriplesSameSubjectPath =
     std::bind_front(parseFront, &SparqlAutomaticParser::triplesSameSubjectPath,
                     "triplesSameSubjectPath");
 
+inline auto parsePrologue =
+    std::bind_front(parseFront, &SparqlAutomaticParser::prologue, "prologue");
+
+inline auto parsePrefixDecl = std::bind_front(
+    parseFront, &SparqlAutomaticParser::prefixDecl, "prefix decl");
+
+inline auto parsePnameLn =
+    std::bind_front(parseFront, &SparqlAutomaticParser::pnameLn, "pnameLn");
+
+inline auto parsePnameNs =
+    std::bind_front(parseFront, &SparqlAutomaticParser::pnameNs, "pnameNs");
+
+inline auto parsePrefixedName = std::bind_front(
+    parseFront, &SparqlAutomaticParser::prefixedName, "prefixedName");
+
+inline auto parseIriref =
+    std::bind_front(parseFront, &SparqlAutomaticParser::iriref, "iriRef");
+
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H
