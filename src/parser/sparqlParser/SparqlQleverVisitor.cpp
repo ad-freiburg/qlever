@@ -307,11 +307,12 @@ string Visitor::visitTypesafe(Parser::PnameNsContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+namespace {
 [[noreturn]] void throwBaseDeclNotSupported(
     SparqlAutomaticParser::BaseDeclContext* ctx) {
   throw ParseException("BaseDecl is not supported. Got: " + ctx->getText());
 }
-
+}
 // ____________________________________________________________________________________
 SparqlQleverVisitor::PrefixMap SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PrologueContext* ctx) {
@@ -351,6 +352,9 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
 
 // ____________________________________________________________________________________
 GroupKey Visitor::visitTypesafe(Parser::GroupConditionContext* ctx) {
+ // TODO<qup42> Deploy an abstraction `visitExpressionPimpl(someContext*)` that performs
+ // exactly those two steps and is also used in all the other places where we currently
+ // call `SparqlExpressionPimpl(visitTypesafe(ctx->something()))` manually.
   auto makeExpression = [&ctx, this]<typename Ctx>(Ctx* subCtx) -> GroupKey {
     auto expr = SparqlExpressionPimpl{visitTypesafe(subCtx)};
     expr.setDescriptor(ctx->getText());
@@ -375,12 +379,11 @@ GroupKey Visitor::visitTypesafe(Parser::GroupConditionContext* ctx) {
 
 // ____________________________________________________________________________________
 OrderKey Visitor::visitTypesafe(Parser::OrderConditionContext* ctx) {
-  auto visitExprOrderKey = [this]<typename Ctx>(bool isDescending,
-                                                Ctx* context) -> OrderKey {
+  auto visitExprOrderKey = [this](bool isDescending, auto* context) -> OrderKey {
     auto expr = SparqlExpressionPimpl{visitTypesafe(context)};
     if (auto exprIsVariable = expr.getVariableOrNullopt();
         exprIsVariable.has_value()) {
-      return {VariableOrderKey(exprIsVariable.value(), isDescending)};
+      return VariableOrderKey{exprIsVariable.value(), isDescending};
     } else {
       return {ExpressionOrderKey{std::move(expr), isDescending}};
     }
@@ -867,6 +870,8 @@ VarOrTerm Visitor::visitTypesafe(Parser::VarOrIriContext* ctx) {
     return {visitTypesafe(ctx->var())};
   }
   if (ctx->iri()) {
+    // TODO<qup42> If `visitTypesafe` returns an `Iri` and `VarOrTerm` can be constructed from 
+    // an `Iri`, this whole function becomes `visitAlternative`.
     return {GraphTerm{Iri{visitTypesafe(ctx->iri())}}};
   }
   // invalid grammar
