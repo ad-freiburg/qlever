@@ -141,6 +141,9 @@ inline auto parsePrefixedName = std::bind_front(
 inline auto parseIriref =
     std::bind_front(parseFront, &SparqlAutomaticParser::iriref, "iriRef");
 
+inline auto parseNumericLiteral = std::bind_front(
+    parseFront, &SparqlAutomaticParser::numericLiteral, "numericLiteral");
+
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H

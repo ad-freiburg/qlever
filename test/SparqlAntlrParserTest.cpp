@@ -20,14 +20,14 @@ using namespace sparqlParserHelpers;
 
 template <typename T>
 void testNumericLiteral(const std::string& input, T target) {
-  ParserAndVisitor p(input);
-  auto literalContext = p.parser_.numericLiteral();
-  auto result = p.visitor_.visitNumericLiteral(literalContext).as<T>();
+  auto result = sparqlParserHelpers::parseNumericLiteral(input);
+  ASSERT_EQ(result.remainingText_.size(), 0);
+  auto value = get<T>(result.resultOfParse_);
 
   if constexpr (std::is_floating_point_v<T>) {
-    ASSERT_FLOAT_EQ(target, result);
+    ASSERT_FLOAT_EQ(target, value);
   } else {
-    ASSERT_EQ(target, result);
+    ASSERT_EQ(target, value);
   }
 }
 
@@ -44,9 +44,9 @@ TEST(SparqlParser, NumericLiterals) {
   testNumericLiteral("3.0", 3.0);
   testNumericLiteral("3.0e2", 300.0);
   testNumericLiteral("3.0e-2", 0.030);
-  testNumericLiteral("3", 3ull);
+  testNumericLiteral("3", (int64_t)3ll);
   testNumericLiteral("-3.0", -3.0);
-  testNumericLiteral("-3", -3ll);
+  testNumericLiteral("-3", (int64_t)-3ll);
 
   // TODO<joka921> : Unit tests with random numbers
 }

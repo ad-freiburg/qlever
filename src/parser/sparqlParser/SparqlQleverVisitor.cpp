@@ -882,23 +882,8 @@ VarOrTerm Visitor::visitTypesafe(Parser::VarOrIriContext* ctx) {
 // ____________________________________________________________________________________
 GraphTerm Visitor::visitTypesafe(Parser::GraphTermContext* ctx) {
   if (ctx->numericLiteral()) {
-    auto literalAny = visitNumericLiteral(ctx->numericLiteral());
-    try {
-      auto intLiteral = literalAny.as<unsigned long long>();
-      return Literal{intLiteral};
-    } catch (...) {
-    }
-    try {
-      auto intLiteral = literalAny.as<long long>();
-      return Literal{intLiteral};
-    } catch (...) {
-    }
-    try {
-      auto intLiteral = literalAny.as<double>();
-      return Literal{intLiteral};
-    } catch (...) {
-    }
-    AD_CHECK(false);
+    auto wrapper = [](auto x) -> GraphTerm { return GraphTerm{Literal{x}}; };
+    return std::visit(wrapper, visitTypesafe(ctx->numericLiteral()));
   }
   if (ctx->booleanLiteral()) {
     return Literal{visitTypesafe(ctx->booleanLiteral())};
@@ -1084,28 +1069,18 @@ ExpressionPtr Visitor::visitTypesafe(Parser::PrimaryExpressionContext* ctx) {
     return visitTypesafe(ctx->brackettedExpression());
   }
 
-  // TODO<joka921> Refactor s.t. try/catch becomes if/else here
   if (ctx->numericLiteral()) {
-    auto literalAny = visitNumericLiteral(ctx->numericLiteral());
-    try {
-      auto intLiteral = literalAny.as<unsigned long long>();
-      return std::make_unique<sparqlExpression::IntExpression>(
-          static_cast<int64_t>(intLiteral));
-    } catch (...) {
-    }
-    try {
-      auto intLiteral = literalAny.as<long long>();
-      return std::make_unique<sparqlExpression::IntExpression>(
-          static_cast<int64_t>(intLiteral));
-    } catch (...) {
-    }
-    try {
-      auto intLiteral = literalAny.as<double>();
-      return std::make_unique<sparqlExpression::DoubleExpression>(
-          static_cast<double>(intLiteral));
-    } catch (...) {
-    }
-    AD_CHECK(false);
+    auto integralWrapper = [](int64_t x) {
+      return ExpressionPtr{
+          std::make_unique<sparqlExpression::IntExpression>(x)};
+    };
+    auto doubleWrapper = [](double x) {
+      return ExpressionPtr{
+          std::make_unique<sparqlExpression::DoubleExpression>(x)};
+    };
+    return std::visit(
+        ad_utility::OverloadCallOperator{integralWrapper, doubleWrapper},
+        visitTypesafe(ctx->numericLiteral()));
   }
 
   if (ctx->booleanLiteral()) {
@@ -1233,6 +1208,44 @@ std::string Visitor::visitTypesafe(Parser::RdfLiteralContext* ctx) {
     ret += ("^^" + visitTypesafe(ctx->iri()));
   }
   return ret;
+}
+
+// ____________________________________________________________________________________
+std::variant<int64_t, double> Visitor::visitTypesafe(
+    Parser::NumericLiteralContext* ctx) {
+  return visitAlternative<std::variant<int64_t, double>>(
+      ctx->numericLiteralUnsigned(), ctx->numericLiteralPositive(),
+      ctx->numericLiteralNegative());
+}
+
+// ____________________________________________________________________________________
+namespace {
+template <typename Ctx>
+std::variant<int64_t, double> parseNumericLiteral(Ctx* ctx, bool parseAsInt) {
+  if (parseAsInt) {
+    return std::stoll(ctx->getText());
+  } else {
+    return std::stod(ctx->getText());
+  }
+}
+}  // namespace
+
+// ____________________________________________________________________________________
+std::variant<int64_t, double> Visitor::visitTypesafe(
+    Parser::NumericLiteralUnsignedContext* ctx) {
+  return parseNumericLiteral(ctx, ctx->INTEGER());
+}
+
+// ____________________________________________________________________________________
+std::variant<int64_t, double> Visitor::visitTypesafe(
+    Parser::NumericLiteralPositiveContext* ctx) {
+  return parseNumericLiteral(ctx, ctx->INTEGER_POSITIVE());
+}
+
+// ____________________________________________________________________________________
+std::variant<int64_t, double> Visitor::visitTypesafe(
+    Parser::NumericLiteralNegativeContext* ctx) {
+  return parseNumericLiteral(ctx, ctx->INTEGER_NEGATIVE());
 }
 
 // ____________________________________________________________________________________
