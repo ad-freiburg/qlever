@@ -61,7 +61,7 @@ class SparqlExpressionPimpl {
   // declared.
   [[nodiscard]] std::string getCacheKey(
       const VariableColumnMap& variableColumnMap) const;
-  explicit SparqlExpressionPimpl(std::shared_ptr<SparqlExpression>&& pimpl);
+  SparqlExpressionPimpl(std::shared_ptr<SparqlExpression>&& pimpl);
   ~SparqlExpressionPimpl();
   SparqlExpressionPimpl(SparqlExpressionPimpl&&) noexcept;
   SparqlExpressionPimpl& operator=(SparqlExpressionPimpl&&) noexcept;
