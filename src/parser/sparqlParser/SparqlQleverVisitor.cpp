@@ -312,7 +312,7 @@ namespace {
     SparqlAutomaticParser::BaseDeclContext* ctx) {
   throw ParseException("BaseDecl is not supported. Got: " + ctx->getText());
 }
-}
+}  // namespace
 // ____________________________________________________________________________________
 SparqlQleverVisitor::PrefixMap SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PrologueContext* ctx) {
@@ -352,16 +352,17 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
 
 // ____________________________________________________________________________________
 GroupKey Visitor::visitTypesafe(Parser::GroupConditionContext* ctx) {
- // TODO<qup42> Deploy an abstraction `visitExpressionPimpl(someContext*)` that performs
- // exactly those two steps and is also used in all the other places where we currently
- // call `SparqlExpressionPimpl(visitTypesafe(ctx->something()))` manually.
-  auto makeExpression = [&ctx, this]<typename Ctx>(Ctx* subCtx) -> GroupKey {
+  // TODO<qup42> Deploy an abstraction `visitExpressionPimpl(someContext*)` that
+  // performs exactly those two steps and is also used in all the other places
+  // where we currently call
+  // `SparqlExpressionPimpl(visitTypesafe(ctx->something()))` manually.
+  auto makeExpression = [&ctx, this](auto* subCtx) -> GroupKey {
     auto expr = SparqlExpressionPimpl{visitTypesafe(subCtx)};
     expr.setDescriptor(ctx->getText());
-    return {std::move(expr)};
+    return expr;
   };
   if (ctx->var() && !ctx->expression()) {
-    return {Variable{ctx->var()->getText()}};
+    return Variable{ctx->var()->getText()};
   } else if (ctx->builtInCall() || ctx->functionCall()) {
     // builtInCall and functionCall are both also an Expression
     return (ctx->builtInCall() ? makeExpression(ctx->builtInCall())
@@ -369,9 +370,9 @@ GroupKey Visitor::visitTypesafe(Parser::GroupConditionContext* ctx) {
   } else if (ctx->expression()) {
     auto expr = SparqlExpressionPimpl{visitTypesafe(ctx->expression())};
     if (ctx->AS() && ctx->var()) {
-      return {Alias{std::move(expr), ctx->var()->getText()}};
+      return Alias{std::move(expr), ctx->var()->getText()};
     } else {
-      return {std::move(expr)};
+      return expr;
     }
   }
   AD_FAIL();  // Should be unreachable.
@@ -379,18 +380,19 @@ GroupKey Visitor::visitTypesafe(Parser::GroupConditionContext* ctx) {
 
 // ____________________________________________________________________________________
 OrderKey Visitor::visitTypesafe(Parser::OrderConditionContext* ctx) {
-  auto visitExprOrderKey = [this](bool isDescending, auto* context) -> OrderKey {
+  auto visitExprOrderKey = [this](bool isDescending,
+                                  auto* context) -> OrderKey {
     auto expr = SparqlExpressionPimpl{visitTypesafe(context)};
     if (auto exprIsVariable = expr.getVariableOrNullopt();
         exprIsVariable.has_value()) {
       return VariableOrderKey{exprIsVariable.value(), isDescending};
     } else {
-      return {ExpressionOrderKey{std::move(expr), isDescending}};
+      return ExpressionOrderKey{std::move(expr), isDescending};
     }
   };
 
   if (ctx->var()) {
-    return {VariableOrderKey(ctx->var()->getText())};
+    return VariableOrderKey(ctx->var()->getText());
   } else if (ctx->constraint()) {
     return visitExprOrderKey(false, ctx->constraint());
   } else if (ctx->brackettedExpression()) {
@@ -598,8 +600,7 @@ VarOrTerm Visitor::visitTypesafe(Parser::VerbContext* ctx) {
   }
   if (ctx->getText() == "a") {
     // Special keyword 'a'
-    return {
-        GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"}}};
+    return GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"}};
   }
   throw ParseException{"Invalid verb "s + ctx->getText()};
 }
@@ -792,6 +793,12 @@ unsigned long long int Visitor::visitTypesafe(Parser::IntegerContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+Node Visitor::visitTypesafe(Parser::TriplesNodeContext* ctx) {
+  return visitAlternative<Node>(ctx->collection(),
+                                ctx->blankNodePropertyList());
+}
+
+// ____________________________________________________________________________________
 Node Visitor::visitTypesafe(Parser::BlankNodePropertyListContext* ctx) {
   VarOrTerm var{GraphTerm{newBlankNode()}};
   Triples triples;
@@ -836,8 +843,9 @@ Node Visitor::visitTypesafe(Parser::GraphNodeContext* ctx) {
     return {visitTypesafe(ctx->varOrTerm()), Triples{}};
   } else if (ctx->triplesNode()) {
     return visitTriplesNode(ctx->triplesNode()).as<Node>();
+  } else {
+    AD_CHECK(false);
   }
-  AD_CHECK(false);
 }
 
 // ____________________________________________________________________________________
@@ -854,28 +862,21 @@ VarOrTerm SparqlQleverVisitor::visitTypesafe(
 
 // ____________________________________________________________________________________
 VarOrTerm Visitor::visitTypesafe(Parser::VarOrTermContext* ctx) {
-  if (ctx->var()) {
-    return {visitTypesafe(ctx->var())};
-  }
-  if (ctx->graphTerm()) {
-    return {visitTypesafe(ctx->graphTerm())};
-  } else {
-    AD_FAIL()  // Should be unreachable.
-  }
+  return visitAlternative<VarOrTerm>(ctx->var(), ctx->graphTerm());
 }
 
 // ____________________________________________________________________________________
 VarOrTerm Visitor::visitTypesafe(Parser::VarOrIriContext* ctx) {
   if (ctx->var()) {
-    return {visitTypesafe(ctx->var())};
+    return visitTypesafe(ctx->var());
+  } else if (ctx->iri()) {
+    // TODO<qup42> If `visitTypesafe` returns an `Iri` and `VarOrTerm` can be
+    // constructed from an `Iri`, this whole function becomes
+    // `visitAlternative`.
+    return GraphTerm{Iri{visitTypesafe(ctx->iri())}};
+  } else {
+    AD_FAIL()  // Should be unreachable.
   }
-  if (ctx->iri()) {
-    // TODO<qup42> If `visitTypesafe` returns an `Iri` and `VarOrTerm` can be constructed from 
-    // an `Iri`, this whole function becomes `visitAlternative`.
-    return {GraphTerm{Iri{visitTypesafe(ctx->iri())}}};
-  }
-  // invalid grammar
-  AD_CHECK(false);
 }
 
 // ____________________________________________________________________________________
@@ -884,35 +885,35 @@ GraphTerm Visitor::visitTypesafe(Parser::GraphTermContext* ctx) {
     auto literalAny = visitNumericLiteral(ctx->numericLiteral());
     try {
       auto intLiteral = literalAny.as<unsigned long long>();
-      return {Literal{intLiteral}};
+      return Literal{intLiteral};
     } catch (...) {
     }
     try {
       auto intLiteral = literalAny.as<long long>();
-      return {Literal{intLiteral}};
+      return Literal{intLiteral};
     } catch (...) {
     }
     try {
       auto intLiteral = literalAny.as<double>();
-      return {Literal{intLiteral}};
+      return Literal{intLiteral};
     } catch (...) {
     }
     AD_CHECK(false);
   }
   if (ctx->booleanLiteral()) {
-    return {Literal{visitTypesafe(ctx->booleanLiteral())}};
+    return Literal{visitTypesafe(ctx->booleanLiteral())};
   }
   if (ctx->blankNode()) {
-    return {visitTypesafe(ctx->blankNode())};
+    return visitTypesafe(ctx->blankNode());
   }
   if (ctx->iri()) {
-    return {Iri{visitTypesafe(ctx->iri())}};
+    return Iri{visitTypesafe(ctx->iri())};
   }
   if (ctx->rdfLiteral()) {
-    return {Literal{visitTypesafe(ctx->rdfLiteral())}};
+    return Literal{visitTypesafe(ctx->rdfLiteral())};
   }
   if (ctx->NIL()) {
-    return {Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}};
+    return Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"};
   }
   AD_CHECK(false);
 }
@@ -1072,8 +1073,8 @@ ExpressionPtr Visitor::visitTypesafe(Parser::PrimaryExpressionContext* ctx) {
   if (ctx->rdfLiteral()) {
     // TODO<joka921> : handle strings with value datatype that are
     // not in the knowledge base correctly.
-    return {std::make_unique<sparqlExpression::StringOrIriExpression>(
-        ctx->rdfLiteral()->getText())};
+    return std::make_unique<sparqlExpression::StringOrIriExpression>(
+        ctx->rdfLiteral()->getText());
   }
   if (ctx->iriOrFunction()) {
     return visitTypesafe(ctx->iriOrFunction());
@@ -1088,20 +1089,20 @@ ExpressionPtr Visitor::visitTypesafe(Parser::PrimaryExpressionContext* ctx) {
     auto literalAny = visitNumericLiteral(ctx->numericLiteral());
     try {
       auto intLiteral = literalAny.as<unsigned long long>();
-      return {std::make_unique<sparqlExpression::IntExpression>(
-          static_cast<int64_t>(intLiteral))};
+      return std::make_unique<sparqlExpression::IntExpression>(
+          static_cast<int64_t>(intLiteral));
     } catch (...) {
     }
     try {
       auto intLiteral = literalAny.as<long long>();
-      return {std::make_unique<sparqlExpression::IntExpression>(
-          static_cast<int64_t>(intLiteral))};
+      return std::make_unique<sparqlExpression::IntExpression>(
+          static_cast<int64_t>(intLiteral));
     } catch (...) {
     }
     try {
       auto intLiteral = literalAny.as<double>();
-      return {std::make_unique<sparqlExpression::DoubleExpression>(
-          static_cast<double>(intLiteral))};
+      return std::make_unique<sparqlExpression::DoubleExpression>(
+          static_cast<double>(intLiteral));
     } catch (...) {
     }
     AD_CHECK(false);
@@ -1109,13 +1110,13 @@ ExpressionPtr Visitor::visitTypesafe(Parser::PrimaryExpressionContext* ctx) {
 
   if (ctx->booleanLiteral()) {
     auto b = visitTypesafe(ctx->booleanLiteral());
-    return {std::make_unique<sparqlExpression::BoolExpression>(b)};
+    return std::make_unique<sparqlExpression::BoolExpression>(b);
   }
 
   if (ctx->var()) {
     sparqlExpression::Variable v;
     v._variable = ctx->var()->getText();
-    return {std::make_unique<sparqlExpression::VariableExpression>(v)};
+    return std::make_unique<sparqlExpression::VariableExpression>(v);
   }
   // We should have returned by now
   AD_CHECK(false);
@@ -1215,8 +1216,8 @@ ExpressionPtr Visitor::visitTypesafe(Parser::AggregateContext* ctx) {
 ExpressionPtr Visitor::visitTypesafe(Parser::IriOrFunctionContext* ctx) {
   // Case 1: Just an IRI.
   if (ctx->argList() == nullptr) {
-    return {std::make_unique<sparqlExpression::StringOrIriExpression>(
-        ctx->getText())};
+    return std::make_unique<sparqlExpression::StringOrIriExpression>(
+        ctx->getText());
   }
   // Case 2: Function call, where the function name is an IRI.
   return processIriFunctionCall(visitTypesafe(ctx->iri()),

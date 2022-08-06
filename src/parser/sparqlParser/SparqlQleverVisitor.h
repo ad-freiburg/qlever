@@ -564,8 +564,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   unsigned long long int visitTypesafe(Parser::IntegerContext* ctx);
 
   Any visitTriplesNode(Parser::TriplesNodeContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  Node visitTypesafe(Parser::TriplesNodeContext* ctx);
 
   Any visitBlankNodePropertyList(
       Parser::BlankNodePropertyListContext* ctx) override {
