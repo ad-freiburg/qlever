@@ -479,7 +479,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   PropertyPath visitTypesafe(Parser::VerbPathContext* ctx);
 
   Any visitVerbSimple(Parser::VerbSimpleContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
 
   Variable visitTypesafe(Parser::VerbSimpleContext* ctx);
@@ -498,8 +498,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   ObjectList visitTypesafe(Parser::ObjectListPathContext* ctx);
 
   Any visitObjectPath(Parser::ObjectPathContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  VarOrTerm visitTypesafe(Parser::ObjectPathContext* ctx);
 
   Any visitPath(Parser::PathContext* ctx) override {
     // returns PropertyPath
@@ -534,7 +536,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   Any visitPathMod(Parser::PathModContext* ctx) override {
     // Handled in visitPathElt.
-    return visitChildren(ctx);
+    throw ParseException(
+        "PathMod should be handled by upper clauses. It should not be visited. "
+        "Got: " +
+        ctx->getText());
   }
 
   Any visitPathPrimary(Parser::PathPrimaryContext* ctx) override {
@@ -577,6 +582,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   Node visitTypesafe(Parser::BlankNodePropertyListContext* ctx);
 
   Any visitTriplesNodePath(Parser::TriplesNodePathContext* ctx) override {
+    // TODO<qup42> use visitAlternative when NotSupported Exceptions and return
+    // types are implemented.
     return visitChildren(ctx);
   }
 
@@ -604,7 +611,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   Node visitTypesafe(Parser::GraphNodeContext* ctx);
 
   Any visitGraphNodePath(Parser::GraphNodePathContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
 
   VarOrTerm visitTypesafe(Parser::GraphNodePathContext* ctx);
@@ -705,8 +712,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   ExpressionPtr visitTypesafe(Parser::AdditiveExpressionContext* ctx);
 
   Any visitStrangeMultiplicativeSubexprOfAdditive(
-      Parser::StrangeMultiplicativeSubexprOfAdditiveContext* context) override {
-    return visitChildren(context);
+      Parser::StrangeMultiplicativeSubexprOfAdditiveContext* ctx) override {
+    throw ParseException(
+        "StrangeMultiplicativeSubexprOfAdditiveContext must not be visited. "
+        "Got: " +
+        ctx->getText());
   }
 
   Any visitMultiplicativeExpression(
@@ -823,8 +833,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   bool visitTypesafe(Parser::BooleanLiteralContext* ctx);
 
   Any visitString(Parser::StringContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  string visitTypesafe(Parser::StringContext* ctx);
 
   Any visitIri(Parser::IriContext* ctx) override { return visitTypesafe(ctx); }
 
@@ -865,4 +877,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   template <typename Out>
   Out visitAlternative();
+
+  template <typename Out, typename Ctx>
+  std::optional<Out> visitOptional(Ctx ctx);
 };

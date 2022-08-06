@@ -144,11 +144,8 @@ SelectClause Visitor::visitTypesafe(Parser::SelectClauseContext* ctx) {
 // ____________________________________________________________________________________
 std::variant<Variable, Alias> Visitor::visitTypesafe(
     Parser::VarOrAliasContext* ctx) {
-  if (ctx->var())
-    return visitTypesafe(ctx->var());
-  else if (ctx->alias())
-    return visitTypesafe(ctx->alias());
-  AD_FAIL();  // Should be unreachable.
+  return visitAlternative<std::variant<Variable, Alias>>(ctx->var(),
+                                                         ctx->alias());
 }
 
 // ____________________________________________________________________________________
@@ -194,21 +191,13 @@ Values Visitor::visitTypesafe(Parser::InlineDataContext* ctx) {
 
 // ____________________________________________________________________________________
 Values Visitor::visitTypesafe(Parser::DataBlockContext* ctx) {
-  if (ctx->inlineDataOneVar()) {
-    return {visitTypesafe(ctx->inlineDataOneVar())};
-  } else if (ctx->inlineDataFull()) {
-    return {visitTypesafe(ctx->inlineDataFull())};
-  }
-  AD_FAIL()  // Should be unreachable.
+  return visitAlternative<Values>(ctx->inlineDataOneVar(),
+                                  ctx->inlineDataFull());
 }
 
 // ____________________________________________________________________________________
 std::optional<Values> Visitor::visitTypesafe(Parser::ValuesClauseContext* ctx) {
-  if (ctx->dataBlock()) {
-    return visitTypesafe(ctx->dataBlock());
-  } else {
-    return std::nullopt;
-  }
+  return visitOptional<Values>(ctx->dataBlock());
 }
 
 // ____________________________________________________________________________________
@@ -250,6 +239,11 @@ Visitor::Triples Visitor::visitTypesafe(Parser::ConstructTemplateContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+string Visitor::visitTypesafe(Parser::StringContext* ctx) {
+  return ctx->getText();
+}
+
+// ____________________________________________________________________________________
 string Visitor::visitTypesafe(Parser::IriContext* ctx) {
   // TODO return an IRI, not a std::string.
   string langtag =
@@ -269,12 +263,7 @@ string Visitor::visitTypesafe(Parser::IrirefContext* ctx) {
 
 // ____________________________________________________________________________________
 string Visitor::visitTypesafe(Parser::PrefixedNameContext* ctx) {
-  if (ctx->pnameLn()) {
-    return visitTypesafe(ctx->pnameLn());
-  } else {
-    AD_CHECK(ctx->pnameNs());
-    return visitTypesafe(ctx->pnameNs());
-  }
+  return visitAlternative<std::string>(ctx->pnameLn(), ctx->pnameNs());
 }
 
 // ____________________________________________________________________________________
@@ -597,12 +586,12 @@ PropertyList Visitor::visitTypesafe(Parser::PropertyListNotEmptyContext* ctx) {
 VarOrTerm Visitor::visitTypesafe(Parser::VerbContext* ctx) {
   if (ctx->varOrIri()) {
     return visitTypesafe(ctx->varOrIri());
-  }
-  if (ctx->getText() == "a") {
+  } else if (ctx->getText() == "a") {
     // Special keyword 'a'
     return GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"}};
+  } else {
+    AD_FAIL()  // Should be unreachable.
   }
-  throw ParseException{"Invalid verb "s + ctx->getText()};
 }
 
 // ____________________________________________________________________________________
@@ -647,11 +636,7 @@ vector<TripleWithPropertyPath> SparqlQleverVisitor::visitTypesafe(
 // ___________________________________________________________________________
 std::optional<PathTuples> SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PropertyListPathContext* ctx) {
-  if (ctx->propertyListPathNotEmpty()) {
-    return visitTypesafe(ctx->propertyListPathNotEmpty());
-  } else {
-    return std::nullopt;
-  }
+  return visitOptional<PathTuples>(ctx->propertyListPathNotEmpty());
 }
 
 // ___________________________________________________________________________
@@ -709,6 +694,11 @@ ObjectList SparqlQleverVisitor::visitTypesafe(
   // which might add additional triples, are currently not supported.
   // When this is implemented they will be returned by visit(ObjectPathContext).
   return {visitVector<VarOrTerm>(ctx->objectPath()), {}};
+}
+
+// ____________________________________________________________________________________
+VarOrTerm Visitor::visitTypesafe(Parser::ObjectPathContext* ctx) {
+  return visitTypesafe(ctx->graphNodePath());
 }
 
 // ____________________________________________________________________________________
@@ -1196,7 +1186,7 @@ ExpressionPtr Visitor::visitTypesafe(Parser::AggregateContext* ctx) {
 
     std::string separator;
     if (ctx->string()) {
-      separator = ctx->string()->getText();
+      separator = visitTypesafe(ctx->string());
       // If there was a separator, we have to strip the quotation marks
       AD_CHECK(separator.size() >= 2);
       separator = separator.substr(1, separator.size() - 2);
@@ -1226,7 +1216,7 @@ ExpressionPtr Visitor::visitTypesafe(Parser::IriOrFunctionContext* ctx) {
 
 // ____________________________________________________________________________________
 std::string Visitor::visitTypesafe(Parser::RdfLiteralContext* ctx) {
-  string ret = ctx->string()->getText();
+  string ret = visitTypesafe(ctx->string());
   if (ctx->LANGTAG()) {
     ret += ctx->LANGTAG()->getText();
   } else if (ctx->iri()) {
@@ -1258,7 +1248,7 @@ BlankNode Visitor::visitTypesafe(Parser::BlankNodeContext* ctx) {
 
 // ____________________________________________________________________________________
 template <typename Out, typename FirstContext, typename... Context>
-Out SparqlQleverVisitor::visitAlternative(FirstContext ctx, Context... ctxs) {
+Out Visitor::visitAlternative(FirstContext ctx, Context... ctxs) {
   if (ctx)
     return {visitTypesafe(ctx)};
   else
@@ -1266,6 +1256,15 @@ Out SparqlQleverVisitor::visitAlternative(FirstContext ctx, Context... ctxs) {
 }
 
 template <typename Out>
-Out SparqlQleverVisitor::visitAlternative() {
+Out Visitor::visitAlternative() {
   AD_FAIL()  // Should be unreachable.
+}
+
+// ____________________________________________________________________________________
+template <typename Out, typename Ctx>
+std::optional<Out> Visitor::visitOptional(Ctx ctx) {
+  if (ctx)
+    return {visitTypesafe(ctx)};
+  else
+    return std::nullopt;
 }
