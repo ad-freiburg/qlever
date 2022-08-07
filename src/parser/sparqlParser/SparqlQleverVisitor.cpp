@@ -881,26 +881,16 @@ VarOrTerm Visitor::visitTypesafe(Parser::VarOrIriContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphTerm Visitor::visitTypesafe(Parser::GraphTermContext* ctx) {
-  if (ctx->numericLiteral()) {
-    auto wrapper = [](auto x) -> GraphTerm { return GraphTerm{Literal{x}}; };
-    return std::visit(wrapper, visitTypesafe(ctx->numericLiteral()));
-  }
-  if (ctx->booleanLiteral()) {
-    return Literal{visitTypesafe(ctx->booleanLiteral())};
-  }
   if (ctx->blankNode()) {
     return visitTypesafe(ctx->blankNode());
-  }
-  if (ctx->iri()) {
+  } else if (ctx->iri()) {
     return Iri{visitTypesafe(ctx->iri())};
-  }
-  if (ctx->rdfLiteral()) {
-    return Literal{visitTypesafe(ctx->rdfLiteral())};
-  }
-  if (ctx->NIL()) {
+  } else if (ctx->NIL()) {
     return Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"};
+  } else {
+    return visitAlternative<Literal>(ctx->numericLiteral(),
+                                     ctx->booleanLiteral(), ctx->rdfLiteral());
   }
-  AD_CHECK(false);
 }
 
 // ____________________________________________________________________________________
@@ -1055,23 +1045,11 @@ ExpressionPtr Visitor::visitTypesafe(Parser::PrimaryExpressionContext* ctx) {
   using std::make_unique;
   using namespace sparqlExpression;
 
-  if (ctx->builtInCall()) {
-    return visitTypesafe(ctx->builtInCall());
-  }
   if (ctx->rdfLiteral()) {
     // TODO<joka921> : handle strings with value datatype that are
     // not in the knowledge base correctly.
     return make_unique<StringOrIriExpression>(ctx->rdfLiteral()->getText());
-  }
-  if (ctx->iriOrFunction()) {
-    return visitTypesafe(ctx->iriOrFunction());
-  }
-
-  if (ctx->brackettedExpression()) {
-    return visitTypesafe(ctx->brackettedExpression());
-  }
-
-  if (ctx->numericLiteral()) {
+  } else if (ctx->numericLiteral()) {
     auto integralWrapper = [](int64_t x) {
       return ExpressionPtr{make_unique<IntExpression>(x)};
     };
@@ -1081,20 +1059,17 @@ ExpressionPtr Visitor::visitTypesafe(Parser::PrimaryExpressionContext* ctx) {
     return std::visit(
         ad_utility::OverloadCallOperator{integralWrapper, doubleWrapper},
         visitTypesafe(ctx->numericLiteral()));
-  }
-
-  if (ctx->booleanLiteral()) {
+  } else if (ctx->booleanLiteral()) {
     auto b = visitTypesafe(ctx->booleanLiteral());
     return make_unique<BoolExpression>(b);
-  }
-
-  if (ctx->var()) {
+  } else if (ctx->var()) {
     sparqlExpression::Variable v;
     v._variable = ctx->var()->getText();
     return make_unique<VariableExpression>(v);
+  } else {
+    return visitAlternative<ExpressionPtr>(
+        ctx->builtInCall(), ctx->iriOrFunction(), ctx->brackettedExpression());
   }
-  // We should have returned by now
-  AD_CHECK(false);
 }
 
 // ____________________________________________________________________________________
@@ -1278,7 +1253,8 @@ BlankNode Visitor::visitTypesafe(Parser::BlankNodeContext* ctx) {
 template <typename Out, typename FirstContext, typename... Context>
 Out SparqlQleverVisitor::visitAlternative(FirstContext ctx, Context... ctxs) {
   if (ctx)
-    return {visitTypesafe(ctx)};
+    // required for types that have an explicit constructor
+    return Out{visitTypesafe(ctx)};
   else
     return visitAlternative<Out>(ctxs...);
 }

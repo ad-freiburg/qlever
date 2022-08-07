@@ -28,6 +28,10 @@ class Literal {
   explicit Literal(T&& t)
       : _stringRepresentation(toString(std::forward<T>(t))) {}
 
+  Literal(std::variant<int64_t, double> t) {
+    std::visit([this](auto& x) { _stringRepresentation = toString(x); }, t);
+  }
+
   static_assert(!ad_utility::Streamable<Literal>,
                 "If Literal satisfies the Streamable concept, copy and move "
                 "constructors are hidden, leading to unexpected behaviour");
