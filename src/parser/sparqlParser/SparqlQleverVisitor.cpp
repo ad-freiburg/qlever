@@ -11,10 +11,8 @@ using namespace ad_utility::sparql_types;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
 using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
 using SelectClause = ParsedQuery::SelectClause;
-using Alias = ParsedQuery::Alias;
 using Bind = GraphPatternOperation::Bind;
 using Values = GraphPatternOperation::Values;
-using VarOrAlias = std::variant<Variable, Alias>;
 
 using Visitor = SparqlQleverVisitor;
 using Parser = SparqlAutomaticParser;

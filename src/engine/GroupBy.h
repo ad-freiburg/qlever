@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "../parser/Alias.h"
 #include "../parser/ParsedQuery.h"
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
@@ -39,7 +40,7 @@ class GroupBy : public Operation {
    * @param aliases
    */
   GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
-          std::vector<ParsedQuery::Alias> aliases);
+          std::vector<Alias> aliases);
 
  protected:
   virtual string asStringImpl(size_t indent = 0) const override;
@@ -92,7 +93,7 @@ class GroupBy : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   vector<string> _groupByVariables;
-  std::vector<ParsedQuery::Alias> _aliases;
+  std::vector<Alias> _aliases;
   ad_utility::HashMap<string, size_t> _varColMap;
 
   virtual void computeResult(ResultTable* result) override;

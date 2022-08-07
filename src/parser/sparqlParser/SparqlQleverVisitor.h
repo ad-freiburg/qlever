@@ -13,6 +13,7 @@
 #include "../../util/HashMap.h"
 #include "../../util/OverloadCallOperator.h"
 #include "../../util/StringUtils.h"
+#include "../Alias.h"
 #include "../ParsedQuery.h"
 #include "../RdfEscaping.h"
 #include "../data/BlankNode.h"
@@ -149,21 +150,20 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  std::variant<Variable, ParsedQuery::Alias> visitTypesafe(
-      Parser::VarOrAliasContext* ctx);
+  std::variant<Variable, Alias> visitTypesafe(Parser::VarOrAliasContext* ctx);
 
   Any visitAlias(Parser::AliasContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ParsedQuery::Alias visitTypesafe(Parser::AliasContext* ctx);
+  Alias visitTypesafe(Parser::AliasContext* ctx);
 
   Any visitAliasWithoutBrackets(
       Parser::AliasWithoutBracketsContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  ParsedQuery::Alias visitTypesafe(Parser::AliasWithoutBracketsContext* ctx);
+  Alias visitTypesafe(Parser::AliasWithoutBracketsContext* ctx);
 
   Any visitConstructQuery(Parser::ConstructQueryContext* ctx) override {
     return visitTypesafe(ctx);
