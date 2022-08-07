@@ -1060,12 +1060,10 @@ ExpressionPtr Visitor::visitTypesafe(Parser::PrimaryExpressionContext* ctx) {
         ad_utility::OverloadCallOperator{integralWrapper, doubleWrapper},
         visitTypesafe(ctx->numericLiteral()));
   } else if (ctx->booleanLiteral()) {
-    auto b = visitTypesafe(ctx->booleanLiteral());
-    return make_unique<BoolExpression>(b);
+    return make_unique<BoolExpression>(visitTypesafe(ctx->booleanLiteral()));
   } else if (ctx->var()) {
-    sparqlExpression::Variable v;
-    v._variable = ctx->var()->getText();
-    return make_unique<VariableExpression>(v);
+    return make_unique<VariableExpression>(
+        sparqlExpression::Variable{ctx->var()->getText()});
   } else {
     return visitAlternative<ExpressionPtr>(
         ctx->builtInCall(), ctx->iriOrFunction(), ctx->brackettedExpression());
@@ -1205,7 +1203,7 @@ std::variant<int64_t, double> parseNumericLiteral(Ctx* ctx, bool parseAsInt) {
     }
   } catch (const std::out_of_range& range) {
     throw ParseException("Could not parse Numeric Literal \"" + ctx->getText() +
-                         "\". Is is out of range. Reason: " + range.what());
+                         "\". It is out of range. Reason: " + range.what());
   }
 }
 }  // namespace
