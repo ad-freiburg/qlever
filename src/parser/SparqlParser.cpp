@@ -57,16 +57,13 @@ ParsedQuery SparqlParser::parse() {
 // _____________________________________________________________________________
 void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
   if (queryType == CONSTRUCT_QUERY) {
-    auto str = lexer_.getUnconsumedInput();
     SparqlQleverVisitor::PrefixMap prefixes;
     for (const auto& prefix : query->_prefixes) {
       prefixes[prefix._prefix] = prefix._uri;
     }
-    auto parseResult =
-        sparqlParserHelpers::parseConstructTemplate(str, std::move(prefixes));
-    query->_clause = std::move(parseResult.resultOfParse_)
-                         .value_or(ad_utility::sparql_types::Triples{});
-    lexer_.reset(std::move(parseResult.remainingText_));
+    query->_clause =
+        parseWithAntlr(sparqlParserHelpers::parseConstructTemplate, prefixes)
+            .value_or(ad_utility::sparql_types::Triples{});
     lexer_.expect("where");
   } else if (queryType == SELECT_QUERY) {
     parseSelect(query);

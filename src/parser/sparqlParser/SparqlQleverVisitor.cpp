@@ -1253,9 +1253,9 @@ template <typename Out, bool isRecursive, typename FirstContext,
           typename... Context>
 Out Visitor::visitAlternative(FirstContext* ctx, Context*... ctxs) {
   if constexpr (!isRecursive) {
-    int validContexts =
+    int numValidContexts =
         (static_cast<bool>(ctx) + ... + static_cast<bool>(ctxs));
-    AD_CHECK(validContexts == 1);
+    AD_CHECK(numValidContexts == 1);
   }
   if (ctx) {
     return {visitTypesafe(ctx)};
@@ -1263,6 +1263,8 @@ Out Visitor::visitAlternative(FirstContext* ctx, Context*... ctxs) {
     if constexpr (sizeof...(Context) != 0) {
       return visitAlternative<Out, true>(ctxs...);
     } else {
+      // Unreachable because of the `AD_CHECK` above, but the `if constexpr` is
+      // still needed for the compilation of the base case.
       AD_FAIL()  // Should be unreachable.
     }
   }
@@ -1270,7 +1272,7 @@ Out Visitor::visitAlternative(FirstContext* ctx, Context*... ctxs) {
 
 // ____________________________________________________________________________________
 template <typename Ctx>
-auto Visitor::visitOptional(Ctx ctx)
+auto Visitor::visitOptional(Ctx* ctx)
     -> std::optional<decltype(visitTypesafe(ctx))> {
   if (ctx) {
     return visitTypesafe(ctx);
@@ -1281,7 +1283,7 @@ auto Visitor::visitOptional(Ctx ctx)
 
 // ____________________________________________________________________________________
 template <typename Ctx>
-void Visitor::visitIf(auto* target, Ctx ctx) {
+void Visitor::visitIf(auto* target, Ctx* ctx) {
   if (ctx) {
     *target = visitTypesafe(ctx);
   }
