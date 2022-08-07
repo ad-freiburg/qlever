@@ -25,7 +25,7 @@ void testNumericLiteral(const std::string& input, T target) {
   auto value = get<T>(result.resultOfParse_);
 
   if constexpr (std::is_floating_point_v<T>) {
-    ASSERT_FLOAT_EQ(target, value);
+    ASSERT_DOUBLE_EQ(target, value);
   } else {
     ASSERT_EQ(target, value);
   }
@@ -47,8 +47,15 @@ TEST(SparqlParser, NumericLiterals) {
   testNumericLiteral("3", (int64_t)3ll);
   testNumericLiteral("-3.0", -3.0);
   testNumericLiteral("-3", (int64_t)-3ll);
-
-  // TODO<joka921> : Unit tests with random numbers
+  testNumericLiteral("+3", (int64_t)3ll);
+  testNumericLiteral("+3.02", 3.02);
+  testNumericLiteral("+3.1234e12", 3123400000000.0);
+  testNumericLiteral(".234", 0.234);
+  testNumericLiteral("+.0123", 0.0123);
+  testNumericLiteral("-.5123", -0.5123);
+  testNumericLiteral(".234e4", 2340.0);
+  testNumericLiteral("+.0123E-3", 0.0000123);
+  testNumericLiteral("-.5123E12", -512300000000.0);
 }
 
 TEST(SparqlParser, Prefix) {

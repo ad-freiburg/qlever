@@ -1052,14 +1052,16 @@ ExpressionPtr Visitor::visitTypesafe(Parser::UnaryExpressionContext* ctx) {
 
 // ____________________________________________________________________________________
 ExpressionPtr Visitor::visitTypesafe(Parser::PrimaryExpressionContext* ctx) {
+  using std::make_unique;
+  using namespace sparqlExpression;
+
   if (ctx->builtInCall()) {
     return visitTypesafe(ctx->builtInCall());
   }
   if (ctx->rdfLiteral()) {
     // TODO<joka921> : handle strings with value datatype that are
     // not in the knowledge base correctly.
-    return std::make_unique<sparqlExpression::StringOrIriExpression>(
-        ctx->rdfLiteral()->getText());
+    return make_unique<StringOrIriExpression>(ctx->rdfLiteral()->getText());
   }
   if (ctx->iriOrFunction()) {
     return visitTypesafe(ctx->iriOrFunction());
@@ -1071,12 +1073,10 @@ ExpressionPtr Visitor::visitTypesafe(Parser::PrimaryExpressionContext* ctx) {
 
   if (ctx->numericLiteral()) {
     auto integralWrapper = [](int64_t x) {
-      return ExpressionPtr{
-          std::make_unique<sparqlExpression::IntExpression>(x)};
+      return ExpressionPtr{make_unique<IntExpression>(x)};
     };
     auto doubleWrapper = [](double x) {
-      return ExpressionPtr{
-          std::make_unique<sparqlExpression::DoubleExpression>(x)};
+      return ExpressionPtr{make_unique<DoubleExpression>(x)};
     };
     return std::visit(
         ad_utility::OverloadCallOperator{integralWrapper, doubleWrapper},
@@ -1085,13 +1085,13 @@ ExpressionPtr Visitor::visitTypesafe(Parser::PrimaryExpressionContext* ctx) {
 
   if (ctx->booleanLiteral()) {
     auto b = visitTypesafe(ctx->booleanLiteral());
-    return std::make_unique<sparqlExpression::BoolExpression>(b);
+    return make_unique<BoolExpression>(b);
   }
 
   if (ctx->var()) {
     sparqlExpression::Variable v;
     v._variable = ctx->var()->getText();
-    return std::make_unique<sparqlExpression::VariableExpression>(v);
+    return make_unique<VariableExpression>(v);
   }
   // We should have returned by now
   AD_CHECK(false);
@@ -1222,10 +1222,15 @@ std::variant<int64_t, double> Visitor::visitTypesafe(
 namespace {
 template <typename Ctx>
 std::variant<int64_t, double> parseNumericLiteral(Ctx* ctx, bool parseAsInt) {
-  if (parseAsInt) {
-    return std::stoll(ctx->getText());
-  } else {
-    return std::stod(ctx->getText());
+  try {
+    if (parseAsInt) {
+      return std::stoll(ctx->getText());
+    } else {
+      return std::stod(ctx->getText());
+    }
+  } catch (const std::out_of_range& range) {
+    throw ParseException("Could not parse Numeric Literal \"" + ctx->getText() +
+                         "\". Is is out of range. Reason: " + range.what());
   }
 }
 }  // namespace
