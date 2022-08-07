@@ -11,6 +11,7 @@
 #include "../util/OverloadCallOperator.h"
 #include "./SparqlParserHelpers.h"
 #include "Alias.h"
+#include "data/Types.h"
 #include "sparqlParser/SparqlQleverVisitor.h"
 
 using namespace std::literals::string_literals;
@@ -63,7 +64,8 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
     }
     auto parseResult =
         sparqlParserHelpers::parseConstructTemplate(str, std::move(prefixes));
-    query->_clause = std::move(parseResult.resultOfParse_);
+    query->_clause = std::move(parseResult.resultOfParse_)
+                         .value_or(ad_utility::sparql_types::Triples{});
     lexer_.reset(std::move(parseResult.remainingText_));
     lexer_.expect("where");
   } else if (queryType == SELECT_QUERY) {

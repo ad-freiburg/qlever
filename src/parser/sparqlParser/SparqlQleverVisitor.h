@@ -386,7 +386,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  Triples visitTypesafe(Parser::ConstructTemplateContext* ctx);
+  std::optional<Triples> visitTypesafe(Parser::ConstructTemplateContext* ctx);
 
   Any visitConstructTriples(Parser::ConstructTriplesContext* ctx) override {
     return visitTypesafe(ctx);

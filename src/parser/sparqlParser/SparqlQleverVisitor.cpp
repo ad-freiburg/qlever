@@ -164,7 +164,7 @@ Triples Visitor::visitTypesafe(Parser::ConstructQueryContext* ctx) {
   // TODO: once where clause is supported also process whereClause and
   // solutionModifiers
   if (ctx->constructTemplate()) {
-    return visitTypesafe(ctx->constructTemplate());
+    return visitTypesafe(ctx->constructTemplate()).value_or(Triples{});
   } else {
     return {};
   }
@@ -229,9 +229,9 @@ vector<GroupKey> Visitor::visitTypesafe(Parser::GroupClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-Visitor::Triples Visitor::visitTypesafe(Parser::ConstructTemplateContext* ctx) {
-  return ctx->constructTriples() ? visitTypesafe(ctx->constructTriples())
-                                 : Triples{};
+std::optional<Triples> Visitor::visitTypesafe(
+    Parser::ConstructTemplateContext* ctx) {
+  return visitOptional(ctx->constructTriples());
 }
 
 // ____________________________________________________________________________________
