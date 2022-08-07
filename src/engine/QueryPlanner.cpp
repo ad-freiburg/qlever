@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <ctime>
 
+#include "../parser/Alias.h"
 #include "Bind.h"
 #include "CountAvailablePredicates.h"
 #include "Distinct.h"
@@ -60,7 +61,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   if (!doGrouping && pq.hasSelectClause()) {
     // if there is no group by statement, but an aggregate alias is used
     // somewhere do grouping anyways.
-    for (const ParsedQuery::Alias& alias : pq.selectClause().getAliases()) {
+    for (const Alias& alias : pq.selectClause().getAliases()) {
       if (alias._expression.isAggregate({})) {
         doGrouping = true;
         break;
@@ -473,7 +474,7 @@ bool QueryPlanner::checkUsePatternTrick(
 
   if (returns_counts) {
     // We have already verified above that there is exactly one alias.
-    const ParsedQuery::Alias& alias = aliases.front();
+    const Alias& alias = aliases.front();
     auto countVariable =
         alias._expression.getVariableForNonDistinctCountOrNullopt();
     if (!countVariable.has_value()) {
@@ -1003,7 +1004,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
     SubtreePlan groupByPlan(_qec);
     groupByPlan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
     groupByPlan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
-    std::vector<ParsedQuery::Alias> aliases;
+    std::vector<Alias> aliases;
     if (pq.hasSelectClause()) {
       aliases = pq.selectClause().getAliases();
     }

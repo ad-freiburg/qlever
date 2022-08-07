@@ -28,4 +28,5 @@ struct TripleWithPropertyPath {
 using Node = std::pair<VarOrTerm, Triples>;
 using ObjectList = std::pair<Objects, Triples>;
 using PropertyList = std::pair<Tuples, Triples>;
+using VarOrAlias = std::variant<Variable, Alias>;
 }  // namespace ad_utility::sparql_types

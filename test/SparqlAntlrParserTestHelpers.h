@@ -6,6 +6,7 @@
 
 #include <gmock/gmock.h>
 
+#include "../src/parser/Alias.h"
 #include "../src/parser/data/VarOrTerm.h"
 #include "../src/util/TypeTraits.h"
 
@@ -237,7 +238,7 @@ MATCHER_P(IsExpressionGroupKey, expr, "") {
 }
 
 MATCHER_P2(IsAliasGroupKey, expr, variable, "") {
-  if (const auto alias = unwrapVariant<GroupKey, ParsedQuery::Alias>(arg)) {
+  if (const auto alias = unwrapVariant<GroupKey, Alias>(arg)) {
     return (alias->_expression.getDescriptor() == expr) &&
            (alias->_outVarName == variable);
   }

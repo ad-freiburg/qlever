@@ -11,7 +11,6 @@ using namespace ad_utility::sparql_types;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
 using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
 using SelectClause = ParsedQuery::SelectClause;
-using Alias = ParsedQuery::Alias;
 using Bind = GraphPatternOperation::Bind;
 using Values = GraphPatternOperation::Values;
 
@@ -135,20 +134,14 @@ SelectClause Visitor::visitTypesafe(Parser::SelectClauseContext* ctx) {
   if (ctx->asterisk) {
     select.setAsterisk();
   } else {
-    using VarOrAlias = std::variant<Variable, Alias>;
     select.setSelected(visitVector<VarOrAlias>(ctx->varOrAlias()));
   }
   return select;
 }
 
 // ____________________________________________________________________________________
-std::variant<Variable, Alias> Visitor::visitTypesafe(
-    Parser::VarOrAliasContext* ctx) {
-  if (ctx->var())
-    return visitTypesafe(ctx->var());
-  else if (ctx->alias())
-    return visitTypesafe(ctx->alias());
-  AD_FAIL();  // Should be unreachable.
+VarOrAlias Visitor::visitTypesafe(Parser::VarOrAliasContext* ctx) {
+  return visitAlternative<VarOrAlias>(ctx->var(), ctx->alias());
 }
 
 // ____________________________________________________________________________________
@@ -171,7 +164,7 @@ Triples Visitor::visitTypesafe(Parser::ConstructQueryContext* ctx) {
   // TODO: once where clause is supported also process whereClause and
   // solutionModifiers
   if (ctx->constructTemplate()) {
-    return visitTypesafe(ctx->constructTemplate());
+    return visitTypesafe(ctx->constructTemplate()).value_or(Triples{});
   } else {
     return {};
   }
@@ -194,21 +187,13 @@ Values Visitor::visitTypesafe(Parser::InlineDataContext* ctx) {
 
 // ____________________________________________________________________________________
 Values Visitor::visitTypesafe(Parser::DataBlockContext* ctx) {
-  if (ctx->inlineDataOneVar()) {
-    return {visitTypesafe(ctx->inlineDataOneVar())};
-  } else if (ctx->inlineDataFull()) {
-    return {visitTypesafe(ctx->inlineDataFull())};
-  }
-  AD_FAIL()  // Should be unreachable.
+  return visitAlternative<Values>(ctx->inlineDataOneVar(),
+                                  ctx->inlineDataFull());
 }
 
 // ____________________________________________________________________________________
 std::optional<Values> Visitor::visitTypesafe(Parser::ValuesClauseContext* ctx) {
-  if (ctx->dataBlock()) {
-    return visitTypesafe(ctx->dataBlock());
-  } else {
-    return std::nullopt;
-  }
+  return visitOptional(ctx->dataBlock());
 }
 
 // ____________________________________________________________________________________
@@ -221,15 +206,9 @@ sparqlExpression::SparqlExpression::Ptr Visitor::visitTypesafe(
 LimitOffsetClause Visitor::visitTypesafe(
     Parser::LimitOffsetClausesContext* ctx) {
   LimitOffsetClause clause{};
-  if (ctx->limitClause()) {
-    clause._limit = visitTypesafe(ctx->limitClause());
-  }
-  if (ctx->offsetClause()) {
-    clause._offset = visitTypesafe(ctx->offsetClause());
-  }
-  if (ctx->textLimitClause()) {
-    clause._textLimit = visitTypesafe(ctx->textLimitClause());
-  }
+  visitIf(&clause._limit, ctx->limitClause());
+  visitIf(&clause._offset, ctx->offsetClause());
+  visitIf(&clause._textLimit, ctx->textLimitClause());
   return clause;
 }
 
@@ -244,9 +223,17 @@ vector<GroupKey> Visitor::visitTypesafe(Parser::GroupClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-Visitor::Triples Visitor::visitTypesafe(Parser::ConstructTemplateContext* ctx) {
-  return ctx->constructTriples() ? visitTypesafe(ctx->constructTriples())
-                                 : Triples{};
+std::optional<Triples> Visitor::visitTypesafe(
+    Parser::ConstructTemplateContext* ctx) {
+  return visitOptional(ctx->constructTriples());
+}
+
+// ____________________________________________________________________________________
+string Visitor::visitTypesafe(Parser::StringContext* ctx) {
+  // TODO: The string rule also allow triple quoted strings with different
+  //  escaping rules. These are currently not handled. They should be parsed
+  //  into a typesafe format with a unique representation.
+  return ctx->getText();
 }
 
 // ____________________________________________________________________________________
@@ -269,12 +256,7 @@ string Visitor::visitTypesafe(Parser::IrirefContext* ctx) {
 
 // ____________________________________________________________________________________
 string Visitor::visitTypesafe(Parser::PrefixedNameContext* ctx) {
-  if (ctx->pnameLn()) {
-    return visitTypesafe(ctx->pnameLn());
-  } else {
-    AD_CHECK(ctx->pnameNs());
-    return visitTypesafe(ctx->pnameNs());
-  }
+  return visitAlternative<std::string>(ctx->pnameLn(), ctx->pnameNs());
 }
 
 // ____________________________________________________________________________________
@@ -595,14 +577,16 @@ PropertyList Visitor::visitTypesafe(Parser::PropertyListNotEmptyContext* ctx) {
 
 // ____________________________________________________________________________________
 VarOrTerm Visitor::visitTypesafe(Parser::VerbContext* ctx) {
+  // TODO<qup42, joka921> Is there a way to make this visitAlternative in the
+  // presence of the a case?
   if (ctx->varOrIri()) {
     return visitTypesafe(ctx->varOrIri());
-  }
-  if (ctx->getText() == "a") {
+  } else if (ctx->getText() == "a") {
     // Special keyword 'a'
     return GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"}};
+  } else {
+    AD_FAIL()  // Should be unreachable.
   }
-  throw ParseException{"Invalid verb "s + ctx->getText()};
 }
 
 // ____________________________________________________________________________________
@@ -647,11 +631,7 @@ vector<TripleWithPropertyPath> SparqlQleverVisitor::visitTypesafe(
 // ___________________________________________________________________________
 std::optional<PathTuples> SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PropertyListPathContext* ctx) {
-  if (ctx->propertyListPathNotEmpty()) {
-    return visitTypesafe(ctx->propertyListPathNotEmpty());
-  } else {
-    return std::nullopt;
-  }
+  return visitOptional(ctx->propertyListPathNotEmpty());
 }
 
 // ___________________________________________________________________________
@@ -712,6 +692,11 @@ ObjectList SparqlQleverVisitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
+VarOrTerm Visitor::visitTypesafe(Parser::ObjectPathContext* ctx) {
+  return visitTypesafe(ctx->graphNodePath());
+}
+
+// ____________________________________________________________________________________
 PropertyPath Visitor::visitTypesafe(Parser::PathContext* ctx) {
   return visitTypesafe(ctx->pathAlternative());
 }
@@ -761,6 +746,8 @@ PropertyPath Visitor::visitTypesafe(Parser::PathEltOrInverseContext* ctx) {
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visitTypesafe(Parser::PathPrimaryContext* ctx) {
+  // TODO<qup42, joka921> Is there a way to make this visitAlternative in the
+  // presence of the a case?
   if (ctx->iri()) {
     return PropertyPath::fromIri(visitTypesafe(ctx->iri()));
   } else if (ctx->path()) {
@@ -1196,7 +1183,10 @@ ExpressionPtr Visitor::visitTypesafe(Parser::AggregateContext* ctx) {
 
     std::string separator;
     if (ctx->string()) {
-      separator = ctx->string()->getText();
+      // TODO: The string rule also allow triple quoted strings with different
+      //  escaping rules. These are currently not handled. They should be parsed
+      //  into a typesafe format with a unique representation.
+      separator = visitTypesafe(ctx->string());
       // If there was a separator, we have to strip the quotation marks
       AD_CHECK(separator.size() >= 2);
       separator = separator.substr(1, separator.size() - 2);
@@ -1226,7 +1216,9 @@ ExpressionPtr Visitor::visitTypesafe(Parser::IriOrFunctionContext* ctx) {
 
 // ____________________________________________________________________________________
 std::string Visitor::visitTypesafe(Parser::RdfLiteralContext* ctx) {
-  string ret = ctx->string()->getText();
+  // TODO: This should really be an RdfLiteral class that stores a unified
+  //  version of the string, and the langtag/datatype separately.
+  string ret = visitTypesafe(ctx->string());
   if (ctx->LANGTAG()) {
     ret += ctx->LANGTAG()->getText();
   } else if (ctx->iri()) {
@@ -1257,15 +1249,42 @@ BlankNode Visitor::visitTypesafe(Parser::BlankNodeContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-template <typename Out, typename FirstContext, typename... Context>
-Out SparqlQleverVisitor::visitAlternative(FirstContext ctx, Context... ctxs) {
-  if (ctx)
+template <typename Out, bool isRecursive, typename FirstContext,
+          typename... Context>
+Out Visitor::visitAlternative(FirstContext* ctx, Context*... ctxs) {
+  if constexpr (!isRecursive) {
+    int numValidContexts =
+        (static_cast<bool>(ctx) + ... + static_cast<bool>(ctxs));
+    AD_CHECK(numValidContexts == 1);
+  }
+  if (ctx) {
     return {visitTypesafe(ctx)};
-  else
-    return visitAlternative<Out>(ctxs...);
+  } else {
+    if constexpr (sizeof...(Context) != 0) {
+      return visitAlternative<Out, true>(ctxs...);
+    } else {
+      // Unreachable because of the `AD_CHECK` above, but the `if constexpr` is
+      // still needed for the compilation of the base case.
+      AD_FAIL()  // Should be unreachable.
+    }
+  }
 }
 
-template <typename Out>
-Out SparqlQleverVisitor::visitAlternative() {
-  AD_FAIL()  // Should be unreachable.
+// ____________________________________________________________________________________
+template <typename Ctx>
+auto Visitor::visitOptional(Ctx* ctx)
+    -> std::optional<decltype(visitTypesafe(ctx))> {
+  if (ctx) {
+    return visitTypesafe(ctx);
+  } else {
+    return std::nullopt;
+  }
+}
+
+// ____________________________________________________________________________________
+template <typename Ctx>
+void Visitor::visitIf(auto* target, Ctx* ctx) {
+  if (ctx) {
+    *target = visitTypesafe(ctx);
+  }
 }

@@ -7,16 +7,17 @@
 #include <absl/strings/str_join.h>
 
 #include "../index/Index.h"
+#include "../parser/Alias.h"
 #include "../util/Conversions.h"
 #include "../util/HashSet.h"
 #include "./sparqlExpressions/SparqlExpression.h"
 #include "CallFixedSize.h"
 
 GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
-                 std::vector<ParsedQuery::Alias> aliases)
+                 std::vector<Alias> aliases)
     : Operation(qec), _subtree(nullptr), _aliases{std::move(aliases)} {
   std::sort(_aliases.begin(), _aliases.end(),
-            [](const ParsedQuery::Alias& a1, const ParsedQuery::Alias& a2) {
+            [](const Alias& a1, const Alias& a2) {
               return a1._outVarName < a2._outVarName;
             });
 
@@ -32,7 +33,7 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
     _varColMap[var] = colIndex;
     colIndex++;
   }
-  for (const ParsedQuery::Alias& a : _aliases) {
+  for (const Alias& a : _aliases) {
     _varColMap[a._outVarName] = colIndex;
     colIndex++;
   }
@@ -290,7 +291,7 @@ void GroupBy::computeResult(ResultTable* result) {
   }
 
   // parse the aggregate aliases
-  for (const ParsedQuery::Alias& alias : _aliases) {
+  for (const Alias& alias : _aliases) {
     aggregates.push_back(Aggregate{alias._expression,
                                    _varColMap.find(alias._outVarName)->second});
   }

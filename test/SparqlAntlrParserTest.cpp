@@ -292,13 +292,7 @@ TEST(SparqlParser, BlankNodeLabelled) {
 }
 
 TEST(SparqlParser, ConstructTemplateEmpty) {
-  string input = "{}";
-  ParserAndVisitor p{input};
-
-  auto triples = p.parser_.constructTemplate()
-                     ->accept(&p.visitor_)
-                     .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, IsEmpty());
+  expectCompleteParse(parseConstructTemplate("{}"), testing::Eq(std::nullopt));
 }
 
 TEST(SparqlParser, ConstructTriplesSingletonWithTerminator) {
