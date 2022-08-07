@@ -236,6 +236,9 @@ std::optional<Triples> Visitor::visitTypesafe(
 
 // ____________________________________________________________________________________
 string Visitor::visitTypesafe(Parser::StringContext* ctx) {
+  // TODO: The string rule also allow triple quoted strings with different
+  //  escaping rules. These are currently not handled. They should be parsed
+  //  into a typesafe format with a unique representation.
   return ctx->getText();
 }
 
@@ -580,6 +583,8 @@ PropertyList Visitor::visitTypesafe(Parser::PropertyListNotEmptyContext* ctx) {
 
 // ____________________________________________________________________________________
 VarOrTerm Visitor::visitTypesafe(Parser::VerbContext* ctx) {
+  // TODO<qup42, joka921> Is there a way to make this visitAlternative in the
+  // presence of the a case?
   if (ctx->varOrIri()) {
     return visitTypesafe(ctx->varOrIri());
   } else if (ctx->getText() == "a") {
@@ -747,6 +752,8 @@ PropertyPath Visitor::visitTypesafe(Parser::PathEltOrInverseContext* ctx) {
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visitTypesafe(Parser::PathPrimaryContext* ctx) {
+  // TODO<qup42, joka921> Is there a way to make this visitAlternative in the
+  // presence of the a case?
   if (ctx->iri()) {
     return PropertyPath::fromIri(visitTypesafe(ctx->iri()));
   } else if (ctx->path()) {
@@ -1182,6 +1189,9 @@ ExpressionPtr Visitor::visitTypesafe(Parser::AggregateContext* ctx) {
 
     std::string separator;
     if (ctx->string()) {
+      // TODO: The string rule also allow triple quoted strings with different
+      //  escaping rules. These are currently not handled. They should be parsed
+      //  into a typesafe format with a unique representation.
       separator = visitTypesafe(ctx->string());
       // If there was a separator, we have to strip the quotation marks
       AD_CHECK(separator.size() >= 2);
@@ -1245,18 +1255,23 @@ BlankNode Visitor::visitTypesafe(Parser::BlankNodeContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-template <typename Out, typename FirstContext, typename... Context>
-Out Visitor::visitAlternative(FirstContext ctx, Context... ctxs) {
+template <typename Out, bool isRecursive, typename FirstContext,
+          typename... Context>
+Out Visitor::visitAlternative(FirstContext* ctx, Context*... ctxs) {
+  if constexpr (!isRecursive) {
+    int validContexts =
+        (static_cast<bool>(ctx) + ... + static_cast<bool>(ctxs));
+    AD_CHECK(validContexts == 1);
+  }
   if (ctx) {
     return {visitTypesafe(ctx)};
   } else {
-    return visitAlternative<Out>(ctxs...);
+    if constexpr (sizeof...(Context) != 0) {
+      return visitAlternative<Out, true>(ctxs...);
+    } else {
+      AD_FAIL()  // Should be unreachable.
+    }
   }
-}
-
-template <typename Out>
-Out Visitor::visitAlternative() {
-  AD_FAIL()  // Should be unreachable.
 }
 
 // ____________________________________________________________________________________
