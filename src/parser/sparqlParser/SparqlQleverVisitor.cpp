@@ -14,6 +14,7 @@ using SelectClause = ParsedQuery::SelectClause;
 using Alias = ParsedQuery::Alias;
 using Bind = GraphPatternOperation::Bind;
 using Values = GraphPatternOperation::Values;
+using VarOrAlias = std::variant<Variable, Alias>;
 
 using Visitor = SparqlQleverVisitor;
 using Parser = SparqlAutomaticParser;
@@ -135,17 +136,14 @@ SelectClause Visitor::visitTypesafe(Parser::SelectClauseContext* ctx) {
   if (ctx->asterisk) {
     select.setAsterisk();
   } else {
-    using VarOrAlias = std::variant<Variable, Alias>;
     select.setSelected(visitVector<VarOrAlias>(ctx->varOrAlias()));
   }
   return select;
 }
 
 // ____________________________________________________________________________________
-std::variant<Variable, Alias> Visitor::visitTypesafe(
-    Parser::VarOrAliasContext* ctx) {
-  return visitAlternative<std::variant<Variable, Alias>>(ctx->var(),
-                                                         ctx->alias());
+VarOrAlias Visitor::visitTypesafe(Parser::VarOrAliasContext* ctx) {
+  return visitAlternative<VarOrAlias>(ctx->var(), ctx->alias());
 }
 
 // ____________________________________________________________________________________
@@ -197,7 +195,7 @@ Values Visitor::visitTypesafe(Parser::DataBlockContext* ctx) {
 
 // ____________________________________________________________________________________
 std::optional<Values> Visitor::visitTypesafe(Parser::ValuesClauseContext* ctx) {
-  return visitOptional<Values>(ctx->dataBlock());
+  return visitOptional(ctx->dataBlock());
 }
 
 // ____________________________________________________________________________________
@@ -636,7 +634,7 @@ vector<TripleWithPropertyPath> SparqlQleverVisitor::visitTypesafe(
 // ___________________________________________________________________________
 std::optional<PathTuples> SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PropertyListPathContext* ctx) {
-  return visitOptional<PathTuples>(ctx->propertyListPathNotEmpty());
+  return visitOptional(ctx->propertyListPathNotEmpty());
 }
 
 // ___________________________________________________________________________
@@ -1216,6 +1214,8 @@ ExpressionPtr Visitor::visitTypesafe(Parser::IriOrFunctionContext* ctx) {
 
 // ____________________________________________________________________________________
 std::string Visitor::visitTypesafe(Parser::RdfLiteralContext* ctx) {
+  // TODO: This should really be an RdfLiteral class that stores a unified
+  //  version of the string, and the langtag/datatype separately.
   string ret = visitTypesafe(ctx->string());
   if (ctx->LANGTAG()) {
     ret += ctx->LANGTAG()->getText();
@@ -1249,10 +1249,11 @@ BlankNode Visitor::visitTypesafe(Parser::BlankNodeContext* ctx) {
 // ____________________________________________________________________________________
 template <typename Out, typename FirstContext, typename... Context>
 Out Visitor::visitAlternative(FirstContext ctx, Context... ctxs) {
-  if (ctx)
+  if (ctx) {
     return {visitTypesafe(ctx)};
-  else
+  } else {
     return visitAlternative<Out>(ctxs...);
+  }
 }
 
 template <typename Out>
@@ -1261,10 +1262,12 @@ Out Visitor::visitAlternative() {
 }
 
 // ____________________________________________________________________________________
-template <typename Out, typename Ctx>
-std::optional<Out> Visitor::visitOptional(Ctx ctx) {
-  if (ctx)
-    return {visitTypesafe(ctx)};
-  else
+template <typename Ctx>
+auto Visitor::visitOptional(Ctx ctx)
+    -> std::optional<decltype(visitTypesafe(ctx))> {
+  if (ctx) {
+    return visitTypesafe(ctx);
+  } else {
     return std::nullopt;
+  }
 }
