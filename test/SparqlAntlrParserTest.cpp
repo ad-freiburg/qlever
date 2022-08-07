@@ -40,6 +40,13 @@ using ::testing::ElementsAre;
 using ::testing::IsEmpty;
 using ::testing::SizeIs;
 
+namespace {
+template <typename Exception = ParseException>
+void expectNumericLiteralFails(const string& input) {
+  EXPECT_THROW(parseNumericLiteral(input), Exception) << input;
+}
+}  // namespace
+
 TEST(SparqlParser, NumericLiterals) {
   testNumericLiteral("3.0", 3.0);
   testNumericLiteral("3.0e2", 300.0);
@@ -56,6 +63,10 @@ TEST(SparqlParser, NumericLiterals) {
   testNumericLiteral(".234e4", 2340.0);
   testNumericLiteral("+.0123E-3", 0.0000123);
   testNumericLiteral("-.5123E12", -512300000000.0);
+  expectNumericLiteralFails("1000000000000000000000000000000000000");
+  expectNumericLiteralFails("-99999999999999999999");
+  expectNumericLiteralFails("12E400");
+  expectNumericLiteralFails("-4.2E550");
 }
 
 TEST(SparqlParser, Prefix) {
