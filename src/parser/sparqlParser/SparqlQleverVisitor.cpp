@@ -206,15 +206,9 @@ sparqlExpression::SparqlExpression::Ptr Visitor::visitTypesafe(
 LimitOffsetClause Visitor::visitTypesafe(
     Parser::LimitOffsetClausesContext* ctx) {
   LimitOffsetClause clause{};
-  if (ctx->limitClause()) {
-    clause._limit = visitTypesafe(ctx->limitClause());
-  }
-  if (ctx->offsetClause()) {
-    clause._offset = visitTypesafe(ctx->offsetClause());
-  }
-  if (ctx->textLimitClause()) {
-    clause._textLimit = visitTypesafe(ctx->textLimitClause());
-  }
+  visitIf(&clause._limit, ctx->limitClause());
+  visitIf(&clause._offset, ctx->offsetClause());
+  visitIf(&clause._textLimit, ctx->textLimitClause());
   return clause;
 }
 
@@ -1282,5 +1276,13 @@ auto Visitor::visitOptional(Ctx ctx)
     return visitTypesafe(ctx);
   } else {
     return std::nullopt;
+  }
+}
+
+// ____________________________________________________________________________________
+template <typename Ctx>
+void Visitor::visitIf(auto* target, Ctx ctx) {
+  if (ctx) {
+    *target = visitTypesafe(ctx);
   }
 }
