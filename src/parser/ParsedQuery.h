@@ -17,6 +17,7 @@
 #include "../util/OverloadCallOperator.h"
 #include "../util/StringUtils.h"
 #include "./TripleComponent.h"
+#include "Alias.h"
 #include "ParseException.h"
 #include "PropertyPath.h"
 #include "data/Types.h"
@@ -226,22 +227,6 @@ class ParsedQuery {
     }
   }
 
-  struct Alias {
-    sparqlExpression::SparqlExpressionPimpl _expression;
-    string _outVarName;
-    [[nodiscard]] std::string getDescriptor() const {
-      return "(" + _expression.getDescriptor() + " as " + _outVarName + ")";
-    }
-    bool operator==(const Alias& other) const {
-      return _expression.getDescriptor() == other._expression.getDescriptor() &&
-             _outVarName == other._outVarName;
-    }
-
-    [[nodiscard]] const std::string& targetVariable() const {
-      return _outVarName;
-    }
-  };
-
   using VarOrAlias = std::variant<Variable, Alias>;
 
   // Represents either "all Variables" (Select *) or a list of explicitly
@@ -405,8 +390,8 @@ class ParsedQuery {
       string& item, const ad_utility::HashMap<string, string>& prefixMap);
 };
 
-using GroupKey = std::variant<sparqlExpression::SparqlExpressionPimpl,
-                              ParsedQuery::Alias, Variable>;
+using GroupKey =
+    std::variant<sparqlExpression::SparqlExpressionPimpl, Alias, Variable>;
 
 struct GraphPatternOperation {
   struct BasicGraphPattern {

@@ -10,6 +10,8 @@
 #include "../util/Algorithm.h"
 #include "../util/OverloadCallOperator.h"
 #include "./SparqlParserHelpers.h"
+#include "Alias.h"
+#include "data/Types.h"
 #include "sparqlParser/SparqlQleverVisitor.h"
 
 using namespace std::literals::string_literals;
@@ -55,15 +57,13 @@ ParsedQuery SparqlParser::parse() {
 // _____________________________________________________________________________
 void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
   if (queryType == CONSTRUCT_QUERY) {
-    auto str = lexer_.getUnconsumedInput();
     SparqlQleverVisitor::PrefixMap prefixes;
     for (const auto& prefix : query->_prefixes) {
       prefixes[prefix._prefix] = prefix._uri;
     }
-    auto parseResult =
-        sparqlParserHelpers::parseConstructTemplate(str, std::move(prefixes));
-    query->_clause = std::move(parseResult.resultOfParse_);
-    lexer_.reset(std::move(parseResult.remainingText_));
+    query->_clause =
+        parseWithAntlr(sparqlParserHelpers::parseConstructTemplate, prefixes)
+            .value_or(ad_utility::sparql_types::Triples{});
     lexer_.expect("where");
   } else if (queryType == SELECT_QUERY) {
     parseSelect(query);
@@ -84,7 +84,7 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
       for (const string& var : selectClause.getSelectedVariablesAsStrings()) {
         if (var[0] == '?') {
           if (ad_utility::contains_if(selectClause.getAliases(),
-                                      [&var](const ParsedQuery::Alias& alias) {
+                                      [&var](const Alias& alias) {
                                         return alias._outVarName == var;
                                       })) {
             continue;
@@ -145,7 +145,7 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
     variable_counts[s]++;
   }
 
-  for (const ParsedQuery::Alias& a : selectClause.getAliases()) {
+  for (const Alias& a : selectClause.getAliases()) {
     // The variable was already added to the selected variables while
     // parsing the alias, thus it should appear exactly once
     if (variable_counts[a._outVarName] > 1) {
@@ -431,11 +431,11 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
                                      [&orderKey](const Variable& var) {
                                        return orderKey.variable_ == var.name();
                                      }) &&
-            !ad_utility::contains_if(
-                query->selectClause().getAliases(),
-                [&orderKey](const ParsedQuery::Alias& alias) {
-                  return alias._outVarName == orderKey.variable_;
-                })) {
+            !ad_utility::contains_if(query->selectClause().getAliases(),
+                                     [&orderKey](const Alias& alias) {
+                                       return alias._outVarName ==
+                                              orderKey.variable_;
+                                     })) {
           throw ParseException(
               "Variable " + orderKey.variable_ +
               " was used in an ORDER BY "
@@ -488,7 +488,7 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
             auto helperTarget = addInternalBind(query, std::move(groupKey));
             query->_groupByVariables.emplace_back(helperTarget.name());
           };
-      auto processAlias = [&query](ParsedQuery::Alias groupKey) {
+      auto processAlias = [&query](Alias groupKey) {
         GraphPatternOperation::Bind helperBind{std::move(groupKey._expression),
                                                groupKey._outVarName};
         query->_rootGraphPattern._children.emplace_back(std::move(helperBind));
