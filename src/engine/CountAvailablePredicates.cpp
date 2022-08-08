@@ -173,6 +173,10 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
                << std::endl;
 
     int width = subresult->_idTable.cols();
+    LOG(ERROR) << "Outputting varColMap for debugging" << std::endl;
+    for (const auto& [var, col] : getVariableColumns()) {
+      LOG(ERROR) << var << ": " << col << std::endl;
+    }
     CALL_FIXED_SIZE_1(width, CountAvailablePredicates::computePatternTrick,
                       subresult->_idTable, &result->_idTable, hasPattern,
                       hasPredicate, patterns, _subjectColumnIndex,
@@ -286,9 +290,6 @@ void CountAvailablePredicates::computePatternTrick(
         LOG(ERROR) << "subject ID of pattern trick has wrong type " << subjectId
                    << std::endl;
         LOG(ERROR) << "subject column is" << subjectColumn;
-        for (const auto& [var, col] : getVariableColumns()) {
-          LOG(ERROR) << var << ": " << col << std::endl;
-        }
         AD_CHECK(false);
       }
       auto subject = subjectId.getVocabIndex().get();

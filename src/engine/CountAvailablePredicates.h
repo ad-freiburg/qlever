@@ -102,7 +102,7 @@ class CountAvailablePredicates : public Operation {
    *                      relations should be counted.
    */
   template <int I>
-  void computePatternTrick(
+  static void computePatternTrick(
       const IdTable& input, IdTable* result,
       const vector<PatternID>& hasPattern,
       const CompactVectorOfStrings<Id>& hasPredicate,
