@@ -282,7 +282,15 @@ void CountAvailablePredicates::computePatternTrick(
       if (inputIdx > 0 && subjectId == input(inputIdx - 1, subjectColumn)) {
         continue;
       }
-      AD_CHECK(subjectId.getDatatype() == Datatype::VocabIndex);
+      if (subjectId.getDatatype() != Datatype::VocabIndex) {
+        LOG(ERROR) << "subject ID of pattern trick has wrong type " << subjectId
+                   << std::endl;
+        LOG(ERROR) << "subject column is" << subjectColumn;
+        for (const auto& [var, col] : getVariableColumns()) {
+          LOG(ERROR) << var << ": " << col << std::endl;
+        }
+        AD_CHECK(false);
+      }
       auto subject = subjectId.getVocabIndex().get();
 
       if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {

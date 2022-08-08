@@ -919,6 +919,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
                      "trick.");
       }
       size_t subjectColumn = it->second;
+      LOG(INFO) << "subject column is " << subjectColumn << std::endl;
       const std::vector<size_t>& resultSortedOn =
           parent._qet->getRootOperation()->getResultSortedOn();
       bool isSorted =
