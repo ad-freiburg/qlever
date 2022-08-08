@@ -868,41 +868,16 @@ VarOrTerm Visitor::visitTypesafe(Parser::VarOrIriContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphTerm Visitor::visitTypesafe(Parser::GraphTermContext* ctx) {
-  if (ctx->numericLiteral()) {
-    auto literalAny = visitNumericLiteral(ctx->numericLiteral());
-    try {
-      auto intLiteral = literalAny.as<unsigned long long>();
-      return Literal{intLiteral};
-    } catch (...) {
-    }
-    try {
-      auto intLiteral = literalAny.as<long long>();
-      return Literal{intLiteral};
-    } catch (...) {
-    }
-    try {
-      auto intLiteral = literalAny.as<double>();
-      return Literal{intLiteral};
-    } catch (...) {
-    }
-    AD_CHECK(false);
-  }
-  if (ctx->booleanLiteral()) {
-    return Literal{visitTypesafe(ctx->booleanLiteral())};
-  }
   if (ctx->blankNode()) {
     return visitTypesafe(ctx->blankNode());
-  }
-  if (ctx->iri()) {
+  } else if (ctx->iri()) {
     return Iri{visitTypesafe(ctx->iri())};
-  }
-  if (ctx->rdfLiteral()) {
-    return Literal{visitTypesafe(ctx->rdfLiteral())};
-  }
-  if (ctx->NIL()) {
+  } else if (ctx->NIL()) {
     return Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"};
+  } else {
+    return visitAlternative<Literal>(ctx->numericLiteral(),
+                                     ctx->booleanLiteral(), ctx->rdfLiteral());
   }
-  AD_CHECK(false);
 }
 
 // ____________________________________________________________________________________
@@ -1054,59 +1029,32 @@ ExpressionPtr Visitor::visitTypesafe(Parser::UnaryExpressionContext* ctx) {
 
 // ____________________________________________________________________________________
 ExpressionPtr Visitor::visitTypesafe(Parser::PrimaryExpressionContext* ctx) {
-  if (ctx->builtInCall()) {
-    return visitTypesafe(ctx->builtInCall());
-  }
+  using std::make_unique;
+  using namespace sparqlExpression;
+
   if (ctx->rdfLiteral()) {
     // TODO<joka921> : handle strings with value datatype that are
     // not in the knowledge base correctly.
-    return std::make_unique<sparqlExpression::StringOrIriExpression>(
-        ctx->rdfLiteral()->getText());
+    return make_unique<StringOrIriExpression>(ctx->rdfLiteral()->getText());
+  } else if (ctx->numericLiteral()) {
+    auto integralWrapper = [](int64_t x) {
+      return ExpressionPtr{make_unique<IntExpression>(x)};
+    };
+    auto doubleWrapper = [](double x) {
+      return ExpressionPtr{make_unique<DoubleExpression>(x)};
+    };
+    return std::visit(
+        ad_utility::OverloadCallOperator{integralWrapper, doubleWrapper},
+        visitTypesafe(ctx->numericLiteral()));
+  } else if (ctx->booleanLiteral()) {
+    return make_unique<BoolExpression>(visitTypesafe(ctx->booleanLiteral()));
+  } else if (ctx->var()) {
+    return make_unique<VariableExpression>(
+        sparqlExpression::Variable{ctx->var()->getText()});
+  } else {
+    return visitAlternative<ExpressionPtr>(
+        ctx->builtInCall(), ctx->iriOrFunction(), ctx->brackettedExpression());
   }
-  if (ctx->iriOrFunction()) {
-    return visitTypesafe(ctx->iriOrFunction());
-  }
-
-  if (ctx->brackettedExpression()) {
-    return visitTypesafe(ctx->brackettedExpression());
-  }
-
-  // TODO<joka921> Refactor s.t. try/catch becomes if/else here
-  if (ctx->numericLiteral()) {
-    auto literalAny = visitNumericLiteral(ctx->numericLiteral());
-    try {
-      auto intLiteral = literalAny.as<unsigned long long>();
-      return std::make_unique<sparqlExpression::IntExpression>(
-          static_cast<int64_t>(intLiteral));
-    } catch (...) {
-    }
-    try {
-      auto intLiteral = literalAny.as<long long>();
-      return std::make_unique<sparqlExpression::IntExpression>(
-          static_cast<int64_t>(intLiteral));
-    } catch (...) {
-    }
-    try {
-      auto intLiteral = literalAny.as<double>();
-      return std::make_unique<sparqlExpression::DoubleExpression>(
-          static_cast<double>(intLiteral));
-    } catch (...) {
-    }
-    AD_CHECK(false);
-  }
-
-  if (ctx->booleanLiteral()) {
-    auto b = visitTypesafe(ctx->booleanLiteral());
-    return std::make_unique<sparqlExpression::BoolExpression>(b);
-  }
-
-  if (ctx->var()) {
-    sparqlExpression::Variable v;
-    v._variable = ctx->var()->getText();
-    return std::make_unique<sparqlExpression::VariableExpression>(v);
-  }
-  // We should have returned by now
-  AD_CHECK(false);
 }
 
 // ____________________________________________________________________________________
@@ -1228,6 +1176,49 @@ std::string Visitor::visitTypesafe(Parser::RdfLiteralContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+std::variant<int64_t, double> Visitor::visitTypesafe(
+    Parser::NumericLiteralContext* ctx) {
+  return visitAlternative<std::variant<int64_t, double>>(
+      ctx->numericLiteralUnsigned(), ctx->numericLiteralPositive(),
+      ctx->numericLiteralNegative());
+}
+
+// ____________________________________________________________________________________
+namespace {
+template <typename Ctx>
+std::variant<int64_t, double> parseNumericLiteral(Ctx* ctx, bool parseAsInt) {
+  try {
+    if (parseAsInt) {
+      return std::stoll(ctx->getText());
+    } else {
+      return std::stod(ctx->getText());
+    }
+  } catch (const std::out_of_range& range) {
+    throw ParseException("Could not parse Numeric Literal \"" + ctx->getText() +
+                         "\". It is out of range. Reason: " + range.what());
+  }
+}
+}  // namespace
+
+// ____________________________________________________________________________________
+std::variant<int64_t, double> Visitor::visitTypesafe(
+    Parser::NumericLiteralUnsignedContext* ctx) {
+  return parseNumericLiteral(ctx, ctx->INTEGER());
+}
+
+// ____________________________________________________________________________________
+std::variant<int64_t, double> Visitor::visitTypesafe(
+    Parser::NumericLiteralPositiveContext* ctx) {
+  return parseNumericLiteral(ctx, ctx->INTEGER_POSITIVE());
+}
+
+// ____________________________________________________________________________________
+std::variant<int64_t, double> Visitor::visitTypesafe(
+    Parser::NumericLiteralNegativeContext* ctx) {
+  return parseNumericLiteral(ctx, ctx->INTEGER_NEGATIVE());
+}
+
+// ____________________________________________________________________________________
 bool Visitor::visitTypesafe(Parser::BooleanLiteralContext* ctx) {
   return ctx->getText() == "true";
 }
@@ -1249,6 +1240,7 @@ BlankNode Visitor::visitTypesafe(Parser::BlankNodeContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+
 template <typename Out, bool isRecursive, typename FirstContext,
           typename... Context>
 Out Visitor::visitAlternative(FirstContext* ctx, Context*... ctxs) {
@@ -1258,7 +1250,8 @@ Out Visitor::visitAlternative(FirstContext* ctx, Context*... ctxs) {
     AD_CHECK(numValidContexts == 1);
   }
   if (ctx) {
-    return {visitTypesafe(ctx)};
+    // required for types that have an explicit constructor
+    return Out{visitTypesafe(ctx)};
   } else {
     if constexpr (sizeof...(Context) != 0) {
       return visitAlternative<Out, true>(ctxs...);

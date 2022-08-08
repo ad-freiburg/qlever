@@ -793,38 +793,35 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   std::string visitTypesafe(Parser::RdfLiteralContext* ctx);
 
   Any visitNumericLiteral(Parser::NumericLiteralContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  std::variant<int64_t, double> visitTypesafe(
+      Parser::NumericLiteralContext* ctx);
 
   Any visitNumericLiteralUnsigned(
       Parser::NumericLiteralUnsignedContext* ctx) override {
-    // TODO: refactor to return variant
-    if (ctx->INTEGER()) {
-      return std::stoull(ctx->getText());
-    } else {
-      return std::stod(ctx->getText());
-    }
+    return visitTypesafe(ctx);
   }
+
+  std::variant<int64_t, double> visitTypesafe(
+      Parser::NumericLiteralUnsignedContext* ctx);
 
   Any visitNumericLiteralPositive(
       Parser::NumericLiteralPositiveContext* ctx) override {
-    // TODO: refactor to return variant
-    if (ctx->INTEGER_POSITIVE()) {
-      return std::stoull(ctx->getText());
-    } else {
-      return std::stod(ctx->getText());
-    }
+    return visitTypesafe(ctx);
   }
+
+  std::variant<int64_t, double> visitTypesafe(
+      Parser::NumericLiteralPositiveContext* ctx);
 
   Any visitNumericLiteralNegative(
       Parser::NumericLiteralNegativeContext* ctx) override {
-    // TODO: refactor to return variant
-    if (ctx->INTEGER_NEGATIVE()) {
-      return std::stoll(ctx->getText());
-    } else {
-      return std::stod(ctx->getText());
-    }
+    return visitTypesafe(ctx);
   }
+
+  std::variant<int64_t, double> visitTypesafe(
+      Parser::NumericLiteralNegativeContext* ctx);
 
   Any visitBooleanLiteral(Parser::BooleanLiteralContext* ctx) override {
     return visitTypesafe(ctx);
