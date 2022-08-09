@@ -545,7 +545,7 @@ Triples Visitor::visitTypesafe(Parser::TriplesSameSubjectContext* ctx) {
     appendVector(triples, std::move(propertyList.second));
   } else {
     // Invalid grammar
-    AD_CHECK(false);
+    AD_FAIL();
   }
   return triples;
 }
@@ -831,7 +831,7 @@ Node Visitor::visitTypesafe(Parser::GraphNodeContext* ctx) {
   } else if (ctx->triplesNode()) {
     return visitTriplesNode(ctx->triplesNode()).as<Node>();
   } else {
-    AD_CHECK(false);
+    AD_FAIL();
   }
 }
 
@@ -976,7 +976,7 @@ ExpressionPtr Visitor::visitTypesafe(Parser::AdditiveExpressionContext* ctx) {
       result = createExpression<sparqlExpression::SubtractExpression>(
           std::move(result), std::move(*childIt));
     } else {
-      AD_CHECK(false);
+      AD_FAIL();
     }
     ++childIt;
     ++opIt;
@@ -1004,7 +1004,7 @@ ExpressionPtr Visitor::visitTypesafe(
       result = createExpression<sparqlExpression::DivideExpression>(
           std::move(result), std::move(*childIt));
     } else {
-      AD_CHECK(false);
+      AD_FAIL();
     }
     ++childIt;
     ++opIt;
@@ -1236,7 +1236,7 @@ BlankNode Visitor::visitTypesafe(Parser::BlankNodeContext* ctx) {
     return {false, label};
   }
   // invalid grammar
-  AD_CHECK(false);
+  AD_FAIL();
 }
 
 // ____________________________________________________________________________________

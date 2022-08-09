@@ -70,7 +70,7 @@ addLinkAndDiscoverTest(CacheTest absl::flat_hash_map)
 addLinkAndDiscoverTest(ConcurrentCacheTest absl::flat_hash_map)
 
 # This test also seems to use the same filenames and should be fixed.
-addLinkAndDiscoverTestSerial(FileTest)
+addLinkAndDiscoverTestSerial(FileTest absl::strings)
 
 addLinkAndDiscoverTest(Simple8bTest)
 
@@ -101,10 +101,10 @@ addLinkAndDiscoverTest(VocabularyGeneratorTest index)
 
 addLinkAndDiscoverTest(HasPredicateScanTest engine)
 
-addLinkAndDiscoverTest(MmapVectorTest)
+addLinkAndDiscoverTest(MmapVectorTest absl::strings)
 
 # BufferedVectorTest also uses conflicting filenames.
-addLinkAndDiscoverTestSerial(BufferedVectorTest)
+addLinkAndDiscoverTestSerial(BufferedVectorTest absl::strings)
 
 addLinkAndDiscoverTest(UnionTest engine)
 
@@ -192,7 +192,7 @@ addLinkAndDiscoverTest(MilestoneIdTest absl::strings)
 # TODO<qup42, joka921> fix this
 addLinkAndDiscoverTest(VocabularyOnDiskTest index)
 
-addLinkAndDiscoverTest(VocabularyTest index)
+addLinkAndDiscoverTest(VocabularyTest index absl::strings)
 
 addLinkAndDiscoverTest(IteratorTest)
 

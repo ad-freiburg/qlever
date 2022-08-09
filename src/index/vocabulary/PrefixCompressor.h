@@ -80,7 +80,7 @@ class PrefixCompressor {
         LOG(ERROR)
             << "More than " << NUM_COMPRESSION_PREFIXES
             << " prefixes have been specified. This should never happen\n";
-        AD_CHECK(false);
+        AD_FAIL();
       }
       _prefixToCode[prefixIdx] = fulltext;
       _codeToPrefix.emplace_back(prefixIdx + MIN_COMPRESSION_PREFIX, fulltext);

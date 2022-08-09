@@ -46,8 +46,8 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
   std::vector<uint64_t> numWordsLeftInPartialVocabulary;
 
   if (!_noIdMapsAndIgnoreExternalVocab) {
-    _outfileExternal.open(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
-    AD_CHECK(_outfileExternal.is_open());
+    _outfileExternal =
+        ad_utility::makeOfstream(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
   }
   std::vector<bool> endOfFile(numFiles, false);
 
@@ -269,7 +269,7 @@ void writeMappedIdsToExtVec(const auto& input,
       if (iterator == map.end()) {
         LOG(ERROR) << "not found in partial local vocabulary: " << curTriple[k]
                    << std::endl;
-        AD_CHECK(false);
+        AD_FAIL();
       }
       mappedTriple[k] =
           Id::makeFromVocabIndex(VocabIndex::make(iterator->second));

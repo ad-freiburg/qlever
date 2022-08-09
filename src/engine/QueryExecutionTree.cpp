@@ -335,7 +335,7 @@ QueryExecutionTree::idToStringAndType(Id id,
       return std::pair{_qec->getIndex().getTextExcerpt(id.getTextRecordIndex()),
                        nullptr};
   }
-  AD_CHECK(false);
+  AD_FAIL();
 }
 
 // __________________________________________________________________________________________________________

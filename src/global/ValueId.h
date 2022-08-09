@@ -224,7 +224,7 @@ class ValueId {
       case Datatype::TextRecordIndex:
         return std::invoke(visitor, getTextRecordIndex());
       default:
-        AD_CHECK(false);
+        AD_FAIL();
     }
   }
 

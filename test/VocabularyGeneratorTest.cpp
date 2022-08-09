@@ -159,8 +159,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   VocabularyMerger::VocMergeRes res;
   {
     VocabularyMerger m;
-    std::ofstream file(_basePath + INTERNAL_VOCAB_SUFFIX);
-    AD_CHECK(file.is_open());
+    auto file = ad_utility::makeOfstream(_basePath + INTERNAL_VOCAB_SUFFIX);
     auto internalVocabularyAction = [&file](const auto& word) {
       file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
     };
@@ -202,8 +201,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
 
     {
       VocabularyMerger m;
-      std::ofstream file(basename + INTERNAL_VOCAB_SUFFIX);
-      AD_CHECK(file.is_open());
+      auto file = ad_utility::makeOfstream(basename + INTERNAL_VOCAB_SUFFIX);
       auto internalVocabularyAction = [&file](const auto& word) {
         file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
       };
@@ -246,8 +244,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
 
     {
       VocabularyMerger m;
-      std::ofstream file(basename + INTERNAL_VOCAB_SUFFIX);
-      AD_CHECK(file.is_open());
+      auto file = ad_utility::makeOfstream(basename + INTERNAL_VOCAB_SUFFIX);
       auto internalVocabularyAction = [&file](const auto& word) {
         file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
       };

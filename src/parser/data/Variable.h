@@ -60,7 +60,7 @@ class Variable {
           return qecIndex.getTextExcerpt(id.getTextRecordIndex());
       }
       // The switch is exhaustive
-      AD_CHECK(false);
+      AD_FAIL();
     }
     return std::nullopt;
   }

@@ -138,7 +138,7 @@ void unescapeStringAndNumericEscapes(InputIterator beginIterator,
 
       default:
         // should never happen
-        AD_CHECK(false);
+        AD_FAIL();
     }
     beginIterator = nextBackslashIterator + numCharactersFromInput;
   }
@@ -170,7 +170,7 @@ std::string escapeNewlinesAndBackslashes(std::string_view literal) {
         result.append("\\\\");
         break;
       default:
-        AD_CHECK(false);
+        AD_FAIL();
     }
     literal.remove_prefix(pos + 1);
   }

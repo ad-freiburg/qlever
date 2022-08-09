@@ -220,7 +220,7 @@ class Index {
         return getTextExcerpt(id.getTextRecordIndex());
     }
     // should be unreachable because the enum is exhaustive.
-    AD_CHECK(false);
+    AD_FAIL();
   }
 
   bool getId(const string& element, Id* id) const {

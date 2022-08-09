@@ -264,7 +264,7 @@ void Filter::computeFilterRange(IdTableStatic<WIDTH>* res, size_t lhs,
     }
     default:
       // This should be unreachable.
-      AD_CHECK(false);
+      AD_FAIL();
   }
 }
 

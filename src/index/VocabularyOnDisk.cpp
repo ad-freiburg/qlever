@@ -109,8 +109,7 @@ void VocabularyOnDisk::buildFromStringsAndIds(
 // _____________________________________________________________________________
 void VocabularyOnDisk::buildFromTextFile(const string& textFileName,
                                          const string& outFileName) {
-  std::ifstream infile(textFileName);
-  AD_CHECK(infile.is_open());
+  auto infile = ad_utility::makeIfstream(textFileName);
   auto lineGenerator =
       [&infile]() -> cppcoro::generator<std::pair<std::string_view, uint64_t>> {
     std::string word;
