@@ -281,13 +281,14 @@ inline void deleteFile(const std::filesystem::path& path,
 }
 
 namespace detail {
-template <typename Stream>
+template <typename Stream, bool forWriting>
 Stream makeFilestream(const std::filesystem::path& path, auto&&... args) {
   Stream stream{path.string(), AD_FWD(args)...};
+  std::string_view mode = forWriting ? "for writing" : "for reading";
   if (!stream.is_open()) {
     std::string error =
-        absl::StrCat("Could not open file \"", path.string(),
-                     "\". Possible causes: The file does not exist or the "
+        absl::StrCat("Could not open file \"", path.string(), "\" ", mode,
+                     ". Possible causes: The file does not exist or the "
                      "permissions are wrong. The absolute path is \"",
                      std::filesystem::absolute(path).string(), "\".");
     throw std::runtime_error{error};
@@ -300,12 +301,12 @@ Stream makeFilestream(const std::filesystem::path& path, auto&&... args) {
 // additionals `args`. Throw an exception stating the filename and the absolute
 // path when the file can't be opened.
 std::ifstream makeIfstream(const std::filesystem::path& path, auto&&... args) {
-  return detail::makeFilestream<std::ifstream>(path, AD_FWD(args)...);
+  return detail::makeFilestream<std::ifstream, false>(path, AD_FWD(args)...);
 }
 
 // Similar to `makeIfstream`, but returns `std::ofstream`
 std::ofstream makeOfstream(const std::filesystem::path& path, auto&&... args) {
-  return detail::makeFilestream<std::ofstream>(path, AD_FWD(args)...);
+  return detail::makeFilestream<std::ofstream, true>(path, AD_FWD(args)...);
 }
 
 }  // namespace ad_utility

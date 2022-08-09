@@ -70,7 +70,7 @@ addLinkAndDiscoverTest(CacheTest absl::flat_hash_map)
 addLinkAndDiscoverTest(ConcurrentCacheTest absl::flat_hash_map)
 
 # This test also seems to use the same filenames and should be fixed.
-addLinkAndDiscoverTestSerial(FileTest)
+addLinkAndDiscoverTestSerial(FileTest absl::strings)
 
 addLinkAndDiscoverTest(Simple8bTest)
 
