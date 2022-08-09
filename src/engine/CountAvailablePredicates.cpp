@@ -282,7 +282,12 @@ void CountAvailablePredicates::computePatternTrick(
       if (inputIdx > 0 && subjectId == input(inputIdx - 1, subjectColumn)) {
         continue;
       }
-      AD_CHECK(subjectId.getDatatype() == Datatype::VocabIndex);
+      if (subjectId.getDatatype() != Datatype::VocabIndex) {
+        // Ignore numeric literals and other types that are folded into
+        // the value IDs. They can never be subjects and thus also have no
+        // patterns.
+        continue;
+      }
       auto subject = subjectId.getVocabIndex().get();
 
       if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
@@ -317,11 +322,8 @@ void CountAvailablePredicates::computePatternTrick(
 
   LOG(DEBUG) << "Converting PatternMap to vector" << std::endl;
   // flatten into a vector, to make iterable
-  std::vector<std::pair<size_t, size_t>> patternVec;
-  patternVec.reserve(patternCounts.size());
-  for (const auto& p : patternCounts) {
-    patternVec.push_back(p);
-  }
+  const std::vector<std::pair<size_t, size_t>> patternVec(patternCounts.begin(),
+                                                          patternCounts.end());
 
   LOG(DEBUG) << "Start translating pattern counts to predicate counts"
              << std::endl;

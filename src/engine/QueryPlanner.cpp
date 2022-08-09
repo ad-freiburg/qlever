@@ -906,23 +906,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     for (const auto& parent : *previous) {
       // Determine the column containing the subjects for which we are
       // interested in their predicates.
-      auto it = parent._qet->getVariableColumns().find(
-          patternTrickTriple._s.getString());
-      if (it == parent._qet->getVariableColumns().end()) {
-        AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-                 "The root operation of the "
-                 "query excecution tree does "
-                 "not contain a column for "
-                 "variable " +
-                     patternTrickTriple._s.toString() +
-                     " required by the pattern "
-                     "trick.");
-      }
-      size_t subjectColumn = it->second;
+      auto subjectColumn =
+          parent._qet->getVariableColumn(patternTrickTriple._s.getString());
       const std::vector<size_t>& resultSortedOn =
           parent._qet->getRootOperation()->getResultSortedOn();
       bool isSorted =
-          resultSortedOn.size() > 0 && resultSortedOn[0] == subjectColumn;
+          !resultSortedOn.empty() && resultSortedOn[0] == subjectColumn;
       // a and b need to be ordered properly first
       vector<pair<size_t, bool>> sortIndices = {
           std::make_pair(subjectColumn, false)};
