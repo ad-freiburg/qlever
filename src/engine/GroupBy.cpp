@@ -170,7 +170,7 @@ void GroupBy::processGroup(
           singleResult, *(outTable->_localVocab), false);
     } else {
       // This should never happen since aggregates always return constants.
-      AD_CHECK(false)
+      AD_FAIL()
     }
   };
 

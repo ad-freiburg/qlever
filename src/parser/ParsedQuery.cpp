@@ -181,7 +181,7 @@ void ParsedQuery::expandPrefixes() {
           arg._subquery.expandPrefixes();
         } else if constexpr (std::is_same_v<T,
                                             GraphPatternOperation::TransPath>) {
-          AD_CHECK(false);
+          AD_FAIL();
           // we may never be in an transitive path here or a
           // subquery?TODO<joka921, verify by florian> at least this
           // shoudn't have worked before

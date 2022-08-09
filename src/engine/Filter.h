@@ -184,7 +184,7 @@ class Filter : public Operation {
       case SparqlFilter::GE:
         return valueIdComparators::Comparison::GE;
       default:
-        AD_CHECK(false);
+        AD_FAIL();
     }
   }
 };

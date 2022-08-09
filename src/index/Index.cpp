@@ -129,8 +129,7 @@ void Index::createFromFile(const string& filename) {
     prefixes = calculatePrefixes(vocabFileForPrefixCalculation,
                                  NUM_COMPRESSION_PREFIXES, 1, true);
     deleteTemporaryFile(vocabFileForPrefixCalculation);
-    std::ofstream prefixFile(_onDiskBase + PREFIX_FILE);
-    AD_CHECK(prefixFile.is_open());
+    auto prefixFile = ad_utility::makeOfstream(_onDiskBase + PREFIX_FILE);
     for (const auto& prefix : prefixes) {
       prefixFile << prefix << std::endl;
     }
@@ -153,7 +152,7 @@ void Index::createFromFile(const string& filename) {
     LOG(INFO) << "Error: Rename the prefixed vocab file " << vocabFileTmp
               << " to " << vocabFile << " set errno to " << errno
               << ". Terminating..." << std::endl;
-    AD_CHECK(false);
+    AD_FAIL();
   }
 
   // Write the configuration already at this point, so we have it available in
@@ -347,9 +346,8 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
     LOG(INFO) << "Merging partial vocabularies in byte order "
               << "(internal only) ..." << std::endl;
     VocabularyMerger m;
-    std::ofstream compressionOutfile(_onDiskBase + TMP_BASENAME_COMPRESSION +
-                                     INTERNAL_VOCAB_SUFFIX);
-    AD_CHECK(compressionOutfile.is_open());
+    auto compressionOutfile = ad_utility::makeOfstream(
+        _onDiskBase + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX);
     auto internalVocabularyActionCompression =
         [&compressionOutfile](const auto& word) {
           compressionOutfile << RdfEscaping::escapeNewlinesAndBackslashes(word)
@@ -445,7 +443,7 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
         if (iterator == idMap.end()) {
           LOG(INFO) << "Not found in partial vocabulary: " << curTriple[k]
                     << std::endl;
-          AD_CHECK(false);
+          AD_FAIL();
         }
         // TODO<joka921> at some point we have to check for out of range.
         curTriple[k] = iterator->second;
@@ -655,7 +653,7 @@ void Index::addPatternsToExistingIndex() {
   auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
   // We only iterate over the SPO permutation which typically only has few
   // triples per subject, so it should be safe to not apply a memory limit here.
-  AD_CHECK(false);
+  AD_FAIL();
   ad_utility::AllocatorWithLimit<Id> allocator{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
           std::numeric_limits<uint64_t>::max())};
@@ -854,15 +852,13 @@ void Index::setPrefixCompression(bool compressed) {
 
 // ____________________________________________________________________________
 void Index::writeConfiguration() const {
-  std::ofstream f(_onDiskBase + CONFIGURATION_FILE);
-  AD_CHECK(f.is_open());
+  auto f = ad_utility::makeOfstream(_onDiskBase + CONFIGURATION_FILE);
   f << _configurationJson;
 }
 
 // ___________________________________________________________________________
 void Index::readConfiguration() {
-  std::ifstream f(_onDiskBase + CONFIGURATION_FILE);
-  AD_CHECK(f.is_open());
+  auto f = ad_utility::makeIfstream(_onDiskBase + CONFIGURATION_FILE);
   f >> _configurationJson;
   if (_configurationJson.find("external-literals") !=
       _configurationJson.end()) {
@@ -873,8 +869,7 @@ void Index::readConfiguration() {
   if (_configurationJson.find("prefixes") != _configurationJson.end()) {
     if (_configurationJson["prefixes"]) {
       vector<string> prefixes;
-      std::ifstream prefixFile(_onDiskBase + PREFIX_FILE);
-      AD_CHECK(prefixFile.is_open());
+      auto prefixFile = ad_utility::makeIfstream(_onDiskBase + PREFIX_FILE);
       for (string prefix; std::getline(prefixFile, prefix);) {
         prefixes.emplace_back(std::move(prefix));
       }
@@ -969,8 +964,7 @@ void Index::readIndexBuilderSettingsFromFile() {
   json j;  // if we have no settings, we still have to initialize some default
            // values
   if (!_settingsFileName.empty()) {
-    std::ifstream f(_settingsFileName);
-    AD_CHECK(f.is_open());
+    auto f = ad_utility::makeIfstream(_settingsFileName);
     f >> j;
   }
 

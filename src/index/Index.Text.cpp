@@ -278,7 +278,7 @@ void Index::processWordsForInvertedLists(const string& contextFile,
       if (!ret) {
         LOG(ERROR) << "ERROR: word \"" << line._word << "\" "
                    << "not found in textVocab. Terminating\n";
-        AD_CHECK(false);
+        AD_FAIL();
       }
       wordsInContext[wid] += line._score;
     }
@@ -559,7 +559,7 @@ void Index::calculateBlockBoundariesImpl(
     LOG(ERROR) << "You have chosen a locale where the prefixes aaaa, aaab, "
                   "..., zzzz are not alphabetically ordered. This is currently "
                   "unsupported when building a text index";
-    AD_CHECK(false);
+    AD_FAIL();
   }
 
   if (index._textVocab.size() == 0) {

@@ -64,7 +64,7 @@ inline const char* toTypeIri(NumericType type) {
       return XSD_DOUBLE_TYPE;
     default:
       // This should never happen
-      AD_CHECK(false);
+      AD_FAIL();
   }
 }
 

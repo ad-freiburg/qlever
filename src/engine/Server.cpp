@@ -699,7 +699,7 @@ boost::asio::awaitable<void> Server::processQuery(
       default:
         // This should never happen, because we have carefully restricted the
         // subset of mediaTypes that can occur here.
-        AD_CHECK(false);
+        AD_FAIL();
     }
     // Print the runtime info. This needs to be done after the query
     // was computed.

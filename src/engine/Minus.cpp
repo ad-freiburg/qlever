@@ -198,7 +198,7 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
           }
         } break;
         default:
-          AD_CHECK(false);
+          AD_FAIL();
       }
       checkTimeout();
     }

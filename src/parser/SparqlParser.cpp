@@ -69,7 +69,7 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
     parseSelect(query);
   } else {
     // Unsupported query type
-    AD_CHECK(false);
+    AD_FAIL();
   }
 
   lexer_.expect("{");
@@ -126,7 +126,7 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
       }
     } else {
       // Invalid clause type
-      AD_CHECK(false);
+      AD_FAIL();
     }
   }
   if (!query->hasSelectClause()) {

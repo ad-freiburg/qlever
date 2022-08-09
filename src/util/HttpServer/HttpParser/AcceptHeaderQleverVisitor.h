@@ -111,12 +111,12 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
   }
 
   antlrcpp::Any visitType(AcceptHeaderParser::TypeContext* ctx) override {
-    AD_CHECK(false);  // Should be unreachable.
+    AD_FAIL();  // Should be unreachable.
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitSubtype(AcceptHeaderParser::SubtypeContext* ctx) override {
-    AD_CHECK(false);  // Should be unreachable.
+    AD_FAIL();  // Should be unreachable.
     return visitChildren(ctx);
   }
 
@@ -147,19 +147,19 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
   }
 
   antlrcpp::Any visitQvalue(AcceptHeaderParser::QvalueContext* ctx) override {
-    AD_CHECK(false);  // Should be unreachable.
+    AD_FAIL();  // Should be unreachable.
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitAcceptExt(
       AcceptHeaderParser::AcceptExtContext* ctx) override {
-    AD_CHECK(false);  // Should be unreachable.
+    AD_FAIL();  // Should be unreachable.
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitParameter(
       AcceptHeaderParser::ParameterContext* ctx) override {
-    AD_CHECK(false);  // Should be unreachable.
+    AD_FAIL();  // Should be unreachable.
     return visitChildren(ctx);
   }
 
@@ -169,19 +169,19 @@ class AcceptHeaderQleverVisitor : public AcceptHeaderVisitor {
   }
 
   antlrcpp::Any visitTchar(AcceptHeaderParser::TcharContext* ctx) override {
-    AD_CHECK(false);  // Should be unreachable.
+    AD_FAIL();  // Should be unreachable.
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitQuotedString(
       AcceptHeaderParser::QuotedStringContext* ctx) override {
-    AD_CHECK(false);  // Should be unreachable.
+    AD_FAIL();  // Should be unreachable.
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitQuoted_pair(
       AcceptHeaderParser::Quoted_pairContext* ctx) override {
-    AD_CHECK(false);  // Should be unreachable.
+    AD_FAIL();  // Should be unreachable.
     return visitChildren(ctx);
   }
 };
