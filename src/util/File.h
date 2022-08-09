@@ -289,7 +289,7 @@ Stream makeFilestream(const std::filesystem::path& path, auto&&... args) {
     std::string error =
         absl::StrCat("Could not open file \"", path.string(), "\" ", mode,
                      ". Possible causes: The file does not exist or the "
-                     "permissions are wrong. The absolute path is \"",
+                     "permissions are insufficient. The absolute path is \"",
                      std::filesystem::absolute(path).string(), "\".");
     throw std::runtime_error{error};
   }
