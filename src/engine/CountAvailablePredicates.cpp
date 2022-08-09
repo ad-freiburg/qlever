@@ -322,11 +322,8 @@ void CountAvailablePredicates::computePatternTrick(
 
   LOG(DEBUG) << "Converting PatternMap to vector" << std::endl;
   // flatten into a vector, to make iterable
-  std::vector<std::pair<size_t, size_t>> patternVec;
-  patternVec.reserve(patternCounts.size());
-  for (const auto& p : patternCounts) {
-    patternVec.push_back(p);
-  }
+  const std::vector<std::pair<size_t, size_t>> patternVec(patternCounts.begin(),
+                                                          patternCounts.end());
 
   LOG(DEBUG) << "Start translating pattern counts to predicate counts"
              << std::endl;

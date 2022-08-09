@@ -707,6 +707,44 @@ queries:
       - contains_row: ["<label>", 134]
 
 
+  - query : count-available-predicates-wrong-datatype
+    type: no-text
+    sparql: |
+      SELECT ?p (COUNT(?p) as ?count) WHERE {
+        ?h1 ql:has-predicate ?p .
+        ?a <Height> ?h1 .
+        ?a <Profession> ?profession .
+      }
+      GROUP BY ?p
+    checks:
+      - num_rows: 0
+      - num_cols: 2
+      - selected: ["?p", "?count"]
+
+
+  - query : count-available-predicates-mixed-datatypes
+    type: no-text
+    sparql: |
+      SELECT ?p (COUNT(?p) as ?count) WHERE {
+        ?a ql:has-predicate ?p .
+        {
+          ?a <Height> ?h1 .
+          ?a <Profession> ?profession .
+        } UNION {
+          # the heights have no predicates (see the two queries above)
+          ?x <Height> ?a
+        }
+      }
+      GROUP BY ?p
+    checks:
+      - num_rows: 109
+      - num_cols: 2
+      - selected: ["?p", "?count"]
+      - contains_row: ["<Film_appeared_in>", 56]
+      - contains_row: ["<Patent>", 2]
+      - contains_row: ["<label>", 134]
+
+
   - query : count-available-predicates-on-single-entity
     type: no-text
     sparql: |
