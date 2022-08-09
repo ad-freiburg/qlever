@@ -908,8 +908,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
       // interested in their predicates.
       auto subjectColumn =
           parent._qet->getVariableColumn(patternTrickTriple._s.getString());
-      LOG(INFO) << "Subject column of CountAvailablePredicate is "
-                << subjectColumn << std::endl;
       const std::vector<size_t>& resultSortedOn =
           parent._qet->getRootOperation()->getResultSortedOn();
       bool isSorted =

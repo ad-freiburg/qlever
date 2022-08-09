@@ -282,7 +282,12 @@ void CountAvailablePredicates::computePatternTrick(
       if (inputIdx > 0 && subjectId == input(inputIdx - 1, subjectColumn)) {
         continue;
       }
-      AD_CHECK(subjectId.getDatatype() == Datatype::VocabIndex);
+      if (subjectId.getDatatype() != Datatype::VocabIndex) {
+        // Ignore numeric literals and other types that are folded into
+        // the value IDs. They can never be subjects and thus also have no
+        // patterns.
+        continue;
+      }
       auto subject = subjectId.getVocabIndex().get();
 
       if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
