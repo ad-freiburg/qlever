@@ -206,6 +206,13 @@ message(STATUS ---)
 ###############################################################################
 ##### Actual project configuration #####
 ###############################################################################
+
+# get the current git hash
+execute_process( COMMAND git log -1 --format="%H" OUTPUT_VARIABLE GIT_HASH)
+message(STATUS "Git hash is ${GIT_HASH}")
+message(STATUS "Dir is ${PROJECT_BINARY_DIR}")
+configure_file("${PROJECT_SOURCE_DIR}/src/GitHashTemplate.h"  "${PROJECT_BINARY_DIR}/src/GitHash.h")
+
 set(LOG_LEVEL_FATAL 0)
 set(LOG_LEVEL_ERROR 1)
 set(LOG_LEVEL_WARN 2)
@@ -244,7 +251,7 @@ target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
 add_executable(ServerMain src/ServerMain.cpp)
 target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
 
-add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
+add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp src/GitHashTemplate.h)
 target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(TurtleParserMain src/TurtleParserMain.cpp)

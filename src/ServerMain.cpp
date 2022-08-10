@@ -12,6 +12,7 @@
 #include "global/Constants.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFact.h"
+#include "./GitHash.h"
 
 using std::cerr;
 using std::cout;
