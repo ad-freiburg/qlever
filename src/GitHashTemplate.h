@@ -5,5 +5,5 @@
 #pragma once
 #include <string_view>
 namespace qlever::version {
-  static constexpr std::string_view GitHash = "${GIT_HASH}";
+static constexpr std::string_view GitHash = ${GIT_HASH};
 }

@@ -8,11 +8,11 @@
 #include <string>
 #include <vector>
 
+#include "./GitHash.h"
 #include "engine/Server.h"
 #include "global/Constants.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFact.h"
-#include "./GitHash.h"
 
 using std::cerr;
 using std::cout;
@@ -124,6 +124,7 @@ int main(int argc, char** argv) {
 
   LOG(INFO) << EMPH_ON << "QLever Server, compiled on " << __DATE__ << " "
             << __TIME__ << EMPH_OFF << std::endl;
+  LOG(INFO) << "Git commit hash is " << qlever::version::GitHash << std::endl;
 
   try {
     Server server(port, static_cast<int>(numSimultaneousQueries),

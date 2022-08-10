@@ -211,7 +211,7 @@ message(STATUS ---)
 execute_process( COMMAND git log -1 --format="%H" OUTPUT_VARIABLE GIT_HASH)
 message(STATUS "Git hash is ${GIT_HASH}")
 message(STATUS "Dir is ${PROJECT_BINARY_DIR}")
-configure_file("${PROJECT_SOURCE_DIR}/src/GitHashTemplate.h"  "${PROJECT_BINARY_DIR}/src/GitHash.h")
+configure_file("${PROJECT_SOURCE_DIR}/src/GitHashTemplate.h"  "${PROJECT_SOURCE_DIR}/src/GitHash.h")
 
 set(LOG_LEVEL_FATAL 0)
 set(LOG_LEVEL_ERROR 1)

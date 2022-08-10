@@ -15,7 +15,8 @@ class QueryPlanner {
  public:
   explicit QueryPlanner(QueryExecutionContext* qec);
 
-  // Create the best execution tree for the given query according to the optimization algorithm an cost estimates of the QueryPlanner.
+  // Create the best execution tree for the given query according to the
+  // optimization algorithm an cost estimates of the QueryPlanner.
   QueryExecutionTree createExecutionTree(ParsedQuery& pq);
 
   class TripleGraph {

@@ -13,6 +13,7 @@
 #include <string>
 #include <unordered_set>
 
+#include "../GitHash.h"
 #include "../global/Constants.h"
 #include "../util/File.h"
 #include "../util/ReadableNumberFact.h"
@@ -276,6 +277,7 @@ int main(int argc, char** argv) {
 
   LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on " << __DATE__ << " "
             << __TIME__ << EMPH_OFF << std::endl;
+  LOG(INFO) << "Git hash is " << qlever::version::GitHash << std::endl;
 
   try {
     LOG(TRACE) << "Configuring STXXL..." << std::endl;
