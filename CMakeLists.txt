@@ -208,6 +208,7 @@ message(STATUS ---)
 ###############################################################################
 
 # get the current git hash
+set(GIT_HASH "Qlever is not inside a git repository")
 execute_process( COMMAND git log -1 --format="%H" OUTPUT_VARIABLE GIT_HASH)
 message(STATUS "Git hash is ${GIT_HASH}")
 message(STATUS "Dir is ${PROJECT_BINARY_DIR}")
