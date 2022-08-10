@@ -417,119 +417,91 @@ std::string_view SparqlParser::readTriplePart(const std::string& s,
 
 // _____________________________________________________________________________
 void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
-  while (!lexer_.empty() && !lexer_.accept("}")) {
-    if (lexer_.peek(SparqlToken::Type::ORDER_BY)) {
-      auto order_keys =
-          parseWithAntlr(sparqlParserHelpers::parseOrderClause, *query);
+  auto modifiers =
+      parseWithAntlr(sparqlParserHelpers::parseSolutionModifier, *query);
 
-      auto processVariableOrderKey = [&query](VariableOrderKey orderKey) {
-        // Check whether grouping is done. The variable being ordered by
-        // must then be either grouped or the result of an alias in the select.
-        const vector<Variable>& groupByVariables = query->_groupByVariables;
-        if (!groupByVariables.empty() &&
-            !ad_utility::contains_if(groupByVariables,
-                                     [&orderKey](const Variable& var) {
-                                       return orderKey.variable_ == var.name();
-                                     }) &&
-            !ad_utility::contains_if(query->selectClause().getAliases(),
-                                     [&orderKey](const Alias& alias) {
-                                       return alias._outVarName ==
-                                              orderKey.variable_;
-                                     })) {
-          throw ParseException(
-              "Variable " + orderKey.variable_ +
-              " was used in an ORDER BY "
-              "clause, but is neither grouped, nor created as an alias in the "
-              "SELECT clause.");
-        }
-
-        query->_orderBy.push_back(std::move(orderKey));
+  // Process groupClause
+  auto processVariable = [&query](const Variable& groupKey) {
+    query->_groupByVariables.emplace_back(groupKey.name());
+  };
+  auto processExpression =
+      [&query, this](sparqlExpression::SparqlExpressionPimpl groupKey) {
+        auto helperTarget = addInternalBind(query, std::move(groupKey));
+        query->_groupByVariables.emplace_back(helperTarget.name());
       };
+  auto processAlias = [&query](Alias groupKey) {
+    GraphPatternOperation::Bind helperBind{std::move(groupKey._expression),
+                                           groupKey._outVarName};
+    query->_rootGraphPattern._children.emplace_back(std::move(helperBind));
+    query->registerVariableVisibleInQueryBody(Variable{groupKey._outVarName});
+    query->_groupByVariables.emplace_back(groupKey._outVarName);
+  };
 
-      // QLever currently only supports ordering by variables. To allow
-      // all `orderConditions`, the corresponding expression is bound to a new
-      // internal variable. Ordering is then done by this variable.
-      auto processExpressionOrderKey = [&query,
-                                        this](ExpressionOrderKey orderKey) {
-        if (!query->_groupByVariables.empty())
-          // TODO<qup42> Implement this by adding a hidden alias in the
-          //  SELECT clause.
-          throw ParseException(
-              "Ordering by an expression while grouping is not supported by "
-              "QLever. (The expression is \"" +
-              orderKey.expression_.getDescriptor() +
-              "\"). Please assign this expression to a "
-              "new variable in the SELECT clause and then order by this "
-              "variable.");
-        auto additionalVariable =
-            addInternalBind(query, std::move(orderKey.expression_));
-        query->_orderBy.emplace_back(additionalVariable.name(),
-                                     orderKey.isDescending_);
-      };
-
-      for (auto& orderKey : order_keys) {
-        std::visit(ad_utility::OverloadCallOperator{processVariableOrderKey,
-                                                    processExpressionOrderKey},
-                   std::move(orderKey));
-      }
-    } else if (lexer_.peek("limit") || lexer_.peek("textlimit") ||
-               lexer_.peek("offset")) {
-      query->_limitOffset =
-          parseWithAntlr(sparqlParserHelpers::parseLimitOffsetClause, *query);
-    } else if (lexer_.peek(SparqlToken::Type::GROUP_BY)) {
-      auto group_keys =
-          parseWithAntlr(sparqlParserHelpers::parseGroupClause, *query);
-
-      auto processVariable = [&query](const Variable& groupKey) {
-        query->_groupByVariables.emplace_back(groupKey.name());
-      };
-      auto processExpression =
-          [&query, this](sparqlExpression::SparqlExpressionPimpl groupKey) {
-            auto helperTarget = addInternalBind(query, std::move(groupKey));
-            query->_groupByVariables.emplace_back(helperTarget.name());
-          };
-      auto processAlias = [&query](Alias groupKey) {
-        GraphPatternOperation::Bind helperBind{std::move(groupKey._expression),
-                                               groupKey._outVarName};
-        query->_rootGraphPattern._children.emplace_back(std::move(helperBind));
-        query->registerVariableVisibleInQueryBody(
-            Variable{groupKey._outVarName});
-        query->_groupByVariables.emplace_back(groupKey._outVarName);
-      };
-
-      for (auto& orderKey : group_keys) {
-        std::visit(
-            ad_utility::OverloadCallOperator{processVariable, processExpression,
-                                             processAlias},
-            std::move(orderKey));
-      }
-    } else if (lexer_.accept("having")) {
-      auto addHavingFilter = [&](bool failOnNoFilter) {
-        auto filterOpt = parseFilter(failOnNoFilter);
-        if (filterOpt.has_value()) {
-          auto& filter = filterOpt.value();
-          if (filter._type == SparqlFilter::LANG_MATCHES) {
-            throw ParseException(
-                "Language filter in HAVING clause currently not "
-                "supported by QLever");
-          }
-          query->_havingClauses.push_back(std::move(filter));
-          return true;
-        } else {
-          AD_CHECK(!failOnNoFilter);
-          return false;
-        }
-      };
-      addHavingFilter(true);
-      // Add remaining filters.
-      while (addHavingFilter(false)) {
-      }
-    } else {
-      lexer_.accept();
-      throw ParseException("Expected a solution modifier but got " +
-                           lexer_.current().raw);
-    }
+  for (auto& orderKey : modifiers._groupByVariables) {
+    std::visit(
+        ad_utility::OverloadCallOperator{processVariable, processExpression,
+                                         processAlias},
+        std::move(orderKey));
   }
+
+  // Process havingClause
+  query->_havingClauses = std::move(modifiers._havingClauses);
+
+  // Process orderClause
+  auto processVariableOrderKey = [&query](VariableOrderKey orderKey) {
+    // Check whether grouping is done. The variable being ordered by
+    // must then be either grouped or the result of an alias in the select.
+    const vector<Variable>& groupByVariables = query->_groupByVariables;
+    if (!groupByVariables.empty() &&
+        !ad_utility::contains_if(groupByVariables,
+                                 [&orderKey](const Variable& var) {
+                                   return orderKey.variable_ == var.name();
+                                 }) &&
+        !ad_utility::contains_if(query->selectClause().getAliases(),
+                                 [&orderKey](const Alias& alias) {
+                                   return alias._outVarName ==
+                                          orderKey.variable_;
+                                 })) {
+      throw ParseException(
+          "Variable " + orderKey.variable_ +
+          " was used in an ORDER BY "
+          "clause, but is neither grouped, nor created as an alias in the "
+          "SELECT clause.");
+    }
+
+    query->_orderBy.push_back(std::move(orderKey));
+  };
+
+  // QLever currently only supports ordering by variables. To allow
+  // all `orderConditions`, the corresponding expression is bound to a new
+  // internal variable. Ordering is then done by this variable.
+  auto processExpressionOrderKey = [&query, this](ExpressionOrderKey orderKey) {
+    if (!query->_groupByVariables.empty())
+      // TODO<qup42> Implement this by adding a hidden alias in the
+      //  SELECT clause.
+      throw ParseException(
+          "Ordering by an expression while grouping is not supported by "
+          "QLever. (The expression is \"" +
+          orderKey.expression_.getDescriptor() +
+          "\"). Please assign this expression to a "
+          "new variable in the SELECT clause and then order by this "
+          "variable.");
+    auto additionalVariable =
+        addInternalBind(query, std::move(orderKey.expression_));
+    query->_orderBy.emplace_back(additionalVariable.name(),
+                                 orderKey.isDescending_);
+  };
+
+  for (auto& orderKey : modifiers._orderBy) {
+    std::visit(ad_utility::OverloadCallOperator{processVariableOrderKey,
+                                                processExpressionOrderKey},
+               std::move(orderKey));
+  }
+
+  // Process limitOffsetClause
+  query->_limitOffset = modifiers._limitOffset;
+
+  lexer_.accept("}");
 }
 
 // _____________________________________________________________________________

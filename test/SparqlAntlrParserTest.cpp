@@ -7,6 +7,7 @@
 
 #include <iostream>
 #include <type_traits>
+#include <utility>
 
 #include "../../src/parser/sparqlParser/SparqlQleverVisitor.h"
 #include "../src/parser/SparqlParserHelpers.h"
@@ -1113,4 +1114,21 @@ TEST(SparqlParser, SelectClause) {
                false);
   expectSelect("SELECT (5 - 10 as ?m) ?foo (10 as ?bar)",
                {Alias{"5-10", "?m"}, Variable{"?foo"}, Alias{"10", "?bar"}});
+}
+
+namespace {
+template <typename Exception = ParseException>
+void expectHavingConditionFails(const string& input) {
+  EXPECT_THROW(parseHavingCondition(input), Exception) << input;
+}
+}  // namespace
+
+TEST(SparqlParser, HavingCondition) {
+  auto expectHavingCondition = [](const string& input, SparqlFilter filter) {
+    expectCompleteParse(parseHavingCondition(input),
+                        testing::Eq(std::move(filter)));
+  };
+
+  expectHavingCondition("(?x <= 42.3)", {SparqlFilter::LE, "?x", "42.3"});
+  expectHavingConditionFails("(LANG(?x) = \"en\")");
 }

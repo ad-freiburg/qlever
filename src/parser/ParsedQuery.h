@@ -20,6 +20,10 @@
 #include "Alias.h"
 #include "ParseException.h"
 #include "PropertyPath.h"
+#include "data/GroupKey.h"
+#include "data/LimitOffsetClause.h"
+#include "data/OrderKey.h"
+#include "data/SparqlFilter.h"
 #include "data/Types.h"
 #include "data/VarOrTerm.h"
 
@@ -73,59 +77,6 @@ class SparqlTriple {
   [[nodiscard]] string asString() const;
 };
 
-/// Store an expression that appeared in an ORDER BY clause.
-class ExpressionOrderKey {
- public:
-  bool isDescending_;
-  sparqlExpression::SparqlExpressionPimpl expression_;
-  // ___________________________________________________________________________
-  explicit ExpressionOrderKey(
-      sparqlExpression::SparqlExpressionPimpl expression,
-      bool isDescending = false)
-      : isDescending_{isDescending}, expression_{std::move(expression)} {}
-};
-
-/// Store a variable that appeared in an ORDER BY clause.
-class VariableOrderKey {
- public:
-  string variable_;
-  bool isDescending_;
-  // ___________________________________________________________________________
-  explicit VariableOrderKey(string variable, bool isDescending = false)
-      : variable_{std::move(variable)}, isDescending_{isDescending} {}
-};
-
-// Represents an ordering by a variable or an expression.
-using OrderKey = std::variant<VariableOrderKey, ExpressionOrderKey>;
-
-class SparqlFilter {
- public:
-  enum FilterType {
-    EQ = 0,
-    NE = 1,
-    LT = 2,
-    LE = 3,
-    GT = 5,
-    GE = 6,
-    LANG_MATCHES = 7,
-    REGEX = 8,
-    PREFIX = 9
-  };
-
-  [[nodiscard]] string asString() const;
-
-  FilterType _type;
-  string _lhs;
-  string _rhs;
-  vector<string> _additionalLhs = {};
-  vector<string> _additionalPrefixes = {};
-  bool _regexIgnoreCase = false;
-  // True if the str function was applied to the left side.
-  bool _lhsAsString = false;
-
-  bool operator==(const SparqlFilter&) const = default;
-};
-
 // Represents a VALUES statement in the query.
 class SparqlValues {
  public:
@@ -133,13 +84,6 @@ class SparqlValues {
   vector<string> _variables;
   // A table storing the values in their string form
   vector<vector<string>> _values;
-};
-
-// Represents the data returned by a limitOffsetClause.
-struct LimitOffsetClause {
-  uint64_t _limit = std::numeric_limits<uint64_t>::max();
-  uint64_t _textLimit = 1;
-  uint64_t _offset = 0;
 };
 
 struct GraphPatternOperation;
@@ -389,9 +333,6 @@ class ParsedQuery {
   static void expandPrefix(
       string& item, const ad_utility::HashMap<string, string>& prefixMap);
 };
-
-using GroupKey =
-    std::variant<sparqlExpression::SparqlExpressionPimpl, Alias, Variable>;
 
 struct GraphPatternOperation {
   struct BasicGraphPattern {
