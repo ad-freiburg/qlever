@@ -187,6 +187,9 @@ class QueryPlanner {
 
   void setEnablePatternTrick(bool enablePatternTrick);
 
+  // TODO comment
+  std::vector<SubtreePlan> createExecutionTrees(ParsedQuery& pq);
+
  private:
   QueryExecutionContext* _qec;
 

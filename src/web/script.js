@@ -34,6 +34,7 @@ $(document).ready(function () {
     $("#runbtn").click(function () {
         var q = encodeURIComponent($("#query").val());
         var queryString = "?query=" + q;
+        queryString += "&action=qlever_json_export";
         if ($("#clear").prop('checked')) {
             queryString += "&cmd=clear-cache";
         }
