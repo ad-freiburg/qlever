@@ -875,6 +875,6 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   template <typename Ctx>
   auto visitOptional(Ctx* ctx) -> std::optional<decltype(visitTypesafe(ctx))>;
 
-  template <typename Target, typename Ctx>
+  template <typename Target, typename Intermediate = Target, typename Ctx>
   void visitIf(Target* target, Ctx* ctx);
 };

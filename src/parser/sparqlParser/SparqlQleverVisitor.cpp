@@ -1245,7 +1245,7 @@ template <typename Out, typename... Contexts>
 Out Visitor::visitAlternative(Contexts*... ctxs) {
   AD_CHECK(1u == (... + static_cast<bool>(ctxs)));
   std::optional<Out> out;
-  (..., visitIf(&out, ctxs));
+  (..., visitIf<std::optional<Out>, Out>(&out, ctxs));
   return std::move(out.value());
 }
 
@@ -1261,9 +1261,9 @@ auto Visitor::visitOptional(Ctx* ctx)
 }
 
 // ____________________________________________________________________________________
-template <typename Target, typename Ctx>
+template <typename Target, typename Intermediate, typename Ctx>
 void Visitor::visitIf(Target* target, Ctx* ctx) {
   if (ctx) {
-    *target = Target{visitTypesafe(ctx)};
+    *target = Intermediate{visitTypesafe(ctx)};
   }
 }
