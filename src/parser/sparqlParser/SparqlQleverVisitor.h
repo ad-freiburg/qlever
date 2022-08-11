@@ -869,13 +869,12 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   string visitTypesafe(Parser::PnameNsContext* ctx);
 
-  template <typename Out, bool isRecursive = false, typename FirstContext,
-            typename... Context>
-  Out visitAlternative(FirstContext* ctx, Context*... ctxs);
+  template <typename Out, typename... Contexts>
+  Out visitAlternative(Contexts*... ctxs);
 
   template <typename Ctx>
   auto visitOptional(Ctx* ctx) -> std::optional<decltype(visitTypesafe(ctx))>;
 
-  template <typename Ctx>
-  void visitIf(auto* target, Ctx* ctx);
+  template <typename Target, typename Ctx>
+  void visitIf(Target* target, Ctx* ctx);
 };
