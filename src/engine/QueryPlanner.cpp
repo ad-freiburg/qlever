@@ -343,8 +343,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         // remove the ORDER BY clauses of a subquery if we can prove that
         // the results will be reordered anyway.
 
-        // Use the complete last row of the dynamic programming of the subquery
-        // which might have different sortings.
+        // For a subquery, make sure that one optimal result for each ordering
+        // of the result (by a single column) is contained.
         joinCandidates(createExecutionTrees(arg._subquery));
       } else if constexpr (std::is_same_v<T,
                                           GraphPatternOperation::TransPath>) {

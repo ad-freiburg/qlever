@@ -16,7 +16,7 @@ class QueryPlanner {
   explicit QueryPlanner(QueryExecutionContext* qec);
 
   // Create the best execution tree for the given query according to the
-  // optimization algorithm an cost estimates of the QueryPlanner.
+  // optimization algorithm and cost estimates of the QueryPlanner.
   QueryExecutionTree createExecutionTree(ParsedQuery& pq);
 
   class TripleGraph {
@@ -191,9 +191,11 @@ class QueryPlanner {
 
   // Create a set of possible execution trees for the given parsed query. The
   // best (cheapest) execution tree according to the QueryPlanner is part of
-  // that set. Typically, when the query has no `ORDER BY` clause the created
-  // plans produce different sortings of the query result which is relevant,
-  // when the query is actually used as a subquery.
+  // that set. When the query has no `ORDER BY` clause, the set contains on
+  // optimal execution tree for each possible ordering (by one column) of the
+  // result. This is relevant for subqueries, which are currently optimized
+  // independently from the rest of the query, but where it depends on the rest
+  // of the query, which ordering of the result is best.
   std::vector<SubtreePlan> createExecutionTrees(ParsedQuery& pq);
 
  private:

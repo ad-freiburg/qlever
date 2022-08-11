@@ -1260,8 +1260,9 @@ queries:
   #  checks:
   #    - selected: ["?count"]
 
-  # One of the following two queries used to throw an exception
-  # about no execution tree being found
+  # For both of the following two queries to work, the query optimizer must
+  # produce two query plans for the result of the subquery (it used to
+  # produce only one).
   - query: subquery-one-triple-1
     type: no-text
     sparql: |
