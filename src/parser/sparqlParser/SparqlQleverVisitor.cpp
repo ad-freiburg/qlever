@@ -201,13 +201,11 @@ std::optional<Values> Visitor::visitTypesafe(Parser::ValuesClauseContext* ctx) {
 // ____________________________________________________________________________________
 vector<TripleWithPropertyPath> Visitor::visitTypesafe(
     Parser::TriplesBlockContext* ctx) {
-  if (!ctx->triplesBlock()) {
-    return visitTypesafe(ctx->triplesSameSubjectPath());
-  } else {
-    auto triples = visitTypesafe(ctx->triplesSameSubjectPath());
+  auto triples = visitTypesafe(ctx->triplesSameSubjectPath());
+  if(ctx->triplesBlock()) {
     appendVector(triples, visitTypesafe(ctx->triplesBlock()));
-    return triples;
   }
+  return triples;
 }
 
 // ____________________________________________________________________________________
@@ -219,10 +217,10 @@ sparqlExpression::SparqlExpression::Ptr Visitor::visitTypesafe(
 // ____________________________________________________________________________________
 SolutionModifiers Visitor::visitTypesafe(Parser::SolutionModifierContext* ctx) {
   SolutionModifiers modifiers;
-  visitIf(&modifiers._groupByVariables, ctx->groupClause());
-  visitIf(&modifiers._havingClauses, ctx->havingClause());
-  visitIf(&modifiers._orderBy, ctx->orderClause());
-  visitIf(&modifiers._limitOffset, ctx->limitOffsetClauses());
+  visitIf(&modifiers.groupByVariables_, ctx->groupClause());
+  visitIf(&modifiers.havingClauses_, ctx->havingClause());
+  visitIf(&modifiers.orderBy_, ctx->orderClause());
+  visitIf(&modifiers.limitOffset_, ctx->limitOffsetClauses());
   return modifiers;
 }
 
@@ -243,19 +241,23 @@ vector<SparqlFilter> Visitor::visitTypesafe(Parser::HavingClauseContext* ctx) {
 
 // ____________________________________________________________________________________
 SparqlFilter Visitor::visitTypesafe(Parser::HavingConditionContext* ctx) {
-  try {
-    SparqlFilter filter = SparqlParser::parseFilterExpression(ctx->getText());
-    if (filter._type == SparqlFilter::LANG_MATCHES) {
+   const SparqlFilter filter = [ctx]() {
+     try {
+       return SparqlParser::parseFilterExpression(ctx->getText());
+     } catch (const std::bad_optional_access& error) {
+       throw ParseException("The expression " + ctx->getText() + " is currently not supported by Qlever inside a FILTER or HAVING clause.");
+     } catch (const ParseException& error) {
+       throw ParseException("The expression " + ctx->getText() + " is currently not supported by Qlever inside a FILTER or HAVING clause. Details: " + error.what());
+     }
+   }();
+   if (filter._type == SparqlFilter::LANG_MATCHES) {
       throw ParseException(
           "Language filter in HAVING clause currently not "
           "supported by QLever. Got: " +
           ctx->getText());
-    } else {
-      return filter;
-    }
-  } catch (const std::bad_optional_access& error) {
-    throw ParseException("Could not parse Condition. Got: " + ctx->getText());
-  }
+   } else {
+      return std::move(filter);
+   }
 }
 
 // ____________________________________________________________________________________

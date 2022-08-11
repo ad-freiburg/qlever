@@ -437,7 +437,7 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
     query->_groupByVariables.emplace_back(groupKey._outVarName);
   };
 
-  for (auto& orderKey : modifiers._groupByVariables) {
+  for (auto& orderKey : modifiers.groupByVariables_) {
     std::visit(
         ad_utility::OverloadCallOperator{processVariable, processExpression,
                                          processAlias},
@@ -445,7 +445,7 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
   }
 
   // Process havingClause
-  query->_havingClauses = std::move(modifiers._havingClauses);
+  query->_havingClauses = std::move(modifiers.havingClauses_);
 
   // Process orderClause
   auto processVariableOrderKey = [&query](VariableOrderKey orderKey) {
@@ -492,14 +492,14 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
                                  orderKey.isDescending_);
   };
 
-  for (auto& orderKey : modifiers._orderBy) {
+  for (auto& orderKey : modifiers.orderBy_) {
     std::visit(ad_utility::OverloadCallOperator{processVariableOrderKey,
                                                 processExpressionOrderKey},
                std::move(orderKey));
   }
 
   // Process limitOffsetClause
-  query->_limitOffset = modifiers._limitOffset;
+  query->_limitOffset = modifiers.limitOffset_;
 
   lexer_.accept("}");
 }

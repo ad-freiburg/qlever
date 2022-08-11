@@ -11,8 +11,8 @@
 #include "Variable.h"
 
 struct SolutionModifiers {
-  vector<GroupKey> _groupByVariables;
-  vector<SparqlFilter> _havingClauses;
-  vector<OrderKey> _orderBy;
-  LimitOffsetClause _limitOffset{};
+  vector<GroupKey> groupByVariables_;
+  vector<SparqlFilter> havingClauses_;
+  vector<OrderKey> orderBy_;
+  LimitOffsetClause limitOffset_{};
 };

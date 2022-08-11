@@ -1124,7 +1124,7 @@ void expectHavingConditionFails(const string& input) {
 }  // namespace
 
 TEST(SparqlParser, HavingCondition) {
-  auto expectHavingCondition = [](const string& input, SparqlFilter filter) {
+  auto expectHavingCondition = [](const string& input, const SparqlFilter& filter) {
     expectCompleteParse(parseHavingCondition(input),
                         testing::Eq(std::move(filter)));
   };
