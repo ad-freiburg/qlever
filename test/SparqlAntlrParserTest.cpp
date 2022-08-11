@@ -1124,11 +1124,15 @@ void expectHavingConditionFails(const string& input) {
 }  // namespace
 
 TEST(SparqlParser, HavingCondition) {
-  auto expectHavingCondition = [](const string& input, const SparqlFilter& filter) {
-    expectCompleteParse(parseHavingCondition(input),
-                        testing::Eq(std::move(filter)));
+  auto expectHavingCondition = [](const string& input,
+                                  const SparqlFilter& filter) {
+    expectCompleteParse(parseHavingCondition(input), testing::Eq(filter));
   };
 
   expectHavingCondition("(?x <= 42.3)", {SparqlFilter::LE, "?x", "42.3"});
+  expectHavingCondition("(?height > 1.7)",
+                        {SparqlFilter::GT, "?height", "1.7"});
+  expectHavingCondition("(?predicate < \"<Z\")",
+                        {SparqlFilter::LT, "?predicate", "\"<Z\""});
   expectHavingConditionFails("(LANG(?x) = \"en\")");
 }
