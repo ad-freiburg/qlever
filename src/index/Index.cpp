@@ -15,7 +15,7 @@
 #include <stxxl/map>
 #include <unordered_map>
 
-#include "../GitHash.h"
+#include <GitHash.h>
 #include "../parser/ParallelParseBuffer.h"
 #include "../util/BatchedPipeline.h"
 #include "../util/CompressionUsingZstd/ZstdWrapper.h"

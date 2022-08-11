@@ -207,12 +207,15 @@ message(STATUS ---)
 ##### Actual project configuration #####
 ###############################################################################
 
-# get the current git hash
-set(GIT_HASH "Qlever is not inside a git repository")
-execute_process( COMMAND git log -1 --format="%H" OUTPUT_VARIABLE GIT_HASH)
-message(STATUS "Git hash is ${GIT_HASH}")
-message(STATUS "Dir is ${PROJECT_BINARY_DIR}")
-configure_file("${PROJECT_SOURCE_DIR}/src/GitHashTemplate.h"  "${PROJECT_SOURCE_DIR}/src/GitHash.h")
+include_directories(src)
+ADD_CUSTOM_COMMAND(
+        OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/GitHash.h
+        ${CMAKE_CURRENT_SOURCE_DIR}/_notexistingForRerun.cpp
+        COMMAND ${CMAKE_COMMAND} -P
+        ${CMAKE_CURRENT_SOURCE_DIR}/GitHash.cmake)
+
+execute_process(COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/GitHash.cmake)
+add_custom_command(OUTPUT something.txt COMMAND touch CMakeLists.txt)
 
 set(LOG_LEVEL_FATAL 0)
 set(LOG_LEVEL_ERROR 1)
