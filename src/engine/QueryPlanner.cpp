@@ -48,7 +48,8 @@ QueryPlanner::QueryPlanner(QueryExecutionContext* qec)
     : _qec(qec), _internalVarCount(0), _enablePatternTrick(true) {}
 
 // _____________________________________________________________________________
-QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
+std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
+    ParsedQuery& pq) {
   // Look for ql:has-predicate to determine if the pattern trick should be used.
   // If the pattern trick is used the ql:has-predicate triple will be removed
   // from the list of where clause triples. Otherwise the ql:has-relation triple
@@ -115,16 +116,24 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   }
 
   AD_CHECK_GT(lastRow.size(), 0);
-  auto minInd = findCheapestExecutionTree(lastRow);
   if (pq._rootGraphPattern._optional) {
-    lastRow[minInd].type = SubtreePlan::OPTIONAL;
+    for (auto& plan : lastRow) {
+      plan.type = SubtreePlan::OPTIONAL;
+    }
   }
 
-  SubtreePlan final = lastRow[minInd];
-  final._qet->setTextLimit(pq._limitOffset._textLimit);
+  for (auto& plan : lastRow) {
+    plan._qet->setTextLimit(pq._limitOffset._textLimit);
+  }
+  return lastRow;
+}
 
+// _____________________________________________________________________
+QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
+  auto lastRow = createExecutionTrees(pq);
+  auto minInd = findCheapestExecutionTree(lastRow);
   LOG(DEBUG) << "Done creating execution plan.\n";
-  return *final._qet;
+  return *lastRow[minInd]._qet;
 }
 
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
@@ -331,12 +340,12 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       } else if constexpr (std::is_same_v<T, GraphPatternOperation::Subquery>) {
         // TODO<joka921> We currently do not optimize across subquery borders
         // but abuse them as "optimization hints". In theory, one could even
-        // remove the ORDER BY clauses of a subquery if we can prove, that
+        // remove the ORDER BY clauses of a subquery if we can prove that
         // the results will be reordered anyway.
-        SubtreePlan plan(_qec);
-        plan._qet = std::make_shared<QueryExecutionTree>(
-            createExecutionTree(arg._subquery));
-        joinCandidates(std::vector{std::move(plan)});
+
+        // For a subquery, make sure that one optimal result for each ordering
+        // of the result (by a single column) is contained.
+        joinCandidates(createExecutionTrees(arg._subquery));
       } else if constexpr (std::is_same_v<T,
                                           GraphPatternOperation::TransPath>) {
         // TODO<kramerfl> This is obviously how you set up transitive paths.
