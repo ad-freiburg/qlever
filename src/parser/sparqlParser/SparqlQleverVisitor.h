@@ -884,7 +884,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   /// but the conversion chain `VisitResult -> Intermediate -> Target` is valid.
   /// For example when `visit(ctx)` yields `A`, `A` is explicitly convertible to
   /// `B` and `Target` is `optional<B>`, then `B` has to be specified as
-  /// `Intermediate` (see for example the implementation of `visitAlternative`)
+  /// `Intermediate` (see for example the implementation of `visitAlternative`).
   template <typename Target, typename Intermediate = Target, typename Ctx>
   void visitIf(Target* target, Ctx* ctx);
 };
