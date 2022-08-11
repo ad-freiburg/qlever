@@ -191,7 +191,7 @@ class QueryPlanner {
 
   // Create a set of possible execution trees for the given parsed query. The
   // best (cheapest) execution tree according to the QueryPlanner is part of
-  // that set. When the query has no `ORDER BY` clause, the set contains on
+  // that set. When the query has no `ORDER BY` clause, the set contains one
   // optimal execution tree for each possible ordering (by one column) of the
   // result. This is relevant for subqueries, which are currently optimized
   // independently from the rest of the query, but where it depends on the rest
