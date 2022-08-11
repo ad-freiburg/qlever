@@ -1243,8 +1243,11 @@ BlankNode Visitor::visitTypesafe(Parser::BlankNodeContext* ctx) {
 
 template <typename Out, typename... Contexts>
 Out Visitor::visitAlternative(Contexts*... ctxs) {
+  // Check that exactly one of the pointer is not `nullptr`.
   AD_CHECK(1u == (... + static_cast<bool>(ctxs)));
   std::optional<Out> out;
+  // Visit the one `context` which is not null and write the result to `out`.
+
   (..., visitIf<std::optional<Out>, Out>(&out, ctxs));
   return std::move(out.value());
 }
