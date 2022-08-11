@@ -222,13 +222,13 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   GroupKey visitTypesafe(Parser::GroupConditionContext* ctx);
 
   Any visitHavingClause(Parser::HavingClauseContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
 
   vector<SparqlFilter> visitTypesafe(Parser::HavingClauseContext* ctx);
 
   Any visitHavingCondition(Parser::HavingConditionContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
 
   SparqlFilter visitTypesafe(Parser::HavingConditionContext* ctx);
