@@ -869,13 +869,22 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   string visitTypesafe(Parser::PnameNsContext* ctx);
 
-  template <typename Out, bool isRecursive = false, typename FirstContext,
-            typename... Context>
-  Out visitAlternative(FirstContext* ctx, Context*... ctxs);
+  // Check that exactly one of the `ctxs` is not `null`, visit that context,
+  // cast the result to `Out` and return it. Requires that for all of the
+  // `ctxs`, `visit(ctxs)` is convertible to `Out`.
+  template <typename Out, typename... Contexts>
+  Out visitAlternative(Contexts*... ctxs);
 
   template <typename Ctx>
   auto visitOptional(Ctx* ctx) -> std::optional<decltype(visitTypesafe(ctx))>;
 
-  template <typename Ctx>
-  void visitIf(auto* target, Ctx* ctx);
+  /// If `ctx` is not `nullptr`, visit it, convert the result to `Intermediate`
+  /// and assign it to `*target`. The case where `Intermediate!=Target` is
+  /// useful, when the result of `visit(ctx)` cannot be converted to `Target`,
+  /// but the conversion chain `VisitResult -> Intermediate -> Target` is valid.
+  /// For example when `visit(ctx)` yields `A`, `A` is explicitly convertible to
+  /// `B` and `Target` is `optional<B>`, then `B` has to be specified as
+  /// `Intermediate` (see for example the implementation of `visitAlternative`).
+  template <typename Target, typename Intermediate = Target, typename Ctx>
+  void visitIf(Target* target, Ctx* ctx);
 };
