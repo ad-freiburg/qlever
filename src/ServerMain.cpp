@@ -122,9 +122,9 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  LOG(INFO) << EMPH_ON << "QLever Server, compiled on " << qlever::version::DatetimeOfCompilation
-            << EMPH_OFF << std::endl;
-  LOG(INFO) << "Git commit hash is " << qlever::version::GitHash << std::endl;
+  LOG(INFO) << EMPH_ON << "QLever Server, compiled on "
+            << qlever::version::DatetimeOfCompilation << " using git hash "
+            << qlever::version::GitHash << EMPH_OFF << std::endl;
 
   try {
     Server server(port, static_cast<int>(numSimultaneousQueries),

@@ -275,9 +275,9 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
-  LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on " << qlever::version::DatetimeOfCompilation << " "
-            << EMPH_OFF << std::endl;
-  LOG(INFO) << "Git hash is " << qlever::version::GitHash << std::endl;
+  LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on "
+            << qlever::version::DatetimeOfCompilation << "using git hash "
+            << qlever::version::GitHash << EMPH_OFF << std::endl;
 
   try {
     LOG(TRACE) << "Configuring STXXL..." << std::endl;

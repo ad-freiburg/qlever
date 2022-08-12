@@ -1,10 +1,22 @@
 // Copyright 2014, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Authors:
+//   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #include "./Index.h"
 
+#include <GitHash.h>
 #include <absl/strings/str_join.h>
+#include <index/PrefixHeuristic.h>
+#include <index/TriplesView.h>
+#include <index/VocabularyGenerator.h>
+#include <parser/ParallelParseBuffer.h>
+#include <util/BatchedPipeline.h>
+#include <util/CompressionUsingZstd/ZstdWrapper.h>
+#include <util/HashMap.h>
+#include <util/Serializer/FileSerializer.h>
+#include <util/TupleHelpers.h>
 
 #include <algorithm>
 #include <cmath>
@@ -14,18 +26,6 @@
 #include <stxxl/algorithm>
 #include <stxxl/map>
 #include <unordered_map>
-
-#include <GitHash.h>
-#include "../parser/ParallelParseBuffer.h"
-#include "../util/BatchedPipeline.h"
-#include "../util/CompressionUsingZstd/ZstdWrapper.h"
-#include "../util/Conversions.h"
-#include "../util/HashMap.h"
-#include "../util/Serializer/FileSerializer.h"
-#include "../util/TupleHelpers.h"
-#include "./PrefixHeuristic.h"
-#include "./VocabularyGenerator.h"
-#include "TriplesView.h"
 
 using std::array;
 

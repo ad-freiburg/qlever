@@ -208,14 +208,13 @@ message(STATUS ---)
 ###############################################################################
 
 include_directories(src)
-ADD_CUSTOM_COMMAND(
-        OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/GitHash.h
-        ${CMAKE_CURRENT_SOURCE_DIR}/_notexistingForRerun.cpp
-        COMMAND ${CMAKE_COMMAND} -P
-        ${CMAKE_CURRENT_SOURCE_DIR}/GitHash.cmake)
 
-execute_process(COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/GitHash.cmake)
-add_custom_command(OUTPUT something.txt COMMAND touch CMakeLists.txt)
+# run the script `GitHash.cmake` that creates the file `GitHash.cpp` with the
+# current git hash and the curent time and date. The first output which is never
+# created is necessary s.t. the command is never cached and always rerun.
+add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/__NeverExisting__.cpp"
+                          "${CMAKE_CURRENT_BINARY_DIR}/GitHash.cpp"
+                   COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/GitHash.cmake)
 
 set(LOG_LEVEL_FATAL 0)
 set(LOG_LEVEL_ERROR 1)
@@ -245,6 +244,9 @@ configure_file(src/web/index.html index.html)
 configure_file(src/web/style.css style.css)
 configure_file(src/web/script.js script.js)
 
+# Add the library with the constants defined in GitHash.h and defined
+# in the GitHash.cpp created by `GitHash.cmake`.
+add_library(gitHash ${CMAKE_CURRENT_BINARY_DIR}/GitHash.cpp)
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
 target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT})
@@ -255,7 +257,7 @@ target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
 add_executable(ServerMain src/ServerMain.cpp)
 target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
 
-add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp src/GitHashTemplate.h)
+add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
 target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(TurtleParserMain src/TurtleParserMain.cpp)
