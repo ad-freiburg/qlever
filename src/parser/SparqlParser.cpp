@@ -270,9 +270,10 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         lexer_.accept(".");
         currentPattern->_children.emplace_back(std::move(un));
       }
-    } else if (lexer_.accept("filter")) {
+    } else if (lexer_.peek("filter")) {
       // append to the global filters of the pattern.
-      SparqlFilter filter = parseFilter(true).value();
+      SparqlFilter filter =
+          parseWithAntlr(sparqlParserHelpers::parseFilterR, *query);
       if (filter._type == SparqlFilter::LANG_MATCHES) {
         currentPattern->addLanguageFilter(filter._lhs, filter._rhs);
       } else {

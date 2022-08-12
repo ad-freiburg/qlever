@@ -367,8 +367,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   Any visitFilterR(Parser::FilterRContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  SparqlFilter visitTypesafe(Parser::FilterRContext* ctx);
 
   Any visitConstraint(Parser::ConstraintContext* ctx) override {
     return visitTypesafe(ctx);

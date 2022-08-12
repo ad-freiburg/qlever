@@ -239,22 +239,26 @@ vector<SparqlFilter> Visitor::visitTypesafe(Parser::HavingClauseContext* ctx) {
   return visitVector<SparqlFilter>(ctx->havingCondition());
 }
 
+namespace {
+SparqlFilter parseFilter(auto* ctx) {
+  try {
+    return SparqlParser::parseFilterExpression(ctx->getText());
+  } catch (const std::bad_optional_access& error) {
+    throw ParseException("The expression " + ctx->getText() +
+                         " is currently not supported by Qlever inside a "
+                         "FILTER or HAVING clause.");
+  } catch (const ParseException& error) {
+    throw ParseException("The expression " + ctx->getText() +
+                         " is currently not supported by Qlever inside a "
+                         "FILTER or HAVING clause. Details: " +
+                         error.what());
+  }
+}
+}  // namespace
+
 // ____________________________________________________________________________________
 SparqlFilter Visitor::visitTypesafe(Parser::HavingConditionContext* ctx) {
-  const SparqlFilter filter = [ctx]() {
-    try {
-      return SparqlParser::parseFilterExpression(ctx->getText());
-    } catch (const std::bad_optional_access& error) {
-      throw ParseException("The expression " + ctx->getText() +
-                           " is currently not supported by Qlever inside a "
-                           "FILTER or HAVING clause.");
-    } catch (const ParseException& error) {
-      throw ParseException("The expression " + ctx->getText() +
-                           " is currently not supported by Qlever inside a "
-                           "FILTER or HAVING clause. Details: " +
-                           error.what());
-    }
-  }();
+  SparqlFilter filter = parseFilter(ctx);
   if (filter._type == SparqlFilter::LANG_MATCHES) {
     throw ParseException(
         "Language filter in HAVING clause currently not "
@@ -533,6 +537,11 @@ std::string Visitor::visitTypesafe(Parser::DataBlockValueContext* ctx) {
         ".");
   }
   AD_FAIL()  // Should be unreachable.
+}
+
+// ____________________________________________________________________________________
+SparqlFilter Visitor::visitTypesafe(Parser::FilterRContext* ctx) {
+  return parseFilter(ctx->constraint());
 }
 
 // ____________________________________________________________________________________

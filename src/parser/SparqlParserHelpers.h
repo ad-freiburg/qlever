@@ -150,6 +150,9 @@ inline auto parseHavingCondition = std::bind_front(
 inline auto parseSolutionModifier = std::bind_front(
     parseFront, &SparqlAutomaticParser::solutionModifier, "solutionModifier");
 
+inline auto parseFilterR =
+    std::bind_front(parseFront, &SparqlAutomaticParser::filterR, "filterR");
+
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H
