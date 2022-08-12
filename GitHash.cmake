@@ -2,7 +2,9 @@
 # .cpp file
 
 # Get the current time, remove the trailing newline and add quotes.
+message(STATUS "Before anything for debugging inside")
 execute_process(COMMAND date OUTPUT_VARIABLE DATETIME_OF_COMPILATION)
+message(STATUS "Datetime before doing anything:${DATETIME_OF_COMPILATION}")
 string(REPLACE "\n" "" DATETIME_OF_COMPILATION "${DATETIME_OF_COMPILATION}")
 set(DATETIME_OF_COMPILATION "\"${DATETIME_OF_COMPILATION}\"")
 message(STATUS "DATETIME_OF_COMPILATION is ${DATETIME_OF_COMPILATION}" )
