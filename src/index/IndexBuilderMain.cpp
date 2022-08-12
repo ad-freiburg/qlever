@@ -14,10 +14,10 @@
 
 #include "../global/Constants.h"
 #include "../util/File.h"
+#include "../util/ProgramOptionsHelpers.h"
 #include "../util/ReadableNumberFact.h"
 #include "./ConstantsIndexBuilding.h"
 #include "./Index.h"
-#include "util/ProgramOptionsHelpers.h"
 
 using std::cerr;
 using std::cout;
