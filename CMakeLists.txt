@@ -212,6 +212,10 @@ include_directories(src)
 # run the script `GitHash.cmake` that creates the file `GitHash.cpp` with the
 # current git hash and the curent time and date. The first output which is never
 # created is necessary s.t. the command is never cached and always rerun.
+message(STATUS "directories ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}")
+execute_process(COMMAND ls ${CMAKE_CURRENT_SOURCE_DIR})
+message(STATUS "\n\n\n")
+execute_process(COMMAND ls ${CMAKE_CURRENT_BINARY_DIR})
 add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/__NeverExisting__.cpp"
                           "${CMAKE_CURRENT_BINARY_DIR}/GitHash.cpp"
                    COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/GitHash.cmake)
