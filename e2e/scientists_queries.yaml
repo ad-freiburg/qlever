@@ -528,8 +528,8 @@ queries:
         ?s <Award_Won> ?award .
       }
       GROUP BY ?profession
-      ORDER BY DESC(?count)
       HAVING (?count > 300)
+      ORDER BY DESC(?count)
     checks:
       - num_rows: 6
       - num_cols: 2
