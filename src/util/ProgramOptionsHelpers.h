@@ -8,6 +8,7 @@
 #include <boost/program_options.hpp>
 #include <vector>
 
+#include "./Concepts.h"
 #include "./Parameters.h"
 namespace ad_utility {
 
@@ -16,7 +17,7 @@ namespace ad_utility {
 // accept positive values because of the `validate` function below.
 class NonNegative {
  public:
-  operator size_t() { return _value; }
+  operator size_t() const { return _value; }
   NonNegative(size_t value) : _value{value} {}
   NonNegative() = default;
 
@@ -24,8 +25,8 @@ class NonNegative {
   size_t _value;
 };
 
-template <typename Stream>
-Stream& operator<<(Stream& stream, NonNegative nonNegative) {
+template <typename Stream, ad_utility::SimilarTo<NonNegative> NN>
+Stream& operator<<(Stream& stream, NN&& nonNegative) {
   return stream << static_cast<size_t>(nonNegative);
 }
 
