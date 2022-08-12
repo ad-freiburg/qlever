@@ -1,6 +1,7 @@
 *
 !.clang-format
 !CMakeLists.txt
+!GitHash.cmake
 !LICENSE
 !README.md
 !e2e
