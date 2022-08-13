@@ -2,9 +2,7 @@
 # .cpp file
 
 # Get the current time, remove the trailing newline and add quotes.
-message(STATUS "Before anything for debugging inside")
 execute_process(COMMAND date OUTPUT_VARIABLE DATETIME_OF_COMPILATION)
-message(STATUS "Datetime before doing anything:${DATETIME_OF_COMPILATION}")
 string(REPLACE "\n" "" DATETIME_OF_COMPILATION "${DATETIME_OF_COMPILATION}")
 set(DATETIME_OF_COMPILATION "\"${DATETIME_OF_COMPILATION}\"")
 message(STATUS "DATETIME_OF_COMPILATION is ${DATETIME_OF_COMPILATION}" )
@@ -17,11 +15,12 @@ endif()
 message(STATUS "GIT_HASH is ${GIT_HASH}")
 
 # write the .cpp file.
-set(CONSTANTS "namespace qlever::version {
-const char* GitHash = ${GIT_HASH};
-const char* DatetimeOfCompilation = ${DATETIME_OF_COMPILATION};
+set(CONSTANTS "#include <string>
+namespace qlever::version {
+const std::string GitHash = ${GIT_HASH};
+const std::string DatetimeOfCompilation = ${DATETIME_OF_COMPILATION};
 }")
 
 # for some reason `CMAKE_CURRENT_SOURCE_DIR` inside this script is
 # `CMAKE_CURRENT_BINARY_DIR` in the main `CMakeLists.txt`.
-file(WRITE ${CMAKE_CURRENT_SOURCE_DIR}/GitHash.cpp "${CONSTANTS}")
+file(WRITE ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cpp "${CONSTANTS}")

@@ -6,7 +6,7 @@
 
 #include "./Index.h"
 
-#include <GitHash.h>
+#include <CompilationInfo.h>
 #include <absl/strings/str_join.h>
 #include <index/PrefixHeuristic.h>
 #include <index/TriplesView.h>

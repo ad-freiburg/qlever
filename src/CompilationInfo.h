@@ -3,12 +3,13 @@
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
 // Several constants. The values of these constants reside in the
-// File `GitHash.cpp` which is created and linked by Cmake.
+// File `CompilationInfo.cpp` which is created and linked by Cmake.
 
 #pragma once
+#include <string>
 namespace qlever::version {
 // The git hash of the commit that was used to build qlever.
-extern const char* GitHash;
+extern std::string GitHash;
 // The date and time during which qlever was compiled.
-extern const char* DatetimeOfCompilation;
+extern std::string DatetimeOfCompilation;
 }  // namespace qlever::version

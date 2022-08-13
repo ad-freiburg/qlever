@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include "./GitHash.h"
+#include "./CompilationInfo.h"
 #include "engine/Server.h"
 #include "global/Constants.h"
 #include "util/ProgramOptionsHelpers.h"
@@ -124,7 +124,7 @@ int main(int argc, char** argv) {
 
   LOG(INFO) << EMPH_ON << "QLever Server, compiled on "
             << qlever::version::DatetimeOfCompilation << " using git hash "
-            << qlever::version::GitHash << EMPH_OFF << std::endl;
+            << qlever::version::GitHash.substr(0, 6) << EMPH_OFF << std::endl;
 
   try {
     Server server(port, static_cast<int>(numSimultaneousQueries),

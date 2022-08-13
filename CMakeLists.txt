@@ -209,16 +209,12 @@ message(STATUS ---)
 
 include_directories(src)
 
-# run the script `GitHash.cmake` that creates the file `GitHash.cpp` with the
+# run the script `CompilationInfo.cmake` that creates the file `CompilationInfo.cpp` with the
 # current git hash and the curent time and date. The first output which is never
 # created is necessary s.t. the command is never cached and always rerun.
-message(STATUS "directories ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}")
-execute_process(COMMAND ls ${CMAKE_CURRENT_SOURCE_DIR})
-message(STATUS "\n\n\n")
-execute_process(COMMAND ls ${CMAKE_CURRENT_BINARY_DIR})
-add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/__NeverExisting__.cpp"
-                          "${CMAKE_CURRENT_BINARY_DIR}/GitHash.cpp"
-                   COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/GitHash.cmake)
+add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/FileThatNeverExists.cpp"
+                          "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
+                   COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
 
 set(LOG_LEVEL_FATAL 0)
 set(LOG_LEVEL_ERROR 1)
@@ -248,9 +244,9 @@ configure_file(src/web/index.html index.html)
 configure_file(src/web/style.css style.css)
 configure_file(src/web/script.js script.js)
 
-# Add the library with the constants defined in GitHash.h and defined
-# in the GitHash.cpp created by `GitHash.cmake`.
-add_library(gitHash ${CMAKE_CURRENT_BINARY_DIR}/GitHash.cpp)
+# Add the library with the constants declared in `CompilationInfo.h` and defined
+# in `CompilationInfo.cpp` created by `CompilationInfo.cmake`.
+add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
 target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT})
