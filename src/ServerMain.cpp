@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "./CompilationInfo.h"
 #include "engine/Server.h"
 #include "global/Constants.h"
 #include "util/ProgramOptionsHelpers.h"
@@ -121,8 +122,9 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  LOG(INFO) << EMPH_ON << "QLever Server, compiled on " << __DATE__ << " "
-            << __TIME__ << EMPH_OFF << std::endl;
+  LOG(INFO) << EMPH_ON << "QLever Server, compiled on "
+            << qlever::version::DatetimeOfCompilation << " using git hash "
+            << qlever::version::GitShortHash() << EMPH_OFF << std::endl;
 
   try {
     Server server(port, static_cast<int>(numSimultaneousQueries),

@@ -206,6 +206,16 @@ message(STATUS ---)
 ###############################################################################
 ##### Actual project configuration #####
 ###############################################################################
+
+include_directories(src)
+
+# Run the script `CompilationInfo.cmake` that creates the file `CompilationInfo.cpp`
+# with the current git hash and the curent time and date. The first output which is
+# never created is necessary s.t. the command is never cached and always rerun.
+add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/FileThatNeverExists.cpp"
+                          "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
+                   COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
+
 set(LOG_LEVEL_FATAL 0)
 set(LOG_LEVEL_ERROR 1)
 set(LOG_LEVEL_WARN 2)
@@ -234,6 +244,9 @@ configure_file(src/web/index.html index.html)
 configure_file(src/web/style.css style.css)
 configure_file(src/web/script.js script.js)
 
+# Add the library with the constants declared in `CompilationInfo.h` and defined
+# in `CompilationInfo.cpp` created by `CompilationInfo.cmake`.
+add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
 target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT})

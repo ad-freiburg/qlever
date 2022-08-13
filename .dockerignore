@@ -1,6 +1,8 @@
 *
 !.clang-format
 !CMakeLists.txt
+!CompilationInfo.cmake
+!.git
 !LICENSE
 !README.md
 !e2e
