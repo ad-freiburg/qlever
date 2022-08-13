@@ -10,17 +10,17 @@ message(STATUS "DATETIME_OF_COMPILATION is ${DATETIME_OF_COMPILATION}" )
 # Get the current git hash.
 execute_process(COMMAND git log -1 --format="%H" OUTPUT_VARIABLE GIT_HASH)
 if ((NOT DEFINED GIT_HASH) OR (GIT_HASH STREQUAL ""))
-    set(GIT_HASH "\"Qlever is not inside a git repository\"")
+    set(GIT_HASH "\"QLever compilation not taking place in a git repository\"")
 endif()
 message(STATUS "GIT_HASH is ${GIT_HASH}")
 
-# write the .cpp file.
+# Write the .cpp file.
 set(CONSTANTS "#include <string>
 namespace qlever::version {
 const std::string GitHash = ${GIT_HASH};
 const std::string DatetimeOfCompilation = ${DATETIME_OF_COMPILATION};
 }")
 
-# for some reason `CMAKE_CURRENT_SOURCE_DIR` inside this script is
+# For some reason `CMAKE_CURRENT_SOURCE_DIR` inside this script is
 # `CMAKE_CURRENT_BINARY_DIR` in the main `CMakeLists.txt`.
 file(WRITE ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cpp "${CONSTANTS}")
