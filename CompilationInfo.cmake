@@ -17,8 +17,8 @@ message(STATUS "GIT_HASH is ${GIT_HASH}")
 # Write the .cpp file.
 set(CONSTANTS "#include <string>
 namespace qlever::version {
-const std::string GitHash = ${GIT_HASH};
-const std::string DatetimeOfCompilation = ${DATETIME_OF_COMPILATION};
+const char* GitHash = ${GIT_HASH};
+const char* DatetimeOfCompilation = ${DATETIME_OF_COMPILATION};
 }")
 
 # For some reason `CMAKE_CURRENT_SOURCE_DIR` inside this script is

@@ -8,8 +8,10 @@
 #pragma once
 #include <string>
 namespace qlever::version {
-// The git hash of the commit that was used to build QLever.
-extern std::string GitHash;
+// The git hash of the commit that was used to  QLever.
+extern const char* GitHash;
 // The date and time at which QLever was compiled.
-extern std::string DatetimeOfCompilation;
+extern const char* DatetimeOfCompilation;
+
+inline std::string GitShortHash() { return std::string{GitHash}.substr(0, 6); }
 }  // namespace qlever::version

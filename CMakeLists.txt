@@ -209,9 +209,9 @@ message(STATUS ---)
 
 include_directories(src)
 
-# Run the script `CompilationInfo.cmake` that creates the file `CompilationInfo.cpp` with the
-# current git hash and the curent time and date. The first output which is never
-# created is necessary s.t. the command is never cached and always rerun.
+# Run the script `CompilationInfo.cmake` that creates the file `CompilationInfo.cpp`
+# with the current git hash and the curent time and date. The first output which is
+# never created is necessary s.t. the command is never cached and always rerun.
 add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/FileThatNeverExists.cpp"
                           "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
                    COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
