@@ -209,7 +209,7 @@ message(STATUS ---)
 
 include_directories(src)
 
-# run the script `GitHash.cmake` that creates the file `GitHash.cpp` with the
+# Run the script `GitHash.cmake` that creates the file `GitHash.cpp` with the
 # current git hash and the curent time and date. The first output which is never
 # created is necessary s.t. the command is never cached and always rerun.
 message(STATUS "directories ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}")
