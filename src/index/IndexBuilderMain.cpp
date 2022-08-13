@@ -276,7 +276,7 @@ int main(int argc, char** argv) {
   }
 
   LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on "
-            << qlever::version::DatetimeOfCompilation << "using git hash "
+            << qlever::version::DatetimeOfCompilation << " using git hash "
             << qlever::version::GitShortHash() << EMPH_OFF << std::endl;
 
   try {
