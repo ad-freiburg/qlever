@@ -65,9 +65,6 @@ class SparqlParser {
 
   SparqlLexer lexer_;
   string query_;
-  // The number of additional internal variables that were added by the
-  // implementation of ORDER BY as BIND+ORDER BY.
-  uint64_t numInternalVariables_ = 0;
   SparqlFilter parseRegexFilter(bool expectKeyword);
 
   // Parse the clause with the prefixes of the given ParsedQuery.

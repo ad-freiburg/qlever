@@ -272,6 +272,8 @@ class ParsedQuery {
   GraphPattern _rootGraphPattern;
   vector<SparqlFilter> _havingClauses;
   size_t _numGraphPatterns = 1;
+  // The number of additional internal variables that were added by the
+  // implementation of ORDER BY as BIND+ORDER BY.
   int64_t numInternalVariables_ = 0;
   vector<VariableOrderKey> _orderBy;
   vector<Variable> _groupByVariables;
