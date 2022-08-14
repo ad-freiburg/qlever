@@ -23,6 +23,7 @@
 #include "data/GroupKey.h"
 #include "data/LimitOffsetClause.h"
 #include "data/OrderKey.h"
+#include "data/SolutionModifiers.h"
 #include "data/SparqlFilter.h"
 #include "data/Types.h"
 #include "data/VarOrTerm.h"
@@ -271,6 +272,7 @@ class ParsedQuery {
   GraphPattern _rootGraphPattern;
   vector<SparqlFilter> _havingClauses;
   size_t _numGraphPatterns = 1;
+  int64_t numInternalVariables_ = 0;
   vector<VariableOrderKey> _orderBy;
   vector<Variable> _groupByVariables;
   LimitOffsetClause _limitOffset{};
@@ -319,6 +321,12 @@ class ParsedQuery {
   [[nodiscard]] const auto& children() const {
     return _rootGraphPattern._children;
   }
+
+  /// Generates an internal bind that binds the given expression using a bind.
+  /// The bind is added to the query as child. The variable that the expression
+  /// is bound to is returned.
+  Variable addInternalBind(sparqlExpression::SparqlExpressionPimpl expression);
+  void addSolutionModifiers(SolutionModifiers modifiers);
 
   /**
    * @brief Adds all elements from p's rootGraphPattern to this parsed query's
