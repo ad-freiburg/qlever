@@ -585,9 +585,8 @@ TEST(SparqlParser, Iri) {
     // TODO<qup42> replace with curried parse... in `SparqlParserHelpers.h`
     // Parse "by hand" in order not to pollute the `SparqlParserHelpers`.
     ParserAndVisitor p{input, std::move(prefixMap)};
-    expectCompleteParse(
-        p.parseTypesafe(input, "iri", &SparqlAutomaticParser::iri),
-        testing::Eq(iri));
+    expectCompleteParse(p.parseTypesafe(input, &SparqlAutomaticParser::iri),
+                        testing::Eq(iri));
   };
   expectIri("rdfs:label", "<http://www.w3.org/2000/01/rdf-schema#label>",
             {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});
@@ -697,8 +696,7 @@ TEST(SparqlParser, Integer) {
     string input = "-1";
     ParserAndVisitor p{input};
 
-    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_),
-                 antlr4::ParseCancellationException);
+    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_), ParseException);
   }
 }
 
@@ -758,9 +756,7 @@ TEST(SparqlParser, LimitOffsetClause) {
   {
     string input = "LIMIT20";
 
-    // parse* catches antlr4::ParseCancellationException and throws a
-    // std::runtime_error so this has to be checked instead.
-    EXPECT_THROW(parseLimitOffsetClause(input), std::runtime_error);
+    EXPECT_THROW(parseLimitOffsetClause(input), ParseException);
   }
 
   {
@@ -776,8 +772,7 @@ TEST(SparqlParser, LimitOffsetClause) {
 TEST(SparqlParser, OrderCondition) {
   auto parseOrderCondition = [](const std::string& input) {
     ParserAndVisitor p{input};
-    return p.parse<OrderKey>(input, "order condition",
-                             &SparqlAutomaticParser::orderCondition);
+    return p.parseTypesafe(input, &SparqlAutomaticParser::orderCondition);
   };
   auto expectParseVariable = [&parseOrderCondition](const string& input,
                                                     const string& variable,
@@ -816,8 +811,7 @@ TEST(SparqlParser, OrderClause) {
 TEST(SparqlParser, GroupCondition) {
   auto parseGroupCondition = [](const std::string& input) {
     ParserAndVisitor p{input};
-    return p.parse<GroupKey>(input, "group condition",
-                             &SparqlAutomaticParser::groupCondition);
+    return p.parseTypesafe(input, &SparqlAutomaticParser::groupCondition);
   };
   auto expectParseVariable = [&parseGroupCondition](const string& input,
                                                     const string& variable) {
@@ -917,7 +911,7 @@ TEST(SparqlParser, InlineData) {
   };
   expectInlineData("VALUES ?test { \"foo\" }", {"?test"}, {{"\"foo\""}});
   // There must always be a block present for InlineData
-  expectInlineDataFails<std::runtime_error>("");
+  expectInlineDataFails<ParseException>("");
 }
 
 TEST(SparqlParser, propertyPaths) {
@@ -942,7 +936,7 @@ TEST(SparqlParser, propertyPaths) {
   expectPathOrVar(
       "@en@rdfs:label", Iri("@en@<http://www.w3.org/2000/01/rdf-schema#label>"),
       PrefixMap{{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});
-  EXPECT_THROW(parseVerbPathOrSimple("b"), std::runtime_error);
+  EXPECT_THROW(parseVerbPathOrSimple("b"), ParseException);
   expectPathOrVar("test:foo", Iri("<http://www.example.com/foo>"),
                   {{"test", "<http://www.example.com/>"}});
   expectPathOrVar("?bar", Variable{"?bar"});
@@ -1099,7 +1093,7 @@ TEST(SparqlParser, SelectClause) {
   expectCompleteParse(parseSelectClause("SELECT REDUCED *"),
                       IsAsteriskSelect(false, true));
   expectSelectFails("SELECT DISTINCT REDUCED *");
-  expectSelectFails<std::runtime_error>(
+  expectSelectFails<ParseException>(
       "SELECT");  // Lexer throws the error instead of the parser
   expectVariablesSelect("SELECT ?foo", {"?foo"});
   expectVariablesSelect("SELECT ?foo ?baz ?bar", {"?foo", "?baz", "?bar"});

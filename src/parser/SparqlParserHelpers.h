@@ -41,108 +41,95 @@ struct ParserAndVisitor {
   ParserAndVisitor(string input, SparqlQleverVisitor::PrefixMap prefixes);
 
   template <typename ResultType, typename ContextType>
-  auto parse(const std::string_view input, const std::string_view name,
+  auto parse(const std::string_view input,
              ContextType* (SparqlAutomaticParser::*F)(void)) {
-    try {
-      auto context = (parser_.*F)();
-      auto resultOfParse =
-          std::move(context->accept(&(visitor_)).template as<ResultType>());
+    auto context = (parser_.*F)();
+    auto resultOfParse =
+        std::move(context->accept(&(visitor_)).template as<ResultType>());
 
-      auto remainingString =
-          input.substr(parser_.getCurrentToken()->getStartIndex());
-      return ResultOfParseAndRemainingText{std::move(resultOfParse),
-                                           std::string{remainingString}};
-    } catch (const antlr4::ParseCancellationException& e) {
-      throw std::runtime_error{"Failed to parse " + name + ": " + e.what()};
-    }
+    auto remainingString =
+        input.substr(parser_.getCurrentToken()->getStartIndex());
+    return ResultOfParseAndRemainingText{std::move(resultOfParse),
+                                         std::string{remainingString}};
   }
 
   template <typename ContextType>
-  auto parseTypesafe(const std::string_view input, const std::string_view name,
+  auto parseTypesafe(const std::string_view input,
                      ContextType* (SparqlAutomaticParser::*F)(void)) {
-    try {
-      auto resultOfParse = visitor_.visitTypesafe(std::invoke(F, parser_));
+    auto resultOfParse = visitor_.visitTypesafe(std::invoke(F, parser_));
 
-      auto remainingString =
-          input.substr(parser_.getCurrentToken()->getStartIndex());
-      return ResultOfParseAndRemainingText{std::move(resultOfParse),
-                                           std::string{remainingString}};
-    } catch (const antlr4::ParseCancellationException& e) {
-      throw std::runtime_error{"Failed to parse " + name + ": " + e.what()};
-    }
+    auto remainingString =
+        input.substr(parser_.getCurrentToken()->getStartIndex());
+    return ResultOfParseAndRemainingText{std::move(resultOfParse),
+                                         std::string{remainingString}};
   }
 };
 
 // ____________________________________________________________________________
 inline auto parseFront = []<typename ContextType>(
                              ContextType* (SparqlAutomaticParser::*F)(void),
-                             const std::string& error, const std::string& input,
+                             const std::string& input,
                              SparqlQleverVisitor::PrefixMap prefixes = {}) {
   ParserAndVisitor p{input, std::move(prefixes)};
-  return p.parseTypesafe(input, error, F);
+  return p.parseTypesafe(input, F);
 };
 
-inline auto parseInlineData = std::bind_front(
-    parseFront, &SparqlAutomaticParser::inlineData, "inline data");
+inline auto parseInlineData =
+    std::bind_front(parseFront, &SparqlAutomaticParser::inlineData);
 
-inline auto parseExpression = std::bind_front(
-    parseFront, &SparqlAutomaticParser::expression, "expression");
+inline auto parseExpression =
+    std::bind_front(parseFront, &SparqlAutomaticParser::expression);
 
 inline auto parseBind =
-    std::bind_front(parseFront, &SparqlAutomaticParser::bind, "bind");
+    std::bind_front(parseFront, &SparqlAutomaticParser::bind);
 
 inline auto parseConstructTemplate =
-    std::bind_front(parseFront, &SparqlAutomaticParser::constructTemplate,
-                    "construct template");
+    std::bind_front(parseFront, &SparqlAutomaticParser::constructTemplate);
 
 inline auto parseLimitOffsetClause =
-    std::bind_front(parseFront, &SparqlAutomaticParser::limitOffsetClauses,
-                    "limit offset clause");
+    std::bind_front(parseFront, &SparqlAutomaticParser::limitOffsetClauses);
 
-inline auto parseOrderClause = std::bind_front(
-    parseFront, &SparqlAutomaticParser::orderClause, "order clause");
+inline auto parseOrderClause =
+    std::bind_front(parseFront, &SparqlAutomaticParser::orderClause);
 
-inline auto parseGroupClause = std::bind_front(
-    parseFront, &SparqlAutomaticParser::groupClause, "group clause");
+inline auto parseGroupClause =
+    std::bind_front(parseFront, &SparqlAutomaticParser::groupClause);
 
-inline auto parseDataBlock = std::bind_front(
-    parseFront, &SparqlAutomaticParser::dataBlock, "data block");
+inline auto parseDataBlock =
+    std::bind_front(parseFront, &SparqlAutomaticParser::dataBlock);
 
 inline auto parseVerbPathOrSimple =
-    std::bind_front(parseFront, &SparqlAutomaticParser::verbPathOrSimple,
-                    "verb path or simple");
+    std::bind_front(parseFront, &SparqlAutomaticParser::verbPathOrSimple);
 
-inline auto parseSelectClause = std::bind_front(
-    parseFront, &SparqlAutomaticParser::selectClause, "selectClause");
+inline auto parseSelectClause =
+    std::bind_front(parseFront, &SparqlAutomaticParser::selectClause);
 
 inline auto parsePropertyListPathNotEmpty = std::bind_front(
-    parseFront, &SparqlAutomaticParser::propertyListPathNotEmpty,
-    "propertyListPathNotEmpty");
+    parseFront, &SparqlAutomaticParser::propertyListPathNotEmpty);
 
 inline auto parseTriplesSameSubjectPath =
-    std::bind_front(parseFront, &SparqlAutomaticParser::triplesSameSubjectPath,
-                    "triplesSameSubjectPath");
+    std::bind_front(parseFront, &SparqlAutomaticParser::triplesSameSubjectPath);
 
 inline auto parsePrologue =
-    std::bind_front(parseFront, &SparqlAutomaticParser::prologue, "prologue");
+    std::bind_front(parseFront, &SparqlAutomaticParser::prologue);
 
-inline auto parsePrefixDecl = std::bind_front(
-    parseFront, &SparqlAutomaticParser::prefixDecl, "prefix decl");
+inline auto parsePrefixDecl =
+    std::bind_front(parseFront, &SparqlAutomaticParser::prefixDecl);
 
 inline auto parsePnameLn =
-    std::bind_front(parseFront, &SparqlAutomaticParser::pnameLn, "pnameLn");
+    std::bind_front(parseFront, &SparqlAutomaticParser::pnameLn);
 
 inline auto parsePnameNs =
-    std::bind_front(parseFront, &SparqlAutomaticParser::pnameNs, "pnameNs");
+    std::bind_front(parseFront, &SparqlAutomaticParser::pnameNs);
 
-inline auto parsePrefixedName = std::bind_front(
-    parseFront, &SparqlAutomaticParser::prefixedName, "prefixedName");
+inline auto parsePrefixedName =
+    std::bind_front(parseFront, &SparqlAutomaticParser::prefixedName);
 
 inline auto parseIriref =
-    std::bind_front(parseFront, &SparqlAutomaticParser::iriref, "iriRef");
+    std::bind_front(parseFront, &SparqlAutomaticParser::iriref);
 
-inline auto parseNumericLiteral = std::bind_front(
-    parseFront, &SparqlAutomaticParser::numericLiteral, "numericLiteral");
+inline auto parseNumericLiteral =
+    std::bind_front(parseFront, &SparqlAutomaticParser::numericLiteral);
 
 }  // namespace sparqlParserHelpers
 
