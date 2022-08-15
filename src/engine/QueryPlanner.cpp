@@ -1226,6 +1226,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         addIndexScan(IndexScan::ScanType::PSO_BOUND_S);
       } else {
         AD_CHECK(isVariable(node._triple._p));
+        addIndexScan(IndexScan::ScanType::SOP_BOUND_O);
       }
     } else if (node._variables.size() == 2) {
       // Add plans for both possible scan directions.
