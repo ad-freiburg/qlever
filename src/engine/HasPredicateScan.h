@@ -27,6 +27,34 @@ class HasPredicateScan : public Operation {
   };
 
   HasPredicateScan(QueryExecutionContext* qec, ScanType type);
+  HasPredicateScan(QueryExecutionContext* qec, ScanType type,
+                   const TripleComponent& subject,
+                   const TripleComponent& object)
+      : HasPredicateScan{qec, type} {
+    setSubject(subject);
+    setObject(object);
+  }
+
+  HasPredicateScan(QueryExecutionContext* qec, SparqlTriple triple)
+      : Operation{qec} {
+    // Just pick one direction, they should be equivalent.
+    AD_CHECK(triple._p._iri == HAS_PREDICATE_PREDICATE);
+    // TODO(schnelle): Handle ?p ql:has-prediacte ?p
+    // Add a has relation scan instead of a normal IndexScan
+    _type = [&]() {
+      if (isVariable(triple._s) && (isVariable(triple._o))) {
+        return ScanType::FULL_SCAN;
+      } else if (isVariable(triple._s)) {
+        return ScanType::FREE_S;
+      } else if (isVariable(triple._o)) {
+        return ScanType::FREE_O;
+      } else {
+        AD_FAIL();
+      }
+    }();
+    setSubject(triple._s);
+    setObject(triple._o);
+  }
 
  private:
   virtual string asStringImpl(size_t indent = 0) const override;
@@ -89,7 +117,7 @@ class HasPredicateScan : public Operation {
  private:
   ScanType _type;
   std::shared_ptr<QueryExecutionTree> _subtree;
-  size_t _subtreeColIndex;
+  size_t _subtreeColIndex = -1;
 
   std::string _subject;
   std::string _object;

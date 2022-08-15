@@ -14,12 +14,7 @@ void doComputeSubqueryS(const std::vector<A>* input,
                         const CompactVectorOfStrings<Id>& patterns);
 
 HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec, ScanType type)
-    : Operation(qec),
-      _type(type),
-      _subtree(nullptr),
-      _subtreeColIndex(-1),
-      _subject(),
-      _object() {}
+    : Operation(qec), _type(type) {}
 
 string HasPredicateScan::asStringImpl(size_t indent) const {
   std::ostringstream os;
