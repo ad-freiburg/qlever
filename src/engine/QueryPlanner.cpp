@@ -1199,6 +1199,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
     auto addIndexScan = [&](IndexScan::ScanType type) {
       pushPlan(makeSubtreePlan<IndexScan>(_qec, type, node._triple));
     };
+    using enum IndexScan::ScanType;
     if (node._variables.size() == 1) {
       if (isVariable(node._triple._s) && isVariable(node._triple._o) &&
           node._triple._s == node._triple._o) {
@@ -1214,41 +1215,41 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         auto scanTriple = node._triple;
         scanTriple._o = filterVar;
         auto scanTree = makeExecutionTree<IndexScan>(
-            _qec, IndexScan::ScanType::PSO_FREE_S, scanTriple);
+            _qec, PSO_FREE_S, scanTriple);
         auto plan = makeSubtreePlan<Filter>(
             _qec, scanTree, SparqlFilter::FilterType::EQ,
             node._triple._s.getString(), filterVar, vector<string>{},
             vector<string>{});
         pushPlan(std::move(plan));
       } else if (isVariable(node._triple._s)) {
-        addIndexScan(IndexScan::ScanType::POS_BOUND_O);
+        addIndexScan(POS_BOUND_O);
       } else if (isVariable(node._triple._o)) {
-        addIndexScan(IndexScan::ScanType::PSO_BOUND_S);
+        addIndexScan(PSO_BOUND_S);
       } else {
         AD_CHECK(isVariable(node._triple._p));
-        addIndexScan(IndexScan::ScanType::SOP_BOUND_O);
+        addIndexScan(SOP_BOUND_O);
       }
     } else if (node._variables.size() == 2) {
       // Add plans for both possible scan directions.
       if (!isVariable(node._triple._p._iri)) {
-        addIndexScan(IndexScan::ScanType::PSO_FREE_S);
-        addIndexScan(IndexScan::ScanType::POS_FREE_O);
+        addIndexScan(PSO_FREE_S);
+        addIndexScan(POS_FREE_O);
       } else if (!isVariable(node._triple._s)) {
-        addIndexScan(IndexScan::ScanType::SPO_FREE_P);
-        addIndexScan(IndexScan::ScanType::SOP_FREE_O);
+        addIndexScan(SPO_FREE_P);
+        addIndexScan(SOP_FREE_O);
       } else if (!isVariable(node._triple._o)) {
-        addIndexScan(IndexScan::ScanType::OSP_FREE_S);
-        addIndexScan(IndexScan::ScanType::OPS_FREE_P);
+        addIndexScan(OSP_FREE_S);
+        addIndexScan(OPS_FREE_P);
       }
     } else {
       if (!_qec || _qec->getIndex().hasAllPermutations()) {
         // Add plans for all six permutations.
-        addIndexScan(IndexScan::ScanType::FULL_INDEX_SCAN_OPS);
-        addIndexScan(IndexScan::ScanType::FULL_INDEX_SCAN_OSP);
-        addIndexScan(IndexScan::ScanType::FULL_INDEX_SCAN_PSO);
-        addIndexScan(IndexScan::ScanType::FULL_INDEX_SCAN_POS);
-        addIndexScan(IndexScan::ScanType::FULL_INDEX_SCAN_SPO);
-        addIndexScan(IndexScan::ScanType::FULL_INDEX_SCAN_SOP);
+        addIndexScan(FULL_INDEX_SCAN_OPS);
+        addIndexScan(FULL_INDEX_SCAN_OSP);
+        addIndexScan(FULL_INDEX_SCAN_PSO);
+        addIndexScan(FULL_INDEX_SCAN_POS);
+        addIndexScan(FULL_INDEX_SCAN_SPO);
+        addIndexScan(FULL_INDEX_SCAN_SOP);
       } else {
         AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
                  "With only 2 permutations registered (no -a option), "
