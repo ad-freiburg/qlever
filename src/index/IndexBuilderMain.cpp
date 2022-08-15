@@ -34,7 +34,7 @@ string getStxxlConfigFileName(const string& location) {
 }
 
 string getStxxlDiskFileName(const string& location, const string& tail) {
-  return absl::StrCat(location, tail, "-stxxl.disk");
+  return absl::StrCat(location, tail, ".stxxl-disk");
 }
 
 // Write a .stxxl config-file.
