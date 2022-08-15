@@ -237,7 +237,11 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         // create the subquery operation
         GraphPatternOperation::Subquery subq;
         subq._subquery._prefixes = query->_prefixes;
+        subq._subquery.setNumInternalVariables(
+            query->getNumInternalVariables());
         parseQuery(&subq._subquery, SELECT_QUERY);
+        query->setNumInternalVariables(
+            subq._subquery.getNumInternalVariables());
 
         // Add the variables from the subquery that are visible to the outside
         // (because they were selected, or because of a SELECT *) to the outer

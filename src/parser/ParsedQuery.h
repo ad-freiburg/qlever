@@ -324,6 +324,16 @@ class ParsedQuery {
     return _rootGraphPattern._children;
   }
 
+  // TODO<joka921> This is currently necessary because of the missing scoping of
+  // subqueries
+  [[nodiscard]] int64_t getNumInternalVariables() const {
+    return numInternalVariables_;
+  }
+
+  void setNumInternalVariables(int64_t numInternalVariables) {
+    numInternalVariables_ = numInternalVariables;
+  }
+
   /// Generates an internal bind that binds the given expression using a bind.
   /// The bind is added to the query as child. The variable that the expression
   /// is bound to is returned.
