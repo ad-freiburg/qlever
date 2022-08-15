@@ -1269,3 +1269,13 @@ void Visitor::visitIf(Target* target, Ctx* ctx) {
     *target = Intermediate{visitTypesafe(ctx)};
   }
 }
+
+// ____________________________________________________________________________________
+void Visitor::reportError(antlr4::ParserRuleContext* ctx,
+                          const std::string& msg) {
+  throw ParseException{
+      absl::StrCat("Clause \"", ctx->getText(), "\" at line ",
+                   ctx->getStart()->getLine(), ":",
+                   ctx->getStart()->getCharPositionInLine(), " ", msg),
+      generateMetadata(ctx)};
+}

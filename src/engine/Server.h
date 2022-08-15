@@ -159,6 +159,10 @@ class Server {
   static json composeErrorResponseJson(const string& query,
                                        const std::string& errorMsg,
                                        ad_utility::Timer& requestTimer);
+  static json composeErrorResponseJson(const string& query,
+                                       const std::string& errorMsg,
+                                       const ExceptionMetadata& metadata,
+                                       ad_utility::Timer& requestTimer);
 
   static ad_utility::streams::stream_generator composeTurtleResponse(
       const ParsedQuery& query, const QueryExecutionTree& qet);

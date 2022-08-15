@@ -25,24 +25,26 @@ struct [[deprecated("Using ErrorHandlers is not recommend. Use ErrorListeners in
   }
 };
 
+// TODO<qup42> whats up with this namespace?
 namespace {
-std::string colorError(const ExceptionMetadata& metadata) {
-  if (metadata.startIndex > metadata.stopIndex) {
+// TODO<qup42> finalize and use/throw out
+[[maybe_unused]] std::string colorError(const ExceptionMetadata& metadata) {
+  if (metadata.startIndex < metadata.stopIndex) {
     auto first = metadata.query_.substr(0, metadata.startIndex);
     auto middle = metadata.query_.substr(
         metadata.startIndex, metadata.stopIndex - metadata.startIndex + 1);
     auto end = metadata.query_.substr(metadata.stopIndex + 1);
 
-    //    return (first + "\x1b[1m\x1b[4m\x1b[31m" + middle +"\x1b[0m" + end);
-    return (first + "**" + middle + "**" + end);
+    return (first + "\x1b[1m\x1b[4m\x1b[31m" + middle + "\x1b[0m" + end);
   } else {
     return metadata.query_;
   }
 }
 
 ExceptionMetadata generateMetadata(antlr4::Recognizer* recognizer,
-                                   antlr4::Token* offendingToken, size_t line,
-                                   size_t charPositionInLine) {
+                                   antlr4::Token* offendingToken,
+                                   [[maybe_unused]] size_t line,
+                                   [[maybe_unused]] size_t charPositionInLine) {
   return {((antlr4::CommonTokenStream*)recognizer->getInputStream())
               ->getTokenSource()
               ->getInputStream()
@@ -50,7 +52,8 @@ ExceptionMetadata generateMetadata(antlr4::Recognizer* recognizer,
           offendingToken->getStartIndex(), offendingToken->getStopIndex()};
 }
 
-ExceptionMetadata generateMetadata(antlr4::ParserRuleContext* ctx) {
+[[maybe_unused]] ExceptionMetadata generateMetadata(
+    antlr4::ParserRuleContext* ctx) {
   return {ctx->getStart()->getInputStream()->toString(),
           ctx->getStart()->getStartIndex(), ctx->getStop()->getStopIndex()};
 }
@@ -66,30 +69,10 @@ struct ThrowingErrorListener : public antlr4::BaseErrorListener {
                    [[maybe_unused]] antlr4::Token* offendingSymbol, size_t line,
                    size_t charPositionInLine, const std::string& msg,
                    [[maybe_unused]] std::exception_ptr e) override {
-    // Try out displaying the error with ANSI Highlighting.
-    std::cout << colorError(generateMetadata(recognizer, offendingSymbol, line,
-                                             charPositionInLine))
-              << std::endl;
     throw ParseException{
-        absl::StrCat("line ", line, ":", charPositionInLine, " ", msg),
+        absl::StrCat("Token \"", offendingSymbol->getText(), "\" at line ",
+                     line, ":", charPositionInLine, " ", msg),
         generateMetadata(recognizer, offendingSymbol, line,
                          charPositionInLine)};
-  }
-};
-
-class IVisitorErrorReporter {
- public:
-  virtual ~IVisitorErrorReporter() = default;
-  virtual void ReportError(antlr4::ParserRuleContext* ctx, std::string msg) = 0;
-};
-
-class QleverErrorReporter : public IVisitorErrorReporter {
- public:
-  void ReportError(antlr4::ParserRuleContext* ctx,
-                   [[maybe_unused]] std::string msg) override {
-    //      std::cout << colorError(generateMetadata(ctx)) << std::endl;
-    throw ParseException{absl::StrCat("line", ctx->getStart()->getLine(), ":",
-                                      ctx->getStart()->getCharPositionInLine(), " ", msg),
-                         generateMetadata(ctx)};
   }
 };

@@ -489,6 +489,22 @@ json Server::composeErrorResponseJson(const string& query,
 }
 
 // _____________________________________________________________________________
+json Server::composeErrorResponseJson(const string& query,
+                                      const std::string& errorMsg,
+                                      const ExceptionMetadata& metadata,
+                                      ad_utility::Timer& requestTimer) {
+  json j = composeErrorResponseJson(query, errorMsg, requestTimer);
+  j["metadata"]["startIndex"] = metadata.startIndex;
+  j["metadata"]["stopIndex"] = metadata.stopIndex;
+  // The ANTLR parser may not see the whole query. (The reason is a mixing of
+  // the old and new parser.) To detect/work with this we also transmit what
+  // ANTLR saw as query.
+  // TODO<qup42> remove once the whole query is parsed with ANTLR.
+  j["metadata"]["query"] = metadata.query_;
+  return j;
+}
+
+// _____________________________________________________________________________
 json Server::composeStatsJson() const {
   json result;
   result["kbindex"] = _index.getKbName();
@@ -543,6 +559,7 @@ boost::asio::awaitable<void> Server::processQuery(
   // to the client. Note that the C++ standard forbids co_await in the catch
   // block, hence the workaround with the optional `exceptionErrorMsg`.
   std::optional<std::string> exceptionErrorMsg;
+  std::optional<ExceptionMetadata> metadata;
   try {
     ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
         std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
@@ -719,13 +736,24 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(DEBUG) << "Runtime Info:\n"
                << qet.getRootOperation()->getRuntimeInfo().toString()
                << std::endl;
+  } catch (const ParseException& e) {
+    exceptionErrorMsg = e.what();
+    metadata = e.metadata();
   } catch (const std::exception& e) {
     exceptionErrorMsg = e.what();
   }
+  // TODO<qup42> at this stage should probably have a wrapper that takes
+  //  optional<errorMsg> and optional<metadata> and does this logic
   if (exceptionErrorMsg) {
     LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
-    auto errorResponseJson = composeErrorResponseJson(
-        query, exceptionErrorMsg.value(), requestTimer);
+    json errorResponseJson;
+    if (metadata) {
+      errorResponseJson = composeErrorResponseJson(
+          query, exceptionErrorMsg.value(), metadata.value(), requestTimer);
+    } else {
+      errorResponseJson = composeErrorResponseJson(
+          query, exceptionErrorMsg.value(), requestTimer);
+    }
     co_return co_await sendJson(errorResponseJson, http::status::bad_request);
   }
 }

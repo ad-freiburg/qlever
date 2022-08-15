@@ -25,6 +25,7 @@ class ParseException : public std::exception {
         metadata_(std::move(metadata_)){};
 
   virtual const char* what() const throw() { return _cause.c_str(); }
+  [[nodiscard]] ExceptionMetadata metadata() const { return metadata_; }
 
  private:
   std::string _cause;

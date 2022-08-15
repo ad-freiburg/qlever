@@ -81,7 +81,6 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
  private:
   PrefixMap _prefixMap{};
-  QleverErrorReporter reporter{};
 
   template <typename T>
   void appendVector(std::vector<T>& destination, std::vector<T>&& source) {
@@ -889,4 +888,6 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   /// `Intermediate` (see for example the implementation of `visitAlternative`).
   template <typename Target, typename Intermediate = Target, typename Ctx>
   void visitIf(Target* target, Ctx* ctx);
+
+  void reportError(antlr4::ParserRuleContext* ctx, const std::string& msg);
 };
