@@ -13,6 +13,7 @@
 #include "../../util/HashMap.h"
 #include "../../util/OverloadCallOperator.h"
 #include "../../util/StringUtils.h"
+#include "../../util/antlr/ANTLRErrorHandling.h"
 #include "../Alias.h"
 #include "../ParsedQuery.h"
 #include "../RdfEscaping.h"
@@ -80,6 +81,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
  private:
   PrefixMap _prefixMap{};
+  QleverErrorReporter reporter{};
 
   template <typename T>
   void appendVector(std::vector<T>& destination, std::vector<T>&& source) {
