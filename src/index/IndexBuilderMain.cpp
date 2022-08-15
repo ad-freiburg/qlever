@@ -95,8 +95,7 @@ int main(int argc, char** argv) {
       "will read from stdin.");
   add("file-format,F", po::value(&filetype),
       "The format of the input file with the knowledge graph data. Must be one "
-      "of "
-      "[tsv|nt|ttl]. If not set, QLever will try to deduce it from the "
+      "of [tsv|nt|ttl]. If not set, QLever will try to deduce it from the "
       "filename suffix.");
   add("kg-index-name,K", po::value(&kbIndexName),
       "The name of the knowledge graph index (default: basename of "
@@ -119,8 +118,9 @@ int main(int argc, char** argv) {
 
   // Options for the knowledge graph index.
   add("externalize-literals,l", po::bool_switch(&onDiskLiterals),
-      "Externalize parts of the knowledge graph vocabulary, in the "
-      "`settings-file`.");
+      "Externalize parts of the knowledge graph vocabulary, according to the "
+      "rules specified in the "
+      "`settings-file` JSON.");
   add("settings-file,s", po::value(&settingsFile),
       "A JSON file, where various settings can be specified (see the QLever "
       "documentation).");
