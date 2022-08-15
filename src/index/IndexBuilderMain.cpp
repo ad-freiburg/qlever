@@ -119,8 +119,7 @@ int main(int argc, char** argv) {
   // Options for the knowledge graph index.
   add("externalize-literals,l", po::bool_switch(&onDiskLiterals),
       "Externalize parts of the knowledge graph vocabulary, according to the "
-      "rules specified in the "
-      "`settings-file` JSON.");
+      "rules specified in the `settings-file` JSON.");
   add("settings-file,s", po::value(&settingsFile),
       "A JSON file, where various settings can be specified (see the QLever "
       "documentation).");
