@@ -89,58 +89,63 @@ int main(int argc, char** argv) {
   };
   add("help,h", "Produce this help message.");
   add("index-basename,i", po::value(&baseName)->required(),
-      "The basename of the index files (required).");
-  add("docs-by-context,d", po::value(&docsfile),
-      "docs-file to build text index from");
+      "The basename of the output files (required).");
+  add("kg-input-file,f", po::value(&inputFile),
+      "The file to be parsed from. If omitted, will read from stdin.");
   add("file-format,F", po::value(&filetype),
-      "Specify format of the input file. Must be one of "
-      "[tsv|nt|ttl|mmap]. If not set, we will try to deduce from the filename. "
-      "`mmap` assumes an on-disk turtle file that can be mmapped to memory)");
-  add("knowledge-base-input-file,f", po::value(&inputFile),
-      "The file to be parsed from. If omitted, we will read from stdin");
-  add("kb-index-name, K", po::value(&kbIndexName),
-      "Assign a name to be displayed in the UI (default: name of nt-file)");
-  add("on-disk-literals,l", po::bool_switch(&onDiskLiterals),
-      "Externalize parts of the KB vocab.");
-  add("no-patterns", po::bool_switch(&noPatterns),
-      "Disable the use of patterns. This disables ql:has-predicate.");
+      "The format of the input file. Must be one of "
+      "[tsv|nt|ttl]. If not set, QLever will try to deduce it from the "
+      "filename suffix. ");
+  add("kg-index-name,K", po::value(&kbIndexName),
+      "The name of the knowledge graph index (default: basename of "
+      "kg-input-file).");
+  // Options for the text index
+  add("text-docs-input-file,d", po::value(&docsfile),
+      "Text records from which to build a text index.");
+  add("text-words-input-file,w", po::value(&wordsfile),
+      "Words of the text records from which to build the text index from.");
+  add("text-words-from-literals,W", po::bool_switch(&addWordsFromLiterals),
+      "Consider all literals from the internal vocabulary as text records.");
   add("text-index-name,T", po::value(&textIndexName),
-      "Assign a name to be displayed in the UI "
-      "(default: name of words-file).");
-  add("words-by-contexts,w", po::value(&wordsfile),
-      "words-file to build text index from");
-  add("words-from-literals,W", po::bool_switch(&addWordsFromLiterals),
-      "Consider all literals from the internal vocabulary as text records");
-  add("add-text-index, A", po::bool_switch(&onlyAddTextIndex),
-      "Add text index to already existing kb-index");
-  add("keep-temporary-files,k", po::bool_switch(&keepTemporaryFiles),
-      "Keep Temporary Files from IndexCreation (normally only for debugging)");
+      "The name of the text index (default: basename of "
+      "text-words-input-file).");
+  add("add-text-index,A", po::bool_switch(&onlyAddTextIndex),
+      "Only build the text index. Assume, that a knowledge graph index with "
+      "the same `index-basename` already exists");
+
+  // Index options
+  add("externalize-literals,l", po::bool_switch(&onDiskLiterals),
+      "Externalize parts of the knowledge graph vocabulary, in the settings "
+      "jsong file.");
   add("settings-file,s", po::value(&settingsFile),
-      "Specify a input settings file where prefixes that are to be "
-      "externalized etc. can be specified");
+      "A JSON file, where various settings can be specified (see the QLever "
+      "documentation).");
+  add("no-patterns", po::bool_switch(&noPatterns),
+      "Disable the precomputation for `ql:has-predicate`.");
   add("no-compressed-vocabulary,N", po::bool_switch(&noPrefixCompression),
-      "Do NOT use prefix compression on the vocabulary (default is to "
-      "compress).");
+      "Do not apply prefix compression to the vocabulary (default: do apply).");
   add("only-pos-and-pso-permutations,o", po::bool_switch(&onlyPsoAndPos),
-      "Only load PSO and POS permutations");
-  add("m, stxxl-memory-gb", po::value(&stxxlMemoryGB),
-      "The amount of memory to use for sorting during the index build. "
+      "Only build PSO and POS permutations");
+
+  // Index Builder options
+  add("stxxl-memory-gb,m", po::value(&stxxlMemoryGB),
+      "The amount of memory in GB to use for sorting during the index build. "
       "Decrease if the index builder runs out of memory.");
+  add("keep-temporary-files,k", po::bool_switch(&keepTemporaryFiles),
+      "Do not delete temporary files from index creation for debugging.");
 
   // Process command line arguments.
   po::variables_map optionsMap;
 
   try {
     po::store(po::parse_command_line(argc, argv, boostOptions), optionsMap);
-
     if (optionsMap.count("help")) {
       std::cout << boostOptions << '\n';
       return EXIT_SUCCESS;
     }
-
     po::notify(optionsMap);
   } catch (const std::exception& e) {
-    std::cerr << "Error in command-line Argument: " << e.what() << '\n';
+    std::cerr << "Error in command-line argument: " << e.what() << '\n';
     std::cerr << boostOptions << '\n';
     return EXIT_FAILURE;
   }

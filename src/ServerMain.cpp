@@ -110,15 +110,13 @@ int main(int argc, char** argv) {
 
   try {
     po::store(po::parse_command_line(argc, argv, options), optionsMap);
-
     if (optionsMap.count("help")) {
       std::cout << options << '\n';
       return EXIT_SUCCESS;
     }
-
     po::notify(optionsMap);
   } catch (const std::exception& e) {
-    std::cerr << "Error in command-line Argument: " << e.what() << '\n';
+    std::cerr << "Error in command-line argument: " << e.what() << '\n';
     std::cerr << options << '\n';
     return EXIT_FAILURE;
   }
