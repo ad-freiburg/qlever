@@ -91,32 +91,36 @@ int main(int argc, char** argv) {
   add("index-basename,i", po::value(&baseName)->required(),
       "The basename of the output files (required).");
   add("kg-input-file,f", po::value(&inputFile),
-      "The file to be parsed from. If omitted, will read from stdin.");
+      "The file with the knowledge graph data to be parsed from. If omitted, "
+      "will read from stdin.");
   add("file-format,F", po::value(&filetype),
-      "The format of the input file. Must be one of "
+      "The format of the input file with the knowledge graph data. Must be one "
+      "of "
       "[tsv|nt|ttl]. If not set, QLever will try to deduce it from the "
-      "filename suffix. ");
+      "filename suffix.");
   add("kg-index-name,K", po::value(&kbIndexName),
       "The name of the knowledge graph index (default: basename of "
-      "kg-input-file).");
-  // Options for the text index
+      "`kg-input-file`).");
+
+  // Options for the text index.
   add("text-docs-input-file,d", po::value(&docsfile),
-      "Text records from which to build a text index.");
+      "The full text of the text records from which to build the text index.");
   add("text-words-input-file,w", po::value(&wordsfile),
-      "Words of the text records from which to build the text index from.");
+      "Words of the text records from which to build the text index.");
   add("text-words-from-literals,W", po::bool_switch(&addWordsFromLiterals),
-      "Consider all literals from the internal vocabulary as text records.");
+      "Consider all literals from the internal vocabulary as text records. Can "
+      "be combined with `text-docs-input-file` and `text-words-input-file`");
   add("text-index-name,T", po::value(&textIndexName),
       "The name of the text index (default: basename of "
       "text-words-input-file).");
   add("add-text-index,A", po::bool_switch(&onlyAddTextIndex),
-      "Only build the text index. Assume, that a knowledge graph index with "
-      "the same `index-basename` already exists");
+      "Only build the text index. Assumes that a knowledge graph index with "
+      "the same `index-basename` already exists.");
 
-  // Index options
+  // Options for the knowledge graph index.
   add("externalize-literals,l", po::bool_switch(&onDiskLiterals),
-      "Externalize parts of the knowledge graph vocabulary, in the settings "
-      "jsong file.");
+      "Externalize parts of the knowledge graph vocabulary, in the "
+      "`settings-file`.");
   add("settings-file,s", po::value(&settingsFile),
       "A JSON file, where various settings can be specified (see the QLever "
       "documentation).");
@@ -125,9 +129,10 @@ int main(int argc, char** argv) {
   add("no-compressed-vocabulary,N", po::bool_switch(&noPrefixCompression),
       "Do not apply prefix compression to the vocabulary (default: do apply).");
   add("only-pos-and-pso-permutations,o", po::bool_switch(&onlyPsoAndPos),
-      "Only build PSO and POS permutations");
+      "Only build the PSO and POS permutations. This is faster, but then "
+      "queries with predicate variables are not supported");
 
-  // Index Builder options
+  // Options for the index building process.
   add("stxxl-memory-gb,m", po::value(&stxxlMemoryGB),
       "The amount of memory in GB to use for sorting during the index build. "
       "Decrease if the index builder runs out of memory.");
