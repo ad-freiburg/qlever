@@ -5,22 +5,23 @@
 #include "./QueryExecutionTree.h"
 
 #include <absl/strings/str_join.h>
+#include <engine/Bind.h>
+#include <engine/Distinct.h>
+#include <engine/Filter.h>
+#include <engine/GroupBy.h>
+#include <engine/HasPredicateScan.h>
+#include <engine/IndexScan.h>
+#include <engine/OrderBy.h>
+#include <engine/Sort.h>
+#include <engine/TransitivePath.h>
+#include <engine/Union.h>
+#include <engine/Values.h>
+#include <parser/RdfEscaping.h>
 
 #include <algorithm>
 #include <sstream>
 #include <string>
 #include <utility>
-
-#include "../parser/RdfEscaping.h"
-#include "./Bind.h"
-#include "./Distinct.h"
-#include "./GroupBy.h"
-#include "./IndexScan.h"
-#include "./OrderBy.h"
-#include "./Sort.h"
-#include "./TransitivePath.h"
-#include "./Union.h"
-#include "./Values.h"
 
 using std::string;
 
@@ -601,7 +602,10 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
     _type = ORDER_BY;
   } else if constexpr (std::is_same_v<Op, GroupBy>) {
     _type = GROUP_BY;
-
+  } else if constexpr (std::is_same_v<Op, HasPredicateScan>) {
+    _type = HAS_PREDICATE_SCAN;
+  } else if constexpr (std::is_same_v<Op, Filter>) {
+    _type = FILTER;
   } else {
     static_assert(ad_utility::alwaysFalse<Op>,
                   "New type of operation that was not yet registered");
@@ -618,3 +622,6 @@ template void QueryExecutionTree::setOperation(std::shared_ptr<Values>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<TransitivePath>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<OrderBy>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<GroupBy>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<HasPredicateScan>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<Filter>);
