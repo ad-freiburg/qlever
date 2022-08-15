@@ -4,21 +4,19 @@
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
+#include <CompilationInfo.h>
+#include <global/Constants.h>
+#include <index/ConstantsIndexBuilding.h>
+#include <index/Index.h>
+#include <util/File.h>
+#include <util/ProgramOptionsHelpers.h>
+#include <util/ReadableNumberFact.h>
+
 #include <boost/program_options.hpp>
 #include <cstdlib>
 #include <exception>
-#include <iomanip>
 #include <iostream>
-#include <sstream>
 #include <string>
-
-#include "../CompilationInfo.h"
-#include "../global/Constants.h"
-#include "../util/File.h"
-#include "../util/ProgramOptionsHelpers.h"
-#include "../util/ReadableNumberFact.h"
-#include "./ConstantsIndexBuilding.h"
-#include "./Index.h"
 
 using std::cerr;
 using std::cout;
@@ -90,11 +88,11 @@ int main(int argc, char** argv) {
     boostOptions.add_options()(std::forward<Args>(args)...);
   };
   add("help,h", "Produce this help message.");
-  add("index-basename,i", po::value<std::string>(&baseName)->required(),
+  add("index-basename,i", po::value(&baseName)->required(),
       "The basename of the index files (required).");
-  add("docs-by-context,d", po::value<std::string>(&docsfile),
+  add("docs-by-context,d", po::value(&docsfile),
       "docs-file to build text index from");
-  add("file-format,F", po::value<std::string>(&filetype),
+  add("file-format,F", po::value(&filetype),
       "Specify format of the input file. Must be one of "
       "[tsv|nt|ttl|mmap]. If not set, we will try to deduce from the filename. "
       "`mmap` assumes an on-disk turtle file that can be mmapped to memory)");
@@ -162,8 +160,6 @@ int main(int argc, char** argv) {
   if (kbIndexName.empty() && !inputFile.empty()) {
     kbIndexName = ad_utility::getLastPartOfString(inputFile, '/');
   }
-
-
 
   LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on "
             << qlever::version::DatetimeOfCompilation << " using git hash "
