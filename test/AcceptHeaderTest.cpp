@@ -3,6 +3,7 @@
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
+#include <parser/ParseException.h>
 
 #include <string>
 
@@ -136,13 +137,11 @@ TEST(AcceptHeaderParser, TotalWildCard) {
 }
 
 TEST(AcceptHeaderParser, IllegalInput) {
-  ASSERT_THROW(parse("application/json text/html"), ParseCancellationException);
-  ASSERT_THROW(parse("application/json; text/html"),
-               ParseCancellationException);
-  ASSERT_THROW(parse("application/json,q=1.0, text/html"),
-               ParseCancellationException);
-  ASSERT_THROW(parse("application"), ParseCancellationException);
-  ASSERT_THROW(parse("application/"), ParseCancellationException);
+  ASSERT_THROW(parse("application/json text/html"), ParseException);
+  ASSERT_THROW(parse("application/json; text/html"), ParseException);
+  ASSERT_THROW(parse("application/json,q=1.0, text/html"), ParseException);
+  ASSERT_THROW(parse("application"), ParseException);
+  ASSERT_THROW(parse("application/"), ParseException);
 }
 
 TEST(AcceptHeaderParser, FindMediaTypeFromAcceptHeader) {

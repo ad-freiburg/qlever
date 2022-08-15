@@ -140,6 +140,7 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
     antlr4::ANTLRInputStream stream{input};
     AcceptHeaderLexer lexer{&stream};
     antlr4::CommonTokenStream tokens{&lexer};
+    ThrowingErrorListener errorListener_{};
 
    public:
     AcceptHeaderParser parser{&tokens};
@@ -147,7 +148,10 @@ std::vector<MediaTypeWithQuality> parseAcceptHeader(
     explicit ParserAndVisitor(string toParse,
                               std::vector<MediaType> supportedMediaTypes)
         : input{std::move(toParse)}, visitor{std::move(supportedMediaTypes)} {
-      parser.setErrorHandler(std::make_shared<ThrowingErrorStrategy>());
+      parser.removeErrorListeners();
+      parser.addErrorListener(&errorListener_);
+      lexer.removeErrorListeners();
+      lexer.addErrorListener(&errorListener_);
     }
   };
 

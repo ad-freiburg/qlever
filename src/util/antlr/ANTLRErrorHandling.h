@@ -4,9 +4,10 @@
 
 #pragma once
 
+#include <parser/ParseException.h>
+
 #include <string>
 
-#include "../../parser/ParseException.h"
 #include "BaseErrorListener.h"
 #include "CharStream.h"
 #include "CommonTokenStream.h"
@@ -15,15 +16,6 @@
 #include "RecognitionException.h"
 #include "Recognizer.h"
 #include "TokenSource.h"
-
-struct [[deprecated("Using ErrorHandlers is not recommend. Use ErrorListeners instead.")]] ThrowingErrorStrategy : public antlr4::DefaultErrorStrategy {
-  void reportError(antlr4::Parser*,
-                   const antlr4::RecognitionException& e) override {
-    throw antlr4::ParseCancellationException{
-        e.what() + std::string{" at token \""} +
-        e.getOffendingToken()->getText() + '"'};
-  }
-};
 
 // TODO<qup42> whats up with this namespace?
 namespace {
