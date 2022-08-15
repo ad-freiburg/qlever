@@ -1205,7 +1205,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           node._triple._s == node._triple._o) {
         if (isVariable(node._triple._p._iri)) {
           AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                   "Triple with one variable repated 3 times");
+                   "Triple with one variable repeated 3 times");
         }
         LOG(DEBUG) << "Subject variable same as object variable" << std::endl;
         // Need to handle this as IndexScan with a new unique
