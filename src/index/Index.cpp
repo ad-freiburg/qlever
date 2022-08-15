@@ -1,10 +1,22 @@
 // Copyright 2014, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Authors:
+//   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #include "./Index.h"
 
+#include <CompilationInfo.h>
 #include <absl/strings/str_join.h>
+#include <index/PrefixHeuristic.h>
+#include <index/TriplesView.h>
+#include <index/VocabularyGenerator.h>
+#include <parser/ParallelParseBuffer.h>
+#include <util/BatchedPipeline.h>
+#include <util/CompressionUsingZstd/ZstdWrapper.h>
+#include <util/HashMap.h>
+#include <util/Serializer/FileSerializer.h>
+#include <util/TupleHelpers.h>
 
 #include <algorithm>
 #include <cmath>
@@ -14,17 +26,6 @@
 #include <stxxl/algorithm>
 #include <stxxl/map>
 #include <unordered_map>
-
-#include "../parser/ParallelParseBuffer.h"
-#include "../util/BatchedPipeline.h"
-#include "../util/CompressionUsingZstd/ZstdWrapper.h"
-#include "../util/Conversions.h"
-#include "../util/HashMap.h"
-#include "../util/Serializer/FileSerializer.h"
-#include "../util/TupleHelpers.h"
-#include "./PrefixHeuristic.h"
-#include "./VocabularyGenerator.h"
-#include "TriplesView.h"
 
 using std::array;
 
@@ -852,14 +853,25 @@ void Index::setPrefixCompression(bool compressed) {
 
 // ____________________________________________________________________________
 void Index::writeConfiguration() const {
+  // Copy the configuration and add the current commit hash.
+  auto configuration = _configurationJson;
+  configuration["git_hash"] = std::string(qlever::version::GitHash);
   auto f = ad_utility::makeOfstream(_onDiskBase + CONFIGURATION_FILE);
-  f << _configurationJson;
+  f << configuration;
 }
 
 // ___________________________________________________________________________
 void Index::readConfiguration() {
   auto f = ad_utility::makeIfstream(_onDiskBase + CONFIGURATION_FILE);
   f >> _configurationJson;
+  if (_configurationJson.find("git_hash") != _configurationJson.end()) {
+    LOG(INFO) << "The git hash used to build this index was "
+              << _configurationJson["git_hash"] << std::endl;
+  } else {
+    LOG(INFO) << "The index was built before git commit hashes were stored in "
+                 "the index meta data"
+              << std::endl;
+  }
   if (_configurationJson.find("external-literals") !=
       _configurationJson.end()) {
     _onDiskLiterals =

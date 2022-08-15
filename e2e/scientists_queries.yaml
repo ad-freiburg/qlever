@@ -1259,3 +1259,37 @@ queries:
   #    GROUP BY SUBSTR(?scientist, 0, 2)
   #  checks:
   #    - selected: ["?count"]
+
+  # For both of the following two queries to work, the query optimizer must
+  # produce two query plans for the result of the subquery (it used to
+  # produce only one).
+  - query: subquery-one-triple-1
+    type: no-text
+    sparql: |
+      SELECT (COUNT(?x) as ?count) ?place WHERE {
+          {SELECT * WHERE {?x <is-a> ?y}} .
+          ?x <Place_of_birth> ?place .
+      }
+      GROUP BY ?place
+      ORDER BY DESC(?count)
+    checks:
+      - num_cols: 2
+      #- num_rows : 5295 #greater than current limit
+      - selected: [ "?count", "?place" ]
+      - contains_row: [ 2476, "<New_York_City>" ]
+      - order_numeric: { "dir": "DESC", "var": "?count" }
+  - query: subquery-one-triple-2
+    type: no-text
+    sparql: |
+      SELECT (COUNT(?x) as ?count) ?y WHERE {
+                {SELECT * WHERE {?x <is-a> ?y}} .
+                <Albert_Einstein> <is-a> ?y .
+            }
+            GROUP BY ?y
+            ORDER BY DESC(?count)
+    checks:
+      - num_cols: 2
+      #- num_rows : 5295 #greater than current limit
+      - selected: [ "?count", "?y" ]
+      - contains_row: [ 1398, "<Educator>" ]
+      - order_numeric: { "dir": "DESC", "var": "?count" }

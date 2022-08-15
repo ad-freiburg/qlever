@@ -12,6 +12,7 @@
 #include <sstream>
 #include <string>
 
+#include "../CompilationInfo.h"
 #include "../global/Constants.h"
 #include "../util/File.h"
 #include "../util/ProgramOptionsHelpers.h"
@@ -162,8 +163,11 @@ int main(int argc, char** argv) {
     kbIndexName = ad_utility::getLastPartOfString(inputFile, '/');
   }
 
-  LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on " << __DATE__ << " "
-            << __TIME__ << EMPH_OFF << std::endl;
+
+
+  LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on "
+            << qlever::version::DatetimeOfCompilation << " using git hash "
+            << qlever::version::GitShortHash() << EMPH_OFF << std::endl;
 
   try {
     LOG(TRACE) << "Configuring STXXL..." << std::endl;

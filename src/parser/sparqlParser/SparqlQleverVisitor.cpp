@@ -1241,26 +1241,14 @@ BlankNode Visitor::visitTypesafe(Parser::BlankNodeContext* ctx) {
 
 // ____________________________________________________________________________________
 
-template <typename Out, bool isRecursive, typename FirstContext,
-          typename... Context>
-Out Visitor::visitAlternative(FirstContext* ctx, Context*... ctxs) {
-  if constexpr (!isRecursive) {
-    int numValidContexts =
-        (static_cast<bool>(ctx) + ... + static_cast<bool>(ctxs));
-    AD_CHECK(numValidContexts == 1);
-  }
-  if (ctx) {
-    // required for types that have an explicit constructor
-    return Out{visitTypesafe(ctx)};
-  } else {
-    if constexpr (sizeof...(Context) != 0) {
-      return visitAlternative<Out, true>(ctxs...);
-    } else {
-      // Unreachable because of the `AD_CHECK` above, but the `if constexpr` is
-      // still needed for the compilation of the base case.
-      AD_FAIL()  // Should be unreachable.
-    }
-  }
+template <typename Out, typename... Contexts>
+Out Visitor::visitAlternative(Contexts*... ctxs) {
+  // Check that exactly one of the `ctxs` is not `nullptr`.
+  AD_CHECK(1u == (... + static_cast<bool>(ctxs)));
+  std::optional<Out> out;
+  // Visit the one `context` which is not null and write the result to `out`.
+  (..., visitIf<std::optional<Out>, Out>(&out, ctxs));
+  return std::move(out.value());
 }
 
 // ____________________________________________________________________________________
@@ -1275,9 +1263,9 @@ auto Visitor::visitOptional(Ctx* ctx)
 }
 
 // ____________________________________________________________________________________
-template <typename Ctx>
-void Visitor::visitIf(auto* target, Ctx* ctx) {
+template <typename Target, typename Intermediate, typename Ctx>
+void Visitor::visitIf(Target* target, Ctx* ctx) {
   if (ctx) {
-    *target = visitTypesafe(ctx);
+    *target = Intermediate{visitTypesafe(ctx)};
   }
 }
