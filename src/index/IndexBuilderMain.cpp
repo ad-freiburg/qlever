@@ -159,6 +159,10 @@ void printUsage(char* execName) {
 
 // Main function.
 int main(int argc, char** argv) {
+  LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on "
+            << qlever::version::DatetimeOfCompilation << " using git hash "
+            << qlever::version::GitShortHash() << EMPH_OFF << std::endl;
+
   setlocale(LC_CTYPE, "");
 
   std::locale loc;
@@ -274,10 +278,6 @@ int main(int argc, char** argv) {
     printUsage(argv[0]);
     exit(1);
   }
-
-  LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on "
-            << qlever::version::DatetimeOfCompilation << " using git hash "
-            << qlever::version::GitShortHash() << EMPH_OFF << std::endl;
 
   try {
     LOG(TRACE) << "Configuring STXXL..." << std::endl;

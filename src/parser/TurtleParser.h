@@ -7,6 +7,7 @@
 
 #include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
+#include <parser/data/BlankNode.h>
 #include <sys/mman.h>
 
 #include <codecvt>
@@ -84,6 +85,13 @@ class TurtleParser {
   // The CTRE Tokenizer implies relaxed parsing.
   static constexpr bool UseRelaxedParsing =
       std::is_same_v<Tokenizer_T, TokenizerCtre>;
+
+  // Get the result of the single rule that was parsed most recently. Used for
+  // testing.
+  const TripleComponent& getLastParseResult() { return _lastParseResult; }
+
+  // Get the currently buffered triples. Used for testing.
+  const std::vector<TurtleTriple>& getTriples() { return _triples; }
 
  protected:
   // Data members.
@@ -316,9 +324,7 @@ class TurtleParser {
 
   // create a new, unused, unique blank node string
   string createAnonNode() {
-    string res = ANON_NODE_PREFIX + ":" + std::to_string(_numBlankNodes);
-    _numBlankNodes++;
-    return res;
+    return BlankNode{true, std::to_string(_numBlankNodes++)}.toSparql();
   }
 
   FRIEND_TEST(TurtleParserTest, prefixedName);
@@ -332,6 +338,7 @@ class TurtleParser {
   FRIEND_TEST(TurtleParserTest, blankNodePropertyList);
   FRIEND_TEST(TurtleParserTest, numericLiteral);
   FRIEND_TEST(TurtleParserTest, booleanLiteral);
+  FRIEND_TEST(TurtleParserTest, collection);
 };
 
 /**

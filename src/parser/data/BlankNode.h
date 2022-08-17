@@ -4,6 +4,8 @@
 
 #pragma once
 
+#include <ctre/ctre.h>
+
 #include <memory>
 #include <sstream>
 #include <string>

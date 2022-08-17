@@ -228,8 +228,42 @@ bool TurtleParser<T>::collection() {
   if (!skip<TurtleTokenId::OpenRound>()) {
     return false;
   }
-  raise("The QLever turtle parser cannot handle collections yet");
-  // TODO<joka921> understand collections
+  std::vector<TripleComponent> elements;
+  while (object()) {
+    elements.push_back(std::move(_lastParseResult));
+  }
+  // The `object` rule creates triples, but those are incomplete in this case,
+  // so we remove them again.
+  _triples.resize(_triples.size() - elements.size());
+  static constexpr std::string_view rdfPrefix =
+      "<http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+  static const std::string nil = absl::StrCat(rdfPrefix, "nil>");
+  static const std::string first = absl::StrCat(rdfPrefix, "first>");
+  static const std::string rest = absl::StrCat(rdfPrefix, "rest>");
+
+  if (elements.empty()) {
+    _lastParseResult = nil;
+  } else {
+    // Create a new blank node for each collection element.
+    std::vector<std::string> blankNodes;
+    blankNodes.reserve(elements.size());
+    for (size_t i = 0; i < elements.size(); ++i) {
+      blankNodes.push_back(createAnonNode());
+    }
+
+    // The first blank node (the list head) will be the actual result (subject
+    // or object of the triple that contains the collection.
+    _lastParseResult = blankNodes.front();
+
+    // Add the triples for the linked list structure.
+    for (size_t i = 0; i < blankNodes.size(); ++i) {
+      _triples.push_back({blankNodes[i], first, elements[i]});
+      _triples.push_back({blankNodes[i], rest,
+                          i < blankNodes.size() - 1 ? blankNodes[i + 1] : nil});
+    }
+  }
+  check(skip<TurtleTokenId::CloseRound>());
+  return true;
 }
 
 // ____________________________________________________________________________
@@ -494,7 +528,14 @@ bool TurtleParser<T>::parseTerminal() {
 // ________________________________________________________________________
 template <class T>
 bool TurtleParser<T>::blankNodeLabel() {
-  return parseTerminal<TurtleTokenId::BlankNodeLabel>();
+  bool res = parseTerminal<TurtleTokenId::BlankNodeLabel>();
+  if (res) {
+    // add a special prefix to ensure that the manually specified blank nodes
+    // never interfere with the automatically generated ones.
+    _lastParseResult =
+        BlankNode{false, _lastParseResult.getString().substr(2)}.toSparql();
+  }
+  return res;
 }
 
 // __________________________________________________________________________

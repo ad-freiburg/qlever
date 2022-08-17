@@ -3,6 +3,8 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <parser/TripleComponent.h>
+
 #include <array>
 #include <fstream>
 #include <memory>
