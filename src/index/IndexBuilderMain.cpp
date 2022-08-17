@@ -161,8 +161,7 @@ int main(int argc, char** argv) {
   if (onDiskLiterals) {
     LOG(WARN) << EMPH_ON
               << "Warning, the -l command line option has no effect anymore "
-                 "and will be removed from a "
-                 "future version of QLever"
+                 "and will be removed from a future version of QLever"
               << EMPH_OFF << std::endl;
   }
 
