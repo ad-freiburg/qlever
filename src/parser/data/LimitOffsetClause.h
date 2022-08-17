@@ -12,4 +12,6 @@ struct LimitOffsetClause {
   uint64_t _limit = std::numeric_limits<uint64_t>::max();
   uint64_t _textLimit = 1;
   uint64_t _offset = 0;
+
+  bool operator==(const LimitOffsetClause&) const = default;
 };

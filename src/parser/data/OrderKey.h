@@ -31,6 +31,8 @@ class VariableOrderKey {
   // ___________________________________________________________________________
   explicit VariableOrderKey(string variable, bool isDescending = false)
       : variable_{std::move(variable)}, isDescending_{isDescending} {}
+
+  bool operator==(const VariableOrderKey&) const = default;
 };
 
 // Represents an ordering by a variable or an expression.

@@ -860,6 +860,38 @@ TEST(SparqlParser, GroupClause) {
   }
 }
 
+TEST(SparqlParser, SolutionModifier) {
+  auto expectSolutionModifier =
+      [](const string& input, const vector<variant<std::string, Alias, Variable>>& groupByVariables = {},
+         const vector<SparqlFilter>& havingClauses = {},
+         const vector<variant<std::pair<std::string, bool>, VariableOrderKey>>& orderBy = {},
+         const LimitOffsetClause limitOffset = {}) {
+        expectCompleteParse(parseSolutionModifier(input),
+                            IsSolutionModifier(groupByVariables, havingClauses,
+                                               orderBy, limitOffset));
+      };
+  auto expectIncompleteParse = [](const string& input) {
+    EXPECT_FALSE(parseSolutionModifier(input).remainingText_.empty());
+  };
+  using Var = Variable;
+  using VOK = VariableOrderKey;
+
+  expectSolutionModifier("", {}, {}, {}, {});
+  expectIncompleteParse("GROUP BY ?var LIMIT 10 ORDER BY ?var");
+  expectSolutionModifier("LIMIT 10", {}, {}, {}, {10, 1, 0});
+  expectSolutionModifier(
+      "GROUP BY ?var (?b - 10) HAVING (?var != 10) ORDER BY ?var LIMIT 10 OFFSET 2",
+      {Var{"?var"}, "?b-10"}, {{SparqlFilter::FilterType::NE, "?var", "10"}},
+      {VOK{"?var", false}}, {10, 1, 2});
+  expectSolutionModifier(
+      "GROUP BY ?var HAVING (?foo < ?bar) ORDER BY (5 - ?var) TEXTLIMIT 21 LIMIT 2",
+      {Var{"?var"}}, {{SparqlFilter::FilterType::LT, "?foo", "?bar"}},
+      {std::pair{"5-?var", false}}, {2, 21, 0});
+  expectSolutionModifier(
+      "GROUP BY (?var - ?bar) ORDER BY (5 - ?var)",
+      {"?var-?bar"}, {}, {std::pair{"5-?var", false}}, {});
+}
+
 namespace {
 template <typename Exception = ParseException>
 void expectDataBlockFails(const string& input) {
