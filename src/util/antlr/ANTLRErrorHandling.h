@@ -19,7 +19,6 @@
 
 // TODO<qup42> whats up with this namespace?
 namespace {
-// TODO<qup42> finalize and use/throw out
 [[maybe_unused]] std::string colorError(const ExceptionMetadata& metadata) {
   if (metadata.startIndex < metadata.stopIndex) {
     auto first = metadata.query_.substr(0, metadata.startIndex);

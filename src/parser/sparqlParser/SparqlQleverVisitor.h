@@ -453,7 +453,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   PathTuples visitTypesafe(Parser::TupleWithPathContext* ctx);
 
   [[noreturn]] void throwCollectionsAndBlankNodePathsNotSupported(auto* ctx) {
-    reportError(ctx, "( ... ) and [ ... ] in triples are not yet supported by QLever.");
+    reportError(
+        ctx, "( ... ) and [ ... ] in triples are not yet supported by QLever.");
   }
 
   Any visitPropertyListPath(Parser::PropertyListPathContext* ctx) override {
@@ -534,7 +535,9 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   Any visitPathMod(Parser::PathModContext* ctx) override {
     // Handled in visitPathElt.
-    reportError(ctx, "PathMod should be handled by upper clauses. It should not be visited.");
+    reportError(ctx,
+                "PathMod should be handled by upper clauses. It should not be "
+                "visited.");
   }
 
   Any visitPathPrimary(Parser::PathPrimaryContext* ctx) override {
@@ -550,8 +553,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   PropertyPath visitTypesafe(Parser::PathNegatedPropertySetContext*);
 
-  Any visitPathOneInPropertySet(Parser::PathOneInPropertySetContext* ctx) override {
-    reportError(ctx, R"("!" and "^" inside a property path is not supported by QLever.)");
+  Any visitPathOneInPropertySet(
+      Parser::PathOneInPropertySetContext* ctx) override {
+    reportError(
+        ctx,
+        R"("!" and "^" inside a property path is not supported by QLever.)");
   }
 
   /// Note that in the SPARQL grammar the INTEGER rule refers to positive
@@ -707,7 +713,9 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   Any visitStrangeMultiplicativeSubexprOfAdditive(
       Parser::StrangeMultiplicativeSubexprOfAdditiveContext* ctx) override {
-    reportError(ctx, "StrangeMultiplicativeSubexprOfAdditiveContext must not be visited.");
+    reportError(
+        ctx,
+        "StrangeMultiplicativeSubexprOfAdditiveContext must not be visited.");
   }
 
   Any visitMultiplicativeExpression(
@@ -879,5 +887,6 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   template <typename Target, typename Intermediate = Target, typename Ctx>
   void visitIf(Target* target, Ctx* ctx);
 
-  [[noreturn]] void reportError(antlr4::ParserRuleContext* ctx, const std::string& msg);
+  [[noreturn]] void reportError(antlr4::ParserRuleContext* ctx,
+                                const std::string& msg);
 };
