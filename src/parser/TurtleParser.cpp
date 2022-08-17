@@ -226,26 +226,26 @@ bool TurtleParser<T>::collection() {
   if (!skip<TurtleTokenId::OpenRound>()) {
     return false;
   }
-  std::vector<TripleComponent> elements;
+  std::vector<TripleComponent> objects;
   while (object()) {
-    elements.push_back(std::move(_lastParseResult));
+    objects.push_back(std::move(_lastParseResult));
   }
   // The `object` rule creates triples, but those are incomplete in this case,
   // so we remove them again.
-  _triples.resize(_triples.size() - elements.size());
+  _triples.resize(_triples.size() - objects.size());
   static constexpr std::string_view rdfPrefix =
       "<http://www.w3.org/1999/02/22-rdf-syntax-ns#";
   static const std::string nil = absl::StrCat(rdfPrefix, "nil>");
   static const std::string first = absl::StrCat(rdfPrefix, "first>");
   static const std::string rest = absl::StrCat(rdfPrefix, "rest>");
 
-  if (elements.empty()) {
+  if (objects.empty()) {
     _lastParseResult = nil;
   } else {
     // Create a new blank node for each collection element.
     std::vector<std::string> blankNodes;
-    blankNodes.reserve(elements.size());
-    for (size_t i = 0; i < elements.size(); ++i) {
+    blankNodes.reserve(objects.size());
+    for (size_t i = 0; i < objects.size(); ++i) {
       blankNodes.push_back(createAnonNode());
     }
 

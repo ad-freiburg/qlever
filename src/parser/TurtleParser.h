@@ -126,6 +126,9 @@ class TurtleParser {
   bool _invalidLiteralsAreSkipped = false;
   bool _currentTripleIgnoredBecauseOfInvalidLiteral = false;
 
+  static inline std::atomic<size_t> _numParsers = 0;
+  size_t _blankNodePrefix = _numParsers.fetch_add(1);
+
  public:
   virtual ~TurtleParser() = default;
   TurtleParser() = default;
@@ -322,7 +325,9 @@ class TurtleParser {
 
   // create a new, unused, unique blank node string
   string createAnonNode() {
-    return BlankNode{true, std::to_string(_numBlankNodes++)}.toSparql();
+    return BlankNode{true,
+                     absl::StrCat(_blankNodePrefix, "_", _numBlankNodes++)}
+        .toSparql();
   }
 
   FRIEND_TEST(TurtleParserTest, prefixedName);
