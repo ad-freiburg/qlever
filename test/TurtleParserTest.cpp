@@ -26,9 +26,8 @@ std::optional<Parser> parseRule(const std::string& input, auto rule) {
   return parser;
 }
 
-// Set up a `Parser` with the given `input`. Asserts that parsing the `rule`
-// works and sets the `lastParseResult` to `expectedLastParserResult` and the
-// emitted triples to `triples`.
+// Asserts that parsing the `rule` works and that the last parse result and the
+// emitted triples are as expected.
 void checkParseResult(const std::string& input, auto rule,
                       TripleComponent expectedLastParserResult,
                       std::vector<TurtleTriple> expectedTriples = {}) {
