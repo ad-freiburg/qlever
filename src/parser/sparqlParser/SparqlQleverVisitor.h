@@ -18,6 +18,7 @@
 #include "../RdfEscaping.h"
 #include "../data/BlankNode.h"
 #include "../data/Iri.h"
+#include "../data/SolutionModifiers.h"
 #include "../data/Types.h"
 #include "../data/VarOrTerm.h"
 #include "antlr4-runtime.h"
@@ -203,8 +204,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   Any visitSolutionModifier(Parser::SolutionModifierContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  SolutionModifiers visitTypesafe(Parser::SolutionModifierContext* ctx);
 
   Any visitGroupClause(Parser::GroupClauseContext* ctx) override {
     return visitTypesafe(ctx);
@@ -219,12 +222,16 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   GroupKey visitTypesafe(Parser::GroupConditionContext* ctx);
 
   Any visitHavingClause(Parser::HavingClauseContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
 
+  vector<SparqlFilter> visitTypesafe(Parser::HavingClauseContext* ctx);
+
   Any visitHavingCondition(Parser::HavingConditionContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  SparqlFilter visitTypesafe(Parser::HavingConditionContext* ctx);
 
   Any visitOrderClause(Parser::OrderClauseContext* ctx) override {
     return visitTypesafe(ctx);
@@ -283,8 +290,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   Any visitTriplesBlock(Parser::TriplesBlockContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  vector<TripleWithPropertyPath> visitTypesafe(
+      Parser::TriplesBlockContext* ctx);
 
   Any visitGraphPatternNotTriples(
       Parser::GraphPatternNotTriplesContext* ctx) override {
@@ -357,8 +367,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   Any visitFilterR(Parser::FilterRContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  SparqlFilter visitTypesafe(Parser::FilterRContext* ctx);
 
   Any visitConstraint(Parser::ConstraintContext* ctx) override {
     return visitTypesafe(ctx);

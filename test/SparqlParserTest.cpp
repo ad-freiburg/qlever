@@ -456,8 +456,8 @@ TEST(ParserTest, testParse) {
                     "SELECT REDUCED * WHERE { \n"
                     "  ?movie <directed-by> ?director .\n"
                     "} \n"
-                    "LIMIT 10 \n"
-                    "ORDER BY ASC(?movie)\n")
+                    "ORDER BY ASC(?movie)\n"
+                    "LIMIT 10 \n")
                     .parse();
       ASSERT_EQ(1u, pq._prefixes.size());
       ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
@@ -487,8 +487,8 @@ TEST(ParserTest, testParse) {
                     "SELECT DISTINCT * WHERE { \n"
                     "  ?movie <directed-by> ?director .\n"
                     "} \n"
-                    "LIMIT 10 \n"
-                    "ORDER BY DESC(?movie)\n")
+                    "ORDER BY DESC(?movie)\n"
+                    "LIMIT 10 \n")
                     .parse();
 
       ASSERT_EQ(1u, pq._prefixes.size());
@@ -527,9 +527,9 @@ TEST(ParserTest, testParse) {
                     "\t\t ORDER BY DESC(?director) \n"
                     "\t} \n"
                     "} \n"
+                    "ORDER BY DESC(?movie)\n"
                     "LIMIT 20 \n"
-                    "OFFSET 3 \n"
-                    "ORDER BY DESC(?movie)\n")
+                    "OFFSET 3 \n")
                     .parse();
 
       ASSERT_EQ(1u, pq._prefixes.size());
@@ -611,9 +611,9 @@ TEST(ParserTest, testParse) {
                     "\t\t ORDER BY DESC(?director) \n"
                     "\t} \n"
                     "} \n"
+                    "ORDER BY DESC(?movie)\n"
                     "LIMIT 20 \n"
-                    "OFFSET 3 \n"
-                    "ORDER BY DESC(?movie)\n")
+                    "OFFSET 3 \n")
                     .parse();
 
       ASSERT_EQ(1u, pq._prefixes.size());

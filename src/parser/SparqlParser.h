@@ -65,9 +65,6 @@ class SparqlParser {
 
   SparqlLexer lexer_;
   string query_;
-  // The number of additional internal variables that were added by the
-  // implementation of ORDER BY as BIND+ORDER BY.
-  uint64_t numInternalVariables_ = 0;
   SparqlFilter parseRegexFilter(bool expectKeyword);
 
   // Parse the clause with the prefixes of the given ParsedQuery.
@@ -91,10 +88,4 @@ class SparqlParser {
       -> decltype(f(std::declval<const string&>(),
                     std::declval<SparqlQleverVisitor::PrefixMap>())
                       .resultOfParse_);
-
-  /// Generates an internal bind that binds the given expression using a bind.
-  /// The bind is added to the query as child. The variable that the expression
-  /// is bound to is returned.
-  Variable addInternalBind(ParsedQuery* query,
-                           sparqlExpression::SparqlExpressionPimpl expression);
 };

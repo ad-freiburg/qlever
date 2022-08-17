@@ -144,6 +144,15 @@ inline auto parseIriref =
 inline auto parseNumericLiteral = std::bind_front(
     parseFront, &SparqlAutomaticParser::numericLiteral, "numericLiteral");
 
+inline auto parseHavingCondition = std::bind_front(
+    parseFront, &SparqlAutomaticParser::havingCondition, "havingCondition");
+
+inline auto parseSolutionModifier = std::bind_front(
+    parseFront, &SparqlAutomaticParser::solutionModifier, "solutionModifier");
+
+inline auto parseFilterR =
+    std::bind_front(parseFront, &SparqlAutomaticParser::filterR, "filterR");
+
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H

@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include "../SparqlParser.h"
+
 using namespace ad_utility::sparql_types;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
 using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
@@ -197,9 +199,29 @@ std::optional<Values> Visitor::visitTypesafe(Parser::ValuesClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+vector<TripleWithPropertyPath> Visitor::visitTypesafe(
+    Parser::TriplesBlockContext* ctx) {
+  auto triples = visitTypesafe(ctx->triplesSameSubjectPath());
+  if (ctx->triplesBlock()) {
+    appendVector(triples, visitTypesafe(ctx->triplesBlock()));
+  }
+  return triples;
+}
+
+// ____________________________________________________________________________________
 sparqlExpression::SparqlExpression::Ptr Visitor::visitTypesafe(
     Parser::ExpressionContext* ctx) {
   return visitTypesafe(ctx->conditionalOrExpression());
+}
+
+// ____________________________________________________________________________________
+SolutionModifiers Visitor::visitTypesafe(Parser::SolutionModifierContext* ctx) {
+  SolutionModifiers modifiers;
+  visitIf(&modifiers.groupByVariables_, ctx->groupClause());
+  visitIf(&modifiers.havingClauses_, ctx->havingClause());
+  visitIf(&modifiers.orderBy_, ctx->orderClause());
+  visitIf(&modifiers.limitOffset_, ctx->limitOffsetClauses());
+  return modifiers;
 }
 
 // ____________________________________________________________________________________
@@ -210,6 +232,41 @@ LimitOffsetClause Visitor::visitTypesafe(
   visitIf(&clause._offset, ctx->offsetClause());
   visitIf(&clause._textLimit, ctx->textLimitClause());
   return clause;
+}
+
+// ____________________________________________________________________________________
+vector<SparqlFilter> Visitor::visitTypesafe(Parser::HavingClauseContext* ctx) {
+  return visitVector<SparqlFilter>(ctx->havingCondition());
+}
+
+namespace {
+SparqlFilter parseFilter(auto* ctx) {
+  try {
+    return SparqlParser::parseFilterExpression(ctx->getText());
+  } catch (const std::bad_optional_access& error) {
+    throw ParseException("The expression " + ctx->getText() +
+                         " is currently not supported by Qlever inside a "
+                         "FILTER or HAVING clause.");
+  } catch (const ParseException& error) {
+    throw ParseException("The expression " + ctx->getText() +
+                         " is currently not supported by Qlever inside a "
+                         "FILTER or HAVING clause. Details: " +
+                         error.what());
+  }
+}
+}  // namespace
+
+// ____________________________________________________________________________________
+SparqlFilter Visitor::visitTypesafe(Parser::HavingConditionContext* ctx) {
+  SparqlFilter filter = parseFilter(ctx);
+  if (filter._type == SparqlFilter::LANG_MATCHES) {
+    throw ParseException(
+        "Language filter in HAVING clause currently not "
+        "supported by QLever. Got: " +
+        ctx->getText());
+  } else {
+    return filter;
+  }
 }
 
 // ____________________________________________________________________________________
@@ -480,6 +537,11 @@ std::string Visitor::visitTypesafe(Parser::DataBlockValueContext* ctx) {
         ".");
   }
   AD_FAIL()  // Should be unreachable.
+}
+
+// ____________________________________________________________________________________
+SparqlFilter Visitor::visitTypesafe(Parser::FilterRContext* ctx) {
+  return parseFilter(ctx->constraint());
 }
 
 // ____________________________________________________________________________________
