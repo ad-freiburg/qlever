@@ -46,11 +46,9 @@ IndexBuilderDataAsPsoSorter Index::createIdTriplesAndVocab(
 
   LOG(INFO) << "Converting external vocabulary to binary format ..."
             << std::endl;
-  if (_onDiskLiterals) {
-    _vocab.externalizeLiteralsFromTextFile(
-        _onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME,
-        _onDiskBase + EXTERNAL_VOCAB_SUFFIX);
-  }
+  _vocab.externalizeLiteralsFromTextFile(
+      _onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME,
+      _onDiskBase + EXTERNAL_VOCAB_SUFFIX);
   deleteTemporaryFile(_onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME);
   // clear vocabulary to save ram (only information from partial binary files
   // used from now on). This will preserve information about externalized
@@ -94,7 +92,6 @@ void createPatternsFromSpoTriplesView(auto&& spoTriplesView,
 template <class Parser>
 void Index::createFromFile(const string& filename) {
   string indexFilename = _onDiskBase + ".index";
-  _configurationJson["external-literals"] = _onDiskLiterals;
 
   readIndexBuilderSettingsFromFile<Parser>();
 
@@ -668,9 +665,8 @@ void Index::addPatternsToExistingIndex() {
 void Index::createFromOnDiskIndex(const string& onDiskBase) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
-  _vocab.readFromFile(
-      _onDiskBase + INTERNAL_VOCAB_SUFFIX,
-      _onDiskLiterals ? _onDiskBase + EXTERNAL_VOCAB_SUFFIX : "");
+  _vocab.readFromFile(_onDiskBase + INTERNAL_VOCAB_SUFFIX,
+                      _onDiskBase + EXTERNAL_VOCAB_SUFFIX);
 
   _totalVocabularySize = _vocab.size() + _vocab.getExternalVocab().size();
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
@@ -819,11 +815,6 @@ void Index::setKbName(const string& name) {
 }
 
 // ____________________________________________________________________________
-void Index::setOnDiskLiterals(bool onDiskLiterals) {
-  _onDiskLiterals = onDiskLiterals;
-}
-
-// ____________________________________________________________________________
 void Index::setOnDiskBase(const std::string& onDiskBase) {
   _onDiskBase = onDiskBase;
 }
@@ -872,11 +863,6 @@ void Index::readConfiguration() {
     LOG(INFO) << "The index was built before git commit hashes were stored in "
                  "the index meta data"
               << std::endl;
-  }
-  if (_configurationJson.find("external-literals") !=
-      _configurationJson.end()) {
-    _onDiskLiterals =
-        static_cast<bool>(_configurationJson["external-literals"]);
   }
 
   if (_configurationJson.find("prefixes") != _configurationJson.end()) {
@@ -960,7 +946,7 @@ LangtagAndTriple Index::tripleToInternalRepresentation(
     auto& component = std::get<PossiblyExternalizedIriOrLiteral>(el);
     auto& iriOrLiteral = component._iriOrLiteral;
     iriOrLiteral = _vocab.getLocaleManager().normalizeUtf8(iriOrLiteral);
-    if (_onDiskLiterals && _vocab.shouldBeExternalized(iriOrLiteral)) {
+    if (_vocab.shouldBeExternalized(iriOrLiteral)) {
       component._isExternal = true;
     }
     // Only the third element (the object) might contain a language tag.
@@ -984,8 +970,6 @@ void Index::readIndexBuilderSettingsFromFile() {
   if (j.find("prefixes-external") != j.end()) {
     _vocab.initializeExternalizePrefixes(j["prefixes-external"]);
     _configurationJson["prefixes-external"] = j["prefixes-external"];
-    _onDiskLiterals = true;
-    _configurationJson["external-literals"] = true;
   }
 
   if (j.count("ignore-case")) {
@@ -1036,8 +1020,6 @@ void Index::readIndexBuilderSettingsFromFile() {
   if (j.find("languages-internal") != j.end()) {
     _vocab.initializeInternalizedLangs(j["languages-internal"]);
     _configurationJson["languages-internal"] = j["languages-internal"];
-    _onDiskLiterals = true;
-    _configurationJson["external-literals"] = true;
   }
   if (j.count("ascii-prefixes-only")) {
     if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserAuto>) {
