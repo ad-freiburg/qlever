@@ -748,6 +748,7 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
     json errorResponseJson;
     if (metadata) {
+      LOG(ERROR) << colorError(metadata.value()) << std::endl;
       errorResponseJson = composeErrorResponseJson(
           query, exceptionErrorMsg.value(), metadata.value(), requestTimer);
     } else {
