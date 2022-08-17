@@ -255,7 +255,7 @@ bool TurtleParser<T>::collection() {
 
     // Add the triples for the linked list structure.
     for (size_t i = 0; i < blankNodes.size(); ++i) {
-      _triples.push_back({blankNodes[i], first, elements[i]});
+      _triples.push_back({blankNodes[i], first, objects[i]});
       _triples.push_back({blankNodes[i], rest,
                           i < blankNodes.size() - 1 ? blankNodes[i + 1] : nil});
     }
