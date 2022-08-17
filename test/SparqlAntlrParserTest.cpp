@@ -880,6 +880,8 @@ TEST(SparqlParser, SolutionModifier) {
   using VOK = VariableOrderKey;
 
   expectSolutionModifier("", {}, {}, {}, {});
+  // The following are no valid solution modifiers, because ORDER BY
+  // has to appear before LIMIT.
   expectIncompleteParse("GROUP BY ?var LIMIT 10 ORDER BY ?var");
   expectSolutionModifier("LIMIT 10", {}, {}, {}, {10, 1, 0});
   expectSolutionModifier(
