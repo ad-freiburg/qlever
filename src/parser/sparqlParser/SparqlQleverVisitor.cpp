@@ -1094,6 +1094,7 @@ ExpressionPtr Visitor::visitTypesafe(
 
 // ____________________________________________________________________________________
 ExpressionPtr Visitor::visitTypesafe(Parser::AggregateContext* ctx) {
+  using namespace sparqlExpression;
   // the only case that there is no child expression is COUNT(*), so we can
   // check this outside the if below.
   if (!ctx->expression()) {
@@ -1115,18 +1116,20 @@ ExpressionPtr Visitor::visitTypesafe(Parser::AggregateContext* ctx) {
     result->descriptor() = ctx->getText();
     return result;
   };
-  if (ad_utility::getLowercase(children[0]->getText()) == "count") {
-    return makePtr.operator()<sparqlExpression::CountExpression>();
-  } else if (ad_utility::getLowercase(children[0]->getText()) == "sum") {
-    return makePtr.operator()<sparqlExpression::SumExpression>();
-  } else if (ad_utility::getLowercase(children[0]->getText()) == "max") {
-    return makePtr.operator()<sparqlExpression::MaxExpression>();
-  } else if (ad_utility::getLowercase(children[0]->getText()) == "min") {
-    return makePtr.operator()<sparqlExpression::MinExpression>();
-  } else if (ad_utility::getLowercase(children[0]->getText()) == "avg") {
-    return makePtr.operator()<sparqlExpression::AvgExpression>();
-  } else if (ad_utility::getLowercase(children[0]->getText()) ==
-             "group_concat") {
+
+  std::string functionName = ad_utility::getLowercase(children[0]->getText());
+
+  if (functionName == "count") {
+    return makePtr.operator()<CountExpression>();
+  } else if (functionName == "sum") {
+    return makePtr.operator()<SumExpression>();
+  } else if (functionName == "max") {
+    return makePtr.operator()<MaxExpression>();
+  } else if (functionName == "min") {
+    return makePtr.operator()<MinExpression>();
+  } else if (functionName == "avg") {
+    return makePtr.operator()<AvgExpression>();
+  } else if (functionName == "group_concat") {
     // Use a space as a default separator
 
     std::string separator;
@@ -1142,10 +1145,9 @@ ExpressionPtr Visitor::visitTypesafe(Parser::AggregateContext* ctx) {
       separator = " "s;
     }
 
-    return makePtr.operator()<sparqlExpression::GroupConcatExpression>(
-        std::move(separator));
-  } else if (ad_utility::getLowercase(children[0]->getText()) == "sample") {
-    return makePtr.operator()<sparqlExpression::SampleExpression>();
+    return makePtr.operator()<GroupConcatExpression>(std::move(separator));
+  } else if (functionName == "sample") {
+    return makePtr.operator()<SampleExpression>();
   }
   AD_FAIL()  // Should be unreachable.
 }

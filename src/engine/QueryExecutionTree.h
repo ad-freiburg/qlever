@@ -36,27 +36,26 @@ class QueryExecutionTree {
   }
 
   enum OperationType {
-    UNDEFINED = 0,
-    SCAN = 1,
-    JOIN = 2,
-    SORT = 3,
-    ORDER_BY = 4,
-    FILTER = 5,
-    DISTINCT = 6,
-    TEXT_FOR_CONTEXTS = 7,
-    TEXT_WITHOUT_FILTER = 8,
-    TEXT_WITH_FILTER = 9,
-    TWO_COL_JOIN = 10,
-    OPTIONAL_JOIN = 11,
-    COUNT_AVAILABLE_PREDICATES = 12,
-    GROUP_BY = 13,
-    HAS_RELATION_SCAN = 14,
-    UNION = 15,
-    MULTICOLUMN_JOIN = 16,
-    TRANSITIVE_PATH = 17,
-    VALUES = 18,
-    BIND = 19,
-    MINUS = 20
+    UNDEFINED,
+    SCAN,
+    JOIN,
+    SORT,
+    ORDER_BY,
+    FILTER,
+    DISTINCT,
+    TEXT_WITHOUT_FILTER,
+    TEXT_WITH_FILTER,
+    TWO_COL_JOIN,
+    OPTIONAL_JOIN,
+    COUNT_AVAILABLE_PREDICATES,
+    GROUP_BY,
+    HAS_PREDICATE_SCAN,
+    UNION,
+    MULTICOLUMN_JOIN,
+    TRANSITIVE_PATH,
+    VALUES,
+    BIND,
+    MINUS
   };
 
   enum class ExportSubFormat { CSV, TSV, BINARY };

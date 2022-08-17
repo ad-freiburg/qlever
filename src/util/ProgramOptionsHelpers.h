@@ -5,10 +5,11 @@
 #ifndef QLEVER_PROGRAMOPTIONSHELPERS_H
 #define QLEVER_PROGRAMOPTIONSHELPERS_H
 
+#include <util/Concepts.h>
+#include <util/Parameters.h>
+
 #include <boost/program_options.hpp>
 #include <vector>
-
-#include "./Parameters.h"
 namespace ad_utility {
 
 // An implicit wrapper that can be implicitly converted to and from `size_t`.
@@ -16,7 +17,7 @@ namespace ad_utility {
 // accept positive values because of the `validate` function below.
 class NonNegative {
  public:
-  operator size_t() { return _value; }
+  operator size_t() const { return _value; }
   NonNegative(size_t value) : _value{value} {}
   NonNegative() = default;
 
@@ -24,8 +25,8 @@ class NonNegative {
   size_t _value;
 };
 
-template <typename Stream>
-Stream& operator<<(Stream& stream, NonNegative nonNegative) {
+template <typename Stream, ad_utility::SimilarTo<NonNegative> NN>
+Stream& operator<<(Stream& stream, NN&& nonNegative) {
   return stream << static_cast<size_t>(nonNegative);
 }
 
