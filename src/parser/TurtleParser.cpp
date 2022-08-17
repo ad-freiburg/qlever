@@ -180,11 +180,11 @@ template <class T>
 bool TurtleParser<T>::object() {
   // these produce a single object that becomes part of a triple
   // check blank Node first because _: also could look like a prefix
-  if (blankNode() || literal() || iri()) {
+  // TODO<joka921> Currently collections and blankNodePropertyLists do not work
+  // on dblp when using the relaxed parser. Is this fixable?
+  if (blankNode() || literal() || iri() || collection() ||
+      blankNodePropertyList()) {
     emitTriple();
-    return true;
-  } else if (collection() || blankNodePropertyList()) {
-    // these have a more complex logic and produce their own triples
     return true;
   } else {
     return false;
