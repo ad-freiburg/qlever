@@ -300,17 +300,19 @@ MATCHER_P4(IsSolutionModifier, groupByVariables, havingClauses, orderBy,
            a.expression_.getDescriptor() == b.first;
   };
   auto pimplComp = [](const sparqlExpression::SparqlExpressionPimpl& a,
-                      const std::string& b) {
-    return a.getDescriptor() == b;
-  };
-  auto orderKeyComp = [&exprOrderKeyComp, &equalComp, &falseComp](
-                          const OrderKey& a, const variant<std::pair<std::string, bool>, VariableOrderKey>& b) {
-    return std::visit(ad_utility::OverloadCallOperator{exprOrderKeyComp,
-                                                       equalComp, falseComp},
-                      a, b);
-  };
-  auto groupKeyComp = [&pimplComp, &equalComp, &falseComp](const GroupKey& a,
-                                                           const variant<std::string, Alias, Variable>& b) {
+                      const std::string& b) { return a.getDescriptor() == b; };
+  auto orderKeyComp =
+      [&exprOrderKeyComp, &equalComp, &falseComp](
+          const OrderKey& a,
+          const variant<std::pair<std::string, bool>, VariableOrderKey>& b) {
+        return std::visit(
+            ad_utility::OverloadCallOperator{exprOrderKeyComp, equalComp,
+                                             falseComp},
+            a, b);
+      };
+  auto groupKeyComp = [&pimplComp, &equalComp, &falseComp](
+                          const GroupKey& a,
+                          const variant<std::string, Alias, Variable>& b) {
     return std::visit(
         ad_utility::OverloadCallOperator{pimplComp, equalComp, falseComp}, a,
         b);
