@@ -37,6 +37,8 @@ ExceptionMetadata generateMetadata(antlr4::Recognizer* recognizer,
                                    antlr4::Token* offendingToken,
                                    [[maybe_unused]] size_t line,
                                    [[maybe_unused]] size_t charPositionInLine) {
+  // TODO<qup42> the source query differs from the real query. The SparqlLexer
+  //  lowercases some parts and sometimes adds whitespaces.
   return {((antlr4::CommonTokenStream*)recognizer->getInputStream())
               ->getTokenSource()
               ->getInputStream()
@@ -46,6 +48,7 @@ ExceptionMetadata generateMetadata(antlr4::Recognizer* recognizer,
 
 [[maybe_unused]] ExceptionMetadata generateMetadata(
     antlr4::ParserRuleContext* ctx) {
+  // TODO<qup42> see above
   return {ctx->getStart()->getInputStream()->toString(),
           ctx->getStart()->getStartIndex(), ctx->getStop()->getStopIndex()};
 }
