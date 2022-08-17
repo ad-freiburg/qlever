@@ -27,16 +27,16 @@ std::optional<Parser> parseRule(const std::string& input, auto rule) {
 }
 
 // Set up a `Parser` with the given `input`. Asserts that parsing the `rule`
-// works and sets the `lastParseResult` to `expected` and the emitted triples to
-// `triples`.
+// works and sets the `lastParseResult` to `expectedLastParserResult` and the
+// emitted triples to `triples`.
 void checkParseResult(const std::string& input, auto rule,
-                      TripleComponent expected,
-                      std::vector<TurtleTriple> triples = {}) {
+                      TripleComponent expectedLastParserResult,
+                      std::vector<TurtleTriple> expectedTriples = {}) {
   auto optionalParser = parseRule(input, rule);
   ASSERT_TRUE(optionalParser.has_value());
   auto& parser = optionalParser.value();
-  ASSERT_EQ(expected, parser.getLastParseResult());
-  ASSERT_EQ(parser.getTriples(), triples);
+  ASSERT_EQ(expectedLastParserResult, parser.getLastParseResult());
+  ASSERT_EQ(expectedTriples, parser.getTriples());
 }
 
 // Formatted output of TurtleTriples in case of test failures.
@@ -228,7 +228,7 @@ TEST(TurtleParserTest, blankNode) {
   // anonymous blank node
   p.setInputStream(" [    \n\t  ]");
   ASSERT_TRUE(p.blankNode());
-  ASSERT_EQ(p._lastParseResult, "_:g_0");
+  ASSERT_EQ(p._lastParseResult, "_:g_4_0");
   ASSERT_EQ(p._numBlankNodes, 1u);
   ASSERT_EQ(p.getPosition(), 11u);
 }
@@ -240,9 +240,9 @@ TEST(TurtleParserTest, blankNodePropertyList) {
 
   string blankNodeL = "[<p2> <ob2>; <p3> <ob3>]";
   std::vector<TurtleTriple> exp;
-  exp.push_back({"<s>", "<p1>", TripleComponent{"_:g_0"}});
-  exp.push_back({"_:g_0", "<p2>", TripleComponent{"<ob2>"}});
-  exp.push_back({"_:g_0", "<p3>", TripleComponent{"<ob3>"}});
+  exp.push_back({"<s>", "<p1>", TripleComponent{"_:g_5_0"}});
+  exp.push_back({"_:g_5_0", "<p2>", TripleComponent{"<ob2>"}});
+  exp.push_back({"_:g_5_0", "<p3>", TripleComponent{"<ob3>"}});
   p.setInputStream(blankNodeL);
   ASSERT_TRUE(p.blankNodePropertyList());
   ASSERT_EQ(p._triples, exp);
@@ -520,17 +520,13 @@ TEST(TurtleParserTest, collection) {
   std::string rest = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>";
 
   using T = TripleComponent;
+  using TR = TurtleTriple;
   checkParseResult("()", &Parser::collection,
                    T{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"});
 
-  std::vector<TurtleTriple> expected;
-  expected.emplace_back(TurtleTriple{"_:g_0", first, 42});
-  expected.emplace_back(TurtleTriple{"_:g_0", rest, "_:g_1"});
-  expected.emplace_back(TurtleTriple{"_:g_1", first, "<alpha>"});
-  expected.emplace_back(TurtleTriple{"_:g_1", rest, "_:g_2"});
-  expected.emplace_back(TurtleTriple{"_:g_2", first, "\"me\""});
-  expected.emplace_back(TurtleTriple{"_:g_2", rest, nil});
-
-  checkParseResult("(42 <alpha> \"me\")", &Parser::collection, T{"_:g_0"},
-                   expected);
+  checkParseResult(
+      "(42 <alpha> \"me\")", &Parser::collection, T{"_:g_22_0"},
+      {TR{"_:g_22_0", first, 42}, TR{"_:g_22_0", rest, "_:g_22_1"},
+       TR{"_:g_22_1", first, "<alpha>"}, TR{"_:g_22_1", rest, "_:g_22_2"},
+       TR{"_:g_22_2", first, "\"me\""}, TR{"_:g_22_2", rest, nil}});
 }

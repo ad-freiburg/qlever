@@ -96,6 +96,7 @@ static const char XSD_POSITIVE_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#positiveInteger";
 static const char XSD_BOOLEAN_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#boolean";
+static const char RDF_PREFIX[] = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 static const char VALUE_DATE_TIME_SEPARATOR[] = "T";
 static const int DEFAULT_NOF_VALUE_INTEGER_DIGITS = 50;
 static const int DEFAULT_NOF_VALUE_EXPONENT_DIGITS = 20;

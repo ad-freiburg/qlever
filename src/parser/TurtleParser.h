@@ -126,6 +126,8 @@ class TurtleParser {
   bool _invalidLiteralsAreSkipped = false;
   bool _currentTripleIgnoredBecauseOfInvalidLiteral = false;
 
+  // Make sure that each blank nodes is unique, even across different parser
+  // instances.
   static inline std::atomic<size_t> _numParsers = 0;
   size_t _blankNodePrefix = _numParsers.fetch_add(1);
 

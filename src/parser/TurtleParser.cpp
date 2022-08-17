@@ -233,11 +233,13 @@ bool TurtleParser<T>::collection() {
   // The `object` rule creates triples, but those are incomplete in this case,
   // so we remove them again.
   _triples.resize(_triples.size() - objects.size());
-  static constexpr std::string_view rdfPrefix =
-      "<http://www.w3.org/1999/02/22-rdf-syntax-ns#";
-  static const std::string nil = absl::StrCat(rdfPrefix, "nil>");
-  static const std::string first = absl::StrCat(rdfPrefix, "first>");
-  static const std::string rest = absl::StrCat(rdfPrefix, "rest>");
+  // TODO<joka921> Move such functionality into a general util.
+  auto makeIri = [](std::string_view suffix) {
+    return absl::StrCat("<", RDF_PREFIX, suffix, ">");
+  };
+  static const std::string nil = makeIri("nil");
+  static const std::string first = makeIri("first");
+  static const std::string rest = makeIri("rest");
 
   if (objects.empty()) {
     _lastParseResult = nil;
@@ -257,7 +259,7 @@ bool TurtleParser<T>::collection() {
     for (size_t i = 0; i < blankNodes.size(); ++i) {
       _triples.push_back({blankNodes[i], first, objects[i]});
       _triples.push_back({blankNodes[i], rest,
-                          i < blankNodes.size() - 1 ? blankNodes[i + 1] : nil});
+                          i + 1 < blankNodes.size() ? blankNodes[i + 1] : nil});
     }
   }
   check(skip<TurtleTokenId::CloseRound>());
@@ -528,8 +530,10 @@ template <class T>
 bool TurtleParser<T>::blankNodeLabel() {
   bool res = parseTerminal<TurtleTokenId::BlankNodeLabel>();
   if (res) {
-    // add a special prefix to ensure that the manually specified blank nodes
-    // never interfere with the automatically generated ones.
+    // Add a special prefix to ensure that the manually specified blank nodes
+    // never interfere with the automatically generated ones. The `substr`
+    // removes the leading `_:` which will be added againg by the `BlankNode`
+    // constructor
     _lastParseResult =
         BlankNode{false, _lastParseResult.getString().substr(2)}.toSparql();
   }
