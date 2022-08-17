@@ -453,10 +453,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   PathTuples visitTypesafe(Parser::TupleWithPathContext* ctx);
 
   [[noreturn]] void throwCollectionsAndBlankNodePathsNotSupported(auto* ctx) {
-    throw ParseException(
-        "( ... ) and [ ... ] in triples are not yet supported by QLever. "
-        "Got: " +
-        ctx->getText());
+    reportError(ctx, "( ... ) and [ ... ] in triples are not yet supported by QLever.");
   }
 
   Any visitPropertyListPath(Parser::PropertyListPathContext* ctx) override {
@@ -537,10 +534,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   Any visitPathMod(Parser::PathModContext* ctx) override {
     // Handled in visitPathElt.
-    throw ParseException(
-        "PathMod should be handled by upper clauses. It should not be visited. "
-        "Got: " +
-        ctx->getText());
+    reportError(ctx, "PathMod should be handled by upper clauses. It should not be visited.");
   }
 
   Any visitPathPrimary(Parser::PathPrimaryContext* ctx) override {
@@ -556,9 +550,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   PropertyPath visitTypesafe(Parser::PathNegatedPropertySetContext*);
 
-  Any visitPathOneInPropertySet(Parser::PathOneInPropertySetContext*) override {
-    throw ParseException(
-        R"("!" and "^" inside a property path is not supported by QLever.)");
+  Any visitPathOneInPropertySet(Parser::PathOneInPropertySetContext* ctx) override {
+    reportError(ctx, R"("!" and "^" inside a property path is not supported by QLever.)");
   }
 
   /// Note that in the SPARQL grammar the INTEGER rule refers to positive
@@ -714,10 +707,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   Any visitStrangeMultiplicativeSubexprOfAdditive(
       Parser::StrangeMultiplicativeSubexprOfAdditiveContext* ctx) override {
-    throw ParseException(
-        "StrangeMultiplicativeSubexprOfAdditiveContext must not be visited. "
-        "Got: " +
-        ctx->getText());
+    reportError(ctx, "StrangeMultiplicativeSubexprOfAdditiveContext must not be visited.");
   }
 
   Any visitMultiplicativeExpression(
@@ -889,5 +879,5 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   template <typename Target, typename Intermediate = Target, typename Ctx>
   void visitIf(Target* target, Ctx* ctx);
 
-  void reportError(antlr4::ParserRuleContext* ctx, const std::string& msg);
+  [[noreturn]] void reportError(antlr4::ParserRuleContext* ctx, const std::string& msg);
 };
