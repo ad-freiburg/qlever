@@ -3,13 +3,11 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
 
-#include "./TurtleParser.h"
+#include <parser/RdfEscaping.h>
+#include <parser/TurtleParser.h>
+#include <util/Conversions.h>
 
 #include <cstring>
-
-#include "../util/Conversions.h"
-#include "../util/TaskQueue.h"
-#include "./RdfEscaping.h"
 
 // _______________________________________________________________
 template <class T>

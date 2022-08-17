@@ -3,12 +3,11 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
 #include <gtest/gtest.h>
+#include <parser/TurtleParser.h>
+#include <util/Conversions.h>
 
 #include <iostream>
 #include <string>
-
-#include "../src/parser/TurtleParser.h"
-#include "../src/util/Conversions.h"
 
 using std::string;
 using namespace std::literals;

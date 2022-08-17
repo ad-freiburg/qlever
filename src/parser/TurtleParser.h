@@ -1,32 +1,30 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
-//
 
 #pragma once
 
 #include <absl/strings/str_cat.h>
+#include <global/Constants.h>
 #include <gtest/gtest.h>
+#include <index/ConstantsIndexBuilding.h>
+#include <parser/ParallelBuffer.h>
+#include <parser/Tokenizer.h>
+#include <parser/TokenizerCtre.h>
+#include <parser/TripleComponent.h>
 #include <parser/data/BlankNode.h>
 #include <sys/mman.h>
+#include <util/Exception.h>
+#include <util/File.h>
+#include <util/HashMap.h>
+#include <util/Log.h>
+#include <util/TaskQueue.h>
 
 #include <codecvt>
 #include <exception>
 #include <future>
 #include <locale>
 #include <string_view>
-
-#include "../global/Constants.h"
-#include "../index/ConstantsIndexBuilding.h"
-#include "../util/Exception.h"
-#include "../util/File.h"
-#include "../util/HashMap.h"
-#include "../util/Log.h"
-#include "../util/TaskQueue.h"
-#include "./Tokenizer.h"
-#include "./TokenizerCtre.h"
-#include "./TripleComponent.h"
-#include "ParallelBuffer.h"
 
 using std::string;
 
