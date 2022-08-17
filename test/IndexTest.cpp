@@ -576,7 +576,6 @@ TEST(IndexTest, TripleToInternalRepresentation) {
   }
   {
     Index index;
-    index.setOnDiskLiterals(true);
     index.getNonConstVocabForTesting().initializeExternalizePrefixes(
         std::vector{"<subj"s});
     TurtleTriple turtleTriple{"<subject>", "<predicate>", "\"literal\"@fr"};

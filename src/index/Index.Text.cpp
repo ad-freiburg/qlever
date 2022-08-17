@@ -104,9 +104,8 @@ void Index::addTextFromContextFile(const string& contextFile,
   LOG(DEBUG) << "Reloading the RDF vocabulary ..." << std::endl;
   _vocab = RdfsVocabulary{};
   readConfiguration();
-  _vocab.readFromFile(
-      _onDiskBase + INTERNAL_VOCAB_SUFFIX,
-      _onDiskLiterals ? _onDiskBase + EXTERNAL_VOCAB_SUFFIX : "");
+  _vocab.readFromFile(_onDiskBase + INTERNAL_VOCAB_SUFFIX,
+                      _onDiskBase + EXTERNAL_VOCAB_SUFFIX);
 
   // Build the text vocabulary (first scan over the text records).
   LOG(INFO) << "Building text vocabulary ..." << std::endl;
