@@ -518,14 +518,14 @@ TEST(TurtleParserTest, collection) {
   std::string first = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>";
   std::string rest = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>";
 
-  using T = TripleComponent;
-  using TR = TurtleTriple;
+  using TC = TripleComponent;
+  using TT = TurtleTriple;
   checkParseResult("()", &Parser::collection,
-                   T{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"});
+                   TC{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"});
 
   checkParseResult(
-      "(42 <alpha> \"me\")", &Parser::collection, T{"_:g_22_0"},
-      {TR{"_:g_22_0", first, 42}, TR{"_:g_22_0", rest, "_:g_22_1"},
-       TR{"_:g_22_1", first, "<alpha>"}, TR{"_:g_22_1", rest, "_:g_22_2"},
-       TR{"_:g_22_2", first, "\"me\""}, TR{"_:g_22_2", rest, nil}});
+      "(42 <alpha> \"me\")", &Parser::collection, TC{"_:g_22_0"},
+      {TT{"_:g_22_0", first, 42}, TT{"_:g_22_0", rest, "_:g_22_1"},
+       TT{"_:g_22_1", first, "<alpha>"}, TT{"_:g_22_1", rest, "_:g_22_2"},
+       TT{"_:g_22_2", first, "\"me\""}, TT{"_:g_22_2", rest, nil}});
 }
