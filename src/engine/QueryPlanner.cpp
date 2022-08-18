@@ -230,6 +230,10 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
         candidatePlans.back().push_back(std::move(plan));
       }
+      // handle the case that the BIND clause is the first clause which means that `lastRow` is empty
+      if (lastRow.empty()) {
+
+      }
       return;
     } else {
       static_assert(
