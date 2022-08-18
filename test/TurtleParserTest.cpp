@@ -34,7 +34,7 @@ std::optional<Parser> parseRule(const std::string& input, auto rule) {
 // generated will start with "_:g_<blankNodePrefix>_".
 template <auto rule, size_t blankNodePrefix = 0>
 auto checkParseResult =
-    [](const std::string& input, TripleComponent expectedLastParserResult,
+    [](const std::string& input, TripleComponent expectedLastParseResult,
        std::optional<size_t> expectedPosition = {},
        std::vector<TurtleTriple> expectedTriples = {}) -> Parser {
   auto optionalParser = parseRule<blankNodePrefix>(input, rule);
@@ -44,7 +44,7 @@ auto checkParseResult =
     ASSERT_TRUE(optionalParser.has_value());
     auto& parser = optionalParser.value();
     ASSERT_EQ(parser.getPosition(), expectedPosition.value_or(input.size()));
-    ASSERT_EQ(expectedLastParserResult, parser.getLastParseResult());
+    ASSERT_EQ(expectedLastParseResult, parser.getLastParseResult());
     ASSERT_EQ(expectedTriples, parser.getTriples());
   }();
   return std::move(optionalParser.value());
