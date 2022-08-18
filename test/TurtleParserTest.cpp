@@ -17,8 +17,10 @@ using Parser = TurtleStringParser<Tokenizer>;
 // of this file. Set up a `Parser` with the given `input` and call the given
 // `rule` (a member function of `Parser` that returns a bool). Return the
 // parser, if the call to `rule` returns true, else return `std::nullopt`.
+template <size_t blankNodePrefix = 0>
 std::optional<Parser> parseRule(const std::string& input, auto rule) {
   Parser parser;
+  parser.setBlankNodePrefixOnlyForTesting(blankNodePrefix);
   parser.setInputStream(input);
   if (!std::invoke(rule, parser)) {
     return std::nullopt;
@@ -27,16 +29,26 @@ std::optional<Parser> parseRule(const std::string& input, auto rule) {
 }
 
 // Asserts that parsing the `rule` works and that the last parse result and the
-// emitted triples are as expected.
-void checkParseResult(const std::string& input, auto rule,
-                      TripleComponent expectedLastParserResult,
-                      std::vector<TurtleTriple> expectedTriples = {}) {
-  auto optionalParser = parseRule(input, rule);
-  ASSERT_TRUE(optionalParser.has_value());
-  auto& parser = optionalParser.value();
-  ASSERT_EQ(expectedLastParserResult, parser.getLastParseResult());
-  ASSERT_EQ(expectedTriples, parser.getTriples());
-}
+// emitted triples are as expected. Returns the `Parser` instance that is used
+// to parse the rule for further inspection. The anonymous blank nodes that are
+// generated will start with "_:g_<blankNodePrefix>_".
+template <auto rule, size_t blankNodePrefix = 0>
+auto checkParseResult =
+    [](const std::string& input, TripleComponent expectedLastParserResult,
+       std::optional<size_t> expectedPosition = {},
+       std::vector<TurtleTriple> expectedTriples = {}) -> Parser {
+  auto optionalParser = parseRule<blankNodePrefix>(input, rule);
+  // We have to wrap this code into a void lambda because the `ASSERT_...`
+  // macros only work inside void functions and we want to return the parser.
+  [&]() {
+    ASSERT_TRUE(optionalParser.has_value());
+    auto& parser = optionalParser.value();
+    ASSERT_EQ(parser.getPosition(), expectedPosition.value_or(input.size()));
+    ASSERT_EQ(expectedLastParserResult, parser.getLastParseResult());
+    ASSERT_EQ(expectedTriples, parser.getTriples());
+  }();
+  return std::move(optionalParser.value());
+};
 
 // Formatted output of TurtleTriples in case of test failures.
 std::ostream& operator<<(std::ostream& os, const TurtleTriple& tr) {
@@ -207,29 +219,14 @@ TEST(TurtleParserTest, rdfLiteral) {
 }
 
 TEST(TurtleParserTest, blankNode) {
-  TurtleStringParser<Tokenizer> p;
-  p.setInputStream(" _:blank1");
-  ASSERT_TRUE(p.blankNode());
-  ASSERT_EQ(p._lastParseResult, "_:u_blank1");
-  ASSERT_EQ(p.getPosition(), 9u);
-
-  p.setInputStream(" _:blank1 someRemainder");
-  ASSERT_TRUE(p.blankNode());
-  ASSERT_EQ(p._lastParseResult, "_:u_blank1");
-  ASSERT_EQ(p.getPosition(), 9u);
-
-  p.setInputStream("  _:blank2 someOtherStuff");
-  ASSERT_TRUE(p.blankNode());
-  ASSERT_EQ(p._lastParseResult, "_:u_blank2");
+  auto checkBlankNode = checkParseResult<&Parser::blankNode, 4>;
+  checkBlankNode(" _:blank1", "_:u_blank1", 9);
+  checkBlankNode(" _:blank1 someRemainder", "_:u_blank1", 9);
+  Parser p = checkBlankNode("  _:blank2 someOtherStuff", "_:u_blank2", 10);
   ASSERT_EQ(p._numBlankNodes, 0u);
-  ASSERT_EQ(p.getPosition(), 10u);
-
   // anonymous blank node
-  p.setInputStream(" [    \n\t  ]");
-  ASSERT_TRUE(p.blankNode());
-  ASSERT_EQ(p._lastParseResult, "_:g_4_0");
+  p = checkBlankNode(" [    \n\t  ]", "_:g_4_0", 11u);
   ASSERT_EQ(p._numBlankNodes, 1u);
-  ASSERT_EQ(p.getPosition(), 11u);
 }
 
 TEST(TurtleParserTest, blankNodePropertyList) {
@@ -243,6 +240,7 @@ TEST(TurtleParserTest, blankNodePropertyList) {
   exp.push_back({"_:g_5_0", "<p2>", TripleComponent{"<ob2>"}});
   exp.push_back({"_:g_5_0", "<p3>", TripleComponent{"<ob3>"}});
   p.setInputStream(blankNodeL);
+  p.setBlankNodePrefixOnlyForTesting(5);
   ASSERT_TRUE(p.blankNodePropertyList());
   ASSERT_EQ(p._triples, exp);
   ASSERT_EQ(p.getPosition(), blankNodeL.size());
@@ -520,11 +518,11 @@ TEST(TurtleParserTest, collection) {
 
   using TC = TripleComponent;
   using TT = TurtleTriple;
-  checkParseResult("()", &Parser::collection,
-                   TC{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"});
+  auto checkCollection = checkParseResult<&Parser::collection, 22>;
+  checkCollection("()", TC{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"});
 
-  checkParseResult(
-      "(42 <alpha> \"me\")", &Parser::collection, TC{"_:g_22_0"},
+  checkCollection(
+      "(42 <alpha> \"me\")", TC{"_:g_22_0"}, {},
       {TT{"_:g_22_0", first, 42}, TT{"_:g_22_0", rest, "_:g_22_1"},
        TT{"_:g_22_1", first, "<alpha>"}, TT{"_:g_22_1", rest, "_:g_22_2"},
        TT{"_:g_22_2", first, "\"me\""}, TT{"_:g_22_2", rest, nil}});

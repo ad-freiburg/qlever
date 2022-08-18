@@ -332,6 +332,13 @@ class TurtleParser {
         .toSparql();
   }
 
+ public:
+  // To get consistent blank node labels when testing, we need to manually set
+  // the prefix. This function is named `...ForTesting` so you really shouldn't
+  // use it in the actual QLever code.
+  void setBlankNodePrefixOnlyForTesting(size_t id) { _blankNodePrefix = id; }
+
+ protected:
   FRIEND_TEST(TurtleParserTest, prefixedName);
   FRIEND_TEST(TurtleParserTest, prefixID);
   FRIEND_TEST(TurtleParserTest, stringParse);
