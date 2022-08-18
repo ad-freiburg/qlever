@@ -494,3 +494,20 @@ TEST(TurtleParserTest, collection) {
                                   {"_:g_22_2", first, "\"me\""},
                                   {"_:g_22_2", rest, nil}});
 }
+
+TEST(TurtleParserTest, collection) {
+  std::string nil = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>";
+  std::string first = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>";
+  std::string rest = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>";
+
+  using TC = TripleComponent;
+  using TT = TurtleTriple;
+  auto checkCollection = checkParseResult<&Parser::collection, 22>;
+  checkCollection("()", TC{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"});
+
+  checkCollection(
+      "(42 <alpha> \"me\")", TC{"_:g_22_0"}, {},
+      {TT{"_:g_22_0", first, 42}, TT{"_:g_22_0", rest, "_:g_22_1"},
+       TT{"_:g_22_1", first, "<alpha>"}, TT{"_:g_22_1", rest, "_:g_22_2"},
+       TT{"_:g_22_2", first, "\"me\""}, TT{"_:g_22_2", rest, nil}});
+}

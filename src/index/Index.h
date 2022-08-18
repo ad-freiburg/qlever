@@ -344,8 +344,6 @@ class Index {
 
   void setLoadAllPermutations(bool loadAllPermutations);
 
-  void setOnDiskLiterals(bool onDiskLiterals);
-
   void setKeepTempFiles(bool keepTempFiles);
 
   uint64_t& stxxlMemoryInBytes() { return _stxxlMemoryInBytes; }
@@ -509,7 +507,6 @@ class Index {
   TurtleParserIntegerOverflowBehavior _turtleParserIntegerOverflowBehavior =
       TurtleParserIntegerOverflowBehavior::Error;
   bool _turtleParserSkipIllegalLiterals = false;
-  bool _onDiskLiterals = false;
   bool _keepTempFiles = false;
   uint64_t _stxxlMemoryInBytes = DEFAULT_STXXL_MEMORY_IN_BYTES;
   json _configurationJson;

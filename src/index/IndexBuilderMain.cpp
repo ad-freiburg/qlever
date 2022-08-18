@@ -118,8 +118,8 @@ int main(int argc, char** argv) {
 
   // Options for the knowledge graph index.
   add("externalize-literals,l", po::bool_switch(&onDiskLiterals),
-      "Externalize parts of the knowledge graph vocabulary, according to the "
-      "rules specified in the `settings-file` JSON.");
+      "An unused and deprecated option that will be removed from a future "
+      "version of qlever");
   add("settings-file,s", po::value(&settingsFile),
       "A JSON file, where various settings can be specified (see the QLever "
       "documentation).");
@@ -158,6 +158,13 @@ int main(int argc, char** argv) {
         1024ul * 1024ul * 1024ul * stxxlMemoryGB.value();
   }
 
+  if (onDiskLiterals) {
+    LOG(WARN) << EMPH_ON
+              << "Warning, the -l command line option has no effect anymore "
+                 "and will be removed from a future version of QLever"
+              << EMPH_OFF << std::endl;
+  }
+
   // If no text index name was specified, take the part of the wordsfile after
   // the last slash.
   if (textIndexName.empty() && !wordsfile.empty()) {
@@ -186,7 +193,6 @@ int main(int argc, char** argv) {
     index.setKbName(kbIndexName);
     index.setTextName(textIndexName);
     index.setUsePatterns(!noPatterns);
-    index.setOnDiskLiterals(onDiskLiterals);
     index.setOnDiskBase(baseName);
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
