@@ -1,31 +1,30 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
-//
 
 #pragma once
 
 #include <absl/strings/str_cat.h>
+#include <global/Constants.h>
 #include <gtest/gtest.h>
+#include <index/ConstantsIndexBuilding.h>
+#include <parser/ParallelBuffer.h>
+#include <parser/Tokenizer.h>
+#include <parser/TokenizerCtre.h>
+#include <parser/TripleComponent.h>
+#include <parser/data/BlankNode.h>
 #include <sys/mman.h>
+#include <util/Exception.h>
+#include <util/File.h>
+#include <util/HashMap.h>
+#include <util/Log.h>
+#include <util/TaskQueue.h>
 
 #include <codecvt>
 #include <exception>
 #include <future>
 #include <locale>
 #include <string_view>
-
-#include "../global/Constants.h"
-#include "../index/ConstantsIndexBuilding.h"
-#include "../util/Exception.h"
-#include "../util/File.h"
-#include "../util/HashMap.h"
-#include "../util/Log.h"
-#include "../util/TaskQueue.h"
-#include "./Tokenizer.h"
-#include "./TokenizerCtre.h"
-#include "./TripleComponent.h"
-#include "ParallelBuffer.h"
 
 using std::string;
 
@@ -85,6 +84,13 @@ class TurtleParser {
   static constexpr bool UseRelaxedParsing =
       std::is_same_v<Tokenizer_T, TokenizerCtre>;
 
+  // Get the result of the single rule that was parsed most recently. Used for
+  // testing.
+  const TripleComponent& getLastParseResult() { return _lastParseResult; }
+
+  // Get the currently buffered triples. Used for testing.
+  const std::vector<TurtleTriple>& getTriples() { return _triples; }
+
  protected:
   // Data members.
 
@@ -119,6 +125,11 @@ class TurtleParser {
       TurtleParserIntegerOverflowBehavior::Error;
   bool _invalidLiteralsAreSkipped = false;
   bool _currentTripleIgnoredBecauseOfInvalidLiteral = false;
+
+  // Make sure that each blank nodes is unique, even across different parser
+  // instances.
+  static inline std::atomic<size_t> _numParsers = 0;
+  size_t _blankNodePrefix = _numParsers.fetch_add(1);
 
  public:
   virtual ~TurtleParser() = default;
@@ -316,11 +327,18 @@ class TurtleParser {
 
   // create a new, unused, unique blank node string
   string createAnonNode() {
-    string res = ANON_NODE_PREFIX + ":" + std::to_string(_numBlankNodes);
-    _numBlankNodes++;
-    return res;
+    return BlankNode{true,
+                     absl::StrCat(_blankNodePrefix, "_", _numBlankNodes++)}
+        .toSparql();
   }
 
+ public:
+  // To get consistent blank node labels when testing, we need to manually set
+  // the prefix. This function is named `...ForTesting` so you really shouldn't
+  // use it in the actual QLever code.
+  void setBlankNodePrefixOnlyForTesting(size_t id) { _blankNodePrefix = id; }
+
+ protected:
   FRIEND_TEST(TurtleParserTest, prefixedName);
   FRIEND_TEST(TurtleParserTest, prefixID);
   FRIEND_TEST(TurtleParserTest, stringParse);
@@ -332,6 +350,7 @@ class TurtleParser {
   FRIEND_TEST(TurtleParserTest, blankNodePropertyList);
   FRIEND_TEST(TurtleParserTest, numericLiteral);
   FRIEND_TEST(TurtleParserTest, booleanLiteral);
+  FRIEND_TEST(TurtleParserTest, collection);
 };
 
 /**

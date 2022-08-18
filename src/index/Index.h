@@ -1,7 +1,34 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author:
+//   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 #pragma once
+
+#include <engine/ResultTable.h>
+#include <global/Pattern.h>
+#include <index/CompressedRelation.h>
+#include <index/ConstantsIndexBuilding.h>
+#include <index/DocsDB.h>
+#include <index/IndexBuilderTypes.h>
+#include <index/IndexMetaData.h>
+#include <index/PatternCreator.h>
+#include <index/Permutations.h>
+#include <index/StxxlSortFunctors.h>
+#include <index/TextMetaData.h>
+#include <index/Vocabulary.h>
+#include <parser/ContextFileParser.h>
+#include <parser/TripleComponent.h>
+#include <parser/TurtleParser.h>
+#include <util/BackgroundStxxlSorter.h>
+#include <util/BufferedVector.h>
+#include <util/CompressionUsingZstd/ZstdWrapper.h>
+#include <util/File.h>
+#include <util/Forward.h>
+#include <util/HashMap.h>
+#include <util/MmapVector.h>
+#include <util/Timer.h>
+#include <util/json.h>
 
 #include <array>
 #include <fstream>
@@ -12,30 +39,6 @@
 #include <stxxl/stream>
 #include <stxxl/vector>
 #include <vector>
-
-#include "../engine/ResultTable.h"
-#include "../global/Pattern.h"
-#include "../parser/ContextFileParser.h"
-#include "../parser/TurtleParser.h"
-#include "../util/BackgroundStxxlSorter.h"
-#include "../util/BufferedVector.h"
-#include "../util/CompressionUsingZstd/ZstdWrapper.h"
-#include "../util/File.h"
-#include "../util/Forward.h"
-#include "../util/HashMap.h"
-#include "../util/MmapVector.h"
-#include "../util/Timer.h"
-#include "../util/json.h"
-#include "./CompressedRelation.h"
-#include "./ConstantsIndexBuilding.h"
-#include "./DocsDB.h"
-#include "./IndexBuilderTypes.h"
-#include "./IndexMetaData.h"
-#include "./PatternCreator.h"
-#include "./Permutations.h"
-#include "./StxxlSortFunctors.h"
-#include "./TextMetaData.h"
-#include "./Vocabulary.h"
 
 using ad_utility::BufferedVector;
 using ad_utility::MmapVector;
