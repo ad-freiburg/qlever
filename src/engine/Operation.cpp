@@ -61,6 +61,10 @@ void Operation::recursivelySetTimeoutTimer(
 shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   ad_utility::Timer timer;
   timer.start();
+  if (isRoot) {
+    // Start with an estimated runtime Info which will be updated as we go.
+    createRuntimeInfoFromEstimates();
+  }
   auto& cache = _executionContext->getQueryTreeCache();
   const string cacheKey = asString();
   const bool pinFinalResultButNotSubtrees =
@@ -119,7 +123,9 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
                << resultNumCols << std::endl;
     return result._resultPointer->_resultTable;
   } catch (const ad_semsearch::AbortException& e) {
-    // A child Operation was aborted, do not print the information again.
+    // A child Operation was aborted, do not print the information again, but
+    // update the runtime information
+    createRuntimeInformationOnFailure(false);
     throw;
   } catch (const ad_utility::WaitedForResultWhichThenFailedException& e) {
     // Here and in the following, show the detailed information (it's the
@@ -129,6 +135,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     LOG(ERROR) << "Waited for a result from another thread which then failed"
                << endl;
     LOG(DEBUG) << asString();
+    createRuntimeInformationOnFailure(true);
     throw ad_semsearch::AbortException(e);
   } catch (const std::exception& e) {
     // We are in the innermost level of the exception, so print
@@ -136,6 +143,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     LOG(DEBUG) << asString() << endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
+    createRuntimeInformationOnFailure(true);
     throw ad_semsearch::AbortException(e);
   } catch (...) {
     // We are in the innermost level of the exception, so print
@@ -143,6 +151,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     LOG(DEBUG) << asString() << endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
+    createRuntimeInformationOnFailure(true);
     throw ad_semsearch::AbortException(
         "Unexpected expection that is not a subclass of std::exception");
   }
@@ -153,4 +162,87 @@ void Operation::checkTimeout() const {
   if (_timeoutTimer->wlock()->hasTimedOut()) {
     throw ad_utility::TimeoutException("Timeout in " + getDescriptor());
   }
+}
+
+// _______________________________________________________________________
+void Operation::createRuntimeInformation(
+    const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
+    size_t timeInMilliseconds) {
+  // reset
+  _runtimeInfo = RuntimeInformation();
+  // the column names might differ between a cached result and this operation,
+  // so we have to take the local ones.
+  _runtimeInfo.setColumnNames(getVariableColumns());
+
+  _runtimeInfo.setCols(getResultWidth());
+  _runtimeInfo.setDescriptor(getDescriptor());
+
+  // Only the result that was actually computed (or read from cache) knows
+  // the correct information about the children computations.
+  _runtimeInfo.children() =
+      resultAndCacheStatus._resultPointer->_runtimeInfo.children();
+
+  _runtimeInfo.setTime(timeInMilliseconds);
+  _runtimeInfo.setRows(
+      resultAndCacheStatus._resultPointer->_resultTable->size());
+  _runtimeInfo.setWasCached(resultAndCacheStatus._wasCached);
+  _runtimeInfo.addDetail(
+      "original_total_time",
+      resultAndCacheStatus._resultPointer->_runtimeInfo.getTime());
+  _runtimeInfo.addDetail(
+      "original_operation_time",
+      resultAndCacheStatus._resultPointer->_runtimeInfo.getOperationTime());
+  _runtimeInfo.addDetail("status", "completed");
+}
+
+// _______________________________________________________________________
+void Operation::createRuntimeInformationOnFailure(bool isActualFailure) {
+  // reset
+  _runtimeInfo = RuntimeInformation();
+  // the column names might differ between a cached result and this operation,
+  // so we have to take the local ones.
+  _runtimeInfo.setColumnNames(getVariableColumns());
+
+  _runtimeInfo.setCols(getResultWidth());
+  _runtimeInfo.setDescriptor(getDescriptor());
+
+  // Only the result that was actually computed (or read from cache) knows
+  // the correct information about the children computations.
+  for (auto child : getChildren()) {
+    _runtimeInfo.children().push_back(child->getRootOperation()->_runtimeInfo);
+  }
+
+  _runtimeInfo.setTime(0);
+  _runtimeInfo.setRows(0);
+  _runtimeInfo.setWasCached(false);
+  if (isActualFailure) {
+    _runtimeInfo.addDetail("status", "failed");
+  } else {
+    _runtimeInfo.addDetail("status", "child-failed");
+  }
+}
+
+// __________________________________________________________________
+RuntimeInformation Operation::createRuntimeInfoFromEstimates() {
+  // reset
+  RuntimeInformation result;
+  result.setColumnNames(getVariableColumns());
+  result.setCols(getResultWidth());
+  result.setDescriptor(getDescriptor());
+
+  for (const auto& child : getChildren()) {
+    result.children().push_back(
+        child->getRootOperation()->createRuntimeInfoFromEstimates());
+  }
+
+  // TODO<joka921> Is there any good reason thy `getCostEstimate` and
+  // `getSizeEstimate` are not const?
+  result.setCostEstimate(getCostEstimate());
+  result.setSizeEstimate(getSizeEstimate());
+  result.setTime(0);
+  result.setRows(0);
+  result.setWasCached(
+      _executionContext->getQueryTreeCache().cacheContains(asString()));
+  _runtimeInfo = result;
+  return result;
 }

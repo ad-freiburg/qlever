@@ -134,6 +134,9 @@ class RuntimeInformation {
     return sum;
   }
 
+  void setEstimatedCost(size_t estimate) { _estimatedCost = estimate; }
+  void setEstimatedSize(size_t estimate) { _estimatedSize = estimate; }
+
   void setWasCached(bool wasCached) { _wasCached = wasCached; }
 
   void addChild(const RuntimeInformation& r) { _children.push_back(r); }
@@ -159,7 +162,9 @@ class RuntimeInformation {
   }
 
   double _time;
+  size_t _estimatedCost;
   size_t _rows;
+  size_t _estimatedSize;
   size_t _cols;
   bool _wasCached;
   std::string _descriptor;
@@ -179,5 +184,7 @@ inline void to_json(RuntimeInformation::ordered_json& j,
       {"operation_time", rti.getOperationTime()},
       {"was_cached", rti._wasCached},
       {"details", rti._details},
+      {"estimated_cost", rti._estimatedCost},
+      {"estimated_size", rti._estimatedSize},
       {"children", rti._children}};
 }

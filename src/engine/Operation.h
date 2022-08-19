@@ -119,6 +119,10 @@ class Operation {
     _limit = limit;
   }
 
+  // Create and return the runtime information wrt the size and cost estimates
+  // without actually executing the query.
+  RuntimeInformation createRuntimeInfoFromEstimates();
+
  protected:
   QueryExecutionContext* getExecutionContext() const {
     return _executionContext;
@@ -190,32 +194,9 @@ class Operation {
   // deleted.
   virtual void createRuntimeInformation(
       const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
-      size_t timeInMilliseconds) final {
-    // reset
-    _runtimeInfo = RuntimeInformation();
-    // the column names might differ between a cached result and this operation,
-    // so we have to take the local ones.
-    _runtimeInfo.setColumnNames(getVariableColumns());
+      size_t timeInMilliseconds) final;
 
-    _runtimeInfo.setCols(getResultWidth());
-    _runtimeInfo.setDescriptor(getDescriptor());
-
-    // Only the result that was actually computed (or read from cache) knows
-    // the correct information about the children computations.
-    _runtimeInfo.children() =
-        resultAndCacheStatus._resultPointer->_runtimeInfo.children();
-
-    _runtimeInfo.setTime(timeInMilliseconds);
-    _runtimeInfo.setRows(
-        resultAndCacheStatus._resultPointer->_resultTable->size());
-    _runtimeInfo.setWasCached(resultAndCacheStatus._wasCached);
-    _runtimeInfo.addDetail(
-        "original_total_time",
-        resultAndCacheStatus._resultPointer->_runtimeInfo.getTime());
-    _runtimeInfo.addDetail(
-        "original_operation_time",
-        resultAndCacheStatus._resultPointer->_runtimeInfo.getOperationTime());
-  }
+  void createRuntimeInformationOnFailure(bool wasActualFailure);
 
   // Recursively call a function on all children.
   template <typename F>
