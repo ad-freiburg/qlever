@@ -1063,6 +1063,18 @@ queries:
       - order_string: { "dir": "ASC", "var": "?x" }
 
 
+  - query: bind-at-beginning
+    type: no-text
+    sparql: |
+      SELECT * WHERE {
+          BIND(<Scientist> AS ?x)
+      }
+    checks:
+      - num_cols: 1
+      - num_rows: 1
+      - selected: [ "?x" ]
+      - contains_row: [ "<Scientist>" ]
+
   - query : select_asterisk_prefix-filter-disjunction
     type: no-text
     sparql: |

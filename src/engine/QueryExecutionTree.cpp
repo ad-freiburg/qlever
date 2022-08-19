@@ -11,6 +11,7 @@
 #include <engine/GroupBy.h>
 #include <engine/HasPredicateScan.h>
 #include <engine/IndexScan.h>
+#include <engine/NeutralElementOperation.h>
 #include <engine/OrderBy.h>
 #include <engine/Sort.h>
 #include <engine/TransitivePath.h>
@@ -606,6 +607,8 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
     _type = HAS_PREDICATE_SCAN;
   } else if constexpr (std::is_same_v<Op, Filter>) {
     _type = FILTER;
+  } else if constexpr (std::is_same_v<Op, NeutralElementOperation>) {
+    _type = NEUTRAL_ELEMENT;
   } else {
     static_assert(ad_utility::alwaysFalse<Op>,
                   "New type of operation that was not yet registered");
@@ -625,3 +628,5 @@ template void QueryExecutionTree::setOperation(std::shared_ptr<GroupBy>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<HasPredicateScan>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Filter>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<NeutralElementOperation>);

@@ -55,7 +55,8 @@ class QueryExecutionTree {
     TRANSITIVE_PATH,
     VALUES,
     BIND,
-    MINUS
+    MINUS,
+    NEUTRAL_ELEMENT
   };
 
   enum class ExportSubFormat { CSV, TSV, BINARY };
