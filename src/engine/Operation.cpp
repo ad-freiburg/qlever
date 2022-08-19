@@ -60,6 +60,9 @@ void Operation::recursivelySetTimeoutTimer(
 shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   ad_utility::Timer timer;
   timer.start();
+  // We don't want the children multiple times in case the operation works.
+  _runtimeInfo.children().clear();
+
   if (isRoot) {
     // Start with an estimated runtime Info which will be updated as we go.
     createRuntimeInfoFromEstimates();
@@ -167,8 +170,6 @@ void Operation::checkTimeout() const {
 void Operation::createRuntimeInformation(
     const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
     size_t timeInMilliseconds) {
-  // reset
-  _runtimeInfo = RuntimeInformation();
   // the column names might differ between a cached result and this operation,
   // so we have to take the local ones.
   _runtimeInfo.setColumnNames(getVariableColumns());
