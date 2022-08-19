@@ -25,15 +25,7 @@ class RuntimeInformation {
   friend inline void to_json(RuntimeInformation::ordered_json& j,
                              const RuntimeInformation& rti);
 
-  RuntimeInformation()
-      : _time(0),
-        _rows(0),
-        _cols(0),
-        _wasCached(false),
-        _descriptor(),
-        _columnNames(),
-        _details(),
-        _children() {}
+  RuntimeInformation() = default;
 
   std::string toString() const {
     std::ostringstream buffer;
@@ -160,16 +152,16 @@ class RuntimeInformation {
     return ind;
   }
 
-  double _time;
-  size_t _estimatedCost;
-  size_t _rows;
-  size_t _estimatedSize;
-  size_t _cols;
-  bool _wasCached;
-  std::string _descriptor;
-  std::vector<std::string> _columnNames;
-  nlohmann::json _details;
-  std::vector<RuntimeInformation> _children;
+  double _time{};
+  size_t _estimatedCost{};
+  size_t _rows{};
+  size_t _estimatedSize{};
+  size_t _cols{};
+  bool _wasCached{};
+  std::string _descriptor{};
+  std::vector<std::string> _columnNames{};
+  nlohmann::json _details{};
+  std::vector<RuntimeInformation> _children{};
 };
 
 inline void to_json(RuntimeInformation::ordered_json& j,
