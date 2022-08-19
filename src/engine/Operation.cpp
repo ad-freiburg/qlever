@@ -2,9 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach  (johannes.kalmbach@gmail.com)
 
-#include "Operation.h"
-
-#include "QueryExecutionTree.h"
+#include <engine/Operation.h>
+#include <engine/QueryExecutionTree.h>
 
 template <typename F>
 void Operation::forAllDescendants(F f) {

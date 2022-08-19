@@ -3,17 +3,17 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <engine/QueryExecutionContext.h>
+#include <engine/ResultTable.h>
+#include <engine/RuntimeInformation.h>
+#include <util/Exception.h>
+#include <util/Log.h>
+#include <util/Timer.h>
+
 #include <iomanip>
 #include <iostream>
 #include <memory>
 #include <utility>
-
-#include "../util/Exception.h"
-#include "../util/Log.h"
-#include "../util/Timer.h"
-#include "QueryExecutionContext.h"
-#include "ResultTable.h"
-#include "RuntimeInformation.h"
 
 using std::endl;
 using std::pair;

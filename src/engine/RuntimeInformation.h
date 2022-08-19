@@ -5,15 +5,14 @@
 #pragma once
 
 #include <absl/strings/str_join.h>
+#include <util/HashMap.h>
+#include <util/StringUtils.h>
+#include <util/Timer.h>
+#include <util/json.h>
 
 #include <iostream>
 #include <string>
 #include <vector>
-
-#include "../util/HashMap.h"
-#include "../util/StringUtils.h"
-#include "../util/Timer.h"
-#include "../util/json.h"
 
 class RuntimeInformation {
  public:
@@ -134,8 +133,8 @@ class RuntimeInformation {
     return sum;
   }
 
-  void setEstimatedCost(size_t estimate) { _estimatedCost = estimate; }
-  void setEstimatedSize(size_t estimate) { _estimatedSize = estimate; }
+  void setCostEstimate(size_t estimate) { _estimatedCost = estimate; }
+  void setSizeEstimate(size_t estimate) { _estimatedSize = estimate; }
 
   void setWasCached(bool wasCached) { _wasCached = wasCached; }
 

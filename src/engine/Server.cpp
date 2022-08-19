@@ -1,15 +1,16 @@
 // Copyright 2011, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold <buchholb>
+// Author:
+//   2011-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include "./Server.h"
+#include <engine/QueryPlanner.h>
+#include <engine/Server.h>
 
 #include <cstring>
 #include <sstream>
 #include <string>
 #include <vector>
-
-#include "QueryPlanner.h"
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
