@@ -61,7 +61,11 @@ class HasPredicateScan : public Operation {
   const std::string& getObject() const;
 
   vector<QueryExecutionTree*> getChildren() override {
-    return {_subtree.get()};
+    if (_subtree) {
+      return {_subtree.get()};
+    } else {
+      return {};
+    }
   }
 
   // These are made static and public mainly for easier testing

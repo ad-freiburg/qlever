@@ -230,6 +230,7 @@ RuntimeInformation Operation::createRuntimeInfoFromEstimates() {
   result.setDescriptor(getDescriptor());
 
   for (const auto& child : getChildren()) {
+    AD_CHECK(child);
     result.children().push_back(
         child->getRootOperation()->createRuntimeInfoFromEstimates());
   }
