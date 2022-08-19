@@ -22,7 +22,7 @@ class NeutralElementOperation : public Operation {
 
  public:
   [[nodiscard]] string getDescriptor() const override {
-    return "Neutral Element";
+    return "NeutralElement";
   };
   [[nodiscard]] size_t getResultWidth() const override { return 0; };
   void setTextLimit(size_t) override{};
