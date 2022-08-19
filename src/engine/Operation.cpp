@@ -60,8 +60,6 @@ void Operation::recursivelySetTimeoutTimer(
 shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   ad_utility::Timer timer;
   timer.start();
-  // We don't want the children multiple times in case the operation works.
-  _runtimeInfo.children().clear();
 
   if (isRoot) {
     // Start with an estimated runtime Info which will be updated as we go.
@@ -103,6 +101,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
             "functionality, before " +
             getDescriptor());
       }
+      _runtimeInfo.children().clear();
       computeResult(val._resultTable.get());
       if (_timeoutTimer->wlock()->hasTimedOut()) {
         throw ad_utility::TimeoutException(
