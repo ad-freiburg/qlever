@@ -18,7 +18,6 @@ void Operation::forAllDescendants(F f) {
   }
 }
 
-
 template <typename F>
 void Operation::forAllDescendants(F f) const {
   static_assert(
