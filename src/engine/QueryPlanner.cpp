@@ -18,6 +18,7 @@
 #include "Join.h"
 #include "Minus.h"
 #include "MultiColumnJoin.h"
+#include "NeutralElementOperation.h"
 #include "OptionalJoin.h"
 #include "OrderBy.h"
 #include "Sort.h"
@@ -229,6 +230,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         SubtreePlan plan = makeSubtreePlan<Bind>(_qec, a._qet, v);
         plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
         candidatePlans.back().push_back(std::move(plan));
+      }
+      // Handle the case that the BIND clause is the first clause which means
+      // that `lastRow` is empty.
+      if (lastRow.empty()) {
+        auto neutralElement = makeExecutionTree<NeutralElementOperation>(_qec);
+        candidatePlans.back().push_back(
+            makeSubtreePlan<Bind>(_qec, std::move(neutralElement), v));
       }
       return;
     } else {
