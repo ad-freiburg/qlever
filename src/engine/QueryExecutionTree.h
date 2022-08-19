@@ -55,7 +55,8 @@ class QueryExecutionTree {
     TRANSITIVE_PATH,
     VALUES,
     BIND,
-    MINUS
+    MINUS,
+    NEUTRAL_ELEMENT
   };
 
   enum class ExportSubFormat { CSV, TSV, BINARY };
@@ -75,10 +76,7 @@ class QueryExecutionTree {
     return _rootOperation->getVariableColumns();
   }
 
-  std::shared_ptr<Operation> getRootOperation() const {
-    AD_CHECK(_rootOperation);
-    return _rootOperation;
-  }
+  std::shared_ptr<Operation> getRootOperation() const { return _rootOperation; }
 
   const OperationType& getType() const { return _type; }
 

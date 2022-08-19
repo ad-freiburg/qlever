@@ -243,6 +243,7 @@ RuntimeInformation Operation::createRuntimeInfoFromEstimates() {
   result.setRows(0);
   result.setWasCached(
       _executionContext->getQueryTreeCache().cacheContains(asString()));
+  _runtimeInfo.addDetail("status", "not-started");
   _runtimeInfo = result;
   return result;
 }

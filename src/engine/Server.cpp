@@ -547,7 +547,6 @@ boost::asio::awaitable<void> Server::processQuery(
   // Also store the QueryExecutionTree outside of the try-catch block to gain
   // access to the runtimeInformation in the case of an error.
   std::optional<QueryExecutionTree> optExecutionTree;
-  RuntimeInformation runtimeInfo;
   try {
     ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
         std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
@@ -649,7 +648,7 @@ boost::asio::awaitable<void> Server::processQuery(
     auto& qet = optExecutionTree.value();
     qet.isRoot() = true;  // allow pinning of the final result
     qet.recursivelySetTimeoutTimer(timeoutTimer);
-    runtimeInfo = qet.getRootOperation()->createRuntimeInfoFromEstimates();
+    qet.getRootOperation()->createRuntimeInfoFromEstimates();
     requestTimer.stop();
     LOG(INFO) << "Query planning done in " << requestTimer.msecs() << " ms"
               << " (can include index scans)" << std::endl;
