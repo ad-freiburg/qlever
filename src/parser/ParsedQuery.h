@@ -419,7 +419,7 @@ struct GraphPatternOperation {
   };
 
   std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-               Values, Minus>
+               Values, Minus, GroupGraphPattern>
       variant_;
   // Construct from one of the variant types (or anything that is convertible to
   // them.
