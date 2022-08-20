@@ -19,8 +19,7 @@ class ParseException : public std::exception {
         _cause(std::string("ParseException, cause: ") + _cause),
         metadata_({}){};
 
-  ParseException(std::string _cause, ExceptionMetadata metadata_)
-      : std::exception(),
+  ParseException(std::string _cause, ExceptionMetadata metadata = {{}})
         _cause(std::string("ParseException, cause: ") + _cause),
         metadata_(std::move(metadata_)){};
 
