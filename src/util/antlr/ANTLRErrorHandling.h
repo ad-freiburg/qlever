@@ -1,6 +1,8 @@
 // Copyright 2021, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
+// Authors:
+//   2021 Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
+//   2022 Julian Mundhahs (mundhahj@tf.informatik.uni-freiburg.de)
 
 #pragma once
 
@@ -19,19 +21,6 @@
 
 // TODO<qup42> whats up with this namespace?
 namespace {
-[[maybe_unused]] std::string colorError(const ExceptionMetadata& metadata) {
-  if (metadata.startIndex < metadata.stopIndex) {
-    auto first = metadata.query_.substr(0, metadata.startIndex);
-    auto middle = metadata.query_.substr(
-        metadata.startIndex, metadata.stopIndex - metadata.startIndex + 1);
-    auto end = metadata.query_.substr(metadata.stopIndex + 1);
-
-    return (first + "\x1b[1m\x1b[4m\x1b[31m" + middle + "\x1b[0m" + end);
-  } else {
-    return metadata.query_;
-  }
-}
-
 ExceptionMetadata generateMetadata(antlr4::Recognizer* recognizer,
                                    antlr4::Token* offendingToken,
                                    [[maybe_unused]] size_t line,

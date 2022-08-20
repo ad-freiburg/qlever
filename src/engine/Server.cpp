@@ -473,9 +473,10 @@ ad_utility::streams::stream_generator Server::composeTurtleResponse(
 }
 
 // _____________________________________________________________________________
-json Server::composeErrorResponseJson(const string& query,
-                                      const std::string& errorMsg,
-                                      ad_utility::Timer& requestTimer) {
+json Server::composeErrorResponseJson(
+    const string& query, const std::string& errorMsg,
+    ad_utility::Timer& requestTimer,
+    const std::optional<ExceptionMetadata>& metadata) {
   requestTimer.stop();
 
   json j;
@@ -485,22 +486,18 @@ json Server::composeErrorResponseJson(const string& query,
   j["time"]["total"] = requestTimer.msecs();
   j["time"]["computeResult"] = requestTimer.msecs();
   j["exception"] = errorMsg;
-  return j;
-}
 
-// _____________________________________________________________________________
-json Server::composeErrorResponseJson(const string& query,
-                                      const std::string& errorMsg,
-                                      const ExceptionMetadata& metadata,
-                                      ad_utility::Timer& requestTimer) {
-  json j = composeErrorResponseJson(query, errorMsg, requestTimer);
-  j["metadata"]["startIndex"] = metadata.startIndex;
-  j["metadata"]["stopIndex"] = metadata.stopIndex;
-  // The ANTLR parser may not see the whole query. (The reason is a mixing of
-  // the old and new parser.) To detect/work with this we also transmit what
-  // ANTLR saw as query.
-  // TODO<qup42> remove once the whole query is parsed with ANTLR.
-  j["metadata"]["query"] = metadata.query_;
+  if (metadata) {
+    auto& value = metadata.value();
+    j["metadata"]["startIndex"] = value.startIndex_;
+    j["metadata"]["stopIndex_"] = value.stopIndex_;
+    // The ANTLR parser may not see the whole query. (The reason is value mixing
+    // of the old and new parser.) To detect/work with this we also transmit
+    // what ANTLR saw as query.
+    // TODO<qup42> remove once the whole query is parsed with ANTLR.
+    j["metadata"]["query"] = value.query_;
+  }
+
   return j;
 }
 
@@ -746,14 +743,10 @@ boost::asio::awaitable<void> Server::processQuery(
   //  optional<errorMsg> and optional<metadata> and does this logic
   if (exceptionErrorMsg) {
     LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
-    json errorResponseJson;
+    json errorResponseJson = composeErrorResponseJson(
+        query, exceptionErrorMsg.value(), requestTimer, metadata);
     if (metadata) {
-      LOG(ERROR) << colorError(metadata.value()) << std::endl;
-      errorResponseJson = composeErrorResponseJson(
-          query, exceptionErrorMsg.value(), metadata.value(), requestTimer);
-    } else {
-      errorResponseJson = composeErrorResponseJson(
-          query, exceptionErrorMsg.value(), requestTimer);
+      LOG(ERROR) << metadata.value().coloredError() << std::endl;
     }
     co_return co_await sendJson(errorResponseJson, http::status::bad_request);
   }
