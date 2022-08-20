@@ -209,8 +209,7 @@ void Operation::createRuntimeInformationOnFailure(bool isActualFailure,
   _runtimeInfo.setCols(getResultWidth());
   _runtimeInfo.setDescriptor(getDescriptor());
 
-  // Only the result that was actually computed (or read from cache) knows
-  // the correct information about the children computations.
+  _runtimeInfo.children().clear();
   for (auto child : getChildren()) {
     _runtimeInfo.children().push_back(child->getRootOperation()->_runtimeInfo);
   }
