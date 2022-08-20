@@ -98,7 +98,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     ad_utility::OnDestruction onDestruction{[&]() {
       if (std::uncaught_exceptions()) {
         timer.stop();
-        createRuntimeInformationOnFailure(false, timer.msecs());
+        createRuntimeInformationOnFailure(true, timer.msecs());
       }
     }};
     auto computeLambda = [this] {
