@@ -93,6 +93,14 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   }
 
   try {
+    // In case of an exception, create the correct runtimeInfo, no matter which
+    // exception handler is called.
+    ad_utility::OnDestruction onDestruction{[&]() {
+      if (std::uncaught_exceptions()) {
+        timer.stop();
+        createRuntimeInformationOnFailure(false, timer.msecs());
+      }
+    }};
     auto computeLambda = [this] {
       CacheValue val(getExecutionContext()->getAllocator());
       if (_timeoutTimer->wlock()->hasTimedOut()) {
@@ -109,6 +117,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
             ". This timeout was not caught inside the actual computation, "
             "which indicates insufficient timeout functionality.");
       }
+      _runtimeInfo.setRows(val._resultTable->_idTable.size());
       val._runtimeInfo = getRuntimeInfo();
       return val;
     };
@@ -124,9 +133,8 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
                << resultNumCols << std::endl;
     return result._resultPointer->_resultTable;
   } catch (const ad_semsearch::AbortException& e) {
-    // A child Operation was aborted, do not print the information again, but
-    // update the runtime information
-    createRuntimeInformationOnFailure(false);
+    // A child Operation was aborted, do not print the information again.
+    _runtimeInfo.addDetail("status", "child-failed");
     throw;
   } catch (const ad_utility::WaitedForResultWhichThenFailedException& e) {
     // Here and in the following, show the detailed information (it's the
@@ -136,7 +144,6 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     LOG(ERROR) << "Waited for a result from another thread which then failed"
                << endl;
     LOG(DEBUG) << asString();
-    createRuntimeInformationOnFailure(true);
     throw ad_semsearch::AbortException(e);
   } catch (const std::exception& e) {
     // We are in the innermost level of the exception, so print
@@ -144,7 +151,6 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     LOG(DEBUG) << asString() << endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
-    createRuntimeInformationOnFailure(true);
     throw ad_semsearch::AbortException(e);
   } catch (...) {
     // We are in the innermost level of the exception, so print
@@ -152,7 +158,6 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     LOG(DEBUG) << asString() << endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
-    createRuntimeInformationOnFailure(true);
     throw ad_semsearch::AbortException(
         "Unexpected expection that is not a subclass of std::exception");
   }
@@ -195,10 +200,9 @@ void Operation::createRuntimeInformation(
 }
 
 // _______________________________________________________________________
-void Operation::createRuntimeInformationOnFailure(bool isActualFailure) {
-  // reset
-  _runtimeInfo = RuntimeInformation();
-  // the column names might differ between a cached result and this operation,
+void Operation::createRuntimeInformationOnFailure(bool isActualFailure,
+                                                  size_t timeInMilliseconds) {
+  // The column names might differ between a cached result and this operation,
   // so we have to take the local ones.
   _runtimeInfo.setColumnNames(getVariableColumns());
 
@@ -211,7 +215,7 @@ void Operation::createRuntimeInformationOnFailure(bool isActualFailure) {
     _runtimeInfo.children().push_back(child->getRootOperation()->_runtimeInfo);
   }
 
-  _runtimeInfo.setTime(0);
+  _runtimeInfo.setTime(timeInMilliseconds);
   _runtimeInfo.setRows(0);
   _runtimeInfo.setWasCached(false);
   if (isActualFailure) {
@@ -222,28 +226,44 @@ void Operation::createRuntimeInformationOnFailure(bool isActualFailure) {
 }
 
 // __________________________________________________________________
-RuntimeInformation Operation::createRuntimeInfoFromEstimates() {
+void Operation::createRuntimeInfoFromEstimates() {
   // reset
-  RuntimeInformation result;
-  result.setColumnNames(getVariableColumns());
-  result.setCols(getResultWidth());
-  result.setDescriptor(getDescriptor());
+  _runtimeInfo = RuntimeInformation{};
+  _runtimeInfo.setColumnNames(getVariableColumns());
+  const auto numCols = getResultWidth();
+  _runtimeInfo.setCols(numCols);
+  _runtimeInfo.setDescriptor(getDescriptor());
 
   for (const auto& child : getChildren()) {
     AD_CHECK(child);
-    result.children().push_back(
-        child->getRootOperation()->createRuntimeInfoFromEstimates());
+    child->getRootOperation()->createRuntimeInfoFromEstimates();
+    _runtimeInfo.children().push_back(
+        child->getRootOperation()->getRuntimeInfo());
   }
 
-  // TODO<joka921> Is there any good reason thy `getCostEstimate` and
-  // `getSizeEstimate` are not const?
-  result.setCostEstimate(getCostEstimate());
-  result.setSizeEstimate(getSizeEstimate());
-  result.setTime(0);
-  result.setRows(0);
-  result.setWasCached(
-      _executionContext->getQueryTreeCache().cacheContains(asString()));
+  _runtimeInfo.setCostEstimate(getCostEstimate());
+  _runtimeInfo.setSizeEstimate(getSizeEstimate());
+  _runtimeInfo.setTime(0);
+  _runtimeInfo.setRows(0);
+
+  std::vector<float> multiplicityEstimates;
+  multiplicityEstimates.reserve(numCols);
+  for (size_t i = 0; i < numCols; ++i) {
+    multiplicityEstimates.push_back(getMultiplicity(i));
+  }
+  _runtimeInfo.addDetail("multiplicity-estimates", multiplicityEstimates);
+
+  auto cachedResult =
+      _executionContext->getQueryTreeCache().resultAt(asString());
+  if (cachedResult) {
+    _runtimeInfo.setWasCached(true);
+    _runtimeInfo.setRows(cachedResult->_resultTable->size());
+    _runtimeInfo.addDetail("original_total_time",
+                           cachedResult->_runtimeInfo.getTime());
+    _runtimeInfo.addDetail("original_operation_time",
+                           cachedResult->_runtimeInfo.getOperationTime());
+  } else {
+    _runtimeInfo.setWasCached(false);
+  }
   _runtimeInfo.addDetail("status", "not-started");
-  _runtimeInfo = result;
-  return result;
 }

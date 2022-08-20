@@ -121,7 +121,7 @@ class Operation {
 
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.
-  RuntimeInformation createRuntimeInfoFromEstimates();
+  void createRuntimeInfoFromEstimates();
 
  protected:
   QueryExecutionContext* getExecutionContext() const {
@@ -196,7 +196,12 @@ class Operation {
       const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
       size_t timeInMilliseconds) final;
 
-  void createRuntimeInformationOnFailure(bool wasActualFailure);
+  // Create the runtime information in case the evaluation of this operation has
+  // failed. The first argument specifies whether this Operation caused the
+  // failure (true) or whether the failure is propagated form a failed child
+  // Operation (false).
+  void createRuntimeInformationOnFailure(bool wasActualFailure,
+                                         size_t timeInMilliseconds);
 
   // Recursively call a function on all children.
   template <typename F>

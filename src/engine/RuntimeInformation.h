@@ -25,7 +25,7 @@ class RuntimeInformation {
   friend inline void to_json(RuntimeInformation::ordered_json& j,
                              const RuntimeInformation& rti);
 
-  RuntimeInformation() = default;
+  RuntimeInformation() { addDetail("status", "not-started"); };
 
   std::string toString() const {
     std::ostringstream buffer;
