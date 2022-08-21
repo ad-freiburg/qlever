@@ -40,26 +40,12 @@ struct ParserAndVisitor {
   explicit ParserAndVisitor(string input);
   ParserAndVisitor(string input, SparqlQleverVisitor::PrefixMap prefixes);
 
-  template <typename ResultType, typename ContextType>
-  auto parse(const std::string_view input,
-             ContextType* (SparqlAutomaticParser::*F)(void)) {
-    auto context = (parser_.*F)();
-    auto resultOfParse =
-        std::move(context->accept(&(visitor_)).template as<ResultType>());
-
-    auto remainingString =
-        input.substr(parser_.getCurrentToken()->getStartIndex());
-    return ResultOfParseAndRemainingText{std::move(resultOfParse),
-                                         std::string{remainingString}};
-  }
-
   template <typename ContextType>
-  auto parseTypesafe(const std::string_view input,
-                     ContextType* (SparqlAutomaticParser::*F)(void)) {
+  auto parseTypesafe(ContextType* (SparqlAutomaticParser::*F)(void)) {
     auto resultOfParse = visitor_.visitTypesafe(std::invoke(F, parser_));
 
     auto remainingString =
-        input.substr(parser_.getCurrentToken()->getStartIndex());
+        input_.substr(parser_.getCurrentToken()->getStartIndex());
     return ResultOfParseAndRemainingText{std::move(resultOfParse),
                                          std::string{remainingString}};
   }
@@ -71,7 +57,7 @@ inline auto parseFront = []<typename ContextType>(
                              const std::string& input,
                              SparqlQleverVisitor::PrefixMap prefixes = {}) {
   ParserAndVisitor p{input, std::move(prefixes)};
-  return p.parseTypesafe(input, F);
+  return p.parseTypesafe(F);
 };
 
 inline auto parseInlineData =
@@ -109,9 +95,6 @@ inline auto parsePropertyListPathNotEmpty = std::bind_front(
 
 inline auto parseTriplesSameSubjectPath =
     std::bind_front(parseFront, &SparqlAutomaticParser::triplesSameSubjectPath);
-
-inline auto parsePrologue =
-    std::bind_front(parseFront, &SparqlAutomaticParser::prologue);
 
 inline auto parsePrefixDecl =
     std::bind_front(parseFront, &SparqlAutomaticParser::prefixDecl);

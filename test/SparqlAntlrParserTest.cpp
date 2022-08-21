@@ -585,7 +585,7 @@ TEST(SparqlParser, Iri) {
     // TODO<qup42> replace with curried parse... in `SparqlParserHelpers.h`
     // Parse "by hand" in order not to pollute the `SparqlParserHelpers`.
     ParserAndVisitor p{input, std::move(prefixMap)};
-    expectCompleteParse(p.parseTypesafe(input, &SparqlAutomaticParser::iri),
+    expectCompleteParse(p.parseTypesafe(&SparqlAutomaticParser::iri),
                         testing::Eq(iri));
   };
   expectIri("rdfs:label", "<http://www.w3.org/2000/01/rdf-schema#label>",
@@ -726,7 +726,7 @@ TEST(SparqlParser, LimitOffsetClause) {
 TEST(SparqlParser, OrderCondition) {
   auto parseOrderCondition = [](const std::string& input) {
     ParserAndVisitor p{input};
-    return p.parseTypesafe(input, &SparqlAutomaticParser::orderCondition);
+    return p.parseTypesafe(&SparqlAutomaticParser::orderCondition);
   };
   auto expectParseVariable = [&parseOrderCondition](const string& input,
                                                     const string& variable,
@@ -765,7 +765,7 @@ TEST(SparqlParser, OrderClause) {
 TEST(SparqlParser, GroupCondition) {
   auto parseGroupCondition = [](const std::string& input) {
     ParserAndVisitor p{input};
-    return p.parseTypesafe(input, &SparqlAutomaticParser::groupCondition);
+    return p.parseTypesafe(&SparqlAutomaticParser::groupCondition);
   };
   auto expectParseVariable = [&parseGroupCondition](const string& input,
                                                     const string& variable) {

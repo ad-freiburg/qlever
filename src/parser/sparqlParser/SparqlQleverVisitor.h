@@ -533,11 +533,9 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   PropertyPath visitTypesafe(Parser::PathEltOrInverseContext* ctx);
 
-  Any visitPathMod(Parser::PathModContext* ctx) override {
-    // Handled in visitPathElt.
-    reportError(ctx,
-                "PathMod should be handled by upper clauses. It should not be "
-                "visited.");
+  Any visitPathMod(Parser::PathModContext*) override {
+    // PathMod should be handled by upper clauses. It should not be visited.
+    AD_FAIL();
   }
 
   Any visitPathPrimary(Parser::PathPrimaryContext* ctx) override {
