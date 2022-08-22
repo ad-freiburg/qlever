@@ -41,17 +41,17 @@ class RuntimeInformation {
   void writeToStream(std::ostream& out, size_t indent = 1) const {
     using json = nlohmann::json;
     out << indentStr(indent) << '\n';
-    out << indentStr(indent - 1) << "├─ " << _descriptor << '\n';
-    out << indentStr(indent) << "result_size: " << _rows << " x " << _cols
+    out << indentStr(indent - 1) << "├─ " << descriptor_ << '\n';
+    out << indentStr(indent) << "result_size: " << rows_ << " x " << cols_
         << '\n';
-    out << indentStr(indent) << "columns: " << absl::StrJoin(_columnNames, ", ")
+    out << indentStr(indent) << "columns: " << absl::StrJoin(columnNames_, ", ")
         << '\n';
-    out << indentStr(indent) << "total_time: " << _time << " ms" << '\n';
+    out << indentStr(indent) << "total_time: " << time_ << " ms" << '\n';
     out << indentStr(indent) << "operation_time: " << getOperationTime()
         << " ms" << '\n';
-    out << indentStr(indent) << "cached: " << ((_wasCached) ? "true" : "false")
+    out << indentStr(indent) << "cached: " << ((wasCached_) ? "true" : "false")
         << '\n';
-    for (const auto& el : _details.items()) {
+    for (const auto& el : details_.items()) {
       out << indentStr(indent) << "  " << el.key() << ": ";
       // We want to print doubles with fixed precision and stream ints as their
       // native type so they get thousands separators. For everything else we
@@ -70,46 +70,46 @@ class RuntimeInformation {
       }
       out << '\n';
     }
-    if (_children.size()) {
+    if (children_.size()) {
       out << indentStr(indent) << "┬\n";
-      for (const RuntimeInformation& child : _children) {
+      for (const RuntimeInformation& child : children_) {
         child.writeToStream(out, indent + 1);
       }
     }
   }
 
   void setDescriptor(const std::string& descriptor) {
-    _descriptor = descriptor;
+    descriptor_ = descriptor;
   }
 
   void setColumnNames(
       const ad_utility::HashMap<std::string, size_t>& columnMap) {
-    _columnNames.resize(columnMap.size());
+    columnNames_.resize(columnMap.size());
     for (const auto& column : columnMap) {
-      _columnNames[column.second] = column.first;
+      columnNames_[column.second] = column.first;
     }
   }
 
   // Set the overall time in milliseconds
-  void setTime(double time) { _time = time; }
+  void setTime(double time) { time_ = time; }
 
   // Get the overall time in milliseconds
-  double getTime() const { return _time; }
+  double getTime() const { return time_; }
 
   // Set the number of rows
-  void setRows(size_t rows) { _rows = rows; }
+  void setRows(size_t rows) { rows_ = rows; }
 
   // Get the number of rows
-  size_t getRows() { return _rows; }
+  size_t getRows() { return rows_; }
 
   // Set the number of columns
-  void setCols(size_t cols) { _cols = cols; }
+  void setCols(size_t cols) { cols_ = cols; }
 
   // Get the number of columns
-  size_t getCols() { return _cols; }
+  size_t getCols() { return cols_; }
 
   double getOperationTime() const {
-    if (_wasCached) {
+    if (wasCached_) {
       return getTime();
     } else {
       return getTime() - getChildrenTime();
@@ -117,9 +117,9 @@ class RuntimeInformation {
   }
 
   size_t getOperationCostEstimate() const {
-    size_t result = _costEstimate;
-    for (const auto& child : _children) {
-      result -= child._costEstimate;
+    size_t result = costEstimate_;
+    for (const auto& child : children_) {
+      result -= child.costEstimate_;
     }
     return result;
   }
@@ -127,28 +127,28 @@ class RuntimeInformation {
   // The time spend in children
   double getChildrenTime() const {
     double sum = 0;
-    for (const RuntimeInformation& child : _children) {
+    for (const RuntimeInformation& child : children_) {
       sum += child.getTime();
     }
     return sum;
   }
 
-  void setCostEstimate(size_t costEstimate) { _costEstimate = costEstimate; }
-  void setSizeEstimate(size_t sizeEstimate) { _sizeEstimate = sizeEstimate; }
+  void setCostEstimate(size_t costEstimate) { costEstimate_ = costEstimate; }
+  void setSizeEstimate(size_t sizeEstimate) { sizeEstimate_ = sizeEstimate; }
 
-  void setWasCached(bool wasCached) { _wasCached = wasCached; }
+  void setWasCached(bool wasCached) { wasCached_ = wasCached; }
 
-  void addChild(const RuntimeInformation& r) { _children.push_back(r); }
+  void addChild(const RuntimeInformation& r) { children_.push_back(r); }
 
   // direct access to the children
-  std::vector<RuntimeInformation>& children() { return _children; }
+  std::vector<RuntimeInformation>& children() { return children_; }
   [[nodiscard]] const std::vector<RuntimeInformation>& children() const {
-    return _children;
+    return children_;
   }
 
   template <typename T>
   void addDetail(const std::string& key, const T& value) {
-    _details[key] = value;
+    details_[key] = value;
   }
 
  private:
@@ -160,31 +160,31 @@ class RuntimeInformation {
     return ind;
   }
 
-  double _time = 0.0;
-  size_t _costEstimate = 0;
-  size_t _rows = 0;
-  size_t _sizeEstimate = 0;
-  size_t _cols = 0;
-  bool _wasCached = false;
-  std::string _descriptor;
-  std::vector<std::string> _columnNames;
-  nlohmann::json _details;
-  std::vector<RuntimeInformation> _children;
+  double time_ = 0.0;
+  size_t costEstimate_ = 0;
+  size_t rows_ = 0;
+  size_t sizeEstimate_ = 0;
+  size_t cols_ = 0;
+  bool wasCached_ = false;
+  std::string descriptor_;
+  std::vector<std::string> columnNames_;
+  nlohmann::json details_;
+  std::vector<RuntimeInformation> children_;
 };
 
 inline void to_json(RuntimeInformation::ordered_json& j,
                     const RuntimeInformation& rti) {
   j = RuntimeInformation::ordered_json{
-      {"description", rti._descriptor},
-      {"result_rows", rti._rows},
-      {"result_cols", rti._cols},
-      {"column_names", rti._columnNames},
-      {"total_time", rti._time},
+      {"description", rti.descriptor_},
+      {"result_rows", rti.rows_},
+      {"result_cols", rti.cols_},
+      {"column_names", rti.columnNames_},
+      {"total_time", rti.time_},
       {"operation_time", rti.getOperationTime()},
-      {"was_cached", rti._wasCached},
-      {"details", rti._details},
-      {"estimated_total_cost", rti._costEstimate},
+      {"was_cached", rti.wasCached_},
+      {"details", rti.details_},
+      {"estimated_total_cost", rti.costEstimate_},
       {"estimated_operation_cost", rti.getOperationCostEstimate()},
-      {"estimated_size", rti._sizeEstimate},
-      {"children", rti._children}};
+      {"estimated_size", rti.sizeEstimate_},
+      {"children", rti.children_}};
 }

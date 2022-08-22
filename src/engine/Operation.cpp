@@ -142,7 +142,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     return result._resultPointer->_resultTable;
   } catch (const ad_semsearch::AbortException& e) {
     // A child Operation was aborted, do not print the information again.
-    _runtimeInfo.addDetail("status", "child failed");
+    _runtimeInfo.addDetail("status", "failed because child failed");
     throw;
   } catch (const ad_utility::WaitedForResultWhichThenFailedException& e) {
     // Here and in the following, show the detailed information (it's the
