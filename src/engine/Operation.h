@@ -1,6 +1,9 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author:
+//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+
 #pragma once
 
 #include <engine/QueryExecutionContext.h>
@@ -121,7 +124,7 @@ class Operation {
 
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.
-  void createRuntimeInfoFromEstimates();
+  virtual void createRuntimeInfoFromEstimates() final;
 
  protected:
   QueryExecutionContext* getExecutionContext() const {
@@ -191,15 +194,15 @@ class Operation {
 
   // Create and store the complete runtime information for this operation after
   // it has either been succesfully computed or read from the cache.
-  virtual void createRuntimeInformation(
-      const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
+  virtual void updateRuntimeInformationOnSuccess(
+      const ConcurrentLruCache::ResultAndCacheStatus& resultAndCacheStatus,
       size_t timeInMilliseconds) final;
 
   // Similar to the function above, but the components are specified manually.
   // If nullopt is specified for the last argument, then the `_runtimeInfo` is
   // expected to already have the correct children information. This is only
   // allowed when `wasCached` is false, otherwise a runtime check will fail.
-  virtual void createRuntimeInformation(
+  virtual void updateRuntimeInformationOnSuccess(
       const ResultTable& resultTable, bool wasCached, size_t timeInMilliseconds,
       std::optional<RuntimeInformation> runtimeInfo) final;
 
@@ -207,7 +210,7 @@ class Operation {
   // failed. The first argument specifies whether this Operation caused the
   // failure (true) or whether the failure is propagated form a failed child
   // Operation (false).
-  void createRuntimeInformationOnFailure(bool wasActualFailure,
+  void updateRuntimeInformationOnFailure(bool failureCausedByThisOperation,
                                          size_t timeInMilliseconds);
 
   // Recursively call a function on all children.

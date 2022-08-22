@@ -25,7 +25,7 @@ class RuntimeInformation {
   friend inline void to_json(RuntimeInformation::ordered_json& j,
                              const RuntimeInformation& rti);
 
-  RuntimeInformation() { addDetail("status", "not-started"); };
+  RuntimeInformation() { addDetail("status", "not started"); };
 
   std::string toString() const {
     std::ostringstream buffer;
@@ -117,9 +117,9 @@ class RuntimeInformation {
   }
 
   size_t getOperationCostEstimate() const {
-    size_t result = _estimatedCost;
+    size_t result = _costEstimate;
     for (const auto& child : _children) {
-      result -= child._estimatedCost;
+      result -= child._costEstimate;
     }
     return result;
   }
@@ -133,8 +133,8 @@ class RuntimeInformation {
     return sum;
   }
 
-  void setCostEstimate(size_t estimate) { _estimatedCost = estimate; }
-  void setSizeEstimate(size_t estimate) { _estimatedSize = estimate; }
+  void setCostEstimate(size_t costEstimate) { _costEstimate = costEstimate; }
+  void setSizeEstimate(size_t sizeEstimate) { _sizeEstimate = sizeEstimate; }
 
   void setWasCached(bool wasCached) { _wasCached = wasCached; }
 
@@ -160,16 +160,16 @@ class RuntimeInformation {
     return ind;
   }
 
-  double _time{};
-  size_t _estimatedCost{};
-  size_t _rows{};
-  size_t _estimatedSize{};
-  size_t _cols{};
-  bool _wasCached{};
-  std::string _descriptor{};
-  std::vector<std::string> _columnNames{};
-  nlohmann::json _details{};
-  std::vector<RuntimeInformation> _children{};
+  double _time = 0.0;
+  size_t _costEstimate = 0;
+  size_t _rows = 0;
+  size_t _sizeEstimate = 0;
+  size_t _cols = 0;
+  bool _wasCached = false;
+  std::string _descriptor;
+  std::vector<std::string> _columnNames;
+  nlohmann::json _details;
+  std::vector<RuntimeInformation> _children;
 };
 
 inline void to_json(RuntimeInformation::ordered_json& j,
@@ -183,8 +183,8 @@ inline void to_json(RuntimeInformation::ordered_json& j,
       {"operation_time", rti.getOperationTime()},
       {"was_cached", rti._wasCached},
       {"details", rti._details},
-      {"estimated_total_cost", rti._estimatedCost},
+      {"estimated_total_cost", rti._costEstimate},
       {"estimated_operation_cost", rti.getOperationCostEstimate()},
-      {"estimated_size", rti._estimatedSize},
+      {"estimated_size", rti._sizeEstimate},
       {"children", rti._children}};
 }

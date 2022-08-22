@@ -546,7 +546,7 @@ boost::asio::awaitable<void> Server::processQuery(
   std::optional<std::string> exceptionErrorMsg;
   // Also store the QueryExecutionTree outside of the try-catch block to gain
   // access to the runtimeInformation in the case of an error.
-  std::optional<QueryExecutionTree> optExecutionTree;
+  std::optional<QueryExecutionTree> queryExecutionTree;
   try {
     ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
         std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
@@ -644,8 +644,8 @@ boost::asio::awaitable<void> Server::processQuery(
                               pinResult);
     QueryPlanner qp(&qec);
     qp.setEnablePatternTrick(_enablePatternTrick);
-    optExecutionTree = qp.createExecutionTree(pq);
-    auto& qet = optExecutionTree.value();
+    queryExecutionTree = qp.createExecutionTree(pq);
+    auto& qet = queryExecutionTree.value();
     qet.isRoot() = true;  // allow pinning of the final result
     qet.recursivelySetTimeoutTimer(timeoutTimer);
     qet.getRootOperation()->createRuntimeInfoFromEstimates();
@@ -732,10 +732,10 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
     auto errorResponseJson = composeErrorResponseJson(
         query, exceptionErrorMsg.value(), requestTimer);
-    if (optExecutionTree) {
+    if (queryExecutionTree) {
       errorResponseJson["runtimeInformation"] =
           RuntimeInformation::ordered_json(
-              optExecutionTree->getRootOperation()->getRuntimeInfo());
+              queryExecutionTree->getRootOperation()->getRuntimeInfo());
     }
     co_return co_await sendJson(errorResponseJson, http::status::bad_request);
   }

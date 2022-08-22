@@ -62,7 +62,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   timer.start();
 
   if (isRoot) {
-    // Start with an estimated runtime Info which will be updated as we go.
+    // Start with an estimated runtime info which will be updated as we go.
     createRuntimeInfoFromEstimates();
   }
   auto& cache = _executionContext->getQueryTreeCache();
@@ -93,12 +93,12 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   }
 
   try {
-    // In case of an exception, create the correct runtimeInfo, no matter which
+    // In case of an exception, create the correct runtime info, no matter which
     // exception handler is called.
     ad_utility::OnDestruction onDestruction{[&]() {
       if (std::uncaught_exceptions()) {
         timer.stop();
-        createRuntimeInformationOnFailure(true, timer.msecs());
+        updateRuntimeInformationOnFailure(true, timer.msecs());
       }
     }};
     auto computeLambda = [this, &timer] {
@@ -123,8 +123,8 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       // correctly because the result was computed, so we can pass `nullopt` as
       // the last argument.
       timer.stop();
-      createRuntimeInformation(*val._resultTable, false, timer.msecs(),
-                               std::nullopt);
+      updateRuntimeInformationOnSuccess(*val._resultTable, false, timer.msecs(),
+                                        std::nullopt);
       timer.cont();
       val._runtimeInfo = getRuntimeInfo();
       return val;
@@ -134,7 +134,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
                               : cache.computeOnce(cacheKey, computeLambda);
 
     timer.stop();
-    createRuntimeInformation(result, timer.msecs());
+    updateRuntimeInformationOnSuccess(result, timer.msecs());
     auto resultNumRows = result._resultPointer->_resultTable->size();
     auto resultNumCols = result._resultPointer->_resultTable->width();
     LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
@@ -142,7 +142,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     return result._resultPointer->_resultTable;
   } catch (const ad_semsearch::AbortException& e) {
     // A child Operation was aborted, do not print the information again.
-    _runtimeInfo.addDetail("status", "child-failed");
+    _runtimeInfo.addDetail("status", "child failed");
     throw;
   } catch (const ad_utility::WaitedForResultWhichThenFailedException& e) {
     // Here and in the following, show the detailed information (it's the
@@ -179,7 +179,7 @@ void Operation::checkTimeout() const {
 }
 
 // _______________________________________________________________________
-void Operation::createRuntimeInformation(
+void Operation::updateRuntimeInformationOnSuccess(
     const ResultTable& resultTable, bool wasCached, size_t timeInMilliseconds,
     std::optional<RuntimeInformation> runtimeInfo) {
   // the column names might differ between a cached result and this operation,
@@ -210,17 +210,18 @@ void Operation::createRuntimeInformation(
 }
 
 // ____________________________________________________________________________________________________________________
-void Operation::createRuntimeInformation(
+void Operation::updateRuntimeInformationOnSuccess(
     const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
     size_t timeInMilliseconds) {
-  createRuntimeInformation(*resultAndCacheStatus._resultPointer->_resultTable,
-                           resultAndCacheStatus._wasCached, timeInMilliseconds,
-                           resultAndCacheStatus._resultPointer->_runtimeInfo);
+  updateRuntimeInformationOnSuccess(
+      *resultAndCacheStatus._resultPointer->_resultTable,
+      resultAndCacheStatus._wasCached, timeInMilliseconds,
+      resultAndCacheStatus._resultPointer->_runtimeInfo);
 }
 
 // _______________________________________________________________________
-void Operation::createRuntimeInformationOnFailure(bool isActualFailure,
-                                                  size_t timeInMilliseconds) {
+void Operation::updateRuntimeInformationOnFailure(
+    bool failureCausedByThisOperation, size_t timeInMilliseconds) {
   // The column names might differ between a cached result and this operation,
   // so we have to take the local ones.
   _runtimeInfo.setColumnNames(getVariableColumns());
@@ -236,10 +237,10 @@ void Operation::createRuntimeInformationOnFailure(bool isActualFailure,
   _runtimeInfo.setTime(timeInMilliseconds);
   _runtimeInfo.setRows(0);
   _runtimeInfo.setWasCached(false);
-  if (isActualFailure) {
+  if (failureCausedByThisOperation) {
     _runtimeInfo.addDetail("status", "failed");
   } else {
-    _runtimeInfo.addDetail("status", "child-failed");
+    _runtimeInfo.addDetail("status", "failed because child failed");
   }
 }
 
@@ -283,5 +284,5 @@ void Operation::createRuntimeInfoFromEstimates() {
   } else {
     _runtimeInfo.setWasCached(false);
   }
-  _runtimeInfo.addDetail("status", "not-started");
+  _runtimeInfo.addDetail("status", "not started");
 }
