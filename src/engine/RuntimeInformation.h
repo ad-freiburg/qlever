@@ -116,6 +116,14 @@ class RuntimeInformation {
     }
   }
 
+  size_t getOperationCostEstimate() const {
+    size_t result = _estimatedCost;
+    for (const auto& child : _children) {
+      result -= child._estimatedCost;
+    }
+    return result;
+  }
+
   // The time spend in children
   double getChildrenTime() const {
     double sum = 0;
@@ -175,7 +183,8 @@ inline void to_json(RuntimeInformation::ordered_json& j,
       {"operation_time", rti.getOperationTime()},
       {"was_cached", rti._wasCached},
       {"details", rti._details},
-      {"estimated_cost", rti._estimatedCost},
-      {"estimated_size", rti._estimatedSize},
+      {"estimated_total_cost", rti._estimatedCost},
+      {"estimated_operation_cost", rti.getOperationCostEstimate()} {
+          "estimated_size", rti._estimatedSize},
       {"children", rti._children}};
 }
