@@ -184,7 +184,7 @@ inline void to_json(RuntimeInformation::ordered_json& j,
       {"was_cached", rti._wasCached},
       {"details", rti._details},
       {"estimated_total_cost", rti._estimatedCost},
-      {"estimated_operation_cost", rti.getOperationCostEstimate()} {
-          "estimated_size", rti._estimatedSize},
+      {"estimated_operation_cost", rti.getOperationCostEstimate()},
+      {"estimated_size", rti._estimatedSize},
       {"children", rti._children}};
 }
