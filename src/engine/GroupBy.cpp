@@ -267,6 +267,10 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
 
 void GroupBy::computeResult(ResultTable* result) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
+
+  std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
+  LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
+
   std::vector<size_t> groupByColumns;
 
   result->_sortedBy = resultSortedOn();
@@ -295,9 +299,6 @@ void GroupBy::computeResult(ResultTable* result) {
     aggregates.push_back(Aggregate{alias._expression,
                                    _varColMap.find(alias._outVarName)->second});
   }
-
-  std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
-  LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());

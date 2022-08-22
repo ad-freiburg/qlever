@@ -1,15 +1,16 @@
 // Copyright 2011, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold <buchholb>
+// Author:
+//   2011-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include "./Server.h"
+#include <engine/QueryPlanner.h>
+#include <engine/Server.h>
 
 #include <cstring>
 #include <sstream>
 #include <string>
 #include <vector>
-
-#include "QueryPlanner.h"
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
@@ -543,6 +544,9 @@ boost::asio::awaitable<void> Server::processQuery(
   // to the client. Note that the C++ standard forbids co_await in the catch
   // block, hence the workaround with the optional `exceptionErrorMsg`.
   std::optional<std::string> exceptionErrorMsg;
+  // Also store the QueryExecutionTree outside of the try-catch block to gain
+  // access to the runtimeInformation in the case of an error.
+  std::optional<QueryExecutionTree> queryExecutionTree;
   try {
     ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
         std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
@@ -640,9 +644,11 @@ boost::asio::awaitable<void> Server::processQuery(
                               pinResult);
     QueryPlanner qp(&qec);
     qp.setEnablePatternTrick(_enablePatternTrick);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    queryExecutionTree = qp.createExecutionTree(pq);
+    auto& qet = queryExecutionTree.value();
     qet.isRoot() = true;  // allow pinning of the final result
     qet.recursivelySetTimeoutTimer(timeoutTimer);
+    qet.getRootOperation()->createRuntimeInfoFromEstimates();
     requestTimer.stop();
     LOG(INFO) << "Query planning done in " << requestTimer.msecs() << " ms"
               << " (can include index scans)" << std::endl;
@@ -726,6 +732,11 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
     auto errorResponseJson = composeErrorResponseJson(
         query, exceptionErrorMsg.value(), requestTimer);
+    if (queryExecutionTree) {
+      errorResponseJson["runtimeInformation"] =
+          RuntimeInformation::ordered_json(
+              queryExecutionTree->getRootOperation()->getRuntimeInfo());
+    }
     co_return co_await sendJson(errorResponseJson, http::status::bad_request);
   }
 }

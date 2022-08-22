@@ -2,32 +2,31 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./QueryPlanner.h"
+#include <engine/Bind.h>
+#include <engine/CountAvailablePredicates.h>
+#include <engine/Distinct.h>
+#include <engine/Filter.h>
+#include <engine/GroupBy.h>
+#include <engine/HasPredicateScan.h>
+#include <engine/IndexScan.h>
+#include <engine/Join.h>
+#include <engine/Minus.h>
+#include <engine/MultiColumnJoin.h>
+#include <engine/NeutralElementOperation.h>
+#include <engine/OptionalJoin.h>
+#include <engine/OrderBy.h>
+#include <engine/QueryPlanner.h>
+#include <engine/Sort.h>
+#include <engine/TextOperationWithFilter.h>
+#include <engine/TextOperationWithoutFilter.h>
+#include <engine/TransitivePath.h>
+#include <engine/TwoColumnJoin.h>
+#include <engine/Union.h>
+#include <engine/Values.h>
+#include <parser/Alias.h>
 
 #include <algorithm>
 #include <ctime>
-
-#include "../parser/Alias.h"
-#include "Bind.h"
-#include "CountAvailablePredicates.h"
-#include "Distinct.h"
-#include "Filter.h"
-#include "GroupBy.h"
-#include "HasPredicateScan.h"
-#include "IndexScan.h"
-#include "Join.h"
-#include "Minus.h"
-#include "MultiColumnJoin.h"
-#include "NeutralElementOperation.h"
-#include "OptionalJoin.h"
-#include "OrderBy.h"
-#include "Sort.h"
-#include "TextOperationWithFilter.h"
-#include "TextOperationWithoutFilter.h"
-#include "TransitivePath.h"
-#include "TwoColumnJoin.h"
-#include "Union.h"
-#include "Values.h"
 
 // All the operations take a `QueryExecutionContext` as a first argument.
 // Todo: Continue the comment.
