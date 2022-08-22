@@ -16,5 +16,5 @@ add_library(parser
         ParallelBuffer.cpp
         SparqlParserHelpers.h SparqlParserHelpers.cpp
         TripleComponent.h
-        PropertyPath.h PropertyPath.cpp Alias.h)
+        PropertyPath.h PropertyPath.cpp Alias.h ParseException.cpp)
 target_link_libraries(parser sparqlParser sparqlExpressions rdfEscaping re2 absl::flat_hash_map util)

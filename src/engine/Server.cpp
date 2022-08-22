@@ -487,7 +487,7 @@ json Server::composeErrorResponseJson(
   j["time"]["computeResult"] = requestTimer.msecs();
   j["exception"] = errorMsg;
 
-  if (metadata) {
+  if (metadata.has_value()) {
     auto& value = metadata.value();
     j["metadata"]["startIndex"] = value.startIndex_;
     j["metadata"]["stopIndex_"] = value.stopIndex_;
@@ -745,7 +745,7 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
     json errorResponseJson = composeErrorResponseJson(
         query, exceptionErrorMsg.value(), requestTimer, metadata);
-    if (metadata) {
+    if (metadata.has_value()) {
       LOG(ERROR) << metadata.value().coloredError() << std::endl;
     }
     co_return co_await sendJson(errorResponseJson, http::status::bad_request);

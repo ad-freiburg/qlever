@@ -15,12 +15,21 @@
 #include "../src/util/antlr/ANTLRErrorHandling.h"
 #include "SparqlAntlrParserTestHelpers.h"
 
-using namespace antlr4;
 using namespace sparqlParserHelpers;
+using Parser = SparqlAutomaticParser;
+
+template <auto F>
+auto parse =
+    [](const string& input, SparqlQleverVisitor::PrefixMap prefixes = {}) {
+      ParserAndVisitor p{input, std::move(prefixes)};
+      return p.parseTypesafe(F);
+    };
 
 template <typename T>
 void testNumericLiteral(const std::string& input, T target) {
-  auto result = sparqlParserHelpers::parseNumericLiteral(input);
+  // TODO: do for all tests
+  auto parserNumericLiteral = parse<&Parser::numericLiteral>;
+  auto result = parserNumericLiteral(input);
   ASSERT_EQ(result.remainingText_.size(), 0);
   auto value = get<T>(result.resultOfParse_);
 
@@ -1061,4 +1070,12 @@ TEST(SparqlParser, SelectClause) {
                false);
   expectSelect("SELECT (5 - 10 as ?m) ?foo (10 as ?bar)",
                {Alias{"5-10", "?m"}, Variable{"?foo"}, Alias{"10", "?bar"}});
+}
+
+TEST(SparqlParser, Foo) {
+  try {
+    parseSelectClause("SELECT a ?foo");
+  } catch (ParseException& exception) {
+    cout << exception.metadata().value().coloredError() << endl;
+  }
 }

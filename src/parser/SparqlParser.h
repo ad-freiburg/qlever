@@ -71,6 +71,9 @@ class SparqlParser {
   uint64_t numInternalVariables_ = 0;
   SparqlFilter parseRegexFilter(bool expectKeyword);
 
+  // Helper function that converts the prefix map from `parsedQuery` (a vector
+  // of pairs of prefix and IRI) to the prefix map we need for the
+  // `SparqlQleverVisitor` (a hash map from prefixes to IRIs).
   static SparqlQleverVisitor::PrefixMap getPrefixMap(
       const ParsedQuery& parsedQuery);
   // Parse the clause with the prefixes of the given ParsedQuery.
