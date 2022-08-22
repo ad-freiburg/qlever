@@ -189,12 +189,19 @@ class Operation {
   //! Computes both, an EntityList and a HitList.
   virtual void computeResult(ResultTable* result) = 0;
 
-  // Create and store the complete runtime Information for this operation.
-  // All data that was previously stored in the runtime information will be
-  // deleted.
+  // Create and store the complete runtime information for this operation after
+  // it has either been succesfully computed or read from the cache.
   virtual void createRuntimeInformation(
       const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
       size_t timeInMilliseconds) final;
+
+  // Similar to the function above, but the components are specified manually.
+  // If nullopt is specified for the last argument, then the `_runtimeInfo` is
+  // expected to already have the correct children information. This is only
+  // allowed when `wasCached` is false, otherwise a runtime check will fail.
+  virtual void createRuntimeInformation(
+      const ResultTable& resultTable, bool wasCached, size_t timeInMilliseconds,
+      std::optional<RuntimeInformation> runtimeInfo) final;
 
   // Create the runtime information in case the evaluation of this operation has
   // failed. The first argument specifies whether this Operation caused the

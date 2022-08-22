@@ -101,7 +101,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
         createRuntimeInformationOnFailure(true, timer.msecs());
       }
     }};
-    auto computeLambda = [this] {
+    auto computeLambda = [this, &timer] {
       CacheValue val(getExecutionContext()->getAllocator());
       if (_timeoutTimer->wlock()->hasTimedOut()) {
         throw ad_utility::TimeoutException(
@@ -118,6 +118,14 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
             "which indicates insufficient timeout functionality.");
       }
       _runtimeInfo.setRows(val._resultTable->_idTable.size());
+      // Make sure that the results that are written to the cache have the
+      // correct runtimeInfo. The children of the runtime info are already set
+      // correctly because the result was computed, so we can pass `nullopt` as
+      // the last argument.
+      timer.stop();
+      createRuntimeInformation(*val._resultTable, false, timer.msecs(),
+                               std::nullopt);
+      timer.cont();
       val._runtimeInfo = getRuntimeInfo();
       return val;
     };
@@ -172,8 +180,8 @@ void Operation::checkTimeout() const {
 
 // _______________________________________________________________________
 void Operation::createRuntimeInformation(
-    const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
-    size_t timeInMilliseconds) {
+    const ResultTable& resultTable, bool wasCached, size_t timeInMilliseconds,
+    std::optional<RuntimeInformation> runtimeInfo) {
   // the column names might differ between a cached result and this operation,
   // so we have to take the local ones.
   _runtimeInfo.setColumnNames(getVariableColumns());
@@ -181,22 +189,33 @@ void Operation::createRuntimeInformation(
   _runtimeInfo.setCols(getResultWidth());
   _runtimeInfo.setDescriptor(getDescriptor());
 
-  // Only the result that was actually computed (or read from cache) knows
-  // the correct information about the children computations.
-  _runtimeInfo.children() =
-      resultAndCacheStatus._resultPointer->_runtimeInfo.children();
-
   _runtimeInfo.setTime(timeInMilliseconds);
-  _runtimeInfo.setRows(
-      resultAndCacheStatus._resultPointer->_resultTable->size());
-  _runtimeInfo.setWasCached(resultAndCacheStatus._wasCached);
-  _runtimeInfo.addDetail(
-      "original_total_time",
-      resultAndCacheStatus._resultPointer->_runtimeInfo.getTime());
-  _runtimeInfo.addDetail(
-      "original_operation_time",
-      resultAndCacheStatus._resultPointer->_runtimeInfo.getOperationTime());
+  _runtimeInfo.setRows(resultTable.size());
+  _runtimeInfo.setWasCached(wasCached);
+
   _runtimeInfo.addDetail("status", "completed");
+
+  // If the result was read from the cache, then we need the additional
+  // runtime info for the correct child information etc.
+  AD_CHECK(!wasCached || runtimeInfo.has_value());
+
+  if (runtimeInfo.has_value()) {
+    _runtimeInfo.addDetail("original_total_time", runtimeInfo->getTime());
+    _runtimeInfo.addDetail("original_operation_time",
+                           runtimeInfo->getOperationTime());
+    // Only the result that was actually computed (or read from cache) knows
+    // the correct information about the children computations.
+    _runtimeInfo.children() = std::move(runtimeInfo->children());
+  }
+}
+
+// ____________________________________________________________________________________________________________________
+void Operation::createRuntimeInformation(
+    const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
+    size_t timeInMilliseconds) {
+  createRuntimeInformation(*resultAndCacheStatus._resultPointer->_resultTable,
+                           resultAndCacheStatus._wasCached, timeInMilliseconds,
+                           resultAndCacheStatus._resultPointer->_runtimeInfo);
 }
 
 // _______________________________________________________________________
