@@ -54,6 +54,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   using PropertyList = ad_utility::sparql_types::PropertyList;
   using Any = antlrcpp::Any;
   size_t _blankNodeCounter = 0;
+  int64_t numInternalVariables_ = 0;
+  // A Stack of vector<Variable> that store the variables that are visible in a
+  // query body. Each element corresponds to nested Queries that the parse is
+  // currently parsing.
+  std::vector<std::vector<Variable>> visibleVariables_{{}};
 
  public:
   using PrefixMap = ad_utility::HashMap<string, string>;
@@ -81,13 +86,6 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
  private:
   PrefixMap _prefixMap{};
-
-  template <typename T>
-  void appendVector(std::vector<T>& destination, std::vector<T>&& source) {
-    destination.insert(destination.end(),
-                       std::make_move_iterator(source.begin()),
-                       std::make_move_iterator(source.end()));
-  }
 
   BlankNode newBlankNode() {
     std::string label = std::to_string(_blankNodeCounter);

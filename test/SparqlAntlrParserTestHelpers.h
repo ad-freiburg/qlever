@@ -324,3 +324,36 @@ MATCHER_P4(IsSolutionModifier, groupByVariables, havingClauses, orderBy,
                     orderKeyComp) &&
          arg.limitOffset_ == limitOffset;
 }
+
+// TODO: ExplainMatchResult?
+MATCHER_P(IsTriples, triples, "") {
+  return testing::Matches(testing::UnorderedElementsAreArray(triples))(
+      std::get<GraphPatternOperation::BasicGraphPattern>(arg.variant_)
+          ._whereClauseTriples);
+}
+
+MATCHER_P2(IsBindd, target, expression, "") {
+  auto& bind = std::get<GraphPatternOperation::Bind>(arg.variant_);
+  return bind._target == target &&
+         bind._expression.getDescriptor() == expression;
+}
+
+MATCHER_P(IsFilters, filters, "") {
+  return testing::Matches(testing::UnorderedElementsAreArray(filters))(
+      arg._filters);
+}
+
+MATCHER(IsOptional, "") {
+  return testing::Matches(testing::Eq(true))(arg._optional);
+}
+
+MATCHER_P(IsChildren, childMatchers, "") {
+  if (arg._children.size() != childMatchers.size()) {
+    return false;
+  }
+  bool matches = true;
+  for (size_t i = 0; i < childMatchers.size(); ++i) {
+    matches &= testing::Matches(childMatchers[i])(arg._children[i]);
+  }
+  return matches;
+}

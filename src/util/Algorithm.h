@@ -33,6 +33,43 @@ bool contains_if(const Container& container, const Predicate& predicate) {
          container.end();
 }
 
+/**
+ * Appends the second vector to the first one.
+ *
+ * @param destination Vector& to which to append
+ * @param source Vector&& to append
+ */
+template <typename T>
+void appendVector(std::vector<T>& destination, std::vector<T>&& source) {
+  destination.insert(destination.end(), std::make_move_iterator(source.begin()),
+                     std::make_move_iterator(source.end()));
+}
+
+/**
+ * Applies the UnaryOperation to all elements of the vector.
+ */
+template <typename Input, typename F>
+auto transform(std::vector<Input>&& input, F unaryOp)
+    -> std::vector<decltype(unaryOp(std::declval<Input>()))> {
+  std::vector<decltype(unaryOp(std::declval<Input>()))> out;
+  std::transform(std::make_move_iterator(input.begin()),
+                 std::make_move_iterator(input.end()), std::back_inserter(out),
+                 unaryOp);
+  return out;
+}
+
+/**
+ * Flatten a vector<vector<T>> into a vector<T>.
+ */
+template <typename T>
+std::vector<T> flatten(std::vector<std::vector<T>> input) {
+  std::vector<T> out;
+  for (std::vector<T> sub : input) {
+    appendVector(out, std::move(sub));
+  }
+  return out;
+}
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_ALGORITHM_H

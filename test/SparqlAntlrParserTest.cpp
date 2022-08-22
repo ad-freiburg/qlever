@@ -1174,3 +1174,65 @@ TEST(SparqlParser, HavingCondition) {
                         {SparqlFilter::LT, "?predicate", "\"<Z\""});
   expectHavingConditionFails("(LANG(?x) = \"en\")");
 }
+
+TEST(SparqlParser, WhereClause) {
+  auto Triples = [](vector<SparqlTriple>&& triples) {
+    return IsTriples(triples);
+  };
+  auto Bind = [](const string& target, const string& expression) {
+    return IsBindd(target, expression);
+  };
+  auto Filters = [](vector<SparqlFilter>&& triples) {
+    return IsFilters(triples);
+  };
+  auto Optional = IsOptional();
+  auto NotOptional = testing::Not(IsOptional());
+  auto HasChildren = [](auto&&... childMatchers) {
+    return IsChildren(vector{childMatchers...});
+  };
+
+  auto expectGraphPattern = [](const string&& input, const auto&... matchers) {
+    expectCompleteParse(parseWhereClause(input,
+                                         SparqlQleverVisitor::PrefixMap{
+                                             {INTERNAL_PREDICATE_PREFIX_NAME,
+                                              INTERNAL_PREDICATE_PREFIX_IRI}}),
+                        testing::AllOf(matchers...));
+  };
+  expectGraphPattern("WHERE { ?x ?y ?z }",
+                     HasChildren(Triples({{"?x", "?y", "?z"}})), Filters({}),
+                     NotOptional);
+  expectGraphPattern(
+      "WHERE { ?x ?y ?z ; ?f <bar> }",
+      HasChildren(Triples({{"?x", "?y", "?z"}, {"?x", "?f", "<bar>"}})),
+      Filters({}), NotOptional);
+  expectGraphPattern(
+      "WHERE { ?x ?y ?z . <foo> ?f <bar> }",
+      HasChildren(Triples({{"?x", "?y", "?z"}, {"<foo>", "?f", "<bar>"}})),
+      Filters({}), NotOptional);
+  expectGraphPattern(
+      "WHERE { ?x <is-a> <Actor> . FILTER(?x != ?y) . ?y <is-a> <Actor> . "
+      "FILTER(?y < ?x) }",
+      HasChildren(
+          Triples({{"?x", "<is-a>", "<Actor>"}, {"?y", "<is-a>", "<Actor>"}})),
+      Filters({{SparqlFilter::FilterType::NE, "?x", "?y"},
+               {SparqlFilter::FilterType::LT, "?y", "?x"}}),
+      NotOptional);
+  expectGraphPattern(
+      "WHERE {?x <is-a> <Actor> . FILTER(?x != ?y) . ?y <is-a> <Actor> . ?c "
+      "ql:contains-entity ?x . ?c ql:contains-word \"coca* abuse\"}",
+      HasChildren(Triples({{"?x", "<is-a>", "<Actor>"},
+                           {"?y", "<is-a>", "<Actor>"},
+                           {"?c", CONTAINS_ENTITY_PREDICATE, "?x"},
+                           {"?c", CONTAINS_WORD_PREDICATE, "coca* abuse"}})),
+      Filters({{SparqlFilter::FilterType::NE, "?x", "?y"}}), NotOptional);
+  //    expectGraphPattern(
+  //            "WHERE {?x <is-a> <Actor> . BIND(10 - ?foo as ?y) }",
+  //            HasChildren(Triples({{"?x", "<is-a>", "<Actor>"}}), Bind("?y",
+  //            "10-?foo")), NotOptional);
+  {
+    auto pattern = parseWhereClause(
+        "WHERE { ?var ?foo ?var BIND(?foo as ?bar) FILTER(?a = 10) OPTIONAL { "
+        "?f "
+        "?a ?b FILTER(?f > 0) } }");
+  }
+}
