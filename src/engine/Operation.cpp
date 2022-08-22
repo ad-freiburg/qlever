@@ -182,7 +182,7 @@ void Operation::checkTimeout() const {
 void Operation::updateRuntimeInformationOnSuccess(
     const ResultTable& resultTable, bool wasCached, size_t timeInMilliseconds,
     std::optional<RuntimeInformation> runtimeInfo) {
-  // the column names might differ between a cached result and this operation,
+  // The column names might differ between a cached result and this operation,
   // so we have to take the local ones.
   _runtimeInfo.setColumnNames(getVariableColumns());
 
