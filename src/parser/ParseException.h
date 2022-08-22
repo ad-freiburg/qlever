@@ -13,9 +13,9 @@
 // occurred.
 struct ExceptionMetadata {
   // Query that the exception occurred in. This is currently needed because the
-  // parse doesn't parse the whole query in one piece. It therefore can only
-  // determine the position in the current (sub-)query.
-  std::string_view query_;
+  // parser doesn't parse the whole query in one piece. It therefore can only
+  // determine the position in the current partial query.
+  std::string_view query_{};
   // Start and Stop Index of the clause that cause the exception in query_.
   size_t startIndex_ = 0;
   size_t stopIndex_ = 0;
@@ -36,8 +36,8 @@ struct ExceptionMetadata {
 
 class ParseException : public std::exception {
  public:
-  ParseException(std::string cause_, ExceptionMetadata metadata = {{}})
-      : cause_(std::string("ParseException, cause: ") + cause_),
+  ParseException(std::string_view cause, ExceptionMetadata metadata = {})
+      : cause_(absl::StrCat("ParseException, cause: ", cause)),
         metadata_(metadata){};
 
   virtual const char* what() const throw() { return cause_.c_str(); }
