@@ -1305,3 +1305,34 @@ queries:
       - selected: [ "?count", "?y" ]
       - contains_row: [ 1398, "<Educator>" ]
       - order_numeric: { "dir": "DESC", "var": "?count" }
+
+  - query: subquery-one-triple-2
+    type: no-text
+    sparql: |
+      SELECT (COUNT(?x) as ?count) ?y WHERE {
+                {SELECT * WHERE {?x <is-a> ?y}} .
+                <Albert_Einstein> <is-a> ?y .
+            }
+            GROUP BY ?y
+            ORDER BY DESC(?count)
+    checks:
+      - num_cols: 2
+      #- num_rows : 5295 #greater than current limit
+      - selected: [ "?count", "?y" ]
+      - contains_row: [ 1398, "<Educator>" ]
+      - order_numeric: { "dir": "DESC", "var": "?count" }
+
+  # This query checks a subtle bug in the query planner (issue 748)
+  - query: property-path-without-modifiers
+    type: no-text
+    sparql: |
+      SELECT ?x WHERE {
+        ?x <is-a> <Scientist>.
+        ?x <Spouse_(or_domestic_partner)>/ <is-a> <Scientist> .
+      }
+    checks:
+      - num_cols: 1
+      - num_rows : 194
+      - selected: [ "?x" ]
+      - contains_row: [ "<Albert_Einstein>" ]
+      - order_numeric: { "dir": "DESC", "var": "?count" }
