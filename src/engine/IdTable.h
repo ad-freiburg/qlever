@@ -1106,7 +1106,17 @@ using IdTableStatic =
 
 // the "runtime number of cols" variant
 // template <typename Allocator = ad_utility::AllocatorWithLimit<Id>>
-using IdTable = IdTableStatic<0, ad_utility::AllocatorWithLimit<Id>>;
+// We do not use an alias template to allow forward declaration.
+class IdTable : public IdTableStatic<0, ad_utility::AllocatorWithLimit<Id>> {
+  using Base = IdTableStatic<0, ad_utility::AllocatorWithLimit<Id>>;
+  // Inherit the constructors.
+  using Base::Base;
+
+  IdTable(Base&& b) : Base(std::move(b)) {}
+  IdTable(const Base& b) : Base(b) {}
+
+  IdTable& operator= (const Base& b)
+};
 
 /// A constant view into an IdTable that does not own its data
 template <int COLS, typename Allocator = ad_utility::AllocatorWithLimit<Id>>

@@ -4,8 +4,7 @@
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#if 0
-#include "./Index.h"
+#include "./IndexImpl.h"
 
 #include <CompilationInfo.h>
 #include <absl/strings/str_join.h>
@@ -31,11 +30,11 @@
 using std::array;
 
 // _____________________________________________________________________________
-Index::Index() : _usePatterns(false) {}
+IndexImpl::IndexImpl() : _usePatterns(false) {}
 
 // _____________________________________________________________________________
 template <class Parser>
-IndexBuilderDataAsPsoSorter Index::createIdTriplesAndVocab(
+IndexBuilderDataAsPsoSorter IndexImpl::createIdTriplesAndVocab(
     const string& ntFile) {
   auto indexBuilderData =
       passFileForVocabulary<Parser>(ntFile, _numTriplesPerBatch);
@@ -91,7 +90,7 @@ void createPatternsFromSpoTriplesView(auto&& spoTriplesView,
 
 // _____________________________________________________________________________
 template <class Parser>
-void Index::createFromFile(const string& filename) {
+void IndexImpl::createFromFile(const string& filename) {
   string indexFilename = _onDiskBase + ".index";
 
   readIndexBuilderSettingsFromFile<Parser>();
@@ -214,15 +213,15 @@ void Index::createFromFile(const string& filename) {
 }
 
 // Explicit instantiations.
-template void Index::createFromFile<TurtleStreamParser<Tokenizer>>(
+template void IndexImpl::createFromFile<TurtleStreamParser<Tokenizer>>(
     const string& filename);
-template void Index::createFromFile<TurtleMmapParser<Tokenizer>>(
+template void IndexImpl::createFromFile<TurtleMmapParser<Tokenizer>>(
     const string& filename);
-template void Index::createFromFile<TurtleParserAuto>(const string& filename);
+template void IndexImpl::createFromFile<TurtleParserAuto>(const string& filename);
 
 // _____________________________________________________________________________
 template <class Parser>
-IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
+IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     const string& filename, size_t linesPerPartial) {
   LOG(INFO) << "Processing input triples from " << filename << " ..."
             << std::endl;
@@ -404,7 +403,7 @@ IndexBuilderDataAsStxxlVector Index::passFileForVocabulary(
 }
 
 // _____________________________________________________________________________
-std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
+std::unique_ptr<PsoSorter> IndexImpl::convertPartialToGlobalIds(
     TripleVec& data, const vector<size_t>& actualLinesPerPartial,
     size_t linesPerPartial) {
   LOG(INFO) << "Converting triples from local IDs to global IDs ..."
@@ -464,7 +463,7 @@ std::unique_ptr<PsoSorter> Index::convertPartialToGlobalIds(
 template <class MetaDataDispatcher, typename SortedTriples>
 std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                         typename MetaDataDispatcher::WriteType>>
-Index::createPermutationPairImpl(const string& fileName1,
+IndexImpl::createPermutationPairImpl(const string& fileName1,
                                  const string& fileName2,
                                  SortedTriples&& sortedTriples, size_t c0,
                                  size_t c1, size_t c2,
@@ -543,7 +542,7 @@ Index::createPermutationPairImpl(const string& fileName1,
 }
 
 // __________________________________________________________________________
-void Index::writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
+void IndexImpl::writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
                              ad_utility::BufferedVector<array<Id, 2>>* bufPtr) {
   // sort according to the "switched" relation.
   auto& buffer = *bufPtr;
@@ -575,7 +574,7 @@ void Index::writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
 template <class MetaDataDispatcher, class Comparator1, class Comparator2>
 std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                         typename MetaDataDispatcher::WriteType>>
-Index::createPermutations(
+IndexImpl::createPermutations(
     auto&& sortedTriples,
     const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
         p1,
@@ -601,7 +600,7 @@ Index::createPermutations(
 
 // ________________________________________________________________________
 template <class MetaDataDispatcher, class Comparator1, class Comparator2>
-void Index::createPermutationPair(
+void IndexImpl::createPermutationPair(
     auto&& sortedTriples,
     const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
         p1,
@@ -632,7 +631,7 @@ void Index::createPermutationPair(
 
 // _________________________________________________________________________
 template <class MetaData>
-void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
+void IndexImpl::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
   for (auto it = m1->data().begin(); it != m1->data().end(); ++it) {
     // our MetaData classes have a read-only interface because normally the
     // FuullRelationMetaData are created separately and then added and never
@@ -648,7 +647,7 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 }
 
 // _____________________________________________________________________________
-void Index::addPatternsToExistingIndex() {
+void IndexImpl::addPatternsToExistingIndex() {
   auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
   // We only iterate over the SPO permutation which typically only has few
   // triples per subject, so it should be safe to not apply a memory limit here.
@@ -663,7 +662,7 @@ void Index::addPatternsToExistingIndex() {
 }
 
 // _____________________________________________________________________________
-void Index::createFromOnDiskIndex(const string& onDiskBase) {
+void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
   _vocab.readFromFile(_onDiskBase + INTERNAL_VOCAB_SUFFIX,
@@ -696,7 +695,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
 }
 
 // _____________________________________________________________________________
-void Index::throwExceptionIfNoPatterns() const {
+void IndexImpl::throwExceptionIfNoPatterns() const {
   if (!_usePatterns) {
     AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
              "The requested feature requires a loaded patterns file ("
@@ -705,43 +704,43 @@ void Index::throwExceptionIfNoPatterns() const {
 }
 
 // _____________________________________________________________________________
-const vector<PatternID>& Index::getHasPattern() const {
+const vector<PatternID>& IndexImpl::getHasPattern() const {
   throwExceptionIfNoPatterns();
   return _hasPattern;
 }
 
 // _____________________________________________________________________________
-const CompactVectorOfStrings<Id>& Index::getHasPredicate() const {
+const CompactVectorOfStrings<Id>& IndexImpl::getHasPredicate() const {
   throwExceptionIfNoPatterns();
   return _hasPredicate;
 }
 
 // _____________________________________________________________________________
-const CompactVectorOfStrings<Id>& Index::getPatterns() const {
+const CompactVectorOfStrings<Id>& IndexImpl::getPatterns() const {
   throwExceptionIfNoPatterns();
   return _patterns;
 }
 
 // _____________________________________________________________________________
-double Index::getHasPredicateMultiplicityEntities() const {
+double IndexImpl::getHasPredicateMultiplicityEntities() const {
   throwExceptionIfNoPatterns();
   return _fullHasPredicateMultiplicityEntities;
 }
 
 // _____________________________________________________________________________
-double Index::getHasPredicateMultiplicityPredicates() const {
+double IndexImpl::getHasPredicateMultiplicityPredicates() const {
   throwExceptionIfNoPatterns();
   return _fullHasPredicateMultiplicityPredicates;
 }
 
 // _____________________________________________________________________________
-size_t Index::getHasPredicateFullSize() const {
+size_t IndexImpl::getHasPredicateFullSize() const {
   throwExceptionIfNoPatterns();
   return _fullHasPredicateSize;
 }
 
 // _____________________________________________________________________________
-size_t Index::relationCardinality(const string& relationName) const {
+size_t IndexImpl::relationCardinality(const string& relationName) const {
   if (relationName == INTERNAL_TEXT_MATCH_PREDICATE) {
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
@@ -757,7 +756,7 @@ size_t Index::relationCardinality(const string& relationName) const {
 // TODO<joka921> There is a lot of duplication in the three cardinality
 // functions, remove it.
 // _____________________________________________________________________________
-size_t Index::subjectCardinality(const TripleComponent& sub) const {
+size_t IndexImpl::subjectCardinality(const TripleComponent& sub) const {
   std::optional<Id> relId = sub.toValueId(getVocab());
   if (relId.has_value()) {
     if (this->_SPO.metaData().col0IdExists(relId.value())) {
@@ -768,7 +767,7 @@ size_t Index::subjectCardinality(const TripleComponent& sub) const {
 }
 
 // _____________________________________________________________________________
-size_t Index::objectCardinality(const TripleComponent& obj) const {
+size_t IndexImpl::objectCardinality(const TripleComponent& obj) const {
   std::optional<Id> relId = obj.toValueId(getVocab());
   if (relId.has_value()) {
     if (this->_OSP.metaData().col0IdExists(relId.value())) {
@@ -780,7 +779,7 @@ size_t Index::objectCardinality(const TripleComponent& obj) const {
 
 // _____________________________________________________________________________
 template <class T>
-void Index::writeAsciiListFile(const string& filename, const T& ids) const {
+void IndexImpl::writeAsciiListFile(const string& filename, const T& ids) const {
   std::ofstream f(filename);
 
   for (size_t i = 0; i < ids.size(); ++i) {
@@ -789,24 +788,24 @@ void Index::writeAsciiListFile(const string& filename, const T& ids) const {
   f.close();
 }
 
-template void Index::writeAsciiListFile<vector<Id>>(
+template void IndexImpl::writeAsciiListFile<vector<Id>>(
     const string& filename, const vector<Id>& ids) const;
 
-template void Index::writeAsciiListFile<vector<Score>>(
+template void IndexImpl::writeAsciiListFile<vector<Score>>(
     const string& filename, const vector<Score>& ids) const;
 
 // _____________________________________________________________________________
-bool Index::isLiteral(const string& object) const {
+bool IndexImpl::isLiteral(const string& object) const {
   return decltype(_vocab)::isLiteral(object);
 }
 
 // _____________________________________________________________________________
-bool Index::shouldBeExternalized(const string& object) {
+bool IndexImpl::shouldBeExternalized(const string& object) {
   return _vocab.shouldBeExternalized(object);
 }
 
 // _____________________________________________________________________________
-void Index::setKbName(const string& name) {
+void IndexImpl::setKbName(const string& name) {
   _POS.setKbName(name);
   _PSO.setKbName(name);
   _SOP.setKbName(name);
@@ -816,35 +815,35 @@ void Index::setKbName(const string& name) {
 }
 
 // ____________________________________________________________________________
-void Index::setOnDiskBase(const std::string& onDiskBase) {
+void IndexImpl::setOnDiskBase(const std::string& onDiskBase) {
   _onDiskBase = onDiskBase;
 }
 
 // ____________________________________________________________________________
-void Index::setKeepTempFiles(bool keepTempFiles) {
+void IndexImpl::setKeepTempFiles(bool keepTempFiles) {
   _keepTempFiles = keepTempFiles;
 }
 
 // _____________________________________________________________________________
-void Index::setUsePatterns(bool usePatterns) { _usePatterns = usePatterns; }
+void IndexImpl::setUsePatterns(bool usePatterns) { _usePatterns = usePatterns; }
 
 // _____________________________________________________________________________
-void Index::setLoadAllPermutations(bool loadAllPermutations) {
+void IndexImpl::setLoadAllPermutations(bool loadAllPermutations) {
   _loadAllPermutations = loadAllPermutations;
 }
 
 // ____________________________________________________________________________
-void Index::setSettingsFile(const std::string& filename) {
+void IndexImpl::setSettingsFile(const std::string& filename) {
   _settingsFileName = filename;
 }
 
 // ____________________________________________________________________________
-void Index::setPrefixCompression(bool compressed) {
+void IndexImpl::setPrefixCompression(bool compressed) {
   _vocabPrefixCompressed = compressed;
 }
 
 // ____________________________________________________________________________
-void Index::writeConfiguration() const {
+void IndexImpl::writeConfiguration() const {
   // Copy the configuration and add the current commit hash.
   auto configuration = _configurationJson;
   configuration["git_hash"] = std::string(qlever::version::GitHash);
@@ -853,7 +852,7 @@ void Index::writeConfiguration() const {
 }
 
 // ___________________________________________________________________________
-void Index::readConfiguration() {
+void IndexImpl::readConfiguration() {
   auto f = ad_utility::makeIfstream(_onDiskBase + CONFIGURATION_FILE);
   f >> _configurationJson;
   if (_configurationJson.find("git_hash") != _configurationJson.end()) {
@@ -919,7 +918,7 @@ void Index::readConfiguration() {
 }
 
 // ___________________________________________________________________________
-LangtagAndTriple Index::tripleToInternalRepresentation(
+LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     TurtleTriple&& triple) const {
   LangtagAndTriple result{"", {}};
   auto& resultTriple = result._triple;
@@ -960,7 +959,7 @@ LangtagAndTriple Index::tripleToInternalRepresentation(
 
 // ___________________________________________________________________________
 template <class Parser>
-void Index::readIndexBuilderSettingsFromFile() {
+void IndexImpl::readIndexBuilderSettingsFromFile() {
   json j;  // if we have no settings, we still have to initialize some default
            // values
   if (!_settingsFileName.empty()) {
@@ -1097,7 +1096,7 @@ void Index::readIndexBuilderSettingsFromFile() {
 }
 
 // ___________________________________________________________________________
-std::future<void> Index::writeNextPartialVocabulary(
+std::future<void> IndexImpl::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
     std::unique_ptr<ItemMapArray> items, auto localIds,
     ad_utility::Synchronized<TripleVec::bufwriter_type>* globalWritePtr) {
@@ -1168,5 +1167,3 @@ std::future<void> Index::writeNextPartialVocabulary(
 
   return std::async(std::launch::async, std::move(lambda));
 }
-
-#endif
