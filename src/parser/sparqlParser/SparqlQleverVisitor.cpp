@@ -345,9 +345,7 @@ std::variant<GraphPatternOperation, SparqlFilter> Visitor::visitTypesafe(
     // TODO: visitAlternative
     return visitTypesafe(ctx->filterR());
   } else if (ctx->optionalGraphPattern()) {
-    auto optionalPattern = visitTypesafe(ctx->optionalGraphPattern());
-    optionalPattern._child._optional = true;
-    return GraphPatternOperation{std::move(optionalPattern)};
+    return GraphPatternOperation{visitTypesafe(ctx->optionalGraphPattern())};
   } else if (ctx->minusGraphPattern()) {
     return GraphPatternOperation{visitTypesafe(ctx->minusGraphPattern())};
   } else if (ctx->bind()) {
@@ -364,7 +362,9 @@ std::variant<GraphPatternOperation, SparqlFilter> Visitor::visitTypesafe(
 // ____________________________________________________________________________________
 GraphPatternOperation::Optional Visitor::visitTypesafe(
     Parser::OptionalGraphPatternContext* ctx) {
-  return {visitTypesafe(ctx->groupGraphPattern())};
+  auto pattern = visitTypesafe(ctx->groupGraphPattern());
+  pattern._optional = true;
+  return {pattern};
 }
 
 // ____________________________________________________________________________________
@@ -746,6 +746,7 @@ GraphPattern wrap(GraphPatternOperation op) {
 }
 }  // namespace
 
+// ____________________________________________________________________________________
 GraphPatternOperation Visitor::visitTypesafe(
     Parser::GroupOrUnionGraphPatternContext* ctx) {
   auto children =
@@ -757,6 +758,7 @@ GraphPatternOperation Visitor::visitTypesafe(
       return GraphPatternOperation{
           GraphPatternOperation::Union{wrap(std::move(op1)), std::move(op2)}};
     };
+    // TODO<joka921> QLever should support Nary UNIONs directly.
     return std::accumulate(std::next(children.begin(), 2), children.end(),
                            GraphPatternOperation{GraphPatternOperation::Union{
                                std::move(children[0]), std::move(children[1])}},

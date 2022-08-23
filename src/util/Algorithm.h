@@ -46,9 +46,11 @@ void appendVector(std::vector<T>& destination, std::vector<T>&& source) {
 }
 
 /**
- * Applies the UnaryOperation to all elements of the vector.
+ * Applies the UnaryOperation to all elements of the vector and return a new
+ * vector which contains the results.
  */
-template <typename Input, typename F, typename Output = std::invoke_result_t<F, Input&&>
+template <typename Input, typename F,
+          typename Output = std::invoke_result_t<F, Input&&>>
 std::vector<Output> transform(std::vector<Input>&& input, F unaryOp) {
   std::vector<Output> out;
   out.reserve(input.size());
@@ -64,6 +66,10 @@ std::vector<Output> transform(std::vector<Input>&& input, F unaryOp) {
 template <typename T>
 std::vector<T> flatten(std::vector<std::vector<T>> input) {
   std::vector<T> out;
+  // Reserve the total required space. It is the sum of all the vectors lengths.
+  out.reserve(std::accumulate(
+      input.begin(), input.end(), 0,
+      [](size_t i, const std::vector<T>& elem) { return i + elem.size(); }));
   for (std::vector<T> sub : input) {
     appendVector(out, std::move(sub));
   }

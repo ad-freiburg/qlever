@@ -309,6 +309,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
+  // Filter clauses are no independent graph patterns themselves, but their
+  // scope is always the complete graph pattern enclosing them.
   std::variant<GraphPatternOperation, SparqlFilter> visitTypesafe(
       Parser::GraphPatternNotTriplesContext* ctx);
 
@@ -383,7 +385,6 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  // TODO: std::variant<GroupGraphPattern, Union>?
   GraphPatternOperation visitTypesafe(
       Parser::GroupOrUnionGraphPatternContext* ctx);
 
