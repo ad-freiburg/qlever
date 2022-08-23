@@ -140,7 +140,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     return result._resultPointer->_resultTable;
   } catch (const ad_semsearch::AbortException& e) {
     // A child Operation was aborted, do not print the information again.
-    _runtimeInfo.status_ = RuntimeInformation::failedBecauseChildFailed;
+    _runtimeInfo.status_ = RuntimeInformation::Status::failedBecauseChildFailed;
     throw;
   } catch (const ad_utility::WaitedForResultWhichThenFailedException& e) {
     // Here and in the following, show the detailed information (it's the
@@ -184,7 +184,7 @@ void Operation::updateRuntimeInformationOnSuccess(
   _runtimeInfo.numRows_ = resultTable.size();
   _runtimeInfo.wasCached_ = wasCached;
 
-  _runtimeInfo.status_ = RuntimeInformation::completed;
+  _runtimeInfo.status_ = RuntimeInformation::Status::completed;
 
   // If the result was read from the cache, then we need the additional
   // runtime info for the correct child information etc.
@@ -229,7 +229,7 @@ void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
   }
 
   _runtimeInfo.totalTime_ = timeInMilliseconds;
-  _runtimeInfo.status_ = RuntimeInformation::failed;
+  _runtimeInfo.status_ = RuntimeInformation::Status::failed;
 }
 
 // __________________________________________________________________

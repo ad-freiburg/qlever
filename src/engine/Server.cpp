@@ -733,9 +733,8 @@ boost::asio::awaitable<void> Server::processQuery(
     auto errorResponseJson = composeErrorResponseJson(
         query, exceptionErrorMsg.value(), requestTimer);
     if (queryExecutionTree) {
-      errorResponseJson["runtimeInformation"] =
-          nlohmann::ordered_json(
-              queryExecutionTree->getRootOperation()->getRuntimeInfo());
+      errorResponseJson["runtimeInformation"] = nlohmann::ordered_json(
+          queryExecutionTree->getRootOperation()->getRuntimeInfo());
     }
     co_return co_await sendJson(errorResponseJson, http::status::bad_request);
   }
