@@ -207,11 +207,8 @@ class Operation {
       std::optional<RuntimeInformation> runtimeInfo) final;
 
   // Create the runtime information in case the evaluation of this operation has
-  // failed. The first argument specifies whether this Operation caused the
-  // failure (true) or whether the failure is propagated form a failed child
-  // Operation (false).
-  void updateRuntimeInformationOnFailure(bool failureCausedByThisOperation,
-                                         size_t timeInMilliseconds);
+  // failed.
+  void updateRuntimeInformationOnFailure(size_t timeInMilliseconds);
 
   // Recursively call a function on all children.
   template <typename F>

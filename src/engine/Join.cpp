@@ -65,8 +65,6 @@ string Join::getDescriptor() const {
 
 // _____________________________________________________________________________
 void Join::computeResult(ResultTable* result) {
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-
   LOG(DEBUG) << "Getting sub-results for join result computation..." << endl;
   size_t leftWidth = _left->getResultWidth();
   size_t rightWidth = _right->getResultWidth();
@@ -97,7 +95,6 @@ void Join::computeResult(ResultTable* result) {
 
   LOG(TRACE) << "Computing left side..." << endl;
   shared_ptr<const ResultTable> leftRes = _left->getResult();
-  runtimeInfo.addChild(_left->getRootOperation()->getRuntimeInfo());
 
   // TODO<joka921> Currently the _resultTypes are set incorrectly in case
   // of early stopping. For now, early stopping is thus disabled.
@@ -117,7 +114,6 @@ void Join::computeResult(ResultTable* result) {
 
   LOG(TRACE) << "Computing right side..." << endl;
   shared_ptr<const ResultTable> rightRes = _right->getResult();
-  runtimeInfo.addChild(_right->getRootOperation()->getRuntimeInfo());
 
   LOG(DEBUG) << "Computing Join result..." << endl;
 
@@ -246,7 +242,6 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
     result->_idTable.setCols(_right->getResultWidth() + 2);
     result->_sortedBy = {2 + _rightJoinCol};
     shared_ptr<const ResultTable> nonDummyRes = _right->getResult();
-    getRuntimeInfo().addChild(_right->getRootOperation()->getRuntimeInfo());
     result->_resultTypes.reserve(result->_idTable.cols());
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
@@ -261,7 +256,6 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
     result->_sortedBy = {_leftJoinCol};
 
     shared_ptr<const ResultTable> nonDummyRes = _left->getResult();
-    getRuntimeInfo().addChild(_left->getRootOperation()->getRuntimeInfo());
     result->_resultTypes.reserve(result->_idTable.cols());
     result->_resultTypes.insert(result->_resultTypes.end(),
                                 nonDummyRes->_resultTypes.begin(),

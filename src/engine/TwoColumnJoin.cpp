@@ -103,9 +103,6 @@ void TwoColumnJoin::computeResult(ResultTable* result) {
     const auto leftResult = _left->getResult();
     const auto rightResult = _right->getResult();
     const auto& toFilter = rightFilter ? leftResult : rightResult;
-    RuntimeInformation& runtimeInfo = getRuntimeInfo();
-    runtimeInfo.addChild(_left->getRootOperation()->getRuntimeInfo());
-    runtimeInfo.addChild(_right->getRootOperation()->getRuntimeInfo());
     const IdTable& filter =
         rightFilter ? rightResult->_idTable : leftResult->_idTable;
     size_t jc1 = rightFilter ? _jc1Left : _jc1Right;

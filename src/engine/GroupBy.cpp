@@ -300,9 +300,6 @@ void GroupBy::computeResult(ResultTable* result) {
                                    _varColMap.find(alias._outVarName)->second});
   }
 
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
-
   // populate the result type vector
   result->_resultTypes.resize(result->_idTable.cols());
 

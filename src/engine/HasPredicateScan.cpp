@@ -231,11 +231,8 @@ void HasPredicateScan::computeResult(ResultTable* result) {
   const CompactVectorOfStrings<Id>& hasPredicate = getIndex().getHasPredicate();
   const CompactVectorOfStrings<Id>& patterns = getIndex().getPatterns();
 
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-
   switch (_type) {
     case ScanType::FREE_S: {
-      runtimeInfo.setDescriptor("HasPredicateScan free subject: " + _subject);
       Id objectId;
       if (!getIndex().getId(_object, &objectId)) {
         AD_THROW(ad_semsearch::Exception::BAD_INPUT,
@@ -245,7 +242,6 @@ void HasPredicateScan::computeResult(ResultTable* result) {
                                      patterns);
     } break;
     case ScanType::FREE_O: {
-      runtimeInfo.setDescriptor("HasPredicateScan free object: " + _object);
       Id subjectId;
       if (!getIndex().getId(_subject, &subjectId)) {
         AD_THROW(ad_semsearch::Exception::BAD_INPUT,
@@ -255,7 +251,6 @@ void HasPredicateScan::computeResult(ResultTable* result) {
                                      hasPredicate, patterns);
     } break;
     case ScanType::FULL_SCAN:
-      runtimeInfo.setDescriptor("HasPredicateScan full scan");
       HasPredicateScan::computeFullScan(result, hasPattern, hasPredicate,
                                         patterns,
                                         getIndex().getHasPredicateFullSize());
@@ -272,9 +267,6 @@ void HasPredicateScan::computeResult(ResultTable* result) {
       CALL_FIXED_SIZE_2(inWidth, outWidth, HasPredicateScan::computeSubqueryS,
                         &result->_idTable, subresult->_idTable,
                         _subtreeColIndex, hasPattern, hasPredicate, patterns);
-      runtimeInfo.setDescriptor("HasPredicateScan with a subquery on " +
-                                _subject);
-      runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
       break;
   }
 

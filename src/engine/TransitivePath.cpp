@@ -669,9 +669,6 @@ void TransitivePath::computeResult(ResultTable* result) {
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "TransitivePath subresult computation done." << std::endl;
 
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
-
   result->_sortedBy = resultSortedOn();
   if (_leftIsVar || _leftSideTree != nullptr) {
     result->_resultTypes.push_back(subRes->getResultType(_leftSubCol));
@@ -693,7 +690,6 @@ void TransitivePath::computeResult(ResultTable* result) {
         result->_resultTypes.push_back(leftRes->getResultType(c));
       }
     }
-    runtimeInfo.addChild(_leftSideTree->getRootOperation()->getRuntimeInfo());
     int leftWidth = leftRes->_idTable.cols();
     CALL_FIXED_SIZE_3(subWidth, leftWidth, _resultWidth,
                       computeTransitivePathLeftBound, &result->_idTable,
@@ -707,7 +703,6 @@ void TransitivePath::computeResult(ResultTable* result) {
         result->_resultTypes.push_back(rightRes->getResultType(c));
       }
     }
-    runtimeInfo.addChild(_rightSideTree->getRootOperation()->getRuntimeInfo());
     int rightWidth = rightRes->_idTable.cols();
     CALL_FIXED_SIZE_3(subWidth, rightWidth, _resultWidth,
                       computeTransitivePathRightBound, &result->_idTable,

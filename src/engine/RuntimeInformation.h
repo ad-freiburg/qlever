@@ -22,10 +22,39 @@ class RuntimeInformation {
   // https://github.com/nlohmann/json/issues/485#issuecomment-333652309
   using ordered_json = nlohmann::ordered_json;
 
+  enum struct Status {
+    notStarted,
+    completed,
+    failed,
+    failedBecauseChildFailed
+  };
+  using enum Status;
+
+  // Public members
+  double time_ = 0.0;
+
+  // In case this operation was read from the cache, we will store the time
+  // information about the original computation in the following two members
+  double originalTime_ = 0.0;
+  double originalOperationTime_ = 0.0;
+
+  size_t costEstimate_ = 0;
+  size_t rows_ = 0;
+  size_t sizeEstimate_ = 0;
+  size_t cols_ = 0;
+
+  std::vector<float> multiplictyEstimates_;
+  bool wasCached_ = false;
+  std::string descriptor_;
+  std::vector<std::string> columnNames_;
+  std::vector<RuntimeInformation> children_;
+  Status status_ = Status::notStarted;
+  nlohmann::json details_;
+
   friend inline void to_json(RuntimeInformation::ordered_json& j,
                              const RuntimeInformation& rti);
 
-  RuntimeInformation() { addDetail("status", "not started"); };
+  RuntimeInformation() = default;
 
   std::string toString() const {
     std::ostringstream buffer;
@@ -39,7 +68,6 @@ class RuntimeInformation {
   }
 
   void writeToStream(std::ostream& out, size_t indent = 1) const {
-    using json = nlohmann::json;
     out << indentStr(indent) << '\n';
     out << indentStr(indent - 1) << "├─ " << descriptor_ << '\n';
     out << indentStr(indent) << "result_size: " << rows_ << " x " << cols_
@@ -51,26 +79,7 @@ class RuntimeInformation {
         << " ms" << '\n';
     out << indentStr(indent) << "cached: " << ((wasCached_) ? "true" : "false")
         << '\n';
-    for (const auto& el : details_.items()) {
-      out << indentStr(indent) << "  " << el.key() << ": ";
-      // We want to print doubles with fixed precision and stream ints as their
-      // native type so they get thousands separators. For everything else we
-      // let nlohmann::json handle it
-      if (el.value().type() == json::value_t::number_float) {
-        out << ad_utility::to_string(el.value().get<double>(), 2);
-      } else if (el.value().type() == json::value_t::number_unsigned) {
-        out << el.value().get<uint64_t>();
-      } else if (el.value().type() == json::value_t::number_integer) {
-        out << el.value().get<int64_t>();
-      } else {
-        out << el.value();
-      }
-      if (el.key().ends_with("Time")) {
-        out << " ms";
-      }
-      out << '\n';
-    }
-    if (children_.size()) {
+    if (!children_.empty()) {
       out << indentStr(indent) << "┬\n";
       for (const RuntimeInformation& child : children_) {
         child.writeToStream(out, indent + 1);
@@ -78,41 +87,20 @@ class RuntimeInformation {
     }
   }
 
-  void setDescriptor(const std::string& descriptor) {
-    descriptor_ = descriptor;
-  }
-
   void setColumnNames(
       const ad_utility::HashMap<std::string, size_t>& columnMap) {
     columnNames_.resize(columnMap.size());
-    for (const auto& column : columnMap) {
-      columnNames_[column.second] = column.first;
+    for (const auto& [variable, columnIndex] : columnMap) {
+      AD_CHECK(columnIndex < columnNames_.size());
+      columnNames_[columnIndex] = variable;
     }
   }
 
-  // Set the overall time in milliseconds
-  void setTime(double time) { time_ = time; }
-
-  // Get the overall time in milliseconds
-  double getTime() const { return time_; }
-
-  // Set the number of rows
-  void setRows(size_t rows) { rows_ = rows; }
-
-  // Get the number of rows
-  size_t getRows() { return rows_; }
-
-  // Set the number of columns
-  void setCols(size_t cols) { cols_ = cols; }
-
-  // Get the number of columns
-  size_t getCols() { return cols_; }
-
   double getOperationTime() const {
     if (wasCached_) {
-      return getTime();
+      return time_;
     } else {
-      return getTime() - getChildrenTime();
+      return time_ - getChildrenTime();
     }
   }
 
@@ -128,22 +116,9 @@ class RuntimeInformation {
   double getChildrenTime() const {
     double sum = 0;
     for (const RuntimeInformation& child : children_) {
-      sum += child.getTime();
+      sum += child.time_;
     }
     return sum;
-  }
-
-  void setCostEstimate(size_t costEstimate) { costEstimate_ = costEstimate; }
-  void setSizeEstimate(size_t sizeEstimate) { sizeEstimate_ = sizeEstimate; }
-
-  void setWasCached(bool wasCached) { wasCached_ = wasCached; }
-
-  void addChild(const RuntimeInformation& r) { children_.push_back(r); }
-
-  // direct access to the children
-  std::vector<RuntimeInformation>& children() { return children_; }
-  [[nodiscard]] const std::vector<RuntimeInformation>& children() const {
-    return children_;
   }
 
   template <typename T>
@@ -160,16 +135,21 @@ class RuntimeInformation {
     return ind;
   }
 
-  double time_ = 0.0;
-  size_t costEstimate_ = 0;
-  size_t rows_ = 0;
-  size_t sizeEstimate_ = 0;
-  size_t cols_ = 0;
-  bool wasCached_ = false;
-  std::string descriptor_;
-  std::vector<std::string> columnNames_;
-  nlohmann::json details_;
-  std::vector<RuntimeInformation> children_;
+  static std::string_view toString(Status status) {
+    using enum Status;
+    switch (status) {
+      case completed:
+        return "completed";
+      case notStarted:
+        return "not started";
+      case failed:
+        return "failed";
+      case failedBecauseChildFailed:
+        return "failed because child failed";
+      default:
+        AD_FAIL();
+    }
+  }
 };
 
 inline void to_json(RuntimeInformation::ordered_json& j,
@@ -181,10 +161,14 @@ inline void to_json(RuntimeInformation::ordered_json& j,
       {"column_names", rti.columnNames_},
       {"total_time", rti.time_},
       {"operation_time", rti.getOperationTime()},
+      {"original_total_time", rti.originalTime_},
+      {"original_operation_time", rti.originalOperationTime_},
       {"was_cached", rti.wasCached_},
       {"details", rti.details_},
       {"estimated_total_cost", rti.costEstimate_},
       {"estimated_operation_cost", rti.getOperationCostEstimate()},
+      {"estimated_column_multiplicities", rti.multiplictyEstimates_},
       {"estimated_size", rti.sizeEstimate_},
+      {"status", RuntimeInformation::toString(rti.status_)},
       {"children", rti.children_}};
 }
