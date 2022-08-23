@@ -26,11 +26,33 @@ auto parse =
       return p.parseTypesafe(F);
     };
 
+auto parseBind = parse<&Parser::bind>;
+auto parseConstructTemplate = parse<&Parser::constructTemplate>;
+auto parseDataBlock = parse<&Parser::dataBlock>;
+auto parseExpression = parse<&Parser::expression>;
+auto parseGroupClause = parse<&Parser::groupClause>;
+auto parseGroupCondition = parse<&Parser::groupCondition>;
+auto parseHavingCondition = parse<&Parser::havingCondition>;
+auto parseInlineData = parse<&Parser::inlineData>;
+auto parseIri = parse<&Parser::iri>;
+auto parseIriref = parse<&Parser::iriref>;
+auto parseLimitOffsetClause = parse<&Parser::limitOffsetClauses>;
+auto parseNumericLiteral = parse<&Parser::numericLiteral>;
+auto parseOrderClause = parse<&Parser::orderClause>;
+auto parseOrderCondition = parse<&Parser::orderCondition>;
+auto parsePnameLn = parse<&Parser::pnameLn>;
+auto parsePnameNs = parse<&Parser::pnameNs>;
+auto parsePrefixDecl = parse<&Parser::prefixDecl>;
+auto parsePrefixedName = parse<&Parser::prefixedName>;
+auto parsePropertyListPathNotEmpty = parse<&Parser::propertyListPathNotEmpty>;
+auto parseSelectClause = parse<&Parser::selectClause>;
+auto parseSolutionModifier = parse<&Parser::solutionModifier>;
+auto parseTriplesSameSubjectPath = parse<&Parser::triplesSameSubjectPath>;
+auto parseVerbPathOrSimple = parse<&Parser::verbPathOrSimple>;
+
 template <typename T>
 void testNumericLiteral(const std::string& input, T target) {
-  // TODO: do for all tests
-  auto parserNumericLiteral = parse<&Parser::numericLiteral>;
-  auto result = parserNumericLiteral(input);
+  auto result = parseNumericLiteral(input);
   ASSERT_EQ(result.remainingText_.size(), 0);
   auto value = get<T>(result.resultOfParse_);
 
@@ -592,10 +614,7 @@ TEST(SparqlParser, VarOrTermGraphTerm) {
 TEST(SparqlParser, Iri) {
   auto expectIri = [](const string& input, const string& iri,
                       SparqlQleverVisitor::PrefixMap prefixMap = {}) {
-    // TODO<qup42> replace with curried parse... in `SparqlParserHelpers.h`
-    // Parse "by hand" in order not to pollute the `SparqlParserHelpers`.
-    ParserAndVisitor p{input, std::move(prefixMap)};
-    expectCompleteParse(p.parseTypesafe(&SparqlAutomaticParser::iri),
+    expectCompleteParse(parseIri(input, std::move(prefixMap)),
                         testing::Eq(iri));
   };
   expectIri("rdfs:label", "<http://www.w3.org/2000/01/rdf-schema#label>",
@@ -734,19 +753,13 @@ TEST(SparqlParser, LimitOffsetClause) {
 }
 
 TEST(SparqlParser, OrderCondition) {
-  auto parseOrderCondition = [](const std::string& input) {
-    ParserAndVisitor p{input};
-    return p.parseTypesafe(&SparqlAutomaticParser::orderCondition);
-  };
-  auto expectParseVariable = [&parseOrderCondition](const string& input,
-                                                    const string& variable,
-                                                    bool isDescending) {
+  auto expectParseVariable = [](const string& input, const string& variable,
+                                bool isDescending) {
     expectCompleteParse(parseOrderCondition(input),
                         IsVariableOrderKey(variable, isDescending));
   };
-  auto expectParseExpression = [&parseOrderCondition](const string& input,
-                                                      const string& expression,
-                                                      bool isDescending) {
+  auto expectParseExpression = [](const string& input, const string& expression,
+                                  bool isDescending) {
     expectCompleteParse(parseOrderCondition(input),
                         IsExpressionOrderKey(expression, isDescending));
   };
@@ -773,26 +786,21 @@ TEST(SparqlParser, OrderClause) {
 }
 
 TEST(SparqlParser, GroupCondition) {
-  auto parseGroupCondition = [](const std::string& input) {
-    ParserAndVisitor p{input};
-    return p.parseTypesafe(&SparqlAutomaticParser::groupCondition);
-  };
-  auto expectParseVariable = [&parseGroupCondition](const string& input,
-                                                    const string& variable) {
+  auto expectParseVariable = [](const string& input, const string& variable) {
     expectCompleteParse(parseGroupCondition(input),
                         IsVariableGroupKey(variable));
   };
-  auto expectParseExpression =
-      [&parseGroupCondition](const string& input, const string& expression) {
-        expectCompleteParse(parseGroupCondition(input),
-                            IsExpressionGroupKey(expression));
-      };
-  auto expectParseExpressionAlias =
-      [&parseGroupCondition](const string& input, const string& expression,
-                             const string& variable) {
-        expectCompleteParse(parseGroupCondition(input),
-                            IsAliasGroupKey(expression, variable));
-      };
+  auto expectParseExpression = [](const string& input,
+                                  const string& expression) {
+    expectCompleteParse(parseGroupCondition(input),
+                        IsExpressionGroupKey(expression));
+  };
+  auto expectParseExpressionAlias = [](const string& input,
+                                       const string& expression,
+                                       const string& variable) {
+    expectCompleteParse(parseGroupCondition(input),
+                        IsAliasGroupKey(expression, variable));
+  };
   // variable
   expectParseVariable("?test", "?test");
   // expression without binding
