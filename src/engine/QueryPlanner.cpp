@@ -1168,7 +1168,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
     const TripleGraph::Node& node = *tg._nodeMap.find(i)->second;
 
     auto pushPlan = [&](SubtreePlan plan) {
-      plan._idsOfIncludedNodes |= (uint64_t(1) << i);
+      plan._idsOfIncludedNodes = (uint64_t(1) << i);
       seeds.push_back(std::move(plan));
     };
 
