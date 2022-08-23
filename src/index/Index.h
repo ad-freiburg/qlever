@@ -21,6 +21,9 @@
 class IdTable;
 class TextBlockMetaData;
 
+// an empty Tag type.
+class TurtleParserAuto{};
+
 using json = nlohmann::json;
 
 enum struct Permutations {
@@ -176,7 +179,7 @@ class Index {
                                 vector<TextRecordIndex>& cids, vector<Id>& eids,
                                 vector<Score>& scores) const;
 
-  std::string getTextExcerpt(TextRecordIndex cid);
+  std::string getTextExcerpt(TextRecordIndex cid) const;
 
   // Only for debug reasons and external encoding tests.
   // Supply an empty vector to dump all lists above a size threshold.

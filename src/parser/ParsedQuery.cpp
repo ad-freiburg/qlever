@@ -5,6 +5,7 @@
 #include "ParsedQuery.h"
 
 #include <absl/strings/str_split.h>
+#include <absl/strings/str_join.h>
 
 #include <optional>
 #include <sstream>
@@ -12,8 +13,8 @@
 #include <utility>
 #include <vector>
 
-#include "./RdfEscaping.h"
-#include "absl/strings/str_join.h"
+#include <parser/RdfEscaping.h>
+#include <util/Conversions.h>
 
 using std::string;
 using std::vector;
