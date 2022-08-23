@@ -327,15 +327,24 @@ MATCHER_P4(IsSolutionModifier, groupByVariables, havingClauses, orderBy,
 
 // TODO: ExplainMatchResult?
 MATCHER_P(IsTriples, triples, "") {
-  return testing::Matches(testing::UnorderedElementsAreArray(triples))(
-      std::get<GraphPatternOperation::BasicGraphPattern>(arg.variant_)
-          ._whereClauseTriples);
+  if (holds_alternative<GraphPatternOperation::BasicGraphPattern>(
+          arg.variant_)) {
+    return testing::Matches(testing::UnorderedElementsAreArray(triples))(
+        std::get<GraphPatternOperation::BasicGraphPattern>(arg.variant_)
+            ._whereClauseTriples);
+  } else {
+    return false;
+  }
 }
 
 MATCHER_P2(IsBindd, target, expression, "") {
-  auto& bind = std::get<GraphPatternOperation::Bind>(arg.variant_);
-  return bind._target == target &&
-         bind._expression.getDescriptor() == expression;
+  if (holds_alternative<GraphPatternOperation::Bind>(arg.variant_)) {
+    auto& bind = std::get<GraphPatternOperation::Bind>(arg.variant_);
+    return bind._target == target &&
+           bind._expression.getDescriptor() == expression;
+  } else {
+    return false;
+  }
 }
 
 MATCHER_P(IsFilters, filters, "") {
@@ -348,12 +357,19 @@ MATCHER(IsOptional, "") {
 }
 
 MATCHER_P(IsChildren, childMatchers, "") {
-  if (arg._children.size() != childMatchers.size()) {
+  if (arg._children.size() != std::tuple_size_v<decltype(childMatchers)>) {
     return false;
   }
-  bool matches = true;
-  for (size_t i = 0; i < childMatchers.size(); ++i) {
-    matches &= testing::Matches(childMatchers[i])(arg._children[i]);
-  }
-  return matches;
+
+  auto sequence =
+      std::make_index_sequence<std::tuple_size_v<decltype(childMatchers)>>();
+
+  auto lambda = [&]<size_t... i>(std::index_sequence<i...>,
+                                 auto&&... matchers) {
+    return (... && testing::Value(arg._children[i], matchers));
+  };
+  auto lambdalambda = [&lambda, &sequence](auto... matchers) {
+    return lambda(sequence, matchers...);
+  };
+  return std::apply(lambdalambda, childMatchers);
 }

@@ -1188,7 +1188,7 @@ TEST(SparqlParser, WhereClause) {
   auto Optional = IsOptional();
   auto NotOptional = testing::Not(IsOptional());
   auto HasChildren = [](auto&&... childMatchers) {
-    return IsChildren(vector{childMatchers...});
+    return IsChildren(std::tuple{childMatchers...});
   };
 
   auto expectGraphPattern = [](const string&& input, const auto&... matchers) {
@@ -1225,14 +1225,14 @@ TEST(SparqlParser, WhereClause) {
                            {"?c", CONTAINS_ENTITY_PREDICATE, "?x"},
                            {"?c", CONTAINS_WORD_PREDICATE, "coca* abuse"}})),
       Filters({{SparqlFilter::FilterType::NE, "?x", "?y"}}), NotOptional);
-  //    expectGraphPattern(
-  //            "WHERE {?x <is-a> <Actor> . BIND(10 - ?foo as ?y) }",
-  //            HasChildren(Triples({{"?x", "<is-a>", "<Actor>"}}), Bind("?y",
-  //            "10-?foo")), NotOptional);
+  // TODO: Failing here is currently correct. The code is not yet correct.
+  expectGraphPattern("WHERE {?x <is-a> <Actor> . BIND(10 - ?foo as ?y) }",
+                     HasChildren(Triples({{"?x", "<is-a>", "<Actor>"}}),
+                                 Bind("?y", "10-?foo")),
+                     NotOptional);
   {
     auto pattern = parseWhereClause(
         "WHERE { ?var ?foo ?var BIND(?foo as ?bar) FILTER(?a = 10) OPTIONAL { "
-        "?f "
-        "?a ?b FILTER(?f > 0) } }");
+        "?f ?a ?b FILTER(?f > 0) } }");
   }
 }

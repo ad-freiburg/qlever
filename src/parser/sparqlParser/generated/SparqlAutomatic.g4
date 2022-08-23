@@ -151,6 +151,7 @@ valuesClause : ( VALUES dataBlock )?;
 triplesTemplate: triplesSameSubject ( '.' triplesTemplate? )?;
 
 
+// Corresponds to GraphPattern.
 groupGraphPattern
     : '{' ( subSelect | groupGraphPatternSub )'}'
     ;
@@ -163,6 +164,7 @@ triplesBlock
     : triplesSameSubjectPath ( '.' triplesBlock? )?
     ;
 
+// Corresponds to GraphPatternOperation.
 graphPatternNotTriples
     : groupOrUnionGraphPattern | optionalGraphPattern | minusGraphPattern | graphGraphPattern | serviceGraphPattern | filterR | bind | inlineData
     ;
