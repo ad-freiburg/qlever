@@ -365,7 +365,7 @@ Awaitable<json> Server::composeResponseQleverJson(
           std::vector<std::string>{"?subject", "?predicate", "?object"};
     }
 
-    j["runtimeInformation"] = RuntimeInformation::ordered_json(
+    j["runtimeInformation"] = nlohmann::ordered_json(
         qet.getRootOperation()->getRuntimeInfo());
 
     {
