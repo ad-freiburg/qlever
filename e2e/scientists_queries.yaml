@@ -1335,4 +1335,3 @@ queries:
       - num_rows : 194
       - selected: [ "?x" ]
       - contains_row: [ "<Albert_Einstein>" ]
-      - order_numeric: { "dir": "DESC", "var": "?count" }
