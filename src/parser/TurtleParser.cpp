@@ -3,13 +3,11 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
 
-#include "./TurtleParser.h"
+#include <parser/RdfEscaping.h>
+#include <parser/TurtleParser.h>
+#include <util/Conversions.h>
 
 #include <cstring>
-
-#include "../util/Conversions.h"
-#include "../util/TaskQueue.h"
-#include "./RdfEscaping.h"
 
 // _______________________________________________________________
 template <class T>
@@ -182,11 +180,11 @@ template <class T>
 bool TurtleParser<T>::object() {
   // these produce a single object that becomes part of a triple
   // check blank Node first because _: also could look like a prefix
-  if (blankNode() || literal() || iri()) {
+  // TODO<joka921> Currently collections and blankNodePropertyLists do not work
+  // on dblp when using the relaxed parser. Is this fixable?
+  if (blankNode() || literal() || iri() || collection() ||
+      blankNodePropertyList()) {
     emitTriple();
-    return true;
-  } else if (collection() || blankNodePropertyList()) {
-    // these have a more complex logic and produce their own triples
     return true;
   } else {
     return false;
@@ -228,8 +226,44 @@ bool TurtleParser<T>::collection() {
   if (!skip<TurtleTokenId::OpenRound>()) {
     return false;
   }
-  raise("The QLever turtle parser cannot handle collections yet");
-  // TODO<joka921> understand collections
+  std::vector<TripleComponent> objects;
+  while (object()) {
+    objects.push_back(std::move(_lastParseResult));
+  }
+  // The `object` rule creates triples, but those are incomplete in this case,
+  // so we remove them again.
+  _triples.resize(_triples.size() - objects.size());
+  // TODO<joka921> Move such functionality into a general util.
+  auto makeIri = [](std::string_view suffix) {
+    return absl::StrCat("<", RDF_PREFIX, suffix, ">");
+  };
+  static const std::string nil = makeIri("nil");
+  static const std::string first = makeIri("first");
+  static const std::string rest = makeIri("rest");
+
+  if (objects.empty()) {
+    _lastParseResult = nil;
+  } else {
+    // Create a new blank node for each collection element.
+    std::vector<std::string> blankNodes;
+    blankNodes.reserve(objects.size());
+    for (size_t i = 0; i < objects.size(); ++i) {
+      blankNodes.push_back(createAnonNode());
+    }
+
+    // The first blank node (the list head) will be the actual result (subject
+    // or object of the triple that contains the collection.
+    _lastParseResult = blankNodes.front();
+
+    // Add the triples for the linked list structure.
+    for (size_t i = 0; i < blankNodes.size(); ++i) {
+      _triples.push_back({blankNodes[i], first, objects[i]});
+      _triples.push_back({blankNodes[i], rest,
+                          i + 1 < blankNodes.size() ? blankNodes[i + 1] : nil});
+    }
+  }
+  check(skip<TurtleTokenId::CloseRound>());
+  return true;
 }
 
 // ____________________________________________________________________________
@@ -494,7 +528,16 @@ bool TurtleParser<T>::parseTerminal() {
 // ________________________________________________________________________
 template <class T>
 bool TurtleParser<T>::blankNodeLabel() {
-  return parseTerminal<TurtleTokenId::BlankNodeLabel>();
+  bool res = parseTerminal<TurtleTokenId::BlankNodeLabel>();
+  if (res) {
+    // Add a special prefix to ensure that the manually specified blank nodes
+    // never interfere with the automatically generated ones. The `substr`
+    // removes the leading `_:` which will be added againg by the `BlankNode`
+    // constructor
+    _lastParseResult =
+        BlankNode{false, _lastParseResult.getString().substr(2)}.toSparql();
+  }
+  return res;
 }
 
 // __________________________________________________________________________

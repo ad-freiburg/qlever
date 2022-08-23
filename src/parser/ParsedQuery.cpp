@@ -110,46 +110,6 @@ string SparqlTriple::asString() const {
 }
 
 // _____________________________________________________________________________
-string SparqlFilter::asString() const {
-  std::ostringstream os;
-  os << "FILTER(" << _lhs;
-  switch (_type) {
-    case EQ:
-      os << " < ";
-      break;
-    case NE:
-      os << " != ";
-      break;
-    case LT:
-      os << " < ";
-      break;
-    case LE:
-      os << " <= ";
-      break;
-    case GT:
-      os << " > ";
-      break;
-    case GE:
-      os << " >= ";
-      break;
-    case LANG_MATCHES:
-      os << " LANG_MATCHES ";
-      break;
-    case PREFIX:
-      os << " PREFIX ";
-      break;
-    case SparqlFilter::REGEX:
-      os << " REGEX ";
-      if (_regexIgnoreCase) {
-        os << "ignoring case ";
-      }
-      break;
-  }
-  os << _rhs << ")";
-  return std::move(os).str();
-}
-
-// _____________________________________________________________________________
 void ParsedQuery::expandPrefixes() {
   ad_utility::HashMap<string, string> prefixMap;
   prefixMap["ql"] = "<QLever-internal-function/>";
@@ -240,6 +200,105 @@ void ParsedQuery::expandPrefixes() {
     }
   }
 }
+
+// ________________________________________________________________________
+Variable ParsedQuery::addInternalBind(
+    sparqlExpression::SparqlExpressionPimpl expression) {
+  // Internal variable name to which the result of the helper bind is
+  // assigned.
+  std::string targetVariable =
+      INTERNAL_VARIABLE_PREFIX + std::to_string(numInternalVariables_);
+  numInternalVariables_++;
+  GraphPatternOperation::Bind bind{std::move(expression), targetVariable};
+  _rootGraphPattern._children.emplace_back(std::move(bind));
+  // Don't register the targetVariable as visible because it is used
+  // internally and should not be selected by SELECT *.
+  // TODO<qup42, joka921> Implement "internal" variables, that can't be
+  //  selected at all and can never interfere with variables from the
+  //  query.
+  return Variable{std::move(targetVariable)};
+}
+
+// ________________________________________________________________________
+void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
+  // Process groupClause
+  auto processVariable = [this](const Variable& groupKey) {
+    _groupByVariables.emplace_back(groupKey.name());
+  };
+  auto processExpression =
+      [this](sparqlExpression::SparqlExpressionPimpl groupKey) {
+        auto helperTarget = addInternalBind(std::move(groupKey));
+        _groupByVariables.emplace_back(helperTarget.name());
+      };
+  auto processAlias = [this](Alias groupKey) {
+    GraphPatternOperation::Bind helperBind{std::move(groupKey._expression),
+                                           groupKey._outVarName};
+    _rootGraphPattern._children.emplace_back(std::move(helperBind));
+    registerVariableVisibleInQueryBody(Variable{groupKey._outVarName});
+    _groupByVariables.emplace_back(groupKey._outVarName);
+  };
+
+  for (auto& orderKey : modifiers.groupByVariables_) {
+    std::visit(
+        ad_utility::OverloadCallOperator{processVariable, processExpression,
+                                         processAlias},
+        std::move(orderKey));
+  }
+
+  // Process havingClause
+  _havingClauses = std::move(modifiers.havingClauses_);
+
+  // Process orderClause
+  auto processVariableOrderKey = [this](VariableOrderKey orderKey) {
+    // Check whether grouping is done. The variable being ordered by
+    // must then be either grouped or the result of an alias in the select.
+    const vector<Variable>& groupByVariables = _groupByVariables;
+    if (!groupByVariables.empty() &&
+        !ad_utility::contains_if(groupByVariables,
+                                 [&orderKey](const Variable& var) {
+                                   return orderKey.variable_ == var.name();
+                                 }) &&
+        !ad_utility::contains_if(
+            selectClause().getAliases(), [&orderKey](const Alias& alias) {
+              return alias._outVarName == orderKey.variable_;
+            })) {
+      throw ParseException(
+          "Variable " + orderKey.variable_ +
+          " was used in an ORDER BY "
+          "clause, but is neither grouped, nor created as an alias in the "
+          "SELECT clause.");
+    }
+
+    _orderBy.push_back(std::move(orderKey));
+  };
+
+  // QLever currently only supports ordering by variables. To allow
+  // all `orderConditions`, the corresponding expression is bound to a new
+  // internal variable. Ordering is then done by this variable.
+  auto processExpressionOrderKey = [this](ExpressionOrderKey orderKey) {
+    if (!_groupByVariables.empty())
+      // TODO<qup42> Implement this by adding a hidden alias in the
+      //  SELECT clause.
+      throw ParseException(
+          "Ordering by an expression while grouping is not supported by "
+          "QLever. (The expression is \"" +
+          orderKey.expression_.getDescriptor() +
+          "\"). Please assign this expression to a "
+          "new variable in the SELECT clause and then order by this "
+          "variable.");
+    auto additionalVariable = addInternalBind(std::move(orderKey.expression_));
+    _orderBy.emplace_back(additionalVariable.name(), orderKey.isDescending_);
+  };
+
+  for (auto& orderKey : modifiers.orderBy_) {
+    std::visit(ad_utility::OverloadCallOperator{processVariableOrderKey,
+                                                processExpressionOrderKey},
+               std::move(orderKey));
+  }
+
+  // Process limitOffsetClause
+  _limitOffset = modifiers.limitOffset_;
+};
 
 // _____________________________________________________________________________
 void ParsedQuery::expandPrefix(

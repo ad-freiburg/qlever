@@ -289,3 +289,38 @@ MATCHER_P3(IsSelect, distinct, reduced, selection, "") {
   return arg._distinct == distinct && arg._reduced == reduced &&
          arg.getAliases().size() == alias_counter;
 }
+
+MATCHER_P4(IsSolutionModifier, groupByVariables, havingClauses, orderBy,
+           limitOffset, "") {
+  auto equalComp = []<typename T>(const T& a, const T& b) { return a == b; };
+  auto falseComp = [](auto, auto) { return false; };
+  auto exprOrderKeyComp = [](const ExpressionOrderKey& a,
+                             const std::pair<std::string, bool>& b) {
+    return a.isDescending_ == b.second &&
+           a.expression_.getDescriptor() == b.first;
+  };
+  auto pimplComp = [](const sparqlExpression::SparqlExpressionPimpl& a,
+                      const std::string& b) { return a.getDescriptor() == b; };
+  auto orderKeyComp =
+      [&exprOrderKeyComp, &equalComp, &falseComp](
+          const OrderKey& a,
+          const variant<std::pair<std::string, bool>, VariableOrderKey>& b) {
+        return std::visit(
+            ad_utility::OverloadCallOperator{exprOrderKeyComp, equalComp,
+                                             falseComp},
+            a, b);
+      };
+  auto groupKeyComp = [&pimplComp, &equalComp, &falseComp](
+                          const GroupKey& a,
+                          const variant<std::string, Alias, Variable>& b) {
+    return std::visit(
+        ad_utility::OverloadCallOperator{pimplComp, equalComp, falseComp}, a,
+        b);
+  };
+  return std::equal(arg.groupByVariables_.begin(), arg.groupByVariables_.end(),
+                    groupByVariables.begin(), groupKeyComp) &&
+         arg.havingClauses_ == havingClauses &&
+         std::equal(arg.orderBy_.begin(), arg.orderBy_.end(), orderBy.begin(),
+                    orderKeyComp) &&
+         arg.limitOffset_ == limitOffset;
+}

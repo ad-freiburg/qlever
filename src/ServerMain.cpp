@@ -1,18 +1,19 @@
 // Copyright 2011, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold <buchholb>
+//   2011-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+
+#include <CompilationInfo.h>
+#include <engine/Server.h>
+#include <global/Constants.h>
+#include <util/ProgramOptionsHelpers.h>
+#include <util/ReadableNumberFact.h>
 
 #include <boost/program_options.hpp>
 #include <cstdlib>
 #include <iostream>
 #include <string>
 #include <vector>
-
-#include "./CompilationInfo.h"
-#include "engine/Server.h"
-#include "global/Constants.h"
-#include "util/ProgramOptionsHelpers.h"
-#include "util/ReadableNumberFact.h"
 
 using std::cerr;
 using std::cout;
@@ -109,15 +110,13 @@ int main(int argc, char** argv) {
 
   try {
     po::store(po::parse_command_line(argc, argv, options), optionsMap);
-
     if (optionsMap.count("help")) {
       std::cout << options << '\n';
       return EXIT_SUCCESS;
     }
-
     po::notify(optionsMap);
   } catch (const std::exception& e) {
-    std::cerr << "Error in command-line Argument: " << e.what() << '\n';
+    std::cerr << "Error in command-line argument: " << e.what() << '\n';
     std::cerr << options << '\n';
     return EXIT_FAILURE;
   }

@@ -528,8 +528,8 @@ queries:
         ?s <Award_Won> ?award .
       }
       GROUP BY ?profession
-      ORDER BY DESC(?count)
       HAVING (?count > 300)
+      ORDER BY DESC(?count)
     checks:
       - num_rows: 6
       - num_cols: 2
@@ -1062,6 +1062,18 @@ queries:
       - contains_row: [ "<Albert_Einstein>", "<Mileva_Marić>", 42.0 ]
       - order_string: { "dir": "ASC", "var": "?x" }
 
+
+  - query: bind-at-beginning
+    type: no-text
+    sparql: |
+      SELECT * WHERE {
+          BIND(<Scientist> AS ?x)
+      }
+    checks:
+      - num_cols: 1
+      - num_rows: 1
+      - selected: [ "?x" ]
+      - contains_row: [ "<Scientist>" ]
 
   - query : select_asterisk_prefix-filter-disjunction
     type: no-text

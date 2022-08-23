@@ -28,6 +28,8 @@ class HasPredicateScan : public Operation {
 
   HasPredicateScan(QueryExecutionContext* qec, ScanType type);
 
+  HasPredicateScan(QueryExecutionContext* qec, SparqlTriple triple);
+
  private:
   virtual string asStringImpl(size_t indent = 0) const override;
 
@@ -59,7 +61,11 @@ class HasPredicateScan : public Operation {
   const std::string& getObject() const;
 
   vector<QueryExecutionTree*> getChildren() override {
-    return {_subtree.get()};
+    if (_subtree) {
+      return {_subtree.get()};
+    } else {
+      return {};
+    }
   }
 
   // These are made static and public mainly for easier testing
@@ -89,7 +95,7 @@ class HasPredicateScan : public Operation {
  private:
   ScanType _type;
   std::shared_ptr<QueryExecutionTree> _subtree;
-  size_t _subtreeColIndex;
+  size_t _subtreeColIndex = -1;
 
   std::string _subject;
   std::string _object;

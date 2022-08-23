@@ -4,11 +4,13 @@
 
 #pragma once
 
+#include <engine/ResultTable.h>
+#include <util/HashMap.h>
+
 #include <string>
 
-#include "../../engine/ResultTable.h"
-#include "../../index/Index.h"
-
+// Forward declarations to avoid cyclic dependencies
+class Index;
 enum ContextRole { SUBJECT, PREDICATE, OBJECT };
 
 struct Context {

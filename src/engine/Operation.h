@@ -1,19 +1,22 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author:
+//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+
 #pragma once
+
+#include <engine/QueryExecutionContext.h>
+#include <engine/ResultTable.h>
+#include <engine/RuntimeInformation.h>
+#include <util/Exception.h>
+#include <util/Log.h>
+#include <util/Timer.h>
 
 #include <iomanip>
 #include <iostream>
 #include <memory>
 #include <utility>
-
-#include "../util/Exception.h"
-#include "../util/Log.h"
-#include "../util/Timer.h"
-#include "QueryExecutionContext.h"
-#include "ResultTable.h"
-#include "RuntimeInformation.h"
 
 using std::endl;
 using std::pair;
@@ -119,6 +122,10 @@ class Operation {
     _limit = limit;
   }
 
+  // Create and return the runtime information wrt the size and cost estimates
+  // without actually executing the query.
+  virtual void createRuntimeInfoFromEstimates() final;
+
  protected:
   QueryExecutionContext* getExecutionContext() const {
     return _executionContext;
@@ -185,37 +192,26 @@ class Operation {
   //! Computes both, an EntityList and a HitList.
   virtual void computeResult(ResultTable* result) = 0;
 
-  // Create and store the complete runtime Information for this operation.
-  // All data that was previously stored in the runtime information will be
-  // deleted.
-  virtual void createRuntimeInformation(
-      const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
-      size_t timeInMilliseconds) final {
-    // reset
-    _runtimeInfo = RuntimeInformation();
-    // the column names might differ between a cached result and this operation,
-    // so we have to take the local ones.
-    _runtimeInfo.setColumnNames(getVariableColumns());
+  // Create and store the complete runtime information for this operation after
+  // it has either been succesfully computed or read from the cache.
+  virtual void updateRuntimeInformationOnSuccess(
+      const ConcurrentLruCache::ResultAndCacheStatus& resultAndCacheStatus,
+      size_t timeInMilliseconds) final;
 
-    _runtimeInfo.setCols(getResultWidth());
-    _runtimeInfo.setDescriptor(getDescriptor());
+  // Similar to the function above, but the components are specified manually.
+  // If nullopt is specified for the last argument, then the `_runtimeInfo` is
+  // expected to already have the correct children information. This is only
+  // allowed when `wasCached` is false, otherwise a runtime check will fail.
+  virtual void updateRuntimeInformationOnSuccess(
+      const ResultTable& resultTable, bool wasCached, size_t timeInMilliseconds,
+      std::optional<RuntimeInformation> runtimeInfo) final;
 
-    // Only the result that was actually computed (or read from cache) knows
-    // the correct information about the children computations.
-    _runtimeInfo.children() =
-        resultAndCacheStatus._resultPointer->_runtimeInfo.children();
-
-    _runtimeInfo.setTime(timeInMilliseconds);
-    _runtimeInfo.setRows(
-        resultAndCacheStatus._resultPointer->_resultTable->size());
-    _runtimeInfo.setWasCached(resultAndCacheStatus._wasCached);
-    _runtimeInfo.addDetail(
-        "original_total_time",
-        resultAndCacheStatus._resultPointer->_runtimeInfo.getTime());
-    _runtimeInfo.addDetail(
-        "original_operation_time",
-        resultAndCacheStatus._resultPointer->_runtimeInfo.getOperationTime());
-  }
+  // Create the runtime information in case the evaluation of this operation has
+  // failed. The first argument specifies whether this Operation caused the
+  // failure (true) or whether the failure is propagated form a failed child
+  // Operation (false).
+  void updateRuntimeInformationOnFailure(bool failureCausedByThisOperation,
+                                         size_t timeInMilliseconds);
 
   // Recursively call a function on all children.
   template <typename F>

@@ -14,12 +14,33 @@ void doComputeSubqueryS(const std::vector<A>* input,
                         const CompactVectorOfStrings<Id>& patterns);
 
 HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec, ScanType type)
-    : Operation(qec),
-      _type(type),
-      _subtree(nullptr),
-      _subtreeColIndex(-1),
-      _subject(),
-      _object() {}
+    : Operation(qec), _type(type) {}
+
+HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
+                                   SparqlTriple triple)
+    : Operation{qec} {
+  // Just pick one direction, they should be equivalent.
+  AD_CHECK(triple._p._iri == HAS_PREDICATE_PREDICATE);
+  // TODO(schnelle): Handle ?p ql:has-predicate ?p
+  _type = [&]() {
+    if (isVariable(triple._s) && (isVariable(triple._o))) {
+      if (triple._s == triple._o) {
+        throw std::runtime_error{
+            "ql:has-predicate with same variable for subject and object not "
+            "supported."};
+      }
+      return ScanType::FULL_SCAN;
+    } else if (isVariable(triple._s)) {
+      return ScanType::FREE_S;
+    } else if (isVariable(triple._o)) {
+      return ScanType::FREE_O;
+    } else {
+      AD_FAIL();
+    }
+  }();
+  setSubject(triple._s);
+  setObject(triple._o);
+}
 
 string HasPredicateScan::asStringImpl(size_t indent) const {
   std::ostringstream os;
@@ -28,16 +49,16 @@ string HasPredicateScan::asStringImpl(size_t indent) const {
   }
   switch (_type) {
     case ScanType::FREE_S:
-      os << "HAS_RELATION_SCAN with O = " << _object;
+      os << "HAS_PREDICATE_SCAN with O = " << _object;
       break;
     case ScanType::FREE_O:
-      os << "HAS_RELATION_SCAN with S = " << _subject;
+      os << "HAS_PREDICATE_SCAN with S = " << _subject;
       break;
     case ScanType::FULL_SCAN:
-      os << "HAS_RELATION_SCAN for the full relation";
+      os << "HAS_PREDICATE_SCAN for the full relation";
       break;
     case ScanType::SUBQUERY_S:
-      os << "HAS_RELATION_SCAN with S = " << _subtree->asString(indent);
+      os << "HAS_PREDICATE_SCAN with S = " << _subtree->asString(indent);
       break;
   }
   return std::move(os).str();
