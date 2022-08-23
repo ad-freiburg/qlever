@@ -19,7 +19,7 @@
 /// that information nicely formatted and to export it to JSON.
 class RuntimeInformation {
  public:
-  /// The computation status of an operation
+  /// The computation status of an operation.
   enum struct Status {
     notStarted,
     completed,
@@ -35,7 +35,7 @@ class RuntimeInformation {
   double totalTime_ = 0.0;
 
   /// In case this operation was read from the cache, we will store the time
-  /// information about the original computation in the following two members
+  /// information about the original computation in the following two members.
   double originalTotalTime_ = 0.0;
   double originalOperationTime_ = 0.0;
 
