@@ -1,7 +1,8 @@
 // Copyright 2019, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
-//
+// Author:
+//   2019      Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
+//   2022-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 #pragma once
 
 #include <absl/strings/str_join.h>
@@ -79,6 +80,30 @@ class RuntimeInformation {
         << " ms" << '\n';
     out << indentStr(indent) << "cached: " << ((wasCached_) ? "true" : "false")
         << '\n';
+    if (wasCached_) {
+      out << indentStr(indent) << "original_total_time: " << originalTime__ << " ms" << '\n';
+      out << indentStr(indent) << "original_operation_time: " << originalOperationTime_
+          << " ms" << '\n';
+    }
+    for (const auto& el : details_.items()) {
+      out << indentStr(indent) << "  " << el.key() << ": ";
+      // We want to print doubles with fixed precision and stream ints as their
+      // native type so they get thousands separators. For everything else we
+      // let nlohmann::json handle it
+      if (el.value().type() == json::value_t::number_float) {
+        out << ad_utility::to_string(el.value().get<double>(), 2);
+      } else if (el.value().type() == json::value_t::number_unsigned) {
+        out << el.value().get<uint64_t>();
+      } else if (el.value().type() == json::value_t::number_integer) {
+        out << el.value().get<int64_t>();
+      } else {
+        out << el.value();
+      }
+      if (el.key().ends_with("Time")) {
+        out << " ms";
+      }
+      out << '\n';
+    }
     if (!children_.empty()) {
       out << indentStr(indent) << "┬\n";
       for (const RuntimeInformation& child : children_) {
@@ -136,7 +161,6 @@ class RuntimeInformation {
   }
 
   static std::string_view toString(Status status) {
-    using enum Status;
     switch (status) {
       case completed:
         return "completed";
