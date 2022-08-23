@@ -17,8 +17,8 @@ using Parser = TurtleStringParser<Tokenizer>;
 // of this file. Set up a `Parser` with the given `input` and call the given
 // `rule` (a member function of `Parser` that returns a bool). Return the
 // parser, if the call to `rule` returns true, else return `std::nullopt`.
-template <size_t blankNodePrefix = 0>
-std::optional<Parser> parseRule(const std::string& input, auto rule) {
+template <auto rule, size_t blankNodePrefix = 0>
+std::optional<Parser> parseRule(const std::string& input) {
   Parser parser;
   parser.setBlankNodePrefixOnlyForTesting(blankNodePrefix);
   parser.setInputStream(input);
@@ -34,18 +34,24 @@ std::optional<Parser> parseRule(const std::string& input, auto rule) {
 // generated will start with "_:g_<blankNodePrefix>_".
 template <auto rule, size_t blankNodePrefix = 0>
 auto checkParseResult =
-    [](const std::string& input, TripleComponent expectedLastParseResult,
+    [](const std::string& input,
+       std::optional<TripleComponent> expectedLastParseResult = {},
        std::optional<size_t> expectedPosition = {},
-       std::vector<TurtleTriple> expectedTriples = {}) -> Parser {
-  auto optionalParser = parseRule<blankNodePrefix>(input, rule);
+       std::optional<std::vector<TurtleTriple>> expectedTriples = {})
+    -> Parser {
+  auto optionalParser = parseRule<rule, blankNodePrefix>(input);
   // We have to wrap this code into a void lambda because the `ASSERT_...`
   // macros only work inside void functions and we want to return the parser.
   [&]() {
     ASSERT_TRUE(optionalParser.has_value());
     auto& parser = optionalParser.value();
     ASSERT_EQ(parser.getPosition(), expectedPosition.value_or(input.size()));
-    ASSERT_EQ(expectedLastParseResult, parser.getLastParseResult());
-    ASSERT_EQ(expectedTriples, parser.getTriples());
+    if (expectedLastParseResult.has_value()) {
+      ASSERT_EQ(expectedLastParseResult, parser.getLastParseResult());
+    }
+    if (expectedTriples.has_value()) {
+      ASSERT_EQ(expectedTriples, parser.getTriples());
+    }
   }();
   return std::move(optionalParser.value());
 };
@@ -123,24 +129,18 @@ TEST(TurtleParserTest, prefixedName) {
 }
 
 TEST(TurtleParserTest, prefixID) {
-  TurtleStringParser<Tokenizer> p;
-  string s = "@prefix bla:<www.bla.org/> .";
-  p.setInputStream(s);
-  ASSERT_TRUE(p.prefixID());
+  auto checkPrefixId = checkParseResult<&Parser::prefixID>;
+  auto p = checkPrefixId("@prefix bla:<www.bla.org/> .");
   ASSERT_EQ(p._prefixMap["bla"], "www.bla.org/");
-  ASSERT_EQ(p.getPosition(), s.size());
 
   // different spaces that don't change meaning
-  s = "@prefix bla: <www.bla.org/>.";
-  p.setInputStream(s);
-  ASSERT_TRUE(p.prefixID());
+  std::string s;
+  p = checkPrefixId("@prefix bla: <www.bla.org/>.");
   ASSERT_EQ(p._prefixMap["bla"], "www.bla.org/");
-  ASSERT_EQ(p.getPosition(), s.size());
 
   // invalid LL1
-  s = "@prefix bla<www.bla.org/>.";
-  p.setInputStream(s);
-  ASSERT_THROW(p.prefixID(), TurtleParser<Tokenizer>::ParseException);
+  ASSERT_THROW(checkPrefixId("@prefix bla<www.bla.org/>."),
+               Parser::ParseException);
 
   s = "@prefxxix bla<www.bla.org/>.";
   p.setInputStream(s);
@@ -151,34 +151,18 @@ TEST(TurtleParserTest, prefixID) {
 }
 
 TEST(TurtleParserTest, stringParse) {
-  TurtleStringParser<Tokenizer> p;
-  string s1("\"double quote\"");
-  string s2("\'single quote\'");
-  string s3("\"\"\"multiline \n double quote\"\"\"");
-  string s4("\'\'\'multiline \n single quote\'\'\'");
+  auto checkString = checkParseResult<&Parser::stringParse>;
+  std::string s1("\"double quote\"");
+  std::string s2("\'single quote\'");
+  std::string s3("\"\"\"multiline \n double quote\"\"\"");
+  std::string s4("\'\'\'multiline \n single quote\'\'\'");
 
+  checkString(s1, s1);
+  checkString(s2, s2);
   // the main thing to test here is that s3 does not prefix-match the simple
   // string "" but the complex string """..."""
-
-  p.setInputStream(s1);
-  ASSERT_TRUE(p.stringParse());
-  ASSERT_EQ(p._lastParseResult, s1);
-  ASSERT_EQ(p.getPosition(), s1.size());
-
-  p.setInputStream(s2);
-  ASSERT_TRUE(p.stringParse());
-  ASSERT_EQ(p._lastParseResult, s2);
-  ASSERT_EQ(p.getPosition(), s2.size());
-
-  p.setInputStream(s3);
-  ASSERT_TRUE(p.stringParse());
-  ASSERT_EQ(p._lastParseResult, s3);
-  ASSERT_EQ(p.getPosition(), s3.size());
-
-  p.setInputStream(s4);
-  ASSERT_TRUE(p.stringParse());
-  ASSERT_EQ(p._lastParseResult, s4);
-  ASSERT_EQ(p.getPosition(), s4.size());
+  checkString(s3, s3);
+  checkString(s4, s4);
 }
 
 TEST(TurtleParserTest, rdfLiteral) {
@@ -200,16 +184,11 @@ TEST(TurtleParserTest, rdfLiteral) {
   literals.push_back(R"("+144321"^^)"s + "<" + XSD_INTEGER_TYPE + ">");
   expected.emplace_back(144321);
 
-  TurtleStringParser<Tokenizer> p;
   for (size_t i = 0; i < literals.size(); ++i) {
-    const auto& literal = literals[i];
-    const auto& exp = expected[i];
-    p.setInputStream(literal);
-    ASSERT_TRUE(p.rdfLiteral());
-    ASSERT_EQ(p._lastParseResult, exp);
-    ASSERT_EQ(p.getPosition(), literal.size());
+    checkParseResult<&Parser::rdfLiteral>(literals[i], expected[i]);
   }
 
+  TurtleStringParser<Tokenizer> p;
   p._prefixMap["doof"] = "www.doof.org/";
   string s("\"valuePrefixed\"^^doof:sometype");
   p.setInputStream(s);
@@ -235,10 +214,9 @@ TEST(TurtleParserTest, blankNodePropertyList) {
   p._activePredicate = "<p1>";
 
   string blankNodeL = "[<p2> <ob2>; <p3> <ob3>]";
-  std::vector<TurtleTriple> exp;
-  exp.push_back({"<s>", "<p1>", TripleComponent{"_:g_5_0"}});
-  exp.push_back({"_:g_5_0", "<p2>", TripleComponent{"<ob2>"}});
-  exp.push_back({"_:g_5_0", "<p3>", TripleComponent{"<ob3>"}});
+  std::vector<TurtleTriple> exp = {{"<s>", "<p1>", "_:g_5_0"},
+                                   {"_:g_5_0", "<p2>", "<ob2>"},
+                                   {"_:g_5_0", "<p3>", "<ob3>"}};
   p.setInputStream(blankNodeL);
   p.setBlankNodePrefixOnlyForTesting(5);
   ASSERT_TRUE(p.blankNodePropertyList());
@@ -322,12 +300,9 @@ TEST(TurtleParserTest, numericLiteral) {
   std::vector<TripleComponent> expected{2,   -2,     42.209,   -42.239,
                                         .74, 2.3e12, 2.34e-14, -0.3e2};
 
-  TurtleStringParser<Tokenizer> parser;
+  auto checkNumericLiteral = checkParseResult<&Parser::numericLiteral>;
   for (size_t i = 0; i < literals.size(); ++i) {
-    const auto& literal = literals[i];
-    parser.setInputStream(literal);
-    ASSERT_TRUE(parser.numericLiteral());
-    ASSERT_EQ(parser._lastParseResult, expected[i]);
+    checkNumericLiteral(literals[i], expected[i]);
   }
 }
 
@@ -488,27 +463,17 @@ TEST(TurtleParserTest, DateLiterals) {
       ":v:date:0000000000000002083-12-00T00:00:00"};
 
   for (size_t i = 0; i < dateLiterals.size(); ++i) {
-    auto object =
-        TurtleStringParser<Tokenizer>::parseTripleObject(dateLiterals[i]);
-    ASSERT_TRUE(object.isString());
-    EXPECT_EQ(object.getString(), expected[i]);
+    checkParseResult<&Parser::object>(dateLiterals[i], expected[i]);
   }
 }
 
 TEST(TurtleParserTest, booleanLiteral) {
-  TurtleStringParser<Tokenizer> parser;
-  parser.setInputStream("true");
-  ASSERT_TRUE(parser.booleanLiteral());
-  ASSERT_EQ("\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
-            parser._lastParseResult);
-
-  parser.setInputStream("false");
-  ASSERT_TRUE(parser.booleanLiteral());
-  ASSERT_EQ("\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
-            parser._lastParseResult);
-
-  parser.setInputStream("maybe");
-  ASSERT_FALSE(parser.booleanLiteral());
+  constexpr auto bl = &Parser::booleanLiteral;
+  checkParseResult<bl>("true",
+                       "\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>");
+  checkParseResult<bl>("false",
+                       "\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>");
+  ASSERT_FALSE(parseRule<bl>("maybe"));
 }
 
 TEST(TurtleParserTest, collection) {
@@ -519,11 +484,13 @@ TEST(TurtleParserTest, collection) {
   using TC = TripleComponent;
   using TT = TurtleTriple;
   auto checkCollection = checkParseResult<&Parser::collection, 22>;
-  checkCollection("()", TC{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"});
+  checkCollection("()", "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>");
 
-  checkCollection(
-      "(42 <alpha> \"me\")", TC{"_:g_22_0"}, {},
-      {TT{"_:g_22_0", first, 42}, TT{"_:g_22_0", rest, "_:g_22_1"},
-       TT{"_:g_22_1", first, "<alpha>"}, TT{"_:g_22_1", rest, "_:g_22_2"},
-       TT{"_:g_22_2", first, "\"me\""}, TT{"_:g_22_2", rest, nil}});
+  checkCollection("(42 <alpha> \"me\")", TC{"_:g_22_0"}, {},
+                  std::vector<TT>{{"_:g_22_0", first, 42},
+                                  {"_:g_22_0", rest, "_:g_22_1"},
+                                  {"_:g_22_1", first, "<alpha>"},
+                                  {"_:g_22_1", rest, "_:g_22_2"},
+                                  {"_:g_22_2", first, "\"me\""},
+                                  {"_:g_22_2", rest, nil}});
 }

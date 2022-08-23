@@ -229,3 +229,5 @@ addLinkAndDiscoverTest(ValueIdTest absl::flat_hash_set)
 #addLinkAndDiscoverTest(ValueIdComparatorsTest)
 
 addLinkAndDiscoverTest(LambdaHelpersTest)
+
+addLinkAndDiscoverTest(ParseExceptionTest parser)
