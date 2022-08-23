@@ -10,8 +10,8 @@
 // ________________________________________________________________________________________________________________
 std::string RuntimeInformation::toString() const {
   std::ostringstream buffer;
-  // imbue with the same locale as std::cout which uses for exanoke
-  // thousands separators
+  // Imbue with the same locale as std::cout which uses for example
+  // thousands separators.
   buffer.imbue(ad_utility::commaLocale);
   // So floats use fixed precision
   buffer << std::fixed << std::setprecision(2);
@@ -20,7 +20,7 @@ std::string RuntimeInformation::toString() const {
 }
 
 namespace {
-// A small formatting helper used inside RuntimeInformation::writeToStream
+// A small formatting helper used inside RuntimeInformation::writeToStream.
 std::string indentStr(size_t indent) {
   std::string ind;
   for (size_t i = 0; i < indent; i++) {
