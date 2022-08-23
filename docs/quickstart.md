@@ -25,6 +25,13 @@ the QLever repository uses a few submodules.
         cd qlever-code
         docker build -t qlever .
 
+Note: The compilation of qlever by default runs in parallel by default, using the number of logical cores on your 
+machine as the degree of parallelism.  If it runs out of memory on your machine, you can manually set the degree of 
+parallelism by replacing `ninja` (at the end of line 19) by `ninja -j <num_cores_to_use>`. A good starting point for 
+`<num_cores_to_use>` is the available amount of RAM on your machine in GB, divided by 2. You can detect that you ran 
+out of memory when you encounter error messages like
+`c++: fatal error: Killed signal terminated program cc1plus .compilation terminated.`.
+
 ## Get the data
 
 Create and go to a directory of your choice, and download or copy an N-Triples
