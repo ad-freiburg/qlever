@@ -48,10 +48,10 @@ void appendVector(std::vector<T>& destination, std::vector<T>&& source) {
 /**
  * Applies the UnaryOperation to all elements of the vector.
  */
-template <typename Input, typename F>
-auto transform(std::vector<Input>&& input, F unaryOp)
-    -> std::vector<decltype(unaryOp(std::declval<Input>()))> {
-  std::vector<decltype(unaryOp(std::declval<Input>()))> out;
+template <typename Input, typename F, typename Output = std::invoke_result_t<F, Input&&>
+std::vector<Output> transform(std::vector<Input>&& input, F unaryOp) {
+  std::vector<Output> out;
+  out.reserve(input.size());
   std::transform(std::make_move_iterator(input.begin()),
                  std::make_move_iterator(input.end()), std::back_inserter(out),
                  unaryOp);
