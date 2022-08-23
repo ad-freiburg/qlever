@@ -180,8 +180,8 @@ void Operation::checkTimeout() const {
 void Operation::updateRuntimeInformationOnSuccess(
     const ResultTable& resultTable, bool wasCached, size_t timeInMilliseconds,
     std::optional<RuntimeInformation> runtimeInfo) {
-  _runtimeInfo.time_ = timeInMilliseconds;
-  _runtimeInfo.rows_ = resultTable.size();
+  _runtimeInfo.totalTime_ = timeInMilliseconds;
+  _runtimeInfo.numRows_ = resultTable.size();
   _runtimeInfo.wasCached_ = wasCached;
 
   _runtimeInfo.status_ = RuntimeInformation::completed;
@@ -192,7 +192,7 @@ void Operation::updateRuntimeInformationOnSuccess(
 
   if (runtimeInfo.has_value()) {
     if (wasCached) {
-      _runtimeInfo.originalTime_ = runtimeInfo->time_;
+      _runtimeInfo.originalTotalTime_ = runtimeInfo->totalTime_;
       _runtimeInfo.originalOperationTime_ = runtimeInfo->getOperationTime();
       _runtimeInfo.details_ = std::move(runtimeInfo->details_);
     }
@@ -228,7 +228,7 @@ void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
     _runtimeInfo.children_.push_back(child->getRootOperation()->_runtimeInfo);
   }
 
-  _runtimeInfo.time_ = timeInMilliseconds;
+  _runtimeInfo.totalTime_ = timeInMilliseconds;
   _runtimeInfo.status_ = RuntimeInformation::failed;
 }
 
@@ -238,7 +238,7 @@ void Operation::createRuntimeInfoFromEstimates() {
   _runtimeInfo = RuntimeInformation{};
   _runtimeInfo.setColumnNames(getVariableColumns());
   const auto numCols = getResultWidth();
-  _runtimeInfo.cols_ = numCols;
+  _runtimeInfo.numCols_ = numCols;
   _runtimeInfo.descriptor_ = getDescriptor();
 
   for (const auto& child : getChildren()) {
@@ -256,15 +256,15 @@ void Operation::createRuntimeInfoFromEstimates() {
   for (size_t i = 0; i < numCols; ++i) {
     multiplicityEstimates.push_back(getMultiplicity(i));
   }
-  _runtimeInfo.multiplictyEstimates_ = multiplicityEstimates;
+  _runtimeInfo.multiplicityEstimates_ = multiplicityEstimates;
 
   auto cachedResult =
       _executionContext->getQueryTreeCache().resultAt(asString());
   if (cachedResult) {
     _runtimeInfo.wasCached_ = true;
 
-    _runtimeInfo.rows_ = cachedResult->_resultTable->size();
-    _runtimeInfo.originalTime_ = cachedResult->_runtimeInfo.time_;
+    _runtimeInfo.numRows_ = cachedResult->_resultTable->size();
+    _runtimeInfo.originalTotalTime_ = cachedResult->_runtimeInfo.totalTime_;
     _runtimeInfo.originalOperationTime_ =
         cachedResult->_runtimeInfo.getOperationTime();
   }

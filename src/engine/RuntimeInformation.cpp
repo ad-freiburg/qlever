@@ -28,26 +28,28 @@ std::string indentStr(size_t indent) {
   }
   return ind;
 }
-}
+}  // namespace
 
 // ________________________________________________________________________________________________________________
 void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
   using json = nlohmann::json;
   out << indentStr(indent) << '\n';
   out << indentStr(indent - 1) << "├─ " << descriptor_ << '\n';
-  out << indentStr(indent) << "result_size: " << rows_ << " x " << cols_
+  out << indentStr(indent) << "result_size: " << numRows_ << " x " << numCols_
       << '\n';
   out << indentStr(indent) << "columns: " << absl::StrJoin(columnNames_, ", ")
       << '\n';
-  out << indentStr(indent) << "total_time: " << time_ << " ms" << '\n';
-  out << indentStr(indent) << "operation_time: " << getOperationTime()
-      << " ms" << '\n';
+  out << indentStr(indent) << "total_time: " << totalTime_ << " ms" << '\n';
+  out << indentStr(indent) << "operation_time: " << getOperationTime() << " ms"
+      << '\n';
   out << indentStr(indent) << "cached: " << ((wasCached_) ? "true" : "false")
       << '\n';
   if (wasCached_) {
-    out << indentStr(indent) << "original_total_time: " << originalTime_ << " ms" << '\n';
-    out << indentStr(indent) << "original_operation_time: " << originalOperationTime_
+    out << indentStr(indent) << "original_total_time: " << originalTotalTime_
         << " ms" << '\n';
+    out << indentStr(indent)
+        << "original_operation_time: " << originalOperationTime_ << " ms"
+        << '\n';
   }
   for (const auto& el : details_.items()) {
     out << indentStr(indent) << "  " << el.key() << ": ";
@@ -89,9 +91,13 @@ void RuntimeInformation::setColumnNames(
 // ________________________________________________________________________________________________________________
 double RuntimeInformation::getOperationTime() const {
   if (wasCached_) {
-    return time_;
+    return totalTime_;
   } else {
-    return time_ - getChildrenTime();
+    auto result = totalTime_;
+    for (const RuntimeInformation& child : children_) {
+      result -= child.totalTime_;
+    }
+    return result;
   }
 }
 
@@ -102,15 +108,6 @@ size_t RuntimeInformation::getOperationCostEstimate() const {
     result -= child.costEstimate_;
   }
   return result;
-}
-
-// ________________________________________________________________________________________________________________
-double RuntimeInformation::getChildrenTime() const {
-  double sum = 0;
-  for (const RuntimeInformation& child : children_) {
-    sum += child.time_;
-  }
-  return sum;
 }
 
 // ________________________________________________________________________________________________________________
@@ -125,26 +122,26 @@ std::string_view RuntimeInformation::toString(Status status) {
     case failedBecauseChildFailed:
       return "failed because child failed";
     default:
-    AD_FAIL();
+      AD_FAIL();
   }
 }
 
 // ________________________________________________________________________________________________________________
-void to_json (nlohmann::ordered_json& j, const RuntimeInformation& rti) {
-   j = nlohmann::ordered_json {
+void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
+  j = nlohmann::ordered_json{
       {"description", rti.descriptor_},
-      {"result_rows", rti.rows_},
-      {"result_cols", rti.cols_},
+      {"result_rows", rti.numRows_},
+      {"result_cols", rti.numCols_},
       {"column_names", rti.columnNames_},
-      {"total_time", rti.time_},
+      {"total_time", rti.totalTime_},
       {"operation_time", rti.getOperationTime()},
-      {"original_total_time", rti.originalTime_},
+      {"original_total_time", rti.originalTotalTime_},
       {"original_operation_time", rti.originalOperationTime_},
       {"was_cached", rti.wasCached_},
       {"details", rti.details_},
       {"estimated_total_cost", rti.costEstimate_},
       {"estimated_operation_cost", rti.getOperationCostEstimate()},
-      {"estimated_column_multiplicities", rti.multiplictyEstimates_},
+      {"estimated_column_multiplicities", rti.multiplicityEstimates_},
       {"estimated_size", rti.sizeEstimate_},
       {"status", RuntimeInformation::toString(rti.status_)},
       {"children", rti.children_}};

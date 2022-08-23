@@ -365,8 +365,8 @@ Awaitable<json> Server::composeResponseQleverJson(
           std::vector<std::string>{"?subject", "?predicate", "?object"};
     }
 
-    j["runtimeInformation"] = nlohmann::ordered_json(
-        qet.getRootOperation()->getRuntimeInfo());
+    j["runtimeInformation"] =
+        nlohmann::ordered_json(qet.getRootOperation()->getRuntimeInfo());
 
     {
       size_t limit = std::min(query._limitOffset._limit, maxSend);
