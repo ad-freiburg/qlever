@@ -200,10 +200,10 @@ void Operation::updateRuntimeInformationOnSuccess(
     // the correct information about the children computations.
     _runtimeInfo.children_ = std::move(runtimeInfo->children_);
   } else {
-    // The result was computed by this instance, so we can use the information
-    // on the children.
+    // The result was computed by this operation (not read from the cache). Therefore, for each child of this operation
+    // the correct runtime is available.
+    _runtimeInfo.children_.clear();
     for (auto* child : getChildren()) {
-      _runtimeInfo.children_.clear();
       AD_CHECK(child);
       _runtimeInfo.children_.push_back(
           child->getRootOperation()->getRuntimeInfo());

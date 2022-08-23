@@ -3,6 +3,7 @@
 // Author:
 //   2019      Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 //   2022-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+
 #pragma once
 
 #include <absl/strings/str_join.h>
