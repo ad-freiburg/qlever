@@ -1,24 +1,26 @@
 // Copyright 2021, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
+// Authors:
+//   2021 Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
+//   2022 Julian Mundhahs (mundhahj@tf.informatik.uni-freiburg.de)
 
 #pragma once
 
+#include <parser/ParseException.h>
+
 #include <string>
 
-#include "../../parser/ParseException.h"
 #include "BaseErrorListener.h"
-#include "DefaultErrorStrategy.h"
-#include "RecognitionException.h"
+#include "ParserRuleContext.h"
+#include "Recognizer.h"
+#include "Token.h"
+#include "absl/strings/str_cat.h"
 
-struct ThrowingErrorStrategy : public antlr4::DefaultErrorStrategy {
-  void reportError(antlr4::Parser*,
-                   const antlr4::RecognitionException& e) override {
-    throw antlr4::ParseCancellationException{
-        e.what() + std::string{" at token \""} +
-        e.getOffendingToken()->getText() + '"'};
-  }
-};
+ExceptionMetadata generateMetadata(antlr4::Recognizer* recognizer,
+                                   antlr4::Token* offendingToken, size_t line,
+                                   size_t charPositionInLine);
+
+ExceptionMetadata generateMetadata(antlr4::ParserRuleContext* ctx);
 
 /**
  * antlr::ANTLRErrorListener that raises encountered syntaxErrors as
@@ -26,11 +28,8 @@ struct ThrowingErrorStrategy : public antlr4::DefaultErrorStrategy {
  * included as exception cause.
  */
 struct ThrowingErrorListener : public antlr4::BaseErrorListener {
-  void syntaxError([[maybe_unused]] antlr4::Recognizer* recognizer,
-                   [[maybe_unused]] antlr4::Token* offendingSymbol, size_t line,
+  void syntaxError(antlr4::Recognizer* recognizer,
+                   antlr4::Token* offendingSymbol, size_t line,
                    size_t charPositionInLine, const std::string& msg,
-                   [[maybe_unused]] std::exception_ptr e) override {
-    throw ParseException{
-        absl::StrCat("line ", line, ":", charPositionInLine, " ", msg)};
-  }
+                   std::exception_ptr e) override;
 };

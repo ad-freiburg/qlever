@@ -474,9 +474,10 @@ ad_utility::streams::stream_generator Server::composeTurtleResponse(
 }
 
 // _____________________________________________________________________________
-json Server::composeErrorResponseJson(const string& query,
-                                      const std::string& errorMsg,
-                                      ad_utility::Timer& requestTimer) {
+json Server::composeErrorResponseJson(
+    const string& query, const std::string& errorMsg,
+    ad_utility::Timer& requestTimer,
+    const std::optional<ExceptionMetadata>& metadata) {
   requestTimer.stop();
 
   json j;
@@ -486,6 +487,18 @@ json Server::composeErrorResponseJson(const string& query,
   j["time"]["total"] = requestTimer.msecs();
   j["time"]["computeResult"] = requestTimer.msecs();
   j["exception"] = errorMsg;
+
+  if (metadata.has_value()) {
+    auto& value = metadata.value();
+    j["metadata"]["startIndex"] = value.startIndex_;
+    j["metadata"]["stopIndex_"] = value.stopIndex_;
+    // The ANTLR parser may not see the whole query. (The reason is value mixing
+    // of the old and new parser.) To detect/work with this we also transmit
+    // what ANTLR saw as query.
+    // TODO<qup42> remove once the whole query is parsed with ANTLR.
+    j["metadata"]["query"] = value.query_;
+  }
+
   return j;
 }
 
@@ -544,6 +557,7 @@ boost::asio::awaitable<void> Server::processQuery(
   // to the client. Note that the C++ standard forbids co_await in the catch
   // block, hence the workaround with the optional `exceptionErrorMsg`.
   std::optional<std::string> exceptionErrorMsg;
+  std::optional<ExceptionMetadata> metadata;
   // Also store the QueryExecutionTree outside of the try-catch block to gain
   // access to the runtimeInformation in the case of an error.
   std::optional<QueryExecutionTree> queryExecutionTree;
@@ -725,13 +739,21 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(DEBUG) << "Runtime Info:\n"
                << qet.getRootOperation()->getRuntimeInfo().toString()
                << std::endl;
+  } catch (const ParseException& e) {
+    exceptionErrorMsg = e.what();
+    metadata = e.metadata();
   } catch (const std::exception& e) {
     exceptionErrorMsg = e.what();
   }
+  // TODO<qup42> at this stage should probably have a wrapper that takes
+  //  optional<errorMsg> and optional<metadata> and does this logic
   if (exceptionErrorMsg) {
     LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
     auto errorResponseJson = composeErrorResponseJson(
-        query, exceptionErrorMsg.value(), requestTimer);
+        query, exceptionErrorMsg.value(), requestTimer, metadata);
+    if (metadata.has_value()) {
+      LOG(ERROR) << metadata.value().coloredError() << std::endl;
+    }
     if (queryExecutionTree) {
       errorResponseJson["runtimeInformation"] =
           RuntimeInformation::ordered_json(

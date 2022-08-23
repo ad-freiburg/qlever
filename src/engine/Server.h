@@ -156,9 +156,10 @@ class Server {
   Awaitable<ad_utility::streams::stream_generator> composeResponseSepValues(
       const ParsedQuery& query, const QueryExecutionTree& qet) const;
 
-  static json composeErrorResponseJson(const string& query,
-                                       const std::string& errorMsg,
-                                       ad_utility::Timer& requestTimer);
+  static json composeErrorResponseJson(
+      const string& query, const std::string& errorMsg,
+      ad_utility::Timer& requestTimer,
+      const std::optional<ExceptionMetadata>& metadata = std::nullopt);
 
   static ad_utility::streams::stream_generator composeTurtleResponse(
       const ParsedQuery& query, const QueryExecutionTree& qet);

@@ -16,12 +16,43 @@
 #include "../src/util/antlr/ANTLRErrorHandling.h"
 #include "SparqlAntlrParserTestHelpers.h"
 
-using namespace antlr4;
 using namespace sparqlParserHelpers;
+using Parser = SparqlAutomaticParser;
+
+template <auto F>
+auto parse =
+    [](const string& input, SparqlQleverVisitor::PrefixMap prefixes = {}) {
+      ParserAndVisitor p{input, std::move(prefixes)};
+      return p.parseTypesafe(F);
+    };
+
+auto parseBind = parse<&Parser::bind>;
+auto parseConstructTemplate = parse<&Parser::constructTemplate>;
+auto parseDataBlock = parse<&Parser::dataBlock>;
+auto parseExpression = parse<&Parser::expression>;
+auto parseGroupClause = parse<&Parser::groupClause>;
+auto parseGroupCondition = parse<&Parser::groupCondition>;
+auto parseHavingCondition = parse<&Parser::havingCondition>;
+auto parseInlineData = parse<&Parser::inlineData>;
+auto parseIri = parse<&Parser::iri>;
+auto parseIriref = parse<&Parser::iriref>;
+auto parseLimitOffsetClause = parse<&Parser::limitOffsetClauses>;
+auto parseNumericLiteral = parse<&Parser::numericLiteral>;
+auto parseOrderClause = parse<&Parser::orderClause>;
+auto parseOrderCondition = parse<&Parser::orderCondition>;
+auto parsePnameLn = parse<&Parser::pnameLn>;
+auto parsePnameNs = parse<&Parser::pnameNs>;
+auto parsePrefixDecl = parse<&Parser::prefixDecl>;
+auto parsePrefixedName = parse<&Parser::prefixedName>;
+auto parsePropertyListPathNotEmpty = parse<&Parser::propertyListPathNotEmpty>;
+auto parseSelectClause = parse<&Parser::selectClause>;
+auto parseSolutionModifier = parse<&Parser::solutionModifier>;
+auto parseTriplesSameSubjectPath = parse<&Parser::triplesSameSubjectPath>;
+auto parseVerbPathOrSimple = parse<&Parser::verbPathOrSimple>;
 
 template <typename T>
 void testNumericLiteral(const std::string& input, T target) {
-  auto result = sparqlParserHelpers::parseNumericLiteral(input);
+  auto result = parseNumericLiteral(input);
   ASSERT_EQ(result.remainingText_.size(), 0);
   auto value = get<T>(result.resultOfParse_);
 
@@ -583,12 +614,8 @@ TEST(SparqlParser, VarOrTermGraphTerm) {
 TEST(SparqlParser, Iri) {
   auto expectIri = [](const string& input, const string& iri,
                       SparqlQleverVisitor::PrefixMap prefixMap = {}) {
-    // TODO<qup42> replace with curried parse... in `SparqlParserHelpers.h`
-    // Parse "by hand" in order not to pollute the `SparqlParserHelpers`.
-    ParserAndVisitor p{input, std::move(prefixMap)};
-    expectCompleteParse(
-        p.parseTypesafe(input, "iri", &SparqlAutomaticParser::iri),
-        testing::Eq(iri));
+    expectCompleteParse(parseIri(input, std::move(prefixMap)),
+                        testing::Eq(iri));
   };
   expectIri("rdfs:label", "<http://www.w3.org/2000/01/rdf-schema#label>",
             {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});
@@ -698,76 +725,27 @@ TEST(SparqlParser, Integer) {
     string input = "-1";
     ParserAndVisitor p{input};
 
-    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_),
-                 antlr4::ParseCancellationException);
+    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_), ParseException);
   }
 }
 
 TEST(SparqlParser, LimitOffsetClause) {
+  auto expectLimitOffset = [](const string& input, uint64_t limit,
+                              uint64_t textLimit, uint64_t offset) {
+    expectCompleteParse(parseLimitOffsetClause(input),
+                        IsLimitOffset(limit, textLimit, offset));
+  };
+  expectLimitOffset("LIMIT 10", 10, 1, 0);
+  expectLimitOffset("OFFSET 31 LIMIT 12 TEXTLIMIT 14", 12, 14, 31);
+  expectLimitOffset("textlimit 999", std::numeric_limits<uint64_t>::max(), 999,
+                    0);
+  expectLimitOffset("LIMIT      999", 999, 1, 0);
+  expectLimitOffset("OFFSET 43", std::numeric_limits<uint64_t>::max(), 1, 43);
+  expectLimitOffset("TEXTLIMIT 43 LIMIT 19", 19, 43, 0);
+  EXPECT_THROW(parseLimitOffsetClause("LIMIT20"), ParseException);
   {
-    string input = "LIMIT 10";
-
-    auto limitOffset = parseLimitOffsetClause(input);
-
-    expectCompleteParse(limitOffset, IsLimitOffset(10ull, 1ull, 0ull));
-  }
-
-  {
-    string input = "OFFSET 31 LIMIT 12 TEXTLIMIT 14";
-
-    auto limitOffset = parseLimitOffsetClause(input);
-
-    expectCompleteParse(limitOffset, IsLimitOffset(12ull, 14ull, 31ull));
-  }
-
-  {
-    string input = "textlimit 999";
-
-    auto limitOffset = parseLimitOffsetClause(input);
-
-    expectCompleteParse(
-        limitOffset,
-        IsLimitOffset(std::numeric_limits<uint64_t>::max(), 999ull, 0ull));
-  }
-
-  {
-    string input = "LIMIT      999";
-
-    auto limitOffset = parseLimitOffsetClause(input);
-
-    expectCompleteParse(limitOffset, IsLimitOffset(999ull, 1ull, 0ull));
-  }
-
-  {
-    string input = "OFFSET 43";
-
-    auto limitOffset = parseLimitOffsetClause(input);
-
-    expectCompleteParse(
-        limitOffset,
-        IsLimitOffset(std::numeric_limits<uint64_t>::max(), 1ull, 43ull));
-  }
-
-  {
-    string input = "TEXTLIMIT 43 LIMIT 19";
-
-    auto limitOffset = parseLimitOffsetClause(input);
-
-    expectCompleteParse(limitOffset, IsLimitOffset(19ull, 43ull, 0ull));
-  }
-
-  {
-    string input = "LIMIT20";
-
-    // parse* catches antlr4::ParseCancellationException and throws a
-    // std::runtime_error so this has to be checked instead.
-    EXPECT_THROW(parseLimitOffsetClause(input), std::runtime_error);
-  }
-
-  {
-    string input = "Limit 10 TEXTLIMIT 20 offset 0 Limit 20";
-
-    auto limitOffset = parseLimitOffsetClause(input);
+    auto limitOffset =
+        parseLimitOffsetClause("Limit 10 TEXTLIMIT 20 offset 0 Limit 20");
 
     EXPECT_THAT(limitOffset.resultOfParse_, IsLimitOffset(10ull, 20ull, 0ull));
     EXPECT_EQ(limitOffset.remainingText_, "Limit 20");
@@ -775,20 +753,13 @@ TEST(SparqlParser, LimitOffsetClause) {
 }
 
 TEST(SparqlParser, OrderCondition) {
-  auto parseOrderCondition = [](const std::string& input) {
-    ParserAndVisitor p{input};
-    return p.parse<OrderKey>(input, "order condition",
-                             &SparqlAutomaticParser::orderCondition);
-  };
-  auto expectParseVariable = [&parseOrderCondition](const string& input,
-                                                    const string& variable,
-                                                    bool isDescending) {
+  auto expectParseVariable = [](const string& input, const string& variable,
+                                bool isDescending) {
     expectCompleteParse(parseOrderCondition(input),
                         IsVariableOrderKey(variable, isDescending));
   };
-  auto expectParseExpression = [&parseOrderCondition](const string& input,
-                                                      const string& expression,
-                                                      bool isDescending) {
+  auto expectParseExpression = [](const string& input, const string& expression,
+                                  bool isDescending) {
     expectCompleteParse(parseOrderCondition(input),
                         IsExpressionOrderKey(expression, isDescending));
   };
@@ -815,27 +786,21 @@ TEST(SparqlParser, OrderClause) {
 }
 
 TEST(SparqlParser, GroupCondition) {
-  auto parseGroupCondition = [](const std::string& input) {
-    ParserAndVisitor p{input};
-    return p.parse<GroupKey>(input, "group condition",
-                             &SparqlAutomaticParser::groupCondition);
-  };
-  auto expectParseVariable = [&parseGroupCondition](const string& input,
-                                                    const string& variable) {
+  auto expectParseVariable = [](const string& input, const string& variable) {
     expectCompleteParse(parseGroupCondition(input),
                         IsVariableGroupKey(variable));
   };
-  auto expectParseExpression =
-      [&parseGroupCondition](const string& input, const string& expression) {
-        expectCompleteParse(parseGroupCondition(input),
-                            IsExpressionGroupKey(expression));
-      };
-  auto expectParseExpressionAlias =
-      [&parseGroupCondition](const string& input, const string& expression,
-                             const string& variable) {
-        expectCompleteParse(parseGroupCondition(input),
-                            IsAliasGroupKey(expression, variable));
-      };
+  auto expectParseExpression = [](const string& input,
+                                  const string& expression) {
+    expectCompleteParse(parseGroupCondition(input),
+                        IsExpressionGroupKey(expression));
+  };
+  auto expectParseExpressionAlias = [](const string& input,
+                                       const string& expression,
+                                       const string& variable) {
+    expectCompleteParse(parseGroupCondition(input),
+                        IsAliasGroupKey(expression, variable));
+  };
   // variable
   expectParseVariable("?test", "?test");
   // expression without binding
@@ -956,7 +921,7 @@ TEST(SparqlParser, InlineData) {
   };
   expectInlineData("VALUES ?test { \"foo\" }", {"?test"}, {{"\"foo\""}});
   // There must always be a block present for InlineData
-  expectInlineDataFails<std::runtime_error>("");
+  expectInlineDataFails<ParseException>("");
 }
 
 TEST(SparqlParser, propertyPaths) {
@@ -981,7 +946,7 @@ TEST(SparqlParser, propertyPaths) {
   expectPathOrVar(
       "@en@rdfs:label", Iri("@en@<http://www.w3.org/2000/01/rdf-schema#label>"),
       PrefixMap{{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});
-  EXPECT_THROW(parseVerbPathOrSimple("b"), std::runtime_error);
+  EXPECT_THROW(parseVerbPathOrSimple("b"), ParseException);
   expectPathOrVar("test:foo", Iri("<http://www.example.com/foo>"),
                   {{"test", "<http://www.example.com/>"}});
   expectPathOrVar("?bar", Variable{"?bar"});
@@ -1138,7 +1103,7 @@ TEST(SparqlParser, SelectClause) {
   expectCompleteParse(parseSelectClause("SELECT REDUCED *"),
                       IsAsteriskSelect(false, true));
   expectSelectFails("SELECT DISTINCT REDUCED *");
-  expectSelectFails<std::runtime_error>(
+  expectSelectFails<ParseException>(
       "SELECT");  // Lexer throws the error instead of the parser
   expectVariablesSelect("SELECT ?foo", {"?foo"});
   expectVariablesSelect("SELECT ?foo ?baz ?bar", {"?foo", "?baz", "?bar"});

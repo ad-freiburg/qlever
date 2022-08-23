@@ -10,6 +10,7 @@
 #include "./TripleComponent.h"
 #include "ParsedQuery.h"
 #include "SparqlLexer.h"
+#include "SparqlParserHelpers.h"
 #include "sparqlParser/SparqlQleverVisitor.h"
 
 using std::string;
@@ -67,25 +68,24 @@ class SparqlParser {
   string query_;
   SparqlFilter parseRegexFilter(bool expectKeyword);
 
+  // Helper function that converts the prefix map from `parsedQuery` (a vector
+  // of pairs of prefix and IRI) to the prefix map we need for the
+  // `SparqlQleverVisitor` (a hash map from prefixes to IRIs).
+  static SparqlQleverVisitor::PrefixMap getPrefixMap(
+      const ParsedQuery& parsedQuery);
   // Parse the clause with the prefixes of the given ParsedQuery.
-  template <typename F>
-  auto parseWithAntlr(F f, const ParsedQuery& parsedQuery)
-      -> decltype(f(std::declval<const string&>(),
-                    std::declval<SparqlQleverVisitor::PrefixMap>())
-                      .resultOfParse_);
-  // Parse the clause with the given explicitly specified prefixes.
-  template <typename F>
-  auto parseWithAntlr(F f, SparqlQleverVisitor::PrefixMap prefixMap)
-      -> decltype(f(std::declval<const string&>(),
-                    std::declval<SparqlQleverVisitor::PrefixMap>())
+  template <typename ContextType>
+  auto parseWithAntlr(ContextType* (SparqlAutomaticParser::*F)(void),
+                      const ParsedQuery& parsedQuery)
+      -> decltype((std::declval<sparqlParserHelpers::ParserAndVisitor>())
+                      .parseTypesafe(F)
                       .resultOfParse_);
 
-  /// Parses the given input with ANTLR but doesn't change the SparqlParser
-  /// state.
-  template <typename F>
-  auto parseWithAntlr(F f, const std::string& input,
-                      const SparqlQleverVisitor::PrefixMap& prefixMap = {})
-      -> decltype(f(std::declval<const string&>(),
-                    std::declval<SparqlQleverVisitor::PrefixMap>())
+  // Parse the clause with the given explicitly specified prefixes.
+  template <typename ContextType>
+  auto parseWithAntlr(ContextType* (SparqlAutomaticParser::*F)(void),
+                      SparqlQleverVisitor::PrefixMap prefixMap)
+      -> decltype((std::declval<sparqlParserHelpers::ParserAndVisitor>())
+                      .parseTypesafe(F)
                       .resultOfParse_);
 };
