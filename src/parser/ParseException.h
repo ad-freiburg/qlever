@@ -23,6 +23,10 @@ struct ExceptionMetadata {
   size_t startIndex_;
   size_t stopIndex_;
 
+  bool operator==(const ExceptionMetadata& rhs) const = default;
+
+  // Returns the query with the faulty clause highlighted using ANSI Escape
+  // Sequences. The faulty clause is made bold, underlined and red.
   [[nodiscard]] std::string coloredError() const;
 };
 

@@ -1071,11 +1071,3 @@ TEST(SparqlParser, SelectClause) {
   expectSelect("SELECT (5 - 10 as ?m) ?foo (10 as ?bar)",
                {Alias{"5-10", "?m"}, Variable{"?foo"}, Alias{"10", "?bar"}});
 }
-
-TEST(SparqlParser, Foo) {
-  try {
-    parseSelectClause("SELECT a ?foo");
-  } catch (ParseException& exception) {
-    cout << exception.metadata().value().coloredError() << endl;
-  }
-}
