@@ -342,6 +342,11 @@ MATCHER_P(IsTriples, triples, "") {
                              triples))(triplesValue->_whereClauseTriples);
 }
 
+MATCHER_P(IsOptional, subMatcher, "") {
+  auto optional = std::get_if<GraphPatternOperation::Optional>(&arg.variant_);
+  return optional && testing::Value(optional->_child, subMatcher);
+}
+
 MATCHER_P3(IsGraphPattern, optional, filters, childMatchers, "") {
   if (arg._children.size() != std::tuple_size_v<decltype(childMatchers)>) {
     return false;

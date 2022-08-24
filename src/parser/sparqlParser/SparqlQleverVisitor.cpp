@@ -350,7 +350,6 @@ vector<SparqlTriple> Visitor::visitTypesafe(Parser::TriplesBlockContext* ctx) {
 // ____________________________________________________________________________________
 std::variant<GraphPatternOperation, SparqlFilter> Visitor::visitTypesafe(
     Parser::GraphPatternNotTriplesContext* ctx) {
-  // TODO: correctly set optional attributes
   if (ctx->graphGraphPattern() || ctx->serviceGraphPattern()) {
     reportError(ctx,
                 "GraphGraphPattern or ServiceGraphPattern are not supported.");

@@ -1148,6 +1148,10 @@ TEST(SparqlParser, GroupGraphPattern) {
   auto Bind = [](const string& target, const string& expression) {
     return IsBind(target, expression);
   };
+  auto InlineData = [](vector<string>&& expectedVars,
+                       vector<vector<string>>&& expectedVals) {
+    return IsInlineData(expectedVars, expectedVals);
+  };
   auto GraphPattern = [](bool optional, vector<SparqlFilter>&& filters,
                          const auto&... childMatchers) {
     return IsGraphPattern(optional, filters, std::tuple{childMatchers...});
@@ -1195,9 +1199,13 @@ TEST(SparqlParser, GroupGraphPattern) {
       "{?x <is-a> <Actor> . BIND(10 - ?foo as ?y) . ?a ?b ?c }",
       GraphPattern(false, {}, Triples({{"?x", "<is-a>", "<Actor>"}}),
                    Bind("?y", "10-?foo"), Triples({{"?a", "?b", "?c"}})));
-  {
-    auto pattern = parseGroupGraphPattern(
-        "{ ?var ?foo ?var BIND(?foo as ?bar) FILTER(?a = 10) OPTIONAL { "
-        "?f ?a ?b FILTER(?f > 0) } }");
-  }
+  expectGraphPattern(
+      "{?x <is-a> <Actor> . OPTIONAL { ?x <foo> <bar> } }",
+      GraphPattern(false, {}, Triples({{"?x", "<is-a>", "<Actor>"}}),
+                   IsOptional(GraphPattern(
+                       true, {}, Triples({{"?x", "<foo>", "<bar>"}})))));
+  expectGraphPattern("{ VALUES (?a ?b) { (<foo> <bar>) (<a> <b>) } }",
+                     GraphPattern(false, {},
+                                  InlineData({"?a", "?b"}, {{"<foo>", "<bar>"},
+                                                            {"<a>", "<b>"}})));
 }
