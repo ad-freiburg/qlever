@@ -1,6 +1,8 @@
 // Copyright 2021, University of Freiburg,
 // Chair of Algorithms and Data Structures
-// Author: Hannah Bast <bast@cs.uni-freiburg.de>
+// Authors:
+//   Hannah Bast <bast@cs.uni-freiburg.de>
+//   2022 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
 #include "SparqlQleverVisitor.h"
 
@@ -255,7 +257,56 @@ std::pair<vector<A>, vector<B>> splitUp(vector<std::pair<A, B>> elems) {
 
 std::pair<vector<GraphPatternOperation>, vector<SparqlFilter>>
 Visitor::visitTypesafe(Parser::GroupGraphPatternSubContext* ctx) {
-  // TODO: Make TripleComponent constructible from these types.
+  vector<GraphPatternOperation> ops;
+  vector<SparqlFilter> filters;
+
+  auto filter = [&filters](SparqlFilter filter) {
+    filters.emplace_back(std::move(filter));
+  };
+  auto op = [&ops](GraphPatternOperation op) {
+    ops.emplace_back(std::move(op));
+  };
+
+  if (ctx->triplesBlock()) {
+    ops.emplace_back(GraphPatternOperation::BasicGraphPattern{
+        visitTypesafe(ctx->triplesBlock())});
+  }
+  auto others = visitVector<
+      std::pair<variant<GraphPatternOperation, SparqlFilter>,
+                std::optional<GraphPatternOperation::BasicGraphPattern>>>(
+      ctx->graphPatternNotTriplesAndMaybeTriples());
+  for (auto [variant, triples] : others) {
+    std::visit(ad_utility::OverloadCallOperator{filter, op}, variant);
+    if (triples.has_value()) {
+      if (holds_alternative<SparqlFilter>(variant) && !ops.empty() &&
+          holds_alternative<GraphPatternOperation::BasicGraphPattern>(
+              ops.back().variant_)) {
+        ad_utility::appendVector(
+            get<GraphPatternOperation::BasicGraphPattern>(ops.back().variant_)
+                ._whereClauseTriples,
+            std::move(triples.value()._whereClauseTriples));
+
+      } else {
+        ops.emplace_back(triples.value());
+      }
+    }
+  }
+  return {ops, filters};
+}
+
+std::pair<variant<GraphPatternOperation, SparqlFilter>,
+          std::optional<GraphPatternOperation::BasicGraphPattern>>
+Visitor::visitTypesafe(
+    Parser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx) {
+  auto triples = ctx->triplesBlock()
+                     ? std::optional{GraphPatternOperation::BasicGraphPattern{
+                           visitTypesafe(ctx->triplesBlock())}}
+                     : std::nullopt;
+  return {visitTypesafe(ctx->graphPatternNotTriples()), std::move(triples)};
+}
+
+// ____________________________________________________________________________________
+vector<SparqlTriple> Visitor::visitTypesafe(Parser::TriplesBlockContext* ctx) {
   auto iri = [](const Iri& iri) -> TripleComponent { return iri.toSparql(); };
   auto blankNode = [](const BlankNode& blankNode) -> TripleComponent {
     return blankNode.toSparql();
@@ -301,8 +352,9 @@ Visitor::visitTypesafe(Parser::GroupGraphPatternSubContext* ctx) {
     }
   };
 
-  auto convertTriple = [&varOrTerm, &varOrPath, &registerIfVariable](
-                           TripleWithPropertyPath&& triple) -> SparqlTriple {
+  auto convertAndRegisterTriple =
+      [&varOrTerm, &varOrPath,
+       &registerIfVariable](TripleWithPropertyPath&& triple) -> SparqlTriple {
     registerIfVariable(triple.subject_);
     registerIfVariable(triple.predicate_);
     registerIfVariable(triple.object_);
@@ -312,22 +364,8 @@ Visitor::visitTypesafe(Parser::GroupGraphPatternSubContext* ctx) {
             varOrTerm(std::move(triple.object_))};
   };
 
-  vector<SparqlTriple> triples = ad_utility::transform(
-      ad_utility::flatten(
-          visitVector<vector<TripleWithPropertyPath>>(ctx->triplesBlock())),
-      convertTriple);
-  auto [ops, filters] =
-      splitUp(visitVector<std::variant<GraphPatternOperation, SparqlFilter>>(
-          ctx->graphPatternNotTriples()));
-  ops.emplace_back(
-      GraphPatternOperation::BasicGraphPattern{std::move(triples)});
-  return {ops, filters};
-}
-
-// ____________________________________________________________________________________
-vector<TripleWithPropertyPath> Visitor::visitTypesafe(
-    Parser::TriplesBlockContext* ctx) {
-  auto triples = visitTypesafe(ctx->triplesSameSubjectPath());
+  auto triples = ad_utility::transform(
+      visitTypesafe(ctx->triplesSameSubjectPath()), convertAndRegisterTriple);
   if (ctx->triplesBlock()) {
     ad_utility::appendVector(triples, visitTypesafe(ctx->triplesBlock()));
   }
@@ -339,8 +377,8 @@ std::variant<GraphPatternOperation, SparqlFilter> Visitor::visitTypesafe(
     Parser::GraphPatternNotTriplesContext* ctx) {
   // TODO: correctly set optional and id attributes
   if (ctx->graphGraphPattern() || ctx->serviceGraphPattern()) {
-    throw ParseException(
-        "GraphGraphPattern or ServiceGraphPattern are not supported.");
+    reportError(ctx,
+                "GraphGraphPattern or ServiceGraphPattern are not supported.");
   } else if (ctx->filterR()) {
     // TODO: visitAlternative
     return visitTypesafe(ctx->filterR());

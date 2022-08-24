@@ -178,6 +178,13 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
   virtual void exitGroupGraphPatternSub(
       SparqlAutomaticParser::GroupGraphPatternSubContext* /*ctx*/) override {}
 
+  virtual void enterGraphPatternNotTriplesAndMaybeTriples(
+      SparqlAutomaticParser::
+          GraphPatternNotTriplesAndMaybeTriplesContext* /*ctx*/) override {}
+  virtual void exitGraphPatternNotTriplesAndMaybeTriples(
+      SparqlAutomaticParser::
+          GraphPatternNotTriplesAndMaybeTriplesContext* /*ctx*/) override {}
+
   virtual void enterTriplesBlock(
       SparqlAutomaticParser::TriplesBlockContext* /*ctx*/) override {}
   virtual void exitTriplesBlock(

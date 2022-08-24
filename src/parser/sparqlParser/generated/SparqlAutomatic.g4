@@ -157,7 +157,11 @@ groupGraphPattern
     ;
 
 groupGraphPatternSub
-    : triplesBlock? ( graphPatternNotTriples '.'? triplesBlock? )*
+    : triplesBlock? graphPatternNotTriplesAndMaybeTriples*
+    ;
+
+graphPatternNotTriplesAndMaybeTriples
+    : graphPatternNotTriples '.'? triplesBlock?
     ;
 
 triplesBlock

@@ -1191,7 +1191,6 @@ TEST(SparqlParser, WhereClause) {
                            {"?c", CONTAINS_ENTITY_PREDICATE, "?x"},
                            {"?c", CONTAINS_WORD_PREDICATE, "coca* abuse"}})),
       Filters({{SparqlFilter::FilterType::NE, "?x", "?y"}}), NotOptional);
-  // TODO: Failing here is currently correct. The code is not yet correct.
   expectGraphPattern("WHERE {?x <is-a> <Actor> . BIND(10 - ?foo as ?y) }",
                      HasChildren(Triples({{"?x", "<is-a>", "<Actor>"}}),
                                  Bind("?y", "10-?foo")),

@@ -298,12 +298,20 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   std::pair<vector<GraphPatternOperation>, vector<SparqlFilter>> visitTypesafe(
       Parser::GroupGraphPatternSubContext* ctx);
 
+  Any visitGraphPatternNotTriplesAndMaybeTriples(
+      Parser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx) override {
+    return visitTypesafe(ctx);
+  }
+
+  std::pair<variant<GraphPatternOperation, SparqlFilter>,
+            std::optional<GraphPatternOperation::BasicGraphPattern>>
+  visitTypesafe(Parser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx);
+
   Any visitTriplesBlock(Parser::TriplesBlockContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  vector<TripleWithPropertyPath> visitTypesafe(
-      Parser::TriplesBlockContext* ctx);
+  vector<SparqlTriple> visitTypesafe(Parser::TriplesBlockContext* ctx);
 
   Any visitGraphPatternNotTriples(
       Parser::GraphPatternNotTriplesContext* ctx) override {

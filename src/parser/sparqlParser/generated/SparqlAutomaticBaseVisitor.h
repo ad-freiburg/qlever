@@ -178,6 +178,12 @@ class SparqlAutomaticBaseVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
+  virtual antlrcpp::Any visitGraphPatternNotTriplesAndMaybeTriples(
+      SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx)
+      override {
+    return visitChildren(ctx);
+  }
+
   virtual antlrcpp::Any visitTriplesBlock(
       SparqlAutomaticParser::TriplesBlockContext* ctx) override {
     return visitChildren(ctx);

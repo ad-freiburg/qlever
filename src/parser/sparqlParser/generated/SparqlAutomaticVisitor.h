@@ -114,6 +114,10 @@ class SparqlAutomaticVisitor : public antlr4::tree::AbstractParseTreeVisitor {
   virtual antlrcpp::Any visitGroupGraphPatternSub(
       SparqlAutomaticParser::GroupGraphPatternSubContext* context) = 0;
 
+  virtual antlrcpp::Any visitGraphPatternNotTriplesAndMaybeTriples(
+      SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext*
+          context) = 0;
+
   virtual antlrcpp::Any visitTriplesBlock(
       SparqlAutomaticParser::TriplesBlockContext* context) = 0;
 
