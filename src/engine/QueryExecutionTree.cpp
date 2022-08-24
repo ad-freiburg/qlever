@@ -644,11 +644,12 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     return input;
   }
 
-  std::shared_ptr<Operation> sort;
   if (sortColumns.size() == 1) {
-    sort =
+    auto sort =
         std::make_shared<Sort>(input->getRootOperation()->getExecutionContext(),
                                std::move(input), sortColumns[0]);
+        return std::make_shared<QueryExecutionTree>(
+            input->getRootOperation()->getExecutionContext(), std::move(sort));
   } else {
     std::vector<std::pair<size_t, bool>> sortColsForOrderBy;
     for (auto i : sortColumns) {
@@ -656,10 +657,10 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
       // TODO<joka921> fix this.
       sortColsForOrderBy.emplace_back(i, false);
     }
-    sort = std::make_shared<OrderBy>(
+    auto sort = std::make_shared<OrderBy>(
         input->getRootOperation()->getExecutionContext(), std::move(input),
         std::move(sortColsForOrderBy));
+    return std::make_shared<QueryExecutionTree>(
+        input->getRootOperation()->getExecutionContext(), std::move(sort));
   }
-  return std::make_shared<QueryExecutionTree>(
-      input->getRootOperation()->getExecutionContext(), std::move(sort));
 }

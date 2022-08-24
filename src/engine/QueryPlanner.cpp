@@ -1013,29 +1013,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
     if (pq.hasSelectClause()) {
       aliases = pq.selectClause().getAliases();
     }
-    auto groupBy = std::make_shared<GroupBy>(_qec, pq._groupByVariables,
-                                             std::move(aliases));
-    QueryExecutionTree& groupByTree = *groupByPlan._qet;
 
-    // Then compute the sort columns
-    std::vector<std::pair<size_t, bool>> sortColumns =
-        groupBy->computeSortColumns(parent._qet.get());
-
-    const std::vector<size_t>& inputSortedOn =
-        parent._qet->getRootOperation()->getResultSortedOn();
-
-    bool inputSorted = sortColumns.size() <= inputSortedOn.size();
-    for (size_t i = 0; inputSorted && i < sortColumns.size(); i++) {
-      inputSorted = sortColumns[i].first == inputSortedOn[i];
-    }
-    if (!sortColumns.empty() && !inputSorted) {
-      // Create an order by operation as required by the group by
-      groupBy->setSubtree(
-          makeExecutionTree<OrderBy>(_qec, parent._qet, sortColumns));
-    } else
-      groupBy->setSubtree(parent._qet);
-
-    groupByTree.setOperation(groupBy);
+    // The GroupBy constructor automatically takes care of sorting the input if necessary.
+    groupByPlan._qet = makeExecutionTree<GroupBy>(_qec, pq._groupByVariables, std::move(aliases), parent._qet);
     added.push_back(groupByPlan);
   }
   return added;

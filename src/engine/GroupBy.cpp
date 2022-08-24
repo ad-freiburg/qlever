@@ -44,7 +44,12 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
                  std::vector<Alias> aliases,
                  std::shared_ptr<QueryExecutionTree> subtree)
     : GroupBy(qec, std::move(groupByVariables), std::move(aliases)) {
-  setSubtree(std::move(subtree));
+  std::vector<size_t> sortColumns;
+  for (auto [columnIdx, isDescending] : computeSortColumns(subtree.get())) {
+    AD_CHECK(!isDescending);
+    sortColumns.push_back(columnIdx);
+  }
+  setSubtree(QueryExecutionTree::createSortedTree(std::move(subtree), std::move(sortColumns)));
 }
 
 void GroupBy::setSubtree(std::shared_ptr<QueryExecutionTree> subtree) {
@@ -87,6 +92,7 @@ vector<size_t> GroupBy::resultSortedOn() const {
   return sortedOn;
 }
 
+// TODO<joka921> there should be no more need for the pair<bools...>
 vector<pair<size_t, bool>> GroupBy::computeSortColumns(
     const QueryExecutionTree* inputTree) {
   vector<pair<size_t, bool>> cols;
