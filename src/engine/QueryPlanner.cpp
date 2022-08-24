@@ -1,6 +1,8 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author:
+//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #include <engine/Bind.h>
 #include <engine/CountAvailablePredicates.h>
@@ -28,6 +30,7 @@
 #include <algorithm>
 #include <ctime>
 
+namespace {
 // All the operations take a `QueryExecutionContext` as a first argument.
 // Todo: Continue the comment.
 template <typename Operation>
@@ -42,6 +45,26 @@ QueryPlanner::SubtreePlan makeSubtreePlan(QueryExecutionContext* qec,
                                           auto&&... args) {
   return {qec, std::make_shared<Operation>(qec, AD_FWD(args)...)};
 }
+
+// Create a `SubtreePlan` that holds the given `operation`. `Op` must be a class
+// inheriting from `Operation`.
+template <typename Op>
+QueryPlanner::SubtreePlan makeSubtreePlan(std::shared_ptr<Op> operation) {
+  auto* qec = operation->getExecutionContext();
+  return {qec, std::move(operation)};
+}
+
+// Update the `target` query plan such that it knows that it includes all the
+// nodes and filters from `a` and `b`. NOTE: This does not actually merge
+// the plans from `a` and `b`.
+void mergeSubtreePlanIds(QueryPlanner::SubtreePlan& target,
+                         const QueryPlanner::SubtreePlan& a,
+                         const QueryPlanner::SubtreePlan& b) {
+  target._idsOfIncludedNodes = a._idsOfIncludedNodes | b._idsOfIncludedNodes;
+  target._idsOfIncludedFilters =
+      a._idsOfIncludedFilters | b._idsOfIncludedFilters;
+}
+}  // namespace
 
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext* qec)
@@ -1013,29 +1036,11 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
     if (pq.hasSelectClause()) {
       aliases = pq.selectClause().getAliases();
     }
-    auto groupBy = std::make_shared<GroupBy>(_qec, pq._groupByVariables,
-                                             std::move(aliases));
-    QueryExecutionTree& groupByTree = *groupByPlan._qet;
 
-    // Then compute the sort columns
-    std::vector<std::pair<size_t, bool>> sortColumns =
-        groupBy->computeSortColumns(parent._qet.get());
-
-    const std::vector<size_t>& inputSortedOn =
-        parent._qet->getRootOperation()->getResultSortedOn();
-
-    bool inputSorted = sortColumns.size() <= inputSortedOn.size();
-    for (size_t i = 0; inputSorted && i < sortColumns.size(); i++) {
-      inputSorted = sortColumns[i].first == inputSortedOn[i];
-    }
-    if (!sortColumns.empty() && !inputSorted) {
-      // Create an order by operation as required by the group by
-      groupBy->setSubtree(
-          makeExecutionTree<OrderBy>(_qec, parent._qet, sortColumns));
-    } else
-      groupBy->setSubtree(parent._qet);
-
-    groupByTree.setOperation(groupBy);
+    // The GroupBy constructor automatically takes care of sorting the input if
+    // necessary.
+    groupByPlan._qet = makeExecutionTree<GroupBy>(
+        _qec, pq._groupByVariables, std::move(aliases), parent._qet);
     added.push_back(groupByPlan);
   }
   return added;
@@ -2014,14 +2019,12 @@ void QueryPlanner::applyFiltersIfPossible(
           (!isVariable(filters[i]._rhs) ||
            row[n]._qet->varCovered(filters[i]._rhs))) {
         // Apply this filter.
-        SubtreePlan newPlan(_qec);
+        SubtreePlan newPlan =
+            makeSubtreePlan(createFilterOperation(filters[i], row[n]));
         newPlan._idsOfIncludedFilters = row[n]._idsOfIncludedFilters;
         newPlan._idsOfIncludedFilters |= (size_t(1) << i);
         newPlan._idsOfIncludedNodes = row[n]._idsOfIncludedNodes;
         newPlan.type = row[n].type;
-        auto& tree = *newPlan._qet;
-        tree.setOperation(QueryExecutionTree::FILTER,
-                          createFilterOperation(filters[i], row[n]));
         if (replace) {
           row[n] = newPlan;
         } else {
@@ -2033,7 +2036,7 @@ void QueryPlanner::applyFiltersIfPossible(
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<Operation> QueryPlanner::createFilterOperation(
+std::shared_ptr<Filter> QueryPlanner::createFilterOperation(
     const SparqlFilter& filter, const SubtreePlan& parent) const {
   std::shared_ptr<Filter> op = std::make_shared<Filter>(
       _qec, parent._qet, filter._type, filter._lhs, filter._rhs,
@@ -2583,380 +2586,245 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   } else {
     jcs = getJoinColumns(a, b);
   }
-  if (!jcs.empty()) {
-    // Find join variable(s) / columns.
-    if (jcs.size() == 2 &&
-        (a._qet->getType() ==
-             QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER ||
-         b._qet->getType() ==
-             QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER)) {
-      LOG(WARN) << "Not considering possible join on "
-                << "two columns, if they involve text operations.\n";
-      return candidates;
+
+  if (jcs.empty()) {
+    // The candidates are not connected
+    return candidates;
+  }
+  // Find join variable(s) / columns.
+  if (jcs.size() == 2 &&
+      (a._qet->getType() ==
+           QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER ||
+       b._qet->getType() ==
+           QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER)) {
+    LOG(WARN) << "Not considering possible join on "
+              << "two columns, if they involve text operations.\n";
+    return candidates;
+  }
+
+  if (a.type == SubtreePlan::MINUS) {
+    AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+             "MINUS can only appear after"
+             " another graph pattern.");
+  }
+
+  if (b.type == SubtreePlan::MINUS) {
+    // This case shouldn't happen. If the first pattern is OPTIONAL, it
+    // is made non optional earlier. If a minus occurs after an optional
+    // further into the query that optional should be resolved by now.
+    AD_CHECK(a.type != SubtreePlan::OPTIONAL);
+    return std::vector{minus(a, b)};
+  }
+
+  // TODO<joka921> OPTIONAL JOINS are not symmetric!
+  if (a.type == SubtreePlan::OPTIONAL || b.type == SubtreePlan::OPTIONAL) {
+    // Join the two optional columns using an optional join
+    return std::vector{optionalJoin(a, b)};
+  }
+
+  if (jcs.size() >= 2) {
+    // If there are two or more join columns and we are not using the
+    // TwoColumnJoin (the if part before this comment), use a multiColumnJoin.
+    try {
+      SubtreePlan plan = multiColumnJoin(a, b);
+      mergeSubtreePlanIds(plan, a, b);
+      return {plan};
+    } catch (const std::exception& e) {
+      return {};
     }
+  }
 
-    if (a.type == SubtreePlan::MINUS) {
-      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-               "MINUS can only appear after"
-               " another graph pattern.");
-    }
-
-    if (b.type == SubtreePlan::MINUS) {
-      // This case shouldn't happen. If the first pattern is OPTIONAL, it
-      // is made non optional earlier. If a minus occurs after an optional
-      // further into the query that optional should be resolved by now.
-      AD_CHECK(a.type != SubtreePlan::OPTIONAL);
-      return std::vector{minus(a, b)};
-    }
-
-    // TODO<joka921> OPTIONAL JOINS are not symmetric!
-    if (a.type == SubtreePlan::OPTIONAL || b.type == SubtreePlan::OPTIONAL) {
-      // Join the two optional columns using an optional join
-      return std::vector{optionalJoin(a, b)};
-    }
-
-    // The TwoColumnJoin works when one input table has exactly 2 columns
-    // and the join columns are 0 and 1 in that order; see TwoColumnJoin.cpp .
-    // For all other cases, we have to use the general MultiColumnJoin
-    bool considerTwoColumnJoin = jcs.size() == 2;
-    if (considerTwoColumnJoin) {
-      considerTwoColumnJoin =
-          (a._qet->getResultWidth() == 2 && jcs[0][0] == 0 && jcs[1][0] == 1);
-      considerTwoColumnJoin =
-          considerTwoColumnJoin ||
-          (b._qet->getResultWidth() == 2 && jcs[0][1] == 0 && jcs[1][1] == 1);
-    }
-
-    if (considerTwoColumnJoin) {
-      // Forbid a two column join where a dummy is included, as QLever currently
-      // does not support this.
-      if (Join::isFullScanDummy(a._qet) || Join::isFullScanDummy(b._qet)) {
-        return candidates;
-      }
-
-      // Check if a sub-result has to be re-sorted
-      // Consider both ways to order join columns as primary / secondary
-      // Make four iterations instead of two so that first and second
-      // column can be swapped and more trees are constructed (of which
-      // the optimal solution will be picked).
-      // The order plays a role for the efficient implementation for
-      // filtering directly with a scan's result.
-      for (size_t n = 0; n < 4; ++n) {
-        size_t c = n / 2;
-        size_t swap = n % 2;
-        auto left = std::make_shared<QueryExecutionTree>(_qec);
-        auto right = std::make_shared<QueryExecutionTree>(_qec);
-        const vector<size_t>& aSortedOn = a._qet->resultSortedOn();
-        if (aSortedOn.size() > 0 && aSortedOn[0] == jcs[c][(0 + swap) % 2] &&
-            (a._qet->getResultWidth() == 2 ||
-             a._qet->getType() == QueryExecutionTree::SCAN)) {
-          left = a._qet;
-        } else {
-          // Create an order by operation.
-          vector<pair<size_t, bool>> sortIndices;
-          sortIndices.emplace_back(
-              std::make_pair(jcs[c][(0 + swap) % 2], false));
-          sortIndices.emplace_back(
-              std::make_pair(jcs[(c + 1) % 2][(0 + swap) % 2], false));
-          auto orderBy = std::make_shared<OrderBy>(_qec, a._qet, sortIndices);
-          left->setOperation(QueryExecutionTree::ORDER_BY, orderBy);
-        }
-        const vector<size_t>& bSortedOn = b._qet->resultSortedOn();
-        if (bSortedOn.size() > 0 && bSortedOn[0] == jcs[c][(1 + swap) % 2] &&
-            b._qet->getResultWidth() == 2) {
-          right = b._qet;
-        } else {
-          // Create a sort operation.
-          // Create an order by operation.
-          vector<pair<size_t, bool>> sortIndices;
-          sortIndices.emplace_back(
-              std::make_pair(jcs[c][(1 + swap) % 2], false));
-          sortIndices.emplace_back(
-              std::make_pair(jcs[(c + 1) % 2][(1 + swap) % 2], false));
-          auto orderBy = std::make_shared<OrderBy>(_qec, b._qet, sortIndices);
-          right->setOperation(QueryExecutionTree::ORDER_BY, orderBy);
-        }
-        // TODO(florian): consider replacing this with a multicolumn join.
-        // Create the join operation.
-        SubtreePlan plan(_qec);
-        auto& tree = *plan._qet;
-        auto join = std::make_shared<TwoColumnJoin>(_qec, left, right, jcs);
-        tree.setOperation(QueryExecutionTree::TWO_COL_JOIN, join);
-        // TODO<joka921>: shouldn't we |= the filters here to avoid duplicate
-        // filtering when it might hurt (although filters are always cheap).
-        plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
-        plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
-        plan.addAllNodes(b._idsOfIncludedNodes);
-        candidates.push_back(std::move(plan));
-      }
-      return candidates;
-    } else if (jcs.size() >= 2) {
-      // If there are two or more join columns and we are not using the
-      // TwoColumnJoin (the if part before this comment), use a multiColumnJoin.
-      try {
-        SubtreePlan plan = multiColumnJoin(a, b);
-        plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
-        plan.addAllNodes(b._idsOfIncludedNodes);
-        plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
-        plan._idsOfIncludedFilters |= b._idsOfIncludedFilters;
-        return {plan};
-      } catch (const std::exception& e) {
-        return {};
-      }
-    }
-
-    // CASE: JOIN ON ONE COLUMN ONLY.
-    if ((a._qet->getType() ==
-             QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER ||
-         b._qet->getType() ==
-             QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER)) {
-      // If one of the join results is a text operation without filter
-      // also consider using the other one as filter and thus
-      // turning this join into a text operation with filter, instead,
-      bool aTextOp = true;
-      // If both are TextOps, the smaller one will be used as filter.
-      if (a._qet->getType() !=
-              QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER ||
-          (b._qet->getType() ==
-               QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER &&
-           b._qet->getSizeEstimate() > a._qet->getSizeEstimate())) {
-        aTextOp = false;
-      }
-      const SubtreePlan& textPlan = aTextOp ? a : b;
-      const SubtreePlan& filterPlan = aTextOp ? b : a;
-      size_t otherPlanJc = aTextOp ? jcs[0][1] : jcs[0][0];
-      SubtreePlan plan(_qec);
-      plan._idsOfIncludedNodes = filterPlan._idsOfIncludedNodes;
-      plan._idsOfIncludedNodes |= textPlan._idsOfIncludedNodes;
-      plan._idsOfIncludedFilters = filterPlan._idsOfIncludedFilters;
-      QueryExecutionTree& tree = *plan._qet;
-      const TextOperationWithoutFilter& noFilter =
-          *static_cast<const TextOperationWithoutFilter*>(
-              textPlan._qet->getRootOperation().get());
-      auto textOp = std::make_shared<TextOperationWithFilter>(
-          _qec, noFilter.getWordPart(), noFilter.getVars(), noFilter.getCVar(),
-          filterPlan._qet, otherPlanJc);
-      tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITH_FILTER,
-                        textOp);
-      candidates.push_back(std::move(plan));
-    }
-    // Skip if we have two dummies
-    if (a._qet->getType() == QueryExecutionTree::OperationType::SCAN &&
-        a._qet->getResultWidth() == 3 &&
-        b._qet->getType() == QueryExecutionTree::OperationType::SCAN &&
-        b._qet->getResultWidth() == 3) {
-      return candidates;
-    }
-
-    // Check if one of the two operations is a HAS_PREDICATE_SCAN.
-    // If the join column corresponds to the has-predicate scan's
-    // subject column we can use a specialized join that avoids
-    // loading the full has-predicate predicate.
-    if (a._qet->getType() ==
-            QueryExecutionTree::OperationType::HAS_PREDICATE_SCAN ||
-        b._qet->getType() ==
-            QueryExecutionTree::OperationType::HAS_PREDICATE_SCAN) {
-      bool replaceJoin = false;
-      size_t subtree_col = 0;
-
-      auto hasPredicateScan = std::make_shared<QueryExecutionTree>(_qec);
-      auto other = std::make_shared<QueryExecutionTree>(_qec);
-      std::make_shared<QueryExecutionTree>(_qec);
-      if (a._qet->getType() ==
-              QueryExecutionTree::OperationType::HAS_PREDICATE_SCAN &&
-          jcs[0][0] == 0) {
-        const HasPredicateScan* op =
-            static_cast<HasPredicateScan*>(a._qet->getRootOperation().get());
-        if (op->getType() == HasPredicateScan::ScanType::FULL_SCAN) {
-          hasPredicateScan = a._qet;
-          other = b._qet;
-          subtree_col = jcs[0][1];
-          replaceJoin = true;
-        }
-      } else if (b._qet->getType() ==
-                     QueryExecutionTree::OperationType::HAS_PREDICATE_SCAN &&
-                 jcs[0][1] == 0) {
-        const HasPredicateScan* op =
-            static_cast<HasPredicateScan*>(b._qet->getRootOperation().get());
-        if (op->getType() == HasPredicateScan::ScanType::FULL_SCAN) {
-          other = a._qet;
-          hasPredicateScan = b._qet;
-          subtree_col = jcs[0][0];
-          replaceJoin = true;
-        }
-      }
-      if (replaceJoin) {
-        SubtreePlan plan{_qec};
-        QueryExecutionTree& tree = *plan._qet;
-        auto scan = std::make_shared<HasPredicateScan>(
-            _qec, HasPredicateScan::ScanType::SUBQUERY_S);
-        scan->setSubtree(other);
-        scan->setSubtreeSubjectColumn(subtree_col);
-        scan->setObject(static_cast<HasPredicateScan*>(
-                            hasPredicateScan->getRootOperation().get())
-                            ->getObject());
-        tree.setOperation(QueryExecutionTree::HAS_PREDICATE_SCAN, scan);
-        plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
-        plan.addAllNodes(b._idsOfIncludedNodes);
-        plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
-        plan._idsOfIncludedFilters |= b._idsOfIncludedFilters;
-        candidates.push_back(std::move(plan));
-        return candidates;
-      }
-    }
-
-    // Test for binding the other operation to the left side of the
-    // transitive path
-    if ((a._qet->getType() ==
-             QueryExecutionTree::OperationType::TRANSITIVE_PATH &&
-         jcs[0][0] == 0) ||
+  // CASE: JOIN ON ONE COLUMN ONLY.
+  if ((a._qet->getType() ==
+           QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER ||
+       b._qet->getType() ==
+           QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER)) {
+    // If one of the join results is a text operation without filter
+    // also consider using the other one as filter and thus
+    // turning this join into a text operation with filter, instead,
+    bool aTextOp = true;
+    // If both are TextOps, the smaller one will be used as filter.
+    if (a._qet->getType() !=
+            QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER ||
         (b._qet->getType() ==
-             QueryExecutionTree::OperationType::TRANSITIVE_PATH &&
-         jcs[0][1] == 0)) {
-      std::shared_ptr<TransitivePath> srcpath;
-      std::shared_ptr<QueryExecutionTree> other;
-      size_t otherCol;
-      if (a._qet->getType() ==
-          QueryExecutionTree::OperationType::TRANSITIVE_PATH) {
-        srcpath = std::reinterpret_pointer_cast<TransitivePath>(
-            a._qet->getRootOperation());
-        other = b._qet;
-        otherCol = jcs[0][1];
-      } else {
-        other = a._qet;
-        srcpath = std::reinterpret_pointer_cast<TransitivePath>(
-            b._qet->getRootOperation());
-        otherCol = jcs[0][0];
-      }
-
-      // Do not bind the side of a path twice
-      if (!srcpath->isBound() &&
-          other->getSizeEstimate() < srcpath->getSizeEstimate()) {
-        // The left or right side is a TRANSITIVE_PATH and its join column
-        // corresponds to the left side of its input.
-
-        const vector<size_t>& otherSortedOn = other->resultSortedOn();
-        if (otherSortedOn.size() == 0 || otherSortedOn[0] != otherCol) {
-          if (other->getType() == QueryExecutionTree::SCAN) {
-            return candidates;
-          }
-          auto sort = std::make_shared<Sort>(_qec, other, jcs[0][0]);
-          auto sortedOther = std::make_shared<QueryExecutionTree>(_qec);
-          sortedOther->setOperation(QueryExecutionTree::SORT, sort);
-          other = sortedOther;
-        }
-
-        SubtreePlan plan{_qec};
-        QueryExecutionTree& tree = *plan._qet;
-        auto newpath = srcpath->bindLeftSide(other, otherCol);
-        tree.setOperation(QueryExecutionTree::TRANSITIVE_PATH, newpath);
-        plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
-        plan.addAllNodes(b._idsOfIncludedNodes);
-        plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
-        plan._idsOfIncludedFilters |= b._idsOfIncludedFilters;
-        candidates.push_back(std::move(plan));
-        return candidates;
-      }
+             QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER &&
+         b._qet->getSizeEstimate() > a._qet->getSizeEstimate())) {
+      aTextOp = false;
     }
-
-    // Test for binding the other operation to the right side of the
-    // transitive path
-    if ((a._qet->getType() ==
-             QueryExecutionTree::OperationType::TRANSITIVE_PATH &&
-         jcs[0][0] == 1) ||
-        (b._qet->getType() ==
-             QueryExecutionTree::OperationType::TRANSITIVE_PATH &&
-         jcs[0][1] == 1)) {
-      std::shared_ptr<TransitivePath> srcpath;
-      std::shared_ptr<QueryExecutionTree> other;
-      size_t otherCol;
-      if (a._qet->getType() ==
-          QueryExecutionTree::OperationType::TRANSITIVE_PATH) {
-        srcpath = std::reinterpret_pointer_cast<TransitivePath>(
-            a._qet->getRootOperation());
-        other = b._qet;
-        otherCol = jcs[0][1];
-      } else {
-        other = a._qet;
-        srcpath = std::reinterpret_pointer_cast<TransitivePath>(
-            b._qet->getRootOperation());
-        otherCol = jcs[0][0];
-      }
-      // Do not bnd the side of a path twice
-      if (!srcpath->isBound() &&
-          other->getSizeEstimate() < srcpath->getSizeEstimate()) {
-        // The left or right side is a TRANSITIVE_PATH and its join column
-        // corresponds to the left side of its input.
-
-        const vector<size_t>& otherSortedOn = other->resultSortedOn();
-        if (otherSortedOn.empty() || otherSortedOn[0] != otherCol) {
-          if (other->getType() == QueryExecutionTree::SCAN) {
-            return candidates;
-          }
-          auto sort = std::make_shared<Sort>(_qec, other, jcs[0][0]);
-          auto sortedOther = std::make_shared<QueryExecutionTree>(_qec);
-          sortedOther->setOperation(QueryExecutionTree::SORT, sort);
-          other = sortedOther;
-        }
-
-        SubtreePlan plan{_qec};
-        auto& tree = *plan._qet;
-        auto newpath = srcpath->bindRightSide(other, otherCol);
-        tree.setOperation(QueryExecutionTree::TRANSITIVE_PATH, newpath);
-        plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
-        plan.addAllNodes(b._idsOfIncludedNodes);
-        plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
-        plan._idsOfIncludedFilters |= b._idsOfIncludedFilters;
-        candidates.push_back(std::move(plan));
-        return candidates;
-      }
-    }
-
-    // "NORMAL" CASE:
-    // Check if a sub-result has to be re-sorted
-    // TODO: replace with HashJoin maybe (or add variant to possible
-    // plans).
-    auto left = std::make_shared<QueryExecutionTree>(_qec);
-    auto right = std::make_shared<QueryExecutionTree>(_qec);
-    const vector<size_t>& aSortedOn = a._qet->resultSortedOn();
-    if (aSortedOn.size() > 0 && aSortedOn[0] == jcs[0][0]) {
-      left = a._qet;
-    } else {
-      // Create a sort operation.
-      // But never sort scans, there we could have just scanned
-      // differently.
-      if (a._qet->getType() == QueryExecutionTree::SCAN) {
-        return candidates;
-      }
-      auto sort = std::make_shared<Sort>(_qec, a._qet, jcs[0][0]);
-      left->setOperation(QueryExecutionTree::SORT, sort);
-    }
-    const vector<size_t>& bSortedOn = b._qet->resultSortedOn();
-    if (bSortedOn.size() > 0 && bSortedOn[0] == jcs[0][1]) {
-      right = b._qet;
-    } else {
-      // Create a sort operation.
-      // But never sort scans, there we could have just scanned
-      // differently.
-      if (b._qet->getType() == QueryExecutionTree::SCAN) {
-        return candidates;
-      }
-      auto sort = std::make_shared<Sort>(_qec, b._qet, jcs[0][1]);
-      right->setOperation(QueryExecutionTree::SORT, sort);
-    }
-
-    // TODO(florian): consider replacing this with a multicolumn join.
-    // Create the join operation.
-    SubtreePlan plan{_qec};
-    auto& tree = *plan._qet;
-    auto join = std::make_shared<Join>(_qec, left, right, jcs[0][0], jcs[0][1]);
-    tree.setOperation(QueryExecutionTree::JOIN, join);
-    plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
-    plan.addAllNodes(b._idsOfIncludedNodes);
-    plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
-    plan._idsOfIncludedFilters |= b._idsOfIncludedFilters;
+    const SubtreePlan& textPlan = aTextOp ? a : b;
+    const SubtreePlan& filterPlan = aTextOp ? b : a;
+    size_t otherPlanJc = aTextOp ? jcs[0][1] : jcs[0][0];
+    const TextOperationWithoutFilter& noFilter =
+        *static_cast<const TextOperationWithoutFilter*>(
+            textPlan._qet->getRootOperation().get());
+    SubtreePlan plan = makeSubtreePlan<TextOperationWithFilter>(
+        _qec, noFilter.getWordPart(), noFilter.getVars(), noFilter.getCVar(),
+        filterPlan._qet, otherPlanJc);
+    mergeSubtreePlanIds(plan, filterPlan, textPlan);
     candidates.push_back(std::move(plan));
   }
+  // Skip if we have two dummies
+  if (a._qet->getType() == QueryExecutionTree::OperationType::SCAN &&
+      a._qet->getResultWidth() == 3 &&
+      b._qet->getType() == QueryExecutionTree::OperationType::SCAN &&
+      b._qet->getResultWidth() == 3) {
+    return candidates;
+  }
+
+  // Check if one of the two operations is a HAS_PREDICATE_SCAN.
+  // If the join column corresponds to the has-predicate scan's
+  // subject column we can use a specialized join that avoids
+  // loading the full has-predicate predicate.
+  if (a._qet->getType() ==
+          QueryExecutionTree::OperationType::HAS_PREDICATE_SCAN ||
+      b._qet->getType() ==
+          QueryExecutionTree::OperationType::HAS_PREDICATE_SCAN) {
+    bool replaceJoin = false;
+    size_t subtree_col = 0;
+
+    auto hasPredicateScan = std::make_shared<QueryExecutionTree>(_qec);
+    auto other = std::make_shared<QueryExecutionTree>(_qec);
+    std::make_shared<QueryExecutionTree>(_qec);
+    if (a._qet->getType() ==
+            QueryExecutionTree::OperationType::HAS_PREDICATE_SCAN &&
+        jcs[0][0] == 0) {
+      const HasPredicateScan* op =
+          static_cast<HasPredicateScan*>(a._qet->getRootOperation().get());
+      if (op->getType() == HasPredicateScan::ScanType::FULL_SCAN) {
+        hasPredicateScan = a._qet;
+        other = b._qet;
+        subtree_col = jcs[0][1];
+        replaceJoin = true;
+      }
+    } else if (b._qet->getType() ==
+                   QueryExecutionTree::OperationType::HAS_PREDICATE_SCAN &&
+               jcs[0][1] == 0) {
+      const HasPredicateScan* op =
+          static_cast<HasPredicateScan*>(b._qet->getRootOperation().get());
+      if (op->getType() == HasPredicateScan::ScanType::FULL_SCAN) {
+        other = a._qet;
+        hasPredicateScan = b._qet;
+        subtree_col = jcs[0][0];
+        replaceJoin = true;
+      }
+    }
+    if (replaceJoin) {
+      SubtreePlan plan{_qec};
+      QueryExecutionTree& tree = *plan._qet;
+      auto scan = std::make_shared<HasPredicateScan>(
+          _qec, HasPredicateScan::ScanType::SUBQUERY_S);
+      scan->setSubtree(other);
+      scan->setSubtreeSubjectColumn(subtree_col);
+      scan->setObject(static_cast<HasPredicateScan*>(
+                          hasPredicateScan->getRootOperation().get())
+                          ->getObject());
+      tree.setOperation(QueryExecutionTree::HAS_PREDICATE_SCAN, scan);
+      mergeSubtreePlanIds(plan, a, b);
+      candidates.push_back(std::move(plan));
+      return candidates;
+    }
+  }
+
+  // Test for binding the other operation to the left side of the
+  // transitive path
+  if ((a._qet->getType() ==
+           QueryExecutionTree::OperationType::TRANSITIVE_PATH &&
+       jcs[0][0] == 0) ||
+      (b._qet->getType() ==
+           QueryExecutionTree::OperationType::TRANSITIVE_PATH &&
+       jcs[0][1] == 0)) {
+    std::shared_ptr<TransitivePath> srcpath;
+    std::shared_ptr<QueryExecutionTree> other;
+    size_t otherCol;
+    if (a._qet->getType() ==
+        QueryExecutionTree::OperationType::TRANSITIVE_PATH) {
+      srcpath = std::reinterpret_pointer_cast<TransitivePath>(
+          a._qet->getRootOperation());
+      other = b._qet;
+      otherCol = jcs[0][1];
+    } else {
+      other = a._qet;
+      srcpath = std::reinterpret_pointer_cast<TransitivePath>(
+          b._qet->getRootOperation());
+      otherCol = jcs[0][0];
+    }
+
+    // Do not bind the side of a path twice
+    if (!srcpath->isBound() &&
+        other->getSizeEstimate() < srcpath->getSizeEstimate()) {
+      // The left or right side is a TRANSITIVE_PATH and its join column
+      // corresponds to the left side of its input.
+
+      // Enforce the proper sorting, ignore `IndexScan`s that have to be
+      // sorted.
+      other =
+          QueryExecutionTree::createSortedTree(std::move(other), {otherCol});
+
+      SubtreePlan plan{_qec};
+      QueryExecutionTree& tree = *plan._qet;
+      auto newpath = srcpath->bindLeftSide(other, otherCol);
+      tree.setOperation(QueryExecutionTree::TRANSITIVE_PATH, newpath);
+      mergeSubtreePlanIds(plan, a, b);
+      candidates.push_back(std::move(plan));
+      return candidates;
+    }
+  }
+
+  // Test for binding the other operation to the right side of the
+  // transitive path
+  if ((a._qet->getType() ==
+           QueryExecutionTree::OperationType::TRANSITIVE_PATH &&
+       jcs[0][0] == 1) ||
+      (b._qet->getType() ==
+           QueryExecutionTree::OperationType::TRANSITIVE_PATH &&
+       jcs[0][1] == 1)) {
+    std::shared_ptr<TransitivePath> srcpath;
+    std::shared_ptr<QueryExecutionTree> other;
+    size_t otherCol;
+    if (a._qet->getType() ==
+        QueryExecutionTree::OperationType::TRANSITIVE_PATH) {
+      srcpath = std::reinterpret_pointer_cast<TransitivePath>(
+          a._qet->getRootOperation());
+      other = b._qet;
+      otherCol = jcs[0][1];
+    } else {
+      other = a._qet;
+      srcpath = std::reinterpret_pointer_cast<TransitivePath>(
+          b._qet->getRootOperation());
+      otherCol = jcs[0][0];
+    }
+    // Do not bnd the side of a path twice
+    if (!srcpath->isBound() &&
+        other->getSizeEstimate() < srcpath->getSizeEstimate()) {
+      // The left or right side is a TRANSITIVE_PATH and its join column
+      // corresponds to the left side of its input.
+
+      // Enforce the proper sorting, ignore `IndexScan`s that have to be
+      // sorted.
+      other =
+          QueryExecutionTree::createSortedTree(std::move(other), {otherCol});
+
+      SubtreePlan plan =
+          makeSubtreePlan(srcpath->bindRightSide(other, otherCol));
+      mergeSubtreePlanIds(plan, a, b);
+      candidates.push_back(std::move(plan));
+      return candidates;
+    }
+  }
+
+  // "NORMAL" CASE:
+  // Check if a sub-result has to be re-sorted
+  // TODO: replace with HashJoin maybe (or add variant to possible
+  // plans).
+
+  auto left = QueryExecutionTree::createSortedTree(a._qet, {jcs[0][0]});
+  auto right = QueryExecutionTree::createSortedTree(b._qet, {jcs[0][1]});
+
+  // Create the join operation.
+  SubtreePlan plan =
+      makeSubtreePlan<Join>(_qec, left, right, jcs[0][0], jcs[0][1]);
+  mergeSubtreePlanIds(plan, a, b);
+  candidates.push_back(std::move(plan));
 
   return candidates;
 }

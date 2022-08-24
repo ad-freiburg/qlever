@@ -1,21 +1,23 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
-
-#include "GroupBy.h"
+// Author:
+//   2018      Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//   2020-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #include <absl/strings/str_join.h>
+#include <engine/CallFixedSize.h>
+#include <engine/GroupBy.h>
+#include <engine/sparqlExpressions/SparqlExpression.h>
+#include <index/Index.h>
+#include <parser/Alias.h>
+#include <util/Conversions.h>
+#include <util/HashSet.h>
 
-#include "../index/Index.h"
-#include "../parser/Alias.h"
-#include "../util/Conversions.h"
-#include "../util/HashSet.h"
-#include "./sparqlExpressions/SparqlExpression.h"
-#include "CallFixedSize.h"
-
+// _______________________________________________________________________________________________
 GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
-                 std::vector<Alias> aliases)
-    : Operation(qec), _subtree(nullptr), _aliases{std::move(aliases)} {
+                 std::vector<Alias> aliases,
+                 std::shared_ptr<QueryExecutionTree> subtree)
+    : Operation{qec}, _aliases{std::move(aliases)} {
   std::sort(_aliases.begin(), _aliases.end(),
             [](const Alias& a1, const Alias& a2) {
               return a1._outVarName < a2._outVarName;
@@ -37,10 +39,9 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
     _varColMap[a._outVarName] = colIndex;
     colIndex++;
   }
-}
-
-void GroupBy::setSubtree(std::shared_ptr<QueryExecutionTree> subtree) {
-  _subtree = std::move(subtree);
+  auto sortColumns = computeSortColumns(subtree.get());
+  _subtree =
+      QueryExecutionTree::createSortedTree(std::move(subtree), sortColumns);
 }
 
 string GroupBy::asStringImpl(size_t indent) const {
@@ -79,16 +80,15 @@ vector<size_t> GroupBy::resultSortedOn() const {
   return sortedOn;
 }
 
-vector<pair<size_t, bool>> GroupBy::computeSortColumns(
-    const QueryExecutionTree* inputTree) {
-  vector<pair<size_t, bool>> cols;
+vector<size_t> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
+  vector<size_t> cols;
   if (_groupByVariables.empty()) {
     // the entire input is a single group, no sorting needs to be done
     return cols;
   }
 
   ad_utility::HashMap<string, size_t> inVarColMap =
-      inputTree->getVariableColumns();
+      subtree->getVariableColumns();
 
   std::unordered_set<size_t> sortColSet;
 
@@ -97,7 +97,7 @@ vector<pair<size_t, bool>> GroupBy::computeSortColumns(
     // avoid sorting by a column twice
     if (sortColSet.find(col) == sortColSet.end()) {
       sortColSet.insert(col);
-      cols.emplace_back(col, false);
+      cols.push_back(col);
     }
   }
   return cols;
