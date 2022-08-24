@@ -205,7 +205,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  ParsedQuery::GraphPattern visitTypesafe(Parser::WhereClauseContext* ctx);
+  std::pair<ParsedQuery::GraphPattern, vector<Variable>> visitTypesafe(
+      Parser::WhereClauseContext* ctx);
 
   Any visitSolutionModifier(Parser::SolutionModifierContext* ctx) override {
     return visitTypesafe(ctx);

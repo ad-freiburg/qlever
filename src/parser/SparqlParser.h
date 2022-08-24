@@ -42,8 +42,7 @@ class SparqlParser {
  private:
   void parseQuery(ParsedQuery* query, QueryType queryType);
   void parseSelect(ParsedQuery* query);
-  void parseWhere(ParsedQuery* query,
-                  ParsedQuery::GraphPattern* currentPattern = nullptr);
+  void parseWhere(ParsedQuery* query);
   void parseSolutionModifiers(ParsedQuery* query);
   // Returns true if it found a filter
   std::optional<SparqlFilter> parseFilter(bool failOnNoFilter = true);

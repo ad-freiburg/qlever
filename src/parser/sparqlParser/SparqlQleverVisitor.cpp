@@ -230,6 +230,7 @@ GraphPattern Visitor::visitTypesafe(Parser::GroupGraphPatternContext* ctx) {
   }
 }
 
+// TODO: Package this type into a struct.
 std::pair<vector<GraphPatternOperation>, vector<SparqlFilter>>
 Visitor::visitTypesafe(Parser::GroupGraphPatternSubContext* ctx) {
   vector<GraphPatternOperation> ops;
@@ -269,6 +270,7 @@ Visitor::visitTypesafe(Parser::GroupGraphPatternSubContext* ctx) {
   return {ops, filters};
 }
 
+// TODO: Package this type into a struct.
 std::pair<variant<GraphPatternOperation, SparqlFilter>,
           std::optional<GraphPatternOperation::BasicGraphPattern>>
 Visitor::visitTypesafe(
@@ -375,8 +377,14 @@ sparqlExpression::SparqlExpression::Ptr Visitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-GraphPattern Visitor::visitTypesafe(Parser::WhereClauseContext* ctx) {
-  return visitTypesafe(ctx->groupGraphPattern());
+// TODO: Fix this type or package it into a struct.
+std::pair<GraphPattern, vector<Variable>> Visitor::visitTypesafe(
+    Parser::WhereClauseContext* ctx) {
+  visibleVariables_.emplace_back();
+  auto pattern = visitTypesafe(ctx->groupGraphPattern());
+  auto visible = std::move(visibleVariables_.back());
+  visibleVariables_.pop_back();
+  return {std::move(pattern), std::move(visible)};
 }
 
 // ____________________________________________________________________________________
@@ -550,13 +558,13 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
 GraphPatternOperation::Subquery Visitor::visitTypesafe(
     Parser::SubSelectContext* ctx) {
   ParsedQuery query;
-  visibleVariables_.emplace_back();
   query._clause = visitTypesafe(ctx->selectClause());
-  query._rootGraphPattern = visitTypesafe(ctx->whereClause());
+  auto [pattern, visibleVariables] = visitTypesafe(ctx->whereClause());
+  query._rootGraphPattern = std::move(pattern);
   query.setNumInternalVariables(numInternalVariables_);
   query.addSolutionModifiers(visitTypesafe(ctx->solutionModifier()));
   numInternalVariables_ = query.getNumInternalVariables();
-  if (ctx->valuesClause()) {
+  if (ctx->valuesClause() && !ctx->valuesClause()->getText().empty()) {
     // TODO: implement
     reportError(ctx->valuesClause(), "ValuesClause is not yet implemented.");
   }
@@ -565,10 +573,9 @@ GraphPatternOperation::Subquery Visitor::visitTypesafe(
   //   query._rootGraphPattern._children.emplace_back(std::move(values.value()));
   // }
   //  Process Variables that are visible by children of this query.
-  for (const auto& variable : visibleVariables_.back()) {
+  for (const auto& variable : visibleVariables) {
     query.registerVariableVisibleInQueryBody(variable);
   }
-  visibleVariables_.pop_back();
   // Variables that are selected in this query are visible in the parent query.
   for (const auto& variable : query.selectClause().getSelectedVariables()) {
     visibleVariables_.back().emplace_back(variable);

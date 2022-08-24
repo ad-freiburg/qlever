@@ -556,8 +556,10 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
 
       // -- SubQuery
-      auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
+      auto subQueryGroup = get<GraphPatternOperation::GroupGraphPattern>(
           pq._rootGraphPattern._children[1].variant_);
+      auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
+          subQueryGroup._child._children[0].variant_);
       const auto& c_subquery = get<GraphPatternOperation::BasicGraphPattern>(
           parsed_sub_query._subquery._rootGraphPattern._children[0].variant_);
       ASSERT_EQ(2u, c_subquery._whereClauseTriples.size());
@@ -640,8 +642,10 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
 
       // -- SubQuery (level 1)
-      auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
+      auto subQueryGroup = get<GraphPatternOperation::GroupGraphPattern>(
           pq._rootGraphPattern._children[1].variant_);
+      auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
+          subQueryGroup._child._children[0].variant_);
       const auto& c_subquery = get<GraphPatternOperation::BasicGraphPattern>(
           parsed_sub_query._subquery._rootGraphPattern._children[0].variant_);
       ASSERT_EQ(1u, c_subquery._whereClauseTriples.size());
@@ -673,20 +677,15 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(vvars_subquery, sc_subquery.getSelectedVariablesAsStrings());
 
       // -- SubQuery (level 2)
-      auto parsed_sub_sub_query = get<GraphPatternOperation::Subquery>(
-          pq._rootGraphPattern._children[1].variant_);
-      const auto& c_sub_subquery =
-          get<GraphPatternOperation::BasicGraphPattern>(
-              get<GraphPatternOperation::Subquery>(
-                  parsed_sub_sub_query._subquery._rootGraphPattern._children[1]
-                      .variant_)
-                  ._subquery._rootGraphPattern._children[0]
-                  .variant_);
+      auto subsubQueryGroup = get<GraphPatternOperation::GroupGraphPattern>(
+          parsed_sub_query._subquery._rootGraphPattern._children[1].variant_);
       auto aux_parsed_sub_sub_query =
           get<GraphPatternOperation::Subquery>(
-              parsed_sub_sub_query._subquery._rootGraphPattern._children[1]
-                  .variant_)
+              subsubQueryGroup._child._children[0].variant_)
               ._subquery;
+      const auto& c_sub_subquery =
+          get<GraphPatternOperation::BasicGraphPattern>(
+              aux_parsed_sub_sub_query._rootGraphPattern._children[0].variant_);
       ASSERT_EQ(1u, c_sub_subquery._whereClauseTriples.size());
       ASSERT_EQ(0u, aux_parsed_sub_sub_query._rootGraphPattern._filters.size());
       ASSERT_EQ(0, aux_parsed_sub_sub_query._limitOffset._offset);

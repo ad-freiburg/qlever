@@ -92,6 +92,14 @@ std::ostream& operator<<(
 
 // _____________________________________________________________________________
 
+std::ostream& operator<<(std::ostream& out, const ExceptionMetadata& metadata) {
+  out << "ExceptionMetadata(\"" << metadata.query_ << "\", "
+      << metadata.startIndex_ << ", " << metadata.stopIndex_ << ")";
+  return out;
+}
+
+// _____________________________________________________________________________
+
 // Recursively unwrap a std::variant object, or return a pointer
 // to the argument directly if it is already unwrapped.
 
