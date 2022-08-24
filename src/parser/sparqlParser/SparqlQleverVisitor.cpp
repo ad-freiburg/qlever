@@ -230,32 +230,6 @@ ParsedQuery::GraphPattern Visitor::visitTypesafe(
   }
 }
 
-// ____________________________________________________________________________________
-namespace {
-template <typename A, typename B>
-std::pair<vector<A>, vector<B>> splitUp(vector<std::variant<A, B>> elems) {
-  vector<A> as;
-  vector<B> bs;
-  auto aOp = [&as](A a) { as.push_back(std::move(a)); };
-  auto bOp = [&bs](B b) { bs.push_back(std::move(b)); };
-  for (auto& elem : elems) {
-    std::visit(ad_utility::OverloadCallOperator{aOp, bOp}, std::move(elem));
-  }
-  return {as, bs};
-}
-
-template <typename A, typename B>
-std::pair<vector<A>, vector<B>> splitUp(vector<std::pair<A, B>> elems) {
-  vector<A> as;
-  vector<B> bs;
-  for (auto [a, b] : elems) {
-    as.push_back(a);
-    bs.pusb_back(b);
-  }
-  return {as, bs};
-}
-}  // namespace
-
 std::pair<vector<GraphPatternOperation>, vector<SparqlFilter>>
 Visitor::visitTypesafe(Parser::GroupGraphPatternSubContext* ctx) {
   vector<GraphPatternOperation> ops;
