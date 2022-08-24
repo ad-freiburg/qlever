@@ -43,6 +43,14 @@ QueryPlanner::SubtreePlan makeSubtreePlan(QueryExecutionContext* qec,
   return {qec, std::make_shared<Operation>(qec, AD_FWD(args)...)};
 }
 
+void mergePlanIds(QueryPlanner::SubtreePlan& target,
+                  const QueryPlanner::SubtreePlan& a,
+                  const QueryPlanner::SubtreePlan& b) {
+  target._idsOfIncludedNodes = a._idsOfIncludedNodes | b._idsOfIncludedNodes;
+  target._idsOfIncludedFilters =
+      a._idsOfIncludedFilters | b._idsOfIncludedFilters;
+}
+
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext* qec)
     : _qec(qec), _internalVarCount(0), _enablePatternTrick(true) {}
@@ -1014,8 +1022,10 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
       aliases = pq.selectClause().getAliases();
     }
 
-    // The GroupBy constructor automatically takes care of sorting the input if necessary.
-    groupByPlan._qet = makeExecutionTree<GroupBy>(_qec, pq._groupByVariables, std::move(aliases), parent._qet);
+    // The GroupBy constructor automatically takes care of sorting the input if
+    // necessary.
+    groupByPlan._qet = makeExecutionTree<GroupBy>(
+        _qec, pq._groupByVariables, std::move(aliases), parent._qet);
     added.push_back(groupByPlan);
   }
   return added;
@@ -2658,15 +2668,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
         }
         // TODO(florian): consider replacing this with a multicolumn join.
         // Create the join operation.
-        SubtreePlan plan(_qec);
-        auto& tree = *plan._qet;
-        auto join = std::make_shared<TwoColumnJoin>(_qec, left, right, jcs);
-        tree.setOperation(QueryExecutionTree::TWO_COL_JOIN, join);
-        // TODO<joka921>: shouldn't we |= the filters here to avoid duplicate
-        // filtering when it might hurt (although filters are always cheap).
-        plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
-        plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
-        plan.addAllNodes(b._idsOfIncludedNodes);
+        SubtreePlan plan =
+            makeSubtreePlan<TwoColumnJoin>(_qec, left, right, jcs);
+        mergePlanIds(plan, a, b);
         candidates.push_back(std::move(plan));
       }
       return candidates;
@@ -2675,10 +2679,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
       // TwoColumnJoin (the if part before this comment), use a multiColumnJoin.
       try {
         SubtreePlan plan = multiColumnJoin(a, b);
-        plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
-        plan.addAllNodes(b._idsOfIncludedNodes);
-        plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
-        plan._idsOfIncludedFilters |= b._idsOfIncludedFilters;
+        mergePlanIds(plan, a, b);
         return {plan};
       } catch (const std::exception& e) {
         return {};
@@ -2705,19 +2706,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
       const SubtreePlan& textPlan = aTextOp ? a : b;
       const SubtreePlan& filterPlan = aTextOp ? b : a;
       size_t otherPlanJc = aTextOp ? jcs[0][1] : jcs[0][0];
-      SubtreePlan plan(_qec);
-      plan._idsOfIncludedNodes = filterPlan._idsOfIncludedNodes;
-      plan._idsOfIncludedNodes |= textPlan._idsOfIncludedNodes;
-      plan._idsOfIncludedFilters = filterPlan._idsOfIncludedFilters;
-      QueryExecutionTree& tree = *plan._qet;
       const TextOperationWithoutFilter& noFilter =
           *static_cast<const TextOperationWithoutFilter*>(
               textPlan._qet->getRootOperation().get());
-      auto textOp = std::make_shared<TextOperationWithFilter>(
+      SubtreePlan plan = makeSubtreePlan<TextOperationWithFilter>(
           _qec, noFilter.getWordPart(), noFilter.getVars(), noFilter.getCVar(),
           filterPlan._qet, otherPlanJc);
-      tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITH_FILTER,
-                        textOp);
+      mergePlanIds(plan, filterPlan, textPlan);
       candidates.push_back(std::move(plan));
     }
     // Skip if we have two dummies
@@ -2815,25 +2810,20 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
         // The left or right side is a TRANSITIVE_PATH and its join column
         // corresponds to the left side of its input.
 
-        const vector<size_t>& otherSortedOn = other->resultSortedOn();
-        if (otherSortedOn.size() == 0 || otherSortedOn[0] != otherCol) {
-          if (other->getType() == QueryExecutionTree::SCAN) {
-            return candidates;
-          }
-          auto sort = std::make_shared<Sort>(_qec, other, jcs[0][0]);
-          auto sortedOther = std::make_shared<QueryExecutionTree>(_qec);
-          sortedOther->setOperation(QueryExecutionTree::SORT, sort);
-          other = sortedOther;
+        // Enforce the proper sorting, ignore `IndexScan`s that have to be
+        // sorted.
+        other = QueryExecutionTree::createSortedTree(std::move(other),
+                                                     {otherCol}, false)
+                    .value_or(nullptr);
+        if (!other) {
+          return candidates;
         }
 
         SubtreePlan plan{_qec};
         QueryExecutionTree& tree = *plan._qet;
         auto newpath = srcpath->bindLeftSide(other, otherCol);
         tree.setOperation(QueryExecutionTree::TRANSITIVE_PATH, newpath);
-        plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
-        plan.addAllNodes(b._idsOfIncludedNodes);
-        plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
-        plan._idsOfIncludedFilters |= b._idsOfIncludedFilters;
+        mergePlanIds(plan, a, b);
         candidates.push_back(std::move(plan));
         return candidates;
       }
@@ -2868,25 +2858,19 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
         // The left or right side is a TRANSITIVE_PATH and its join column
         // corresponds to the left side of its input.
 
-        const vector<size_t>& otherSortedOn = other->resultSortedOn();
-        if (otherSortedOn.empty() || otherSortedOn[0] != otherCol) {
-          if (other->getType() == QueryExecutionTree::SCAN) {
-            return candidates;
-          }
-          auto sort = std::make_shared<Sort>(_qec, other, jcs[0][0]);
-          auto sortedOther = std::make_shared<QueryExecutionTree>(_qec);
-          sortedOther->setOperation(QueryExecutionTree::SORT, sort);
-          other = sortedOther;
+        // Enforce the proper sorting, ignore `IndexScan`s that have to be
+        // sorted.
+        other = QueryExecutionTree::createSortedTree(std::move(other),
+                                                     {otherCol}, false)
+                    .value_or(nullptr);
+        if (!other) {
+          return candidates;
         }
 
         SubtreePlan plan{_qec};
-        auto& tree = *plan._qet;
         auto newpath = srcpath->bindRightSide(other, otherCol);
-        tree.setOperation(QueryExecutionTree::TRANSITIVE_PATH, newpath);
-        plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
-        plan.addAllNodes(b._idsOfIncludedNodes);
-        plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
-        plan._idsOfIncludedFilters |= b._idsOfIncludedFilters;
+        plan._qet->setOperation(QueryExecutionTree::TRANSITIVE_PATH, newpath);
+        mergePlanIds(plan, a, b);
         candidates.push_back(std::move(plan));
         return candidates;
       }
@@ -2896,45 +2880,21 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     // Check if a sub-result has to be re-sorted
     // TODO: replace with HashJoin maybe (or add variant to possible
     // plans).
-    auto left = std::make_shared<QueryExecutionTree>(_qec);
-    auto right = std::make_shared<QueryExecutionTree>(_qec);
-    const vector<size_t>& aSortedOn = a._qet->resultSortedOn();
-    if (aSortedOn.size() > 0 && aSortedOn[0] == jcs[0][0]) {
-      left = a._qet;
-    } else {
-      // Create a sort operation.
-      // But never sort scans, there we could have just scanned
-      // differently.
-      if (a._qet->getType() == QueryExecutionTree::SCAN) {
-        return candidates;
-      }
-      auto sort = std::make_shared<Sort>(_qec, a._qet, jcs[0][0]);
-      left->setOperation(QueryExecutionTree::SORT, sort);
-    }
-    const vector<size_t>& bSortedOn = b._qet->resultSortedOn();
-    if (bSortedOn.size() > 0 && bSortedOn[0] == jcs[0][1]) {
-      right = b._qet;
-    } else {
-      // Create a sort operation.
-      // But never sort scans, there we could have just scanned
-      // differently.
-      if (b._qet->getType() == QueryExecutionTree::SCAN) {
-        return candidates;
-      }
-      auto sort = std::make_shared<Sort>(_qec, b._qet, jcs[0][1]);
-      right->setOperation(QueryExecutionTree::SORT, sort);
+
+    auto left = QueryExecutionTree::createSortedTree(a._qet, {jcs[0][0]}, false)
+                    .value_or(nullptr);
+    auto right =
+        QueryExecutionTree::createSortedTree(b._qet, {jcs[0][1]}, false)
+            .value_or(nullptr);
+    if (!left || !right) {
+      return candidates;
     }
 
     // TODO(florian): consider replacing this with a multicolumn join.
     // Create the join operation.
-    SubtreePlan plan{_qec};
-    auto& tree = *plan._qet;
-    auto join = std::make_shared<Join>(_qec, left, right, jcs[0][0], jcs[0][1]);
-    tree.setOperation(QueryExecutionTree::JOIN, join);
-    plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
-    plan.addAllNodes(b._idsOfIncludedNodes);
-    plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
-    plan._idsOfIncludedFilters |= b._idsOfIncludedFilters;
+    SubtreePlan plan =
+        makeSubtreePlan<Join>(_qec, left, right, jcs[0][0], jcs[0][1]);
+    mergePlanIds(plan, a, b);
     candidates.push_back(std::move(plan));
   }
 

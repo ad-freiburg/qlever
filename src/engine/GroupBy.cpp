@@ -13,9 +13,11 @@
 #include "./sparqlExpressions/SparqlExpression.h"
 #include "CallFixedSize.h"
 
+// _______________________________________________________________________________________________
 GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
-                 std::vector<Alias> aliases)
-    : Operation(qec), _subtree(nullptr), _aliases{std::move(aliases)} {
+                 std::vector<Alias> aliases,
+                 std::shared_ptr<QueryExecutionTree> subtree)
+    : Operation{qec}, _aliases{std::move(aliases)} {
   std::sort(_aliases.begin(), _aliases.end(),
             [](const Alias& a1, const Alias& a2) {
               return a1._outVarName < a2._outVarName;
@@ -37,23 +39,14 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
     _varColMap[a._outVarName] = colIndex;
     colIndex++;
   }
-}
-
-// _______________________________________________________________________________________________
-GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
-                 std::vector<Alias> aliases,
-                 std::shared_ptr<QueryExecutionTree> subtree)
-    : GroupBy(qec, std::move(groupByVariables), std::move(aliases)) {
   std::vector<size_t> sortColumns;
   for (auto [columnIdx, isDescending] : computeSortColumns(subtree.get())) {
     AD_CHECK(!isDescending);
     sortColumns.push_back(columnIdx);
   }
-  setSubtree(QueryExecutionTree::createSortedTree(std::move(subtree), std::move(sortColumns)));
-}
-
-void GroupBy::setSubtree(std::shared_ptr<QueryExecutionTree> subtree) {
-  _subtree = std::move(subtree);
+  _subtree = QueryExecutionTree::createSortedTree(std::move(subtree),
+                                                  std::move(sortColumns), true)
+                 .value();
 }
 
 string GroupBy::asStringImpl(size_t indent) const {

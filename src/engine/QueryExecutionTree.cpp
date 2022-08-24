@@ -632,9 +632,10 @@ template void QueryExecutionTree::setOperation(
     std::shared_ptr<NeutralElementOperation>);
 
 // ________________________________________________________________________________________________________________
-std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
-    std::shared_ptr<QueryExecutionTree> input,
-    std::vector<size_t> sortColumns) {
+std::optional<std::shared_ptr<QueryExecutionTree>>
+QueryExecutionTree::createSortedTree(std::shared_ptr<QueryExecutionTree> input,
+                                     std::vector<size_t> sortColumns,
+                                     bool allowResortingScans) {
   auto inputSortedOn = input->resultSortedOn();
   bool inputSorted = sortColumns.size() <= inputSortedOn.size();
   for (size_t i = 0; inputSorted && i < sortColumns.size(); ++i) {
@@ -644,12 +645,16 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
     return input;
   }
 
+  if (!allowResortingScans && input->getType() == SCAN) {
+    return std::nullopt;
+  }
+
   if (sortColumns.size() == 1) {
     auto sort =
         std::make_shared<Sort>(input->getRootOperation()->getExecutionContext(),
                                std::move(input), sortColumns[0]);
-        return std::make_shared<QueryExecutionTree>(
-            input->getRootOperation()->getExecutionContext(), std::move(sort));
+    return std::make_shared<QueryExecutionTree>(
+        input->getRootOperation()->getExecutionContext(), std::move(sort));
   } else {
     std::vector<std::pair<size_t, bool>> sortColsForOrderBy;
     for (auto i : sortColumns) {

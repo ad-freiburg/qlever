@@ -28,20 +28,6 @@ class GroupBy : public Operation {
     size_t _outCol;
   };
 
-  /**
-   * @brief This constructor does not take a subtree as an argument to allow
-   *        for creating the GroupBy operation before the OrderBy operation
-   *        that is required by this GroupBy. This prevents having to compute
-   *        the order of the aggregate aliases twice and group by columns
-   *        in two places. The subtree must be set by calling setSubtree
-   *        before calling computeResult
-   * @param qec
-   * @param groupByVariables
-   * @param aliases
-   */
-  GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
-          std::vector<Alias> aliases);
-
   GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
           std::vector<Alias> aliases,
           std::shared_ptr<QueryExecutionTree> subtree);

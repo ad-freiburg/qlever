@@ -215,9 +215,9 @@ class QueryExecutionTree {
   [[nodiscard]] const bool& isRoot() const noexcept { return _isRoot; }
 
   // TODO<joka921> comment
-  static std::shared_ptr<QueryExecutionTree> createSortedTree(
+  static std::optional<std::shared_ptr<QueryExecutionTree>> createSortedTree(
       std::shared_ptr<QueryExecutionTree> input,
-      std::vector<size_t> sortColumns);
+      std::vector<size_t> sortColumns, bool allowResortingOfScans);
 
  private:
   QueryExecutionContext* _qec;  // No ownership
