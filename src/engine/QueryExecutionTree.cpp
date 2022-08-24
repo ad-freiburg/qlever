@@ -646,7 +646,8 @@ template void QueryExecutionTree::setOperation(
 
 // ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
-    std::shared_ptr<QueryExecutionTree> qet, std::vector<size_t> sortColumns) {
+    std::shared_ptr<QueryExecutionTree> qet,
+    const vector<size_t>& sortColumns) {
   auto inputSortedOn = qet->resultSortedOn();
   bool inputSorted = sortColumns.size() <= inputSortedOn.size();
   for (size_t i = 0; inputSorted && i < sortColumns.size(); ++i) {

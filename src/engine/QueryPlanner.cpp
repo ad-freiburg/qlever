@@ -2796,12 +2796,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
 
         // Enforce the proper sorting, ignore `IndexScan`s that have to be
         // sorted.
-        other = QueryExecutionTree::createSortedTree(std::move(other),
-                                                     {otherCol}, false)
-                    .value_or(nullptr);
-        if (!other) {
-          return candidates;
-        }
+        other =
+            QueryExecutionTree::createSortedTree(std::move(other), {otherCol});
 
         SubtreePlan plan =
             makeSubtreePlan(srcpath->bindRightSide(other, otherCol));
@@ -2824,7 +2820,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
         makeSubtreePlan<Join>(_qec, left, right, jcs[0][0], jcs[0][1]);
     mergeSubtreePlanIds(plan, a, b);
     candidates.push_back(std::move(plan));
-  }
+  };
 
   return candidates;
 }

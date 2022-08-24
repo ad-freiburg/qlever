@@ -64,10 +64,10 @@ class GroupBy : public Operation {
   /**
    * @return The columns on which the input data should be sorted or an empty
    *         list if no particular order is required for the grouping.
-   * @param inputTree The QueryExecutionTree that contains the operations
+   * @param subtree The QueryExecutionTree that contains the operations
    *                  creating the sorting operation inputs.
    */
-  vector<size_t> computeSortColumns(const QueryExecutionTree* inputTree);
+  vector<size_t> computeSortColumns(const QueryExecutionTree* subtree);
 
   vector<QueryExecutionTree*> getChildren() override {
     return {_subtree.get()};

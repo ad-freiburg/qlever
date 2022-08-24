@@ -39,8 +39,9 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
     _varColMap[a._outVarName] = colIndex;
     colIndex++;
   }
-  _subtree = QueryExecutionTree::createSortedTree(std::move(subtree),
-                                                  computeSortColumns());
+  auto sortColumns = computeSortColumns(subtree.get());
+  _subtree =
+      QueryExecutionTree::createSortedTree(std::move(subtree), sortColumns);
 }
 
 string GroupBy::asStringImpl(size_t indent) const {
@@ -79,8 +80,7 @@ vector<size_t> GroupBy::resultSortedOn() const {
   return sortedOn;
 }
 
-vector<size_t> GroupBy::computeSortColumns(
-    const QueryExecutionTree* inputTree) {
+vector<size_t> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
   vector<size_t> cols;
   if (_groupByVariables.empty()) {
     // the entire input is a single group, no sorting needs to be done
@@ -88,7 +88,7 @@ vector<size_t> GroupBy::computeSortColumns(
   }
 
   ad_utility::HashMap<string, size_t> inVarColMap =
-      inputTree->getVariableColumns();
+      subtree->getVariableColumns();
 
   std::unordered_set<size_t> sortColSet;
 

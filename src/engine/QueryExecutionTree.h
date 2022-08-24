@@ -218,7 +218,8 @@ class QueryExecutionTree {
   // `qet`, but sorted according to the `sortColumns`. If `qet` is already
   // sorted accordingly, it is simply returned.
   static std::shared_ptr<QueryExecutionTree> createSortedTree(
-      std::shared_ptr<QueryExecutionTree> qet, std::vector<size_t> sortColumns);
+      std::shared_ptr<QueryExecutionTree> qet,
+      const vector<size_t>& sortColumns);
 
  private:
   QueryExecutionContext* _qec;  // No ownership
