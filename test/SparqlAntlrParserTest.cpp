@@ -918,7 +918,7 @@ TEST(SparqlParser, InlineData) {
                              const vector<vector<string>>& expectedVals) {
     expectCompleteParse(
         parseInlineData(input, SparqlQleverVisitor::PrefixMap{}),
-        IsValues(expectedVars, expectedVals));
+        IsInlineData(expectedVars, expectedVals));
   };
   expectInlineData("VALUES ?test { \"foo\" }", {"?test"}, {{"\"foo\""}});
   // There must always be a block present for InlineData

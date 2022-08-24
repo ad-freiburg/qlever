@@ -190,8 +190,9 @@ MATCHER_P(IsLiteral, value, "") {
 // _____________________________________________________________________________
 
 MATCHER_P2(IsBind, variable, expression, "") {
-  return (arg._target == variable) &&
-         (arg._expression.getDescriptor() == expression);
+  auto bind = std::get_if<GraphPatternOperation::Bind>(&arg.variant_);
+  return bind && (bind->_target == variable) &&
+         (bind->_expression.getDescriptor() == expression);
 }
 
 MATCHER_P(IsBindExpression, expression, "") {
@@ -257,6 +258,14 @@ MATCHER_P2(IsValues, vars, values, "") {
   //  becomes a trivial Eq matcher.
   return (arg._inlineValues._variables == vars) &&
          (arg._inlineValues._values == values);
+}
+
+MATCHER_P2(IsInlineData, vars, values, "") {
+  // TODO Refactor GraphPatternOperation::Values / SparqlValues s.t. this
+  //  becomes a trivial Eq matcher.
+  auto valuesBlock = std::get_if<GraphPatternOperation::Values>(&arg.variant_);
+  return valuesBlock && (valuesBlock->_inlineValues._variables == vars) &&
+         (valuesBlock->_inlineValues._values == values);
 }
 
 MATCHER_P2(IsAsteriskSelect, distinct, reduced, "") {
@@ -327,24 +336,16 @@ MATCHER_P4(IsSolutionModifier, groupByVariables, havingClauses, orderBy,
 
 // TODO: ExplainMatchResult?
 MATCHER_P(IsTriples, triples, "") {
-  if (holds_alternative<GraphPatternOperation::BasicGraphPattern>(
-          arg.variant_)) {
-    return testing::Matches(testing::UnorderedElementsAreArray(triples))(
-        std::get<GraphPatternOperation::BasicGraphPattern>(arg.variant_)
-            ._whereClauseTriples);
-  } else {
-    return false;
-  }
+  auto triplesValue =
+      std::get_if<GraphPatternOperation::BasicGraphPattern>(&arg.variant_);
+  return triplesValue && testing::Matches(testing::UnorderedElementsAreArray(
+                             triples))(triplesValue->_whereClauseTriples);
 }
 
 MATCHER_P2(IsBindd, target, expression, "") {
-  if (holds_alternative<GraphPatternOperation::Bind>(arg.variant_)) {
-    auto& bind = std::get<GraphPatternOperation::Bind>(arg.variant_);
-    return bind._target == target &&
-           bind._expression.getDescriptor() == expression;
-  } else {
-    return false;
-  }
+  auto bind = std::get_if<GraphPatternOperation::Bind>(&arg.variant_);
+  return bind && bind->_target == target &&
+         bind->_expression.getDescriptor() == expression;
 }
 
 MATCHER_P(IsFilters, filters, "") {

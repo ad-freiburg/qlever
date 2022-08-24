@@ -203,9 +203,9 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       parseWhere(query, &child);
       lexer_.accept(".");
     } else if (lexer_.peek("bind")) {
-      GraphPatternOperation::Bind bind =
-          parseWithAntlr(&AntlrParser::bind, *query);
-      query->registerVariableVisibleInQueryBody(Variable{bind._target});
+      GraphPatternOperation bind = parseWithAntlr(&AntlrParser::bind, *query);
+      query->registerVariableVisibleInQueryBody(Variable{
+          std::get<GraphPatternOperation::Bind>(bind.variant_)._target});
       currentPattern->_children.emplace_back(std::move(bind));
       // The dot after a BIND is optional.
       lexer_.accept(".");
@@ -277,11 +277,13 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       // A filter may have an optional dot after it
       lexer_.accept(".");
     } else if (lexer_.peek("values")) {
-      auto values = parseWithAntlr(&AntlrParser::inlineData, *query);
-      for (const auto& variable : values._inlineValues._variables) {
+      auto pattern = parseWithAntlr(&AntlrParser::inlineData, *query);
+      for (const auto& variable :
+           std::get<GraphPatternOperation::Values>(pattern.variant_)
+               ._inlineValues._variables) {
         query->registerVariableVisibleInQueryBody(Variable{variable});
       }
-      currentPattern->_children.emplace_back(std::move(values));
+      currentPattern->_children.emplace_back(std::move(pattern));
       lexer_.accept(".");
     } else {
       // TODO: Make TripleComponent constructible from these types.

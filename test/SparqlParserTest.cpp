@@ -1295,12 +1295,8 @@ TEST(ParserTest, Group) {
                          "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY (?x "
                          "- ?y AS ?foo) ?x")
                          .parse();
-    auto variant = pq._rootGraphPattern._children[1].variant_;
-    ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
-    auto helperBind = get<GraphPatternOperation::Bind>(variant);
-    EXPECT_THAT(helperBind, IsBind("?foo", "?x-?y"));
-    EXPECT_THAT(
-        pq, GroupByVariablesMatch<vector<string>>({helperBind._target, "?x"}));
+    EXPECT_THAT(pq._rootGraphPattern._children[1], IsBind("?foo", "?x-?y"));
+    EXPECT_THAT(pq, GroupByVariablesMatch<vector<string>>({"?foo", "?x"}));
   }
   {
     // grouping by a builtin call
