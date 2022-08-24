@@ -1116,12 +1116,12 @@ class IdTable : public IdTableStatic<0, ad_utility::AllocatorWithLimit<Id>> {
   IdTable(Base&& b) : Base(std::move(b)) {}
   IdTable(const Base& b) : Base(b) {}
 
-  IdTable& operator= (const Base& b) {
+  IdTable& operator=(const Base& b) {
     *(static_cast<Base*>(this)) = b;
     return *this;
   }
 
-  IdTable& operator= (Base&& b) {
+  IdTable& operator=(Base&& b) {
     *(static_cast<Base*>(this)) = std::move(b);
     return *this;
   }

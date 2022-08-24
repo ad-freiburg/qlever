@@ -4,9 +4,168 @@
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#if 0
 #include "./Index.h"
 
+#include "./IndexImpl.h"
+
+// _____________________________________________________________________________________________
+Index::Index() : pimpl_{std::make_unique<IndexImpl>()} {}
+
+// Needs to be in the .cpp file because of the unique_ptr to a forwarded class.
+// see
+// https://stackoverflow.com/questions/13414652/forward-declaration-with-unique-ptr
+Index::~Index() = default;
+
+// ________________________________________________________________________________________________
+template <class Parser>
+void Index::createFromFile(const std::string& filename) {
+  pimpl_->template createFromFile<Parser>(filename);
+}
+
+// ________________________________________________________________________________________________
+void Index::addPatternsToExistingIndex() {
+  pimpl_->addPatternsToExistingIndex();
+}
+
+// ________________________________________________________________________________________________
+void Index::createFromOnDiskIndex(const std::string& onDiskBase) {
+  pimpl_->createFromOnDiskIndex(onDiskBase);
+}
+
+// ________________________________________________________________________________________________
+void Index::addTextFromContextFile(const std::string& contextFile,
+                                   bool addWordsFromLiterals) {
+  pimpl_->addTextFromContextFile(contextFile, addWordsFromLiterals);
+}
+
+// ________________________________________________________________________________________________
+void Index::buildDocsDB(const std::string& docsFile) {
+  pimpl_->buildDocsDB(docsFile);
+}
+
+// ________________________________________________________________________________________________
+void Index::addTextFromOnDiskIndex() { pimpl_->addTextFromOnDiskIndex(); }
+
+// ________________________________________________________________________________________________
+auto Index::getVocab() const -> const Vocab& { return pimpl_->getVocab(); }
+
+// ________________________________________________________________________________________________
+auto Index::getNonConstVocabForTesting() -> Vocab& {
+  return pimpl_->getNonConstVocabForTesting();
+}
+
+// ________________________________________________________________________________________________
+auto Index::getTextVocab() const -> const TextVocab& {
+  return pimpl_->getTextVocab();
+}
+
+// ________________________________________________________________________________________________
+size_t Index::relationCardinality(const std::string& relationName) const {
+  return pimpl_->relationCardinality(relationName);
+}
+
+// ________________________________________________________________________________________________
+size_t Index::subjectCardinality(const TripleComponent& sub) const {
+  return pimpl_->subjectCardinality(sub);
+}
+
+// ________________________________________________________________________________________________
+size_t Index::objectCardinality(const TripleComponent& obj) const {
+  return pimpl_->objectCardinality(obj);
+}
+
+// ________________________________________________________________________________________________
+std::optional<std::string> Index::idToOptionalString(Id id) const {
+  return pimpl_->idToOptionalString(id);
+}
+
+// ________________________________________________________________________________________________
+bool Index::getId(const std::string& element, Id* id) const {
+  return pimpl_->getId(element, id);
+}
+
+// ________________________________________________________________________________________________
+std::pair<Id, Id> Index::prefix_range(const std::string& prefix) const {
+  return pimpl_->prefix_range(prefix);
+}
+
+// ________________________________________________________________________________________________
+const vector<PatternID>& Index::getHasPattern() const {
+  return pimpl_->getHasPattern();
+}
+
+// ________________________________________________________________________________________________
+const CompactVectorOfStrings<Id>& Index::getHasPredicate() const {
+  return pimpl_->getHasPredicate();
+}
+
+// ________________________________________________________________________________________________
+const CompactVectorOfStrings<Id>& Index::getPatterns() const {
+  return pimpl_->getPatterns();
+}
+
+// ________________________________________________________________________________________________
+double Index::getHasPredicateMultiplicityEntities() const {
+  return pimpl_->getHasPredicateMultiplicityEntities();
+}
+
+// _________________________________________________________________________________________________
+double Index::getHasPredicateMultiplicityPredicates() const {
+  return pimpl_->getHasPredicateMultiplicityPredicates();
+}
+
+// _________________________________________________________________________________________________
+size_t Index::getHasPredicateFullSize() const {
+  return pimpl_->getHasPredicateFullSize();
+}
+
+// _________________________________________________________________________________________________
+std::string_view Index::wordIdToString(WordIndex wordIndex) const {
+  return pimpl_->wordIdToString(wordIndex);
+}
+
+// _________________________________________________________________________________________________
+size_t Index::getSizeEstimate(const std::string& words) const {
+  return pimpl_->getSizeEstimate(words);
+}
+
+// _________________________________________________________________________________________________
+void Index::getContextListForWords(const std::string& words,
+                                   IdTable* result) const {
+  return pimpl_->getContextListForWords(words, result);
+}
+
+// _________________________________________________________________________________________________
+void Index::getECListForWordsOneVar(const std::string& words, size_t limit,
+                                    IdTable* result) const {
+  return pimpl_->getECListForWordsOneVar(words, limit, result);
+}
+
+// _________________________________________________________________________________________________
+void Index::getECListForWords(const std::string& words, size_t nofVars,
+                              size_t limit, IdTable* result) const {
+  return pimpl_->getECListForWords(words, nofVars, limit, result);
+}
+
+// _________________________________________________________________________________________________
+void Index::getFilteredECListForWords(const std::string& words,
+                                      const IdTable& filter,
+                                      size_t filterColumn, size_t nofVars,
+                                      size_t limit, IdTable* result) const {
+  return pimpl_->getFilteredECListForWords(words, filter, filterColumn, nofVars,
+                                           limit, result);
+}
+
+// _________________________________________________________________________________________________
+void Index::getFilteredECListForWordsWidthOne(const std::string& words,
+                                              const IdTable& filter,
+                                              size_t nofVars, size_t limit,
+                                              IdTable* result) const {
+  return pimpl_->getFilteredECListForWordsWidthOne(words, filter, nofVars,
+                                                   limit, result);
+}
+
+#if 0
 #include <CompilationInfo.h>
 #include <absl/strings/str_join.h>
 #include <index/PrefixHeuristic.h>
@@ -27,6 +186,8 @@
 #include <stxxl/algorithm>
 #include <stxxl/map>
 #include <unordered_map>
+
+#include "./Index.h"
 
 using std::array;
 

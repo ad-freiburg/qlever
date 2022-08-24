@@ -5,30 +5,30 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 #pragma once
 
-#include <util/json.h>
-#include <string>
-#include <vector>
-#include <optional>
+#include <global/Id.h>
 #include <index/CompressedString.h>
 #include <index/StringSortComparator.h>
 #include <index/Vocabulary.h>
-#include <global/Id.h>
 #include <parser/TripleComponent.h>
 #include <parser/TurtleParser.h>
+#include <util/json.h>
+
 #include <array>
+#include <optional>
+#include <string>
+#include <vector>
 
 // Forward declarations.
 class IdTable;
 class TextBlockMetaData;
+class IndexImpl;
 
 // an empty Tag type.
-class TurtleParserAuto{};
+class TurtleParserAuto {};
 
 using json = nlohmann::json;
 
-enum struct Permutations {
-  PSO, POS, SPO, SOP, OPS, OSP
-};
+enum struct Permutations { PSO, POS, SPO, SOP, OPS, OSP };
 class Index {
  public:
   /// Forbid copy and assignment.
@@ -39,13 +39,15 @@ class Index {
   Index(Index&&) noexcept = default;
 
   Index();
-
+  ~Index();
 
   // Creates an index from a file. Parameter Parser must be able to split the
   // file's format into triples.
   // Will write vocabulary and on-disk index data.
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
+
+  // TODO<joka921> Make the parser options also a plain enum?
   template <class Parser>
   void createFromFile(const std::string& filename);
 
@@ -67,12 +69,12 @@ class Index {
   // Read necessary meta data into memory and opens file handles.
   void addTextFromOnDiskIndex();
 
-  using Vocab = Vocabulary<CompressedString, TripleComponentComparator> ;
-  const Vocab& getVocab() const;
+  using Vocab = Vocabulary<CompressedString, TripleComponentComparator>;
+  [[nodiscard]] const Vocab& getVocab() const;
   Vocab& getNonConstVocabForTesting();
 
   using TextVocab = Vocabulary<std::string, SimpleStringComparator>;
-  const TextVocab& getTextVocab() const;
+  [[nodiscard]] const TextVocab& getTextVocab() const;
 
   // --------------------------------------------------------------------------
   //  -- RETRIEVAL ---
@@ -87,47 +89,48 @@ class Index {
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL
   // --------------------------------------------------------------------------
-  size_t relationCardinality(const std::string& relationName) const;
+  [[nodiscard]] size_t relationCardinality(
+      const std::string& relationName) const;
 
-  size_t subjectCardinality(const TripleComponent& sub) const;
+  [[nodiscard]] size_t subjectCardinality(const TripleComponent& sub) const;
 
-  size_t objectCardinality(const TripleComponent& obj) const;
+  [[nodiscard]] size_t objectCardinality(const TripleComponent& obj) const;
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
-  std::optional<std::string> idToOptionalString(Id id) const;
+  [[nodiscard]] std::optional<std::string> idToOptionalString(Id id) const;
 
   bool getId(const std::string& element, Id* id) const;
 
-  std::pair<Id, Id> prefix_range(const std::string& prefix) const;
+  [[nodiscard]] std::pair<Id, Id> prefix_range(const std::string& prefix) const;
 
-  const vector<PatternID>& getHasPattern() const;
-  const CompactVectorOfStrings<Id>& getHasPredicate() const;
-  const CompactVectorOfStrings<Id>& getPatterns() const;
+  [[nodiscard]] const vector<PatternID>& getHasPattern() const;
+  [[nodiscard]] const CompactVectorOfStrings<Id>& getHasPredicate() const;
+  [[nodiscard]] const CompactVectorOfStrings<Id>& getPatterns() const;
   /**
    * @return The multiplicity of the Entites column (0) of the full has-relation
    *         relation after unrolling the patterns.
    */
-  double getHasPredicateMultiplicityEntities() const;
+  [[nodiscard]] double getHasPredicateMultiplicityEntities() const;
 
   /**
    * @return The multiplicity of the Predicates column (0) of the full
    * has-relation relation after unrolling the patterns.
    */
-  double getHasPredicateMultiplicityPredicates() const;
+  [[nodiscard]] double getHasPredicateMultiplicityPredicates() const;
 
   /**
    * @return The size of the full has-relation relation after unrolling the
    *         patterns.
    */
-  size_t getHasPredicateFullSize() const;
+  [[nodiscard]] size_t getHasPredicateFullSize() const;
 
   // --------------------------------------------------------------------------
   // TEXT RETRIEVAL
   // --------------------------------------------------------------------------
-  std::string_view wordIdToString(WordIndex wordIndex) const;
+  [[nodiscard]] std::string_view wordIdToString(WordIndex wordIndex) const;
 
-  size_t getSizeEstimate(const std::string& words) const;
+  [[nodiscard]] size_t getSizeEstimate(const std::string& words) const;
 
   void getContextListForWords(const std::string& words, IdTable* result) const;
 
@@ -141,9 +144,10 @@ class Index {
   // With filtering. Needs many template instantiations but
   // only nofVars truly makes a difference. Others are just data types
   // of result tables.
-  void getFilteredECListForWords(const std::string& words, const IdTable& filter,
-                                 size_t filterColumn, size_t nofVars,
-                                 size_t limit, IdTable* result) const;
+  void getFilteredECListForWords(const std::string& words,
+                                 const IdTable& filter, size_t filterColumn,
+                                 size_t nofVars, size_t limit,
+                                 IdTable* result) const;
 
   // Special cast with a width-one filter.
   void getFilteredECListForWordsWidthOne(const std::string& words,
@@ -172,7 +176,8 @@ class Index {
       const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
       size_t limit, vector<vector<Id>>& res) const;
 
-  void getWordPostingsForTerm(const std::string& term, vector<TextRecordIndex>& cids,
+  void getWordPostingsForTerm(const std::string& term,
+                              vector<TextRecordIndex>& cids,
                               vector<Score>& scores) const;
 
   void getEntityPostingsForTerm(const std::string& term,
@@ -183,7 +188,8 @@ class Index {
 
   // Only for debug reasons and external encoding tests.
   // Supply an empty vector to dump all lists above a size threshold.
-  void dumpAsciiLists(const vector<std::string>& lists, bool decodeGapsFreq) const;
+  void dumpAsciiLists(const vector<std::string>& lists,
+                      bool decodeGapsFreq) const;
 
   void dumpAsciiLists(const TextBlockMetaData& tbmd) const;
 
@@ -277,12 +283,15 @@ class Index {
    */
   // _____________________________________________________________________________
   void scan(const TripleComponent& col0String,
-            const TripleComponent& col1String, IdTable* result,
-            Permutations p,
+            const TripleComponent& col1String, IdTable* result, Permutations p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   // Count the number of "QLever-internal" triples (predicate ql:langtag or
   // predicate starts with @) and all other triples (that were actually part of
   // the input).
   std::pair<size_t, size_t> getNumTriplesActuallyAndAdded() const;
+
+ private:
+  // Pimpl to reduce compile times
+  std::unique_ptr<IndexImpl> pimpl_;
 };

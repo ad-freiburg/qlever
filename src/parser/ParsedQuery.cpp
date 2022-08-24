@@ -4,17 +4,16 @@
 
 #include "ParsedQuery.h"
 
-#include <absl/strings/str_split.h>
 #include <absl/strings/str_join.h>
+#include <absl/strings/str_split.h>
+#include <parser/RdfEscaping.h>
+#include <util/Conversions.h>
 
 #include <optional>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
-
-#include <parser/RdfEscaping.h>
-#include <util/Conversions.h>
 
 using std::string;
 using std::vector;

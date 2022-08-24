@@ -217,7 +217,8 @@ template void IndexImpl::createFromFile<TurtleStreamParser<Tokenizer>>(
     const string& filename);
 template void IndexImpl::createFromFile<TurtleMmapParser<Tokenizer>>(
     const string& filename);
-template void IndexImpl::createFromFile<TurtleParserAuto>(const string& filename);
+template void IndexImpl::createFromFile<TurtleParserAuto>(
+    const string& filename);
 
 // _____________________________________________________________________________
 template <class Parser>
@@ -464,10 +465,10 @@ template <class MetaDataDispatcher, typename SortedTriples>
 std::optional<std::pair<typename MetaDataDispatcher::WriteType,
                         typename MetaDataDispatcher::WriteType>>
 IndexImpl::createPermutationPairImpl(const string& fileName1,
-                                 const string& fileName2,
-                                 SortedTriples&& sortedTriples, size_t c0,
-                                 size_t c1, size_t c2,
-                                 auto&&... perTripleCallbacks) {
+                                     const string& fileName2,
+                                     SortedTriples&& sortedTriples, size_t c0,
+                                     size_t c1, size_t c2,
+                                     auto&&... perTripleCallbacks) {
   using MetaData = typename MetaDataDispatcher::WriteType;
   MetaData metaData1, metaData2;
   if constexpr (metaData1._isMmapBased) {
@@ -542,8 +543,9 @@ IndexImpl::createPermutationPairImpl(const string& fileName1,
 }
 
 // __________________________________________________________________________
-void IndexImpl::writeSwitchedRel(CompressedRelationWriter* out, Id currentRel,
-                             ad_utility::BufferedVector<array<Id, 2>>* bufPtr) {
+void IndexImpl::writeSwitchedRel(
+    CompressedRelationWriter* out, Id currentRel,
+    ad_utility::BufferedVector<array<Id, 2>>* bufPtr) {
   // sort according to the "switched" relation.
   auto& buffer = *bufPtr;
 
