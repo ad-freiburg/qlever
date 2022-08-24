@@ -328,8 +328,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  GraphPatternOperation::Optional visitTypesafe(
-      Parser::OptionalGraphPatternContext* ctx);
+  GraphPatternOperation visitTypesafe(Parser::OptionalGraphPatternContext* ctx);
 
   Any visitGraphGraphPattern(Parser::GraphGraphPatternContext* ctx) override {
     return visitChildren(ctx);
@@ -344,13 +343,13 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  GraphPatternOperation::Bind visitTypesafe(Parser::BindContext* ctx);
+  GraphPatternOperation visitTypesafe(Parser::BindContext* ctx);
 
   Any visitInlineData(Parser::InlineDataContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  GraphPatternOperation::Values visitTypesafe(Parser::InlineDataContext* ctx);
+  GraphPatternOperation visitTypesafe(Parser::InlineDataContext* ctx);
 
   Any visitDataBlock(Parser::DataBlockContext* ctx) override {
     return visitTypesafe(ctx);
@@ -386,8 +385,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  GraphPatternOperation::Minus visitTypesafe(
-      Parser::MinusGraphPatternContext* ctx);
+  GraphPatternOperation visitTypesafe(Parser::MinusGraphPatternContext* ctx);
 
   Any visitGroupOrUnionGraphPattern(
       Parser::GroupOrUnionGraphPatternContext* ctx) override {

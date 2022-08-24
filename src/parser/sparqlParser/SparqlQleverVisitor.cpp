@@ -180,18 +180,19 @@ Variable Visitor::visitTypesafe(Parser::VarContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-Bind Visitor::visitTypesafe(Parser::BindContext* ctx) {
+GraphPatternOperation Visitor::visitTypesafe(Parser::BindContext* ctx) {
   visibleVariables_.back().emplace_back(ctx->var()->getText());
-  return {{visitTypesafe(ctx->expression())}, ctx->var()->getText()};
+  return GraphPatternOperation{
+      Bind{{visitTypesafe(ctx->expression())}, ctx->var()->getText()}};
 }
 
 // ____________________________________________________________________________________
-Values Visitor::visitTypesafe(Parser::InlineDataContext* ctx) {
+GraphPatternOperation Visitor::visitTypesafe(Parser::InlineDataContext* ctx) {
   Values values = visitTypesafe(ctx->dataBlock());
   for (const auto& variable : values._inlineValues._variables) {
     visibleVariables_.back().emplace_back(variable);
   }
-  return values;
+  return GraphPatternOperation{values};
 }
 
 // ____________________________________________________________________________________
@@ -379,30 +380,19 @@ std::variant<GraphPatternOperation, SparqlFilter> Visitor::visitTypesafe(
   if (ctx->graphGraphPattern() || ctx->serviceGraphPattern()) {
     reportError(ctx,
                 "GraphGraphPattern or ServiceGraphPattern are not supported.");
-  } else if (ctx->filterR()) {
-    // TODO: visitAlternative
-    return visitTypesafe(ctx->filterR());
-  } else if (ctx->optionalGraphPattern()) {
-    return GraphPatternOperation{visitTypesafe(ctx->optionalGraphPattern())};
-  } else if (ctx->minusGraphPattern()) {
-    return GraphPatternOperation{visitTypesafe(ctx->minusGraphPattern())};
-  } else if (ctx->bind()) {
-    return GraphPatternOperation{visitTypesafe(ctx->bind())};
-  } else if (ctx->inlineData()) {
-    return GraphPatternOperation{visitTypesafe(ctx->inlineData())};
-  } else if (ctx->groupOrUnionGraphPattern()) {
-    return visitTypesafe(ctx->groupOrUnionGraphPattern());
   } else {
-    AD_FAIL();  // Unreachable.
+    return visitAlternative<std::variant<GraphPatternOperation, SparqlFilter>>(
+        ctx->filterR(), ctx->optionalGraphPattern(), ctx->minusGraphPattern(),
+        ctx->bind(), ctx->inlineData(), ctx->groupOrUnionGraphPattern());
   }
 }
 
 // ____________________________________________________________________________________
-GraphPatternOperation::Optional Visitor::visitTypesafe(
+GraphPatternOperation Visitor::visitTypesafe(
     Parser::OptionalGraphPatternContext* ctx) {
   auto pattern = visitTypesafe(ctx->groupGraphPattern());
   pattern._optional = true;
-  return {pattern};
+  return GraphPatternOperation{GraphPatternOperation::Optional{pattern}};
 }
 
 // ____________________________________________________________________________________
@@ -751,9 +741,10 @@ std::string Visitor::visitTypesafe(Parser::DataBlockValueContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-GraphPatternOperation::Minus Visitor::visitTypesafe(
+GraphPatternOperation Visitor::visitTypesafe(
     Parser::MinusGraphPatternContext* ctx) {
-  return {visitTypesafe(ctx->groupGraphPattern())};
+  return GraphPatternOperation{
+      GraphPatternOperation::Minus{visitTypesafe(ctx->groupGraphPattern())}};
 }
 
 // ____________________________________________________________________________________
