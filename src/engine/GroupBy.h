@@ -1,6 +1,9 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+// Author:
+//   2018      Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//   2020-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+
 #pragma once
 
 #include <memory>
@@ -59,22 +62,12 @@ class GroupBy : public Operation {
   virtual size_t getCostEstimate() override;
 
   /**
-   * @brief To allow for creating a OrderBy Operation after the GroupBy
-   *        the subtree is not an argument to the constructor, as it is with
-   *        other operations. Instead it needs to be set using this function.
-   * @param subtree The QueryExecutionTree that contains the operations creating
-   *                this operations input.
-   */
-  void setSubtree(std::shared_ptr<QueryExecutionTree> subtree);
-
-  /**
    * @return The columns on which the input data should be sorted or an empty
    *         list if no particular order is required for the grouping.
    * @param inputTree The QueryExecutionTree that contains the operations
    *                  creating the sorting operation inputs.
    */
-  vector<pair<size_t, bool>> computeSortColumns(
-      const QueryExecutionTree* inputTree);
+  vector<size_t> computeSortColumns(const QueryExecutionTree* inputTree);
 
   vector<QueryExecutionTree*> getChildren() override {
     return {_subtree.get()};

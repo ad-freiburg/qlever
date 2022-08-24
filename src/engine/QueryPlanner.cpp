@@ -1,6 +1,8 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author:
+//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #include <engine/Bind.h>
 #include <engine/CountAvailablePredicates.h>
@@ -28,6 +30,7 @@
 #include <algorithm>
 #include <ctime>
 
+namespace {
 // All the operations take a `QueryExecutionContext` as a first argument.
 // Todo: Continue the comment.
 template <typename Operation>
@@ -43,20 +46,24 @@ QueryPlanner::SubtreePlan makeSubtreePlan(QueryExecutionContext* qec,
   return {qec, std::make_shared<Operation>(qec, AD_FWD(args)...)};
 }
 
-template <typename Operation>
-QueryPlanner::SubtreePlan makeSubtreePlan(
-    std::shared_ptr<Operation> operation) {
+// Create a `SubtreePlan` that holds the given `operation`. `Op` must be a class
+// inheriting from `Operation`.
+template <typename Op>
+QueryPlanner::SubtreePlan makeSubtreePlan(std::shared_ptr<Op> operation) {
   auto* qec = operation->getExecutionContext();
   return {qec, std::move(operation)};
 }
 
-void mergePlanIds(QueryPlanner::SubtreePlan& target,
-                  const QueryPlanner::SubtreePlan& a,
-                  const QueryPlanner::SubtreePlan& b) {
+// Update the `target` s.t. it knows that it includes all the nodes and filters
+// from `a` and `b`. Note: This does not actually merge/join the plans!
+void mergeSubtreePlanIds(QueryPlanner::SubtreePlan& target,
+                         const QueryPlanner::SubtreePlan& a,
+                         const QueryPlanner::SubtreePlan& b) {
   target._idsOfIncludedNodes = a._idsOfIncludedNodes | b._idsOfIncludedNodes;
   target._idsOfIncludedFilters =
       a._idsOfIncludedFilters | b._idsOfIncludedFilters;
 }
+}  // namespace
 
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext* qec)
@@ -2615,7 +2622,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
       // TwoColumnJoin (the if part before this comment), use a multiColumnJoin.
       try {
         SubtreePlan plan = multiColumnJoin(a, b);
-        mergePlanIds(plan, a, b);
+        mergeSubtreePlanIds(plan, a, b);
         return {plan};
       } catch (const std::exception& e) {
         return {};
@@ -2648,7 +2655,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
       SubtreePlan plan = makeSubtreePlan<TextOperationWithFilter>(
           _qec, noFilter.getWordPart(), noFilter.getVars(), noFilter.getCVar(),
           filterPlan._qet, otherPlanJc);
-      mergePlanIds(plan, filterPlan, textPlan);
+      mergeSubtreePlanIds(plan, filterPlan, textPlan);
       candidates.push_back(std::move(plan));
     }
     // Skip if we have two dummies
@@ -2707,7 +2714,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
                             hasPredicateScan->getRootOperation().get())
                             ->getObject());
         tree.setOperation(QueryExecutionTree::HAS_PREDICATE_SCAN, scan);
-        mergePlanIds(plan, a, b);
+        mergeSubtreePlanIds(plan, a, b);
         candidates.push_back(std::move(plan));
         return candidates;
       }
@@ -2745,18 +2752,14 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
 
         // Enforce the proper sorting, ignore `IndexScan`s that have to be
         // sorted.
-        other = QueryExecutionTree::createSortedTree(std::move(other),
-                                                     {otherCol}, false)
-                    .value_or(nullptr);
-        if (!other) {
-          return candidates;
-        }
+        other =
+            QueryExecutionTree::createSortedTree(std::move(other), {otherCol});
 
         SubtreePlan plan{_qec};
         QueryExecutionTree& tree = *plan._qet;
         auto newpath = srcpath->bindLeftSide(other, otherCol);
         tree.setOperation(QueryExecutionTree::TRANSITIVE_PATH, newpath);
-        mergePlanIds(plan, a, b);
+        mergeSubtreePlanIds(plan, a, b);
         candidates.push_back(std::move(plan));
         return candidates;
       }
@@ -2802,7 +2805,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
 
         SubtreePlan plan =
             makeSubtreePlan(srcpath->bindRightSide(other, otherCol));
-        mergePlanIds(plan, a, b);
+        mergeSubtreePlanIds(plan, a, b);
         candidates.push_back(std::move(plan));
         return candidates;
       }
@@ -2813,19 +2816,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     // TODO: replace with HashJoin maybe (or add variant to possible
     // plans).
 
-    auto left = QueryExecutionTree::createSortedTree(a._qet, {jcs[0][0]}, false)
-                    .value_or(nullptr);
-    auto right =
-        QueryExecutionTree::createSortedTree(b._qet, {jcs[0][1]}, false)
-            .value_or(nullptr);
-    if (!left || !right) {
-      return candidates;
-    }
+    auto left = QueryExecutionTree::createSortedTree(a._qet, {jcs[0][0]});
+    auto right = QueryExecutionTree::createSortedTree(b._qet, {jcs[0][1]});
 
     // Create the join operation.
     SubtreePlan plan =
         makeSubtreePlan<Join>(_qec, left, right, jcs[0][0], jcs[0][1]);
-    mergePlanIds(plan, a, b);
+    mergeSubtreePlanIds(plan, a, b);
     candidates.push_back(std::move(plan));
   }
 

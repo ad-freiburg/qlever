@@ -645,35 +645,29 @@ template void QueryExecutionTree::setOperation(
     std::shared_ptr<TextOperationWithFilter>);
 
 // ________________________________________________________________________________________________________________
-std::optional<std::shared_ptr<QueryExecutionTree>>
-QueryExecutionTree::createSortedTree(std::shared_ptr<QueryExecutionTree> input,
-                                     std::vector<size_t> sortColumns,
-                                     bool allowResortingScans) {
-  auto inputSortedOn = input->resultSortedOn();
+std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
+    std::shared_ptr<QueryExecutionTree> qet, std::vector<size_t> sortColumns) {
+  auto inputSortedOn = qet->resultSortedOn();
   bool inputSorted = sortColumns.size() <= inputSortedOn.size();
   for (size_t i = 0; inputSorted && i < sortColumns.size(); ++i) {
     inputSorted = sortColumns[i] == inputSortedOn[i];
   }
   if (sortColumns.empty() || inputSorted) {
-    return input;
+    return qet;
   }
 
-  if (!allowResortingScans && input->getType() == SCAN) {
-    return std::nullopt;
-  }
-
-  QueryExecutionContext* qec = input->getRootOperation()->getExecutionContext();
+  QueryExecutionContext* qec = qet->getRootOperation()->getExecutionContext();
   if (sortColumns.size() == 1) {
-    auto sort = std::make_shared<Sort>(qec, std::move(input), sortColumns[0]);
+    auto sort = std::make_shared<Sort>(qec, std::move(qet), sortColumns[0]);
     return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
   } else {
     std::vector<std::pair<size_t, bool>> sortColsForOrderBy;
     for (auto i : sortColumns) {
-      // The second argument means "descending"
+      // The second argument set to `false` means sort in ascending order.
       // TODO<joka921> fix this.
       sortColsForOrderBy.emplace_back(i, false);
     }
-    auto sort = std::make_shared<OrderBy>(qec, std::move(input),
+    auto sort = std::make_shared<OrderBy>(qec, std::move(qet),
                                           std::move(sortColsForOrderBy));
     return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
   }

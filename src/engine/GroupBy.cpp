@@ -1,17 +1,17 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
-
-#include "GroupBy.h"
+// Author:
+//   2018      Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//   2020-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #include <absl/strings/str_join.h>
-
-#include "../index/Index.h"
-#include "../parser/Alias.h"
-#include "../util/Conversions.h"
-#include "../util/HashSet.h"
-#include "./sparqlExpressions/SparqlExpression.h"
-#include "CallFixedSize.h"
+#include <engine/CallFixedSize.h>
+#include <engine/GroupBy.h>
+#include <engine/sparqlExpressions/SparqlExpression.h>
+#include <index/Index.h>
+#include <parser/Alias.h>
+#include <util/Conversions.h>
+#include <util/HashSet.h>
 
 // _______________________________________________________________________________________________
 GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
@@ -39,14 +39,8 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
     _varColMap[a._outVarName] = colIndex;
     colIndex++;
   }
-  std::vector<size_t> sortColumns;
-  for (auto [columnIdx, isDescending] : computeSortColumns(subtree.get())) {
-    AD_CHECK(!isDescending);
-    sortColumns.push_back(columnIdx);
-  }
   _subtree = QueryExecutionTree::createSortedTree(std::move(subtree),
-                                                  std::move(sortColumns), true)
-                 .value();
+                                                  computeSortColumns());
 }
 
 string GroupBy::asStringImpl(size_t indent) const {
@@ -85,10 +79,9 @@ vector<size_t> GroupBy::resultSortedOn() const {
   return sortedOn;
 }
 
-// TODO<joka921> there should be no more need for the pair<bools...>
-vector<pair<size_t, bool>> GroupBy::computeSortColumns(
+vector<size_t> GroupBy::computeSortColumns(
     const QueryExecutionTree* inputTree) {
-  vector<pair<size_t, bool>> cols;
+  vector<size_t> cols;
   if (_groupByVariables.empty()) {
     // the entire input is a single group, no sorting needs to be done
     return cols;
@@ -104,7 +97,7 @@ vector<pair<size_t, bool>> GroupBy::computeSortColumns(
     // avoid sorting by a column twice
     if (sortColSet.find(col) == sortColSet.end()) {
       sortColSet.insert(col);
-      cols.emplace_back(col, false);
+      cols.push_back(col);
     }
   }
   return cols;
