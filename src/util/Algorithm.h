@@ -64,7 +64,7 @@ std::vector<Output> transform(std::vector<Input>&& input, F unaryOp) {
  * Flatten a vector<vector<T>> into a vector<T>.
  */
 template <typename T>
-std::vector<T> flatten(std::vector<std::vector<T>> input) {
+std::vector<T> flatten(std::vector<std::vector<T>>&& input) {
   std::vector<T> out;
   // Reserve the total required space. It is the sum of all the vectors lengths.
   out.reserve(std::accumulate(

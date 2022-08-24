@@ -15,6 +15,7 @@ using namespace ad_utility::sparql_types;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
 using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
 using SelectClause = ParsedQuery::SelectClause;
+using GraphPattern = ParsedQuery::GraphPattern;
 using Bind = GraphPatternOperation::Bind;
 using Values = GraphPatternOperation::Values;
 
@@ -207,16 +208,15 @@ std::optional<Values> Visitor::visitTypesafe(Parser::ValuesClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ParsedQuery::GraphPattern Visitor::visitTypesafe(
-    Parser::GroupGraphPatternContext* ctx) {
-  ParsedQuery::GraphPattern pattern;
+GraphPattern Visitor::visitTypesafe(Parser::GroupGraphPatternContext* ctx) {
+  GraphPattern pattern;
+  pattern._id = numGraphPatterns_++;
   if (ctx->subSelect()) {
     pattern._children.emplace_back(visitTypesafe(ctx->subSelect()));
     return pattern;
   } else if (ctx->groupGraphPatternSub()) {
     auto [subOps, filters] = visitTypesafe(ctx->groupGraphPatternSub());
     pattern._children = std::move(subOps);
-    // TODO: moving
     for (auto& filter : filters) {
       if (filter._type == SparqlFilter::LANG_MATCHES) {
         pattern.addLanguageFilter(filter._lhs, filter._rhs);
@@ -350,7 +350,7 @@ vector<SparqlTriple> Visitor::visitTypesafe(Parser::TriplesBlockContext* ctx) {
 // ____________________________________________________________________________________
 std::variant<GraphPatternOperation, SparqlFilter> Visitor::visitTypesafe(
     Parser::GraphPatternNotTriplesContext* ctx) {
-  // TODO: correctly set optional and id attributes
+  // TODO: correctly set optional attributes
   if (ctx->graphGraphPattern() || ctx->serviceGraphPattern()) {
     reportError(ctx,
                 "GraphGraphPattern or ServiceGraphPattern are not supported.");
@@ -376,8 +376,7 @@ sparqlExpression::SparqlExpression::Ptr Visitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-ParsedQuery::GraphPattern Visitor::visitTypesafe(
-    Parser::WhereClauseContext* ctx) {
+GraphPattern Visitor::visitTypesafe(Parser::WhereClauseContext* ctx) {
   return visitTypesafe(ctx->groupGraphPattern());
 }
 
@@ -558,11 +557,15 @@ GraphPatternOperation::Subquery Visitor::visitTypesafe(
   query.setNumInternalVariables(numInternalVariables_);
   query.addSolutionModifiers(visitTypesafe(ctx->solutionModifier()));
   numInternalVariables_ = query.getNumInternalVariables();
-  auto values = visitTypesafe(ctx->valuesClause());
-  if (values.has_value()) {
-    query._rootGraphPattern._children.emplace_back(std::move(values.value()));
+  if (ctx->valuesClause()) {
+    // TODO: implement
+    reportError(ctx->valuesClause(), "ValuesClause is not yet implemented.");
   }
-  // Process Variables that are visible by children of this query.
+  // auto values = visitTypesafe(ctx->valuesClause());
+  // if (values.has_value()) {
+  //   query._rootGraphPattern._children.emplace_back(std::move(values.value()));
+  // }
+  //  Process Variables that are visible by children of this query.
   for (const auto& variable : visibleVariables_.back()) {
     query.registerVariableVisibleInQueryBody(variable);
   }
@@ -571,7 +574,8 @@ GraphPatternOperation::Subquery Visitor::visitTypesafe(
   for (const auto& variable : query.selectClause().getSelectedVariables()) {
     visibleVariables_.back().emplace_back(variable);
   }
-  return {query};
+  query._numGraphPatterns = numGraphPatterns_++;
+  return {std::move(query)};
 }
 
 // ____________________________________________________________________________________
@@ -722,7 +726,6 @@ GraphPatternOperation Visitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-using GraphPattern = ParsedQuery::GraphPattern;
 namespace {
 GraphPattern wrap(GraphPatternOperation op) {
   auto pattern = GraphPattern();
@@ -734,8 +737,7 @@ GraphPattern wrap(GraphPatternOperation op) {
 // ____________________________________________________________________________________
 GraphPatternOperation Visitor::visitTypesafe(
     Parser::GroupOrUnionGraphPatternContext* ctx) {
-  auto children =
-      visitVector<ParsedQuery::GraphPattern>(ctx->groupGraphPattern());
+  auto children = visitVector<GraphPattern>(ctx->groupGraphPattern());
   if (children.size() > 1) {
     // https://en.cppreference.com/w/cpp/algorithm/accumulate
     // a similar thing is done in QueryPlaner::uniteGraphPatterns

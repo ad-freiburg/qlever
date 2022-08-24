@@ -342,22 +342,7 @@ MATCHER_P(IsTriples, triples, "") {
                              triples))(triplesValue->_whereClauseTriples);
 }
 
-MATCHER_P2(IsBindd, target, expression, "") {
-  auto bind = std::get_if<GraphPatternOperation::Bind>(&arg.variant_);
-  return bind && bind->_target == target &&
-         bind->_expression.getDescriptor() == expression;
-}
-
-MATCHER_P(IsFilters, filters, "") {
-  return testing::Matches(testing::UnorderedElementsAreArray(filters))(
-      arg._filters);
-}
-
-MATCHER(IsOptional, "") {
-  return testing::Matches(testing::Eq(true))(arg._optional);
-}
-
-MATCHER_P(IsChildren, childMatchers, "") {
+MATCHER_P3(IsGraphPattern, optional, filters, childMatchers, "") {
   if (arg._children.size() != std::tuple_size_v<decltype(childMatchers)>) {
     return false;
   }
@@ -372,5 +357,10 @@ MATCHER_P(IsChildren, childMatchers, "") {
   auto lambdalambda = [&lambda, &sequence](auto... matchers) {
     return lambda(sequence, matchers...);
   };
-  return std::apply(lambdalambda, childMatchers);
+  bool childrenMatch = std::apply(lambdalambda, childMatchers);
+
+  return arg._optional == optional &&
+         testing::Value(arg._filters,
+                        testing::UnorderedElementsAreArray(filters)) &&
+         childrenMatch;
 }

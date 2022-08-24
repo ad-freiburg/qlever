@@ -1146,55 +1146,55 @@ TEST(SparqlParser, GroupGraphPattern) {
     return IsTriples(triples);
   };
   auto Bind = [](const string& target, const string& expression) {
-    return IsBindd(target, expression);
+    return IsBind(target, expression);
   };
-  auto Filters = [](vector<SparqlFilter>&& triples) {
-    return IsFilters(triples);
-  };
-  auto Optional = IsOptional();
-  auto NotOptional = testing::Not(IsOptional());
-  auto HasChildren = [](auto&&... childMatchers) {
-    return IsChildren(std::tuple{childMatchers...});
+  auto GraphPattern = [](bool optional, vector<SparqlFilter>&& filters,
+                         const auto&... childMatchers) {
+    return IsGraphPattern(optional, filters, std::tuple{childMatchers...});
   };
 
-  auto expectGraphPattern = [](const string&& input, const auto&... matchers) {
+  auto expectGraphPattern = [](const string&& input, const auto& matcher) {
     expectCompleteParse(
         parseGroupGraphPattern(
             input,
             SparqlQleverVisitor::PrefixMap{{INTERNAL_PREDICATE_PREFIX_NAME,
                                             INTERNAL_PREDICATE_PREFIX_IRI}}),
-        testing::AllOf(matchers...));
+        matcher);
   };
-  expectGraphPattern("{ ?x ?y ?z }", HasChildren(Triples({{"?x", "?y", "?z"}})),
-                     Filters({}), NotOptional);
+  expectGraphPattern("{ ?x ?y ?z }",
+                     GraphPattern(false, {}, Triples({{"?x", "?y", "?z"}})));
   expectGraphPattern(
       "{ ?x ?y ?z ; ?f <bar> }",
-      HasChildren(Triples({{"?x", "?y", "?z"}, {"?x", "?f", "<bar>"}})),
-      Filters({}), NotOptional);
+      GraphPattern(false, {},
+                   Triples({{"?x", "?y", "?z"}, {"?x", "?f", "<bar>"}})));
   expectGraphPattern(
       "{ ?x ?y ?z . <foo> ?f <bar> }",
-      HasChildren(Triples({{"?x", "?y", "?z"}, {"<foo>", "?f", "<bar>"}})),
-      Filters({}), NotOptional);
+      GraphPattern(false, {},
+                   Triples({{"?x", "?y", "?z"}, {"<foo>", "?f", "<bar>"}})));
   expectGraphPattern(
       "{ ?x <is-a> <Actor> . FILTER(?x != ?y) . ?y <is-a> <Actor> . "
       "FILTER(?y < ?x) }",
-      HasChildren(
-          Triples({{"?x", "<is-a>", "<Actor>"}, {"?y", "<is-a>", "<Actor>"}})),
-      Filters({{SparqlFilter::FilterType::NE, "?x", "?y"},
-               {SparqlFilter::FilterType::LT, "?y", "?x"}}),
-      NotOptional);
+      GraphPattern(
+          false,
+          {{SparqlFilter::FilterType::NE, "?x", "?y"},
+           {SparqlFilter::FilterType::LT, "?y", "?x"}},
+          Triples({{"?x", "<is-a>", "<Actor>"}, {"?y", "<is-a>", "<Actor>"}})));
   expectGraphPattern(
       "{?x <is-a> <Actor> . FILTER(?x != ?y) . ?y <is-a> <Actor> . ?c "
       "ql:contains-entity ?x . ?c ql:contains-word \"coca* abuse\"}",
-      HasChildren(Triples({{"?x", "<is-a>", "<Actor>"},
-                           {"?y", "<is-a>", "<Actor>"},
-                           {"?c", CONTAINS_ENTITY_PREDICATE, "?x"},
-                           {"?c", CONTAINS_WORD_PREDICATE, "coca* abuse"}})),
-      Filters({{SparqlFilter::FilterType::NE, "?x", "?y"}}), NotOptional);
-  expectGraphPattern("{?x <is-a> <Actor> . BIND(10 - ?foo as ?y) }",
-                     HasChildren(Triples({{"?x", "<is-a>", "<Actor>"}}),
-                                 Bind("?y", "10-?foo")),
-                     NotOptional);
+      GraphPattern(false, {{SparqlFilter::FilterType::NE, "?x", "?y"}},
+                   Triples({{"?x", "<is-a>", "<Actor>"},
+                            {"?y", "<is-a>", "<Actor>"},
+                            {"?c", CONTAINS_ENTITY_PREDICATE, "?x"},
+                            {"?c", CONTAINS_WORD_PREDICATE, "coca* abuse"}})));
+  expectGraphPattern(
+      "{?x <is-a> <Actor> . BIND(10 - ?foo as ?y) }",
+      GraphPattern(false, {}, Triples({{"?x", "<is-a>", "<Actor>"}}),
+                   Bind("?y", "10-?foo")));
+  expectGraphPattern(
+      "{?x <is-a> <Actor> . BIND(10 - ?foo as ?y) . ?a ?b ?c }",
+      GraphPattern(false, {}, Triples({{"?x", "<is-a>", "<Actor>"}}),
+                   Bind("?y", "10-?foo"), Triples({{"?a", "?b", "?c"}})));
   {
     auto pattern = parseGroupGraphPattern(
         "{ ?var ?foo ?var BIND(?foo as ?bar) FILTER(?a = 10) OPTIONAL { "

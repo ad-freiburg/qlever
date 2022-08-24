@@ -56,6 +56,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   using Any = antlrcpp::Any;
   size_t _blankNodeCounter = 0;
   int64_t numInternalVariables_ = 0;
+  int64_t numGraphPatterns_ = 0;
   // A Stack of vector<Variable> that store the variables that are visible in a
   // query body. Each element corresponds to nested Queries that the parse is
   // currently parsing.
