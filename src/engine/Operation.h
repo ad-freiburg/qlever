@@ -126,11 +126,11 @@ class Operation {
   // without actually executing the query.
   virtual void createRuntimeInfoFromEstimates() final;
 
- protected:
   QueryExecutionContext* getExecutionContext() const {
     return _executionContext;
   }
 
+ protected:
   // The QueryExecutionContext for this particular element.
   // No ownership.
   QueryExecutionContext* _executionContext;

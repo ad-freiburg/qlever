@@ -42,6 +42,10 @@ class GroupBy : public Operation {
   GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
           std::vector<Alias> aliases);
 
+  GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
+          std::vector<Alias> aliases,
+          std::shared_ptr<QueryExecutionTree> subtree);
+
  protected:
   virtual string asStringImpl(size_t indent = 0) const override;
 

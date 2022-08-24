@@ -630,3 +630,36 @@ template void QueryExecutionTree::setOperation(
 template void QueryExecutionTree::setOperation(std::shared_ptr<Filter>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<NeutralElementOperation>);
+
+// ________________________________________________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
+    std::shared_ptr<QueryExecutionTree> input,
+    std::vector<size_t> sortColumns) {
+  auto inputSortedOn = input->resultSortedOn();
+  bool inputSorted = sortColumns.size() <= inputSortedOn.size();
+  for (size_t i = 0; inputSorted && i < sortColumns.size(); ++i) {
+    inputSorted = sortColumns[i] == inputSortedOn[i];
+  }
+  if (sortColumns.empty() || inputSorted) {
+    return input;
+  }
+
+  std::shared_ptr<Operation> sort;
+  if (sortColumns.size() == 1) {
+    sort =
+        std::make_shared<Sort>(input->getRootOperation()->getExecutionContext(),
+                               std::move(input), sortColumns[0]);
+  } else {
+    std::vector<std::pair<size_t, bool>> sortColsForOrderBy;
+    for (auto i : sortColumns) {
+      // The second argument means "descending"
+      // TODO<joka921> fix this.
+      sortColsForOrderBy.emplace_back(i, false);
+    }
+    sort = std::make_shared<OrderBy>(
+        input->getRootOperation()->getExecutionContext(), std::move(input),
+        std::move(sortColsForOrderBy));
+  }
+  return std::make_shared<QueryExecutionTree>(
+      input->getRootOperation()->getExecutionContext(), std::move(sort));
+}

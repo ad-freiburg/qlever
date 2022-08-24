@@ -39,6 +39,14 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
   }
 }
 
+// _______________________________________________________________________________________________
+GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
+                 std::vector<Alias> aliases,
+                 std::shared_ptr<QueryExecutionTree> subtree)
+    : GroupBy(qec, std::move(groupByVariables), std::move(aliases)) {
+  setSubtree(std::move(subtree));
+}
+
 void GroupBy::setSubtree(std::shared_ptr<QueryExecutionTree> subtree) {
   _subtree = std::move(subtree);
 }
