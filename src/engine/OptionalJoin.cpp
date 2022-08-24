@@ -79,8 +79,6 @@ void OptionalJoin::computeResult(ResultTable* result) {
   AD_CHECK(result);
   LOG(DEBUG) << "OptionalJoin result computation..." << endl;
 
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-
   result->_sortedBy = resultSortedOn();
   result->_idTable.setCols(getResultWidth());
 
@@ -89,8 +87,6 @@ void OptionalJoin::computeResult(ResultTable* result) {
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
 
-  runtimeInfo.addChild(_left->getRootOperation()->getRuntimeInfo());
-  runtimeInfo.addChild(_right->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "OptionalJoin subresult computation done." << std::endl;
 
   // compute the result types

@@ -185,9 +185,6 @@ void Filter::computeResultDynamicValue(IdTable* dynResult, size_t lhsInd,
 void Filter::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.setDescriptor(getDescriptor());
-  runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "Filter result computation..." << endl;
   result->_idTable.setCols(subRes->_idTable.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),

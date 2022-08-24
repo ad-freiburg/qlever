@@ -98,7 +98,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     ad_utility::OnDestruction onDestruction{[&]() {
       if (std::uncaught_exceptions()) {
         timer.stop();
-        updateRuntimeInformationOnFailure(true, timer.msecs());
+        updateRuntimeInformationOnFailure(timer.msecs());
       }
     }};
     auto computeLambda = [this, &timer] {
@@ -109,7 +109,6 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
             "functionality, before " +
             getDescriptor());
       }
-      _runtimeInfo.children().clear();
       computeResult(val._resultTable.get());
       if (_timeoutTimer->wlock()->hasTimedOut()) {
         throw ad_utility::TimeoutException(
@@ -117,7 +116,6 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
             ". This timeout was not caught inside the actual computation, "
             "which indicates insufficient timeout functionality.");
       }
-      _runtimeInfo.setRows(val._resultTable->_idTable.size());
       // Make sure that the results that are written to the cache have the
       // correct runtimeInfo. The children of the runtime info are already set
       // correctly because the result was computed, so we can pass `nullopt` as
@@ -142,7 +140,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     return result._resultPointer->_resultTable;
   } catch (const ad_semsearch::AbortException& e) {
     // A child Operation was aborted, do not print the information again.
-    _runtimeInfo.addDetail("status", "failed because child failed");
+    _runtimeInfo.status_ = RuntimeInformation::Status::failedBecauseChildFailed;
     throw;
   } catch (const ad_utility::WaitedForResultWhichThenFailedException& e) {
     // Here and in the following, show the detailed information (it's the
@@ -182,30 +180,35 @@ void Operation::checkTimeout() const {
 void Operation::updateRuntimeInformationOnSuccess(
     const ResultTable& resultTable, bool wasCached, size_t timeInMilliseconds,
     std::optional<RuntimeInformation> runtimeInfo) {
-  // The column names might differ between a cached result and this operation,
-  // so we have to take the local ones.
-  _runtimeInfo.setColumnNames(getVariableColumns());
+  _runtimeInfo.totalTime_ = timeInMilliseconds;
+  _runtimeInfo.numRows_ = resultTable.size();
+  _runtimeInfo.wasCached_ = wasCached;
 
-  _runtimeInfo.setCols(getResultWidth());
-  _runtimeInfo.setDescriptor(getDescriptor());
-
-  _runtimeInfo.setTime(timeInMilliseconds);
-  _runtimeInfo.setRows(resultTable.size());
-  _runtimeInfo.setWasCached(wasCached);
-
-  _runtimeInfo.addDetail("status", "completed");
+  _runtimeInfo.status_ = RuntimeInformation::Status::completed;
 
   // If the result was read from the cache, then we need the additional
   // runtime info for the correct child information etc.
   AD_CHECK(!wasCached || runtimeInfo.has_value());
 
   if (runtimeInfo.has_value()) {
-    _runtimeInfo.addDetail("original_total_time", runtimeInfo->getTime());
-    _runtimeInfo.addDetail("original_operation_time",
-                           runtimeInfo->getOperationTime());
+    if (wasCached) {
+      _runtimeInfo.originalTotalTime_ = runtimeInfo->totalTime_;
+      _runtimeInfo.originalOperationTime_ = runtimeInfo->getOperationTime();
+      _runtimeInfo.details_ = std::move(runtimeInfo->details_);
+    }
     // Only the result that was actually computed (or read from cache) knows
     // the correct information about the children computations.
-    _runtimeInfo.children() = std::move(runtimeInfo->children());
+    _runtimeInfo.children_ = std::move(runtimeInfo->children_);
+  } else {
+    // The result was computed by this operation (not read from the cache).
+    // Therefore, for each child of this operation the correct runtime is
+    // available.
+    _runtimeInfo.children_.clear();
+    for (auto* child : getChildren()) {
+      AD_CHECK(child);
+      _runtimeInfo.children_.push_back(
+          child->getRootOperation()->getRuntimeInfo());
+    }
   }
 }
 
@@ -220,28 +223,14 @@ void Operation::updateRuntimeInformationOnSuccess(
 }
 
 // _______________________________________________________________________
-void Operation::updateRuntimeInformationOnFailure(
-    bool failureCausedByThisOperation, size_t timeInMilliseconds) {
-  // The column names might differ between a cached result and this operation,
-  // so we have to take the local ones.
-  _runtimeInfo.setColumnNames(getVariableColumns());
-
-  _runtimeInfo.setCols(getResultWidth());
-  _runtimeInfo.setDescriptor(getDescriptor());
-
-  _runtimeInfo.children().clear();
+void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
+  _runtimeInfo.children_.clear();
   for (auto child : getChildren()) {
-    _runtimeInfo.children().push_back(child->getRootOperation()->_runtimeInfo);
+    _runtimeInfo.children_.push_back(child->getRootOperation()->_runtimeInfo);
   }
 
-  _runtimeInfo.setTime(timeInMilliseconds);
-  _runtimeInfo.setRows(0);
-  _runtimeInfo.setWasCached(false);
-  if (failureCausedByThisOperation) {
-    _runtimeInfo.addDetail("status", "failed");
-  } else {
-    _runtimeInfo.addDetail("status", "failed because child failed");
-  }
+  _runtimeInfo.totalTime_ = timeInMilliseconds;
+  _runtimeInfo.status_ = RuntimeInformation::Status::failed;
 }
 
 // __________________________________________________________________
@@ -250,39 +239,34 @@ void Operation::createRuntimeInfoFromEstimates() {
   _runtimeInfo = RuntimeInformation{};
   _runtimeInfo.setColumnNames(getVariableColumns());
   const auto numCols = getResultWidth();
-  _runtimeInfo.setCols(numCols);
-  _runtimeInfo.setDescriptor(getDescriptor());
+  _runtimeInfo.numCols_ = numCols;
+  _runtimeInfo.descriptor_ = getDescriptor();
 
   for (const auto& child : getChildren()) {
     AD_CHECK(child);
     child->getRootOperation()->createRuntimeInfoFromEstimates();
-    _runtimeInfo.children().push_back(
+    _runtimeInfo.children_.push_back(
         child->getRootOperation()->getRuntimeInfo());
   }
 
-  _runtimeInfo.setCostEstimate(getCostEstimate());
-  _runtimeInfo.setSizeEstimate(getSizeEstimate());
-  _runtimeInfo.setTime(0);
-  _runtimeInfo.setRows(0);
+  _runtimeInfo.costEstimate_ = getCostEstimate();
+  _runtimeInfo.sizeEstimate_ = getSizeEstimate();
 
   std::vector<float> multiplicityEstimates;
   multiplicityEstimates.reserve(numCols);
   for (size_t i = 0; i < numCols; ++i) {
     multiplicityEstimates.push_back(getMultiplicity(i));
   }
-  _runtimeInfo.addDetail("multiplicity-estimates", multiplicityEstimates);
+  _runtimeInfo.multiplicityEstimates_ = multiplicityEstimates;
 
   auto cachedResult =
       _executionContext->getQueryTreeCache().resultAt(asString());
   if (cachedResult) {
-    _runtimeInfo.setWasCached(true);
-    _runtimeInfo.setRows(cachedResult->_resultTable->size());
-    _runtimeInfo.addDetail("original_total_time",
-                           cachedResult->_runtimeInfo.getTime());
-    _runtimeInfo.addDetail("original_operation_time",
-                           cachedResult->_runtimeInfo.getOperationTime());
-  } else {
-    _runtimeInfo.setWasCached(false);
+    _runtimeInfo.wasCached_ = true;
+
+    _runtimeInfo.numRows_ = cachedResult->_resultTable->size();
+    _runtimeInfo.originalTotalTime_ = cachedResult->_runtimeInfo.totalTime_;
+    _runtimeInfo.originalOperationTime_ =
+        cachedResult->_runtimeInfo.getOperationTime();
   }
-  _runtimeInfo.addDetail("status", "not started");
 }

@@ -43,8 +43,6 @@ void Distinct::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Getting sub-result for distinct result computation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
 
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "Distinct result computation..." << endl;
   result->_idTable.setCols(subRes->_idTable.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
