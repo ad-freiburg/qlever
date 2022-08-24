@@ -3,11 +3,12 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <engine/Filter.h>
+#include <engine/QueryExecutionTree.h>
+#include <parser/ParsedQuery.h>
+
 #include <set>
 #include <vector>
-
-#include "../parser/ParsedQuery.h"
-#include "QueryExecutionTree.h"
 
 using std::vector;
 
@@ -316,7 +317,8 @@ class QueryPlanner {
                               const vector<SparqlFilter>& filters,
                               bool replaceInsteadOfAddPlans) const;
 
-  std::shared_ptr<Operation> createFilterOperation(
+  // Forward declaration of the Filter class
+  std::shared_ptr<Filter> createFilterOperation(
       const SparqlFilter& filter, const SubtreePlan& parent) const;
 
   /**

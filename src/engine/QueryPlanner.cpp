@@ -43,6 +43,13 @@ QueryPlanner::SubtreePlan makeSubtreePlan(QueryExecutionContext* qec,
   return {qec, std::make_shared<Operation>(qec, AD_FWD(args)...)};
 }
 
+template <typename Operation>
+QueryPlanner::SubtreePlan makeSubtreePlan(
+    std::shared_ptr<Operation> operation) {
+  auto* qec = operation->getExecutionContext();
+  return {qec, std::move(operation)};
+}
+
 void mergePlanIds(QueryPlanner::SubtreePlan& target,
                   const QueryPlanner::SubtreePlan& a,
                   const QueryPlanner::SubtreePlan& b) {
@@ -2004,14 +2011,12 @@ void QueryPlanner::applyFiltersIfPossible(
           (!isVariable(filters[i]._rhs) ||
            row[n]._qet->varCovered(filters[i]._rhs))) {
         // Apply this filter.
-        SubtreePlan newPlan(_qec);
+        SubtreePlan newPlan =
+            makeSubtreePlan(createFilterOperation(filters[i], row[n]));
         newPlan._idsOfIncludedFilters = row[n]._idsOfIncludedFilters;
         newPlan._idsOfIncludedFilters |= (size_t(1) << i);
         newPlan._idsOfIncludedNodes = row[n]._idsOfIncludedNodes;
         newPlan.type = row[n].type;
-        auto& tree = *newPlan._qet;
-        tree.setOperation(QueryExecutionTree::FILTER,
-                          createFilterOperation(filters[i], row[n]));
         if (replace) {
           row[n] = newPlan;
         } else {
@@ -2023,7 +2028,7 @@ void QueryPlanner::applyFiltersIfPossible(
 }
 
 // _____________________________________________________________________________
-std::shared_ptr<Operation> QueryPlanner::createFilterOperation(
+std::shared_ptr<Filter> QueryPlanner::createFilterOperation(
     const SparqlFilter& filter, const SubtreePlan& parent) const {
   std::shared_ptr<Filter> op = std::make_shared<Filter>(
       _qec, parent._qet, filter._type, filter._lhs, filter._rhs,
@@ -2605,76 +2610,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
       return std::vector{optionalJoin(a, b)};
     }
 
-    // The TwoColumnJoin works when one input table has exactly 2 columns
-    // and the join columns are 0 and 1 in that order; see TwoColumnJoin.cpp .
-    // For all other cases, we have to use the general MultiColumnJoin
-    bool considerTwoColumnJoin = jcs.size() == 2;
-    if (considerTwoColumnJoin) {
-      considerTwoColumnJoin =
-          (a._qet->getResultWidth() == 2 && jcs[0][0] == 0 && jcs[1][0] == 1);
-      considerTwoColumnJoin =
-          considerTwoColumnJoin ||
-          (b._qet->getResultWidth() == 2 && jcs[0][1] == 0 && jcs[1][1] == 1);
-    }
-
-    if (considerTwoColumnJoin) {
-      // Forbid a two column join where a dummy is included, as QLever currently
-      // does not support this.
-      if (Join::isFullScanDummy(a._qet) || Join::isFullScanDummy(b._qet)) {
-        return candidates;
-      }
-
-      // Check if a sub-result has to be re-sorted
-      // Consider both ways to order join columns as primary / secondary
-      // Make four iterations instead of two so that first and second
-      // column can be swapped and more trees are constructed (of which
-      // the optimal solution will be picked).
-      // The order plays a role for the efficient implementation for
-      // filtering directly with a scan's result.
-      for (size_t n = 0; n < 4; ++n) {
-        size_t c = n / 2;
-        size_t swap = n % 2;
-        auto left = std::make_shared<QueryExecutionTree>(_qec);
-        auto right = std::make_shared<QueryExecutionTree>(_qec);
-        const vector<size_t>& aSortedOn = a._qet->resultSortedOn();
-        if (aSortedOn.size() > 0 && aSortedOn[0] == jcs[c][(0 + swap) % 2] &&
-            (a._qet->getResultWidth() == 2 ||
-             a._qet->getType() == QueryExecutionTree::SCAN)) {
-          left = a._qet;
-        } else {
-          // Create an order by operation.
-          vector<pair<size_t, bool>> sortIndices;
-          sortIndices.emplace_back(
-              std::make_pair(jcs[c][(0 + swap) % 2], false));
-          sortIndices.emplace_back(
-              std::make_pair(jcs[(c + 1) % 2][(0 + swap) % 2], false));
-          auto orderBy = std::make_shared<OrderBy>(_qec, a._qet, sortIndices);
-          left->setOperation(QueryExecutionTree::ORDER_BY, orderBy);
-        }
-        const vector<size_t>& bSortedOn = b._qet->resultSortedOn();
-        if (bSortedOn.size() > 0 && bSortedOn[0] == jcs[c][(1 + swap) % 2] &&
-            b._qet->getResultWidth() == 2) {
-          right = b._qet;
-        } else {
-          // Create a sort operation.
-          // Create an order by operation.
-          vector<pair<size_t, bool>> sortIndices;
-          sortIndices.emplace_back(
-              std::make_pair(jcs[c][(1 + swap) % 2], false));
-          sortIndices.emplace_back(
-              std::make_pair(jcs[(c + 1) % 2][(1 + swap) % 2], false));
-          auto orderBy = std::make_shared<OrderBy>(_qec, b._qet, sortIndices);
-          right->setOperation(QueryExecutionTree::ORDER_BY, orderBy);
-        }
-        // TODO(florian): consider replacing this with a multicolumn join.
-        // Create the join operation.
-        SubtreePlan plan =
-            makeSubtreePlan<TwoColumnJoin>(_qec, left, right, jcs);
-        mergePlanIds(plan, a, b);
-        candidates.push_back(std::move(plan));
-      }
-      return candidates;
-    } else if (jcs.size() >= 2) {
+    if (jcs.size() >= 2) {
       // If there are two or more join columns and we are not using the
       // TwoColumnJoin (the if part before this comment), use a multiColumnJoin.
       try {
@@ -2771,10 +2707,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
                             hasPredicateScan->getRootOperation().get())
                             ->getObject());
         tree.setOperation(QueryExecutionTree::HAS_PREDICATE_SCAN, scan);
-        plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
-        plan.addAllNodes(b._idsOfIncludedNodes);
-        plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
-        plan._idsOfIncludedFilters |= b._idsOfIncludedFilters;
+        mergePlanIds(plan, a, b);
         candidates.push_back(std::move(plan));
         return candidates;
       }
@@ -2867,9 +2800,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
           return candidates;
         }
 
-        SubtreePlan plan{_qec};
-        auto newpath = srcpath->bindRightSide(other, otherCol);
-        plan._qet->setOperation(QueryExecutionTree::TRANSITIVE_PATH, newpath);
+        SubtreePlan plan =
+            makeSubtreePlan(srcpath->bindRightSide(other, otherCol));
         mergePlanIds(plan, a, b);
         candidates.push_back(std::move(plan));
         return candidates;
@@ -2890,7 +2822,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
       return candidates;
     }
 
-    // TODO(florian): consider replacing this with a multicolumn join.
     // Create the join operation.
     SubtreePlan plan =
         makeSubtreePlan<Join>(_qec, left, right, jcs[0][0], jcs[0][1]);
