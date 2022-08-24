@@ -54,8 +54,9 @@ QueryPlanner::SubtreePlan makeSubtreePlan(std::shared_ptr<Op> operation) {
   return {qec, std::move(operation)};
 }
 
-// Update the `target` s.t. it knows that it includes all the nodes and filters
-// from `a` and `b`. Note: This does not actually merge/join the plans!
+// Update the `target` query plan such that it knows that it includes all the
+// nodes and filters from `a` and `b`. NOTE: This does not actually merge
+// the plans from `a` and `b`.
 void mergeSubtreePlanIds(QueryPlanner::SubtreePlan& target,
                          const QueryPlanner::SubtreePlan& a,
                          const QueryPlanner::SubtreePlan& b) {
