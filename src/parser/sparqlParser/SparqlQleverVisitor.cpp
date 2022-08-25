@@ -64,6 +64,14 @@ ExpressionPtr Visitor::processIriFunctionCall(
   throw ParseException{"Function \"" + iri + "\" not supported"};
 }
 
+void Visitor::addVisibleVariable(const string& var) {
+  addVisibleVariable(Variable{var});
+}
+
+void Visitor::addVisibleVariable(const Variable& var) {
+  visibleVariables_.back().emplace_back(var);
+}
+
 // ___________________________________________________________________________
 namespace {
 string stripAndLowercaseKeywordLiteral(std::string_view lit) {
@@ -182,7 +190,7 @@ Variable Visitor::visitTypesafe(Parser::VarContext* ctx) {
 
 // ____________________________________________________________________________________
 GraphPatternOperation Visitor::visitTypesafe(Parser::BindContext* ctx) {
-  visibleVariables_.back().emplace_back(ctx->var()->getText());
+  addVisibleVariable(ctx->var()->getText());
   return GraphPatternOperation{
       Bind{{visitTypesafe(ctx->expression())}, ctx->var()->getText()}};
 }
@@ -191,7 +199,7 @@ GraphPatternOperation Visitor::visitTypesafe(Parser::BindContext* ctx) {
 GraphPatternOperation Visitor::visitTypesafe(Parser::InlineDataContext* ctx) {
   Values values = visitTypesafe(ctx->dataBlock());
   for (const auto& variable : values._inlineValues._variables) {
-    visibleVariables_.back().emplace_back(variable);
+    addVisibleVariable(variable);
   }
   return GraphPatternOperation{std::move(values)};
 }
@@ -321,7 +329,7 @@ GraphPatternOperation::BasicGraphPattern Visitor::visitTypesafe(
 
   auto registerIfVariable = [this](auto& variant) {
     if (holds_alternative<Variable>(variant)) {
-      visibleVariables_.back().emplace_back(std::get<Variable>(variant));
+      addVisibleVariable(std::get<Variable>(variant));
     }
   };
 
@@ -578,7 +586,7 @@ GraphPatternOperation::Subquery Visitor::visitTypesafe(
   }
   // Variables that are selected in this query are visible in the parent query.
   for (const auto& variable : query.selectClause().getSelectedVariables()) {
-    visibleVariables_.back().emplace_back(variable);
+    addVisibleVariable(variable);
   }
   query._numGraphPatterns = numGraphPatterns_++;
   return {std::move(query)};

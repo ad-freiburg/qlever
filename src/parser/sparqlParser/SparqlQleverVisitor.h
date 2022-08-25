@@ -101,6 +101,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   ExpressionPtr processIriFunctionCall(const std::string& iri,
                                        std::vector<ExpressionPtr> argList);
 
+  // TODO: Remove addVisibleVariable(const string&) when all Types use the
+  //  strong type Variable.
+  void addVisibleVariable(const string& var);
+  void addVisibleVariable(const Variable& var);
+
  public:
   // ___________________________________________________________________________
   Any visitQuery(Parser::QueryContext* ctx) override {
