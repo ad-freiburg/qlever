@@ -23,7 +23,10 @@ class IdTable;
 class TextBlockMetaData;
 class IndexImpl;
 
-// an empty Tag type.
+/**
+ * Used as a Template Argument to the createFromFile method, when we do not yet
+ * know, which Tokenizer Specialization of the TurtleParser we are going to use
+ */
 class TurtleParserAuto {};
 
 using json = nlohmann::json;
@@ -184,7 +187,7 @@ class Index {
                                 vector<TextRecordIndex>& cids, vector<Id>& eids,
                                 vector<Score>& scores) const;
 
-  std::string getTextExcerpt(TextRecordIndex cid) const;
+  [[nodiscard]] std::string getTextExcerpt(TextRecordIndex cid) const;
 
   // Only for debug reasons and external encoding tests.
   // Supply an empty vector to dump all lists above a size threshold.
@@ -193,7 +196,7 @@ class Index {
 
   void dumpAsciiLists(const TextBlockMetaData& tbmd) const;
 
-  float getAverageNofEntityContexts() const;
+  [[nodiscard]] float getAverageNofEntityContexts() const;
 
   void setKbName(const std::string& name);
 

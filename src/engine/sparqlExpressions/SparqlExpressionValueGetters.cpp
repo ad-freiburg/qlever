@@ -85,7 +85,7 @@ string StringValueGetter::operator()(StrongIdWithResultType strongId,
       return context->_localVocab[index];
     }
     case Datatype::TextRecordIndex:
-      context->_qec.getIndex().getTextExcerpt(id.getTextRecordIndex());
+      return context->_qec.getIndex().getTextExcerpt(id.getTextRecordIndex());
   }
   AD_FAIL();
 }

@@ -165,6 +165,139 @@ void Index::getFilteredECListForWordsWidthOne(const std::string& words,
                                                    limit, result);
 }
 
+// _________________________________________________________________________________________________
+void Index::getContextEntityScoreListsForWords(const std::string& words,
+                                               vector<TextRecordIndex>& cids,
+                                               vector<Id>& eids,
+                                               vector<Score>& scores) const {
+  return pimpl_->getContextEntityScoreListsForWords(words, cids, eids, scores);
+}
+
+// _________________________________________________________________________________________________
+template <size_t I>
+void Index::getECListForWordsAndSingleSub(
+    const std::string& words, const vector<std::array<Id, I>>& subres,
+    size_t subResMainCol, size_t limit,
+    vector<std::array<Id, 3 + I>>& res) const {
+  return pimpl_->getECListForWordsAndSingleSub(words, subres, subResMainCol,
+                                               limit, res);
+}
+
+// _________________________________________________________________________________________________
+void Index::getECListForWordsAndTwoW1Subs(
+    const std::string& words, const vector<std::array<Id, 1>> subres1,
+    const vector<std::array<Id, 1>> subres2, size_t limit,
+    vector<std::array<Id, 5>>& res) const {
+  return pimpl_->getECListForWordsAndTwoW1Subs(words, subres1, subres2, limit,
+                                               res);
+}
+
+// _________________________________________________________________________________________________
+void Index::getECListForWordsAndSubtrees(
+    const std::string& words,
+    const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
+    size_t limit, vector<vector<Id>>& res) const {
+  return pimpl_->getECListForWordsAndSubtrees(words, subResVecs, limit, res);
+}
+
+// _________________________________________________________________________________________________
+void Index::getWordPostingsForTerm(const std::string& term,
+                                   vector<TextRecordIndex>& cids,
+                                   vector<Score>& scores) const {
+  return pimpl_->getWordPostingsForTerm(term, cids, scores);
+}
+
+// _________________________________________________________________________________________________
+void Index::getEntityPostingsForTerm(const std::string& term,
+                                     vector<TextRecordIndex>& cids,
+                                     vector<Id>& eids,
+                                     vector<Score>& scores) const {
+  return pimpl_->getEntityPostingsForTerm(term, cids, eids, scores);
+}
+
+// _________________________________________________________________________________________________
+std::string Index::getTextExcerpt(TextRecordIndex cid) const {
+  return pimpl_->getTextExcerpt(cid);
+}
+
+// _________________________________________________________________________________________________
+void Index::dumpAsciiLists(const vector<std::string>& lists,
+                           bool decodeGapsFreq) const {
+  return pimpl_->dumpAsciiLists(lists, decodeGapsFreq);
+}
+
+// _________________________________________________________________________________________________
+void Index::dumpAsciiLists(const TextBlockMetaData& tbmd) const {
+  return pimpl_->dumpAsciiLists(tbmd);
+}
+
+// _________________________________________________________________________________________________
+float Index::getAverageNofEntityContexts() const {
+  return pimpl_->getAverageNofEntityContexts();
+}
+
+// _________________________________________________________________________________________________
+void Index::setKbName(const std::string& name) {
+  return pimpl_->setKbName(name);
+}
+
+// _________________________________________________________________________________________________
+void Index::setTextName(const std::string& name) {
+  return pimpl_->setTextName(name);
+}
+
+// _________________________________________________________________________________________________
+void Index::setUsePatterns(bool usePatterns) {
+  return pimpl_->setUsePatterns(usePatterns);
+}
+
+// _________________________________________________________________________________________________
+void Index::setLoadAllPermutations(bool loadAllPermutations) {
+  return pimpl_->setLoadAllPermutations(loadAllPermutations);
+}
+
+// _________________________________________________________________________________________________
+void Index::setKeepTempFiles(bool keepTempFiles) {
+  return pimpl_->setKeepTempFiles(keepTempFiles);
+}
+
+// _________________________________________________________________________________________________
+uint64_t& Index::stxxlMemoryInBytes() { return pimpl_->stxxlMemoryInBytes(); }
+
+// _________________________________________________________________________________________________
+const uint64_t& Index::stxxlMemoryInBytes() const {
+  return pimpl_->stxxlMemoryInBytes();
+}
+
+// _________________________________________________________________________________________________
+void Index::setOnDiskBase(const std::string& onDiskBase) {
+  return pimpl_->setOnDiskBase(onDiskBase);
+}
+
+// _________________________________________________________________________________________________
+void Index::setSettingsFile(const std::string& filename) {
+  return pimpl_->setSettingsFile(filename);
+}
+
+// _________________________________________________________________________________________________
+void Index::setPrefixCompression(bool compressed) {
+  return pimpl_->setPrefixCompression(compressed);
+}
+
+// _________________________________________________________________________________________________
+void Index::setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
+  return pimpl_->setNumTriplesPerBatch(numTriplesPerBatch);
+}
+
+// _________________________________________________________________________________________________
+const std::string& Index::getTextName() const { return pimpl_->getTextName(); }
+
+// _________________________________________________________________________________________________
+const std::string& Index::getKbName() const { return pimpl_->getKbName(); }
+
+// _________________________________________________________________________________________________
+size_t Index::getNofTriples() const { return pimpl_->getNofTriples(); }
+
 #if 0
 #include <CompilationInfo.h>
 #include <absl/strings/str_join.h>

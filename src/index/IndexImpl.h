@@ -10,6 +10,7 @@
 #include <index/CompressedRelation.h>
 #include <index/ConstantsIndexBuilding.h>
 #include <index/DocsDB.h>
+#include <index/Index.h>
 #include <index/IndexBuilderTypes.h>
 #include <index/IndexMetaData.h>
 #include <index/PatternCreator.h>
@@ -88,12 +89,6 @@ struct IndexBuilderDataAsPsoSorter : IndexBuilderDataBase {
       : IndexBuilderDataBase{base}, psoSorter{std::move(sorter)} {}
   IndexBuilderDataAsPsoSorter() = default;
 };
-
-/**
- * Used as a Template Argument to the createFromFile method, when we do not yet
- * know, which Tokenizer Specialization of the TurtleParser we are going to use
- */
-class TurtleParserAuto {};
 
 class IndexImpl {
  public:
