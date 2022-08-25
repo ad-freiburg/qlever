@@ -1,16 +1,17 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author:
+//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include "./Join.h"
+#include <engine/CallFixedSize.h>
+#include <engine/IndexScan.h>
+#include <engine/Join.h>
 
 #include <functional>
 #include <sstream>
 #include <type_traits>
 #include <unordered_set>
-
-#include "./QueryExecutionTree.h"
-#include "CallFixedSize.h"
 
 using std::string;
 
@@ -20,6 +21,11 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            size_t t2JoinCol, bool keepJoinColumn)
     : Operation(qec) {
   AD_CHECK(t1 && t2);
+  // Currently all join algorithms require both inputs to be sorted, so we
+  // enforce the sorting here.
+  t1 = QueryExecutionTree::createSortedTree(std::move(t1), {t1JoinCol});
+  t2 = QueryExecutionTree::createSortedTree(std::move(t2), {t2JoinCol});
+
   // Make sure subtrees are ordered so that identical queries can be identified.
   if (t1->asString() > t2->asString()) {
     std::swap(t1, t2);
