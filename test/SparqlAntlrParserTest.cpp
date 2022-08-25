@@ -1142,6 +1142,10 @@ TEST(SparqlParser, HavingCondition) {
 }
 
 TEST(SparqlParser, GroupGraphPattern) {
+  // The types of arguments to gmock matchers are automatically deduced. We
+  // explicitly specify the types here. This e.g. allows to write
+  // Triples({{"?a", "?b", "?c"}}) instead of
+  // IsTriples(vector{SparqlTriple{"?a", "?b", "?c"}}).
   auto Triples = [](vector<SparqlTriple>&& triples) {
     return IsTriples(triples);
   };
@@ -1208,4 +1212,9 @@ TEST(SparqlParser, GroupGraphPattern) {
                      GraphPattern(false, {},
                                   InlineData({"?a", "?b"}, {{"<foo>", "<bar>"},
                                                             {"<a>", "<b>"}})));
+  // expectGraphPattern(
+  //     "{ { ?a ?b ?c } }",
+  //     GraphPattern(false, {},
+  //                  GraphPattern(false, {}, Triples({{"?a", "?b", "?c"}}))));
+  //  expectGraphPattern("", GraphPattern());
 }

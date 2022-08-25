@@ -5,6 +5,11 @@
 #ifndef QLEVER_ALGORITHM_H
 #define QLEVER_ALGORITHM_H
 
+#include <util/TypeTraits.h>
+
+#include <utility>
+
+// TODO: Test the algorithms.
 namespace ad_utility {
 
 /**
@@ -39,10 +44,15 @@ bool contains_if(const Container& container, const Predicate& predicate) {
  * @param destination Vector& to which to append
  * @param source Vector&& to append
  */
-template <typename T>
-void appendVector(std::vector<T>& destination, std::vector<T>&& source) {
-  destination.insert(destination.end(), std::make_move_iterator(source.begin()),
-                     std::make_move_iterator(source.end()));
+template <typename T, ad_utility::SimilarTo<std::vector<T>> U>
+void appendVector(std::vector<T>& destination, U&& source) {
+  if constexpr (std::is_rvalue_reference_v<U&&>) {
+    destination.insert(destination.end(),
+                       std::make_move_iterator(source.begin()),
+                       std::make_move_iterator(source.end()));
+  } else {
+    destination.insert(destination.end(), source.begin(), source.end());
+  }
 }
 
 /**

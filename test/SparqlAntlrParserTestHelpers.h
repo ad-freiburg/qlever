@@ -360,17 +360,11 @@ MATCHER_P3(IsGraphPattern, optional, filters, childMatchers, "") {
     return false;
   }
 
-  auto sequence =
-      std::make_index_sequence<std::tuple_size_v<decltype(childMatchers)>>();
-
-  auto lambda = [&]<size_t... i>(std::index_sequence<i...>,
-                                 auto&&... matchers) {
-    return (... && testing::Value(arg._children[i], matchers));
+  auto lambda = [&](auto&&... matchers) {
+    size_t i = 0;
+    return (... && testing::Value(arg._children[i++], matchers));
   };
-  auto lambdalambda = [&lambda, &sequence](auto... matchers) {
-    return lambda(sequence, matchers...);
-  };
-  bool childrenMatch = std::apply(lambdalambda, childMatchers);
+  bool childrenMatch = std::apply(lambda, childMatchers);
 
   return arg._optional == optional &&
          testing::Value(arg._filters,
