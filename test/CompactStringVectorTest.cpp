@@ -89,17 +89,17 @@ TEST(CompactVectorOfStrings, Serialization) {
     {
       V vector;
       vector.build(input);
-      ad_utility::serialization::FileWriteSerializer ser{"_writerTest.dat"};
+      ad_utility::serialization::FileWriteSerializer ser{"_writerTest1.dat"};
       ser << vector;
     }  // The destructor finishes writing the file.
 
     V vector;
-    ad_utility::serialization::FileReadSerializer ser{"_writerTest.dat"};
+    ad_utility::serialization::FileReadSerializer ser{"_writerTest1.dat"};
     ser >> vector;
 
     vectorsEqual(input, vector);
 
-    ad_utility::deleteFile("_writerTest.dat");
+    ad_utility::deleteFile("_writerTest1.dat");
   };
 
   testSerialization(CompactVectorChar{}, strings);
@@ -109,19 +109,19 @@ TEST(CompactVectorOfStrings, Serialization) {
 TEST(CompactVectorOfStrings, SerializationWithPush) {
   auto testSerializationWithPush = []<typename V>(const V&, auto& inputVector) {
     {
-      typename V::Writer writer{"_writerTest.dat"};
+      typename V::Writer writer{"_writerTest2.dat"};
       for (const auto& s : inputVector) {
         writer.push(s.data(), s.size());
       }
     }  // The constructor finishes writing the file.
 
     V compactVector;
-    ad_utility::serialization::FileReadSerializer ser{"_writerTest.dat"};
+    ad_utility::serialization::FileReadSerializer ser{"_writerTest2.dat"};
     ser >> compactVector;
 
     vectorsEqual(inputVector, compactVector);
 
-    ad_utility::deleteFile("_writerTest.dat");
+    ad_utility::deleteFile("_writerTest3.dat");
   };
   testSerializationWithPush(CompactVectorChar{}, strings);
   testSerializationWithPush(CompactVectorInt{}, ints);
@@ -129,7 +129,7 @@ TEST(CompactVectorOfStrings, SerializationWithPush) {
 
 TEST(CompactVectorOfStrings, SerializationWithPushMiddleOfFile) {
   auto testSerializationWithPush = []<typename V>(const V&, auto& inputVector) {
-    std::string filename = "_writerTest.dat";
+    std::string filename = "_writerTest3.dat";
     {
       ad_utility::serialization::FileWriteSerializer fileWriter{filename};
       fileWriter << 42;
@@ -143,7 +143,7 @@ TEST(CompactVectorOfStrings, SerializationWithPushMiddleOfFile) {
     }
 
     V compactVector;
-    ad_utility::serialization::FileReadSerializer ser{"_writerTest.dat"};
+    ad_utility::serialization::FileReadSerializer ser{"_writerTest3.dat"};
     int i = 0;
     ser >> i;
     ASSERT_EQ(42, i);
@@ -153,7 +153,7 @@ TEST(CompactVectorOfStrings, SerializationWithPushMiddleOfFile) {
 
     vectorsEqual(inputVector, compactVector);
 
-    ad_utility::deleteFile("_writerTest.dat");
+    ad_utility::deleteFile("_writerTest3.dat");
   };
   testSerializationWithPush(CompactVectorChar{}, strings);
   testSerializationWithPush(CompactVectorInt{}, ints);
@@ -162,20 +162,20 @@ TEST(CompactVectorOfStrings, SerializationWithPushMiddleOfFile) {
 TEST(CompactVectorOfStrings, DiskIterator) {
   auto testDiskIterator = []<typename V>(const V&, auto& inputVector) {
     {
-      typename V::Writer writer{"_writerTest.dat"};
+      typename V::Writer writer{"_writerTest4.dat"};
       for (const auto& s : inputVector) {
         writer.push(s.data(), s.size());
       }
     }  // The constructor finishes writing the file.
 
-    auto iterator = V::diskIterator("_writerTest.dat");
+    auto iterator = V::diskIterator("_writerTest4.dat");
 
     size_t i = 0;
     for (const auto& el : iterator) {
       ASSERT_EQ(el, inputVector[i++]);
     }
     ASSERT_EQ(i, inputVector.size());
-    ad_utility::deleteFile("_writerTest.dat");
+    ad_utility::deleteFile("_writerTest4.dat");
   };
   testDiskIterator(CompactVectorChar{}, strings);
   testDiskIterator(CompactVectorInt{}, ints);
