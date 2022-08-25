@@ -193,7 +193,7 @@ GraphPatternOperation Visitor::visitTypesafe(Parser::InlineDataContext* ctx) {
   for (const auto& variable : values._inlineValues._variables) {
     visibleVariables_.back().emplace_back(variable);
   }
-  return GraphPatternOperation{values};
+  return GraphPatternOperation{std::move(values)};
 }
 
 // ____________________________________________________________________________________
@@ -244,30 +244,28 @@ Visitor::visitTypesafe(Parser::GroupGraphPatternSubContext* ctx) {
   };
 
   if (ctx->triplesBlock()) {
-    ops.emplace_back(GraphPatternOperation::BasicGraphPattern{
-        visitTypesafe(ctx->triplesBlock())});
+    ops.emplace_back(visitTypesafe(ctx->triplesBlock()));
   }
   auto others = visitVector<
       std::pair<variant<GraphPatternOperation, SparqlFilter>,
                 std::optional<GraphPatternOperation::BasicGraphPattern>>>(
       ctx->graphPatternNotTriplesAndMaybeTriples());
-  for (auto [variant, triples] : others) {
-    std::visit(ad_utility::OverloadCallOperator{filter, op}, variant);
-    if (triples.has_value()) {
-      if (holds_alternative<SparqlFilter>(variant) && !ops.empty() &&
-          holds_alternative<GraphPatternOperation::BasicGraphPattern>(
-              ops.back().variant_)) {
-        ad_utility::appendVector(
-            get<GraphPatternOperation::BasicGraphPattern>(ops.back().variant_)
-                ._whereClauseTriples,
-            std::move(triples.value()._whereClauseTriples));
-
-      } else {
-        ops.emplace_back(triples.value());
-      }
+  for (auto [graphPattern, triples] : others) {
+    std::visit(ad_utility::OverloadCallOperator{filter, op}, graphPattern);
+    if (!triples.has_value()) {
+      continue;
     }
+    if (ops.empty() ||
+        !holds_alternative<GraphPatternOperation::BasicGraphPattern>(
+            ops.back().variant_)) {
+      ops.emplace_back(GraphPatternOperation::BasicGraphPattern{});
+    }
+    ad_utility::appendVector(
+        get<GraphPatternOperation::BasicGraphPattern>(ops.back().variant_)
+            ._whereClauseTriples,
+        std::move(triples.value()._whereClauseTriples));
   }
-  return {ops, filters};
+  return {std::move(ops), std::move(filters)};
 }
 
 // TODO: Package this type into a struct.
@@ -275,15 +273,13 @@ std::pair<variant<GraphPatternOperation, SparqlFilter>,
           std::optional<GraphPatternOperation::BasicGraphPattern>>
 Visitor::visitTypesafe(
     Parser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx) {
-  auto triples = ctx->triplesBlock()
-                     ? std::optional{GraphPatternOperation::BasicGraphPattern{
-                           visitTypesafe(ctx->triplesBlock())}}
-                     : std::nullopt;
-  return {visitTypesafe(ctx->graphPatternNotTriples()), std::move(triples)};
+  return {visitTypesafe(ctx->graphPatternNotTriples()),
+          visitOptional(ctx->triplesBlock())};
 }
 
 // ____________________________________________________________________________________
-vector<SparqlTriple> Visitor::visitTypesafe(Parser::TriplesBlockContext* ctx) {
+GraphPatternOperation::BasicGraphPattern Visitor::visitTypesafe(
+    Parser::TriplesBlockContext* ctx) {
   auto iri = [](const Iri& iri) -> TripleComponent { return iri.toSparql(); };
   auto blankNode = [](const BlankNode& blankNode) -> TripleComponent {
     return blankNode.toSparql();
@@ -344,9 +340,10 @@ vector<SparqlTriple> Visitor::visitTypesafe(Parser::TriplesBlockContext* ctx) {
   auto triples = ad_utility::transform(
       visitTypesafe(ctx->triplesSameSubjectPath()), convertAndRegisterTriple);
   if (ctx->triplesBlock()) {
-    ad_utility::appendVector(triples, visitTypesafe(ctx->triplesBlock()));
+    ad_utility::appendVector(
+        triples, visitTypesafe(ctx->triplesBlock())._whereClauseTriples);
   }
-  return triples;
+  return {triples};
 }
 
 // ____________________________________________________________________________________
@@ -367,7 +364,8 @@ GraphPatternOperation Visitor::visitTypesafe(
     Parser::OptionalGraphPatternContext* ctx) {
   auto pattern = visitTypesafe(ctx->groupGraphPattern());
   pattern._optional = true;
-  return GraphPatternOperation{GraphPatternOperation::Optional{pattern}};
+  return GraphPatternOperation{
+      GraphPatternOperation::Optional{std::move(pattern)}};
 }
 
 // ____________________________________________________________________________________
@@ -566,7 +564,9 @@ GraphPatternOperation::Subquery Visitor::visitTypesafe(
   numInternalVariables_ = query.getNumInternalVariables();
   if (ctx->valuesClause() && !ctx->valuesClause()->getText().empty()) {
     // TODO: implement
-    reportError(ctx->valuesClause(), "ValuesClause is not yet implemented.");
+    reportError(
+        ctx->valuesClause(),
+        "VALUES clause directly after a Subquery is not yet implemented.");
   }
   // auto values = visitTypesafe(ctx->valuesClause());
   // if (values.has_value()) {

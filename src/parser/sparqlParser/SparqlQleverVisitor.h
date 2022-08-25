@@ -313,7 +313,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  vector<SparqlTriple> visitTypesafe(Parser::TriplesBlockContext* ctx);
+  GraphPatternOperation::BasicGraphPattern visitTypesafe(
+      Parser::TriplesBlockContext* ctx);
 
   Any visitGraphPatternNotTriples(
       Parser::GraphPatternNotTriplesContext* ctx) override {

@@ -160,6 +160,7 @@ groupGraphPatternSub
     : triplesBlock? graphPatternNotTriplesAndMaybeTriples*
     ;
 
+/* Helper rules to make parsing of groupGraphPatternSub easier. */
 graphPatternNotTriplesAndMaybeTriples
     : graphPatternNotTriples '.'? triplesBlock?
     ;
