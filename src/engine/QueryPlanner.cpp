@@ -2699,7 +2699,7 @@ auto QueryPlanner::createJoinWithTransitivePath(
 
 // ______________________________________________________________________________________
 auto QueryPlanner::createJoinWithHasPredicateScan(
-    SubtreePlan a, SubtreePlan b, vector<array<ColumnIndex, 2>> jcs)
+    SubtreePlan a, SubtreePlan b, const vector<array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
   // Check if one of the two operations is a HAS_PREDICATE_SCAN.
   // If the join column corresponds to the has-predicate scan's
@@ -2721,23 +2721,24 @@ auto QueryPlanner::createJoinWithHasPredicateScan(
   auto otherTree = aIsSuitablePredicateScan ? b._qet : a._qet;
   size_t otherTreeJoinColumn = aIsSuitablePredicateScan ? jcs[0][1] : jcs[0][0];
   auto qec = otherTree->getRootOperation()->getExecutionContext();
-  // TODO<joka921> Make this `scan->addSubtree`
-  auto boundHasPredicateScan = std::make_shared<HasPredicateScan>(
+  // Note that this is a new operation.
+  // TODO<joka921> Make this `HasPredicateScan::addSubtree`.
+  auto hasPredicateScanOperation = std::make_shared<HasPredicateScan>(
       qec, HasPredicateScan::ScanType::SUBQUERY_S);
-  boundHasPredicateScan->setSubtree(otherTree);
-  boundHasPredicateScan->setSubtreeSubjectColumn(otherTreeJoinColumn);
-  boundHasPredicateScan->setObject(
+  hasPredicateScanOperation->setSubtree(otherTree);
+  hasPredicateScanOperation->setSubtreeSubjectColumn(otherTreeJoinColumn);
+  hasPredicateScanOperation->setObject(
       static_cast<HasPredicateScan*>(
           hasPredicateScanTree->getRootOperation().get())
           ->getObject());
-  auto plan = makeSubtreePlan(std::move(boundHasPredicateScan));
+  auto plan = makeSubtreePlan(std::move(hasPredicateScanOperation));
   mergeSubtreePlanIds(plan, a, b);
   return plan;
 }
 
 // ______________________________________________________________________________________
-auto QueryPlanner::createJoinAsTextFilter(SubtreePlan a, SubtreePlan b,
-                                          vector<array<ColumnIndex, 2>> jcs)
+auto QueryPlanner::createJoinAsTextFilter(
+    SubtreePlan a, SubtreePlan b, const vector<array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
   using enum QueryExecutionTree::OperationType;
   if (!(a._qet->getType() == TEXT_WITHOUT_FILTER ||

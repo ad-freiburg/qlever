@@ -302,14 +302,14 @@ class QueryPlanner {
   // then returns a `HasPredicateScan` that takes the other input as a subtree.
   // Else returns `std::nullopt`.
   static std::optional<SubtreePlan> createJoinWithHasPredicateScan(
-      SubtreePlan a, SubtreePlan b, vector<array<ColumnIndex, 2>> jcs);
+      SubtreePlan a, SubtreePlan b, const vector<array<ColumnIndex, 2>>& jcs);
 
   // Used internally by `createJoinCandidates`. If  `a` or `b` is a
   // `TextOperationWithoutFilter` create a `TextOperationWithFilter` that takes
   // the result of the other input as the filter input. Else return
   // `std::nullopt`.
   static std::optional<SubtreePlan> createJoinAsTextFilter(
-      SubtreePlan a, SubtreePlan b, vector<array<ColumnIndex, 2>> jcs);
+      SubtreePlan a, SubtreePlan b, const vector<array<ColumnIndex, 2>>& jcs);
 
   vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
