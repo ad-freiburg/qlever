@@ -289,6 +289,14 @@ class QueryPlanner {
       const SubtreePlan& a, const SubtreePlan& b,
       std::optional<TripleGraph> tg) const;
 
+  // TODO<joka921> comment
+  static std::optional<SubtreePlan> createJoinWithTransitivePath(
+      SubtreePlan a, SubtreePlan b, vector<array<ColumnIndex, 2>> jcs);
+
+  // TODO<joka921> comment
+  static std::optional<SubtreePlan> createJoinWithHasPredicateScan(
+      SubtreePlan a, SubtreePlan b, vector<array<ColumnIndex, 2>> jcs);
+
   vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
 

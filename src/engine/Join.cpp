@@ -20,6 +20,11 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            size_t t2JoinCol, bool keepJoinColumn)
     : Operation(qec) {
   AD_CHECK(t1 && t2);
+  // Currently all join algorithms require both inputs to be sorted, so we
+  // enforce the sorting here
+  t1 = QueryExecutionTree::createSortedTree(std::move(t1), {t1JoinCol});
+  t2 = QueryExecutionTree::createSortedTree(std::move(t2), {t2JoinCol});
+
   // Make sure subtrees are ordered so that identical queries can be identified.
   if (t1->asString() > t2->asString()) {
     std::swap(t1, t2);
