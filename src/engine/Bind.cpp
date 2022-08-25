@@ -1,6 +1,6 @@
-//
-// Created by johannes on 19.04.20.
-//
+//  Copyright 2020, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "Bind.h"
 
@@ -84,9 +84,6 @@ void Bind::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Get input to BIND operation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Got input to Bind operation." << endl;
-
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
 
   result->_idTable.setCols(getResultWidth());
   result->_resultTypes = subRes->_resultTypes;

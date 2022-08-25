@@ -83,9 +83,6 @@ void TextOperationWithFilter::computeResult(ResultTable* result) {
   result->_idTable.setCols(getResultWidth());
   shared_ptr<const ResultTable> filterResult = _filterResult->getResult();
 
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.addChild(_filterResult->getRootOperation()->getRuntimeInfo());
-
   result->_resultTypes.reserve(result->_idTable.cols());
   result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);

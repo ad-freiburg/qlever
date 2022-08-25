@@ -13,6 +13,7 @@
 #include "../../util/HashMap.h"
 #include "../../util/OverloadCallOperator.h"
 #include "../../util/StringUtils.h"
+#include "../../util/antlr/ANTLRErrorHandling.h"
 #include "../Alias.h"
 #include "../ParsedQuery.h"
 #include "../RdfEscaping.h"
@@ -464,10 +465,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   PathTuples visitTypesafe(Parser::TupleWithPathContext* ctx);
 
   [[noreturn]] void throwCollectionsAndBlankNodePathsNotSupported(auto* ctx) {
-    throw ParseException(
-        "( ... ) and [ ... ] in triples are not yet supported by QLever. "
-        "Got: " +
-        ctx->getText());
+    reportError(
+        ctx, "( ... ) and [ ... ] in triples are not yet supported by QLever.");
   }
 
   Any visitPropertyListPath(Parser::PropertyListPathContext* ctx) override {
@@ -546,12 +545,9 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   PropertyPath visitTypesafe(Parser::PathEltOrInverseContext* ctx);
 
-  Any visitPathMod(Parser::PathModContext* ctx) override {
-    // Handled in visitPathElt.
-    throw ParseException(
-        "PathMod should be handled by upper clauses. It should not be visited. "
-        "Got: " +
-        ctx->getText());
+  Any visitPathMod(Parser::PathModContext*) override {
+    // PathMod should be handled by upper clauses. It should not be visited.
+    AD_FAIL();
   }
 
   Any visitPathPrimary(Parser::PathPrimaryContext* ctx) override {
@@ -567,8 +563,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   PropertyPath visitTypesafe(Parser::PathNegatedPropertySetContext*);
 
-  Any visitPathOneInPropertySet(Parser::PathOneInPropertySetContext*) override {
-    throw ParseException(
+  Any visitPathOneInPropertySet(
+      Parser::PathOneInPropertySetContext* ctx) override {
+    reportError(
+        ctx,
         R"("!" and "^" inside a property path is not supported by QLever.)");
   }
 
@@ -725,10 +723,9 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   Any visitStrangeMultiplicativeSubexprOfAdditive(
       Parser::StrangeMultiplicativeSubexprOfAdditiveContext* ctx) override {
-    throw ParseException(
-        "StrangeMultiplicativeSubexprOfAdditiveContext must not be visited. "
-        "Got: " +
-        ctx->getText());
+    reportError(
+        ctx,
+        "StrangeMultiplicativeSubexprOfAdditiveContext must not be visited.");
   }
 
   Any visitMultiplicativeExpression(
@@ -899,4 +896,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   /// `Intermediate` (see for example the implementation of `visitAlternative`).
   template <typename Target, typename Intermediate = Target, typename Ctx>
   void visitIf(Target* target, Ctx* ctx);
+
+  [[noreturn]] void reportError(antlr4::ParserRuleContext* ctx,
+                                const std::string& msg);
 };

@@ -95,8 +95,6 @@ void OrderBy::computeResult(ResultTable* result) {
         std::to_string(sortEstimateCancellationFactor));
   }
 
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "OrderBy result computation..." << endl;
   result->_idTable.setCols(subRes->_idTable.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),

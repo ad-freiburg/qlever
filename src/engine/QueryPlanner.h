@@ -1,13 +1,17 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author:
+//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+
 #pragma once
+
+#include <engine/Filter.h>
+#include <engine/QueryExecutionTree.h>
+#include <parser/ParsedQuery.h>
 
 #include <set>
 #include <vector>
-
-#include "../parser/ParsedQuery.h"
-#include "QueryExecutionTree.h"
 
 using std::vector;
 
@@ -316,7 +320,7 @@ class QueryPlanner {
                               const vector<SparqlFilter>& filters,
                               bool replaceInsteadOfAddPlans) const;
 
-  std::shared_ptr<Operation> createFilterOperation(
+  std::shared_ptr<Filter> createFilterOperation(
       const SparqlFilter& filter, const SubtreePlan& parent) const;
 
   /**

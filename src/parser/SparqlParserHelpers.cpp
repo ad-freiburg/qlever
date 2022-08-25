@@ -12,7 +12,6 @@ using std::string;
 // _____________________________________________________________________________
 ParserAndVisitor::ParserAndVisitor(string input)
     : input_{std::move(input)}, visitor_{} {
-  parser_.setErrorHandler(std::make_shared<ThrowingErrorStrategy>());
   // The default in ANTLR is to log all errors to the console and to continue
   // the parsing. We need to turn parse errors into exceptions instead to
   // propagate them to the user.

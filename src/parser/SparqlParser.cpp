@@ -15,6 +15,7 @@
 #include "sparqlParser/SparqlQleverVisitor.h"
 
 using namespace std::literals::string_literals;
+using AntlrParser = SparqlAutomaticParser;
 
 SparqlParser::SparqlParser(const string& query) : lexer_(query), query_(query) {
   LOG(DEBUG) << "Parsing " << query << std::endl;
@@ -39,7 +40,7 @@ ParsedQuery SparqlParser::parse() {
   // parsePrologue parses all the prefixes which are stored in a member
   // PrefixMap. This member is returned on parse.
   result._prefixes = convertPrefixMap(parseWithAntlr(
-      sparqlParserHelpers::parsePrologue,
+      &AntlrParser::prologue,
       {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}));
 
   if (lexer_.accept("construct")) {
@@ -57,13 +58,8 @@ ParsedQuery SparqlParser::parse() {
 // _____________________________________________________________________________
 void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
   if (queryType == CONSTRUCT_QUERY) {
-    SparqlQleverVisitor::PrefixMap prefixes;
-    for (const auto& prefix : query->_prefixes) {
-      prefixes[prefix._prefix] = prefix._uri;
-    }
-    query->_clause =
-        parseWithAntlr(sparqlParserHelpers::parseConstructTemplate, prefixes)
-            .value_or(ad_utility::sparql_types::Triples{});
+    query->_clause = parseWithAntlr(&AntlrParser::constructTemplate, *query)
+                         .value_or(ad_utility::sparql_types::Triples{});
     lexer_.expect("where");
   } else if (queryType == SELECT_QUERY) {
     parseSelect(query);
@@ -159,24 +155,20 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
 
 // _____________________________________________________________________________
 void SparqlParser::parseSelect(ParsedQuery* query) {
-  query->_clause =
-      parseWithAntlr(sparqlParserHelpers::parseSelectClause, *query);
+  query->_clause = parseWithAntlr(&AntlrParser::selectClause, *query);
   lexer_.expect("where");  // Still parsed with old parser. Expects WHERE
                            // keyword to be consumed.
 }
 
-// Helper function that converts the prefix map from `parsedQuery` (a vector of
-// pairs of prefix and IRI) to the prefix map we need for the
-// `SparqlQleverVisitor` (a hash map from prefixes to IRIs).
-namespace {
-SparqlQleverVisitor::PrefixMap getPrefixMap(const ParsedQuery& parsedQuery) {
+// _____________________________________________________________________________
+SparqlQleverVisitor::PrefixMap SparqlParser::getPrefixMap(
+    const ParsedQuery& parsedQuery) {
   SparqlQleverVisitor::PrefixMap prefixMap;
   for (const auto& prefixDef : parsedQuery._prefixes) {
     prefixMap[prefixDef._prefix] = prefixDef._uri;
   }
   return prefixMap;
 }
-}  // namespace
 
 // _____________________________________________________________________________
 void SparqlParser::parseWhere(ParsedQuery* query,
@@ -212,7 +204,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       lexer_.accept(".");
     } else if (lexer_.peek("bind")) {
       GraphPatternOperation::Bind bind =
-          parseWithAntlr(sparqlParserHelpers::parseBind, *query);
+          parseWithAntlr(&AntlrParser::bind, *query);
       query->registerVariableVisibleInQueryBody(Variable{bind._target});
       currentPattern->_children.emplace_back(std::move(bind));
       // The dot after a BIND is optional.
@@ -276,8 +268,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       }
     } else if (lexer_.peek("filter")) {
       // append to the global filters of the pattern.
-      SparqlFilter filter =
-          parseWithAntlr(sparqlParserHelpers::parseFilterR, *query);
+      SparqlFilter filter = parseWithAntlr(&AntlrParser::filterR, *query);
       if (filter._type == SparqlFilter::LANG_MATCHES) {
         currentPattern->addLanguageFilter(filter._lhs, filter._rhs);
       } else {
@@ -286,8 +277,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       // A filter may have an optional dot after it
       lexer_.accept(".");
     } else if (lexer_.peek("values")) {
-      auto values =
-          parseWithAntlr(sparqlParserHelpers::parseInlineData, *query);
+      auto values = parseWithAntlr(&AntlrParser::inlineData, *query);
       for (const auto& variable : values._inlineValues._variables) {
         query->registerVariableVisibleInQueryBody(Variable{variable});
       }
@@ -342,8 +332,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       };
 
       vector<ad_utility::sparql_types::TripleWithPropertyPath> triples =
-          parseWithAntlr(sparqlParserHelpers::parseTriplesSameSubjectPath,
-                         *query);
+          parseWithAntlr(&AntlrParser::triplesSameSubjectPath, *query);
       auto& v = lastBasicPattern(currentPattern)._whereClauseTriples;
       for (auto& triple : triples) {
         registerIfVariable(&triple.subject_);
@@ -423,7 +412,7 @@ std::string_view SparqlParser::readTriplePart(const std::string& s,
 // _____________________________________________________________________________
 void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
   query->addSolutionModifiers(
-      parseWithAntlr(sparqlParserHelpers::parseSolutionModifier, *query));
+      parseWithAntlr(&AntlrParser::solutionModifier, *query));
 
   lexer_.accept("}");
 }
@@ -744,35 +733,28 @@ GraphPatternOperation::BasicGraphPattern& SparqlParser::lastBasicPattern(
 }
 
 // ________________________________________________________________________
-template <typename F>
-auto SparqlParser::parseWithAntlr(F f, const ParsedQuery& parsedQuery)
-    -> decltype(f(std::declval<const string&>(),
-                  std::declval<SparqlQleverVisitor::PrefixMap>())
-                    .resultOfParse_) {
-  return parseWithAntlr(f, getPrefixMap(parsedQuery));
-}
-
-// ________________________________________________________________________
-template <typename F>
-auto SparqlParser::parseWithAntlr(F f, SparqlQleverVisitor::PrefixMap prefixMap)
-    -> decltype(f(std::declval<const string&>(),
-                  std::declval<SparqlQleverVisitor::PrefixMap>())
-                    .resultOfParse_) {
-  auto resultOfParseAndRemainingText =
-      f(lexer_.getUnconsumedInput(), std::move(prefixMap));
-  lexer_.reset(std::move(resultOfParseAndRemainingText.remainingText_));
-  return std::move(resultOfParseAndRemainingText.resultOfParse_);
-}
-
-// ________________________________________________________________________
-template <typename F>
+template <typename ContextType>
 auto SparqlParser::parseWithAntlr(
-    F f, const std::string& input,
-    const SparqlQleverVisitor::PrefixMap& prefixMap)
-    -> decltype(f(std::declval<const string&>(),
-                  std::declval<SparqlQleverVisitor::PrefixMap>())
+    ContextType* (SparqlAutomaticParser::*F)(void),
+    const ParsedQuery& parsedQuery)
+    -> decltype((std::declval<sparqlParserHelpers::ParserAndVisitor>())
+                    .parseTypesafe(F)
                     .resultOfParse_) {
-  auto resultOfParseAndRemainingText = f(input, prefixMap);
+  return parseWithAntlr(F, getPrefixMap(parsedQuery));
+}
+
+// ________________________________________________________________________
+template <typename ContextType>
+auto SparqlParser::parseWithAntlr(
+    ContextType* (SparqlAutomaticParser::*F)(void),
+    SparqlQleverVisitor::PrefixMap prefixMap)
+    -> decltype((std::declval<sparqlParserHelpers::ParserAndVisitor>())
+                    .parseTypesafe(F)
+                    .resultOfParse_) {
+  sparqlParserHelpers::ParserAndVisitor p{lexer_.getUnconsumedInput(),
+                                          std::move(prefixMap)};
+  auto resultOfParseAndRemainingText = p.parseTypesafe(F);
+  lexer_.reset(std::move(resultOfParseAndRemainingText.remainingText_));
   return std::move(resultOfParseAndRemainingText.resultOfParse_);
 }
 

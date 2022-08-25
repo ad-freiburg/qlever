@@ -123,7 +123,7 @@ std::variant<ParsedQuery, Triples> Visitor::visitTypesafe(
   if (ctx->constructQuery()) {
     return visitTypesafe(ctx->constructQuery());
   }
-  throw ParseException{"QLever only supports select and construct queries"};
+  reportError(ctx, "QLever only supports select and construct queries");
 }
 
 // ____________________________________________________________________________________
@@ -161,7 +161,7 @@ Alias Visitor::visitTypesafe(Parser::AliasWithoutBracketsContext* ctx) {
 // ____________________________________________________________________________________
 Triples Visitor::visitTypesafe(Parser::ConstructQueryContext* ctx) {
   if (!ctx->datasetClause().empty()) {
-    throw ParseException{"Datasets are not supported"};
+    reportError(ctx, "Datasets are not supported");
   }
   // TODO: once where clause is supported also process whereClause and
   // solutionModifiers
@@ -324,8 +324,8 @@ string Visitor::visitTypesafe(Parser::PnameLnContext* ctx) {
   auto pnLocal = text.substr(pos + 1);
   if (!_prefixMap.contains(pnameNS)) {
     // TODO<joka921> : proper name
-    throw ParseException{"Prefix " + pnameNS +
-                         " was not registered using a PREFIX declaration"};
+    reportError(ctx, "Prefix " + pnameNS +
+                         " was not registered using a PREFIX declaration");
   }
   auto inner = _prefixMap[pnameNS];
   // strip the trailing ">"
@@ -339,24 +339,17 @@ string Visitor::visitTypesafe(Parser::PnameNsContext* ctx) {
   auto prefix = text.substr(0, text.length() - 1);
   if (!_prefixMap.contains(prefix)) {
     // TODO<joka921> : proper name
-    throw ParseException{"Prefix " + prefix +
-                         " was not registered using a PREFIX declaration"};
+    reportError(ctx, "Prefix " + prefix +
+                         " was not registered using a PREFIX declaration");
   }
   return _prefixMap[prefix];
 }
 
 // ____________________________________________________________________________________
-namespace {
-[[noreturn]] void throwBaseDeclNotSupported(
-    SparqlAutomaticParser::BaseDeclContext* ctx) {
-  throw ParseException("BaseDecl is not supported. Got: " + ctx->getText());
-}
-}  // namespace
-// ____________________________________________________________________________________
 SparqlQleverVisitor::PrefixMap SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PrologueContext* ctx) {
   if (!ctx->baseDecl().empty()) {
-    throwBaseDeclNotSupported(ctx->baseDecl(0));
+    reportError(ctx->baseDecl(0), "BaseDecl is not supported.");
   }
   for (const auto& prefix : ctx->prefixDecl()) {
     visitTypesafe(prefix);
@@ -369,7 +362,7 @@ SparqlQleverVisitor::PrefixMap SparqlQleverVisitor::visitTypesafe(
 // ____________________________________________________________________________________
 SparqlPrefix SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::BaseDeclContext* ctx) {
-  throwBaseDeclNotSupported(ctx);
+  reportError(ctx, "BaseDecl is not supported.");
 }
 
 // ____________________________________________________________________________________
@@ -385,8 +378,7 @@ SparqlPrefix SparqlQleverVisitor::visitTypesafe(
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
-  throw ParseException("SelectQuery is not yet supported. Got: " +
-                       ctx->getText());
+  reportError(ctx, "SelectQuery is not yet supported.");
 }
 
 // ____________________________________________________________________________________
@@ -464,10 +456,9 @@ SparqlValues Visitor::visitTypesafe(Parser::InlineDataOneVarContext* ctx) {
   auto var = visitTypesafe(ctx->var());
   values._variables.push_back(var.name());
   if (ctx->dataBlockValue().empty())
-    throw ParseException(
-        "No values were specified in Values "
-        "clause. This is not supported by QLever. Got: " +
-        ctx->getText());
+    reportError(ctx,
+                "No values were specified in Values "
+                "clause. This is not supported by QLever.");
   for (auto& dataBlockValue : ctx->dataBlockValue()) {
     values._values.push_back({visitTypesafe(dataBlockValue)});
   }
@@ -478,15 +469,13 @@ SparqlValues Visitor::visitTypesafe(Parser::InlineDataOneVarContext* ctx) {
 SparqlValues Visitor::visitTypesafe(Parser::InlineDataFullContext* ctx) {
   SparqlValues values;
   if (ctx->dataBlockSingle().empty())
-    throw ParseException(
-        "No values were specified in Values "
-        "clause. This is not supported by QLever. Got: " +
-        ctx->getText());
+    reportError(ctx,
+                "No values were specified in Values "
+                "clause. This is not supported by QLever.");
   if (ctx->NIL())
-    throw ParseException(
-        "No variables were specified in Values "
-        "clause. This is not supported by QLever. Got: " +
-        ctx->getText());
+    reportError(ctx,
+                "No variables were specified in Values "
+                "clause. This is not supported by QLever.");
   for (auto& var : ctx->var()) {
     values._variables.push_back(visitTypesafe(var).name());
   }
@@ -495,10 +484,9 @@ SparqlValues Visitor::visitTypesafe(Parser::InlineDataFullContext* ctx) {
                   [numVars = values._variables.size()](const auto& inner) {
                     return inner.size() != numVars;
                   })) {
-    throw ParseException(
-        "The number of values in every data block must "
-        "match the number of variables in a values clause. Got: " +
-        ctx->getText());
+    reportError(ctx,
+                "The number of values in every data block must "
+                "match the number of variables in a values clause.");
   }
   return values;
 }
@@ -507,10 +495,9 @@ SparqlValues Visitor::visitTypesafe(Parser::InlineDataFullContext* ctx) {
 vector<std::string> Visitor::visitTypesafe(
     Parser::DataBlockSingleContext* ctx) {
   if (ctx->NIL())
-    throw ParseException(
-        "No values were specified in DataBlock."
-        "This is not supported by QLever. Got: " +
-        ctx->getText());
+    reportError(ctx,
+                "No values were specified in DataBlock."
+                "This is not supported by QLever.");
   return visitVector<std::string>(ctx->dataBlockValue());
 }
 
@@ -523,18 +510,13 @@ std::string Visitor::visitTypesafe(Parser::DataBlockValueContext* ctx) {
     return visitTypesafe(ctx->rdfLiteral());
   } else if (ctx->numericLiteral()) {
     // TODO implement
-    throw ParseException("Numbers in values clauses are not supported. Got: " +
-                         ctx->getText() + ".");
+    reportError(ctx, "Numbers in values clauses are not supported.");
   } else if (ctx->booleanLiteral()) {
     // TODO implement
-    throw ParseException("Booleans in values clauses are not supported. Got: " +
-                         ctx->getText() + ".");
+    reportError(ctx, "Booleans in values clauses are not supported.");
   } else if (ctx->UNDEF()) {
     // TODO implement
-    throw ParseException(
-        "UNDEF in values clauses is not supported. Got: " + ctx->getText() +
-        ""
-        ".");
+    reportError(ctx, "UNDEF in values clauses is not supported.");
   }
   AD_FAIL()  // Should be unreachable.
 }
@@ -567,8 +549,8 @@ vector<Visitor::ExpressionPtr> Visitor::visitTypesafe(
   // whole list, not the individual arguments), but we currently don't support
   // it.
   if (ctx->DISTINCT()) {
-    throw ParseException{
-        "DISTINCT for argument lists of IRI functions are not supported"};
+    reportError(
+        ctx, "DISTINCT for argument lists of IRI functions are not supported");
   }
   // Visit the expression of each argument.
   return visitVector<ExpressionPtr>(ctx->expression());
@@ -825,9 +807,9 @@ PropertyPath Visitor::visitTypesafe(Parser::PathPrimaryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-PropertyPath Visitor::visitTypesafe(Parser::PathNegatedPropertySetContext*) {
-  throw ParseException(
-      "\"!\" inside a property path is not supported by QLever.");
+PropertyPath Visitor::visitTypesafe(
+    Parser::PathNegatedPropertySetContext* ctx) {
+  reportError(ctx, "\"!\" inside a property path is not supported by QLever.");
 }
 
 // ____________________________________________________________________________________
@@ -835,9 +817,10 @@ unsigned long long int Visitor::visitTypesafe(Parser::IntegerContext* ctx) {
   try {
     return std::stoull(ctx->getText());
   } catch (const std::out_of_range&) {
-    throw ParseException{"Integer " + ctx->getText() +
-                         " does not fit"
-                         " into 64 bits. This is not supported by QLever."};
+    reportError(
+        ctx,
+        "Integer " + ctx->getText() +
+            " does not fit into 64 bits. This is not supported by QLever.");
   }
 }
 
@@ -1003,7 +986,8 @@ ExpressionPtr Visitor::visitTypesafe(Parser::RelationalExpressionContext* ctx) {
 
      */
   } else {
-    throw std::runtime_error(
+    reportError(
+        ctx,
         "This parser does not yet support relational expressions = < etc.");
   }
 }
@@ -1019,9 +1003,9 @@ ExpressionPtr Visitor::visitTypesafe(Parser::AdditiveExpressionContext* ctx) {
   auto opTypes = visitOperationTags(ctx->children, {"+", "-"});
 
   if (!ctx->strangeMultiplicativeSubexprOfAdditive().empty()) {
-    throw std::runtime_error{
-        "You currently have to put a space between a +/- and the number "
-        "after it."};
+    reportError(ctx,
+                "You currently have to put a space between a +/- and the "
+                "number after it.");
   }
 
   AD_CHECK(!children.empty());
@@ -1148,9 +1132,9 @@ ExpressionPtr Visitor::visitTypesafe(
     //   return createExpression<sparqlExpression::DistExpression>(
     //       std::move(children[0]), std::move(children[1]));
   } else {
-    throw ParseException{
-        "Built-in function not yet implemented (only aggregates like COUNT "
-        "so far)"};
+    reportError(ctx,
+                "Built-in function not yet implemented (only aggregates like "
+                "COUNT so far)");
   }
 }
 
@@ -1160,9 +1144,9 @@ ExpressionPtr Visitor::visitTypesafe(Parser::AggregateContext* ctx) {
   // the only case that there is no child expression is COUNT(*), so we can
   // check this outside the if below.
   if (!ctx->expression()) {
-    throw ParseException{
-        "This parser currently doesn't support COUNT(*), please specify an "
-        "explicit expression for the COUNT"};
+    reportError(ctx,
+                "This parser currently doesn't support COUNT(*), please "
+                "specify an explicit expression for the COUNT");
   }
   auto childExpression = visitTypesafe(ctx->expression());
   auto children = ctx->children;
@@ -1332,4 +1316,14 @@ void Visitor::visitIf(Target* target, Ctx* ctx) {
   if (ctx) {
     *target = Intermediate{visitTypesafe(ctx)};
   }
+}
+
+// ____________________________________________________________________________________
+void Visitor::reportError(antlr4::ParserRuleContext* ctx,
+                          const std::string& msg) {
+  throw ParseException{
+      absl::StrCat("Clause \"", ctx->getText(), "\" at line ",
+                   ctx->getStart()->getLine(), ":",
+                   ctx->getStart()->getCharPositionInLine(), " ", msg),
+      generateMetadata(ctx)};
 }

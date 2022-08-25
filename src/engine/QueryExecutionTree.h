@@ -214,6 +214,13 @@ class QueryExecutionTree {
   bool& isRoot() noexcept { return _isRoot; }
   [[nodiscard]] const bool& isRoot() const noexcept { return _isRoot; }
 
+  // Create a `QueryExecutionTree` that produces exactly the same result as
+  // `qet`, but sorted according to the `sortColumns`. If `qet` is already
+  // sorted accordingly, it is simply returned.
+  static std::shared_ptr<QueryExecutionTree> createSortedTree(
+      std::shared_ptr<QueryExecutionTree> qet,
+      const vector<size_t>& sortColumns);
+
  private:
   QueryExecutionContext* _qec;  // No ownership
   std::shared_ptr<Operation>
