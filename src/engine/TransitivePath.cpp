@@ -722,7 +722,7 @@ void TransitivePath::computeResult(ResultTable* result) {
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePath> TransitivePath::bindLeftSide(
     std::shared_ptr<QueryExecutionTree> leftop, size_t inputCol) const {
-  // Enforce necessary sorting of `leftop`
+  // Enforce required sorting of `leftop`.
   leftop = QueryExecutionTree::createSortedTree(std::move(leftop), {inputCol});
   // Create a copy of this
   std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(*this);
@@ -745,7 +745,7 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftSide(
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePath> TransitivePath::bindRightSide(
     std::shared_ptr<QueryExecutionTree> rightop, size_t inputCol) const {
-  // The bound operation must be sorted.
+  // Enforce the required sorting of `rightop`.
   rightop =
       QueryExecutionTree::createSortedTree(std::move(rightop), {inputCol});
   // Create a copy of this
