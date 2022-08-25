@@ -1,19 +1,17 @@
-//
-// Created by johannes on 08.05.21.
-//
+// Copyright 2021, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Authors:
+//   2021-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+//   2022      Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
 
-#include <antlr4-runtime.h>
 #include <gtest/gtest.h>
+#include <parser/SparqlParserHelpers.h>
+#include <parser/sparqlParser/SparqlQleverVisitor.h>
 
 #include <iostream>
 #include <type_traits>
 #include <utility>
 
-#include "../../src/parser/sparqlParser/SparqlQleverVisitor.h"
-#include "../src/parser/SparqlParserHelpers.h"
-#include "../src/parser/data/Types.h"
-#include "../src/parser/sparqlParser/generated/SparqlAutomaticLexer.h"
-#include "../src/util/antlr/ANTLRErrorHandling.h"
 #include "SparqlAntlrParserTestHelpers.h"
 
 using namespace sparqlParserHelpers;

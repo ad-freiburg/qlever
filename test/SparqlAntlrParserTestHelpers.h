@@ -5,10 +5,10 @@
 #pragma once
 
 #include <gmock/gmock.h>
-
-#include "../src/parser/Alias.h"
-#include "../src/parser/data/VarOrTerm.h"
-#include "../src/util/TypeTraits.h"
+#include <parser/Alias.h>
+#include <parser/ParsedQuery.h>
+#include <parser/data/VarOrTerm.h>
+#include <util/TypeTraits.h>
 
 // Not relevant for the actual test logic, but provides
 // human-readable output if a test fails.
