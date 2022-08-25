@@ -7,6 +7,8 @@
 #include <util/Exception.h>
 #include <util/Log.h>
 
+#include <ranges>
+
 // ________________________________________________________________________________________________________________
 std::string RuntimeInformation::toString() const {
   std::ostringstream buffer;
@@ -84,10 +86,10 @@ void RuntimeInformation::setColumnNames(
   if (columnMap.empty()) {
     return;
   }
-  auto maxColumnIndex = std::max_element(
-      columnMap.begin(), columnMap.end(),
-      [](const auto& mapItem1, const auto& mapItem2) {
-      return mapItem1.second < mapItem2.second; })->second;
+  auto maxColumnIndex =
+      std::ranges::max_element(columnMap, {}, [](const auto& mapItem) {
+        return mapItem.second;
+      })->second;
   columnNames_.resize(maxColumnIndex + 1);
   for (const auto& [variable, columnIndex] : columnMap) {
     AD_CHECK(columnIndex < columnNames_.size());
