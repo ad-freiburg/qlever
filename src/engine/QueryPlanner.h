@@ -289,15 +289,25 @@ class QueryPlanner {
       const SubtreePlan& a, const SubtreePlan& b,
       std::optional<TripleGraph> tg) const;
 
-  // TODO<joka921> comment
+  // Used internally by `createJoinCandidates`. If `a` or `b` is a transitive
+  // path operation and the other input can be bound to this transitive path
+  // (see `TransitivePath.cpp` for details), then returns that bound transitive
+  // path.
   static std::optional<SubtreePlan> createJoinWithTransitivePath(
       SubtreePlan a, SubtreePlan b, vector<array<ColumnIndex, 2>> jcs);
 
-  // TODO<joka921> comment
+  // Used internally by `createJoinCandidates`. If  `a` or `b` is a
+  // `HasPredicateScan` with a variable as a subject (`?x ql:has-predicate
+  // <VariableOrIri>`) and `a` and `b` can be joined on that subject variable,
+  // then returns a `HasPredicateScan` that takes the other input as a subtree.
+  // Else return `std::nullopt`.
   static std::optional<SubtreePlan> createJoinWithHasPredicateScan(
       SubtreePlan a, SubtreePlan b, vector<array<ColumnIndex, 2>> jcs);
 
-  // TODO<joka921> comment
+  // Used internally by `createJoinCandidates`. If  any of `a` or `b` is a
+  // `TextOperationWithoutFilter` create a `TextOperationWithFilter` that takes
+  // the result of the other input as the filter input. Else return
+  // `std::nullopt`.
   static std::optional<SubtreePlan> createJoinAsTextFilter(
       SubtreePlan a, SubtreePlan b, vector<array<ColumnIndex, 2>> jcs);
 
