@@ -238,9 +238,8 @@ GraphPattern Visitor::visitTypesafe(Parser::GroupGraphPatternContext* ctx) {
   }
 }
 
-// TODO: Package this type into a struct.
-std::pair<vector<GraphPatternOperation>, vector<SparqlFilter>>
-Visitor::visitTypesafe(Parser::GroupGraphPatternSubContext* ctx) {
+Visitor::OperationsAndFilters Visitor::visitTypesafe(
+    Parser::GroupGraphPatternSubContext* ctx) {
   vector<GraphPatternOperation> ops;
   vector<SparqlFilter> filters;
 
@@ -276,10 +275,7 @@ Visitor::visitTypesafe(Parser::GroupGraphPatternSubContext* ctx) {
   return {std::move(ops), std::move(filters)};
 }
 
-// TODO: Package this type into a struct.
-std::pair<variant<GraphPatternOperation, SparqlFilter>,
-          std::optional<GraphPatternOperation::BasicGraphPattern>>
-Visitor::visitTypesafe(
+Visitor::OperationOrFilterAndMaybeTriples Visitor::visitTypesafe(
     Parser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx) {
   return {visitTypesafe(ctx->graphPatternNotTriples()),
           visitOptional(ctx->triplesBlock())};
@@ -355,7 +351,7 @@ GraphPatternOperation::BasicGraphPattern Visitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-std::variant<GraphPatternOperation, SparqlFilter> Visitor::visitTypesafe(
+Visitor::OperationOrFilter Visitor::visitTypesafe(
     Parser::GraphPatternNotTriplesContext* ctx) {
   if (ctx->graphGraphPattern() || ctx->serviceGraphPattern()) {
     reportError(ctx,

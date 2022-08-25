@@ -355,6 +355,23 @@ MATCHER_P(IsOptional, subMatcher, "") {
   return optional && testing::Value(optional->_child, subMatcher);
 }
 
+MATCHER_P(IsGroup, subMatcher, "") {
+  auto group =
+      std::get_if<GraphPatternOperation::GroupGraphPattern>(&arg.variant_);
+  return group && testing::Value(group->_child, subMatcher);
+}
+
+MATCHER_P2(IsUnion, subMatcher1, subMatcher2, "") {
+  auto unio = std::get_if<GraphPatternOperation::Union>(&arg.variant_);
+  return unio && testing::Value(unio->_child1, subMatcher1) &&
+         testing::Value(unio->_child2, subMatcher2);
+}
+
+MATCHER_P(IsMinus, subMatcher, "") {
+  auto minus = std::get_if<GraphPatternOperation::Minus>(&arg.variant_);
+  return minus && testing::Value(minus->_child, subMatcher);
+}
+
 MATCHER_P3(IsGraphPattern, optional, filters, childMatchers, "") {
   if (arg._children.size() != std::tuple_size_v<decltype(childMatchers)>) {
     return false;

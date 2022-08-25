@@ -54,6 +54,12 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   using ObjectList = ad_utility::sparql_types::ObjectList;
   using PropertyList = ad_utility::sparql_types::PropertyList;
   using Any = antlrcpp::Any;
+  using OperationsAndFilters =
+      std::pair<vector<GraphPatternOperation>, vector<SparqlFilter>>;
+  using OperationOrFilterAndMaybeTriples =
+      std::pair<variant<GraphPatternOperation, SparqlFilter>,
+                std::optional<GraphPatternOperation::BasicGraphPattern>>;
+  using OperationOrFilter = std::variant<GraphPatternOperation, SparqlFilter>;
   size_t _blankNodeCounter = 0;
   int64_t numInternalVariables_ = 0;
   int64_t numGraphPatterns_ = 0;
@@ -302,17 +308,15 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  std::pair<vector<GraphPatternOperation>, vector<SparqlFilter>> visitTypesafe(
-      Parser::GroupGraphPatternSubContext* ctx);
+  OperationsAndFilters visitTypesafe(Parser::GroupGraphPatternSubContext* ctx);
 
   Any visitGraphPatternNotTriplesAndMaybeTriples(
       Parser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  std::pair<variant<GraphPatternOperation, SparqlFilter>,
-            std::optional<GraphPatternOperation::BasicGraphPattern>>
-  visitTypesafe(Parser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx);
+  OperationOrFilterAndMaybeTriples visitTypesafe(
+      Parser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx);
 
   Any visitTriplesBlock(Parser::TriplesBlockContext* ctx) override {
     return visitTypesafe(ctx);
@@ -328,8 +332,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   // Filter clauses are no independent graph patterns themselves, but their
   // scope is always the complete graph pattern enclosing them.
-  std::variant<GraphPatternOperation, SparqlFilter> visitTypesafe(
-      Parser::GraphPatternNotTriplesContext* ctx);
+  OperationOrFilter visitTypesafe(Parser::GraphPatternNotTriplesContext* ctx);
 
   Any visitOptionalGraphPattern(
       Parser::OptionalGraphPatternContext* ctx) override {
