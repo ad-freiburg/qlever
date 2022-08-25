@@ -745,7 +745,7 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftSide(
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePath> TransitivePath::bindRightSide(
     std::shared_ptr<QueryExecutionTree> rightop, size_t inputCol) const {
-  // Enforce the required sorting of `rightop`.
+  // Enforce required sorting of `rightop`.
   rightop =
       QueryExecutionTree::createSortedTree(std::move(rightop), {inputCol});
   // Create a copy of this

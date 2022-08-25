@@ -2620,7 +2620,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
 
   // CASE: JOIN ON ONE COLUMN ONLY.
 
-  // Skip if we have two dummies.
+  // Skip if we have two operations, where all three positions are variables.
   if (a._qet->getType() == SCAN && a._qet->getResultWidth() == 3 &&
       b._qet->getType() == SCAN && b._qet->getResultWidth() == 3) {
     return candidates;
