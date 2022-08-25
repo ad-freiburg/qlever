@@ -81,7 +81,14 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
 // ________________________________________________________________________________________________________________
 void RuntimeInformation::setColumnNames(
     const ad_utility::HashMap<std::string, size_t>& columnMap) {
-  columnNames_.resize(columnMap.size());
+  if (columnMap.empty()) {
+    return;
+  }
+  auto maxColumnIndex = std::max_element(
+      columnMap.begin(), columnMap.end(),
+      [](const auto& mapItem1, const auto& mapItem2) {
+      return mapItem1.second < mapItem2.second; })->second;
+  columnNames_.resize(maxColumnIndex + 1);
   for (const auto& [variable, columnIndex] : columnMap) {
     AD_CHECK(columnIndex < columnNames_.size());
     columnNames_[columnIndex] = variable;
