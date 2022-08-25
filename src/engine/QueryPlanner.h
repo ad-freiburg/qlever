@@ -297,6 +297,10 @@ class QueryPlanner {
   static std::optional<SubtreePlan> createJoinWithHasPredicateScan(
       SubtreePlan a, SubtreePlan b, vector<array<ColumnIndex, 2>> jcs);
 
+  // TODO<joka921> comment
+  static std::optional<SubtreePlan> createJoinAsTextFilter(
+      SubtreePlan a, SubtreePlan b, vector<array<ColumnIndex, 2>> jcs);
+
   vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
 

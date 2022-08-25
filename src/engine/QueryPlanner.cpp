@@ -2621,70 +2621,34 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   }
 
   // CASE: JOIN ON ONE COLUMN ONLY.
-  if ((a._qet->getType() == TEXT_WITHOUT_FILTER ||
-       b._qet->getType() == TEXT_WITHOUT_FILTER)) {
-    // If one of the join results is a text operation without filter
-    // also consider using the other one as filter and thus
-    // turning this join into a text operation with filter, instead,
-    bool aTextOp = true;
-    // If both are TextOps, the smaller one will be used as filter.
-    if (a._qet->getType() != TEXT_WITHOUT_FILTER ||
-        (b._qet->getType() == TEXT_WITHOUT_FILTER &&
-         b._qet->getSizeEstimate() > a._qet->getSizeEstimate())) {
-      aTextOp = false;
-    }
-    const SubtreePlan& textPlan = aTextOp ? a : b;
-    const SubtreePlan& filterPlan = aTextOp ? b : a;
-    size_t otherPlanJc = aTextOp ? jcs[0][1] : jcs[0][0];
-    const TextOperationWithoutFilter& noFilter =
-        *static_cast<const TextOperationWithoutFilter*>(
-            textPlan._qet->getRootOperation().get());
-    SubtreePlan plan = makeSubtreePlan<TextOperationWithFilter>(
-        _qec, noFilter.getWordPart(), noFilter.getVars(), noFilter.getCVar(),
-        filterPlan._qet, otherPlanJc);
-    mergeSubtreePlanIds(plan, filterPlan, textPlan);
-    candidates.push_back(std::move(plan));
-  }
+
   // Skip if we have two dummies
   if (a._qet->getType() == SCAN && a._qet->getResultWidth() == 3 &&
       b._qet->getType() == SCAN && b._qet->getResultWidth() == 3) {
     return candidates;
   }
 
+  // If one of the join results is a text operation without filter
+  // also consider using the other one as filter and thus
+  // turning this join into a text operation with filter, instead.
+  if (auto opt = createJoinAsTextFilter(a, b, jcs)) {
+    // It might still be cheaper to perform a "normal" join, so we are simply
+    // adding to the candidate plans and not returning.
+    candidates.push_back(std::move(opt.value()));
+  }
   // Check if one of the two operations is a HAS_PREDICATE_SCAN.
   // If the join column corresponds to the has-predicate scan's
   // subject column we can use a specialized join that avoids
   // loading the full has-predicate predicate.
-  auto suitablePredicateScan = [](const auto& tree, size_t joinColumn) {
-    return tree._qet->getType() == HAS_PREDICATE_SCAN && joinColumn == 0 &&
-           static_cast<HasPredicateScan*>(tree._qet->getRootOperation().get())
-                   ->getType() == HasPredicateScan::ScanType::FULL_SCAN;
-  };
-
-  const bool suitablePredicateScanA = suitablePredicateScan(a, jcs[0][0]);
-  const bool suitablePredicateScanB = suitablePredicateScan(b, jcs[0][1]);
-  if (suitablePredicateScanA || suitablePredicateScanB) {
-    size_t subtree_col = suitablePredicateScanA ? jcs[0][1] : jcs[0][0];
-    auto hasPredicateScan = suitablePredicateScanA ? a._qet : b._qet;
-    auto other = suitablePredicateScanA ? b._qet : a._qet;
-    auto scan = std::make_shared<HasPredicateScan>(
-        _qec, HasPredicateScan::ScanType::SUBQUERY_S);
-    scan->setSubtree(other);
-    scan->setSubtreeSubjectColumn(subtree_col);
-    scan->setObject(static_cast<HasPredicateScan*>(
-                        hasPredicateScan->getRootOperation().get())
-                        ->getObject());
-    auto plan = makeSubtreePlan(std::move(scan));
-    mergeSubtreePlanIds(plan, a, b);
-    candidates.push_back(std::move(plan));
+  if (auto opt = createJoinWithHasPredicateScan(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
     return candidates;
   }
 
   // Test for binding the other operation to the right side of the
   // transitive path
-  auto joinWithTransitivePath = createJoinWithTransitivePath(a, b, jcs);
-  if (joinWithTransitivePath.has_value()) {
-    candidates.push_back(std::move(joinWithTransitivePath.value()));
+  if (auto opt = createJoinWithTransitivePath(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
     return candidates;
   }
 
@@ -2737,9 +2701,9 @@ auto QueryPlanner::createJoinWithTransitivePath(
 }
 
 // ______________________________________________________________________________________
-auto  QueryPlanner::createJoinWithHasPredicateScan(
-    SubtreePlan a, SubtreePlan b, vector<array<ColumnIndex, 2>> jcs) -> std::optional<SubtreePlan> {
-
+auto QueryPlanner::createJoinWithHasPredicateScan(
+    SubtreePlan a, SubtreePlan b, vector<array<ColumnIndex, 2>> jcs)
+    -> std::optional<SubtreePlan> {
   // Check if one of the two operations is a HAS_PREDICATE_SCAN.
   // If the join column corresponds to the has-predicate scan's
   // subject column we can use a specialized join that avoids
@@ -2748,7 +2712,7 @@ auto  QueryPlanner::createJoinWithHasPredicateScan(
   auto suitablePredicateScan = [](const auto& tree, size_t joinColumn) {
     return tree._qet->getType() == HAS_PREDICATE_SCAN && joinColumn == 0 &&
            static_cast<HasPredicateScan*>(tree._qet->getRootOperation().get())
-               ->getType() == HasPredicateScan::ScanType::FULL_SCAN;
+                   ->getType() == HasPredicateScan::ScanType::FULL_SCAN;
   };
 
   const bool suitablePredicateScanA = suitablePredicateScan(a, jcs[0][0]);
@@ -2756,17 +2720,51 @@ auto  QueryPlanner::createJoinWithHasPredicateScan(
   if (!(suitablePredicateScanA || suitablePredicateScanB)) {
     return std::nullopt;
   }
-    size_t subtree_col = suitablePredicateScanA ? jcs[0][1] : jcs[0][0];
-    auto hasPredicateScan = suitablePredicateScanA ? a._qet : b._qet;
-    auto other = suitablePredicateScanA ? b._qet : a._qet;
-    auto scan = std::make_shared<HasPredicateScan>(
-        _qec, HasPredicateScan::ScanType::SUBQUERY_S);
-    scan->setSubtree(other);
-    scan->setSubtreeSubjectColumn(subtree_col);
-    scan->setObject(static_cast<HasPredicateScan*>(
-                        hasPredicateScan->getRootOperation().get())
-                        ->getObject());
-    auto plan = makeSubtreePlan(std::move(scan));
-    mergeSubtreePlanIds(plan, a, b);
-    return plan
+  size_t subtree_col = suitablePredicateScanA ? jcs[0][1] : jcs[0][0];
+  auto hasPredicateScan = suitablePredicateScanA ? a._qet : b._qet;
+  auto other = suitablePredicateScanA ? b._qet : a._qet;
+  auto qec = other->getRootOperation()->getExecutionContext();
+  auto scan = std::make_shared<HasPredicateScan>(
+      qec, HasPredicateScan::ScanType::SUBQUERY_S);
+  scan->setSubtree(other);
+  scan->setSubtreeSubjectColumn(subtree_col);
+  scan->setObject(
+      static_cast<HasPredicateScan*>(hasPredicateScan->getRootOperation().get())
+          ->getObject());
+  auto plan = makeSubtreePlan(std::move(scan));
+  mergeSubtreePlanIds(plan, a, b);
+  return plan;
+}
+
+// ______________________________________________________________________________________
+auto QueryPlanner::createJoinAsTextFilter(SubtreePlan a, SubtreePlan b,
+                                          vector<array<ColumnIndex, 2>> jcs)
+    -> std::optional<SubtreePlan> {
+  using enum QueryExecutionTree::OperationType;
+  if (!(a._qet->getType() == TEXT_WITHOUT_FILTER ||
+        b._qet->getType() == TEXT_WITHOUT_FILTER)) {
+    return std::nullopt;
+  }
+  // If one of the join results is a text operation without filter
+  // also consider using the other one as filter and thus
+  // turning this join into a text operation with filter, instead,
+  bool aTextOp = true;
+  // If both are TextOps, the smaller one will be used as filter.
+  if (a._qet->getType() != TEXT_WITHOUT_FILTER ||
+      (b._qet->getType() == TEXT_WITHOUT_FILTER &&
+       b._qet->getSizeEstimate() > a._qet->getSizeEstimate())) {
+    aTextOp = false;
+  }
+  const SubtreePlan& textPlan = aTextOp ? a : b;
+  const SubtreePlan& filterPlan = aTextOp ? b : a;
+  size_t otherPlanJc = aTextOp ? jcs[0][1] : jcs[0][0];
+  const TextOperationWithoutFilter& noFilter =
+      *static_cast<const TextOperationWithoutFilter*>(
+          textPlan._qet->getRootOperation().get());
+  auto qec = textPlan._qet->getRootOperation()->getExecutionContext();
+  SubtreePlan plan = makeSubtreePlan<TextOperationWithFilter>(
+      qec, noFilter.getWordPart(), noFilter.getVars(), noFilter.getCVar(),
+      filterPlan._qet, otherPlanJc);
+  mergeSubtreePlanIds(plan, filterPlan, textPlan);
+  return plan;
 }
