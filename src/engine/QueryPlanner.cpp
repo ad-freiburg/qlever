@@ -22,7 +22,6 @@
 #include <engine/TextOperationWithFilter.h>
 #include <engine/TextOperationWithoutFilter.h>
 #include <engine/TransitivePath.h>
-#include <engine/TwoColumnJoin.h>
 #include <engine/Union.h>
 #include <engine/Values.h>
 #include <parser/Alias.h>
