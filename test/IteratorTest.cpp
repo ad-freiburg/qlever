@@ -78,17 +78,17 @@ TEST(RandomAccessIterator, DummyRandomAccessContainer) {
 }
 
 TEST(Iterator, makeForwardingIterator) {
-  auto forwardFirst = []<typename T>(T&& vector) {
+  auto forwardFirstElement = []<typename T>(T&& vector) {
     return *ad_utility::makeForwardingIterator<T>(vector.begin());
   };
 
   std::vector<std::string> vector{"hello"};
   auto vector2 = vector;
-  ASSERT_EQ("hello", forwardFirst(vector));
+  ASSERT_EQ("hello", forwardFirstElement(vector));
   // Nothing was moved.
   ASSERT_EQ(vector, vector2);
 
-  ASSERT_EQ("hello", forwardFirst(std::move(vector)));
+  ASSERT_EQ("hello", forwardFirstElement(std::move(vector)));
   // The first element in the vector was now moved from.
   ASSERT_EQ(1u, vector.size());
   ASSERT_TRUE(vector[0].empty());

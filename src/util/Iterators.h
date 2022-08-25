@@ -151,8 +151,8 @@ class IteratorForAccessOperator {
 /// std::vector<int>&&), then return `std::make_move_iterator(iterator)`. Else
 /// (for example if `T` is `std::vector<int>&` or `const std::vector<int>&` the
 /// iterator is returned unchanged. Typically used in generic code where we need
-/// the semantics of "if a container may be moved from as a whole, we may also
-/// move from the single elements of the container."
+/// the semantics of "if `std::forward` would move the container, we can also
+/// safely move the single elements of the container."
 template <typename T, typename It>
 auto makeForwardingIterator(It iterator) {
   if constexpr (std::is_rvalue_reference_v<T&&>) {
