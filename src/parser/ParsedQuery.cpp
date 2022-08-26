@@ -504,9 +504,9 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
     const std::string& variable, const std::string& languageInQuotes) {
   auto langTag = languageInQuotes.substr(1, languageInQuotes.size() - 2);
   // Find all triples where the object is the `variable` and the predicate is a
-  // simple `IRIREF` (neither a variable nor a complex property path) Search in
-  // all the BasicGraphPatterns, as filters have the complete graph patterns as
-  // their scope.
+  // simple `IRIREF` (neither a variable nor a complex property path). Search in
+  // all the basic graph patterns, as filters have the complete graph patterns
+  // as their scope.
   // TODO<joka921> In theory we could also recurse into GroupGraphPatterns,
   // Subqueries etc.
   // TODO<joka921> Also support property paths (^rdfs:label,
@@ -533,18 +533,18 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
   }
 
   // Handle the case, that no suitable triple (see above) was found. In this
-  // case a triple
-  // `?variable ql:langtag "language"` is added at the end of the GraphPattern.
+  // case a triple `?variable ql:langtag "language"` is added at the end of the
+  // graph pattern.
   if (matchingTriples.empty()) {
     LOG(DEBUG) << "language filter variable " + variable +
                       " did not appear as object in any suitable "
                       "triple. "
                       "Using literal-to-language predicate instead.\n";
 
-    // If necessary, create a `BasicGraphPattern` at the end to which we can
-    // append a triple.
-    // TODO<joka921> It might  be beneficial, to place this triple not at the
-    // end, but close to other occurences of `variable`.
+    // If necessary create an empty `BasicGraphPattern` at the end to which we
+    // can append a triple.
+    // TODO<joka921> It might be beneficial to place this triple not at the
+    // end but close to other occurences of `variable`.
     if (_graphPatterns.empty() ||
         !_graphPatterns.back().is<GraphPatternOperation::BasicGraphPattern>()) {
       _graphPatterns.emplace_back(GraphPatternOperation::BasicGraphPattern{});
