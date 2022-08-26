@@ -4,16 +4,16 @@
 
 #include "ParsedQuery.h"
 
+#include <absl/strings/str_join.h>
 #include <absl/strings/str_split.h>
+#include <parser/RdfEscaping.h>
 
 #include <optional>
+#include <ranges>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
-
-#include "./RdfEscaping.h"
-#include "absl/strings/str_join.h"
 
 using std::string;
 using std::vector;
@@ -506,45 +506,48 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const std::string& lhs,
   auto langTag = rhs.substr(1, rhs.size() - 2);
   // First find a suitable triple for the given variable. It
   // must use a predicate that is neither a variable nor a complex
-  // predicate path.
-  if (_children.empty() ||
-      !_children.back().is<GraphPatternOperation::BasicGraphPattern>()) {
-    _children.emplace_back(GraphPatternOperation::BasicGraphPattern{});
+  // predicate path. Search in all the BasicGraphPatterns, as filters have
+  // the complete graph patterns as their scope.
+  // TODO<joka921> In theory we could also recurse into GroupGraphPatterns,
+  // Subqueries etc.
+  std::vector<SparqlTriple*> matchingTriples;
+
+  std::vector<int> testVec;
+
+  for (auto& child : _children) {
+    if (!child.is<GraphPatternOperation::BasicGraphPattern>()) {
+      continue;
+    }
+    auto& pattern = child.get<GraphPatternOperation::BasicGraphPattern>();
+    for (auto& triple : pattern._whereClauseTriples) {
+      if (triple._o == lhs &&
+          (triple._p._operation == PropertyPath::Operation::IRI &&
+           !isVariable(triple._p))) {
+        matchingTriples.push_back(&triple);
+      }
+    }
   }
-  auto& t = _children.back()
-                .get<GraphPatternOperation::BasicGraphPattern>()
-                ._whereClauseTriples;
-  auto it = std::find_if(t.begin(), t.end(), [&lhs](const auto& tr) {
-    // TODO<joka921> Also apply the efficient language filter for
-    // property paths like "rdfs:label|skos:altLabel".
-    return tr._o == lhs && (tr._p._operation == PropertyPath::Operation::IRI &&
-                            !isVariable(tr._p));
-  });
-  if (it == t.end()) {
+
+  // Replace all the matching triples.
+  for (auto* triplePtr : matchingTriples) {
+    triplePtr->_p._iri = '@' + langTag + '@' + triplePtr->_p._iri;
+  }
+  if (matchingTriples.empty()) {
     LOG(DEBUG) << "language filter variable " + lhs +
                       " did not appear as object in any suitable "
                       "triple. "
                       "Using literal-to-language predicate instead.\n";
     auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
-    PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
-    taggedPredicate._iri = LANGUAGE_PREDICATE;
+    auto taggedPredicate = PropertyPath::fromIri(LANGUAGE_PREDICATE);
     SparqlTriple triple(lhs, taggedPredicate, langEntity);
-    // This `find` is linear in the number of triples (per language filter).
-    // This shouldn't be a problem here, though. If needed, we could use a
-    // (hash)-set instead of a vector.
-    if (std::find(t.begin(), t.end(), triple) != t.end()) {
-      LOG(DEBUG) << "Ignoring duplicate triple: lang(" << lhs << ") = " << rhs
-                 << std::endl;
-    } else {
-      t.push_back(triple);
+
+    if (_children.empty() ||
+        !_children.back().is<GraphPatternOperation::BasicGraphPattern>()) {
+      _children.emplace_back(GraphPatternOperation::BasicGraphPattern{});
     }
-  } else {
-    // replace the triple
-    PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
-    taggedPredicate._iri = '@' + langTag + '@' + it->_p._iri;
-    SparqlTriple taggedTriple(it->_s, taggedPredicate, it->_o);
-    LOG(DEBUG) << "replacing predicate " << it->_p.asString() << " with "
-               << taggedTriple._p.asString() << std::endl;
-    *it = taggedTriple;
+    auto& t = _children.back()
+                  .get<GraphPatternOperation::BasicGraphPattern>()
+                  ._whereClauseTriples;
+    t.push_back(std::move(triple));
   }
 }
