@@ -25,20 +25,20 @@ namespace ad_utility {
 
 namespace detail {
 
-// Implementation of `firstOfPair` (see below)
+// Implementation of `firstOfPair` (see below).
 struct FirstOfPairImpl {
   template <typename T>
   requires similarToInstantiation<std::pair, T> constexpr decltype(auto)
-  operator()(T&& pair) const {
+  operator()(T&& pair) const noexcept {
     return AD_FWD(pair).first;
   }
 };
 
-// Implementation of `secondOfPair` (see below)
+// Implementation of `secondOfPair` (see below).
 struct SecondOfPairImpl {
   template <typename T>
   requires similarToInstantiation<std::pair, T> constexpr decltype(auto)
-  operator()(T&& pair) const {
+  operator()(T&& pair) const noexcept {
     return AD_FWD(pair).second;
   }
 };
