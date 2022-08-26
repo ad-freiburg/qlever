@@ -4,7 +4,7 @@
 //   Hannah Bast <bast@cs.uni-freiburg.de>
 //   2022 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#include <parser/sparqlParser/SparqlQleverVisitor.h>
+#include "parser/sparqlParser/SparqlQleverVisitor.h"
 
 #include <string>
 #include <vector>
@@ -65,12 +65,12 @@ ExpressionPtr Visitor::processIriFunctionCall(
   throw ParseException{"Function \"" + iri + "\" not supported"};
 }
 
-void Visitor::addVisibleVariable(const string& var) {
-  addVisibleVariable(Variable{var});
+void Visitor::addVisibleVariable(string var) {
+  addVisibleVariable(Variable{std::move(vari)});
 }
 
-void Visitor::addVisibleVariable(const Variable& var) {
-  visibleVariables_.back().emplace_back(var);
+void Visitor::addVisibleVariable(Variable var) {
+  visibleVariables_.back().emplace_back(std::move(var));
 }
 
 // ___________________________________________________________________________
@@ -222,9 +222,9 @@ GraphPattern Visitor::visitTypesafe(Parser::GroupGraphPatternContext* ctx) {
   pattern._id = numGraphPatterns_++;
   if (ctx->subSelect()) {
     auto [subquery, valuesOpt] = visitTypesafe(ctx->subSelect());
-    pattern._graphPatterns.emplace_back(subquery);
+    pattern._graphPatterns.emplace_back(std::move(subquery));
     if (valuesOpt.has_value()) {
-      pattern._graphPatterns.emplace_back(valuesOpt.value());
+      pattern._graphPatterns.emplace_back(std::move(valuesOpt.value()));
     }
     return pattern;
   } else if (ctx->groupGraphPatternSub()) {
@@ -262,15 +262,17 @@ Visitor::OperationsAndFilters Visitor::visitTypesafe(
       visitVector<std::pair<variant<GraphPatternOperation, SparqlFilter>,
                             std::optional<BasicGraphPattern>>>(
           ctx->graphPatternNotTriplesAndMaybeTriples());
-  for (auto [graphPattern, triples] : others) {
-    std::visit(ad_utility::OverloadCallOperator{filter, op}, graphPattern);
+  for (auto& [graphPattern, triples] : others) {
+    std::visit(ad_utility::OverloadCallOperator{filter, op}, std::move(graphPattern));
+    
+    // TODO<C++23>: use `optional.transform` for this pattern.
     if (!triples.has_value()) {
       continue;
     }
     if (ops.empty() || !ops.back().is<BasicGraphPattern>()) {
       ops.emplace_back(BasicGraphPattern{});
     }
-    ops.back().get<BasicGraphPattern>().appendTriples(triples.value());
+    ops.back().get<BasicGraphPattern>().appendTriples(std::move(triples.value()));
   }
   return {std::move(ops), std::move(filters)};
 }

@@ -359,8 +359,8 @@ struct GraphPatternOperation {
   struct BasicGraphPattern {
     vector<SparqlTriple> _triples;
 
-    void appendTriples(const BasicGraphPattern& pattern) {
-      ad_utility::appendVector(_triples, pattern._triples);
+    void appendTriples(BasicGraphPattern pattern) {
+      ad_utility::appendVector(_triples, std::move(pattern._triples));
     }
   };
   struct Values {

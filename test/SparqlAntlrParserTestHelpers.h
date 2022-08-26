@@ -378,6 +378,7 @@ MATCHER_P3(IsGraphPattern, optional, filters, childMatchers, "") {
     return false;
   }
 
+  // TODO<joka921, qup42> I think there is a `tupleForEach` function somewhere in `util/xxx.h` that could be used to make this eve more idiomatic.
   auto lambda = [&](auto&&... matchers) {
     size_t i = 0;
     return (... && testing::Value(arg._graphPatterns[i++], matchers));
