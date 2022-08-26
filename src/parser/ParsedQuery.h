@@ -372,6 +372,9 @@ struct GraphPatternOperation {
     ParsedQuery::GraphPattern _child;
   };
   struct Optional {
+    Optional(ParsedQuery::GraphPattern child) : _child{std::move(child)} {
+      _child._optional = true;
+    };
     ParsedQuery::GraphPattern _child;
   };
   struct Minus {

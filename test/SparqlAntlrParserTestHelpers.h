@@ -343,7 +343,6 @@ MATCHER_P4(IsSolutionModifier, groupByVariables, havingClauses, orderBy,
          arg.limitOffset_ == limitOffset;
 }
 
-// TODO: ExplainMatchResult?
 MATCHER_P(IsTriples, triples, "") {
   auto triplesValue =
       std::get_if<GraphPatternOperation::BasicGraphPattern>(&arg.variant_);

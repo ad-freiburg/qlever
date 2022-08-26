@@ -325,7 +325,7 @@ BasicGraphPattern Visitor::visitTypesafe(Parser::TriplesBlockContext* ctx) {
                       std::move(varOrPath));
   };
 
-  auto registerIfVariable = [this](auto& variant) {
+  auto registerIfVariable = [this](const auto& variant) {
     if (holds_alternative<Variable>(variant)) {
       addVisibleVariable(std::get<Variable>(variant));
     }
@@ -368,7 +368,6 @@ Visitor::OperationOrFilter Visitor::visitTypesafe(
 GraphPatternOperation Visitor::visitTypesafe(
     Parser::OptionalGraphPatternContext* ctx) {
   auto pattern = visitTypesafe(ctx->groupGraphPattern());
-  pattern._optional = true;
   return GraphPatternOperation{
       GraphPatternOperation::Optional{std::move(pattern)}};
 }
@@ -380,8 +379,7 @@ sparqlExpression::SparqlExpression::Ptr Visitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-// TODO: Fix this type or package it into a struct.
-std::pair<GraphPattern, vector<Variable>> Visitor::visitTypesafe(
+Visitor::PatternAndVisibleVariables Visitor::visitTypesafe(
     Parser::WhereClauseContext* ctx) {
   visibleVariables_.emplace_back();
   auto pattern = visitTypesafe(ctx->groupGraphPattern());

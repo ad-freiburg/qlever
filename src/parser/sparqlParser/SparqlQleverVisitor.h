@@ -63,6 +63,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   using SubQueryAndMaybeValues =
       std::pair<GraphPatternOperation::Subquery,
                 std::optional<GraphPatternOperation::Values>>;
+  using PatternAndVisibleVariables =
+      std::pair<ParsedQuery::GraphPattern, vector<Variable>>;
   size_t _blankNodeCounter = 0;
   int64_t numInternalVariables_ = 0;
   int64_t numGraphPatterns_ = 0;
@@ -219,8 +221,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  std::pair<ParsedQuery::GraphPattern, vector<Variable>> visitTypesafe(
-      Parser::WhereClauseContext* ctx);
+  PatternAndVisibleVariables visitTypesafe(Parser::WhereClauseContext* ctx);
 
   Any visitSolutionModifier(Parser::SolutionModifierContext* ctx) override {
     return visitTypesafe(ctx);
