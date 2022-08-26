@@ -9,7 +9,6 @@
 #include <parser/RdfEscaping.h>
 
 #include <optional>
-#include <ranges>
 #include <sstream>
 #include <string>
 #include <utility>
