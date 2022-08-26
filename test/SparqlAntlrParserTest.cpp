@@ -1227,6 +1227,10 @@ TEST(SparqlParser, GroupGraphPattern) {
                                                             {"<a>", "<b>"}})));
   expectGraphPattern("{ ?x ?y ?z }",
                      GraphPattern(false, {}, Triples({{"?x", "?y", "?z"}})));
+  expectGraphPattern("{ SELECT *  WHERE { } }",
+                     GraphPattern(false, {},
+                                  IsSubSelect(IsAsteriskSelect(false, false),
+                                              GraphPattern(false, {}))));
   // Test mixes of the components to make sure that they interact correctly.
   expectGraphPattern(
       "{ ?x ?y ?z ; ?f <bar> }",
@@ -1264,10 +1268,14 @@ TEST(SparqlParser, GroupGraphPattern) {
       "{?x <is-a> <Actor> . OPTIONAL { ?x <foo> <bar> } }",
       GraphPattern(false, {}, Triples({{"?x", "<is-a>", "<Actor>"}}),
                    Optional({}, Triples({{"?x", "<foo>", "<bar>"}}))));
+  expectGraphPattern("{ SELECT *  WHERE { } VALUES ?a { <a> <b> } }",
+                     GraphPattern(false, {},
+                                  IsSubSelect(IsAsteriskSelect(false, false),
+                                              GraphPattern(false, {})),
+                                  InlineData({"?a"}, {{"<a>"}, {"<b>"}})));
   // graphGraphPattern and serviceGraphPattern are not supported.
   expectGroupGraphPatternFails("{ GRAPH ?a { } }");
   expectGroupGraphPatternFails("{ GRAPH <foo> { } }");
   expectGroupGraphPatternFails("{ SERVICE <foo> { } }");
   expectGroupGraphPatternFails("{ SERVICE SILENT ?bar { } }");
-  expectGroupGraphPatternFails("{ SELECT *  WHERE { } VALUES ?a { <a> <b> } }");
 }

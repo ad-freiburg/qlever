@@ -219,7 +219,11 @@ GraphPattern Visitor::visitTypesafe(Parser::GroupGraphPatternContext* ctx) {
   GraphPattern pattern;
   pattern._id = numGraphPatterns_++;
   if (ctx->subSelect()) {
-    pattern._children.emplace_back(visitTypesafe(ctx->subSelect()));
+    auto [subquery, valuesOpt] = visitTypesafe(ctx->subSelect());
+    pattern._children.emplace_back(subquery);
+    if (valuesOpt.has_value()) {
+      pattern._children.emplace_back(valuesOpt.value());
+    }
     return pattern;
   } else if (ctx->groupGraphPatternSub()) {
     auto [subOps, filters] = visitTypesafe(ctx->groupGraphPatternSub());
@@ -556,7 +560,7 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-GraphPatternOperation::Subquery Visitor::visitTypesafe(
+Visitor::SubQueryAndMaybeValues Visitor::visitTypesafe(
     Parser::SubSelectContext* ctx) {
   ParsedQuery query;
   query._clause = visitTypesafe(ctx->selectClause());
@@ -565,17 +569,7 @@ GraphPatternOperation::Subquery Visitor::visitTypesafe(
   query.setNumInternalVariables(numInternalVariables_);
   query.addSolutionModifiers(visitTypesafe(ctx->solutionModifier()));
   numInternalVariables_ = query.getNumInternalVariables();
-  if (ctx->valuesClause() && !ctx->valuesClause()->getText().empty()) {
-    // TODO: implement
-    reportError(
-        ctx->valuesClause(),
-        "VALUES clause directly after a Subquery is not yet implemented.");
-  }
-  // auto values = visitTypesafe(ctx->valuesClause());
-  // if (values.has_value()) {
-  //   query._rootGraphPattern._children.emplace_back(std::move(values.value()));
-  // }
-  //  Process Variables that are visible by children of this query.
+  auto values = visitTypesafe(ctx->valuesClause());
   for (const auto& variable : visibleVariables) {
     query.registerVariableVisibleInQueryBody(variable);
   }
@@ -584,7 +578,7 @@ GraphPatternOperation::Subquery Visitor::visitTypesafe(
     addVisibleVariable(variable);
   }
   query._numGraphPatterns = numGraphPatterns_++;
-  return {std::move(query)};
+  return {{std::move(query)}, std::move(values)};
 }
 
 // ____________________________________________________________________________________

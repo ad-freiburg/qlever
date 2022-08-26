@@ -388,3 +388,10 @@ MATCHER_P3(IsGraphPattern, optional, filters, childMatchers, "") {
                         testing::UnorderedElementsAreArray(filters)) &&
          childrenMatch;
 }
+
+MATCHER_P2(IsSubSelect, selectMatcher, whereMatcher, "") {
+  auto query = std::get_if<GraphPatternOperation::Subquery>(&arg.variant_);
+  return query && query->_subquery.hasSelectClause() &&
+         testing::Value(query->_subquery.selectClause(), selectMatcher) &&
+         testing::Value(query->_subquery._rootGraphPattern, whereMatcher);
+}
