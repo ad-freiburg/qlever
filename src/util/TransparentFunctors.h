@@ -15,24 +15,40 @@
 /// overloaded functions from the standard library. This enables passing them as
 /// function parameters.
 
+/// Note that in theory all of them could be implemented shorter as captureless
+/// lambda expressions. We have chosen not to do this because the STL also does
+/// not choose this approach (see e.g. `std::less`, `std::plus`, etc.) and
+/// because global inline lambdas in header feels might in theory cause ODR (one
+/// definition rule) problems, especially  when using differen compilers.
+
 namespace ad_utility {
-/// Return the first element of a `std::pair`.
-struct FirstOfPair {
+
+namespace detail {
+
+// Implementation of `firstOfPair` (see below)
+struct FirstOfPairImpl {
   template <typename T>
-  requires similarToInstantiation<std::pair, T> decltype(auto) operator()(
-      T&& pair) {
+  requires similarToInstantiation<std::pair, T> constexpr decltype(auto)
+  operator()(T&& pair) const {
     return AD_FWD(pair).first;
   }
 };
 
-/// Return the second element of a `std::pair`.
-struct SecondOfPair {
+// Implementation of `secondOfPair` (see below)
+struct SecondOfPairImpl {
   template <typename T>
-  requires similarToInstantiation<std::pair, T> decltype(auto) operator()(
-      T&& pair) {
+  requires similarToInstantiation<std::pair, T> constexpr decltype(auto)
+  operator()(T&& pair) const {
     return AD_FWD(pair).second;
   }
 };
+}  // namespace detail
+
+/// Return the first element of a `std::pair`.
+static constexpr detail::FirstOfPairImpl firstOfPair;
+
+/// Return the second element of a `std::pair`.
+static constexpr detail::SecondOfPairImpl secondOfPair;
 }  // namespace ad_utility
 
 #endif  // QLEVER_TRANSPARENTFUNCTORS_H
