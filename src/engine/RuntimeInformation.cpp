@@ -86,11 +86,14 @@ void RuntimeInformation::setColumnNames(
   if (columnMap.empty()) {
     return;
   }
+  // Resize the `columnNames_` vector such that we can use the keys from
+  // columnMap (which are not necessarily consecutive) as indexes.
   auto maxColumnIndex =
       std::ranges::max_element(columnMap, {}, [](const auto& mapItem) {
         return mapItem.second;
       })->second;
   columnNames_.resize(maxColumnIndex + 1);
+  // Now copy the (variable, index) pairs to the vector.
   for (const auto& [variable, columnIndex] : columnMap) {
     AD_CHECK(columnIndex < columnNames_.size());
     columnNames_[columnIndex] = variable;
