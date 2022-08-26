@@ -112,8 +112,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   // TODO: Remove addVisibleVariable(const string&) when all Types use the
   //  strong type `Variable`.
-  void addVisibleVariable(const string& var);
-  void addVisibleVariable(const Variable& var);
+  void addVisibleVariable(string var);
+  void addVisibleVariable(Variable var);
 
  public:
   // ___________________________________________________________________________

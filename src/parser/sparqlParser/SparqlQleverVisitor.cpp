@@ -66,7 +66,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
 }
 
 void Visitor::addVisibleVariable(string var) {
-  addVisibleVariable(Variable{std::move(vari)});
+  addVisibleVariable(Variable{std::move(var)});
 }
 
 void Visitor::addVisibleVariable(Variable var) {
@@ -258,13 +258,13 @@ Visitor::OperationsAndFilters Visitor::visitTypesafe(
   if (ctx->triplesBlock()) {
     ops.emplace_back(visitTypesafe(ctx->triplesBlock()));
   }
-  auto others =
-      visitVector<std::pair<variant<GraphPatternOperation, SparqlFilter>,
-                            std::optional<BasicGraphPattern>>>(
-          ctx->graphPatternNotTriplesAndMaybeTriples());
+  // TODO make visitVector deduce its return type automatically
+  auto others = visitVector<OperationOrFilterAndMaybeTriples>(
+      ctx->graphPatternNotTriplesAndMaybeTriples());
   for (auto& [graphPattern, triples] : others) {
-    std::visit(ad_utility::OverloadCallOperator{filter, op}, std::move(graphPattern));
-    
+    std::visit(ad_utility::OverloadCallOperator{filter, op},
+               std::move(graphPattern));
+
     // TODO<C++23>: use `optional.transform` for this pattern.
     if (!triples.has_value()) {
       continue;
@@ -272,7 +272,8 @@ Visitor::OperationsAndFilters Visitor::visitTypesafe(
     if (ops.empty() || !ops.back().is<BasicGraphPattern>()) {
       ops.emplace_back(BasicGraphPattern{});
     }
-    ops.back().get<BasicGraphPattern>().appendTriples(std::move(triples.value()));
+    ops.back().get<BasicGraphPattern>().appendTriples(
+        std::move(triples.value()));
   }
   return {std::move(ops), std::move(filters)};
 }
@@ -347,7 +348,7 @@ BasicGraphPattern Visitor::visitTypesafe(Parser::TriplesBlockContext* ctx) {
   if (ctx->triplesBlock()) {
     triples.appendTriples(visitTypesafe(ctx->triplesBlock()));
   }
-  return {triples};
+  return triples;
 }
 
 // ____________________________________________________________________________________
