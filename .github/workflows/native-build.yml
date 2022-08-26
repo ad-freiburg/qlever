@@ -31,7 +31,7 @@ jobs:
           - compiler: gcc12
             os: ubuntu-20.04
           - compiler: clang13
-            os: ubuntu-22.04
+            os: ubuntu-20.04
     runs-on: ${{ matrix.os }}
 
 
