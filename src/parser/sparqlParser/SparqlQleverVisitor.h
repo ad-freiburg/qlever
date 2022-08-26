@@ -4,25 +4,26 @@
 #pragma once
 
 #include <antlr4-runtime.h>
-#include <engine/sparqlExpressions/AggregateExpression.h>
-#include <engine/sparqlExpressions/GroupConcatExpression.h>
-#include <engine/sparqlExpressions/LiteralExpression.h>
-#include <engine/sparqlExpressions/NaryExpression.h>
-#include <engine/sparqlExpressions/SampleExpression.h>
-#include <engine/sparqlExpressions/SparqlExpressionPimpl.h>
-#include <parser/Alias.h>
-#include <parser/ParsedQuery.h>
-#include <parser/RdfEscaping.h>
-#include <parser/data/BlankNode.h>
-#include <parser/data/Iri.h>
-#include <parser/data/SolutionModifiers.h>
-#include <parser/data/Types.h>
-#include <parser/data/VarOrTerm.h>
-#include <parser/sparqlParser/generated/SparqlAutomaticVisitor.h>
-#include <util/HashMap.h>
-#include <util/OverloadCallOperator.h>
-#include <util/StringUtils.h>
-#include <util/antlr/ANTLRErrorHandling.h>
+
+#include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/GroupConcatExpression.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "parser/Alias.h"
+#include "parser/ParsedQuery.h"
+#include "parser/RdfEscaping.h"
+#include "parser/data/BlankNode.h"
+#include "parser/data/Iri.h"
+#include "parser/data/SolutionModifiers.h"
+#include "parser/data/Types.h"
+#include "parser/data/VarOrTerm.h"
+#include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
+#include "util/HashMap.h"
+#include "util/OverloadCallOperator.h"
+#include "util/StringUtils.h"
+#include "util/antlr/ANTLRErrorHandling.h"
 
 template <typename T>
 class Reversed {

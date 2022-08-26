@@ -5,14 +5,14 @@
 //   2022      Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
 
 #include <gtest/gtest.h>
-#include <parser/SparqlParserHelpers.h>
-#include <parser/sparqlParser/SparqlQleverVisitor.h>
 
 #include <iostream>
 #include <type_traits>
 #include <utility>
 
 #include "SparqlAntlrParserTestHelpers.h"
+#include "parser/SparqlParserHelpers.h"
+#include "parser/sparqlParser/SparqlQleverVisitor.h"
 
 using namespace sparqlParserHelpers;
 using Parser = SparqlAutomaticParser;

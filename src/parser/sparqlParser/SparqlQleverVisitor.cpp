@@ -4,11 +4,12 @@
 //   Hannah Bast <bast@cs.uni-freiburg.de>
 //   2022 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#include <parser/SparqlParser.h>
 #include <parser/sparqlParser/SparqlQleverVisitor.h>
 
 #include <string>
 #include <vector>
+
+#include "parser/SparqlParser.h"
 
 using namespace ad_utility::sparql_types;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;

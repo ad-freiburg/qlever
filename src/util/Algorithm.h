@@ -5,9 +5,9 @@
 #ifndef QLEVER_ALGORITHM_H
 #define QLEVER_ALGORITHM_H
 
-#include <util/TypeTraits.h>
-
 #include <utility>
+
+#include "util/TypeTraits.h"
 
 // TODO: Test the algorithms.
 namespace ad_utility {
