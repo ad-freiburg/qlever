@@ -24,8 +24,8 @@ TEST(QueryPlannerTest, createTripleGraph) {
                            .parse();
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
-      auto tg =
-          qp.createTripleGraph(&pq._rootGraphPattern._children[0].getBasic());
+      auto tg = qp.createTripleGraph(
+          &pq._rootGraphPattern._graphPatterns[0].getBasic());
       TripleGraph expected =
           TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
               {std::make_pair<Node, vector<size_t>>(

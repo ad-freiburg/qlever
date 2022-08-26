@@ -131,7 +131,7 @@ void ParsedQuery::expandPrefixes() {
   while (!graphPatterns.empty()) {
     GraphPattern* pattern = graphPatterns.back();
     graphPatterns.pop_back();
-    for (GraphPatternOperation& p : pattern->_children) {
+    for (GraphPatternOperation& p : pattern->_graphPatterns) {
       p.visit([&graphPatterns, &prefixMap = std::as_const(prefixMap),
                this](auto&& arg) {
         using T = std::decay_t<decltype(arg)>;
@@ -167,7 +167,7 @@ void ParsedQuery::expandPrefixes() {
         } else {
           static_assert(
               std::is_same_v<T, GraphPatternOperation::BasicGraphPattern>);
-          for (auto& trip : arg._whereClauseTriples) {
+          for (auto& trip : arg._triples) {
             if (trip._s.isString()) {
               expandPrefix(trip._s.getString(), prefixMap);
             }
@@ -209,7 +209,7 @@ Variable ParsedQuery::addInternalBind(
       INTERNAL_VARIABLE_PREFIX + std::to_string(numInternalVariables_);
   numInternalVariables_++;
   GraphPatternOperation::Bind bind{std::move(expression), targetVariable};
-  _rootGraphPattern._children.emplace_back(std::move(bind));
+  _rootGraphPattern._graphPatterns.emplace_back(std::move(bind));
   // Don't register the targetVariable as visible because it is used
   // internally and should not be selected by SELECT *.
   // TODO<qup42, joka921> Implement "internal" variables, that can't be
@@ -232,7 +232,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   auto processAlias = [this](Alias groupKey) {
     GraphPatternOperation::Bind helperBind{std::move(groupKey._expression),
                                            groupKey._outVarName};
-    _rootGraphPattern._children.emplace_back(std::move(helperBind));
+    _rootGraphPattern._graphPatterns.emplace_back(std::move(helperBind));
     registerVariableVisibleInQueryBody(Variable{groupKey._outVarName});
     _groupByVariables.emplace_back(groupKey._outVarName);
   };
@@ -360,8 +360,8 @@ void ParsedQuery::expandPrefix(
 void ParsedQuery::merge(const ParsedQuery& p) {
   _prefixes.insert(_prefixes.begin(), p._prefixes.begin(), p._prefixes.end());
 
-  auto& children = _rootGraphPattern._children;
-  auto& otherChildren = p._rootGraphPattern._children;
+  auto& children = _rootGraphPattern._graphPatterns;
+  auto& otherChildren = p._rootGraphPattern._graphPatterns;
   children.insert(children.end(), otherChildren.begin(), otherChildren.end());
 
   // update the ids
@@ -384,7 +384,7 @@ void ParsedQuery::GraphPattern::toString(std::ostringstream& os,
     for (int j = 0; j < indentation; ++j) os << "  ";
     os << _filters.back().asString();
   }
-  for (const GraphPatternOperation& child : _children) {
+  for (const GraphPatternOperation& child : _graphPatterns) {
     os << "\n";
     child.toString(os, indentation + 1);
   }
@@ -402,7 +402,7 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
   }
   _id = *id_count;
   (*id_count)++;
-  for (auto& op : _children) {
+  for (auto& op : _graphPatterns) {
     op.visit([&id_count](auto&& arg) {
       using T = std::decay_t<decltype(arg)>;
       if constexpr (std::is_same_v<T, GraphPatternOperation::Union>) {
@@ -470,15 +470,15 @@ void GraphPatternOperation::toString(std::ostringstream& os,
         os << ')';
       }
     } else if constexpr (std::is_same_v<T, BasicGraphPattern>) {
-      for (size_t i = 0; i + 1 < arg._whereClauseTriples.size(); ++i) {
+      for (size_t i = 0; i + 1 < arg._triples.size(); ++i) {
         os << "\n";
         for (int j = 0; j < indentation; ++j) os << "  ";
-        os << arg._whereClauseTriples[i].asString() << ',';
+        os << arg._triples[i].asString() << ',';
       }
-      if (arg._whereClauseTriples.size() > 0) {
+      if (arg._triples.size() > 0) {
         os << "\n";
         for (int j = 0; j < indentation; ++j) os << "  ";
-        os << arg._whereClauseTriples.back().asString();
+        os << arg._triples.back().asString();
       }
 
     } else if constexpr (std::is_same_v<T, Bind>) {
@@ -500,26 +500,26 @@ void GraphPatternOperation::toString(std::ostringstream& os,
 // __________________________________________________________________________
 ParsedQuery::GraphPattern::GraphPattern() : _optional(false) {}
 
-void ParsedQuery::GraphPattern::addLanguageFilter(const std::string& lhs,
-                                                  const std::string& rhs) {
-  auto langTag = rhs.substr(1, rhs.size() - 2);
-  // First find a suitable triple for the given variable. It
-  // must use a predicate that is neither a variable nor a complex
-  // predicate path. Search in all the BasicGraphPatterns, as filters have
-  // the complete graph patterns as their scope.
+void ParsedQuery::GraphPattern::addLanguageFilter(
+    const std::string& variable, const std::string& languageInQuotes) {
+  auto langTag = languageInQuotes.substr(1, languageInQuotes.size() - 2);
+  // Find all triples where the object is the `variable` and the predicate is a
+  // simple `IRIREF` (neither a variable nor a complex property path) Search in
+  // all the BasicGraphPatterns, as filters have the complete graph patterns as
+  // their scope.
   // TODO<joka921> In theory we could also recurse into GroupGraphPatterns,
   // Subqueries etc.
+  // TODO<joka921> Also support property paths (^rdfs:label,
+  // skos:altLabel|rdfs:label, ...)
   std::vector<SparqlTriple*> matchingTriples;
-
-  std::vector<int> testVec;
-
-  for (auto& child : _children) {
-    if (!child.is<GraphPatternOperation::BasicGraphPattern>()) {
+  for (auto& graphPattern : _graphPatterns) {
+    if (!graphPattern.is<GraphPatternOperation::BasicGraphPattern>()) {
       continue;
     }
-    auto& pattern = child.get<GraphPatternOperation::BasicGraphPattern>();
-    for (auto& triple : pattern._whereClauseTriples) {
-      if (triple._o == lhs &&
+    auto& pattern =
+        graphPattern.get<GraphPatternOperation::BasicGraphPattern>();
+    for (auto& triple : pattern._triples) {
+      if (triple._o == variable &&
           (triple._p._operation == PropertyPath::Operation::IRI &&
            !isVariable(triple._p))) {
         matchingTriples.push_back(&triple);
@@ -531,22 +531,31 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const std::string& lhs,
   for (auto* triplePtr : matchingTriples) {
     triplePtr->_p._iri = '@' + langTag + '@' + triplePtr->_p._iri;
   }
+
+  // Handle the case, that no suitable triple (see above) was found. In this
+  // case a triple
+  // `?variable ql:langtag "language"` is added at the end of the GraphPattern.
   if (matchingTriples.empty()) {
-    LOG(DEBUG) << "language filter variable " + lhs +
+    LOG(DEBUG) << "language filter variable " + variable +
                       " did not appear as object in any suitable "
                       "triple. "
                       "Using literal-to-language predicate instead.\n";
-    auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
-    auto taggedPredicate = PropertyPath::fromIri(LANGUAGE_PREDICATE);
-    SparqlTriple triple(lhs, taggedPredicate, langEntity);
 
-    if (_children.empty() ||
-        !_children.back().is<GraphPatternOperation::BasicGraphPattern>()) {
-      _children.emplace_back(GraphPatternOperation::BasicGraphPattern{});
+    // If necessary, create a `BasicGraphPattern` at the end to which we can
+    // append a triple.
+    // TODO<joka921> It might  be beneficial, to place this triple not at the
+    // end, but close to other occurences of `variable`.
+    if (_graphPatterns.empty() ||
+        !_graphPatterns.back().is<GraphPatternOperation::BasicGraphPattern>()) {
+      _graphPatterns.emplace_back(GraphPatternOperation::BasicGraphPattern{});
     }
-    auto& t = _children.back()
+    auto& t = _graphPatterns.back()
                   .get<GraphPatternOperation::BasicGraphPattern>()
-                  ._whereClauseTriples;
+                  ._triples;
+
+    auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
+    SparqlTriple triple(variable, PropertyPath::fromIri(LANGUAGE_PREDICATE),
+                        langEntity);
     t.push_back(std::move(triple));
   }
 }

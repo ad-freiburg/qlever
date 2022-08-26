@@ -24,10 +24,10 @@ TEST(ParserTest, testParse) {
       const auto& selectClause = pq.selectClause();
       ASSERT_EQ(1u, pq._prefixes.size());
       ASSERT_EQ(1u, selectClause.getSelectedVariables().size());
-      ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
-      ASSERT_EQ(1u, pq._rootGraphPattern._children[0]
-                        .getBasic()
-                        ._whereClauseTriples.size());
+      ASSERT_EQ(1u, pq._rootGraphPattern._graphPatterns.size());
+      ASSERT_EQ(
+          1u,
+          pq._rootGraphPattern._graphPatterns[0].getBasic()._triples.size());
     }
 
     {
@@ -44,7 +44,7 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(4u, pq._prefixes.size());
       ASSERT_EQ(2u, selectClause2.getSelectedVariables().size());
       ASSERT_EQ(1u, pq.children().size());
-      const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
+      const auto& triples = pq.children()[0].getBasic()._triples;
       ASSERT_EQ(3u, triples.size());
 
       ASSERT_THAT(pq._prefixes,
@@ -83,7 +83,7 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(4u, pq._prefixes.size());
       ASSERT_EQ(2u, selectClause.getSelectedVariables().size());
       ASSERT_EQ(1u, pq.children().size());
-      const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
+      const auto& triples = pq.children()[0].getBasic()._triples;
       ASSERT_EQ(3u, triples.size());
 
       ASSERT_THAT(pq._prefixes,
@@ -120,7 +120,7 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(2u, pq._prefixes.size());
       ASSERT_EQ(2u, selectClause.getSelectedVariables().size());
       ASSERT_EQ(1u, pq.children().size());
-      const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
+      const auto& triples = pq.children()[0].getBasic()._triples;
       ASSERT_EQ(3u, triples.size());
 
       pq.expandPrefixes();
@@ -147,7 +147,7 @@ TEST(ParserTest, testParse) {
                     .parse();
       pq.expandPrefixes();
       ASSERT_EQ(1u, pq.children().size());
-      const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
+      const auto& triples = pq.children()[0].getBasic()._triples;
       auto filters = pq._rootGraphPattern._filters;
       ASSERT_EQ(2u, filters.size());
       ASSERT_EQ("?x", filters[0]._lhs);
@@ -166,7 +166,7 @@ TEST(ParserTest, testParse) {
                     .parse();
       pq.expandPrefixes();
       ASSERT_EQ(1u, pq.children().size());
-      const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
+      const auto& triples = pq.children()[0].getBasic()._triples;
       auto filters = pq._rootGraphPattern._filters;
       ASSERT_EQ(1u, filters.size());
       ASSERT_EQ("?x", filters[0]._lhs);
@@ -183,7 +183,7 @@ TEST(ParserTest, testParse) {
                     .parse();
       pq.expandPrefixes();
       ASSERT_EQ(1u, pq.children().size());
-      const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
+      const auto& triples = pq.children()[0].getBasic()._triples;
       auto filters = pq._rootGraphPattern._filters;
       ASSERT_EQ(1u, filters.size());
       ASSERT_EQ("?x", filters[0]._lhs);
@@ -228,10 +228,10 @@ TEST(ParserTest, testParse) {
 
       ASSERT_EQ(2u, pq.children().size());
       const auto& opt =
-          pq._rootGraphPattern._children[1]
+          pq._rootGraphPattern._graphPatterns[1]
               .get<GraphPatternOperation::Optional>();  // throws on error
       auto& child = opt._child;
-      const auto& triples = child._children[0].getBasic()._whereClauseTriples;
+      const auto& triples = child._graphPatterns[0].getBasic()._triples;
       auto filters = child._filters;
       ASSERT_EQ(1u, triples.size());
       ASSERT_EQ("?y", triples[0]._s);
@@ -257,23 +257,23 @@ TEST(ParserTest, testParse) {
                     "  }\n"
                     "}")
                     .parse();
-      ASSERT_EQ(2u, pq._rootGraphPattern._children.size());
+      ASSERT_EQ(2u, pq._rootGraphPattern._graphPatterns.size());
       const auto& optA =
-          pq._rootGraphPattern._children[1]
+          pq._rootGraphPattern._graphPatterns[1]
               .get<GraphPatternOperation::Optional>();  // throws on error
       auto& child = optA._child;
-      ASSERT_EQ(3u, child._children.size());
+      ASSERT_EQ(3u, child._graphPatterns.size());
       const auto& opt2 =
-          child._children[1]
+          child._graphPatterns[1]
               .get<GraphPatternOperation::Optional>();  // throws on error
       const auto& opt3 =
-          child._children[2]
+          child._graphPatterns[2]
               .get<GraphPatternOperation::Optional>();  // throws on error
-      const auto& child2 = opt2._child._children[0].getBasic();
-      const auto& child3 = opt3._child._children[0].getBasic();
-      ASSERT_EQ(1u, child2._whereClauseTriples.size());
+      const auto& child2 = opt2._child._graphPatterns[0].getBasic();
+      const auto& child3 = opt3._child._graphPatterns[0].getBasic();
+      ASSERT_EQ(1u, child2._triples.size());
       ASSERT_EQ(1u, opt2._child._filters.size());
-      ASSERT_EQ(1u, child3._whereClauseTriples.size());
+      ASSERT_EQ(1u, child3._triples.size());
       ASSERT_EQ(0u, opt3._child._filters.size());
       ASSERT_TRUE(child._optional);
       ASSERT_TRUE(opt2._child._optional);
@@ -288,9 +288,9 @@ TEST(ParserTest, testParse) {
                     "  ?a <rel> ?b ."
                     "}")
                     .parse();
-      ASSERT_EQ(3u, pq._rootGraphPattern._children.size());
+      ASSERT_EQ(3u, pq._rootGraphPattern._graphPatterns.size());
       const auto& c = pq.children()[2].getBasic();
-      ASSERT_EQ(1u, c._whereClauseTriples.size());
+      ASSERT_EQ(1u, c._triples.size());
       ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
       const auto& values1 =
           pq.children()[0].get<GraphPatternOperation::Values>()._inlineValues;
@@ -350,13 +350,13 @@ TEST(ParserTest, testParse) {
 
       ASSERT_EQ(2u, pq.children().size());
       const auto& c = pq.children()[1].getBasic();
-      ASSERT_EQ(1u, c._whereClauseTriples.size());
+      ASSERT_EQ(1u, c._triples.size());
       ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
 
-      ASSERT_EQ(c._whereClauseTriples[0]._s, "?city");
-      ASSERT_EQ(c._whereClauseTriples[0]._p._iri,
+      ASSERT_EQ(c._triples[0]._s, "?city");
+      ASSERT_EQ(c._triples[0]._p._iri,
                 "<http://www.wikidata.org/prop/direct/P31>");
-      ASSERT_EQ(c._whereClauseTriples[0]._o, "?citytype");
+      ASSERT_EQ(c._triples[0]._o, "?citytype");
 
       const auto& values1 =
           pq.children()[0].get<GraphPatternOperation::Values>()._inlineValues;
@@ -460,15 +460,15 @@ TEST(ParserTest, testParse) {
                     "LIMIT 10 \n")
                     .parse();
       ASSERT_EQ(1u, pq._prefixes.size());
-      ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
+      ASSERT_EQ(1u, pq._rootGraphPattern._graphPatterns.size());
 
       const auto& c = pq.children()[0].getBasic();
-      ASSERT_EQ(1u, c._whereClauseTriples.size());
+      ASSERT_EQ(1u, c._triples.size());
       ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
 
-      ASSERT_EQ(c._whereClauseTriples[0]._s, "?movie");
-      ASSERT_EQ(c._whereClauseTriples[0]._p._iri, "<directed-by>");
-      ASSERT_EQ(c._whereClauseTriples[0]._o, "?director");
+      ASSERT_EQ(c._triples[0]._s, "?movie");
+      ASSERT_EQ(c._triples[0]._p._iri, "<directed-by>");
+      ASSERT_EQ(c._triples[0]._o, "?director");
 
       ASSERT_EQ(10u, pq._limitOffset._limit);
       ASSERT_EQ(false, pq._orderBy[0].isDescending_);
@@ -492,15 +492,15 @@ TEST(ParserTest, testParse) {
                     .parse();
 
       ASSERT_EQ(1u, pq._prefixes.size());
-      ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
+      ASSERT_EQ(1u, pq._rootGraphPattern._graphPatterns.size());
 
       const auto& c = pq.children()[0].getBasic();
-      ASSERT_EQ(1u, c._whereClauseTriples.size());
+      ASSERT_EQ(1u, c._triples.size());
       ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
 
-      ASSERT_EQ(c._whereClauseTriples[0]._s, "?movie");
-      ASSERT_EQ(c._whereClauseTriples[0]._p._iri, "<directed-by>");
-      ASSERT_EQ(c._whereClauseTriples[0]._o, "?director");
+      ASSERT_EQ(c._triples[0]._s, "?movie");
+      ASSERT_EQ(c._triples[0]._p._iri, "<directed-by>");
+      ASSERT_EQ(c._triples[0]._o, "?director");
 
       ASSERT_EQ(10u, pq._limitOffset._limit);
       ASSERT_EQ(true, pq._orderBy[0].isDescending_);
@@ -533,16 +533,16 @@ TEST(ParserTest, testParse) {
                     .parse();
 
       ASSERT_EQ(1u, pq._prefixes.size());
-      ASSERT_EQ(2u, pq._rootGraphPattern._children.size());
+      ASSERT_EQ(2u, pq._rootGraphPattern._graphPatterns.size());
 
       const auto& c = pq.children()[0].getBasic();
-      ASSERT_EQ(1u, c._whereClauseTriples.size());
+      ASSERT_EQ(1u, c._triples.size());
       ASSERT_EQ(0, pq._rootGraphPattern._filters.size());
       ASSERT_EQ(3u, pq._limitOffset._offset);
 
-      ASSERT_EQ(c._whereClauseTriples[0]._s, "?movie");
-      ASSERT_EQ(c._whereClauseTriples[0]._p._iri, "<directed-by>");
-      ASSERT_EQ(c._whereClauseTriples[0]._o, "<Scott%2C%20Ridley>");
+      ASSERT_EQ(c._triples[0]._s, "?movie");
+      ASSERT_EQ(c._triples[0]._p._iri, "<directed-by>");
+      ASSERT_EQ(c._triples[0]._o, "<Scott%2C%20Ridley>");
 
       ASSERT_EQ(20u, pq._limitOffset._limit);
       ASSERT_EQ(true, pq._orderBy[0].isDescending_);
@@ -557,10 +557,11 @@ TEST(ParserTest, testParse) {
 
       // -- SubQuery
       auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
-          pq._rootGraphPattern._children[1].variant_);
+          pq._rootGraphPattern._graphPatterns[1].variant_);
       const auto& c_subquery = get<GraphPatternOperation::BasicGraphPattern>(
-          parsed_sub_query._subquery._rootGraphPattern._children[0].variant_);
-      ASSERT_EQ(2u, c_subquery._whereClauseTriples.size());
+          parsed_sub_query._subquery._rootGraphPattern._graphPatterns[0]
+              .variant_);
+      ASSERT_EQ(2u, c_subquery._triples.size());
       ASSERT_EQ(1u,
                 parsed_sub_query._subquery._rootGraphPattern._filters.size());
       ASSERT_EQ("?year",
@@ -571,13 +572,13 @@ TEST(ParserTest, testParse) {
                 parsed_sub_query._subquery._rootGraphPattern._filters[0]._type);
       ASSERT_EQ(0, parsed_sub_query._subquery._limitOffset._offset);
 
-      ASSERT_EQ(c_subquery._whereClauseTriples[0]._s, "?movie");
-      ASSERT_EQ(c_subquery._whereClauseTriples[0]._p._iri, "<directed-by>");
-      ASSERT_EQ(c_subquery._whereClauseTriples[0]._o, "?director");
+      ASSERT_EQ(c_subquery._triples[0]._s, "?movie");
+      ASSERT_EQ(c_subquery._triples[0]._p._iri, "<directed-by>");
+      ASSERT_EQ(c_subquery._triples[0]._o, "?director");
 
-      ASSERT_EQ(c_subquery._whereClauseTriples[1]._s, "?movie");
-      ASSERT_EQ(c_subquery._whereClauseTriples[1]._p._iri, "<from-year>");
-      ASSERT_EQ(c_subquery._whereClauseTriples[1]._o, "?year");
+      ASSERT_EQ(c_subquery._triples[1]._s, "?movie");
+      ASSERT_EQ(c_subquery._triples[1]._p._iri, "<from-year>");
+      ASSERT_EQ(c_subquery._triples[1]._o, "?year");
 
       ASSERT_EQ(std::numeric_limits<uint64_t>::max(),
                 parsed_sub_query._subquery._limitOffset._limit);
@@ -617,16 +618,16 @@ TEST(ParserTest, testParse) {
                     .parse();
 
       ASSERT_EQ(1u, pq._prefixes.size());
-      ASSERT_EQ(2u, pq._rootGraphPattern._children.size());
+      ASSERT_EQ(2u, pq._rootGraphPattern._graphPatterns.size());
 
       const auto& c = pq.children()[0].getBasic();
-      ASSERT_EQ(1u, c._whereClauseTriples.size());
+      ASSERT_EQ(1u, c._triples.size());
       ASSERT_EQ(0, pq._rootGraphPattern._filters.size());
       ASSERT_EQ(3u, pq._limitOffset._offset);
 
-      ASSERT_EQ(c._whereClauseTriples[0]._s, "?movie");
-      ASSERT_EQ(c._whereClauseTriples[0]._p._iri, "<directed-by>");
-      ASSERT_EQ(c._whereClauseTriples[0]._o, "<Scott%2C%20Ridley>");
+      ASSERT_EQ(c._triples[0]._s, "?movie");
+      ASSERT_EQ(c._triples[0]._p._iri, "<directed-by>");
+      ASSERT_EQ(c._triples[0]._o, "<Scott%2C%20Ridley>");
 
       ASSERT_EQ(20u, pq._limitOffset._limit);
       ASSERT_EQ(true, pq._orderBy[0].isDescending_);
@@ -641,10 +642,11 @@ TEST(ParserTest, testParse) {
 
       // -- SubQuery (level 1)
       auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
-          pq._rootGraphPattern._children[1].variant_);
+          pq._rootGraphPattern._graphPatterns[1].variant_);
       const auto& c_subquery = get<GraphPatternOperation::BasicGraphPattern>(
-          parsed_sub_query._subquery._rootGraphPattern._children[0].variant_);
-      ASSERT_EQ(1u, c_subquery._whereClauseTriples.size());
+          parsed_sub_query._subquery._rootGraphPattern._graphPatterns[0]
+              .variant_);
+      ASSERT_EQ(1u, c_subquery._triples.size());
       ASSERT_EQ(1u,
                 parsed_sub_query._subquery._rootGraphPattern._filters.size());
       ASSERT_EQ("?year",
@@ -655,9 +657,9 @@ TEST(ParserTest, testParse) {
                 parsed_sub_query._subquery._rootGraphPattern._filters[0]._type);
       ASSERT_EQ(0, parsed_sub_query._subquery._limitOffset._offset);
 
-      ASSERT_EQ(c_subquery._whereClauseTriples[0]._s, "?movie");
-      ASSERT_EQ(c_subquery._whereClauseTriples[0]._p._iri, "<directed-by>");
-      ASSERT_EQ(c_subquery._whereClauseTriples[0]._o, "?director");
+      ASSERT_EQ(c_subquery._triples[0]._s, "?movie");
+      ASSERT_EQ(c_subquery._triples[0]._p._iri, "<directed-by>");
+      ASSERT_EQ(c_subquery._triples[0]._o, "?director");
 
       ASSERT_EQ(std::numeric_limits<uint64_t>::max(),
                 parsed_sub_query._subquery._limitOffset._limit);
@@ -674,26 +676,27 @@ TEST(ParserTest, testParse) {
 
       // -- SubQuery (level 2)
       auto parsed_sub_sub_query = get<GraphPatternOperation::Subquery>(
-          pq._rootGraphPattern._children[1].variant_);
+          pq._rootGraphPattern._graphPatterns[1].variant_);
       const auto& c_sub_subquery =
           get<GraphPatternOperation::BasicGraphPattern>(
               get<GraphPatternOperation::Subquery>(
-                  parsed_sub_sub_query._subquery._rootGraphPattern._children[1]
+                  parsed_sub_sub_query._subquery._rootGraphPattern
+                      ._graphPatterns[1]
                       .variant_)
-                  ._subquery._rootGraphPattern._children[0]
+                  ._subquery._rootGraphPattern._graphPatterns[0]
                   .variant_);
       auto aux_parsed_sub_sub_query =
           get<GraphPatternOperation::Subquery>(
-              parsed_sub_sub_query._subquery._rootGraphPattern._children[1]
+              parsed_sub_sub_query._subquery._rootGraphPattern._graphPatterns[1]
                   .variant_)
               ._subquery;
-      ASSERT_EQ(1u, c_sub_subquery._whereClauseTriples.size());
+      ASSERT_EQ(1u, c_sub_subquery._triples.size());
       ASSERT_EQ(0u, aux_parsed_sub_sub_query._rootGraphPattern._filters.size());
       ASSERT_EQ(0, aux_parsed_sub_sub_query._limitOffset._offset);
 
-      ASSERT_EQ(c_sub_subquery._whereClauseTriples[0]._s, "?movie");
-      ASSERT_EQ(c_sub_subquery._whereClauseTriples[0]._p._iri, "<from-year>");
-      ASSERT_EQ(c_sub_subquery._whereClauseTriples[0]._o, "?year");
+      ASSERT_EQ(c_sub_subquery._triples[0]._s, "?movie");
+      ASSERT_EQ(c_sub_subquery._triples[0]._p._iri, "<from-year>");
+      ASSERT_EQ(c_sub_subquery._triples[0]._o, "?year");
 
       ASSERT_EQ(std::numeric_limits<uint64_t>::max(),
                 aux_parsed_sub_sub_query._limitOffset._limit);
@@ -799,7 +802,7 @@ TEST(ParserTest, testFilterWithoutDot) {
   ASSERT_EQ(1u, selectClause.getSelectedVariables().size());
   ASSERT_EQ(1u, pq.children().size());
   const auto& c = pq.children()[0].getBasic();
-  ASSERT_EQ(3u, c._whereClauseTriples.size());
+  ASSERT_EQ(3u, c._triples.size());
   const auto& filters = pq._rootGraphPattern._filters;
   ASSERT_EQ(3u, filters.size());
   ASSERT_EQ("?1", filters[0]._lhs);
@@ -828,7 +831,7 @@ TEST(ParserTest, testExpandPrefixes) {
   const auto& c = pq.children()[0].getBasic();
   ASSERT_EQ(4u, pq._prefixes.size());
   ASSERT_EQ(2u, selectClause.getSelectedVariables().size());
-  ASSERT_EQ(3u, c._whereClauseTriples.size());
+  ASSERT_EQ(3u, c._triples.size());
   ASSERT_THAT(pq._prefixes,
               testing::UnorderedElementsAre(
                   SparqlPrefix{INTERNAL_PREDICATE_PREFIX_NAME,
@@ -838,17 +841,15 @@ TEST(ParserTest, testExpandPrefixes) {
                   SparqlPrefix{"xxx", "<http://rdf.myprefix.com/xxx/>"}));
   ASSERT_EQ(Variable{"?x"}, selectClause.getSelectedVariables()[0]);
   ASSERT_EQ(Variable{"?z"}, selectClause.getSelectedVariables()[1]);
-  ASSERT_EQ("?x", c._whereClauseTriples[0]._s);
-  ASSERT_EQ("<http://rdf.myprefix.com/myrel>",
-            c._whereClauseTriples[0]._p._iri);
-  ASSERT_EQ("?y", c._whereClauseTriples[0]._o);
-  ASSERT_EQ("?y", c._whereClauseTriples[1]._s);
-  ASSERT_EQ("<http://rdf.myprefix.com/ns/myrel>",
-            c._whereClauseTriples[1]._p._iri);
-  ASSERT_EQ("?z", c._whereClauseTriples[1]._o);
-  ASSERT_EQ("?y", c._whereClauseTriples[2]._s);
-  ASSERT_EQ("<nsx:rel2>", c._whereClauseTriples[2]._p._iri);
-  ASSERT_EQ("<http://abc.de>", c._whereClauseTriples[2]._o);
+  ASSERT_EQ("?x", c._triples[0]._s);
+  ASSERT_EQ("<http://rdf.myprefix.com/myrel>", c._triples[0]._p._iri);
+  ASSERT_EQ("?y", c._triples[0]._o);
+  ASSERT_EQ("?y", c._triples[1]._s);
+  ASSERT_EQ("<http://rdf.myprefix.com/ns/myrel>", c._triples[1]._p._iri);
+  ASSERT_EQ("?z", c._triples[1]._o);
+  ASSERT_EQ("?y", c._triples[2]._s);
+  ASSERT_EQ("<nsx:rel2>", c._triples[2]._p._iri);
+  ASSERT_EQ("<http://abc.de>", c._triples[2]._o);
   ASSERT_EQ(std::numeric_limits<uint64_t>::max(), pq._limitOffset._limit);
   ASSERT_EQ(0, pq._limitOffset._offset);
 }
@@ -866,15 +867,14 @@ TEST(ParserTest, testLiterals) {
   const auto& c = pq.children()[0].getBasic();
   ASSERT_EQ(2u, pq._prefixes.size());
   ASSERT_TRUE(selectClause.isAsterisk());
-  ASSERT_EQ(2u, c._whereClauseTriples.size());
+  ASSERT_EQ(2u, c._triples.size());
   ASSERT_EQ("\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>",
-            c._whereClauseTriples[0]._s);
-  ASSERT_EQ("<test:myrel>", c._whereClauseTriples[0]._p._iri);
-  ASSERT_EQ(10, c._whereClauseTriples[0]._o);
-  ASSERT_EQ(10.2, c._whereClauseTriples[1]._s);
-  ASSERT_EQ("<test:myrel>", c._whereClauseTriples[1]._p._iri);
-  ASSERT_EQ(":v:date:0000000000000002000-00-00T00:00:00",
-            c._whereClauseTriples[1]._o);
+            c._triples[0]._s);
+  ASSERT_EQ("<test:myrel>", c._triples[0]._p._iri);
+  ASSERT_EQ(10, c._triples[0]._o);
+  ASSERT_EQ(10.2, c._triples[1]._s);
+  ASSERT_EQ("<test:myrel>", c._triples[1]._p._iri);
+  ASSERT_EQ(":v:date:0000000000000002000-00-00T00:00:00", c._triples[1]._o);
 }
 
 TEST(ParserTest, testSolutionModifiers) {
@@ -888,7 +888,7 @@ TEST(ParserTest, testSolutionModifiers) {
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(1u, pq._prefixes.size());
     ASSERT_EQ(1u, selectClause.getSelectedVariables().size());
-    ASSERT_EQ(1u, c._whereClauseTriples.size());
+    ASSERT_EQ(1u, c._triples.size());
     ASSERT_EQ(std::numeric_limits<uint64_t>::max(), pq._limitOffset._limit);
     ASSERT_EQ(0, pq._limitOffset._offset);
     ASSERT_EQ(size_t(0), pq._orderBy.size());
@@ -906,7 +906,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(1u, selectClause.getSelectedVariables().size());
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
-    ASSERT_EQ(1u, c._whereClauseTriples.size());
+    ASSERT_EQ(1u, c._triples.size());
     ASSERT_EQ(10ul, pq._limitOffset._limit);
     ASSERT_EQ(0, pq._limitOffset._offset);
     ASSERT_EQ(size_t(0), pq._orderBy.size());
@@ -926,7 +926,7 @@ TEST(ParserTest, testSolutionModifiers) {
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(1u, pq._prefixes.size());
     ASSERT_EQ(1u, selectClause.getSelectedVariables().size());
-    ASSERT_EQ(1u, c._whereClauseTriples.size());
+    ASSERT_EQ(1u, c._triples.size());
     ASSERT_EQ(10u, pq._limitOffset._limit);
     ASSERT_EQ(15u, pq._limitOffset._offset);
     ASSERT_EQ(size_t(0), pq._orderBy.size());
@@ -946,7 +946,7 @@ TEST(ParserTest, testSolutionModifiers) {
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(1u, pq._prefixes.size());
     ASSERT_EQ(2u, selectClause.getSelectedVariables().size());
-    ASSERT_EQ(1u, c._whereClauseTriples.size());
+    ASSERT_EQ(1u, c._triples.size());
     ASSERT_EQ(10u, pq._limitOffset._limit);
     ASSERT_EQ(15u, pq._limitOffset._offset);
     ASSERT_EQ(size_t(1), pq._orderBy.size());
@@ -971,7 +971,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(3u, selectClause.getSelectedVariables().size());
     ASSERT_EQ(Variable{"?ql_textscore_x"},
               selectClause.getSelectedVariables()[1]);
-    ASSERT_EQ(1u, c._whereClauseTriples.size());
+    ASSERT_EQ(1u, c._triples.size());
     ASSERT_EQ(10u, pq._limitOffset._limit);
     ASSERT_EQ(15u, pq._limitOffset._offset);
     ASSERT_EQ(size_t(2), pq._orderBy.size());
@@ -995,7 +995,7 @@ TEST(ParserTest, testSolutionModifiers) {
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(1u, pq._prefixes.size());
     ASSERT_EQ(2u, selectClause.getSelectedVariables().size());
-    ASSERT_EQ(1u, c._whereClauseTriples.size());
+    ASSERT_EQ(1u, c._triples.size());
     ASSERT_EQ(10u, pq._limitOffset._limit);
     ASSERT_EQ(15u, pq._limitOffset._offset);
     ASSERT_EQ(size_t(2), pq._orderBy.size());
@@ -1031,14 +1031,13 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(2u, pq._prefixes.size());
     ASSERT_EQ(1u, selectClause.getSelectedVariables().size());
     ASSERT_EQ(Variable{"?movie"}, selectClause.getSelectedVariables()[0]);
-    ASSERT_EQ(2u, c._whereClauseTriples.size());
-    ASSERT_EQ("?movie", c._whereClauseTriples[0]._s);
-    ASSERT_EQ("<from-year>", c._whereClauseTriples[0]._p._iri);
-    ASSERT_EQ(":v:date:0000000000000002000-00-00T00:00:00",
-              c._whereClauseTriples[0]._o);
-    ASSERT_EQ("?movie", c._whereClauseTriples[1]._s);
-    ASSERT_EQ("<directed-by>", c._whereClauseTriples[1]._p._iri);
-    ASSERT_EQ("<Scott%2C%20Ridley>", c._whereClauseTriples[1]._o);
+    ASSERT_EQ(2u, c._triples.size());
+    ASSERT_EQ("?movie", c._triples[0]._s);
+    ASSERT_EQ("<from-year>", c._triples[0]._p._iri);
+    ASSERT_EQ(":v:date:0000000000000002000-00-00T00:00:00", c._triples[0]._o);
+    ASSERT_EQ("?movie", c._triples[1]._s);
+    ASSERT_EQ("<directed-by>", c._triples[1]._p._iri);
+    ASSERT_EQ("<Scott%2C%20Ridley>", c._triples[1]._o);
   }
 
   {
@@ -1058,14 +1057,14 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(2u, pq._prefixes.size());
     ASSERT_EQ(1u, selectClause.getSelectedVariables().size());
     ASSERT_EQ(Variable{"?movie"}, selectClause.getSelectedVariables()[0]);
-    ASSERT_EQ(2u, c._whereClauseTriples.size());
-    ASSERT_EQ("?movie", c._whereClauseTriples[0]._s);
-    ASSERT_EQ("<from-year>", c._whereClauseTriples[0]._p._iri);
+    ASSERT_EQ(2u, c._triples.size());
+    ASSERT_EQ("?movie", c._triples[0]._s);
+    ASSERT_EQ("<from-year>", c._triples[0]._p._iri);
     ASSERT_EQ("\"00-00-2000\"^^<http://www.w3.org/2010/XMLSchema#date>",
-              c._whereClauseTriples[0]._o);
-    ASSERT_EQ("?movie", c._whereClauseTriples[1]._s);
-    ASSERT_EQ("<directed-by>", c._whereClauseTriples[1]._p._iri);
-    ASSERT_EQ("<Scott%2C%20Ridley>", c._whereClauseTriples[1]._o);
+              c._triples[0]._o);
+    ASSERT_EQ("?movie", c._triples[1]._s);
+    ASSERT_EQ("<directed-by>", c._triples[1]._p._iri);
+    ASSERT_EQ("<Scott%2C%20Ridley>", c._triples[1]._o);
   }
 
   {
@@ -1171,9 +1170,9 @@ TEST(ParserTest, Order) {
     ParsedQuery pq =
         SparqlParser("SELECT ?x ?y WHERE { ?x <test/myrel> ?y }").parse();
     ASSERT_TRUE(pq._orderBy.empty());
-    ASSERT_EQ(pq._rootGraphPattern._children.size(), 1);
+    ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
-        pq._rootGraphPattern._children[0].variant_));
+        pq._rootGraphPattern._graphPatterns[0].variant_));
   }
   {
     ParsedQuery pq =
@@ -1181,9 +1180,9 @@ TEST(ParserTest, Order) {
             .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
     EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?x", false));
-    ASSERT_EQ(pq._rootGraphPattern._children.size(), 1);
+    ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
-        pq._rootGraphPattern._children[0].variant_));
+        pq._rootGraphPattern._graphPatterns[0].variant_));
   }
   {
     ParsedQuery pq =
@@ -1192,9 +1191,9 @@ TEST(ParserTest, Order) {
             .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
     EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?y", false));
-    ASSERT_EQ(pq._rootGraphPattern._children.size(), 1);
+    ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
-        pq._rootGraphPattern._children[0].variant_));
+        pq._rootGraphPattern._graphPatterns[0].variant_));
   }
   {
     ParsedQuery pq =
@@ -1203,9 +1202,9 @@ TEST(ParserTest, Order) {
             .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
     EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?foo", true));
-    ASSERT_EQ(pq._rootGraphPattern._children.size(), 1);
+    ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
-        pq._rootGraphPattern._children[0].variant_));
+        pq._rootGraphPattern._graphPatterns[0].variant_));
   }
   {
     ParsedQuery pq =
@@ -1214,9 +1213,9 @@ TEST(ParserTest, Order) {
             .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
     EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?x", false));
-    ASSERT_EQ(pq._rootGraphPattern._children.size(), 1);
+    ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
-        pq._rootGraphPattern._children[0].variant_));
+        pq._rootGraphPattern._graphPatterns[0].variant_));
   }
   {
     ParsedQuery pq = SparqlParser(
@@ -1232,7 +1231,7 @@ TEST(ParserTest, Order) {
             "SELECT ?x ?y WHERE { ?x <test/myrel> ?y } ORDER BY (?x - ?y)")
             .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
-    auto variant = pq._rootGraphPattern._children[1].variant_;
+    auto variant = pq._rootGraphPattern._graphPatterns[1].variant_;
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
     ASSERT_EQ(helperBind._expression.getDescriptor(), "?x-?y");
@@ -1282,7 +1281,7 @@ TEST(ParserTest, Group) {
         SparqlParser(
             "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY (?x - ?y) ?x")
             .parse();
-    auto variant = pq._rootGraphPattern._children[1].variant_;
+    auto variant = pq._rootGraphPattern._graphPatterns[1].variant_;
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
     ASSERT_THAT(helperBind, IsBindExpression("?x-?y"));
@@ -1295,7 +1294,7 @@ TEST(ParserTest, Group) {
                          "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY (?x "
                          "- ?y AS ?foo) ?x")
                          .parse();
-    auto variant = pq._rootGraphPattern._children[1].variant_;
+    auto variant = pq._rootGraphPattern._graphPatterns[1].variant_;
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
     EXPECT_THAT(helperBind, IsBind("?foo", "?x-?y"));
@@ -1308,7 +1307,7 @@ TEST(ParserTest, Group) {
         SparqlParser(
             "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY COUNT(?x) ?x")
             .parse();
-    auto variant = pq._rootGraphPattern._children[1].variant_;
+    auto variant = pq._rootGraphPattern._graphPatterns[1].variant_;
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
     ASSERT_THAT(helperBind, IsBindExpression("COUNT(?x)"));
@@ -1322,7 +1321,7 @@ TEST(ParserTest, Group) {
                          "<http://www.opengis.net/def/function/geosparql/"
                          "latitude> (?test) ?x")
                          .parse();
-    auto variant = pq._rootGraphPattern._children[1].variant_;
+    auto variant = pq._rootGraphPattern._graphPatterns[1].variant_;
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
     ASSERT_THAT(
@@ -1368,7 +1367,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
             .parse();
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
     const auto& triples =
-        q._rootGraphPattern._children[0].getBasic()._whereClauseTriples;
+        q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(1u, triples.size());
     ASSERT_EQ((SparqlTriple{"?x", PropertyPath::fromIri("@en@<label>"), "?y"}),
               triples[0]);
@@ -1380,7 +1379,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
             .parse();
     ASSERT_TRUE(q._rootGraphPattern._filters.empty());
     const auto& triples =
-        q._rootGraphPattern._children[0].getBasic()._whereClauseTriples;
+        q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(2u, triples.size());
     ASSERT_EQ((SparqlTriple{"<somebody>", PropertyPath::fromIri("?p"), "?y"}),
               triples[0]);

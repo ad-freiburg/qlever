@@ -112,9 +112,10 @@ class ParsedQuery {
     // pattern
     void recomputeIds(size_t* id_count = nullptr);
 
-    // Modify query to take care of language filter. `lhs` is the variable,
-    // `rhs` is the language.
-    void addLanguageFilter(const std::string& lhs, const std::string& rhs);
+    // Modify query to take care of language filter. `variable` is the variable,
+    // `languageInQuotes` is the language.
+    void addLanguageFilter(const std::string& variable,
+                           const std::string& languageInQuotes);
 
     bool _optional;
     /**
@@ -127,7 +128,7 @@ class ParsedQuery {
     // they appear. For VALUES and Triples, the order matters, so they
     // become children.
     std::vector<SparqlFilter> _filters;
-    vector<GraphPatternOperation> _children;
+    vector<GraphPatternOperation> _graphPatterns;
   };
 
   /**
@@ -319,9 +320,9 @@ class ParsedQuery {
 
   void expandPrefixes();
 
-  auto& children() { return _rootGraphPattern._children; }
+  auto& children() { return _rootGraphPattern._graphPatterns; }
   [[nodiscard]] const auto& children() const {
-    return _rootGraphPattern._children;
+    return _rootGraphPattern._graphPatterns;
   }
 
   // TODO<joka921> This is currently necessary because of the missing scoping of
@@ -356,7 +357,7 @@ class ParsedQuery {
 
 struct GraphPatternOperation {
   struct BasicGraphPattern {
-    vector<SparqlTriple> _whereClauseTriples;
+    vector<SparqlTriple> _triples;
   };
   struct Values {
     SparqlValues _inlineValues;
