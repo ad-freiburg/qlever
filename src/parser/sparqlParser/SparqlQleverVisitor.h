@@ -110,7 +110,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
                                        std::vector<ExpressionPtr> argList);
 
   // TODO: Remove addVisibleVariable(const string&) when all Types use the
-  //  strong type Variable.
+  //  strong type `Variable`.
   void addVisibleVariable(const string& var);
   void addVisibleVariable(const Variable& var);
 

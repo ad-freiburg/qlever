@@ -4,11 +4,12 @@
 //   Hannah Bast <bast@cs.uni-freiburg.de>
 //   2022 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#include <parser/SparqlParser.h>
 #include <parser/sparqlParser/SparqlQleverVisitor.h>
 
 #include <string>
 #include <vector>
+
+#include <parser/SparqlParser.h>
 
 using namespace ad_utility::sparql_types;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
@@ -266,12 +267,11 @@ Visitor::OperationsAndFilters Visitor::visitTypesafe(
       continue;
     }
     if (ops.empty() ||
-        !holds_alternative<GraphPatternOperation::BasicGraphPattern>(
-            ops.back().variant_)) {
+        !ops.back().is<GraphPatternOperation::BasicGraphPattern>() {
       ops.emplace_back(GraphPatternOperation::BasicGraphPattern{});
     }
     ad_utility::appendVector(
-        get<GraphPatternOperation::BasicGraphPattern>(ops.back().variant_)
+        ops.back().get<GraphPatternOperation::BasicGraphPattern>(
             ._whereClauseTriples,
         std::move(triples.value()._whereClauseTriples));
   }
