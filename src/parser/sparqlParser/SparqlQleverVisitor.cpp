@@ -267,11 +267,11 @@ Visitor::OperationsAndFilters Visitor::visitTypesafe(
       continue;
     }
     if (ops.empty() ||
-        !ops.back().is<GraphPatternOperation::BasicGraphPattern>() {
+        !ops.back().is<GraphPatternOperation::BasicGraphPattern>()) {
       ops.emplace_back(GraphPatternOperation::BasicGraphPattern{});
     }
     ad_utility::appendVector(
-        ops.back().get<GraphPatternOperation::BasicGraphPattern>(
+        ops.back().get<GraphPatternOperation::BasicGraphPattern>()
             ._whereClauseTriples,
         std::move(triples.value()._whereClauseTriples));
   }
