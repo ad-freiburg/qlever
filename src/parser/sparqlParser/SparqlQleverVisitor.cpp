@@ -221,14 +221,14 @@ GraphPattern Visitor::visitTypesafe(Parser::GroupGraphPatternContext* ctx) {
   pattern._id = numGraphPatterns_++;
   if (ctx->subSelect()) {
     auto [subquery, valuesOpt] = visitTypesafe(ctx->subSelect());
-    pattern._children.emplace_back(subquery);
+    pattern._graphPatterns.emplace_back(subquery);
     if (valuesOpt.has_value()) {
-      pattern._children.emplace_back(valuesOpt.value());
+      pattern._graphPatterns.emplace_back(valuesOpt.value());
     }
     return pattern;
   } else if (ctx->groupGraphPatternSub()) {
     auto [subOps, filters] = visitTypesafe(ctx->groupGraphPatternSub());
-    pattern._children = std::move(subOps);
+    pattern._graphPatterns = std::move(subOps);
     for (auto& filter : filters) {
       if (filter._type == SparqlFilter::LANG_MATCHES) {
         pattern.addLanguageFilter(filter._lhs, filter._rhs);
@@ -726,7 +726,7 @@ GraphPatternOperation Visitor::visitTypesafe(
 namespace {
 GraphPattern wrap(GraphPatternOperation op) {
   auto pattern = GraphPattern();
-  pattern._children.emplace_back(std::move(op));
+  pattern._graphPatterns.emplace_back(std::move(op));
   return pattern;
 }
 }  // namespace

@@ -347,7 +347,7 @@ MATCHER_P(IsTriples, triples, "") {
   auto triplesValue =
       std::get_if<GraphPatternOperation::BasicGraphPattern>(&arg.variant_);
   return triplesValue && testing::Matches(testing::UnorderedElementsAreArray(
-                             triples))(triplesValue->_whereClauseTriples);
+                             triples))(triplesValue->_triples);
 }
 
 MATCHER_P(IsOptional, subMatcher, "") {
@@ -373,13 +373,13 @@ MATCHER_P(IsMinus, subMatcher, "") {
 }
 
 MATCHER_P3(IsGraphPattern, optional, filters, childMatchers, "") {
-  if (arg._children.size() != std::tuple_size_v<decltype(childMatchers)>) {
+  if (arg._graphPatterns.size() != std::tuple_size_v<decltype(childMatchers)>) {
     return false;
   }
 
   auto lambda = [&](auto&&... matchers) {
     size_t i = 0;
-    return (... && testing::Value(arg._children[i++], matchers));
+    return (... && testing::Value(arg._graphPatterns[i++], matchers));
   };
   bool childrenMatch = std::apply(lambda, childMatchers);
 

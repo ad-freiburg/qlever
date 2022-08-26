@@ -669,9 +669,6 @@ void TransitivePath::computeResult(ResultTable* result) {
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "TransitivePath subresult computation done." << std::endl;
 
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
-
   result->_sortedBy = resultSortedOn();
   if (_leftIsVar || _leftSideTree != nullptr) {
     result->_resultTypes.push_back(subRes->getResultType(_leftSubCol));
@@ -693,7 +690,6 @@ void TransitivePath::computeResult(ResultTable* result) {
         result->_resultTypes.push_back(leftRes->getResultType(c));
       }
     }
-    runtimeInfo.addChild(_leftSideTree->getRootOperation()->getRuntimeInfo());
     int leftWidth = leftRes->_idTable.cols();
     CALL_FIXED_SIZE_3(subWidth, leftWidth, _resultWidth,
                       computeTransitivePathLeftBound, &result->_idTable,
@@ -707,7 +703,6 @@ void TransitivePath::computeResult(ResultTable* result) {
         result->_resultTypes.push_back(rightRes->getResultType(c));
       }
     }
-    runtimeInfo.addChild(_rightSideTree->getRootOperation()->getRuntimeInfo());
     int rightWidth = rightRes->_idTable.cols();
     CALL_FIXED_SIZE_3(subWidth, rightWidth, _resultWidth,
                       computeTransitivePathRightBound, &result->_idTable,
@@ -727,6 +722,8 @@ void TransitivePath::computeResult(ResultTable* result) {
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePath> TransitivePath::bindLeftSide(
     std::shared_ptr<QueryExecutionTree> leftop, size_t inputCol) const {
+  // Enforce required sorting of `leftop`.
+  leftop = QueryExecutionTree::createSortedTree(std::move(leftop), {inputCol});
   // Create a copy of this
   std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(*this);
   p->_leftSideTree = leftop;
@@ -748,6 +745,9 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftSide(
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePath> TransitivePath::bindRightSide(
     std::shared_ptr<QueryExecutionTree> rightop, size_t inputCol) const {
+  // Enforce required sorting of `rightop`.
+  rightop =
+      QueryExecutionTree::createSortedTree(std::move(rightop), {inputCol});
   // Create a copy of this
   std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(*this);
   p->_rightSideTree = rightop;

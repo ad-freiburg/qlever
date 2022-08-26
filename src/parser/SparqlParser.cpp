@@ -541,7 +541,7 @@ SparqlFilter SparqlParser::parseRegexFilter(bool expectKeyword) {
 
 GraphPatternOperation::BasicGraphPattern& SparqlParser::lastBasicPattern(
     ParsedQuery::GraphPattern* ptr) const {
-  auto& c = ptr->_children;
+  auto& c = ptr->_graphPatterns;
   if (c.empty() || !c.back().is<GraphPatternOperation::BasicGraphPattern>()) {
     c.emplace_back(GraphPatternOperation::BasicGraphPattern{});
   }

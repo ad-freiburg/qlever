@@ -1,16 +1,17 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author:
+//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include "./Join.h"
+#include <engine/CallFixedSize.h>
+#include <engine/IndexScan.h>
+#include <engine/Join.h>
 
 #include <functional>
 #include <sstream>
 #include <type_traits>
 #include <unordered_set>
-
-#include "./QueryExecutionTree.h"
-#include "CallFixedSize.h"
 
 using std::string;
 
@@ -20,6 +21,11 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            size_t t2JoinCol, bool keepJoinColumn)
     : Operation(qec) {
   AD_CHECK(t1 && t2);
+  // Currently all join algorithms require both inputs to be sorted, so we
+  // enforce the sorting here.
+  t1 = QueryExecutionTree::createSortedTree(std::move(t1), {t1JoinCol});
+  t2 = QueryExecutionTree::createSortedTree(std::move(t2), {t2JoinCol});
+
   // Make sure subtrees are ordered so that identical queries can be identified.
   if (t1->asString() > t2->asString()) {
     std::swap(t1, t2);
@@ -65,8 +71,6 @@ string Join::getDescriptor() const {
 
 // _____________________________________________________________________________
 void Join::computeResult(ResultTable* result) {
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-
   LOG(DEBUG) << "Getting sub-results for join result computation..." << endl;
   size_t leftWidth = _left->getResultWidth();
   size_t rightWidth = _right->getResultWidth();
@@ -97,7 +101,6 @@ void Join::computeResult(ResultTable* result) {
 
   LOG(TRACE) << "Computing left side..." << endl;
   shared_ptr<const ResultTable> leftRes = _left->getResult();
-  runtimeInfo.addChild(_left->getRootOperation()->getRuntimeInfo());
 
   // TODO<joka921> Currently the _resultTypes are set incorrectly in case
   // of early stopping. For now, early stopping is thus disabled.
@@ -117,7 +120,6 @@ void Join::computeResult(ResultTable* result) {
 
   LOG(TRACE) << "Computing right side..." << endl;
   shared_ptr<const ResultTable> rightRes = _right->getResult();
-  runtimeInfo.addChild(_right->getRootOperation()->getRuntimeInfo());
 
   LOG(DEBUG) << "Computing Join result..." << endl;
 
@@ -246,7 +248,6 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
     result->_idTable.setCols(_right->getResultWidth() + 2);
     result->_sortedBy = {2 + _rightJoinCol};
     shared_ptr<const ResultTable> nonDummyRes = _right->getResult();
-    getRuntimeInfo().addChild(_right->getRootOperation()->getRuntimeInfo());
     result->_resultTypes.reserve(result->_idTable.cols());
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
@@ -261,7 +262,6 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
     result->_sortedBy = {_leftJoinCol};
 
     shared_ptr<const ResultTable> nonDummyRes = _left->getResult();
-    getRuntimeInfo().addChild(_left->getRootOperation()->getRuntimeInfo());
     result->_resultTypes.reserve(result->_idTable.cols());
     result->_resultTypes.insert(result->_resultTypes.end(),
                                 nonDummyRes->_resultTypes.begin(),

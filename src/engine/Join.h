@@ -1,15 +1,17 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author:
+//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+
 #pragma once
 
-#include <list>
+#include <engine/Operation.h>
+#include <engine/QueryExecutionTree.h>
+#include <util/HashMap.h>
+#include <util/HashSet.h>
 
-#include "../util/HashMap.h"
-#include "../util/HashSet.h"
-#include "./IndexScan.h"
-#include "./Operation.h"
-#include "./QueryExecutionTree.h"
+#include <list>
 
 using std::list;
 

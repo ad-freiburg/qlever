@@ -365,8 +365,8 @@ Awaitable<json> Server::composeResponseQleverJson(
           std::vector<std::string>{"?subject", "?predicate", "?object"};
     }
 
-    j["runtimeInformation"] = RuntimeInformation::ordered_json(
-        qet.getRootOperation()->getRuntimeInfo());
+    j["runtimeInformation"] =
+        nlohmann::ordered_json(qet.getRootOperation()->getRuntimeInfo());
 
     {
       size_t limit = std::min(query._limitOffset._limit, maxSend);
@@ -755,9 +755,8 @@ boost::asio::awaitable<void> Server::processQuery(
       LOG(ERROR) << metadata.value().coloredError() << std::endl;
     }
     if (queryExecutionTree) {
-      errorResponseJson["runtimeInformation"] =
-          RuntimeInformation::ordered_json(
-              queryExecutionTree->getRootOperation()->getRuntimeInfo());
+      errorResponseJson["runtimeInformation"] = nlohmann::ordered_json(
+          queryExecutionTree->getRootOperation()->getRuntimeInfo());
     }
     co_return co_await sendJson(errorResponseJson, http::status::bad_request);
   }
