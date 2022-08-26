@@ -17,6 +17,7 @@ using SelectClause = ParsedQuery::SelectClause;
 using GraphPattern = ParsedQuery::GraphPattern;
 using Bind = GraphPatternOperation::Bind;
 using Values = GraphPatternOperation::Values;
+using BasicGraphPattern = GraphPatternOperation::BasicGraphPattern;
 
 using Visitor = SparqlQleverVisitor;
 using Parser = SparqlAutomaticParser;
@@ -256,24 +257,19 @@ Visitor::OperationsAndFilters Visitor::visitTypesafe(
   if (ctx->triplesBlock()) {
     ops.emplace_back(visitTypesafe(ctx->triplesBlock()));
   }
-  auto others = visitVector<
-      std::pair<variant<GraphPatternOperation, SparqlFilter>,
-                std::optional<GraphPatternOperation::BasicGraphPattern>>>(
-      ctx->graphPatternNotTriplesAndMaybeTriples());
+  auto others =
+      visitVector<std::pair<variant<GraphPatternOperation, SparqlFilter>,
+                            std::optional<BasicGraphPattern>>>(
+          ctx->graphPatternNotTriplesAndMaybeTriples());
   for (auto [graphPattern, triples] : others) {
     std::visit(ad_utility::OverloadCallOperator{filter, op}, graphPattern);
     if (!triples.has_value()) {
       continue;
     }
-    if (ops.empty() ||
-        !ops.back().is<GraphPatternOperation::BasicGraphPattern>()) {
-      ops.emplace_back(GraphPatternOperation::BasicGraphPattern{});
+    if (ops.empty() || !ops.back().is<BasicGraphPattern>()) {
+      ops.emplace_back(BasicGraphPattern{});
     }
-    ad_utility::appendVector(
-        ops.back()
-            .get<GraphPatternOperation::BasicGraphPattern>()
-            ._whereClauseTriples,
-        std::move(triples.value()._whereClauseTriples));
+    ops.back().get<BasicGraphPattern>().appendTriples(triples.value());
   }
   return {std::move(ops), std::move(filters)};
 }
@@ -285,8 +281,7 @@ Visitor::OperationOrFilterAndMaybeTriples Visitor::visitTypesafe(
 }
 
 // ____________________________________________________________________________________
-GraphPatternOperation::BasicGraphPattern Visitor::visitTypesafe(
-    Parser::TriplesBlockContext* ctx) {
+BasicGraphPattern Visitor::visitTypesafe(Parser::TriplesBlockContext* ctx) {
   auto iri = [](const Iri& iri) -> TripleComponent { return iri.toSparql(); };
   auto blankNode = [](const BlankNode& blankNode) -> TripleComponent {
     return blankNode.toSparql();
@@ -344,11 +339,10 @@ GraphPatternOperation::BasicGraphPattern Visitor::visitTypesafe(
             varOrTerm(std::move(triple.object_))};
   };
 
-  auto triples = ad_utility::transform(
-      visitTypesafe(ctx->triplesSameSubjectPath()), convertAndRegisterTriple);
+  BasicGraphPattern triples = {ad_utility::transform(
+      visitTypesafe(ctx->triplesSameSubjectPath()), convertAndRegisterTriple)};
   if (ctx->triplesBlock()) {
-    ad_utility::appendVector(
-        triples, visitTypesafe(ctx->triplesBlock())._whereClauseTriples);
+    triples.appendTriples(visitTypesafe(ctx->triplesBlock()));
   }
   return {triples};
 }

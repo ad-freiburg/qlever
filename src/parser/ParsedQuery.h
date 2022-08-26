@@ -357,6 +357,11 @@ class ParsedQuery {
 struct GraphPatternOperation {
   struct BasicGraphPattern {
     vector<SparqlTriple> _whereClauseTriples;
+
+    void appendTriples(const BasicGraphPattern& pattern) {
+      ad_utility::appendVector(_whereClauseTriples,
+                               pattern._whereClauseTriples);
+    }
   };
   struct Values {
     SparqlValues _inlineValues;
