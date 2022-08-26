@@ -190,9 +190,9 @@ void SparqlParser::parseWhere(ParsedQuery* query,
           "the end of the input.");
     }
     if (lexer_.accept("optional")) {
-      currentPattern->_children.emplace_back(
+      currentPattern->_graphPatterns.emplace_back(
           GraphPatternOperation::Optional{ParsedQuery::GraphPattern()});
-      auto& opt = currentPattern->_children.back()
+      auto& opt = currentPattern->_graphPatterns.back()
                       .get<GraphPatternOperation::Optional>();
       auto& child = opt._child;
       child._optional = true;
@@ -206,14 +206,14 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       GraphPatternOperation::Bind bind =
           parseWithAntlr(&AntlrParser::bind, *query);
       query->registerVariableVisibleInQueryBody(Variable{bind._target});
-      currentPattern->_children.emplace_back(std::move(bind));
+      currentPattern->_graphPatterns.emplace_back(std::move(bind));
       // The dot after a BIND is optional.
       lexer_.accept(".");
     } else if (lexer_.accept("minus")) {
-      currentPattern->_children.emplace_back(
+      currentPattern->_graphPatterns.emplace_back(
           GraphPatternOperation::Minus{ParsedQuery::GraphPattern()});
-      auto& opt =
-          currentPattern->_children.back().get<GraphPatternOperation::Minus>();
+      auto& opt = currentPattern->_graphPatterns.back()
+                      .get<GraphPatternOperation::Minus>();
       auto& child = opt._child;
       child._optional = false;
       child._id = query->_numGraphPatterns;
@@ -244,7 +244,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
           query->registerVariableVisibleInQueryBody(variable);
         }
 
-        currentPattern->_children.emplace_back(std::move(subq));
+        currentPattern->_graphPatterns.emplace_back(std::move(subq));
         // The closing bracket } is consumed by the subquery
         lexer_.accept(".");
       } else {
@@ -264,7 +264,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         lexer_.expect("{");
         parseWhere(query, &un._child2);
         lexer_.accept(".");
-        currentPattern->_children.emplace_back(std::move(un));
+        currentPattern->_graphPatterns.emplace_back(std::move(un));
       }
     } else if (lexer_.peek("filter")) {
       // append to the global filters of the pattern.
@@ -281,7 +281,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       for (const auto& variable : values._inlineValues._variables) {
         query->registerVariableVisibleInQueryBody(Variable{variable});
       }
-      currentPattern->_children.emplace_back(std::move(values));
+      currentPattern->_graphPatterns.emplace_back(std::move(values));
       lexer_.accept(".");
     } else {
       // TODO: Make TripleComponent constructible from these types.
@@ -333,7 +333,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
 
       vector<ad_utility::sparql_types::TripleWithPropertyPath> triples =
           parseWithAntlr(&AntlrParser::triplesSameSubjectPath, *query);
-      auto& v = lastBasicPattern(currentPattern)._whereClauseTriples;
+      auto& v = lastBasicPattern(currentPattern)._triples;
       for (auto& triple : triples) {
         registerIfVariable(&triple.subject_);
         registerIfVariable(&triple.predicate_);
@@ -725,7 +725,7 @@ SparqlFilter SparqlParser::parseRegexFilter(bool expectKeyword) {
 
 GraphPatternOperation::BasicGraphPattern& SparqlParser::lastBasicPattern(
     ParsedQuery::GraphPattern* ptr) const {
-  auto& c = ptr->_children;
+  auto& c = ptr->_graphPatterns;
   if (c.empty() || !c.back().is<GraphPatternOperation::BasicGraphPattern>()) {
     c.emplace_back(GraphPatternOperation::BasicGraphPattern{});
   }
