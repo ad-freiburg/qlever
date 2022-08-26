@@ -18,8 +18,8 @@
 /// Note that in theory all of them could be implemented shorter as captureless
 /// lambda expressions. We have chosen not to do this because the STL also does
 /// not choose this approach (see e.g. `std::less`, `std::plus`, etc.) and
-/// because global inline lambdas in header feels might in theory cause ODR (one
-/// definition rule) problems, especially  when using differen compilers.
+/// because global inline lambdas in header files might in theory cause ODR (one
+/// definition rule) problems, especially  when using different compilers.
 
 namespace ad_utility {
 
