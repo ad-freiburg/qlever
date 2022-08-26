@@ -6,6 +6,8 @@
 #include <parser/ParseException.h>
 #include <parser/SparqlParser.h>
 
+#include "SparqlAntlrParserTestHelpers.h"
+
 TEST(ParseException, coloredError) {
   auto exampleQuery = "SELECT A ?var WHERE";
   EXPECT_EQ((ExceptionMetadata{exampleQuery, 7, 7}).coloredError(),
@@ -33,7 +35,7 @@ TEST(ParseException, MetadataGeneration) {
     } catch (const ParseException& e) {
       EXPECT_TRUE(e.metadata().has_value());
       EXPECT_EQ(e.metadata().value(),
-                (ExceptionMetadata{"?a  a:b ?b }", 4, 6}));
+                (ExceptionMetadata{"where  { ?a a:b ?b }", 12, 14}));
     }
   }
 }

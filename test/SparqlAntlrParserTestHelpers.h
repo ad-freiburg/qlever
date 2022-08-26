@@ -6,9 +6,10 @@
 
 #include <gmock/gmock.h>
 
-#include "../src/parser/Alias.h"
-#include "../src/parser/data/VarOrTerm.h"
-#include "../src/util/TypeTraits.h"
+#include "parser/Alias.h"
+#include "parser/ParsedQuery.h"
+#include "parser/data/VarOrTerm.h"
+#include "util/TypeTraits.h"
 
 // Not relevant for the actual test logic, but provides
 // human-readable output if a test fails.
@@ -89,6 +90,14 @@ std::ostream& operator<<(
   return out;
 }
 }  // namespace sparqlExpression
+
+// _____________________________________________________________________________
+
+std::ostream& operator<<(std::ostream& out, const ExceptionMetadata& metadata) {
+  out << "ExceptionMetadata(\"" << metadata.query_ << "\", "
+      << metadata.startIndex_ << ", " << metadata.stopIndex_ << ")";
+  return out;
+}
 
 // _____________________________________________________________________________
 
@@ -190,8 +199,9 @@ MATCHER_P(IsLiteral, value, "") {
 // _____________________________________________________________________________
 
 MATCHER_P2(IsBind, variable, expression, "") {
-  return (arg._target == variable) &&
-         (arg._expression.getDescriptor() == expression);
+  auto bind = std::get_if<GraphPatternOperation::Bind>(&arg.variant_);
+  return bind && (bind->_target == variable) &&
+         (bind->_expression.getDescriptor() == expression);
 }
 
 MATCHER_P(IsBindExpression, expression, "") {
@@ -259,6 +269,14 @@ MATCHER_P2(IsValues, vars, values, "") {
          (arg._inlineValues._values == values);
 }
 
+MATCHER_P2(IsInlineData, vars, values, "") {
+  // TODO Refactor GraphPatternOperation::Values / SparqlValues s.t. this
+  //  becomes a trivial Eq matcher.
+  auto valuesBlock = std::get_if<GraphPatternOperation::Values>(&arg.variant_);
+  return valuesBlock && (valuesBlock->_inlineValues._variables == vars) &&
+         (valuesBlock->_inlineValues._values == values);
+}
+
 MATCHER_P2(IsAsteriskSelect, distinct, reduced, "") {
   return arg._distinct == distinct && arg._reduced == reduced &&
          arg.isAsterisk() && arg.getAliases().empty();
@@ -323,4 +341,59 @@ MATCHER_P4(IsSolutionModifier, groupByVariables, havingClauses, orderBy,
          std::equal(arg.orderBy_.begin(), arg.orderBy_.end(), orderBy.begin(),
                     orderKeyComp) &&
          arg.limitOffset_ == limitOffset;
+}
+
+MATCHER_P(IsTriples, triples, "") {
+  auto triplesValue =
+      std::get_if<GraphPatternOperation::BasicGraphPattern>(&arg.variant_);
+  return triplesValue && testing::Matches(testing::UnorderedElementsAreArray(
+                             triples))(triplesValue->_triples);
+}
+
+MATCHER_P(IsOptional, subMatcher, "") {
+  auto optional = std::get_if<GraphPatternOperation::Optional>(&arg.variant_);
+  return optional && testing::Value(optional->_child, subMatcher);
+}
+
+MATCHER_P(IsGroup, subMatcher, "") {
+  auto group =
+      std::get_if<GraphPatternOperation::GroupGraphPattern>(&arg.variant_);
+  return group && testing::Value(group->_child, subMatcher);
+}
+
+MATCHER_P2(IsUnion, subMatcher1, subMatcher2, "") {
+  auto unio = std::get_if<GraphPatternOperation::Union>(&arg.variant_);
+  return unio && testing::Value(unio->_child1, subMatcher1) &&
+         testing::Value(unio->_child2, subMatcher2);
+}
+
+MATCHER_P(IsMinus, subMatcher, "") {
+  auto minus = std::get_if<GraphPatternOperation::Minus>(&arg.variant_);
+  return minus && testing::Value(minus->_child, subMatcher);
+}
+
+MATCHER_P3(IsGraphPattern, optional, filters, childMatchers, "") {
+  if (arg._graphPatterns.size() != std::tuple_size_v<decltype(childMatchers)>) {
+    return false;
+  }
+
+  // TODO<joka921, qup42> I think there is a `tupleForEach` function somewhere
+  //  in `util/xxx.h` that could be used to make this eve more idiomatic.
+  auto lambda = [&](auto&&... matchers) {
+    size_t i = 0;
+    return (... && testing::Value(arg._graphPatterns[i++], matchers));
+  };
+  bool childrenMatch = std::apply(lambda, childMatchers);
+
+  return arg._optional == optional &&
+         testing::Value(arg._filters,
+                        testing::UnorderedElementsAreArray(filters)) &&
+         childrenMatch;
+}
+
+MATCHER_P2(IsSubSelect, selectMatcher, whereMatcher, "") {
+  auto query = std::get_if<GraphPatternOperation::Subquery>(&arg.variant_);
+  return query && query->_subquery.hasSelectClause() &&
+         testing::Value(query->_subquery.selectClause(), selectMatcher) &&
+         testing::Value(query->_subquery._rootGraphPattern, whereMatcher);
 }

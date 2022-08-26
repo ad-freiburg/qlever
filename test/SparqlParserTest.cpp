@@ -556,8 +556,10 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
 
       // -- SubQuery
-      auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
+      auto subQueryGroup = get<GraphPatternOperation::GroupGraphPattern>(
           pq._rootGraphPattern._graphPatterns[1].variant_);
+      auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
+          subQueryGroup._child._graphPatterns[0].variant_);
       const auto& c_subquery = get<GraphPatternOperation::BasicGraphPattern>(
           parsed_sub_query._subquery._rootGraphPattern._graphPatterns[0]
               .variant_);
@@ -641,8 +643,10 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
 
       // -- SubQuery (level 1)
-      auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
+      auto subQueryGroup = get<GraphPatternOperation::GroupGraphPattern>(
           pq._rootGraphPattern._graphPatterns[1].variant_);
+      auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
+          subQueryGroup._child._graphPatterns[0].variant_);
       const auto& c_subquery = get<GraphPatternOperation::BasicGraphPattern>(
           parsed_sub_query._subquery._rootGraphPattern._graphPatterns[0]
               .variant_);
@@ -675,21 +679,17 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(vvars_subquery, sc_subquery.getSelectedVariablesAsStrings());
 
       // -- SubQuery (level 2)
-      auto parsed_sub_sub_query = get<GraphPatternOperation::Subquery>(
-          pq._rootGraphPattern._graphPatterns[1].variant_);
-      const auto& c_sub_subquery =
-          get<GraphPatternOperation::BasicGraphPattern>(
-              get<GraphPatternOperation::Subquery>(
-                  parsed_sub_sub_query._subquery._rootGraphPattern
-                      ._graphPatterns[1]
-                      .variant_)
-                  ._subquery._rootGraphPattern._graphPatterns[0]
-                  .variant_);
+      auto subsubQueryGroup = get<GraphPatternOperation::GroupGraphPattern>(
+          parsed_sub_query._subquery._rootGraphPattern._graphPatterns[1]
+              .variant_);
       auto aux_parsed_sub_sub_query =
           get<GraphPatternOperation::Subquery>(
-              parsed_sub_sub_query._subquery._rootGraphPattern._graphPatterns[1]
-                  .variant_)
+              subsubQueryGroup._child._graphPatterns[0].variant_)
               ._subquery;
+      const auto& c_sub_subquery =
+          get<GraphPatternOperation::BasicGraphPattern>(
+              aux_parsed_sub_sub_query._rootGraphPattern._graphPatterns[0]
+                  .variant_);
       ASSERT_EQ(1u, c_sub_subquery._triples.size());
       ASSERT_EQ(0u, aux_parsed_sub_sub_query._rootGraphPattern._filters.size());
       ASSERT_EQ(0, aux_parsed_sub_sub_query._limitOffset._offset);
@@ -1294,12 +1294,9 @@ TEST(ParserTest, Group) {
                          "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY (?x "
                          "- ?y AS ?foo) ?x")
                          .parse();
-    auto variant = pq._rootGraphPattern._graphPatterns[1].variant_;
-    ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
-    auto helperBind = get<GraphPatternOperation::Bind>(variant);
-    EXPECT_THAT(helperBind, IsBind("?foo", "?x-?y"));
-    EXPECT_THAT(
-        pq, GroupByVariablesMatch<vector<string>>({helperBind._target, "?x"}));
+    EXPECT_THAT(pq._rootGraphPattern._graphPatterns[1],
+                IsBind("?foo", "?x-?y"));
+    EXPECT_THAT(pq, GroupByVariablesMatch<vector<string>>({"?foo", "?x"}));
   }
   {
     // grouping by a builtin call

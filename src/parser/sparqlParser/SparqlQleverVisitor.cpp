@@ -1,20 +1,24 @@
 // Copyright 2021, University of Freiburg,
 // Chair of Algorithms and Data Structures
-// Author: Hannah Bast <bast@cs.uni-freiburg.de>
+// Authors:
+//   Hannah Bast <bast@cs.uni-freiburg.de>
+//   2022 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
-#include "SparqlQleverVisitor.h"
+#include "parser/sparqlParser/SparqlQleverVisitor.h"
 
 #include <string>
 #include <vector>
 
-#include "../SparqlParser.h"
+#include "parser/SparqlParser.h"
 
 using namespace ad_utility::sparql_types;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
 using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
 using SelectClause = ParsedQuery::SelectClause;
+using GraphPattern = ParsedQuery::GraphPattern;
 using Bind = GraphPatternOperation::Bind;
 using Values = GraphPatternOperation::Values;
+using BasicGraphPattern = GraphPatternOperation::BasicGraphPattern;
 
 using Visitor = SparqlQleverVisitor;
 using Parser = SparqlAutomaticParser;
@@ -59,6 +63,14 @@ ExpressionPtr Visitor::processIriFunctionCall(
     }
   }
   throw ParseException{"Function \"" + iri + "\" not supported"};
+}
+
+void Visitor::addVisibleVariable(string var) {
+  addVisibleVariable(Variable{std::move(var)});
+}
+
+void Visitor::addVisibleVariable(Variable var) {
+  visibleVariables_.back().emplace_back(std::move(var));
 }
 
 // ___________________________________________________________________________
@@ -178,13 +190,19 @@ Variable Visitor::visitTypesafe(Parser::VarContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-Bind Visitor::visitTypesafe(Parser::BindContext* ctx) {
-  return {{visitTypesafe(ctx->expression())}, ctx->var()->getText()};
+GraphPatternOperation Visitor::visitTypesafe(Parser::BindContext* ctx) {
+  addVisibleVariable(ctx->var()->getText());
+  return GraphPatternOperation{
+      Bind{{visitTypesafe(ctx->expression())}, ctx->var()->getText()}};
 }
 
 // ____________________________________________________________________________________
-Values Visitor::visitTypesafe(Parser::InlineDataContext* ctx) {
-  return visitTypesafe(ctx->dataBlock());
+GraphPatternOperation Visitor::visitTypesafe(Parser::InlineDataContext* ctx) {
+  Values values = visitTypesafe(ctx->dataBlock());
+  for (const auto& variable : values._inlineValues._variables) {
+    addVisibleVariable(variable);
+  }
+  return GraphPatternOperation{std::move(values)};
 }
 
 // ____________________________________________________________________________________
@@ -199,19 +217,175 @@ std::optional<Values> Visitor::visitTypesafe(Parser::ValuesClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-vector<TripleWithPropertyPath> Visitor::visitTypesafe(
-    Parser::TriplesBlockContext* ctx) {
-  auto triples = visitTypesafe(ctx->triplesSameSubjectPath());
+GraphPattern Visitor::visitTypesafe(Parser::GroupGraphPatternContext* ctx) {
+  GraphPattern pattern;
+  pattern._id = numGraphPatterns_++;
+  if (ctx->subSelect()) {
+    auto [subquery, valuesOpt] = visitTypesafe(ctx->subSelect());
+    pattern._graphPatterns.emplace_back(std::move(subquery));
+    if (valuesOpt.has_value()) {
+      pattern._graphPatterns.emplace_back(std::move(valuesOpt.value()));
+    }
+    return pattern;
+  } else if (ctx->groupGraphPatternSub()) {
+    auto [subOps, filters] = visitTypesafe(ctx->groupGraphPatternSub());
+    pattern._graphPatterns = std::move(subOps);
+    for (auto& filter : filters) {
+      if (filter._type == SparqlFilter::LANG_MATCHES) {
+        pattern.addLanguageFilter(filter._lhs, filter._rhs);
+      } else {
+        pattern._filters.push_back(std::move(filter));
+      }
+    }
+    return pattern;
+  } else {
+    AD_FAIL();  // Unreachable
+  }
+}
+
+Visitor::OperationsAndFilters Visitor::visitTypesafe(
+    Parser::GroupGraphPatternSubContext* ctx) {
+  vector<GraphPatternOperation> ops;
+  vector<SparqlFilter> filters;
+
+  auto filter = [&filters](SparqlFilter filter) {
+    filters.emplace_back(std::move(filter));
+  };
+  auto op = [&ops](GraphPatternOperation op) {
+    ops.emplace_back(std::move(op));
+  };
+
   if (ctx->triplesBlock()) {
-    appendVector(triples, visitTypesafe(ctx->triplesBlock()));
+    ops.emplace_back(visitTypesafe(ctx->triplesBlock()));
+  }
+  // TODO make visitVector deduce its return type automatically
+  auto others = visitVector<OperationOrFilterAndMaybeTriples>(
+      ctx->graphPatternNotTriplesAndMaybeTriples());
+  for (auto& [graphPattern, triples] : others) {
+    std::visit(ad_utility::OverloadCallOperator{filter, op},
+               std::move(graphPattern));
+
+    // TODO<C++23>: use `optional.transform` for this pattern.
+    if (!triples.has_value()) {
+      continue;
+    }
+    if (ops.empty() || !ops.back().is<BasicGraphPattern>()) {
+      ops.emplace_back(BasicGraphPattern{});
+    }
+    ops.back().get<BasicGraphPattern>().appendTriples(
+        std::move(triples.value()));
+  }
+  return {std::move(ops), std::move(filters)};
+}
+
+Visitor::OperationOrFilterAndMaybeTriples Visitor::visitTypesafe(
+    Parser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx) {
+  return {visitTypesafe(ctx->graphPatternNotTriples()),
+          visitOptional(ctx->triplesBlock())};
+}
+
+// ____________________________________________________________________________________
+BasicGraphPattern Visitor::visitTypesafe(Parser::TriplesBlockContext* ctx) {
+  auto iri = [](const Iri& iri) -> TripleComponent { return iri.toSparql(); };
+  auto blankNode = [](const BlankNode& blankNode) -> TripleComponent {
+    return blankNode.toSparql();
+  };
+  auto literal = [](const Literal& literal) {
+    // Problem: ql:contains-word causes the " to be stripped.
+    // TODO: Move stripAndLowercaseKeywordLiteral out to this point or
+    //  rewrite the Turtle Parser s.t. this code can be integrated into the
+    //  visitor. In this case the turtle parser should output the
+    //  corresponding modell class.
+    try {
+      return TurtleStringParser<TokenizerCtre>::parseTripleObject(
+          literal.toSparql());
+    } catch (const TurtleStringParser<TokenizerCtre>::ParseException&) {
+      return TripleComponent{literal.toSparql()};
+    }
+  };
+  auto graphTerm = [&iri, &blankNode, &literal](const GraphTerm& term) {
+    return term.visit(
+        ad_utility::OverloadCallOperator{iri, blankNode, literal});
+  };
+  auto varTriple = [](const Variable& var) {
+    return TripleComponent{var.name()};
+  };
+  auto varOrTerm = [&varTriple, &graphTerm](VarOrTerm varOrTerm) {
+    return varOrTerm.visit(
+        ad_utility::OverloadCallOperator{varTriple, graphTerm});
+  };
+
+  auto varPath = [](const Variable& var) {
+    return PropertyPath::fromVariable(var);
+  };
+  auto path = [](const PropertyPath& path) { return path; };
+  auto varOrPath = [&varPath,
+                    &path](ad_utility::sparql_types::VarOrPath varOrPath) {
+    return std::visit(ad_utility::OverloadCallOperator{varPath, path},
+                      std::move(varOrPath));
+  };
+
+  auto registerIfVariable = [this](const auto& variant) {
+    if (holds_alternative<Variable>(variant)) {
+      addVisibleVariable(std::get<Variable>(variant));
+    }
+  };
+
+  auto convertAndRegisterTriple =
+      [&varOrTerm, &varOrPath,
+       &registerIfVariable](TripleWithPropertyPath&& triple) -> SparqlTriple {
+    registerIfVariable(triple.subject_);
+    registerIfVariable(triple.predicate_);
+    registerIfVariable(triple.object_);
+
+    return {varOrTerm(std::move(triple.subject_)),
+            varOrPath(std::move(triple.predicate_)),
+            varOrTerm(std::move(triple.object_))};
+  };
+
+  BasicGraphPattern triples = {ad_utility::transform(
+      visitTypesafe(ctx->triplesSameSubjectPath()), convertAndRegisterTriple)};
+  if (ctx->triplesBlock()) {
+    triples.appendTriples(visitTypesafe(ctx->triplesBlock()));
   }
   return triples;
+}
+
+// ____________________________________________________________________________________
+Visitor::OperationOrFilter Visitor::visitTypesafe(
+    Parser::GraphPatternNotTriplesContext* ctx) {
+  if (ctx->graphGraphPattern() || ctx->serviceGraphPattern()) {
+    reportError(ctx,
+                "GraphGraphPattern or ServiceGraphPattern are not supported.");
+  } else {
+    return visitAlternative<std::variant<GraphPatternOperation, SparqlFilter>>(
+        ctx->filterR(), ctx->optionalGraphPattern(), ctx->minusGraphPattern(),
+        ctx->bind(), ctx->inlineData(), ctx->groupOrUnionGraphPattern());
+  }
+}
+
+// ____________________________________________________________________________________
+GraphPatternOperation Visitor::visitTypesafe(
+    Parser::OptionalGraphPatternContext* ctx) {
+  auto pattern = visitTypesafe(ctx->groupGraphPattern());
+  return GraphPatternOperation{
+      GraphPatternOperation::Optional{std::move(pattern)}};
 }
 
 // ____________________________________________________________________________________
 sparqlExpression::SparqlExpression::Ptr Visitor::visitTypesafe(
     Parser::ExpressionContext* ctx) {
   return visitTypesafe(ctx->conditionalOrExpression());
+}
+
+// ____________________________________________________________________________________
+Visitor::PatternAndVisibleVariables Visitor::visitTypesafe(
+    Parser::WhereClauseContext* ctx) {
+  visibleVariables_.emplace_back();
+  auto pattern = visitTypesafe(ctx->groupGraphPattern());
+  auto visible = std::move(visibleVariables_.back());
+  visibleVariables_.pop_back();
+  return {std::move(pattern), std::move(visible)};
 }
 
 // ____________________________________________________________________________________
@@ -382,6 +556,28 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+Visitor::SubQueryAndMaybeValues Visitor::visitTypesafe(
+    Parser::SubSelectContext* ctx) {
+  ParsedQuery query;
+  query._clause = visitTypesafe(ctx->selectClause());
+  auto [pattern, visibleVariables] = visitTypesafe(ctx->whereClause());
+  query._rootGraphPattern = std::move(pattern);
+  query.setNumInternalVariables(numInternalVariables_);
+  query.addSolutionModifiers(visitTypesafe(ctx->solutionModifier()));
+  numInternalVariables_ = query.getNumInternalVariables();
+  auto values = visitTypesafe(ctx->valuesClause());
+  for (const auto& variable : visibleVariables) {
+    query.registerVariableVisibleInQueryBody(variable);
+  }
+  // Variables that are selected in this query are visible in the parent query.
+  for (const auto& variable : query.selectClause().getSelectedVariables()) {
+    addVisibleVariable(variable);
+  }
+  query._numGraphPatterns = numGraphPatterns_++;
+  return {{std::move(query)}, std::move(values)};
+}
+
+// ____________________________________________________________________________________
 GroupKey Visitor::visitTypesafe(Parser::GroupConditionContext* ctx) {
   // TODO<qup42> Deploy an abstraction `visitExpressionPimpl(someContext*)` that
   // performs exactly those two steps and is also used in all the other places
@@ -522,6 +718,44 @@ std::string Visitor::visitTypesafe(Parser::DataBlockValueContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+GraphPatternOperation Visitor::visitTypesafe(
+    Parser::MinusGraphPatternContext* ctx) {
+  return GraphPatternOperation{
+      GraphPatternOperation::Minus{visitTypesafe(ctx->groupGraphPattern())}};
+}
+
+// ____________________________________________________________________________________
+namespace {
+GraphPattern wrap(GraphPatternOperation op) {
+  auto pattern = GraphPattern();
+  pattern._graphPatterns.emplace_back(std::move(op));
+  return pattern;
+}
+}  // namespace
+
+// ____________________________________________________________________________________
+GraphPatternOperation Visitor::visitTypesafe(
+    Parser::GroupOrUnionGraphPatternContext* ctx) {
+  auto children = visitVector<GraphPattern>(ctx->groupGraphPattern());
+  if (children.size() > 1) {
+    // https://en.cppreference.com/w/cpp/algorithm/accumulate
+    // a similar thing is done in QueryPlaner::uniteGraphPatterns
+    auto foldOp = [](GraphPatternOperation op1, GraphPattern op2) {
+      return GraphPatternOperation{
+          GraphPatternOperation::Union{wrap(std::move(op1)), std::move(op2)}};
+    };
+    // TODO<joka921> QLever should support Nary UNIONs directly.
+    return std::accumulate(std::next(children.begin(), 2), children.end(),
+                           GraphPatternOperation{GraphPatternOperation::Union{
+                               std::move(children[0]), std::move(children[1])}},
+                           foldOp);
+  } else {
+    return GraphPatternOperation{
+        GraphPatternOperation::GroupGraphPattern{std::move(children[0])}};
+  }
+}
+
+// ____________________________________________________________________________________
 SparqlFilter Visitor::visitTypesafe(Parser::FilterRContext* ctx) {
   return parseFilter(ctx->constraint());
 }
@@ -561,7 +795,7 @@ Triples Visitor::visitTypesafe(Parser::ConstructTriplesContext* ctx) {
   auto result = visitTypesafe(ctx->triplesSameSubject());
   if (ctx->constructTriples()) {
     auto newTriples = visitTypesafe(ctx->constructTriples());
-    appendVector(result, std::move(newTriples));
+    ad_utility::appendVector(result, std::move(newTriples));
   }
   return result;
 }
@@ -576,17 +810,17 @@ Triples Visitor::visitTypesafe(Parser::TriplesSameSubjectContext* ctx) {
     for (auto& tuple : propertyList.first) {
       triples.push_back({subject, std::move(tuple[0]), std::move(tuple[1])});
     }
-    appendVector(triples, std::move(propertyList.second));
+    ad_utility::appendVector(triples, std::move(propertyList.second));
   } else if (ctx->triplesNode()) {
     auto tripleNodes = visitTriplesNode(ctx->triplesNode()).as<Node>();
-    appendVector(triples, std::move(tripleNodes.second));
+    ad_utility::appendVector(triples, std::move(tripleNodes.second));
     AD_CHECK(ctx->propertyList());
     auto propertyList = visitTypesafe(ctx->propertyList());
     for (auto& tuple : propertyList.first) {
       triples.push_back(
           {tripleNodes.first, std::move(tuple[0]), std::move(tuple[1])});
     }
-    appendVector(triples, std::move(propertyList.second));
+    ad_utility::appendVector(triples, std::move(propertyList.second));
   } else {
     // Invalid grammar
     AD_FAIL();
@@ -614,7 +848,7 @@ PropertyList Visitor::visitTypesafe(Parser::PropertyListNotEmptyContext* ctx) {
     for (auto& object : objectList.first) {
       triplesWithoutSubject.push_back({verb, std::move(object)});
     }
-    appendVector(additionalTriples, std::move(objectList.second));
+    ad_utility::appendVector(additionalTriples, std::move(objectList.second));
   }
   return {std::move(triplesWithoutSubject), std::move(additionalTriples)};
 }
@@ -640,7 +874,7 @@ ObjectList Visitor::visitTypesafe(Parser::ObjectListContext* ctx) {
   auto objectContexts = ctx->objectR();
   for (auto& objectContext : objectContexts) {
     auto graphNode = visitTypesafe(objectContext);
-    appendVector(additionalTriples, std::move(graphNode.second));
+    ad_utility::appendVector(additionalTriples, std::move(graphNode.second));
     objects.push_back(std::move(graphNode.first));
   }
   return {std::move(objects), std::move(additionalTriples)};
@@ -838,7 +1072,7 @@ Node Visitor::visitTypesafe(Parser::BlankNodePropertyListContext* ctx) {
   for (auto& tuple : propertyList.first) {
     triples.push_back({var, std::move(tuple[0]), std::move(tuple[1])});
   }
-  appendVector(triples, std::move(propertyList.second));
+  ad_utility::appendVector(triples, std::move(propertyList.second));
   return {std::move(var), std::move(triples)};
 }
 
@@ -864,7 +1098,7 @@ Node Visitor::visitTypesafe(Parser::CollectionContext* ctx) {
          std::move(nextElement)});
     nextElement = std::move(currentVar);
 
-    appendVector(triples, std::move(graphNode.second));
+    ad_utility::appendVector(triples, std::move(graphNode.second));
   }
   return {std::move(nextElement), std::move(triples)};
 }

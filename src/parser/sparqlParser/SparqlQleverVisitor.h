@@ -3,27 +3,27 @@
 
 #pragma once
 
-#include "../../engine/sparqlExpressions/AggregateExpression.h"
-#include "../../engine/sparqlExpressions/GroupConcatExpression.h"
-#include "../../engine/sparqlExpressions/LiteralExpression.h"
-#include "../../engine/sparqlExpressions/NaryExpression.h"
-#include "../../engine/sparqlExpressions/SparqlExpressionPimpl.h"
-// #include "../../engine/sparqlExpressions/RelationalExpression.h"
-#include "../../engine/sparqlExpressions/SampleExpression.h"
-#include "../../util/HashMap.h"
-#include "../../util/OverloadCallOperator.h"
-#include "../../util/StringUtils.h"
-#include "../../util/antlr/ANTLRErrorHandling.h"
-#include "../Alias.h"
-#include "../ParsedQuery.h"
-#include "../RdfEscaping.h"
-#include "../data/BlankNode.h"
-#include "../data/Iri.h"
-#include "../data/SolutionModifiers.h"
-#include "../data/Types.h"
-#include "../data/VarOrTerm.h"
-#include "antlr4-runtime.h"
-#include "generated/SparqlAutomaticVisitor.h"
+#include <antlr4-runtime.h>
+
+#include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/GroupConcatExpression.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "parser/Alias.h"
+#include "parser/ParsedQuery.h"
+#include "parser/RdfEscaping.h"
+#include "parser/data/BlankNode.h"
+#include "parser/data/Iri.h"
+#include "parser/data/SolutionModifiers.h"
+#include "parser/data/Types.h"
+#include "parser/data/VarOrTerm.h"
+#include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
+#include "util/HashMap.h"
+#include "util/OverloadCallOperator.h"
+#include "util/StringUtils.h"
+#include "util/antlr/ANTLRErrorHandling.h"
 
 template <typename T>
 class Reversed {
@@ -54,7 +54,24 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   using ObjectList = ad_utility::sparql_types::ObjectList;
   using PropertyList = ad_utility::sparql_types::PropertyList;
   using Any = antlrcpp::Any;
+  using OperationsAndFilters =
+      std::pair<vector<GraphPatternOperation>, vector<SparqlFilter>>;
+  using OperationOrFilterAndMaybeTriples =
+      std::pair<variant<GraphPatternOperation, SparqlFilter>,
+                std::optional<GraphPatternOperation::BasicGraphPattern>>;
+  using OperationOrFilter = std::variant<GraphPatternOperation, SparqlFilter>;
+  using SubQueryAndMaybeValues =
+      std::pair<GraphPatternOperation::Subquery,
+                std::optional<GraphPatternOperation::Values>>;
+  using PatternAndVisibleVariables =
+      std::pair<ParsedQuery::GraphPattern, vector<Variable>>;
   size_t _blankNodeCounter = 0;
+  int64_t numInternalVariables_ = 0;
+  int64_t numGraphPatterns_ = 0;
+  // A Stack of vector<Variable> that store the variables that are visible in a
+  // query body. Each element corresponds to nested Queries that the parse is
+  // currently parsing.
+  std::vector<std::vector<Variable>> visibleVariables_{{}};
 
  public:
   using PrefixMap = ad_utility::HashMap<string, string>;
@@ -83,13 +100,6 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
  private:
   PrefixMap _prefixMap{};
 
-  template <typename T>
-  void appendVector(std::vector<T>& destination, std::vector<T>&& source) {
-    destination.insert(destination.end(),
-                       std::make_move_iterator(source.begin()),
-                       std::make_move_iterator(source.end()));
-  }
-
   BlankNode newBlankNode() {
     std::string label = std::to_string(_blankNodeCounter);
     _blankNodeCounter++;
@@ -101,6 +111,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   // `visitIriOrFunction`.
   ExpressionPtr processIriFunctionCall(const std::string& iri,
                                        std::vector<ExpressionPtr> argList);
+
+  // TODO: Remove addVisibleVariable(const string&) when all Types use the
+  //  strong type `Variable`.
+  void addVisibleVariable(string var);
+  void addVisibleVariable(Variable var);
 
  public:
   // ___________________________________________________________________________
@@ -139,8 +154,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   [[noreturn]] ParsedQuery visitTypesafe(Parser::SelectQueryContext* ctx);
 
   Any visitSubSelect(Parser::SubSelectContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  SubQueryAndMaybeValues visitTypesafe(Parser::SubSelectContext* ctx);
 
   Any visitSelectClause(Parser::SelectClauseContext* ctx) override {
     return visitTypesafe(ctx);
@@ -201,8 +218,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   Any visitWhereClause(Parser::WhereClauseContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  PatternAndVisibleVariables visitTypesafe(Parser::WhereClauseContext* ctx);
 
   Any visitSolutionModifier(Parser::SolutionModifierContext* ctx) override {
     return visitTypesafe(ctx);
@@ -282,30 +301,49 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   Any visitGroupGraphPattern(Parser::GroupGraphPatternContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  ParsedQuery::GraphPattern visitTypesafe(
+      Parser::GroupGraphPatternContext* ctx);
 
   Any visitGroupGraphPatternSub(
       Parser::GroupGraphPatternSubContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  OperationsAndFilters visitTypesafe(Parser::GroupGraphPatternSubContext* ctx);
+
+  Any visitGraphPatternNotTriplesAndMaybeTriples(
+      Parser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx) override {
+    return visitTypesafe(ctx);
+  }
+
+  OperationOrFilterAndMaybeTriples visitTypesafe(
+      Parser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx);
 
   Any visitTriplesBlock(Parser::TriplesBlockContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  vector<TripleWithPropertyPath> visitTypesafe(
+  GraphPatternOperation::BasicGraphPattern visitTypesafe(
       Parser::TriplesBlockContext* ctx);
 
   Any visitGraphPatternNotTriples(
       Parser::GraphPatternNotTriplesContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  // Filter clauses are no independent graph patterns themselves, but their
+  // scope is always the complete graph pattern enclosing them.
+  OperationOrFilter visitTypesafe(Parser::GraphPatternNotTriplesContext* ctx);
 
   Any visitOptionalGraphPattern(
       Parser::OptionalGraphPatternContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  GraphPatternOperation visitTypesafe(Parser::OptionalGraphPatternContext* ctx);
 
   Any visitGraphGraphPattern(Parser::GraphGraphPatternContext* ctx) override {
     return visitChildren(ctx);
@@ -320,13 +358,13 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  GraphPatternOperation::Bind visitTypesafe(Parser::BindContext* ctx);
+  GraphPatternOperation visitTypesafe(Parser::BindContext* ctx);
 
   Any visitInlineData(Parser::InlineDataContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  GraphPatternOperation::Values visitTypesafe(Parser::InlineDataContext* ctx);
+  GraphPatternOperation visitTypesafe(Parser::InlineDataContext* ctx);
 
   Any visitDataBlock(Parser::DataBlockContext* ctx) override {
     return visitTypesafe(ctx);
@@ -362,10 +400,15 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
+  GraphPatternOperation visitTypesafe(Parser::MinusGraphPatternContext* ctx);
+
   Any visitGroupOrUnionGraphPattern(
       Parser::GroupOrUnionGraphPatternContext* ctx) override {
     return visitChildren(ctx);
   }
+
+  GraphPatternOperation visitTypesafe(
+      Parser::GroupOrUnionGraphPatternContext* ctx);
 
   Any visitFilterR(Parser::FilterRContext* ctx) override {
     return visitTypesafe(ctx);

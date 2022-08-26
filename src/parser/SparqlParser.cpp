@@ -60,7 +60,6 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
   if (queryType == CONSTRUCT_QUERY) {
     query->_clause = parseWithAntlr(&AntlrParser::constructTemplate, *query)
                          .value_or(ad_utility::sparql_types::Triples{});
-    lexer_.expect("where");
   } else if (queryType == SELECT_QUERY) {
     parseSelect(query);
   } else {
@@ -68,7 +67,6 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
     AD_FAIL();
   }
 
-  lexer_.expect("{");
   parseWhere(query);
 
   parseSolutionModifiers(query);
@@ -156,8 +154,6 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
 // _____________________________________________________________________________
 void SparqlParser::parseSelect(ParsedQuery* query) {
   query->_clause = parseWithAntlr(&AntlrParser::selectClause, *query);
-  lexer_.expect("where");  // Still parsed with old parser. Expects WHERE
-                           // keyword to be consumed.
 }
 
 // _____________________________________________________________________________
@@ -171,192 +167,12 @@ SparqlQleverVisitor::PrefixMap SparqlParser::getPrefixMap(
 }
 
 // _____________________________________________________________________________
-void SparqlParser::parseWhere(ParsedQuery* query,
-                              ParsedQuery::GraphPattern* currentPattern) {
-  if (currentPattern == nullptr) {
-    // Make the shared pointer point to the root graphpattern without deleting
-    // it.
-    currentPattern = &query->_rootGraphPattern;
-    query->_rootGraphPattern._id = 0;
-  }
-
-  // If these are not empty the last subject and / or predicate is reused
-  std::string lastSubject;
-  std::string lastPredicate;
-  while (!lexer_.accept("}")) {
-    if (lexer_.empty()) {
-      throw ParseException(
-          "Expected a closing bracket for WHERE but reached "
-          "the end of the input.");
-    }
-    if (lexer_.accept("optional")) {
-      currentPattern->_graphPatterns.emplace_back(
-          GraphPatternOperation::Optional{ParsedQuery::GraphPattern()});
-      auto& opt = currentPattern->_graphPatterns.back()
-                      .get<GraphPatternOperation::Optional>();
-      auto& child = opt._child;
-      child._optional = true;
-      child._id = query->_numGraphPatterns;
-      query->_numGraphPatterns++;
-      lexer_.expect("{");
-      // Recursively call parseWhere to parse the optional part.
-      parseWhere(query, &child);
-      lexer_.accept(".");
-    } else if (lexer_.peek("bind")) {
-      GraphPatternOperation::Bind bind =
-          parseWithAntlr(&AntlrParser::bind, *query);
-      query->registerVariableVisibleInQueryBody(Variable{bind._target});
-      currentPattern->_graphPatterns.emplace_back(std::move(bind));
-      // The dot after a BIND is optional.
-      lexer_.accept(".");
-    } else if (lexer_.accept("minus")) {
-      currentPattern->_graphPatterns.emplace_back(
-          GraphPatternOperation::Minus{ParsedQuery::GraphPattern()});
-      auto& opt = currentPattern->_graphPatterns.back()
-                      .get<GraphPatternOperation::Minus>();
-      auto& child = opt._child;
-      child._optional = false;
-      child._id = query->_numGraphPatterns;
-      query->_numGraphPatterns++;
-      lexer_.expect("{");
-      // Recursively call parseWhere to parse the subtrahend.
-      parseWhere(query, &child);
-      lexer_.accept(".");
-    } else if (lexer_.accept("{")) {
-      // Subquery or union
-      if (lexer_.peek("select")) {
-        // subquery
-        // create the subquery operation
-        GraphPatternOperation::Subquery subq;
-        subq._subquery._prefixes = query->_prefixes;
-        subq._subquery.setNumInternalVariables(
-            query->getNumInternalVariables());
-        parseQuery(&subq._subquery, SELECT_QUERY);
-        query->setNumInternalVariables(
-            subq._subquery.getNumInternalVariables());
-
-        // Add the variables from the subquery that are visible to the outside
-        // (because they were selected, or because of a SELECT *) to the outer
-        // query.
-        const auto& selectedVariablesFromSubquery =
-            subq._subquery.selectClause().getSelectedVariables();
-        for (const auto& variable : selectedVariablesFromSubquery) {
-          query->registerVariableVisibleInQueryBody(variable);
-        }
-
-        currentPattern->_graphPatterns.emplace_back(std::move(subq));
-        // The closing bracket } is consumed by the subquery
-        lexer_.accept(".");
-      } else {
-        // union
-        // create the union operation
-        auto un = GraphPatternOperation::Union{ParsedQuery::GraphPattern{},
-                                               ParsedQuery::GraphPattern{}};
-        un._child1._optional = false;
-        un._child2._optional = false;
-        un._child1._id = query->_numGraphPatterns;
-        un._child2._id = query->_numGraphPatterns + 1;
-        query->_numGraphPatterns += 2;
-
-        // parse the left and right bracket
-        parseWhere(query, &un._child1);
-        lexer_.expect("union");
-        lexer_.expect("{");
-        parseWhere(query, &un._child2);
-        lexer_.accept(".");
-        currentPattern->_graphPatterns.emplace_back(std::move(un));
-      }
-    } else if (lexer_.peek("filter")) {
-      // append to the global filters of the pattern.
-      SparqlFilter filter = parseWithAntlr(&AntlrParser::filterR, *query);
-      if (filter._type == SparqlFilter::LANG_MATCHES) {
-        currentPattern->addLanguageFilter(filter._lhs, filter._rhs);
-      } else {
-        currentPattern->_filters.push_back(std::move(filter));
-      }
-      // A filter may have an optional dot after it
-      lexer_.accept(".");
-    } else if (lexer_.peek("values")) {
-      auto values = parseWithAntlr(&AntlrParser::inlineData, *query);
-      for (const auto& variable : values._inlineValues._variables) {
-        query->registerVariableVisibleInQueryBody(Variable{variable});
-      }
-      currentPattern->_graphPatterns.emplace_back(std::move(values));
-      lexer_.accept(".");
-    } else {
-      // TODO: Make TripleComponent constructible from these types.
-      auto iri = [](const Iri& iri) { return TripleComponent{iri.toSparql()}; };
-      auto blankNode = [](const BlankNode& blankNode) -> TripleComponent {
-        return blankNode.toSparql();
-      };
-      auto literal = [](const Literal& literal) {
-        // Problem: ql:contains-word causes the " to be stripped.
-        // TODO: Move stripAndLowercaseKeywordLiteral out to this point or
-        //  rewrite the Turtle Parser s.t. this code can be integrated into the
-        //  visitor. In this case the turtle parser should output the
-        //  corresponding modell class.
-        try {
-          return TurtleStringParser<TokenizerCtre>::parseTripleObject(
-              literal.toSparql());
-        } catch (const TurtleStringParser<TokenizerCtre>::ParseException&) {
-          return TripleComponent{literal.toSparql()};
-        }
-      };
-      auto graphTerm = [&iri, &blankNode, &literal](const GraphTerm& term) {
-        return term.visit(
-            ad_utility::OverloadCallOperator{iri, blankNode, literal});
-      };
-      auto varTriple = [](const Variable& var) {
-        return TripleComponent{var.name()};
-      };
-      auto varOrTerm = [&varTriple, &graphTerm](VarOrTerm varOrTerm) {
-        return varOrTerm.visit(
-            ad_utility::OverloadCallOperator{varTriple, graphTerm});
-      };
-
-      auto varPath = [](const Variable& var) {
-        return PropertyPath::fromVariable(var);
-      };
-      auto path = [](const PropertyPath& path) { return path; };
-      auto varOrPath =
-          [&varPath,
-           &path](const ad_utility::sparql_types::VarOrPath& varOrPath) {
-            return std::visit(ad_utility::OverloadCallOperator{varPath, path},
-                              varOrPath);
-          };
-
-      auto registerIfVariable = [&query](auto* variant) {
-        if (Variable* variable = std::get_if<Variable>(variant)) {
-          query->registerVariableVisibleInQueryBody(*variable);
-        }
-      };
-
-      vector<ad_utility::sparql_types::TripleWithPropertyPath> triples =
-          parseWithAntlr(&AntlrParser::triplesSameSubjectPath, *query);
-      auto& v = lastBasicPattern(currentPattern)._triples;
-      for (auto& triple : triples) {
-        registerIfVariable(&triple.subject_);
-        registerIfVariable(&triple.predicate_);
-        registerIfVariable(&triple.object_);
-        // TODO SparqlTriple and TripleWithPropertyPath should be merged into
-        //  one type.
-        SparqlTriple sparqlTriple = {varOrTerm(triple.subject_),
-                                     varOrPath(triple.predicate_),
-                                     varOrTerm(triple.object_)};
-        if (std::find(v.begin(), v.end(), sparqlTriple) != v.end()) {
-          LOG(INFO) << "Ignoring duplicate triple: " << sparqlTriple._s << ' '
-                    << sparqlTriple._p << ' ' << sparqlTriple._o << std::endl;
-        } else {
-          v.emplace_back(std::move(sparqlTriple));
-        }
-      }
-
-      if (lexer_.accept("}")) {
-        break;
-      } else {
-        lexer_.expect(".");
-      }
-    }
+void SparqlParser::parseWhere(ParsedQuery* query) {
+  auto [pattern, visibleVariables] =
+      parseWithAntlr(&AntlrParser::whereClause, *query);
+  query->_rootGraphPattern = std::move(pattern);
+  for (const auto& var : visibleVariables) {
+    query->registerVariableVisibleInQueryBody(var);
   }
 }
 

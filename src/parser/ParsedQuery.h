@@ -358,6 +358,10 @@ class ParsedQuery {
 struct GraphPatternOperation {
   struct BasicGraphPattern {
     vector<SparqlTriple> _triples;
+
+    void appendTriples(BasicGraphPattern pattern) {
+      ad_utility::appendVector(_triples, std::move(pattern._triples));
+    }
   };
   struct Values {
     SparqlValues _inlineValues;
@@ -368,6 +372,9 @@ struct GraphPatternOperation {
     ParsedQuery::GraphPattern _child;
   };
   struct Optional {
+    Optional(ParsedQuery::GraphPattern child) : _child{std::move(child)} {
+      _child._optional = true;
+    };
     ParsedQuery::GraphPattern _child;
   };
   struct Minus {
@@ -420,7 +427,7 @@ struct GraphPatternOperation {
   };
 
   std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-               Values, Minus>
+               Values, Minus, GroupGraphPattern>
       variant_;
   // Construct from one of the variant types (or anything that is convertible to
   // them.
