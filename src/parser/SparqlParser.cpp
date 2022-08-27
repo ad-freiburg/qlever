@@ -176,55 +176,6 @@ void SparqlParser::parseWhere(ParsedQuery* query) {
   }
 }
 
-std::string_view SparqlParser::readTriplePart(const std::string& s,
-                                              size_t* pos) {
-  size_t start = *pos;
-  bool insideUri = false;
-  bool insidePrefixed = false;
-  bool insideLiteral = false;
-  while (*pos < s.size()) {
-    if (!insideUri && !insideLiteral && !insidePrefixed) {
-      if (s[*pos] == '.' || std::isspace(static_cast<unsigned char>(s[*pos])) ||
-          s[*pos] == ';' || s[*pos] == ',' || s[*pos] == '}' ||
-          s[*pos] == ')') {
-        return std::string_view(s.data() + start, (*pos) - start);
-      }
-      if (s[*pos] == '<') {
-        insideUri = true;
-      }
-      if (s[*pos] == '\"') {
-        insideLiteral = true;
-      }
-      if (s[*pos] == ':') {
-        insidePrefixed = true;
-      }
-    } else if (insidePrefixed) {
-      if (std::isspace(static_cast<unsigned char>(s[*pos])) || s[*pos] == '}') {
-        return std::string_view(s.data() + start, (*pos) - start);
-      } else if (s[*pos] == '.' || s[*pos] == ';' || s[*pos] == ',') {
-        if ((*pos) + 1 >= s.size() ||
-            (s[(*pos) + 1] == '?' || s[(*pos) + 1] == '<' ||
-             s[(*pos) + 1] == '\"' ||
-             std::isspace(static_cast<unsigned char>(s[(*pos) + 1])))) {
-          insidePrefixed = false;
-          // Need to reevaluate the dot as a separator
-          (*pos)--;
-        }
-      }
-    } else {
-      if (insideUri && s[*pos] == '>') {
-        insideUri = false;
-      }
-      if (insideLiteral && s[*pos] == '\"') {
-        insideLiteral = false;
-      }
-    }
-    (*pos)++;
-  }
-
-  return std::string_view(s.data() + start, (*pos) - start);
-}
-
 // _____________________________________________________________________________
 void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
   query->addSolutionModifiers(
@@ -363,15 +314,6 @@ std::optional<SparqlFilter> SparqlParser::parseFilter(bool failOnNoFilter) {
   }
   expectClose();
   return std::nullopt;
-}
-
-// _____________________________________________________________________________
-string SparqlParser::stripAndLowercaseKeywordLiteral(std::string_view lit) {
-  if (lit.size() > 2 && lit[0] == '"' && lit.back() == '"') {
-    auto stripped = lit.substr(1, lit.size() - 2);
-    return ad_utility::getLowercaseUtf8(stripped);
-  }
-  return std::string{lit};
 }
 
 // _____________________________________________________________________________
@@ -537,15 +479,6 @@ SparqlFilter SparqlParser::parseRegexFilter(bool expectKeyword) {
     }
   }
   return f;
-}
-
-GraphPatternOperation::BasicGraphPattern& SparqlParser::lastBasicPattern(
-    ParsedQuery::GraphPattern* ptr) const {
-  auto& c = ptr->_graphPatterns;
-  if (c.empty() || !c.back().is<GraphPatternOperation::BasicGraphPattern>()) {
-    c.emplace_back(GraphPatternOperation::BasicGraphPattern{});
-  }
-  return c.back().get<GraphPatternOperation::BasicGraphPattern>();
 }
 
 // ________________________________________________________________________

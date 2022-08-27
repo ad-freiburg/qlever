@@ -47,22 +47,6 @@ class SparqlParser {
   // Returns true if it found a filter
   std::optional<SparqlFilter> parseFilter(bool failOnNoFilter = true);
 
-  // Reads the next element of a triple (an iri, a variable, a property path,
-  // etc.) out of s beginning at the current value of pos. Sets pos to the
-  // position after the read value, and returns a string view of the triple part
-  // in s.
-  std::string_view readTriplePart(const std::string& s, size_t* pos);
-
-  static string stripAndLowercaseKeywordLiteral(std::string_view lit);
-
-  /**
-   * If *ptr 's last child is a BasicGraphPattern, return a reference to it.
-   * If not, first append a BasicGraphPattern and then return a reference
-   * to the added child
-   */
-  GraphPatternOperation::BasicGraphPattern& lastBasicPattern(
-      ParsedQuery::GraphPattern* ptr) const;
-
   SparqlLexer lexer_;
   string query_;
   SparqlFilter parseRegexFilter(bool expectKeyword);
