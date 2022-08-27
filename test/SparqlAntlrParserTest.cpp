@@ -44,6 +44,7 @@ auto parsePnameNs = parse<&Parser::pnameNs>;
 auto parsePrefixDecl = parse<&Parser::prefixDecl>;
 auto parsePrefixedName = parse<&Parser::prefixedName>;
 auto parsePropertyListPathNotEmpty = parse<&Parser::propertyListPathNotEmpty>;
+auto parseRdfLiteral = parse<&Parser::rdfLiteral>;
 auto parseSelectClause = parse<&Parser::selectClause>;
 auto parseSolutionModifier = parse<&Parser::solutionModifier>;
 auto parseTriplesSameSubjectPath = parse<&Parser::triplesSameSubjectPath>;
@@ -1278,4 +1279,33 @@ TEST(SparqlParser, GroupGraphPattern) {
   expectGroupGraphPatternFails("{ GRAPH <foo> { } }");
   expectGroupGraphPatternFails("{ SERVICE <foo> { } }");
   expectGroupGraphPatternFails("{ SERVICE SILENT ?bar { } }");
+}
+
+namespace {
+template <typename Exception = ParseException>
+void expectRDFLiteralFails(const string& input) {
+  EXPECT_THROW(parseRdfLiteral(input), Exception) << input;
+}
+}  // namespace
+
+TEST(SparqlParser, RDFLiteral) {
+  auto expectRDFLiteral = [](const string&& input, const auto& matcher) {
+    expectCompleteParse(
+        parseRdfLiteral(input,
+                        SparqlQleverVisitor::PrefixMap{
+                            {"xsd", "<http://www.w3.org/2001/XMLSchema#>"}}),
+        matcher);
+  };
+
+  expectRDFLiteral(
+      "   \"Astronaut\"^^xsd:string  \t",
+      testing::Eq("\"Astronaut\"^^<http://www.w3.org/2001/XMLSchema#string>"));
+  // The conversion to the internal date format
+  // (":v:date:0000000000000001950-01-01T00:00:00") is done by
+  // TurtleStringParser<TokenizerCtre>::parseTripleObject(resultAsString) which
+  // is only called at triplesBlock.
+  expectRDFLiteral("\"1950-01-01T00:00:00\"^^xsd:dateTime",
+                   testing::Eq("\"1950-01-01T00:00:00\"^^<http://www.w3.org/"
+                               "2001/XMLSchema#dateTime>"));
+  expectRDFLiteralFails(R"(?a ?b "The \"Moon\""@en .)");
 }
