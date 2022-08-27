@@ -7,9 +7,6 @@
 #include <unordered_set>
 #include <variant>
 
-#include "../util/Algorithm.h"
-#include "../util/OverloadCallOperator.h"
-#include "./SparqlParserHelpers.h"
 #include "Alias.h"
 #include "data/Types.h"
 #include "sparqlParser/SparqlQleverVisitor.h"
