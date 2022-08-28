@@ -6,8 +6,11 @@
 
 #include <gmock/gmock.h>
 
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/Alias.h"
 #include "parser/ParsedQuery.h"
+#include "parser/SparqlParserHelpers.h"
+#include "parser/data/OrderKey.h"
 #include "parser/data/VarOrTerm.h"
 #include "util/TypeTraits.h"
 
@@ -181,10 +184,14 @@ MATCHER_P2(IsBlankNode, generated, label, "") {
 // _____________________________________________________________________________
 
 MATCHER_P(IsVariable, value, "") {
-  if (const auto variable = unwrapVariant<VarOrTerm, Variable>(arg)) {
-    return variable->name() == value;
-  }
-  return false;
+  return testing::ExplainMatchResult(
+      testing::Property("name()", &Variable::name, testing::StrEq(value)), arg,
+      result_listener);
+}
+
+MATCHER_P(IsVariableVariant, value, "") {
+  return testing::ExplainMatchResult(
+      testing::VariantWith<Variable>(IsVariable(value)), arg, result_listener);
 }
 
 // _____________________________________________________________________________
@@ -198,61 +205,91 @@ MATCHER_P(IsLiteral, value, "") {
 
 // _____________________________________________________________________________
 
+auto IsExpression = [](const std::string& descriptor) {
+  return testing::Property(
+      "getDescriptor()",
+      &sparqlExpression::SparqlExpressionPimpl::getDescriptor,
+      testing::StrEq(descriptor));
+};
+
 MATCHER_P2(IsBind, variable, expression, "") {
-  auto bind = std::get_if<GraphPatternOperation::Bind>(&arg.variant_);
-  return bind && (bind->_target == variable) &&
-         (bind->_expression.getDescriptor() == expression);
+  return testing::ExplainMatchResult(
+      testing::VariantWith<GraphPatternOperation::Bind>(testing::AllOf(
+          testing::Field("_expression",
+                         &GraphPatternOperation::Bind::_expression,
+                         IsExpression(expression)),
+          testing::Field("_target", &GraphPatternOperation::Bind::_target,
+                         testing::StrEq(variable)))),
+      arg.variant_, result_listener);
 }
 
 MATCHER_P(IsBindExpression, expression, "") {
-  return (arg._expression.getDescriptor() == expression);
+  return testing::ExplainMatchResult(
+      testing::Field("_expression", &GraphPatternOperation::Bind::_expression,
+                     IsExpression(expression)),
+      arg, result_listener);
 }
 
 MATCHER_P3(IsLimitOffset, limit, textLimit, offset, "") {
-  return (arg._limit == limit) && (arg._textLimit == textLimit) &&
-         (arg._offset == offset);
+  return testing::ExplainMatchResult(
+      testing::AllOf(
+          testing::Field("_limit", &LimitOffsetClause::_limit,
+                         testing::Eq(limit)),
+          testing::Field("_textLimit", &LimitOffsetClause::_textLimit,
+                         testing::Eq(textLimit)),
+          testing::Field("_offset", &LimitOffsetClause::_offset,
+                         testing::Eq(offset))),
+      arg, result_listener);
 }
 
 MATCHER_P2(IsVariableOrderKey, key, desc, "") {
-  if (const auto variableOrderKey =
-          unwrapVariant<OrderKey, VariableOrderKey>(arg)) {
-    return (variableOrderKey->variable_ == key) &&
-           (variableOrderKey->isDescending_ == desc);
-  }
-  return false;
+  return testing::ExplainMatchResult(
+      testing::AllOf(
+          testing::Field("variable_", &VariableOrderKey::variable_,
+                         testing::Eq(key)),
+          testing::Field("isDescending_", &VariableOrderKey::isDescending_,
+                         testing::Eq(desc))),
+      arg, result_listener);
+}
+
+MATCHER_P2(IsVariableOrderKeyVariant, key, desc, "") {
+  return testing::ExplainMatchResult(
+      testing::VariantWith<VariableOrderKey>(IsVariableOrderKey(key, desc)),
+      arg, result_listener);
 }
 
 MATCHER_P2(IsExpressionOrderKey, expr, desc, "") {
-  if (const auto bindOrderKey =
-          unwrapVariant<OrderKey, ExpressionOrderKey>(arg)) {
-    return (bindOrderKey->expression_.getDescriptor() == expr) &&
-           (bindOrderKey->isDescending_ == desc);
-  }
-  return false;
+  return testing::ExplainMatchResult(
+      testing::VariantWith<ExpressionOrderKey>(testing::AllOf(
+          testing::Field("expression_", &ExpressionOrderKey::expression_,
+                         IsExpression(expr)),
+          testing::Field("isDescending_", &ExpressionOrderKey::isDescending_,
+                         testing::Eq(desc)))),
+      arg, result_listener);
 }
 
 MATCHER_P(IsVariableGroupKey, key, "") {
-  if (const auto variable = unwrapVariant<GroupKey, Variable>(arg)) {
-    return (variable->name() == key);
-  }
-  return false;
+  return testing::ExplainMatchResult(
+      testing::VariantWith<Variable>(
+          testing::Property("name()", &Variable::name, testing::StrEq(key))),
+      arg, result_listener);
 }
 
 MATCHER_P(IsExpressionGroupKey, expr, "") {
-  if (const auto expression =
-          unwrapVariant<GroupKey, sparqlExpression::SparqlExpressionPimpl>(
-              arg)) {
-    return (expression->getDescriptor() == expr);
-  }
-  return false;
+  return testing::ExplainMatchResult(
+      testing::VariantWith<sparqlExpression::SparqlExpressionPimpl>(
+          IsExpression(expr)),
+      arg, result_listener);
 }
 
 MATCHER_P2(IsAliasGroupKey, expr, variable, "") {
-  if (const auto alias = unwrapVariant<GroupKey, Alias>(arg)) {
-    return (alias->_expression.getDescriptor() == expr) &&
-           (alias->_outVarName == variable);
-  }
-  return false;
+  return testing::ExplainMatchResult(
+      testing::VariantWith<Alias>(
+          testing::AllOf(testing::Field("_outVarName", &Alias::_outVarName,
+                                        testing::StrEq(variable)),
+                         testing::Field("_expression", &Alias::_expression,
+                                        IsExpression(expr)))),
+      arg, result_listener);
 }
 
 MATCHER_P(GroupByVariablesMatch, vars, "") {
@@ -265,16 +302,23 @@ MATCHER_P(GroupByVariablesMatch, vars, "") {
 MATCHER_P2(IsValues, vars, values, "") {
   // TODO Refactor GraphPatternOperation::Values / SparqlValues s.t. this
   //  becomes a trivial Eq matcher.
-  return (arg._inlineValues._variables == vars) &&
-         (arg._inlineValues._values == values);
+  return testing::ExplainMatchResult(
+      testing::AllOf(testing::Field(
+          "_inlineValues", &GraphPatternOperation::Values::_inlineValues,
+          testing::AllOf(testing::Field("_variables", &SparqlValues::_variables,
+                                        testing::Eq(vars)),
+                         testing::Field("_values", &SparqlValues::_values,
+                                        testing::Eq(values))))),
+      arg, result_listener);
 }
 
 MATCHER_P2(IsInlineData, vars, values, "") {
   // TODO Refactor GraphPatternOperation::Values / SparqlValues s.t. this
   //  becomes a trivial Eq matcher.
-  auto valuesBlock = std::get_if<GraphPatternOperation::Values>(&arg.variant_);
-  return valuesBlock && (valuesBlock->_inlineValues._variables == vars) &&
-         (valuesBlock->_inlineValues._values == values);
+  return testing::ExplainMatchResult(
+      testing::VariantWith<GraphPatternOperation::Values>(
+          IsValues(vars, values)),
+      arg.variant_, result_listener);
 }
 
 MATCHER_P2(IsAsteriskSelect, distinct, reduced, "") {
@@ -283,9 +327,20 @@ MATCHER_P2(IsAsteriskSelect, distinct, reduced, "") {
 }
 
 MATCHER_P3(IsVariablesSelect, distinct, reduced, variables, "") {
-  return arg._distinct == distinct && arg._reduced == reduced &&
-         arg.getSelectedVariablesAsStrings() == variables &&
-         arg.getAliases().empty();
+  return testing::ExplainMatchResult(
+      testing::AllOf(
+          testing::Field("_distinct", &ParsedQuery::SelectClause::_distinct,
+                         testing::Eq(distinct)),
+          testing::Field("_reduced", &ParsedQuery::SelectClause::_reduced,
+                         testing::Eq(reduced)),
+          testing::Property(
+              "getSelectedVariablesAsStrings()",
+              &ParsedQuery::SelectClause::getSelectedVariablesAsStrings,
+              testing::Eq(variables)),
+          testing::Property("getAliases()",
+                            &ParsedQuery::SelectClause::getAliases,
+                            testing::IsEmpty())),
+      arg, result_listener);
 }
 
 MATCHER_P3(IsSelect, distinct, reduced, selection, "") {
@@ -294,18 +349,40 @@ MATCHER_P3(IsSelect, distinct, reduced, selection, "") {
   size_t alias_counter = 0;
   for (size_t i = 0; i < selection.size(); i++) {
     if (holds_alternative<Variable>(selection[i])) {
-      if (get<Variable>(selection[i]) != selectedVariables[i]) return false;
+      if (get<Variable>(selection[i]) != selectedVariables[i]) {
+        *result_listener << "where Variable#" << i << " = "
+                         << testing::PrintToString(selectedVariables[i]);
+        return false;
+      }
     } else {
       auto pair = get<std::pair<string, string>>(selection[i]);
+      if (alias_counter >= arg.getAliases().size()) {
+        *result_listener << "where selected Variables contain less Aliases ("
+                         << testing::PrintToString(alias_counter)
+                         << ") than provided to matcher";
+        return false;
+      }
       if (pair.first !=
               arg.getAliases()[alias_counter]._expression.getDescriptor() ||
           pair.second != arg.getAliases()[alias_counter++]._outVarName ||
-          pair.second != selectedVariables[i].name())
+          pair.second != selectedVariables[i].name()) {
+        *result_listener << "where Alias#" << i << " = "
+                         << testing::PrintToString(
+                                arg.getAliases()[alias_counter - 1]);
         return false;
+      }
     }
   }
-  return arg._distinct == distinct && arg._reduced == reduced &&
-         arg.getAliases().size() == alias_counter;
+  return testing::ExplainMatchResult(
+      testing::AllOf(
+          testing::Field("_distinct", &ParsedQuery::SelectClause::_distinct,
+                         testing::Eq(distinct)),
+          testing::Property("getAliases()",
+                            &ParsedQuery::SelectClause::getAliases,
+                            testing::SizeIs(testing::Eq(alias_counter))),
+          testing::Field("_distinct", &ParsedQuery::SelectClause::_distinct,
+                         testing::Eq(distinct))),
+      arg, result_listener);
 }
 
 MATCHER_P4(IsSolutionModifier, groupByVariables, havingClauses, orderBy,
@@ -319,18 +396,17 @@ MATCHER_P4(IsSolutionModifier, groupByVariables, havingClauses, orderBy,
   };
   auto pimplComp = [](const sparqlExpression::SparqlExpressionPimpl& a,
                       const std::string& b) { return a.getDescriptor() == b; };
-  auto orderKeyComp =
-      [&exprOrderKeyComp, &equalComp, &falseComp](
-          const OrderKey& a,
-          const variant<std::pair<std::string, bool>, VariableOrderKey>& b) {
-        return std::visit(
-            ad_utility::OverloadCallOperator{exprOrderKeyComp, equalComp,
-                                             falseComp},
-            a, b);
-      };
+  auto orderKeyComp = [&exprOrderKeyComp, &equalComp, &falseComp](
+                          const OrderKey& a,
+                          const std::variant<std::pair<std::string, bool>,
+                                             VariableOrderKey>& b) {
+    return std::visit(ad_utility::OverloadCallOperator{exprOrderKeyComp,
+                                                       equalComp, falseComp},
+                      a, b);
+  };
   auto groupKeyComp = [&pimplComp, &equalComp, &falseComp](
                           const GroupKey& a,
-                          const variant<std::string, Alias, Variable>& b) {
+                          const std::variant<std::string, Alias, Variable>& b) {
     return std::visit(
         ad_utility::OverloadCallOperator{pimplComp, equalComp, falseComp}, a,
         b);
@@ -344,32 +420,45 @@ MATCHER_P4(IsSolutionModifier, groupByVariables, havingClauses, orderBy,
 }
 
 MATCHER_P(IsTriples, triples, "") {
-  auto triplesValue =
-      std::get_if<GraphPatternOperation::BasicGraphPattern>(&arg.variant_);
-  return triplesValue && testing::Matches(testing::UnorderedElementsAreArray(
-                             triples))(triplesValue->_triples);
+  return testing::ExplainMatchResult(
+      testing::VariantWith<GraphPatternOperation::BasicGraphPattern>(
+          testing::Field("_triples",
+                         &GraphPatternOperation::BasicGraphPattern::_triples,
+                         testing::UnorderedElementsAreArray(triples))),
+      arg.variant_, result_listener);
 }
 
 MATCHER_P(IsOptional, subMatcher, "") {
-  auto optional = std::get_if<GraphPatternOperation::Optional>(&arg.variant_);
-  return optional && testing::Value(optional->_child, subMatcher);
+  return testing::ExplainMatchResult(
+      testing::VariantWith<GraphPatternOperation::Optional>(testing::Field(
+          "_child", &GraphPatternOperation::Optional::_child, subMatcher)),
+      arg.variant_, result_listener);
 }
 
 MATCHER_P(IsGroup, subMatcher, "") {
-  auto group =
-      std::get_if<GraphPatternOperation::GroupGraphPattern>(&arg.variant_);
-  return group && testing::Value(group->_child, subMatcher);
+  return testing::ExplainMatchResult(
+      testing::VariantWith<GraphPatternOperation::GroupGraphPattern>(
+          testing::Field("_child",
+                         &GraphPatternOperation::GroupGraphPattern::_child,
+                         subMatcher)),
+      arg.variant_, result_listener);
 }
 
 MATCHER_P2(IsUnion, subMatcher1, subMatcher2, "") {
-  auto unio = std::get_if<GraphPatternOperation::Union>(&arg.variant_);
-  return unio && testing::Value(unio->_child1, subMatcher1) &&
-         testing::Value(unio->_child2, subMatcher2);
+  return testing::ExplainMatchResult(
+      testing::VariantWith<GraphPatternOperation::Union>(testing::AllOf(
+          testing::Field("_child1", &GraphPatternOperation::Union::_child1,
+                         subMatcher1),
+          testing::Field("_child2", &GraphPatternOperation::Union::_child2,
+                         subMatcher2))),
+      arg.variant_, result_listener);
 }
 
 MATCHER_P(IsMinus, subMatcher, "") {
-  auto minus = std::get_if<GraphPatternOperation::Minus>(&arg.variant_);
-  return minus && testing::Value(minus->_child, subMatcher);
+  return testing::ExplainMatchResult(
+      testing::VariantWith<GraphPatternOperation::Minus>(testing::Field(
+          "_child", &GraphPatternOperation::Minus::_child, subMatcher)),
+      arg.variant_, result_listener);
 }
 
 MATCHER_P3(IsGraphPattern, optional, filters, childMatchers, "") {
@@ -392,8 +481,16 @@ MATCHER_P3(IsGraphPattern, optional, filters, childMatchers, "") {
 }
 
 MATCHER_P2(IsSubSelect, selectMatcher, whereMatcher, "") {
-  auto query = std::get_if<GraphPatternOperation::Subquery>(&arg.variant_);
-  return query && query->_subquery.hasSelectClause() &&
-         testing::Value(query->_subquery.selectClause(), selectMatcher) &&
-         testing::Value(query->_subquery._rootGraphPattern, whereMatcher);
+  return testing::ExplainMatchResult(
+      testing::VariantWith<GraphPatternOperation::Subquery>(testing::Field(
+          "_subquery", &GraphPatternOperation::Subquery::_subquery,
+          testing::AllOf(
+              testing::Property("hasSelectClause()",
+                                &ParsedQuery::hasSelectClause,
+                                testing::IsTrue()),
+              testing::Property("selectClause()", &ParsedQuery::selectClause,
+                                selectMatcher),
+              testing::Field("_rootGraphPattern",
+                             &ParsedQuery::_rootGraphPattern, whereMatcher)))),
+      arg.variant_, result_listener);
 }

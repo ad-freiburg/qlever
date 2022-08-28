@@ -57,7 +57,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   using OperationsAndFilters =
       std::pair<vector<GraphPatternOperation>, vector<SparqlFilter>>;
   using OperationOrFilterAndMaybeTriples =
-      std::pair<variant<GraphPatternOperation, SparqlFilter>,
+      std::pair<std::variant<GraphPatternOperation, SparqlFilter>,
                 std::optional<GraphPatternOperation::BasicGraphPattern>>;
   using OperationOrFilter = std::variant<GraphPatternOperation, SparqlFilter>;
   using SubQueryAndMaybeValues =

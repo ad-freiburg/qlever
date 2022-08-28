@@ -25,28 +25,44 @@ auto parse =
     };
 
 auto parseBind = parse<&Parser::bind>;
+auto parseBlankNode = parse<&Parser::blankNode>;
+auto parseBlankNodePropertyList = parse<&Parser::blankNodePropertyList>;
+auto parseCollection = parse<&Parser::collection>;
 auto parseConstructTemplate = parse<&Parser::constructTemplate>;
+auto parseConstructTriples = parse<&Parser::constructTriples>;
+auto parseConstructQuery = parse<&Parser::constructQuery>;
 auto parseDataBlock = parse<&Parser::dataBlock>;
 auto parseExpression = parse<&Parser::expression>;
+auto parseGraphNode = parse<&Parser::graphNode>;
+auto parseGraphTerm = parse<&Parser::graphTerm>;
 auto parseGroupClause = parse<&Parser::groupClause>;
 auto parseGroupCondition = parse<&Parser::groupCondition>;
 auto parseGroupGraphPattern = parse<&Parser::groupGraphPattern>;
 auto parseHavingCondition = parse<&Parser::havingCondition>;
 auto parseInlineData = parse<&Parser::inlineData>;
+auto parseInteger = parse<&Parser::integer>;
 auto parseIri = parse<&Parser::iri>;
 auto parseIriref = parse<&Parser::iriref>;
 auto parseLimitOffsetClause = parse<&Parser::limitOffsetClauses>;
 auto parseNumericLiteral = parse<&Parser::numericLiteral>;
+auto parseObjectList = parse<&Parser::objectList>;
 auto parseOrderClause = parse<&Parser::orderClause>;
 auto parseOrderCondition = parse<&Parser::orderCondition>;
 auto parsePnameLn = parse<&Parser::pnameLn>;
 auto parsePnameNs = parse<&Parser::pnameNs>;
 auto parsePrefixDecl = parse<&Parser::prefixDecl>;
 auto parsePrefixedName = parse<&Parser::prefixedName>;
+auto parsePropertyList = parse<&Parser::propertyList>;
+auto parsePropertyListNotEmpty = parse<&Parser::propertyListNotEmpty>;
 auto parsePropertyListPathNotEmpty = parse<&Parser::propertyListPathNotEmpty>;
 auto parseSelectClause = parse<&Parser::selectClause>;
+auto parseSelectQuery = parse<&Parser::selectQuery>;
 auto parseSolutionModifier = parse<&Parser::solutionModifier>;
+auto parseTriplesSameSubject = parse<&Parser::triplesSameSubject>;
 auto parseTriplesSameSubjectPath = parse<&Parser::triplesSameSubjectPath>;
+auto parseVariable = parse<&Parser::var>;
+auto parseVarOrTerm = parse<&Parser::varOrTerm>;
+auto parseVerb = parse<&Parser::verb>;
 auto parseVerbPathOrSimple = parse<&Parser::verbPathOrSimple>;
 
 template <typename T>
@@ -68,8 +84,11 @@ auto rest = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>";
 auto type = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
 
 using ::testing::ElementsAre;
+using ::testing::Eq;
 using ::testing::IsEmpty;
+using ::testing::Pair;
 using ::testing::SizeIs;
+using ::testing::StrEq;
 
 namespace {
 template <typename Exception = ParseException>
@@ -113,13 +132,13 @@ TEST(SparqlParser, Prefix) {
     ASSERT_EQ(prefixes.at("wd"), "<www.wikidata.org/>");
   }
   expectCompleteParse(parsePrefixDecl("PREFIX wd: <www.wikidata.org/>"),
-                      testing::Eq(SparqlPrefix("wd", "<www.wikidata.org/>")));
+                      Eq(SparqlPrefix("wd", "<www.wikidata.org/>")));
   expectCompleteParse(parsePnameLn("wd:bimbam", prefixMap),
-                      testing::Eq("<www.wikidata.org/bimbam>"));
+                      StrEq("<www.wikidata.org/bimbam>"));
   expectCompleteParse(parsePnameNs("wd:", prefixMap),
-                      testing::Eq("<www.wikidata.org/>"));
+                      StrEq("<www.wikidata.org/>"));
   expectCompleteParse(parsePrefixedName("wd:bimbam", prefixMap),
-                      testing::Eq("<www.wikidata.org/bimbam>"));
+                      StrEq("<www.wikidata.org/bimbam>"));
   {
     auto result = parseIriref("<somethingsomething> <rest>", prefixMap);
     ASSERT_EQ(result.resultOfParse_, "<somethingsomething>");
@@ -162,182 +181,79 @@ TEST(SparqlParser, ComplexConstructQuery) {
       "<http://wallscope.co.uk/resource/olympics/medal/#something> a "
       "<http://wallscope.co.uk/resource/olympics/medal/#somethingelse> } "
       "WHERE {}";
-  ParserAndVisitor p{input};
 
-  auto triples = p.parser_.constructQuery()
-                     ->accept(&p.visitor_)
-                     .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, SizeIs(11));
-  auto something =
-      "<http://wallscope.co.uk/resource/olympics/medal/#something>";
-  auto somethingElse =
-      "<http://wallscope.co.uk/resource/olympics/medal/#somethingelse>";
-
-  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsVariable("?a"),        //
-                                      IsBlankNode(true, "3")));
-
-  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "1"),  //
-                                      IsIri(first),            //
-                                      IsBlankNode(true, "2")));
-
-  EXPECT_THAT(triples[2], ElementsAre(IsBlankNode(true, "1"),  //
-                                      IsIri(rest),             //
-                                      IsIri(nil)));
-
-  EXPECT_THAT(triples[3], ElementsAre(IsBlankNode(true, "2"),  //
-                                      IsIri(first),            //
-                                      IsVariable("?c")));
-
-  EXPECT_THAT(triples[4], ElementsAre(IsBlankNode(true, "2"),  //
-                                      IsIri(rest),             //
-                                      IsIri(nil)));
-
-  EXPECT_THAT(triples[5], ElementsAre(IsBlankNode(true, "3"),  //
-                                      IsIri(first),            //
-                                      IsVariable("?b")));
-
-  EXPECT_THAT(triples[6], ElementsAre(IsBlankNode(true, "3"),  //
-                                      IsIri(rest),             //
-                                      IsBlankNode(true, "1")));
-
-  EXPECT_THAT(triples[7], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsVariable("?d"),        //
-                                      IsBlankNode(true, "4")));
-
-  EXPECT_THAT(triples[8], ElementsAre(IsBlankNode(true, "4"),  //
-                                      IsVariable("?e"),        //
-                                      IsBlankNode(true, "5")));
-
-  EXPECT_THAT(triples[9], ElementsAre(IsBlankNode(true, "5"),  //
-                                      IsVariable("?f"),        //
-                                      IsVariable("?g")));
-
-  EXPECT_THAT(triples[10], ElementsAre(IsIri(something),  //
-                                       IsIri(type),       //
-                                       IsIri(somethingElse)));
+  expectCompleteArrayParse(
+      parseConstructQuery(input),
+      ElementsAre(IsBlankNode(true, "0"), IsVariableVariant("?a"),
+                  IsBlankNode(true, "3")),
+      ElementsAre(IsBlankNode(true, "1"), IsIri(first), IsBlankNode(true, "2")),
+      ElementsAre(IsBlankNode(true, "1"), IsIri(rest), IsIri(nil)),
+      ElementsAre(IsBlankNode(true, "2"), IsIri(first),
+                  IsVariableVariant("?c")),
+      ElementsAre(IsBlankNode(true, "2"), IsIri(rest), IsIri(nil)),
+      ElementsAre(IsBlankNode(true, "3"), IsIri(first),
+                  IsVariableVariant("?b")),
+      ElementsAre(IsBlankNode(true, "3"), IsIri(rest), IsBlankNode(true, "1")),
+      ElementsAre(IsBlankNode(true, "0"), IsVariableVariant("?d"),
+                  IsBlankNode(true, "4")),
+      ElementsAre(IsBlankNode(true, "4"), IsVariableVariant("?e"),
+                  IsBlankNode(true, "5")),
+      ElementsAre(IsBlankNode(true, "5"), IsVariableVariant("?f"),
+                  IsVariableVariant("?g")),
+      ElementsAre(IsIri("<http://wallscope.co.uk/resource/olympics/medal/"
+                        "#something>"),
+                  IsIri(type),
+                  IsIri("<http://wallscope.co.uk/resource/olympics/medal/"
+                        "#somethingelse>")));
 }
 
-TEST(SparqlParser, GraphTermNumericLiteral) {
-  string input = "1337";
-  ParserAndVisitor p{input};
-
-  auto graphTerm = p.parser_.graphTerm()->accept(&p.visitor_).as<GraphTerm>();
-  EXPECT_THAT(graphTerm, IsLiteral("1337"));
-}
-
-TEST(SparqlParser, GraphTermBooleanLiteral) {
-  string input = "true";
-  ParserAndVisitor p{input};
-
-  auto graphTerm = p.parser_.graphTerm()->accept(&p.visitor_).as<GraphTerm>();
-  EXPECT_THAT(graphTerm, IsLiteral(input));
-}
-
-TEST(SparqlParser, GraphTermBlankNode) {
-  string input = "[]";
-  ParserAndVisitor p{input};
-
-  auto graphTerm = p.parser_.graphTerm()->accept(&p.visitor_).as<GraphTerm>();
-  EXPECT_THAT(graphTerm, IsBlankNode(true, "0"));
-}
-
-TEST(SparqlParser, GraphTermIri) {
-  string input = "<http://dummy-iri.com#fragment>";
-  ParserAndVisitor p{input};
-
-  auto graphTerm = p.parser_.graphTerm()->accept(&p.visitor_).as<GraphTerm>();
-  EXPECT_THAT(graphTerm, IsIri(input));
-}
-
-TEST(SparqlParser, GraphTermRdfLiteral) {
-  string input = "\"abc\"";
-  ParserAndVisitor p{input};
-
-  auto graphTerm = p.parser_.graphTerm()->accept(&p.visitor_).as<GraphTerm>();
-  EXPECT_THAT(graphTerm, IsLiteral(input));
-}
-
-TEST(SparqlParser, GraphTermRdfNil) {
-  string input = "()";
-  ParserAndVisitor p{input};
-
-  auto graphTerm = p.parser_.graphTerm()->accept(&p.visitor_).as<GraphTerm>();
-  EXPECT_THAT(graphTerm, IsIri(nil));
+TEST(SparqlParser, GraphTerm) {
+  expectCompleteParse(parseGraphTerm("1337"), IsLiteral("1337"));
+  expectCompleteParse(parseGraphTerm("true"), IsLiteral("true"));
+  expectCompleteParse(parseGraphTerm("[]"), IsBlankNode(true, "0"));
+  {
+    const std::string iri = "<http://dummy-iri.com#fragment>";
+    expectCompleteParse(parseGraphTerm(iri), IsIri(iri));
+  }
+  expectCompleteParse(parseGraphTerm("\"abc\""), IsLiteral("\"abc\""));
+  expectCompleteParse(parseGraphTerm("()"), IsIri(nil));
 }
 
 TEST(SparqlParser, RdfCollectionSingleVar) {
-  string input = "( ?a )";
-  ParserAndVisitor p{input};
-
-  const auto [node, triples] = p.parser_.collection()
-                                   ->accept(&p.visitor_)
-                                   .as<ad_utility::sparql_types::Node>();
-
-  EXPECT_THAT(node, IsBlankNode(true, "0"));
-
-  ASSERT_THAT(triples, SizeIs(2));
-
-  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(first),            //
-                                      IsVariable("?a")));
-
-  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(rest),             //
-                                      IsIri(nil)));
+  expectCompleteParse(
+      parseCollection("( ?a )"),
+      Pair(IsBlankNode(true, "0"),
+           ElementsAre(
+               ElementsAre(IsBlankNode(true, "0"), IsIri(first),
+                           IsVariableVariant("?a")),
+               ElementsAre(IsBlankNode(true, "0"), IsIri(rest), IsIri(nil)))));
 }
 
 TEST(SparqlParser, RdfCollectionTripleVar) {
-  string input = "( ?a ?b ?c )";
-  ParserAndVisitor p{input};
-
-  const auto [node, triples] = p.parser_.collection()
-                                   ->accept(&p.visitor_)
-                                   .as<ad_utility::sparql_types::Node>();
-
-  EXPECT_THAT(node, IsBlankNode(true, "2"));
-
-  ASSERT_THAT(triples, SizeIs(6));
-
-  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(first),            //
-                                      IsVariable("?c")));
-
-  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(rest),             //
-                                      IsIri(nil)));
-
-  EXPECT_THAT(triples[2], ElementsAre(IsBlankNode(true, "1"),  //
-                                      IsIri(first),            //
-                                      IsVariable("?b")));
-
-  EXPECT_THAT(triples[3], ElementsAre(IsBlankNode(true, "1"),  //
-                                      IsIri(rest),             //
-                                      IsBlankNode(true, "0")));
-
-  EXPECT_THAT(triples[4], ElementsAre(IsBlankNode(true, "2"),  //
-                                      IsIri(first),            //
-                                      IsVariable("?a")));
-
-  EXPECT_THAT(triples[5], ElementsAre(IsBlankNode(true, "2"),  //
-                                      IsIri(rest),             //
-                                      IsBlankNode(true, "1")));
+  expectCompleteParse(
+      parseCollection("( ?a ?b ?c )"),
+      Pair(IsBlankNode(true, "2"),
+           ElementsAre(
+               ElementsAre(IsBlankNode(true, "0"), IsIri(first),
+                           IsVariableVariant("?c")),
+               ElementsAre(IsBlankNode(true, "0"), IsIri(rest), IsIri(nil)),
+               ElementsAre(IsBlankNode(true, "1"), IsIri(first),
+                           IsVariableVariant("?b")),
+               ElementsAre(IsBlankNode(true, "1"), IsIri(rest),
+                           IsBlankNode(true, "0")),
+               ElementsAre(IsBlankNode(true, "2"), IsIri(first),
+                           IsVariableVariant("?a")),
+               ElementsAre(IsBlankNode(true, "2"), IsIri(rest),
+                           IsBlankNode(true, "1")))));
 }
 
 TEST(SparqlParser, BlankNodeAnonymous) {
-  string input = "[ \t\r\n]";
-  ParserAndVisitor p{input};
-
-  auto graphTerm = p.parser_.blankNode()->accept(&p.visitor_).as<BlankNode>();
-  EXPECT_THAT(graphTerm, IsBlankNode(true, "0"));
+  expectCompleteParse(parseBlankNode("[ \t\r\n]"), IsBlankNode(true, "0"));
 }
 
 TEST(SparqlParser, BlankNodeLabelled) {
-  string input = "_:label123";
-  ParserAndVisitor p{input};
-
-  auto graphTerm = p.parser_.blankNode()->accept(&p.visitor_).as<BlankNode>();
-  EXPECT_THAT(graphTerm, IsBlankNode(false, "label123"));
+  expectCompleteParse(parseBlankNode("_:label123"),
+                      IsBlankNode(false, "label123"));
 }
 
 TEST(SparqlParser, ConstructTemplateEmpty) {
@@ -345,269 +261,128 @@ TEST(SparqlParser, ConstructTemplateEmpty) {
 }
 
 TEST(SparqlParser, ConstructTriplesSingletonWithTerminator) {
-  string input = "?a ?b ?c .";
-  ParserAndVisitor p{input};
-
-  auto triples = p.parser_.constructTriples()
-                     ->accept(&p.visitor_)
-                     .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, SizeIs(1));
-
-  EXPECT_THAT(triples[0], ElementsAre(IsVariable("?a"),  //
-                                      IsVariable("?b"),  //
-                                      IsVariable("?c")));
+  expectCompleteParse(
+      parseConstructTriples("?a ?b ?c ."),
+      ElementsAre(ElementsAre(IsVariableVariant("?a"), IsVariableVariant("?b"),
+                              IsVariableVariant("?c"))));
 }
 
 TEST(SparqlParser, ConstructTriplesWithTerminator) {
-  string input = "?a ?b ?c . ?d ?e ?f . ?g ?h ?i .";
-  ParserAndVisitor p{input};
-
-  auto triples = p.parser_.constructTriples()
-                     ->accept(&p.visitor_)
-                     .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, SizeIs(3));
-
-  EXPECT_THAT(triples[0], ElementsAre(IsVariable("?a"),  //
-                                      IsVariable("?b"),  //
-                                      IsVariable("?c")));
-
-  EXPECT_THAT(triples[1], ElementsAre(IsVariable("?d"),  //
-                                      IsVariable("?e"),  //
-                                      IsVariable("?f")));
-
-  EXPECT_THAT(triples[2], ElementsAre(IsVariable("?g"),  //
-                                      IsVariable("?h"),  //
-                                      IsVariable("?i")));
+  expectCompleteParse(
+      parseConstructTriples("?a ?b ?c . ?d ?e ?f . ?g ?h ?i ."),
+      ElementsAre(ElementsAre(IsVariableVariant("?a"), IsVariableVariant("?b"),
+                              IsVariableVariant("?c")),
+                  ElementsAre(IsVariableVariant("?d"), IsVariableVariant("?e"),
+                              IsVariableVariant("?f")),
+                  ElementsAre(IsVariableVariant("?g"), IsVariableVariant("?h"),
+                              IsVariableVariant("?i"))));
 }
 
 TEST(SparqlParser, TriplesSameSubjectVarOrTerm) {
-  string input = "?a ?b ?c";
-  ParserAndVisitor p{input};
-
-  auto triples = p.parser_.constructTriples()
-                     ->accept(&p.visitor_)
-                     .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, SizeIs(1));
-
-  EXPECT_THAT(triples[0], ElementsAre(IsVariable("?a"),  //
-                                      IsVariable("?b"),  //
-                                      IsVariable("?c")));
+  expectCompleteParse(
+      parseConstructTriples("?a ?b ?c"),
+      ElementsAre(ElementsAre(IsVariableVariant("?a"), IsVariableVariant("?b"),
+                              IsVariableVariant("?c"))));
 }
 
 TEST(SparqlParser, TriplesSameSubjectTriplesNodeWithPropertyList) {
-  string input = "(?a) ?b ?c";
-  ParserAndVisitor p{input};
-
-  auto triples = p.parser_.triplesSameSubject()
-                     ->accept(&p.visitor_)
-                     .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, SizeIs(3));
-
-  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(first),            //
-                                      IsVariable("?a")));
-
-  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(rest),             //
-                                      IsIri(nil)));
-
-  EXPECT_THAT(triples[2], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsVariable("?b"),        //
-                                      IsVariable("?c")));
+  expectCompleteParse(
+      parseTriplesSameSubject("(?a) ?b ?c"),
+      ElementsAre(ElementsAre(IsBlankNode(true, "0"), IsIri(first),
+                              IsVariableVariant("?a")),
+                  ElementsAre(IsBlankNode(true, "0"), IsIri(rest), IsIri(nil)),
+                  ElementsAre(IsBlankNode(true, "0"), IsVariableVariant("?b"),
+                              IsVariableVariant("?c"))));
 }
 
 TEST(SparqlParser, TriplesSameSubjectTriplesNodeEmptyPropertyList) {
-  string input = "(?a)";
-  ParserAndVisitor p{input};
-
-  auto triples = p.parser_.triplesSameSubject()
-                     ->accept(&p.visitor_)
-                     .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, SizeIs(2));
-
-  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(first),            //
-                                      IsVariable("?a")));
-
-  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(rest),             //
-                                      IsIri(nil)));
+  expectCompleteParse(
+      parseTriplesSameSubject("(?a)"),
+      ElementsAre(
+          ElementsAre(IsBlankNode(true, "0"), IsIri(first),
+                      IsVariableVariant("?a")),
+          ElementsAre(IsBlankNode(true, "0"), IsIri(rest), IsIri(nil))));
 }
 
 TEST(SparqlParser, PropertyList) {
-  string input = "a ?a";
-  ParserAndVisitor p{input};
-
-  const auto [tuples, triples] =
-      p.parser_.propertyList()
-          ->accept(&p.visitor_)
-          .as<ad_utility::sparql_types::PropertyList>();
-
-  EXPECT_THAT(triples, IsEmpty());
-
-  ASSERT_THAT(tuples, SizeIs(1));
-
-  EXPECT_THAT(tuples[0], ElementsAre(IsIri(type), IsVariable("?a")));
+  expectCompleteParse(
+      parsePropertyList("a ?a"),
+      Pair(ElementsAre(ElementsAre(IsIri(type), IsVariableVariant("?a"))),
+           IsEmpty()));
 }
 
 TEST(SparqlParser, EmptyPropertyList) {
-  ParserAndVisitor p{""};
-
-  const auto [tuples, triples] =
-      p.parser_.propertyList()
-          ->accept(&p.visitor_)
-          .as<ad_utility::sparql_types::PropertyList>();
-  ASSERT_THAT(tuples, IsEmpty());
-  ASSERT_THAT(triples, IsEmpty());
+  expectCompleteParse(parsePropertyList(""), Pair(IsEmpty(), IsEmpty()));
 }
 
 TEST(SparqlParser, PropertyListNotEmptySingletonWithTerminator) {
-  string input = "a ?a ;";
-  ParserAndVisitor p{input};
-
-  const auto [tuples, triples] =
-      p.parser_.propertyListNotEmpty()
-          ->accept(&p.visitor_)
-          .as<ad_utility::sparql_types::PropertyList>();
-  EXPECT_THAT(triples, IsEmpty());
-
-  ASSERT_THAT(tuples, SizeIs(1));
-
-  EXPECT_THAT(tuples[0], ElementsAre(IsIri(type), IsVariable("?a")));
+  expectCompleteParse(
+      parsePropertyListNotEmpty("a ?a ;"),
+      Pair(ElementsAre(ElementsAre(IsIri(type), IsVariableVariant("?a"))),
+           IsEmpty()));
 }
 
 TEST(SparqlParser, PropertyListNotEmptyWithTerminator) {
-  string input = "a ?a ; a ?b ; a ?c ;";
-  ParserAndVisitor p{input};
-
-  const auto [tuples, triples] =
-      p.parser_.propertyListNotEmpty()
-          ->accept(&p.visitor_)
-          .as<ad_utility::sparql_types::PropertyList>();
-  EXPECT_THAT(triples, IsEmpty());
-
-  ASSERT_THAT(tuples, SizeIs(3));
-
-  EXPECT_THAT(tuples[0], ElementsAre(IsIri(type), IsVariable("?a")));
-  EXPECT_THAT(tuples[1], ElementsAre(IsIri(type), IsVariable("?b")));
-  EXPECT_THAT(tuples[2], ElementsAre(IsIri(type), IsVariable("?c")));
+  expectCompleteParse(
+      parsePropertyListNotEmpty("a ?a ; a ?b ; a ?c ;"),
+      Pair(ElementsAre(ElementsAre(IsIri(type), IsVariableVariant("?a")),
+                       ElementsAre(IsIri(type), IsVariableVariant("?b")),
+                       ElementsAre(IsIri(type), IsVariableVariant("?c"))),
+           IsEmpty()));
 }
 
-TEST(SparqlParser, VerbA) {
-  string input = "a";
-  ParserAndVisitor p{input};
-
-  auto varOrTerm = p.parser_.verb()->accept(&p.visitor_).as<VarOrTerm>();
-  ASSERT_THAT(varOrTerm, IsIri(type));
-}
+TEST(SparqlParser, VerbA) { expectCompleteParse(parseVerb("a"), IsIri(type)); }
 
 TEST(SparqlParser, VerbVariable) {
-  string input = "?a";
-  ParserAndVisitor p{input};
-
-  auto varOrTerm = p.parser_.verb()->accept(&p.visitor_).as<VarOrTerm>();
-  ASSERT_THAT(varOrTerm, IsVariable("?a"));
+  expectCompleteParse(parseVerb("?a"), IsVariableVariant("?a"));
 }
 
 TEST(SparqlParser, ObjectListSingleton) {
-  string input = "?a";
-  ParserAndVisitor p{input};
-
-  const auto [objects, triples] =
-      p.parser_.objectList()
-          ->accept(&p.visitor_)
-          .as<ad_utility::sparql_types::ObjectList>();
-  EXPECT_THAT(triples, IsEmpty());
-
-  ASSERT_THAT(objects, SizeIs(1));
-  ASSERT_THAT(objects[0], IsVariable("?a"));
+  expectCompleteParse(parseObjectList("?a"),
+                      Pair(ElementsAre(IsVariableVariant("?a")), IsEmpty()));
 }
 
 TEST(SparqlParser, ObjectList) {
-  string input = "?a , ?b , ?c";
-  ParserAndVisitor p{input};
-
-  const auto [objects, triples] =
-      p.parser_.objectList()
-          ->accept(&p.visitor_)
-          .as<ad_utility::sparql_types::ObjectList>();
-  EXPECT_THAT(triples, IsEmpty());
-
-  ASSERT_THAT(objects, SizeIs(3));
-  ASSERT_THAT(objects[0], IsVariable("?a"));
-  ASSERT_THAT(objects[1], IsVariable("?b"));
-  ASSERT_THAT(objects[2], IsVariable("?c"));
+  expectCompleteParse(
+      parseObjectList("?a , ?b , ?c"),
+      Pair(ElementsAre(IsVariableVariant("?a"), IsVariableVariant("?b"),
+                       IsVariableVariant("?c")),
+           IsEmpty()));
 }
 
 TEST(SparqlParser, BlankNodePropertyList) {
-  string input = "[ a ?a ; a ?b ; a ?c ]";
-  ParserAndVisitor p{input};
-
-  const auto [node, triples] = p.parser_.blankNodePropertyList()
-                                   ->accept(&p.visitor_)
-                                   .as<ad_utility::sparql_types::Node>();
-  EXPECT_THAT(node, IsBlankNode(true, "0"));
-
-  ASSERT_THAT(triples, SizeIs(3));
-
-  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(type),             //
-                                      IsVariable("?a")));
-
-  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(type),             //
-                                      IsVariable("?b")));
-
-  EXPECT_THAT(triples[2], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(type),             //
-                                      IsVariable("?c")));
+  expectCompleteParse(
+      parseBlankNodePropertyList("[ a ?a ; a ?b ; a ?c ]"),
+      Pair(IsBlankNode(true, "0"),
+           ElementsAre(ElementsAre(IsBlankNode(true, "0"), IsIri(type),
+                                   IsVariableVariant("?a")),
+                       ElementsAre(IsBlankNode(true, "0"), IsIri(type),
+                                   IsVariableVariant("?b")),
+                       ElementsAre(IsBlankNode(true, "0"), IsIri(type),
+                                   IsVariableVariant("?c")))));
 }
 
 TEST(SparqlParser, GraphNodeVarOrTerm) {
-  string input = "?a";
-  ParserAndVisitor p{input};
-
-  const auto [node, triples] = p.parser_.graphNode()
-                                   ->accept(&p.visitor_)
-                                   .as<ad_utility::sparql_types::Node>();
-  EXPECT_THAT(node, IsVariable("?a"));
-  EXPECT_THAT(triples, IsEmpty());
+  expectCompleteParse(parseGraphNode("?a"),
+                      Pair(IsVariableVariant("?a"), IsEmpty()));
 }
 
 TEST(SparqlParser, GraphNodeTriplesNode) {
-  string input = "(?a)";
-  ParserAndVisitor p{input};
-
-  const auto [node, triples] = p.parser_.graphNode()
-                                   ->accept(&p.visitor_)
-                                   .as<ad_utility::sparql_types::Node>();
-  EXPECT_THAT(node, IsBlankNode(true, "0"));
-
-  ASSERT_THAT(triples, SizeIs(2));
-
-  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(first),            //
-                                      IsVariable("?a")));
-
-  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(rest),             //
-                                      IsIri(nil)));
+  expectCompleteParse(
+      parseGraphNode("(?a)"),
+      Pair(IsBlankNode(true, "0"),
+           ElementsAre(
+               ElementsAre(IsBlankNode(true, "0"), IsIri(first),
+                           IsVariableVariant("?a")),
+               ElementsAre(IsBlankNode(true, "0"), IsIri(rest), IsIri(nil)))));
 }
 
 TEST(SparqlParser, VarOrTermVariable) {
-  string input = "?a";
-  ParserAndVisitor p{input};
-
-  auto varOrTerm = p.parser_.varOrTerm()->accept(&p.visitor_).as<VarOrTerm>();
-  EXPECT_THAT(varOrTerm, IsVariable("?a"));
+  expectCompleteParse(parseVarOrTerm("?a"), IsVariableVariant("?a"));
 }
 
 TEST(SparqlParser, VarOrTermGraphTerm) {
-  string input = "()";
-  ParserAndVisitor p{input};
-
-  auto varOrTerm = p.parser_.varOrTerm()->accept(&p.visitor_).as<VarOrTerm>();
-  EXPECT_THAT(varOrTerm, IsIri(nil));
+  expectCompleteParse(parseVarOrTerm("()"), IsIri(nil));
 }
 
 TEST(SparqlParser, Iri) {
@@ -630,102 +405,36 @@ TEST(SparqlParser, Iri) {
             "@en@<http://www.w3.org/2000/01/rdf-schema>", {});
 }
 
-TEST(SparqlParser, VarOrIriVariable) {
-  string input = "?a";
-  ParserAndVisitor p{input};
-
-  auto varOrTerm = p.parser_.varOrIri()->accept(&p.visitor_).as<VarOrTerm>();
-  EXPECT_THAT(varOrTerm, IsVariable("?a"));
-}
-
 TEST(SparqlParser, VarOrIriIri) {
-  string input = "<http://testiri>";
-  ParserAndVisitor p{input};
-
-  auto varOrTerm = p.parser_.varOrIri()->accept(&p.visitor_).as<VarOrTerm>();
-  EXPECT_THAT(varOrTerm, IsIri(input));
+  expectCompleteParse(parseVarOrTerm("<http://testiri>"),
+                      IsIri("<http://testiri>"));
 }
 
 TEST(SparqlParser, VariableWithQuestionMark) {
-  string input = "?variableName";
-  ParserAndVisitor p{input};
-
-  auto variable = p.parser_.var()->accept(&p.visitor_).as<Variable>();
-  EXPECT_THAT(variable, IsVariable(input));
+  expectCompleteParse(parseVariable("?variableName"),
+                      IsVariable("?variableName"));
 }
 
 TEST(SparqlParser, VariableWithDollarSign) {
-  string input = "$variableName";
-  ParserAndVisitor p{input};
-
-  auto variable = p.parser_.var()->accept(&p.visitor_).as<Variable>();
-  EXPECT_THAT(variable, IsVariable("?variableName"));
+  expectCompleteParse(parseVariable("$variableName"),
+                      IsVariable("?variableName"));
 }
 
 TEST(SparqlParser, Bind) {
-  {
-    string input = "BIND (10 - 5 as ?a)";
-    auto bindAndText = parseBind(input);
-
-    expectCompleteParse(bindAndText, IsBind("?a", "10-5"));
-  }
-
-  {
-    string input = "bInD (?age - 10 As ?s)";
-    auto bindAndText = parseBind(input);
-
-    expectCompleteParse(bindAndText, IsBind("?s", "?age-10"));
-  }
+  expectCompleteParse(parseBind("BIND (10 - 5 as ?a)"), IsBind("?a", "10-5"));
+  expectCompleteParse(parseBind("bInD (?age - 10 As ?s)"),
+                      IsBind("?s", "?age-10"));
 }
 
 TEST(SparqlParser, Integer) {
-  {
-    string input = "1931";
-    ParserAndVisitor p{input};
-
-    unsigned long long result =
-        p.parser_.integer()->accept(&p.visitor_).as<unsigned long long>();
-    EXPECT_EQ(result, 1931ull);
-  }
-
-  {
-    string input = "0";
-    ParserAndVisitor p{input};
-
-    unsigned long long result =
-        p.parser_.integer()->accept(&p.visitor_).as<unsigned long long>();
-    EXPECT_EQ(result, 0ull);
-  }
-
-  {
-    string input = "18446744073709551615";
-    ParserAndVisitor p{input};
-
-    unsigned long long result =
-        p.parser_.integer()->accept(&p.visitor_).as<unsigned long long>();
-    EXPECT_EQ(result, 18446744073709551615ull);
-  }
-
-  {
-    string input = "18446744073709551616";
-    ParserAndVisitor p{input};
-
-    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_), ParseException);
-  }
-
-  {
-    string input = "10000000000000000000000000000000000000000";
-    ParserAndVisitor p{input};
-
-    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_), ParseException);
-  }
-
-  {
-    string input = "-1";
-    ParserAndVisitor p{input};
-
-    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_), ParseException);
-  }
+  expectCompleteParse(parseInteger("1931"), Eq(1931ull));
+  expectCompleteParse(parseInteger("0"), Eq(0ull));
+  expectCompleteParse(parseInteger("18446744073709551615"),
+                      Eq(18446744073709551615ull));
+  EXPECT_THROW(parseInteger("18446744073709551616"), ParseException);
+  EXPECT_THROW(parseInteger("10000000000000000000000000000000000000000"),
+               ParseException);
+  EXPECT_THROW(parseInteger("-1"), ParseException);
 }
 
 TEST(SparqlParser, LimitOffsetClause) {
@@ -755,7 +464,7 @@ TEST(SparqlParser, OrderCondition) {
   auto expectParseVariable = [](const string& input, const string& variable,
                                 bool isDescending) {
     expectCompleteParse(parseOrderCondition(input),
-                        IsVariableOrderKey(variable, isDescending));
+                        IsVariableOrderKeyVariant(variable, isDescending));
   };
   auto expectParseExpression = [](const string& input, const string& expression,
                                   bool isDescending) {
@@ -779,7 +488,8 @@ TEST(SparqlParser, OrderClause) {
   {
     string input = "ORDER BY ?test DESC(?foo - 5)";
     auto orderKeys = parseOrderClause(input);
-    expectCompleteArrayParse(orderKeys, IsVariableOrderKey("?test", false),
+    expectCompleteArrayParse(orderKeys,
+                             IsVariableOrderKeyVariant("?test", false),
                              IsExpressionOrderKey("?foo-5", true));
   }
 }
@@ -827,11 +537,11 @@ TEST(SparqlParser, GroupClause) {
 TEST(SparqlParser, SolutionModifier) {
   auto expectSolutionModifier =
       [](const string& input,
-         const vector<variant<std::string, Alias, Variable>>& groupByVariables =
-             {},
+         const vector<std::variant<std::string, Alias, Variable>>&
+             groupByVariables = {},
          const vector<SparqlFilter>& havingClauses = {},
-         const vector<variant<std::pair<std::string, bool>, VariableOrderKey>>&
-             orderBy = {},
+         const vector<std::variant<std::pair<std::string, bool>,
+                                   VariableOrderKey>>& orderBy = {},
          const LimitOffsetClause limitOffset = {}) {
         expectCompleteParse(parseSolutionModifier(input),
                             IsSolutionModifier(groupByVariables, havingClauses,
