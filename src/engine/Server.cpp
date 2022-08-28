@@ -491,7 +491,7 @@ json Server::composeErrorResponseJson(
   if (metadata.has_value()) {
     auto& value = metadata.value();
     j["metadata"]["startIndex"] = value.startIndex_;
-    j["metadata"]["stopIndex_"] = value.stopIndex_;
+    j["metadata"]["stopIndex"] = value.stopIndex_;
     // The ANTLR parser may not see the whole query. (The reason is value mixing
     // of the old and new parser.) To detect/work with this we also transmit
     // what ANTLR saw as query.
