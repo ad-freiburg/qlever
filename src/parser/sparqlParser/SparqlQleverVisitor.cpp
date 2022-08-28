@@ -148,7 +148,7 @@ SelectClause Visitor::visitTypesafe(Parser::SelectClauseContext* ctx) {
   if (ctx->asterisk) {
     select.setAsterisk();
   } else {
-    select.setSelected(visitVector<VarOrAlias>(ctx->varOrAlias()));
+    select.setSelected(visitVector(ctx->varOrAlias()));
   }
   return select;
 }
@@ -258,9 +258,7 @@ Visitor::OperationsAndFilters Visitor::visitTypesafe(
   if (ctx->triplesBlock()) {
     ops.emplace_back(visitTypesafe(ctx->triplesBlock()));
   }
-  // TODO make visitVector deduce its return type automatically
-  auto others = visitVector<OperationOrFilterAndMaybeTriples>(
-      ctx->graphPatternNotTriplesAndMaybeTriples());
+  auto others = visitVector(ctx->graphPatternNotTriplesAndMaybeTriples());
   for (auto& [graphPattern, triples] : others) {
     std::visit(ad_utility::OverloadCallOperator{filter, op},
                std::move(graphPattern));
@@ -410,7 +408,7 @@ LimitOffsetClause Visitor::visitTypesafe(
 
 // ____________________________________________________________________________________
 vector<SparqlFilter> Visitor::visitTypesafe(Parser::HavingClauseContext* ctx) {
-  return visitVector<SparqlFilter>(ctx->havingCondition());
+  return visitVector(ctx->havingCondition());
 }
 
 namespace {
@@ -445,12 +443,12 @@ SparqlFilter Visitor::visitTypesafe(Parser::HavingConditionContext* ctx) {
 
 // ____________________________________________________________________________________
 vector<OrderKey> Visitor::visitTypesafe(Parser::OrderClauseContext* ctx) {
-  return visitVector<OrderKey>(ctx->orderCondition());
+  return visitVector(ctx->orderCondition());
 }
 
 // ____________________________________________________________________________________
 vector<GroupKey> Visitor::visitTypesafe(Parser::GroupClauseContext* ctx) {
-  return visitVector<GroupKey>(ctx->groupCondition());
+  return visitVector(ctx->groupCondition());
 }
 
 // ____________________________________________________________________________________
@@ -675,7 +673,7 @@ SparqlValues Visitor::visitTypesafe(Parser::InlineDataFullContext* ctx) {
   for (auto& var : ctx->var()) {
     values._variables.push_back(visitTypesafe(var).name());
   }
-  values._values = visitVector<vector<std::string>>(ctx->dataBlockSingle());
+  values._values = visitVector(ctx->dataBlockSingle());
   if (std::any_of(values._values.begin(), values._values.end(),
                   [numVars = values._variables.size()](const auto& inner) {
                     return inner.size() != numVars;
@@ -694,7 +692,7 @@ vector<std::string> Visitor::visitTypesafe(
     reportError(ctx,
                 "No values were specified in DataBlock."
                 "This is not supported by QLever.");
-  return visitVector<std::string>(ctx->dataBlockValue());
+  return visitVector(ctx->dataBlockValue());
 }
 
 // ____________________________________________________________________________________
@@ -736,7 +734,7 @@ GraphPattern wrap(GraphPatternOperation op) {
 // ____________________________________________________________________________________
 GraphPatternOperation Visitor::visitTypesafe(
     Parser::GroupOrUnionGraphPatternContext* ctx) {
-  auto children = visitVector<GraphPattern>(ctx->groupGraphPattern());
+  auto children = visitVector(ctx->groupGraphPattern());
   if (children.size() > 1) {
     // https://en.cppreference.com/w/cpp/algorithm/accumulate
     // a similar thing is done in QueryPlaner::uniteGraphPatterns
@@ -787,7 +785,7 @@ vector<Visitor::ExpressionPtr> Visitor::visitTypesafe(
         ctx, "DISTINCT for argument lists of IRI functions are not supported");
   }
   // Visit the expression of each argument.
-  return visitVector<ExpressionPtr>(ctx->expression());
+  return visitVector(ctx->expression());
 }
 
 // ____________________________________________________________________________________
@@ -916,8 +914,7 @@ std::optional<PathTuples> SparqlQleverVisitor::visitTypesafe(
 PathTuples SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::PropertyListPathNotEmptyContext* ctx) {
   PathTuples tuples = visitTypesafe(ctx->tupleWithPath());
-  vector<PathTuples> tuplesWithoutPaths =
-      visitVector<PathTuples>(ctx->tupleWithoutPath());
+  vector<PathTuples> tuplesWithoutPaths = visitVector(ctx->tupleWithoutPath());
   for (auto& tuplesWithoutPath : tuplesWithoutPaths) {
     tuples.insert(tuples.end(), tuplesWithoutPath.begin(),
                   tuplesWithoutPath.end());
@@ -966,7 +963,7 @@ ObjectList SparqlQleverVisitor::visitTypesafe(
   // The second parameter is empty because collections and blank not paths,
   // which might add additional triples, are currently not supported.
   // When this is implemented they will be returned by visit(ObjectPathContext).
-  return {visitVector<VarOrTerm>(ctx->objectPath()), {}};
+  return {visitVector(ctx->objectPath()), {}};
 }
 
 // ____________________________________________________________________________________
@@ -981,14 +978,12 @@ PropertyPath Visitor::visitTypesafe(Parser::PathContext* ctx) {
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visitTypesafe(Parser::PathAlternativeContext* ctx) {
-  return PropertyPath::makeAlternative(
-      visitVector<PropertyPath>(ctx->pathSequence()));
+  return PropertyPath::makeAlternative(visitVector(ctx->pathSequence()));
 }
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visitTypesafe(Parser::PathSequenceContext* ctx) {
-  return PropertyPath::makeSequence(
-      visitVector<PropertyPath>(ctx->pathEltOrInverse()));
+  return PropertyPath::makeSequence(visitVector(ctx->pathEltOrInverse()));
 }
 
 // ____________________________________________________________________________________
@@ -1163,7 +1158,7 @@ GraphTerm Visitor::visitTypesafe(Parser::GraphTermContext* ctx) {
 ExpressionPtr Visitor::visitTypesafe(
     Parser::ConditionalOrExpressionContext* ctx) {
   auto childContexts = ctx->conditionalAndExpression();
-  auto children = visitVector<ExpressionPtr>(ctx->conditionalAndExpression());
+  auto children = visitVector(ctx->conditionalAndExpression());
   AD_CHECK(!children.empty());
   auto result = std::move(children.front());
   using C = sparqlExpression::OrExpression::Children;
@@ -1179,7 +1174,7 @@ ExpressionPtr Visitor::visitTypesafe(
 // ____________________________________________________________________________________
 ExpressionPtr Visitor::visitTypesafe(
     Parser::ConditionalAndExpressionContext* ctx) {
-  auto children = visitVector<ExpressionPtr>(ctx->valueLogical());
+  auto children = visitVector(ctx->valueLogical());
   AD_CHECK(!children.empty());
   auto result = std::move(children.front());
   using C = sparqlExpression::AndExpression::Children;
@@ -1233,7 +1228,7 @@ ExpressionPtr Visitor::visitTypesafe(Parser::NumericExpressionContext* ctx) {
 
 // ____________________________________________________________________________________
 ExpressionPtr Visitor::visitTypesafe(Parser::AdditiveExpressionContext* ctx) {
-  auto children = visitVector<ExpressionPtr>(ctx->multiplicativeExpression());
+  auto children = visitVector(ctx->multiplicativeExpression());
   auto opTypes = visitOperationTags(ctx->children, {"+", "-"});
 
   if (!ctx->strangeMultiplicativeSubexprOfAdditive().empty()) {
@@ -1267,7 +1262,7 @@ ExpressionPtr Visitor::visitTypesafe(Parser::AdditiveExpressionContext* ctx) {
 // ____________________________________________________________________________________
 ExpressionPtr Visitor::visitTypesafe(
     Parser::MultiplicativeExpressionContext* ctx) {
-  auto children = visitVector<ExpressionPtr>(ctx->unaryExpression());
+  auto children = visitVector(ctx->unaryExpression());
   auto opTypes = visitOperationTags(ctx->children, {"*", "/"});
 
   AD_CHECK(!children.empty());
@@ -1519,6 +1514,18 @@ BlankNode Visitor::visitTypesafe(Parser::BlankNodeContext* ctx) {
   }
   // invalid grammar
   AD_FAIL();
+}
+
+// ____________________________________________________________________________________
+
+template <typename Ctx>
+auto Visitor::visitVector(const std::vector<Ctx*>& childContexts)
+    -> std::vector<decltype(visitTypesafe(childContexts[0]))> {
+  std::vector<decltype(visitTypesafe(childContexts[0]))> children;
+  for (const auto& child : childContexts) {
+    children.emplace_back(std::move(visitTypesafe(child)));
+  }
+  return children;
 }
 
 // ____________________________________________________________________________________
