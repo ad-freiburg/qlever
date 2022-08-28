@@ -52,19 +52,38 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
   // to `HttpServer` below.
   auto httpSessionHandler =
       [this](auto request, auto&& send) -> boost::asio::awaitable<void> {
-    // Version of send with maximally permissive CORS header (that allows the
+    // Version of send with maximally permissive CORS header (which allows the
     // client that receives the response to do with it what it wants).
-    auto sendWithCors = [&send](auto response) -> boost::asio::awaitable<void> {
+    // NOTE: For POST and GET requests, the "allow origin" header is sufficient,
+    // while the "allow headers" header is needed only for OPTIONS request. The
+    // "allow methods" header is purely informational. To avoid two similar
+    // lambdas here, we send the same headers for GET, POST, and OPTIONS.
+    auto sendWithAccessControlHeaders =
+        [&send](auto response) -> boost::asio::awaitable<void> {
       response.set(http::field::access_control_allow_origin, "*");
+      response.set(http::field::access_control_allow_headers, "*");
+      response.set(http::field::access_control_allow_methods,
+                   "GET, POST, OPTIONS");
       co_return co_await send(std::move(response));
     };
+    // Reply to OPTIONS requests immediately by allowing everything.
+    // NOTE: Handling OPTIONS requests is necessary because some POST queries
+    // (in particular, from the QLever UI) are preceded by an OPTIONS request (a
+    // so-called "preflight" request, which asks permission for the POST query).
+    if (request.method() == http::verb::options) {
+      LOG(INFO) << std::endl;
+      LOG(INFO) << "Request received via " << request.method()
+                << ", allowing everything" << std::endl;
+      co_return co_await sendWithAccessControlHeaders(
+          createOkResponse("", request, ad_utility::MediaType::textPlain));
+    }
     // Process the request using the `process` method and if it throws an
     // exception, log the error message and send a HTTP/1.1 400 Bad Request
     // response with that message. Note that the C++ standard forbids co_await
     // in the catch block, hence the workaround with the `exceptionErrorMsg`.
     std::optional<std::string> exceptionErrorMsg;
     try {
-      co_await process(std::move(request), sendWithCors);
+      co_await process(std::move(request), sendWithAccessControlHeaders);
     } catch (const std::exception& e) {
       exceptionErrorMsg = e.what();
     }
@@ -72,7 +91,7 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
       LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
       auto badRequestResponse = createBadRequestResponse(
           absl::StrCat(exceptionErrorMsg.value(), "\n"), request);
-      co_await sendWithCors(std::move(badRequestResponse));
+      co_await sendWithAccessControlHeaders(std::move(badRequestResponse));
     }
   };
 
