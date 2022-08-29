@@ -38,4 +38,13 @@ TEST(ParseException, MetadataGeneration) {
                 (ExceptionMetadata{"where  { ?a a:b ?b }", 12, 14}));
     }
   }
+  // "%" doesn't match any valid token. So in this case we will get an Error
+  // from the Lexer. There is no ExceptionMetadata available for Lexer Errors.
+  {
+    try {
+      SparqlParser("SELECT * WHERE { % }").parse();
+    } catch (const ParseException& e) {
+      EXPECT_FALSE(e.metadata().has_value());
+    }
+  }
 }

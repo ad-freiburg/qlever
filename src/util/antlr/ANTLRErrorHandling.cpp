@@ -27,13 +27,19 @@ ExceptionMetadata generateMetadata(antlr4::ParserRuleContext* ctx) {
 }
 
 // _____________________________________________________________________________
-void ThrowingErrorListener::syntaxError(
-    [[maybe_unused]] antlr4::Recognizer* recognizer,
-    [[maybe_unused]] antlr4::Token* offendingSymbol, size_t line,
-    size_t charPositionInLine, const std::string& msg,
-    [[maybe_unused]] std::exception_ptr e) {
-  throw ParseException{
-      absl::StrCat("Token \"", offendingSymbol->getText(), "\" at line ", line,
-                   ":", charPositionInLine, " ", msg),
-      generateMetadata(recognizer, offendingSymbol, line, charPositionInLine)};
+void ThrowingErrorListener::syntaxError(antlr4::Recognizer* recognizer,
+                                        antlr4::Token* offendingSymbol,
+                                        size_t line, size_t charPositionInLine,
+                                        const std::string& msg,
+                                        [[maybe_unused]] std::exception_ptr e) {
+  if (offendingSymbol) {
+    throw ParseException{
+        absl::StrCat("Token \"", offendingSymbol->getText(), "\" at line ",
+                     line, ":", charPositionInLine, " ", msg),
+        generateMetadata(recognizer, offendingSymbol, line,
+                         charPositionInLine)};
+  } else {
+    throw ParseException{
+        absl::StrCat("line ", line, ":", charPositionInLine, " ", msg)};
+  }
 }
