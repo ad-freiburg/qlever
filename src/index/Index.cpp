@@ -27,8 +27,7 @@ template void Index::createFromFile<TurtleStreamParser<Tokenizer>>(
     const string& filename);
 template void Index::createFromFile<TurtleMmapParser<Tokenizer>>(
     const string& filename);
-template void Index::createFromFile<TurtleParserAuto>(
-    const string& filename);
+template void Index::createFromFile<TurtleParserAuto>(const string& filename);
 
 // __________________________________________________________
 void Index::addPatternsToExistingIndex() {
@@ -237,9 +236,11 @@ void Index::dumpAsciiLists(const vector<std::string>& lists,
  */
 
 // _______________________
+/*
 void Index::dumpAsciiLists(const TextBlockMetaData& tbmd) const {
   return pimpl_->dumpAsciiLists(tbmd);
 }
+ */
 
 // ______________________
 float Index::getAverageNofEntityContexts() const {
