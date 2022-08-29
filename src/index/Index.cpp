@@ -22,6 +22,14 @@ void Index::createFromFile(const std::string& filename) {
   pimpl_->template createFromFile<Parser>(filename);
 }
 
+// Explicit instantiations.
+template void Index::createFromFile<TurtleStreamParser<Tokenizer>>(
+    const string& filename);
+template void Index::createFromFile<TurtleMmapParser<Tokenizer>>(
+    const string& filename);
+template void Index::createFromFile<TurtleParserAuto>(
+    const string& filename);
+
 // __________________________________________________________
 void Index::addPatternsToExistingIndex() {
   pimpl_->addPatternsToExistingIndex();
@@ -301,9 +309,7 @@ const std::string& Index::getKbName() const { return pimpl_->getKbName(); }
 size_t Index::getNofTriples() const { return pimpl_->getNofTriples(); }
 
 // _________________________________________________________
-size_t Index::getNofTextRecords() const {
-  return pimpl_->getNofTextRecords();
-}
+size_t Index::getNofTextRecords() const { return pimpl_->getNofTextRecords(); }
 
 // ________________________________________________________
 size_t Index::getNofWordPostings() const {
@@ -316,60 +322,80 @@ size_t Index::getNofEntityPostings() const {
 }
 
 // ______________________________________________________
-size_t Index::getNofSubjects() const {
-  return pimpl_->getNofSubjects();
-}
+size_t Index::getNofSubjects() const { return pimpl_->getNofSubjects(); }
 
 // _____________________________________________________
-size_t Index::getNofObjects() const {
-  return pimpl_->getNofObjects();
-}
+size_t Index::getNofObjects() const { return pimpl_->getNofObjects(); }
 
 // _____________________________________________________
-size_t Index::getNofPredicates() const {
-  return pimpl_->getNofPredicates();
-}
+size_t Index::getNofPredicates() const { return pimpl_->getNofPredicates(); }
 
 // _____________________________________________________
-bool Index::hasAllPermutations() const {
-  return pimpl_->hasAllPermutations();
-}
+bool Index::hasAllPermutations() const { return pimpl_->hasAllPermutations(); }
 
+auto applyToPermutation(IndexImpl* index, Permutations permutation,
+                        const auto& F) {
+  using enum Permutations;
+  switch (permutation) {
+    case POS:
+      return F(index->POS());
+    case PSO:
+      return F(index->PSO());
+    case SPO:
+      return F(index->SPO());
+    case SOP:
+      return F(index->SOP());
+    case OSP:
+      return F(index->OSP());
+    case OPS:
+      return F(index->OPS());
+    default:
+      AD_FAIL();
+  }
+}
 // _____________________________________________________
 vector<float> Index::getMultiplicities(Permutations p) const {
-  // TODO<joka921>
+  return applyToPermutation(pimpl_.get(), p, [this](const auto& permutation) {
+    return pimpl_->getMultiplicities(permutation);
+  });
 }
 
 // _____________________________________________________
-vector<float> Index::getMultiplicities(const TripleComponent& key, Permutations permutation) const {
- // TODO<joka921>
+vector<float> Index::getMultiplicities(const TripleComponent& key,
+                                       Permutations permutation) const {
+  return applyToPermutation(
+      pimpl_.get(), permutation,
+      [this, key](const auto& p) { return pimpl_->getMultiplicities(key, p); });
 }
 
 // _____________________________________________________
-void Index::scan(Id key, IdTable* result, Permutations p, ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  // TODO<joka921>
+void Index::scan(Id key, IdTable* result, Permutations p,
+                 ad_utility::SharedConcurrentTimeoutTimer timer) const {
+  return applyToPermutation(pimpl_.get(), p, [&](const auto& perm) {
+    return pimpl_->scan(key, result, perm, std::move(timer));
+  });
 }
 
 // _____________________________________________________
-void Index::scan(const TripleComponent& key, IdTable* result, const Permutations& p, ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  // TODO<joka921>
+void Index::scan(const TripleComponent& key, IdTable* result,
+                 const Permutations& p,
+                 ad_utility::SharedConcurrentTimeoutTimer timer) const {
+  return applyToPermutation(pimpl_.get(), p, [&](const auto& perm) {
+    return pimpl_->scan(key, result, perm, std::move(timer));
+  });
 }
 
 // _____________________________________________________
-void Index::scan(const TripleComponent& col0String, const TripleComponent& col1String, IdTable* result, Permutations p, ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  // TODO<joka921>
+void Index::scan(const TripleComponent& col0String,
+                 const TripleComponent& col1String, IdTable* result,
+                 Permutations p,
+                 ad_utility::SharedConcurrentTimeoutTimer timer) const {
+  return applyToPermutation(pimpl_.get(), p, [&](const auto& perm) {
+    return pimpl_->scan(col0String, col1String, result, perm, std::move(timer));
+  });
 }
 
 // _____________________________________________________
 std::pair<size_t, size_t> Index::getNumTriplesActuallyAndAdded() const {
-  // TODO<joka921>
+  return pimpl_->getNumTriplesActuallyAndAdded();
 }
-
-
-
-
-
-
-
-
-
