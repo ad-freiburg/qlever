@@ -407,10 +407,12 @@ MATCHER_P4(IsSolutionModifier, groupByVariables, havingClauses, orderBy,
 }
 
 auto IsTriples = [](const vector<SparqlTriple>& triples) {
-  return testing::VariantWith<GraphPatternOperation::BasicGraphPattern>(
-      testing::Field("_triples",
-                     &GraphPatternOperation::BasicGraphPattern::_triples,
-                     testing::UnorderedElementsAreArray(triples)));
+  return testing::Field(
+      "variant_", &GraphPatternOperation::variant_,
+      testing::VariantWith<GraphPatternOperation::BasicGraphPattern>(
+          testing::Field("_triples",
+                         &GraphPatternOperation::BasicGraphPattern::_triples,
+                         testing::UnorderedElementsAreArray(triples))));
 };
 
 auto IsOptional = [](auto&& subMatcher) {
@@ -442,9 +444,8 @@ auto IsUnion = [](auto&& subMatcher1, auto&& subMatcher2) {
 auto IsMinus = [](auto&& subMatcher) {
   return testing::Field(
       "variant_", &GraphPatternOperation::variant_,
-      testing::VariantWith<GraphPatternOperation::Union>(
-          testing::VariantWith<GraphPatternOperation::Minus>(testing::Field(
-              "_child", &GraphPatternOperation::Minus::_child, subMatcher))));
+      testing::VariantWith<GraphPatternOperation::Minus>(testing::Field(
+          "_child", &GraphPatternOperation::Minus::_child, subMatcher)));
 };
 
 MATCHER_P3(IsGraphPattern, optional, filters, childMatchers, "") {
