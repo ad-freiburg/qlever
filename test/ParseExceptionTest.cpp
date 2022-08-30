@@ -3,16 +3,16 @@
 //  Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
-#include <parser/ParseException.h>
-#include <parser/SparqlParser.h>
 
 #include "SparqlAntlrParserTestHelpers.h"
+#include "parser/ParseException.h"
+#include "parser/SparqlParser.h"
 
 TEST(ParseException, coloredError) {
   auto exampleQuery = "SELECT A ?var WHERE";
-  EXPECT_EQ((ExceptionMetadata{exampleQuery, 7, 7}).coloredError(),
+  EXPECT_EQ((ExceptionMetadata{exampleQuery, 7, 7, 1, 7}).coloredError(),
             "SELECT \x1B[1m\x1B[4m\x1B[31mA\x1B[0m ?var WHERE");
-  EXPECT_EQ((ExceptionMetadata{exampleQuery, 9, 12}).coloredError(),
+  EXPECT_EQ((ExceptionMetadata{exampleQuery, 9, 12, 1, 9}).coloredError(),
             "SELECT A \x1B[1m\x1B[4m\x1B[31m?var\x1B[0m WHERE");
 }
 
