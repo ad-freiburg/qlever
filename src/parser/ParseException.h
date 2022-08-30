@@ -22,6 +22,10 @@ struct ExceptionMetadata {
   // Start and Stop Index of the clause that cause the exception in query_.
   size_t startIndex_;
   size_t stopIndex_;
+  // Start of the clause expressed as line and position in the line relative to
+  // query_.
+  size_t line_;
+  size_t charPositionInLine_;
 
   bool operator==(const ExceptionMetadata& rhs) const = default;
 

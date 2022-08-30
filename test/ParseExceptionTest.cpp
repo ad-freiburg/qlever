@@ -32,11 +32,12 @@ TEST(ParseException, MetadataGeneration) {
   // when it is outputted with getUnconsumedInput (which is used for ANtLR).
   expectParseExceptionWithMetadata(
       "SELECT A ?a WHERE { ?a ?b ?c }",
-      {{"select   A ?a WHERE { ?a ?b ?c }", 9, 9}});
+      {{"select   A ?a WHERE { ?a ?b ?c }", 9, 9, 1, 9}});
   // The ANTLR Parser currently doesn't always have the whole query.
   expectParseExceptionWithMetadata("SELECT * WHERE { ?a a:b ?b }",
-                                   {{"where  { ?a a:b ?b }", 12, 14}});
+                                   {{"where  { ?a a:b ?b }", 12, 14, 1, 12}});
   // "%" doesn't match any valid token. So in this case we will get an Error
   // from the Lexer. There is no ExceptionMetadata available for Lexer Errors.
-  expectParseExceptionWithMetadata("SELECT * WHERE { % }", std::nullopt);
+  expectParseExceptionWithMetadata("SELECT * WHERE { % }",
+                                   {{"where  { % }", 9, 9, 1, 9}});
 }
