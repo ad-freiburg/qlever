@@ -791,11 +791,11 @@ void expectSelectFails(const string& input) {
 
 TEST(SparqlParser, SelectClause) {
   auto expectVariablesSelect = [](const string& input,
-                                  std::vector<std::string> variables,
+                                  const std::vector<std::string>& variables,
                                   bool distinct = false, bool reduced = false) {
     expectCompleteParse(
         parseSelectClause(input),
-        IsVariablesSelect(distinct, reduced, std::move(variables)));
+        IsVariablesSelect(std::move(variables), distinct, reduced));
   };
   using Alias = std::pair<string, string>;
   auto expectSelect = [](const string& input,
@@ -859,31 +859,12 @@ void expectGroupGraphPatternFails(const string& input) {
 TEST(SparqlParser, GroupGraphPattern) {
   // The types of arguments to gmock matchers are automatically deduced. We
   // explicitly specify the types here. This e.g. allows to write
-  // Triples({{"?a", "?b", "?c"}}) instead of
-  // IsTriples(vector{SparqlTriple{"?a", "?b", "?c"}}).
-  auto Triples = [](vector<SparqlTriple>&& triples) {
-    return IsTriples(triples);
-  };
-  auto Bind = [](const string& target, const string& expression) {
-    return IsBind(target, expression);
-  };
-  auto InlineData = [](vector<string>&& expectedVars,
-                       vector<vector<string>>&& expectedVals) {
-    return IsInlineData(expectedVars, expectedVals);
-  };
+  // `GraphPattern(false, {}, subMatcher1, subMatcher2)` instead of
+  // `IsGraphPattern(false, vector<SparqlFilter>{}, std::tuple{subMatcher1,
+  // subMatcher2})`.
   auto GraphPattern = [](bool optional, vector<SparqlFilter>&& filters,
                          const auto&... childMatchers) {
     return IsGraphPattern(optional, filters, std::tuple{childMatchers...});
-  };
-  auto Optional = [](vector<SparqlFilter>&& filters,
-                     const auto&... childMatchers) {
-    return IsOptional(
-        IsGraphPattern(true, filters, std::tuple{childMatchers...}));
-  };
-  auto Minus = [](vector<SparqlFilter>&& filters,
-                  const auto&... childMatchers) {
-    return IsMinus(
-        IsGraphPattern(false, filters, std::tuple{childMatchers...}));
   };
 
   auto expectGraphPattern = [](const string&& input, const auto& matcher) {
@@ -901,42 +882,46 @@ TEST(SparqlParser, GroupGraphPattern) {
       "{ { ?a ?b ?c } }",
       GraphPattern(
           false, {},
-          IsGroup(GraphPattern(false, {}, Triples({{"?a", "?b", "?c"}})))));
+          IsGroup(GraphPattern(false, {}, IsTriples({{"?a", "?b", "?c"}})))));
   expectGraphPattern(
       "{ { ?a ?b ?c } UNION { ?d ?e ?f } }",
       GraphPattern(
           false, {},
-          IsUnion(GraphPattern(false, {}, Triples({{"?a", "?b", "?c"}})),
-                  GraphPattern(false, {}, Triples({{"?d", "?e", "?f"}})))));
+          IsUnion(GraphPattern(false, {}, IsTriples({{"?a", "?b", "?c"}})),
+                  GraphPattern(false, {}, IsTriples({{"?d", "?e", "?f"}})))));
   expectGraphPattern(
       "{ { ?a ?b ?c } UNION { ?d ?e ?f } UNION { ?g ?h ?i } }",
       GraphPattern(
           false, {},
-          IsUnion(
-              GraphPattern(
-                  false, {},
-                  IsUnion(
-                      GraphPattern(false, {}, Triples({{"?a", "?b", "?c"}})),
-                      GraphPattern(false, {}, Triples({{"?d", "?e", "?f"}})))),
-              GraphPattern(false, {}, Triples({{"?g", "?h", "?i"}})))));
+          IsUnion(GraphPattern(
+                      false, {},
+                      IsUnion(GraphPattern(false, {},
+                                           IsTriples({{"?a", "?b", "?c"}})),
+                              GraphPattern(false, {},
+                                           IsTriples({{"?d", "?e", "?f"}})))),
+                  GraphPattern(false, {}, IsTriples({{"?g", "?h", "?i"}})))));
   expectGraphPattern(
       "{ OPTIONAL { ?a <foo> <bar> } }",
-      GraphPattern(false, {},
-                   Optional({}, Triples({{"?a", "<foo>", "<bar>"}}))));
+      GraphPattern(
+          false, {},
+          OptionalGraphPattern({}, IsTriples({{"?a", "<foo>", "<bar>"}}))));
   expectGraphPattern(
       "{ MINUS { ?a <foo> <bar> } }",
-      GraphPattern(false, {}, Minus({}, Triples({{"?a", "<foo>", "<bar>"}}))));
+      GraphPattern(
+          false, {},
+          MinusGraphPattern({}, IsTriples({{"?a", "<foo>", "<bar>"}}))));
   expectGraphPattern(
       "{ FILTER (?a = 10) }",
       GraphPattern(false, {{SparqlFilter::FilterType::EQ, "?a", "10"}}));
   expectGraphPattern("{ BIND (?f - ?b as ?c) }",
-                     GraphPattern(false, {}, Bind("?c", "?f-?b")));
-  expectGraphPattern("{ VALUES (?a ?b) { (<foo> <bar>) (<a> <b>) } }",
-                     GraphPattern(false, {},
-                                  InlineData({"?a", "?b"}, {{"<foo>", "<bar>"},
-                                                            {"<a>", "<b>"}})));
+                     GraphPattern(false, {}, IsBind("?c", "?f-?b")));
+  expectGraphPattern(
+      "{ VALUES (?a ?b) { (<foo> <bar>) (<a> <b>) } }",
+      GraphPattern(
+          false, {},
+          IsInlineData({"?a", "?b"}, {{"<foo>", "<bar>"}, {"<a>", "<b>"}})));
   expectGraphPattern("{ ?x ?y ?z }",
-                     GraphPattern(false, {}, Triples({{"?x", "?y", "?z"}})));
+                     GraphPattern(false, {}, IsTriples({{"?x", "?y", "?z"}})));
   expectGraphPattern("{ SELECT *  WHERE { } }",
                      GraphPattern(false, {},
                                   IsSubSelect(IsAsteriskSelect(false, false),
@@ -945,44 +930,46 @@ TEST(SparqlParser, GroupGraphPattern) {
   expectGraphPattern(
       "{ ?x ?y ?z ; ?f <bar> }",
       GraphPattern(false, {},
-                   Triples({{"?x", "?y", "?z"}, {"?x", "?f", "<bar>"}})));
+                   IsTriples({{"?x", "?y", "?z"}, {"?x", "?f", "<bar>"}})));
   expectGraphPattern(
       "{ ?x ?y ?z . <foo> ?f <bar> }",
       GraphPattern(false, {},
-                   Triples({{"?x", "?y", "?z"}, {"<foo>", "?f", "<bar>"}})));
+                   IsTriples({{"?x", "?y", "?z"}, {"<foo>", "?f", "<bar>"}})));
   expectGraphPattern(
       "{ ?x <is-a> <Actor> . FILTER(?x != ?y) . ?y <is-a> <Actor> . "
       "FILTER(?y < ?x) }",
-      GraphPattern(
-          false,
-          {{SparqlFilter::FilterType::NE, "?x", "?y"},
-           {SparqlFilter::FilterType::LT, "?y", "?x"}},
-          Triples({{"?x", "<is-a>", "<Actor>"}, {"?y", "<is-a>", "<Actor>"}})));
+      GraphPattern(false,
+                   {{SparqlFilter::FilterType::NE, "?x", "?y"},
+                    {SparqlFilter::FilterType::LT, "?y", "?x"}},
+                   IsTriples({{"?x", "<is-a>", "<Actor>"},
+                              {"?y", "<is-a>", "<Actor>"}})));
   expectGraphPattern(
       "{?x <is-a> <Actor> . FILTER(?x != ?y) . ?y <is-a> <Actor> . ?c "
       "ql:contains-entity ?x . ?c ql:contains-word \"coca* abuse\"}",
-      GraphPattern(false, {{SparqlFilter::FilterType::NE, "?x", "?y"}},
-                   Triples({{"?x", "<is-a>", "<Actor>"},
-                            {"?y", "<is-a>", "<Actor>"},
-                            {"?c", CONTAINS_ENTITY_PREDICATE, "?x"},
-                            {"?c", CONTAINS_WORD_PREDICATE, "coca* abuse"}})));
+      GraphPattern(
+          false, {{SparqlFilter::FilterType::NE, "?x", "?y"}},
+          IsTriples({{"?x", "<is-a>", "<Actor>"},
+                     {"?y", "<is-a>", "<Actor>"},
+                     {"?c", CONTAINS_ENTITY_PREDICATE, "?x"},
+                     {"?c", CONTAINS_WORD_PREDICATE, "coca* abuse"}})));
   expectGraphPattern(
       "{?x <is-a> <Actor> . BIND(10 - ?foo as ?y) }",
-      GraphPattern(false, {}, Triples({{"?x", "<is-a>", "<Actor>"}}),
-                   Bind("?y", "10-?foo")));
+      GraphPattern(false, {}, IsTriples({{"?x", "<is-a>", "<Actor>"}}),
+                   IsBind("?y", "10-?foo")));
   expectGraphPattern(
       "{?x <is-a> <Actor> . BIND(10 - ?foo as ?y) . ?a ?b ?c }",
-      GraphPattern(false, {}, Triples({{"?x", "<is-a>", "<Actor>"}}),
-                   Bind("?y", "10-?foo"), Triples({{"?a", "?b", "?c"}})));
+      GraphPattern(false, {}, IsTriples({{"?x", "<is-a>", "<Actor>"}}),
+                   IsBind("?y", "10-?foo"), IsTriples({{"?a", "?b", "?c"}})));
   expectGraphPattern(
       "{?x <is-a> <Actor> . OPTIONAL { ?x <foo> <bar> } }",
-      GraphPattern(false, {}, Triples({{"?x", "<is-a>", "<Actor>"}}),
-                   Optional({}, Triples({{"?x", "<foo>", "<bar>"}}))));
+      GraphPattern(
+          false, {}, IsTriples({{"?x", "<is-a>", "<Actor>"}}),
+          OptionalGraphPattern({}, IsTriples({{"?x", "<foo>", "<bar>"}}))));
   expectGraphPattern("{ SELECT *  WHERE { } VALUES ?a { <a> <b> } }",
                      GraphPattern(false, {},
                                   IsSubSelect(IsAsteriskSelect(false, false),
                                               GraphPattern(false, {})),
-                                  InlineData({"?a"}, {{"<a>"}, {"<b>"}})));
+                                  IsInlineData({"?a"}, {{"<a>"}, {"<b>"}})));
   // graphGraphPattern and serviceGraphPattern are not supported.
   expectGroupGraphPatternFails("{ GRAPH ?a { } }");
   expectGroupGraphPatternFails("{ GRAPH <foo> { } }");
