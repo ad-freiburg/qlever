@@ -39,7 +39,7 @@ class Index {
   Index(const Index&) = delete;
 
   /// Allow move construction, which is mostly used in unit tests.
-  Index(Index&&) noexcept = default;
+  Index(Index&&) noexcept;
 
   Index();
   ~Index();
@@ -293,6 +293,11 @@ class Index {
   // predicate starts with @) and all other triples (that were actually part of
   // the input).
   std::pair<size_t, size_t> getNumTriplesActuallyAndAdded() const;
+
+  // Get access to the implementation. This should be used rarerly as it
+  // requires including the rather expensive `IndexImpl.h` header
+  IndexImpl& getImpl() { return *pimpl_; }
+  const IndexImpl& getImpl() const { return *pimpl_; }
 
  private:
   // Pimpl to reduce compile times

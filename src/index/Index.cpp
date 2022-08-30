@@ -10,6 +10,7 @@
 
 // ____________________________________________________________
 Index::Index() : pimpl_{std::make_unique<IndexImpl>()} {}
+Index::Index(Index&&) noexcept = default;
 
 // Needs to be in the .cpp file because of the unique_ptr to a forwarded class.
 // see
@@ -334,29 +335,9 @@ size_t Index::getNofPredicates() const { return pimpl_->getNofPredicates(); }
 // _____________________________________________________
 bool Index::hasAllPermutations() const { return pimpl_->hasAllPermutations(); }
 
-auto applyToPermutation(IndexImpl* index, Permutations permutation,
-                        const auto& F) {
-  using enum Permutations;
-  switch (permutation) {
-    case POS:
-      return F(index->POS());
-    case PSO:
-      return F(index->PSO());
-    case SPO:
-      return F(index->SPO());
-    case SOP:
-      return F(index->SOP());
-    case OSP:
-      return F(index->OSP());
-    case OPS:
-      return F(index->OPS());
-    default:
-      AD_FAIL();
-  }
-}
 // _____________________________________________________
 vector<float> Index::getMultiplicities(Permutations p) const {
-  return applyToPermutation(pimpl_.get(), p, [this](const auto& permutation) {
+  return pimpl_->applyToPermutation(p, [this](const auto& permutation) {
     return pimpl_->getMultiplicities(permutation);
   });
 }
@@ -364,15 +345,15 @@ vector<float> Index::getMultiplicities(Permutations p) const {
 // _____________________________________________________
 vector<float> Index::getMultiplicities(const TripleComponent& key,
                                        Permutations permutation) const {
-  return applyToPermutation(
-      pimpl_.get(), permutation,
-      [this, key](const auto& p) { return pimpl_->getMultiplicities(key, p); });
+  return pimpl_->applyToPermutation(permutation, [this, key](const auto& p) {
+    return pimpl_->getMultiplicities(key, p);
+  });
 }
 
 // _____________________________________________________
 void Index::scan(Id key, IdTable* result, Permutations p,
                  ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  return applyToPermutation(pimpl_.get(), p, [&](const auto& perm) {
+  return pimpl_->applyToPermutation(p, [&](const auto& perm) {
     return pimpl_->scan(key, result, perm, std::move(timer));
   });
 }
@@ -381,7 +362,7 @@ void Index::scan(Id key, IdTable* result, Permutations p,
 void Index::scan(const TripleComponent& key, IdTable* result,
                  const Permutations& p,
                  ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  return applyToPermutation(pimpl_.get(), p, [&](const auto& perm) {
+  return pimpl_->applyToPermutation(p, [&](const auto& perm) {
     return pimpl_->scan(key, result, perm, std::move(timer));
   });
 }
@@ -391,7 +372,7 @@ void Index::scan(const TripleComponent& col0String,
                  const TripleComponent& col1String, IdTable* result,
                  Permutations p,
                  ad_utility::SharedConcurrentTimeoutTimer timer) const {
-  return applyToPermutation(pimpl_.get(), p, [&](const auto& perm) {
+  return pimpl_->applyToPermutation(p, [&](const auto& perm) {
     return pimpl_->scan(col0String, col1String, result, perm, std::move(timer));
   });
 }

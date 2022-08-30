@@ -498,6 +498,49 @@ class IndexImpl {
                                      timer);
   }
 
+  // Apply the function `F` to the permutation that corresponds to the
+  // `permutation` argument.
+  auto applyToPermutation(Permutations permutation, const auto& F) {
+    using enum Permutations;
+    switch (permutation) {
+      case POS:
+        return F(_POS);
+      case PSO:
+        return F(_PSO);
+      case SPO:
+        return F(_SPO);
+      case SOP:
+        return F(_SOP);
+      case OSP:
+        return F(_OSP);
+      case OPS:
+        return F(_OPS);
+      default:
+        AD_FAIL();
+    }
+  }
+
+  // TODO<joka921> reduce code duplication here
+  auto applyToPermutation(Permutations permutation, const auto& F) const {
+    using enum Permutations;
+    switch (permutation) {
+      case POS:
+        return F(_POS);
+      case PSO:
+        return F(_PSO);
+      case SPO:
+        return F(_SPO);
+      case SOP:
+        return F(_SOP);
+      case OSP:
+        return F(_OSP);
+      case OPS:
+        return F(_OPS);
+      default:
+        AD_FAIL();
+    }
+  }
+
  private:
   string _onDiskBase;
   string _settingsFileName;

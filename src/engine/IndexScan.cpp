@@ -2,12 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./IndexScan.h"
+#include "engine/IndexScan.h"
 
 #include <sstream>
 #include <string>
 
-#include "../index/TriplesView.h"
+#include "index/IndexImpl.h"
+#include "index/TriplesView.h"
 #include "parser/ParsedQuery.h"
 
 using std::string;
@@ -450,9 +451,6 @@ void IndexScan::determineMultiplicities() {
 
 void IndexScan::computeFullScan(ResultTable* result,
                                 const Permutations permutation) const {
-  // TODO<joka921> reimplement this
-  AD_FAIL();
-  /*
   std::vector<std::pair<Id, Id>> ignoredRanges;
 
   auto literalRange = getIndex().getVocab().prefix_range("\"");
@@ -464,7 +462,6 @@ void IndexScan::computeFullScan(ResultTable* result,
 
   // TODO<joka921> lift `prefixRange` to Index and ID
   if (permutation == Permutations::SPO || permutation == Permutations::SOP) {
-
     ignoredRanges.push_back({Id::makeFromVocabIndex(literalRange.first),
                              Id::makeFromVocabIndex(literalRange.second)});
   } else if (permutation == Permutations::PSO ||
@@ -478,15 +475,14 @@ void IndexScan::computeFullScan(ResultTable* result,
   }
 
   auto isTripleIgnored = [&](const auto& triple) {
-    if (permutation == Permutations::SPO ||
-                  permutation == Permutations::OPS) {
+    if (permutation == Permutations::SPO || permutation == Permutations::OPS) {
       // Predicates are always entities from the vocabulary.
       auto id = triple[1].getVocabIndex();
       return id == languagePredicateIndex ||
              (id >= taggedPredicatesRange.first &&
               id < taggedPredicatesRange.second);
     } else if (permutation == Permutations::SOP ||
-                         permutation == Permutations::OSP) {
+               permutation == Permutations::OSP) {
       // Predicates are always entities from the vocabulary.
       auto id = triple[2].getVocabIndex();
       return id == languagePredicateIndex ||
@@ -509,9 +505,13 @@ void IndexScan::computeFullScan(ResultTable* result,
   result->_idTable.reserve(resultSize);
   auto table = result->_idTable.moveToStatic<3>();
   size_t i = 0;
-  for (const auto& triple :
-       TriplesView(permutation, getExecutionContext()->getAllocator(),
-                   ignoredRanges, isTripleIgnored)) {
+  auto triplesView =
+      getExecutionContext()->getIndex().getImpl().applyToPermutation(
+          permutation, [&](const auto& p) {
+            return TriplesView(p, getExecutionContext()->getAllocator(),
+                               ignoredRanges, isTripleIgnored);
+          });
+  for (const auto& triple : triplesView) {
     if (i >= resultSize) {
       break;
     }
@@ -519,5 +519,4 @@ void IndexScan::computeFullScan(ResultTable* result,
     ++i;
   }
   result->_idTable = table.moveToDynamic();
-   */
 }
