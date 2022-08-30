@@ -151,18 +151,25 @@ valuesClause : ( VALUES dataBlock )?;
 triplesTemplate: triplesSameSubject ( '.' triplesTemplate? )?;
 
 
+// Corresponds to GraphPattern.
 groupGraphPattern
     : '{' ( subSelect | groupGraphPatternSub )'}'
     ;
 
 groupGraphPatternSub
-    : triplesBlock? ( graphPatternNotTriples '.'? triplesBlock? )*
+    : triplesBlock? graphPatternNotTriplesAndMaybeTriples*
+    ;
+
+/* Helper rules to make parsing of groupGraphPatternSub easier. */
+graphPatternNotTriplesAndMaybeTriples
+    : graphPatternNotTriples '.'? triplesBlock?
     ;
 
 triplesBlock
     : triplesSameSubjectPath ( '.' triplesBlock? )?
     ;
 
+// Corresponds to GraphPatternOperation.
 graphPatternNotTriples
     : groupOrUnionGraphPattern | optionalGraphPattern | minusGraphPattern | graphGraphPattern | serviceGraphPattern | filterR | bind | inlineData
     ;
