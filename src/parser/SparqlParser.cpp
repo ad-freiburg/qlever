@@ -7,14 +7,14 @@
 #include <unordered_set>
 #include <variant>
 
-#include "util/Algorithm.h"
-#include "util/OverloadCallOperator.h"
-#include "parser/SparqlParserHelpers.h"
-#include "parser/Alias.h"
 #include "data/Types.h"
-#include "sparqlParser/SparqlQleverVisitor.h"
+#include "parser/Alias.h"
+#include "parser/SparqlParserHelpers.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
+#include "sparqlParser/SparqlQleverVisitor.h"
+#include "util/Algorithm.h"
+#include "util/OverloadCallOperator.h"
 
 using namespace std::literals::string_literals;
 using AntlrParser = SparqlAutomaticParser;

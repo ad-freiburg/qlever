@@ -29,7 +29,7 @@ class SampleExpression : public SparqlExpression {
 
   // __________________________________________________________________________
   string getCacheKey(const VariableToColumnMap& varColMap) const override {
-    return absl::StrCat("SAMPLE(" , _child->getCacheKey(varColMap) , ")");
+    return absl::StrCat("SAMPLE(", _child->getCacheKey(varColMap), ")");
   }
 
   // __________________________________________________________________________

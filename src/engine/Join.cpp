@@ -291,7 +291,7 @@ Join::ScanMethodType Join::getScanMethod(
         [&idx, perm](Id id, IdTable* idTable) { idx.scan(id, idTable, perm); };
   };
 
-  using enum Index::Permutations;
+  using enum Index::Permutation;
   switch (scan.getType()) {
     case IndexScan::FULL_INDEX_SCAN_SPO:
       scanMethod = scanLambda(SPO);

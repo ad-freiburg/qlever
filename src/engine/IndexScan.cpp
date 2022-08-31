@@ -211,7 +211,7 @@ ad_utility::HashMap<string, size_t> IndexScan::getVariableColumns() const {
 void IndexScan::computeResult(ResultTable* result) {
   LOG(DEBUG) << "IndexScan result computation...\n";
 
-  using enum Index::Permutations;
+  using enum Index::Permutation;
   switch (_type) {
     case PSO_BOUND_S:
       computePSOboundS(result);
@@ -469,7 +469,7 @@ void IndexScan::computeFullScan(ResultTable* result,
       getIndex().getVocab().getId(LANGUAGE_PREDICATE, &languagePredicateIndex);
   AD_CHECK(success);
 
-  using enum Index::Permutations;
+  using enum Index::Permutation;
   // TODO<joka921> lift `prefixRange` to Index and ID
   if (permutation == SPO || permutation == SOP) {
     ignoredRanges.push_back({Id::makeFromVocabIndex(literalRange.first),

@@ -23,13 +23,11 @@
 #include "./SortPerformanceEstimator.h"
 #include "nlohmann/json.hpp"
 
+using nlohmann::json;
 using std::string;
 using std::vector;
-using nlohmann::json;
 
 using ad_utility::Socket;
-
-
 
 //! The HTTP Server used.
 class Server {

@@ -7,10 +7,10 @@
 #include <string>
 #include <utility>
 
+#include "Context.h"
+#include "ctre/ctre.h"
 #include "engine/ResultTable.h"
 #include "index/Index.h"
-#include "ctre/ctre.h"
-#include "Context.h"
 
 class Variable {
   std::string _name;

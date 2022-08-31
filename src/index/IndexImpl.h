@@ -501,7 +501,7 @@ class IndexImpl {
   // Apply the function `F` to the permutation that corresponds to the
   // `permutation` argument.
   auto applyToPermutation(Index::Permutation permutation, const auto& F) {
-    using enum Index::Permutations;
+    using enum Index::Permutation;
     switch (permutation) {
       case POS:
         return F(_POS);
@@ -522,7 +522,7 @@ class IndexImpl {
 
   // TODO<joka921> reduce code duplication here
   auto applyToPermutation(Index::Permutation permutation, const auto& F) const {
-    using enum Index::Permutations;
+    using enum Index::Permutation;
     switch (permutation) {
       case POS:
         return F(_POS);
