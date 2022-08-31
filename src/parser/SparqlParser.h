@@ -29,16 +29,6 @@ class SparqlParser {
   /// by FILTER and BIND/GROUP BY is not the same.
   static SparqlFilter parseFilterExpression(const string& filterContent);
 
-  /**
-   * @brief This method looks for the first string literal it can find and
-   * parses it. During the parsing any escaped characters are resolved (e.g. \")
-   * If isEntireString is true an exception is thrown if the entire string
-   * is not a literal (apart from any leading and trailing whitespace).
-   **/
-  static TripleComponent parseLiteral(const ParsedQuery& pq,
-                                      const string& literal,
-                                      bool isEntireString, size_t off = 0);
-
  private:
   void parseQuery(ParsedQuery* query, QueryType queryType);
   void parseSelect(ParsedQuery* query);
@@ -46,22 +36,6 @@ class SparqlParser {
   void parseSolutionModifiers(ParsedQuery* query);
   // Returns true if it found a filter
   std::optional<SparqlFilter> parseFilter(bool failOnNoFilter = true);
-
-  // Reads the next element of a triple (an iri, a variable, a property path,
-  // etc.) out of s beginning at the current value of pos. Sets pos to the
-  // position after the read value, and returns a string view of the triple part
-  // in s.
-  std::string_view readTriplePart(const std::string& s, size_t* pos);
-
-  static string stripAndLowercaseKeywordLiteral(std::string_view lit);
-
-  /**
-   * If *ptr 's last child is a BasicGraphPattern, return a reference to it.
-   * If not, first append a BasicGraphPattern and then return a reference
-   * to the added child
-   */
-  GraphPatternOperation::BasicGraphPattern& lastBasicPattern(
-      ParsedQuery::GraphPattern* ptr) const;
 
   SparqlLexer lexer_;
   string query_;
