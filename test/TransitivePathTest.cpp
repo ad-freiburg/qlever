@@ -5,8 +5,8 @@
 #include <gtest/gtest.h>
 
 #include <array>
-#include <vector>
 #include <string>
+#include <vector>
 
 #include "engine/TransitivePath.h"
 #include "global/Id.h"

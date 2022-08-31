@@ -121,7 +121,7 @@ class IndexImpl {
   using PermutationImpl = Permutation::PermutationImpl<A, B>;
 
   // TODO: make those private and allow only const access
-  // instantiations for the 6 Permutations used in QLever
+  // instantiations for the 6 Permutation used in QLever
   // They simplify the creation of permutations in the index class
   Permutation::POS_T _POS{SortByPOS(), "POS", ".pos", {1, 2, 0}};
   Permutation::PSO_T _PSO{SortByPSO(), "PSO", ".pso", {1, 0, 2}};
@@ -500,7 +500,7 @@ class IndexImpl {
 
   // Apply the function `F` to the permutation that corresponds to the
   // `permutation` argument.
-  auto applyToPermutation(Index::Permutations permutation, const auto& F) {
+  auto applyToPermutation(Index::Permutation permutation, const auto& F) {
     using enum Index::Permutations;
     switch (permutation) {
       case POS:
@@ -521,7 +521,7 @@ class IndexImpl {
   }
 
   // TODO<joka921> reduce code duplication here
-  auto applyToPermutation(Index::Permutations permutation, const auto& F) const {
+  auto applyToPermutation(Index::Permutation permutation, const auto& F) const {
     using enum Index::Permutations;
     switch (permutation) {
       case POS:

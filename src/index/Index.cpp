@@ -336,7 +336,7 @@ size_t Index::getNofPredicates() const { return pimpl_->getNofPredicates(); }
 bool Index::hasAllPermutations() const { return pimpl_->hasAllPermutations(); }
 
 // _____________________________________________________
-vector<float> Index::getMultiplicities(Permutations p) const {
+vector<float> Index::getMultiplicities(Permutation p) const {
   return pimpl_->applyToPermutation(p, [this](const auto& permutation) {
     return pimpl_->getMultiplicities(permutation);
   });
@@ -344,14 +344,14 @@ vector<float> Index::getMultiplicities(Permutations p) const {
 
 // _____________________________________________________
 vector<float> Index::getMultiplicities(const TripleComponent& key,
-                                       Permutations permutation) const {
+                                       Permutation permutation) const {
   return pimpl_->applyToPermutation(permutation, [this, key](const auto& p) {
     return pimpl_->getMultiplicities(key, p);
   });
 }
 
 // _____________________________________________________
-void Index::scan(Id key, IdTable* result, Permutations p,
+void Index::scan(Id key, IdTable* result, Permutation p,
                  ad_utility::SharedConcurrentTimeoutTimer timer) const {
   return pimpl_->applyToPermutation(p, [&](const auto& perm) {
     return pimpl_->scan(key, result, perm, std::move(timer));
@@ -360,7 +360,7 @@ void Index::scan(Id key, IdTable* result, Permutations p,
 
 // _____________________________________________________
 void Index::scan(const TripleComponent& key, IdTable* result,
-                 const Permutations& p,
+                 const Permutation& p,
                  ad_utility::SharedConcurrentTimeoutTimer timer) const {
   return pimpl_->applyToPermutation(p, [&](const auto& perm) {
     return pimpl_->scan(key, result, perm, std::move(timer));
@@ -370,7 +370,7 @@ void Index::scan(const TripleComponent& key, IdTable* result,
 // _____________________________________________________
 void Index::scan(const TripleComponent& col0String,
                  const TripleComponent& col1String, IdTable* result,
-                 Permutations p,
+                 Permutation p,
                  ad_utility::SharedConcurrentTimeoutTimer timer) const {
   return pimpl_->applyToPermutation(p, [&](const auto& perm) {
     return pimpl_->scan(col0String, col1String, result, perm, std::move(timer));

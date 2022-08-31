@@ -22,8 +22,9 @@ class TextBlockMetaData;
 class IndexImpl;
 
 /**
- * Used as a template argument to the `createFromFile` method, when we do not yet
- * know, which tokenizer specialization of the `TurtleParser` we are going to use.
+ * Used as a template argument to the `createFromFile` method, when we do not
+ * yet know, which tokenizer specialization of the `TurtleParser` we are going
+ * to use.
  */
 class TurtleParserAuto {};
 
@@ -34,7 +35,7 @@ class Index {
 
  public:
   /// Identifiers for the six possible permutations.
-  enum struct Permutations { PSO, POS, SPO, SOP, OPS, OSP };
+  enum struct Permutation { PSO, POS, SPO, SOP, OPS, OSP };
 
   /// Forbid copy and assignment.
   Index& operator=(const Index&) = delete;
@@ -47,8 +48,8 @@ class Index {
   ~Index();
 
   // Create an index from a file. Will write vocabulary and on-disk index data.
-  // NOTE: The index can not directly be used after this call, but has to be setup
-  // by `createFromOnDiskIndex` after this call.
+  // NOTE: The index can not directly be used after this call, but has to be
+  // setup by `createFromOnDiskIndex` after this call.
   // TODO<joka921> Make the parser options also a plain enum!
   template <class Parser>
   void createFromFile(const std::string& filename);
@@ -56,7 +57,9 @@ class Index {
   void addPatternsToExistingIndex();
 
   // Create an index object from an on-disk index that has previously been
-  // constructed using the `createFromFile` method which is typically called via `IndexBuilderMain`. Read necessary metadata into memory and open file handles.
+  // constructed using the `createFromFile` method which is typically called via
+  // `IndexBuilderMain`. Read necessary metadata into memory and open file
+  // handles.
   void createFromOnDiskIndex(const std::string& onDiskBase);
 
   // Add a text index to a complete KB index. First read the given context
@@ -238,10 +241,10 @@ class Index {
 
   // _____________________________________________________________________________
   vector<float> getMultiplicities(const TripleComponent& key,
-                                  Permutations permutation) const;
+                                  Permutation permutation) const;
 
   // ___________________________________________________________________
-  vector<float> getMultiplicities(Permutations p) const;
+  vector<float> getMultiplicities(Permutation p) const;
 
   /**
    * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
@@ -253,7 +256,7 @@ class Index {
    * @param p The Permutation to use (in particularly POS(), SOP,... members of
    * Index class).
    */
-  void scan(Id key, IdTable* result, Permutations p,
+  void scan(Id key, IdTable* result, Permutation p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   /**
@@ -266,7 +269,7 @@ class Index {
    * @param p The Permutation to use (in particularly POS(), SOP,... members of
    * Index class).
    */
-  void scan(const TripleComponent& key, IdTable* result, const Permutations& p,
+  void scan(const TripleComponent& key, IdTable* result, const Permutation& p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   /**
@@ -285,7 +288,7 @@ class Index {
    */
   // _____________________________________________________________________________
   void scan(const TripleComponent& col0String,
-            const TripleComponent& col1String, IdTable* result, Permutations p,
+            const TripleComponent& col1String, IdTable* result, Permutation p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
   // Count the number of "QLever-internal" triples (predicate ql:langtag or

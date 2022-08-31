@@ -131,7 +131,7 @@ class IndexScan : public Operation {
   void computeOSPfreeS(ResultTable* result) const;
 
   void computeFullScan(ResultTable* result,
-                       const Index::Permutations permutation) const;
+                       const Index::Permutation permutation) const;
 
   size_t computeSizeEstimate();
 };
