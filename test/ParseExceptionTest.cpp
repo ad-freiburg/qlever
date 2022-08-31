@@ -39,7 +39,7 @@ TEST(ParseException, MetadataGeneration) {
   expectParseExceptionWithMetadata("SELECT * WHERE { ?a a:b ?b }",
                                    {{"where  { ?a a:b ?b }", 12, 14, 1, 12}});
   // "%" doesn't match any valid token. So in this case we will get an Error
-  // from the Lexer. There is no ExceptionMetadata available for Lexer Errors.
+  // from the Lexer.
   expectParseExceptionWithMetadata("SELECT * WHERE { % }",
                                    {{"where  { % }", 9, 9, 1, 9}});
   // Error is the undefined Prefix "f".
