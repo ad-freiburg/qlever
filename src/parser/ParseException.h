@@ -22,8 +22,8 @@ struct ExceptionMetadata {
   // Start and Stop Index of the clause that cause the exception in query_.
   size_t startIndex_;
   size_t stopIndex_;
-  // Start of the clause expressed as line and position in the line relative to
-  // query_.
+  // Start of the clause expressed as line and position in the line (0-based)
+  // relative to query_.
   size_t line_;
   size_t charPositionInLine_;
 
@@ -46,18 +46,7 @@ class ParseException : public std::exception {
     return metadata_;
   }
 
-  [[maybe_unused]] [[nodiscard]] std::optional<std::string>
-  errorMessageIncludingPositionalInfo() const {
-    if (metadata_.has_value()) {
-      auto metadata = metadata_.value();
-      return absl::StrCat("At line ", metadata.line_, ":",
-                          metadata.charPositionInLine_, " ", cause_);
-    } else {
-      return std::nullopt;
-    }
-  }
-
-  [[nodiscard]] std::string errorMessageWithoutPositionalInfo() const {
+  [[nodiscard]] const std::string& errorMessageWithoutPositionalInfo() const {
     return cause_;
   }
 

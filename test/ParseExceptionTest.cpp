@@ -30,16 +30,19 @@ void expectParseExceptionWithMetadata(
 TEST(ParseException, MetadataGeneration) {
   // The SparqlLexer changes the input that has already been read into a token
   // when it is outputted with getUnconsumedInput (which is used for ANtLR).
+  // A is not a valid argument for select.
   expectParseExceptionWithMetadata(
       "SELECT A ?a WHERE { ?a ?b ?c }",
       {{"select   A ?a WHERE { ?a ?b ?c }", 9, 9, 1, 9}});
   // The ANTLR Parser currently doesn't always have the whole query.
+  // Error is the undefined Prefix "a".
   expectParseExceptionWithMetadata("SELECT * WHERE { ?a a:b ?b }",
                                    {{"where  { ?a a:b ?b }", 12, 14, 1, 12}});
   // "%" doesn't match any valid token. So in this case we will get an Error
   // from the Lexer. There is no ExceptionMetadata available for Lexer Errors.
   expectParseExceptionWithMetadata("SELECT * WHERE { % }",
                                    {{"where  { % }", 9, 9, 1, 9}});
+  // Error is the undefined Prefix "f".
   expectParseExceptionWithMetadata(
       "SELECT * WHERE {\n ?a ?b ?c . \n f:d ?d ?e\n}",
       {{"where  {\n ?a ?b ?c . \n f:d ?d ?e\n}", 23, 25, 3, 1}});
