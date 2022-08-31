@@ -286,29 +286,30 @@ Join::ScanMethodType Join::getScanMethod(
   // this works because the join operations execution Context never changes
   // during its lifetime
   const auto& idx = _executionContext->getIndex();
-  const auto scanLambda = [&idx](const Permutations perm) {
+  const auto scanLambda = [&idx](const Index::Permutations perm) {
     return
         [&idx, perm](Id id, IdTable* idTable) { idx.scan(id, idTable, perm); };
   };
 
+  using enum Index::Permutations;
   switch (scan.getType()) {
     case IndexScan::FULL_INDEX_SCAN_SPO:
-      scanMethod = scanLambda(Permutations::SPO);
+      scanMethod = scanLambda(SPO);
       break;
     case IndexScan::FULL_INDEX_SCAN_SOP:
-      scanMethod = scanLambda(Permutations::SOP);
+      scanMethod = scanLambda(SOP);
       break;
     case IndexScan::FULL_INDEX_SCAN_PSO:
-      scanMethod = scanLambda(Permutations::PSO);
+      scanMethod = scanLambda(PSO);
       break;
     case IndexScan::FULL_INDEX_SCAN_POS:
-      scanMethod = scanLambda(Permutations::POS);
+      scanMethod = scanLambda(POS);
       break;
     case IndexScan::FULL_INDEX_SCAN_OSP:
-      scanMethod = scanLambda(Permutations::OSP);
+      scanMethod = scanLambda(OSP);
       break;
     case IndexScan::FULL_INDEX_SCAN_OPS:
-      scanMethod = scanLambda(Permutations::OPS);
+      scanMethod = scanLambda(OPS);
       break;
     default:
       AD_THROW(ad_semsearch::Exception::CHECK_FAILED,

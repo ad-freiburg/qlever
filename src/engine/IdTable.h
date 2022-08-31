@@ -1104,9 +1104,9 @@ using IdTableStatic =
     detail::IdTableTemplated<COLS, detail::IdTableVectorWrapper<Allocator>,
                              Allocator>;
 
-// the "runtime number of cols" variant
-// template <typename Allocator = ad_utility::AllocatorWithLimit<Id>>
-// We do not use an alias template to allow forward declaration.
+// This was previously implemented as an alias (`using IdTable = IdTableStatic<0...`).
+// However this did not allow forward declarations, so we now implement `IdTable`
+// as a subclass of `IdTableStatic<0>` that can be implicitly converted to and from `IdTableStatic<0>`.
 class IdTable : public IdTableStatic<0, ad_utility::AllocatorWithLimit<Id>> {
  public:
   using Base = IdTableStatic<0, ad_utility::AllocatorWithLimit<Id>>;

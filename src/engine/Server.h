@@ -21,11 +21,15 @@
 #include "./QueryExecutionContext.h"
 #include "./QueryExecutionTree.h"
 #include "./SortPerformanceEstimator.h"
+#include "nlohmann/json.hpp"
 
 using std::string;
 using std::vector;
+using nlohmann::json;
 
 using ad_utility::Socket;
+
+
 
 //! The HTTP Server used.
 class Server {

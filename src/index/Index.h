@@ -5,18 +5,16 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 #pragma once
 
-#include <global/Id.h>
-#include <index/CompressedString.h>
-#include <index/StringSortComparator.h>
-#include <index/Vocabulary.h>
-#include <parser/TripleComponent.h>
-#include <parser/TurtleParser.h>
-#include <util/json.h>
-
 #include <array>
 #include <optional>
 #include <string>
 #include <vector>
+
+#include "global/Id.h"
+#include "index/CompressedString.h"
+#include "index/StringSortComparator.h"
+#include "index/Vocabulary.h"
+#include "parser/TripleComponent.h"
 
 // Forward declarations.
 class IdTable;
@@ -24,16 +22,20 @@ class TextBlockMetaData;
 class IndexImpl;
 
 /**
- * Used as a Template Argument to the createFromFile method, when we do not yet
- * know, which Tokenizer Specialization of the TurtleParser we are going to use
+ * Used as a template argument to the `createFromFile` method, when we do not yet
+ * know, which tokenizer specialization of the `TurtleParser` we are going to use.
  */
 class TurtleParserAuto {};
 
-using json = nlohmann::json;
-
-enum struct Permutations { PSO, POS, SPO, SOP, OPS, OSP };
 class Index {
+ private:
+  // Pimpl to reduce compile times
+  std::unique_ptr<IndexImpl> pimpl_;
+
  public:
+  /// Identifiers for the six possible permutations.
+  enum struct Permutations { PSO, POS, SPO, SOP, OPS, OSP };
+
   /// Forbid copy and assignment.
   Index& operator=(const Index&) = delete;
   Index(const Index&) = delete;
@@ -44,32 +46,29 @@ class Index {
   Index();
   ~Index();
 
-  // Creates an index from a file. Parameter Parser must be able to split the
-  // file's format into triples.
-  // Will write vocabulary and on-disk index data.
-  // !! The index can not directly be used after this call, but has to be setup
-  // by createFromOnDiskIndex after this call.
-
-  // TODO<joka921> Make the parser options also a plain enum?
+  // Create an index from a file. Will write vocabulary and on-disk index data.
+  // NOTE: The index can not directly be used after this call, but has to be setup
+  // by `createFromOnDiskIndex` after this call.
+  // TODO<joka921> Make the parser options also a plain enum!
   template <class Parser>
   void createFromFile(const std::string& filename);
 
   void addPatternsToExistingIndex();
 
-  // Creates an index object from an on disk index that has previously been
-  // constructed. Read necessary meta data into memory and opens file handles.
+  // Create an index object from an on-disk index that has previously been
+  // constructed using the `createFromFile` method which is typically called via `IndexBuilderMain`. Read necessary metadata into memory and open file handles.
   void createFromOnDiskIndex(const std::string& onDiskBase);
 
-  // Adds a text index to a complete KB index. First reads the given context
-  // file (if file name not empty), then adds words from literals (if true).
+  // Add a text index to a complete KB index. First read the given context
+  // file (if file name not empty), then add words from literals (if true).
   void addTextFromContextFile(const std::string& contextFile,
                               bool addWordsFromLiterals);
 
   // Build docsDB file from given file (one text record per line).
   void buildDocsDB(const std::string& docsFile);
 
-  // Adds text index from on disk index that has previously been constructed.
-  // Read necessary meta data into memory and opens file handles.
+  // Add text index from on-disk index that has previously been constructed.
+  // Read necessary metadata into memory and open file handles.
   void addTextFromOnDiskIndex();
 
   using Vocab = Vocabulary<CompressedString, TripleComponentComparator>;
@@ -111,13 +110,13 @@ class Index {
   [[nodiscard]] const CompactVectorOfStrings<Id>& getHasPredicate() const;
   [[nodiscard]] const CompactVectorOfStrings<Id>& getPatterns() const;
   /**
-   * @return The multiplicity of the Entites column (0) of the full has-relation
+   * @return The multiplicity of the entites column (0) of the full has-relation
    *         relation after unrolling the patterns.
    */
   [[nodiscard]] double getHasPredicateMultiplicityEntities() const;
 
   /**
-   * @return The multiplicity of the Predicates column (0) of the full
+   * @return The multiplicity of the predicates column (0) of the full
    * has-relation relation after unrolling the patterns.
    */
   [[nodiscard]] double getHasPredicateMultiplicityPredicates() const;
@@ -297,9 +296,5 @@ class Index {
   // Get access to the implementation. This should be used rarerly as it
   // requires including the rather expensive `IndexImpl.h` header
   IndexImpl& getImpl() { return *pimpl_; }
-  const IndexImpl& getImpl() const { return *pimpl_; }
-
- private:
-  // Pimpl to reduce compile times
-  std::unique_ptr<IndexImpl> pimpl_;
+  [[nodiscard]] const IndexImpl& getImpl() const { return *pimpl_; }
 };
