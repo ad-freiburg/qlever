@@ -64,10 +64,9 @@ template <auto parseFunction,
           typename Value = decltype(parseFunction("").resultOfParse_)>
 auto makeExpectCompleteParserEq(SparqlQleverVisitor::PrefixMap prefixMap = {}) {
   auto expect = makeExpectCompleteParser<parseFunction>(std::move(prefixMap));
-  return
-      [expect = std::move(expect)](const string& input, const Value& value) {
-        return expect(input, testing::Eq(value));
-      };
+  return [expect = std::move(expect)](const string& input, const Value& value) {
+    return expect(input, testing::Eq(value));
+  };
 }
 
 template <auto parseFunction, typename Exception = ParseException>
