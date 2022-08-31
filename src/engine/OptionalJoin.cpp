@@ -125,22 +125,22 @@ void OptionalJoin::computeResult(ResultTable* result) {
 ad_utility::HashMap<string, size_t> OptionalJoin::getVariableColumns() const {
   ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumns());
   size_t leftSize = _left->getResultWidth();
-  for (auto it = _right->getVariableColumns().begin();
-       it != _right->getVariableColumns().end(); ++it) {
-    size_t columnIndex = leftSize + it->second;
+  for (const auto& [variable, columnIndexRight] :
+       _right->getVariableColumns()) {
+    size_t columnIndex = leftSize + columnIndexRight;
     bool isJoinColumn = false;
     // Reduce the index for every column of _right that is beeing joined on,
     // and the index of which is smaller than the index of it.
     for (const std::array<ColumnIndex, 2>& a : _joinColumns) {
-      if (a[1] < it->second) {
+      if (a[1] < columnIndexRight) {
         columnIndex--;
-      } else if (a[1] == it->second) {
+      } else if (a[1] == columnIndexRight) {
         isJoinColumn = true;
         break;
       }
     }
     if (!isJoinColumn) {
-      retVal[it->first] = columnIndex;
+      retVal[variable] = columnIndex;
     }
   }
   return retVal;
