@@ -54,30 +54,26 @@ namespace {
 template <auto parseFunction>
 auto makeExpectCompleteParser(SparqlQleverVisitor::PrefixMap&& prefixMap = {}) {
   // Capture `prefixMap` by value to avoid lifetime issues.
-  return [prefixMap = std::move(prefixMap)](const string& input, const auto& matcher) {
+  return [prefixMap = std::move(prefixMap)](const string& input,
+                                            const auto& matcher) {
     return expectCompleteParse(parseFunction(input, prefixMap), matcher);
   };
 }
 
-// TODO: type value can probably removed with some decltype, declvals.
-// TODO: I would like to parametrize the testing::Eq. This seems to not bee
-//  possible because matchers take parameters (so not passable as parameter) and
-//  themselves take a different number of template arguments.
-template <auto parseFunction, typename Value>
-auto makeExpectCompleteParserEq(
-    SparqlQleverVisitor::PrefixMap&& prefixMap = {}) {
-  // Capture `prefixMap` by value. Since the inner code will only be called
-  // later `prefixMap` would be NULL if it were captured by reference.
-  return [prefixMap](const string& input, const Value&& value) {
-    return expectCompleteParse(parseFunction(input, prefixMap),
-                               testing::Eq(value));
-  };
+template <auto parseFunction,
+          typename Value = decltype(parseFunction("").resultOfParse_)>
+auto makeExpectCompleteParserEq(SparqlQleverVisitor::PrefixMap prefixMap = {}) {
+  auto expect = makeExpectCompleteParser<parseFunction>(std::move(prefixMap));
+  return
+      [expect = std::move(expect)](const string& input, const Value&& value) {
+        return expect(input, testing::Eq(value));
+      };
 }
 
 template <auto parseFunction, typename Exception = ParseException>
-auto makeExpectParsingFails(SparqlQleverVisitor::PrefixMap&& prefixMap = {}) {
+auto makeExpectParsingFails(SparqlQleverVisitor::PrefixMap prefixMap = {}) {
   // Capture `prefixMap` by value. See above comment.
-  return [prefixMap](const string& input) {
+  return [prefixMap = std::move(prefixMap)](const string& input) {
     EXPECT_THROW(parseFunction(input), Exception) << input;
   };
 }
@@ -994,9 +990,8 @@ TEST(SparqlParser, propertyPaths) {
 }
 
 TEST(SparqlParser, propertyListPathNotEmpty) {
-  auto expectPropertyListPath = makeExpectCompleteParserEq<
-      parsePropertyListPathNotEmpty,
-      std::vector<ad_utility::sparql_types::PredicateAndObject>>();
+  auto expectPropertyListPath =
+      makeExpectCompleteParserEq<parsePropertyListPathNotEmpty>();
   auto expectPropertyListPathFails =
       makeExpectParsingFails<parsePropertyListPathNotEmpty>();
   auto Iri = &PropertyPath::fromIri;
@@ -1013,9 +1008,8 @@ TEST(SparqlParser, propertyListPathNotEmpty) {
 }
 
 TEST(SparqlParser, triplesSameSubjectPath) {
-  auto expectTriples = makeExpectCompleteParserEq<
-      parseTriplesSameSubjectPath,
-      std::vector<ad_utility::sparql_types::TripleWithPropertyPath>>();
+  auto expectTriples =
+      makeExpectCompleteParserEq<parseTriplesSameSubjectPath>();
   auto PathIri = &PropertyPath::fromIri;
   using Var = Variable;
   expectTriples("?foo <bar> ?baz",
@@ -1090,7 +1084,7 @@ TEST(SparqlParser, SelectClause) {
 
 TEST(SparqlParser, HavingCondition) {
   auto expectHavingCondition =
-      makeExpectCompleteParserEq<parseHavingCondition, SparqlFilter>();
+      makeExpectCompleteParserEq<parseHavingCondition>();
   auto expectHavingConditionFails =
       makeExpectParsingFails<parseHavingCondition>();
 
@@ -1233,19 +1227,18 @@ TEST(SparqlParser, GroupGraphPattern) {
 }
 
 TEST(SparqlParser, RDFLiteral) {
-  auto expectRDFLiteral = makeExpectCompleteParser<parseRdfLiteral>(
+  auto expectRDFLiteral = makeExpectCompleteParserEq<parseRdfLiteral>(
       {{"xsd", "<http://www.w3.org/2001/XMLSchema#>"}});
   auto expectRDFLiteralFails = makeExpectParsingFails<parseRdfLiteral>();
 
-  expectRDFLiteral(
-      "   \"Astronaut\"^^xsd:string  \t",
-      testing::Eq("\"Astronaut\"^^<http://www.w3.org/2001/XMLSchema#string>"));
+  expectRDFLiteral("   \"Astronaut\"^^xsd:string  \t",
+                   "\"Astronaut\"^^<http://www.w3.org/2001/XMLSchema#string>");
   // The conversion to the internal date format
   // (":v:date:0000000000000001950-01-01T00:00:00") is done by
   // TurtleStringParser<TokenizerCtre>::parseTripleObject(resultAsString) which
   // is only called at triplesBlock.
-  expectRDFLiteral("\"1950-01-01T00:00:00\"^^xsd:dateTime",
-                   testing::Eq("\"1950-01-01T00:00:00\"^^<http://www.w3.org/"
-                               "2001/XMLSchema#dateTime>"));
+  expectRDFLiteral(
+      "\"1950-01-01T00:00:00\"^^xsd:dateTime",
+      "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>");
   expectRDFLiteralFails(R"(?a ?b "The \"Moon\""@en .)");
 }
