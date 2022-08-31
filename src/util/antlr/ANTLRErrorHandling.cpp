@@ -4,7 +4,7 @@
 
 #include "util/antlr/ANTLRErrorHandling.h"
 
-// These are ANTLR haders.
+// These are ANTLR headers.
 #include <Lexer.h>
 #include <Parser.h>
 
@@ -40,7 +40,7 @@ ExceptionMetadata generateMetadata(antlr4::Recognizer* recognizer,
     return generateMetadata(parser, offendingToken, line, charPositionInLine);
   } else if (auto* lexer = dynamic_cast<antlr4::Lexer*>(recognizer)) {
     // If the recognizer is a Lexer this means that the error was a Lexer error.
-    // In that case  `offendingToken` is `nullptr`.
+    // In that case `offendingToken` is `nullptr`.
     return generateMetadata(lexer, line, charPositionInLine);
   } else {
     AD_FAIL();  // Should be unreachable.
