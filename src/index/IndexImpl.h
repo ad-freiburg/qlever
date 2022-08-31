@@ -121,8 +121,8 @@ class IndexImpl {
   using PermutationImpl = Permutation::PermutationImpl<A, B>;
 
   // TODO: make those private and allow only const access
-  // instantiations for the 6 Permutation used in QLever
-  // They simplify the creation of permutations in the index class
+  // instantiations for the six permutations used in QLever.
+  // They simplify the creation of permutations in the index class.
   Permutation::POS_T _POS{SortByPOS(), "POS", ".pos", {1, 2, 0}};
   Permutation::PSO_T _PSO{SortByPSO(), "PSO", ".pso", {1, 0, 2}};
   Permutation::SOP_T _SOP{SortBySOP(), "SOP", ".sop", {0, 2, 1}};

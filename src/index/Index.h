@@ -23,14 +23,14 @@ class IndexImpl;
 
 /**
  * Used as a template argument to the `createFromFile` method, when we do not
- * yet know, which tokenizer specialization of the `TurtleParser` we are going
+ * yet know which tokenizer specialization of the `TurtleParser` we are going
  * to use.
  */
 class TurtleParserAuto {};
 
 class Index {
  private:
-  // Pimpl to reduce compile times
+  // Pimpl to reduce compile times.
   std::unique_ptr<IndexImpl> pimpl_;
 
  public:

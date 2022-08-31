@@ -1105,9 +1105,9 @@ using IdTableStatic =
                              Allocator>;
 
 // This was previously implemented as an alias (`using IdTable =
-// IdTableStatic<0...`). However this did not allow forward declarations, so we
-// now implement `IdTable` as a subclass of `IdTableStatic<0>` that can be
-// implicitly converted to and from `IdTableStatic<0>`.
+// IdTableStatic<0, ...>`). However this did not allow forward declarations, so
+// we now implement `IdTable` as a subclass of `IdTableStatic<0, ...>` that can
+// be implicitly converted to and from `IdTableStatic<0, ...>`.
 class IdTable : public IdTableStatic<0, ad_utility::AllocatorWithLimit<Id>> {
  public:
   using Base = IdTableStatic<0, ad_utility::AllocatorWithLimit<Id>>;
