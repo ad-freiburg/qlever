@@ -53,9 +53,8 @@ auto parseVerbPathOrSimple = parse<&Parser::verbPathOrSimple>;
 namespace {
 template <auto parseFunction>
 auto makeExpectCompleteParser(SparqlQleverVisitor::PrefixMap&& prefixMap = {}) {
-  // Capture `prefixMap` by value. Since the inner code will only be called
-  // later `prefixMap` would be NULL if it were captured by reference.
-  return [prefixMap](const string& input, const auto& matcher) {
+  // Capture `prefixMap` by value to avoid lifetime issues.
+  return [prefixMap = std::move(prefixMap)](const string& input, const auto& matcher) {
     return expectCompleteParse(parseFunction(input, prefixMap), matcher);
   };
 }
