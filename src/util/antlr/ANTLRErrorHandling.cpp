@@ -2,7 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 
-#include "ANTLRErrorHandling.h"
+#include "util/antlr/ANTLRErrorHandling.h"
 
 #include <Lexer.h>
 #include <Parser.h>
@@ -30,8 +30,8 @@ ExceptionMetadata generateMetadata(antlr4::Lexer* lexer, size_t line,
 ExceptionMetadata generateMetadata(antlr4::Recognizer* recognizer,
                                    antlr4::Token* offendingToken, size_t line,
                                    size_t charPositionInLine) {
-  // The `antlr4::Recognizer` interface does not provide enough information to
-  // obtain a copy of the input string. Do this switching here to obtain that.
+  // The abstract `antlr4::Recognizer` interface does not provide enough information to generate the Metadata
+  // For this reason we manually cast to the subclasses.
   // As of ANTLRv4 `antlr4::Parser` and `antlr4::Lexer` are the only subclasses
   // of `antlr4::Recognizer`.
   if (auto* parser = dynamic_cast<antlr4::Parser*>(recognizer)) {
@@ -39,8 +39,7 @@ ExceptionMetadata generateMetadata(antlr4::Recognizer* recognizer,
     return generateMetadata(parser, offendingToken, line, charPositionInLine);
   } else if (auto* lexer = dynamic_cast<antlr4::Lexer*>(recognizer)) {
     // If the recognizer is a Lexer this means that the error was a Lexer error.
-    // In that case the tokens are not yet available and `offendingToken` is
-    // NULL.
+    // In that case  `offendingToken` is `nullptr`.
     return generateMetadata(lexer, line, charPositionInLine);
   } else {
     AD_FAIL();  // Should be unreachable.
