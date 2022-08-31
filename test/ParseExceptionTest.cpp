@@ -3,39 +3,47 @@
 //  Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
-#include <parser/ParseException.h>
-#include <parser/SparqlParser.h>
 
 #include "SparqlAntlrParserTestHelpers.h"
+#include "parser/ParseException.h"
+#include "parser/SparqlParser.h"
 
 TEST(ParseException, coloredError) {
   auto exampleQuery = "SELECT A ?var WHERE";
-  EXPECT_EQ((ExceptionMetadata{exampleQuery, 7, 7}).coloredError(),
+  EXPECT_EQ((ExceptionMetadata{exampleQuery, 7, 7, 1, 7}).coloredError(),
             "SELECT \x1B[1m\x1B[4m\x1B[31mA\x1B[0m ?var WHERE");
-  EXPECT_EQ((ExceptionMetadata{exampleQuery, 9, 12}).coloredError(),
+  EXPECT_EQ((ExceptionMetadata{exampleQuery, 9, 12, 1, 9}).coloredError(),
             "SELECT A \x1B[1m\x1B[4m\x1B[31m?var\x1B[0m WHERE");
+}
+
+void expectParseExceptionWithMetadata(
+    const string& input, const std::optional<ExceptionMetadata>& metadata) {
+  try {
+    SparqlParser(input).parse();
+    FAIL();  // Should be unreachable.
+  } catch (const ParseException& e) {
+    // The constructor has to be bracketed because EXPECT_EQ is a macro.
+    EXPECT_EQ(e.metadata(), metadata);
+  }
 }
 
 TEST(ParseException, MetadataGeneration) {
   // The SparqlLexer changes the input that has already been read into a token
   // when it is outputted with getUnconsumedInput (which is used for ANtLR).
-  {
-    try {
-      SparqlParser("SELECT A ?a WHERE { ?a ?b ?c }").parse();
-    } catch (const ParseException& e) {
-      EXPECT_TRUE(e.metadata().has_value());
-      EXPECT_EQ(e.metadata().value(),
-                (ExceptionMetadata{"select   A ?a WHERE { ?a ?b ?c }", 9, 9}));
-    }
-  }
+  // A is not a valid argument for select.
+  expectParseExceptionWithMetadata(
+      "SELECT A ?a WHERE { ?a ?b ?c }",
+      {{"select   A ?a WHERE { ?a ?b ?c }", 9, 9, 1, 9}});
   // The ANTLR Parser currently doesn't always have the whole query.
-  {
-    try {
-      SparqlParser("SELECT * WHERE { ?a a:b ?b }").parse();
-    } catch (const ParseException& e) {
-      EXPECT_TRUE(e.metadata().has_value());
-      EXPECT_EQ(e.metadata().value(),
-                (ExceptionMetadata{"where  { ?a a:b ?b }", 12, 14}));
-    }
-  }
+  // Error is the undefined Prefix "a".
+  expectParseExceptionWithMetadata("SELECT * WHERE { ?a a:b ?b }",
+                                   {{"where  { ?a a:b ?b }", 12, 14, 1, 12}});
+  // "%" doesn't match any valid token. So in this case we will get an Error
+  // from the Lexer.
+  expectParseExceptionWithMetadata("SELECT * WHERE { % }",
+                                   {{"where  { % }", 9, 9, 1, 9}});
+  // Error is the undefined Prefix "f".
+  expectParseExceptionWithMetadata(
+      "SELECT * WHERE {\n ?a ?b ?c . \n f:d ?d ?e\n}",
+      {{"where  {\n ?a ?b ?c . \n f:d ?d ?e\n}", 23, 25, 3, 1}});
 }

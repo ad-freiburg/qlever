@@ -511,6 +511,8 @@ json Server::composeErrorResponseJson(
     auto& value = metadata.value();
     j["metadata"]["startIndex"] = value.startIndex_;
     j["metadata"]["stopIndex"] = value.stopIndex_;
+    j["metadata"]["line"] = value.line_;
+    j["metadata"]["positionInLine"] = value.charPositionInLine_;
     // The ANTLR parser may not see the whole query. (The reason is value mixing
     // of the old and new parser.) To detect/work with this we also transmit
     // what ANTLR saw as query.
@@ -759,7 +761,7 @@ boost::asio::awaitable<void> Server::processQuery(
                << qet.getRootOperation()->getRuntimeInfo().toString()
                << std::endl;
   } catch (const ParseException& e) {
-    exceptionErrorMsg = e.what();
+    exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
     metadata = e.metadata();
   } catch (const std::exception& e) {
     exceptionErrorMsg = e.what();

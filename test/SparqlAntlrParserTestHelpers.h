@@ -95,7 +95,8 @@ std::ostream& operator<<(
 
 std::ostream& operator<<(std::ostream& out, const ExceptionMetadata& metadata) {
   out << "ExceptionMetadata(\"" << metadata.query_ << "\", "
-      << metadata.startIndex_ << ", " << metadata.stopIndex_ << ")";
+      << metadata.startIndex_ << ", " << metadata.stopIndex_ << ", "
+      << metadata.line_ << ", " << metadata.charPositionInLine_ << ")";
   return out;
 }
 
