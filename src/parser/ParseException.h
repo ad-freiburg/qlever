@@ -46,6 +46,21 @@ class ParseException : public std::exception {
     return metadata_;
   }
 
+  [[maybe_unused]] [[nodiscard]] std::optional<std::string>
+  errorMessageIncludingPositionalInfo() const {
+    if (metadata_.has_value()) {
+      auto metadata = metadata_.value();
+      return absl::StrCat("At line ", metadata.line_, ":",
+                          metadata.charPositionInLine_, " ", cause_);
+    } else {
+      return std::nullopt;
+    }
+  }
+
+  [[nodiscard]] std::string errorMessageWithoutPositionalInfo() const {
+    return cause_;
+  }
+
  private:
   std::string cause_;
   std::optional<ExceptionMetadata> metadata_;

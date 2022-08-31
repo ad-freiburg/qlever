@@ -40,4 +40,7 @@ TEST(ParseException, MetadataGeneration) {
   // from the Lexer. There is no ExceptionMetadata available for Lexer Errors.
   expectParseExceptionWithMetadata("SELECT * WHERE { % }",
                                    {{"where  { % }", 9, 9, 1, 9}});
+  expectParseExceptionWithMetadata(
+      "SELECT * WHERE {\n ?a ?b ?c . \n f:d ?d ?e\n}",
+      {{"where  {\n ?a ?b ?c . \n f:d ?d ?e\n}", 23, 25, 3, 1}});
 }
