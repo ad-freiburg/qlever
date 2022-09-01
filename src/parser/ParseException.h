@@ -19,9 +19,15 @@ struct ExceptionMetadata {
   // parser doesn't parse the whole query in one piece. It therefore can only
   // determine the position in the current partial query.
   std::string query_;
-  // Start and Stop Index of the clause that cause the exception in query_.
+  // Start and stop index of the clause that cause the exception in query_. The
+  // indices are inclusive. The character at position `stopIndex` is part of the
+  // clause.
   size_t startIndex_;
   size_t stopIndex_;
+  // Start of the clause expressed as line (1-based) and position in the line
+  // (0-based) in query_.
+  size_t line_;
+  size_t charPositionInLine_;
 
   bool operator==(const ExceptionMetadata& rhs) const = default;
 
@@ -40,6 +46,10 @@ class ParseException : public std::exception {
   virtual const char* what() const throw() { return cause_.c_str(); }
   [[nodiscard]] const std::optional<ExceptionMetadata>& metadata() const {
     return metadata_;
+  }
+
+  [[nodiscard]] const std::string& errorMessageWithoutPositionalInfo() const {
+    return cause_;
   }
 
  private:

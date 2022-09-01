@@ -165,6 +165,13 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
   virtual void exitGroupGraphPatternSub(
       SparqlAutomaticParser::GroupGraphPatternSubContext* ctx) = 0;
 
+  virtual void enterGraphPatternNotTriplesAndMaybeTriples(
+      SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext*
+          ctx) = 0;
+  virtual void exitGraphPatternNotTriplesAndMaybeTriples(
+      SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext*
+          ctx) = 0;
+
   virtual void enterTriplesBlock(
       SparqlAutomaticParser::TriplesBlockContext* ctx) = 0;
   virtual void exitTriplesBlock(
