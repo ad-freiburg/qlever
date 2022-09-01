@@ -7,9 +7,6 @@
 #include <unordered_set>
 #include <variant>
 
-#include "../util/Algorithm.h"
-#include "../util/OverloadCallOperator.h"
-#include "./SparqlParserHelpers.h"
 #include "Alias.h"
 #include "data/Types.h"
 #include "sparqlParser/SparqlQleverVisitor.h"
@@ -176,55 +173,6 @@ void SparqlParser::parseWhere(ParsedQuery* query) {
   }
 }
 
-std::string_view SparqlParser::readTriplePart(const std::string& s,
-                                              size_t* pos) {
-  size_t start = *pos;
-  bool insideUri = false;
-  bool insidePrefixed = false;
-  bool insideLiteral = false;
-  while (*pos < s.size()) {
-    if (!insideUri && !insideLiteral && !insidePrefixed) {
-      if (s[*pos] == '.' || std::isspace(static_cast<unsigned char>(s[*pos])) ||
-          s[*pos] == ';' || s[*pos] == ',' || s[*pos] == '}' ||
-          s[*pos] == ')') {
-        return std::string_view(s.data() + start, (*pos) - start);
-      }
-      if (s[*pos] == '<') {
-        insideUri = true;
-      }
-      if (s[*pos] == '\"') {
-        insideLiteral = true;
-      }
-      if (s[*pos] == ':') {
-        insidePrefixed = true;
-      }
-    } else if (insidePrefixed) {
-      if (std::isspace(static_cast<unsigned char>(s[*pos])) || s[*pos] == '}') {
-        return std::string_view(s.data() + start, (*pos) - start);
-      } else if (s[*pos] == '.' || s[*pos] == ';' || s[*pos] == ',') {
-        if ((*pos) + 1 >= s.size() ||
-            (s[(*pos) + 1] == '?' || s[(*pos) + 1] == '<' ||
-             s[(*pos) + 1] == '\"' ||
-             std::isspace(static_cast<unsigned char>(s[(*pos) + 1])))) {
-          insidePrefixed = false;
-          // Need to reevaluate the dot as a separator
-          (*pos)--;
-        }
-      }
-    } else {
-      if (insideUri && s[*pos] == '>') {
-        insideUri = false;
-      }
-      if (insideLiteral && s[*pos] == '\"') {
-        insideLiteral = false;
-      }
-    }
-    (*pos)++;
-  }
-
-  return std::string_view(s.data() + start, (*pos) - start);
-}
-
 // _____________________________________________________________________________
 void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
   query->addSolutionModifiers(
@@ -366,102 +314,6 @@ std::optional<SparqlFilter> SparqlParser::parseFilter(bool failOnNoFilter) {
 }
 
 // _____________________________________________________________________________
-string SparqlParser::stripAndLowercaseKeywordLiteral(std::string_view lit) {
-  if (lit.size() > 2 && lit[0] == '"' && lit.back() == '"') {
-    auto stripped = lit.substr(1, lit.size() - 2);
-    return ad_utility::getLowercaseUtf8(stripped);
-  }
-  return std::string{lit};
-}
-
-// _____________________________________________________________________________
-TripleComponent SparqlParser::parseLiteral(const ParsedQuery& pq,
-                                           const string& literal,
-                                           bool isEntireString,
-                                           size_t off /* defaults to 0 */) {
-  auto parseLiteralAsString = [&]() -> std::string {
-    std::stringstream out;
-    size_t pos = off;
-    // The delimiter of the string. Either ' or "
-    char delimiter = '"';
-    if (isEntireString) {
-      // check for a leading qutation mark
-      while (pos < literal.size() &&
-             std::isspace(static_cast<unsigned char>(literal[pos]))) {
-        pos++;
-      }
-      if (pos == literal.size() ||
-          (literal[pos] != '"' && literal[pos] != '\'')) {
-        throw ParseException("The literal: " + literal +
-                             " does not begin with a quotation mark.");
-      }
-    }
-    while (pos < literal.size() && literal[pos] != '"' &&
-           literal[pos] != '\'') {
-      pos++;
-    }
-    if (pos == literal.size()) {
-      // the string does not contain a literal
-      return "";
-    }
-    delimiter = literal[pos];
-    out << '"';
-    pos++;
-    bool escaped = false;
-    while (pos < literal.size() && (escaped || literal[pos] != delimiter)) {
-      escaped = false;
-      if (literal[pos] == '\\' && pos + 1 < literal.size() &&
-          literal[pos + 1] == delimiter) {
-        // Allow for escaping " using \ but do not change any other form of
-        // escaping.
-        escaped = true;
-      } else {
-        out << literal[pos];
-      }
-      pos++;
-    }
-    out << '"';
-    pos++;
-    if (pos < literal.size() && literal[pos] == '@') {
-      out << literal[pos];
-      pos++;
-      // add the language tag
-      // allow for ascii based language tags (no current language tag should
-      // contain non ascii letters).
-      while (pos < literal.size() &&
-             std::isalpha(static_cast<unsigned char>(literal[pos]))) {
-        out << literal[pos];
-        pos++;
-      }
-    }
-    if (pos + 1 < literal.size() && literal[pos] == '^' &&
-        literal[pos + 1] == '^') {
-      // add the xsd type
-      while (pos < literal.size() &&
-             !std::isspace(static_cast<unsigned char>(literal[pos]))) {
-        out << literal[pos];
-        pos++;
-      }
-    }
-    if (isEntireString && pos < literal.size()) {
-      // check for trailing non whitespace characters
-      while (pos < literal.size() &&
-             std::isspace(static_cast<unsigned char>(literal[pos]))) {
-        pos++;
-      }
-      if (pos < literal.size()) {
-        throw ParseException("The literal: " + literal +
-                             " was not terminated properly.");
-      }
-    }
-    return std::move(out).str();
-  };
-  auto resultAsString = parseLiteralAsString();
-  // Convert the Literals to ints or doubles if they have the appropriate
-  // types.
-  ParsedQuery::expandPrefix(resultAsString, getPrefixMap(pq));
-  return TurtleStringParser<TokenizerCtre>::parseTripleObject(resultAsString);
-}
 SparqlFilter SparqlParser::parseRegexFilter(bool expectKeyword) {
   if (expectKeyword) {
     lexer_.expect("regex");
@@ -537,15 +389,6 @@ SparqlFilter SparqlParser::parseRegexFilter(bool expectKeyword) {
     }
   }
   return f;
-}
-
-GraphPatternOperation::BasicGraphPattern& SparqlParser::lastBasicPattern(
-    ParsedQuery::GraphPattern* ptr) const {
-  auto& c = ptr->_graphPatterns;
-  if (c.empty() || !c.back().is<GraphPatternOperation::BasicGraphPattern>()) {
-    c.emplace_back(GraphPatternOperation::BasicGraphPattern{});
-  }
-  return c.back().get<GraphPatternOperation::BasicGraphPattern>();
 }
 
 // ________________________________________________________________________

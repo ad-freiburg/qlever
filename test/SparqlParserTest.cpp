@@ -1130,28 +1130,6 @@ TEST(ParserTest, testGroupByAndAlias) {
   EXPECT_THAT(pq, GroupByVariablesMatch<vector<string>>({"?b"}));
 }
 
-TEST(ParserTest, testParseLiteral) {
-  using std::string;
-  // Test a basic parse of a simple xsd string
-  string inp = "   \"Astronaut\"^^xsd:string  \t";
-  string ret = SparqlParser::parseLiteral(pqDummy, inp, true).getString();
-  ASSERT_EQ("\"Astronaut\"^^<http://www.w3.org/2001/XMLSchema#string>", ret);
-
-  inp = "\"1950-01-01T00:00:00\"^^xsd:dateTime";
-  ret = SparqlParser::parseLiteral(pqDummy, inp, true).getString();
-  ASSERT_EQ(":v:date:0000000000000001950-01-01T00:00:00", ret);
-
-  // Check that `parseLiteral` fails on the following string, which is not a
-  // literal.
-  inp = R"(?a ?b "The \"Moon\""@en .)";
-  ASSERT_THROW(SparqlParser::parseLiteral(pqDummy, inp, true), ParseException);
-
-  // Do not escape quotation marks with the isEntireString check
-  inp = R"(?a ?b "The \"Moon""@en)";
-  ASSERT_THROW(SparqlParser::parseLiteral(pqDummy, inp, true, 6),
-               ParseException);
-}
-
 TEST(ParserTest, Bind) {
   ParsedQuery pq =
       SparqlParser("SELECT ?a WHERE { BIND (10 - 5 as ?a) . }").parse();

@@ -697,15 +697,6 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   ExpressionPtr visitTypesafe(Parser::ExpressionContext* ctx);
 
-  template <typename Out, typename Ctx>
-  std::vector<Out> visitVector(const std::vector<Ctx*>& childContexts) {
-    std::vector<Out> children;
-    for (const auto& child : childContexts) {
-      children.emplace_back(std::move(child->accept(this).template as<Out>()));
-    }
-    return children;
-  }
-
   std::vector<std::string> visitOperationTags(
       const std::vector<antlr4::tree::ParseTree*>& childContexts,
       const ad_utility::HashSet<string>& allowedTags) {
@@ -921,12 +912,20 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   string visitTypesafe(Parser::PnameNsContext* ctx);
 
+  // Visit a vector of Contexts and return the corresponding results as a
+  // vector. Only Contexts that have a matching `visitTypesafe` are supported.
+  template <typename Ctx>
+  auto visitVector(const std::vector<Ctx*>& childContexts)
+      -> std::vector<decltype(visitTypesafe(childContexts[0]))>;
+
   // Check that exactly one of the `ctxs` is not `null`, visit that context,
   // cast the result to `Out` and return it. Requires that for all of the
   // `ctxs`, `visit(ctxs)` is convertible to `Out`.
   template <typename Out, typename... Contexts>
   Out visitAlternative(Contexts*... ctxs);
 
+  // Returns `std::nullopt` if the pointer is the `nullptr`. Otherwise return
+  // `visitTypesafe(ctx)`.
   template <typename Ctx>
   auto visitOptional(Ctx* ctx) -> std::optional<decltype(visitTypesafe(ctx))>;
 
