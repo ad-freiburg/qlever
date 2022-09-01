@@ -66,23 +66,36 @@ auto parseVarOrTerm = parse<&Parser::varOrTerm>;
 auto parseVerb = parse<&Parser::verb>;
 auto parseVerbPathOrSimple = parse<&Parser::verbPathOrSimple>;
 
-namespace {
-template <auto parseFunction>
-auto makeExpectCompleteParser(SparqlQleverVisitor::PrefixMap&& prefixMap = {}) {
-  // Capture `prefixMap` by value to avoid lifetime issues.
-  return [prefixMap = std::move(prefixMap)](const string& input,
-                                            const auto& matcher) {
-    return expectCompleteParse(parseFunction(input, prefixMap), matcher);
-  };
-}
-
 template <auto parseFunction,
           typename Value = decltype(parseFunction("").resultOfParse_)>
-auto makeExpectCompleteParserEq(SparqlQleverVisitor::PrefixMap prefixMap = {}) {
-  auto expect = makeExpectCompleteParser<parseFunction>(std::move(prefixMap));
-  return [expect = std::move(expect)](const string& input, const Value& value) {
-    return expect(input, testing::Eq(value));
+struct expectFunction {
+  SparqlQleverVisitor::PrefixMap prefixMap_;
+
+  auto operator()(const string& input, Value&& value) const {
+    return expectCompleteParse(parseFunction(input, prefixMap_),
+                               testing::Eq(value));
   };
+
+  auto operator()(const string& input, const auto& matcher) const {
+    return expectCompleteParse(parseFunction(input, prefixMap_), matcher);
+  };
+
+  auto operator()(const string& input, Value&& value,
+                  SparqlQleverVisitor::PrefixMap&& prefixMap) const {
+    return expectCompleteParse(parseFunction(input, std::move(prefixMap)),
+                               testing::Eq(value));
+  };
+
+  auto operator()(const string& input, const auto& matcher,
+                  SparqlQleverVisitor::PrefixMap&& prefixMap) const {
+    return expectCompleteParse(parseFunction(input, std::move(prefixMap)),
+                               matcher);
+  };
+};
+
+template <auto parseFunction>
+auto makeExpectCompleteParser(SparqlQleverVisitor::PrefixMap&& prefixMap = {}) {
+  return expectFunction<parseFunction>{std::move(prefixMap)};
 }
 
 template <auto parseFunction, typename Exception = ParseException>
@@ -92,7 +105,6 @@ auto makeExpectParsingFails(SparqlQleverVisitor::PrefixMap prefixMap = {}) {
     EXPECT_THROW(parseFunction(input), Exception) << input;
   };
 }
-}  // namespace
 
 template <typename T>
 void testNumericLiteral(const std::string& input, T target) {
@@ -237,15 +249,16 @@ TEST(SparqlParser, ComplexConstructQuery) {
 }
 
 TEST(SparqlParser, GraphTerm) {
-  expectCompleteParse(parseGraphTerm("1337"), IsLiteral("1337"));
-  expectCompleteParse(parseGraphTerm("true"), IsLiteral("true"));
-  expectCompleteParse(parseGraphTerm("[]"), IsBlankNode(true, "0"));
+  auto expectGraphTerm = makeExpectCompleteParser<parseGraphTerm>();
+  expectGraphTerm("1337", IsLiteral("1337"));
+  expectGraphTerm("true", IsLiteral("true"));
+  expectGraphTerm("[]", IsBlankNode(true, "0"));
   {
     const std::string iri = "<http://dummy-iri.com#fragment>";
     expectCompleteParse(parseGraphTerm(iri), IsIri(iri));
   }
-  expectCompleteParse(parseGraphTerm("\"abc\""), IsLiteral("\"abc\""));
-  expectCompleteParse(parseGraphTerm("()"), IsIri(nil));
+  expectGraphTerm("\"abc\"", IsLiteral("\"abc\""));
+  expectGraphTerm("()", IsIri(nil));
 }
 
 TEST(SparqlParser, RdfCollectionSingleVar) {
@@ -415,11 +428,7 @@ TEST(SparqlParser, VarOrTermGraphTerm) {
 }
 
 TEST(SparqlParser, Iri) {
-  auto expectIri = [](const string& input, const string& iri,
-                      SparqlQleverVisitor::PrefixMap prefixMap = {}) {
-    expectCompleteParse(parseIri(input, std::move(prefixMap)),
-                        testing::Eq(iri));
-  };
+  auto expectIri = makeExpectCompleteParser<parseIri>();
   expectIri("rdfs:label", "<http://www.w3.org/2000/01/rdf-schema#label>",
             {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});
   expectIri(
@@ -450,36 +459,37 @@ TEST(SparqlParser, VariableWithDollarSign) {
 }
 
 TEST(SparqlParser, Bind) {
-  expectCompleteParse(parseBind("BIND (10 - 5 as ?a)"), IsBind("?a", "10-5"));
-  expectCompleteParse(parseBind("bInD (?age - 10 As ?s)"),
-                      IsBind("?s", "?age-10"));
+  auto expectBind = makeExpectCompleteParser<parseBind>();
+  expectBind("BIND (10 - 5 as ?a)", IsBind("?a", "10-5"));
+  expectBind("bInD (?age - 10 As ?s)", IsBind("?s", "?age-10"));
 }
 
 TEST(SparqlParser, Integer) {
-  expectCompleteParse(parseInteger("1931"), Eq(1931ull));
-  expectCompleteParse(parseInteger("0"), Eq(0ull));
-  expectCompleteParse(parseInteger("18446744073709551615"),
-                      Eq(18446744073709551615ull));
-  EXPECT_THROW(parseInteger("18446744073709551616"), ParseException);
-  EXPECT_THROW(parseInteger("10000000000000000000000000000000000000000"),
-               ParseException);
-  EXPECT_THROW(parseInteger("-1"), ParseException);
+  auto expectInteger = makeExpectCompleteParser<parseInteger>();
+  auto expectIntegerFails = makeExpectParsingFails<parseInteger>();
+  expectInteger("1931", 1931ull);
+  expectInteger("0", 0ull);
+  expectInteger("18446744073709551615", 18446744073709551615ull);
+  expectIntegerFails("18446744073709551616");
+  expectIntegerFails("10000000000000000000000000000000000000000");
+  expectIntegerFails("-1");
 }
 
 TEST(SparqlParser, LimitOffsetClause) {
-  auto expectLimitOffset = [](const string& input, uint64_t limit,
-                              uint64_t textLimit, uint64_t offset) {
-    expectCompleteParse(parseLimitOffsetClause(input),
-                        IsLimitOffset(limit, textLimit, offset));
-  };
-  expectLimitOffset("LIMIT 10", 10, 1, 0);
-  expectLimitOffset("OFFSET 31 LIMIT 12 TEXTLIMIT 14", 12, 14, 31);
-  expectLimitOffset("textlimit 999", std::numeric_limits<uint64_t>::max(), 999,
-                    0);
-  expectLimitOffset("LIMIT      999", 999, 1, 0);
-  expectLimitOffset("OFFSET 43", std::numeric_limits<uint64_t>::max(), 1, 43);
-  expectLimitOffset("TEXTLIMIT 43 LIMIT 19", 19, 43, 0);
-  EXPECT_THROW(parseLimitOffsetClause("LIMIT20"), ParseException);
+  auto expectLimitOffset = makeExpectCompleteParser<parseLimitOffsetClause>();
+  auto expectLimitOffsetFails =
+      makeExpectParsingFails<parseLimitOffsetClause>();
+  expectLimitOffset("LIMIT 10", IsLimitOffset(10, 1, 0));
+  expectLimitOffset("OFFSET 31 LIMIT 12 TEXTLIMIT 14",
+                    IsLimitOffset(12, 14, 31));
+  expectLimitOffset(
+      "textlimit 999",
+      IsLimitOffset(std::numeric_limits<uint64_t>::max(), 999, 0));
+  expectLimitOffset("LIMIT      999", IsLimitOffset(999, 1, 0));
+  expectLimitOffset("OFFSET 43",
+                    IsLimitOffset(std::numeric_limits<uint64_t>::max(), 1, 43));
+  expectLimitOffset("TEXTLIMIT 43 LIMIT 19", IsLimitOffset(19, 43, 0));
+  expectLimitOffsetFails("LIMIT20");
   {
     auto limitOffset =
         parseLimitOffsetClause("Limit 10 TEXTLIMIT 20 offset 0 Limit 20");
@@ -589,25 +599,21 @@ TEST(SparqlParser, DataBlock) {
   expectDataBlockFails("?test { 10.0 }");
   expectDataBlockFails("?test { UNDEF }");
   expectDataBlock(R"(?foo { "baz" "bar" })",
-                  IsValues(vector<string>{"?foo"},
-                           vector<vector<string>>{{"\"baz\""}, {"\"bar\""}}));
+                  IsValues({"?foo"}, {{"\"baz\""}, {"\"bar\""}}));
   // TODO<joka921/qup42> implement
   expectDataBlockFails(R"(( ) { })");
   expectDataBlockFails(R"(?foo { })");
   expectDataBlockFails(R"(( ?foo ) { })");
   expectDataBlockFails(R"(( ?foo ?bar ) { (<foo>) (<bar>) })");
   expectDataBlock(R"(( ?foo ?bar ) { (<foo> <bar>) })",
-                  IsValues(vector<string>{"?foo", "?bar"},
-                           vector<vector<string>>{{"<foo>", "<bar>"}}));
+                  IsValues({"?foo", "?bar"}, {{"<foo>", "<bar>"}}));
   expectDataBlock(
       R"(( ?foo ?bar ) { (<foo> "m") ("1" <bar>) })",
-      IsValues(vector<string>{"?foo", "?bar"},
-               vector<vector<string>>{{"<foo>", "\"m\""}, {"\"1\"", "<bar>"}}));
+      IsValues({"?foo", "?bar"}, {{"<foo>", "\"m\""}, {"\"1\"", "<bar>"}}));
   expectDataBlock(
       R"(( ?foo ?bar ) { (<foo> "m") (<bar> <e>) ("1" "f") })",
-      IsValues(vector<string>{"?foo", "?bar"},
-               vector<vector<string>>{
-                   {"<foo>", "\"m\""}, {"<bar>", "<e>"}, {"\"1\"", "\"f\""}}));
+      IsValues({"?foo", "?bar"},
+               {{"<foo>", "\"m\""}, {"<bar>", "<e>"}, {"\"1\"", "\"f\""}}));
   // TODO<joka921/qup42> implement
   expectDataBlockFails(R"(( ) { (<foo>) })");
 }
@@ -616,19 +622,13 @@ TEST(SparqlParser, InlineData) {
   auto expectInlineData = makeExpectCompleteParser<parseInlineData>();
   auto expectInlineDataFails = makeExpectParsingFails<parseInlineData>();
   expectInlineData("VALUES ?test { \"foo\" }",
-                   IsInlineData(vector<string>{"?test"},
-                                vector<vector<string>>{{"\"foo\""}}));
+                   IsInlineData({"?test"}, {{"\"foo\""}}));
   // There must always be a block present for InlineData
   expectInlineDataFails("");
 }
 
 TEST(SparqlParser, propertyPaths) {
-  auto expectPathOrVar = [](const string& input,
-                            const ad_utility::sparql_types::VarOrPath& expected,
-                            SparqlQleverVisitor::PrefixMap prefixMap = {}) {
-    expectCompleteParse(parseVerbPathOrSimple(input, std::move(prefixMap)),
-                        testing::Eq(expected));
-  };
+  auto expectPathOrVar = makeExpectCompleteParser<parseVerbPathOrSimple>();
   auto Iri = &PropertyPath::fromIri;
   auto Sequence = &PropertyPath::makeSequence;
   auto Alternative = &PropertyPath::makeAlternative;
@@ -699,7 +699,7 @@ TEST(SparqlParser, propertyPaths) {
 
 TEST(SparqlParser, propertyListPathNotEmpty) {
   auto expectPropertyListPath =
-      makeExpectCompleteParserEq<parsePropertyListPathNotEmpty>();
+      makeExpectCompleteParser<parsePropertyListPathNotEmpty>();
   auto expectPropertyListPathFails =
       makeExpectParsingFails<parsePropertyListPathNotEmpty>();
   auto Iri = &PropertyPath::fromIri;
@@ -716,8 +716,7 @@ TEST(SparqlParser, propertyListPathNotEmpty) {
 }
 
 TEST(SparqlParser, triplesSameSubjectPath) {
-  auto expectTriples =
-      makeExpectCompleteParserEq<parseTriplesSameSubjectPath>();
+  auto expectTriples = makeExpectCompleteParser<parseTriplesSameSubjectPath>();
   auto PathIri = &PropertyPath::fromIri;
   using Var = Variable;
   expectTriples("?foo <bar> ?baz",
@@ -791,8 +790,7 @@ TEST(SparqlParser, SelectClause) {
 }
 
 TEST(SparqlParser, HavingCondition) {
-  auto expectHavingCondition =
-      makeExpectCompleteParserEq<parseHavingCondition>();
+  auto expectHavingCondition = makeExpectCompleteParser<parseHavingCondition>();
   auto expectHavingConditionFails =
       makeExpectParsingFails<parseHavingCondition>();
 
@@ -922,7 +920,7 @@ TEST(SparqlParser, GroupGraphPattern) {
 }
 
 TEST(SparqlParser, RDFLiteral) {
-  auto expectRDFLiteral = makeExpectCompleteParserEq<parseRdfLiteral>(
+  auto expectRDFLiteral = makeExpectCompleteParser<parseRdfLiteral>(
       {{"xsd", "<http://www.w3.org/2001/XMLSchema#>"}});
   auto expectRDFLiteralFails = makeExpectParsingFails<parseRdfLiteral>();
 
