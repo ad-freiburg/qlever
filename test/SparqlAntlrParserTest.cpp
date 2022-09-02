@@ -303,13 +303,13 @@ TEST(SparqlParser, ConstructTriplesSingletonWithTerminator) {
 }
 
 TEST(SparqlParser, ConstructTriplesWithTerminator) {
+  auto IsVar = IsVariableVariant;
   expectCompleteParse(
       parseConstructTriples("?a ?b ?c . ?d ?e ?f . ?g ?h ?i ."),
-     auto Var = IsVariableVariant;
-     ElementsAre(ElementsAre(IsVar("?a"), IsVar("?b"), IsVar("?c")),
-                          ElementsAre(IsVar("?d"), IsVar("?e"), IsVar("?f")),
-                          ElementsAre(IsVar("?g"), IsVar("?h"),
-                              IsVariableVariant("?i"))));
+      ElementsAre(
+          ElementsAre(IsVar("?a"), IsVar("?b"), IsVar("?c")),
+          ElementsAre(IsVar("?d"), IsVar("?e"), IsVar("?f")),
+          ElementsAre(IsVar("?g"), IsVar("?h"), IsVariableVariant("?i"))));
 }
 
 TEST(SparqlParser, TriplesSameSubjectVarOrTerm) {
