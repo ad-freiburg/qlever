@@ -188,9 +188,9 @@ auto IsVariable = [](const std::string& value) {
   return testing::Property("name()", &Variable::name, testing::StrEq(value));
 };
 
-auto IsVariableVariant(const std::string& value) {
+auto IsVariableVariant = [](const std::string& value) {
   return testing::VariantWith<Variable>(IsVariable(value));
-}
+};
 
 // _____________________________________________________________________________
 
@@ -366,8 +366,8 @@ MATCHER_P3(IsSelect, distinct, reduced, selection, "") {
           testing::Property("getAliases()",
                             &ParsedQuery::SelectClause::getAliases,
                             testing::SizeIs(testing::Eq(alias_counter))),
-          testing::Field("_distinct", &ParsedQuery::SelectClause::_distinct,
-                         testing::Eq(distinct))),
+          testing::Field("_reduced", &ParsedQuery::SelectClause::_reduced,
+                         testing::Eq(reduced))),
       arg, result_listener);
 }
 
