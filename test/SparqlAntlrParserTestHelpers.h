@@ -8,6 +8,8 @@
 
 #include <gmock/gmock.h>
 
+#include <source_location>
+
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/Alias.h"
 #include "parser/ParsedQuery.h"
@@ -134,12 +136,29 @@ constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
  * @param resultOfParseAndText Parsing result
  * @param matcher Matcher that must be fulfilled
  */
-void expectCompleteParse(const auto& resultOfParseAndText, auto&& matcher) {
+void expectCompleteParse(
+    const auto& resultOfParseAndText, auto&& matcher,
+    std::source_location l = std::source_location::current()) {
+  testing::ScopedTrace trace(l.file_name(), l.line(), "Source location");
   EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
   EXPECT_TRUE(resultOfParseAndText.remainingText_.empty());
 }
 
 // _____________________________________________________________________________
+void expectIncompleteParse(const auto& resultOfParseAndText, const string& rest,
+                           auto&& matcher) {
+  EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
+  EXPECT_THAT(resultOfParseAndText.remainingText_, testing::StrEq(rest));
+}
+[[maybe_unused]] void expectIncompleteParse(const auto& resultOfParseAndText,
+                                            const size_t length,
+                                            auto&& matcher) {
+  EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
+  EXPECT_THAT(resultOfParseAndText.remainingText_, testing::SizeIs(length));
+}
+void expectIncompleteParse(const auto& resultOfParseAndText, auto&& matcher) {
+  expectIncompleteParse(resultOfParseAndText, 0, matcher);
+}
 
 // Cannot be broken down into a combination of existing googletest matchers
 // because unwrapVariant is not available as a matcher.

@@ -43,23 +43,31 @@ template <auto Clause,
 struct ExpectCompleteParse {
   SparqlQleverVisitor::PrefixMap prefixMap_ = {};
 
-  auto operator()(const string& input, Value&& value) const {
-    return operator()(input, value, prefixMap_);
+  auto operator()(
+      const string& input, Value&& value,
+      std::source_location l = std::source_location::current()) const {
+    return operator()(input, value, prefixMap_, l);
   };
 
-  auto operator()(const string& input, const auto& matcher) const {
-    return operator()(input, matcher, prefixMap_);
+  auto operator()(
+      const string& input, const auto& matcher,
+      std::source_location l = std::source_location::current()) const {
+    return operator()(input, matcher, prefixMap_, l);
   };
 
-  auto operator()(const string& input, Value&& value,
-                  SparqlQleverVisitor::PrefixMap prefixMap) const {
-    return operator()(input, testing::Eq(value), std::move(prefixMap));
+  auto operator()(
+      const string& input, Value&& value,
+      SparqlQleverVisitor::PrefixMap prefixMap,
+      std::source_location l = std::source_location::current()) const {
+    return operator()(input, testing::Eq(value), std::move(prefixMap), l);
   };
 
-  auto operator()(const string& input, const auto& matcher,
-                  SparqlQleverVisitor::PrefixMap prefixMap) const {
+  auto operator()(
+      const string& input, const auto& matcher,
+      SparqlQleverVisitor::PrefixMap prefixMap,
+      std::source_location l = std::source_location::current()) const {
     return expectCompleteParse(parse<Clause>(input, std::move(prefixMap)),
-                               matcher);
+                               matcher, l);
   };
 };
 
@@ -146,12 +154,9 @@ TEST(SparqlParser, Prefix) {
                       StrEq("<www.wikidata.org/>"));
   expectCompleteParse(parse<&Parser::prefixedName>("wd:bimbam", prefixMap),
                       StrEq("<www.wikidata.org/bimbam>"));
-  {
-    auto result =
-        parse<&Parser::iriref>("<somethingsomething> <rest>", prefixMap);
-    ASSERT_EQ(result.resultOfParse_, "<somethingsomething>");
-    ASSERT_EQ(result.remainingText_, "<rest>");
-  }
+  expectIncompleteParse(
+      parse<&Parser::iriref>("<somethingsomething> <rest>", prefixMap),
+      "<rest>", testing::StrEq("<somethingsomething>"));
 }
 
 TEST(SparqlExpressionParser, First) {
@@ -405,12 +410,14 @@ TEST(SparqlParser, Iri) {
       "rdfs:label", "<http://www.w3.org/2000/01/rdf-schema#label>",
       {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}, {"foo", "<bar#>"}});
   expectIri("<http://www.w3.org/2000/01/rdf-schema>",
-            "<http://www.w3.org/2000/01/rdf-schema>", {});
+            "<http://www.w3.org/2000/01/rdf-schema>",
+            SparqlQleverVisitor::PrefixMap{});
   expectIri("@en@rdfs:label",
             "@en@<http://www.w3.org/2000/01/rdf-schema#label>",
             {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});
   expectIri("@en@<http://www.w3.org/2000/01/rdf-schema>",
-            "@en@<http://www.w3.org/2000/01/rdf-schema>", {});
+            "@en@<http://www.w3.org/2000/01/rdf-schema>",
+            SparqlQleverVisitor::PrefixMap{});
 }
 
 TEST(SparqlParser, VarOrIriIri) {
@@ -460,13 +467,9 @@ TEST(SparqlParser, LimitOffsetClause) {
                     IsLimitOffset(std::numeric_limits<uint64_t>::max(), 1, 43));
   expectLimitOffset("TEXTLIMIT 43 LIMIT 19", IsLimitOffset(19, 43, 0));
   expectLimitOffsetFails("LIMIT20");
-  {
-    auto limitOffset = parse<&Parser::limitOffsetClauses>(
-        "Limit 10 TEXTLIMIT 20 offset 0 Limit 20");
-
-    EXPECT_THAT(limitOffset.resultOfParse_, IsLimitOffset(10ull, 20ull, 0ull));
-    EXPECT_EQ(limitOffset.remainingText_, "Limit 20");
-  }
+  expectIncompleteParse(parse<&Parser::limitOffsetClauses>(
+                            "Limit 10 TEXTLIMIT 20 offset 0 Limit 20"),
+                        "Limit 20", IsLimitOffset(10ull, 20ull, 0ull));
 }
 
 TEST(SparqlParser, OrderCondition) {
