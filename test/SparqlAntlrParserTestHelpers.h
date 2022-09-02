@@ -184,15 +184,12 @@ MATCHER_P2(IsBlankNode, generated, label, "") {
 
 // _____________________________________________________________________________
 
-MATCHER_P(IsVariable, value, "") {
-  return testing::ExplainMatchResult(
-      testing::Property("name()", &Variable::name, testing::StrEq(value)), arg,
-      result_listener);
-}
+auto IsVariable = [](const std::string& value) {
+  return testing::Property("name()", &Variable::name, testing::StrEq(value));
+};
 
-MATCHER_P(IsVariableVariant, value, "") {
-  return testing::ExplainMatchResult(
-      testing::VariantWith<Variable>(IsVariable(value)), arg, result_listener);
+auto IsVariableVariant(const std::string& value) {
+  return testing::VariantWith<Variable>(IsVariable(value));
 }
 
 // _____________________________________________________________________________
@@ -213,28 +210,23 @@ auto IsExpression = [](const std::string& descriptor) {
       testing::StrEq(descriptor));
 };
 
-// Would require ugly `IsGraphPatternOperation.template
-// operator()<GraphPatternOperation::Bind>(...)` syntax
-auto IsGraphPatternOperation = []<typename T>(auto subMatcher) {
-  return testing::Field("_variant", &GraphPatternOperation::variant_,
+template <typename T>
+auto IsGraphPatternOperation = [](auto subMatcher) {
+  return testing::Field("variant_", &GraphPatternOperation::variant_,
                         testing::VariantWith<T>(subMatcher));
-};
-
-auto IsBind = [](const string& variable, const string& expression) {
-  return testing::Field(
-      "_variant", &GraphPatternOperation::variant_,
-      testing::VariantWith<GraphPatternOperation::Bind>((testing::AllOf(
-          testing::Field("_expression",
-                         &GraphPatternOperation::Bind::_expression,
-                         IsExpression(expression)),
-          testing::Field("_target", &GraphPatternOperation::Bind::_target,
-                         testing::StrEq(variable))))));
 };
 
 auto IsBindExpression = [](const string& expression) {
   return testing::Field("_expression",
                         &GraphPatternOperation::Bind::_expression,
                         IsExpression(expression));
+};
+
+auto IsBind = [](const string& variable, const string& expression) {
+  return IsGraphPatternOperation<GraphPatternOperation::Bind>(testing::AllOf(
+      IsBindExpression(expression),
+      testing::Field("_target", &GraphPatternOperation::Bind::_target,
+                     testing::StrEq(variable))));
 };
 
 auto IsLimitOffset = [](uint64_t limit, uint64_t textLimit, uint64_t offset) {
@@ -306,29 +298,35 @@ auto IsInlineData = [](const vector<string>& vars,
                        const vector<vector<string>>& values) {
   // TODO Refactor GraphPatternOperation::Values / SparqlValues s.t. this
   //  becomes a trivial Eq matcher.
-  return testing::Field("variant_", &GraphPatternOperation::variant_,
-                        testing::VariantWith<GraphPatternOperation::Values>(
-                            IsValues(vars, values)));
+  return IsGraphPatternOperation<GraphPatternOperation::Values>(
+      IsValues(vars, values));
 };
 
-MATCHER_P2(IsAsteriskSelect, distinct, reduced, "") {
-  return arg._distinct == distinct && arg._reduced == reduced &&
-         arg.isAsterisk() && arg.getAliases().empty();
-}
-
-auto IsVariablesSelect = [](const vector<string>& variables,
-                            bool distinct = false, bool reduced = false) {
+auto IsSelectBase = [](bool distinct, bool reduced) {
   return testing::AllOf(
       testing::Field("_distinct", &ParsedQuery::SelectClause::_distinct,
                      testing::Eq(distinct)),
       testing::Field("_reduced", &ParsedQuery::SelectClause::_reduced,
                      testing::Eq(reduced)),
+      testing::Property("getAliases()", &ParsedQuery::SelectClause::getAliases,
+                        testing::IsEmpty()));
+};
+
+auto IsAsteriskSelect = [](bool distinct = false, bool reduced = false) {
+  return testing::AllOf(
+      IsSelectBase(distinct, reduced),
+      testing::Property("isAsterisk()", &ParsedQuery::SelectClause::isAsterisk,
+                        testing::IsTrue()));
+};
+
+auto IsVariablesSelect = [](const vector<string>& variables,
+                            bool distinct = false, bool reduced = false) {
+  return testing::AllOf(
+      IsSelectBase(distinct, reduced),
       testing::Property(
           "getSelectedVariablesAsStrings()",
           &ParsedQuery::SelectClause::getSelectedVariablesAsStrings,
-          testing::Eq(variables)),
-      testing::Property("getAliases()", &ParsedQuery::SelectClause::getAliases,
-                        testing::IsEmpty()));
+          testing::Eq(variables)));
 };
 
 MATCHER_P3(IsSelect, distinct, reduced, selection, "") {
@@ -408,45 +406,36 @@ MATCHER_P4(IsSolutionModifier, groupByVariables, havingClauses, orderBy,
 }
 
 auto IsTriples = [](const vector<SparqlTriple>& triples) {
-  return testing::Field(
-      "variant_", &GraphPatternOperation::variant_,
-      testing::VariantWith<GraphPatternOperation::BasicGraphPattern>(
-          testing::Field("_triples",
-                         &GraphPatternOperation::BasicGraphPattern::_triples,
-                         testing::UnorderedElementsAreArray(triples))));
+  return IsGraphPatternOperation<GraphPatternOperation::BasicGraphPattern>(
+      testing::Field("_triples",
+                     &GraphPatternOperation::BasicGraphPattern::_triples,
+                     testing::UnorderedElementsAreArray(triples)));
 };
 
 auto IsOptional = [](auto&& subMatcher) {
-  return testing::Field(
-      "variant_", &GraphPatternOperation::variant_,
-      testing::VariantWith<GraphPatternOperation::Optional>(testing::Field(
-          "_child", &GraphPatternOperation::Optional::_child, subMatcher)));
+  return IsGraphPatternOperation<GraphPatternOperation::Optional>(
+      testing::Field("_child", &GraphPatternOperation::Optional::_child,
+                     subMatcher));
 };
 
 auto IsGroup = [](auto&& subMatcher) {
-  return testing::Field(
-      "variant_", &GraphPatternOperation::variant_,
-      testing::VariantWith<GraphPatternOperation::GroupGraphPattern>(
-          testing::Field("_child",
-                         &GraphPatternOperation::GroupGraphPattern::_child,
-                         subMatcher)));
+  return IsGraphPatternOperation<GraphPatternOperation::GroupGraphPattern>(
+      testing::Field("_child",
+                     &GraphPatternOperation::GroupGraphPattern::_child,
+                     subMatcher));
 };
 
 auto IsUnion = [](auto&& subMatcher1, auto&& subMatcher2) {
-  return testing::Field(
-      "variant_", &GraphPatternOperation::variant_,
-      testing::VariantWith<GraphPatternOperation::Union>(testing::AllOf(
-          testing::Field("_child1", &GraphPatternOperation::Union::_child1,
-                         subMatcher1),
-          testing::Field("_child2", &GraphPatternOperation::Union::_child2,
-                         subMatcher2))));
+  return IsGraphPatternOperation<GraphPatternOperation::Union>(testing::AllOf(
+      testing::Field("_child1", &GraphPatternOperation::Union::_child1,
+                     subMatcher1),
+      testing::Field("_child2", &GraphPatternOperation::Union::_child2,
+                     subMatcher2)));
 };
 
 auto IsMinus = [](auto&& subMatcher) {
-  return testing::Field(
-      "variant_", &GraphPatternOperation::variant_,
-      testing::VariantWith<GraphPatternOperation::Minus>(testing::Field(
-          "_child", &GraphPatternOperation::Minus::_child, subMatcher)));
+  return IsGraphPatternOperation<GraphPatternOperation::Minus>(testing::Field(
+      "_child", &GraphPatternOperation::Minus::_child, subMatcher));
 };
 
 MATCHER_P3(IsGraphPattern, optional, filters, childMatchers, "") {
@@ -480,9 +469,8 @@ auto MinusGraphPattern = [](vector<SparqlFilter>&& filters,
 };
 
 auto IsSubSelect = [](auto&& selectMatcher, auto&& whereMatcher) {
-  return testing::Field(
-      "variant_", &GraphPatternOperation::variant_,
-      testing::VariantWith<GraphPatternOperation::Subquery>(testing::Field(
+  return IsGraphPatternOperation<GraphPatternOperation::Subquery>(
+      testing::Field(
           "_subquery", &GraphPatternOperation::Subquery::_subquery,
           testing::AllOf(
               testing::Property("hasSelectClause()",
@@ -491,5 +479,5 @@ auto IsSubSelect = [](auto&& selectMatcher, auto&& whereMatcher) {
               testing::Property("selectClause()", &ParsedQuery::selectClause,
                                 selectMatcher),
               testing::Field("_rootGraphPattern",
-                             &ParsedQuery::_rootGraphPattern, whereMatcher)))));
+                             &ParsedQuery::_rootGraphPattern, whereMatcher))));
 };
