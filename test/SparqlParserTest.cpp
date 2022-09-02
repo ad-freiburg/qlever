@@ -1077,7 +1077,7 @@ TEST(ParserTest, testSolutionModifiers) {
                   .parse();
     ASSERT_EQ(1u, pq.children().size());
     ASSERT_EQ(1u, pq._orderBy.size());
-    EXPECT_THAT(pq, GroupByVariablesMatch<vector<string>>({"?r"}));
+    EXPECT_THAT(pq, GroupByVariablesMatch({Variable{"?r"}}));
     ASSERT_EQ("?avg", pq._orderBy[0].variable_);
     ASSERT_FALSE(pq._orderBy[0].isDescending_);
   }
@@ -1091,7 +1091,7 @@ TEST(ParserTest, testSolutionModifiers) {
                   "ORDER BY ?count")
                   .parse();
     ASSERT_EQ(1u, pq._orderBy.size());
-    EXPECT_THAT(pq, GroupByVariablesMatch<vector<string>>({"?r"}));
+    EXPECT_THAT(pq, GroupByVariablesMatch({Variable{"?r"}}));
     ASSERT_EQ("?count", pq._orderBy[0].variable_);
     ASSERT_FALSE(pq._orderBy[0].isDescending_);
   }
@@ -1127,7 +1127,7 @@ TEST(ParserTest, testGroupByAndAlias) {
   ASSERT_EQ(1u, aliases.size());
   ASSERT_TRUE(aliases[0]._expression.isAggregate({}));
   ASSERT_EQ("(COUNT(?a) as ?count)", aliases[0].getDescriptor());
-  EXPECT_THAT(pq, GroupByVariablesMatch<vector<string>>({"?b"}));
+  EXPECT_THAT(pq, GroupByVariablesMatch({Variable{"?b"}}));
 }
 
 TEST(ParserTest, Bind) {
@@ -1244,14 +1244,14 @@ TEST(ParserTest, Group) {
     ParsedQuery pq =
         SparqlParser("SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY ?x")
             .parse();
-    EXPECT_THAT(pq, GroupByVariablesMatch<vector<string>>({"?x"}));
+    EXPECT_THAT(pq, GroupByVariablesMatch({Variable{"?x"}}));
   }
   {
     // grouping by a variable
     ParsedQuery pq =
         SparqlParser("SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY ?y ?x")
             .parse();
-    EXPECT_THAT(pq, GroupByVariablesMatch<vector<string>>({"?y", "?x"}));
+    EXPECT_THAT(pq, GroupByVariablesMatch({Variable{"?y"}, Variable{"?x"}}));
   }
   {
     // grouping by an expression
@@ -1263,8 +1263,8 @@ TEST(ParserTest, Group) {
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
     ASSERT_THAT(helperBind, IsBindExpression("?x-?y"));
-    EXPECT_THAT(
-        pq, GroupByVariablesMatch<vector<string>>({helperBind._target, "?x"}));
+    EXPECT_THAT(pq, GroupByVariablesMatch(
+                        {Variable{helperBind._target}, Variable{"?x"}}));
   }
   {
     // grouping by an expression with an alias
@@ -1274,7 +1274,7 @@ TEST(ParserTest, Group) {
                          .parse();
     EXPECT_THAT(pq._rootGraphPattern._graphPatterns[1],
                 IsBind("?foo", "?x-?y"));
-    EXPECT_THAT(pq, GroupByVariablesMatch<vector<string>>({"?foo", "?x"}));
+    EXPECT_THAT(pq, GroupByVariablesMatch({Variable{"?foo"}, Variable{"?x"}}));
   }
   {
     // grouping by a builtin call
@@ -1286,8 +1286,8 @@ TEST(ParserTest, Group) {
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
     ASSERT_THAT(helperBind, IsBindExpression("COUNT(?x)"));
-    EXPECT_THAT(
-        pq, GroupByVariablesMatch<vector<string>>({helperBind._target, "?x"}));
+    EXPECT_THAT(pq, GroupByVariablesMatch(
+                        {Variable{helperBind._target}, Variable{"?x"}}));
   }
   {
     // grouping by a function call
@@ -1303,8 +1303,8 @@ TEST(ParserTest, Group) {
         helperBind,
         IsBindExpression(
             "<http://www.opengis.net/def/function/geosparql/latitude>(?test)"));
-    EXPECT_THAT(
-        pq, GroupByVariablesMatch<vector<string>>({helperBind._target, "?x"}));
+    EXPECT_THAT(pq, GroupByVariablesMatch(
+                        {Variable{helperBind._target}, Variable{"?x"}}));
   }
   {
     // selection of a variable that is not grouped/aggregated

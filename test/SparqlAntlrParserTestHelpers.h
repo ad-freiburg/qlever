@@ -1,6 +1,8 @@
 // Copyright 2022, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
+// Authors:
+//   2022 Robin Textor-Falconi (textorr@informatik.uni-freiburg.de)
+//   2022 Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
 
 #pragma once
 
@@ -138,33 +140,9 @@ void expectCompleteParse(const auto& resultOfParseAndText, auto&& matcher) {
 }
 
 // _____________________________________________________________________________
-/**
- * Ensures that resultOfParseAndText.resultOfParse_ is an array-like type (e.g.
- * std::vector) the size of which is the number of specified matchers and the
- * the i-th matcher matches resultOfParseAndText.resultOfParser_[i] and that the
- * text has been fully consumed by the parser.
- *
- * @param resultOfParseAndText Parsing result
- * @param matchers Matcher... that must be fulfilled
- */
-void expectCompleteArrayParse(const auto& resultOfParseAndText,
-                              auto&&... matchers) {
-  auto expect_single_element = [](auto&& result, auto matcher) {
-    EXPECT_THAT(result, matcher);
-  };
-  ASSERT_EQ(resultOfParseAndText.resultOfParse_.size(), sizeof...(matchers));
-  auto sequence = std::make_index_sequence<sizeof...(matchers)>();
 
-  auto lambda = [&]<size_t... i>(std::index_sequence<i...>) {
-    (...,
-     expect_single_element(resultOfParseAndText.resultOfParse_[i], matchers));
-  };
-
-  lambda(sequence);
-  EXPECT_TRUE(resultOfParseAndText.remainingText_.empty());
-}
-// _____________________________________________________________________________
-
+// Cannot be broken down into a combination of existing googletest matchers
+// because unwrapVariant is not available as a matcher.
 MATCHER_P(IsIri, value, "") {
   if (const auto iri = unwrapVariant<VarOrTerm, GraphTerm, Iri>(arg)) {
     return iri->iri() == value;
@@ -174,6 +152,8 @@ MATCHER_P(IsIri, value, "") {
 
 // _____________________________________________________________________________
 
+// Cannot be broken down into a combination of existing googletest matchers
+// because unwrapVariant is not available as a matcher.
 MATCHER_P2(IsBlankNode, generated, label, "") {
   if (const auto blankNode =
           unwrapVariant<VarOrTerm, GraphTerm, BlankNode>(arg)) {
@@ -194,6 +174,8 @@ auto IsVariableVariant = [](const std::string& value) {
 
 // _____________________________________________________________________________
 
+// Cannot be broken down into a combination of existing googletest matchers
+// because unwrapVariant is not available as a matcher.
 MATCHER_P(IsLiteral, value, "") {
   if (const auto literal = unwrapVariant<VarOrTerm, GraphTerm, Literal>(arg)) {
     return literal->literal() == value;
@@ -216,12 +198,16 @@ auto IsGraphPatternOperation = [](auto subMatcher) {
                         testing::VariantWith<T>(subMatcher));
 };
 
+// Return a matcher that checks that a given Bind has the given expression
+// descriptor.
 auto IsBindExpression = [](const string& expression) {
   return testing::Field("_expression",
                         &GraphPatternOperation::Bind::_expression,
                         IsExpression(expression));
 };
 
+// Return a matcher that checks that a given GraphPatternOperation is a Bind
+// with the given variable and expression descriptor.
 auto IsBind = [](const string& variable, const string& expression) {
   return IsGraphPatternOperation<GraphPatternOperation::Bind>(testing::AllOf(
       IsBindExpression(expression),
@@ -258,6 +244,29 @@ auto IsExpressionOrderKey = [](const string& expr, bool desc) {
                      testing::Eq(desc))));
 };
 
+using ExpressionOrderKeyTest = std::pair<std::string, bool>;
+auto IsOrderKeys =
+    [](const std::vector<
+        std::variant<VariableOrderKey, ExpressionOrderKeyTest>>& orderKeys) {
+      vector<testing::Matcher<OrderKey>> keyMatchers;
+      auto variableOrderKey =
+          [](const VariableOrderKey& key) -> testing::Matcher<OrderKey> {
+        // TODO: enhance
+        return IsVariableOrderKeyVariant(key.variable_, key.isDescending_);
+      };
+      auto expressionOrderKey = [](const std::pair<std::string, bool>& key)
+          -> testing::Matcher<OrderKey> {
+        return IsExpressionOrderKey(key.first, key.second);
+      };
+      for (auto& key : orderKeys) {
+        keyMatchers.push_back(
+            std::visit(ad_utility::OverloadCallOperator{variableOrderKey,
+                                                        expressionOrderKey},
+                       key));
+      }
+      return testing::ElementsAreArray(keyMatchers);
+    };
+
 auto IsVariableGroupKey = [](const string& key) {
   return testing::VariantWith<Variable>(
       testing::Property("name()", &Variable::name, testing::StrEq(key)));
@@ -275,12 +284,36 @@ auto IsAliasGroupKey = [](const string& expr, const string& variable) {
       testing::Field("_expression", &Alias::_expression, IsExpression(expr))));
 };
 
-MATCHER_P(GroupByVariablesMatch, vars, "") {
-  vector<Variable> groupVariables = arg._groupByVariables;
-  if (groupVariables.size() != vars.size()) return false;
-  return std::equal(groupVariables.begin(), groupVariables.end(), vars.begin(),
-                    [](auto& var, auto& var1) { return var.name() == var1; });
-}
+auto IsGroupKeys =
+    [](const std::vector<std::variant<
+           std::string, std::pair<std::string, std::string>, Variable>>&
+           groupKeys) {
+      vector<testing::Matcher<GroupKey>> keyMatchers;
+      auto variableGroupKey =
+          [](const Variable& key) -> testing::Matcher<GroupKey> {
+        return IsVariableGroupKey(key.name());
+      };
+      auto expressionGroupKey =
+          [](const std::string& key) -> testing::Matcher<GroupKey> {
+        return IsExpressionGroupKey(key);
+      };
+      auto aliasGroupKey = [](const std::pair<std::string, std::string>& alias)
+          -> testing::Matcher<GroupKey> {
+        return IsAliasGroupKey(alias.first, alias.second);
+      };
+      for (auto& key : groupKeys) {
+        keyMatchers.push_back(std::visit(
+            ad_utility::OverloadCallOperator{variableGroupKey,
+                                             expressionGroupKey, aliasGroupKey},
+            key));
+      }
+      return testing::ElementsAreArray(keyMatchers);
+    };
+
+auto GroupByVariablesMatch = [](const vector<Variable>& vars) {
+  return testing::Field("_groupByVariables", &ParsedQuery::_groupByVariables,
+                        testing::UnorderedElementsAreArray(vars));
+};
 
 auto IsValues = [](const vector<string>& vars,
                    const vector<vector<string>>& values) {
@@ -329,6 +362,9 @@ auto IsVariablesSelect = [](const vector<string>& variables,
           testing::Eq(variables)));
 };
 
+// This matcher cannot be trivially broken down into a combination of existing
+// googletest matchers because of the way how the aliases are stored in the
+// select clause.
 MATCHER_P3(IsSelect, distinct, reduced, selection, "") {
   const auto& selectedVariables = arg.getSelectedVariables();
   if (selection.size() != selectedVariables.size()) return false;
@@ -371,39 +407,25 @@ MATCHER_P3(IsSelect, distinct, reduced, selection, "") {
       arg, result_listener);
 }
 
-MATCHER_P4(IsSolutionModifier, groupByVariables, havingClauses, orderBy,
-           limitOffset, "") {
-  auto equalComp = []<typename T>(const T& a, const T& b) { return a == b; };
-  auto falseComp = [](auto, auto) { return false; };
-  auto exprOrderKeyComp = [](const ExpressionOrderKey& a,
-                             const std::pair<std::string, bool>& b) {
-    return a.isDescending_ == b.second &&
-           a.expression_.getDescriptor() == b.first;
-  };
-  auto pimplComp = [](const sparqlExpression::SparqlExpressionPimpl& a,
-                      const std::string& b) { return a.getDescriptor() == b; };
-  auto orderKeyComp = [&exprOrderKeyComp, &equalComp, &falseComp](
-                          const OrderKey& a,
-                          const std::variant<std::pair<std::string, bool>,
-                                             VariableOrderKey>& b) {
-    return std::visit(ad_utility::OverloadCallOperator{exprOrderKeyComp,
-                                                       equalComp, falseComp},
-                      a, b);
-  };
-  auto groupKeyComp = [&pimplComp, &equalComp, &falseComp](
-                          const GroupKey& a,
-                          const std::variant<std::string, Alias, Variable>& b) {
-    return std::visit(
-        ad_utility::OverloadCallOperator{pimplComp, equalComp, falseComp}, a,
-        b);
-  };
-  return std::equal(arg.groupByVariables_.begin(), arg.groupByVariables_.end(),
-                    groupByVariables.begin(), groupKeyComp) &&
-         arg.havingClauses_ == havingClauses &&
-         std::equal(arg.orderBy_.begin(), arg.orderBy_.end(), orderBy.begin(),
-                    orderKeyComp) &&
-         arg.limitOffset_ == limitOffset;
-}
+auto IsSolutionModifier =
+    [](const std::vector<std::variant<
+           std::string, std::pair<std::string, std::string>, Variable>>&
+           groupKeys = {},
+       const vector<SparqlFilter>& havingClauses = {},
+       const std::vector<std::variant<VariableOrderKey,
+                                      ExpressionOrderKeyTest>>& orderKeys = {},
+       const LimitOffsetClause& limitOffset = {}) {
+      return testing::AllOf(
+          testing::Field("groupByVariables_",
+                         &SolutionModifiers::groupByVariables_,
+                         IsGroupKeys(groupKeys)),
+          testing::Field("havingClauses_", &SolutionModifiers::havingClauses_,
+                         testing::Eq(havingClauses)),
+          testing::Field("orderBy_", &SolutionModifiers::orderBy_,
+                         IsOrderKeys(orderKeys)),
+          testing::Field("limitOffset_", &SolutionModifiers::limitOffset_,
+                         testing::Eq(limitOffset)));
+    };
 
 auto IsTriples = [](const vector<SparqlTriple>& triples) {
   return IsGraphPatternOperation<GraphPatternOperation::BasicGraphPattern>(
@@ -438,34 +460,35 @@ auto IsMinus = [](auto&& subMatcher) {
       "_child", &GraphPatternOperation::Minus::_child, subMatcher));
 };
 
-MATCHER_P3(IsGraphPattern, optional, filters, childMatchers, "") {
-  if (arg._graphPatterns.size() != std::tuple_size_v<decltype(childMatchers)>) {
-    return false;
-  }
+auto IsGraphPattern = [](bool optional, const vector<SparqlFilter>& filters,
+                         auto&&... childMatchers) {
+  return testing::AllOf(
+      testing::Field("_optional", &ParsedQuery::GraphPattern::_optional,
+                     testing::Eq(optional)),
+      testing::Field("_filters", &ParsedQuery::GraphPattern::_filters,
+                     testing::UnorderedElementsAreArray(filters)),
+      testing::Field("_graphPatterns",
+                     &ParsedQuery::GraphPattern::_graphPatterns,
+                     testing::ElementsAre(childMatchers...)));
+};
 
-  // TODO<joka921, qup42> I think there is a `tupleForEach` function somewhere
-  //  in `util/xxx.h` that could be used to make this eve more idiomatic.
-  auto lambda = [&](auto&&... matchers) {
-    size_t i = 0;
-    return (... && testing::Value(arg._graphPatterns[i++], matchers));
-  };
-  bool childrenMatch = std::apply(lambda, childMatchers);
-
-  return arg._optional == optional &&
-         testing::Value(arg._filters,
-                        testing::UnorderedElementsAreArray(filters)) &&
-         childrenMatch;
-}
+auto IsGraphPatternSimple = [](auto&&... childMatchers) {
+  return IsGraphPattern(false, {}, childMatchers...);
+};
 
 auto OptionalGraphPattern = [](vector<SparqlFilter>&& filters,
                                const auto&... childMatchers) {
-  return IsOptional(
-      IsGraphPattern(true, filters, std::tuple{childMatchers...}));
+  return IsOptional(IsGraphPattern(true, filters, childMatchers...));
+};
+
+auto GroupGraphPattern = [](vector<SparqlFilter>&& filters,
+                            const auto&... childMatchers) {
+  return IsGroup(IsGraphPattern(false, filters, childMatchers...));
 };
 
 auto MinusGraphPattern = [](vector<SparqlFilter>&& filters,
                             const auto&... childMatchers) {
-  return IsMinus(IsGraphPattern(false, filters, std::tuple{childMatchers...}));
+  return IsMinus(IsGraphPattern(false, filters, childMatchers...));
 };
 
 auto IsSubSelect = [](auto&& selectMatcher, auto&& whereMatcher) {
