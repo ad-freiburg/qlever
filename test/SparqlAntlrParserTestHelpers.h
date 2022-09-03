@@ -506,6 +506,34 @@ auto IsMinus =
       "_child", &GraphPatternOperation::Minus::_child, subMatcher));
 };
 
+// TODO: generalize or rename
+template <auto SubMatcherLambda>
+struct MatcherOverloads {
+  testing::Matcher<const GraphPatternOperation&> operator()(
+      vector<SparqlFilter>&& filters, const auto&... childMatchers) {
+    return SubMatcherLambda(std::move(filters), childMatchers...);
+  }
+
+  testing::Matcher<const GraphPatternOperation&> operator()(
+      const auto&... childMatchers) {
+    return SubMatcherLambda({}, childMatchers...);
+  }
+};
+
+template <auto SubMatcherLambda>
+struct MatcherOverloadss {
+  testing::Matcher<const ParsedQuery::GraphPattern&> operator()(
+      bool optional, vector<SparqlFilter>&& filters,
+      const auto&... childMatchers) {
+    return SubMatcherLambda(optional, std::move(filters), childMatchers...);
+  }
+
+  testing::Matcher<const ParsedQuery::GraphPattern&> operator()(
+      const auto&... childMatchers) {
+    return SubMatcherLambda(false, {}, childMatchers...);
+  }
+};
+
 auto IsGraphPattern = [](bool optional, const vector<SparqlFilter>& filters,
                          auto&&... childMatchers)
     -> testing::Matcher<const ParsedQuery::GraphPattern&> {
@@ -519,28 +547,31 @@ auto IsGraphPattern = [](bool optional, const vector<SparqlFilter>& filters,
                      testing::ElementsAre(childMatchers...)));
 };
 
-auto IsGraphPatternSimple = [](auto&&... childMatchers)
-    -> testing::Matcher<const ParsedQuery::GraphPattern&> {
-  return IsGraphPattern(false, {}, childMatchers...);
-};
+auto GraphPattern = MatcherOverloadss<IsGraphPattern>{};
 
-auto OptionalGraphPattern = [](vector<SparqlFilter>&& filters,
-                               const auto&... childMatchers)
+auto IsOptionalGraphPattern = [](vector<SparqlFilter>&& filters,
+                                 const auto&... childMatchers)
     -> testing::Matcher<const GraphPatternOperation&> {
   return IsOptional(IsGraphPattern(true, filters, childMatchers...));
 };
 
-auto GroupGraphPattern = [](vector<SparqlFilter>&& filters,
-                            const auto&... childMatchers)
+auto OptionalGraphPattern = MatcherOverloads<IsOptionalGraphPattern>{};
+
+auto IsGroupGraphPattern = [](vector<SparqlFilter>&& filters,
+                              const auto&... childMatchers)
     -> testing::Matcher<const GraphPatternOperation&> {
   return IsGroup(IsGraphPattern(false, filters, childMatchers...));
 };
 
-auto MinusGraphPattern = [](vector<SparqlFilter>&& filters,
-                            const auto&... childMatchers)
+auto GroupGraphPattern = MatcherOverloads<IsGroupGraphPattern>{};
+
+auto IsMinusGraphPattern = [](vector<SparqlFilter>&& filters,
+                              const auto&... childMatchers)
     -> testing::Matcher<const GraphPatternOperation&> {
   return IsMinus(IsGraphPattern(false, filters, childMatchers...));
 };
+
+auto MinusGraphPattern = MatcherOverloads<IsMinusGraphPattern>{};
 
 auto IsSubSelect =
     [](auto&& selectMatcher,
