@@ -146,11 +146,11 @@ SparqlValues Values::sanitizeValues(SparqlValues&& values) {
     AD_CHECK(values._values[i].size() == values._variables.size());
     auto& v = values._values[i];
     if (std::all_of(v.begin(), v.end(),
-                    [](const auto& s) { return s == "UNDEF"s; })) {
+                    [](const auto& s) { return s == "UNDEF"; })) {
       emptyValues.push_back(i);
     }
     for (std::size_t k = 0; k < v.size(); ++k) {
-      if (v[k] != "UNDEF"s) {
+      if (v[k] != "UNDEF") {
         variableBound[k].second = 1;
       }
     }

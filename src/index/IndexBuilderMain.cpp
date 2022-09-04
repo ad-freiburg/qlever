@@ -4,19 +4,21 @@
 //   2014-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include <CompilationInfo.h>
-#include <global/Constants.h>
-#include <index/ConstantsIndexBuilding.h>
-#include <index/Index.h>
-#include <util/File.h>
-#include <util/ProgramOptionsHelpers.h>
-#include <util/ReadableNumberFact.h>
-
 #include <boost/program_options.hpp>
 #include <cstdlib>
 #include <exception>
 #include <iostream>
 #include <string>
+
+#include "CompilationInfo.h"
+#include "global/Constants.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "index/Index.h"
+#include "parser/Tokenizer.h"
+#include "parser/TurtleParser.h"
+#include "util/File.h"
+#include "util/ProgramOptionsHelpers.h"
+#include "util/ReadableNumberFact.h"
 
 using std::cerr;
 using std::cout;

@@ -9,6 +9,7 @@
 #define QLEVER_SAMPLEEXPRESSION_H
 
 #include "./SparqlExpression.h"
+#include "absl/strings/str_cat.h"
 
 namespace sparqlExpression {
 /// The (SAMPLE(?x) as ?sample) expression
@@ -28,7 +29,7 @@ class SampleExpression : public SparqlExpression {
 
   // __________________________________________________________________________
   string getCacheKey(const VariableToColumnMap& varColMap) const override {
-    return "SAMPLE("s + _child->getCacheKey(varColMap) + ")";
+    return absl::StrCat("SAMPLE(", _child->getCacheKey(varColMap), ")");
   }
 
   // __________________________________________________________________________

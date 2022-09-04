@@ -7,6 +7,7 @@
 #include <absl/strings/str_join.h>
 #include <absl/strings/str_split.h>
 #include <parser/RdfEscaping.h>
+#include <util/Conversions.h>
 
 #include <optional>
 #include <sstream>

@@ -6,6 +6,7 @@
 #define QLEVER_GROUPCONCATEXPRESSION_H
 
 #include "AggregateExpression.h"
+#include "absl/strings/str_cat.h"
 
 namespace sparqlExpression {
 /// The GROUP_CONCAT Expression
@@ -50,7 +51,8 @@ class GroupConcatExpression : public SparqlExpression {
 
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override {
-    return "["s + _separator + "]" + _actualExpression->getCacheKey(varColMap);
+    return absl::StrCat("[", _separator, "]",
+                        _actualExpression->getCacheKey(varColMap));
   }
 
  private:

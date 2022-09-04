@@ -180,7 +180,7 @@ class Operation {
             this](size_t countIncrease = 1) mutable {
       i += countIncrease;
       if (i >= numOperationsBetweenTimeoutChecks) {
-        _timeoutTimer->wlock()->checkTimeoutAndThrow("Timeout in "s +
+        _timeoutTimer->wlock()->checkTimeoutAndThrow("Timeout in " +
                                                      getDescriptor());
         i = 0;
       }
