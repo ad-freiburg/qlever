@@ -259,39 +259,39 @@ MultiVariantWith(
 }
 
 // Returns a matcher that accepts a `VarOrTerm`, `GraphTerm` or `Iri`.
-auto IsIri = [](const std::string& value) {
-  return MultiVariantWith<VarOrTerm, GraphTerm, Iri>(
-      AD_PROPERTY(Iri, iri, testing::Eq(value)));
+auto Iri = [](const std::string& value) {
+  return MultiVariantWith<VarOrTerm, GraphTerm, ::Iri>(
+      AD_PROPERTY(::Iri, iri, testing::Eq(value)));
 };
 
 // _____________________________________________________________________________
 
 // Returns a matcher that accepts a `VarOrTerm`, `GraphTerm` or `BlankNode`.
-auto IsBlankNode = [](bool generated, const std::string& label) {
-  return MultiVariantWith<VarOrTerm, GraphTerm, BlankNode>(testing::AllOf(
-      AD_PROPERTY(BlankNode, isGenerated, testing::Eq(generated)),
-      AD_PROPERTY(BlankNode, label, testing::Eq(label))));
+auto BlankNode = [](bool generated, const std::string& label) {
+  return MultiVariantWith<VarOrTerm, GraphTerm, ::BlankNode>(testing::AllOf(
+      AD_PROPERTY(::BlankNode, isGenerated, testing::Eq(generated)),
+      AD_PROPERTY(::BlankNode, label, testing::Eq(label))));
 };
 
 // _____________________________________________________________________________
 
-auto IsVariable =
-    [](const std::string& value) -> testing::Matcher<const Variable&> {
-  return AD_PROPERTY(Variable, name, testing::Eq(value));
+auto Variable =
+    [](const std::string& value) -> testing::Matcher<const ::Variable&> {
+  return AD_PROPERTY(::Variable, name, testing::Eq(value));
 };
 
 // Returns a matcher that matches a variant that given a variant checks that it
 // contains a variable and that the variable matches.
 auto VariableVariant = [](const std::string& value) {
-  return testing::VariantWith<Variable>(IsVariable(value));
+  return testing::VariantWith<::Variable>(Variable(value));
 };
 
 // _____________________________________________________________________________
 
 // Returns a matcher that accepts a `VarOrTerm`, `GraphTerm` or `Literal`.
-auto IsLiteral = [](const std::string& value) {
-  return MultiVariantWith<VarOrTerm, GraphTerm, Literal>(
-      AD_PROPERTY(Literal, literal, testing::Eq(value)));
+auto Literal = [](const std::string& value) {
+  return MultiVariantWith<VarOrTerm, GraphTerm, ::Literal>(
+      AD_PROPERTY(::Literal, literal, testing::Eq(value)));
 };
 
 // _____________________________________________________________________________
@@ -306,8 +306,8 @@ auto Expression = [](const std::string& descriptor)
 
 namespace detail {
 template <typename T>
-auto IsGraphPatternOperation =
-    [](auto subMatcher) -> testing::Matcher<const GraphPatternOperation&> {
+auto GraphPatternOperation =
+    [](auto subMatcher) -> testing::Matcher<const ::GraphPatternOperation&> {
   return AD_FIELD(GraphPatternOperation, variant_,
                   testing::VariantWith<T>(subMatcher));
 };
@@ -321,7 +321,7 @@ auto BindExpression = [](const string& expression)
 
 auto Bind = [](const string& variable, const string& expression)
     -> testing::Matcher<const GraphPatternOperation&> {
-  return detail::IsGraphPatternOperation<GraphPatternOperation::Bind>(
+  return detail::GraphPatternOperation<GraphPatternOperation::Bind>(
       testing::AllOf(BindExpression(expression),
                      AD_FIELD(GraphPatternOperation::Bind, _target,
                               testing::Eq(variable))));
@@ -336,39 +336,39 @@ auto LimitOffset =
       AD_FIELD(LimitOffsetClause, _offset, testing::Eq(offset)));
 };
 
-auto IsVariableOrderKey =
+auto VariableOrderKey =
     [](const string& key,
-       bool desc) -> testing::Matcher<const VariableOrderKey&> {
+       bool desc) -> testing::Matcher<const ::VariableOrderKey&> {
   return testing::AllOf(
-      AD_FIELD(VariableOrderKey, variable_, testing::Eq(key)),
-      AD_FIELD(VariableOrderKey, isDescending_, testing::Eq(desc)));
+      AD_FIELD(::VariableOrderKey, variable_, testing::Eq(key)),
+      AD_FIELD(::VariableOrderKey, isDescending_, testing::Eq(desc)));
 };
 
 auto VariableOrderKeyVariant =
     [](const string& key, bool desc) -> testing::Matcher<const OrderKey&> {
-  return testing::VariantWith<VariableOrderKey>(VariableOrderKey(key, desc));
+  return testing::VariantWith<::VariableOrderKey>(VariableOrderKey(key, desc));
 };
 
-auto IsExpressionOrderKey = [](const string& expr,
-                               bool desc) -> testing::Matcher<const OrderKey&> {
-  return testing::VariantWith<ExpressionOrderKey>(testing::AllOf(
-      AD_FIELD(ExpressionOrderKey, expression_, detail::Expression(expr)),
-      AD_FIELD(ExpressionOrderKey, isDescending_, testing::Eq(desc))));
+auto ExpressionOrderKey = [](const string& expr,
+                             bool desc) -> testing::Matcher<const OrderKey&> {
+  return testing::VariantWith<::ExpressionOrderKey>(testing::AllOf(
+      AD_FIELD(::ExpressionOrderKey, expression_, detail::Expression(expr)),
+      AD_FIELD(::ExpressionOrderKey, isDescending_, testing::Eq(desc))));
 };
 
 using ExpressionOrderKeyTest = std::pair<std::string, bool>;
 auto OrderKeys =
     [](const std::vector<
-        std::variant<VariableOrderKey, ExpressionOrderKeyTest>>& orderKeys)
+        std::variant<::VariableOrderKey, ExpressionOrderKeyTest>>& orderKeys)
     -> testing::Matcher<const vector<OrderKey>&> {
   vector<testing::Matcher<const OrderKey&>> keyMatchers;
   auto variableOrderKey =
-      [](const VariableOrderKey& key) -> testing::Matcher<const OrderKey&> {
+      [](const ::VariableOrderKey& key) -> testing::Matcher<const OrderKey&> {
     return VariableOrderKeyVariant(key.variable_, key.isDescending_);
   };
   auto expressionOrderKey = [](const std::pair<std::string, bool>& key)
       -> testing::Matcher<const OrderKey&> {
-    return IsExpressionOrderKey(key.first, key.second);
+    return ExpressionOrderKey(key.first, key.second);
   };
   for (auto& key : orderKeys) {
     keyMatchers.push_back(std::visit(
@@ -380,7 +380,7 @@ auto OrderKeys =
 
 auto VariableGroupKey =
     [](const string& key) -> testing::Matcher<const GroupKey&> {
-  return testing::VariantWith<Variable>(
+  return testing::VariantWith<::Variable>(
       AD_PROPERTY(Variable, name, testing::Eq(key)));
 };
 
@@ -400,11 +400,11 @@ auto AliasGroupKey =
 
 auto GroupKeys =
     [](const std::vector<std::variant<
-           std::string, std::pair<std::string, std::string>, Variable>>&
+           std::string, std::pair<std::string, std::string>, ::Variable>>&
            groupKeys) -> testing::Matcher<const vector<GroupKey>&> {
   vector<testing::Matcher<const GroupKey&>> keyMatchers;
   auto variableGroupKey =
-      [](const Variable& key) -> testing::Matcher<const GroupKey&> {
+      [](const ::Variable& key) -> testing::Matcher<const GroupKey&> {
     return VariableGroupKey(key.name());
   };
   auto expressionGroupKey =
@@ -425,7 +425,7 @@ auto GroupKeys =
 };
 
 auto GroupByVariablesMatch =
-    [](const vector<Variable>& vars) -> testing::Matcher<const ParsedQuery&> {
+    [](const vector<::Variable>& vars) -> testing::Matcher<const ParsedQuery&> {
   return AD_FIELD(ParsedQuery, _groupByVariables,
                   testing::UnorderedElementsAreArray(vars));
 };
@@ -446,12 +446,12 @@ auto InlineData = [](const vector<string>& vars,
     -> testing::Matcher<const GraphPatternOperation&> {
   // TODO Refactor GraphPatternOperation::Values / SparqlValues s.t. this
   //  becomes a trivial Eq matcher.
-  return detail::IsGraphPatternOperation<GraphPatternOperation::Values>(
+  return detail::GraphPatternOperation<GraphPatternOperation::Values>(
       Values(vars, values));
 };
 
 namespace detail {
-auto IsSelectBase =
+auto SelectBase =
     [](bool distinct,
        bool reduced) -> testing::Matcher<const ParsedQuery::SelectClause&> {
   return testing::AllOf(
@@ -464,7 +464,7 @@ auto IsSelectBase =
 auto AsteriskSelect = [](bool distinct = false, bool reduced = false)
     -> testing::Matcher<const ParsedQuery::SelectClause&> {
   return testing::AllOf(
-      detail::IsSelectBase(distinct, reduced),
+      detail::SelectBase(distinct, reduced),
       AD_PROPERTY(ParsedQuery, SelectClause::isAsterisk, testing::IsTrue()));
 };
 
@@ -473,7 +473,7 @@ auto VariablesSelect =
        bool reduced =
            false) -> testing::Matcher<const ParsedQuery::SelectClause&> {
   return testing::AllOf(
-      detail::IsSelectBase(distinct, reduced),
+      detail::SelectBase(distinct, reduced),
       AD_PROPERTY(ParsedQuery::SelectClause, getSelectedVariablesAsStrings,
                   testing::Eq(variables)));
 };
@@ -487,8 +487,8 @@ MATCHER_P3(Select, distinct, reduced, selection, "") {
   if (selection.size() != selectedVariables.size()) return false;
   size_t alias_counter = 0;
   for (size_t i = 0; i < selection.size(); i++) {
-    if (holds_alternative<Variable>(selection[i])) {
-      if (get<Variable>(selection[i]) != selectedVariables[i]) {
+    if (holds_alternative<::Variable>(selection[i])) {
+      if (get<::Variable>(selection[i]) != selectedVariables[i]) {
         *result_listener << "where Variable#" << i << " = "
                          << testing::PrintToString(selectedVariables[i]);
         return false;
@@ -523,10 +523,10 @@ MATCHER_P3(Select, distinct, reduced, selection, "") {
 
 auto SolutionModifier =
     [](const std::vector<std::variant<
-           std::string, std::pair<std::string, std::string>, Variable>>&
+           std::string, std::pair<std::string, std::string>, ::Variable>>&
            groupKeys = {},
        const vector<SparqlFilter>& havingClauses = {},
-       const std::vector<std::variant<VariableOrderKey,
+       const std::vector<std::variant<::VariableOrderKey,
                                       ExpressionOrderKeyTest>>& orderKeys = {},
        const LimitOffsetClause& limitOffset = {})
     -> testing::Matcher<const SolutionModifiers&> {
@@ -539,23 +539,23 @@ auto SolutionModifier =
 
 auto Triples = [](const vector<SparqlTriple>& triples)
     -> testing::Matcher<const GraphPatternOperation&> {
-  return detail::IsGraphPatternOperation<
+  return detail::GraphPatternOperation<
       GraphPatternOperation::BasicGraphPattern>(
       AD_FIELD(GraphPatternOperation::BasicGraphPattern, _triples,
                testing::UnorderedElementsAreArray(triples)));
 };
 
 namespace detail {
-auto IsOptional =
-    [](auto&& subMatcher) -> testing::Matcher<const GraphPatternOperation&> {
-  return detail::IsGraphPatternOperation<GraphPatternOperation::Optional>(
+auto Optional =
+    [](auto&& subMatcher) -> testing::Matcher<const ::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<GraphPatternOperation::Optional>(
       AD_FIELD(GraphPatternOperation::Optional, _child, subMatcher));
 };
 }
 
 auto Group =
     [](auto&& subMatcher) -> testing::Matcher<const GraphPatternOperation&> {
-  return detail::IsGraphPatternOperation<
+  return detail::GraphPatternOperation<
       GraphPatternOperation::GroupGraphPattern>(
       AD_FIELD(GraphPatternOperation::GroupGraphPattern, _child, subMatcher));
 };
@@ -563,7 +563,7 @@ auto Group =
 auto Union =
     [](auto&& subMatcher1,
        auto&& subMatcher2) -> testing::Matcher<const GraphPatternOperation&> {
-  return detail::IsGraphPatternOperation<GraphPatternOperation::Union>(
+  return detail::GraphPatternOperation<GraphPatternOperation::Union>(
       testing::AllOf(
           AD_FIELD(GraphPatternOperation::Union, _child1, subMatcher1),
           AD_FIELD(GraphPatternOperation::Union, _child2, subMatcher2)));
@@ -571,7 +571,7 @@ auto Union =
 
 auto Minus =
     [](auto&& subMatcher) -> testing::Matcher<const GraphPatternOperation&> {
-  return detail::IsGraphPatternOperation<GraphPatternOperation::Minus>(
+  return detail::GraphPatternOperation<GraphPatternOperation::Minus>(
       AD_FIELD(GraphPatternOperation::Minus, _child, subMatcher));
 };
 
@@ -603,8 +603,8 @@ struct MatcherWithDefaultFiltersAndOptional {
 };
 
 namespace detail {
-auto IsGraphPattern = [](bool optional, const vector<SparqlFilter>& filters,
-                         auto&&... childMatchers)
+auto GraphPattern = [](bool optional, const vector<SparqlFilter>& filters,
+                       auto&&... childMatchers)
     -> testing::Matcher<const ParsedQuery::GraphPattern&> {
   return testing::AllOf(
       AD_FIELD(ParsedQuery::GraphPattern, _optional, testing::Eq(optional)),
@@ -616,46 +616,44 @@ auto IsGraphPattern = [](bool optional, const vector<SparqlFilter>& filters,
 }
 
 auto GraphPattern =
-    MatcherWithDefaultFiltersAndOptional<detail::IsGraphPattern>{};
+    MatcherWithDefaultFiltersAndOptional<detail::GraphPattern>{};
 
 namespace detail {
-auto IsOptionalGraphPattern = [](vector<SparqlFilter>&& filters,
-                                 const auto&... childMatchers)
-    -> testing::Matcher<const GraphPatternOperation&> {
-  return detail::IsOptional(
-      detail::IsGraphPattern(true, filters, childMatchers...));
+auto OptionalGraphPattern = [](vector<SparqlFilter>&& filters,
+                               const auto&... childMatchers)
+    -> testing::Matcher<const ::GraphPatternOperation&> {
+  return detail::Optional(
+      detail::GraphPattern(true, filters, childMatchers...));
 };
 }
 
 auto OptionalGraphPattern =
-    MatcherWithDefaultFilters<detail::IsOptionalGraphPattern>{};
+    MatcherWithDefaultFilters<detail::OptionalGraphPattern>{};
 
 namespace detail {
-auto IsGroupGraphPattern = [](vector<SparqlFilter>&& filters,
-                              const auto&... childMatchers)
-    -> testing::Matcher<const GraphPatternOperation&> {
-  return Group(detail::IsGraphPattern(false, filters, childMatchers...));
+auto GroupGraphPattern = [](vector<SparqlFilter>&& filters,
+                            const auto&... childMatchers)
+    -> testing::Matcher<const ::GraphPatternOperation&> {
+  return Group(detail::GraphPattern(false, filters, childMatchers...));
 };
 }
 
-auto GroupGraphPattern =
-    MatcherWithDefaultFilters<detail::IsGroupGraphPattern>{};
+auto GroupGraphPattern = MatcherWithDefaultFilters<detail::GroupGraphPattern>{};
 
 namespace detail {
-auto IsMinusGraphPattern = [](vector<SparqlFilter>&& filters,
-                              const auto&... childMatchers)
-    -> testing::Matcher<const GraphPatternOperation&> {
-  return Minus(detail::IsGraphPattern(false, filters, childMatchers...));
+auto MinusGraphPattern = [](vector<SparqlFilter>&& filters,
+                            const auto&... childMatchers)
+    -> testing::Matcher<const ::GraphPatternOperation&> {
+  return Minus(detail::GraphPattern(false, filters, childMatchers...));
 };
 }
 
-auto MinusGraphPattern =
-    MatcherWithDefaultFilters<detail::IsMinusGraphPattern>{};
+auto MinusGraphPattern = MatcherWithDefaultFilters<detail::MinusGraphPattern>{};
 
 auto SubSelect =
     [](auto&& selectMatcher,
        auto&& whereMatcher) -> testing::Matcher<const GraphPatternOperation&> {
-  return detail::IsGraphPatternOperation<GraphPatternOperation::Subquery>(
+  return detail::GraphPatternOperation<GraphPatternOperation::Subquery>(
       AD_FIELD(GraphPatternOperation::Subquery, _subquery,
                testing::AllOf(
                    AD_PROPERTY(ParsedQuery, hasSelectClause, testing::IsTrue()),

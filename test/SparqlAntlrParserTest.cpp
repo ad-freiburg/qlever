@@ -194,75 +194,74 @@ TEST(SparqlParser, ComplexConstructQuery) {
 
   auto Var = m::VariableVariant;
   auto Blank = [](const std::string& label) {
-    return m::IsBlankNode(true, label);
+    return m::BlankNode(true, label);
   };
   expectCompleteParse(
       parse<&Parser::constructQuery>(input),
       ElementsAre(
           ElementsAre(Blank("0"), Var("?a"), Blank("3")),
-          ElementsAre(Blank("1"), m::IsIri(first), Blank("2")),
-          ElementsAre(Blank("1"), m::IsIri(rest), m::IsIri(nil)),
-          ElementsAre(Blank("2"), m::IsIri(first), Var("?c")),
-          ElementsAre(Blank("2"), m::IsIri(rest), m::IsIri(nil)),
-          ElementsAre(Blank("3"), m::IsIri(first), Var("?b")),
-          ElementsAre(Blank("3"), m::IsIri(rest), Blank("1")),
+          ElementsAre(Blank("1"), m::Iri(first), Blank("2")),
+          ElementsAre(Blank("1"), m::Iri(rest), m::Iri(nil)),
+          ElementsAre(Blank("2"), m::Iri(first), Var("?c")),
+          ElementsAre(Blank("2"), m::Iri(rest), m::Iri(nil)),
+          ElementsAre(Blank("3"), m::Iri(first), Var("?b")),
+          ElementsAre(Blank("3"), m::Iri(rest), Blank("1")),
           ElementsAre(Blank("0"), Var("?d"), Blank("4")),
           ElementsAre(Blank("4"), Var("?e"), Blank("5")),
           ElementsAre(Blank("5"), Var("?f"), Var("?g")),
-          ElementsAre(
-              m::IsIri("<http://wallscope.co.uk/resource/olympics/medal/"
-                       "#something>"),
-              m::IsIri(type),
-              m::IsIri("<http://wallscope.co.uk/resource/olympics/medal/"
-                       "#somethingelse>"))));
+          ElementsAre(m::Iri("<http://wallscope.co.uk/resource/olympics/medal/"
+                             "#something>"),
+                      m::Iri(type),
+                      m::Iri("<http://wallscope.co.uk/resource/olympics/medal/"
+                             "#somethingelse>"))));
 }
 
 TEST(SparqlParser, GraphTerm) {
   auto expectGraphTerm = ExpectCompleteParse<&Parser::graphTerm>{};
-  expectGraphTerm("1337", m::IsLiteral("1337"));
-  expectGraphTerm("true", m::IsLiteral("true"));
-  expectGraphTerm("[]", m::IsBlankNode(true, "0"));
+  expectGraphTerm("1337", m::Literal("1337"));
+  expectGraphTerm("true", m::Literal("true"));
+  expectGraphTerm("[]", m::BlankNode(true, "0"));
   {
     const std::string iri = "<http://dummy-iri.com#fragment>";
-    expectCompleteParse(parse<&Parser::graphTerm>(iri), m::IsIri(iri));
+    expectCompleteParse(parse<&Parser::graphTerm>(iri), m::Iri(iri));
   }
-  expectGraphTerm("\"abc\"", m::IsLiteral("\"abc\""));
-  expectGraphTerm("()", m::IsIri(nil));
+  expectGraphTerm("\"abc\"", m::Literal("\"abc\""));
+  expectGraphTerm("()", m::Iri(nil));
 }
 
 TEST(SparqlParser, RdfCollectionSingleVar) {
   expectCompleteParse(
       parseCollection("( ?a )"),
-      Pair(m::IsBlankNode(true, "0"),
-           ElementsAre(ElementsAre(m::IsBlankNode(true, "0"), m::IsIri(first),
+      Pair(m::BlankNode(true, "0"),
+           ElementsAre(ElementsAre(m::BlankNode(true, "0"), m::Iri(first),
                                    m::VariableVariant("?a")),
-                       ElementsAre(m::IsBlankNode(true, "0"), m::IsIri(rest),
-                                   m::IsIri(nil)))));
+                       ElementsAre(m::BlankNode(true, "0"), m::Iri(rest),
+                                   m::Iri(nil)))));
 }
 
 TEST(SparqlParser, RdfCollectionTripleVar) {
   auto Var = m::VariableVariant;
   auto Blank = [](const std::string& label) {
-    return m::IsBlankNode(true, label);
+    return m::BlankNode(true, label);
   };
   expectCompleteParse(
       parseCollection("( ?a ?b ?c )"),
-      Pair(m::IsBlankNode(true, "2"),
-           ElementsAre(ElementsAre(Blank("0"), m::IsIri(first), Var("?c")),
-                       ElementsAre(Blank("0"), m::IsIri(rest), m::IsIri(nil)),
-                       ElementsAre(Blank("1"), m::IsIri(first), Var("?b")),
-                       ElementsAre(Blank("1"), m::IsIri(rest), Blank("0")),
-                       ElementsAre(Blank("2"), m::IsIri(first), Var("?a")),
-                       ElementsAre(Blank("2"), m::IsIri(rest), Blank("1")))));
+      Pair(m::BlankNode(true, "2"),
+           ElementsAre(ElementsAre(Blank("0"), m::Iri(first), Var("?c")),
+                       ElementsAre(Blank("0"), m::Iri(rest), m::Iri(nil)),
+                       ElementsAre(Blank("1"), m::Iri(first), Var("?b")),
+                       ElementsAre(Blank("1"), m::Iri(rest), Blank("0")),
+                       ElementsAre(Blank("2"), m::Iri(first), Var("?a")),
+                       ElementsAre(Blank("2"), m::Iri(rest), Blank("1")))));
 }
 
 TEST(SparqlParser, BlankNodeAnonymous) {
-  expectCompleteParse(parseBlankNode("[ \t\r\n]"), m::IsBlankNode(true, "0"));
+  expectCompleteParse(parseBlankNode("[ \t\r\n]"), m::BlankNode(true, "0"));
 }
 
 TEST(SparqlParser, BlankNodeLabelled) {
   expectCompleteParse(parseBlankNode("_:label123"),
-                      m::IsBlankNode(false, "label123"));
+                      m::BlankNode(false, "label123"));
 }
 
 TEST(SparqlParser, ConstructTemplateEmpty) {
@@ -298,26 +297,26 @@ TEST(SparqlParser, TriplesSameSubjectTriplesNodeWithPropertyList) {
   expectCompleteParse(
       parseTriplesSameSubject("(?a) ?b ?c"),
       ElementsAre(
-          ElementsAre(m::IsBlankNode(true, "0"), m::IsIri(first),
+          ElementsAre(m::BlankNode(true, "0"), m::Iri(first),
                       m::VariableVariant("?a")),
-          ElementsAre(m::IsBlankNode(true, "0"), m::IsIri(rest), m::IsIri(nil)),
-          ElementsAre(m::IsBlankNode(true, "0"), m::VariableVariant("?b"),
+          ElementsAre(m::BlankNode(true, "0"), m::Iri(rest), m::Iri(nil)),
+          ElementsAre(m::BlankNode(true, "0"), m::VariableVariant("?b"),
                       m::VariableVariant("?c"))));
 }
 
 TEST(SparqlParser, TriplesSameSubjectTriplesNodeEmptyPropertyList) {
   expectCompleteParse(
       parseTriplesSameSubject("(?a)"),
-      ElementsAre(ElementsAre(m::IsBlankNode(true, "0"), m::IsIri(first),
-                              m::VariableVariant("?a")),
-                  ElementsAre(m::IsBlankNode(true, "0"), m::IsIri(rest),
-                              m::IsIri(nil))));
+      ElementsAre(
+          ElementsAre(m::BlankNode(true, "0"), m::Iri(first),
+                      m::VariableVariant("?a")),
+          ElementsAre(m::BlankNode(true, "0"), m::Iri(rest), m::Iri(nil))));
 }
 
 TEST(SparqlParser, PropertyList) {
   expectCompleteParse(
       parsePropertyList("a ?a"),
-      Pair(ElementsAre(ElementsAre(m::IsIri(type), m::VariableVariant("?a"))),
+      Pair(ElementsAre(ElementsAre(m::Iri(type), m::VariableVariant("?a"))),
            IsEmpty()));
 }
 
@@ -328,22 +327,20 @@ TEST(SparqlParser, EmptyPropertyList) {
 TEST(SparqlParser, PropertyListNotEmptySingletonWithTerminator) {
   expectCompleteParse(
       parsePropertyListNotEmpty("a ?a ;"),
-      Pair(ElementsAre(ElementsAre(m::IsIri(type), m::VariableVariant("?a"))),
+      Pair(ElementsAre(ElementsAre(m::Iri(type), m::VariableVariant("?a"))),
            IsEmpty()));
 }
 
 TEST(SparqlParser, PropertyListNotEmptyWithTerminator) {
   expectCompleteParse(
       parsePropertyListNotEmpty("a ?a ; a ?b ; a ?c ;"),
-      Pair(ElementsAre(ElementsAre(m::IsIri(type), m::VariableVariant("?a")),
-                       ElementsAre(m::IsIri(type), m::VariableVariant("?b")),
-                       ElementsAre(m::IsIri(type), m::VariableVariant("?c"))),
+      Pair(ElementsAre(ElementsAre(m::Iri(type), m::VariableVariant("?a")),
+                       ElementsAre(m::Iri(type), m::VariableVariant("?b")),
+                       ElementsAre(m::Iri(type), m::VariableVariant("?c"))),
            IsEmpty()));
 }
 
-TEST(SparqlParser, VerbA) {
-  expectCompleteParse(parseVerb("a"), m::IsIri(type));
-}
+TEST(SparqlParser, VerbA) { expectCompleteParse(parseVerb("a"), m::Iri(type)); }
 
 TEST(SparqlParser, VerbVariable) {
   expectCompleteParse(parseVerb("?a"), m::VariableVariant("?a"));
@@ -365,12 +362,12 @@ TEST(SparqlParser, ObjectList) {
 TEST(SparqlParser, BlankNodePropertyList) {
   expectCompleteParse(
       parse<&Parser::blankNodePropertyList>("[ a ?a ; a ?b ; a ?c ]"),
-      Pair(m::IsBlankNode(true, "0"),
-           ElementsAre(ElementsAre(m::IsBlankNode(true, "0"), m::IsIri(type),
+      Pair(m::BlankNode(true, "0"),
+           ElementsAre(ElementsAre(m::BlankNode(true, "0"), m::Iri(type),
                                    m::VariableVariant("?a")),
-                       ElementsAre(m::IsBlankNode(true, "0"), m::IsIri(type),
+                       ElementsAre(m::BlankNode(true, "0"), m::Iri(type),
                                    m::VariableVariant("?b")),
-                       ElementsAre(m::IsBlankNode(true, "0"), m::IsIri(type),
+                       ElementsAre(m::BlankNode(true, "0"), m::Iri(type),
                                    m::VariableVariant("?c")))));
 }
 
@@ -382,11 +379,11 @@ TEST(SparqlParser, GraphNodeVarOrTerm) {
 TEST(SparqlParser, GraphNodeTriplesNode) {
   expectCompleteParse(
       parseGraphNode("(?a)"),
-      Pair(m::IsBlankNode(true, "0"),
-           ElementsAre(ElementsAre(m::IsBlankNode(true, "0"), m::IsIri(first),
+      Pair(m::BlankNode(true, "0"),
+           ElementsAre(ElementsAre(m::BlankNode(true, "0"), m::Iri(first),
                                    m::VariableVariant("?a")),
-                       ElementsAre(m::IsBlankNode(true, "0"), m::IsIri(rest),
-                                   m::IsIri(nil)))));
+                       ElementsAre(m::BlankNode(true, "0"), m::Iri(rest),
+                                   m::Iri(nil)))));
 }
 
 TEST(SparqlParser, VarOrTermVariable) {
@@ -394,7 +391,7 @@ TEST(SparqlParser, VarOrTermVariable) {
 }
 
 TEST(SparqlParser, VarOrTermGraphTerm) {
-  expectCompleteParse(parseVarOrTerm("()"), m::IsIri(nil));
+  expectCompleteParse(parseVarOrTerm("()"), m::Iri(nil));
 }
 
 TEST(SparqlParser, Iri) {
@@ -417,17 +414,17 @@ TEST(SparqlParser, Iri) {
 
 TEST(SparqlParser, VarOrIriIri) {
   expectCompleteParse(parseVarOrTerm("<http://testiri>"),
-                      m::IsIri("<http://testiri>"));
+                      m::Iri("<http://testiri>"));
 }
 
 TEST(SparqlParser, VariableWithQuestionMark) {
   expectCompleteParse(parseVariable("?variableName"),
-                      m::IsVariable("?variableName"));
+                      m::Variable("?variableName"));
 }
 
 TEST(SparqlParser, VariableWithDollarSign) {
   expectCompleteParse(parseVariable("$variableName"),
-                      m::IsVariable("?variableName"));
+                      m::Variable("?variableName"));
 }
 
 TEST(SparqlParser, Bind) {
@@ -475,13 +472,12 @@ TEST(SparqlParser, OrderCondition) {
   expectOrderCondition("DESC (?foo)", m::VariableOrderKeyVariant("?foo", true));
   expectOrderCondition("ASC (?bar)", m::VariableOrderKeyVariant("?bar", false));
   expectOrderCondition("ASC(?test - 5)",
-                       m::IsExpressionOrderKey("?test-5", false));
+                       m::ExpressionOrderKey("?test-5", false));
   expectOrderCondition("DESC (10 || (5 && ?foo))",
-                       m::IsExpressionOrderKey("10||(5&&?foo)", true));
+                       m::ExpressionOrderKey("10||(5&&?foo)", true));
   // constraint
-  expectOrderCondition("(5 - ?mehr)",
-                       m::IsExpressionOrderKey("5-?mehr", false));
-  expectOrderCondition("SUM(?i)", m::IsExpressionOrderKey("SUM(?i)", false));
+  expectOrderCondition("(5 - ?mehr)", m::ExpressionOrderKey("5-?mehr", false));
+  expectOrderCondition("SUM(?i)", m::ExpressionOrderKey("SUM(?i)", false));
   expectOrderConditionFails("ASC SCORE(?i)");
 }
 

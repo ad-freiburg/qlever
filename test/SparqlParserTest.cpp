@@ -1159,7 +1159,7 @@ TEST(ParserTest, Order) {
         SparqlParser("SELECT ?x ?y WHERE { ?x <test/myrel> ?y } ORDER BY ?x")
             .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
-    EXPECT_THAT(pq._orderBy[0], m::IsVariableOrderKey("?x", false));
+    EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey("?x", false));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0].variant_));
@@ -1170,7 +1170,7 @@ TEST(ParserTest, Order) {
             "SELECT ?x ?y WHERE { ?x <test/myrel> ?y } ORDER BY ASC(?y)")
             .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
-    EXPECT_THAT(pq._orderBy[0], m::IsVariableOrderKey("?y", false));
+    EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey("?y", false));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0].variant_));
@@ -1181,7 +1181,7 @@ TEST(ParserTest, Order) {
             "SELECT ?x ?y WHERE { ?x <test/myrel> ?y } ORDER BY DESC(?foo)")
             .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
-    EXPECT_THAT(pq._orderBy[0], m::IsVariableOrderKey("?foo", true));
+    EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey("?foo", true));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0].variant_));
@@ -1192,7 +1192,7 @@ TEST(ParserTest, Order) {
             "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY ?x ORDER BY ?x")
             .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
-    EXPECT_THAT(pq._orderBy[0], m::IsVariableOrderKey("?x", false));
+    EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey("?x", false));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0].variant_));
@@ -1203,7 +1203,7 @@ TEST(ParserTest, Order) {
                          "?y } GROUP BY ?x ORDER BY ?c")
                          .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
-    EXPECT_THAT(pq._orderBy[0], m::IsVariableOrderKey("?c", false));
+    EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey("?c", false));
   }
   {
     ParsedQuery pq =
