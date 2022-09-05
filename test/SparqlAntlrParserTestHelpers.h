@@ -121,27 +121,6 @@ std::ostream& operator<<(std::ostream& out, const ExceptionMetadata& metadata) {
 }
 
 // _____________________________________________________________________________
-
-// Recursively unwrap a std::variant object, or return a pointer
-// to the argument directly if it is already unwrapped.
-
-template <typename Current, typename... Others>
-constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
-    const auto& arg) {
-  if constexpr (sizeof...(Others) > 0) {
-    if constexpr (ad_utility::isSimilar<decltype(arg), Current>) {
-      if (const auto ptr = std::get_if<ad_utility::First<Others...>>(&arg)) {
-        return unwrapVariant<Others...>(*ptr);
-      }
-      return nullptr;
-    } else {
-      return unwrapVariant<Others...>(arg);
-    }
-  } else {
-    return &arg;
-  }
-}
-// _____________________________________________________________________________
 // Adds the position of the actual caller in the gtest error messages.
 [[nodiscard]] testing::ScopedTrace generateLocationTrace(
     ad_utility::source_location l) {
@@ -180,6 +159,28 @@ void expectIncompleteParse(
   auto trace = generateLocationTrace(l);
   EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
   EXPECT_THAT(resultOfParseAndText.remainingText_, testing::Eq(rest));
+}
+// _____________________________________________________________________________
+
+namespace matchers {
+// Recursively unwrap a std::variant object, or return a pointer
+// to the argument directly if it is already unwrapped.
+
+template <typename Current, typename... Others>
+constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
+    const auto& arg) {
+  if constexpr (sizeof...(Others) > 0) {
+    if constexpr (ad_utility::isSimilar<decltype(arg), Current>) {
+      if (const auto ptr = std::get_if<ad_utility::First<Others...>>(&arg)) {
+        return unwrapVariant<Others...>(*ptr);
+      }
+      return nullptr;
+    } else {
+      return unwrapVariant<Others...>(arg);
+    }
+  } else {
+    return &arg;
+  }
 }
 // _____________________________________________________________________________
 auto NumericLiteralFP =
@@ -574,9 +575,8 @@ auto Minus =
       AD_FIELD(GraphPatternOperation::Minus, _child, subMatcher));
 };
 
-// TODO: generalize or rename
 template <auto SubMatcherLambda>
-struct MatcherOverloads {
+struct MatcherWithDefaultFilters {
   testing::Matcher<const GraphPatternOperation&> operator()(
       vector<SparqlFilter>&& filters, const auto&... childMatchers) {
     return SubMatcherLambda(std::move(filters), childMatchers...);
@@ -589,7 +589,7 @@ struct MatcherOverloads {
 };
 
 template <auto SubMatcherLambda>
-struct MatcherOverloadss {
+struct MatcherWithDefaultFiltersAndOptional {
   testing::Matcher<const ParsedQuery::GraphPattern&> operator()(
       bool optional, vector<SparqlFilter>&& filters,
       const auto&... childMatchers) {
@@ -615,7 +615,8 @@ auto IsGraphPattern = [](bool optional, const vector<SparqlFilter>& filters,
 };
 }
 
-auto GraphPattern = MatcherOverloadss<detail::IsGraphPattern>{};
+auto GraphPattern =
+    MatcherWithDefaultFiltersAndOptional<detail::IsGraphPattern>{};
 
 namespace detail {
 auto IsOptionalGraphPattern = [](vector<SparqlFilter>&& filters,
@@ -626,7 +627,8 @@ auto IsOptionalGraphPattern = [](vector<SparqlFilter>&& filters,
 };
 }
 
-auto OptionalGraphPattern = MatcherOverloads<detail::IsOptionalGraphPattern>{};
+auto OptionalGraphPattern =
+    MatcherWithDefaultFilters<detail::IsOptionalGraphPattern>{};
 
 namespace detail {
 auto IsGroupGraphPattern = [](vector<SparqlFilter>&& filters,
@@ -636,7 +638,8 @@ auto IsGroupGraphPattern = [](vector<SparqlFilter>&& filters,
 };
 }
 
-auto GroupGraphPattern = MatcherOverloads<detail::IsGroupGraphPattern>{};
+auto GroupGraphPattern =
+    MatcherWithDefaultFilters<detail::IsGroupGraphPattern>{};
 
 namespace detail {
 auto IsMinusGraphPattern = [](vector<SparqlFilter>&& filters,
@@ -646,7 +649,8 @@ auto IsMinusGraphPattern = [](vector<SparqlFilter>&& filters,
 };
 }
 
-auto MinusGraphPattern = MatcherOverloads<detail::IsMinusGraphPattern>{};
+auto MinusGraphPattern =
+    MatcherWithDefaultFilters<detail::IsMinusGraphPattern>{};
 
 auto SubSelect =
     [](auto&& selectMatcher,
@@ -658,6 +662,8 @@ auto SubSelect =
                    AD_PROPERTY(ParsedQuery, selectClause, selectMatcher),
                    AD_FIELD(ParsedQuery, _rootGraphPattern, whereMatcher))));
 };
+
+}  // namespace matchers
 
 #undef AD_PROPERTY
 #undef AD_FIELD

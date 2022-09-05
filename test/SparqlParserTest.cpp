@@ -10,6 +10,8 @@
 #include "../src/parser/SparqlParser.h"
 #include "SparqlAntlrParserTestHelpers.h"
 
+namespace m = matchers;
+
 const ParsedQuery pqDummy = []() {
   ParsedQuery pq;
   pq._prefixes.emplace_back("xsd", "<http://www.w3.org/2001/XMLSchema#>");
@@ -1077,7 +1079,7 @@ TEST(ParserTest, testSolutionModifiers) {
                   .parse();
     ASSERT_EQ(1u, pq.children().size());
     ASSERT_EQ(1u, pq._orderBy.size());
-    EXPECT_THAT(pq, GroupByVariablesMatch({Variable{"?r"}}));
+    EXPECT_THAT(pq, m::GroupByVariablesMatch({Variable{"?r"}}));
     ASSERT_EQ("?avg", pq._orderBy[0].variable_);
     ASSERT_FALSE(pq._orderBy[0].isDescending_);
   }
@@ -1091,7 +1093,7 @@ TEST(ParserTest, testSolutionModifiers) {
                   "ORDER BY ?count")
                   .parse();
     ASSERT_EQ(1u, pq._orderBy.size());
-    EXPECT_THAT(pq, GroupByVariablesMatch({Variable{"?r"}}));
+    EXPECT_THAT(pq, m::GroupByVariablesMatch({Variable{"?r"}}));
     ASSERT_EQ("?count", pq._orderBy[0].variable_);
     ASSERT_FALSE(pq._orderBy[0].isDescending_);
   }
@@ -1127,7 +1129,7 @@ TEST(ParserTest, testGroupByAndAlias) {
   ASSERT_EQ(1u, aliases.size());
   ASSERT_TRUE(aliases[0]._expression.isAggregate({}));
   ASSERT_EQ("(COUNT(?a) as ?count)", aliases[0].getDescriptor());
-  EXPECT_THAT(pq, GroupByVariablesMatch({Variable{"?b"}}));
+  EXPECT_THAT(pq, m::GroupByVariablesMatch({Variable{"?b"}}));
 }
 
 TEST(ParserTest, Bind) {
@@ -1157,7 +1159,7 @@ TEST(ParserTest, Order) {
         SparqlParser("SELECT ?x ?y WHERE { ?x <test/myrel> ?y } ORDER BY ?x")
             .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
-    EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?x", false));
+    EXPECT_THAT(pq._orderBy[0], m::IsVariableOrderKey("?x", false));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0].variant_));
@@ -1168,7 +1170,7 @@ TEST(ParserTest, Order) {
             "SELECT ?x ?y WHERE { ?x <test/myrel> ?y } ORDER BY ASC(?y)")
             .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
-    EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?y", false));
+    EXPECT_THAT(pq._orderBy[0], m::IsVariableOrderKey("?y", false));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0].variant_));
@@ -1179,7 +1181,7 @@ TEST(ParserTest, Order) {
             "SELECT ?x ?y WHERE { ?x <test/myrel> ?y } ORDER BY DESC(?foo)")
             .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
-    EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?foo", true));
+    EXPECT_THAT(pq._orderBy[0], m::IsVariableOrderKey("?foo", true));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0].variant_));
@@ -1190,7 +1192,7 @@ TEST(ParserTest, Order) {
             "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY ?x ORDER BY ?x")
             .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
-    EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?x", false));
+    EXPECT_THAT(pq._orderBy[0], m::IsVariableOrderKey("?x", false));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0].variant_));
@@ -1201,7 +1203,7 @@ TEST(ParserTest, Order) {
                          "?y } GROUP BY ?x ORDER BY ?c")
                          .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
-    EXPECT_THAT(pq._orderBy[0], IsVariableOrderKey("?c", false));
+    EXPECT_THAT(pq._orderBy[0], m::IsVariableOrderKey("?c", false));
   }
   {
     ParsedQuery pq =
@@ -1244,14 +1246,14 @@ TEST(ParserTest, Group) {
     ParsedQuery pq =
         SparqlParser("SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY ?x")
             .parse();
-    EXPECT_THAT(pq, GroupByVariablesMatch({Variable{"?x"}}));
+    EXPECT_THAT(pq, m::GroupByVariablesMatch({Variable{"?x"}}));
   }
   {
     // grouping by a variable
     ParsedQuery pq =
         SparqlParser("SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY ?y ?x")
             .parse();
-    EXPECT_THAT(pq, GroupByVariablesMatch({Variable{"?y"}, Variable{"?x"}}));
+    EXPECT_THAT(pq, m::GroupByVariablesMatch({Variable{"?y"}, Variable{"?x"}}));
   }
   {
     // grouping by an expression
@@ -1262,8 +1264,8 @@ TEST(ParserTest, Group) {
     auto variant = pq._rootGraphPattern._graphPatterns[1].variant_;
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
-    ASSERT_THAT(helperBind, BindExpression("?x-?y"));
-    EXPECT_THAT(pq, GroupByVariablesMatch(
+    ASSERT_THAT(helperBind, m::BindExpression("?x-?y"));
+    EXPECT_THAT(pq, m::GroupByVariablesMatch(
                         {Variable{helperBind._target}, Variable{"?x"}}));
   }
   {
@@ -1272,8 +1274,10 @@ TEST(ParserTest, Group) {
                          "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY (?x "
                          "- ?y AS ?foo) ?x")
                          .parse();
-    EXPECT_THAT(pq._rootGraphPattern._graphPatterns[1], Bind("?foo", "?x-?y"));
-    EXPECT_THAT(pq, GroupByVariablesMatch({Variable{"?foo"}, Variable{"?x"}}));
+    EXPECT_THAT(pq._rootGraphPattern._graphPatterns[1],
+                m::Bind("?foo", "?x-?y"));
+    EXPECT_THAT(pq,
+                m::GroupByVariablesMatch({Variable{"?foo"}, Variable{"?x"}}));
   }
   {
     // grouping by a builtin call
@@ -1284,8 +1288,8 @@ TEST(ParserTest, Group) {
     auto variant = pq._rootGraphPattern._graphPatterns[1].variant_;
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
-    ASSERT_THAT(helperBind, BindExpression("COUNT(?x)"));
-    EXPECT_THAT(pq, GroupByVariablesMatch(
+    ASSERT_THAT(helperBind, m::BindExpression("COUNT(?x)"));
+    EXPECT_THAT(pq, m::GroupByVariablesMatch(
                         {Variable{helperBind._target}, Variable{"?x"}}));
   }
   {
@@ -1300,9 +1304,9 @@ TEST(ParserTest, Group) {
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
     ASSERT_THAT(
         helperBind,
-        BindExpression(
+        m::BindExpression(
             "<http://www.opengis.net/def/function/geosparql/latitude>(?test)"));
-    EXPECT_THAT(pq, GroupByVariablesMatch(
+    EXPECT_THAT(pq, m::GroupByVariablesMatch(
                         {Variable{helperBind._target}, Variable{"?x"}}));
   }
   {
