@@ -1262,7 +1262,7 @@ TEST(ParserTest, Group) {
     auto variant = pq._rootGraphPattern._graphPatterns[1].variant_;
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
-    ASSERT_THAT(helperBind, IsBindExpression("?x-?y"));
+    ASSERT_THAT(helperBind, BindExpression("?x-?y"));
     EXPECT_THAT(pq, GroupByVariablesMatch(
                         {Variable{helperBind._target}, Variable{"?x"}}));
   }
@@ -1272,8 +1272,7 @@ TEST(ParserTest, Group) {
                          "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY (?x "
                          "- ?y AS ?foo) ?x")
                          .parse();
-    EXPECT_THAT(pq._rootGraphPattern._graphPatterns[1],
-                IsBind("?foo", "?x-?y"));
+    EXPECT_THAT(pq._rootGraphPattern._graphPatterns[1], Bind("?foo", "?x-?y"));
     EXPECT_THAT(pq, GroupByVariablesMatch({Variable{"?foo"}, Variable{"?x"}}));
   }
   {
@@ -1285,7 +1284,7 @@ TEST(ParserTest, Group) {
     auto variant = pq._rootGraphPattern._graphPatterns[1].variant_;
     ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
-    ASSERT_THAT(helperBind, IsBindExpression("COUNT(?x)"));
+    ASSERT_THAT(helperBind, BindExpression("COUNT(?x)"));
     EXPECT_THAT(pq, GroupByVariablesMatch(
                         {Variable{helperBind._target}, Variable{"?x"}}));
   }
@@ -1301,7 +1300,7 @@ TEST(ParserTest, Group) {
     auto helperBind = get<GraphPatternOperation::Bind>(variant);
     ASSERT_THAT(
         helperBind,
-        IsBindExpression(
+        BindExpression(
             "<http://www.opengis.net/def/function/geosparql/latitude>(?test)"));
     EXPECT_THAT(pq, GroupByVariablesMatch(
                         {Variable{helperBind._target}, Variable{"?x"}}));
