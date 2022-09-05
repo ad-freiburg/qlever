@@ -156,30 +156,87 @@ void expectIncompleteParse(const auto& resultOfParseAndText, const string& rest,
   EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
   EXPECT_THAT(resultOfParseAndText.remainingText_, testing::SizeIs(length));
 }
-void expectIncompleteParse(const auto& resultOfParseAndText, auto&& matcher) {
-  expectIncompleteParse(resultOfParseAndText, 0, matcher);
+
+namespace variant_matcher {
+// Implements a matcher that checks the value of arbitrarily deeply nested
+// variants that contain a value with the last Type of the Ts. The variant may
+// also be an suffix of the Ts so to speak. E.g.
+// `MultiVariantMatcher<VarOrTerm, GraphTerm, Iri>` can match on a `Iri`,
+// `GraphTerm=std::variant<Literal, BlankNode, Iri>` and
+// `VarOrTerm=std::variant<Variable, GraphTerm>`.
+template <typename... Ts>
+class MultiVariantMatcher {
+ public:
+  explicit MultiVariantMatcher(
+      ::testing::Matcher<const ad_utility::Last<Ts...>&> matcher)
+      : matcher_(std::move(matcher)) {}
+
+  template <typename Variant>
+  bool MatchAndExplain(const Variant& value,
+                       ::testing::MatchResultListener* listener) const {
+    auto elem = unwrapVariant<Ts...>(value);
+    if (!listener->IsInterested()) {
+      return elem && matcher_.Matches(*elem);
+    }
+
+    if (!elem) {
+      *listener << "whose value is not of type '" << GetTypeName() << "'";
+      return false;
+    }
+
+    testing::StringMatchResultListener elem_listener;
+    const bool match = matcher_.MatchAndExplain(*elem, &elem_listener);
+    *listener << "whose value " << testing::PrintToString(*elem)
+              << (match ? " matches" : " doesn't match");
+    testing::internal::PrintIfNotEmpty(elem_listener.str(), listener->stream());
+    return match;
+  }
+
+  void DescribeTo(std::ostream* os) const {
+    *os << "is a variant<> with value of type '" << GetTypeName()
+        << "' and the value ";
+    matcher_.DescribeTo(os);
+  }
+
+  void DescribeNegationTo(std::ostream* os) const {
+    *os << "is a variant<> with value of type other than '" << GetTypeName()
+        << "' or the value ";
+    matcher_.DescribeNegationTo(os);
+  }
+
+ private:
+  static std::string GetTypeName() {
+    return testing::internal::GetTypeName<ad_utility::Last<Ts...>>();
+  }
+
+  const ::testing::Matcher<const ad_utility::Last<Ts...>&> matcher_;
+};
+
+}  // namespace variant_matcher
+
+template <typename... Ts>
+testing::PolymorphicMatcher<variant_matcher::MultiVariantMatcher<Ts...>>
+MultiVariantWith(
+    const testing::Matcher<const ad_utility::Last<Ts...>&>& matcher) {
+  return testing::MakePolymorphicMatcher(
+      variant_matcher::MultiVariantMatcher<Ts...>(matcher));
 }
 
-// Cannot be broken down into a combination of existing googletest matchers
-// because unwrapVariant is not available as a matcher.
-MATCHER_P(IsIri, value, "") {
-  if (const auto iri = unwrapVariant<VarOrTerm, GraphTerm, Iri>(arg)) {
-    return iri->iri() == value;
-  }
-  return false;
-}
+// Returns a matcher that accepts a `VarOrTerm`, `GraphTerm` or `Iri`.
+auto IsIri = [](const std::string& value) {
+  return MultiVariantWith<VarOrTerm, GraphTerm, Iri>(
+      testing::Property("iri()", &Iri::iri, testing::Eq(value)));
+};
 
 // _____________________________________________________________________________
 
-// Cannot be broken down into a combination of existing googletest matchers
-// because unwrapVariant is not available as a matcher.
-MATCHER_P2(IsBlankNode, generated, label, "") {
-  if (const auto blankNode =
-          unwrapVariant<VarOrTerm, GraphTerm, BlankNode>(arg)) {
-    return blankNode->isGenerated() == generated && blankNode->label() == label;
-  }
-  return false;
-}
+// Returns a matcher that accepts a `VarOrTerm`, `GraphTerm` or `BlankNode`.
+auto IsBlankNode = [](bool generated, const std::string& label) {
+  return MultiVariantWith<VarOrTerm, GraphTerm, BlankNode>(testing::AllOf(
+      testing::Property("isGenerated()", &BlankNode::isGenerated,
+                        testing::Eq(generated)),
+      testing::Property("label()", &BlankNode::label, testing::Eq(label))));
+};
 
 // _____________________________________________________________________________
 
@@ -196,14 +253,11 @@ auto IsVariableVariant = [](const std::string& value) {
 
 // _____________________________________________________________________________
 
-// Cannot be broken down into a combination of existing googletest matchers
-// because unwrapVariant is not available as a matcher.
-MATCHER_P(IsLiteral, value, "") {
-  if (const auto literal = unwrapVariant<VarOrTerm, GraphTerm, Literal>(arg)) {
-    return literal->literal() == value;
-  }
-  return false;
-}
+// Returns a matcher that accepts a `VarOrTerm`, `GraphTerm` or `Literal`.
+auto IsLiteral = [](const std::string& value) {
+  return MultiVariantWith<VarOrTerm, GraphTerm, Literal>(
+      testing::Property("literal()", &Literal::literal, testing::Eq(value)));
+};
 
 // _____________________________________________________________________________
 

@@ -195,27 +195,25 @@ TEST(SparqlParser, ComplexConstructQuery) {
       "<http://wallscope.co.uk/resource/olympics/medal/#somethingelse> } "
       "WHERE {}";
 
+  auto Var = IsVariableVariant;
   expectCompleteParse(
       parse<&Parser::constructQuery>(input),
       ElementsAre(
-          ElementsAre(IsBlankNode(true, "0"), IsVariableVariant("?a"),
+          ElementsAre(IsBlankNode(true, "0"), Var("?a"),
                       IsBlankNode(true, "3")),
           ElementsAre(IsBlankNode(true, "1"), IsIri(first),
                       IsBlankNode(true, "2")),
           ElementsAre(IsBlankNode(true, "1"), IsIri(rest), IsIri(nil)),
-          ElementsAre(IsBlankNode(true, "2"), IsIri(first),
-                      IsVariableVariant("?c")),
+          ElementsAre(IsBlankNode(true, "2"), IsIri(first), Var("?c")),
           ElementsAre(IsBlankNode(true, "2"), IsIri(rest), IsIri(nil)),
-          ElementsAre(IsBlankNode(true, "3"), IsIri(first),
-                      IsVariableVariant("?b")),
+          ElementsAre(IsBlankNode(true, "3"), IsIri(first), Var("?b")),
           ElementsAre(IsBlankNode(true, "3"), IsIri(rest),
                       IsBlankNode(true, "1")),
-          ElementsAre(IsBlankNode(true, "0"), IsVariableVariant("?d"),
+          ElementsAre(IsBlankNode(true, "0"), Var("?d"),
                       IsBlankNode(true, "4")),
-          ElementsAre(IsBlankNode(true, "4"), IsVariableVariant("?e"),
+          ElementsAre(IsBlankNode(true, "4"), Var("?e"),
                       IsBlankNode(true, "5")),
-          ElementsAre(IsBlankNode(true, "5"), IsVariableVariant("?f"),
-                      IsVariableVariant("?g")),
+          ElementsAre(IsBlankNode(true, "5"), Var("?f"), Var("?g")),
           ElementsAre(IsIri("<http://wallscope.co.uk/resource/olympics/medal/"
                             "#something>"),
                       IsIri(type),
@@ -247,19 +245,17 @@ TEST(SparqlParser, RdfCollectionSingleVar) {
 }
 
 TEST(SparqlParser, RdfCollectionTripleVar) {
+  auto Var = IsVariableVariant;
   expectCompleteParse(
       parseCollection("( ?a ?b ?c )"),
       Pair(IsBlankNode(true, "2"),
            ElementsAre(
-               ElementsAre(IsBlankNode(true, "0"), IsIri(first),
-                           IsVariableVariant("?c")),
+               ElementsAre(IsBlankNode(true, "0"), IsIri(first), Var("?c")),
                ElementsAre(IsBlankNode(true, "0"), IsIri(rest), IsIri(nil)),
-               ElementsAre(IsBlankNode(true, "1"), IsIri(first),
-                           IsVariableVariant("?b")),
+               ElementsAre(IsBlankNode(true, "1"), IsIri(first), Var("?b")),
                ElementsAre(IsBlankNode(true, "1"), IsIri(rest),
                            IsBlankNode(true, "0")),
-               ElementsAre(IsBlankNode(true, "2"), IsIri(first),
-                           IsVariableVariant("?a")),
+               ElementsAre(IsBlankNode(true, "2"), IsIri(first), Var("?a")),
                ElementsAre(IsBlankNode(true, "2"), IsIri(rest),
                            IsBlankNode(true, "1")))));
 }
