@@ -1,6 +1,7 @@
 add_subdirectory(vocabulary)
 add_library(index
-        Index.h Index.cpp Index.Text.cpp
+        Index.h Index.cpp
+        IndexImpl.cpp IndexImpl.Text.cpp
         Vocabulary.h Vocabulary.cpp
         VocabularyGenerator.h VocabularyGeneratorImpl.h
         ConstantsIndexBuilding.h

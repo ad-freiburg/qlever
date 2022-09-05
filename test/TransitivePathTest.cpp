@@ -5,10 +5,13 @@
 #include <gtest/gtest.h>
 
 #include <array>
+#include <string>
 #include <vector>
 
-#include "../src/engine/TransitivePath.h"
-#include "../src/global/Id.h"
+#include "engine/TransitivePath.h"
+#include "global/Id.h"
+
+using namespace std::literals;
 
 auto I = [](const auto& id) {
   return Id::makeFromVocabIndex(VocabIndex::make(id));

@@ -21,7 +21,9 @@
 #include "./QueryExecutionContext.h"
 #include "./QueryExecutionTree.h"
 #include "./SortPerformanceEstimator.h"
+#include "nlohmann/json.hpp"
 
+using nlohmann::json;
 using std::string;
 using std::vector;
 

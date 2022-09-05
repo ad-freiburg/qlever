@@ -14,6 +14,7 @@
 #include "./UrlParser.h"
 #include "./beast.h"
 #include "./streamable_body.h"
+#include "nlohmann/json.hpp"
 
 /// Several utilities for using/customizing the HttpServer template from
 /// HttpServer.h
@@ -125,7 +126,7 @@ static auto createJsonResponse(std::string text, const auto& request,
 
 /// Create a HttpResponse from a json object with status 200 OK and mime type
 /// "application/json".
-static auto createJsonResponse(const json& j, const auto& request,
+static auto createJsonResponse(const nlohmann::json& j, const auto& request,
                                http::status status = http::status::ok) {
   // Argument `4` leads to a human-readable indentation.
   return createJsonResponse(j.dump(4), request, status);

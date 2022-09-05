@@ -10,6 +10,8 @@
 #include <vector>
 
 #include "parser/SparqlParser.h"
+#include "parser/TokenizerCtre.h"
+#include "parser/TurtleParser.h"
 
 using namespace ad_utility::sparql_types;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;

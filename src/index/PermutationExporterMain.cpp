@@ -2,6 +2,7 @@
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #include "./Index.h"
+#include "./IndexImpl.h"
 #include "./TriplesView.h"
 
 /// Dump a  certain permutation to stdout in a human-readable way as IDs, and
@@ -40,38 +41,40 @@ int main(int argc, char** argv) {
   }
 
   Index i;
+  IndexImpl& impl = i.getImpl();
   std::string indexName{argv[1]};
   std::string p{argv[2]};
+
   if (p == "sop") {
-    i.SOP().loadFromDisk(indexName);
-    dumpToStdout(i.SOP());
+    impl.SOP().loadFromDisk(indexName);
+    dumpToStdout(impl.SOP());
     return EXIT_SUCCESS;
   }
   if (p == "spo") {
-    i.SPO().loadFromDisk(indexName);
-    dumpToStdout(i.SPO());
+    impl.SPO().loadFromDisk(indexName);
+    dumpToStdout(impl.SPO());
     return EXIT_SUCCESS;
   }
   if (p == "osp") {
-    i.OSP().loadFromDisk(indexName);
-    dumpToStdout(i.OSP());
+    impl.OSP().loadFromDisk(indexName);
+    dumpToStdout(impl.OSP());
     return EXIT_SUCCESS;
   }
   if (p == "ops") {
-    i.OPS().loadFromDisk(indexName);
-    dumpToStdout(i.OPS());
+    impl.OPS().loadFromDisk(indexName);
+    dumpToStdout(impl.OPS());
     return EXIT_SUCCESS;
   }
 
   if (p == "pos") {
-    i.POS().loadFromDisk(indexName);
-    dumpToStdout(i.POS());
+    impl.POS().loadFromDisk(indexName);
+    dumpToStdout(impl.POS());
     return EXIT_SUCCESS;
   }
 
   if (p == "pso") {
-    i.PSO().loadFromDisk(indexName);
-    dumpToStdout(i.PSO());
+    impl.PSO().loadFromDisk(indexName);
+    dumpToStdout(impl.PSO());
     return EXIT_SUCCESS;
   }
 

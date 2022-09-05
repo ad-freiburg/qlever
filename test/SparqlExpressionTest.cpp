@@ -7,11 +7,12 @@
 
 #include <string>
 
-#include "../src/engine/sparqlExpressions/LiteralExpression.h"
-#include "../src/engine/sparqlExpressions/NaryExpression.h"
-#include "../src/engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 
 using namespace sparqlExpression;
+using namespace std::literals;
 
 /// Dummy expression for testing, that for `evaluate` returns the `result`
 /// that is specified in the constructor.
