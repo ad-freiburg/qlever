@@ -129,6 +129,12 @@ constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
   }
 }
 // _____________________________________________________________________________
+// Adds the position of the actual caller in the gtest error messages.
+void addActualLocationTrace(std::source_location l) {
+  testing::ScopedTrace trace(l.file_name(), l.line(),
+                             "Actual location of the test failure");
+}
+// _____________________________________________________________________________
 /**
  * Ensures that the matcher matches on the result of the parsing and that the
  * text has been fully consumed by the parser.
@@ -139,22 +145,27 @@ constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
 void expectCompleteParse(
     const auto& resultOfParseAndText, auto&& matcher,
     std::source_location l = std::source_location::current()) {
-  testing::ScopedTrace trace(l.file_name(), l.line(), "Source location");
+  addActualLocationTrace(l);
   EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
   EXPECT_TRUE(resultOfParseAndText.remainingText_.empty());
 }
 
 // _____________________________________________________________________________
-void expectIncompleteParse(const auto& resultOfParseAndText, const string& rest,
-                           auto&& matcher) {
+/**
+ * Ensures that the matcher matches on the result of the parsing and that the
+ * text has not been fully consumed by the parser. rest is expected to be the
+ * unconsumed input of the parser.
+ *
+ * @param resultOfParseAndText Parsing result
+ * @param matcher Matcher that must be fulfilled
+ * @param rest Input that is not consumed
+ */
+void expectIncompleteParse(
+    const auto& resultOfParseAndText, const string& rest, auto&& matcher,
+    std::source_location l = std::source_location::current()) {
+  addActualLocationTrace(l);
   EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
-  EXPECT_THAT(resultOfParseAndText.remainingText_, testing::StrEq(rest));
-}
-[[maybe_unused]] void expectIncompleteParse(const auto& resultOfParseAndText,
-                                            const size_t length,
-                                            auto&& matcher) {
-  EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
-  EXPECT_THAT(resultOfParseAndText.remainingText_, testing::SizeIs(length));
+  EXPECT_THAT(resultOfParseAndText.remainingText_, testing::Eq(rest));
 }
 
 namespace variant_matcher {
@@ -242,7 +253,7 @@ auto IsBlankNode = [](bool generated, const std::string& label) {
 
 auto IsVariable =
     [](const std::string& value) -> testing::Matcher<const Variable&> {
-  return testing::Property("name()", &Variable::name, testing::StrEq(value));
+  return testing::Property("name()", &Variable::name, testing::Eq(value));
 };
 
 // Returns a matcher that matches a variant that given a variant checks that it
@@ -266,7 +277,7 @@ auto IsExpression = [](const std::string& descriptor)
   return testing::Property(
       "getDescriptor()",
       &sparqlExpression::SparqlExpressionPimpl::getDescriptor,
-      testing::StrEq(descriptor));
+      testing::Eq(descriptor));
 };
 
 template <typename T>
@@ -288,7 +299,7 @@ auto IsBind = [](const string& variable, const string& expression)
   return IsGraphPatternOperation<GraphPatternOperation::Bind>(testing::AllOf(
       IsBindExpression(expression),
       testing::Field("_target", &GraphPatternOperation::Bind::_target,
-                     testing::StrEq(variable))));
+                     testing::Eq(variable))));
 };
 
 auto IsLimitOffset =
@@ -351,7 +362,7 @@ auto IsOrderKeys =
 auto IsVariableGroupKey =
     [](const string& key) -> testing::Matcher<const GroupKey&> {
   return testing::VariantWith<Variable>(
-      testing::Property("name()", &Variable::name, testing::StrEq(key)));
+      testing::Property("name()", &Variable::name, testing::Eq(key)));
 };
 
 auto IsExpressionGroupKey =
@@ -364,8 +375,7 @@ auto IsAliasGroupKey =
     [](const string& expr,
        const string& variable) -> testing::Matcher<const GroupKey&> {
   return testing::VariantWith<Alias>(testing::AllOf(
-      testing::Field("_outVarName", &Alias::_outVarName,
-                     testing::StrEq(variable)),
+      testing::Field("_outVarName", &Alias::_outVarName, testing::Eq(variable)),
       testing::Field("_expression", &Alias::_expression, IsExpression(expr))));
 };
 

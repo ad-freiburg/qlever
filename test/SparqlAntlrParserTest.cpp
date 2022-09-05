@@ -44,7 +44,7 @@ struct ExpectCompleteParse {
   SparqlQleverVisitor::PrefixMap prefixMap_ = {};
 
   auto operator()(
-      const string& input, Value&& value,
+      const string& input, const Value& value,
       std::source_location l = std::source_location::current()) const {
     return operator()(input, value, prefixMap_, l);
   };
@@ -56,7 +56,7 @@ struct ExpectCompleteParse {
   };
 
   auto operator()(
-      const string& input, Value&& value,
+      const string& input, const Value& value,
       SparqlQleverVisitor::PrefixMap prefixMap,
       std::source_location l = std::source_location::current()) const {
     return operator()(input, testing::Eq(value), std::move(prefixMap), l);
