@@ -13,6 +13,7 @@
 #include "SparqlAntlrParserTestHelpers.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "util/SourceLocation.h"
 
 using namespace sparqlParserHelpers;
 using Parser = SparqlAutomaticParser;
@@ -42,29 +43,29 @@ template <auto Clause,
 struct ExpectCompleteParse {
   SparqlQleverVisitor::PrefixMap prefixMap_ = {};
 
-  auto operator()(
-      const string& input, const Value& value,
-      std::source_location l = std::source_location::current()) const {
+  auto operator()(const string& input, const Value& value,
+                  ad_utility::source_location l =
+                      ad_utility::source_location::current()) const {
     return operator()(input, value, prefixMap_, l);
   };
 
-  auto operator()(
-      const string& input, const auto& matcher,
-      std::source_location l = std::source_location::current()) const {
+  auto operator()(const string& input, const auto& matcher,
+                  ad_utility::source_location l =
+                      ad_utility::source_location::current()) const {
     return operator()(input, matcher, prefixMap_, l);
   };
 
-  auto operator()(
-      const string& input, const Value& value,
-      SparqlQleverVisitor::PrefixMap prefixMap,
-      std::source_location l = std::source_location::current()) const {
+  auto operator()(const string& input, const Value& value,
+                  SparqlQleverVisitor::PrefixMap prefixMap,
+                  ad_utility::source_location l =
+                      ad_utility::source_location::current()) const {
     return operator()(input, testing::Eq(value), std::move(prefixMap), l);
   };
 
-  auto operator()(
-      const string& input, const auto& matcher,
-      SparqlQleverVisitor::PrefixMap prefixMap,
-      std::source_location l = std::source_location::current()) const {
+  auto operator()(const string& input, const auto& matcher,
+                  SparqlQleverVisitor::PrefixMap prefixMap,
+                  ad_utility::source_location l =
+                      ad_utility::source_location::current()) const {
     return expectCompleteParse(parse<Clause>(input, std::move(prefixMap)),
                                matcher, l);
   };
@@ -74,14 +75,16 @@ template <auto Clause, typename Exception = ParseException>
 struct ExpectParseFails {
   SparqlQleverVisitor::PrefixMap prefixMap_ = {};
 
-  auto operator()(const string& input,
-                  std::source_location l = std::source_location::current()) {
+  auto operator()(
+      const string& input,
+      ad_utility::source_location l = ad_utility::source_location::current()) {
     return operator()(input, prefixMap_, l);
   }
 
-  auto operator()(const string& input, SparqlQleverVisitor::PrefixMap prefixMap,
-                  std::source_location l = std::source_location::current()) {
-    addActualLocationTrace(l);
+  auto operator()(
+      const string& input, SparqlQleverVisitor::PrefixMap prefixMap,
+      ad_utility::source_location l = ad_utility::source_location::current()) {
+    auto trace = generateLocationTrace(l);
     EXPECT_THROW(parse<Clause>(input, std::move(prefixMap)), Exception)
         << input;
   }

@@ -8,14 +8,13 @@
 
 #include <gmock/gmock.h>
 
-#include <source_location>
-
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/Alias.h"
 #include "parser/ParsedQuery.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/data/OrderKey.h"
 #include "parser/data/VarOrTerm.h"
+#include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 
 // Not relevant for the actual test logic, but provides
@@ -130,9 +129,10 @@ constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
 }
 // _____________________________________________________________________________
 // Adds the position of the actual caller in the gtest error messages.
-void addActualLocationTrace(std::source_location l) {
-  testing::ScopedTrace trace(l.file_name(), l.line(),
-                             "Actual location of the test failure");
+[[nodiscard]] testing::ScopedTrace generateLocationTrace(
+    ad_utility::source_location l) {
+  return {l.file_name(), static_cast<int>(l.line()),
+          "Actual location of the test failure"};
 }
 // _____________________________________________________________________________
 /**
@@ -144,8 +144,8 @@ void addActualLocationTrace(std::source_location l) {
  */
 void expectCompleteParse(
     const auto& resultOfParseAndText, auto&& matcher,
-    std::source_location l = std::source_location::current()) {
-  addActualLocationTrace(l);
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  auto trace = generateLocationTrace(l);
   EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
   EXPECT_TRUE(resultOfParseAndText.remainingText_.empty());
 }
@@ -162,8 +162,8 @@ void expectCompleteParse(
  */
 void expectIncompleteParse(
     const auto& resultOfParseAndText, const string& rest, auto&& matcher,
-    std::source_location l = std::source_location::current()) {
-  addActualLocationTrace(l);
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  auto trace = generateLocationTrace(l);
   EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
   EXPECT_THAT(resultOfParseAndText.remainingText_, testing::Eq(rest));
 }
