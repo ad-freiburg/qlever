@@ -7,13 +7,15 @@
 #include "./CallFixedSize.h"
 
 // _____________________________________________________________________________
-CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec)
+CountAvailablePredicates::CountAvailablePredicates(
+    QueryExecutionContext* qec, std::string predicateVariable,
+    std::string countVariable)
     : Operation(qec),
       _subtree(nullptr),
       _subjectColumnIndex(0),
       _subjectEntityName(),
-      _predicateVarName("predicate"),
-      _countVarName("count") {}
+      _predicateVarName(std::move(predicateVariable)),
+      _countVarName(std::move(countVariable)) {}
 
 // _____________________________________________________________________________
 CountAvailablePredicates::CountAvailablePredicates(

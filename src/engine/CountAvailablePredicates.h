@@ -30,7 +30,9 @@ class CountAvailablePredicates : public Operation {
    * @brief Creates a new CountAvailablePredicates operation that returns
    * predicates and their counts for all entities.
    */
-  explicit CountAvailablePredicates(QueryExecutionContext* qec);
+  explicit CountAvailablePredicates(QueryExecutionContext* qec,
+                                    std::string predicateVariable,
+                                    std::string countVariable);
 
   /**
    * @brief Creates a new CountAvailablePredicates operation that returns
