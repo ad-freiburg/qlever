@@ -167,7 +167,17 @@ void expectIncompleteParse(
   EXPECT_THAT(resultOfParseAndText.resultOfParse_, matcher);
   EXPECT_THAT(resultOfParseAndText.remainingText_, testing::Eq(rest));
 }
+// _____________________________________________________________________________
+auto IsNumericLiteralFP =
+    [](double value) -> testing::Matcher<std::variant<int64_t, double>> {
+  return testing::VariantWith<double>(testing::DoubleEq(value));
+};
 
+auto IsNumericLiteralWhole =
+    [](int64_t value) -> testing::Matcher<std::variant<int64_t, double>> {
+  return testing::VariantWith<int64_t>(testing::Eq(value));
+};
+// _____________________________________________________________________________
 namespace variant_matcher {
 // Implements a matcher that checks the value of arbitrarily deeply nested
 // variants that contain a value with the last Type of the Ts. The variant may

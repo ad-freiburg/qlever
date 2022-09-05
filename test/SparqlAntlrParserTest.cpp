@@ -28,7 +28,6 @@ auto parseBlankNode = parse<&Parser::blankNode>;
 auto parseCollection = parse<&Parser::collection>;
 auto parseConstructTriples = parse<&Parser::constructTriples>;
 auto parseGraphNode = parse<&Parser::graphNode>;
-auto parseNumericLiteral = parse<&Parser::numericLiteral>;
 auto parseObjectList = parse<&Parser::objectList>;
 auto parsePropertyList = parse<&Parser::propertyList>;
 auto parsePropertyListNotEmpty = parse<&Parser::propertyListNotEmpty>;
@@ -72,25 +71,21 @@ struct ExpectCompleteParse {
 };
 
 template <auto Clause, typename Exception = ParseException>
-auto makeExpectParsingFails(SparqlQleverVisitor::PrefixMap prefixMap = {}) {
-  // Capture `prefixMap` by value. See above comment.
-  return [prefixMap = std::move(prefixMap)](const string& input) {
-    EXPECT_THROW(parse<Clause>(input), Exception) << input;
-  };
-}
+struct ExpectParseFails {
+  SparqlQleverVisitor::PrefixMap prefixMap_ = {};
 
-template <typename T>
-void testNumericLiteral(const std::string& input, T target) {
-  auto result = parseNumericLiteral(input);
-  ASSERT_EQ(result.remainingText_.size(), 0);
-  auto value = get<T>(result.resultOfParse_);
-
-  if constexpr (std::is_floating_point_v<T>) {
-    ASSERT_DOUBLE_EQ(target, value);
-  } else {
-    ASSERT_EQ(target, value);
+  auto operator()(const string& input,
+                  std::source_location l = std::source_location::current()) {
+    return operator()(input, prefixMap_, l);
   }
-}
+
+  auto operator()(const string& input, SparqlQleverVisitor::PrefixMap prefixMap,
+                  std::source_location l = std::source_location::current()) {
+    addActualLocationTrace(l);
+    EXPECT_THROW(parse<Clause>(input, std::move(prefixMap)), Exception)
+        << input;
+  }
+};
 
 auto nil = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>";
 auto first = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>";
@@ -104,29 +99,24 @@ using ::testing::Pair;
 using ::testing::SizeIs;
 using ::testing::StrEq;
 
-namespace {
-template <typename Exception = ParseException>
-void expectNumericLiteralFails(const string& input) {
-  EXPECT_THROW(parseNumericLiteral(input), Exception) << input;
-}
-}  // namespace
-
 TEST(SparqlParser, NumericLiterals) {
-  testNumericLiteral("3.0", 3.0);
-  testNumericLiteral("3.0e2", 300.0);
-  testNumericLiteral("3.0e-2", 0.030);
-  testNumericLiteral("3", (int64_t)3ll);
-  testNumericLiteral("-3.0", -3.0);
-  testNumericLiteral("-3", (int64_t)-3ll);
-  testNumericLiteral("+3", (int64_t)3ll);
-  testNumericLiteral("+3.02", 3.02);
-  testNumericLiteral("+3.1234e12", 3123400000000.0);
-  testNumericLiteral(".234", 0.234);
-  testNumericLiteral("+.0123", 0.0123);
-  testNumericLiteral("-.5123", -0.5123);
-  testNumericLiteral(".234e4", 2340.0);
-  testNumericLiteral("+.0123E-3", 0.0000123);
-  testNumericLiteral("-.5123E12", -512300000000.0);
+  auto expectNumericLiteral = ExpectCompleteParse<&Parser::numericLiteral>{};
+  auto expectNumericLiteralFails = ExpectParseFails<&Parser::numericLiteral>{};
+  expectNumericLiteral("3.0", IsNumericLiteralFP(3.0));
+  expectNumericLiteral("3.0e2", IsNumericLiteralFP(300.0));
+  expectNumericLiteral("3.0e-2", IsNumericLiteralFP(0.030));
+  expectNumericLiteral("3", IsNumericLiteralWhole(3ll));
+  expectNumericLiteral("-3.0", IsNumericLiteralFP(-3.0));
+  expectNumericLiteral("-3", IsNumericLiteralWhole(-3ll));
+  expectNumericLiteral("+3", IsNumericLiteralWhole(3ll));
+  expectNumericLiteral("+3.02", IsNumericLiteralFP(3.02));
+  expectNumericLiteral("+3.1234e12", IsNumericLiteralFP(3123400000000.0));
+  expectNumericLiteral(".234", IsNumericLiteralFP(0.234));
+  expectNumericLiteral("+.0123", IsNumericLiteralFP(0.0123));
+  expectNumericLiteral("-.5123", IsNumericLiteralFP(-0.5123));
+  expectNumericLiteral(".234e4", IsNumericLiteralFP(2340.0));
+  expectNumericLiteral("+.0123E-3", IsNumericLiteralFP(0.0000123));
+  expectNumericLiteral("-.5123E12", IsNumericLiteralFP(-512300000000.0));
   expectNumericLiteralFails("1000000000000000000000000000000000000");
   expectNumericLiteralFails("-99999999999999999999");
   expectNumericLiteralFails("12E400");
@@ -439,7 +429,7 @@ TEST(SparqlParser, Bind) {
 
 TEST(SparqlParser, Integer) {
   auto expectInteger = ExpectCompleteParse<&Parser::integer>{};
-  auto expectIntegerFails = makeExpectParsingFails<&Parser::integer>();
+  auto expectIntegerFails = ExpectParseFails<&Parser::integer>();
   expectInteger("1931", 1931ull);
   expectInteger("0", 0ull);
   expectInteger("18446744073709551615", 18446744073709551615ull);
@@ -450,8 +440,7 @@ TEST(SparqlParser, Integer) {
 
 TEST(SparqlParser, LimitOffsetClause) {
   auto expectLimitOffset = ExpectCompleteParse<&Parser::limitOffsetClauses>{};
-  auto expectLimitOffsetFails =
-      makeExpectParsingFails<&Parser::limitOffsetClauses>();
+  auto expectLimitOffsetFails = ExpectParseFails<&Parser::limitOffsetClauses>();
   expectLimitOffset("LIMIT 10", IsLimitOffset(10, 1, 0));
   expectLimitOffset("OFFSET 31 LIMIT 12 TEXTLIMIT 14",
                     IsLimitOffset(12, 14, 31));
@@ -470,8 +459,7 @@ TEST(SparqlParser, LimitOffsetClause) {
 
 TEST(SparqlParser, OrderCondition) {
   auto expectOrderCondition = ExpectCompleteParse<&Parser::orderCondition>{};
-  auto expectOrderConditionFails =
-      makeExpectParsingFails<&Parser::orderCondition>();
+  auto expectOrderConditionFails = ExpectParseFails<&Parser::orderCondition>();
   // var
   expectOrderCondition("?test", IsVariableOrderKeyVariant("?test", false));
   // brackettedExpression
@@ -554,7 +542,7 @@ TEST(SparqlParser, SolutionModifier) {
 
 TEST(SparqlParser, DataBlock) {
   auto expectDataBlock = ExpectCompleteParse<&Parser::dataBlock>{};
-  auto expectDataBlockFails = makeExpectParsingFails<&Parser::dataBlock>();
+  auto expectDataBlockFails = ExpectParseFails<&Parser::dataBlock>();
   expectDataBlock(
       "?test { \"foo\" }",
       IsValues(vector<string>{"?test"}, vector<vector<string>>{{"\"foo\""}}));
@@ -586,7 +574,7 @@ TEST(SparqlParser, DataBlock) {
 
 TEST(SparqlParser, InlineData) {
   auto expectInlineData = ExpectCompleteParse<&Parser::inlineData>{};
-  auto expectInlineDataFails = makeExpectParsingFails<&Parser::inlineData>();
+  auto expectInlineDataFails = ExpectParseFails<&Parser::inlineData>();
   expectInlineData("VALUES ?test { \"foo\" }",
                    IsInlineData({"?test"}, {{"\"foo\""}}));
   // There must always be a block present for InlineData
@@ -667,7 +655,7 @@ TEST(SparqlParser, propertyListPathNotEmpty) {
   auto expectPropertyListPath =
       ExpectCompleteParse<&Parser::propertyListPathNotEmpty>{};
   auto expectPropertyListPathFails =
-      makeExpectParsingFails<&Parser::propertyListPathNotEmpty>();
+      ExpectParseFails<&Parser::propertyListPathNotEmpty>();
   auto Iri = &PropertyPath::fromIri;
   expectPropertyListPath("<bar> ?foo", {{Iri("<bar>"), Variable{"?foo"}}});
   expectPropertyListPath(
@@ -731,7 +719,7 @@ TEST(SparqlParser, SelectClause) {
     expectSelectClause(input,
                        IsSelect(distinct, reduced, std::move(selection)));
   };
-  auto expectSelectFails = makeExpectParsingFails<&Parser::selectClause>();
+  auto expectSelectFails = ExpectParseFails<&Parser::selectClause>();
 
   expectCompleteParse(parseSelectClause("SELECT *"),
                       IsAsteriskSelect(false, false));
@@ -758,7 +746,7 @@ TEST(SparqlParser, SelectClause) {
 TEST(SparqlParser, HavingCondition) {
   auto expectHavingCondition = ExpectCompleteParse<&Parser::havingCondition>{};
   auto expectHavingConditionFails =
-      makeExpectParsingFails<&Parser::havingCondition>();
+      ExpectParseFails<&Parser::havingCondition>();
 
   expectHavingCondition("(?x <= 42.3)", {SparqlFilter::LE, "?x", "42.3"});
   expectHavingCondition("(?height > 1.7)",
@@ -772,7 +760,7 @@ TEST(SparqlParser, GroupGraphPattern) {
   auto expectGraphPattern = ExpectCompleteParse<&Parser::groupGraphPattern>{
       {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
   auto expectGroupGraphPatternFails =
-      makeExpectParsingFails<&Parser::groupGraphPattern>();
+      ExpectParseFails<&Parser::groupGraphPattern>();
 
   // Test the Components alone.
   expectGraphPattern("{ }", GraphPattern());
@@ -857,7 +845,7 @@ TEST(SparqlParser, GroupGraphPattern) {
 TEST(SparqlParser, RDFLiteral) {
   auto expectRDFLiteral = ExpectCompleteParse<&Parser::rdfLiteral>{
       {{"xsd", "<http://www.w3.org/2001/XMLSchema#>"}}};
-  auto expectRDFLiteralFails = makeExpectParsingFails<&Parser::rdfLiteral>();
+  auto expectRDFLiteralFails = ExpectParseFails<&Parser::rdfLiteral>();
 
   expectRDFLiteral("   \"Astronaut\"^^xsd:string  \t",
                    "\"Astronaut\"^^<http://www.w3.org/2001/XMLSchema#string>");
