@@ -29,9 +29,8 @@ struct AssignableLambdaImpl {
     return _lambda(AD_FWD(args)...);
   }
 
-  AssignableLambdaImpl& operator=(
-      const AssignableLambdaImpl&
-          other) requires std::is_copy_constructible_v<AssignableLambdaImpl> {
+  AssignableLambdaImpl& operator=(const AssignableLambdaImpl& other) requires
+      std::is_copy_constructible_v<AssignableLambdaImpl> {
     std::destroy_at(&_lambda);
     std::construct_at(&_lambda, other._lambda);
     return *this;

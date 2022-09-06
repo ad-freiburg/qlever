@@ -12,7 +12,8 @@ namespace ad_utility {
 /// major difference to `absl::Cleanup`, the destructor of which is always
 /// noexcept, which will lead to the program being aborted when F throws.
 template <typename F>
-requires std::is_invocable_r_v<void, F> class OnDestruction {
+requires std::is_invocable_r_v<void, F>
+class OnDestruction {
  private:
   F f_;
 

@@ -126,19 +126,22 @@ constexpr static bool alwaysFalse = false;
 /// From the type Tuple (std::tuple<A, B, C....>) creates the type
 /// std::tuple<TypeLifter<A>, TypeLifter<B>,...>
 template <typename Tuple, template <typename> typename TypeLifter>
-requires isTuple<Tuple> using LiftedTuple =
+requires isTuple<Tuple>
+using LiftedTuple =
     typename detail::LiftInnerTypes<std::tuple, TypeLifter>::template TypeToLift<Tuple>::LiftedType;
 
 /// From the type Variant (std::variant<A, B, C....>) creates the type
 /// std::variant<TypeLifter<A>, TypeLifter<B>,...>
 template <typename Variant, template <typename> typename TypeLifter>
-requires isVariant<Variant> using LiftedVariant =
+requires isVariant<Variant>
+using LiftedVariant =
     typename detail::LiftInnerTypes<std::variant,
                                     TypeLifter>::template TypeToLift<Variant>::LiftedType;
 
 /// From the type std::tuple<A, B, ...> makes the type std::variant<A, B, ...>
 template <typename Tuple>
-requires isTuple<Tuple> using TupleToVariant = typename detail::TupleToVariantImpl<Tuple>::type;
+requires isTuple<Tuple>
+using TupleToVariant = typename detail::TupleToVariantImpl<Tuple>::type;
 
 /// From the types X = std::tuple<A, ... , B>, , Y = std::tuple<C, ..., D>...
 /// makes the type TupleCat<X, Y> = std::tuple<A, ..., B, C, ..., D, ...> (works

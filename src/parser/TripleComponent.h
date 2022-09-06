@@ -47,9 +47,7 @@ class TripleComponent {
   /// Assignment for types that can be directly assigned to the underlying
   /// variant.
   template <typename T>
-  requires requires(Variant v, T&& t) {
-    _variant = t;
-  }
+  requires requires(Variant v, T&& t) { _variant = t; }
   TripleComponent& operator=(T&& value) {
     _variant = AD_FWD(value);
     return *this;
@@ -67,9 +65,7 @@ class TripleComponent {
 
   /// Make a `TripleComponent` directly comparable to the underlying types.
   template <typename T>
-  requires requires(T&& t) {
-    _variant == t;
-  }
+  requires requires(T&& t) { _variant == t; }
   bool operator==(const T& other) const { return _variant == other; }
 
   /// Equality comparison between two `TripleComponent`s.
