@@ -17,10 +17,12 @@
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 
-// The following two macros make the usage of `testing::Property` and `testing::Field` simpler and more consistent.
-// Examples:
-//  AD_PROPERTY(std::string, empty, IsTrue);  // Matcher that checks that `arg.empty()` is true for the passed std::string `arg`.
-// AD_FIELD(std::pair<int, bool>, second, IsTrue); // Matcher that checks, that `arg.second` is true for a`std::pair<int, bool>`
+// The following two macros make the usage of `testing::Property` and
+// `testing::Field` simpler and more consistent. Examples:
+//  AD_PROPERTY(std::string, empty, IsTrue);  // Matcher that checks that
+//  `arg.empty()` is true for the passed std::string `arg`.
+// AD_FIELD(std::pair<int, bool>, second, IsTrue); // Matcher that checks, that
+// `arg.second` is true for a`std::pair<int, bool>`
 
 #ifdef AD_PROPERTY
 #error "AD_PROPERTY must not already be defined. Consider renaming it."
@@ -126,8 +128,10 @@ std::ostream& operator<<(std::ostream& out, const ExceptionMetadata& metadata) {
 }
 
 // _____________________________________________________________________________
-// Add the given `source_location`  to all gtest failure messages that occur, while the return value is still in scope.
-// It is important to bind the return value to a variable, otherwise it will immediately go of scope and have no effect.
+// Add the given `source_location`  to all gtest failure messages that occur,
+// while the return value is still in scope. It is important to bind the return
+// value to a variable, otherwise it will immediately go of scope and have no
+// effect.
 [[nodiscard]] testing::ScopedTrace generateLocationTrace(
     ad_utility::source_location l) {
   return {l.file_name(), static_cast<int>(l.line()),
@@ -189,12 +193,12 @@ constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
   }
 }
 // _____________________________________________________________________________
-auto NumericLiteralFP =
+auto NumericLiteralDouble =
     [](double value) -> testing::Matcher<std::variant<int64_t, double>> {
   return testing::VariantWith<double>(testing::DoubleEq(value));
 };
 
-auto NumericLiteralWhole =
+auto NumericLiteralInt =
     [](int64_t value) -> testing::Matcher<std::variant<int64_t, double>> {
   return testing::VariantWith<int64_t>(testing::Eq(value));
 };
@@ -430,7 +434,7 @@ auto GroupKeys =
   return testing::ElementsAreArray(keyMatchers);
 };
 
-auto GroupByVariablesMatch =
+auto GroupByVariables =
     [](const vector<::Variable>& vars) -> testing::Matcher<const ParsedQuery&> {
   return AD_FIELD(ParsedQuery, _groupByVariables,
                   testing::UnorderedElementsAreArray(vars));
