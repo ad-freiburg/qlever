@@ -9,12 +9,19 @@
 template <typename A, typename R>
 void doComputeSubqueryS(const std::vector<A>* input,
                         const size_t inputSubjectColumn, std::vector<R>* result,
-                        const std::vector<PatternID>& hasPattern,
                         const CompactVectorOfStrings<Id>& hasPredicate,
                         const CompactVectorOfStrings<Id>& patterns);
 
-HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec, ScanType type)
-    : Operation(qec), _type(type) {}
+HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
+                                   std::shared_ptr<QueryExecutionTree> subtree,
+                                   size_t subtreeJoinColumn,
+                                   std::string objectVariable)
+    : Operation{qec},
+      _type{ScanType::SUBQUERY_S},
+
+      _subtree{std::move(subtree)},
+      _subtreeColIndex{subtreeJoinColumn},
+      _object{std::move(objectVariable)} {}
 
 HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
                                    SparqlTriple triple)
@@ -428,13 +435,5 @@ void HasPredicateScan::setObject(const TripleComponent& object) {
 }
 
 const std::string& HasPredicateScan::getObject() const { return _object; }
-
-void HasPredicateScan::setSubtree(std::shared_ptr<QueryExecutionTree> subtree) {
-  _subtree = std::move(subtree);
-}
-
-void HasPredicateScan::setSubtreeSubjectColumn(size_t colIndex) {
-  _subtreeColIndex = colIndex;
-}
 
 HasPredicateScan::ScanType HasPredicateScan::getType() const { return _type; }

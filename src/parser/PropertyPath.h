@@ -105,6 +105,10 @@ class PropertyPath {
 
   void computeCanBeNull();
 
+  // ASSERT that this property path consists of a single IRI and return that
+  // IRI.
+  [[nodiscard]] const std::string& getIri() const;
+
   Operation _operation;
   // For the limited transitive operations
   uint_fast16_t _limit;

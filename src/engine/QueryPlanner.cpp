@@ -2690,16 +2690,11 @@ auto QueryPlanner::createJoinWithHasPredicateScan(
   size_t otherTreeJoinColumn = aIsSuitablePredicateScan ? jcs[0][1] : jcs[0][0];
   auto qec = otherTree->getRootOperation()->getExecutionContext();
   // Note that this is a new operation.
-  // TODO<joka921> Make this `HasPredicateScan::addSubtree`.
-  auto hasPredicateScanOperation = std::make_shared<HasPredicateScan>(
-      qec, HasPredicateScan::ScanType::SUBQUERY_S);
-  hasPredicateScanOperation->setSubtree(otherTree);
-  hasPredicateScanOperation->setSubtreeSubjectColumn(otherTreeJoinColumn);
-  hasPredicateScanOperation->setObject(
-      static_cast<HasPredicateScan*>(
-          hasPredicateScanTree->getRootOperation().get())
-          ->getObject());
-  auto plan = makeSubtreePlan(std::move(hasPredicateScanOperation));
+  auto object = static_cast<HasPredicateScan*>(
+                    hasPredicateScanTree->getRootOperation().get())
+                    ->getObject();
+  auto plan = makeSubtreePlan<HasPredicateScan>(
+      qec, std::move(otherTree), otherTreeJoinColumn, std::move(object));
   mergeSubtreePlanIds(plan, a, b);
   return plan;
 }
