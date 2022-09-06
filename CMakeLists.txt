@@ -165,6 +165,11 @@ if (USE_TREE_BASED_CACHE)
     add_definitions("-D_QLEVER_USE_TREE_BASED_CACHE")
 endif()
 
+if (RUN_EXPENSIVE_TESTS)
+    message(STATUS "Running expensive unit tests. This is only recommended in release builds")
+    add_definitions("-DQLEVER_RUN_EXPENSIVE_TESTS")
+endif()
+
 ################################
 # STXXL
 ################################
