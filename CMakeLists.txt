@@ -211,7 +211,9 @@ include_directories(src)
 
 # Run the script `CompilationInfo.cmake` that creates the file `CompilationInfo.cpp`
 # with the current git hash and the curent time and date.q When specifying
-# `-DDONT_UPDATE_COMPILATION_INFO=true` as an argument to CMAKE the
+# `-DDONT_UPDATE_COMPILATION_INFO=true` as an argument to CMAKE, the compilation info is
+# never updated. This is useful during development to avoid unnecessary relinking of unchanged
+# binaries.
 if (NOT DONT_UPDATE_COMPILATION_INFO)
     # The first output which is never created is necessary s.t. the command is never cached and
     # always rerun.
