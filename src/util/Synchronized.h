@@ -215,8 +215,9 @@ class Synchronized {
     return {ConstructWithMutex{}, mutex(), data_};
   }
 
- private : T data_;  // The data to which we synchronize the access.
-  Mutex m_;          // The used mutex
+ private:
+  T data_;   // The data to which we synchronize the access.
+  Mutex m_;  // The used mutex
 
   Mutex& mutex() const { return const_cast<Mutex&>(m_); }
 

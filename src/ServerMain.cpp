@@ -56,7 +56,7 @@ int main(int argc, char** argv) {
       &RuntimeParameters()};
 
   po::options_description options("Options for ServerMain");
-  auto add = [&options]<typename... Args>(Args && ... args) {
+  auto add = [&options]<typename... Args>(Args&&... args) {
     options.add_options()(std::forward<Args>(args)...);
   };
   add("help,h", "Produce this help message.");
