@@ -710,23 +710,9 @@ TEST(SparqlParser, triplesSameSubjectPath) {
 
 TEST(SparqlParser, SelectClause) {
   auto expectSelectClause = ExpectCompleteParse<&Parser::selectClause>{};
-  auto expectVariablesSelect = [&expectSelectClause](
-                                   const string& input,
-                                   const std::vector<std::string>& variables,
-                                   bool distinct = false,
-                                   bool reduced = false) {
-    expectSelectClause(input, m::VariablesSelect(variables, distinct, reduced));
-  };
-  using Alias = std::pair<string, string>;
-  auto expectSelect = [&expectSelectClause](
-                          const string& input,
-                          std::vector<std::variant<Variable, Alias>> selection,
-                          bool distinct = false, bool reduced = false) {
-    expectSelectClause(input,
-                       m::Select(distinct, reduced, std::move(selection)));
-  };
   auto expectSelectFails = ExpectParseFails<&Parser::selectClause>();
 
+  using Alias = std::pair<string, string>;
   expectCompleteParse(parseSelectClause("SELECT *"),
                       m::AsteriskSelect(false, false));
   expectCompleteParse(parseSelectClause("SELECT DISTINCT *"),
@@ -735,18 +721,20 @@ TEST(SparqlParser, SelectClause) {
                       m::AsteriskSelect(false, true));
   expectSelectFails("SELECT DISTINCT REDUCED *");
   expectSelectFails("SELECT");
-  expectVariablesSelect("SELECT ?foo", {"?foo"});
-  expectVariablesSelect("SELECT ?foo ?baz ?bar", {"?foo", "?baz", "?bar"});
-  expectVariablesSelect("SELECT DISTINCT ?foo ?bar", {"?foo", "?bar"}, true,
-                        false);
-  expectVariablesSelect("SELECT REDUCED ?foo ?bar ?baz",
-                        {"?foo", "?bar", "?baz"}, false, true);
-  expectSelect("SELECT (10 as ?foo) ?bar",
-               {Alias{"10", "?foo"}, Variable{"?bar"}});
-  expectSelect("SELECT DISTINCT (5 - 10 as ?m)", {Alias{"5-10", "?m"}}, true,
-               false);
-  expectSelect("SELECT (5 - 10 as ?m) ?foo (10 as ?bar)",
-               {Alias{"5-10", "?m"}, Variable{"?foo"}, Alias{"10", "?bar"}});
+  expectSelectClause("SELECT ?foo", m::VariablesSelect({"?foo"}));
+  expectSelectClause("SELECT ?foo ?baz ?bar",
+                     m::VariablesSelect({"?foo", "?baz", "?bar"}));
+  expectSelectClause("SELECT DISTINCT ?foo ?bar",
+                     m::VariablesSelect({"?foo", "?bar"}, true, false));
+  expectSelectClause("SELECT REDUCED ?foo ?bar ?baz",
+                     m::VariablesSelect({"?foo", "?bar", "?baz"}, false, true));
+  expectSelectClause("SELECT (10 as ?foo) ?bar",
+                     m::Select({Alias{"10", "?foo"}, Variable{"?bar"}}));
+  expectSelectClause("SELECT DISTINCT (5 - 10 as ?m)",
+                     m::Select({Alias{"5-10", "?m"}}, true, false));
+  expectSelectClause(
+      "SELECT (5 - 10 as ?m) ?foo (10 as ?bar)",
+      m::Select({Alias{"5-10", "?m"}, Variable{"?foo"}, Alias{"10", "?bar"}}));
 }
 
 TEST(SparqlParser, HavingCondition) {

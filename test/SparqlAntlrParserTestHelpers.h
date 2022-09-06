@@ -14,6 +14,7 @@
 #include "parser/SparqlParserHelpers.h"
 #include "parser/data/OrderKey.h"
 #include "parser/data/VarOrTerm.h"
+#include "util/GTestHelpers.h"
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 
@@ -23,20 +24,6 @@
 //  `arg.empty()` is true for the passed std::string `arg`.
 // AD_FIELD(std::pair<int, bool>, second, IsTrue); // Matcher that checks, that
 // `arg.second` is true for a`std::pair<int, bool>`
-
-#ifdef AD_PROPERTY
-#error "AD_PROPERTY must not already be defined. Consider renaming it."
-#else
-#define AD_PROPERTY(Class, Member, Matcher) \
-  testing::Property(#Member "()", &Class::Member, Matcher)
-#endif
-
-#ifdef AD_FIELD
-#error "AD_FIELD must not already be defined. Consider renaming it."
-#else
-#define AD_FIELD(Class, Member, Matcher) \
-  testing::Field(#Member, &Class::Member, Matcher)
-#endif
 
 // Not relevant for the actual test logic, but provides
 // human-readable output if a test fails.
@@ -492,6 +479,7 @@ auto VariablesSelect =
                   testing::Eq(variables)));
 };
 
+namespace detail {
 // A Matcher that matches a SelectClause.
 // This matcher cannot be trivially broken down into a combination of existing
 // googletest matchers because of the way how the aliases are stored in the
@@ -534,6 +522,16 @@ MATCHER_P3(Select, distinct, reduced, selection, "") {
           AD_FIELD(ParsedQuery::SelectClause, _reduced, testing::Eq(reduced))),
       arg, result_listener);
 }
+}  // namespace detail
+
+auto Select =
+    [](std::vector<std::variant<::Variable, std::pair<string, string>>>
+           selection,
+       bool distinct = false,
+       bool reduced = false) -> testing::Matcher<ParsedQuery::SelectClause> {
+  return testing::SafeMatcherCast<ParsedQuery::SelectClause>(
+      detail::Select(distinct, reduced, std::move(selection)));
+};
 
 auto SolutionModifier =
     [](const std::vector<std::variant<

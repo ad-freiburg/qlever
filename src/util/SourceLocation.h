@@ -2,9 +2,9 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 
-//  This compatibility allows the usage of `ad_utility::source_location` (an
-//  alias to C++20's `std::source_location`) consistently across GCC and Clang.
-//  It is necessary, because `source_location` is currently still in the
+//  This compatibility header allows the usage of `ad_utility::source_location`
+//  (an alias to C++20's `std::source_location`) consistently across GCC and
+//  Clang. It is necessary, because `source_location` is currently still in the
 //  `std::experimental` namespaces for Clang.
 
 #pragma once
