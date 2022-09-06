@@ -2487,13 +2487,6 @@ bool QueryPlanner::TripleGraph::isSimilar(
   return true;
 }
 
-/*
-// _____________________________________________________________________________
-bool QueryPlanner::TripleGraph::isPureTextQuery() {
-  return _nodeStorage.size() == 1 && _nodeStorage.begin()->_cvar.size() > 0;
-}
- */
-
 // _____________________________________________________________________________
 void QueryPlanner::setEnablePatternTrick(bool enablePatternTrick) {
   _enablePatternTrick = enablePatternTrick;
