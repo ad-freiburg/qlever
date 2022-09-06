@@ -234,7 +234,11 @@ class MultiVariantMatcher {
     const bool match = matcher_.MatchAndExplain(*elem, &elem_listener);
     *listener << "whose value " << testing::PrintToString(*elem)
               << (match ? " matches" : " doesn't match");
-    testing::internal::PrintIfNotEmpty(elem_listener.str(), listener->stream());
+    // First add our own Explanation and then that of the sub matcher.
+    auto subMatcherExplanation = elem_listener.str();
+    if (!subMatcherExplanation.empty()) {
+      *listener << subMatcherExplanation;
+    }
     return match;
   }
 
