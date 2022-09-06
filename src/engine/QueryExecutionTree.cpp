@@ -1,31 +1,34 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author:
+//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #include "./QueryExecutionTree.h"
-
-#include <absl/strings/str_join.h>
-#include <engine/Bind.h>
-#include <engine/Distinct.h>
-#include <engine/Filter.h>
-#include <engine/GroupBy.h>
-#include <engine/HasPredicateScan.h>
-#include <engine/IndexScan.h>
-#include <engine/Join.h>
-#include <engine/NeutralElementOperation.h>
-#include <engine/OrderBy.h>
-#include <engine/Sort.h>
-#include <engine/TextOperationWithFilter.h>
-#include <engine/TransitivePath.h>
-#include <engine/TwoColumnJoin.h>
-#include <engine/Union.h>
-#include <engine/Values.h>
-#include <parser/RdfEscaping.h>
 
 #include <algorithm>
 #include <sstream>
 #include <string>
 #include <utility>
+
+#include "absl/strings/str_join.h"
+#include "engine/Bind.h"
+#include "engine/CountAvailablePredicates.h"
+#include "engine/Distinct.h"
+#include "engine/Filter.h"
+#include "engine/GroupBy.h"
+#include "engine/HasPredicateScan.h"
+#include "engine/IndexScan.h"
+#include "engine/Join.h"
+#include "engine/NeutralElementOperation.h"
+#include "engine/OrderBy.h"
+#include "engine/Sort.h"
+#include "engine/TextOperationWithFilter.h"
+#include "engine/TransitivePath.h"
+#include "engine/TwoColumnJoin.h"
+#include "engine/Union.h"
+#include "engine/Values.h"
+#include "parser/RdfEscaping.h"
 
 using std::string;
 
@@ -618,6 +621,8 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
     _type = TWO_COL_JOIN;
   } else if constexpr (std::is_same_v<Op, TextOperationWithFilter>) {
     _type = TEXT_WITH_FILTER;
+  } else if constexpr (std::is_same_v<Op, CountAvailablePredicates>) {
+    _type = COUNT_AVAILABLE_PREDICATES;
   } else {
     static_assert(ad_utility::alwaysFalse<Op>,
                   "New type of operation that was not yet registered");
@@ -643,6 +648,8 @@ template void QueryExecutionTree::setOperation(std::shared_ptr<Join>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<TwoColumnJoin>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<TextOperationWithFilter>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<CountAvailablePredicates>);
 
 // ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(

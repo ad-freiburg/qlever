@@ -30,7 +30,9 @@ class CountAvailablePredicates : public Operation {
    * @brief Creates a new CountAvailablePredicates operation that returns
    * predicates and their counts for all entities.
    */
-  explicit CountAvailablePredicates(QueryExecutionContext* qec);
+  explicit CountAvailablePredicates(QueryExecutionContext* qec,
+                                    std::string predicateVariable,
+                                    std::string countVariable);
 
   /**
    * @brief Creates a new CountAvailablePredicates operation that returns
@@ -39,14 +41,18 @@ class CountAvailablePredicates : public Operation {
    */
   CountAvailablePredicates(QueryExecutionContext* qec,
                            std::shared_ptr<QueryExecutionTree> subtree,
-                           size_t subjectColumnIndex);
+                           size_t subjectColumnIndex,
+                           std::string predicateVariable,
+                           std::string countVariable);
 
   /**
    * @brief Creates a new CountAvailblePredicates operation that returns
    * predicates and their counts for the entity given by the entityName.
    */
   CountAvailablePredicates(QueryExecutionContext* qec,
-                           TripleComponent entityName);
+                           TripleComponent entityName,
+                           std::string predicateVariable,
+                           std::string countVariable);
 
  protected:
   [[nodiscard]] string asStringImpl(size_t indent) const override;
@@ -84,9 +90,6 @@ class CountAvailablePredicates : public Operation {
   size_t getSizeEstimate() override;
 
   size_t getCostEstimate() override;
-
-  void setVarNames(const std::string& predicateVarName,
-                   const std::string& countVarName);
 
   // This method is declared here solely for unit testing purposes
   /**
