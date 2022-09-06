@@ -26,6 +26,8 @@ class HasPredicateScan : public Operation {
     SUBQUERY_S
   };
 
+  HasPredicateScan() = delete;
+
   HasPredicateScan(QueryExecutionContext* qec,
                    std::shared_ptr<QueryExecutionTree> subtree,
                    size_t subtreeJoinColumn, std::string objectVariable);
@@ -99,7 +101,7 @@ class HasPredicateScan : public Operation {
  private:
   ScanType _type;
   std::shared_ptr<QueryExecutionTree> _subtree;
-  size_t _subtreeJoinColumn = -1;
+  size_t _subtreeJoinColumn;
 
   std::string _subject;
   std::string _object;
