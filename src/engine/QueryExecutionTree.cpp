@@ -461,7 +461,7 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
                      "Cannot deduce output type.");
         }
       }
-      co_yield(j + 1 < selectedColumnIndices.size() ? sep : '\n');
+      co_yield j + 1 < selectedColumnIndices.size() ? sep : '\n';
     }
   }
   LOG(DEBUG) << "Done creating readable result.\n";

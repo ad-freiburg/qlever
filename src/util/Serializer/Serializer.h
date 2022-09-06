@@ -63,8 +63,7 @@ template <typename S>
 concept WriteSerializer = requires(S s, const char* ptr, size_t numBytes) {
   {
     typename std::decay_t<S>::SerializerType {}
-  }
-  ->std::same_as<WriteSerializerTag>;
+    } -> std::same_as<WriteSerializerTag>;
   {s.serializeBytes(ptr, numBytes)};
 };
 
@@ -74,8 +73,7 @@ template <typename S>
 concept ReadSerializer = requires(S s, char* ptr, size_t numBytes) {
   {
     typename std::decay_t<S>::SerializerType {}
-  }
-  ->std::same_as<ReadSerializerTag>;
+    } -> std::same_as<ReadSerializerTag>;
   {s.serializeBytes(ptr, numBytes)};
 };
 
@@ -114,22 +112,21 @@ static constexpr bool SerializerMatchesConstness =
  * - The second argument to `serialize` is a `T`, `T&`, `const T&`, `T&&` etc.
  * - If the `arg` is const then the serializer is a `WriteSerializer`.
  */
-#define AD_SERIALIZE_FUNCTION(T)                                            \
-  template <ad_utility::serialization::Serializer S,                        \
-            ad_utility::SimilarTo<T> U>                                     \
-  requires ad_utility::serialization::SerializerMatchesConstness<S, U> void \
-  serialize(S& serializer, U&& arg)
+#define AD_SERIALIZE_FUNCTION(T)                                       \
+  template <ad_utility::serialization::Serializer S,                   \
+            ad_utility::SimilarTo<T> U>                                \
+  requires ad_utility::serialization::SerializerMatchesConstness<S, U> \
+  void serialize(S& serializer, U&& arg)
 
 /// Similar to `AD_SERIALIZE_FUNCTION` but defines a `friend` function to also
 /// access private members of a class. It is possible to declare the friend
 /// using `AD_SERIALIZE_FRIEND_FUNCTION(Type);` and to define it outside of the
 /// class with `AD_SERIALIZE_FUNCTION(Type){...}`
-#define AD_SERIALIZE_FRIEND_FUNCTION(T)                           \
-  template <ad_utility::serialization::Serializer S,              \
-            ad_utility::SimilarTo<T> U>                           \
-  requires ad_utility::serialization::SerializerMatchesConstness< \
-      S, U> friend void                                           \
-  serialize(S& serializer, U&& arg)
+#define AD_SERIALIZE_FRIEND_FUNCTION(T)                                \
+  template <ad_utility::serialization::Serializer S,                   \
+            ad_utility::SimilarTo<T> U>                                \
+  requires ad_utility::serialization::SerializerMatchesConstness<S, U> \
+  friend void serialize(S& serializer, U&& arg)
 
 /**
  * Define `serialize` functions for all types that fulfill the `Constraint`.
