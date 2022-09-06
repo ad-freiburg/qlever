@@ -167,7 +167,7 @@ endif()
 
 if (RUN_EXPENSIVE_TESTS)
     message(STATUS "Running expensive unit tests. This is only recommended in release builds")
-    add_definitions("_D_QLEVER_RUN_EXPENSIVE_TESTS")
+    add_definitions("-DQLEVER_RUN_EXPENSIVE_TESTS")
 endif()
 
 ################################
