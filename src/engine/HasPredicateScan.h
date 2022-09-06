@@ -99,7 +99,7 @@ class HasPredicateScan : public Operation {
  private:
   ScanType _type;
   std::shared_ptr<QueryExecutionTree> _subtree;
-  size_t _subtreeColIndex = -1;
+  size_t _subtreeJoinColumn = -1;
 
   std::string _subject;
   std::string _object;

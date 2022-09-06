@@ -108,8 +108,8 @@ class AggregateExpression : public SparqlExpression {
       // would get the operand type, which is not necessarily the `ResultType`.
       // For example, in the COUNT aggregate we calculate a sum of boolean
       // values, but the result is not boolean.
-      using ResultType = std::decay_t<decltype(
-          aggregateOperation._function(std::move(*it), *it))>;
+      using ResultType = std::decay_t<decltype(aggregateOperation._function(
+          std::move(*it), *it))>;
       ResultType result = *it;
       for (++it; it != values.end(); ++it) {
         result =
@@ -134,8 +134,8 @@ class AggregateExpression : public SparqlExpression {
       using ResultType = std::decay_t<decltype(aggregateOperation._function(
           std::move(valueGetter(*it, context)), valueGetter(*it, context)))>;
       ResultType result = valueGetter(*it, context);
-      ad_utility::HashSetWithMemoryLimit<typename decltype(
-          operands)::value_type>
+      ad_utility::HashSetWithMemoryLimit<
+          typename decltype(operands)::value_type>
           uniqueHashSet({*it}, inputSize, context->_allocator);
       for (++it; it != operands.end(); ++it) {
         if (uniqueHashSet.insert(*it).second) {

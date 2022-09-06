@@ -4,6 +4,8 @@
 //          Johannes Kalmbach <johannes.kalmbach@gmail.com>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
+#include "./IndexImpl.h"
+
 #include <absl/strings/str_split.h>
 
 #include <algorithm>
@@ -16,7 +18,6 @@
 #include "../util/Conversions.h"
 #include "../util/Simple8bCode.h"
 #include "./FTSAlgorithms.h"
-#include "./IndexImpl.h"
 
 namespace {
 
