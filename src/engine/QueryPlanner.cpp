@@ -2488,43 +2488,6 @@ bool QueryPlanner::TripleGraph::isSimilar(
 }
 
 // _____________________________________________________________________________
-bool QueryPlanner::TripleGraph::isPureTextQuery() {
-  return _nodeStorage.size() == 1 && _nodeStorage.begin()->_cvar.size() > 0;
-}
-
-// _____________________________________________________________________________
-ad_utility::HashMap<string, size_t>
-QueryPlanner::createVariableColumnsMapForTextOperation(
-    const string& contextVar, const string& entityVar,
-    const ad_utility::HashSet<string>& freeVars,
-    const vector<pair<QueryExecutionTree, size_t>>& subtrees) {
-  AD_CHECK(!contextVar.empty());
-  ad_utility::HashMap<string, size_t> map;
-  size_t n = 0;
-  if (!entityVar.empty()) {
-    map[entityVar] = n++;
-    map[absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, contextVar.substr(1))] = n++;
-    map[contextVar] = n++;
-  } else {
-    map[contextVar] = n++;
-    map[absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, contextVar.substr(1))] = n++;
-  }
-
-  for (const auto& v : freeVars) {
-    map[v] = n++;
-  }
-
-  for (const auto& subtree : subtrees) {
-    size_t offset = n;
-    for (const auto& [variable, index] : subtree.first.getVariableColumns()) {
-      map[variable] = offset + index;
-      ++n;
-    }
-  }
-  return map;
-}
-
-// _____________________________________________________________________________
 void QueryPlanner::setEnablePatternTrick(bool enablePatternTrick) {
   _enablePatternTrick = enablePatternTrick;
 }

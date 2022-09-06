@@ -119,8 +119,6 @@ class QueryPlanner {
 
     void collapseTextCliques();
 
-    bool isPureTextQuery();
-
    private:
     vector<pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
         const vector<SparqlFilter>& origFilters,
@@ -160,36 +158,6 @@ class QueryPlanner {
 
   TripleGraph createTripleGraph(
       const GraphPatternOperation::BasicGraphPattern* pattern) const;
-
-  static ad_utility::HashMap<string, size_t>
-  createVariableColumnsMapForTextOperation(
-      const string& contextVar, const string& entityVar,
-      const ad_utility::HashSet<string>& freeVars,
-      const vector<pair<QueryExecutionTree, size_t>>& subtrees);
-
-  static ad_utility::HashMap<string, size_t>
-  createVariableColumnsMapForTextOperation(
-      const string& contextVar, const string& entityVar,
-      const vector<pair<QueryExecutionTree, size_t>>& subtrees) {
-    return createVariableColumnsMapForTextOperation(
-        contextVar, entityVar, ad_utility::HashSet<string>(), subtrees);
-  };
-
-  static ad_utility::HashMap<string, size_t>
-  createVariableColumnsMapForTextOperation(const string& contextVar,
-                                           const string& entityVar) {
-    return createVariableColumnsMapForTextOperation(
-        contextVar, entityVar, vector<pair<QueryExecutionTree, size_t>>());
-  }
-
-  static ad_utility::HashMap<string, size_t>
-  createVariableColumnsMapForTextOperation(
-      const string& contextVar, const string& entityVar,
-      const ad_utility::HashSet<string>& freeVars) {
-    return createVariableColumnsMapForTextOperation(
-        contextVar, entityVar, freeVars,
-        vector<pair<QueryExecutionTree, size_t>>());
-  };
 
   void setEnablePatternTrick(bool enablePatternTrick);
 
