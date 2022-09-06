@@ -110,8 +110,8 @@ void VocabularyOnDisk::buildFromStringsAndIds(
 void VocabularyOnDisk::buildFromTextFile(const string& textFileName,
                                          const string& outFileName) {
   auto infile = ad_utility::makeIfstream(textFileName);
-  auto lineGenerator =
-      [&infile]() -> cppcoro::generator<std::pair<std::string_view, uint64_t>> {
+  auto lineGenerator = [](auto infile)
+      -> cppcoro::generator<std::pair<std::string_view, uint64_t>> {
     std::string word;
     uint64_t index = 0;
     while (std::getline(infile, word)) {
@@ -123,7 +123,7 @@ void VocabularyOnDisk::buildFromTextFile(const string& textFileName,
       co_yield std::pair{std::string_view{word}, index};
       index++;
     }
-  }();
+  }(std::move(infile));
   buildFromIterable(std::move(lineGenerator), outFileName);
 }
 
