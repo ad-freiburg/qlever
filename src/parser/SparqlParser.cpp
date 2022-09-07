@@ -418,7 +418,12 @@ auto SparqlParser::parseWithAntlr(
 }
 
 // _____________________________________________________________________________
-SparqlFilter SparqlParser::parseFilterExpression(const string& filterContent) {
+SparqlFilter SparqlParser::parseFilterExpression(const string& filterContent, const SparqlQleverVisitor::PrefixMap& prefixMap) {
   SparqlParser parser(filterContent);
-  return parser.parseFilter(true).value();
+  auto filter = parser.parseFilter(true).value();
+  ParsedQuery::expandPrefix(filter._lhs, prefixMap);
+  if (filter._type != SparqlFilter::REGEX) {
+    ParsedQuery::expandPrefix(filter._rhs, prefixMap);
+  }
+  return filter;
 }
