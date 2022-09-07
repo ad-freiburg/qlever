@@ -1286,13 +1286,14 @@ TEST(QueryPlannerTest, testSimpleOptional) {
 TEST(QueryPlannerTest, SimpleTripleOneVariable) {
   using enum IndexScan::ScanType;
 
-  // If there's only one variable, the query planner always chooses the same
-  // permutation, because it doesn't make a difference.
-  h::expect("SELECT * WHERE {?s <p> <o> }",
+  // With only one variable, there are always two permutations that will yield
+  // exactly the same result. The query planner consistently chosses one of
+  // them.
+  h::expect("SELECT * WHERE { ?s <p> <o> }",
             h::IndexScan("?s", "<p>", "<o>", {POS_BOUND_O}));
-  h::expect("SELECT * WHERE {<s> ?p <o> }",
+  h::expect("SELECT * WHERE { <s> ?p <o> }",
             h::IndexScan("<s>", "?p", "<o>", {SOP_BOUND_O}));
-  h::expect("SELECT * WHERE {<s> <p> ?o }",
+  h::expect("SELECT * WHERE { <s> <p> ?o }",
             h::IndexScan("<s>", "<p>", "?o", {PSO_BOUND_S}));
 }
 
@@ -1300,29 +1301,30 @@ TEST(QueryPlannerTest, SimpleTripleTwoVariables) {
   using enum IndexScan::ScanType;
 
   // Fixed predicate.
-  // Don't care about the ordering.
-  h::expect("SELECT * WHERE {?s <p> ?o }",
+
+  // Without `Order By`, two orderings are possible, both are fine.
+  h::expect("SELECT * WHERE { ?s <p> ?o }",
             h::IndexScan("?s", "<p>", "?o", {POS_FREE_O, PSO_FREE_S}));
   // Must always be a single index scan, never index scan + sorting.
-  h::expect("SELECT * WHERE {?s <p> ?o } ORDER BY ?o",
+  h::expect("SELECT * WHERE { ?s <p> ?o } ORDER BY ?o",
             h::IndexScan("?s", "<p>", "?o", {POS_FREE_O}));
-  h::expect("SELECT * WHERE {?s <p> ?o } ORDER BY ?s",
+  h::expect("SELECT * WHERE { ?s <p> ?o } ORDER BY ?s",
             h::IndexScan("?s", "<p>", "?o", {PSO_FREE_S}));
 
   // Fixed subject.
-  h::expect("SELECT * WHERE {<s> ?p ?o }",
+  h::expect("SELECT * WHERE { <s> ?p ?o }",
             h::IndexScan("<s>", "?p", "?o", {SOP_FREE_O, SPO_FREE_P}));
-  h::expect("SELECT * WHERE {<s> ?p ?o } ORDER BY ?o",
+  h::expect("SELECT * WHERE { <s> ?p ?o } ORDER BY ?o",
             h::IndexScan("<s>", "?p", "?o", {SOP_FREE_O}));
-  h::expect("SELECT * WHERE {<s> ?p ?o } ORDER BY ?p",
+  h::expect("SELECT * WHERE { <s> ?p ?o } ORDER BY ?p",
             h::IndexScan("<s>", "?p", "?o", {SPO_FREE_P}));
 
   // Fixed object.
-  h::expect("SELECT * WHERE {<s> ?p ?o }",
+  h::expect("SELECT * WHERE { <s> ?p ?o }",
             h::IndexScan("<s>", "?p", "?o", {SOP_FREE_O, SPO_FREE_P}));
-  h::expect("SELECT * WHERE {<s> ?p ?o } ORDER BY ?o",
+  h::expect("SELECT * WHERE { <s> ?p ?o } ORDER BY ?o",
             h::IndexScan("<s>", "?p", "?o", {SOP_FREE_O}));
-  h::expect("SELECT * WHERE {<s> ?p ?o } ORDER BY ?p",
+  h::expect("SELECT * WHERE { <s> ?p ?o } ORDER BY ?p",
             h::IndexScan("<s>", "?p", "?o", {SPO_FREE_P}));
 }
 
@@ -1331,34 +1333,34 @@ TEST(QueryPlannerTest, SimpleTripleThreeVariables) {
 
   // Fixed predicate.
   // Don't care about the sorting.
-  h::expect("SELECT * WHERE {?s ?p ?o }",
+  h::expect("SELECT * WHERE { ?s ?p ?o }",
             h::IndexScan("?s", "?p", "?o",
                          {FULL_INDEX_SCAN_SPO, FULL_INDEX_SCAN_SOP,
                           FULL_INDEX_SCAN_PSO, FULL_INDEX_SCAN_POS,
                           FULL_INDEX_SCAN_OSP, FULL_INDEX_SCAN_OPS}));
 
   // Sorted by one variable, two possible permutations remain.
-  h::expect("SELECT * WHERE {?s ?p ?o } ORDER BY ?s",
+  h::expect("SELECT * WHERE { ?s ?p ?o } ORDER BY ?s",
             h::IndexScan("?s", "?p", "?o",
                          {FULL_INDEX_SCAN_SPO, FULL_INDEX_SCAN_SOP}));
-  h::expect("SELECT * WHERE {?s ?p ?o } ORDER BY ?p",
+  h::expect("SELECT * WHERE { ?s ?p ?o } ORDER BY ?p",
             h::IndexScan("?s", "?p", "?o",
                          {FULL_INDEX_SCAN_POS, FULL_INDEX_SCAN_PSO}));
-  h::expect("SELECT * WHERE {?s ?p ?o } ORDER BY ?o",
+  h::expect("SELECT * WHERE { ?s ?p ?o } ORDER BY ?o",
             h::IndexScan("?s", "?p", "?o",
                          {FULL_INDEX_SCAN_OSP, FULL_INDEX_SCAN_OPS}));
 
   // Sorted by two variables, this makes the permutation unique.
-  h::expect("SELECT * WHERE {?s ?p ?o } ORDER BY ?s ?o",
+  h::expect("SELECT * WHERE { ?s ?p ?o } ORDER BY ?s ?o",
             h::IndexScan("?s", "?p", "?o", {FULL_INDEX_SCAN_SOP}));
-  h::expect("SELECT * WHERE {?s ?p ?o } ORDER BY ?s ?p",
+  h::expect("SELECT * WHERE { ?s ?p ?o } ORDER BY ?s ?p",
             h::IndexScan("?s", "?p", "?o", {FULL_INDEX_SCAN_SPO}));
-  h::expect("SELECT * WHERE {?s ?p ?o } ORDER BY ?o ?s",
+  h::expect("SELECT * WHERE { ?s ?p ?o } ORDER BY ?o ?s",
             h::IndexScan("?s", "?p", "?o", {FULL_INDEX_SCAN_OSP}));
-  h::expect("SELECT * WHERE {?s ?p ?o } ORDER BY ?o ?p",
+  h::expect("SELECT * WHERE { ?s ?p ?o } ORDER BY ?o ?p",
             h::IndexScan("?s", "?p", "?o", {FULL_INDEX_SCAN_OPS}));
-  h::expect("SELECT * WHERE {?s ?p ?o } ORDER BY ?p ?s",
+  h::expect("SELECT * WHERE { ?s ?p ?o } ORDER BY ?p ?s",
             h::IndexScan("?s", "?p", "?o", {FULL_INDEX_SCAN_PSO}));
-  h::expect("SELECT * WHERE {?s ?p ?o } ORDER BY ?p ?o",
+  h::expect("SELECT * WHERE { ?s ?p ?o } ORDER BY ?p ?o",
             h::IndexScan("?s", "?p", "?o", {FULL_INDEX_SCAN_POS}));
 }
