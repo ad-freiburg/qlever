@@ -84,7 +84,7 @@ class QueryPlanner {
 
       friend std::ostream& operator<<(std::ostream& out, const Node& n) {
         out << "id: " << n._id << " triple: " << n._triple.asString()
-            << " _vars ";
+            << " vars_ ";
         for (const std::string& s : n._variables) {
           out << s << ", ";
         }
@@ -286,11 +286,11 @@ class QueryPlanner {
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
 
   vector<SubtreePlan> getDistinctRow(
-      const ParsedQuery::SelectClause& selectClause,
+      const parsedQuery::SelectClause& selectClause,
       const vector<vector<SubtreePlan>>& dpTab) const;
 
   vector<SubtreePlan> getPatternTrickRow(
-      const ParsedQuery::SelectClause& selectClause,
+      const parsedQuery::SelectClause& selectClause,
       const vector<vector<SubtreePlan>>& dpTab,
       const SparqlTriple& patternTrickTriple);
 

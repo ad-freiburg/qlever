@@ -114,7 +114,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   // DISTINCT
   if (pq.hasSelectClause()) {
     const auto& selectClause = pq.selectClause();
-    if (selectClause._distinct) {
+    if (selectClause.distinct_) {
       plans.emplace_back(getDistinctRow(selectClause, plans));
     }
   }
@@ -511,6 +511,7 @@ bool QueryPlanner::checkUsePatternTrick(
 
   if (returns_counts) {
     // We have already verified above that there is exactly one alias.
+    // TODO<joka921> this should be `DISTINCT` not `nonDistinct`.
     const Alias& alias = aliases.front();
     auto countVariable =
         alias._expression.getVariableForNonDistinctCountOrNullopt();
@@ -787,8 +788,8 @@ bool QueryPlanner::checkUsePatternTrick(
   // into the root
   auto sub =
   root._graphPatterns[0].get<GraphPatternOperation::Subquery>()._subquery; if
-  (!sub._distinct || sub._groupByVariables.size() > 0 ||
-      sub._selectClause._aliases.size() > 0 ||
+  (!sub.distinct_ || sub._groupByVariables.size() > 0 ||
+      sub._selectClause.aliases_.size() > 0 ||
   sub._selectClause._selectedVariables.size() != 2) { return false;
   }
   // Also check that it returns the correct variables
@@ -874,7 +875,7 @@ bool QueryPlanner::checkUsePatternTrick(
 
 // _____________________________________________________________________________
 vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
-    const ParsedQuery::SelectClause& selectClause,
+    const parsedQuery::SelectClause& selectClause,
     const vector<vector<SubtreePlan>>& dpTab) const {
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
@@ -928,7 +929,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
 
 // _____________________________________________________________________________
 vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
-    const ParsedQuery::SelectClause& selectClause,
+    const parsedQuery::SelectClause& selectClause,
     const vector<vector<SubtreePlan>>& dpTab,
     const SparqlTriple& patternTrickTriple) {
   const vector<SubtreePlan>* previous = nullptr;

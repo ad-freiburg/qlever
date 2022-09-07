@@ -476,8 +476,8 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(false, pq._orderBy[0].isDescending_);
       ASSERT_EQ("?movie", pq._orderBy[0].variable_);
 
-      auto sc = get<ParsedQuery::SelectClause>(pq._clause);
-      ASSERT_EQ(true, sc._reduced);
+      auto sc = get<parsedQuery::SelectClause>(pq._clause);
+      ASSERT_EQ(true, sc.reduced_);
       ASSERT_EQ(true, sc.isAsterisk());
 
       vector<string> vvars = {"?movie", "?director"};
@@ -509,7 +509,7 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ("?movie", pq._orderBy[0].variable_);
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
-      ASSERT_EQ(true, sc._distinct);
+      ASSERT_EQ(true, sc.distinct_);
       ASSERT_EQ(true, sc.isAsterisk());
 
       vector<string> vvars = {"?movie", "?director"};
@@ -551,7 +551,7 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ("?movie", pq._orderBy[0].variable_);
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
-      ASSERT_EQ(true, sc._distinct);
+      ASSERT_EQ(true, sc.distinct_);
       ASSERT_EQ(true, sc.isAsterisk());
 
       vector<string> vvars = {"?movie", "?director", "?year"};
@@ -591,8 +591,8 @@ TEST(ParserTest, testParse) {
 
       auto sc_subquery =
           get<ParsedQuery::SelectClause>(parsed_sub_query._subquery._clause);
-      ASSERT_EQ(false, sc_subquery._distinct);
-      ASSERT_EQ(false, sc_subquery._reduced);
+      ASSERT_EQ(false, sc_subquery.distinct_);
+      ASSERT_EQ(false, sc_subquery.reduced_);
       ASSERT_EQ(true, sc_subquery.isAsterisk());
       vector<string> vvars_subquery = {"?movie", "?director", "?year"};
       ASSERT_EQ(vvars_subquery, sc_subquery.getSelectedVariablesAsStrings());
@@ -638,7 +638,7 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ("?movie", pq._orderBy[0].variable_);
 
       auto sc = get<ParsedQuery::SelectClause>(pq._clause);
-      ASSERT_EQ(true, sc._distinct);
+      ASSERT_EQ(true, sc.distinct_);
       ASSERT_EQ(true, sc.isAsterisk());
 
       vector<string> vvars = {"?movie", "?director", "?year"};
@@ -674,8 +674,8 @@ TEST(ParserTest, testParse) {
 
       auto sc_subquery =
           get<ParsedQuery::SelectClause>(parsed_sub_query._subquery._clause);
-      ASSERT_EQ(false, sc_subquery._distinct);
-      ASSERT_EQ(false, sc_subquery._reduced);
+      ASSERT_EQ(false, sc_subquery.distinct_);
+      ASSERT_EQ(false, sc_subquery.reduced_);
       ASSERT_EQ(true, sc_subquery.isAsterisk());
       vector<string> vvars_subquery = {"?movie", "?director", "?year"};
       ASSERT_EQ(vvars_subquery, sc_subquery.getSelectedVariablesAsStrings());
@@ -706,8 +706,8 @@ TEST(ParserTest, testParse) {
 
       auto sc_sub_subquery =
           get<ParsedQuery::SelectClause>(aux_parsed_sub_sub_query._clause);
-      ASSERT_EQ(false, sc_sub_subquery._distinct);
-      ASSERT_EQ(false, sc_sub_subquery._reduced);
+      ASSERT_EQ(false, sc_sub_subquery.distinct_);
+      ASSERT_EQ(false, sc_sub_subquery.reduced_);
       ASSERT_EQ(false, sc_sub_subquery.isAsterisk());
       vector<string> vvars_sub_subquery = {"?year"};
       ASSERT_EQ(vvars_sub_subquery,
@@ -894,8 +894,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(std::numeric_limits<uint64_t>::max(), pq._limitOffset._limit);
     ASSERT_EQ(0, pq._limitOffset._offset);
     ASSERT_EQ(size_t(0), pq._orderBy.size());
-    ASSERT_FALSE(selectClause._distinct);
-    ASSERT_FALSE(selectClause._reduced);
+    ASSERT_FALSE(selectClause.distinct_);
+    ASSERT_FALSE(selectClause.reduced_);
   }
 
   {
@@ -912,8 +912,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(10ul, pq._limitOffset._limit);
     ASSERT_EQ(0, pq._limitOffset._offset);
     ASSERT_EQ(size_t(0), pq._orderBy.size());
-    ASSERT_FALSE(selectClause._distinct);
-    ASSERT_FALSE(selectClause._reduced);
+    ASSERT_FALSE(selectClause.distinct_);
+    ASSERT_FALSE(selectClause.reduced_);
   }
 
   {
@@ -932,8 +932,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(10u, pq._limitOffset._limit);
     ASSERT_EQ(15u, pq._limitOffset._offset);
     ASSERT_EQ(size_t(0), pq._orderBy.size());
-    ASSERT_FALSE(selectClause._distinct);
-    ASSERT_FALSE(selectClause._reduced);
+    ASSERT_FALSE(selectClause.distinct_);
+    ASSERT_FALSE(selectClause.reduced_);
   }
 
   {
@@ -954,8 +954,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(size_t(1), pq._orderBy.size());
     ASSERT_EQ("?y", pq._orderBy[0].variable_);
     ASSERT_FALSE(pq._orderBy[0].isDescending_);
-    ASSERT_TRUE(selectClause._distinct);
-    ASSERT_FALSE(selectClause._reduced);
+    ASSERT_TRUE(selectClause.distinct_);
+    ASSERT_FALSE(selectClause.reduced_);
   }
 
   {
@@ -981,8 +981,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_FALSE(pq._orderBy[0].isDescending_);
     ASSERT_EQ("?ql_textscore_x", pq._orderBy[1].variable_);
     ASSERT_TRUE(pq._orderBy[1].isDescending_);
-    ASSERT_TRUE(selectClause._distinct);
-    ASSERT_FALSE(selectClause._reduced);
+    ASSERT_TRUE(selectClause.distinct_);
+    ASSERT_FALSE(selectClause.reduced_);
   }
 
   {
@@ -1005,8 +1005,8 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_TRUE(pq._orderBy[0].isDescending_);
     ASSERT_EQ("?y", pq._orderBy[1].variable_);
     ASSERT_FALSE(pq._orderBy[1].isDescending_);
-    ASSERT_FALSE(selectClause._distinct);
-    ASSERT_TRUE(selectClause._reduced);
+    ASSERT_FALSE(selectClause.distinct_);
+    ASSERT_TRUE(selectClause.reduced_);
   }
 
   {
