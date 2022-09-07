@@ -32,6 +32,8 @@
 
 using std::string;
 
+using parsedQuery::SelectClause;
+
 // _____________________________________________________________________________
 QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
     : _qec(qec),

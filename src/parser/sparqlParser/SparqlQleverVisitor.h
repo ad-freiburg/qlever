@@ -163,7 +163,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  ParsedQuery::SelectClause visitTypesafe(Parser::SelectClauseContext* ctx);
+  parsedQuery::SelectClause visitTypesafe(Parser::SelectClauseContext* ctx);
 
   Any visitVarOrAlias(Parser::VarOrAliasContext* ctx) override {
     return visitTypesafe(ctx);

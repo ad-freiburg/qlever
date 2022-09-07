@@ -104,19 +104,18 @@ class QueryExecutionTree {
     ResultTable::ResultType _resultType;
   };
 
-  using SelectClause = ParsedQuery::SelectClause;
-
   using ColumnIndicesAndTypes = vector<std::optional<VariableAndColumnIndex>>;
 
   // Returns a vector where the i-th element contains the column index and
   // `ResultType` of the i-th `selectVariable` in the `resultTable`
   ColumnIndicesAndTypes selectedVariablesToColumnIndices(
-      const SelectClause& selectClause, const ResultTable& resultTable,
-      bool includeQuestionMark = true) const;
+      const parsedQuery::SelectClause& selectClause,
+      const ResultTable& resultTable, bool includeQuestionMark = true) const;
 
   template <ExportSubFormat format>
   ad_utility::streams::stream_generator generateResults(
-      const SelectClause& selectClause, size_t limit, size_t offset) const;
+      const parsedQuery::SelectClause& selectClause, size_t limit,
+      size_t offset) const;
 
   // Generate an RDF graph in turtle format for a CONSTRUCT query.
   ad_utility::streams::stream_generator writeRdfGraphTurtle(
@@ -135,11 +134,12 @@ class QueryExecutionTree {
       size_t offset, std::shared_ptr<const ResultTable> res) const;
 
   nlohmann::json writeResultAsQLeverJson(
-      const SelectClause& selectClause, size_t limit, size_t offset,
-      shared_ptr<const ResultTable> resultTable = nullptr) const;
+      const parsedQuery::SelectClause& selectClause, size_t limit,
+      size_t offset, shared_ptr<const ResultTable> resultTable = nullptr) const;
 
   nlohmann::json writeResultAsSparqlJson(
-      const SelectClause& selectClause, size_t limit, size_t offset,
+      const parsedQuery::SelectClause& selectClause, size_t limit,
+      size_t offset,
       shared_ptr<const ResultTable> preComputedResult = nullptr) const;
 
   const std::vector<size_t>& resultSortedOn() const {
