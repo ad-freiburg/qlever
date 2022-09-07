@@ -7,33 +7,38 @@
 #include "./CallFixedSize.h"
 
 // _____________________________________________________________________________
-CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec)
+CountAvailablePredicates::CountAvailablePredicates(
+    QueryExecutionContext* qec, std::string predicateVariable,
+    std::string countVariable)
     : Operation(qec),
       _subtree(nullptr),
       _subjectColumnIndex(0),
       _subjectEntityName(),
-      _predicateVarName("predicate"),
-      _countVarName("count") {}
+      _predicateVarName(std::move(predicateVariable)),
+      _countVarName(std::move(countVariable)) {}
 
 // _____________________________________________________________________________
 CountAvailablePredicates::CountAvailablePredicates(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
-    size_t subjectColumnIndex)
+    size_t subjectColumnIndex, std::string predicateVariable,
+    std::string countVariable)
     : Operation(qec),
-      _subtree(subtree),
+      _subtree(QueryExecutionTree::createSortedTree(std::move(subtree),
+                                                    {subjectColumnIndex})),
       _subjectColumnIndex(subjectColumnIndex),
       _subjectEntityName(),
-      _predicateVarName("predicate"),
-      _countVarName("count") {}
+      _predicateVarName(std::move(predicateVariable)),
+      _countVarName(std::move(countVariable)) {}
 
-CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec,
-                                                   TripleComponent entityName)
+CountAvailablePredicates::CountAvailablePredicates(
+    QueryExecutionContext* qec, TripleComponent entityName,
+    std::string predicateVariable, std::string countVariable)
     : Operation(qec),
       _subtree(nullptr),
       _subjectColumnIndex(0),
       _subjectEntityName(entityName.getString()),
-      _predicateVarName("predicate"),
-      _countVarName("count") {}
+      _predicateVarName(std::move(predicateVariable)),
+      _countVarName(std::move(countVariable)) {}
 
 // _____________________________________________________________________________
 string CountAvailablePredicates::asStringImpl(size_t indent) const {
@@ -69,13 +74,6 @@ size_t CountAvailablePredicates::getResultWidth() const { return 2; }
 vector<size_t> CountAvailablePredicates::resultSortedOn() const {
   // The result is not sorted on any column.
   return {};
-}
-
-// _____________________________________________________________________________
-void CountAvailablePredicates::setVarNames(const std::string& predicateVarName,
-                                           const std::string& countVarName) {
-  _predicateVarName = predicateVarName;
-  _countVarName = countVarName;
 }
 
 // _____________________________________________________________________________

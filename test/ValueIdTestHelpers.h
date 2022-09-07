@@ -8,6 +8,13 @@
 #include "../src/global/ValueId.h"
 #include "../src/util/Random.h"
 
+// Enabling cheaper unit tests when building in Debug mode
+#ifdef QLEVER_RUN_EXPENSIVE_TESTS
+static constexpr size_t numElements = 10'000;
+#else
+static constexpr size_t numElements = 10;
+#endif
+
 inline auto positiveRepresentableDoubleGenerator = RandomDoubleGenerator(
     ValueId::minPositiveDouble, std::numeric_limits<double>::max());
 inline auto negativeRepresentableDoubleGenerator = RandomDoubleGenerator(
@@ -49,7 +56,7 @@ inline uint64_t getTextRecordIndex(ValueId id) {
 inline auto addIdsFromGenerator = [](auto& generator, auto makeIds,
                                      std::vector<ValueId>& ids) {
   SlowRandomIntGenerator<uint8_t> numRepetitionGenerator(1, 4);
-  for (size_t i = 0; i < 10'000; ++i) {
+  for (size_t i = 0; i < numElements; ++i) {
     auto randomValue = generator();
     auto numRepetitions = numRepetitionGenerator();
     for (size_t j = 0; j < numRepetitions; ++j) {
@@ -64,7 +71,7 @@ inline auto makeRandomDoubleIds = []() {
   addIdsFromGenerator(negativeRepresentableDoubleGenerator,
                       &ValueId::makeFromDouble, ids);
 
-  for (size_t i = 0; i < 1000; ++i) {
+  for (size_t i = 0; i < numElements; ++i) {
     ids.push_back(ValueId::makeFromDouble(0.0));
     ids.push_back(ValueId::makeFromDouble(-0.0));
     auto inf = std::numeric_limits<double>::infinity();
@@ -91,7 +98,7 @@ inline auto makeRandomIds = []() {
   addIdsFromGenerator(overflowingNBitGenerator, &ValueId::makeFromInt, ids);
   addIdsFromGenerator(underflowingNBitGenerator, &ValueId::makeFromInt, ids);
 
-  for (size_t i = 0; i < 10'000; ++i) {
+  for (size_t i = 0; i < numElements; ++i) {
     ids.push_back(ValueId::makeUndefined());
   }
 

@@ -42,7 +42,7 @@ string ParsedQuery::asString() const {
     // TODO<joka921> is this needed?
     /*
     os <<
-    absl::StrJoin(selectClause._varsAndAliasesOrAsterisk.getSelectedVariables(),
+    absl::StrJoin(selectClause.varsAndAliasesOrAsterisk_.getSelectedVariables(),
                         ", ");
                         */
     os << "\n}";
@@ -78,9 +78,9 @@ string ParsedQuery::asString() const {
   os << "\nOFFSET: " << (_limitOffset._offset);
   if (usesSelect) {
     const auto& selectClause = this->selectClause();
-    os << "\nDISTINCT modifier is " << (selectClause._distinct ? "" : "not ")
+    os << "\nDISTINCT modifier is " << (selectClause.distinct_ ? "" : "not ")
        << "present.";
-    os << "\nREDUCED modifier is " << (selectClause._reduced ? "" : "not ")
+    os << "\nREDUCED modifier is " << (selectClause.reduced_ ? "" : "not ")
        << "present.";
   }
   os << "\nORDER BY: ";

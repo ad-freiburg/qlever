@@ -114,7 +114,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   // DISTINCT
   if (pq.hasSelectClause()) {
     const auto& selectClause = pq.selectClause();
-    if (selectClause._distinct) {
+    if (selectClause.distinct_) {
       plans.emplace_back(getDistinctRow(selectClause, plans));
     }
   }
@@ -511,6 +511,7 @@ bool QueryPlanner::checkUsePatternTrick(
 
   if (returns_counts) {
     // We have already verified above that there is exactly one alias.
+    // TODO<joka921> this should be `DISTINCT` not `nonDistinct`.
     const Alias& alias = aliases.front();
     auto countVariable =
         alias._expression.getVariableForNonDistinctCountOrNullopt();
@@ -787,8 +788,8 @@ bool QueryPlanner::checkUsePatternTrick(
   // into the root
   auto sub =
   root._graphPatterns[0].get<GraphPatternOperation::Subquery>()._subquery; if
-  (!sub._distinct || sub._groupByVariables.size() > 0 ||
-      sub._selectClause._aliases.size() > 0 ||
+  (!sub.distinct_ || sub._groupByVariables.size() > 0 ||
+      sub._selectClause.aliases_.size() > 0 ||
   sub._selectClause._selectedVariables.size() != 2) { return false;
   }
   // Also check that it returns the correct variables
@@ -874,7 +875,7 @@ bool QueryPlanner::checkUsePatternTrick(
 
 // _____________________________________________________________________________
 vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
-    const ParsedQuery::SelectClause& selectClause,
+    const parsedQuery::SelectClause& selectClause,
     const vector<vector<SubtreePlan>>& dpTab) const {
   const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
   vector<SubtreePlan> added;
@@ -928,7 +929,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
 
 // _____________________________________________________________________________
 vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
-    const ParsedQuery::SelectClause& selectClause,
+    const parsedQuery::SelectClause& selectClause,
     const vector<vector<SubtreePlan>>& dpTab,
     const SparqlTriple& patternTrickTriple) {
   const vector<SubtreePlan>* previous = nullptr;
@@ -937,6 +938,10 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     previous = &dpTab.back();
   }
   vector<SubtreePlan> added;
+
+  std::string predicateVariable = patternTrickTriple._o.getString();
+  std::string countVariable =
+      aliases.empty() ? generateUniqueVarName() : aliases[0]._outVarName;
   if (previous != nullptr && !previous->empty()) {
     added.reserve(previous->size());
     for (const auto& parent : *previous) {
@@ -944,55 +949,20 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
       // interested in their predicates.
       auto subjectColumn =
           parent._qet->getVariableColumn(patternTrickTriple._s.getString());
-      const std::vector<size_t>& resultSortedOn =
-          parent._qet->getRootOperation()->getResultSortedOn();
-      bool isSorted =
-          !resultSortedOn.empty() && resultSortedOn[0] == subjectColumn;
-      // a and b need to be ordered properly first
-      vector<pair<size_t, bool>> sortIndices = {
-          std::make_pair(subjectColumn, false)};
-
-      SubtreePlan orderByPlan =
-          makeSubtreePlan<OrderBy>(_qec, parent._qet, sortIndices);
-      SubtreePlan patternTrickPlan(_qec);
-      auto countPred = std::make_shared<CountAvailablePredicates>(
-          _qec, isSorted ? parent._qet : orderByPlan._qet, subjectColumn);
-
-      countPred->setVarNames(patternTrickTriple._o.getString(),
-                             aliases[0]._outVarName);
-      QueryExecutionTree& tree = *patternTrickPlan._qet;
-      tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
-                        countPred);
-      added.push_back(patternTrickPlan);
+      auto patternTrickPlan = makeSubtreePlan<CountAvailablePredicates>(
+          _qec, parent._qet, subjectColumn, predicateVariable, countVariable);
+      added.push_back(std::move(patternTrickPlan));
     }
   } else if (!patternTrickTriple._s.isVariable()) {
     // The subject of the pattern trick is not a variable
-    SubtreePlan patternTrickPlan(_qec);
-    auto countPred =
-        std::make_shared<CountAvailablePredicates>(_qec, patternTrickTriple._s);
-
-    countPred->setVarNames(patternTrickTriple._o.getString(),
-                           aliases[0]._outVarName);
-    QueryExecutionTree& tree = *patternTrickPlan._qet;
-    tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
-                      countPred);
-    added.push_back(patternTrickPlan);
+    SubtreePlan patternTrickPlan = makeSubtreePlan<CountAvailablePredicates>(
+        _qec, patternTrickTriple._s, predicateVariable, countVariable);
+    added.push_back(std::move(patternTrickPlan));
   } else {
     // Use the pattern trick without a subtree
-    SubtreePlan patternTrickPlan(_qec);
-    auto countPred = std::make_shared<CountAvailablePredicates>(_qec);
-
-    if (!aliases.empty()) {
-      countPred->setVarNames(patternTrickTriple._o.getString(),
-                             aliases[0]._outVarName);
-    } else {
-      countPred->setVarNames(patternTrickTriple._o.getString(),
-                             generateUniqueVarName());
-    }
-    QueryExecutionTree& tree = *patternTrickPlan._qet;
-    tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
-                      countPred);
-    added.push_back(patternTrickPlan);
+    SubtreePlan patternTrickPlan = makeSubtreePlan<CountAvailablePredicates>(
+        _qec, predicateVariable, countVariable);
+    added.push_back(std::move(patternTrickPlan));
   }
   return added;
 }
@@ -2488,43 +2458,6 @@ bool QueryPlanner::TripleGraph::isSimilar(
 }
 
 // _____________________________________________________________________________
-bool QueryPlanner::TripleGraph::isPureTextQuery() {
-  return _nodeStorage.size() == 1 && _nodeStorage.begin()->_cvar.size() > 0;
-}
-
-// _____________________________________________________________________________
-ad_utility::HashMap<string, size_t>
-QueryPlanner::createVariableColumnsMapForTextOperation(
-    const string& contextVar, const string& entityVar,
-    const ad_utility::HashSet<string>& freeVars,
-    const vector<pair<QueryExecutionTree, size_t>>& subtrees) {
-  AD_CHECK(!contextVar.empty());
-  ad_utility::HashMap<string, size_t> map;
-  size_t n = 0;
-  if (!entityVar.empty()) {
-    map[entityVar] = n++;
-    map[absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, contextVar.substr(1))] = n++;
-    map[contextVar] = n++;
-  } else {
-    map[contextVar] = n++;
-    map[absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, contextVar.substr(1))] = n++;
-  }
-
-  for (const auto& v : freeVars) {
-    map[v] = n++;
-  }
-
-  for (const auto& subtree : subtrees) {
-    size_t offset = n;
-    for (const auto& [variable, index] : subtree.first.getVariableColumns()) {
-      map[variable] = offset + index;
-      ++n;
-    }
-  }
-  return map;
-}
-
-// _____________________________________________________________________________
 void QueryPlanner::setEnablePatternTrick(bool enablePatternTrick) {
   _enablePatternTrick = enablePatternTrick;
 }
@@ -2721,16 +2654,11 @@ auto QueryPlanner::createJoinWithHasPredicateScan(
   size_t otherTreeJoinColumn = aIsSuitablePredicateScan ? jcs[0][1] : jcs[0][0];
   auto qec = otherTree->getRootOperation()->getExecutionContext();
   // Note that this is a new operation.
-  // TODO<joka921> Make this `HasPredicateScan::addSubtree`.
-  auto hasPredicateScanOperation = std::make_shared<HasPredicateScan>(
-      qec, HasPredicateScan::ScanType::SUBQUERY_S);
-  hasPredicateScanOperation->setSubtree(otherTree);
-  hasPredicateScanOperation->setSubtreeSubjectColumn(otherTreeJoinColumn);
-  hasPredicateScanOperation->setObject(
-      static_cast<HasPredicateScan*>(
-          hasPredicateScanTree->getRootOperation().get())
-          ->getObject());
-  auto plan = makeSubtreePlan(std::move(hasPredicateScanOperation));
+  auto object = static_cast<HasPredicateScan*>(
+                    hasPredicateScanTree->getRootOperation().get())
+                    ->getObject();
+  auto plan = makeSubtreePlan<HasPredicateScan>(
+      qec, std::move(otherTree), otherTreeJoinColumn, std::move(object));
   mergeSubtreePlanIds(plan, a, b);
   return plan;
 }

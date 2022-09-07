@@ -114,6 +114,12 @@ void PropertyPath::computeCanBeNull() {
 }
 
 // _____________________________________________________________________________
+const std::string& PropertyPath::getIri() const {
+  AD_CHECK(_operation == Operation::IRI);
+  return _iri;
+}
+
+// _____________________________________________________________________________
 std::ostream& operator<<(std::ostream& out, const PropertyPath& p) {
   p.writeToStream(out);
   return out;

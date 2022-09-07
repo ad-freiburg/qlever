@@ -26,39 +26,45 @@ class HasPredicateScan : public Operation {
     SUBQUERY_S
   };
 
-  HasPredicateScan(QueryExecutionContext* qec, ScanType type);
+  HasPredicateScan() = delete;
+
+  HasPredicateScan(QueryExecutionContext* qec,
+                   std::shared_ptr<QueryExecutionTree> subtree,
+                   size_t subtreeJoinColumn, std::string objectVariable);
 
   HasPredicateScan(QueryExecutionContext* qec, SparqlTriple triple);
 
  private:
-  virtual string asStringImpl(size_t indent = 0) const override;
-
- public:
-  virtual string getDescriptor() const override;
-
-  virtual size_t getResultWidth() const override;
-
-  virtual vector<size_t> resultSortedOn() const override;
-
-  ad_utility::HashMap<string, size_t> getVariableColumns() const override;
-
-  virtual void setTextLimit(size_t limit) override;
-
-  virtual bool knownEmptyResult() override;
-
-  virtual float getMultiplicity(size_t col) override;
-
-  virtual size_t getSizeEstimate() override;
-
-  virtual size_t getCostEstimate() override;
+  [[nodiscard]] string asStringImpl(size_t indent) const override;
 
   void setSubject(const TripleComponent& subject);
-  void setObject(const TripleComponent& object);
-  void setSubtree(std::shared_ptr<QueryExecutionTree> subtree);
-  void setSubtreeSubjectColumn(size_t colIndex);
-  ScanType getType() const;
 
-  const std::string& getObject() const;
+  void setObject(const TripleComponent& object);
+
+ public:
+  [[nodiscard]] string getDescriptor() const override;
+
+  [[nodiscard]] size_t getResultWidth() const override;
+
+  [[nodiscard]] vector<size_t> resultSortedOn() const override;
+
+  [[nodiscard]] ad_utility::HashMap<string, size_t> getVariableColumns()
+      const override;
+
+  void setTextLimit(size_t limit) override;
+
+  bool knownEmptyResult() override;
+
+  float getMultiplicity(size_t col) override;
+
+  size_t getSizeEstimate() override;
+
+  size_t getCostEstimate() override;
+
+ public:
+  [[nodiscard]] ScanType getType() const;
+
+  [[nodiscard]] const std::string& getObject() const;
 
   vector<QueryExecutionTree*> getChildren() override {
     if (_subtree) {
@@ -95,7 +101,7 @@ class HasPredicateScan : public Operation {
  private:
   ScanType _type;
   std::shared_ptr<QueryExecutionTree> _subtree;
-  size_t _subtreeColIndex = -1;
+  size_t _subtreeJoinColumn;
 
   std::string _subject;
   std::string _object;

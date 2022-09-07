@@ -42,14 +42,9 @@ class IndexScan : public Operation {
 
   virtual ~IndexScan() = default;
 
-  void setSubject(const TripleComponent& subject) { _subject = subject; }
-
-  void setPredicate(const string& predicate) { _predicate = predicate; }
   const string& getPredicate() const { return _predicate; }
   const TripleComponent& getSubject() const { return _subject; }
   const TripleComponent& getObject() const { return _object; }
-
-  void setObject(const TripleComponent& object) { _object = object; }
 
   virtual size_t getResultWidth() const override;
 

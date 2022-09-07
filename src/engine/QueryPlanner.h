@@ -84,7 +84,7 @@ class QueryPlanner {
 
       friend std::ostream& operator<<(std::ostream& out, const Node& n) {
         out << "id: " << n._id << " triple: " << n._triple.asString()
-            << " _vars ";
+            << " vars_ ";
         for (const std::string& s : n._variables) {
           out << s << ", ";
         }
@@ -118,8 +118,6 @@ class QueryPlanner {
                                ad_utility::HashSet<size_t> leaveOut) const;
 
     void collapseTextCliques();
-
-    bool isPureTextQuery();
 
    private:
     vector<pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
@@ -160,36 +158,6 @@ class QueryPlanner {
 
   TripleGraph createTripleGraph(
       const GraphPatternOperation::BasicGraphPattern* pattern) const;
-
-  static ad_utility::HashMap<string, size_t>
-  createVariableColumnsMapForTextOperation(
-      const string& contextVar, const string& entityVar,
-      const ad_utility::HashSet<string>& freeVars,
-      const vector<pair<QueryExecutionTree, size_t>>& subtrees);
-
-  static ad_utility::HashMap<string, size_t>
-  createVariableColumnsMapForTextOperation(
-      const string& contextVar, const string& entityVar,
-      const vector<pair<QueryExecutionTree, size_t>>& subtrees) {
-    return createVariableColumnsMapForTextOperation(
-        contextVar, entityVar, ad_utility::HashSet<string>(), subtrees);
-  };
-
-  static ad_utility::HashMap<string, size_t>
-  createVariableColumnsMapForTextOperation(const string& contextVar,
-                                           const string& entityVar) {
-    return createVariableColumnsMapForTextOperation(
-        contextVar, entityVar, vector<pair<QueryExecutionTree, size_t>>());
-  }
-
-  static ad_utility::HashMap<string, size_t>
-  createVariableColumnsMapForTextOperation(
-      const string& contextVar, const string& entityVar,
-      const ad_utility::HashSet<string>& freeVars) {
-    return createVariableColumnsMapForTextOperation(
-        contextVar, entityVar, freeVars,
-        vector<pair<QueryExecutionTree, size_t>>());
-  };
 
   void setEnablePatternTrick(bool enablePatternTrick);
 
@@ -318,11 +286,11 @@ class QueryPlanner {
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
 
   vector<SubtreePlan> getDistinctRow(
-      const ParsedQuery::SelectClause& selectClause,
+      const parsedQuery::SelectClause& selectClause,
       const vector<vector<SubtreePlan>>& dpTab) const;
 
   vector<SubtreePlan> getPatternTrickRow(
-      const ParsedQuery::SelectClause& selectClause,
+      const parsedQuery::SelectClause& selectClause,
       const vector<vector<SubtreePlan>>& dpTab,
       const SparqlTriple& patternTrickTriple);
 

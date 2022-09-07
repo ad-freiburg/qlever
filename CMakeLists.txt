@@ -165,6 +165,11 @@ if (USE_TREE_BASED_CACHE)
     add_definitions("-D_QLEVER_USE_TREE_BASED_CACHE")
 endif()
 
+if (RUN_EXPENSIVE_TESTS)
+    message(STATUS "Running expensive unit tests. This is only recommended in release builds")
+    add_definitions("-DQLEVER_RUN_EXPENSIVE_TESTS")
+endif()
+
 ################################
 # STXXL
 ################################
@@ -210,11 +215,21 @@ message(STATUS ---)
 include_directories(src)
 
 # Run the script `CompilationInfo.cmake` that creates the file `CompilationInfo.cpp`
-# with the current git hash and the curent time and date. The first output which is
-# never created is necessary s.t. the command is never cached and always rerun.
-add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/FileThatNeverExists.cpp"
-                          "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
-                   COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
+# with the current git hash and the curent time and date. When specifying
+# `-DDONT_UPDATE_COMPILATION_INFO=true` as an argument to `cmake`, the compilation info is
+# never updated. This is useful during development to avoid a relinking of the binaries for
+# every compilation.
+if (NOT DONT_UPDATE_COMPILATION_INFO)
+    # The first output which is never created is necessary s.t. the command is never cached and
+    # always rerun.
+    add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/FileThatNeverExists.cpp"
+                              "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
+                       COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
+else()
+    add_custom_command(OUTPUT
+            "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
+            COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
+endif()
 
 set(LOG_LEVEL_FATAL 0)
 set(LOG_LEVEL_ERROR 1)

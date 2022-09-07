@@ -16,7 +16,7 @@
 using namespace ad_utility::sparql_types;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
 using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
-using SelectClause = ParsedQuery::SelectClause;
+using SelectClause = parsedQuery::SelectClause;
 using GraphPattern = ParsedQuery::GraphPattern;
 using Bind = GraphPatternOperation::Bind;
 using Values = GraphPatternOperation::Values;
@@ -144,8 +144,8 @@ std::variant<ParsedQuery, Triples> Visitor::visitTypesafe(
 SelectClause Visitor::visitTypesafe(Parser::SelectClauseContext* ctx) {
   SelectClause select;
 
-  select._distinct = static_cast<bool>(ctx->DISTINCT());
-  select._reduced = static_cast<bool>(ctx->REDUCED());
+  select.distinct_ = static_cast<bool>(ctx->DISTINCT());
+  select.reduced_ = static_cast<bool>(ctx->REDUCED());
 
   if (ctx->asterisk) {
     select.setAsterisk();
