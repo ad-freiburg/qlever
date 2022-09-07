@@ -222,10 +222,7 @@ class MultiVariantMatcher {
     *listener << "whose value " << testing::PrintToString(*elem)
               << (match ? " matches" : " doesn't match");
     // First add our own Explanation and then that of the sub matcher.
-    auto subMatcherExplanation = elem_listener.str();
-    if (!subMatcherExplanation.empty()) {
-      *listener << subMatcherExplanation;
-    }
+    *listener << elem_listener.str();
     return match;
   }
 

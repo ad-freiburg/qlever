@@ -5,7 +5,7 @@
 //  This compatibility header allows the usage of `ad_utility::source_location`
 //  (an alias to C++20's `std::source_location`) consistently across GCC and
 //  Clang. It is necessary, because `source_location` is currently still in the
-//  `std::experimental` namespaces for Clang.
+//  `std::experimental` namespace for Clang.
 
 #pragma once
 
