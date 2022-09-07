@@ -18,13 +18,6 @@
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 
-// The following two macros make the usage of `testing::Property` and
-// `testing::Field` simpler and more consistent. Examples:
-//  AD_PROPERTY(std::string, empty, IsTrue);  // Matcher that checks that
-//  `arg.empty()` is true for the passed std::string `arg`.
-// AD_FIELD(std::pair<int, bool>, second, IsTrue); // Matcher that checks, that
-// `arg.second` is true for a`std::pair<int, bool>`
-
 // Not relevant for the actual test logic, but provides
 // human-readable output if a test fails.
 std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
@@ -217,12 +210,12 @@ class MultiVariantMatcher {
       return false;
     }
 
-    testing::StringMatchResultListener elem_listener;
-    const bool match = matcher_.MatchAndExplain(*elem, &elem_listener);
+    testing::StringMatchResultListener subMatcherListener;
+    const bool match = matcher_.MatchAndExplain(*elem, &subMatcherListener);
     *listener << "whose value " << testing::PrintToString(*elem)
               << (match ? " matches" : " doesn't match");
     // First add our own Explanation and then that of the sub matcher.
-    *listener << elem_listener.str();
+    *listener << subMatcherListener.str();
     return match;
   }
 
