@@ -26,8 +26,11 @@ struct SelectClause {
     std::vector<Alias> aliases_;
   };
 
+  // An empty struct to identify the `SELECT *` case
+  struct Asterisk {};
+
   // The `char` means `SELECT *`.
-  std::variant<VarsAndAliases, char> varsAndAliasesOrAsterisk_;
+  std::variant<VarsAndAliases, Asterisk> varsAndAliasesOrAsterisk_;
 
   // The variables that will be used in the case of `SELECT *`.
   std::vector<Variable> variablesForAsterisk_;
@@ -38,10 +41,10 @@ struct SelectClause {
   [[nodiscard]] bool isAsterisk() const;
 
   // Set the selector to '*', which means that all variables for which
-  // `addVariableForAsterisk()` is called, are implicitly selected.
+  // `addVariableForAsterisk()` is called are implicitly selected.
   void setAsterisk();
 
-  // Set the (manually) selected variables and aliases. Note that all variables
+  // Set the (manually) selected variables and aliases. All variables
   // and aliases have to be specified at once via a single call to
   // `setSelected`.
   using VarOrAlias = std::variant<Variable, Alias>;
@@ -55,15 +58,15 @@ struct SelectClause {
   // will only be used if `isAsterisk()` is true.
   void addVariableForAsterisk(const Variable& variable);
 
-  /// Get all the selected variables. This includes the variables that aliases
-  /// are bound to. For example for `SELECT ?x (?a + ?b AS ?c)`,
-  /// `getSelectedVariables` will return `{?x, ?c}`. If `isAsteris()` is true
-  /// (`SELECT *`), then all the variables for which `addVariableForAsteris()`
+  /// Get all the selected variables. This includes the variables to which
+  /// aliases are bound. For example for `SELECT ?x (?a + ?b AS ?c)`,
+  /// `getSelectedVariables` will return `{?x, ?c}`. If `isAsterisk()` is true
+  /// (`SELECT *`), then all the variables for which `addVariableForAsterisk()`
   /// was called, will be returned.
   [[nodiscard]] const std::vector<Variable>& getSelectedVariables() const;
 
   /// Same as `getSelectedVariables`, but the variables will be returned as
-  /// `std::string`
+  /// `std::string`.
   [[nodiscard]] std::vector<std::string> getSelectedVariablesAsStrings() const;
 
   /// Get all the aliases (not the simple variables) that were selected. For
@@ -71,5 +74,4 @@ struct SelectClause {
   /// `{(?a + ?b AS ?c)}` will be returned.
   [[nodiscard]] const std::vector<Alias>& getAliases() const;
 };
-
 }  // namespace parsedQuery

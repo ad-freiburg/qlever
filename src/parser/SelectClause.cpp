@@ -11,11 +11,11 @@
 using namespace parsedQuery;
 // ____________________________________________________________________
 [[nodiscard]] bool SelectClause::isAsterisk() const {
-  return std::holds_alternative<char>(varsAndAliasesOrAsterisk_);
+  return std::holds_alternative<Asterisk>(varsAndAliasesOrAsterisk_);
 }
 
 // ____________________________________________________________________
-void SelectClause::setAsterisk() { varsAndAliasesOrAsterisk_ = '*'; }
+void SelectClause::setAsterisk() { varsAndAliasesOrAsterisk_ = Asterisk{}; }
 
 // ____________________________________________________________________
 void SelectClause::setSelected(std::vector<VarOrAlias> varsOrAliases) {

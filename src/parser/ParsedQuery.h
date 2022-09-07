@@ -133,7 +133,7 @@ class ParsedQuery {
   };
 
   using SelectClause = parsedQuery::SelectClause;
-  SelectClause _selectedVarsOrAsterisk;
+  SelectClause _selectClause;
 
   using ConstructClause = ad_utility::sparql_types::Triples;
 
@@ -155,7 +155,7 @@ class ParsedQuery {
 
   // explicit default initialisation because the constructor
   // of SelectClause is private
-  std::variant<SelectClause, ConstructClause> _clause{_selectedVarsOrAsterisk};
+  std::variant<SelectClause, ConstructClause> _clause{_selectClause};
 
   [[nodiscard]] bool hasSelectClause() const {
     return std::holds_alternative<SelectClause>(_clause);
@@ -228,47 +228,37 @@ class ParsedQuery {
 };
 
 struct GraphPatternOperation {
-  using Children = std::vector<ParsedQuery::GraphPattern*>;
   struct BasicGraphPattern {
     vector<SparqlTriple> _triples;
 
     void appendTriples(BasicGraphPattern pattern) {
       ad_utility::appendVector(_triples, std::move(pattern._triples));
     }
-
-    Children getVisibleChildren() { return {}; }
   };
   struct Values {
     SparqlValues _inlineValues;
     // This value will be overwritten later.
     size_t _id = std::numeric_limits<size_t>::max();
-
-    Children getVisibleChildren() { return {}; }
   };
   struct GroupGraphPattern {
     ParsedQuery::GraphPattern _child;
-    Children getVisibleChildren() { return {&_child}; }
   };
   struct Optional {
     Optional(ParsedQuery::GraphPattern child) : _child{std::move(child)} {
       _child._optional = true;
     };
     ParsedQuery::GraphPattern _child;
-    Children getVisibleChildren() { return {&_child}; }
   };
   struct Minus {
     ParsedQuery::GraphPattern _child;
-    Children getVisibleChildren() { return {&_child}; }
   };
   struct Union {
     ParsedQuery::GraphPattern _child1;
     ParsedQuery::GraphPattern _child2;
-    Children getVisibleChildren() { return {&_child1, &_child2}; }
   };
   struct Subquery {
     ParsedQuery _subquery;
     // The subquery's children to not influence the outer query.
-    Children getVisibleChildren() { return {}; }
   };
 
   struct TransPath {
@@ -281,7 +271,6 @@ struct GraphPatternOperation {
     size_t _min = 0;
     size_t _max = 0;
     ParsedQuery::GraphPattern _childGraphPattern;
-    Children getVisibleChildren() { return {&_childGraphPattern}; }
   };
 
   // A SPARQL Bind construct.
@@ -308,8 +297,6 @@ struct GraphPatternOperation {
       auto inner = _expression.getDescriptor();
       return "BIND (" + inner + " AS " + _target + ")";
     }
-
-    Children getVisibleChildren() { return {}; }
   };
 
   std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
