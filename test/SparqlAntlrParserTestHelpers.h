@@ -57,10 +57,19 @@ std::ostream& operator<<(std::ostream& out, const VarOrTerm& varOrTerm) {
 
 // _____________________________________________________________________________
 
+namespace parsedQuery {
 std::ostream& operator<<(std::ostream& out, const parsedQuery::Bind& bind) {
   out << "Bind " << bind._expression.getDescriptor() << " as " << bind._target;
   return out;
 }
+
+std::ostream& operator<<(std::ostream& out, const parsedQuery::Values& values) {
+  out << "Values: variables "
+      << ::testing::PrintToString(values._inlineValues._variables) << " values "
+      << ::testing::PrintToString(values._inlineValues._values);
+  return out;
+}
+}  // namespace parsedQuery
 
 // _____________________________________________________________________________
 
@@ -74,13 +83,6 @@ std::ostream& operator<<(std::ostream& out,
                          const ExpressionOrderKey& expressionOrderKey) {
   out << "Order " << (expressionOrderKey.isDescending_ ? "DESC" : "ASC")
       << " by " << expressionOrderKey.expression_.getDescriptor();
-  return out;
-}
-
-std::ostream& operator<<(std::ostream& out, const parsedQuery::Values& values) {
-  out << "Values: variables "
-      << ::testing::PrintToString(values._inlineValues._variables) << " values "
-      << ::testing::PrintToString(values._inlineValues._values);
   return out;
 }
 
