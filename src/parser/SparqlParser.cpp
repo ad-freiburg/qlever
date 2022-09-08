@@ -2,14 +2,15 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./SparqlParser.h"
+#include "parser/SparqlParser.h"
 
 #include <unordered_set>
 #include <variant>
 
-#include "Alias.h"
-#include "data/Types.h"
-#include "sparqlParser/SparqlQleverVisitor.h"
+#include "parser/Alias.h"
+#include "parser/data/Types.h"
+#include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "util/Conversions.h"
 
 using namespace std::literals::string_literals;
 using AntlrParser = SparqlAutomaticParser;
@@ -417,8 +418,60 @@ auto SparqlParser::parseWithAntlr(
   return std::move(resultOfParseAndRemainingText.resultOfParse_);
 }
 
+namespace {
+// The legacy way of expanding prefixes in an IRI. Currently used only by
+// `parserFilterExpression` below.
+// TODO<joka921> Remove this function as soon as we have proper filters and
+// proper parsing of these filters.
+void expandPrefix(string& item,
+                  const ad_utility::HashMap<string, string>& prefixMap) {
+  if (!item.starts_with("?") && !item.starts_with("<")) {
+    std::optional<string> langtag = std::nullopt;
+    if (item.starts_with("@")) {
+      auto secondPos = item.find('@', 1);
+      if (secondPos == string::npos) {
+        throw ParseException(
+            "langtaged predicates must have form @lang@ActualPredicate. Second "
+            "@ is missing in " +
+            item);
+      }
+      langtag = item.substr(1, secondPos - 1);
+      item = item.substr(secondPos + 1);
+    }
+
+    size_t i = item.rfind(':');
+    size_t from = item.find("^^");
+    if (from == string::npos) {
+      from = 0;
+    } else {
+      from += 2;
+    }
+    if (i != string::npos && i >= from &&
+        prefixMap.contains(item.substr(from, i - from))) {
+      string prefixUri = prefixMap.at(item.substr(from, i - from));
+      // Note that substr(0, 0) yields the empty string.
+      item = item.substr(0, from) + prefixUri.substr(0, prefixUri.size() - 1) +
+             item.substr(i + 1) + '>';
+      item = RdfEscaping::unescapePrefixedIri(item);
+    }
+    if (langtag) {
+      item =
+          ad_utility::convertToLanguageTaggedPredicate(item, langtag.value());
+    }
+  }
+}
+
+}  // namespace
+
 // _____________________________________________________________________________
-SparqlFilter SparqlParser::parseFilterExpression(const string& filterContent) {
+SparqlFilter SparqlParser::parseFilterExpression(
+    const string& filterContent,
+    const SparqlQleverVisitor::PrefixMap& prefixMap) {
   SparqlParser parser(filterContent);
-  return parser.parseFilter(true).value();
+  auto filter = parser.parseFilter(true).value();
+  expandPrefix(filter._lhs, prefixMap);
+  if (filter._type != SparqlFilter::REGEX) {
+    expandPrefix(filter._rhs, prefixMap);
+  }
+  return filter;
 }

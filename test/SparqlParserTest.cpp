@@ -126,8 +126,6 @@ TEST(ParserTest, testParse) {
       const auto& triples = pq.children()[0].getBasic()._triples;
       ASSERT_EQ(3u, triples.size());
 
-      pq.expandPrefixes();
-
       ASSERT_EQ(Variable{"?x"}, selectClause.getSelectedVariables()[0]);
       ASSERT_EQ(Variable{"?z"}, selectClause.getSelectedVariables()[1]);
       ASSERT_EQ("?x", triples[0]._s);
@@ -148,7 +146,6 @@ TEST(ParserTest, testParse) {
                     "SELECT ?x ?y WHERE {?x <is-a> <Actor> .  FILTER(?x != ?y)."
                     "?y <is-a> <Actor> . FILTER(?y < ?x)} LIMIT 10")
                     .parse();
-      pq.expandPrefixes();
       ASSERT_EQ(1u, pq.children().size());
       const auto& triples = pq.children()[0].getBasic()._triples;
       auto filters = pq._rootGraphPattern._filters;
@@ -167,7 +164,6 @@ TEST(ParserTest, testParse) {
                     "SELECT ?x ?y WHERE {?x <is-a> <Actor> .  FILTER(?x != ?y)."
                     "?y <is-a> <Actor>} LIMIT 10")
                     .parse();
-      pq.expandPrefixes();
       ASSERT_EQ(1u, pq.children().size());
       const auto& triples = pq.children()[0].getBasic()._triples;
       auto filters = pq._rootGraphPattern._filters;
@@ -184,7 +180,6 @@ TEST(ParserTest, testParse) {
                     "?y <is-a> <Actor>. ?c ql:contains-entity ?x."
                     "?c ql:contains-word \"coca* abuse\"} LIMIT 10")
                     .parse();
-      pq.expandPrefixes();
       ASSERT_EQ(1u, pq.children().size());
       const auto& triples = pq.children()[0].getBasic()._triples;
       auto filters = pq._rootGraphPattern._filters;
@@ -213,7 +208,6 @@ TEST(ParserTest, testParse) {
                     "FILTER(?x != ?y) .\n"
                     "} ORDER BY ?c")
                     .parse();
-      pq.expandPrefixes();
       ASSERT_EQ(1u, pq._rootGraphPattern._filters.size());
 
       // shouldn't have more checks??
@@ -780,7 +774,6 @@ TEST(ParserTest, testFilterWithoutDot) {
           "FILTER (?1 != fb:m.018mts) \n"
           "} LIMIT 300")
           .parse();
-  pq.expandPrefixes();
   ASSERT_TRUE(pq.hasSelectClause());
   const auto& selectClause = pq.selectClause();
   ASSERT_EQ(2u, pq._prefixes.size());
@@ -809,7 +802,6 @@ TEST(ParserTest, testExpandPrefixes) {
                        "SELECT ?x ?z \n WHERE \t {?x :myrel ?y. ?y ns:myrel "
                        "?z.?y <nsx:rel2> <http://abc.de>}")
                        .parse();
-  pq.expandPrefixes();
   ASSERT_TRUE(pq.hasSelectClause());
   const auto& selectClause = pq.selectClause();
   ASSERT_EQ(1u, pq.children().size());
@@ -845,7 +837,6 @@ TEST(ParserTest, testLiterals) {
           "PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> SELECT * WHERE { "
           "true <test:myrel> 10 . 10.2 <test:myrel> \"2000-00-00\"^^xsd:date }")
           .parse();
-  pq.expandPrefixes();
   ASSERT_TRUE(pq.hasSelectClause());
   const auto& selectClause = pq.selectClause();
   ASSERT_EQ(1u, pq.children().size());
@@ -866,7 +857,6 @@ TEST(ParserTest, testSolutionModifiers) {
   {
     ParsedQuery pq =
         SparqlParser("SELECT ?x WHERE \t {?x <test:myrel> ?y}").parse();
-    pq.expandPrefixes();
     ASSERT_TRUE(pq.hasSelectClause());
     const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
@@ -884,7 +874,6 @@ TEST(ParserTest, testSolutionModifiers) {
   {
     auto pq = SparqlParser("SELECT ?x WHERE \t {?x <test:myrel> ?y} LIMIT 10")
                   .parse();
-    pq.expandPrefixes();
     ASSERT_TRUE(pq.hasSelectClause());
     const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq._prefixes.size());
@@ -904,7 +893,6 @@ TEST(ParserTest, testSolutionModifiers) {
                   "SELECT ?x WHERE \t {?x <test:myrel> ?y}\n"
                   "LIMIT 10 OFFSET 15")
                   .parse();
-    pq.expandPrefixes();
     ASSERT_TRUE(pq.hasSelectClause());
     const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
@@ -924,7 +912,6 @@ TEST(ParserTest, testSolutionModifiers) {
                   "SELECT DISTINCT ?x ?y WHERE \t {?x <test:myrel> ?y}\n"
                   "ORDER BY ?y LIMIT 10 OFFSET 15")
                   .parse();
-    pq.expandPrefixes();
     ASSERT_TRUE(pq.hasSelectClause());
     const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
@@ -947,7 +934,6 @@ TEST(ParserTest, testSolutionModifiers) {
                   "<test:myrel> ?y}\n"
                   "ORDER BY ASC(?y) DESC(?ql_textscore_x) LIMIT 10 OFFSET 15")
                   .parse();
-    pq.expandPrefixes();
     ASSERT_TRUE(pq.hasSelectClause());
     const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
@@ -973,7 +959,6 @@ TEST(ParserTest, testSolutionModifiers) {
                   "SELECT REDUCED ?x ?y WHERE \t {?x <test:myrel> ?y}\n"
                   "ORDER BY DESC(?x) ASC(?y) LIMIT 10 OFFSET 15")
                   .parse();
-    pq.expandPrefixes();
     ASSERT_TRUE(pq.hasSelectClause());
     const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
@@ -995,7 +980,6 @@ TEST(ParserTest, testSolutionModifiers) {
   {
     auto pq =
         SparqlParser("SELECT ?x ?y WHERE {?x <is-a> <Actor>} LIMIT 10").parse();
-    pq.expandPrefixes();
     ASSERT_EQ(10u, pq._limitOffset._limit);
   }
 
@@ -1008,7 +992,6 @@ TEST(ParserTest, testSolutionModifiers) {
                   "\n"
                   "?movie <directed-by> <Scott%2C%20Ridley> .   }  LIMIT 50")
                   .parse();
-    pq.expandPrefixes();
     ASSERT_TRUE(pq.hasSelectClause());
     const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
@@ -1034,7 +1017,6 @@ TEST(ParserTest, testSolutionModifiers) {
                   "\n"
                   "?movie <directed-by> <Scott%2C%20Ridley> .   }  LIMIT 50")
                   .parse();
-    pq.expandPrefixes();
     ASSERT_TRUE(pq.hasSelectClause());
     const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
@@ -1311,11 +1293,15 @@ TEST(ParserTest, Prefix) {
 }
 
 TEST(ParserTest, ParseFilterExpression) {
-  auto f = SparqlParser::parseFilterExpression("(LANG(?x) = \"en\")");
+  auto f = SparqlParser::parseFilterExpression("(LANG(?x) = \"en\")", {});
   ASSERT_EQ(f, (SparqlFilter{SparqlFilter::LANG_MATCHES, "?x", "\"en\""}));
 
-  f = SparqlParser::parseFilterExpression("(?x <= 42.3)");
+  f = SparqlParser::parseFilterExpression("(?x <= 42.3)", {});
   ASSERT_EQ(f, (SparqlFilter{SparqlFilter::LE, "?x", "42.3"}));
+
+  f = SparqlParser::parseFilterExpression("(?x = me:you)",
+                                          {{"me", "<www.me.de/>"}});
+  ASSERT_EQ(f, (SparqlFilter{SparqlFilter::EQ, "?x", "<www.me.de/you>"}));
 }
 
 TEST(ParserTest, LanguageFilterPostProcessing) {

@@ -605,7 +605,6 @@ boost::asio::awaitable<void> Server::processQuery(
               << (pinSubtrees ? " [pin subresults]" : "") << "\n"
               << query << std::endl;
     ParsedQuery pq = SparqlParser(query).parse();
-    pq.expandPrefixes();
 
     // The following code block determines the media type to be used for the
     // result. The media type is either determined by the "Accept:" header of

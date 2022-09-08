@@ -25,7 +25,6 @@ TEST(QueryPlannerTest, createTripleGraph) {
                            "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y xxx:rel2 "
                            "<http://abc.de>}")
                            .parse();
-      pq.expandPrefixes();
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(
           &pq._rootGraphPattern._graphPatterns[0].getBasic());
@@ -56,7 +55,6 @@ TEST(QueryPlannerTest, createTripleGraph) {
       ParsedQuery pq =
           SparqlParser("SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}")
               .parse();
-      pq.expandPrefixes();
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
       TripleGraph expected =
@@ -81,7 +79,6 @@ TEST(QueryPlannerTest, createTripleGraph) {
                            "SELECT ?x WHERE { ?x <is-a> <Book> . \n"
                            "?x <Author> <Anthony_Newman_(Author)> }")
                            .parse();
-      pq.expandPrefixes();
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
 
@@ -114,7 +111,6 @@ TEST(QueryPlannerTest, testCpyCtorWithKeepNodes) {
       ParsedQuery pq =
           SparqlParser("SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}")
               .parse();
-      pq.expandPrefixes();
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
       ASSERT_EQ(2u, tg._nodeMap.find(0)->second->_variables.size());
@@ -177,7 +173,6 @@ TEST(QueryPlannerTest, testBFSLeaveOut) {
       ParsedQuery pq =
           SparqlParser("SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}")
               .parse();
-      pq.expandPrefixes();
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
       ASSERT_EQ(3u, tg._adjLists.size());
@@ -199,7 +194,6 @@ TEST(QueryPlannerTest, testBFSLeaveOut) {
       ParsedQuery pq =
           SparqlParser("SELECT ?x WHERE {<A> <B> ?x. ?x <C> ?y. ?y <X> <Y>}")
               .parse();
-      pq.expandPrefixes();
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
       ad_utility::HashSet<size_t> lo;
@@ -237,7 +231,6 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
                 "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
                 "ql:contains-word \"abc\"}")
                 .parse();
-        pq.expandPrefixes();
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
         ASSERT_EQ(
@@ -278,7 +271,6 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
                 "<QLever-internal-function/contains-word> \"abc\" . ?c "
                 "ql:contains-entity ?y}")
                 .parse();
-        pq.expandPrefixes();
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
         ASSERT_EQ(
@@ -321,7 +313,6 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
                 "ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?y <P2> "
                 "<X2>}")
                 .parse();
-        pq.expandPrefixes();
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
         ASSERT_EQ(
@@ -369,7 +360,6 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
                 "ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?c2 "
                 "ql:contains-entity ?y. ?c2 ql:contains-word \"xx\"}")
                 .parse();
-        pq.expandPrefixes();
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
         TripleGraph expected = TripleGraph(std::vector<std::pair<
@@ -453,7 +443,6 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
                 "ql:contains-entity ?y. ?c2 ql:contains-word \"xx\". ?y <P2> "
                 "<X2>}")
                 .parse();
-        pq.expandPrefixes();
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
         ASSERT_EQ(
@@ -522,7 +511,6 @@ TEST(QueryPlannerTest, testSPX) {
                        "SELECT ?x \n "
                        "WHERE \t {?x :myrel :obj}")
                        .parse();
-  pq.expandPrefixes();
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
@@ -537,7 +525,6 @@ TEST(QueryPlannerTest, testXPO) {
                        "SELECT ?x \n "
                        "WHERE \t {:subj :myrel ?x}")
                        .parse();
-  pq.expandPrefixes();
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
@@ -552,7 +539,6 @@ TEST(QueryPlannerTest, testSP_free_) {
                        "SELECT ?x \n "
                        "WHERE \t {?x :myrel ?y}")
                        .parse();
-  pq.expandPrefixes();
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
@@ -568,7 +554,6 @@ TEST(QueryPlannerTest, testSPX_SPX) {
                          "SELECT ?x \n "
                          "WHERE \t {:s1 :r ?x. :s2 :r ?x}")
                          .parse();
-    pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -593,7 +578,6 @@ TEST(QueryPlannerTest, test_free_PX_SPX) {
                          "SELECT ?x ?y \n "
                          "WHERE  {?y :r ?x . :s2 :r ?x}")
                          .parse();
-    pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -618,7 +602,6 @@ TEST(QueryPlannerTest, test_free_PX__free_PX) {
                          "SELECT ?x ?y ?z \n "
                          "WHERE {?y :r ?x. ?z :r ?x}")
                          .parse();
-    pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -645,7 +628,6 @@ TEST(QueryPlannerTest, testActorsBornInEurope) {
             "WHERE {?a :profession :Actor . ?a :born-in ?c. ?c :in :Europe}\n"
             "ORDER BY ?a")
             .parse();
-    pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(18340u, qet.getCostEstimate());
@@ -682,7 +664,6 @@ TEST(QueryPlannerTest, testStarTwoFree) {
               "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z. ?y xxx:rel2 "
               "<http://abc.de>}")
               .parse();
-      pq.expandPrefixes();
       QueryPlanner qp(nullptr);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
       ASSERT_EQ(
@@ -886,7 +867,6 @@ TEST(QueryExecutionTreeTest, testBooksbyNewman) {
                          "SELECT ?x WHERE { ?x <is-a> <Book> . "
                          "?x <Author> <Anthony_Newman_(Author)> }")
                          .parse();
-    pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -914,7 +894,6 @@ TEST(QueryExecutionTreeTest, testBooksGermanAwardNomAuth) {
                          "?x <Author> ?y . "
                          "?y <is-a> <Award-Nominated_Work> }")
                          .parse();
-    pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_GT(qet.asString().size(), 0u);
@@ -936,7 +915,6 @@ TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
             "WHERE  {?a <is-a> <Plant> . ?c ql:contains-entity ?a. "
             "?c ql:contains-word \"edible leaves\"} TEXTLIMIT 5")
             .parse();
-    pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryPlanner::TripleGraph tg =
         qp.createTripleGraph(&pq.children()[0].getBasic());
@@ -964,7 +942,6 @@ TEST(QueryExecutionTreeTest, testTextQuerySE) {
                          "SELECT ?c \n "
                          "WHERE  {?c ql:contains-word \"search engine\"}")
                          .parse();
-    pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -993,7 +970,6 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
                          "?c ql:contains-word \"cocaine\" ."
                          "}")
                          .parse();
-    pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -1029,7 +1005,6 @@ TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
                          "?c ql:contains-entity ?y ."
                          "}")
                          .parse();
-    pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -1061,7 +1036,6 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
                          "?c2 ql:contains-entity ?s ."
                          "?c2 ql:contains-word \"manhattan project\"}")
                          .parse();
-    pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -1095,7 +1069,6 @@ TEST(QueryExecutionTreeTest, testCyclicQuery) {
             "SELECT ?x ?y ?m WHERE { ?x <Spouse_(or_domestic_partner)> ?y . "
             "?x <Film_performance> ?m . ?y <Film_performance> ?m }")
             .parse();
-    pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
 
@@ -1228,7 +1201,6 @@ TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
             "FILTER (?1 != fb:m.018mts)"
             "} LIMIT 300")
             .parse();
-    pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_TRUE(qet.varCovered("?1"));
@@ -1250,7 +1222,6 @@ TEST(QueryPlannerTest, testSimpleOptional) {
                          "SELECT ?a ?b \n "
                          "WHERE  {?a <rel1> ?b . OPTIONAL { ?a <rel2> ?c }}")
                          .parse();
-    pq.expandPrefixes();
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  OPTIONAL_JOIN\n  {\n    SCAN PSO with P = \"<rel1>\"\n    "
@@ -1265,7 +1236,6 @@ TEST(QueryPlannerTest, testSimpleOptional) {
                           "WHERE  {?a <rel1> ?b . "
                           "OPTIONAL { ?a <rel2> ?c }} ORDER BY ?b")
                           .parse();
-    pq2.expandPrefixes();
     QueryExecutionTree qet2 = qp.createExecutionTree(pq2);
     ASSERT_EQ(
         "{\n  SORT / ORDER BY on columns:asc(1) \n  {\n    OPTIONAL_JOIN\n    "

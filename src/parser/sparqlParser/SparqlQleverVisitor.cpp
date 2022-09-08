@@ -415,9 +415,10 @@ vector<SparqlFilter> Visitor::visitTypesafe(Parser::HavingClauseContext* ctx) {
 }
 
 namespace {
-SparqlFilter parseFilter(auto* ctx) {
+SparqlFilter parseFilter(auto* ctx,
+                         const SparqlQleverVisitor::PrefixMap& prefixMap) {
   try {
-    return SparqlParser::parseFilterExpression(ctx->getText());
+    return SparqlParser::parseFilterExpression(ctx->getText(), prefixMap);
   } catch (const std::bad_optional_access& error) {
     throw ParseException("The expression " + ctx->getText() +
                          " is currently not supported by Qlever inside a "
@@ -433,7 +434,7 @@ SparqlFilter parseFilter(auto* ctx) {
 
 // ____________________________________________________________________________________
 SparqlFilter Visitor::visitTypesafe(Parser::HavingConditionContext* ctx) {
-  SparqlFilter filter = parseFilter(ctx);
+  SparqlFilter filter = parseFilter(ctx, _prefixMap);
   if (filter._type == SparqlFilter::LANG_MATCHES) {
     throw ParseException(
         "Language filter in HAVING clause currently not "
@@ -758,7 +759,7 @@ GraphPatternOperation Visitor::visitTypesafe(
 
 // ____________________________________________________________________________________
 SparqlFilter Visitor::visitTypesafe(Parser::FilterRContext* ctx) {
-  return parseFilter(ctx->constraint());
+  return parseFilter(ctx->constraint(), _prefixMap);
 }
 
 // ____________________________________________________________________________________
