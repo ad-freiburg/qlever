@@ -232,8 +232,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           candidateTriples._triples.end(),
           std::make_move_iterator(v._triples.begin()),
           std::make_move_iterator(v._triples.end()));
-    } else if constexpr (std::is_same_v<p::Bind,
-                                        std::decay_t<decltype(v)>>) {
+    } else if constexpr (std::is_same_v<p::Bind, std::decay_t<decltype(v)>>) {
       if (boundVariables.count(v._target)) {
         AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                  "The target variable of a BIND must not be used before the "
@@ -673,8 +672,7 @@ bool QueryPlanner::checkUsePatternTrick(
                   break;
                 }
               }
-            } else if constexpr (std::is_same_v<
-                                     T, p::BasicGraphPattern>) {
+            } else if constexpr (std::is_same_v<T, p::BasicGraphPattern>) {
               for (const SparqlTriple& other : arg._triples) {
                 if (other._s == t._o || other._p._iri == t._o ||
                     other._o == t._o) {

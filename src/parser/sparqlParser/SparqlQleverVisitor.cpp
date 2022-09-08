@@ -274,8 +274,8 @@ Visitor::OperationsAndFilters Visitor::visitTypesafe(
     if (ops.empty() || !std::holds_alternative<BasicGraphPattern>(ops.back())) {
       ops.emplace_back(BasicGraphPattern{});
     }
-    std::get<BasicGraphPattern>(ops.back()).appendTriples(
-        std::move(triples.value()));
+    std::get<BasicGraphPattern>(ops.back())
+        .appendTriples(std::move(triples.value()));
   }
   return {std::move(ops), std::move(filters)};
 }

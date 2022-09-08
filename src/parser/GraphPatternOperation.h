@@ -12,15 +12,20 @@
 #include "util/Algorithm.h"
 #include "util/VisitMixin.h"
 
+// First some forward declarations.
+// TODO<joka921> More stuff should consistently be in the `parsedQuery`
+// namespace.
 class SparqlTriple;
-
 class ParsedQuery;
 
 namespace parsedQuery {
 
 class GraphPattern;
 
-// Represents a VALUES statement in the query.
+/// The actual data of a `VALUES` clause.
+/// TODO<joka921> the two classes `SparqlValues` and `Values` (below) can be
+/// merged, but we first have to figure out and refactor the `id`-business in
+/// the query planner.
 class SparqlValues {
  public:
   // The variables to which the values will be bound
@@ -29,37 +34,58 @@ class SparqlValues {
   std::vector<std::vector<std::string>> _values;
 };
 
+/// A `BasicGraphPattern` represents a consecutive block of triples.
 struct BasicGraphPattern {
   std::vector<SparqlTriple> _triples;
-
-  void appendTriples(BasicGraphPattern pattern);
+  /// Append the triples from `other` to this `BasicGraphPattern`
+  void appendTriples(BasicGraphPattern other);
 };
+
+/// A `Values` clause
 struct Values {
   SparqlValues _inlineValues;
   // This value will be overwritten later.
   size_t _id = std::numeric_limits<size_t>::max();
 };
+
+/// A `GroupGraphPattern` is anything enclosed in `{}`.
+/// TODO<joka921> The naming is inconsistent between `GroupGraphPattern` and
+/// `GraphPattern`.
 struct GroupGraphPattern {
   GraphPattern _child;
 };
+
+/// An `OPTIONAL` clause.
+/// TODO<joka921> the `_optional` member of the child should not be necessary.
 struct Optional {
   Optional(GraphPattern child) : _child{std::move(child)} {
     _child._optional = true;
   };
   GraphPattern _child;
 };
+
+/// A SPARQL `MINUS` construct.
 struct Minus {
   GraphPattern _child;
 };
+
+/// A SPARQL `UNION` construct.
 struct Union {
   GraphPattern _child1;
   GraphPattern _child2;
 };
+
+/// A subquery.
+/// TODO<joka921> It currently only consists of a single `ParsedQuery`, but we
+/// have to go through a `unique_ptr` to break the cyclic dependency. The manual
+/// definition of all the special member functions is there, to give this class
+/// value semantics.
 class Subquery {
  private:
   std::unique_ptr<ParsedQuery> _subquery;
 
  public:
+  // TODO<joka921> Make this an abstraction `TypeErasingPimpl`.
   explicit Subquery(const ParsedQuery&);
   explicit Subquery(ParsedQuery&&);
   Subquery();
@@ -113,6 +139,8 @@ struct Bind {
   }
 };
 
+// TODO<joka921> Further refactor this, s.t. the whole `GraphPatternOperation`
+// class actually becomes `using GraphPatternOperation = std::variant<...>`
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
                  Values, Minus, GroupGraphPattern>;

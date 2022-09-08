@@ -230,7 +230,8 @@ TEST(ParserTest, testParse) {
                     .parse();
 
       ASSERT_EQ(2u, pq.children().size());
-      const auto& opt = std::get<p::Optional>(pq._rootGraphPattern._graphPatterns[1]);
+      const auto& opt =
+          std::get<p::Optional>(pq._rootGraphPattern._graphPatterns[1]);
       auto& child = opt._child;
       const auto& triples = child._graphPatterns[0].getBasic()._triples;
       auto filters = child._filters;
@@ -259,13 +260,14 @@ TEST(ParserTest, testParse) {
                     "}")
                     .parse();
       ASSERT_EQ(2u, pq._rootGraphPattern._graphPatterns.size());
-      const auto& optA =
-                             std::get<p::Optional>(pq._rootGraphPattern._graphPatterns[1]);  // throws on error
+      const auto& optA = std::get<p::Optional>(
+          pq._rootGraphPattern._graphPatterns[1]);  // throws on error
       auto& child = optA._child;
       ASSERT_EQ(3u, child._graphPatterns.size());
-      const auto& opt2 = std::get<p::Optional>(child._graphPatterns[1]
-                             );  // throws on error
-      const auto& opt3 = std::get<p::Optional>(child._graphPatterns[2]);  // throws on error
+      const auto& opt2 =
+          std::get<p::Optional>(child._graphPatterns[1]);  // throws on error
+      const auto& opt3 =
+          std::get<p::Optional>(child._graphPatterns[2]);  // throws on error
       const auto& child2 = opt2._child._graphPatterns[0].getBasic();
       const auto& child3 = opt3._child._graphPatterns[0].getBasic();
       ASSERT_EQ(1u, child2._triples.size());
@@ -289,10 +291,8 @@ TEST(ParserTest, testParse) {
       const auto& c = pq.children()[2].getBasic();
       ASSERT_EQ(1u, c._triples.size());
       ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
-      const auto& values1 =
-          std::get<p::Values>(pq.children()[0])._inlineValues;
-      const auto& values2 =
-          std::get<p::Values>(pq.children()[1])._inlineValues;
+      const auto& values1 = std::get<p::Values>(pq.children()[0])._inlineValues;
+      const auto& values2 = std::get<p::Values>(pq.children()[1])._inlineValues;
 
       vector<string> vvars = {"?a"};
       ASSERT_EQ(vvars, values1._variables);
@@ -317,10 +317,8 @@ TEST(ParserTest, testParse) {
 
       ASSERT_EQ(2u, pq.children().size());
       ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
-      const auto& values1 =
-          std::get<p::Values>(pq.children()[0])._inlineValues;
-      const auto& values2 =
-          std::get<p::Values>(pq.children()[1])._inlineValues;
+      const auto& values1 = std::get<p::Values>(pq.children()[0])._inlineValues;
+      const auto& values2 = std::get<p::Values>(pq.children()[1])._inlineValues;
 
       vector<string> vvars = {"?a"};
       ASSERT_EQ(vvars, values1._variables);
@@ -355,8 +353,7 @@ TEST(ParserTest, testParse) {
                 "<http://www.wikidata.org/prop/direct/P31>");
       ASSERT_EQ(c._triples[0]._o, "?citytype");
 
-      const auto& values1 =
-          std::get<p::Values>(pq.children()[0])._inlineValues;
+      const auto& values1 = std::get<p::Values>(pq.children()[0])._inlineValues;
       vector<string> vvars = {"?citytype"};
       ASSERT_EQ(vvars, values1._variables);
       vector<vector<string>> vvals = {
@@ -553,8 +550,8 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
 
       // -- SubQuery
-      auto subQueryGroup = get<p::GroupGraphPattern>(
-          pq._rootGraphPattern._graphPatterns[1]);
+      auto subQueryGroup =
+          get<p::GroupGraphPattern>(pq._rootGraphPattern._graphPatterns[1]);
       auto parsed_sub_query =
           get<p::Subquery>(subQueryGroup._child._graphPatterns[0]);
       const auto& c_subquery = get<p::BasicGraphPattern>(
@@ -638,8 +635,8 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
 
       // -- SubQuery (level 1)
-      auto subQueryGroup = get<p::GroupGraphPattern>(
-          pq._rootGraphPattern._graphPatterns[1]);
+      auto subQueryGroup =
+          get<p::GroupGraphPattern>(pq._rootGraphPattern._graphPatterns[1]);
       auto parsed_sub_query =
           get<p::Subquery>(subQueryGroup._child._graphPatterns[0]);
       const auto& c_subquery = get<p::BasicGraphPattern>(
@@ -675,8 +672,7 @@ TEST(ParserTest, testParse) {
       auto subsubQueryGroup = get<p::GroupGraphPattern>(
           parsed_sub_query.get()._rootGraphPattern._graphPatterns[1]);
       auto aux_parsed_sub_sub_query =
-          get<p::Subquery>(subsubQueryGroup._child._graphPatterns[0])
-              .get();
+          get<p::Subquery>(subsubQueryGroup._child._graphPatterns[0]).get();
       const auto& c_sub_subquery = get<p::BasicGraphPattern>(
           aux_parsed_sub_sub_query._rootGraphPattern._graphPatterns[0]);
       ASSERT_EQ(1u, c_sub_subquery._triples.size());

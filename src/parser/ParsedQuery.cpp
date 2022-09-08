@@ -134,7 +134,7 @@ void ParsedQuery::expandPrefixes() {
     graphPatterns.pop_back();
     for (parsedQuery::GraphPatternOperation& p : pattern->_graphPatterns) {
       p.visit([&graphPatterns, &prefixMap = std::as_const(prefixMap),
-                       this](auto&& arg) {
+               this](auto&& arg) {
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, parsedQuery::Subquery>) {
           // TODO<joka921> Make the unique_ptr safe to use (always check the
@@ -413,7 +413,7 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
                            std::is_same_v<T, parsedQuery::Minus>) {
         arg._child.recomputeIds(id_count);
       } else if constexpr (std::is_same_v<T, parsedQuery::TransPath>) {
-        //arg._childGraphPattern.recomputeIds(id_count);
+        // arg._childGraphPattern.recomputeIds(id_count);
       } else if constexpr (std::is_same_v<T, parsedQuery::Values>) {
         arg._id = (*id_count)++;
       } else {
@@ -449,7 +449,8 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
   // skos:altLabel|rdfs:label, ...)
   std::vector<SparqlTriple*> matchingTriples;
   for (auto& graphPattern : _graphPatterns) {
-    auto* basicPattern = std::get_if<parsedQuery::BasicGraphPattern>(&graphPattern);
+    auto* basicPattern =
+        std::get_if<parsedQuery::BasicGraphPattern>(&graphPattern);
     if (!basicPattern) {
       continue;
     }
@@ -481,11 +482,12 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
     // TODO<joka921> It might be beneficial to place this triple not at the
     // end but close to other occurences of `variable`.
     if (_graphPatterns.empty() ||
-        !std::holds_alternative<parsedQuery::BasicGraphPattern>(_graphPatterns.back())) {
+        !std::holds_alternative<parsedQuery::BasicGraphPattern>(
+            _graphPatterns.back())) {
       _graphPatterns.emplace_back(parsedQuery::BasicGraphPattern{});
     }
-    auto& t =
-        std::get<parsedQuery::BasicGraphPattern>(_graphPatterns.back())._triples;
+    auto& t = std::get<parsedQuery::BasicGraphPattern>(_graphPatterns.back())
+                  ._triples;
 
     auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
     SparqlTriple triple(variable, PropertyPath::fromIri(LANGUAGE_PREDICATE),
