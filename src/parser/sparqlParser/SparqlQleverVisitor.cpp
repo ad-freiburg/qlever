@@ -414,7 +414,8 @@ vector<SparqlFilter> Visitor::visitTypesafe(Parser::HavingClauseContext* ctx) {
 }
 
 namespace {
-SparqlFilter parseFilter(auto* ctx, const SparqlQleverVisitor::PrefixMap& prefixMap) {
+SparqlFilter parseFilter(auto* ctx,
+                         const SparqlQleverVisitor::PrefixMap& prefixMap) {
   try {
     return SparqlParser::parseFilterExpression(ctx->getText(), prefixMap);
   } catch (const std::bad_optional_access& error) {

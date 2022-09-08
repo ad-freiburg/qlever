@@ -418,7 +418,9 @@ auto SparqlParser::parseWithAntlr(
 }
 
 // _____________________________________________________________________________
-SparqlFilter SparqlParser::parseFilterExpression(const string& filterContent, const SparqlQleverVisitor::PrefixMap& prefixMap) {
+SparqlFilter SparqlParser::parseFilterExpression(
+    const string& filterContent,
+    const SparqlQleverVisitor::PrefixMap& prefixMap) {
   SparqlParser parser(filterContent);
   auto filter = parser.parseFilter(true).value();
   ParsedQuery::expandPrefix(filter._lhs, prefixMap);

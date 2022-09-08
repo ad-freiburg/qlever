@@ -190,7 +190,9 @@ class ParsedQuery {
     return true;
   }
 
+  /*
   void expandPrefixes();
+  */
 
   auto& children() { return _rootGraphPattern._graphPatterns; }
   [[nodiscard]] const auto& children() const {

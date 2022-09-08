@@ -109,6 +109,7 @@ string SparqlTriple::asString() const {
   return std::move(os).str();
 }
 
+/*
 // _____________________________________________________________________________
 void ParsedQuery::expandPrefixes() {
   ad_utility::HashMap<string, string> prefixMap;
@@ -200,6 +201,7 @@ void ParsedQuery::expandPrefixes() {
     }
   }
 }
+ */
 
 // ________________________________________________________________________
 Variable ParsedQuery::addInternalBind(
