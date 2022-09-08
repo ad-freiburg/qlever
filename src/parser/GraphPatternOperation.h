@@ -78,11 +78,10 @@ struct Union {
 // A subquery.
 class Subquery {
  private:
-  // TODO<joka921> It currently only consists of a single `ParsedQuery`, but we
-  // have to go through a `unique_ptr` to break the circular dependency between
-  // `ParsedQuery`, `GraphPattern` and `GraphPatternOperation` . The manual
-  // definition of all the special member functions is there, to give this class
-  // value semantics.
+  // Note: This is  a `unique_ptr` because of the  circular dependency between
+  // `ParsedQuery`, `GraphPattern` and `GraphPatternOperation` (`Subquery` is a
+  // part of `GraphPatternOperation`). The  special member functions make sure
+  // that this class can be used like a plain value of type `ParsedQuery`.
   std::unique_ptr<ParsedQuery> _subquery;
 
  public:
