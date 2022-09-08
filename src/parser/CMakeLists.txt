@@ -16,5 +16,6 @@ add_library(parser
         ParallelBuffer.cpp
         SparqlParserHelpers.h SparqlParserHelpers.cpp
         TripleComponent.h
-        PropertyPath.h PropertyPath.cpp Alias.h data/SolutionModifiers.h data/LimitOffsetClause.h data/SparqlFilter.h data/SparqlFilter.cpp data/OrderKey.h data/GroupKey.h ParseException.cpp SelectClause.cpp SelectClause.h)
+        GraphPatternOperation.cpp
+        PropertyPath.h PropertyPath.cpp Alias.h data/SolutionModifiers.h data/LimitOffsetClause.h data/SparqlFilter.h data/SparqlFilter.cpp data/OrderKey.h data/GroupKey.h ParseException.cpp SelectClause.cpp SelectClause.h GraphPatternOperation.cpp GraphPatternOperation.h GraphPattern.cpp GraphPattern.h)
 target_link_libraries(parser sparqlParser sparqlExpressions rdfEscaping re2 absl::flat_hash_map util)

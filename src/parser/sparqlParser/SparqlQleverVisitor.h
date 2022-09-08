@@ -43,6 +43,7 @@ class Reversed {
  * available methods.
  */
 class SparqlQleverVisitor : public SparqlAutomaticVisitor {
+  using GraphPatternOperation = parsedQuery::GraphPatternOperation;
   using Objects = ad_utility::sparql_types::Objects;
   using Tuples = ad_utility::sparql_types::Tuples;
   using PredicateAndObject = ad_utility::sparql_types::PredicateAndObject;
@@ -58,11 +59,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       std::pair<vector<GraphPatternOperation>, vector<SparqlFilter>>;
   using OperationOrFilterAndMaybeTriples =
       std::pair<std::variant<GraphPatternOperation, SparqlFilter>,
-                std::optional<GraphPatternOperation::BasicGraphPattern>>;
+                std::optional<parsedQuery::BasicGraphPattern>>;
   using OperationOrFilter = std::variant<GraphPatternOperation, SparqlFilter>;
   using SubQueryAndMaybeValues =
-      std::pair<GraphPatternOperation::Subquery,
-                std::optional<GraphPatternOperation::Values>>;
+      std::pair<parsedQuery::Subquery, std::optional<parsedQuery::Values>>;
   using PatternAndVisibleVariables =
       std::pair<ParsedQuery::GraphPattern, vector<Variable>>;
   size_t _blankNodeCounter = 0;
@@ -293,7 +293,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  std::optional<GraphPatternOperation::Values> visitTypesafe(
+  std::optional<parsedQuery::Values> visitTypesafe(
       Parser::ValuesClauseContext* ctx);
 
   Any visitTriplesTemplate(Parser::TriplesTemplateContext* ctx) override {
@@ -326,7 +326,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  GraphPatternOperation::BasicGraphPattern visitTypesafe(
+  parsedQuery::BasicGraphPattern visitTypesafe(
       Parser::TriplesBlockContext* ctx);
 
   Any visitGraphPatternNotTriples(
@@ -343,7 +343,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  GraphPatternOperation visitTypesafe(Parser::OptionalGraphPatternContext* ctx);
+  parsedQuery::GraphPatternOperation visitTypesafe(
+      Parser::OptionalGraphPatternContext* ctx);
 
   Any visitGraphGraphPattern(Parser::GraphGraphPatternContext* ctx) override {
     return visitChildren(ctx);
@@ -358,31 +359,32 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  GraphPatternOperation visitTypesafe(Parser::BindContext* ctx);
+  parsedQuery::GraphPatternOperation visitTypesafe(Parser::BindContext* ctx);
 
   Any visitInlineData(Parser::InlineDataContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  GraphPatternOperation visitTypesafe(Parser::InlineDataContext* ctx);
+  parsedQuery::GraphPatternOperation visitTypesafe(
+      Parser::InlineDataContext* ctx);
 
   Any visitDataBlock(Parser::DataBlockContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  GraphPatternOperation::Values visitTypesafe(Parser::DataBlockContext* ctx);
+  parsedQuery::Values visitTypesafe(Parser::DataBlockContext* ctx);
 
   Any visitInlineDataOneVar(Parser::InlineDataOneVarContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  SparqlValues visitTypesafe(Parser::InlineDataOneVarContext* ctx);
+  parsedQuery::SparqlValues visitTypesafe(Parser::InlineDataOneVarContext* ctx);
 
   Any visitInlineDataFull(Parser::InlineDataFullContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
-  SparqlValues visitTypesafe(Parser::InlineDataFullContext* ctx);
+  parsedQuery::SparqlValues visitTypesafe(Parser::InlineDataFullContext* ctx);
 
   Any visitDataBlockSingle(Parser::DataBlockSingleContext* ctx) override {
     return visitTypesafe(ctx);

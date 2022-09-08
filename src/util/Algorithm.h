@@ -5,6 +5,7 @@
 #ifndef QLEVER_ALGORITHM_H
 #define QLEVER_ALGORITHM_H
 
+#include <numeric>
 #include <utility>
 
 #include "util/TypeTraits.h"
