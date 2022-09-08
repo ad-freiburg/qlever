@@ -27,6 +27,7 @@
 #include "data/SparqlFilter.h"
 #include "data/Types.h"
 #include "data/VarOrTerm.h"
+#include "parser/SelectClause.h"
 
 using std::string;
 using std::vector;
@@ -131,137 +132,8 @@ class ParsedQuery {
     vector<GraphPatternOperation> _graphPatterns;
   };
 
-  /**
-   * @brief All supported types of aggregate aliases
-   */
-  enum class AggregateType {
-    COUNT,
-    GROUP_CONCAT,
-    FIRST,
-    LAST,
-    SAMPLE,
-    MIN,
-    MAX,
-    SUM,
-    AVG
-  };
-
-  static std::string AggregateTypeAsString(AggregateType t) {
-    switch (t) {
-      case AggregateType::COUNT:
-        return "COUNT";
-      case AggregateType::GROUP_CONCAT:
-        return "GROUP_CONCAT";
-      case AggregateType::FIRST:
-        return "FIRST";
-      case AggregateType::LAST:
-        return "LAST";
-      case AggregateType::SAMPLE:
-        return "SAMPLE";
-      case AggregateType::MIN:
-        return "MIN";
-      case AggregateType::MAX:
-        return "MAX";
-      case AggregateType::SUM:
-        return "SUM";
-      case AggregateType::AVG:
-        return "AVG";
-      default:
-        AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-                 "Illegal/unimplemented enum value in AggregateTypeAsString. "
-                 "Should never happen, please report this");
-    }
-  }
-
-  using VarOrAlias = std::variant<Variable, Alias>;
-
-  // Represents either "all Variables" (Select *) or a list of explicitly
-  // selected Variables (Select ?a ?b).
-  // Represents the SELECT clause with all the possible outcomes.
-  struct SelectClause {
-    bool _reduced = false;
-    bool _distinct = false;
-
-   private:
-    struct VarsAndAliases {
-      std::vector<Variable> _vars;
-      std::vector<Alias> _aliases;
-    };
-    std::variant<VarsAndAliases, char> _varsAndAliasesOrAsterisk;
-    std::vector<Variable> _variablesFromQueryBody;
-
-   public:
-    [[nodiscard]] bool isAsterisk() const {
-      return std::holds_alternative<char>(_varsAndAliasesOrAsterisk);
-    }
-
-    // Set the selector to '*'.
-    void setAsterisk() { _varsAndAliasesOrAsterisk = '*'; }
-
-    void setSelected(std::vector<Variable> variables) {
-      std::vector<VarOrAlias> v(std::make_move_iterator(variables.begin()),
-                                std::make_move_iterator(variables.end()));
-      setSelected(v);
-    }
-
-    void setSelected(std::vector<VarOrAlias> varsOrAliases) {
-      VarsAndAliases v;
-      auto processVariable = [&v](Variable var) {
-        v._vars.push_back(std::move(var));
-      };
-      auto processAlias = [&v](Alias alias) {
-        v._vars.emplace_back(alias._outVarName);
-        v._aliases.push_back(std::move(alias));
-      };
-
-      for (auto& el : varsOrAliases) {
-        std::visit(
-            ad_utility::OverloadCallOperator{processVariable, processAlias},
-            std::move(el));
-      }
-      _varsAndAliasesOrAsterisk = std::move(v);
-    }
-
-    // Add a variable that was found in the query body. The added variables
-    // will only be used if `isAsterisk` is true.
-    void addVariableForAsterisk(const Variable& variable) {
-      if (!ad_utility::contains(_variablesFromQueryBody, variable)) {
-        _variablesFromQueryBody.emplace_back(variable);
-      }
-    }
-
-    // Get the variables accordingly to established Selector:
-    // Select All (Select '*')
-    // or
-    // explicit variables selection (Select 'var_1' ... 'var_n')
-    [[nodiscard]] const std::vector<Variable>& getSelectedVariables() const {
-      return isAsterisk()
-                 ? _variablesFromQueryBody
-                 : std::get<VarsAndAliases>(_varsAndAliasesOrAsterisk)._vars;
-    }
-    [[nodiscard]] std::vector<std::string> getSelectedVariablesAsStrings()
-        const {
-      std::vector<std::string> result;
-      const auto& vars = getSelectedVariables();
-      result.reserve(vars.size());
-      for (const auto& var : vars) {
-        result.push_back(var.name());
-      }
-      return result;
-    }
-
-    [[nodiscard]] const std::vector<Alias>& getAliases() const {
-      static const std::vector<Alias> emptyDummy;
-      // Aliases are always manually specified
-      if (isAsterisk()) {
-        return emptyDummy;
-      } else {
-        return std::get<VarsAndAliases>(_varsAndAliasesOrAsterisk)._aliases;
-      }
-    }
-  };
-
-  SelectClause _selectedVarsOrAsterisk{SelectClause{}};
+  using SelectClause = parsedQuery::SelectClause;
+  SelectClause _selectClause;
 
   using ConstructClause = ad_utility::sparql_types::Triples;
 
@@ -283,7 +155,7 @@ class ParsedQuery {
 
   // explicit default initialisation because the constructor
   // of SelectClause is private
-  std::variant<SelectClause, ConstructClause> _clause{_selectedVarsOrAsterisk};
+  std::variant<SelectClause, ConstructClause> _clause{_selectClause};
 
   [[nodiscard]] bool hasSelectClause() const {
     return std::holds_alternative<SelectClause>(_clause);
@@ -386,6 +258,7 @@ struct GraphPatternOperation {
   };
   struct Subquery {
     ParsedQuery _subquery;
+    // The subquery's children to not influence the outer query.
   };
 
   struct TransPath {

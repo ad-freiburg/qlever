@@ -43,6 +43,8 @@ class IndexScan : public Operation {
   virtual ~IndexScan() = default;
 
   const string& getPredicate() const { return _predicate; }
+  const TripleComponent& getSubject() const { return _subject; }
+  const TripleComponent& getObject() const { return _object; }
 
   virtual size_t getResultWidth() const override;
 

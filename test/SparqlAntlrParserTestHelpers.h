@@ -446,26 +446,26 @@ auto SelectBase =
     [](bool distinct,
        bool reduced) -> testing::Matcher<const ParsedQuery::SelectClause&> {
   return testing::AllOf(
-      AD_FIELD(ParsedQuery::SelectClause, _distinct, testing::Eq(distinct)),
-      AD_FIELD(ParsedQuery::SelectClause, _reduced, testing::Eq(reduced)),
-      AD_PROPERTY(ParsedQuery, SelectClause::getAliases, testing::IsEmpty()));
+      AD_FIELD(parsedQuery::SelectClause, distinct_, testing::Eq(distinct)),
+      AD_FIELD(parsedQuery::SelectClause, reduced_, testing::Eq(reduced)),
+      AD_PROPERTY(parsedQuery::SelectClause, getAliases, testing::IsEmpty()));
 };
 }
 
 auto AsteriskSelect = [](bool distinct = false, bool reduced = false)
-    -> testing::Matcher<const ParsedQuery::SelectClause&> {
+    -> testing::Matcher<const parsedQuery::SelectClause&> {
   return testing::AllOf(
       detail::SelectBase(distinct, reduced),
-      AD_PROPERTY(ParsedQuery, SelectClause::isAsterisk, testing::IsTrue()));
+      AD_PROPERTY(parsedQuery::SelectClause, isAsterisk, testing::IsTrue()));
 };
 
 auto VariablesSelect =
     [](const vector<string>& variables, bool distinct = false,
        bool reduced =
-           false) -> testing::Matcher<const ParsedQuery::SelectClause&> {
+           false) -> testing::Matcher<const parsedQuery::SelectClause&> {
   return testing::AllOf(
       detail::SelectBase(distinct, reduced),
-      AD_PROPERTY(ParsedQuery::SelectClause, getSelectedVariablesAsStrings,
+      AD_PROPERTY(parsedQuery::SelectClause, getSelectedVariablesAsStrings,
                   testing::Eq(variables)));
 };
 
@@ -506,10 +506,10 @@ MATCHER_P3(Select, distinct, reduced, selection, "") {
   }
   return testing::ExplainMatchResult(
       testing::AllOf(
-          AD_FIELD(ParsedQuery::SelectClause, _distinct, testing::Eq(distinct)),
-          AD_PROPERTY(ParsedQuery, SelectClause::getAliases,
+          AD_FIELD(parsedQuery::SelectClause, distinct_, testing::Eq(distinct)),
+          AD_PROPERTY(parsedQuery::SelectClause, getAliases,
                       testing::SizeIs(testing::Eq(alias_counter))),
-          AD_FIELD(ParsedQuery::SelectClause, _reduced, testing::Eq(reduced))),
+          AD_FIELD(parsedQuery::SelectClause, reduced_, testing::Eq(reduced))),
       arg, result_listener);
 }
 }  // namespace detail
@@ -518,8 +518,8 @@ auto Select =
     [](std::vector<std::variant<::Variable, std::pair<string, string>>>
            selection,
        bool distinct = false,
-       bool reduced = false) -> testing::Matcher<ParsedQuery::SelectClause> {
-  return testing::SafeMatcherCast<ParsedQuery::SelectClause>(
+       bool reduced = false) -> testing::Matcher<parsedQuery::SelectClause> {
+  return testing::SafeMatcherCast<parsedQuery::SelectClause>(
       detail::Select(distinct, reduced, std::move(selection)));
 };
 
