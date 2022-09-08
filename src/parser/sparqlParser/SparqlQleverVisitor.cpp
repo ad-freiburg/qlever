@@ -17,10 +17,12 @@ using namespace ad_utility::sparql_types;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
 using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
 using SelectClause = parsedQuery::SelectClause;
-using GraphPattern = ParsedQuery::GraphPattern;
-using Bind = GraphPatternOperation::Bind;
-using Values = GraphPatternOperation::Values;
-using BasicGraphPattern = GraphPatternOperation::BasicGraphPattern;
+using GraphPattern = parsedQuery::GraphPattern;
+using Bind = parsedQuery::Bind;
+using Values = parsedQuery::Values;
+using BasicGraphPattern = parsedQuery::BasicGraphPattern;
+using GraphPatternOperation = parsedQuery::GraphPatternOperation;
+using SparqlValues = parsedQuery::SparqlValues;
 
 using Visitor = SparqlQleverVisitor;
 using Parser = SparqlAutomaticParser;
@@ -269,11 +271,11 @@ Visitor::OperationsAndFilters Visitor::visitTypesafe(
     if (!triples.has_value()) {
       continue;
     }
-    if (ops.empty() || !ops.back().is<BasicGraphPattern>()) {
+    if (ops.empty() || !std::holds_alternative<BasicGraphPattern>(ops.back())) {
       ops.emplace_back(BasicGraphPattern{});
     }
-    ops.back().get<BasicGraphPattern>().appendTriples(
-        std::move(triples.value()));
+    std::get<BasicGraphPattern>(ops.back())
+        .appendTriples(std::move(triples.value()));
   }
   return {std::move(ops), std::move(filters)};
 }
@@ -368,8 +370,7 @@ Visitor::OperationOrFilter Visitor::visitTypesafe(
 GraphPatternOperation Visitor::visitTypesafe(
     Parser::OptionalGraphPatternContext* ctx) {
   auto pattern = visitTypesafe(ctx->groupGraphPattern());
-  return GraphPatternOperation{
-      GraphPatternOperation::Optional{std::move(pattern)}};
+  return GraphPatternOperation{parsedQuery::Optional{std::move(pattern)}};
 }
 
 // ____________________________________________________________________________________
@@ -574,7 +575,7 @@ Visitor::SubQueryAndMaybeValues Visitor::visitTypesafe(
     addVisibleVariable(variable);
   }
   query._numGraphPatterns = numGraphPatterns_++;
-  return {{std::move(query)}, std::move(values)};
+  return {parsedQuery::Subquery{std::move(query)}, std::move(values)};
 }
 
 // ____________________________________________________________________________________
@@ -721,7 +722,7 @@ std::string Visitor::visitTypesafe(Parser::DataBlockValueContext* ctx) {
 GraphPatternOperation Visitor::visitTypesafe(
     Parser::MinusGraphPatternContext* ctx) {
   return GraphPatternOperation{
-      GraphPatternOperation::Minus{visitTypesafe(ctx->groupGraphPattern())}};
+      parsedQuery::Minus{visitTypesafe(ctx->groupGraphPattern())}};
 }
 
 // ____________________________________________________________________________________
@@ -742,16 +743,16 @@ GraphPatternOperation Visitor::visitTypesafe(
     // a similar thing is done in QueryPlaner::uniteGraphPatterns
     auto foldOp = [](GraphPatternOperation op1, GraphPattern op2) {
       return GraphPatternOperation{
-          GraphPatternOperation::Union{wrap(std::move(op1)), std::move(op2)}};
+          parsedQuery::Union{wrap(std::move(op1)), std::move(op2)}};
     };
     // TODO<joka921> QLever should support Nary UNIONs directly.
     return std::accumulate(std::next(children.begin(), 2), children.end(),
-                           GraphPatternOperation{GraphPatternOperation::Union{
+                           GraphPatternOperation{parsedQuery::Union{
                                std::move(children[0]), std::move(children[1])}},
                            foldOp);
   } else {
     return GraphPatternOperation{
-        GraphPatternOperation::GroupGraphPattern{std::move(children[0])}};
+        parsedQuery::GroupGraphPattern{std::move(children[0])}};
   }
 }
 

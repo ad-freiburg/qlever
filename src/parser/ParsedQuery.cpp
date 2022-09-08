@@ -132,42 +132,39 @@ void ParsedQuery::expandPrefixes() {
   while (!graphPatterns.empty()) {
     GraphPattern* pattern = graphPatterns.back();
     graphPatterns.pop_back();
-    for (GraphPatternOperation& p : pattern->_graphPatterns) {
+    for (parsedQuery::GraphPatternOperation& p : pattern->_graphPatterns) {
       p.visit([&graphPatterns, &prefixMap = std::as_const(prefixMap),
                this](auto&& arg) {
         using T = std::decay_t<decltype(arg)>;
-        if constexpr (std::is_same_v<T, GraphPatternOperation::Subquery>) {
-          arg._subquery._prefixes = _prefixes;
-          arg._subquery.expandPrefixes();
-        } else if constexpr (std::is_same_v<T,
-                                            GraphPatternOperation::TransPath>) {
+        if constexpr (std::is_same_v<T, parsedQuery::Subquery>) {
+          arg.get()._prefixes = _prefixes;
+          arg.get().expandPrefixes();
+        } else if constexpr (std::is_same_v<T, parsedQuery::TransPath>) {
           AD_FAIL();
           // we may never be in an transitive path here or a
           // subquery?TODO<joka921, verify by florian> at least this
           // shoudn't have worked before
-        } else if constexpr (std::is_same_v<T,
-                                            GraphPatternOperation::Optional> ||
-                             std::is_same_v<
-                                 T, GraphPatternOperation::GroupGraphPattern> ||
-                             std::is_same_v<T, GraphPatternOperation::Minus>) {
+        } else if constexpr (std::is_same_v<T, parsedQuery::Optional> ||
+                             std::is_same_v<T,
+                                            parsedQuery::GroupGraphPattern> ||
+                             std::is_same_v<T, parsedQuery::Minus>) {
           graphPatterns.push_back(&arg._child);
-        } else if constexpr (std::is_same_v<T, GraphPatternOperation::Union>) {
+        } else if constexpr (std::is_same_v<T, parsedQuery::Union>) {
           graphPatterns.push_back(&arg._child1);
           graphPatterns.push_back(&arg._child2);
-        } else if constexpr (std::is_same_v<T, GraphPatternOperation::Values>) {
+        } else if constexpr (std::is_same_v<T, parsedQuery::Values>) {
           for (auto& row : arg._inlineValues._values) {
             for (std::string& value : row) {
               expandPrefix(value, prefixMap);
             }
           }
 
-        } else if constexpr (std::is_same_v<T, GraphPatternOperation::Bind>) {
+        } else if constexpr (std::is_same_v<T, parsedQuery::Bind>) {
           for (auto ptr : arg.strings()) {
             expandPrefix(*ptr, prefixMap);
           }
         } else {
-          static_assert(
-              std::is_same_v<T, GraphPatternOperation::BasicGraphPattern>);
+          static_assert(std::is_same_v<T, parsedQuery::BasicGraphPattern>);
           for (auto& trip : arg._triples) {
             if (trip._s.isString()) {
               expandPrefix(trip._s.getString(), prefixMap);
@@ -209,7 +206,7 @@ Variable ParsedQuery::addInternalBind(
   std::string targetVariable =
       INTERNAL_VARIABLE_PREFIX + std::to_string(numInternalVariables_);
   numInternalVariables_++;
-  GraphPatternOperation::Bind bind{std::move(expression), targetVariable};
+  parsedQuery::Bind bind{std::move(expression), targetVariable};
   _rootGraphPattern._graphPatterns.emplace_back(std::move(bind));
   // Don't register the targetVariable as visible because it is used
   // internally and should not be selected by SELECT *.
@@ -231,8 +228,8 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
         _groupByVariables.emplace_back(helperTarget.name());
       };
   auto processAlias = [this](Alias groupKey) {
-    GraphPatternOperation::Bind helperBind{std::move(groupKey._expression),
-                                           groupKey._outVarName};
+    parsedQuery::Bind helperBind{std::move(groupKey._expression),
+                                 groupKey._outVarName};
     _rootGraphPattern._graphPatterns.emplace_back(std::move(helperBind));
     registerVariableVisibleInQueryBody(Variable{groupKey._outVarName});
     _groupByVariables.emplace_back(groupKey._outVarName);
@@ -406,24 +403,21 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
   for (auto& op : _graphPatterns) {
     op.visit([&id_count](auto&& arg) {
       using T = std::decay_t<decltype(arg)>;
-      if constexpr (std::is_same_v<T, GraphPatternOperation::Union>) {
+      if constexpr (std::is_same_v<T, parsedQuery::Union>) {
         arg._child1.recomputeIds(id_count);
         arg._child2.recomputeIds(id_count);
-      } else if constexpr (std::is_same_v<T, GraphPatternOperation::Optional> ||
-                           std::is_same_v<
-                               T, GraphPatternOperation::GroupGraphPattern> ||
-                           std::is_same_v<T, GraphPatternOperation::Minus>) {
+      } else if constexpr (std::is_same_v<T, parsedQuery::Optional> ||
+                           std::is_same_v<T, parsedQuery::GroupGraphPattern> ||
+                           std::is_same_v<T, parsedQuery::Minus>) {
         arg._child.recomputeIds(id_count);
-      } else if constexpr (std::is_same_v<T,
-                                          GraphPatternOperation::TransPath>) {
-        arg._childGraphPattern.recomputeIds(id_count);
-      } else if constexpr (std::is_same_v<T, GraphPatternOperation::Values>) {
+      } else if constexpr (std::is_same_v<T, parsedQuery::TransPath>) {
+        // arg._childGraphPattern.recomputeIds(id_count);
+      } else if constexpr (std::is_same_v<T, parsedQuery::Values>) {
         arg._id = (*id_count)++;
       } else {
-        static_assert(
-            std::is_same_v<T, GraphPatternOperation::Subquery> ||
-            std::is_same_v<T, GraphPatternOperation::BasicGraphPattern> ||
-            std::is_same_v<T, GraphPatternOperation::Bind>);
+        static_assert(std::is_same_v<T, parsedQuery::Subquery> ||
+                      std::is_same_v<T, parsedQuery::BasicGraphPattern> ||
+                      std::is_same_v<T, parsedQuery::Bind>);
         // subquery children have their own id space
         // TODO:joka921 look at the optimizer if it is ok, that
         // BasicGraphPatterns and Values have no ids at all. at the same time
@@ -435,67 +429,6 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
   if (allocatedIdCounter) {
     delete id_count;
   }
-}
-
-// _____________________________________________________________________________
-void GraphPatternOperation::toString(std::ostringstream& os,
-                                     int indentation) const {
-  for (int j = 1; j < indentation; ++j) os << "  ";
-
-  visit([&os, indentation](auto&& arg) {
-    using T = std::decay_t<decltype(arg)>;
-    if constexpr (std::is_same_v<T, Optional>) {
-      os << "OPTIONAL ";
-      arg._child.toString(os, indentation);
-    } else if constexpr (std::is_same_v<T, GroupGraphPattern>) {
-      os << "GROUP ";
-      arg._child.toString(os, indentation);
-    } else if constexpr (std::is_same_v<T, Union>) {
-      arg._child1.toString(os, indentation);
-      os << " UNION ";
-      arg._child2.toString(os, indentation);
-    } else if constexpr (std::is_same_v<T, Subquery>) {
-      os << arg._subquery.asString();
-    } else if constexpr (std::is_same_v<T, Values>) {
-      os << "VALUES (";
-      for (const auto& v : arg._inlineValues._variables) {
-        os << v << ' ';
-      }
-      os << ") ";
-
-      for (const auto& v : arg._inlineValues._values) {
-        os << "(";
-        for (const auto& val : v) {
-          os << val << ' ';
-        }
-        os << ')';
-      }
-    } else if constexpr (std::is_same_v<T, BasicGraphPattern>) {
-      for (size_t i = 0; i + 1 < arg._triples.size(); ++i) {
-        os << "\n";
-        for (int j = 0; j < indentation; ++j) os << "  ";
-        os << arg._triples[i].asString() << ',';
-      }
-      if (arg._triples.size() > 0) {
-        os << "\n";
-        for (int j = 0; j < indentation; ++j) os << "  ";
-        os << arg._triples.back().asString();
-      }
-
-    } else if constexpr (std::is_same_v<T, Bind>) {
-      os << "Some kind of BIND\n";
-      // TODO<joka921> proper ToString (are they used for something?)
-    } else if constexpr (std::is_same_v<T, Minus>) {
-      os << "MINUS ";
-      arg._child.toString(os, indentation);
-    } else {
-      static_assert(std::is_same_v<T, TransPath>);
-      os << "TRANS PATH from " << arg._left << " to " << arg._right
-         << " with at least " << arg._min << " and at most " << arg._max
-         << " steps of ";
-      arg._childGraphPattern.toString(os, indentation);
-    }
-  });
 }
 
 // __________________________________________________________________________
@@ -514,12 +447,12 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
   // skos:altLabel|rdfs:label, ...)
   std::vector<SparqlTriple*> matchingTriples;
   for (auto& graphPattern : _graphPatterns) {
-    if (!graphPattern.is<GraphPatternOperation::BasicGraphPattern>()) {
+    auto* basicPattern =
+        std::get_if<parsedQuery::BasicGraphPattern>(&graphPattern);
+    if (!basicPattern) {
       continue;
     }
-    auto& pattern =
-        graphPattern.get<GraphPatternOperation::BasicGraphPattern>();
-    for (auto& triple : pattern._triples) {
+    for (auto& triple : basicPattern->_triples) {
       if (triple._o == variable &&
           (triple._p._operation == PropertyPath::Operation::IRI &&
            !isVariable(triple._p))) {
@@ -547,11 +480,11 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
     // TODO<joka921> It might be beneficial to place this triple not at the
     // end but close to other occurences of `variable`.
     if (_graphPatterns.empty() ||
-        !_graphPatterns.back().is<GraphPatternOperation::BasicGraphPattern>()) {
-      _graphPatterns.emplace_back(GraphPatternOperation::BasicGraphPattern{});
+        !std::holds_alternative<parsedQuery::BasicGraphPattern>(
+            _graphPatterns.back())) {
+      _graphPatterns.emplace_back(parsedQuery::BasicGraphPattern{});
     }
-    auto& t = _graphPatterns.back()
-                  .get<GraphPatternOperation::BasicGraphPattern>()
+    auto& t = std::get<parsedQuery::BasicGraphPattern>(_graphPatterns.back())
                   ._triples;
 
     auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);

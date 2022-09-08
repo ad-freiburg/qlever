@@ -157,7 +157,7 @@ class QueryPlanner {
   };
 
   TripleGraph createTripleGraph(
-      const GraphPatternOperation::BasicGraphPattern* pattern) const;
+      const parsedQuery::BasicGraphPattern* pattern) const;
 
   void setEnablePatternTrick(bool enablePatternTrick);
 

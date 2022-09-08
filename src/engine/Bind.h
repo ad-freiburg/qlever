@@ -13,7 +13,7 @@
 class Bind : public Operation {
  public:
   Bind(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
-       GraphPatternOperation::Bind b)
+       parsedQuery::Bind b)
       : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {}
 
   // For the documentation of the overridden members, see Operation.h
@@ -40,7 +40,7 @@ class Bind : public Operation {
 
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
-  GraphPatternOperation::Bind _bind;
+  parsedQuery::Bind _bind;
 
   void computeResult(ResultTable* result) override;
 
