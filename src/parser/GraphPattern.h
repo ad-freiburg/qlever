@@ -12,7 +12,7 @@
 
 namespace parsedQuery {
 
-// Forward declarations
+// Forward declarations.
 struct GraphPatternOperation;
 
 // Groups triplets and filters. Represents a node in a tree (as graph patterns
@@ -20,7 +20,7 @@ struct GraphPatternOperation;
 class GraphPattern {
  public:
   // The constructor has to be implemented in the .cpp file because of the
-  // circular dependencies of `GraphPattern` and `GraphPatternOperation`
+  // circular dependencies of `GraphPattern` and `GraphPatternOperation`.
   GraphPattern();
   GraphPattern(GraphPattern&& other);
   GraphPattern(const GraphPattern& other);
@@ -28,8 +28,8 @@ class GraphPattern {
   GraphPattern& operator=(GraphPattern&& other) noexcept;
   ~GraphPattern();
   void toString(std::ostringstream& os, int indentation = 0) const;
-  // Traverses the graph pattern tree and assigns a unique id to every graph
-  // pattern
+  // Traverse the graph pattern tree and assigns a unique ID to every graph
+  // pattern.
   void recomputeIds(size_t* id_count = nullptr);
 
   // Modify query to take care of language filter. `variable` is the variable,
@@ -38,10 +38,9 @@ class GraphPattern {
                          const std::string& languageInQuotes);
 
   bool _optional;
-  /**
-   * @brief A id that is unique for the ParsedQuery. Ids are guaranteed to
-   * start with zero and to be dense.
-   */
+
+  // An ID that is only used by the QueryPlanner.
+  // TODO<joka921> This should not be part of this class.
   size_t _id = size_t(-1);
 
   // Filters always apply to the complete GraphPattern, no matter where

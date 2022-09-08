@@ -300,23 +300,22 @@ auto Expression = [](const std::string& descriptor)
 
 namespace detail {
 template <typename T>
-auto GraphPatternOperation = [](auto subMatcher)
-    -> testing::Matcher<const parsedQuery::GraphPatternOperation&> {
+auto GraphPatternOperation =
+    [](auto subMatcher) -> testing::Matcher<const p::GraphPatternOperation&> {
   return testing::VariantWith<T>(subMatcher);
 };
 }
 
 auto BindExpression =
-    [](const string& expression) -> testing::Matcher<const parsedQuery::Bind&> {
-  return AD_FIELD(parsedQuery::Bind, _expression,
-                  detail::Expression(expression));
+    [](const string& expression) -> testing::Matcher<const p::Bind&> {
+  return AD_FIELD(p::Bind, _expression, detail::Expression(expression));
 };
 
 auto Bind = [](const string& variable, const string& expression)
-    -> testing::Matcher<const parsedQuery::GraphPatternOperation&> {
-  return detail::GraphPatternOperation<parsedQuery::Bind>(testing::AllOf(
-      BindExpression(expression),
-      AD_FIELD(parsedQuery::Bind, _target, testing::Eq(variable))));
+    -> testing::Matcher<const p::GraphPatternOperation&> {
+  return detail::GraphPatternOperation<p::Bind>(
+      testing::AllOf(BindExpression(expression),
+                     AD_FIELD(p::Bind, _target, testing::Eq(variable))));
 };
 
 auto LimitOffset =
@@ -424,12 +423,12 @@ auto GroupByVariables =
 
 auto Values = [](const vector<string>& vars,
                  const vector<vector<string>>& values)
-    -> testing::Matcher<const parsedQuery::Values&> {
+    -> testing::Matcher<const p::Values&> {
   // TODO Refactor GraphPatternOperation::Values / SparqlValues s.t. this
   //  becomes a trivial Eq matcher.
-  using SparqlValues = parsedQuery::SparqlValues;
+  using SparqlValues = p::SparqlValues;
   return testing::AllOf(AD_FIELD(
-      parsedQuery::Values, _inlineValues,
+      p::Values, _inlineValues,
       testing::AllOf(AD_FIELD(SparqlValues, _variables, testing::Eq(vars)),
                      AD_FIELD(SparqlValues, _values, testing::Eq(values)))));
 };
@@ -447,26 +446,26 @@ auto SelectBase =
     [](bool distinct,
        bool reduced) -> testing::Matcher<const ParsedQuery::SelectClause&> {
   return testing::AllOf(
-      AD_FIELD(parsedQuery::SelectClause, distinct_, testing::Eq(distinct)),
-      AD_FIELD(parsedQuery::SelectClause, reduced_, testing::Eq(reduced)),
-      AD_PROPERTY(parsedQuery::SelectClause, getAliases, testing::IsEmpty()));
+      AD_FIELD(p::SelectClause, distinct_, testing::Eq(distinct)),
+      AD_FIELD(p::SelectClause, reduced_, testing::Eq(reduced)),
+      AD_PROPERTY(p::SelectClause, getAliases, testing::IsEmpty()));
 };
 }
 
-auto AsteriskSelect = [](bool distinct = false, bool reduced = false)
-    -> testing::Matcher<const parsedQuery::SelectClause&> {
+auto AsteriskSelect =
+    [](bool distinct = false,
+       bool reduced = false) -> testing::Matcher<const p::SelectClause&> {
   return testing::AllOf(
       detail::SelectBase(distinct, reduced),
-      AD_PROPERTY(parsedQuery::SelectClause, isAsterisk, testing::IsTrue()));
+      AD_PROPERTY(p::SelectClause, isAsterisk, testing::IsTrue()));
 };
 
 auto VariablesSelect =
     [](const vector<string>& variables, bool distinct = false,
-       bool reduced =
-           false) -> testing::Matcher<const parsedQuery::SelectClause&> {
+       bool reduced = false) -> testing::Matcher<const p::SelectClause&> {
   return testing::AllOf(
       detail::SelectBase(distinct, reduced),
-      AD_PROPERTY(parsedQuery::SelectClause, getSelectedVariablesAsStrings,
+      AD_PROPERTY(p::SelectClause, getSelectedVariablesAsStrings,
                   testing::Eq(variables)));
 };
 
@@ -507,10 +506,10 @@ MATCHER_P3(Select, distinct, reduced, selection, "") {
   }
   return testing::ExplainMatchResult(
       testing::AllOf(
-          AD_FIELD(parsedQuery::SelectClause, distinct_, testing::Eq(distinct)),
-          AD_PROPERTY(parsedQuery::SelectClause, getAliases,
+          AD_FIELD(p::SelectClause, distinct_, testing::Eq(distinct)),
+          AD_PROPERTY(p::SelectClause, getAliases,
                       testing::SizeIs(testing::Eq(alias_counter))),
-          AD_FIELD(parsedQuery::SelectClause, reduced_, testing::Eq(reduced))),
+          AD_FIELD(p::SelectClause, reduced_, testing::Eq(reduced))),
       arg, result_listener);
 }
 }  // namespace detail
@@ -519,8 +518,8 @@ auto Select =
     [](std::vector<std::variant<::Variable, std::pair<string, string>>>
            selection,
        bool distinct = false,
-       bool reduced = false) -> testing::Matcher<parsedQuery::SelectClause> {
-  return testing::SafeMatcherCast<parsedQuery::SelectClause>(
+       bool reduced = false) -> testing::Matcher<p::SelectClause> {
+  return testing::SafeMatcherCast<p::SelectClause>(
       detail::Select(distinct, reduced, std::move(selection)));
 };
 

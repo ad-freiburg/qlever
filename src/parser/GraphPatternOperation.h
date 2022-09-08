@@ -75,19 +75,23 @@ struct Union {
   GraphPattern _child2;
 };
 
-/// A subquery.
-/// TODO<joka921> It currently only consists of a single `ParsedQuery`, but we
-/// have to go through a `unique_ptr` to break the cyclic dependency. The manual
-/// definition of all the special member functions is there, to give this class
-/// value semantics.
+// A subquery.
 class Subquery {
  private:
+  // TODO<joka921> It currently only consists of a single `ParsedQuery`, but we
+  // have to go through a `unique_ptr` to break the circular dependency between
+  // `ParsedQuery`, `GraphPattern` and `GraphPatternOperation` . The manual
+  // definition of all the special member functions is there, to give this class
+  // value semantics.
   std::unique_ptr<ParsedQuery> _subquery;
 
  public:
   // TODO<joka921> Make this an abstraction `TypeErasingPimpl`.
-  explicit Subquery(const ParsedQuery&);
-  explicit Subquery(ParsedQuery&&);
+
+  // Deliberately not explicit, because semantically those are copy/move
+  // constructors.
+  Subquery(const ParsedQuery&);
+  Subquery(ParsedQuery&&);
   Subquery();
   ~Subquery();
   Subquery(const Subquery&);
@@ -96,7 +100,6 @@ class Subquery {
   Subquery& operator=(Subquery&&);
   ParsedQuery& get();
   const ParsedQuery& get() const;
-  // The subquery's children to not influence the outer query.
 };
 
 // It seems as if this class is never actually set.

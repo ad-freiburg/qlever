@@ -137,8 +137,6 @@ void ParsedQuery::expandPrefixes() {
                this](auto&& arg) {
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, parsedQuery::Subquery>) {
-          // TODO<joka921> Make the unique_ptr safe to use (always check the
-          // access)
           arg.get()._prefixes = _prefixes;
           arg.get().expandPrefixes();
         } else if constexpr (std::is_same_v<T, parsedQuery::TransPath>) {

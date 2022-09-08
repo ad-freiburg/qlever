@@ -20,7 +20,7 @@
 template <typename Derived, typename BaseVariant>
 class VisitMixin {
  public:
-  // TODO<C++23> deducing this
+  // TODO<C++23> use the `deducing this` feature.
   decltype(auto) visit(auto&& f) {
     return std::visit(AD_FWD(f),
                       static_cast<BaseVariant&>(static_cast<Derived&>(*this)));
