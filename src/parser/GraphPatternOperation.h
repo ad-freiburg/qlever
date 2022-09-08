@@ -79,9 +79,10 @@ struct Union {
 class Subquery {
  private:
   // Note: This is  a `unique_ptr` because of the  circular dependency between
-  // `ParsedQuery`, `GraphPattern` and `GraphPatternOperation` (`Subquery` is a
-  // part of `GraphPatternOperation`). The  special member functions make sure
-  // that this class can be used like a plain value of type `ParsedQuery`.
+  // `ParsedQuery`, `GraphPattern` and `GraphPatternOperation` (`Subquery` is
+  // one of the alternatives of the variant `GraphPatternOperation`). The
+  // special member functions make sure that this class can be used like a plain
+  // value of type `ParsedQuery`.
   std::unique_ptr<ParsedQuery> _subquery;
 
  public:
