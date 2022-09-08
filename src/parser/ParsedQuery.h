@@ -190,10 +190,6 @@ class ParsedQuery {
     return true;
   }
 
-  /*
-  void expandPrefixes();
-  */
-
   auto& children() { return _rootGraphPattern._graphPatterns; }
   [[nodiscard]] const auto& children() const {
     return _rootGraphPattern._graphPatterns;
@@ -222,11 +218,6 @@ class ParsedQuery {
   void merge(const ParsedQuery& p);
 
   [[nodiscard]] string asString() const;
-
-  static void expandPrefix(
-      PropertyPath& item, const ad_utility::HashMap<string, string>& prefixMap);
-  static void expandPrefix(
-      string& item, const ad_utility::HashMap<string, string>& prefixMap);
 };
 
 struct GraphPatternOperation {
