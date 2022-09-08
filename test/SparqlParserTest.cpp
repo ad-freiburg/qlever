@@ -229,9 +229,8 @@ TEST(ParserTest, testParse) {
                     .parse();
 
       ASSERT_EQ(2u, pq.children().size());
-      const auto& opt =
-          pq._rootGraphPattern._graphPatterns[1]
-              .get<GraphPatternOperation::Optional>();  // throws on error
+      const auto& opt = pq._rootGraphPattern._graphPatterns[1]
+                            .get<parsedQuery::Optional>();  // throws on error
       auto& child = opt._child;
       const auto& triples = child._graphPatterns[0].getBasic()._triples;
       auto filters = child._filters;
@@ -260,17 +259,14 @@ TEST(ParserTest, testParse) {
                     "}")
                     .parse();
       ASSERT_EQ(2u, pq._rootGraphPattern._graphPatterns.size());
-      const auto& optA =
-          pq._rootGraphPattern._graphPatterns[1]
-              .get<GraphPatternOperation::Optional>();  // throws on error
+      const auto& optA = pq._rootGraphPattern._graphPatterns[1]
+                             .get<parsedQuery::Optional>();  // throws on error
       auto& child = optA._child;
       ASSERT_EQ(3u, child._graphPatterns.size());
-      const auto& opt2 =
-          child._graphPatterns[1]
-              .get<GraphPatternOperation::Optional>();  // throws on error
-      const auto& opt3 =
-          child._graphPatterns[2]
-              .get<GraphPatternOperation::Optional>();  // throws on error
+      const auto& opt2 = child._graphPatterns[1]
+                             .get<parsedQuery::Optional>();  // throws on error
+      const auto& opt3 = child._graphPatterns[2]
+                             .get<parsedQuery::Optional>();  // throws on error
       const auto& child2 = opt2._child._graphPatterns[0].getBasic();
       const auto& child3 = opt3._child._graphPatterns[0].getBasic();
       ASSERT_EQ(1u, child2._triples.size());
@@ -295,9 +291,9 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(1u, c._triples.size());
       ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
       const auto& values1 =
-          pq.children()[0].get<GraphPatternOperation::Values>()._inlineValues;
+          pq.children()[0].get<parsedQuery::Values>()._inlineValues;
       const auto& values2 =
-          pq.children()[1].get<GraphPatternOperation::Values>()._inlineValues;
+          pq.children()[1].get<parsedQuery::Values>()._inlineValues;
 
       vector<string> vvars = {"?a"};
       ASSERT_EQ(vvars, values1._variables);
@@ -323,9 +319,9 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(2u, pq.children().size());
       ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
       const auto& values1 =
-          pq.children()[0].get<GraphPatternOperation::Values>()._inlineValues;
+          pq.children()[0].get<parsedQuery::Values>()._inlineValues;
       const auto& values2 =
-          pq.children()[1].get<GraphPatternOperation::Values>()._inlineValues;
+          pq.children()[1].get<parsedQuery::Values>()._inlineValues;
 
       vector<string> vvars = {"?a"};
       ASSERT_EQ(vvars, values1._variables);
@@ -361,7 +357,7 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(c._triples[0]._o, "?citytype");
 
       const auto& values1 =
-          pq.children()[0].get<GraphPatternOperation::Values>()._inlineValues;
+          pq.children()[0].get<parsedQuery::Values>()._inlineValues;
       vector<string> vvars = {"?citytype"};
       ASSERT_EQ(vvars, values1._variables);
       vector<vector<string>> vvals = {
@@ -558,23 +554,21 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
 
       // -- SubQuery
-      auto subQueryGroup = get<GraphPatternOperation::GroupGraphPattern>(
-          pq._rootGraphPattern._graphPatterns[1].variant_);
-      auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
-          subQueryGroup._child._graphPatterns[0].variant_);
-      const auto& c_subquery = get<GraphPatternOperation::BasicGraphPattern>(
-          parsed_sub_query._subquery._rootGraphPattern._graphPatterns[0]
-              .variant_);
+      auto subQueryGroup = get<parsedQuery::GroupGraphPattern>(
+          pq._rootGraphPattern._graphPatterns[1]);
+      auto parsed_sub_query =
+          get<parsedQuery::Subquery>(subQueryGroup._child._graphPatterns[0]);
+      const auto& c_subquery = get<parsedQuery::BasicGraphPattern>(
+          parsed_sub_query.get()._rootGraphPattern._graphPatterns[0]);
       ASSERT_EQ(2u, c_subquery._triples.size());
-      ASSERT_EQ(1u,
-                parsed_sub_query._subquery._rootGraphPattern._filters.size());
+      ASSERT_EQ(1u, parsed_sub_query.get()._rootGraphPattern._filters.size());
       ASSERT_EQ("?year",
-                parsed_sub_query._subquery._rootGraphPattern._filters[0]._lhs);
+                parsed_sub_query.get()._rootGraphPattern._filters[0]._lhs);
       ASSERT_EQ("\"00-00-2000\"",
-                parsed_sub_query._subquery._rootGraphPattern._filters[0]._rhs);
+                parsed_sub_query.get()._rootGraphPattern._filters[0]._rhs);
       ASSERT_EQ(SparqlFilter::GT,
-                parsed_sub_query._subquery._rootGraphPattern._filters[0]._type);
-      ASSERT_EQ(0, parsed_sub_query._subquery._limitOffset._offset);
+                parsed_sub_query.get()._rootGraphPattern._filters[0]._type);
+      ASSERT_EQ(0, parsed_sub_query.get()._limitOffset._offset);
 
       ASSERT_EQ(c_subquery._triples[0]._s, "?movie");
       ASSERT_EQ(c_subquery._triples[0]._p._iri, "<directed-by>");
@@ -585,12 +579,12 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(c_subquery._triples[1]._o, "?year");
 
       ASSERT_EQ(std::numeric_limits<uint64_t>::max(),
-                parsed_sub_query._subquery._limitOffset._limit);
-      ASSERT_EQ(true, parsed_sub_query._subquery._orderBy[0].isDescending_);
-      ASSERT_EQ("?director", parsed_sub_query._subquery._orderBy[0].variable_);
+                parsed_sub_query.get()._limitOffset._limit);
+      ASSERT_EQ(true, parsed_sub_query.get()._orderBy[0].isDescending_);
+      ASSERT_EQ("?director", parsed_sub_query.get()._orderBy[0].variable_);
 
       auto sc_subquery =
-          get<ParsedQuery::SelectClause>(parsed_sub_query._subquery._clause);
+          get<ParsedQuery::SelectClause>(parsed_sub_query.get()._clause);
       ASSERT_EQ(false, sc_subquery.distinct_);
       ASSERT_EQ(false, sc_subquery.reduced_);
       ASSERT_EQ(true, sc_subquery.isAsterisk());
@@ -645,35 +639,33 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
 
       // -- SubQuery (level 1)
-      auto subQueryGroup = get<GraphPatternOperation::GroupGraphPattern>(
-          pq._rootGraphPattern._graphPatterns[1].variant_);
-      auto parsed_sub_query = get<GraphPatternOperation::Subquery>(
-          subQueryGroup._child._graphPatterns[0].variant_);
-      const auto& c_subquery = get<GraphPatternOperation::BasicGraphPattern>(
-          parsed_sub_query._subquery._rootGraphPattern._graphPatterns[0]
-              .variant_);
+      auto subQueryGroup = get<parsedQuery::GroupGraphPattern>(
+          pq._rootGraphPattern._graphPatterns[1]);
+      auto parsed_sub_query =
+          get<parsedQuery::Subquery>(subQueryGroup._child._graphPatterns[0]);
+      const auto& c_subquery = get<parsedQuery::BasicGraphPattern>(
+          parsed_sub_query.get()._rootGraphPattern._graphPatterns[0]);
       ASSERT_EQ(1u, c_subquery._triples.size());
-      ASSERT_EQ(1u,
-                parsed_sub_query._subquery._rootGraphPattern._filters.size());
+      ASSERT_EQ(1u, parsed_sub_query.get()._rootGraphPattern._filters.size());
       ASSERT_EQ("?year",
-                parsed_sub_query._subquery._rootGraphPattern._filters[0]._lhs);
+                parsed_sub_query.get()._rootGraphPattern._filters[0]._lhs);
       ASSERT_EQ("\"00-00-2000\"",
-                parsed_sub_query._subquery._rootGraphPattern._filters[0]._rhs);
+                parsed_sub_query.get()._rootGraphPattern._filters[0]._rhs);
       ASSERT_EQ(SparqlFilter::GT,
-                parsed_sub_query._subquery._rootGraphPattern._filters[0]._type);
-      ASSERT_EQ(0, parsed_sub_query._subquery._limitOffset._offset);
+                parsed_sub_query.get()._rootGraphPattern._filters[0]._type);
+      ASSERT_EQ(0, parsed_sub_query.get()._limitOffset._offset);
 
       ASSERT_EQ(c_subquery._triples[0]._s, "?movie");
       ASSERT_EQ(c_subquery._triples[0]._p._iri, "<directed-by>");
       ASSERT_EQ(c_subquery._triples[0]._o, "?director");
 
       ASSERT_EQ(std::numeric_limits<uint64_t>::max(),
-                parsed_sub_query._subquery._limitOffset._limit);
-      ASSERT_EQ(true, parsed_sub_query._subquery._orderBy[0].isDescending_);
-      ASSERT_EQ("?director", parsed_sub_query._subquery._orderBy[0].variable_);
+                parsed_sub_query.get()._limitOffset._limit);
+      ASSERT_EQ(true, parsed_sub_query.get()._orderBy[0].isDescending_);
+      ASSERT_EQ("?director", parsed_sub_query.get()._orderBy[0].variable_);
 
       auto sc_subquery =
-          get<ParsedQuery::SelectClause>(parsed_sub_query._subquery._clause);
+          get<ParsedQuery::SelectClause>(parsed_sub_query.get()._clause);
       ASSERT_EQ(false, sc_subquery.distinct_);
       ASSERT_EQ(false, sc_subquery.reduced_);
       ASSERT_EQ(true, sc_subquery.isAsterisk());
@@ -681,17 +673,13 @@ TEST(ParserTest, testParse) {
       ASSERT_EQ(vvars_subquery, sc_subquery.getSelectedVariablesAsStrings());
 
       // -- SubQuery (level 2)
-      auto subsubQueryGroup = get<GraphPatternOperation::GroupGraphPattern>(
-          parsed_sub_query._subquery._rootGraphPattern._graphPatterns[1]
-              .variant_);
+      auto subsubQueryGroup = get<parsedQuery::GroupGraphPattern>(
+          parsed_sub_query.get()._rootGraphPattern._graphPatterns[1]);
       auto aux_parsed_sub_sub_query =
-          get<GraphPatternOperation::Subquery>(
-              subsubQueryGroup._child._graphPatterns[0].variant_)
-              ._subquery;
-      const auto& c_sub_subquery =
-          get<GraphPatternOperation::BasicGraphPattern>(
-              aux_parsed_sub_sub_query._rootGraphPattern._graphPatterns[0]
-                  .variant_);
+          get<parsedQuery::Subquery>(subsubQueryGroup._child._graphPatterns[0])
+              .get();
+      const auto& c_sub_subquery = get<parsedQuery::BasicGraphPattern>(
+          aux_parsed_sub_sub_query._rootGraphPattern._graphPatterns[0]);
       ASSERT_EQ(1u, c_sub_subquery._triples.size());
       ASSERT_EQ(0u, aux_parsed_sub_sub_query._rootGraphPattern._filters.size());
       ASSERT_EQ(0, aux_parsed_sub_sub_query._limitOffset._offset);
@@ -1137,10 +1125,9 @@ TEST(ParserTest, Bind) {
       SparqlParser("SELECT ?a WHERE { BIND (10 - 5 as ?a) . }").parse();
   ASSERT_TRUE(pq.hasSelectClause());
   ASSERT_EQ(pq.children().size(), 1);
-  GraphPatternOperation child = pq.children()[0];
-  ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(child.variant_));
-  GraphPatternOperation::Bind bind =
-      get<GraphPatternOperation::Bind>(child.variant_);
+  parsedQuery::GraphPatternOperation child = pq.children()[0];
+  ASSERT_TRUE(holds_alternative<parsedQuery::Bind>(child));
+  parsedQuery::Bind bind = get<parsedQuery::Bind>(child);
   ASSERT_EQ(bind._target, "?a");
   ASSERT_EQ(bind._expression.getDescriptor(), "10-5");
 }
@@ -1151,8 +1138,8 @@ TEST(ParserTest, Order) {
         SparqlParser("SELECT ?x ?y WHERE { ?x <test/myrel> ?y }").parse();
     ASSERT_TRUE(pq._orderBy.empty());
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
-    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
-        pq._rootGraphPattern._graphPatterns[0].variant_));
+    ASSERT_TRUE(holds_alternative<parsedQuery::BasicGraphPattern>(
+        pq._rootGraphPattern._graphPatterns[0]));
   }
   {
     ParsedQuery pq =
@@ -1161,8 +1148,8 @@ TEST(ParserTest, Order) {
     ASSERT_EQ(pq._orderBy.size(), 1);
     EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey("?x", false));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
-    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
-        pq._rootGraphPattern._graphPatterns[0].variant_));
+    ASSERT_TRUE(holds_alternative<parsedQuery::BasicGraphPattern>(
+        pq._rootGraphPattern._graphPatterns[0]));
   }
   {
     ParsedQuery pq =
@@ -1172,8 +1159,8 @@ TEST(ParserTest, Order) {
     ASSERT_EQ(pq._orderBy.size(), 1);
     EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey("?y", false));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
-    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
-        pq._rootGraphPattern._graphPatterns[0].variant_));
+    ASSERT_TRUE(holds_alternative<parsedQuery::BasicGraphPattern>(
+        pq._rootGraphPattern._graphPatterns[0]));
   }
   {
     ParsedQuery pq =
@@ -1183,8 +1170,8 @@ TEST(ParserTest, Order) {
     ASSERT_EQ(pq._orderBy.size(), 1);
     EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey("?foo", true));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
-    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
-        pq._rootGraphPattern._graphPatterns[0].variant_));
+    ASSERT_TRUE(holds_alternative<parsedQuery::BasicGraphPattern>(
+        pq._rootGraphPattern._graphPatterns[0]));
   }
   {
     ParsedQuery pq =
@@ -1194,8 +1181,8 @@ TEST(ParserTest, Order) {
     ASSERT_EQ(pq._orderBy.size(), 1);
     EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey("?x", false));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
-    ASSERT_TRUE(holds_alternative<GraphPatternOperation::BasicGraphPattern>(
-        pq._rootGraphPattern._graphPatterns[0].variant_));
+    ASSERT_TRUE(holds_alternative<parsedQuery::BasicGraphPattern>(
+        pq._rootGraphPattern._graphPatterns[0]));
   }
   {
     ParsedQuery pq = SparqlParser(
@@ -1211,9 +1198,9 @@ TEST(ParserTest, Order) {
             "SELECT ?x ?y WHERE { ?x <test/myrel> ?y } ORDER BY (?x - ?y)")
             .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
-    auto variant = pq._rootGraphPattern._graphPatterns[1].variant_;
-    ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
-    auto helperBind = get<GraphPatternOperation::Bind>(variant);
+    auto variant = pq._rootGraphPattern._graphPatterns[1];
+    ASSERT_TRUE(holds_alternative<parsedQuery::Bind>(variant));
+    auto helperBind = get<parsedQuery::Bind>(variant);
     ASSERT_EQ(helperBind._expression.getDescriptor(), "?x-?y");
     ASSERT_EQ(pq._orderBy[0].variable_, helperBind._target);
   }
@@ -1261,9 +1248,9 @@ TEST(ParserTest, Group) {
         SparqlParser(
             "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY (?x - ?y) ?x")
             .parse();
-    auto variant = pq._rootGraphPattern._graphPatterns[1].variant_;
-    ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
-    auto helperBind = get<GraphPatternOperation::Bind>(variant);
+    auto variant = pq._rootGraphPattern._graphPatterns[1];
+    ASSERT_TRUE(holds_alternative<parsedQuery::Bind>(variant));
+    auto helperBind = get<parsedQuery::Bind>(variant);
     ASSERT_THAT(helperBind, m::BindExpression("?x-?y"));
     EXPECT_THAT(pq, m::GroupByVariables(
                         {Variable{helperBind._target}, Variable{"?x"}}));
@@ -1284,9 +1271,9 @@ TEST(ParserTest, Group) {
         SparqlParser(
             "SELECT ?x WHERE { ?x <test/myrel> ?y } GROUP BY COUNT(?x) ?x")
             .parse();
-    auto variant = pq._rootGraphPattern._graphPatterns[1].variant_;
-    ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
-    auto helperBind = get<GraphPatternOperation::Bind>(variant);
+    auto variant = pq._rootGraphPattern._graphPatterns[1];
+    ASSERT_TRUE(holds_alternative<parsedQuery::Bind>(variant));
+    auto helperBind = get<parsedQuery::Bind>(variant);
     ASSERT_THAT(helperBind, m::BindExpression("COUNT(?x)"));
     EXPECT_THAT(pq, m::GroupByVariables(
                         {Variable{helperBind._target}, Variable{"?x"}}));
@@ -1298,9 +1285,9 @@ TEST(ParserTest, Group) {
                          "<http://www.opengis.net/def/function/geosparql/"
                          "latitude> (?test) ?x")
                          .parse();
-    auto variant = pq._rootGraphPattern._graphPatterns[1].variant_;
-    ASSERT_TRUE(holds_alternative<GraphPatternOperation::Bind>(variant));
-    auto helperBind = get<GraphPatternOperation::Bind>(variant);
+    auto variant = pq._rootGraphPattern._graphPatterns[1];
+    ASSERT_TRUE(holds_alternative<parsedQuery::Bind>(variant));
+    auto helperBind = get<parsedQuery::Bind>(variant);
     ASSERT_THAT(
         helperBind,
         m::BindExpression(

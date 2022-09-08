@@ -27,6 +27,8 @@
 #include "data/SparqlFilter.h"
 #include "data/Types.h"
 #include "data/VarOrTerm.h"
+#include "parser/GraphPattern.h"
+#include "parser/GraphPatternOperation.h"
 #include "parser/SelectClause.h"
 
 using std::string;
@@ -79,58 +81,10 @@ class SparqlTriple {
   [[nodiscard]] string asString() const;
 };
 
-// Represents a VALUES statement in the query.
-class SparqlValues {
- public:
-  // The variables to which the values will be bound
-  vector<string> _variables;
-  // A table storing the values in their string form
-  vector<vector<string>> _values;
-};
-
-struct GraphPatternOperation;
-
 // A parsed SPARQL query. To be extended.
 class ParsedQuery {
  public:
-  class GraphPattern;
-
-  // Groups triplets and filters. Represents a node in a tree (as graph patterns
-  // are recursive).
-  class GraphPattern {
-   public:
-    // The constructor has to be implemented in the .cpp file because of the
-    // circular dependencies of `GraphPattern` and `GraphPatternOperation`
-    GraphPattern();
-    // Move and copyconstructors to avoid double deletes on the trees children
-    GraphPattern(GraphPattern&& other) = default;
-    GraphPattern(const GraphPattern& other) = default;
-    GraphPattern& operator=(const GraphPattern& other) = default;
-    GraphPattern& operator=(GraphPattern&& other) noexcept = default;
-    ~GraphPattern() = default;
-    void toString(std::ostringstream& os, int indentation = 0) const;
-    // Traverses the graph pattern tree and assigns a unique id to every graph
-    // pattern
-    void recomputeIds(size_t* id_count = nullptr);
-
-    // Modify query to take care of language filter. `variable` is the variable,
-    // `languageInQuotes` is the language.
-    void addLanguageFilter(const std::string& variable,
-                           const std::string& languageInQuotes);
-
-    bool _optional;
-    /**
-     * @brief A id that is unique for the ParsedQuery. Ids are guaranteed to
-     * start with zero and to be dense.
-     */
-    size_t _id = size_t(-1);
-
-    // Filters always apply to the complete GraphPattern, no matter where
-    // they appear. For VALUES and Triples, the order matters, so they
-    // become children.
-    std::vector<SparqlFilter> _filters;
-    vector<GraphPatternOperation> _graphPatterns;
-  };
+  using GraphPattern = parsedQuery::GraphPattern;
 
   using SelectClause = parsedQuery::SelectClause;
   SelectClause _selectClause;
@@ -225,121 +179,4 @@ class ParsedQuery {
       PropertyPath& item, const ad_utility::HashMap<string, string>& prefixMap);
   static void expandPrefix(
       string& item, const ad_utility::HashMap<string, string>& prefixMap);
-};
-
-struct GraphPatternOperation {
-  struct BasicGraphPattern {
-    vector<SparqlTriple> _triples;
-
-    void appendTriples(BasicGraphPattern pattern) {
-      ad_utility::appendVector(_triples, std::move(pattern._triples));
-    }
-  };
-  struct Values {
-    SparqlValues _inlineValues;
-    // This value will be overwritten later.
-    size_t _id = std::numeric_limits<size_t>::max();
-  };
-  struct GroupGraphPattern {
-    ParsedQuery::GraphPattern _child;
-  };
-  struct Optional {
-    Optional(ParsedQuery::GraphPattern child) : _child{std::move(child)} {
-      _child._optional = true;
-    };
-    ParsedQuery::GraphPattern _child;
-  };
-  struct Minus {
-    ParsedQuery::GraphPattern _child;
-  };
-  struct Union {
-    ParsedQuery::GraphPattern _child1;
-    ParsedQuery::GraphPattern _child2;
-  };
-  struct Subquery {
-    ParsedQuery _subquery;
-    // The subquery's children to not influence the outer query.
-  };
-
-  struct TransPath {
-    // The name of the left and right end of the transitive operation
-    TripleComponent _left;
-    TripleComponent _right;
-    // The name of the left and right end of the subpath
-    std::string _innerLeft;
-    std::string _innerRight;
-    size_t _min = 0;
-    size_t _max = 0;
-    ParsedQuery::GraphPattern _childGraphPattern;
-  };
-
-  // A SPARQL Bind construct.
-  struct Bind {
-    sparqlExpression::SparqlExpressionPimpl _expression;
-    std::string _target;  // the variable to which the expression will be bound
-
-    // Return all the strings contained in the BIND expression (variables,
-    // constants, etc. Is required e.g. by ParsedQuery::expandPrefix.
-    vector<string*> strings() {
-      auto r = _expression.strings();
-      r.push_back(&_target);
-      return r;
-    }
-
-    // Const overload, needed by the query planner. The actual behavior is
-    // always const, so this is fine.
-    [[nodiscard]] vector<const string*> strings() const {
-      auto r = const_cast<Bind*>(this)->strings();
-      return {r.begin(), r.end()};
-    }
-
-    [[nodiscard]] string getDescriptor() const {
-      auto inner = _expression.getDescriptor();
-      return "BIND (" + inner + " AS " + _target + ")";
-    }
-  };
-
-  std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-               Values, Minus, GroupGraphPattern>
-      variant_;
-  // Construct from one of the variant types (or anything that is convertible to
-  // them.
-  template <typename A, typename = std::enable_if_t<!std::is_base_of_v<
-                            GraphPatternOperation, std::decay_t<A>>>>
-  explicit GraphPatternOperation(A&& a) : variant_(std::forward<A>(a)) {}
-  GraphPatternOperation() = delete;
-  GraphPatternOperation(const GraphPatternOperation&) = default;
-  GraphPatternOperation(GraphPatternOperation&&) noexcept = default;
-  GraphPatternOperation& operator=(const GraphPatternOperation&) = default;
-  GraphPatternOperation& operator=(GraphPatternOperation&&) noexcept = default;
-
-  template <typename T>
-  constexpr bool is() noexcept {
-    return std::holds_alternative<T>(variant_);
-  }
-
-  template <typename F>
-  decltype(auto) visit(F f) {
-    return std::visit(f, variant_);
-  }
-
-  template <typename F>
-  decltype(auto) visit(F f) const {
-    return std::visit(f, variant_);
-  }
-  template <class T>
-  constexpr T& get() {
-    return std::get<T>(variant_);
-  }
-  template <class T>
-  [[nodiscard]] constexpr const T& get() const {
-    return std::get<T>(variant_);
-  }
-
-  auto& getBasic() { return get<BasicGraphPattern>(); }
-  [[nodiscard]] const auto& getBasic() const {
-    return get<BasicGraphPattern>();
-  }
-
-  void toString(std::ostringstream& os, int indentation = 0) const;
 };

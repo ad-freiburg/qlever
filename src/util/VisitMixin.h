@@ -23,8 +23,14 @@ class VisitMixin {
   // TODO<C++23> deducing this
   auto visit(auto&& f)
       -> decltype(std::visit(AD_FWD(f), std::declval<BaseVariant&>())) {
-    return std::visit(AD_FWD(f), static_cast<const BaseVariant&>(
-                                     static_cast<Derived&>(*this)));
+    return std::visit(AD_FWD(f),
+                      static_cast<BaseVariant&>(static_cast<Derived&>(*this)));
+  }
+
+  auto visitNonConst(auto&& f)
+      -> decltype(std::visit(AD_FWD(f), std::declval<BaseVariant&>())) {
+    return std::visit(AD_FWD(f),
+                      static_cast<BaseVariant&>(static_cast<Derived&>(*this)));
   }
   auto visit(auto&& f) const
       -> decltype(std::visit(AD_FWD(f), std::declval<const BaseVariant&>())) {

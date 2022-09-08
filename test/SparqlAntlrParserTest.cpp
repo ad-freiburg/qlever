@@ -203,6 +203,7 @@ TEST(SparqlParser, ComplexConstructQuery) {
           ElementsAre(Blank("1"), m::Iri(first), Blank("2")),
           ElementsAre(Blank("1"), m::Iri(rest), m::Iri(nil)),
           ElementsAre(Blank("2"), m::Iri(first), Var("?c")),
+
           ElementsAre(Blank("2"), m::Iri(rest), m::Iri(nil)),
           ElementsAre(Blank("3"), m::Iri(first), Var("?b")),
           ElementsAre(Blank("3"), m::Iri(rest), Blank("1")),

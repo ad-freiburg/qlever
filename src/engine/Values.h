@@ -8,6 +8,8 @@
 #include "Operation.h"
 
 class Values : public Operation {
+  using SparqlValues = parsedQuery::SparqlValues;
+
  public:
   /// constructor sanitizes the input by removing completely undefined variables
   /// and values.
