@@ -4,8 +4,30 @@
 #include "parser/GraphPatternOperation.h"
 
 #include "parser/ParsedQuery.h"
+#include "util/Forward.h"
 namespace parsedQuery {
 
+// Small anonymous helper function that is used in the definition of the member
+// functions of the `Subquery` class.
+namespace {
+  auto m(auto&&... args) {
+    return std::make_unique<ParsedQuery>(AD_FWD(args)...);
+  }
+}
+
+// Special member functions for the `Subquery` class
+Subquery::Subquery() : _subquery{m()} {}
+Subquery::Subquery(const ParsedQuery& pq) : _subquery{m(pq)} {}
+Subquery::Subquery(ParsedQuery&& pq) : _subquery{m(std::move(pq))} {}
+Subquery::Subquery(Subquery&& pq) : _subquery{m(std::move(pq.get()))} {}
+Subquery::Subquery(const Subquery& pq) : _subquery{m(pq.get())} {}
+Subquery& Subquery::operator=(const Subquery& pq) { _subquery = m(pq.get()); return *this;}
+Subquery& Subquery::operator=(Subquery&& pq) { _subquery = m(std::move(pq.get())); return *this;}
+Subquery::~Subquery() = default;
+ParsedQuery& Subquery::get() {return *_subquery;}
+const ParsedQuery& Subquery::get() const {return *_subquery;}
+
+// _____________________________________________________________________________
 void BasicGraphPattern::appendTriples(BasicGraphPattern pattern) {
   ad_utility::appendVector(_triples, std::move(pattern._triples));
 }
@@ -64,10 +86,12 @@ void GraphPatternOperation::toString(std::ostringstream& os,
       arg._child.toString(os, indentation);
     } else {
       static_assert(std::is_same_v<T, TransPath>);
+      /*
       os << "TRANS PATH from " << arg._left << " to " << arg._right
          << " with at least " << arg._min << " and at most " << arg._max
          << " steps of ";
       arg._childGraphPattern.toString(os, indentation);
+       */
     }
   });
 }

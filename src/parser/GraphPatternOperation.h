@@ -63,6 +63,7 @@ class Subquery {
   explicit Subquery(const ParsedQuery&);
   explicit Subquery(ParsedQuery&&);
   Subquery();
+  ~Subquery();
   Subquery(const Subquery&);
   Subquery(Subquery&&);
   Subquery& operator=(const Subquery&);
@@ -72,6 +73,8 @@ class Subquery {
   // The subquery's children to not influence the outer query.
 };
 
+// It seems as if this class is never actually set.
+// TODO<joka921> Further explore this and throw it out.
 struct TransPath {
   // The name of the left and right end of the transitive operation
   TripleComponent _left;
@@ -118,23 +121,11 @@ struct GraphPatternOperation
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {
   using GraphPatternOperationVariant::GraphPatternOperationVariant;
 
-  template <typename T>
-  constexpr bool is() noexcept {
-    return std::holds_alternative<T>(*this);
-  }
-
-  template <class T>
-  constexpr T& get() {
-    return std::get<T>(*this);
-  }
-  template <class T>
-  [[nodiscard]] constexpr const T& get() const {
-    return std::get<T>(*this);
-  }
-
-  auto& getBasic() { return get<BasicGraphPattern>(); }
+  // TODO<joka921> First refactor `SparqlParserTest.cpp`,
+  // then get rid of this function.
+  auto& getBasic() { return std::get<BasicGraphPattern>(*this); }
   [[nodiscard]] const auto& getBasic() const {
-    return get<BasicGraphPattern>();
+    return std::get<BasicGraphPattern>(*this);
   }
 
   void toString(std::ostringstream& os, int indentation = 0) const;

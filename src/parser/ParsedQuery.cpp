@@ -133,7 +133,7 @@ void ParsedQuery::expandPrefixes() {
     GraphPattern* pattern = graphPatterns.back();
     graphPatterns.pop_back();
     for (parsedQuery::GraphPatternOperation& p : pattern->_graphPatterns) {
-      p.visitNonConst([&graphPatterns, &prefixMap = std::as_const(prefixMap),
+      p.visit([&graphPatterns, &prefixMap = std::as_const(prefixMap),
                        this](auto&& arg) {
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, parsedQuery::Subquery>) {
@@ -403,7 +403,7 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
   _id = *id_count;
   (*id_count)++;
   for (auto& op : _graphPatterns) {
-    op.visitNonConst([&id_count](auto&& arg) {
+    op.visit([&id_count](auto&& arg) {
       using T = std::decay_t<decltype(arg)>;
       if constexpr (std::is_same_v<T, parsedQuery::Union>) {
         arg._child1.recomputeIds(id_count);
@@ -413,7 +413,7 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
                            std::is_same_v<T, parsedQuery::Minus>) {
         arg._child.recomputeIds(id_count);
       } else if constexpr (std::is_same_v<T, parsedQuery::TransPath>) {
-        arg._childGraphPattern.recomputeIds(id_count);
+        //arg._childGraphPattern.recomputeIds(id_count);
       } else if constexpr (std::is_same_v<T, parsedQuery::Values>) {
         arg._id = (*id_count)++;
       } else {
@@ -449,11 +449,11 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
   // skos:altLabel|rdfs:label, ...)
   std::vector<SparqlTriple*> matchingTriples;
   for (auto& graphPattern : _graphPatterns) {
-    if (!graphPattern.is<parsedQuery::BasicGraphPattern>()) {
+    auto* basicPattern = std::get_if<parsedQuery::BasicGraphPattern>(&graphPattern);
+    if (!basicPattern) {
       continue;
     }
-    auto& pattern = graphPattern.get<parsedQuery::BasicGraphPattern>();
-    for (auto& triple : pattern._triples) {
+    for (auto& triple : basicPattern->_triples) {
       if (triple._o == variable &&
           (triple._p._operation == PropertyPath::Operation::IRI &&
            !isVariable(triple._p))) {
@@ -481,11 +481,11 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
     // TODO<joka921> It might be beneficial to place this triple not at the
     // end but close to other occurences of `variable`.
     if (_graphPatterns.empty() ||
-        !_graphPatterns.back().is<parsedQuery::BasicGraphPattern>()) {
+        !std::holds_alternative<parsedQuery::BasicGraphPattern>(_graphPatterns.back())) {
       _graphPatterns.emplace_back(parsedQuery::BasicGraphPattern{});
     }
     auto& t =
-        _graphPatterns.back().get<parsedQuery::BasicGraphPattern>()._triples;
+        std::get<parsedQuery::BasicGraphPattern>(_graphPatterns.back())._triples;
 
     auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
     SparqlTriple triple(variable, PropertyPath::fromIri(LANGUAGE_PREDICATE),
