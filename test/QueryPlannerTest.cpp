@@ -869,6 +869,33 @@ TEST(QueryExecutionTreeTest, testBooksbyNewman) {
                          .parse();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_EQ(
+        "{\n  JOIN\n  {\n    SCAN POS with "
+        "P = \"<Author>\", O = \"<Anthony_Newman_(Author)>\"\n   "
+        " qet-width: 1 \n  } join-column: [0]\n  |X|\n  {\n  "
+        "  SCAN POS with P = \"<is-a>\", O = \"<Book>\"\n  "
+        "  qet-width: 1 \n  } join-column: [0]\n  qet-width: 1 \n}",
+        qet.asString());
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
+
+TEST(QueryExecutionTreeTest, testBooksGermanAwardNomAuth) {
+  try {
+    ParsedQuery pq = SparqlParser(
+                         "SELECT ?x ?y WHERE { "
+                         "?x <is-a> <Person> . "
+                         "?x <Country_of_nationality> <Germany> . "
+                         "?x <Author> ?y . "
+                         "?y <is-a> <Award-Nominated_Work> }")
+                         .parse();
+    QueryPlanner qp(nullptr);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_GT(qet.asString().size(), 0u);
     // Just check that ther is no exception, here.
   } catch (const ad_semsearch::Exception& e) {
