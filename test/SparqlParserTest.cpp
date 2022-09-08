@@ -1329,11 +1329,14 @@ TEST(ParserTest, Prefix) {
 }
 
 TEST(ParserTest, ParseFilterExpression) {
-  auto f = SparqlParser::parseFilterExpression("(LANG(?x) = \"en\")");
+  auto f = SparqlParser::parseFilterExpression("(LANG(?x) = \"en\")", {});
   ASSERT_EQ(f, (SparqlFilter{SparqlFilter::LANG_MATCHES, "?x", "\"en\""}));
 
-  f = SparqlParser::parseFilterExpression("(?x <= 42.3)");
+  f = SparqlParser::parseFilterExpression("(?x <= 42.3)", {});
   ASSERT_EQ(f, (SparqlFilter{SparqlFilter::LE, "?x", "42.3"}));
+
+  f = SparqlParser::parseFilterExpression("(?x = me:you)", {{"me", "www.me.de/"}});
+  ASSERT_EQ(f, (SparqlFilter{SparqlFilter::EQ, "?x", "<www.me.de/you>"}));
 }
 
 TEST(ParserTest, LanguageFilterPostProcessing) {
