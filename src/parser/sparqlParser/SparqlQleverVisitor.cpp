@@ -554,7 +554,80 @@ SparqlPrefix SparqlQleverVisitor::visitTypesafe(
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
-  reportError(ctx, "SelectQuery is not yet supported.");
+  ParsedQuery query;
+  query._clause = visitTypesafe(ctx->selectClause());
+  if (!ctx->datasetClause().empty()) {
+    reportError(ctx, "DatasetClause is not support.");
+  }
+  auto [pattern, visibleVariables] = visitTypesafe(ctx->whereClause());
+  query._rootGraphPattern = std::move(pattern);
+  for (const auto& var : visibleVariables) {
+    query.registerVariableVisibleInQueryBody(var);
+  }
+  query.addSolutionModifiers(visitTypesafe(ctx->solutionModifier()));
+  // TODO: move up to visitTypesafe(QueryContext*)
+  query._originalString = ctx->getStart()->getInputStream()->toString();
+
+  // Checks that the query is valid
+  if (!query._groupByVariables.empty()) {
+    if (!query.selectClause().isAsterisk()) {
+      const auto& selectClause = query.selectClause();
+      // Check if all selected variables are either aggregated or
+      // part of the group by statement.
+      for (const string& var : selectClause.getSelectedVariablesAsStrings()) {
+        // TODO: this code is wrong. It is only checked whether a selected
+        // variable is the result of an Alias but not whether this Alias
+        // actually aggregates the variable(s). Should use something like
+        // SparqlExpressionPimpl::isAggregate.
+        if (var[0] == '?') {
+          if (ad_utility::contains_if(selectClause.getAliases(),
+                                      [&var](const Alias& alias) {
+                                        return alias._outVarName == var;
+                                      })) {
+            continue;
+          }
+          if (!ad_utility::contains_if(query._groupByVariables,
+                                       [&var](const Variable& grouping) {
+                                         return var == grouping.name();
+                                       })) {
+            reportError(
+                ctx, absl::StrCat("Variable ", var,
+                                  " is selected but not aggregated despite the "
+                                  "query not being grouped by ",
+                                  var, "."));
+          }
+        }
+      }
+    } else {
+      reportError(ctx,
+                  "GROUP BY is not allowed when all variables are selected via "
+                  "SELECT *");
+    }
+  }
+
+  const auto& selectClause = query.selectClause();
+
+  // TODO<joka921> The following check should be directly in the
+  // `SelectClause` class (in the `setSelected` member).
+
+  // TODO<joka921> Is this even the correct way to check this? we should also
+  // verify that the variable is new (not even visible in the query body).
+  ad_utility::HashMap<std::string, size_t> variable_counts;
+
+  for (const std::string& s : selectClause.getSelectedVariablesAsStrings()) {
+    variable_counts[s]++;
+  }
+
+  for (const Alias& a : selectClause.getAliases()) {
+    // The variable was already added to the selected variables while
+    // parsing the alias, thus it should appear exactly once
+    if (variable_counts[a._outVarName] > 1) {
+      reportError(ctx, "The variable name " + a._outVarName +
+                           " used in an alias was already selected on.");
+    }
+  }
+
+  return query;
 }
 
 // ____________________________________________________________________________________

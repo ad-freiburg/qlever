@@ -335,6 +335,16 @@ auto VariableOrderKey =
       AD_FIELD(::VariableOrderKey, isDescending_, testing::Eq(desc)));
 };
 
+auto VariableOrderKeys =
+    [](const std::vector<std::pair<std::string, bool>>& orderKeys)
+    -> testing::Matcher<const std::vector<::VariableOrderKey>&> {
+  vector<testing::Matcher<const ::VariableOrderKey&>> matchers;
+  for (auto [key, desc] : orderKeys) {
+    matchers.push_back(VariableOrderKey(key, desc));
+  }
+  return testing::UnorderedElementsAreArray(matchers);
+};
+
 auto VariableOrderKeyVariant =
     [](const string& key, bool desc) -> testing::Matcher<const OrderKey&> {
   return testing::VariantWith<::VariableOrderKey>(VariableOrderKey(key, desc));
@@ -656,6 +666,25 @@ auto SubSelect = [](auto&& selectMatcher, auto&& whereMatcher)
           AD_PROPERTY(ParsedQuery, hasSelectClause, testing::IsTrue()),
           AD_PROPERTY(ParsedQuery, selectClause, selectMatcher),
           AD_FIELD(ParsedQuery, _rootGraphPattern, whereMatcher))));
+};
+
+auto ParsedQuery =
+    [](const std::string& originalString, const LimitOffsetClause& limitOffset,
+       const vector<SparqlFilter>& havingClauses,
+       const vector<::Variable>& groupKeys,
+       const std::vector<std::pair<std::string, bool>>& orderKeys,
+       const testing::Matcher<const p::SelectClause&>& selectMatcher,
+       const testing::Matcher<const p::GraphPattern&>& graphPatternMatcher)
+    -> testing::Matcher<const ::ParsedQuery&> {
+  return testing::AllOf(
+      AD_FIELD(ParsedQuery, _originalString, testing::Eq(originalString)),
+      AD_FIELD(ParsedQuery, _limitOffset, testing::Eq(limitOffset)),
+      GroupByVariables(groupKeys),
+      AD_FIELD(ParsedQuery, _orderBy, VariableOrderKeys(orderKeys)),
+      AD_FIELD(ParsedQuery, _havingClauses, testing::Eq(havingClauses)),
+      AD_PROPERTY(ParsedQuery, hasSelectClause, testing::IsTrue()),
+      AD_PROPERTY(ParsedQuery, selectClause, selectMatcher),
+      AD_FIELD(ParsedQuery, _rootGraphPattern, graphPatternMatcher));
 };
 
 }  // namespace matchers

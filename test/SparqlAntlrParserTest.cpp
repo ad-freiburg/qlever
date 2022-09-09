@@ -855,3 +855,27 @@ TEST(SparqlParser, RDFLiteral) {
       "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>");
   expectRDFLiteralFails(R"(?a ?b "The \"Moon\""@en .)");
 }
+
+TEST(SparqlParser, SelectQuery) {
+  auto expectSelectQuery = ExpectCompleteParse<&Parser::selectQuery>{
+      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectSelectQueryFails = ExpectParseFails<&Parser::selectQuery>{};
+  expectSelectQuery(
+      "SELECT * WHERE { ?a <bar> ?foo }",
+      m::ParsedQuery("SELECT * WHERE { ?a <bar> ?foo }", {}, {}, {}, {},
+                     m::AsteriskSelect(),
+                     m::GraphPattern(m::Triples({{"?a", "<bar>", "?foo"}}))));
+  expectSelectQuery(
+      "SELECT ?foo WHERE { } GROUP BY ?foo",
+      m::ParsedQuery("SELECT ?foo WHERE { } GROUP BY ?foo", {}, {},
+                     {Variable{"?foo"}}, {}, m::VariablesSelect({"?foo"}),
+                     m::GraphPattern()));
+  // `SELECT *` is not allowed while grouping.
+  expectSelectQueryFails("SELECT * WHERE { } GROUP BY ?foo");
+  // `?foo` is selected twice. Once as variable and once as the result of an
+  // alias. This is not allowed.
+  expectSelectQueryFails("SELECT ?foo (?bar as ?foo) WHERE { }");
+  // When grouping selected variables must either be grouped by or aggregated.
+  // `?foo` is neither.
+  expectSelectQueryFails("SELECT (?bar as ?foo) WHERE { } GROUP BY ?baz");
+}
