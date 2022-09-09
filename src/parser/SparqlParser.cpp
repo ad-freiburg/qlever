@@ -34,17 +34,21 @@ vector<SparqlPrefix> convertPrefixMap(
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parse() {
   ParsedQuery result;
-  result._originalString = query_;
+  std::string originalString = query_;
   // parsePrologue parses all the prefixes which are stored in a member
   // PrefixMap. This member is returned on parse.
-  result._prefixes = convertPrefixMap(parseWithAntlr(
+  SparqlQleverVisitor::PrefixMap prefixes = parseWithAntlr(
       &AntlrParser::prologue,
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}));
+      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}});
 
   if (lexer_.accept("construct")) {
+    result._originalString = std::move(originalString);
+    result._prefixes = convertPrefixMap(prefixes);
     parseQuery(&result, CONSTRUCT_QUERY);
   } else if (lexer_.peek("select")) {
-    parseQuery(&result, SELECT_QUERY);
+    result = parseWithAntlr(&AntlrParser::selectQuery, prefixes);
+    result._originalString = std::move(originalString);
+    result._prefixes = convertPrefixMap(prefixes);
   } else {
     throw ParseException("Query must either be a SELECT or CONSTRUCT.");
   }
