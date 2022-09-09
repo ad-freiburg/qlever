@@ -54,7 +54,6 @@ requires(isOperation<NaryOperation>) class NaryExpression
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
 
-
  private:
   /// Evaluate the `naryOperation` on the `operands` using the `context`.
   static inline auto evaluateOnChildrenOperands =

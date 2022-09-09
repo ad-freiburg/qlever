@@ -33,7 +33,7 @@ const char* toTypeIri(NumericType type) {
       return XSD_DOUBLE_TYPE;
     default:
       // This should never happen
-    AD_FAIL();
+      AD_FAIL();
   }
 }
 
@@ -260,13 +260,13 @@ string convertIndexWordToFloatString(const string& indexWord) {
 
   string exponentString =
       ((negaMantissa == negaExponent)
-       ? number.substr(2, posOfE - 2)
-       : getBase10ComplementOfIntegerString(number.substr(2, posOfE - 2)));
+           ? number.substr(2, posOfE - 2)
+           : getBase10ComplementOfIntegerString(number.substr(2, posOfE - 2)));
   size_t absExponent = static_cast<size_t>(atoi(exponentString.c_str()));
   string mantissa =
       (!negaMantissa
-       ? number.substr(posOfE + 1)
-       : getBase10ComplementOfIntegerString(number.substr(posOfE + 1)));
+           ? number.substr(posOfE + 1)
+           : getBase10ComplementOfIntegerString(number.substr(posOfE + 1)));
 
   std::ostringstream os;
   if (negaMantissa) {
@@ -348,13 +348,13 @@ float convertIndexWordToFloat(const string& indexWord) {
 
   string exponentString =
       ((negaMantissa == negaExponent)
-       ? number.substr(2, posOfE - 2)
-       : getBase10ComplementOfIntegerString(number.substr(2, posOfE - 2)));
+           ? number.substr(2, posOfE - 2)
+           : getBase10ComplementOfIntegerString(number.substr(2, posOfE - 2)));
   long absExponent = static_cast<size_t>(atoi(exponentString.c_str()));
   string mantissa =
       (!negaMantissa
-       ? number.substr(posOfE + 1)
-       : getBase10ComplementOfIntegerString(number.substr(posOfE + 1)));
+           ? number.substr(posOfE + 1)
+           : getBase10ComplementOfIntegerString(number.substr(posOfE + 1)));
   size_t mStart, mStop;
   for (mStart = 0; mStart < mantissa.size() && mantissa[mStart] == '0';
        mStart++)
@@ -506,7 +506,7 @@ string convertDateToIndexWord(const string& value) {
   if (norm[0] == '-') {
     os << '-'
        << getBase10ComplementOfIntegerString(
-           norm.substr(1, DEFAULT_NOF_DATE_YEAR_DIGITS - 1));
+              norm.substr(1, DEFAULT_NOF_DATE_YEAR_DIGITS - 1));
     os << norm.substr(DEFAULT_NOF_DATE_YEAR_DIGITS);
   } else {
     os << norm;
@@ -521,7 +521,7 @@ string convertIndexWordToDate(const string& indexWord) {
   if (indexWord[prefixLength] == '-') {
     os << '-'
        << getBase10ComplementOfIntegerString(indexWord.substr(
-           prefixLength + 1, DEFAULT_NOF_DATE_YEAR_DIGITS - 1));
+              prefixLength + 1, DEFAULT_NOF_DATE_YEAR_DIGITS - 1));
     os << indexWord.substr(prefixLength + DEFAULT_NOF_DATE_YEAR_DIGITS);
   } else {
     os << indexWord.substr(prefixLength);
@@ -609,4 +609,4 @@ std::string convertToLanguageTaggedPredicate(const string& pred,
   return '@' + langtag + '@' + pred;
 }
 
-}
+}  // namespace ad_utility

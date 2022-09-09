@@ -4,11 +4,9 @@
 
 #pragma once
 
-
-#include <string>
 #include <optional>
+#include <string>
 #include <string_view>
-
 
 namespace ad_utility {
 //! Convert a value literal to an index word.
@@ -69,9 +67,9 @@ std::string removeLeadingZeros(const std::string& orig);
 //! Check if this looks like an value literal
 bool isXsdValue(std::string_view value);
 
-//! Check if the given std::string is numeric, i.e. a decimal integer or float string
-//! i.e. "42", "42.2", "0123", ".3" are all numeric while "a", "1F", "0x32" are
-//! not
+//! Check if the given std::string is numeric, i.e. a decimal integer or float
+//! string i.e. "42", "42.2", "0123", ".3" are all numeric while "a", "1F",
+//! "0x32" are not
 bool isNumeric(const std::string& val);
 
 //! Converts numeric strings (as determined by isNumeric()) into index words
@@ -82,7 +80,7 @@ std::string convertNumericToIndexWord(const std::string& val);
 std::string convertLangtagToEntityUri(const std::string& tag);
 std::optional<std::string> convertEntityUriToLangtag(const std::string& word);
 std::string convertToLanguageTaggedPredicate(const std::string& pred,
-                                                    const std::string& langtag);
+                                             const std::string& langtag);
 
 // _____________________________________________________________________________
 std::string convertValueLiteralToIndexWord(const std::string& orig);
@@ -96,7 +94,7 @@ std::string convertIndexWordToValueLiteral(const std::string& indexWord);
 
 // _____________________________________________________________________________
 std::string convertFloatStringToIndexWord(const std::string& orig,
-                                     const NumericType type);
+                                          const NumericType type);
 
 // _____________________________________________________________________________
 std::string convertIndexWordToFloatString(const std::string& indexWord);

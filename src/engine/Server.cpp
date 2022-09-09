@@ -4,16 +4,58 @@
 //   2011-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include <engine/QueryPlanner.h>
-#include <engine/Server.h>
+#include "engine/Server.h"
 
 #include <cstring>
 #include <sstream>
 #include <string>
 #include <vector>
 
+#include "engine/QueryPlanner.h"
+#include "util/BoostHelpers/AsyncWaitForFuture.h"
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
+
+// __________________________________________________________________________
+Server::Server(const int port, const int numThreads, size_t maxMemGB,
+               std::string accessToken)
+    : _numThreads(numThreads),
+      _port(port),
+      accessToken_(accessToken),
+      _allocator{ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+                     maxMemGB * (1ull << 30u)),
+                 [this](size_t numBytesToAllocate) {
+                   _cache.makeRoomAsMuchAsPossible(
+                       static_cast<double>(numBytesToAllocate) / sizeof(Id) *
+                       MAKE_ROOM_SLACK_FACTOR);
+                 }},
+      _sortPerformanceEstimator(),
+      _index(),
+      _engine(),
+      _initialized(false),
+      // The number of server threads currently also is the number of queries
+      // that can be processed simultaneously.
+      _queryProcessingSemaphore(numThreads) {
+  // TODO<joka921> Write a strong type for KB, MB, GB etc and use it
+  // in the cache and the memory limit
+  // Convert a number of gigabytes to the number of Ids that find in that
+  // amount of memory.
+  auto toNumIds = [](size_t gigabytes) -> size_t {
+    return gigabytes * (1ull << 30u) / sizeof(Id);
+  };
+  // This also directly triggers the update functions and propagates the
+  // values of the parameters to the cache.
+  RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
+      [this](size_t newValue) { _cache.setMaxNumEntries(newValue); });
+  RuntimeParameters().setOnUpdateAction<"cache-max-size-gb">(
+      [this, toNumIds](size_t newValue) {
+        _cache.setMaxSize(toNumIds(newValue));
+      });
+  RuntimeParameters().setOnUpdateAction<"cache-max-size-gb-single-entry">(
+      [this, toNumIds](size_t newValue) {
+        _cache.setMaxSizeSingleEntry(toNumIds(newValue));
+      });
+}
 
 // __________________________________________________________________________
 void Server::initialize(const string& indexBaseName, bool useText,
@@ -780,4 +822,22 @@ boost::asio::awaitable<void> Server::processQuery(
     }
     co_return co_await sendJson(errorResponseJson, http::status::bad_request);
   }
+}
+
+// _____________________________________________________________________________
+template <typename Function, typename T>
+Awaitable<T> Server::computeInNewThread(Function function) const {
+  auto acquireComputeRelease = [this, function = std::move(function)] {
+    LOG(DEBUG) << "Acquiring new thread for query processing\n";
+    _queryProcessingSemaphore.acquire();
+    ad_utility::OnDestruction f{[this]() noexcept {
+      try {
+        _queryProcessingSemaphore.release();
+      } catch (...) {
+      }
+    }};
+    return function();
+  };
+  co_return co_await ad_utility::asio_helpers::async_on_external_thread(
+      std::move(acquireComputeRelease), boost::asio::use_awaitable);
 }

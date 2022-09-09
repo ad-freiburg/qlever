@@ -76,7 +76,6 @@ class QueryExecutionTree {
     return _rootOperation->getVariableColumns();
   }
 
-
   std::shared_ptr<Operation> getRootOperation() const { return _rootOperation; }
 
   const OperationType& getType() const { return _type; }

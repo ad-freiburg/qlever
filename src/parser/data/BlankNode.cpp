@@ -5,8 +5,8 @@
 #include "parser/data/BlankNode.h"
 
 #include <sstream>
-#include "ctre/ctre.h"
 
+#include "ctre/ctre.h"
 
 // _____________________________________________________________________________
 BlankNode::BlankNode(bool generated, std::string label)

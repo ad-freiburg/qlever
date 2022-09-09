@@ -8,53 +8,59 @@ namespace sparqlExpression {
 namespace detail {
 
 // _____________________________________________________________________________
-template <typename Op>requires (isOperation<Op>)
-  NaryExpression<Op>::NaryExpression(Children&& children) : _children{std::move(children)} {}
+template <typename Op>
+requires(isOperation<Op>)
+    NaryExpression<Op>::NaryExpression(Children&& children)
+    : _children{std::move(children)} {}
 
 // _____________________________________________________________________________
 
-template <typename NaryOperation>requires (isOperation<NaryOperation>)
-  ExpressionResult NaryExpression<NaryOperation>::evaluate(EvaluationContext* context) const {
-    auto resultsOfChildren = ad_utility::applyFunctionToEachElementOfTuple(
-        [context](const auto& child) { return child->evaluate(context); },
-        _children);
+template <typename NaryOperation>
+requires(isOperation<NaryOperation>) ExpressionResult
+    NaryExpression<NaryOperation>::evaluate(EvaluationContext* context)
+const {
+  auto resultsOfChildren = ad_utility::applyFunctionToEachElementOfTuple(
+      [context](const auto& child) { return child->evaluate(context); },
+      _children);
 
-    // A function that only takes several `ExpressionResult`s,
-    // and evaluates the expression.
-    auto evaluateOnChildrenResults =
-        std::bind_front(ad_utility::visitWithVariantsAndParameters,
-                        evaluateOnChildrenOperands, NaryOperation{}, context);
+  // A function that only takes several `ExpressionResult`s,
+  // and evaluates the expression.
+  auto evaluateOnChildrenResults =
+      std::bind_front(ad_utility::visitWithVariantsAndParameters,
+                      evaluateOnChildrenOperands, NaryOperation{}, context);
 
-    return std::apply(evaluateOnChildrenResults, std::move(resultsOfChildren));
-  }
+  return std::apply(evaluateOnChildrenResults, std::move(resultsOfChildren));
+}
 
 // _____________________________________________________________________________
-template <typename Op>requires (isOperation<Op>)
-  std::span<SparqlExpression::Ptr> NaryExpression<Op>::children()  {
-    return {_children.data(), _children.size()};
-  }
+template <typename Op>
+requires(isOperation<Op>)
+    std::span<SparqlExpression::Ptr> NaryExpression<Op>::children() {
+  return {_children.data(), _children.size()};
+}
 
-  // __________________________________________________________________________
-  template <typename Op>requires (isOperation<Op>)
-  [[nodiscard]] string NaryExpression<Op>::getCacheKey(
-      const VariableToColumnMap& varColMap) const  {
-    string key = typeid(*this).name();
-    for (const auto& child : _children) {
-      key += child->getCacheKey(varColMap);
-    }
-    return key;
+// __________________________________________________________________________
+template <typename Op>
+requires(isOperation<Op>) [[nodiscard]] string NaryExpression<Op>::getCacheKey(
+    const VariableToColumnMap& varColMap) const {
+  string key = typeid(*this).name();
+  for (const auto& child : _children) {
+    key += child->getCacheKey(varColMap);
   }
+  return key;
+}
 
-#define INSTANTIATE_NARY(N, X, ...) template class NaryExpression<Operation<N, X, __VA_ARGS__>>
+#define INSTANTIATE_NARY(N, X, ...) \
+  template class NaryExpression<Operation<N, X, __VA_ARGS__>>
 
 INSTANTIATE_NARY(2, FV<decltype(orLambda), EffectiveBooleanValueGetter>,
-        SET<SetOfIntervals::Union>);
+                 SET<SetOfIntervals::Union>);
 
 INSTANTIATE_NARY(2, FV<decltype(andLambda), EffectiveBooleanValueGetter>,
-        SET<SetOfIntervals::Intersection>);
+                 SET<SetOfIntervals::Intersection>);
 
 INSTANTIATE_NARY(1, FV<decltype(unaryNegate), EffectiveBooleanValueGetter>,
-        SET<SetOfIntervals::Complement>);
+                 SET<SetOfIntervals::Complement>);
 
 INSTANTIATE_NARY(1, FV<decltype(unaryMinus), NumericValueGetter>);
 
@@ -70,4 +76,4 @@ INSTANTIATE_NARY(1, FV<decltype(ad_utility::wktLongitude), StringValueGetter>);
 INSTANTIATE_NARY(1, FV<decltype(ad_utility::wktLatitude), StringValueGetter>);
 INSTANTIATE_NARY(2, FV<decltype(ad_utility::wktDist), StringValueGetter>);
 }  // namespace detail
-} // namespace sparqlExpressiong
+}  // namespace sparqlExpression
