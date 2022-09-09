@@ -62,8 +62,6 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
   if (queryType == CONSTRUCT_QUERY) {
     query->_clause = parseWithAntlr(&AntlrParser::constructTemplate, *query)
                          .value_or(ad_utility::sparql_types::Triples{});
-  } else if (queryType == SELECT_QUERY) {
-    parseSelect(query);
   } else {
     // Unsupported query type
     AD_FAIL();
@@ -74,34 +72,7 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
   parseSolutionModifiers(query);
 
   if (!query->_groupByVariables.empty()) {
-    if (query->hasSelectClause() && !query->selectClause().isAsterisk()) {
-      const auto& selectClause = query->selectClause();
-      // Check if all selected variables are either aggregated or
-      for (const string& var : selectClause.getSelectedVariablesAsStrings()) {
-        if (var[0] == '?') {
-          if (ad_utility::contains_if(selectClause.getAliases(),
-                                      [&var](const Alias& alias) {
-                                        return alias._outVarName == var;
-                                      })) {
-            continue;
-          }
-          if (!ad_utility::contains_if(query->_groupByVariables,
-                                       [&var](const Variable& grouping) {
-                                         return var == grouping.name();
-                                       })) {
-            throw ParseException("Variable " + var +
-                                 " is selected but not "
-                                 "aggregated despite the query not being "
-                                 "grouped by " +
-                                 var + ".\n" + lexer_.input());
-          }
-        }
-      }
-    } else if (query->hasSelectClause() && query->selectClause().isAsterisk()) {
-      throw ParseException(
-          "GROUP BY is not allowed when all variables are selected via SELECT "
-          "*");
-    } else if (query->hasConstructClause()) {
+    if (query->hasConstructClause()) {
       auto& constructClause = query->constructClause();
       for (const auto& triple : constructClause) {
         for (const auto& varOrTerm : triple) {
@@ -125,37 +96,6 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
       AD_FAIL();
     }
   }
-  if (!query->hasSelectClause()) {
-    return;
-  }
-  const auto& selectClause = query->selectClause();
-
-  // TODO<joka921> The following check should be directly in the
-  // `SelectClause` class (in the `setSelected` member).
-
-  // TODO<joka921> Is this even the correct way to check this? we should also
-  // verify that the variable is new (not even visible in the query body).
-  ad_utility::HashMap<std::string, size_t> variable_counts;
-
-  for (const std::string& s : selectClause.getSelectedVariablesAsStrings()) {
-    variable_counts[s]++;
-  }
-
-  for (const Alias& a : selectClause.getAliases()) {
-    // The variable was already added to the selected variables while
-    // parsing the alias, thus it should appear exactly once
-    if (variable_counts[a._outVarName] > 1) {
-      throw ParseException("The variable name " + a._outVarName +
-                           " used in "
-                           "an alias was already selected on.\n" +
-                           lexer_.input());
-    }
-  }
-}
-
-// _____________________________________________________________________________
-void SparqlParser::parseSelect(ParsedQuery* query) {
-  query->_clause = parseWithAntlr(&AntlrParser::selectClause, *query);
 }
 
 // _____________________________________________________________________________
