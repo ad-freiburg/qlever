@@ -570,20 +570,23 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
 
   // Checks that the query is valid
   if (!query._groupByVariables.empty()) {
+    ad_utility::HashSet<string> groupVariables{};
+    for (const auto& variable : query._groupByVariables) {
+      groupVariables.emplace(variable.toSparql());
+    }
+
     if (!query.selectClause().isAsterisk()) {
       const auto& selectClause = query.selectClause();
       // Check if all selected variables are either aggregated or
       // part of the group by statement.
       for (const string& var : selectClause.getSelectedVariablesAsStrings()) {
-        // TODO: this code is wrong. It is only checked whether a selected
-        // variable is the result of an Alias but not whether this Alias
-        // actually aggregates the variable(s). Should use something like
-        // SparqlExpressionPimpl::isAggregate.
         if (var[0] == '?') {
-          if (ad_utility::contains_if(selectClause.getAliases(),
-                                      [&var](const Alias& alias) {
-                                        return alias._outVarName == var;
-                                      })) {
+          if (ad_utility::contains_if(
+                  selectClause.getAliases(),
+                  [&var, &groupVariables](const Alias& alias) {
+                    return alias._outVarName == var &&
+                           alias._expression.isAggregate(groupVariables);
+                  })) {
             continue;
           }
           if (!ad_utility::contains_if(query._groupByVariables,
