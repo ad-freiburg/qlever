@@ -248,8 +248,13 @@ endif()
 set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TIMING TRACE)
 add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 
+##################################################
+# Precompiled headers
+set(PRECOMPILED_HEADER_FILES src/util/HashMap.h src/engine/Operation.h src/engine/QueryExecutionTree.h)
+
 add_subdirectory(src/parser)
 add_subdirectory(src/engine)
+target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES})
 add_subdirectory(src/index)
 add_subdirectory(src/util)
 enable_testing()

@@ -324,7 +324,7 @@ TEST(ConversionsTest, convertIndexWordToFloat) {
 }
 
 TEST(ConversionsTest, isXsdValue) {
-  auto makeXsdValue = [](auto value, string_view typeString) {
+  auto makeXsdValue = [](auto value, std::string_view typeString) {
     return absl::StrCat("\"", value, "\"^^<", typeString, ">");
   };
 

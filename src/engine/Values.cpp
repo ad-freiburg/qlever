@@ -136,6 +136,7 @@ void Values::computeResult(ResultTable* result) {
   CALL_FIXED_SIZE_1(resWidth, writeValues, &result->_idTable, index, _values);
 }
 
+
 auto Values::sanitizeValues(SparqlValues&& values) -> SparqlValues {
   std::vector<std::pair<std::size_t, std::size_t>> variableBound;
   for (size_t i = 0; i < values._variables.size(); ++i) {

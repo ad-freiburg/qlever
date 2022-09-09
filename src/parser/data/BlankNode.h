@@ -4,27 +4,16 @@
 
 #pragma once
 
-#include <ctre/ctre.h>
-#include <parser/data/Context.h>
-
-#include <memory>
-#include <sstream>
 #include <string>
-#include <unordered_map>
-#include <utility>
+
+#include "parser/data/Context.h"
 
 class BlankNode {
   bool _generated;
   std::string _label;
 
  public:
-  BlankNode(bool generated, std::string label)
-      : _generated{generated}, _label{std::move(label)} {
-    // roughly check allowed characters as blank node labels.
-    // Weaker than the SPARQL grammar, but good
-    // enough so that it will likely never be an issue
-    AD_CHECK(ctre::match<"\\w(?:(?:\\w|-|\\.)*\\w)?">(_label));
-  }
+  BlankNode(bool generated, std::string label);
 
   // ___________________________________________________________________________
   // Used for testing
@@ -36,26 +25,10 @@ class BlankNode {
 
   // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> evaluate(
-      const Context& context, [[maybe_unused]] ContextRole role) const {
-    std::ostringstream stream;
-    stream << "_:";
-    // generated or user-defined
-    stream << (_generated ? 'g' : 'u');
-    stream << context._row << '_';
-    stream << _label;
-    return stream.str();
-  }
+      const Context& context, [[maybe_unused]] ContextRole role) const;
 
   // ___________________________________________________________________________
-  [[nodiscard]] std::string toSparql() const {
-    std::ostringstream stream;
-    stream << "_:";
-    // generated or user-defined
-    stream << (_generated ? 'g' : 'u');
-    stream << '_';
-    stream << _label;
-    return stream.str();
-  }
+  [[nodiscard]] std::string toSparql() const;
 
   bool operator==(const BlankNode& other) const = default;
 };
