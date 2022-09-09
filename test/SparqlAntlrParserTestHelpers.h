@@ -528,8 +528,8 @@ auto Select =
     [](std::vector<std::variant<::Variable, std::pair<string, string>>>
            selection,
        bool distinct = false,
-       bool reduced = false) -> testing::Matcher<p::SelectClause> {
-  return testing::SafeMatcherCast<p::SelectClause>(
+       bool reduced = false) -> testing::Matcher<const p::SelectClause&> {
+  return testing::SafeMatcherCast<const p::SelectClause&>(
       detail::Select(distinct, reduced, std::move(selection)));
 };
 
@@ -669,12 +669,13 @@ auto SubSelect = [](auto&& selectMatcher, auto&& whereMatcher)
 };
 
 auto ParsedQuery =
-    [](const std::string& originalString, const LimitOffsetClause& limitOffset,
-       const vector<SparqlFilter>& havingClauses,
-       const vector<::Variable>& groupKeys,
-       const std::vector<std::pair<std::string, bool>>& orderKeys,
+    [](const std::string& originalString,
        const testing::Matcher<const p::SelectClause&>& selectMatcher,
-       const testing::Matcher<const p::GraphPattern&>& graphPatternMatcher)
+       const testing::Matcher<const p::GraphPattern&>& graphPatternMatcher,
+       const LimitOffsetClause& limitOffset = {},
+       const vector<SparqlFilter>& havingClauses = {},
+       const vector<::Variable>& groupKeys = {},
+       const std::vector<std::pair<std::string, bool>>& orderKeys = {})
     -> testing::Matcher<const ::ParsedQuery&> {
   return testing::AllOf(
       AD_FIELD(ParsedQuery, _originalString, testing::Eq(originalString)),

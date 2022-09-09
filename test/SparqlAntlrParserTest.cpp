@@ -862,14 +862,18 @@ TEST(SparqlParser, SelectQuery) {
   auto expectSelectQueryFails = ExpectParseFails<&Parser::selectQuery>{};
   expectSelectQuery(
       "SELECT * WHERE { ?a <bar> ?foo }",
-      m::ParsedQuery("SELECT * WHERE { ?a <bar> ?foo }", {}, {}, {}, {},
-                     m::AsteriskSelect(),
+      m::ParsedQuery("SELECT * WHERE { ?a <bar> ?foo }", m::AsteriskSelect(),
                      m::GraphPattern(m::Triples({{"?a", "<bar>", "?foo"}}))));
   expectSelectQuery(
       "SELECT ?foo WHERE { } GROUP BY ?foo",
-      m::ParsedQuery("SELECT ?foo WHERE { } GROUP BY ?foo", {}, {},
-                     {Variable{"?foo"}}, {}, m::VariablesSelect({"?foo"}),
-                     m::GraphPattern()));
+      m::ParsedQuery("SELECT ?foo WHERE { } GROUP BY ?foo",
+                     m::VariablesSelect({"?foo"}), m::GraphPattern(), {}, {},
+                     {Variable{"?foo"}}, {}));
+  expectSelectQuery(
+      "SELECT (COUNT(?foo) as ?baz) WHERE { } GROUP BY ?bar",
+      m::ParsedQuery("SELECT (COUNT(?foo) as ?baz) WHERE { } GROUP BY ?bar",
+                     m::Select({std::pair{"COUNT(?foo)", "?baz"}}),
+                     m::GraphPattern(), {}, {}, {Variable{"?bar"}}));
   // `SELECT *` is not allowed while grouping.
   expectSelectQueryFails("SELECT * WHERE { } GROUP BY ?foo");
   // `?foo` is selected twice. Once as variable and once as the result of an
@@ -878,4 +882,6 @@ TEST(SparqlParser, SelectQuery) {
   // When grouping selected variables must either be grouped by or aggregated.
   // `?foo` is neither.
   expectSelectQueryFails("SELECT (?bar as ?foo) WHERE { } GROUP BY ?baz");
+  // Datasets are not supported.
+  expectSelectQueryFails("SELECT * FROM  WHERE <foo> { }");
 }
