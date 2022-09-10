@@ -233,6 +233,13 @@ GraphPattern Visitor::visitTypesafe(Parser::GroupGraphPatternContext* ctx) {
     return pattern;
   } else if (ctx->groupGraphPatternSub()) {
     auto [subOps, filters] = visitTypesafe(ctx->groupGraphPatternSub());
+
+    if (subOps.empty()) {
+      reportError(ctx,
+                  "QLever currently doesn't support empty GroupGraphPatterns "
+                  "and WHERE clauses");
+    }
+
     pattern._graphPatterns = std::move(subOps);
     for (auto& filter : filters) {
       if (filter._type == SparqlFilter::LANG_MATCHES) {

@@ -757,9 +757,12 @@ TEST(SparqlParser, GroupGraphPattern) {
       {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
   auto expectGroupGraphPatternFails =
       ExpectParseFails<&Parser::groupGraphPattern>();
+  auto DummyTriplesMatcher = m::Triples({{"?x", "?y", "?z"}});
 
+  // Empty GraphPatterns are not supported.
+  expectGroupGraphPatternFails("{ }");
+  expectGroupGraphPatternFails("{ SELECT *  WHERE { } }");
   // Test the Components alone.
-  expectGraphPattern("{ }", m::GraphPattern());
   expectGraphPattern(
       "{ { ?a ?b ?c } }",
       m::GraphPattern(m::GroupGraphPattern(m::Triples({{"?a", "?b", "?c"}}))));
@@ -781,8 +784,9 @@ TEST(SparqlParser, GroupGraphPattern) {
                      m::GraphPattern(m::MinusGraphPattern(
                          m::Triples({{"?a", "<foo>", "<bar>"}}))));
   expectGraphPattern(
-      "{ FILTER (?a = 10) }",
-      m::GraphPattern(false, {{SparqlFilter::FilterType::EQ, "?a", "10"}}));
+      "{ FILTER (?a = 10) . ?x ?y ?z }",
+      m::GraphPattern(false, {{SparqlFilter::FilterType::EQ, "?a", "10"}},
+                      DummyTriplesMatcher));
   expectGraphPattern("{ BIND (?f - ?b as ?c) }",
                      m::GraphPattern(m::Bind("?c", "?f-?b")));
   expectGraphPattern("{ VALUES (?a ?b) { (<foo> <bar>) (<a> <b>) } }",
@@ -790,9 +794,10 @@ TEST(SparqlParser, GroupGraphPattern) {
                          {"?a", "?b"}, {{"<foo>", "<bar>"}, {"<a>", "<b>"}})));
   expectGraphPattern("{ ?x ?y ?z }",
                      m::GraphPattern(m::Triples({{"?x", "?y", "?z"}})));
-  expectGraphPattern("{ SELECT *  WHERE { } }",
-                     m::GraphPattern(m::SubSelect(
-                         m::AsteriskSelect(false, false), m::GraphPattern())));
+  expectGraphPattern(
+      "{ SELECT *  WHERE { ?x ?y ?z } }",
+      m::GraphPattern(m::SubSelect(m::AsteriskSelect(false, false),
+                                   m::GraphPattern(DummyTriplesMatcher))));
   // Test mixes of the components to make sure that they interact correctly.
   expectGraphPattern(
       "{ ?x ?y ?z ; ?f <bar> }",
@@ -830,10 +835,10 @@ TEST(SparqlParser, GroupGraphPattern) {
           m::Triples({{"?x", "<is-a>", "<Actor>"}}),
           m::OptionalGraphPattern(m::Triples({{"?x", "<foo>", "<bar>"}}))));
   expectGraphPattern(
-      "{ SELECT *  WHERE { } VALUES ?a { <a> <b> } }",
-      m::GraphPattern(
-          m::SubSelect(m::AsteriskSelect(false, false), m::GraphPattern()),
-          m::InlineData({"?a"}, {{"<a>"}, {"<b>"}})));
+      "{ SELECT *  WHERE { ?x ?y ?z } VALUES ?a { <a> <b> } }",
+      m::GraphPattern(m::SubSelect(m::AsteriskSelect(false, false),
+                                   m::GraphPattern(DummyTriplesMatcher)),
+                      m::InlineData({"?a"}, {{"<a>"}, {"<b>"}})));
   // graphGraphPattern and serviceGraphPattern are not supported.
   expectGroupGraphPatternFails("{ GRAPH ?a { } }");
   expectGroupGraphPatternFails("{ GRAPH <foo> { } }");
@@ -862,28 +867,30 @@ TEST(SparqlParser, SelectQuery) {
   auto expectSelectQuery = ExpectCompleteParse<&Parser::selectQuery>{
       {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
   auto expectSelectQueryFails = ExpectParseFails<&Parser::selectQuery>{};
+  auto DummyTriplesMatcher = m::Triples({{"?x", "?y", "?z"}});
   expectSelectQuery(
       "SELECT * WHERE { ?a <bar> ?foo }",
       m::ParsedQuery("SELECT * WHERE { ?a <bar> ?foo }", m::AsteriskSelect(),
                      m::GraphPattern(m::Triples({{"?a", "<bar>", "?foo"}}))));
+  expectSelectQuery("SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x",
+                    m::ParsedQuery("SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x",
+                                   m::VariablesSelect({"?x"}),
+                                   m::GraphPattern(DummyTriplesMatcher), {}, {},
+                                   {Variable{"?x"}}, {}));
   expectSelectQuery(
-      "SELECT ?foo WHERE { } GROUP BY ?foo",
-      m::ParsedQuery("SELECT ?foo WHERE { } GROUP BY ?foo",
-                     m::VariablesSelect({"?foo"}), m::GraphPattern(), {}, {},
-                     {Variable{"?foo"}}, {}));
-  expectSelectQuery(
-      "SELECT (COUNT(?foo) as ?baz) WHERE { } GROUP BY ?bar",
-      m::ParsedQuery("SELECT (COUNT(?foo) as ?baz) WHERE { } GROUP BY ?bar",
-                     m::Select({std::pair{"COUNT(?foo)", Variable{"?baz"}}}),
-                     m::GraphPattern(), {}, {}, {Variable{"?bar"}}));
+      "SELECT (COUNT(?y) as ?a) WHERE { ?x ?y ?z } GROUP BY ?x",
+      m::ParsedQuery("SELECT (COUNT(?y) as ?a) WHERE { ?x ?y ?z } GROUP BY ?x",
+                     m::Select({std::pair{"COUNT(?y)", Variable{"?a"}}}),
+                     m::GraphPattern(DummyTriplesMatcher), {}, {},
+                     {Variable{"?x"}}));
   // `SELECT *` is not allowed while grouping.
-  expectSelectQueryFails("SELECT * WHERE { } GROUP BY ?foo");
-  // `?foo` is selected twice. Once as variable and once as the result of an
+  expectSelectQueryFails("SELECT * WHERE { ?x ?y ?z } GROUP BY ?x");
+  // `?x` is selected twice. Once as variable and once as the result of an
   // alias. This is not allowed.
-  expectSelectQueryFails("SELECT ?foo (?bar as ?foo) WHERE { }");
+  expectSelectQueryFails("SELECT ?x (?y as ?x) WHERE { ?x ?y ?z }");
   // When grouping selected variables must either be grouped by or aggregated.
-  // `?foo` is neither.
-  expectSelectQueryFails("SELECT (?bar as ?foo) WHERE { } GROUP BY ?baz");
+  // `?y` is neither.
+  expectSelectQueryFails("SELECT (?y as ?a) WHERE { ?x ?y ?z } GROUP BY ?x");
   // Datasets are not supported.
-  expectSelectQueryFails("SELECT * FROM  WHERE <foo> { }");
+  expectSelectQueryFails("SELECT * FROM  WHERE <foo> { ?x ?y ?z }");
 }
