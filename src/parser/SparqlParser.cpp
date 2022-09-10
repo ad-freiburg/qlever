@@ -59,41 +59,33 @@ ParsedQuery SparqlParser::parse() {
 
 // _____________________________________________________________________________
 void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
-  if (queryType == CONSTRUCT_QUERY) {
-    query->_clause = parseWithAntlr(&AntlrParser::constructTemplate, *query)
-                         .value_or(ad_utility::sparql_types::Triples{});
-  } else {
-    // Unsupported query type
-    AD_FAIL();
-  }
+  AD_CHECK(queryType == CONSTRUCT_QUERY);
+  query->_clause = parseWithAntlr(&AntlrParser::constructTemplate, *query)
+                       .value_or(ad_utility::sparql_types::Triples{});
 
   parseWhere(query);
 
   parseSolutionModifiers(query);
 
   if (!query->_groupByVariables.empty()) {
-    if (query->hasConstructClause()) {
-      auto& constructClause = query->constructClause();
-      for (const auto& triple : constructClause) {
-        for (const auto& varOrTerm : triple) {
-          if (auto variable = std::get_if<Variable>(&varOrTerm)) {
-            const auto& var = variable->name();
-            if (!ad_utility::contains_if(query->_groupByVariables,
-                                         [&var](const Variable& grouping) {
-                                           return var == grouping.name();
-                                         })) {
-              throw ParseException("Variable " + var +
-                                   " is used but not "
-                                   "aggregated despite the query not being "
-                                   "grouped by " +
-                                   var + ".\n" + lexer_.input());
-            }
+    AD_CHECK(query->hasConstructClause());
+    auto& constructClause = query->constructClause();
+    for (const auto& triple : constructClause) {
+      for (const auto& varOrTerm : triple) {
+        if (auto variable = std::get_if<Variable>(&varOrTerm)) {
+          const auto& var = variable->name();
+          if (!ad_utility::contains_if(query->_groupByVariables,
+                                       [&var](const Variable& grouping) {
+                                         return var == grouping.name();
+                                       })) {
+            throw ParseException("Variable " + var +
+                                 " is used but not "
+                                 "aggregated despite the query not being "
+                                 "grouped by " +
+                                 var + ".\n" + lexer_.input());
           }
         }
       }
-    } else {
-      // Invalid clause type
-      AD_FAIL();
     }
   }
 }

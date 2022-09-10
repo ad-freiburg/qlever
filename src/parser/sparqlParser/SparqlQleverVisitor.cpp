@@ -557,7 +557,10 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
   ParsedQuery query;
   query._clause = visitTypesafe(ctx->selectClause());
   if (!ctx->datasetClause().empty()) {
-    reportError(ctx->datasetClause(), "QLever currently doesn't support FROM clauses");
+    // TODO: see if it is possible to extend reportError s.t. it can also take
+    // vector<ParserRuleContext>.
+    reportError(ctx->datasetClause(0),
+                "QLever currently doesn't support FROM clauses");
   }
   auto [pattern, visibleVariables] = visitTypesafe(ctx->whereClause());
   query._rootGraphPattern = std::move(pattern);
