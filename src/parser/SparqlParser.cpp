@@ -105,9 +105,7 @@ void SparqlParser::parseWhere(ParsedQuery* query) {
   auto [pattern, visibleVariables] =
       parseWithAntlr(&AntlrParser::whereClause, *query);
   query->_rootGraphPattern = std::move(pattern);
-  for (const auto& var : visibleVariables) {
-    query->registerVariableVisibleInQueryBody(var);
-  }
+  query->registerVariablesVisibleInQueryBody(visibleVariables);
 }
 
 // _____________________________________________________________________________

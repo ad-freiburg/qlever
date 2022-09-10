@@ -136,11 +136,20 @@ class ParsedQuery {
   }
 
   // Add a variable, that was found in the SubQuery body, when query has a
-  // Select Clause
-  [[maybe_unused]] bool registerVariableVisibleInQueryBody(
-      const Variable& variable) {
+  // Select Clause.
+  bool registerVariableVisibleInQueryBody(const Variable& variable) {
     if (!hasSelectClause()) return false;
     selectClause().addVariableForAsterisk(variable);
+    return true;
+  }
+
+  // Add variables, that were found in the SubQuery body, when query has a
+  // Select Clause.
+  bool registerVariablesVisibleInQueryBody(const vector<Variable>& variables) {
+    if (!hasSelectClause()) return false;
+    for (const auto& var : variables) {
+      selectClause().addVariableForAsterisk(var);
+    }
     return true;
   }
 

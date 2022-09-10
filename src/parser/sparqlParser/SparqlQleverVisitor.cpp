@@ -564,9 +564,7 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
   }
   auto [pattern, visibleVariables] = visitTypesafe(ctx->whereClause());
   query._rootGraphPattern = std::move(pattern);
-  for (const auto& var : visibleVariables) {
-    query.registerVariableVisibleInQueryBody(var);
-  }
+  query.registerVariablesVisibleInQueryBody(visibleVariables);
   query.addSolutionModifiers(visitTypesafe(ctx->solutionModifier()));
   // TODO: move up to visitTypesafe(QueryContext*)
   query._originalString = ctx->getStart()->getInputStream()->toString();
@@ -578,36 +576,31 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
       groupVariables.emplace(variable.toSparql());
     }
 
-    if (!query.selectClause().isAsterisk()) {
-      const auto& selectClause = query.selectClause();
-      // Check if all selected variables are either aggregated or
-      // part of the group by statement.
-      for (const string& var : selectClause.getSelectedVariablesAsStrings()) {
-        if (var[0] == '?') {
-          if (ad_utility::contains_if(
-                  selectClause.getAliases(),
-                  [&var, &groupVariables](const Alias& alias) {
-                    return alias._outVarName == var &&
-                           alias._expression.isAggregate(groupVariables);
-                  })) {
-            continue;
-          }
-          if (!ad_utility::contains_if(query._groupByVariables,
-                                       [&var](const Variable& grouping) {
-                                         return var == grouping.name();
-                                       })) {
-            reportError(
-                ctx, absl::StrCat("Variable ", var,
-                                  " is selected but not aggregated despite the "
-                                  "query not being grouped by ",
-                                  var, "."));
-          }
-        }
-      }
-    } else {
+    if (query.selectClause().isAsterisk()) {
       reportError(ctx,
                   "GROUP BY is not allowed when all variables are selected via "
                   "SELECT *");
+    }
+
+    const auto& selectClause = query.selectClause();
+    // Check if all selected variables are either aggregated or
+    // part of the group by statement.
+    for (const Variable& var : selectClause.getSelectedVariables()) {
+      if (ad_utility::contains_if(selectClause.getAliases(),
+                                  [&var, &groupVariables](const Alias& alias) {
+                                    return alias._outVarName == var.name() &&
+                                           alias._expression.isAggregate(
+                                               groupVariables);
+                                  })) {
+        continue;
+      }
+      if (!ad_utility::contains(query._groupByVariables, var)) {
+        reportError(ctx,
+                    absl::StrCat("Variable ", var.name(),
+                                 " is selected but not aggregated despite the "
+                                 "query not being grouped by ",
+                                 var.name(), "."));
+      }
     }
   }
 
@@ -647,9 +640,7 @@ Visitor::SubQueryAndMaybeValues Visitor::visitTypesafe(
   query.addSolutionModifiers(visitTypesafe(ctx->solutionModifier()));
   numInternalVariables_ = query.getNumInternalVariables();
   auto values = visitTypesafe(ctx->valuesClause());
-  for (const auto& variable : visibleVariables) {
-    query.registerVariableVisibleInQueryBody(variable);
-  }
+  query.registerVariablesVisibleInQueryBody(visibleVariables);
   // Variables that are selected in this query are visible in the parent query.
   for (const auto& variable : query.selectClause().getSelectedVariables()) {
     addVisibleVariable(variable);
