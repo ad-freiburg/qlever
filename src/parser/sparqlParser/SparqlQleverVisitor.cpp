@@ -569,6 +569,17 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
   // TODO: move up to visitTypesafe(QueryContext*)
   query._originalString = ctx->getStart()->getInputStream()->toString();
 
+  auto checkAliasOutNamesHaveNoOverlapWith =
+      [this, &query, &ctx](const auto& container, const std::string& message) {
+        for (const auto& alias : query.selectClause().getAliases()) {
+          if (ad_utility::contains_if(container, [&alias](const Variable& var) {
+                return alias._outVarName == var.name();
+              })) {
+            reportError(ctx, absl::StrCat(alias._outVarName, message));
+          }
+        }
+      };
+
   // Check that the query is valid
   if (!query._groupByVariables.empty()) {
     ad_utility::HashSet<string> groupVariables{};
@@ -602,15 +613,19 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
                                  var.name(), "."));
       }
     }
+    checkAliasOutNamesHaveNoOverlapWith(
+        query._groupByVariables,
+        " is the target of an alias although the query is grouped by it. This "
+        "is not allowed.");
+  } else {
+    checkAliasOutNamesHaveNoOverlapWith(
+        visibleVariables,
+        " is the target of an alias although it is also visible in the query "
+        "body. This is not allowed.");
   }
 
   const auto& selectClause = query.selectClause();
 
-  // TODO<joka921> The following check should be directly in the
-  // `SelectClause` class (in the `setSelected` member).
-
-  // TODO<joka921> Is this even the correct way to check this? we should also
-  // verify that the variable is new (not even visible in the query body).
   ad_utility::HashMap<std::string, size_t> variable_counts;
 
   for (const std::string& s : selectClause.getSelectedVariablesAsStrings()) {
