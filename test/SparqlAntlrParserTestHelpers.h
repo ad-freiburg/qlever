@@ -385,16 +385,17 @@ auto ExpressionGroupKey = [](const string& expr) -> Matcher<const GroupKey&> {
       detail::Expression(expr));
 };
 
-auto AliasGroupKey = [](const string& expr,
-                        const string& variable) -> Matcher<const GroupKey&> {
+auto AliasGroupKey =
+    [](const string& expr,
+       const ::Variable& variable) -> Matcher<const GroupKey&> {
   return testing::VariantWith<Alias>(
-      testing::AllOf(AD_FIELD(Alias, _outVarName, testing::Eq(variable)),
+      testing::AllOf(AD_FIELD(Alias, _target, testing::Eq(variable)),
                      AD_FIELD(Alias, _expression, detail::Expression(expr))));
 };
 
 auto GroupKeys =
     [](const std::vector<std::variant<
-           std::string, std::pair<std::string, std::string>, ::Variable>>&
+           std::string, std::pair<std::string, ::Variable>, ::Variable>>&
            groupKeys) -> Matcher<const vector<GroupKey>&> {
   vector<Matcher<const GroupKey&>> keyMatchers;
   auto variableGroupKey =
@@ -405,7 +406,7 @@ auto GroupKeys =
       [](const std::string& key) -> Matcher<const GroupKey&> {
     return ExpressionGroupKey(key);
   };
-  auto aliasGroupKey = [](const std::pair<std::string, std::string>& alias)
+  auto aliasGroupKey = [](const std::pair<std::string, ::Variable>& alias)
       -> Matcher<const GroupKey&> {
     return AliasGroupKey(alias.first, alias.second);
   };
@@ -489,7 +490,7 @@ MATCHER_P3(Select, distinct, reduced, selection, "") {
         return false;
       }
     } else {
-      auto pair = get<std::pair<string, string>>(selection[i]);
+      auto pair = get<std::pair<string, ::Variable>>(selection[i]);
       if (alias_counter >= arg.getAliases().size()) {
         *result_listener << "where selected Variables contain less Aliases ("
                          << testing::PrintToString(alias_counter)
@@ -498,8 +499,8 @@ MATCHER_P3(Select, distinct, reduced, selection, "") {
       }
       if (pair.first !=
               arg.getAliases()[alias_counter]._expression.getDescriptor() ||
-          pair.second != arg.getAliases()[alias_counter++]._outVarName ||
-          pair.second != selectedVariables[i].name()) {
+          pair.second != arg.getAliases()[alias_counter++]._target ||
+          pair.second != selectedVariables[i]) {
         *result_listener << "where Alias#" << i << " = "
                          << testing::PrintToString(
                                 arg.getAliases()[alias_counter - 1]);
@@ -518,7 +519,7 @@ MATCHER_P3(Select, distinct, reduced, selection, "") {
 }  // namespace detail
 
 auto Select =
-    [](std::vector<std::variant<::Variable, std::pair<string, string>>>
+    [](std::vector<std::variant<::Variable, std::pair<string, ::Variable>>>
            selection,
        bool distinct = false,
        bool reduced = false) -> Matcher<const p::SelectClause&> {
@@ -528,7 +529,7 @@ auto Select =
 
 auto SolutionModifier =
     [](const std::vector<std::variant<
-           std::string, std::pair<std::string, std::string>, ::Variable>>&
+           std::string, std::pair<std::string, ::Variable>, ::Variable>>&
            groupKeys = {},
        const vector<SparqlFilter>& havingClauses = {},
        const std::vector<std::variant<::VariableOrderKey,

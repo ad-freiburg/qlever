@@ -140,10 +140,10 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       };
   auto processAlias = [this](Alias groupKey) {
     parsedQuery::Bind helperBind{std::move(groupKey._expression),
-                                 groupKey._outVarName};
+                                 groupKey._target.name()};
     _rootGraphPattern._graphPatterns.emplace_back(std::move(helperBind));
-    registerVariableVisibleInQueryBody(Variable{groupKey._outVarName});
-    _groupByVariables.emplace_back(groupKey._outVarName);
+    registerVariableVisibleInQueryBody(groupKey._target);
+    _groupByVariables.emplace_back(groupKey._target);
   };
 
   for (auto& orderKey : modifiers.groupByVariables_) {
@@ -168,7 +168,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
                                  }) &&
         !ad_utility::contains_if(
             selectClause().getAliases(), [&orderKey](const Alias& alias) {
-              return alias._outVarName == orderKey.variable_;
+              return alias._target.name() == orderKey.variable_;
             })) {
       throw ParseException(
           "Variable " + orderKey.variable_ +

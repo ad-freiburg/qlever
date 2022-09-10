@@ -171,7 +171,7 @@ Alias Visitor::visitTypesafe(Parser::AliasContext* ctx) {
 
 // ____________________________________________________________________________________
 Alias Visitor::visitTypesafe(Parser::AliasWithoutBracketsContext* ctx) {
-  return {{visitTypesafe(ctx->expression())}, ctx->var()->getText()};
+  return {{visitTypesafe(ctx->expression())}, visitTypesafe(ctx->var())};
 }
 
 // ____________________________________________________________________________________
@@ -572,10 +572,8 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
   auto checkAliasOutNamesHaveNoOverlapWith =
       [this, &query, &ctx](const auto& container, const std::string& message) {
         for (const auto& alias : query.selectClause().getAliases()) {
-          if (ad_utility::contains_if(container, [&alias](const Variable& var) {
-                return alias._outVarName == var.name();
-              })) {
-            reportError(ctx, absl::StrCat(alias._outVarName, message));
+          if (ad_utility::contains(container, alias._target)) {
+            reportError(ctx, absl::StrCat(alias._target.name(), message));
           }
         }
       };
@@ -599,7 +597,7 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
     for (const Variable& var : selectClause.getSelectedVariables()) {
       if (ad_utility::contains_if(selectClause.getAliases(),
                                   [&var, &groupVariables](const Alias& alias) {
-                                    return alias._outVarName == var.name() &&
+                                    return alias._target == var &&
                                            alias._expression.isAggregate(
                                                groupVariables);
                                   })) {
@@ -635,8 +633,8 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
   for (const Alias& a : selectClause.getAliases()) {
     // The variable was already added to the selected variables while
     // parsing the alias, thus it should appear exactly once
-    if (variable_counts[a._outVarName] > 1) {
-      reportError(ctx, "The variable name " + a._outVarName +
+    if (variable_counts[a._target.name()] > 1) {
+      reportError(ctx, "The variable name " + a._target.name() +
                            " used in an alias was already selected on.");
     }
   }
@@ -684,7 +682,7 @@ GroupKey Visitor::visitTypesafe(Parser::GroupConditionContext* ctx) {
   } else if (ctx->expression()) {
     auto expr = SparqlExpressionPimpl{visitTypesafe(ctx->expression())};
     if (ctx->AS() && ctx->var()) {
-      return Alias{std::move(expr), ctx->var()->getText()};
+      return Alias{std::move(expr), visitTypesafe(ctx->var())};
     } else {
       return expr;
     }

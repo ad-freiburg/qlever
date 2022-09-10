@@ -495,7 +495,8 @@ TEST(SparqlParser, GroupCondition) {
   // expression without binding
   expectGroupCondition("(?test)", m::ExpressionGroupKey("?test"));
   // expression with binding
-  expectGroupCondition("(?test AS ?mehr)", m::AliasGroupKey("?test", "?mehr"));
+  expectGroupCondition("(?test AS ?mehr)",
+                       m::AliasGroupKey("?test", Variable{"?mehr"}));
   // builtInCall
   expectGroupCondition("COUNT(?test)", m::ExpressionGroupKey("COUNT(?test)"));
   // functionCall
@@ -509,8 +510,8 @@ TEST(SparqlParser, GroupClause) {
   expectCompleteParse(
       parse<&Parser::groupClause>(
           "GROUP BY ?test (?foo - 10 as ?bar) COUNT(?baz)"),
-      m::GroupKeys(
-          {Variable{"?test"}, std::pair{"?foo-10", "?bar"}, "COUNT(?baz)"}));
+      m::GroupKeys({Variable{"?test"}, std::pair{"?foo-10", Variable{"?bar"}},
+                    "COUNT(?baz)"}));
 }
 
 TEST(SparqlParser, SolutionModifier) {
@@ -712,7 +713,7 @@ TEST(SparqlParser, SelectClause) {
   auto expectSelectClause = ExpectCompleteParse<&Parser::selectClause>{};
   auto expectSelectFails = ExpectParseFails<&Parser::selectClause>();
 
-  using Alias = std::pair<string, string>;
+  using Alias = std::pair<string, ::Variable>;
   expectCompleteParse(parseSelectClause("SELECT *"),
                       m::AsteriskSelect(false, false));
   expectCompleteParse(parseSelectClause("SELECT DISTINCT *"),
@@ -728,10 +729,11 @@ TEST(SparqlParser, SelectClause) {
                      m::VariablesSelect({"?foo", "?bar"}, true, false));
   expectSelectClause("SELECT REDUCED ?foo ?bar ?baz",
                      m::VariablesSelect({"?foo", "?bar", "?baz"}, false, true));
-  expectSelectClause("SELECT (10 as ?foo) ?bar",
-                     m::Select({Alias{"10", "?foo"}, Variable{"?bar"}}));
+  expectSelectClause(
+      "SELECT (10 as ?foo) ?bar",
+      m::Select({Alias{"10", Variable{"?foo"}}, Variable{"?bar"}}));
   expectSelectClause("SELECT DISTINCT (5 - 10 as ?m)",
-                     m::Select({Alias{"5-10", "?m"}}, true, false));
+                     m::Select({Alias{"5-10", Variable{"?m"}}}, true, false));
   expectSelectClause(
       "SELECT (5 - 10 as ?m) ?foo (10 as ?bar)",
       m::Select({Alias{"5-10", "?m"}, Variable{"?foo"}, Alias{"10", "?bar"}}));
@@ -872,7 +874,7 @@ TEST(SparqlParser, SelectQuery) {
   expectSelectQuery(
       "SELECT (COUNT(?foo) as ?baz) WHERE { } GROUP BY ?bar",
       m::ParsedQuery("SELECT (COUNT(?foo) as ?baz) WHERE { } GROUP BY ?bar",
-                     m::Select({std::pair{"COUNT(?foo)", "?baz"}}),
+                     m::Select({std::pair{"COUNT(?foo)", Variable{"?baz"}}}),
                      m::GraphPattern(), {}, {}, {Variable{"?bar"}}));
   // `SELECT *` is not allowed while grouping.
   expectSelectQueryFails("SELECT * WHERE { } GROUP BY ?foo");

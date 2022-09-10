@@ -24,7 +24,7 @@ void SelectClause::setSelected(std::vector<VarOrAlias> varsOrAliases) {
     v.vars_.push_back(std::move(var));
   };
   auto processAlias = [&v](Alias alias) {
-    v.vars_.emplace_back(alias._outVarName);
+    v.vars_.emplace_back(alias._target);
     v.aliases_.push_back(std::move(alias));
   };
 
