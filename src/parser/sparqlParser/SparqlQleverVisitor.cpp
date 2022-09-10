@@ -557,7 +557,7 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
   ParsedQuery query;
   query._clause = visitTypesafe(ctx->selectClause());
   if (!ctx->datasetClause().empty()) {
-    reportError(ctx, "DatasetClause is not support.");
+    reportError(ctx->datasetClause(), "QLever currently doesn't support FROM clauses");
   }
   auto [pattern, visibleVariables] = visitTypesafe(ctx->whereClause());
   query._rootGraphPattern = std::move(pattern);
@@ -568,7 +568,7 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
   // TODO: move up to visitTypesafe(QueryContext*)
   query._originalString = ctx->getStart()->getInputStream()->toString();
 
-  // Checks that the query is valid
+  // Check that the query is valid
   if (!query._groupByVariables.empty()) {
     ad_utility::HashSet<string> groupVariables{};
     for (const auto& variable : query._groupByVariables) {
