@@ -565,7 +565,7 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
   query._clause = visitTypesafe(ctx->selectClause());
   if (!ctx->datasetClause().empty()) {
     // TODO: see if it is possible to extend reportError s.t. it can also take
-    // vector<ParserRuleContext>.
+    //  vector<ParserRuleContext>.
     reportError(ctx->datasetClause(0),
                 "QLever currently doesn't support FROM clauses");
   }

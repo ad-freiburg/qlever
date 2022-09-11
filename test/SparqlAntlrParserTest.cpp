@@ -870,19 +870,26 @@ TEST(SparqlParser, SelectQuery) {
   auto DummyTriplesMatcher = m::Triples({{"?x", "?y", "?z"}});
   expectSelectQuery(
       "SELECT * WHERE { ?a <bar> ?foo }",
-      m::ParsedQuery("SELECT * WHERE { ?a <bar> ?foo }", m::AsteriskSelect(),
-                     m::GraphPattern(m::Triples({{"?a", "<bar>", "?foo"}}))));
-  expectSelectQuery("SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x",
-                    m::ParsedQuery("SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x",
-                                   m::VariablesSelect({"?x"}),
-                                   m::GraphPattern(DummyTriplesMatcher), {}, {},
-                                   {Variable{"?x"}}, {}));
+      testing::AllOf(m::pq::OriginalString("SELECT * WHERE { ?a <bar> ?foo }"),
+                     m::pq::SelectClause(m::AsteriskSelect()),
+                     m::pq::RootGraphPattern(m::GraphPattern(
+                         m::Triples({{"?a", "<bar>", "?foo"}})))));
+  expectSelectQuery(
+      "SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x",
+      testing::AllOf(
+          m::pq::OriginalString("SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x"),
+          m::pq::SelectClause(m::VariablesSelect({"?x"})),
+          m::pq::RootGraphPattern(m::GraphPattern(DummyTriplesMatcher)),
+          m::pq::GroupKeys({Variable{"?x"}})));
   expectSelectQuery(
       "SELECT (COUNT(?y) as ?a) WHERE { ?x ?y ?z } GROUP BY ?x",
-      m::ParsedQuery("SELECT (COUNT(?y) as ?a) WHERE { ?x ?y ?z } GROUP BY ?x",
-                     m::Select({std::pair{"COUNT(?y)", Variable{"?a"}}}),
-                     m::GraphPattern(DummyTriplesMatcher), {}, {},
-                     {Variable{"?x"}}));
+      testing::AllOf(
+          m::pq::OriginalString(
+              "SELECT (COUNT(?y) as ?a) WHERE { ?x ?y ?z } GROUP BY ?x"),
+          m::pq::SelectClause(
+              m::Select({std::pair{"COUNT(?y)", Variable{"?a"}}})),
+          m::pq::RootGraphPattern(m::GraphPattern(DummyTriplesMatcher)),
+          m::pq::GroupKeys({Variable{"?x"}})));
   // Grouping by a variable or expression which contains a variable that is not
   // visible in the query body is not allowed.
   expectSelectQueryFails("SELECT ?x WHERE { ?a ?b ?c } GROUP BY ?x");

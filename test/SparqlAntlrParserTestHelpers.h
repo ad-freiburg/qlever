@@ -682,6 +682,41 @@ auto ParsedQuery =
       AD_FIELD(ParsedQuery, _rootGraphPattern, graphPatternMatcher));
 };
 
+namespace pq {
+// TODO: look into whether some shortcuts can be done with composition of e.g.
+// `SelectClause` and `IsAsteriskSelect`.
+auto OriginalString =
+    [](const std::string& originalString) -> Matcher<const ::ParsedQuery&> {
+  return AD_FIELD(ParsedQuery, _originalString, testing::Eq(originalString));
+};
+auto RootGraphPattern =
+    [](const Matcher<const p::GraphPattern&>& graphPatternMatcher)
+    -> Matcher<const ::ParsedQuery&> {
+  return AD_FIELD(ParsedQuery, _rootGraphPattern, graphPatternMatcher);
+};
+
+auto SelectClause = [](const Matcher<const p::SelectClause&>& selectMatcher)
+    -> Matcher<const ::ParsedQuery&> {
+  return testing::AllOf(
+      AD_PROPERTY(ParsedQuery, hasSelectClause, testing::IsTrue()),
+      AD_PROPERTY(ParsedQuery, selectClause, selectMatcher));
+};
+auto LimitOffset = [](const LimitOffsetClause& limitOffset = {})
+    -> Matcher<const ::ParsedQuery&> {
+  return AD_FIELD(ParsedQuery, _limitOffset, testing::Eq(limitOffset));
+};
+auto HavingClause = [](const vector<SparqlFilter>& havingClauses = {})
+    -> Matcher<const ::ParsedQuery&> {
+  return AD_FIELD(ParsedQuery, _havingClauses, testing::Eq(havingClauses));
+};
+auto OrderKeys =
+    [](const std::vector<std::pair<std::string, bool>>& orderKeys = {})
+    -> Matcher<const ::ParsedQuery&> {
+  return AD_FIELD(ParsedQuery, _orderBy, VariableOrderKeys(orderKeys));
+};
+auto GroupKeys = GroupByVariables;
+}  // namespace pq
+
 }  // namespace matchers
 
 #undef AD_PROPERTY
