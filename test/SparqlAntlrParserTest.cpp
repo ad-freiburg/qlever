@@ -429,8 +429,8 @@ TEST(SparqlParser, VariableWithDollarSign) {
 
 TEST(SparqlParser, Bind) {
   auto expectBind = ExpectCompleteParse<&Parser::bind>{};
-  expectBind("BIND (10 - 5 as ?a)", m::Bind("?a", "10-5"));
-  expectBind("bInD (?age - 10 As ?s)", m::Bind("?s", "?age-10"));
+  expectBind("BIND (10 - 5 as ?a)", m::Bind(Variable{"?a"}, "10-5"));
+  expectBind("bInD (?age - 10 As ?s)", m::Bind(Variable{"?s"}, "?age-10"));
 }
 
 TEST(SparqlParser, Integer) {
@@ -785,7 +785,7 @@ TEST(SparqlParser, GroupGraphPattern) {
       "{ FILTER (?a = 10) }",
       m::GraphPattern(false, {{SparqlFilter::FilterType::EQ, "?a", "10"}}));
   expectGraphPattern("{ BIND (?f - ?b as ?c) }",
-                     m::GraphPattern(m::Bind("?c", "?f-?b")));
+                     m::GraphPattern(m::Bind(Variable{"?c"}, "?f-?b")));
   expectGraphPattern("{ VALUES (?a ?b) { (<foo> <bar>) (<a> <b>) } }",
                      m::GraphPattern(m::InlineData(
                          {"?a", "?b"}, {{"<foo>", "<bar>"}, {"<a>", "<b>"}})));
@@ -820,10 +820,10 @@ TEST(SparqlParser, GroupGraphPattern) {
                       {"?c", CONTAINS_WORD_PREDICATE, "coca* abuse"}})));
   expectGraphPattern("{?x <is-a> <Actor> . BIND(10 - ?foo as ?y) }",
                      m::GraphPattern(m::Triples({{"?x", "<is-a>", "<Actor>"}}),
-                                     m::Bind("?y", "10-?foo")));
+                                     m::Bind(Variable{"?y"}, "10-?foo")));
   expectGraphPattern("{?x <is-a> <Actor> . BIND(10 - ?foo as ?y) . ?a ?b ?c }",
                      m::GraphPattern(m::Triples({{"?x", "<is-a>", "<Actor>"}}),
-                                     m::Bind("?y", "10-?foo"),
+                                     m::Bind(Variable{"?y"}, "10-?foo"),
                                      m::Triples({{"?a", "?b", "?c"}})));
   expectGraphPattern(
       "{?x <is-a> <Actor> . OPTIONAL { ?x <foo> <bar> } }",

@@ -197,7 +197,7 @@ Variable Visitor::visitTypesafe(Parser::VarContext* ctx) {
 GraphPatternOperation Visitor::visitTypesafe(Parser::BindContext* ctx) {
   addVisibleVariable(ctx->var()->getText());
   return GraphPatternOperation{
-      Bind{{visitTypesafe(ctx->expression())}, ctx->var()->getText()}};
+      Bind{{visitTypesafe(ctx->expression())}, visitTypesafe(ctx->var())}};
 }
 
 // ____________________________________________________________________________________

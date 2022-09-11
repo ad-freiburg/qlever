@@ -13,9 +13,9 @@
 #include "index/Index.h"
 
 class Variable {
+ public:
   std::string _name;
 
- public:
   explicit Variable(std::string name) : _name{std::move(name)} {
     // verify variable name starts with ? or $ and continues without any
     // special characters. This is weaker than the SPARQL grammar,

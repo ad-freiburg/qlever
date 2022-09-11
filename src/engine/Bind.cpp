@@ -67,7 +67,7 @@ string Bind::asStringImpl(size_t indent) const {
 ad_utility::HashMap<string, size_t> Bind::getVariableColumns() const {
   auto res = _subtree->getVariableColumns();
   // The new variable is always appended at the end.
-  res[_bind._target] = getResultWidth() - 1;
+  res[_bind._target.name()] = getResultWidth() - 1;
   return res;
 }
 

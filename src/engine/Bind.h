@@ -33,7 +33,9 @@ class Bind : public Operation {
       const override;
 
   // Returns the variable to which the expression will be bound
-  [[nodiscard]] const string& targetVariable() const { return _bind._target; }
+  [[nodiscard]] const string& targetVariable() const {
+    return _bind._target.name();
+  }
 
  protected:
   [[nodiscard]] vector<size_t> resultSortedOn() const override;

@@ -115,8 +115,8 @@ Variable ParsedQuery::addInternalBind(
     sparqlExpression::SparqlExpressionPimpl expression) {
   // Internal variable name to which the result of the helper bind is
   // assigned.
-  std::string targetVariable =
-      INTERNAL_VARIABLE_PREFIX + std::to_string(numInternalVariables_);
+  auto targetVariable = Variable{INTERNAL_VARIABLE_PREFIX +
+                                 std::to_string(numInternalVariables_)};
   numInternalVariables_++;
   parsedQuery::Bind bind{std::move(expression), targetVariable};
   _rootGraphPattern._graphPatterns.emplace_back(std::move(bind));
@@ -125,7 +125,7 @@ Variable ParsedQuery::addInternalBind(
   // TODO<qup42, joka921> Implement "internal" variables, that can't be
   //  selected at all and can never interfere with variables from the
   //  query.
-  return Variable{std::move(targetVariable)};
+  return targetVariable;
 }
 
 // ________________________________________________________________________
@@ -141,7 +141,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       };
   auto processAlias = [this](Alias groupKey) {
     parsedQuery::Bind helperBind{std::move(groupKey._expression),
-                                 groupKey._outVarName};
+                                 Variable{groupKey._outVarName}};
     _rootGraphPattern._graphPatterns.emplace_back(std::move(helperBind));
     registerVariableVisibleInQueryBody(Variable{groupKey._outVarName});
     _groupByVariables.emplace_back(groupKey._outVarName);

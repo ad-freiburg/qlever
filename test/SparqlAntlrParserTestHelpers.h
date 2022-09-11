@@ -59,7 +59,8 @@ std::ostream& operator<<(std::ostream& out, const VarOrTerm& varOrTerm) {
 
 namespace parsedQuery {
 std::ostream& operator<<(std::ostream& out, const parsedQuery::Bind& bind) {
-  out << "Bind " << bind._expression.getDescriptor() << " as " << bind._target;
+  out << "Bind " << bind._expression.getDescriptor() << " as "
+      << bind._target.name();
   return out;
 }
 
@@ -311,7 +312,7 @@ auto BindExpression =
   return AD_FIELD(p::Bind, _expression, detail::Expression(expression));
 };
 
-auto Bind = [](const string& variable, const string& expression)
+auto Bind = [](const ::Variable& variable, const string& expression)
     -> testing::Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::Bind>(
       testing::AllOf(BindExpression(expression),

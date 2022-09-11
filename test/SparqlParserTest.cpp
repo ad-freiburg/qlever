@@ -1107,7 +1107,7 @@ TEST(ParserTest, Bind) {
   p::GraphPatternOperation child = pq.children()[0];
   ASSERT_TRUE(holds_alternative<p::Bind>(child));
   p::Bind bind = get<p::Bind>(child);
-  ASSERT_EQ(bind._target, "?a");
+  ASSERT_EQ(bind._target, Variable{"?a"});
   ASSERT_EQ(bind._expression.getDescriptor(), "10-5");
 }
 
@@ -1181,7 +1181,7 @@ TEST(ParserTest, Order) {
     ASSERT_TRUE(holds_alternative<p::Bind>(variant));
     auto helperBind = get<p::Bind>(variant);
     ASSERT_EQ(helperBind._expression.getDescriptor(), "?x-?y");
-    ASSERT_EQ(pq._orderBy[0].variable_.name(), helperBind._target);
+    ASSERT_EQ(pq._orderBy[0].variable_, helperBind._target);
   }
   {
     // Ordering by variables that are not grouped is not allowed.
@@ -1231,8 +1231,7 @@ TEST(ParserTest, Group) {
     ASSERT_TRUE(holds_alternative<p::Bind>(variant));
     auto helperBind = get<p::Bind>(variant);
     ASSERT_THAT(helperBind, m::BindExpression("?x-?y"));
-    EXPECT_THAT(pq, m::GroupByVariables(
-                        {Variable{helperBind._target}, Variable{"?x"}}));
+    EXPECT_THAT(pq, m::GroupByVariables({helperBind._target, Variable{"?x"}}));
   }
   {
     // grouping by an expression with an alias
@@ -1241,7 +1240,7 @@ TEST(ParserTest, Group) {
                          "- ?y AS ?foo) ?x")
                          .parse();
     EXPECT_THAT(pq._rootGraphPattern._graphPatterns[1],
-                m::Bind("?foo", "?x-?y"));
+                m::Bind(Variable{"?foo"}, "?x-?y"));
     EXPECT_THAT(pq, m::GroupByVariables({Variable{"?foo"}, Variable{"?x"}}));
   }
   {
@@ -1254,8 +1253,7 @@ TEST(ParserTest, Group) {
     ASSERT_TRUE(holds_alternative<p::Bind>(variant));
     auto helperBind = get<p::Bind>(variant);
     ASSERT_THAT(helperBind, m::BindExpression("COUNT(?x)"));
-    EXPECT_THAT(pq, m::GroupByVariables(
-                        {Variable{helperBind._target}, Variable{"?x"}}));
+    EXPECT_THAT(pq, m::GroupByVariables({helperBind._target, Variable{"?x"}}));
   }
   {
     // grouping by a function call
@@ -1271,8 +1269,7 @@ TEST(ParserTest, Group) {
         helperBind,
         m::BindExpression(
             "<http://www.opengis.net/def/function/geosparql/latitude>(?test)"));
-    EXPECT_THAT(pq, m::GroupByVariables(
-                        {Variable{helperBind._target}, Variable{"?x"}}));
+    EXPECT_THAT(pq, m::GroupByVariables({helperBind._target, Variable{"?x"}}));
   }
   {
     // selection of a variable that is not grouped/aggregated
