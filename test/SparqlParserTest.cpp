@@ -13,12 +13,6 @@
 namespace m = matchers;
 namespace p = parsedQuery;
 
-const ParsedQuery pqDummy = []() {
-  ParsedQuery pq;
-  pq._prefixes.emplace_back("xsd", "<http://www.w3.org/2001/XMLSchema#>");
-  return pq;
-}();
-
 TEST(ParserTest, testParse) {
   try {
     {

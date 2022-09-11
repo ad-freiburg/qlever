@@ -883,6 +883,12 @@ TEST(SparqlParser, SelectQuery) {
                      m::Select({std::pair{"COUNT(?y)", Variable{"?a"}}}),
                      m::GraphPattern(DummyTriplesMatcher), {}, {},
                      {Variable{"?x"}}));
+  // Grouping by a variable that is not visible in the query body is not
+  // allowed.
+  expectSelectQueryFails("SELECT ?x WHERE { ?a ?b ?c } GROUP BY ?x");
+  // Ordering by a variable that is not visible in the query body is not
+  // allowed.
+  expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY ?x");
   // `SELECT *` is not allowed while grouping.
   expectSelectQueryFails("SELECT * WHERE { ?x ?y ?z } GROUP BY ?x");
   // `?x` is selected twice. Once as variable and once as the result of an

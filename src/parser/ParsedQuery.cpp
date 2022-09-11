@@ -130,6 +130,9 @@ Variable ParsedQuery::addInternalBind(
 // ________________________________________________________________________
 void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   // Process groupClause
+  // TODO<qup42, joka921> Check that all variables that are grouped on or
+  //  are part of an expression that is grouped on are visible in the Query
+  //  Body.
   auto processVariable = [this](const Variable& groupKey) {
     _groupByVariables.emplace_back(groupKey.name());
   };
@@ -157,6 +160,9 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   _havingClauses = std::move(modifiers.havingClauses_);
 
   // Process orderClause
+  // TODO<qup42, joka921> Check that all variables that are ordered on or
+  //  are part of an expression that is ordered on are visible in the Query
+  //  Body.
   auto processVariableOrderKey = [this](VariableOrderKey orderKey) {
     // Check whether grouping is done. The variable being ordered by
     // must then be either grouped or the result of an alias in the select.

@@ -644,6 +644,8 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
       reportError(ctx, "The variable name " + a._target.name() +
                            " used in an alias was already selected on.");
     }
+    // TODO<qup42, joka921> Check that all variables used in the expression of
+    //  Aliases are visible in the QueryBody.
   }
 
   return query;
