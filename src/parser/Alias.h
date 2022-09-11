@@ -21,6 +21,4 @@ struct Alias {
     return _expression.getDescriptor() == other._expression.getDescriptor() &&
            _target == other._target;
   }
-
-  [[nodiscard]] const Variable& targetVariable() const { return _target; }
 };

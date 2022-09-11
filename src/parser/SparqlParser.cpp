@@ -67,23 +67,21 @@ void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
 
   parseSolutionModifiers(query);
 
-  if (!query->_groupByVariables.empty()) {
-    AD_CHECK(query->hasConstructClause());
-    auto& constructClause = query->constructClause();
-    for (const auto& triple : constructClause) {
-      for (const auto& varOrTerm : triple) {
-        if (auto variable = std::get_if<Variable>(&varOrTerm)) {
-          const auto& var = variable->name();
-          if (!ad_utility::contains_if(query->_groupByVariables,
-                                       [&var](const Variable& grouping) {
-                                         return var == grouping.name();
-                                       })) {
-            throw ParseException("Variable " + var +
-                                 " is used but not "
-                                 "aggregated despite the query not being "
-                                 "grouped by " +
-                                 var + ".\n" + lexer_.input());
-          }
+  if (query->_groupByVariables.empty()) {
+    return;
+  }
+
+  AD_CHECK(query->hasConstructClause());
+  auto& constructClause = query->constructClause();
+  for (const auto& triple : constructClause) {
+    for (const auto& varOrTerm : triple) {
+      if (auto variable = std::get_if<Variable>(&varOrTerm)) {
+        if (!ad_utility::contains(query->_groupByVariables, *variable)) {
+          throw ParseException("Variable " + variable->name() +
+                               " is used but not "
+                               "aggregated despite the query not being "
+                               "grouped by " +
+                               variable->name() + ".\n" + lexer_.input());
         }
       }
     }
