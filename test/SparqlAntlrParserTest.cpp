@@ -867,29 +867,48 @@ TEST(SparqlParser, SelectQuery) {
   auto expectSelectQuery = ExpectCompleteParse<&Parser::selectQuery>{
       {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
   auto expectSelectQueryFails = ExpectParseFails<&Parser::selectQuery>{};
-  auto DummyTriplesMatcher = m::Triples({{"?x", "?y", "?z"}});
+  auto DummyGraphPatternMatcher =
+      m::GraphPattern(m::Triples({{"?x", "?y", "?z"}}));
   expectSelectQuery(
       "SELECT * WHERE { ?a <bar> ?foo }",
-      testing::AllOf(m::pq::OriginalString("SELECT * WHERE { ?a <bar> ?foo }"),
-                     m::pq::SelectClause(m::AsteriskSelect()),
-                     m::pq::RootGraphPattern(m::GraphPattern(
-                         m::Triples({{"?a", "<bar>", "?foo"}})))));
+      testing::AllOf(
+          m::SelectQuery(m::AsteriskSelect(), m::GraphPattern(m::Triples(
+                                                  {{"?a", "<bar>", "?foo"}}))),
+          m::pq::OriginalString("SELECT * WHERE { ?a <bar> ?foo }")));
+  expectSelectQuery(
+      "SELECT * WHERE { ?x ?y ?z }",
+      testing::AllOf(
+          m::SelectQuery(m::AsteriskSelect(), DummyGraphPatternMatcher),
+          m::pq::OriginalString("SELECT * WHERE { ?x ?y ?z }")));
   expectSelectQuery(
       "SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x",
       testing::AllOf(
+          m::SelectQuery(m::VariablesSelect({"?x"}), DummyGraphPatternMatcher),
           m::pq::OriginalString("SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x"),
-          m::pq::SelectClause(m::VariablesSelect({"?x"})),
-          m::pq::RootGraphPattern(m::GraphPattern(DummyTriplesMatcher)),
           m::pq::GroupKeys({Variable{"?x"}})));
   expectSelectQuery(
       "SELECT (COUNT(?y) as ?a) WHERE { ?x ?y ?z } GROUP BY ?x",
       testing::AllOf(
+          m::SelectQuery(m::Select({std::pair{"COUNT(?y)", Variable{"?a"}}}),
+                         DummyGraphPatternMatcher),
           m::pq::OriginalString(
               "SELECT (COUNT(?y) as ?a) WHERE { ?x ?y ?z } GROUP BY ?x"),
-          m::pq::SelectClause(
-              m::Select({std::pair{"COUNT(?y)", Variable{"?a"}}})),
-          m::pq::RootGraphPattern(m::GraphPattern(DummyTriplesMatcher)),
           m::pq::GroupKeys({Variable{"?x"}})));
+  expectSelectQuery(
+      "SELECT ?x WHERE { ?x ?y ?z . FILTER(?x != <foo>) } LIMIT 10 TEXTLIMIT 5",
+      testing::AllOf(
+          m::SelectQuery(
+              m::Select({Variable{"?x"}}),
+              m::GraphPattern(false,
+                              {{SparqlFilter::FilterType::NE, "?x", "<foo>"}},
+                              m::Triples({{"?x", "?y", "?z"}}))),
+          m::pq::LimitOffset({10, 5})));
+  expectSelectQuery(
+      "SELECT ?x WHERE { ?x ?y ?z } HAVING (?x > 5) ORDER BY ?y ",
+      testing::AllOf(
+          m::SelectQuery(m::Select({Variable{"?x"}}), DummyGraphPatternMatcher),
+          m::pq::Having({{SparqlFilter::FilterType::GT, "?x", "5"}}),
+          m::pq::OrderKeys({{"?y", false}})));
   // Grouping by a variable or expression which contains a variable that is not
   // visible in the query body is not allowed.
   expectSelectQueryFails("SELECT ?x WHERE { ?a ?b ?c } GROUP BY ?x");

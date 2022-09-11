@@ -662,50 +662,30 @@ auto SubSelect =
           AD_FIELD(ParsedQuery, _rootGraphPattern, whereMatcher))));
 };
 
-auto ParsedQuery =
-    [](const std::string& originalString,
-       const Matcher<const p::SelectClause&>& selectMatcher,
-       const Matcher<const p::GraphPattern&>& graphPatternMatcher,
-       const LimitOffsetClause& limitOffset = {},
-       const vector<SparqlFilter>& havingClauses = {},
-       const vector<::Variable>& groupKeys = {},
-       const std::vector<std::pair<std::string, bool>>& orderKeys = {})
+auto SelectQuery =
+    [](const Matcher<const p::SelectClause&>& selectMatcher,
+       const Matcher<const p::GraphPattern&>& graphPatternMatcher)
     -> Matcher<const ::ParsedQuery&> {
   return testing::AllOf(
-      AD_FIELD(ParsedQuery, _originalString, testing::Eq(originalString)),
-      AD_FIELD(ParsedQuery, _limitOffset, testing::Eq(limitOffset)),
-      GroupByVariables(groupKeys),
-      AD_FIELD(ParsedQuery, _orderBy, VariableOrderKeys(orderKeys)),
-      AD_FIELD(ParsedQuery, _havingClauses, testing::Eq(havingClauses)),
       AD_PROPERTY(ParsedQuery, hasSelectClause, testing::IsTrue()),
       AD_PROPERTY(ParsedQuery, selectClause, selectMatcher),
       AD_FIELD(ParsedQuery, _rootGraphPattern, graphPatternMatcher));
 };
 
 namespace pq {
-// TODO: look into whether some shortcuts can be done with composition of e.g.
-// `SelectClause` and `IsAsteriskSelect`.
+
+// This is implemented as a separater Matcher because it generates some overhead
+// in the tests.
 auto OriginalString =
     [](const std::string& originalString) -> Matcher<const ::ParsedQuery&> {
   return AD_FIELD(ParsedQuery, _originalString, testing::Eq(originalString));
 };
-auto RootGraphPattern =
-    [](const Matcher<const p::GraphPattern&>& graphPatternMatcher)
-    -> Matcher<const ::ParsedQuery&> {
-  return AD_FIELD(ParsedQuery, _rootGraphPattern, graphPatternMatcher);
-};
 
-auto SelectClause = [](const Matcher<const p::SelectClause&>& selectMatcher)
-    -> Matcher<const ::ParsedQuery&> {
-  return testing::AllOf(
-      AD_PROPERTY(ParsedQuery, hasSelectClause, testing::IsTrue()),
-      AD_PROPERTY(ParsedQuery, selectClause, selectMatcher));
-};
 auto LimitOffset = [](const LimitOffsetClause& limitOffset = {})
     -> Matcher<const ::ParsedQuery&> {
   return AD_FIELD(ParsedQuery, _limitOffset, testing::Eq(limitOffset));
 };
-auto HavingClause = [](const vector<SparqlFilter>& havingClauses = {})
+auto Having = [](const vector<SparqlFilter>& havingClauses = {})
     -> Matcher<const ::ParsedQuery&> {
   return AD_FIELD(ParsedQuery, _havingClauses, testing::Eq(havingClauses));
 };
