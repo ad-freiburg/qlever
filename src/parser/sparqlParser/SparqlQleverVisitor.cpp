@@ -621,7 +621,7 @@ OrderKey Visitor::visitTypesafe(Parser::OrderConditionContext* ctx) {
   };
 
   if (ctx->var()) {
-    return VariableOrderKey(ctx->var()->getText());
+    return VariableOrderKey(visitTypesafe(ctx->var()));
   } else if (ctx->constraint()) {
     return visitExprOrderKey(false, ctx->constraint());
   } else if (ctx->brackettedExpression()) {

@@ -467,10 +467,13 @@ TEST(SparqlParser, OrderCondition) {
   auto expectOrderCondition = ExpectCompleteParse<&Parser::orderCondition>{};
   auto expectOrderConditionFails = ExpectParseFails<&Parser::orderCondition>();
   // var
-  expectOrderCondition("?test", m::VariableOrderKeyVariant("?test", false));
+  expectOrderCondition("?test",
+                       m::VariableOrderKeyVariant(Variable{"?test"}, false));
   // brackettedExpression
-  expectOrderCondition("DESC (?foo)", m::VariableOrderKeyVariant("?foo", true));
-  expectOrderCondition("ASC (?bar)", m::VariableOrderKeyVariant("?bar", false));
+  expectOrderCondition("DESC (?foo)",
+                       m::VariableOrderKeyVariant(Variable{"?foo"}, true));
+  expectOrderCondition("ASC (?bar)",
+                       m::VariableOrderKeyVariant(Variable{"?bar"}, false));
   expectOrderCondition("ASC(?test - 5)",
                        m::ExpressionOrderKey("?test-5", false));
   expectOrderCondition("DESC (10 || (5 && ?foo))",
@@ -484,7 +487,7 @@ TEST(SparqlParser, OrderCondition) {
 TEST(SparqlParser, OrderClause) {
   expectCompleteParse(
       parse<&Parser::orderClause>("ORDER BY ?test DESC(?foo - 5)"),
-      m::OrderKeys({VariableOrderKey{"?test", false},
+      m::OrderKeys({VariableOrderKey{Variable{"?test"}, false},
                     m::ExpressionOrderKeyTest{"?foo-5", true}}));
 }
 
@@ -534,7 +537,7 @@ TEST(SparqlParser, SolutionModifier) {
       "OFFSET 2",
       m::SolutionModifier({Var{"?var"}, "?b-10"},
                           {{SparqlFilter::FilterType::NE, "?var", "10"}},
-                          {VOK{"?var", false}}, {10, 1, 2}));
+                          {VOK{Variable{"?var"}, false}}, {10, 1, 2}));
   expectSolutionModifier(
       "GROUP BY ?var HAVING (?foo < ?bar) ORDER BY (5 - ?var) TEXTLIMIT 21 "
       "LIMIT 2",

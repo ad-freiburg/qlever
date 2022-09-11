@@ -76,9 +76,9 @@ class LiteralExpression : public SparqlExpression {
 
  protected:
   // _________________________________________________________________________
-  std::optional<std::string> getVariableOrNullopt() const override {
+  std::optional<::Variable> getVariableOrNullopt() const override {
     if constexpr (std::is_same_v<T, Variable>) {
-      return _value._variable;
+      return ::Variable{_value._variable};
     }
     return std::nullopt;
   }

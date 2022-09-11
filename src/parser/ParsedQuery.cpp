@@ -88,7 +88,8 @@ string ParsedQuery::asString() const {
     os << "not specified";
   } else {
     for (auto& key : _orderBy) {
-      os << key.variable_ << (key.isDescending_ ? " (DESC)" : " (ASC)") << "\t";
+      os << key.variable_.name() << (key.isDescending_ ? " (DESC)" : " (ASC)")
+         << "\t";
     }
   }
   os << "\n";
@@ -162,16 +163,13 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
     // must then be either grouped or the result of an alias in the select.
     const vector<Variable>& groupByVariables = _groupByVariables;
     if (!groupByVariables.empty() &&
-        !ad_utility::contains_if(groupByVariables,
-                                 [&orderKey](const Variable& var) {
-                                   return orderKey.variable_ == var.name();
-                                 }) &&
+        !ad_utility::contains(groupByVariables, orderKey.variable_) &&
         !ad_utility::contains_if(
             selectClause().getAliases(), [&orderKey](const Alias& alias) {
-              return alias._outVarName == orderKey.variable_;
+              return alias._outVarName == orderKey.variable_.name();
             })) {
       throw ParseException(
-          "Variable " + orderKey.variable_ +
+          "Variable " + orderKey.variable_.name() +
           " was used in an ORDER BY "
           "clause, but is neither grouped, nor created as an alias in the "
           "SELECT clause.");
@@ -195,7 +193,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           "new variable in the SELECT clause and then order by this "
           "variable.");
     auto additionalVariable = addInternalBind(std::move(orderKey.expression_));
-    _orderBy.emplace_back(additionalVariable.name(), orderKey.isDescending_);
+    _orderBy.emplace_back(additionalVariable, orderKey.isDescending_);
   };
 
   for (auto& orderKey : modifiers.orderBy_) {

@@ -58,8 +58,8 @@ class AggregateExpression : public SparqlExpression {
   }
 
   // __________________________________________________________________________
-  [[nodiscard]] std::optional<string> getVariableForNonDistinctCountOrNullopt()
-      const override {
+  [[nodiscard]] std::optional<::Variable>
+  getVariableForNonDistinctCountOrNullopt() const override {
     // This behavior is not correct for the `COUNT` aggreate. The count is
     // therefore implemented in a separate `CountExpression` class, which
     // overrides this function.
@@ -172,8 +172,8 @@ inline auto count = [](const auto& a, const auto& b) -> int64_t {
 using CountExpressionBase = AGG_EXP<decltype(count), IsValidValueGetter>;
 class CountExpression : public CountExpressionBase {
   using CountExpressionBase::CountExpressionBase;
-  [[nodiscard]] std::optional<string> getVariableForNonDistinctCountOrNullopt()
-      const override {
+  [[nodiscard]] std::optional<::Variable>
+  getVariableForNonDistinctCountOrNullopt() const override {
     if (this->_distinct) {
       return std::nullopt;
     }

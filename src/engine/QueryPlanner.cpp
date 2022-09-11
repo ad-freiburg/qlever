@@ -515,7 +515,7 @@ bool QueryPlanner::checkUsePatternTrick(
     if (!countVariable.has_value()) {
       return false;
     }
-    counted_var_name = countVariable.value();
+    counted_var_name = countVariable.value().name();
     count_var_name = alias._outVarName;
   }
 
@@ -1011,7 +1011,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     plan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
     plan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
     if (pq._orderBy.size() == 1 && !pq._orderBy[0].isDescending_) {
-      size_t col = parent._qet->getVariableColumn(pq._orderBy[0].variable_);
+      size_t col =
+          parent._qet->getVariableColumn(pq._orderBy[0].variable_.name());
       const std::vector<size_t>& previousSortedOn =
           parent._qet->resultSortedOn();
       if (!previousSortedOn.empty() && col == previousSortedOn[0]) {
@@ -1024,8 +1025,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     } else {
       vector<pair<size_t, bool>> sortIndices;
       for (auto& ord : pq._orderBy) {
-        sortIndices.emplace_back(parent._qet->getVariableColumn(ord.variable_),
-                                 ord.isDescending_);
+        sortIndices.emplace_back(
+            parent._qet->getVariableColumn(ord.variable_.name()),
+            ord.isDescending_);
       }
       const std::vector<size_t>& previousSortedOn =
           parent._qet->resultSortedOn();

@@ -75,7 +75,7 @@ std::ostream& operator<<(std::ostream& out, const parsedQuery::Values& values) {
 
 std::ostream& operator<<(std::ostream& out, const VariableOrderKey& orderkey) {
   out << "Order " << (orderkey.isDescending_ ? "DESC" : "ASC") << " by "
-      << orderkey.variable_;
+      << orderkey.variable_.name();
   return out;
 }
 
@@ -328,15 +328,15 @@ auto LimitOffset =
 };
 
 auto VariableOrderKey =
-    [](const string& key,
+    [](const ::Variable& variable,
        bool desc) -> testing::Matcher<const ::VariableOrderKey&> {
   return testing::AllOf(
-      AD_FIELD(::VariableOrderKey, variable_, testing::Eq(key)),
+      AD_FIELD(::VariableOrderKey, variable_, testing::Eq(variable)),
       AD_FIELD(::VariableOrderKey, isDescending_, testing::Eq(desc)));
 };
 
 auto VariableOrderKeyVariant =
-    [](const string& key, bool desc) -> testing::Matcher<const OrderKey&> {
+    [](const ::Variable& key, bool desc) -> testing::Matcher<const OrderKey&> {
   return testing::VariantWith<::VariableOrderKey>(VariableOrderKey(key, desc));
 };
 
