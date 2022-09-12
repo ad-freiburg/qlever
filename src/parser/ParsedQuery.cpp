@@ -191,16 +191,6 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           "SELECT clause.");
     }
 
-    // TODO: implement for `ConstructClause`
-    if (hasSelectClause()) {
-      if (!ad_utility::contains(selectClause().getVisibleVariables(),
-                                Variable{orderKey.variable_})) {
-        throw ParseException(
-            "Variable " + orderKey.variable_ +
-            " was used in an ORDER BY but is not visible in the query body.");
-      }
-    }
-
     _orderBy.push_back(std::move(orderKey));
   };
 

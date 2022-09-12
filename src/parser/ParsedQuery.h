@@ -87,7 +87,6 @@ class ParsedQuery {
   using GraphPattern = parsedQuery::GraphPattern;
 
   using SelectClause = parsedQuery::SelectClause;
-  SelectClause _selectClause;
 
   using ConstructClause = ad_utility::sparql_types::Triples;
 
@@ -109,7 +108,7 @@ class ParsedQuery {
 
   // explicit default initialisation because the constructor
   // of SelectClause is private
-  std::variant<SelectClause, ConstructClause> _clause{_selectClause};
+  std::variant<SelectClause, ConstructClause> _clause{SelectClause{}};
 
   [[nodiscard]] bool hasSelectClause() const {
     return std::holds_alternative<SelectClause>(_clause);

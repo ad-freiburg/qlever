@@ -587,10 +587,10 @@ Visitor::SubQueryAndMaybeValues Visitor::visitTypesafe(
   auto [pattern, visibleVariables] = visitTypesafe(ctx->whereClause());
   query._rootGraphPattern = std::move(pattern);
   query.setNumInternalVariables(numInternalVariables_);
+  query.registerVariablesVisibleInQueryBody(visibleVariables);
   query.addSolutionModifiers(visitTypesafe(ctx->solutionModifier()));
   numInternalVariables_ = query.getNumInternalVariables();
   auto values = visitTypesafe(ctx->valuesClause());
-  query.registerVariablesVisibleInQueryBody(visibleVariables);
   // Variables that are selected in this query are visible in the parent query.
   for (const auto& variable : query.selectClause().getSelectedVariables()) {
     addVisibleVariable(variable);

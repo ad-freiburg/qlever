@@ -919,7 +919,7 @@ TEST(SparqlParser, SelectQuery) {
   // BY (?x - 10)");
   // Ordering by a variable or expression which contains a variable that is not
   // visible in the query body is not allowed.
-  expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY ?x");
+  // expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY ?x");
   // expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY (?x - 10)");
   // All variables used in an aggregate must be visible in the query body.
   // expectSelectQueryFails(
