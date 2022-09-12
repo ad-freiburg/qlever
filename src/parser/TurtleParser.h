@@ -524,7 +524,7 @@ class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
   std::unique_ptr<ParallelBuffer> _fileBuffer;
   // this many characters will be buffered at once,
   // defaults to a global constant
-  size_t _bufferSize = FILE_BUFFER_SIZE;
+  size_t _bufferSize = FILE_BUFFER_SIZE();
 
   // that many bytes were already parsed before dealing with the current batch
   // in member _byteVec
@@ -632,7 +632,8 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
 
   // this many characters will be buffered at once,
   // defaults to a global constant
-  size_t _bufferSize = FILE_BUFFER_SIZE;
+  size_t _bufferSize = FILE_BUFFER_SIZE();
+
   ParallelBufferWithEndRegex _fileBuffer{_bufferSize, "\\. *(\\n)"};
 
   ad_utility::TaskQueue<true> tripleCollector{QUEUE_SIZE_AFTER_PARALLEL_PARSING,
