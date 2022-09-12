@@ -13,12 +13,6 @@
 namespace m = matchers;
 namespace p = parsedQuery;
 
-const ParsedQuery pqDummy = []() {
-  ParsedQuery pq;
-  pq._prefixes.emplace_back("xsd", "<http://www.w3.org/2001/XMLSchema#>");
-  return pq;
-}();
-
 TEST(ParserTest, testParse) {
   try {
     {
@@ -1142,10 +1136,10 @@ TEST(ParserTest, Order) {
   {
     ParsedQuery pq =
         SparqlParser(
-            "SELECT ?x ?y WHERE { ?x <test/myrel> ?y } ORDER BY DESC(?foo)")
+            "SELECT ?x ?y WHERE { ?x <test/myrel> ?y } ORDER BY DESC(?x)")
             .parse();
     ASSERT_EQ(pq._orderBy.size(), 1);
-    EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey("?foo", true));
+    EXPECT_THAT(pq._orderBy[0], m::VariableOrderKey("?x", true));
     ASSERT_EQ(pq._rootGraphPattern._graphPatterns.size(), 1);
     ASSERT_TRUE(holds_alternative<p::BasicGraphPattern>(
         pq._rootGraphPattern._graphPatterns[0]));

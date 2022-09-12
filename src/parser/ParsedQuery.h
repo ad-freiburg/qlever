@@ -87,7 +87,6 @@ class ParsedQuery {
   using GraphPattern = parsedQuery::GraphPattern;
 
   using SelectClause = parsedQuery::SelectClause;
-  SelectClause _selectClause;
 
   using ConstructClause = ad_utility::sparql_types::Triples;
 
@@ -109,7 +108,7 @@ class ParsedQuery {
 
   // explicit default initialisation because the constructor
   // of SelectClause is private
-  std::variant<SelectClause, ConstructClause> _clause{_selectClause};
+  std::variant<SelectClause, ConstructClause> _clause{SelectClause{}};
 
   [[nodiscard]] bool hasSelectClause() const {
     return std::holds_alternative<SelectClause>(_clause);
@@ -136,11 +135,20 @@ class ParsedQuery {
   }
 
   // Add a variable, that was found in the SubQuery body, when query has a
-  // Select Clause
-  [[maybe_unused]] bool registerVariableVisibleInQueryBody(
-      const Variable& variable) {
+  // Select Clause.
+  bool registerVariableVisibleInQueryBody(const Variable& variable) {
     if (!hasSelectClause()) return false;
-    selectClause().addVariableForAsterisk(variable);
+    selectClause().addVisibleVariable(variable);
+    return true;
+  }
+
+  // Add variables, that were found in the SubQuery body, when query has a
+  // Select Clause.
+  bool registerVariablesVisibleInQueryBody(const vector<Variable>& variables) {
+    if (!hasSelectClause()) return false;
+    for (const auto& var : variables) {
+      selectClause().addVisibleVariable(var);
+    }
     return true;
   }
 

@@ -22,8 +22,10 @@ void testMilestoneIds() {
 TEST(MilestoneId, OnlyMilestoneIds) {
   testMilestoneIds<256>();
   testMilestoneIds<257>();
+#ifdef QLEVER_RUN_EXPENSIVE_TESTS
   testMilestoneIds<1024 * 1024>();
   testMilestoneIds<1024 * 1024 + 53>();
+#endif
 }
 
 template <uint64_t distance>
@@ -45,8 +47,11 @@ void testConsecutiveIds() {
 TEST(MilestoneId, ConsecutiveIds) {
   testConsecutiveIds<256>();
   testConsecutiveIds<257>();
+
+#ifdef QLEVER_RUN_EXPENSIVE_TESTS
   testConsecutiveIds<1024 * 1024>();
   testConsecutiveIds<1024 * 1024 + 53>();
+#endif
 }
 
 template <uint64_t distance>

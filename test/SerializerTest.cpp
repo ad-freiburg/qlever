@@ -274,7 +274,12 @@ TEST(Serializer, ManyTrivialDatatypes) {
     std::vector<double> doubles;
     std::vector<float> floats;
 
-    const int numIterations = 300'000;
+    // Enabling cheaper unit tests when building in Debug mode
+#ifdef QLEVER_RUN_EXPENSIVE_TESTS
+    static constexpr int numIterations = 300'000;
+#else
+    static constexpr int numIterations = 300;
+#endif
 
     for (int i = 0; i < numIterations; ++i) {
       ints.push_back(static_cast<int>(r()));

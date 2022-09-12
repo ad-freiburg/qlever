@@ -33,7 +33,6 @@ class SparqlParser {
 
  private:
   void parseQuery(ParsedQuery* query, QueryType queryType);
-  void parseSelect(ParsedQuery* query);
   void parseWhere(ParsedQuery* query);
   void parseSolutionModifiers(ParsedQuery* query);
   // Returns true if it found a filter

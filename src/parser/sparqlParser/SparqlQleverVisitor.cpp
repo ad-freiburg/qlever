@@ -171,7 +171,7 @@ Alias Visitor::visitTypesafe(Parser::AliasContext* ctx) {
 
 // ____________________________________________________________________________________
 Alias Visitor::visitTypesafe(Parser::AliasWithoutBracketsContext* ctx) {
-  return {{visitTypesafe(ctx->expression())}, ctx->var()->getText()};
+  return {{visitTypesafe(ctx->expression())}, visitTypesafe(ctx->var())};
 }
 
 // ____________________________________________________________________________________
@@ -233,6 +233,13 @@ GraphPattern Visitor::visitTypesafe(Parser::GroupGraphPatternContext* ctx) {
     return pattern;
   } else if (ctx->groupGraphPatternSub()) {
     auto [subOps, filters] = visitTypesafe(ctx->groupGraphPatternSub());
+
+    if (subOps.empty()) {
+      reportError(ctx,
+                  "QLever currently doesn't support empty GroupGraphPatterns "
+                  "and WHERE clauses");
+    }
+
     pattern._graphPatterns = std::move(subOps);
     for (auto& filter : filters) {
       if (filter._type == SparqlFilter::LANG_MATCHES) {
@@ -554,7 +561,22 @@ SparqlPrefix SparqlQleverVisitor::visitTypesafe(
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
-  reportError(ctx, "SelectQuery is not yet supported.");
+  ParsedQuery query;
+  query._clause = visitTypesafe(ctx->selectClause());
+  if (!ctx->datasetClause().empty()) {
+    // TODO: see if it is possible to extend reportError s.t. it can also take
+    //  vector<ParserRuleContext>.
+    reportError(ctx->datasetClause(0),
+                "QLever currently doesn't support FROM clauses");
+  }
+  auto [pattern, visibleVariables] = visitTypesafe(ctx->whereClause());
+  query._rootGraphPattern = std::move(pattern);
+  query.registerVariablesVisibleInQueryBody(visibleVariables);
+  query.addSolutionModifiers(visitTypesafe(ctx->solutionModifier()));
+  // TODO: move up to visitTypesafe(QueryContext*)
+  query._originalString = ctx->getStart()->getInputStream()->toString();
+
+  return query;
 }
 
 // ____________________________________________________________________________________
@@ -565,12 +587,10 @@ Visitor::SubQueryAndMaybeValues Visitor::visitTypesafe(
   auto [pattern, visibleVariables] = visitTypesafe(ctx->whereClause());
   query._rootGraphPattern = std::move(pattern);
   query.setNumInternalVariables(numInternalVariables_);
+  query.registerVariablesVisibleInQueryBody(visibleVariables);
   query.addSolutionModifiers(visitTypesafe(ctx->solutionModifier()));
   numInternalVariables_ = query.getNumInternalVariables();
   auto values = visitTypesafe(ctx->valuesClause());
-  for (const auto& variable : visibleVariables) {
-    query.registerVariableVisibleInQueryBody(variable);
-  }
   // Variables that are selected in this query are visible in the parent query.
   for (const auto& variable : query.selectClause().getSelectedVariables()) {
     addVisibleVariable(variable);
@@ -599,7 +619,7 @@ GroupKey Visitor::visitTypesafe(Parser::GroupConditionContext* ctx) {
   } else if (ctx->expression()) {
     auto expr = SparqlExpressionPimpl{visitTypesafe(ctx->expression())};
     if (ctx->AS() && ctx->var()) {
-      return Alias{std::move(expr), ctx->var()->getText()};
+      return Alias{std::move(expr), visitTypesafe(ctx->var())};
     } else {
       return expr;
     }
