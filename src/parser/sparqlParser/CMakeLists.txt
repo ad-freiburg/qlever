@@ -1,4 +1,4 @@
-add_library(sparqlParser SparqlQleverVisitor.h SparqlQleverVisitor.cpp
+add_library(sparqlParser SparqlQleverVisitor.h
         generated/SparqlAutomaticBaseListener.h generated/SparqlAutomaticBaseListener.cpp
         generated/SparqlAutomaticLexer.h generated/SparqlAutomaticLexer.cpp
         generated/SparqlAutomaticListener.h generated/SparqlAutomaticListener.cpp

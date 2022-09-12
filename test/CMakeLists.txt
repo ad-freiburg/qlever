@@ -89,7 +89,7 @@ addLinkAndDiscoverTest(EngineTest engine)
 
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
-addLinkAndDiscoverTest(ConversionsTest absl::strings)
+addLinkAndDiscoverTest(ConversionsTest util absl::strings)
 
 addLinkAndDiscoverTest(HashMapTest absl::flat_hash_map)
 
@@ -109,7 +109,7 @@ addLinkAndDiscoverTestSerial(BufferedVectorTest absl::strings)
 addLinkAndDiscoverTest(UnionTest engine)
 
 add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
-linkAndDiscoverTest(TokenTest parser re2 ${ICU_LIBRARIES})
+linkAndDiscoverTest(TokenTest parser re2 util ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(TurtleParserTest parser absl::flat_hash_map re2)
 

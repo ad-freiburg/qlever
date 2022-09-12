@@ -12,11 +12,12 @@
 #include <utility>
 #include <vector>
 
-#include "../parser/Alias.h"
-#include "../parser/ParsedQuery.h"
-#include "./Operation.h"
-#include "./QueryExecutionTree.h"
-#include "sparqlExpressions/SparqlExpressionPimpl.h"
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "gtest/gtest.h"
+#include "parser/Alias.h"
+#include "parser/ParsedQuery.h"
 
 using std::string;
 using std::vector;

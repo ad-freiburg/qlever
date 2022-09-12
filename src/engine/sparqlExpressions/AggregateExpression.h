@@ -1,9 +1,6 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
-//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
-
-//
-// Created by johannes on 28.09.21.
-//
+// Copyright 2021, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+// Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #ifndef QLEVER_AGGREGATEEXPRESSION_H
 #define QLEVER_AGGREGATEEXPRESSION_H
@@ -27,44 +24,24 @@ class AggregateExpression : public SparqlExpression {
  public:
   // __________________________________________________________________________
   AggregateExpression(bool distinct, Ptr&& child,
-                      AggregateOperation aggregateOp = AggregateOperation{})
-      : _distinct(distinct),
-        _child{std::move(child)},
-        _aggregateOp{std::move(aggregateOp)} {}
+                      AggregateOperation aggregateOp = AggregateOperation{});
 
   // __________________________________________________________________________
-  ExpressionResult evaluate(EvaluationContext* context) const override {
-    auto childResult = _child->evaluate(context);
-
-    return ad_utility::visitWithVariantsAndParameters(
-        evaluateOnChildOperand, _aggregateOp, FinalOperation{}, context,
-        _distinct, std::move(childResult));
-  }
+  ExpressionResult evaluate(EvaluationContext* context) const override;
 
   // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> children() override { return {&_child, 1}; }
+  std::span<SparqlExpression::Ptr> children() override;
 
   // _________________________________________________________________________
-  vector<std::string> getUnaggregatedVariables() override {
-    // This is an aggregate, so it never leaves any unaggregated variables.
-    return {};
-  }
+  vector<std::string> getUnaggregatedVariables() override;
 
   // __________________________________________________________________________
   [[nodiscard]] string getCacheKey(
-      const VariableToColumnMap& varColMap) const override {
-    return std::string(typeid(*this).name()) + std::to_string(_distinct) + "(" +
-           _child->getCacheKey(varColMap) + ")";
-  }
+      const VariableToColumnMap& varColMap) const override;
 
   // __________________________________________________________________________
   [[nodiscard]] std::optional<string> getVariableForNonDistinctCountOrNullopt()
-      const override {
-    // This behavior is not correct for the `COUNT` aggreate. The count is
-    // therefore implemented in a separate `CountExpression` class, which
-    // overrides this function.
-    return std::nullopt;
-  }
+      const override;
 
   // This is the visitor for the `evaluateAggregateExpression` function below.
   // It works on a `SingleExpressionResult` rather than on the

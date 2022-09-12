@@ -7,7 +7,6 @@
 #include <utility>
 #include <vector>
 
-#include "../global/ValueIdComparators.h"
 #include "../parser/ParsedQuery.h"
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
@@ -164,27 +163,4 @@ class Filter : public Operation {
       const std::shared_ptr<const ResultTable> subRes) const;
 
   virtual void computeResult(ResultTable* result) override;
-
-  // Convert a FilterType to the corresponding `Comparison`. Throws if no
-  // corresponding `Comparison` exists (supported are LE, LT, EQ, NE, GE, GT).
-  // TODO<joka921> move to cpp file.
-  static valueIdComparators::Comparison toComparison(
-      SparqlFilter::FilterType filterType) {
-    switch (filterType) {
-      case SparqlFilter::LT:
-        return valueIdComparators::Comparison::LT;
-      case SparqlFilter::LE:
-        return valueIdComparators::Comparison::LE;
-      case SparqlFilter::EQ:
-        return valueIdComparators::Comparison::EQ;
-      case SparqlFilter::NE:
-        return valueIdComparators::Comparison::NE;
-      case SparqlFilter::GT:
-        return valueIdComparators::Comparison::GT;
-      case SparqlFilter::GE:
-        return valueIdComparators::Comparison::GE;
-      default:
-        AD_FAIL();
-    }
-  }
 };
