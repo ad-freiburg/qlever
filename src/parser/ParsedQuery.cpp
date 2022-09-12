@@ -130,10 +130,19 @@ Variable ParsedQuery::addInternalBind(
 // ________________________________________________________________________
 void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   // Process groupClause
-  // TODO<qup42, joka921> Check that all variables that are grouped on or
-  //  are part of an expression that is grouped on are visible in the Query
-  //  Body.
+  // TODO<qup42, joka921> Check that all variables that are part of an
+  //  expression that is grouped on are visible in the Query Body.
   auto processVariable = [this](const Variable& groupKey) {
+    // TODO: implement for `ConstructClause`
+    if (hasSelectClause()) {
+      if (!ad_utility::contains(selectClause().getVisibleVariables(),
+                                groupKey)) {
+        throw ParseException(
+            "Variable " + groupKey.name() +
+            " was used in an GROUP BY but is not visible in the query body.");
+      }
+    }
+
     _groupByVariables.emplace_back(groupKey.name());
   };
   auto processExpression =
@@ -160,9 +169,8 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   _havingClauses = std::move(modifiers.havingClauses_);
 
   // Process orderClause
-  // TODO<qup42, joka921> Check that all variables that are ordered on or
-  //  are part of an expression that is ordered on are visible in the Query
-  //  Body.
+  // TODO<qup42, joka921> Check that all variables that are part of an
+  //  expression that is ordered on are visible in the Query Body.
   auto processVariableOrderKey = [this](VariableOrderKey orderKey) {
     // Check whether grouping is done. The variable being ordered by
     // must then be either grouped or the result of an alias in the select.
@@ -181,6 +189,16 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           " was used in an ORDER BY "
           "clause, but is neither grouped, nor created as an alias in the "
           "SELECT clause.");
+    }
+
+    // TODO: implement for `ConstructClause`
+    if (hasSelectClause()) {
+      if (!ad_utility::contains(selectClause().getVisibleVariables(),
+                                Variable{orderKey.variable_})) {
+        throw ParseException(
+            "Variable " + orderKey.variable_ +
+            " was used in an ORDER BY but is not visible in the query body.");
+      }
     }
 
     _orderBy.push_back(std::move(orderKey));
@@ -212,7 +230,80 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
 
   // Process limitOffsetClause
   _limitOffset = modifiers.limitOffset_;
-};
+
+  auto checkAliasOutNamesHaveNoOverlapWith =
+      [this](const auto& container, const std::string& message) {
+        for (const auto& alias : selectClause().getAliases()) {
+          if (ad_utility::contains(container, alias._target)) {
+            throw ParseException(absl::StrCat(alias._target.name(), message));
+          }
+        }
+      };
+
+  // Check that the query is valid
+
+  if (hasSelectClause()) {
+    if (!_groupByVariables.empty()) {
+      ad_utility::HashSet<string> groupVariables{};
+      for (const auto& variable : _groupByVariables) {
+        groupVariables.emplace(variable.toSparql());
+      }
+
+      if (selectClause().isAsterisk()) {
+        throw ParseException(
+            "GROUP BY is not allowed when all variables are selected via "
+            "SELECT *");
+      }
+
+      // Check if all selected variables are either aggregated or
+      // part of the group by statement.
+      for (const Variable& var : selectClause().getSelectedVariables()) {
+        if (ad_utility::contains_if(
+                selectClause().getAliases(),
+                [&var, &groupVariables](const Alias& alias) {
+                  return alias._target == var &&
+                         alias._expression.isAggregate(groupVariables);
+                })) {
+          continue;
+        }
+        if (!ad_utility::contains(_groupByVariables, var)) {
+          throw ParseException(
+              absl::StrCat("Variable ", var.name(),
+                           " is selected but not aggregated despite the "
+                           "query not being grouped by ",
+                           var.name(), "."));
+        }
+      }
+      checkAliasOutNamesHaveNoOverlapWith(_groupByVariables,
+                                          " is the target of an alias although "
+                                          "the query is grouped by it. This "
+                                          "is not allowed.");
+    } else {
+      checkAliasOutNamesHaveNoOverlapWith(
+          selectClause().getVisibleVariables(),
+          " is the target of an alias although it is also visible in the query "
+          "body. This is not allowed.");
+    }
+
+    ad_utility::HashMap<std::string, size_t> variable_counts;
+
+    for (const std::string& s :
+         selectClause().getSelectedVariablesAsStrings()) {
+      variable_counts[s]++;
+    }
+
+    for (const Alias& a : selectClause().getAliases()) {
+      // The variable was already added to the selected variables while
+      // parsing the alias, thus it should appear exactly once
+      if (variable_counts[a._target.name()] > 1) {
+        throw ParseException("The variable name " + a._target.name() +
+                             " used in an alias was already selected on.");
+      }
+      // TODO<qup42, joka921> Check that all variables used in the expression of
+      //  Aliases are visible in the QueryBody.
+    }
+  }
+}
 
 void ParsedQuery::merge(const ParsedQuery& p) {
   _prefixes.insert(_prefixes.begin(), p._prefixes.begin(), p._prefixes.end());
