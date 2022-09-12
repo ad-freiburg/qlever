@@ -17,7 +17,7 @@ namespace sparqlExpression::detail {
 // It is required because of the `CALL_FIXED_SIZE` mechanism for the `IdTable`s.
 template <size_t WIDTH>
 void getIdsFromVariableImpl(VectorWithMemoryLimit<StrongId>& result,
-                            const Variable& variable,
+                            const ::Variable& variable,
                             EvaluationContext* context) {
   AD_CHECK(result.empty());
   const auto inputTable = context->_inputTable.asStaticView<WIDTH>();
@@ -25,15 +25,14 @@ void getIdsFromVariableImpl(VectorWithMemoryLimit<StrongId>& result,
   const size_t beginIndex = context->_beginIndex;
   const size_t endIndex = context->_endIndex;
 
-  if (!context->_variableToColumnAndResultTypeMap.contains(
-          variable._variable)) {
+  if (!context->_variableToColumnAndResultTypeMap.contains(variable.name())) {
     throw std::runtime_error(
-        "Variable " + variable._variable +
+        "Variable " + variable.name() +
         " could not be mapped to context column of expression evaluation");
   }
 
   const size_t columnIndex =
-      context->_variableToColumnAndResultTypeMap.at(variable._variable).first;
+      context->_variableToColumnAndResultTypeMap.at(variable.name()).first;
 
   result.reserve(endIndex - endIndex);
   for (size_t i = beginIndex; i < endIndex; ++i) {
@@ -46,7 +45,7 @@ void getIdsFromVariableImpl(VectorWithMemoryLimit<StrongId>& result,
 // TODO<joka921> Restructure QLever to column based design, then this will
 // become a noop;
 inline VectorWithMemoryLimit<StrongId> getIdsFromVariable(
-    const Variable& variable, EvaluationContext* context) {
+    const ::Variable& variable, EvaluationContext* context) {
   auto cols = context->_inputTable.cols();
   VectorWithMemoryLimit<StrongId> result{context->_allocator};
   CALL_FIXED_SIZE_1(cols, getIdsFromVariableImpl, result, variable, context);
@@ -103,11 +102,11 @@ inline cppcoro::generator<Bool> resultGenerator(ad_utility::SetOfIntervals set,
 template <SingleExpressionResult Input>
 auto makeGenerator(Input&& input, [[maybe_unused]] size_t numItems,
                    EvaluationContext* context) {
-  if constexpr (ad_utility::isSimilar<Variable, Input>) {
+  if constexpr (ad_utility::isSimilar<::Variable, Input>) {
     // TODO: Also directly write a generator that lazily gets the Ids in chunks.
     StrongIdsWithResultType inputWithVariableResolved{
         getIdsFromVariable(std::forward<Input>(input), context),
-        context->_variableToColumnAndResultTypeMap.at(input._variable).second};
+        context->_variableToColumnAndResultTypeMap.at(input.name()).second};
     return resultGenerator(std::move(inputWithVariableResolved), numItems);
   } else {
     return resultGenerator(std::forward<Input>(input), numItems);
@@ -120,10 +119,11 @@ inline auto valueGetterGenerator =
     []<typename ValueGetter, SingleExpressionResult Input>(
         size_t numElements, EvaluationContext* context, Input&& input,
         ValueGetter&& valueGetter)
-    -> cppcoro::generator<std::invoke_result_t<
-        ValueGetter,
-        typename decltype(makeGenerator(Input{}, 0, nullptr))::value_type,
-        EvaluationContext*>> {
+    -> cppcoro::generator<std::invoke_result_t<ValueGetter,
+                                               typename decltype(makeGenerator(
+                                                   std::declval<Input>(), 0,
+                                                   nullptr))::value_type,
+                                               EvaluationContext*>> {
   for (auto singleInput :
        makeGenerator(std::forward<Input>(input), numElements, context)) {
     co_yield valueGetter(std::move(singleInput), context);

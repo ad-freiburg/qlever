@@ -44,8 +44,8 @@ class LiteralExpression : public SparqlExpression {
 
   // Variables and string constants add their values.
   std::span<string> getStringLiteralsAndVariablesNonRecursive() override {
-    if constexpr (std::is_same_v<T, Variable>) {
-      return {&_value._variable, 1};
+    if constexpr (std::is_same_v<T, ::Variable>) {
+      return {&_value._name, 1};
     } else if constexpr (std::is_same_v<T, string>) {
       return {&_value, 1};
     } else {
@@ -55,8 +55,8 @@ class LiteralExpression : public SparqlExpression {
 
   // _________________________________________________________________________
   vector<std::string> getUnaggregatedVariables() override {
-    if constexpr (std::is_same_v<T, Variable>) {
-      return {_value._variable};
+    if constexpr (std::is_same_v<T, ::Variable>) {
+      return {_value.name()};
     } else {
       return {};
     }
@@ -64,9 +64,8 @@ class LiteralExpression : public SparqlExpression {
 
   // ______________________________________________________________________
   string getCacheKey(const VariableToColumnMap& varColMap) const override {
-    if constexpr (std::is_same_v<T, Variable>) {
-      return {"#column_" + std::to_string(varColMap.at(_value._variable)) +
-              "#"};
+    if constexpr (std::is_same_v<T, ::Variable>) {
+      return {"#column_" + std::to_string(varColMap.at(_value.name())) + "#"};
     } else if constexpr (std::is_same_v<T, string>) {
       return _value;
     } else {
@@ -77,8 +76,8 @@ class LiteralExpression : public SparqlExpression {
  protected:
   // _________________________________________________________________________
   std::optional<::Variable> getVariableOrNullopt() const override {
-    if constexpr (std::is_same_v<T, Variable>) {
-      return ::Variable{_value._variable};
+    if constexpr (std::is_same_v<T, ::Variable>) {
+      return _value;
     }
     return std::nullopt;
   }
@@ -92,7 +91,7 @@ class LiteralExpression : public SparqlExpression {
 using BoolExpression = detail::LiteralExpression<bool>;
 using IntExpression = detail::LiteralExpression<int64_t>;
 using DoubleExpression = detail::LiteralExpression<double>;
-using VariableExpression = detail::LiteralExpression<Variable>;
+using VariableExpression = detail::LiteralExpression<::Variable>;
 using StringOrIriExpression = detail::LiteralExpression<string>;
 }  // namespace sparqlExpression
 

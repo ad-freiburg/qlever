@@ -140,17 +140,16 @@ void Bind::computeExpressionBind(
 
   auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                      T&& singleResult) mutable {
-    constexpr static bool isVariable =
-        std::is_same_v<T, sparqlExpression::Variable>;
+    constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId =
         std::is_same_v<T, sparqlExpression::StrongIdWithResultType>;
     if constexpr (isVariable) {
-      auto column = getVariableColumns().at(singleResult._variable);
+      auto column = getVariableColumns().at(singleResult.name());
       for (size_t i = 0; i < inSize; ++i) {
         output(i, inCols) = output(i, column);
       }
       *resultType = evaluationContext._variableToColumnAndResultTypeMap
-                        .at(singleResult._variable)
+                        .at(singleResult.name())
                         .second;
     } else if constexpr (isStrongId) {
       for (size_t i = 0; i < inSize; ++i) {

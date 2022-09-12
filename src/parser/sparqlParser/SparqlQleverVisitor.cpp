@@ -1348,8 +1348,7 @@ ExpressionPtr Visitor::visitTypesafe(Parser::PrimaryExpressionContext* ctx) {
   } else if (ctx->booleanLiteral()) {
     return make_unique<BoolExpression>(visitTypesafe(ctx->booleanLiteral()));
   } else if (ctx->var()) {
-    return make_unique<VariableExpression>(
-        sparqlExpression::Variable{ctx->var()->getText()});
+    return make_unique<VariableExpression>(visitTypesafe(ctx->var()));
   } else {
     return visitAlternative<ExpressionPtr>(
         ctx->builtInCall(), ctx->iriOrFunction(), ctx->brackettedExpression());
