@@ -6,22 +6,19 @@
 
 #include <string>
 
-#include "../engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "parser/data/Variable.h"
 
 using std::string;
 
 struct Alias {
   sparqlExpression::SparqlExpressionPimpl _expression;
-  string _outVarName;
+  Variable _target;
   [[nodiscard]] std::string getDescriptor() const {
-    return "(" + _expression.getDescriptor() + " as " + _outVarName + ")";
+    return "(" + _expression.getDescriptor() + " as " + _target.name() + ")";
   }
   bool operator==(const Alias& other) const {
     return _expression.getDescriptor() == other._expression.getDescriptor() &&
-           _outVarName == other._outVarName;
-  }
-
-  [[nodiscard]] const std::string& targetVariable() const {
-    return _outVarName;
+           _target == other._target;
   }
 };

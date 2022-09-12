@@ -36,14 +36,15 @@ TEST(ParseException, MetadataGeneration) {
       {{"select   A ?a WHERE { ?a ?b ?c }", 9, 9, 1, 9}});
   // The ANTLR Parser currently doesn't always have the whole query.
   // Error is the undefined Prefix "a".
-  expectParseExceptionWithMetadata("SELECT * WHERE { ?a a:b ?b }",
-                                   {{"where  { ?a a:b ?b }", 12, 14, 1, 12}});
+  expectParseExceptionWithMetadata(
+      "SELECT * WHERE { ?a a:b ?b }",
+      {{"select   * WHERE { ?a a:b ?b }", 22, 24, 1, 22}});
   // "%" doesn't match any valid token. So in this case we will get an Error
   // from the Lexer.
   expectParseExceptionWithMetadata("SELECT * WHERE { % }",
-                                   {{"where  { % }", 9, 9, 1, 9}});
+                                   {{"select   * WHERE { % }", 19, 19, 1, 19}});
   // Error is the undefined Prefix "f".
   expectParseExceptionWithMetadata(
       "SELECT * WHERE {\n ?a ?b ?c . \n f:d ?d ?e\n}",
-      {{"where  {\n ?a ?b ?c . \n f:d ?d ?e\n}", 23, 25, 3, 1}});
+      {{"select   * WHERE {\n ?a ?b ?c . \n f:d ?d ?e\n}", 33, 35, 3, 1}});
 }

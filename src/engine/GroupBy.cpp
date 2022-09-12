@@ -20,7 +20,7 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
     : Operation{qec}, _aliases{std::move(aliases)} {
   std::sort(_aliases.begin(), _aliases.end(),
             [](const Alias& a1, const Alias& a2) {
-              return a1._outVarName < a2._outVarName;
+              return a1._target.name() < a2._target.name();
             });
 
   std::transform(groupByVariables.begin(), groupByVariables.end(),
@@ -36,7 +36,7 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
     colIndex++;
   }
   for (const Alias& a : _aliases) {
-    _varColMap[a._outVarName] = colIndex;
+    _varColMap[a._target.name()] = colIndex;
     colIndex++;
   }
   auto sortColumns = computeSortColumns(subtree.get());
@@ -57,7 +57,7 @@ string GroupBy::asStringImpl(size_t indent) const {
   }
   for (const auto& alias : _aliases) {
     os << alias._expression.getCacheKey(varMapInput) << " AS "
-       << varMap.at(alias._outVarName);
+       << varMap.at(alias._target.name());
   }
   os << std::endl;
   os << _subtree->asString(indent);
@@ -296,8 +296,8 @@ void GroupBy::computeResult(ResultTable* result) {
 
   // parse the aggregate aliases
   for (const Alias& alias : _aliases) {
-    aggregates.push_back(Aggregate{alias._expression,
-                                   _varColMap.find(alias._outVarName)->second});
+    aggregates.push_back(Aggregate{
+        alias._expression, _varColMap.find(alias._target.name())->second});
   }
 
   // populate the result type vector

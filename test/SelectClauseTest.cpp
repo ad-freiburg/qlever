@@ -14,9 +14,9 @@ using namespace ::testing;
 
 TEST(SelectClause, Asterisk) {
   SelectClause clause;
-  clause.addVariableForAsterisk(Variable{"?x"});
+  clause.addVisibleVariable(Variable{"?x"});
   clause.setAsterisk();
-  clause.addVariableForAsterisk(Variable{"?y"});
+  clause.addVisibleVariable(Variable{"?y"});
   EXPECT_THAT(clause.getSelectedVariables(),
               ElementsAre(Variable{"?x"}, Variable{"?y"}));
   EXPECT_TRUE(clause.isAsterisk());
@@ -36,7 +36,8 @@ TEST(SelectClause, VariablesAndAliases) {
   SelectClause clause;
   std::vector<SelectClause::VarOrAlias> v{
       Variable{"?x"},
-      Alias{{std::make_unique<sparqlExpression::BoolExpression>(false)}, "?y"},
+      Alias{{std::make_unique<sparqlExpression::BoolExpression>(false)},
+            Variable{"?y"}},
       Variable{"?z"}};
   clause.setSelected(v);
   EXPECT_THAT(clause.getSelectedVariables(),
