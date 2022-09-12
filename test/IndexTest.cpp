@@ -52,7 +52,7 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
 }
 
 TEST(IndexTest, createFromTurtleTest) {
-  FILE_BUFFER_SIZE() = 1000; // Increase performance in debug mode.
+  FILE_BUFFER_SIZE() = 1000;  // Increase performance in debug mode.
   string location = "./";
   string tail = "";
   writeStxxlConfigFile(location, tail);
@@ -250,7 +250,7 @@ class CreatePatternsFixture : public testing::Test {
 };
 
 TEST_F(CreatePatternsFixture, createPatterns) {
-  FILE_BUFFER_SIZE() = 1000; // Increase performance in debug mode.
+  FILE_BUFFER_SIZE() = 1000;  // Increase performance in debug mode.
   {
     LOG(DEBUG) << "Testing createPatterns with ttl file..." << std::endl;
     std::ofstream f(inputFilename);
@@ -307,7 +307,7 @@ TEST_F(CreatePatternsFixture, createPatterns) {
 }
 
 TEST(IndexTest, createFromOnDiskIndexTest) {
-  FILE_BUFFER_SIZE() = 1000; // Increase performance in debug mode.
+  FILE_BUFFER_SIZE() = 1000;  // Increase performance in debug mode.
   string location = "./";
   string tail = "";
   writeStxxlConfigFile(location, tail);
@@ -359,7 +359,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
 };
 
 TEST(IndexTest, scanTest) {
-  FILE_BUFFER_SIZE() = 1000; // Increase performance in debug mode.
+  FILE_BUFFER_SIZE() = 1000;  // Increase performance in debug mode.
   string location = "./";
   string tail = "";
   writeStxxlConfigFile(location, tail);
