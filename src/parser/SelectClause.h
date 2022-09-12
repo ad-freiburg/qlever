@@ -32,8 +32,9 @@ struct SelectClause {
   // The `char` means `SELECT *`.
   std::variant<VarsAndAliases, Asterisk> varsAndAliasesOrAsterisk_;
 
-  // The variables that will be used in the case of `SELECT *`.
-  std::vector<Variable> variablesForAsterisk_;
+  // The variables that are visible in the query body. Will be used in the case
+  // of `SELECT *` and to check invariants of the `ParsedQuery`.
+  std::vector<Variable> visibleVariables_;
 
  public:
   /// If true, then this `SelectClause` represents `SELECT *`. If false,
@@ -54,14 +55,16 @@ struct SelectClause {
   // variables and no aliases are selected.
   void setSelected(std::vector<Variable> variables);
 
-  // Add a variable that was found in the query body. The added variables
-  // will only be used if `isAsterisk()` is true.
-  void addVariableForAsterisk(const Variable& variable);
+  // Add a variable that is visible in the query body.
+  void addVisibleVariable(const Variable& variable);
+
+  // Get all the variables that are visible in the query body.
+  const std::vector<Variable>& getVisibleVariables();
 
   /// Get all the selected variables. This includes the variables to which
   /// aliases are bound. For example for `SELECT ?x (?a + ?b AS ?c)`,
   /// `getSelectedVariables` will return `{?x, ?c}`. If `isAsterisk()` is true
-  /// (`SELECT *`), then all the variables for which `addVariableForAsterisk()`
+  /// (`SELECT *`), then all the variables for which `addVisibleVariable()`
   /// was called, will be returned.
   [[nodiscard]] const std::vector<Variable>& getSelectedVariables() const;
 

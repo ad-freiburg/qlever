@@ -14,9 +14,9 @@ using namespace ::testing;
 
 TEST(SelectClause, Asterisk) {
   SelectClause clause;
-  clause.addVariableForAsterisk(Variable{"?x"});
+  clause.addVisibleVariable(Variable{"?x"});
   clause.setAsterisk();
-  clause.addVariableForAsterisk(Variable{"?y"});
+  clause.addVisibleVariable(Variable{"?y"});
   EXPECT_THAT(clause.getSelectedVariables(),
               ElementsAre(Variable{"?x"}, Variable{"?y"}));
   EXPECT_TRUE(clause.isAsterisk());

@@ -139,7 +139,7 @@ class ParsedQuery {
   // Select Clause.
   bool registerVariableVisibleInQueryBody(const Variable& variable) {
     if (!hasSelectClause()) return false;
-    selectClause().addVariableForAsterisk(variable);
+    selectClause().addVisibleVariable(variable);
     return true;
   }
 
@@ -148,7 +148,7 @@ class ParsedQuery {
   bool registerVariablesVisibleInQueryBody(const vector<Variable>& variables) {
     if (!hasSelectClause()) return false;
     for (const auto& var : variables) {
-      selectClause().addVariableForAsterisk(var);
+      selectClause().addVisibleVariable(var);
     }
     return true;
   }
