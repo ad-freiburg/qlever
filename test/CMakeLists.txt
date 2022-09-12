@@ -108,7 +108,7 @@ addLinkAndDiscoverTestSerial(BufferedVectorTest absl::strings)
 
 addLinkAndDiscoverTest(UnionTest engine)
 
-add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp SelectClauseTest.cpp)
+add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
 linkAndDiscoverTest(TokenTest parser re2 ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(TurtleParserTest parser absl::flat_hash_map re2)

@@ -8,6 +8,7 @@
 
 #include "../src/engine/GroupBy.h"
 #include "./IndexTestHelpers.h"
+#include "index/ConstantsIndexBuilding.h"
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
@@ -23,6 +24,7 @@ auto I = [](const auto& id) { return Id::makeFromInt(id); };
 class GroupByTest : public ::testing::Test {
  public:
   GroupByTest() {
+    FILE_BUFFER_SIZE() = 1000;
     // Create the index. The full index creation is run here to allow for
     // loading a docsDb file, which is not otherwise accessible
     std::string docsFileContent = "0\tExert 1\n1\tExert 2\n2\tExert3";
