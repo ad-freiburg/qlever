@@ -114,7 +114,7 @@ TEST(ConcurrentCache, sequentialPinnedComputation) {
   SimpleConcurrentLruCache a{3ul};
   ad_utility::Timer t;
   t.start();
-  // Fake computation that takes 100ms and returns value "3", which is then
+  // Fake computation that takes 5ms and returns value "3", which is then
   // stored under key 3.
   auto result = a.computeOncePinned(3, waiting_function("3"s, 5));
   t.stop();
@@ -147,7 +147,7 @@ TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
   SimpleConcurrentLruCache a{3ul};
   ad_utility::Timer t;
   t.start();
-  // Fake computation that takes 100ms and returns value "3", which is then
+  // Fake computation that takes 5ms and returns value "3", which is then
   // stored under key 3.
   auto result = a.computeOnce(3, waiting_function("3"s, 5));
   t.stop();

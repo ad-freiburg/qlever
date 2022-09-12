@@ -2,12 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
-#include <gtest/gtest.h>
-
 #include <cstdio>
 
-#include "../src/engine/GroupBy.h"
 #include "./IndexTestHelpers.h"
+#include "engine/GroupBy.h"
+#include "gtest/gtest.h"
 #include "index/ConstantsIndexBuilding.h"
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
