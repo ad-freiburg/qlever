@@ -6,7 +6,7 @@
 
 #include <string>
 
-#include "./Context.h"
+#include "parser/data/Context.h"
 
 class Iri {
   std::string _string;

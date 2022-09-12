@@ -123,33 +123,3 @@
   } else {                                           \
     _CALL_FIXED_SIZE_3_i(0, j, k, func, __VA_ARGS__) \
   }
-
-// Try the `call fixed size` using no macros and better deduction of the result
-// size.
-
-template <size_t I, size_t J, auto GetResultWidth>
-bool callFixedSize3impl(size_t i, size_t j, auto&& f, auto&&... args) {
-  if (i == I && j == J) {
-    constexpr size_t resultWidth =
-        (I == 0 || J == 0 || GetResultWidth(I, J) < 5) ? 0
-                                                       : GetResultWidth(I, J);
-    f.template operator()<I, J, resultWidth>(args...);
-    return true;
-  } else {
-    return false;
-  }
-}
-
-template <auto GetResultWidth>
-void callFixedSize3(size_t i, size_t j, auto&& function, auto&&... args) {
-  constexpr auto f1 = [&]<size_t I, size_t... J>()->bool {
-    return (... || callFixedSize3impl<I, J, GetResultWidth>(i, j, function,
-                                                            AD_FWD(args)...));
-  };
-
-  auto f2 = [&]<size_t... I>() {
-    return (... || f1.template operator()<I, 0, 1, 2, 3, 4, 5>());
-  };
-
-  f2.template operator()<0, 1, 2, 3, 4, 5>();
-}

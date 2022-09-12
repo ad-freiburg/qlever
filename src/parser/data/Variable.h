@@ -17,7 +17,7 @@ class Variable {
  public:
   explicit Variable(std::string name);
 
-  // Todo<joka921> There are several similar variants of this function across
+  // TODO<joka921> There are several similar variants of this function across
   // the codebase. Unify them!
   // TODO<joka921> This function can also be in the .cpp file, but we first
   // have to figure out the link order.

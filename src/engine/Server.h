@@ -8,18 +8,18 @@
 #include <string>
 #include <vector>
 
-#include "../engine/Engine.h"
-#include "../index/Index.h"
-#include "../parser/ParseException.h"
-#include "../parser/SparqlParser.h"
-#include "../util/AllocatorWithLimit.h"
-#include "../util/HttpServer/HttpServer.h"
-#include "../util/HttpServer/streamable_body.h"
-#include "../util/Timer.h"
-#include "./QueryExecutionContext.h"
-#include "./QueryExecutionTree.h"
-#include "./SortPerformanceEstimator.h"
+#include "engine/Engine.h"
+#include "engine/QueryExecutionContext.h"
+#include "engine/QueryExecutionTree.h"
+#include "engine/SortPerformanceEstimator.h"
+#include "index/Index.h"
 #include "nlohmann/json.hpp"
+#include "parser/ParseException.h"
+#include "parser/SparqlParser.h"
+#include "util/AllocatorWithLimit.h"
+#include "util/HttpServer/HttpServer.h"
+#include "util/HttpServer/streamable_body.h"
+#include "util/Timer.h"
 
 using nlohmann::json;
 using std::string;
