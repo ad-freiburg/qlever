@@ -34,17 +34,21 @@ vector<SparqlPrefix> convertPrefixMap(
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parse() {
   ParsedQuery result;
-  result._originalString = query_;
+  std::string originalString = query_;
   // parsePrologue parses all the prefixes which are stored in a member
   // PrefixMap. This member is returned on parse.
-  result._prefixes = convertPrefixMap(parseWithAntlr(
+  SparqlQleverVisitor::PrefixMap prefixes = parseWithAntlr(
       &AntlrParser::prologue,
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}));
+      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}});
 
   if (lexer_.accept("construct")) {
+    result._originalString = std::move(originalString);
+    result._prefixes = convertPrefixMap(prefixes);
     parseQuery(&result, CONSTRUCT_QUERY);
   } else if (lexer_.peek("select")) {
-    parseQuery(&result, SELECT_QUERY);
+    result = parseWithAntlr(&AntlrParser::selectQuery, prefixes);
+    result._originalString = std::move(originalString);
+    result._prefixes = convertPrefixMap(prefixes);
   } else {
     throw ParseException("Query must either be a SELECT or CONSTRUCT.");
   }
@@ -55,103 +59,33 @@ ParsedQuery SparqlParser::parse() {
 
 // _____________________________________________________________________________
 void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
-  if (queryType == CONSTRUCT_QUERY) {
-    query->_clause = parseWithAntlr(&AntlrParser::constructTemplate, *query)
-                         .value_or(ad_utility::sparql_types::Triples{});
-  } else if (queryType == SELECT_QUERY) {
-    parseSelect(query);
-  } else {
-    // Unsupported query type
-    AD_FAIL();
-  }
+  AD_CHECK(queryType == CONSTRUCT_QUERY);
+  query->_clause = parseWithAntlr(&AntlrParser::constructTemplate, *query)
+                       .value_or(ad_utility::sparql_types::Triples{});
 
   parseWhere(query);
 
   parseSolutionModifiers(query);
 
-  if (!query->_groupByVariables.empty()) {
-    if (query->hasSelectClause() && !query->selectClause().isAsterisk()) {
-      const auto& selectClause = query->selectClause();
-      // Check if all selected variables are either aggregated or
-      for (const string& var : selectClause.getSelectedVariablesAsStrings()) {
-        if (var[0] == '?') {
-          if (ad_utility::contains_if(selectClause.getAliases(),
-                                      [&var](const Alias& alias) {
-                                        return alias._outVarName == var;
-                                      })) {
-            continue;
-          }
-          if (!ad_utility::contains_if(query->_groupByVariables,
-                                       [&var](const Variable& grouping) {
-                                         return var == grouping.name();
-                                       })) {
-            throw ParseException("Variable " + var +
-                                 " is selected but not "
-                                 "aggregated despite the query not being "
-                                 "grouped by " +
-                                 var + ".\n" + lexer_.input());
-          }
-        }
-      }
-    } else if (query->hasSelectClause() && query->selectClause().isAsterisk()) {
-      throw ParseException(
-          "GROUP BY is not allowed when all variables are selected via SELECT "
-          "*");
-    } else if (query->hasConstructClause()) {
-      auto& constructClause = query->constructClause();
-      for (const auto& triple : constructClause) {
-        for (const auto& varOrTerm : triple) {
-          if (auto variable = std::get_if<Variable>(&varOrTerm)) {
-            const auto& var = variable->name();
-            if (!ad_utility::contains_if(query->_groupByVariables,
-                                         [&var](const Variable& grouping) {
-                                           return var == grouping.name();
-                                         })) {
-              throw ParseException("Variable " + var +
-                                   " is used but not "
-                                   "aggregated despite the query not being "
-                                   "grouped by " +
-                                   var + ".\n" + lexer_.input());
-            }
-          }
-        }
-      }
-    } else {
-      // Invalid clause type
-      AD_FAIL();
-    }
-  }
-  if (!query->hasSelectClause()) {
+  if (query->_groupByVariables.empty()) {
     return;
   }
-  const auto& selectClause = query->selectClause();
 
-  // TODO<joka921> The following check should be directly in the
-  // `SelectClause` class (in the `setSelected` member).
-
-  // TODO<joka921> Is this even the correct way to check this? we should also
-  // verify that the variable is new (not even visible in the query body).
-  ad_utility::HashMap<std::string, size_t> variable_counts;
-
-  for (const std::string& s : selectClause.getSelectedVariablesAsStrings()) {
-    variable_counts[s]++;
-  }
-
-  for (const Alias& a : selectClause.getAliases()) {
-    // The variable was already added to the selected variables while
-    // parsing the alias, thus it should appear exactly once
-    if (variable_counts[a._outVarName] > 1) {
-      throw ParseException("The variable name " + a._outVarName +
-                           " used in "
-                           "an alias was already selected on.\n" +
-                           lexer_.input());
+  AD_CHECK(query->hasConstructClause());
+  auto& constructClause = query->constructClause();
+  for (const auto& triple : constructClause) {
+    for (const auto& varOrTerm : triple) {
+      if (auto variable = std::get_if<Variable>(&varOrTerm)) {
+        if (!ad_utility::contains(query->_groupByVariables, *variable)) {
+          throw ParseException("Variable " + variable->name() +
+                               " is used but not "
+                               "aggregated despite the query not being "
+                               "grouped by " +
+                               variable->name() + ".\n" + lexer_.input());
+        }
+      }
     }
   }
-}
-
-// _____________________________________________________________________________
-void SparqlParser::parseSelect(ParsedQuery* query) {
-  query->_clause = parseWithAntlr(&AntlrParser::selectClause, *query);
 }
 
 // _____________________________________________________________________________
@@ -169,9 +103,7 @@ void SparqlParser::parseWhere(ParsedQuery* query) {
   auto [pattern, visibleVariables] =
       parseWithAntlr(&AntlrParser::whereClause, *query);
   query->_rootGraphPattern = std::move(pattern);
-  for (const auto& var : visibleVariables) {
-    query->registerVariableVisibleInQueryBody(var);
-  }
+  query->registerVariablesVisibleInQueryBody(visibleVariables);
 }
 
 // _____________________________________________________________________________

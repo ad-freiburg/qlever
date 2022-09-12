@@ -516,7 +516,7 @@ bool QueryPlanner::checkUsePatternTrick(
       return false;
     }
     counted_var_name = countVariable.value();
-    count_var_name = alias._outVarName;
+    count_var_name = alias._target.name();
   }
 
   // The first possibility for using the pattern trick is having a
@@ -927,7 +927,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
 
   std::string predicateVariable = patternTrickTriple._o.getString();
   std::string countVariable =
-      aliases.empty() ? generateUniqueVarName() : aliases[0]._outVarName;
+      aliases.empty() ? generateUniqueVarName() : aliases[0]._target.name();
   if (previous != nullptr && !previous->empty()) {
     added.reserve(previous->size());
     for (const auto& parent : *previous) {

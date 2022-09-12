@@ -151,7 +151,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  [[noreturn]] ParsedQuery visitTypesafe(Parser::SelectQueryContext* ctx);
+  ParsedQuery visitTypesafe(Parser::SelectQueryContext* ctx);
 
   Any visitSubSelect(Parser::SubSelectContext* ctx) override {
     return visitTypesafe(ctx);

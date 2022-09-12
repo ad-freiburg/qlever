@@ -24,7 +24,7 @@ void SelectClause::setSelected(std::vector<VarOrAlias> varsOrAliases) {
     v.vars_.push_back(std::move(var));
   };
   auto processAlias = [&v](Alias alias) {
-    v.vars_.emplace_back(alias._outVarName);
+    v.vars_.emplace_back(alias._target);
     v.aliases_.push_back(std::move(alias));
   };
 
@@ -43,17 +43,21 @@ void SelectClause::setSelected(std::vector<Variable> variables) {
 }
 
 // ____________________________________________________________________
-void SelectClause::addVariableForAsterisk(const Variable& variable) {
-  if (!ad_utility::contains(variablesForAsterisk_, variable)) {
-    variablesForAsterisk_.emplace_back(variable);
+void SelectClause::addVisibleVariable(const Variable& variable) {
+  if (!ad_utility::contains(visibleVariables_, variable)) {
+    visibleVariables_.emplace_back(variable);
   }
+}
+
+const vector<Variable>& SelectClause::getVisibleVariables() {
+  return visibleVariables_;
 }
 
 // ____________________________________________________________________
 [[nodiscard]] const std::vector<Variable>& SelectClause::getSelectedVariables()
     const {
   return isAsterisk()
-             ? variablesForAsterisk_
+             ? visibleVariables_
              : std::get<VarsAndAliases>(varsAndAliasesOrAsterisk_).vars_;
 }
 [[nodiscard]] std::vector<std::string>
