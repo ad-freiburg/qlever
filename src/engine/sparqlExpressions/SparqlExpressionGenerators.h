@@ -120,9 +120,7 @@ inline auto valueGetterGenerator =
         size_t numElements, EvaluationContext* context, Input&& input,
         ValueGetter&& valueGetter)
     -> cppcoro::generator<std::invoke_result_t<ValueGetter,
-                                               typename decltype(makeGenerator(
-                                                   input, 0,
-                                                   nullptr))::value_type,
+                                               typename decltype(makeGenerator(AD_FWD(input), 0, nullptr))::value_type,
                                                EvaluationContext*>> {
   for (auto singleInput :
        makeGenerator(std::forward<Input>(input), numElements, context)) {
