@@ -16,8 +16,8 @@ SparqlExpressionPimpl::SparqlExpressionPimpl(
 SparqlExpressionPimpl::~SparqlExpressionPimpl() = default;
 
 // ___________________________________________________________________________
-std::vector<std::string*> SparqlExpressionPimpl::strings() {
-  return _pimpl->strings();
+std::vector<const Variable*> SparqlExpressionPimpl::containedVariables() const {
+  return _pimpl->containedVariables();
 }
 
 // ____________________________________________________________________________
