@@ -309,8 +309,9 @@ auto BindExpression = [](const string& expression) -> Matcher<const p::Bind&> {
   return AD_FIELD(p::Bind, _expression, detail::Expression(expression));
 };
 
-auto Bind = [](const ::Variable& variable, const string& expression)
-    -> testing::Matcher<const p::GraphPatternOperation&> {
+auto Bind =
+    [](const ::Variable& variable,
+       const string& expression) -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::Bind>(
       testing::AllOf(BindExpression(expression),
                      AD_FIELD(p::Bind, _target, testing::Eq(variable))));
@@ -324,16 +325,15 @@ auto LimitOffset = [](uint64_t limit, uint64_t textLimit,
       AD_FIELD(LimitOffsetClause, _offset, testing::Eq(offset)));
 };
 
-auto VariableOrderKey =
-    [](const ::Variable& variable,
-       bool desc) -> testing::Matcher<const ::VariableOrderKey&> {
+auto VariableOrderKey = [](const ::Variable& variable,
+                           bool desc) -> Matcher<const ::VariableOrderKey&> {
   return testing::AllOf(
       AD_FIELD(::VariableOrderKey, variable_, testing::Eq(variable)),
       AD_FIELD(::VariableOrderKey, isDescending_, testing::Eq(desc)));
 };
 
-auto VariableOrderKeyVariant =
-    [](const ::Variable& key, bool desc) -> testing::Matcher<const OrderKey&> {
+auto VariableOrderKeyVariant = [](const ::Variable& key,
+                                  bool desc) -> Matcher<const OrderKey&> {
   return testing::VariantWith<::VariableOrderKey>(VariableOrderKey(key, desc));
 };
 
