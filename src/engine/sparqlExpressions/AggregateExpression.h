@@ -8,8 +8,9 @@
 #ifndef QLEVER_AGGREGATEEXPRESSION_H
 #define QLEVER_AGGREGATEEXPRESSION_H
 
-#include "./SparqlExpressionGenerators.h"
-#include "SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+
 namespace sparqlExpression {
 
 // This can be used as the `FinalOperation` parameter to an

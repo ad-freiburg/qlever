@@ -3,7 +3,7 @@
 
 #include "SparqlExpressionPimpl.h"
 
-#include "SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 
 namespace sparqlExpression {
 

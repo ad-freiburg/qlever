@@ -4,11 +4,11 @@
 
 #include "Bind.h"
 
-#include "../util/Exception.h"
-#include "./sparqlExpressions/SparqlExpression.h"
-#include "./sparqlExpressions/SparqlExpressionGenerators.h"
-#include "CallFixedSize.h"
-#include "QueryExecutionTree.h"
+#include "engine/CallFixedSize.h"
+#include "engine/QueryExecutionTree.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "util/Exception.h"
 
 // BIND adds exactly one new column
 size_t Bind::getResultWidth() const { return _subtree->getResultWidth() + 1; }

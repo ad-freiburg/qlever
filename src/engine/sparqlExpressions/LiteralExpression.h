@@ -8,7 +8,7 @@
 #ifndef QLEVER_LITERALEXPRESSION_H
 #define QLEVER_LITERALEXPRESSION_H
 
-#include "./SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 
 namespace sparqlExpression {
 namespace detail {

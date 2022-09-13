@@ -5,9 +5,9 @@
 #ifndef QLEVER_BIND_H
 #define QLEVER_BIND_H
 
-#include "../parser/ParsedQuery.h"
-#include "Operation.h"
-#include "sparqlExpressions/SparqlExpressionPimpl.h"
+#include "engine/Operation.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "parser/ParsedQuery.h"
 
 /// BIND operation, currently only supports a very limited subset of expressions
 class Bind : public Operation {

@@ -6,9 +6,9 @@
 
 #include <variant>
 
-#include "../src/global/Constants.h"
-#include "../src/parser/SparqlParser.h"
 #include "SparqlAntlrParserTestHelpers.h"
+#include "global/Constants.h"
+#include "parser/SparqlParser.h"
 
 namespace m = matchers;
 namespace p = parsedQuery;

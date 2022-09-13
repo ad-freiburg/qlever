@@ -7,7 +7,7 @@
 
 #include "./SampleExpression.h"
 
-#include "./SparqlExpressionGenerators.h"
+#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 
 using namespace sparqlExpression;
 using namespace sparqlExpression::detail;

@@ -6,7 +6,7 @@
 #include <string>
 #include <variant>
 
-#include "../../engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
 /// Store an expression that appeared in an ORDER BY clause.
 class ExpressionOrderKey {

@@ -11,15 +11,15 @@
 #include <variant>
 #include <vector>
 
-#include "../../global/Id.h"
-#include "../../util/ConstexprSmallString.h"
-#include "../CallFixedSize.h"
-#include "../QueryExecutionContext.h"
-#include "../ResultTable.h"
-#include "./SparqlExpressionTypes.h"
-#include "./SparqlExpressionValueGetters.h"
-#include "SetOfIntervals.h"
+#include "engine/CallFixedSize.h"
+#include "engine/QueryExecutionContext.h"
+#include "engine/ResultTable.h"
+#include "engine/sparqlExpressions/SetOfIntervals.h"
+#include "engine/sparqlExpressions/SparqlExpressionTypes.h"
+#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "global/Id.h"
 #include "parser/data/Variable.h"
+#include "util/ConstexprSmallString.h"
 
 namespace sparqlExpression {
 

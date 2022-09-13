@@ -8,8 +8,8 @@
 #ifndef QLEVER_SPARQLEXPRESSIONGENERATORS_H
 #define QLEVER_SPARQLEXPRESSIONGENERATORS_H
 
-#include "../../util/Generator.h"
-#include "./SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
+#include "util/Generator.h"
 
 namespace sparqlExpression::detail {
 

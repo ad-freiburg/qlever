@@ -6,9 +6,9 @@
 #ifndef QLEVER_SPARQLEXPRESSIONTYPES_H
 #define QLEVER_SPARQLEXPRESSIONTYPES_H
 
-#include "SetOfIntervals.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/ResultTable.h"
+#include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
 #include "parser/data/Variable.h"
 #include "util/AllocatorWithLimit.h"
