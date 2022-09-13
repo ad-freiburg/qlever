@@ -9,6 +9,13 @@
 #include "../src/util/Generator.h"
 #include "../src/util/NBitInteger.h"
 
+// Enabling cheaper unit tests when building in Debug mode
+#ifdef QLEVER_RUN_EXPENSIVE_TESTS
+static constexpr int numElements = 100;
+#else
+static constexpr int numElements = 5;
+#endif
+
 auto testToFrom = []<size_t N>(int64_t x) {
   using I = ad_utility::NBitInteger<N>;
   if (x >= I::min() && x <= I::max()) {
@@ -50,11 +57,11 @@ cppcoro::generator<int64_t> valuesNearLimits() {
   constexpr static auto globalMax = std::numeric_limits<int64_t>::max();
 
   constexpr static auto aBitLessThanMin =
-      min - globalMin > 100 ? min - 100 : globalMin;
-  constexpr static auto aBitMoreThanMin = min + 100;
-  constexpr static auto aBitLessThanMax = max - 100;
+      min - globalMin > numElements ? min - numElements : globalMin;
+  constexpr static auto aBitMoreThanMin = min + numElements;
+  constexpr static auto aBitLessThanMax = max - numElements;
   constexpr static auto aBitMoreThanMax =
-      globalMax - max > 100 ? max + 100 : globalMax;
+      globalMax - max > numElements ? max + numElements : globalMax;
 
   for (auto i = aBitLessThanMin; i < aBitMoreThanMin; ++i) {
     co_yield i;
@@ -133,16 +140,16 @@ void testAllN(auto function, auto... args) {
 // 100 values near int64_t::max();
 auto valuesNearCornercasesInt64 = []() -> cppcoro::generator<int64_t> {
   int64_t max = std::numeric_limits<int64_t>::max();
-  for (auto i = max - 100; i < max; ++i) {
+  for (auto i = max - numElements; i < max; ++i) {
     co_yield i + 1;
   }
 
-  for (auto i = -100; i < 100; ++i) {
+  for (auto i = -numElements; i < numElements; ++i) {
     co_yield i;
   }
 
   int64_t min = std::numeric_limits<int64_t>::min();
-  for (auto i = min; i <= min + 100; ++i) {
+  for (auto i = min; i <= min + numElements; ++i) {
     co_yield i;
   }
 };

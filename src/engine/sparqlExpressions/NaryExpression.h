@@ -41,36 +41,18 @@ requires(isOperation<NaryOperation>) class NaryExpression
   /// The actual constructor. It is private; to construct an object of this
   /// class, use the static `create` function (which uses this private
   /// constructor).
-  NaryExpression(Children&& children) : _children{std::move(children)} {}
+  NaryExpression(Children&& children);
 
  public:
   // __________________________________________________________________________
-  ExpressionResult evaluate(EvaluationContext* context) const override {
-    auto resultsOfChildren = ad_utility::applyFunctionToEachElementOfTuple(
-        [context](const auto& child) { return child->evaluate(context); },
-        _children);
+  ExpressionResult evaluate(EvaluationContext* context) const override;
 
-    // A function that only takes several `ExpressionResult`s,
-    // and evaluates the expression.
-    auto evaluateOnChildrenResults =
-        std::bind_front(ad_utility::visitWithVariantsAndParameters,
-                        evaluateOnChildrenOperands, NaryOperation{}, context);
-
-    return std::apply(evaluateOnChildrenResults, std::move(resultsOfChildren));
-  }
   // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> children() override {
-    return {_children.data(), _children.size()};
-  }
+  std::span<SparqlExpression::Ptr> children() override;
 
+  // _________________________________________________________________________
   [[nodiscard]] string getCacheKey(
-      const VariableToColumnMap& varColMap) const override {
-    string key = typeid(*this).name();
-    for (const auto& child : _children) {
-      key += child->getCacheKey(varColMap);
-    }
-    return key;
-  }
+      const VariableToColumnMap& varColMap) const override;
 
  private:
   /// Evaluate the `naryOperation` on the `operands` using the `context`.

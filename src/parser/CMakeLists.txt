@@ -2,8 +2,10 @@ add_library(rdfEscaping RdfEscaping.h RdfEscaping.cpp)
 target_link_libraries(rdfEscaping absl::flat_hash_map ${ICU_LIBRARIES})
 
 add_subdirectory(sparqlParser)
+add_subdirectory(data)
 
 add_library(parser
+        sparqlParser/SparqlQleverVisitor.cpp
         SparqlParser.h SparqlParser.cpp
         ParsedQuery.h ParsedQuery.cpp
         ParseException.h
@@ -18,4 +20,5 @@ add_library(parser
         TripleComponent.h
         GraphPatternOperation.cpp
         PropertyPath.h PropertyPath.cpp Alias.h data/SolutionModifiers.h data/LimitOffsetClause.h data/SparqlFilter.h data/SparqlFilter.cpp data/OrderKey.h data/GroupKey.h ParseException.cpp SelectClause.cpp SelectClause.h GraphPatternOperation.cpp GraphPatternOperation.h GraphPattern.cpp GraphPattern.h)
-target_link_libraries(parser sparqlParser sparqlExpressions rdfEscaping re2 absl::flat_hash_map util)
+target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2 absl::flat_hash_map util)
+

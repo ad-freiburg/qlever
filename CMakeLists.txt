@@ -248,8 +248,15 @@ endif()
 set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TIMING TRACE)
 add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 
+##################################################
+# Precompiled headers
+set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h src/engine/QueryExecutionTree.h)
+set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h third_party/ctre/include/ctre/ctre.h third_party/antlr4/runtime/Cpp/runtime/src/antlr4-runtime.h)
+
 add_subdirectory(src/parser)
+target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
 add_subdirectory(src/engine)
+target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
 add_subdirectory(src/index)
 add_subdirectory(src/util)
 enable_testing()
@@ -271,6 +278,7 @@ target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(ServerMain src/ServerMain.cpp)
 target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
+target_precompile_headers(ServerMain REUSE_FROM engine)
 
 add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
 target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
