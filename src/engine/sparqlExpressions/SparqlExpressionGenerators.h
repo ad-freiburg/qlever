@@ -121,7 +121,7 @@ inline auto valueGetterGenerator =
         ValueGetter&& valueGetter)
     -> cppcoro::generator<std::invoke_result_t<ValueGetter,
                                                typename decltype(makeGenerator(
-                                                   std::declval<Input>(), 0,
+                                                   input, 0,
                                                    nullptr))::value_type,
                                                EvaluationContext*>> {
   for (auto singleInput :
