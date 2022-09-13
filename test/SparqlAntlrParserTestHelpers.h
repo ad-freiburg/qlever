@@ -59,7 +59,8 @@ std::ostream& operator<<(std::ostream& out, const VarOrTerm& varOrTerm) {
 
 namespace parsedQuery {
 std::ostream& operator<<(std::ostream& out, const parsedQuery::Bind& bind) {
-  out << "Bind " << bind._expression.getDescriptor() << " as " << bind._target;
+  out << "Bind " << bind._expression.getDescriptor() << " as "
+      << bind._target.name();
   return out;
 }
 
@@ -75,7 +76,7 @@ std::ostream& operator<<(std::ostream& out, const parsedQuery::Values& values) {
 
 std::ostream& operator<<(std::ostream& out, const VariableOrderKey& orderkey) {
   out << "Order " << (orderkey.isDescending_ ? "DESC" : "ASC") << " by "
-      << orderkey.variable_;
+      << orderkey.variable_.name();
   return out;
 }
 
@@ -309,7 +310,7 @@ auto BindExpression = [](const string& expression) -> Matcher<const p::Bind&> {
 };
 
 auto Bind =
-    [](const string& variable,
+    [](const ::Variable& variable,
        const string& expression) -> Matcher<const p::GraphPatternOperation&> {
   return detail::GraphPatternOperation<p::Bind>(
       testing::AllOf(BindExpression(expression),
@@ -324,26 +325,26 @@ auto LimitOffset = [](uint64_t limit, uint64_t textLimit,
       AD_FIELD(LimitOffsetClause, _offset, testing::Eq(offset)));
 };
 
-auto VariableOrderKey = [](const string& key,
+auto VariableOrderKey = [](const ::Variable& variable,
                            bool desc) -> Matcher<const ::VariableOrderKey&> {
   return testing::AllOf(
-      AD_FIELD(::VariableOrderKey, variable_, testing::Eq(key)),
+      AD_FIELD(::VariableOrderKey, variable_, testing::Eq(variable)),
       AD_FIELD(::VariableOrderKey, isDescending_, testing::Eq(desc)));
 };
 
+auto VariableOrderKeyVariant = [](const ::Variable& key,
+                                  bool desc) -> Matcher<const OrderKey&> {
+  return testing::VariantWith<::VariableOrderKey>(VariableOrderKey(key, desc));
+};
+
 auto VariableOrderKeys =
-    [](const std::vector<std::pair<std::string, bool>>& orderKeys)
+    [](const std::vector<std::pair<::Variable, bool>>& orderKeys)
     -> Matcher<const std::vector<::VariableOrderKey>&> {
   vector<Matcher<const ::VariableOrderKey&>> matchers;
   for (auto [key, desc] : orderKeys) {
     matchers.push_back(VariableOrderKey(key, desc));
   }
   return testing::ElementsAreArray(matchers);
-};
-
-auto VariableOrderKeyVariant = [](const string& key,
-                                  bool desc) -> Matcher<const OrderKey&> {
-  return testing::VariantWith<::VariableOrderKey>(VariableOrderKey(key, desc));
 };
 
 auto ExpressionOrderKey = [](const string& expr,
@@ -690,7 +691,7 @@ auto Having = [](const vector<SparqlFilter>& havingClauses = {})
   return AD_FIELD(ParsedQuery, _havingClauses, testing::Eq(havingClauses));
 };
 auto OrderKeys =
-    [](const std::vector<std::pair<std::string, bool>>& orderKeys = {})
+    [](const std::vector<std::pair<::Variable, bool>>& orderKeys = {})
     -> Matcher<const ::ParsedQuery&> {
   return AD_FIELD(ParsedQuery, _orderBy, VariableOrderKeys(orderKeys));
 };

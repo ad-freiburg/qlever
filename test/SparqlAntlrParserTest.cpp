@@ -429,8 +429,8 @@ TEST(SparqlParser, VariableWithDollarSign) {
 
 TEST(SparqlParser, Bind) {
   auto expectBind = ExpectCompleteParse<&Parser::bind>{};
-  expectBind("BIND (10 - 5 as ?a)", m::Bind("?a", "10-5"));
-  expectBind("bInD (?age - 10 As ?s)", m::Bind("?s", "?age-10"));
+  expectBind("BIND (10 - 5 as ?a)", m::Bind(Variable{"?a"}, "10-5"));
+  expectBind("bInD (?age - 10 As ?s)", m::Bind(Variable{"?s"}, "?age-10"));
 }
 
 TEST(SparqlParser, Integer) {
@@ -467,10 +467,13 @@ TEST(SparqlParser, OrderCondition) {
   auto expectOrderCondition = ExpectCompleteParse<&Parser::orderCondition>{};
   auto expectOrderConditionFails = ExpectParseFails<&Parser::orderCondition>();
   // var
-  expectOrderCondition("?test", m::VariableOrderKeyVariant("?test", false));
+  expectOrderCondition("?test",
+                       m::VariableOrderKeyVariant(Variable{"?test"}, false));
   // brackettedExpression
-  expectOrderCondition("DESC (?foo)", m::VariableOrderKeyVariant("?foo", true));
-  expectOrderCondition("ASC (?bar)", m::VariableOrderKeyVariant("?bar", false));
+  expectOrderCondition("DESC (?foo)",
+                       m::VariableOrderKeyVariant(Variable{"?foo"}, true));
+  expectOrderCondition("ASC (?bar)",
+                       m::VariableOrderKeyVariant(Variable{"?bar"}, false));
   expectOrderCondition("ASC(?test - 5)",
                        m::ExpressionOrderKey("?test-5", false));
   expectOrderCondition("DESC (10 || (5 && ?foo))",
@@ -484,7 +487,7 @@ TEST(SparqlParser, OrderCondition) {
 TEST(SparqlParser, OrderClause) {
   expectCompleteParse(
       parse<&Parser::orderClause>("ORDER BY ?test DESC(?foo - 5)"),
-      m::OrderKeys({VariableOrderKey{"?test", false},
+      m::OrderKeys({VariableOrderKey{Variable{"?test"}, false},
                     m::ExpressionOrderKeyTest{"?foo-5", true}}));
 }
 
@@ -535,7 +538,7 @@ TEST(SparqlParser, SolutionModifier) {
       "OFFSET 2",
       m::SolutionModifier({Var{"?var"}, "?b-10"},
                           {{SparqlFilter::FilterType::NE, "?var", "10"}},
-                          {VOK{"?var", false}}, {10, 1, 2}));
+                          {VOK{Variable{"?var"}, false}}, {10, 1, 2}));
   expectSolutionModifier(
       "GROUP BY ?var HAVING (?foo < ?bar) ORDER BY (5 - ?var) TEXTLIMIT 21 "
       "LIMIT 2",
@@ -788,7 +791,7 @@ TEST(SparqlParser, GroupGraphPattern) {
       m::GraphPattern(false, {{SparqlFilter::FilterType::EQ, "?a", "10"}},
                       DummyTriplesMatcher));
   expectGraphPattern("{ BIND (?f - ?b as ?c) }",
-                     m::GraphPattern(m::Bind("?c", "?f-?b")));
+                     m::GraphPattern(m::Bind(Variable{"?c"}, "?f-?b")));
   expectGraphPattern("{ VALUES (?a ?b) { (<foo> <bar>) (<a> <b>) } }",
                      m::GraphPattern(m::InlineData(
                          {"?a", "?b"}, {{"<foo>", "<bar>"}, {"<a>", "<b>"}})));
@@ -824,10 +827,10 @@ TEST(SparqlParser, GroupGraphPattern) {
                       {"?c", CONTAINS_WORD_PREDICATE, "coca* abuse"}})));
   expectGraphPattern("{?x <is-a> <Actor> . BIND(10 - ?foo as ?y) }",
                      m::GraphPattern(m::Triples({{"?x", "<is-a>", "<Actor>"}}),
-                                     m::Bind("?y", "10-?foo")));
+                                     m::Bind(Variable{"?y"}, "10-?foo")));
   expectGraphPattern("{?x <is-a> <Actor> . BIND(10 - ?foo as ?y) . ?a ?b ?c }",
                      m::GraphPattern(m::Triples({{"?x", "<is-a>", "<Actor>"}}),
-                                     m::Bind("?y", "10-?foo"),
+                                     m::Bind(Variable{"?y"}, "10-?foo"),
                                      m::Triples({{"?a", "?b", "?c"}})));
   expectGraphPattern(
       "{?x <is-a> <Actor> . OPTIONAL { ?x <foo> <bar> } }",
@@ -908,7 +911,7 @@ TEST(SparqlParser, SelectQuery) {
       testing::AllOf(
           m::SelectQuery(m::Select({Variable{"?x"}}), DummyGraphPatternMatcher),
           m::pq::Having({{SparqlFilter::FilterType::GT, "?x", "5"}}),
-          m::pq::OrderKeys({{"?y", false}})));
+          m::pq::OrderKeys({{Variable{"?y"}, false}})));
   // TODO<qup42, joka921> enable Tests once the corresponding checks are
   //  implemented.
 

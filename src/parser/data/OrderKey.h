@@ -6,7 +6,7 @@
 #include <string>
 #include <variant>
 
-#include "../../engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
 /// Store an expression that appeared in an ORDER BY clause.
 class ExpressionOrderKey {
@@ -23,11 +23,11 @@ class ExpressionOrderKey {
 /// Store a variable that appeared in an ORDER BY clause.
 class VariableOrderKey {
  public:
-  std::string variable_;
   bool isDescending_;
+  Variable variable_;
   // ___________________________________________________________________________
-  explicit VariableOrderKey(std::string variable, bool isDescending = false)
-      : variable_{std::move(variable)}, isDescending_{isDescending} {}
+  explicit VariableOrderKey(Variable variable, bool isDescending = false)
+      : isDescending_{isDescending}, variable_{std::move(variable)} {}
 
   bool operator==(const VariableOrderKey&) const = default;
 };

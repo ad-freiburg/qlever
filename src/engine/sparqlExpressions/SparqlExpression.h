@@ -11,14 +11,15 @@
 #include <variant>
 #include <vector>
 
-#include "../../global/Id.h"
-#include "../../util/ConstexprSmallString.h"
-#include "../CallFixedSize.h"
-#include "../QueryExecutionContext.h"
-#include "../ResultTable.h"
-#include "./SparqlExpressionTypes.h"
-#include "./SparqlExpressionValueGetters.h"
-#include "SetOfIntervals.h"
+#include "engine/CallFixedSize.h"
+#include "engine/QueryExecutionContext.h"
+#include "engine/ResultTable.h"
+#include "engine/sparqlExpressions/SetOfIntervals.h"
+#include "engine/sparqlExpressions/SparqlExpressionTypes.h"
+#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "global/Id.h"
+#include "parser/data/Variable.h"
+#include "util/ConstexprSmallString.h"
 
 namespace sparqlExpression {
 
@@ -78,7 +79,7 @@ class SparqlExpression {
   /// For the pattern trick we need to know, whether this expression
   /// is a non-distinct count of a single variable. In this case we return
   /// the variable. Otherwise we return std::nullopt.
-  virtual std::optional<string> getVariableForNonDistinctCountOrNullopt()
+  virtual std::optional<::Variable> getVariableForNonDistinctCountOrNullopt()
       const {
     return std::nullopt;
   }
@@ -86,7 +87,7 @@ class SparqlExpression {
   /// Helper function for getVariableForNonDistinctCountOrNullopt() : If this
   /// expression is a single variable, return the name of this variable.
   /// Otherwise, return std::nullopt.
-  virtual std::optional<string> getVariableOrNullopt() const {
+  virtual std::optional<::Variable> getVariableOrNullopt() const {
     return std::nullopt;
   }
 

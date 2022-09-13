@@ -55,7 +55,7 @@ AggregateExpression<AggregateOperation, FinalOperation>::getCacheKey(
 
 // __________________________________________________________________________
 template <typename AggregateOperation, typename FinalOperation>
-[[nodiscard]] std::optional<string> AggregateExpression<
+[[nodiscard]] std::optional<::Variable> AggregateExpression<
     AggregateOperation,
     FinalOperation>::getVariableForNonDistinctCountOrNullopt() const {
   // This behavior is not correct for the `COUNT` aggreate. The count is

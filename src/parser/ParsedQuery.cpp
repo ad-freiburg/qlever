@@ -88,7 +88,8 @@ string ParsedQuery::asString() const {
     os << "not specified";
   } else {
     for (auto& key : _orderBy) {
-      os << key.variable_ << (key.isDescending_ ? " (DESC)" : " (ASC)") << "\t";
+      os << key.variable_.name() << (key.isDescending_ ? " (DESC)" : " (ASC)")
+         << "\t";
     }
   }
   os << "\n";
@@ -114,8 +115,8 @@ Variable ParsedQuery::addInternalBind(
     sparqlExpression::SparqlExpressionPimpl expression) {
   // Internal variable name to which the result of the helper bind is
   // assigned.
-  std::string targetVariable =
-      INTERNAL_VARIABLE_PREFIX + std::to_string(numInternalVariables_);
+  auto targetVariable = Variable{INTERNAL_VARIABLE_PREFIX +
+                                 std::to_string(numInternalVariables_)};
   numInternalVariables_++;
   parsedQuery::Bind bind{std::move(expression), targetVariable};
   _rootGraphPattern._graphPatterns.emplace_back(std::move(bind));
@@ -124,7 +125,7 @@ Variable ParsedQuery::addInternalBind(
   // TODO<qup42, joka921> Implement "internal" variables, that can't be
   //  selected at all and can never interfere with variables from the
   //  query.
-  return Variable{std::move(targetVariable)};
+  return targetVariable;
 }
 
 // ________________________________________________________________________
@@ -152,7 +153,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       };
   auto processAlias = [this](Alias groupKey) {
     parsedQuery::Bind helperBind{std::move(groupKey._expression),
-                                 groupKey._target.name()};
+                                 groupKey._target};
     _rootGraphPattern._graphPatterns.emplace_back(std::move(helperBind));
     registerVariableVisibleInQueryBody(groupKey._target);
     _groupByVariables.emplace_back(groupKey._target);
@@ -176,16 +177,13 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
     // must then be either grouped or the result of an alias in the select.
     const vector<Variable>& groupByVariables = _groupByVariables;
     if (!groupByVariables.empty() &&
-        !ad_utility::contains_if(groupByVariables,
-                                 [&orderKey](const Variable& var) {
-                                   return orderKey.variable_ == var.name();
-                                 }) &&
-        !ad_utility::contains_if(
-            selectClause().getAliases(), [&orderKey](const Alias& alias) {
-              return alias._target.name() == orderKey.variable_;
-            })) {
+        !ad_utility::contains(groupByVariables, orderKey.variable_) &&
+        !ad_utility::contains_if(selectClause().getAliases(),
+                                 [&orderKey](const Alias& alias) {
+                                   return alias._target == orderKey.variable_;
+                                 })) {
       throw ParseException(
-          "Variable " + orderKey.variable_ +
+          "Variable " + orderKey.variable_.name() +
           " was used in an ORDER BY "
           "clause, but is neither grouped, nor created as an alias in the "
           "SELECT clause.");
@@ -209,7 +207,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           "new variable in the SELECT clause and then order by this "
           "variable.");
     auto additionalVariable = addInternalBind(std::move(orderKey.expression_));
-    _orderBy.emplace_back(additionalVariable.name(), orderKey.isDescending_);
+    _orderBy.emplace_back(additionalVariable, orderKey.isDescending_);
   };
 
   for (auto& orderKey : modifiers.orderBy_) {

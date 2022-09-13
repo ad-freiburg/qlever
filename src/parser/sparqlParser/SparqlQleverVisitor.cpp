@@ -197,7 +197,7 @@ Variable Visitor::visitTypesafe(Parser::VarContext* ctx) {
 GraphPatternOperation Visitor::visitTypesafe(Parser::BindContext* ctx) {
   addVisibleVariable(ctx->var()->getText());
   return GraphPatternOperation{
-      Bind{{visitTypesafe(ctx->expression())}, ctx->var()->getText()}};
+      Bind{{visitTypesafe(ctx->expression())}, visitTypesafe(ctx->var())}};
 }
 
 // ____________________________________________________________________________________
@@ -641,7 +641,7 @@ OrderKey Visitor::visitTypesafe(Parser::OrderConditionContext* ctx) {
   };
 
   if (ctx->var()) {
-    return VariableOrderKey(ctx->var()->getText());
+    return VariableOrderKey(visitTypesafe(ctx->var()));
   } else if (ctx->constraint()) {
     return visitExprOrderKey(false, ctx->constraint());
   } else if (ctx->brackettedExpression()) {
@@ -1348,8 +1348,7 @@ ExpressionPtr Visitor::visitTypesafe(Parser::PrimaryExpressionContext* ctx) {
   } else if (ctx->booleanLiteral()) {
     return make_unique<BoolExpression>(visitTypesafe(ctx->booleanLiteral()));
   } else if (ctx->var()) {
-    return make_unique<VariableExpression>(
-        sparqlExpression::Variable{ctx->var()->getText()});
+    return make_unique<VariableExpression>(visitTypesafe(ctx->var()));
   } else {
     return visitAlternative<ExpressionPtr>(
         ctx->builtInCall(), ctx->iriOrFunction(), ctx->brackettedExpression());

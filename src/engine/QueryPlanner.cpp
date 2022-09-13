@@ -233,12 +233,12 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           std::make_move_iterator(v._triples.begin()),
           std::make_move_iterator(v._triples.end()));
     } else if constexpr (std::is_same_v<p::Bind, std::decay_t<decltype(v)>>) {
-      if (boundVariables.count(v._target)) {
+      if (boundVariables.count(v._target.name())) {
         AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                  "The target variable of a BIND must not be used before the "
                  "BIND clause");
       }
-      boundVariables.insert(v._target);
+      boundVariables.insert(v._target.name());
 
       // Assumption for now: BIND does not commute. This is always safe.
       auto lastRow = optimizeCommutativ(candidateTriples, candidatePlans,
@@ -515,7 +515,7 @@ bool QueryPlanner::checkUsePatternTrick(
     if (!countVariable.has_value()) {
       return false;
     }
-    counted_var_name = countVariable.value();
+    counted_var_name = countVariable.value().name();
     count_var_name = alias._target.name();
   }
 
@@ -1011,7 +1011,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     plan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
     plan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
     if (pq._orderBy.size() == 1 && !pq._orderBy[0].isDescending_) {
-      size_t col = parent._qet->getVariableColumn(pq._orderBy[0].variable_);
+      size_t col =
+          parent._qet->getVariableColumn(pq._orderBy[0].variable_.name());
       const std::vector<size_t>& previousSortedOn =
           parent._qet->resultSortedOn();
       if (!previousSortedOn.empty() && col == previousSortedOn[0]) {
@@ -1024,8 +1025,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     } else {
       vector<pair<size_t, bool>> sortIndices;
       for (auto& ord : pq._orderBy) {
-        sortIndices.emplace_back(parent._qet->getVariableColumn(ord.variable_),
-                                 ord.isDescending_);
+        sortIndices.emplace_back(
+            parent._qet->getVariableColumn(ord.variable_.name()),
+            ord.isDescending_);
       }
       const std::vector<size_t>& previousSortedOn =
           parent._qet->resultSortedOn();

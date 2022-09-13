@@ -5,8 +5,9 @@
 #ifndef QLEVER_AGGREGATEEXPRESSION_H
 #define QLEVER_AGGREGATEEXPRESSION_H
 
-#include "./SparqlExpressionGenerators.h"
-#include "SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+
 namespace sparqlExpression {
 
 // This can be used as the `FinalOperation` parameter to an
@@ -40,8 +41,8 @@ class AggregateExpression : public SparqlExpression {
       const VariableToColumnMap& varColMap) const override;
 
   // __________________________________________________________________________
-  [[nodiscard]] std::optional<string> getVariableForNonDistinctCountOrNullopt()
-      const override;
+  [[nodiscard]] std::optional<::Variable>
+  getVariableForNonDistinctCountOrNullopt() const override;
 
   // This is the visitor for the `evaluateAggregateExpression` function below.
   // It works on a `SingleExpressionResult` rather than on the
@@ -149,8 +150,8 @@ inline auto count = [](const auto& a, const auto& b) -> int64_t {
 using CountExpressionBase = AGG_EXP<decltype(count), IsValidValueGetter>;
 class CountExpression : public CountExpressionBase {
   using CountExpressionBase::CountExpressionBase;
-  [[nodiscard]] std::optional<string> getVariableForNonDistinctCountOrNullopt()
-      const override {
+  [[nodiscard]] std::optional<::Variable>
+  getVariableForNonDistinctCountOrNullopt() const override {
     if (this->_distinct) {
       return std::nullopt;
     }

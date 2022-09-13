@@ -5,9 +5,9 @@
 #ifndef QLEVER_BIND_H
 #define QLEVER_BIND_H
 
-#include "../parser/ParsedQuery.h"
-#include "Operation.h"
-#include "sparqlExpressions/SparqlExpressionPimpl.h"
+#include "engine/Operation.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "parser/ParsedQuery.h"
 
 /// BIND operation, currently only supports a very limited subset of expressions
 class Bind : public Operation {
@@ -33,7 +33,9 @@ class Bind : public Operation {
       const override;
 
   // Returns the variable to which the expression will be bound
-  [[nodiscard]] const string& targetVariable() const { return _bind._target; }
+  [[nodiscard]] const string& targetVariable() const {
+    return _bind._target.name();
+  }
 
  protected:
   [[nodiscard]] vector<size_t> resultSortedOn() const override;

@@ -6,15 +6,16 @@
 #ifndef QLEVER_SPARQLEXPRESSIONTYPES_H
 #define QLEVER_SPARQLEXPRESSIONTYPES_H
 
-#include "../../global/Id.h"
-#include "../../util/AllocatorWithLimit.h"
-#include "../../util/ConstexprSmallString.h"
-#include "../../util/Generator.h"
-#include "../../util/HashMap.h"
-#include "../../util/TypeTraits.h"
-#include "../QueryExecutionContext.h"
-#include "../ResultTable.h"
-#include "SetOfIntervals.h"
+#include "engine/QueryExecutionContext.h"
+#include "engine/ResultTable.h"
+#include "engine/sparqlExpressions/SetOfIntervals.h"
+#include "global/Id.h"
+#include "parser/data/Variable.h"
+#include "util/AllocatorWithLimit.h"
+#include "util/ConstexprSmallString.h"
+#include "util/Generator.h"
+#include "util/HashMap.h"
+#include "util/TypeTraits.h"
 
 namespace sparqlExpression {
 
@@ -190,12 +191,6 @@ struct EvaluationContext {
         _localVocab{localVocab} {}
 };
 
-/// Strong type for a Sparql Variable, e.g. "?x"
-struct Variable {
-  std::string _variable;
-  bool operator==(const Variable&) const = default;
-};
-
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
 /// the row indices in which a boolean expression evaluates to "true". Constant
@@ -209,7 +204,7 @@ using ConstantTypesAsVector =
 
 // Each type in this tuple also is a possible expression result type.
 using OtherTypes =
-    std::tuple<ad_utility::SetOfIntervals, StrongIdWithResultType, Variable>;
+    std::tuple<ad_utility::SetOfIntervals, StrongIdWithResultType, ::Variable>;
 
 using AllTypesAsTuple =
     ad_utility::TupleCat<ConstantTypes, ConstantTypesAsVector, OtherTypes>;

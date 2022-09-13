@@ -12,9 +12,9 @@
 #include "index/Index.h"
 
 class Variable {
+ public:
   std::string _name;
 
- public:
   explicit Variable(std::string name);
 
   // TODO<joka921> There are several similar variants of this function across

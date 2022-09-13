@@ -119,13 +119,13 @@ struct TransPath {
 // A SPARQL Bind construct.
 struct Bind {
   sparqlExpression::SparqlExpressionPimpl _expression;
-  std::string _target;  // the variable to which the expression will be bound
+  Variable _target;  // the variable to which the expression will be bound
 
   // Return all the strings contained in the BIND expression (variables,
   // constants, etc. Is required e.g. by ParsedQuery::expandPrefix.
   std::vector<std::string*> strings() {
     auto r = _expression.strings();
-    r.push_back(&_target);
+    r.push_back(&_target._name);
     return r;
   }
 
@@ -138,7 +138,7 @@ struct Bind {
 
   [[nodiscard]] string getDescriptor() const {
     auto inner = _expression.getDescriptor();
-    return "BIND (" + inner + " AS " + _target + ")";
+    return "BIND (" + inner + " AS " + _target.name() + ")";
   }
 };
 
