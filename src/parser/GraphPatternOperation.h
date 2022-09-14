@@ -121,7 +121,8 @@ struct Bind {
   sparqlExpression::SparqlExpressionPimpl _expression;
   Variable _target;  // the variable to which the expression will be bound
 
-  // Return all the variables that are used in the BIND expression (the target variable as well as all variables from the expression).
+  // Return all the variables that are used in the BIND expression (the target
+  // variable as well as all variables from the expression).
   std::vector<const Variable*> containedVariables() const {
     auto r = _expression.containedVariables();
     r.push_back(&_target);
