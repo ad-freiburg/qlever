@@ -142,7 +142,7 @@ void Bind::computeExpressionBind(
                      T&& singleResult) mutable {
     constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId =
-        std::is_same_v<T, sparqlExpression::StrongIdWithResultType>;
+        std::is_same_v<T, Id>;
     if constexpr (isVariable) {
       auto column = getVariableColumns().at(singleResult.name());
       for (size_t i = 0; i < inSize; ++i) {
@@ -153,9 +153,9 @@ void Bind::computeExpressionBind(
                         .second;
     } else if constexpr (isStrongId) {
       for (size_t i = 0; i < inSize; ++i) {
-        output(i, inCols) = singleResult._id._value;
+        output(i, inCols) = singleResult;
       }
-      *resultType = singleResult._type;
+      *resultType = qlever::ResultType::KB;
     } else {
       bool isConstant = sparqlExpression::isConstantResult<T>;
 

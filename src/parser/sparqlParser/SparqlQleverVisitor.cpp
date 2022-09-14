@@ -12,7 +12,7 @@
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
-#include "engine/sparqlExpressions//RelationExpressions.cpp"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 
 using namespace ad_utility::sparql_types;
 using namespace sparqlExpression;
@@ -69,41 +69,6 @@ ExpressionPtr Visitor::processIriFunctionCall(
     }
   }
   throw ParseException{"Function \"" + iri + "\" not supported"};
-}
-// ___________________________________________________________________________
-auto SparqlQleverVisitor::visitTypesafe(
-    SparqlAutomaticParser::RelationalExpressionContext* ctx) -> ExpressionPtr {
-  auto children = visitVector<ExpressionPtr>(ctx->numericExpression());
-
-  if (ctx->expressionList()) {
-    throw ParseException{
-        "IN/ NOT IN in expressions is currently not supported by QLever."};
-  }
-  AD_CHECK(children.size() == 1 || children.size() == 2);
-  if (children.size() == 1) {
-    return std::move(children[0]);
-  }
-
-  auto make = [&]<typename Expr>() {
-    return createExpression<Expr>(std::move(children[0]),
-                                  std::move(children[1]));
-  };
-  std::string relation = ctx->children[1]->getText();
-  if (relation == "=") {
-    return make.operator()<EqualExpression>();
-  } else if (relation == "!=") {
-    return make.operator()<NotEqualExpression>();
-  } else if (relation == "<") {
-    return make.operator()<LessThanExpression>();
-  } else if (relation == ">") {
-    return make.operator()<GreaterThanExpression>();
-  } else if (relation == "<=") {
-    return make.operator()<LessEqualExpression>();
-  } else if (relation == ">=") {
-    return make.operator()<relational::GreaterEqualExpression>();
-  } else {
-    AD_FAIL();
-  }
 }
 
 void Visitor::addVisibleVariable(string var) {
@@ -1253,32 +1218,39 @@ ExpressionPtr Visitor::visitTypesafe(Parser::ValueLogicalContext* ctx) {
   return visitTypesafe(ctx->relationalExpression());
 }
 
-// ____________________________________________________________________________________
-ExpressionPtr Visitor::visitTypesafe(Parser::RelationalExpressionContext* ctx) {
-  auto childContexts = ctx->numericExpression();
+// ___________________________________________________________________________
+auto SparqlQleverVisitor::visitTypesafe(
+    SparqlAutomaticParser::RelationalExpressionContext* ctx) -> ExpressionPtr {
+  auto children = visitVector(ctx->numericExpression());
 
-  if (childContexts.size() == 1) {
-    return visitTypesafe(childContexts[0]);
+  if (ctx->expressionList()) {
+    reportError(ctx,
+        "IN/ NOT IN in expressions are currently not supported by QLever.");
   }
-  if (false) {
-    // TODO<joka921> Once we have reviewed and merged the EqualsExpression,
-    // this can be uncommented.
-    /*
-   if (ctx->children[1]->getText() == "=") {
-     auto leftChild = std::move(
-         visitNumericExpression(childContexts[0]).as<ExpressionPtr>());
-     auto rightChild = std::move(
-         visitNumericExpression(childContexts[1]).as<ExpressionPtr>());
+  AD_CHECK(children.size() == 1 || children.size() == 2);
+  if (children.size() == 1) {
+    return std::move(children[0]);
+  }
 
-     return
-   ExpressionPtr{std::make_unique<sparqlExpression::EqualsExpression>(
-         std::move(leftChild), std::move(rightChild))};
-
-     */
+  auto make = [&]<typename Expr>() {
+    return createExpression<Expr>(std::move(children[0]),
+                                  std::move(children[1]));
+  };
+  std::string relation = ctx->children[1]->getText();
+  if (relation == "=") {
+    return make.operator()<EqualExpression>();
+  } else if (relation == "!=") {
+    return make.operator()<NotEqualExpression>();
+  } else if (relation == "<") {
+    return make.operator()<LessThanExpression>();
+  } else if (relation == ">") {
+    return make.operator()<GreaterThanExpression>();
+  } else if (relation == "<=") {
+    return make.operator()<LessEqualExpression>();
+  } else if (relation == ">=") {
+    return make.operator()<relational::GreaterEqualExpression>();
   } else {
-    reportError(
-        ctx,
-        "This parser does not yet support relational expressions = < etc.");
+    AD_FAIL();
   }
 }
 

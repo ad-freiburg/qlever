@@ -32,7 +32,7 @@ struct NumericValueGetter {
 
   // Convert an id from a result table to a double value.
   // TODO<joka921> Also convert to integer types.
-  double operator()(StrongIdWithResultType id, EvaluationContext*) const;
+  double operator()(ValueId id, EvaluationContext*) const;
 };
 
 /// Return the type exactly as it was passed in.
@@ -42,12 +42,6 @@ struct ActualValueGetter {
   template <typename T>
   T operator()(T v, EvaluationContext*) const {
     return v;
-  }
-
-  // _________________________________________________________________________
-  StrongIdWithResultType operator()(StrongIdWithResultType id,
-                                    EvaluationContext*) const {
-    return id;
   }
 };
 
@@ -60,7 +54,7 @@ struct IsValidValueGetter {
   bool operator()(Bool, EvaluationContext*) const { return true; }
 
   // check for NULL/UNDEF values.
-  bool operator()(StrongIdWithResultType id, EvaluationContext*) const;
+  bool operator()(ValueId id, EvaluationContext*) const;
 
   bool operator()(const string&, EvaluationContext*) const { return true; }
 };
@@ -76,7 +70,7 @@ struct EffectiveBooleanValueGetter {
   bool operator()(Bool v, EvaluationContext*) const { return v._value; }
 
   // _________________________________________________________________________
-  bool operator()(StrongIdWithResultType id, EvaluationContext*) const;
+  bool operator()(ValueId id, EvaluationContext*) const;
 
   // Nonempty strings are true.
   bool operator()(const string& s, EvaluationContext*) { return !s.empty(); }
@@ -95,7 +89,7 @@ struct StringValueGetter {
     return std::to_string(b._value);
   }
 
-  string operator()(StrongIdWithResultType, EvaluationContext*) const;
+  string operator()(ValueId, EvaluationContext*) const;
 
   string operator()(string s, EvaluationContext*) const { return s; }
 };

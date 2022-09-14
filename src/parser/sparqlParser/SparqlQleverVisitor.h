@@ -730,7 +730,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitRelationalExpression(
       SparqlAutomaticParser::RelationalExpressionContext* ctx) override {
     return visitTypesafe(ctx);
-    auto childContexts = ctx->numericExpression();
+  }
 
   Any visitValueLogical(Parser::ValueLogicalContext* ctx) override {
     return visitTypesafe(ctx);
@@ -738,18 +738,12 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   ExpressionPtr visitTypesafe(Parser::ValueLogicalContext* ctx);
 
-  Any visitRelationalExpression(
-      Parser::RelationalExpressionContext* ctx) override {
-    return visitTypesafe(ctx);
-  }
-
-  ExpressionPtr visitTypesafe(Parser::RelationalExpressionContext* ctx);
-
   Any visitNumericExpression(Parser::NumericExpressionContext* ctx) override {
     return visitTypesafe(ctx);
   }
 
   ExpressionPtr visitTypesafe(Parser::NumericExpressionContext* ctx);
+
 
   template <typename Expr>
   ExpressionPtr createExpression(auto... children) {

@@ -83,7 +83,7 @@ concept Compatible = (Arithmetic<A> && Arithmetic<B>) ||
                      (std::is_same_v<std::string, A> &&
                       std::is_same_v<std::string, B>) ||
                      BothVariables<A, B> || VariableAndVector<A, B> ||
-                     anyStrongId<A, B> && !Boolean<A> && !Boolean<B>;
+                     (anyStrongId<A, B> && !Boolean<A> && !Boolean<B>);
 
 template <typename A, typename B>
 concept Incompatible = (Arithmetic<A> && std::is_same_v<B, std::string>) ||
@@ -264,13 +264,13 @@ ExpressionResult evaluateR(const std::string& a, const Variable& b,
 }
 
 template <Comparison>
-Bool evaluateR(const StrongIdWithResultType&, const std::string&,
+Bool evaluateR(const Id&, const std::string&,
                EvaluationContext*) {
   throw std::runtime_error("Not implemented, TODO");
 }
 
 template <Comparison>
-Bool evaluateR(const std::string&, const StrongIdWithResultType&,
+Bool evaluateR(const std::string&, const Id&,
                EvaluationContext*) {
   throw std::runtime_error("Not implemented, TODO");
 }
@@ -299,6 +299,31 @@ Bool evaluateR(const VectorWithMemoryLimit<std::string>&, const ValueId&,
   throw std::runtime_error("Not implemented, TODO");
 }
 
+template <Comparison>
+Bool evaluateR(const VectorWithMemoryLimit<std::string>&, const VectorWithMemoryLimit<ValueId>&,
+               EvaluationContext*) {
+  throw std::runtime_error("Not implemented, TODO");
+}
+
+template <Comparison>
+Bool evaluateR( const VectorWithMemoryLimit<ValueId>&,const VectorWithMemoryLimit<std::string>&,
+               EvaluationContext*) {
+  throw std::runtime_error("Not implemented, TODO");
+}
+
+template <Comparison>
+Bool evaluateR( const VectorWithMemoryLimit<ValueId>&,const std::string&,
+                EvaluationContext*) {
+  throw std::runtime_error("Not implemented, TODO");
+}
+
+template <Comparison>
+Bool evaluateR(const std::string&, const VectorWithMemoryLimit<ValueId>&,
+                EvaluationContext*) {
+  throw std::runtime_error("Not implemented, TODO");
+}
+
+
 }  // namespace
 
 namespace sparqlExpression::relational {
@@ -308,7 +333,7 @@ ExpressionResult RelationalExpression<Comp>::evaluate(
   auto resA = _children[0]->evaluate(context);
   auto resB = _children[1]->evaluate(context);
 
-  auto visitor = [this, context](auto a, auto b) -> ExpressionResult {
+  auto visitor = [context](auto a, auto b) -> ExpressionResult {
     return evaluateR<Comp>(std::move(a), std::move(b), context);
   };
 

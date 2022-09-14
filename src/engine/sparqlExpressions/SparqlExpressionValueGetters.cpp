@@ -12,9 +12,8 @@
 
 using namespace sparqlExpression::detail;
 // _____________________________________________________________________________
-double NumericValueGetter::operator()(StrongIdWithResultType strongId,
+double NumericValueGetter::operator()(ValueId id,
                                       EvaluationContext*) const {
-  const Id id = strongId;
   switch (id.getDatatype()) {
     case Datatype::Double:
       return id.getDouble();
@@ -30,9 +29,8 @@ double NumericValueGetter::operator()(StrongIdWithResultType strongId,
 }
 
 // _____________________________________________________________________________
-bool EffectiveBooleanValueGetter::operator()(StrongIdWithResultType strongId,
+bool EffectiveBooleanValueGetter::operator()(ValueId id,
                                              EvaluationContext* context) const {
-  const Id id = strongId;
   switch (id.getDatatype()) {
     case Datatype::Double: {
       auto d = id.getDouble();
@@ -64,9 +62,8 @@ bool EffectiveBooleanValueGetter::operator()(StrongIdWithResultType strongId,
 }
 
 // ____________________________________________________________________________
-string StringValueGetter::operator()(StrongIdWithResultType strongId,
+string StringValueGetter::operator()(Id id,
                                      EvaluationContext* context) const {
-  const Id id = strongId;
   switch (id.getDatatype()) {
     case Datatype::Undefined:
       return "";
@@ -92,10 +89,10 @@ string StringValueGetter::operator()(StrongIdWithResultType strongId,
 
 // ____________________________________________________________________________
 bool IsValidValueGetter::operator()(
-    StrongIdWithResultType strongId,
+    ValueId id,
     [[maybe_unused]] EvaluationContext* context) const {
   // Every knowledge base value that is bound converts to "True"
   // TODO<joka921> check for the correct semantics of the error handling and
   // implement it in a further version.
-  return strongId != ValueId::makeUndefined();
+  return id != ValueId::makeUndefined();
 }
