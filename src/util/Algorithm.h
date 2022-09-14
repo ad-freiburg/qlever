@@ -45,7 +45,7 @@ bool contains_if(const Container& container, const Predicate& predicate) {
  * @param destination Vector& to which to append
  * @param source Vector&& to append
  */
-template <typename T, ad_utility::SimilarTo<std::vector<T>> U>
+template <typename T, typename U>
 void appendVector(std::vector<T>& destination, U&& source) {
   if constexpr (std::is_rvalue_reference_v<U&&>) {
     destination.insert(destination.end(),

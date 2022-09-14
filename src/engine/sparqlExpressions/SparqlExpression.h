@@ -43,8 +43,9 @@ class SparqlExpression {
     vector<const Variable*> result;
     // Recursively aggregate the strings from all children.
     for (const auto& child : children()) {
-      auto childStrings = child->containedVariables();
-      result.insert(result.end(), childStrings.begin(), childStrings.end());
+      auto variablesFromChild = child->containedVariables();
+      result.insert(result.end(), variablesFromChild.begin(),
+                    variablesFromChild.end());
     }
 
     // Add the strings from this expression.
