@@ -5,6 +5,9 @@
 #ifndef QLEVER_ITERATORS_H
 #define QLEVER_ITERATORS_H
 
+#include <iterator>
+#include <type_traits>
+
 namespace ad_utility {
 
 /// A lambda that accesses the `i`-th element in a `randomAccessContainer`
@@ -129,20 +132,31 @@ class IteratorForAccessOperator {
 
   // Only allowed, if `RandomAccessContainer` yields references and not values
   template <typename A = Accessor, typename P = RandomAccessContainerPtr>
-  requires requires(A a, P p, uint64_t i) {
-    {&a(*p, i)};
-  }
+  requires requires(A a, P p, uint64_t i) { {&a(*p, i)}; }
   auto operator->() { return &(*(*this)); }
   template <typename A = Accessor, typename P = RandomAccessContainerPtr>
-  requires requires(A a, P p, uint64_t i) {
-    {&a(*p, i)};
-  }
+  requires requires(A a, P p, uint64_t i) { {&a(*p, i)}; }
   auto operator->() const { return &(*(*this)); }
 
   decltype(auto) operator[](difference_type n) const {
     return _accessor(*_vector, _index + n);
   }
 };
+
+/// If `T` is a type that can safely be moved from (e.g. std::vector<int> or
+/// std::vector<int>&&), then return `std::make_move_iterator(iterator)`. Else
+/// (for example if `T` is `std::vector<int>&` or `const std::vector<int>&` the
+/// iterator is returned unchanged. Typically used in generic code where we need
+/// the semantics of "if `std::forward` would move the container, we can also
+/// safely move the single elements of the container."
+template <typename T, typename It>
+auto makeForwardingIterator(It iterator) {
+  if constexpr (std::is_rvalue_reference_v<T&&>) {
+    return std::make_move_iterator(iterator);
+  } else {
+    return iterator;
+  }
+}
 
 }  // namespace ad_utility
 

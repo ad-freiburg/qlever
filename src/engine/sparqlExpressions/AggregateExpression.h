@@ -1,15 +1,13 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
-//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
-
-//
-// Created by johannes on 28.09.21.
-//
+// Copyright 2021, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+// Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #ifndef QLEVER_AGGREGATEEXPRESSION_H
 #define QLEVER_AGGREGATEEXPRESSION_H
 
-#include "./SparqlExpressionGenerators.h"
-#include "SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+
 namespace sparqlExpression {
 
 // This can be used as the `FinalOperation` parameter to an
@@ -27,44 +25,24 @@ class AggregateExpression : public SparqlExpression {
  public:
   // __________________________________________________________________________
   AggregateExpression(bool distinct, Ptr&& child,
-                      AggregateOperation aggregateOp = AggregateOperation{})
-      : _distinct(distinct),
-        _child{std::move(child)},
-        _aggregateOp{std::move(aggregateOp)} {}
+                      AggregateOperation aggregateOp = AggregateOperation{});
 
   // __________________________________________________________________________
-  ExpressionResult evaluate(EvaluationContext* context) const override {
-    auto childResult = _child->evaluate(context);
-
-    return ad_utility::visitWithVariantsAndParameters(
-        evaluateOnChildOperand, _aggregateOp, FinalOperation{}, context,
-        _distinct, std::move(childResult));
-  }
+  ExpressionResult evaluate(EvaluationContext* context) const override;
 
   // _________________________________________________________________________
-  std::span<SparqlExpression::Ptr> children() override { return {&_child, 1}; }
+  std::span<SparqlExpression::Ptr> children() override;
 
   // _________________________________________________________________________
-  vector<std::string> getUnaggregatedVariables() override {
-    // This is an aggregate, so it never leaves any unaggregated variables.
-    return {};
-  }
+  vector<std::string> getUnaggregatedVariables() override;
 
   // __________________________________________________________________________
   [[nodiscard]] string getCacheKey(
-      const VariableToColumnMap& varColMap) const override {
-    return std::string(typeid(*this).name()) + std::to_string(_distinct) + "(" +
-           _child->getCacheKey(varColMap) + ")";
-  }
+      const VariableToColumnMap& varColMap) const override;
 
   // __________________________________________________________________________
-  [[nodiscard]] std::optional<string> getVariableForNonDistinctCountOrNullopt()
-      const override {
-    // This behavior is not correct for the `COUNT` aggreate. The count is
-    // therefore implemented in a separate `CountExpression` class, which
-    // overrides this function.
-    return std::nullopt;
-  }
+  [[nodiscard]] std::optional<::Variable>
+  getVariableForNonDistinctCountOrNullopt() const override;
 
   // This is the visitor for the `evaluateAggregateExpression` function below.
   // It works on a `SingleExpressionResult` rather than on the
@@ -108,8 +86,8 @@ class AggregateExpression : public SparqlExpression {
       // would get the operand type, which is not necessarily the `ResultType`.
       // For example, in the COUNT aggregate we calculate a sum of boolean
       // values, but the result is not boolean.
-      using ResultType = std::decay_t<decltype(
-          aggregateOperation._function(std::move(*it), *it))>;
+      using ResultType = std::decay_t<decltype(aggregateOperation._function(
+          std::move(*it), *it))>;
       ResultType result = *it;
       for (++it; it != values.end(); ++it) {
         result =
@@ -134,8 +112,8 @@ class AggregateExpression : public SparqlExpression {
       using ResultType = std::decay_t<decltype(aggregateOperation._function(
           std::move(valueGetter(*it, context)), valueGetter(*it, context)))>;
       ResultType result = valueGetter(*it, context);
-      ad_utility::HashSetWithMemoryLimit<typename decltype(
-          operands)::value_type>
+      ad_utility::HashSetWithMemoryLimit<
+          typename decltype(operands)::value_type>
           uniqueHashSet({*it}, inputSize, context->_allocator);
       for (++it; it != operands.end(); ++it) {
         if (uniqueHashSet.insert(*it).second) {
@@ -172,8 +150,8 @@ inline auto count = [](const auto& a, const auto& b) -> int64_t {
 using CountExpressionBase = AGG_EXP<decltype(count), IsValidValueGetter>;
 class CountExpression : public CountExpressionBase {
   using CountExpressionBase::CountExpressionBase;
-  [[nodiscard]] std::optional<string> getVariableForNonDistinctCountOrNullopt()
-      const override {
+  [[nodiscard]] std::optional<::Variable>
+  getVariableForNonDistinctCountOrNullopt() const override {
     if (this->_distinct) {
       return std::nullopt;
     }

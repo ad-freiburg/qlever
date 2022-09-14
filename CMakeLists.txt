@@ -165,6 +165,11 @@ if (USE_TREE_BASED_CACHE)
     add_definitions("-D_QLEVER_USE_TREE_BASED_CACHE")
 endif()
 
+if (RUN_EXPENSIVE_TESTS)
+    message(STATUS "Running expensive unit tests. This is only recommended in release builds")
+    add_definitions("-DQLEVER_RUN_EXPENSIVE_TESTS")
+endif()
+
 ################################
 # STXXL
 ################################
@@ -206,6 +211,26 @@ message(STATUS ---)
 ###############################################################################
 ##### Actual project configuration #####
 ###############################################################################
+
+include_directories(src)
+
+# Run the script `CompilationInfo.cmake` that creates the file `CompilationInfo.cpp`
+# with the current git hash and the curent time and date. When specifying
+# `-DDONT_UPDATE_COMPILATION_INFO=true` as an argument to `cmake`, the compilation info is
+# never updated. This is useful during development to avoid a relinking of the binaries for
+# every compilation.
+if (NOT DONT_UPDATE_COMPILATION_INFO)
+    # The first output which is never created is necessary s.t. the command is never cached and
+    # always rerun.
+    add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/FileThatNeverExists.cpp"
+                              "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
+                       COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
+else()
+    add_custom_command(OUTPUT
+            "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
+            COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
+endif()
+
 set(LOG_LEVEL_FATAL 0)
 set(LOG_LEVEL_ERROR 1)
 set(LOG_LEVEL_WARN 2)
@@ -223,8 +248,15 @@ endif()
 set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TIMING TRACE)
 add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 
+##################################################
+# Precompiled headers
+set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h src/engine/QueryExecutionTree.h)
+set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h third_party/ctre/include/ctre/ctre.h third_party/antlr4/runtime/Cpp/runtime/src/antlr4-runtime.h)
+
 add_subdirectory(src/parser)
+target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
 add_subdirectory(src/engine)
+target_precompile_headers(engine PRIVATE ${PRECOMPILED_HEADER_FILES_ENGINE})
 add_subdirectory(src/index)
 add_subdirectory(src/util)
 enable_testing()
@@ -234,15 +266,19 @@ configure_file(src/web/index.html index.html)
 configure_file(src/web/style.css style.css)
 configure_file(src/web/script.js script.js)
 
+# Add the library with the constants declared in `CompilationInfo.h` and defined
+# in `CompilationInfo.cpp` created by `CompilationInfo.cmake`.
+add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
-target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
 
 add_executable(CreatePatternsMain src/index/CreatePatternsMain.cpp src/util/ConstexprSmallString.h)
 target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(ServerMain src/ServerMain.cpp)
 target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} boost_program_options)
+target_precompile_headers(ServerMain REUSE_FROM engine)
 
 add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
 target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})

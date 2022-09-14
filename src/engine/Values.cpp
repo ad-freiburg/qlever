@@ -136,7 +136,7 @@ void Values::computeResult(ResultTable* result) {
   CALL_FIXED_SIZE_1(resWidth, writeValues, &result->_idTable, index, _values);
 }
 
-SparqlValues Values::sanitizeValues(SparqlValues&& values) {
+auto Values::sanitizeValues(SparqlValues&& values) -> SparqlValues {
   std::vector<std::pair<std::size_t, std::size_t>> variableBound;
   for (size_t i = 0; i < values._variables.size(); ++i) {
     variableBound.emplace_back(i, 0);  // variable i is unbound so far;
@@ -146,11 +146,11 @@ SparqlValues Values::sanitizeValues(SparqlValues&& values) {
     AD_CHECK(values._values[i].size() == values._variables.size());
     auto& v = values._values[i];
     if (std::all_of(v.begin(), v.end(),
-                    [](const auto& s) { return s == "UNDEF"s; })) {
+                    [](const auto& s) { return s == "UNDEF"; })) {
       emptyValues.push_back(i);
     }
     for (std::size_t k = 0; k < v.size(); ++k) {
-      if (v[k] != "UNDEF"s) {
+      if (v[k] != "UNDEF") {
         variableBound[k].second = 1;
       }
     }

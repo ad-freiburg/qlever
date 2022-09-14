@@ -195,3 +195,18 @@ TEST(File, move) {
   ad_utility::deleteFile(filename);
 }
 }  // namespace ad_utility
+
+TEST(File, makeFilestream) {
+  std::string filename = "makeFilstreamTest.dat";
+  ad_utility::makeOfstream(filename) << "helloAgain\n";
+  std::string s;
+  auto reader = ad_utility::makeIfstream(filename);
+  ASSERT_TRUE(reader.is_open());
+  ASSERT_TRUE(std::getline(reader, s));
+  ASSERT_EQ("helloAgain", s);
+  ASSERT_FALSE(std::getline(reader, s));
+
+  // Throw on nonexisting file
+  ASSERT_THROW(ad_utility::makeIfstream("nonExisting1620349.datxyz"),
+               std::runtime_error);
+}

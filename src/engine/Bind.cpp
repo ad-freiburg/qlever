@@ -1,14 +1,14 @@
-//
-// Created by johannes on 19.04.20.
-//
+//  Copyright 2020, University of Freiburg,
+//  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "Bind.h"
 
-#include "../util/Exception.h"
-#include "./sparqlExpressions/SparqlExpression.h"
-#include "./sparqlExpressions/SparqlExpressionGenerators.h"
-#include "CallFixedSize.h"
-#include "QueryExecutionTree.h"
+#include "engine/CallFixedSize.h"
+#include "engine/QueryExecutionTree.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "util/Exception.h"
 
 // BIND adds exactly one new column
 size_t Bind::getResultWidth() const { return _subtree->getResultWidth() + 1; }
@@ -67,7 +67,7 @@ string Bind::asStringImpl(size_t indent) const {
 ad_utility::HashMap<string, size_t> Bind::getVariableColumns() const {
   auto res = _subtree->getVariableColumns();
   // The new variable is always appended at the end.
-  res[_bind._target] = getResultWidth() - 1;
+  res[_bind._target.name()] = getResultWidth() - 1;
   return res;
 }
 
@@ -84,9 +84,6 @@ void Bind::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Get input to BIND operation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Got input to Bind operation." << endl;
-
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
 
   result->_idTable.setCols(getResultWidth());
   result->_resultTypes = subRes->_resultTypes;
@@ -143,17 +140,16 @@ void Bind::computeExpressionBind(
 
   auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                      T&& singleResult) mutable {
-    constexpr static bool isVariable =
-        std::is_same_v<T, sparqlExpression::Variable>;
+    constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId =
         std::is_same_v<T, sparqlExpression::StrongIdWithResultType>;
     if constexpr (isVariable) {
-      auto column = getVariableColumns().at(singleResult._variable);
+      auto column = getVariableColumns().at(singleResult.name());
       for (size_t i = 0; i < inSize; ++i) {
         output(i, inCols) = output(i, column);
       }
       *resultType = evaluationContext._variableToColumnAndResultTypeMap
-                        .at(singleResult._variable)
+                        .at(singleResult.name())
                         .second;
     } else if constexpr (isStrongId) {
       for (size_t i = 0; i < inSize; ++i) {

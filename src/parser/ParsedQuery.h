@@ -11,13 +11,25 @@
 
 #include "../engine/ResultType.h"
 #include "../engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "../util/Algorithm.h"
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
+#include "../util/OverloadCallOperator.h"
 #include "../util/StringUtils.h"
 #include "./TripleComponent.h"
+#include "Alias.h"
 #include "ParseException.h"
+#include "PropertyPath.h"
+#include "data/GroupKey.h"
+#include "data/LimitOffsetClause.h"
+#include "data/OrderKey.h"
+#include "data/SolutionModifiers.h"
+#include "data/SparqlFilter.h"
 #include "data/Types.h"
 #include "data/VarOrTerm.h"
+#include "parser/GraphPattern.h"
+#include "parser/GraphPatternOperation.h"
+#include "parser/SelectClause.h"
 
 using std::string;
 using std::vector;
@@ -32,111 +44,8 @@ class SparqlPrefix {
   string _uri;
 
   [[nodiscard]] string asString() const;
-};
 
-class PropertyPath {
- public:
-  enum class Operation {
-    SEQUENCE,
-    ALTERNATIVE,
-    TRANSITIVE,
-    TRANSITIVE_MIN,  // e.g. +
-    TRANSITIVE_MAX,  // e.g. *n or ?
-    INVERSE,
-    IRI
-  };
-
-  PropertyPath()
-      : _operation(Operation::IRI),
-        _limit(0),
-        _iri(),
-        _children(),
-        _can_be_null(false) {}
-  explicit PropertyPath(Operation op)
-      : _operation(op), _limit(0), _iri(), _children(), _can_be_null(false) {}
-  PropertyPath(Operation op, uint16_t limit, std::string iri,
-               std::initializer_list<PropertyPath> children);
-
-  static PropertyPath fromIri(std::string iri) {
-    PropertyPath p(PropertyPath::Operation::IRI);
-    p._iri = std::move(iri);
-    return p;
-  }
-
-  static PropertyPath fromVariable(Variable var) {
-    PropertyPath p(PropertyPath::Operation::IRI);
-    p._iri = std::move(var.name());
-    return p;
-  }
-
-  static PropertyPath makeWithChildren(std::vector<PropertyPath> children,
-                                       PropertyPath::Operation op) {
-    PropertyPath p(std::move(op));
-    p._children = std::move(children);
-    return p;
-  }
-
-  static PropertyPath makeAlternative(std::vector<PropertyPath> children) {
-    return makeWithChildren(std::move(children), Operation::ALTERNATIVE);
-  }
-
-  static PropertyPath makeSequence(std::vector<PropertyPath> children) {
-    return makeWithChildren(std::move(children), Operation::SEQUENCE);
-  }
-
-  static PropertyPath makeInverse(PropertyPath child) {
-    return makeWithChildren({std::move(child)}, Operation::INVERSE);
-  }
-
-  static PropertyPath makeWithChildLimit(PropertyPath child,
-                                         uint_fast16_t limit,
-                                         PropertyPath::Operation op) {
-    PropertyPath p = makeWithChildren({std::move(child)}, op);
-    p._limit = limit;
-    return p;
-  }
-
-  static PropertyPath makeTransitiveMin(PropertyPath child,
-                                        uint_fast16_t limit) {
-    return makeWithChildLimit(std::move(child), limit,
-                              Operation::TRANSITIVE_MIN);
-  }
-
-  static PropertyPath makeTransitiveMax(PropertyPath child,
-                                        uint_fast16_t limit) {
-    return makeWithChildLimit(std::move(child), limit,
-                              Operation::TRANSITIVE_MAX);
-  }
-
-  static PropertyPath makeTransitive(PropertyPath child) {
-    return makeWithChildren({std::move(child)}, Operation::TRANSITIVE);
-  }
-
-  bool operator==(const PropertyPath& other) const {
-    return _operation == other._operation && _limit == other._limit &&
-           _iri == other._iri && _children == other._children &&
-           _can_be_null == other._can_be_null;
-  }
-
-  void writeToStream(std::ostream& out) const;
-  [[nodiscard]] std::string asString() const;
-
-  void computeCanBeNull();
-
-  Operation _operation;
-  // For the limited transitive operations
-  uint_fast16_t _limit;
-
-  // In case of an iri
-  std::string _iri;
-
-  std::vector<PropertyPath> _children;
-
-  /**
-   * True iff this property path is either a transitive path with minimum length
-   * of 0, or if all of this transitive path's children can be null.
-   */
-  bool _can_be_null;
+  bool operator==(const SparqlPrefix&) const = default;
 };
 
 inline bool isVariable(const string& elem) { return elem.starts_with("?"); }
@@ -172,220 +81,12 @@ class SparqlTriple {
   [[nodiscard]] string asString() const;
 };
 
-/// Store an expression that appeared in an ORDER BY clause.
-class ExpressionOrderKey {
- public:
-  bool isDescending_;
-  sparqlExpression::SparqlExpressionPimpl expression_;
-  // ___________________________________________________________________________
-  explicit ExpressionOrderKey(
-      sparqlExpression::SparqlExpressionPimpl expression,
-      bool isDescending = false)
-      : isDescending_{isDescending}, expression_{std::move(expression)} {}
-};
-
-/// Store a variable that appeared in an ORDER BY clause.
-class VariableOrderKey {
- public:
-  string variable_;
-  bool isDescending_;
-  // ___________________________________________________________________________
-  explicit VariableOrderKey(string variable, bool isDescending = false)
-      : variable_{std::move(variable)}, isDescending_{isDescending} {}
-};
-
-// Represents an ordering by a variable or an expression.
-using OrderKey = std::variant<VariableOrderKey, ExpressionOrderKey>;
-
-class SparqlFilter {
- public:
-  enum FilterType {
-    EQ = 0,
-    NE = 1,
-    LT = 2,
-    LE = 3,
-    GT = 5,
-    GE = 6,
-    LANG_MATCHES = 7,
-    REGEX = 8,
-    PREFIX = 9
-  };
-
-  [[nodiscard]] string asString() const;
-
-  FilterType _type;
-  string _lhs;
-  string _rhs;
-  vector<string> _additionalLhs;
-  vector<string> _additionalPrefixes;
-  bool _regexIgnoreCase = false;
-  // True if the str function was applied to the left side.
-  bool _lhsAsString = false;
-};
-
-// Represents a VALUES statement in the query.
-class SparqlValues {
- public:
-  // The variables to which the values will be bound
-  vector<string> _variables;
-  // A table storing the values in their string form
-  vector<vector<string>> _values;
-};
-
-// Represents the data returned by a limitOffsetClause.
-struct LimitOffsetClause {
-  uint64_t _limit = std::numeric_limits<uint64_t>::max();
-  uint64_t _textLimit = 1;
-  uint64_t _offset = 0;
-};
-
-struct GraphPatternOperation;
-
 // A parsed SPARQL query. To be extended.
 class ParsedQuery {
  public:
-  class GraphPattern;
+  using GraphPattern = parsedQuery::GraphPattern;
 
-  // Groups triplets and filters. Represents a node in a tree (as graph patterns
-  // are recursive).
-  class GraphPattern {
-   public:
-    // The constructor has to be implemented in the .cpp file because of the
-    // circular dependencies of `GraphPattern` and `GraphPatternOperation`
-    GraphPattern();
-    // Move and copyconstructors to avoid double deletes on the trees children
-    GraphPattern(GraphPattern&& other) = default;
-    GraphPattern(const GraphPattern& other) = default;
-    GraphPattern& operator=(const GraphPattern& other) = default;
-    GraphPattern& operator=(GraphPattern&& other) noexcept = default;
-    ~GraphPattern() = default;
-    void toString(std::ostringstream& os, int indentation = 0) const;
-    // Traverses the graph pattern tree and assigns a unique id to every graph
-    // pattern
-    void recomputeIds(size_t* id_count = nullptr);
-
-    bool _optional;
-    /**
-     * @brief A id that is unique for the ParsedQuery. Ids are guaranteed to
-     * start with zero and to be dense.
-     */
-    size_t _id = size_t(-1);
-
-    // Filters always apply to the complete GraphPattern, no matter where
-    // they appear. For VALUES and Triples, the order matters, so they
-    // become children.
-    std::vector<SparqlFilter> _filters;
-    vector<GraphPatternOperation> _children;
-  };
-
-  /**
-   * @brief All supported types of aggregate aliases
-   */
-  enum class AggregateType {
-    COUNT,
-    GROUP_CONCAT,
-    FIRST,
-    LAST,
-    SAMPLE,
-    MIN,
-    MAX,
-    SUM,
-    AVG
-  };
-
-  static std::string AggregateTypeAsString(AggregateType t) {
-    switch (t) {
-      case AggregateType::COUNT:
-        return "COUNT";
-      case AggregateType::GROUP_CONCAT:
-        return "GROUP_CONCAT";
-      case AggregateType::FIRST:
-        return "FIRST";
-      case AggregateType::LAST:
-        return "LAST";
-      case AggregateType::SAMPLE:
-        return "SAMPLE";
-      case AggregateType::MIN:
-        return "MIN";
-      case AggregateType::MAX:
-        return "MAX";
-      case AggregateType::SUM:
-        return "SUM";
-      case AggregateType::AVG:
-        return "AVG";
-      default:
-        AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-                 "Illegal/unimplemented enum value in AggregateTypeAsString. "
-                 "Should never happen, please report this");
-    }
-  }
-
-  struct Alias {
-    sparqlExpression::SparqlExpressionPimpl _expression;
-    string _outVarName;
-    [[nodiscard]] std::string getDescriptor() const {
-      return "(" + _expression.getDescriptor() + " as " + _outVarName + ")";
-    }
-  };
-
-  // Represents either "all Variables" (Select *) or a list of explicitly
-  // selected Variables (Select ?a ?b).
-  struct SelectedVarsOrAsterisk {
-   private:
-    std::variant<vector<string>, char> _varsOrAsterisk;
-    std::vector<string> _variablesFromQueryBody;
-
-   public:
-    [[nodiscard]] bool isAllVariablesSelected() const {
-      return std::holds_alternative<char>(_varsOrAsterisk);
-    }
-
-    [[nodiscard]] bool isManuallySelectedVariables() const {
-      return std::holds_alternative<std::vector<string>>(_varsOrAsterisk);
-    }
-
-    // Sets the Selector to 'All' (*) only if the Selector is still undefined
-    void setAllVariablesSelected() { _varsOrAsterisk = '*'; }
-
-    // Sets the Selector with the variables manually defined
-    // Ex: Select var_1 (...) var_n
-    void setManuallySelected(std::vector<string> variables) {
-      _varsOrAsterisk = std::move(variables);
-    }
-
-    // Add a variable, that was found in the query body. The added variables
-    // will only be used if `isAsterisk` is true.
-    void registerVariableVisibleInQueryBody(const string& variable) {
-      if (!(std::find(_variablesFromQueryBody.begin(),
-                      _variablesFromQueryBody.end(),
-                      variable) != _variablesFromQueryBody.end())) {
-        _variablesFromQueryBody.emplace_back(variable);
-      }
-    }
-
-    // Get the variables accordingly to established Selector:
-    // Select All (Select '*')
-    // or
-    // explicit variables selection (Select 'var_1' ... 'var_n')
-    [[nodiscard]] const auto& getSelectedVariables() const {
-      return isAllVariablesSelected()
-                 ? _variablesFromQueryBody
-                 : std::get<std::vector<string>>(_varsOrAsterisk);
-      ;
-    }
-  };
-
-  // Represents the Select Clause with all the possible outcomes
-  struct SelectClause {
-    // `_aliases` will be empty if Selector '*' is present.
-    // This means, that there is a `SELECT *` clause in the query.
-    std::vector<Alias> _aliases;
-    SelectedVarsOrAsterisk _varsOrAsterisk;
-    bool _reduced = false;
-    bool _distinct = false;
-  };
-
-  SelectClause _selectedVarsOrAsterisk{SelectClause{}};
+  using SelectClause = parsedQuery::SelectClause;
 
   using ConstructClause = ad_utility::sparql_types::Triples;
 
@@ -397,6 +98,9 @@ class ParsedQuery {
   GraphPattern _rootGraphPattern;
   vector<SparqlFilter> _havingClauses;
   size_t _numGraphPatterns = 1;
+  // The number of additional internal variables that were added by the
+  // implementation of ORDER BY as BIND+ORDER BY.
+  int64_t numInternalVariables_ = 0;
   vector<VariableOrderKey> _orderBy;
   vector<Variable> _groupByVariables;
   LimitOffsetClause _limitOffset{};
@@ -404,7 +108,7 @@ class ParsedQuery {
 
   // explicit default initialisation because the constructor
   // of SelectClause is private
-  std::variant<SelectClause, ConstructClause> _clause{_selectedVarsOrAsterisk};
+  std::variant<SelectClause, ConstructClause> _clause{SelectClause{}};
 
   [[nodiscard]] bool hasSelectClause() const {
     return std::holds_alternative<SelectClause>(_clause);
@@ -431,20 +135,43 @@ class ParsedQuery {
   }
 
   // Add a variable, that was found in the SubQuery body, when query has a
-  // Select Clause
-  [[maybe_unused]] bool registerVariableVisibleInQueryBody(
-      const string& variable) {
+  // Select Clause.
+  bool registerVariableVisibleInQueryBody(const Variable& variable) {
     if (!hasSelectClause()) return false;
-    selectClause()._varsOrAsterisk.registerVariableVisibleInQueryBody(variable);
+    selectClause().addVisibleVariable(variable);
     return true;
   }
 
-  void expandPrefixes();
-
-  auto& children() { return _rootGraphPattern._children; }
-  [[nodiscard]] const auto& children() const {
-    return _rootGraphPattern._children;
+  // Add variables, that were found in the SubQuery body, when query has a
+  // Select Clause.
+  bool registerVariablesVisibleInQueryBody(const vector<Variable>& variables) {
+    if (!hasSelectClause()) return false;
+    for (const auto& var : variables) {
+      selectClause().addVisibleVariable(var);
+    }
+    return true;
   }
+
+  auto& children() { return _rootGraphPattern._graphPatterns; }
+  [[nodiscard]] const auto& children() const {
+    return _rootGraphPattern._graphPatterns;
+  }
+
+  // TODO<joka921> This is currently necessary because of the missing scoping of
+  // subqueries
+  [[nodiscard]] int64_t getNumInternalVariables() const {
+    return numInternalVariables_;
+  }
+
+  void setNumInternalVariables(int64_t numInternalVariables) {
+    numInternalVariables_ = numInternalVariables;
+  }
+
+  /// Generates an internal bind that binds the given expression using a bind.
+  /// The bind is added to the query as child. The variable that the expression
+  /// is bound to is returned.
+  Variable addInternalBind(sparqlExpression::SparqlExpressionPimpl expression);
+  void addSolutionModifiers(SolutionModifiers modifiers);
 
   /**
    * @brief Adds all elements from p's rootGraphPattern to this parsed query's
@@ -453,121 +180,4 @@ class ParsedQuery {
   void merge(const ParsedQuery& p);
 
   [[nodiscard]] string asString() const;
-
-  static void expandPrefix(
-      PropertyPath& item, const ad_utility::HashMap<string, string>& prefixMap);
-  static void expandPrefix(
-      string& item, const ad_utility::HashMap<string, string>& prefixMap);
-};
-
-using GroupKey = std::variant<sparqlExpression::SparqlExpressionPimpl,
-                              ParsedQuery::Alias, Variable>;
-
-struct GraphPatternOperation {
-  struct BasicGraphPattern {
-    vector<SparqlTriple> _whereClauseTriples;
-  };
-  struct Values {
-    SparqlValues _inlineValues;
-    // This value will be overwritten later.
-    size_t _id = std::numeric_limits<size_t>::max();
-  };
-  struct GroupGraphPattern {
-    ParsedQuery::GraphPattern _child;
-  };
-  struct Optional {
-    ParsedQuery::GraphPattern _child;
-  };
-  struct Minus {
-    ParsedQuery::GraphPattern _child;
-  };
-  struct Union {
-    ParsedQuery::GraphPattern _child1;
-    ParsedQuery::GraphPattern _child2;
-  };
-  struct Subquery {
-    ParsedQuery _subquery;
-  };
-
-  struct TransPath {
-    // The name of the left and right end of the transitive operation
-    TripleComponent _left;
-    TripleComponent _right;
-    // The name of the left and right end of the subpath
-    std::string _innerLeft;
-    std::string _innerRight;
-    size_t _min = 0;
-    size_t _max = 0;
-    ParsedQuery::GraphPattern _childGraphPattern;
-  };
-
-  // A SPARQL Bind construct.
-  struct Bind {
-    sparqlExpression::SparqlExpressionPimpl _expression;
-    std::string _target;  // the variable to which the expression will be bound
-
-    // Return all the strings contained in the BIND expression (variables,
-    // constants, etc. Is required e.g. by ParsedQuery::expandPrefix.
-    vector<string*> strings() {
-      auto r = _expression.strings();
-      r.push_back(&_target);
-      return r;
-    }
-
-    // Const overload, needed by the query planner. The actual behavior is
-    // always const, so this is fine.
-    [[nodiscard]] vector<const string*> strings() const {
-      auto r = const_cast<Bind*>(this)->strings();
-      return {r.begin(), r.end()};
-    }
-
-    [[nodiscard]] string getDescriptor() const {
-      auto inner = _expression.getDescriptor();
-      return "BIND (" + inner + " AS " + _target + ")";
-    }
-  };
-
-  std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-               Values, Minus>
-      variant_;
-  // Construct from one of the variant types (or anything that is convertible to
-  // them.
-  template <typename A, typename = std::enable_if_t<!std::is_base_of_v<
-                            GraphPatternOperation, std::decay_t<A>>>>
-  explicit GraphPatternOperation(A&& a) : variant_(std::forward<A>(a)) {}
-  GraphPatternOperation() = delete;
-  GraphPatternOperation(const GraphPatternOperation&) = default;
-  GraphPatternOperation(GraphPatternOperation&&) noexcept = default;
-  GraphPatternOperation& operator=(const GraphPatternOperation&) = default;
-  GraphPatternOperation& operator=(GraphPatternOperation&&) noexcept = default;
-
-  template <typename T>
-  constexpr bool is() noexcept {
-    return std::holds_alternative<T>(variant_);
-  }
-
-  template <typename F>
-  decltype(auto) visit(F f) {
-    return std::visit(f, variant_);
-  }
-
-  template <typename F>
-  decltype(auto) visit(F f) const {
-    return std::visit(f, variant_);
-  }
-  template <class T>
-  constexpr T& get() {
-    return std::get<T>(variant_);
-  }
-  template <class T>
-  [[nodiscard]] constexpr const T& get() const {
-    return std::get<T>(variant_);
-  }
-
-  auto& getBasic() { return get<BasicGraphPattern>(); }
-  [[nodiscard]] const auto& getBasic() const {
-    return get<BasicGraphPattern>();
-  }
-
-  void toString(std::ostringstream& os, int indentation = 0) const;
 };

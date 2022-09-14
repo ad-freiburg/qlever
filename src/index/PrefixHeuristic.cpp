@@ -10,6 +10,7 @@
 #include "../parser/RdfEscaping.h"
 #include "../parser/Tokenizer.h"
 #include "../util/Exception.h"
+#include "../util/File.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
 
@@ -163,8 +164,7 @@ void TreeNode::penaltize() {
 std::vector<string> calculatePrefixes(const string& filename,
                                       size_t numPrefixes, size_t codelength,
                                       bool alwaysAddCode) {
-  std::ifstream ifs(filename);
-  AD_CHECK(ifs.is_open());
+  auto ifs = ad_utility::makeIfstream(filename);
 
   size_t MinPrefixLength = alwaysAddCode ? 1 : codelength + 1;
   size_t actualCodeLength = alwaysAddCode ? 0 : codelength;

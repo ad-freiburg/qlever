@@ -6,17 +6,13 @@
 
 #include <string>
 
-#include "./Context.h"
-#include "ctre/ctre.h"
+#include "parser/data/Context.h"
 
 class Iri {
   std::string _string;
 
  public:
-  explicit Iri(std::string str) : _string{std::move(str)} {
-    AD_CHECK(ctre::match<"(?:@[a-zA-Z]+(?:-(?:[a-zA-Z]|\\d)+)*@)?"
-                         "<[^<>\"{}|^\\\\`\\0- ]*>">(_string));
-  }
+  explicit Iri(std::string str);
 
   // ___________________________________________________________________________
   // Used for testing
@@ -31,4 +27,6 @@ class Iri {
 
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const { return _string; }
+
+  bool operator==(const Iri& other) const = default;
 };

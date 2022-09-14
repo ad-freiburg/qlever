@@ -33,7 +33,8 @@ struct IsInstantiationOf {
 // Example: LiftInnerTypes<std::variant,
 // std::vector>::TypeToLift<std::variant<A, B, C>>::LiftedType is
 // std::variant<std::vector<A>, std::vector<B>, std::vector<C>>
-template <template <typename...> typename Template, template <typename> typename TypeLifter>
+template <template <typename...> typename Template,
+          template <typename> typename TypeLifter>
 struct LiftInnerTypes {
   template <typename>
   struct TypeToLift {};
@@ -66,7 +67,8 @@ struct FirstWrapper : public std::type_identity<T> {};
 
 }  // namespace detail
 
-/// The concept is fulfilled iff `T` is an instantiation of `TemplatedType`. Examples:
+/// The concept is fulfilled iff `T` is an instantiation of `TemplatedType`.
+/// Examples:
 ///
 /// isInstantiation<std::vector, std::vector<int>> == true;
 /// isInstantiation<std::vector, const std::vector<int>&> == false;
@@ -80,7 +82,8 @@ concept isInstantiation =
 /// similarToInstantiation<std::vector, std::vector<int>> == true;
 /// similarToInstantiation<std::vector, const std::vector<int>&> == true;
 template <template <typename...> typename TemplatedType, typename T>
-concept similarToInstantiation = isInstantiation<TemplatedType, std::decay_t<T>>;
+concept similarToInstantiation =
+    isInstantiation<TemplatedType, std::decay_t<T>>;
 
 /// isVector<T> is true if and only if T is an instantiation of std::vector
 template <typename T>
@@ -97,7 +100,8 @@ constexpr static bool isVariant = isInstantiation<std::variant, T>;
 /// Two types are similar, if they are the same when we remove all cv (const or
 /// volatile) qualifiers and all references
 template <typename T, typename U>
-constexpr static bool isSimilar = std::is_same_v<std::decay_t<T>, std::decay_t<U>>;
+constexpr static bool isSimilar =
+    std::is_same_v<std::decay_t<T>, std::decay_t<U>>;
 
 /// A concept for similarity
 template <typename T, typename U>
@@ -110,13 +114,16 @@ template <typename... Ts>
 constexpr static bool isTypeContainedIn = false;
 
 template <typename T, typename... Ts>
-constexpr static bool isTypeContainedIn<T, std::tuple<Ts...>> = (... || isSimilar<T, Ts>);
+constexpr static bool isTypeContainedIn<T, std::tuple<Ts...>> =
+    (... || isSimilar<T, Ts>);
 
 template <typename T, typename... Ts>
-constexpr static bool isTypeContainedIn<T, std::variant<Ts...>> = (... || isSimilar<T, Ts>);
+constexpr static bool isTypeContainedIn<T, std::variant<Ts...>> =
+    (... || isSimilar<T, Ts>);
 
 template <typename T, typename... Ts>
-constexpr static bool isTypeContainedIn<T, std::pair<Ts...>> = (... || isSimilar<T, Ts>);
+constexpr static bool isTypeContainedIn<T, std::pair<Ts...>> =
+    (... || isSimilar<T, Ts>);
 
 /// A templated bool that is always false,
 /// independent of the template parameter.
@@ -126,19 +133,21 @@ constexpr static bool alwaysFalse = false;
 /// From the type Tuple (std::tuple<A, B, C....>) creates the type
 /// std::tuple<TypeLifter<A>, TypeLifter<B>,...>
 template <typename Tuple, template <typename> typename TypeLifter>
-requires isTuple<Tuple> using LiftedTuple =
-    typename detail::LiftInnerTypes<std::tuple, TypeLifter>::template TypeToLift<Tuple>::LiftedType;
+requires isTuple<Tuple>
+using LiftedTuple = typename detail::LiftInnerTypes<
+    std::tuple, TypeLifter>::template TypeToLift<Tuple>::LiftedType;
 
 /// From the type Variant (std::variant<A, B, C....>) creates the type
 /// std::variant<TypeLifter<A>, TypeLifter<B>,...>
 template <typename Variant, template <typename> typename TypeLifter>
-requires isVariant<Variant> using LiftedVariant =
-    typename detail::LiftInnerTypes<std::variant,
-                                    TypeLifter>::template TypeToLift<Variant>::LiftedType;
+requires isVariant<Variant>
+using LiftedVariant = typename detail::LiftInnerTypes<
+    std::variant, TypeLifter>::template TypeToLift<Variant>::LiftedType;
 
 /// From the type std::tuple<A, B, ...> makes the type std::variant<A, B, ...>
 template <typename Tuple>
-requires isTuple<Tuple> using TupleToVariant = typename detail::TupleToVariantImpl<Tuple>::type;
+requires isTuple<Tuple>
+using TupleToVariant = typename detail::TupleToVariantImpl<Tuple>::type;
 
 /// From the types X = std::tuple<A, ... , B>, , Y = std::tuple<C, ..., D>...
 /// makes the type TupleCat<X, Y> = std::tuple<A, ..., B, C, ..., D, ...> (works
@@ -147,36 +156,41 @@ template <typename... Tuples>
 requires(...&& isTuple<Tuples>) using TupleCat =
     decltype(std::tuple_cat(std::declval<Tuples&>()...));
 
-/// A generalized version of std::visit that also supports non-variant parameters.
-/// Each `parameterOrVariant` of type T that is not a std::variant is converted to a
-/// `std::variant<T>`. Each `parameterOrVariant` that is a std::variant is left as-is. Then
-/// std::visit is called on the passed `Function` and the transformed parameters (which now are all
-/// variants). This has the effect that `Function` is called on the values contained in the passed
-/// variants and additionally with the non-variant parameters. Note that this currently only
-/// supports variant types that are direct instantiations of `std::variant`. If you want a different
-/// behavior, etc. also visit types that inherit from std::variant, or treat a parameter that is a
-/// std::variant as an "ordinary" parameter to the `Function`, you cannot use this function.
+/// A generalized version of std::visit that also supports non-variant
+/// parameters. Each `parameterOrVariant` of type T that is not a std::variant
+/// is converted to a `std::variant<T>`. Each `parameterOrVariant` that is a
+/// std::variant is left as-is. Then std::visit is called on the passed
+/// `Function` and the transformed parameters (which now are all variants). This
+/// has the effect that `Function` is called on the values contained in the
+/// passed variants and additionally with the non-variant parameters. Note that
+/// this currently only supports variant types that are direct instantiations of
+/// `std::variant`. If you want a different behavior, etc. also visit types that
+/// inherit from std::variant, or treat a parameter that is a std::variant as an
+/// "ordinary" parameter to the `Function`, you cannot use this function.
 inline auto visitWithVariantsAndParameters =
     []<typename Function, typename... ParametersOrVariants>(
-        Function && f, ParametersOrVariants&&... parametersOrVariants) {
-  auto liftToVariant = []<typename T>(T&& t) {
-    if constexpr (isVariant<T>) {
-      return std::forward<T>(t);
-    } else {
-      return std::variant<std::decay_t<T>>{std::forward<T>(t)};
-    }
-  };
-  return std::visit(f, liftToVariant(std::forward<ParametersOrVariants>(parametersOrVariants))...);
-};
+        Function&& f, ParametersOrVariants&&... parametersOrVariants) {
+      auto liftToVariant = []<typename T>(T&& t) {
+        if constexpr (isVariant<T>) {
+          return std::forward<T>(t);
+        } else {
+          return std::variant<std::decay_t<T>>{std::forward<T>(t)};
+        }
+      };
+      return std::visit(f, liftToVariant(std::forward<ParametersOrVariants>(
+                               parametersOrVariants))...);
+    };
 
 /// Apply `Function f` to each element of tuple. Returns a tuple of the results.
-/// Note: 1. The `Function` must not return void (otherwise this doesn't compile)
+/// Note: 1. The `Function` must not return void (otherwise this doesn't
+/// compile)
 ///       2. The order in which the function is called is unspecified.
 template <typename Function, typename Tuple>
 auto applyFunctionToEachElementOfTuple(Function&& f, Tuple&& tuple) {
-  auto transformer = [f = std::forward<Function>(f)]<typename... Args>(Args && ... args) {
-    return std::tuple{f(std::forward<Args>(args))...};
-  };
+  auto transformer =
+      [f = std::forward<Function>(f)]<typename... Args>(Args&&... args) {
+        return std::tuple{f(std::forward<Args>(args))...};
+      };
   return std::apply(transformer, std::forward<Tuple>(tuple));
 }
 
@@ -186,6 +200,7 @@ requires(sizeof...(Ts) > 0) using Last = typename detail::LastT<Ts...>::type;
 
 // Return the first type of variadic template arguments.
 template <typename... Ts>
-requires(sizeof...(Ts) > 0) using First = typename detail::FirstWrapper<Ts...>::type;
+requires(sizeof...(Ts) >
+         0) using First = typename detail::FirstWrapper<Ts...>::type;
 
 }  // namespace ad_utility

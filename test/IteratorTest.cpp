@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <string>
 
 #include "../src/util/Iterators.h"
 
@@ -74,4 +75,21 @@ TEST(RandomAccessIterator, DummyRandomAccessContainer) {
   Iterator begin = Iterator{&d, 0};
   Iterator end = Iterator{&d, 43};
   testIterator(d, begin, end);
+}
+
+TEST(Iterator, makeForwardingIterator) {
+  auto forwardFirstElement = []<typename T>(T&& vector) {
+    return *ad_utility::makeForwardingIterator<T>(vector.begin());
+  };
+
+  std::vector<std::string> vector{"hello"};
+  auto vector2 = vector;
+  ASSERT_EQ("hello", forwardFirstElement(vector));
+  // Nothing was moved.
+  ASSERT_EQ(vector, vector2);
+
+  ASSERT_EQ("hello", forwardFirstElement(std::move(vector)));
+  // The first element in the vector was now moved from.
+  ASSERT_EQ(1u, vector.size());
+  ASSERT_TRUE(vector[0].empty());
 }

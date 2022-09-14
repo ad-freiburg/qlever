@@ -61,12 +61,16 @@ selectQuery : selectClause datasetClause* whereClause solutionModifier;
 subSelect : selectClause whereClause solutionModifier valuesClause;
 
 selectClause
-    : SELECT ( DISTINCT | REDUCED)? ( ( var | alias )+ | '*' )  // extracted the alias rule for easier visiting.
+    : SELECT ( DISTINCT | REDUCED)? ( varOrAlias+ | asterisk='*' )
+    // extracted the alias rule for easier visiting.
     ;
 
-alias: ( '(' aliasWithouBrackes ')' ) ;  // NOT part of sparql, for easier antlr parsing
+varOrAlias: var | alias; // NOT part of sparql, extracted from selectClause to
+// preserve the order of the selections
 
-aliasWithouBrackes : ( expression AS var ); // Needed for  interaction between old and new parser
+alias: ( '(' aliasWithoutBrackets ')' ) ;  // NOT part of sparql, for easier antlr parsing
+
+aliasWithoutBrackets : ( expression AS var ); // Needed for interaction between old and new parser
 
 constructQuery : CONSTRUCT ( constructTemplate datasetClause* whereClause solutionModifier | datasetClause* WHERE '{' triplesTemplate? '}' solutionModifier );
 
@@ -147,18 +151,25 @@ valuesClause : ( VALUES dataBlock )?;
 triplesTemplate: triplesSameSubject ( '.' triplesTemplate? )?;
 
 
+// Corresponds to GraphPattern.
 groupGraphPattern
     : '{' ( subSelect | groupGraphPatternSub )'}'
     ;
 
 groupGraphPatternSub
-    : triplesBlock? ( graphPatternNotTriples '.'? triplesBlock? )*
+    : triplesBlock? graphPatternNotTriplesAndMaybeTriples*
+    ;
+
+/* Helper rules to make parsing of groupGraphPatternSub easier. */
+graphPatternNotTriplesAndMaybeTriples
+    : graphPatternNotTriples '.'? triplesBlock?
     ;
 
 triplesBlock
     : triplesSameSubjectPath ( '.' triplesBlock? )?
     ;
 
+// Corresponds to GraphPatternOperation.
 graphPatternNotTriples
     : groupOrUnionGraphPattern | optionalGraphPattern | minusGraphPattern | graphGraphPattern | serviceGraphPattern | filterR | bind | inlineData
     ;
@@ -252,7 +263,7 @@ propertyListPath
     ;
 
 propertyListPathNotEmpty
-    : verbPathOrSimple objectListPath ( ';' ( verbPathOrSimple objectList )? )*
+    : tupleWithPath ( ';' ( tupleWithoutPath )? )*
     ;
 
 verbPath
@@ -261,6 +272,15 @@ verbPath
 
 verbSimple
     : var
+    ;
+
+/* Helper rules to make parsing of propertyListPathNotEmpty easier. */
+tupleWithoutPath
+    : verbPathOrSimple objectList
+    ;
+
+tupleWithPath
+    : verbPathOrSimple objectListPath
     ;
 
 /*
@@ -547,8 +567,7 @@ string
     ;
 
 iri
-    : (LANGTAG '@')? (iriref
-    | prefixedName)
+    : (PREFIX_LANGTAG)? (iriref | prefixedName)
     ;
 
 prefixedName
@@ -708,6 +727,13 @@ VAR2
 
 LANGTAG
     : '@' ('a'..'z' | 'A' .. 'Z')+ ('-' ('a'..'z' | 'A' .. 'Z' | DIGIT)+)*
+    ;
+
+// The PREFIX_LANGTAG is an extension of the SPARQL standard that allows IRIs
+// like @en@rdfs:label which are used in QLever's implementation of language
+// filters.
+PREFIX_LANGTAG
+    : LANGTAG '@'
     ;
 
 INTEGER

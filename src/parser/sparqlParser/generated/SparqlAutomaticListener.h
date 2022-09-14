@@ -39,13 +39,18 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
   virtual void exitSelectClause(
       SparqlAutomaticParser::SelectClauseContext* ctx) = 0;
 
+  virtual void enterVarOrAlias(
+      SparqlAutomaticParser::VarOrAliasContext* ctx) = 0;
+  virtual void exitVarOrAlias(
+      SparqlAutomaticParser::VarOrAliasContext* ctx) = 0;
+
   virtual void enterAlias(SparqlAutomaticParser::AliasContext* ctx) = 0;
   virtual void exitAlias(SparqlAutomaticParser::AliasContext* ctx) = 0;
 
-  virtual void enterAliasWithouBrackes(
-      SparqlAutomaticParser::AliasWithouBrackesContext* ctx) = 0;
-  virtual void exitAliasWithouBrackes(
-      SparqlAutomaticParser::AliasWithouBrackesContext* ctx) = 0;
+  virtual void enterAliasWithoutBrackets(
+      SparqlAutomaticParser::AliasWithoutBracketsContext* ctx) = 0;
+  virtual void exitAliasWithoutBrackets(
+      SparqlAutomaticParser::AliasWithoutBracketsContext* ctx) = 0;
 
   virtual void enterConstructQuery(
       SparqlAutomaticParser::ConstructQueryContext* ctx) = 0;
@@ -159,6 +164,13 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
       SparqlAutomaticParser::GroupGraphPatternSubContext* ctx) = 0;
   virtual void exitGroupGraphPatternSub(
       SparqlAutomaticParser::GroupGraphPatternSubContext* ctx) = 0;
+
+  virtual void enterGraphPatternNotTriplesAndMaybeTriples(
+      SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext*
+          ctx) = 0;
+  virtual void exitGraphPatternNotTriplesAndMaybeTriples(
+      SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext*
+          ctx) = 0;
 
   virtual void enterTriplesBlock(
       SparqlAutomaticParser::TriplesBlockContext* ctx) = 0;
@@ -305,6 +317,16 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
       SparqlAutomaticParser::VerbSimpleContext* ctx) = 0;
   virtual void exitVerbSimple(
       SparqlAutomaticParser::VerbSimpleContext* ctx) = 0;
+
+  virtual void enterTupleWithoutPath(
+      SparqlAutomaticParser::TupleWithoutPathContext* ctx) = 0;
+  virtual void exitTupleWithoutPath(
+      SparqlAutomaticParser::TupleWithoutPathContext* ctx) = 0;
+
+  virtual void enterTupleWithPath(
+      SparqlAutomaticParser::TupleWithPathContext* ctx) = 0;
+  virtual void exitTupleWithPath(
+      SparqlAutomaticParser::TupleWithPathContext* ctx) = 0;
 
   virtual void enterVerbPathOrSimple(
       SparqlAutomaticParser::VerbPathOrSimpleContext* ctx) = 0;

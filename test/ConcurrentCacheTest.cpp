@@ -82,13 +82,13 @@ TEST(ConcurrentCache, sequentialComputation) {
   SimpleConcurrentLruCache a{3ul};
   ad_utility::Timer t;
   t.start();
-  // Fake computation that takes 100ms and returns value "3", which is then
+  // Fake computation that takes 5ms and returns value "3", which is then
   // stored under key 3.
-  auto result = a.computeOnce(3, waiting_function("3"s, 100));
+  auto result = a.computeOnce(3, waiting_function("3"s, 5));
   t.stop();
   ASSERT_EQ("3"s, *result._resultPointer);
   ASSERT_FALSE(result._wasCached);
-  ASSERT_GE(t.msecs(), 100);
+  ASSERT_GE(t.msecs(), 5);
   ASSERT_EQ(1ul, a.numNonPinnedEntries());
   ASSERT_EQ(0ul, a.numPinnedEntries());
   // No other results currently being computed
@@ -97,7 +97,7 @@ TEST(ConcurrentCache, sequentialComputation) {
   t.reset();
   t.start();
   // takes 0 msecs to compute, as the request is served from the cache.
-  auto result2 = a.computeOnce(3, waiting_function("3"s, 100));
+  auto result2 = a.computeOnce(3, waiting_function("3"s, 5));
   t.stop();
   // computing result again: still yields "3", was cached and takes 0
   // milliseconds (result is read from cache)
@@ -114,13 +114,13 @@ TEST(ConcurrentCache, sequentialPinnedComputation) {
   SimpleConcurrentLruCache a{3ul};
   ad_utility::Timer t;
   t.start();
-  // Fake computation that takes 100ms and returns value "3", which is then
+  // Fake computation that takes 5ms and returns value "3", which is then
   // stored under key 3.
-  auto result = a.computeOncePinned(3, waiting_function("3"s, 100));
+  auto result = a.computeOncePinned(3, waiting_function("3"s, 5));
   t.stop();
   ASSERT_EQ("3"s, *result._resultPointer);
   ASSERT_FALSE(result._wasCached);
-  ASSERT_GE(t.msecs(), 100);
+  ASSERT_GE(t.msecs(), 5);
   ASSERT_EQ(1ul, a.numPinnedEntries());
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   // No other results currently being computed
@@ -130,7 +130,7 @@ TEST(ConcurrentCache, sequentialPinnedComputation) {
   t.start();
   // takes 0 msecs to compute, as the request is served from the cache.
   // we don't request a pin, but the original computation was pinned
-  auto result2 = a.computeOnce(3, waiting_function("3"s, 100));
+  auto result2 = a.computeOnce(3, waiting_function("3"s, 5));
   t.stop();
   // computing result again: still yields "3", was cached and takes 0
   // milliseconds (result is read from cache)
@@ -147,13 +147,13 @@ TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
   SimpleConcurrentLruCache a{3ul};
   ad_utility::Timer t;
   t.start();
-  // Fake computation that takes 100ms and returns value "3", which is then
+  // Fake computation that takes 5ms and returns value "3", which is then
   // stored under key 3.
-  auto result = a.computeOnce(3, waiting_function("3"s, 100));
+  auto result = a.computeOnce(3, waiting_function("3"s, 5));
   t.stop();
   ASSERT_EQ("3"s, *result._resultPointer);
   ASSERT_FALSE(result._wasCached);
-  ASSERT_GE(t.msecs(), 100);
+  ASSERT_GE(t.msecs(), 5);
   ASSERT_EQ(0ul, a.numPinnedEntries());
   ASSERT_EQ(1ul, a.numNonPinnedEntries());
   // No other results currently being computed
@@ -164,7 +164,7 @@ TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
   // takes 0 msecs to compute, as the request is served from the cache.
   // request a pin, the result should be read from the cache and upgraded
   // to a pinned result.
-  auto result2 = a.computeOncePinned(3, waiting_function("3"s, 100));
+  auto result2 = a.computeOncePinned(3, waiting_function("3"s, 5));
   t.stop();
   // computing result again: still yields "3", was cached and takes 0
   // milliseconds (result is read from cache)
@@ -181,7 +181,7 @@ TEST(ConcurrentCache, concurrentComputation) {
   auto a = SimpleConcurrentLruCache(3ul);
   StartStopSignal signal;
   auto compute = [&a, &signal]() {
-    return a.computeOnce(3, waiting_function("3"s, 100, &signal));
+    return a.computeOnce(3, waiting_function("3"s, 5, &signal));
   };
   auto resultFuture = std::async(std::launch::async, compute);
   signal._hasStartedSignal.wait();
@@ -209,7 +209,7 @@ TEST(ConcurrentCache, concurrentPinnedComputation) {
   auto a = SimpleConcurrentLruCache(3ul);
   StartStopSignal signal;
   auto compute = [&a, &signal]() {
-    return a.computeOncePinned(3, waiting_function("3"s, 100, &signal));
+    return a.computeOncePinned(3, waiting_function("3"s, 5, &signal));
   };
   auto resultFuture = std::async(std::launch::async, compute);
   signal._hasStartedSignal.wait();
@@ -239,7 +239,7 @@ TEST(ConcurrentCache, concurrentPinnedUpgradeComputation) {
   auto a = SimpleConcurrentLruCache(3ul);
   StartStopSignal signal;
   auto compute = [&a, &signal]() {
-    return a.computeOnce(3, waiting_function("3"s, 100, &signal));
+    return a.computeOnce(3, waiting_function("3"s, 5, &signal));
   };
   auto resultFuture = std::async(std::launch::async, compute);
   signal._hasStartedSignal.wait();
@@ -254,7 +254,7 @@ TEST(ConcurrentCache, concurrentPinnedUpgradeComputation) {
   // this call waits for the background task to compute, and then fetches the
   // result. After this call completes, nothing is in progress and the result
   // is cached.
-  auto result = a.computeOncePinned(3, waiting_function("3"s, 100));
+  auto result = a.computeOncePinned(3, waiting_function("3"s, 5));
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(1ul, a.numPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
@@ -269,10 +269,10 @@ TEST(ConcurrentCache, abort) {
   auto a = SimpleConcurrentLruCache(3ul);
   StartStopSignal signal;
   auto compute = [&a, &signal]() {
-    return a.computeOnce(3, waiting_function("3"s, 100, &signal));
+    return a.computeOnce(3, waiting_function("3"s, 5, &signal));
   };
   auto computeWithError = [&a, &signal]() {
-    return a.computeOnce(3, wait_and_throw_function(100, &signal));
+    return a.computeOnce(3, wait_and_throw_function(5, &signal));
   };
   auto fut = std::async(std::launch::async, computeWithError);
   signal._hasStartedSignal.wait();
@@ -293,10 +293,10 @@ TEST(ConcurrentCache, abortPinned) {
   auto a = SimpleConcurrentLruCache(3ul);
   StartStopSignal signal;
   auto compute = [&]() {
-    return a.computeOncePinned(3, waiting_function("3"s, 100, &signal));
+    return a.computeOncePinned(3, waiting_function("3"s, 5, &signal));
   };
   auto computeWithError = [&a, &signal]() {
-    return a.computeOncePinned(3, wait_and_throw_function(100, &signal));
+    return a.computeOncePinned(3, wait_and_throw_function(5, &signal));
   };
   auto fut = std::async(std::launch::async, computeWithError);
   signal._hasStartedSignal.wait();

@@ -8,67 +8,28 @@
 #include <string>
 #include <vector>
 
-#include "../engine/Engine.h"
-#include "../index/Index.h"
-#include "../parser/ParseException.h"
-#include "../parser/SparqlParser.h"
-#include "../util/AllocatorWithLimit.h"
-#include "../util/BoostHelpers/AsyncWaitForFuture.h"
-#include "../util/HttpServer/HttpServer.h"
-#include "../util/HttpServer/streamable_body.h"
-#include "../util/Socket.h"
-#include "../util/Timer.h"
-#include "./QueryExecutionContext.h"
-#include "./QueryExecutionTree.h"
-#include "./SortPerformanceEstimator.h"
+#include "engine/Engine.h"
+#include "engine/QueryExecutionContext.h"
+#include "engine/QueryExecutionTree.h"
+#include "engine/SortPerformanceEstimator.h"
+#include "index/Index.h"
+#include "nlohmann/json.hpp"
+#include "parser/ParseException.h"
+#include "parser/SparqlParser.h"
+#include "util/AllocatorWithLimit.h"
+#include "util/HttpServer/HttpServer.h"
+#include "util/HttpServer/streamable_body.h"
+#include "util/Timer.h"
 
+using nlohmann::json;
 using std::string;
 using std::vector;
-
-using ad_utility::Socket;
 
 //! The HTTP Server used.
 class Server {
  public:
   explicit Server(const int port, const int numThreads, size_t maxMemGB,
-                  std::string accessToken)
-      : _numThreads(numThreads),
-        _port(port),
-        accessToken_(accessToken),
-        _allocator{ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-                       maxMemGB * (1ull << 30u)),
-                   [this](size_t numBytesToAllocate) {
-                     _cache.makeRoomAsMuchAsPossible(
-                         static_cast<double>(numBytesToAllocate) / sizeof(Id) *
-                         MAKE_ROOM_SLACK_FACTOR);
-                   }},
-        _sortPerformanceEstimator(),
-        _index(),
-        _engine(),
-        _initialized(false),
-        // The number of server threads currently also is the number of queries
-        // that can be processed simultaneously.
-        _queryProcessingSemaphore(numThreads) {
-    // TODO<joka921> Write a strong type for KB, MB, GB etc and use it
-    // in the cache and the memory limit
-    // Convert a number of gigabytes to the number of Ids that find in that
-    // amount of memory.
-    auto toNumIds = [](size_t gigabytes) -> size_t {
-      return gigabytes * (1ull << 30u) / sizeof(Id);
-    };
-    // This also directly triggers the update functions and propagates the
-    // values of the parameters to the cache.
-    RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
-        [this](size_t newValue) { _cache.setMaxNumEntries(newValue); });
-    RuntimeParameters().setOnUpdateAction<"cache-max-size-gb">(
-        [this, toNumIds](size_t newValue) {
-          _cache.setMaxSize(toNumIds(newValue));
-        });
-    RuntimeParameters().setOnUpdateAction<"cache-max-size-gb-single-entry">(
-        [this, toNumIds](size_t newValue) {
-          _cache.setMaxSizeSingleEntry(toNumIds(newValue));
-        });
-  }
+                  std::string accessToken);
 
   virtual ~Server() = default;
 
@@ -145,13 +106,21 @@ class Server {
       ad_utility::Timer& requestTimer,
       size_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
 
+  // Wrapper method for all the different export formats (specified via `type`)
+  // that return a `stream_generator`. Can currently only be used for tsv, csv,
+  // octet-stream and turtle output.
+  Awaitable<ad_utility::streams::stream_generator> composeStreamableResponse(
+      ad_utility::MediaType type, const ParsedQuery& query,
+      const QueryExecutionTree& qet) const;
+
   template <QueryExecutionTree::ExportSubFormat format>
   Awaitable<ad_utility::streams::stream_generator> composeResponseSepValues(
       const ParsedQuery& query, const QueryExecutionTree& qet) const;
 
-  static json composeErrorResponseJson(const string& query,
-                                       const std::string& errorMsg,
-                                       ad_utility::Timer& requestTimer);
+  static json composeErrorResponseJson(
+      const string& query, const std::string& errorMsg,
+      ad_utility::Timer& requestTimer,
+      const std::optional<ExceptionMetadata>& metadata = std::nullopt);
 
   static ad_utility::streams::stream_generator composeTurtleResponse(
       const ParsedQuery& query, const QueryExecutionTree& qet);
@@ -165,19 +134,5 @@ class Server {
   // steps are performed on a new thread (not one of the server threads).
   // Returns an awaitable of the return value of `function`
   template <typename Function, typename T = std::invoke_result_t<Function>>
-  Awaitable<T> computeInNewThread(Function function) const {
-    auto acquireComputeRelease = [this, function = std::move(function)] {
-      LOG(DEBUG) << "Acquiring new thread for query processing\n";
-      _queryProcessingSemaphore.acquire();
-      ad_utility::OnDestruction f{[this]() noexcept {
-        try {
-          _queryProcessingSemaphore.release();
-        } catch (...) {
-        }
-      }};
-      return function();
-    };
-    co_return co_await ad_utility::asio_helpers::async_on_external_thread(
-        std::move(acquireComputeRelease), boost::asio::use_awaitable);
-  }
+  Awaitable<T> computeInNewThread(Function function) const;
 };

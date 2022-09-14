@@ -48,15 +48,20 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
   virtual void exitSelectClause(
       SparqlAutomaticParser::SelectClauseContext* /*ctx*/) override {}
 
+  virtual void enterVarOrAlias(
+      SparqlAutomaticParser::VarOrAliasContext* /*ctx*/) override {}
+  virtual void exitVarOrAlias(
+      SparqlAutomaticParser::VarOrAliasContext* /*ctx*/) override {}
+
   virtual void enterAlias(
       SparqlAutomaticParser::AliasContext* /*ctx*/) override {}
   virtual void exitAlias(
       SparqlAutomaticParser::AliasContext* /*ctx*/) override {}
 
-  virtual void enterAliasWithouBrackes(
-      SparqlAutomaticParser::AliasWithouBrackesContext* /*ctx*/) override {}
-  virtual void exitAliasWithouBrackes(
-      SparqlAutomaticParser::AliasWithouBrackesContext* /*ctx*/) override {}
+  virtual void enterAliasWithoutBrackets(
+      SparqlAutomaticParser::AliasWithoutBracketsContext* /*ctx*/) override {}
+  virtual void exitAliasWithoutBrackets(
+      SparqlAutomaticParser::AliasWithoutBracketsContext* /*ctx*/) override {}
 
   virtual void enterConstructQuery(
       SparqlAutomaticParser::ConstructQueryContext* /*ctx*/) override {}
@@ -172,6 +177,13 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
       SparqlAutomaticParser::GroupGraphPatternSubContext* /*ctx*/) override {}
   virtual void exitGroupGraphPatternSub(
       SparqlAutomaticParser::GroupGraphPatternSubContext* /*ctx*/) override {}
+
+  virtual void enterGraphPatternNotTriplesAndMaybeTriples(
+      SparqlAutomaticParser::
+          GraphPatternNotTriplesAndMaybeTriplesContext* /*ctx*/) override {}
+  virtual void exitGraphPatternNotTriplesAndMaybeTriples(
+      SparqlAutomaticParser::
+          GraphPatternNotTriplesAndMaybeTriplesContext* /*ctx*/) override {}
 
   virtual void enterTriplesBlock(
       SparqlAutomaticParser::TriplesBlockContext* /*ctx*/) override {}
@@ -334,6 +346,16 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
       SparqlAutomaticParser::VerbSimpleContext* /*ctx*/) override {}
   virtual void exitVerbSimple(
       SparqlAutomaticParser::VerbSimpleContext* /*ctx*/) override {}
+
+  virtual void enterTupleWithoutPath(
+      SparqlAutomaticParser::TupleWithoutPathContext* /*ctx*/) override {}
+  virtual void exitTupleWithoutPath(
+      SparqlAutomaticParser::TupleWithoutPathContext* /*ctx*/) override {}
+
+  virtual void enterTupleWithPath(
+      SparqlAutomaticParser::TupleWithPathContext* /*ctx*/) override {}
+  virtual void exitTupleWithPath(
+      SparqlAutomaticParser::TupleWithPathContext* /*ctx*/) override {}
 
   virtual void enterVerbPathOrSimple(
       SparqlAutomaticParser::VerbPathOrSimpleContext* /*ctx*/) override {}

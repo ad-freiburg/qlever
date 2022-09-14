@@ -8,8 +8,9 @@
 #include <optional>
 #include <vector>
 
-#include "../../util/HashMap.h"
-#include "../../util/HashSet.h"
+#include "parser/data/Variable.h"
+#include "util/HashMap.h"
+#include "util/HashSet.h"
 
 namespace sparqlExpression {
 
@@ -48,21 +49,21 @@ class SparqlExpressionPimpl {
   // If this expression is a non-distinct count of a single variable,
   // return that variable, else return std::nullopt. This is needed by the
   // pattern trick.
-  [[nodiscard]] std::optional<std::string>
+  [[nodiscard]] std::optional<::Variable>
   getVariableForNonDistinctCountOrNullopt() const;
 
   // If this expression is a single variable, return that variable, else return
   // std::nullopt. Knowing this enables some optimizations because we can
   // directly handle these trivial "expressions" without using the
   // `SparqlExpression` module.
-  [[nodiscard]] std::optional<std::string> getVariableOrNullopt() const;
+  [[nodiscard]] std::optional<::Variable> getVariableOrNullopt() const;
 
   // The implementation of these methods is small and straightforward, but
   // has to be in the .cpp file because `SparqlExpression` is only forward
   // declared.
   [[nodiscard]] std::string getCacheKey(
       const VariableColumnMap& variableColumnMap) const;
-  explicit SparqlExpressionPimpl(std::shared_ptr<SparqlExpression>&& pimpl);
+  SparqlExpressionPimpl(std::shared_ptr<SparqlExpression>&& pimpl);
   ~SparqlExpressionPimpl();
   SparqlExpressionPimpl(SparqlExpressionPimpl&&) noexcept;
   SparqlExpressionPimpl& operator=(SparqlExpressionPimpl&&) noexcept;

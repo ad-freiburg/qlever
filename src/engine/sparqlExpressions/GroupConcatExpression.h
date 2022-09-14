@@ -6,27 +6,33 @@
 #define QLEVER_GROUPCONCATEXPRESSION_H
 
 #include "AggregateExpression.h"
+#include "absl/strings/str_cat.h"
 
 namespace sparqlExpression {
 /// The GROUP_CONCAT Expression
+
+namespace detail {
+
+struct PerformConcat {
+  std::string separator_;
+  std::string operator()(string&& a, const string& b) const {
+    if (a.empty()) [[unlikely]] {
+      return b;
+    } else [[likely]] {
+      a.append(separator_);
+      a.append(b);
+      return std::move(a);
+    }
+  }
+};
+
+}  // namespace detail
 class GroupConcatExpression : public SparqlExpression {
  public:
   GroupConcatExpression(bool distinct, Ptr&& child, std::string separator)
       : _separator{std::move(separator)} {
-    auto performConcat = [separator = _separator](string&& a,
-                                                  const string& b) -> string {
-      if (a.empty()) [[unlikely]] {
-        return b;
-      } else [[likely]] {
-        a.append(separator);
-        a.append(b);
-        return std::move(a);
-      }
-    };
-
-    using OP =
-        detail::AGG_OP<decltype(performConcat), detail::StringValueGetter>;
-    auto groupConcatOp = OP{performConcat};
+    using OP = detail::AGG_OP<detail::PerformConcat, detail::StringValueGetter>;
+    auto groupConcatOp = OP{detail::PerformConcat{_separator}};
     using AGG_EXP = detail::AggregateExpression<OP>;
     _actualExpression = std::make_unique<AGG_EXP>(distinct, std::move(child),
                                                   std::move(groupConcatOp));
@@ -50,7 +56,8 @@ class GroupConcatExpression : public SparqlExpression {
 
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override {
-    return "["s + _separator + "]" + _actualExpression->getCacheKey(varColMap);
+    return absl::StrCat("[", _separator, "]",
+                        _actualExpression->getCacheKey(varColMap));
   }
 
  private:

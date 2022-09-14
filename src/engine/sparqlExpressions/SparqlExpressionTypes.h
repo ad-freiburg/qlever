@@ -6,15 +6,16 @@
 #ifndef QLEVER_SPARQLEXPRESSIONTYPES_H
 #define QLEVER_SPARQLEXPRESSIONTYPES_H
 
-#include "../../global/Id.h"
-#include "../../util/AllocatorWithLimit.h"
-#include "../../util/ConstexprSmallString.h"
-#include "../../util/Generator.h"
-#include "../../util/HashMap.h"
-#include "../../util/TypeTraits.h"
-#include "../QueryExecutionContext.h"
-#include "../ResultTable.h"
-#include "SetOfIntervals.h"
+#include "engine/QueryExecutionContext.h"
+#include "engine/ResultTable.h"
+#include "engine/sparqlExpressions/SetOfIntervals.h"
+#include "global/Id.h"
+#include "parser/data/Variable.h"
+#include "util/AllocatorWithLimit.h"
+#include "util/ConstexprSmallString.h"
+#include "util/Generator.h"
+#include "util/HashMap.h"
+#include "util/TypeTraits.h"
 
 namespace sparqlExpression {
 
@@ -51,8 +52,6 @@ class VectorWithMemoryLimit
 
 /// A strong type for Ids from the knowledge base to distinguish them from plain
 /// integers.
-using StrongId = ValueId;
-/*
 struct StrongId {
   Id _value;
   friend auto operator<=>(const StrongId&, const StrongId&) = default;
@@ -63,7 +62,6 @@ struct StrongId {
     return H::combine(std::move(h), id._value);
   }
 };
- */
 
 /// A simple wrapper around a bool that prevents the strangely-behaving
 /// std::vector<bool> optimization.
@@ -106,9 +104,6 @@ namespace sparqlExpression {
 
 /// A StrongId and its type. The type is needed to get the actual value from the
 /// knowledge base.
-
-using StrongIdWithResultType = ValueId;
-/*
 struct StrongIdWithResultType {
   StrongId _id;
   ResultTable::ResultType _type;
@@ -121,11 +116,11 @@ struct StrongIdWithResultType {
     return H::combine(std::move(h), id._id, id._type);
   }
 };
- */
 
 /// A list of StrongIds that all have the same datatype.
 struct StrongIdsWithResultType {
-  VectorWithMemoryLimit<Id> _ids;
+  VectorWithMemoryLimit<StrongId> _ids;
+  ResultTable::ResultType _type;
   size_t size() const { return _ids.size(); }
 };
 
@@ -196,12 +191,6 @@ struct EvaluationContext {
         _localVocab{localVocab} {}
 };
 
-/// Strong type for a Sparql Variable, e.g. "?x"
-struct Variable {
-  std::string _variable;
-  bool operator==(const Variable&) const = default;
-};
-
 // ____________________________________________________________________________
 inline size_t getIndexForVariable(const Variable& var,
                                   const EvaluationContext* context) {
@@ -226,7 +215,7 @@ using ConstantTypesAsVector =
 
 // Each type in this tuple also is a possible expression result type.
 using OtherTypes =
-    std::tuple<ad_utility::SetOfIntervals, StrongIdWithResultType, Variable>;
+    std::tuple<ad_utility::SetOfIntervals, StrongIdWithResultType, ::Variable>;
 
 using AllTypesAsTuple =
     ad_utility::TupleCat<ConstantTypes, ConstantTypesAsVector, OtherTypes>;
@@ -386,10 +375,10 @@ std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
 /// `FunctionForSetOfIntervals` (which also has to appear at the end).
 template <size_t NumOperands, typename FunctionAndValueGettersT,
           typename... SpecializedFunctions>
-    requires ad_utility::isInstantiation<FunctionAndValueGetters,
-                                         FunctionAndValueGettersT> &&
-    (... && ad_utility::isInstantiation<SpecializedFunction,
-                                        SpecializedFunctions>)struct Operation {
+requires ad_utility::isInstantiation<FunctionAndValueGetters,
+                                     FunctionAndValueGettersT> &&
+    (...&& ad_utility::isInstantiation<SpecializedFunction,
+                                       SpecializedFunctions>)struct Operation {
  private:
   using OriginalValueGetters = typename FunctionAndValueGettersT::ValueGetters;
   static constexpr size_t NV = std::tuple_size_v<OriginalValueGetters>;

@@ -1,13 +1,17 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author:
+//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+
 #pragma once
+
+#include <engine/Filter.h>
+#include <engine/QueryExecutionTree.h>
+#include <parser/ParsedQuery.h>
 
 #include <set>
 #include <vector>
-
-#include "../parser/ParsedQuery.h"
-#include "QueryExecutionTree.h"
 
 using std::vector;
 
@@ -15,6 +19,8 @@ class QueryPlanner {
  public:
   explicit QueryPlanner(QueryExecutionContext* qec);
 
+  // Create the best execution tree for the given query according to the
+  // optimization algorithm and cost estimates of the QueryPlanner.
   QueryExecutionTree createExecutionTree(ParsedQuery& pq);
 
   class TripleGraph {
@@ -78,7 +84,7 @@ class QueryPlanner {
 
       friend std::ostream& operator<<(std::ostream& out, const Node& n) {
         out << "id: " << n._id << " triple: " << n._triple.asString()
-            << " _vars ";
+            << " vars_ ";
         for (const std::string& s : n._variables) {
           out << s << ", ";
         }
@@ -113,8 +119,6 @@ class QueryPlanner {
 
     void collapseTextCliques();
 
-    bool isPureTextQuery();
-
    private:
     vector<pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
         const vector<SparqlFilter>& origFilters,
@@ -132,6 +136,12 @@ class QueryPlanner {
     explicit SubtreePlan(QueryExecutionContext* qec)
         : _qet(std::make_shared<QueryExecutionTree>(qec)) {}
 
+    template <typename Operation>
+    SubtreePlan(QueryExecutionContext* qec,
+                std::shared_ptr<Operation> operation)
+        : _qet{std::make_shared<QueryExecutionTree>(qec,
+                                                    std::move(operation))} {}
+
     std::shared_ptr<QueryExecutionTree> _qet;
     std::shared_ptr<ResultTable> _cachedResult;
     bool _isCached = false;
@@ -147,39 +157,18 @@ class QueryPlanner {
   };
 
   TripleGraph createTripleGraph(
-      const GraphPatternOperation::BasicGraphPattern* pattern) const;
-
-  static ad_utility::HashMap<string, size_t>
-  createVariableColumnsMapForTextOperation(
-      const string& contextVar, const string& entityVar,
-      const ad_utility::HashSet<string>& freeVars,
-      const vector<pair<QueryExecutionTree, size_t>>& subtrees);
-
-  static ad_utility::HashMap<string, size_t>
-  createVariableColumnsMapForTextOperation(
-      const string& contextVar, const string& entityVar,
-      const vector<pair<QueryExecutionTree, size_t>>& subtrees) {
-    return createVariableColumnsMapForTextOperation(
-        contextVar, entityVar, ad_utility::HashSet<string>(), subtrees);
-  };
-
-  static ad_utility::HashMap<string, size_t>
-  createVariableColumnsMapForTextOperation(const string& contextVar,
-                                           const string& entityVar) {
-    return createVariableColumnsMapForTextOperation(
-        contextVar, entityVar, vector<pair<QueryExecutionTree, size_t>>());
-  }
-
-  static ad_utility::HashMap<string, size_t>
-  createVariableColumnsMapForTextOperation(
-      const string& contextVar, const string& entityVar,
-      const ad_utility::HashSet<string>& freeVars) {
-    return createVariableColumnsMapForTextOperation(
-        contextVar, entityVar, freeVars,
-        vector<pair<QueryExecutionTree, size_t>>());
-  };
+      const parsedQuery::BasicGraphPattern* pattern) const;
 
   void setEnablePatternTrick(bool enablePatternTrick);
+
+  // Create a set of possible execution trees for the given parsed query. The
+  // best (cheapest) execution tree according to the QueryPlanner is part of
+  // that set. When the query has no `ORDER BY` clause, the set contains one
+  // optimal execution tree for each possible ordering (by one column) of the
+  // result. This is relevant for subqueries, which are currently optimized
+  // independently from the rest of the query, but where it depends on the rest
+  // of the query, which ordering of the result is best.
+  std::vector<SubtreePlan> createExecutionTrees(ParsedQuery& pq);
 
  private:
   QueryExecutionContext* _qec;
@@ -268,6 +257,28 @@ class QueryPlanner {
       const SubtreePlan& a, const SubtreePlan& b,
       std::optional<TripleGraph> tg) const;
 
+  // Used internally by `createJoinCandidates`. If `a` or `b` is a transitive
+  // path operation and the other input can be bound to this transitive path
+  // (see `TransitivePath.cpp` for details), then returns that bound transitive
+  // path. Else returns `std::nullopt`
+  static std::optional<SubtreePlan> createJoinWithTransitivePath(
+      SubtreePlan a, SubtreePlan b, const vector<array<ColumnIndex, 2>>& jcs);
+
+  // Used internally by `createJoinCandidates`. If  `a` or `b` is a
+  // `HasPredicateScan` with a variable as a subject (`?x ql:has-predicate
+  // <VariableOrIri>`) and `a` and `b` can be joined on that subject variable,
+  // then returns a `HasPredicateScan` that takes the other input as a subtree.
+  // Else returns `std::nullopt`.
+  static std::optional<SubtreePlan> createJoinWithHasPredicateScan(
+      SubtreePlan a, SubtreePlan b, const vector<array<ColumnIndex, 2>>& jcs);
+
+  // Used internally by `createJoinCandidates`. If  `a` or `b` is a
+  // `TextOperationWithoutFilter` create a `TextOperationWithFilter` that takes
+  // the result of the other input as the filter input. Else return
+  // `std::nullopt`.
+  static std::optional<SubtreePlan> createJoinAsTextFilter(
+      SubtreePlan a, SubtreePlan b, const vector<array<ColumnIndex, 2>>& jcs);
+
   vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
 
@@ -275,11 +286,11 @@ class QueryPlanner {
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
 
   vector<SubtreePlan> getDistinctRow(
-      const ParsedQuery::SelectClause& selectClause,
+      const parsedQuery::SelectClause& selectClause,
       const vector<vector<SubtreePlan>>& dpTab) const;
 
   vector<SubtreePlan> getPatternTrickRow(
-      const ParsedQuery::SelectClause& selectClause,
+      const parsedQuery::SelectClause& selectClause,
       const vector<vector<SubtreePlan>>& dpTab,
       const SparqlTriple& patternTrickTriple);
 
@@ -299,7 +310,7 @@ class QueryPlanner {
                               const vector<SparqlFilter>& filters,
                               bool replaceInsteadOfAddPlans) const;
 
-  std::shared_ptr<Operation> createFilterOperation(
+  std::shared_ptr<Filter> createFilterOperation(
       const SparqlFilter& filter, const SubtreePlan& parent) const;
 
   /**

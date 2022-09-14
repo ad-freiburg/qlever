@@ -38,122 +38,122 @@ class SparqlAutomaticParser : public antlr4::Parser {
     T__27 = 28,
     T__28 = 29,
     T__29 = 30,
-    T__30 = 31,
-    BASE = 32,
-    PREFIX = 33,
-    SELECT = 34,
-    DISTINCT = 35,
-    REDUCED = 36,
-    AS = 37,
-    CONSTRUCT = 38,
-    WHERE = 39,
-    DESCRIBE = 40,
-    ASK = 41,
-    FROM = 42,
-    NAMED = 43,
-    GROUPBY = 44,
-    GROUP_CONCAT = 45,
-    HAVING = 46,
-    ORDERBY = 47,
-    ASC = 48,
-    DESC = 49,
-    LIMIT = 50,
-    OFFSET = 51,
-    TEXTLIMIT = 52,
-    VALUES = 53,
-    LOAD = 54,
-    SILENT = 55,
-    CLEAR = 56,
-    DROP = 57,
-    CREATE = 58,
-    ADD = 59,
-    DATA = 60,
-    MOVE = 61,
-    COPY = 62,
-    INSERT = 63,
-    DELETE = 64,
-    WITH = 65,
-    USING = 66,
-    DEFAULT = 67,
-    GRAPH = 68,
-    ALL = 69,
-    OPTIONAL = 70,
-    SERVICE = 71,
-    BIND = 72,
-    UNDEF = 73,
-    MINUS = 74,
-    UNION = 75,
-    FILTER = 76,
-    NOT = 77,
-    IN = 78,
-    STR = 79,
-    LANG = 80,
-    LANGMATCHES = 81,
-    DATATYPE = 82,
-    BOUND = 83,
-    IRI = 84,
-    URI = 85,
-    BNODE = 86,
-    RAND = 87,
-    ABS = 88,
-    CEIL = 89,
-    FLOOR = 90,
-    ROUND = 91,
-    CONCAT = 92,
-    STRLEN = 93,
-    UCASE = 94,
-    LCASE = 95,
-    ENCODE = 96,
-    FOR = 97,
-    CONTAINS = 98,
-    STRSTARTS = 99,
-    STRENDS = 100,
-    STRBEFORE = 101,
-    STRAFTER = 102,
-    YEAR = 103,
-    MONTH = 104,
-    DAY = 105,
-    HOURS = 106,
-    MINUTES = 107,
-    SECONDS = 108,
-    TIMEZONE = 109,
-    TZ = 110,
-    NOW = 111,
-    UUID = 112,
-    STRUUID = 113,
-    SHA1 = 114,
-    SHA256 = 115,
-    SHA384 = 116,
-    SHA512 = 117,
-    MD5 = 118,
-    COALESCE = 119,
-    IF = 120,
-    STRLANG = 121,
-    STRDT = 122,
-    SAMETERM = 123,
-    ISIRI = 124,
-    ISURI = 125,
-    ISBLANK = 126,
-    ISLITERAL = 127,
-    ISNUMERIC = 128,
-    REGEX = 129,
-    SUBSTR = 130,
-    REPLACE = 131,
-    EXISTS = 132,
-    COUNT = 133,
-    SUM = 134,
-    MIN = 135,
-    MAX = 136,
-    AVG = 137,
-    SAMPLE = 138,
-    SEPARATOR = 139,
-    IRI_REF = 140,
-    PNAME_NS = 141,
-    PNAME_LN = 142,
-    BLANK_NODE_LABEL = 143,
-    VAR1 = 144,
-    VAR2 = 145,
-    LANGTAG = 146,
+    BASE = 31,
+    PREFIX = 32,
+    SELECT = 33,
+    DISTINCT = 34,
+    REDUCED = 35,
+    AS = 36,
+    CONSTRUCT = 37,
+    WHERE = 38,
+    DESCRIBE = 39,
+    ASK = 40,
+    FROM = 41,
+    NAMED = 42,
+    GROUPBY = 43,
+    GROUP_CONCAT = 44,
+    HAVING = 45,
+    ORDERBY = 46,
+    ASC = 47,
+    DESC = 48,
+    LIMIT = 49,
+    OFFSET = 50,
+    TEXTLIMIT = 51,
+    VALUES = 52,
+    LOAD = 53,
+    SILENT = 54,
+    CLEAR = 55,
+    DROP = 56,
+    CREATE = 57,
+    ADD = 58,
+    DATA = 59,
+    MOVE = 60,
+    COPY = 61,
+    INSERT = 62,
+    DELETE = 63,
+    WITH = 64,
+    USING = 65,
+    DEFAULT = 66,
+    GRAPH = 67,
+    ALL = 68,
+    OPTIONAL = 69,
+    SERVICE = 70,
+    BIND = 71,
+    UNDEF = 72,
+    MINUS = 73,
+    UNION = 74,
+    FILTER = 75,
+    NOT = 76,
+    IN = 77,
+    STR = 78,
+    LANG = 79,
+    LANGMATCHES = 80,
+    DATATYPE = 81,
+    BOUND = 82,
+    IRI = 83,
+    URI = 84,
+    BNODE = 85,
+    RAND = 86,
+    ABS = 87,
+    CEIL = 88,
+    FLOOR = 89,
+    ROUND = 90,
+    CONCAT = 91,
+    STRLEN = 92,
+    UCASE = 93,
+    LCASE = 94,
+    ENCODE = 95,
+    FOR = 96,
+    CONTAINS = 97,
+    STRSTARTS = 98,
+    STRENDS = 99,
+    STRBEFORE = 100,
+    STRAFTER = 101,
+    YEAR = 102,
+    MONTH = 103,
+    DAY = 104,
+    HOURS = 105,
+    MINUTES = 106,
+    SECONDS = 107,
+    TIMEZONE = 108,
+    TZ = 109,
+    NOW = 110,
+    UUID = 111,
+    STRUUID = 112,
+    SHA1 = 113,
+    SHA256 = 114,
+    SHA384 = 115,
+    SHA512 = 116,
+    MD5 = 117,
+    COALESCE = 118,
+    IF = 119,
+    STRLANG = 120,
+    STRDT = 121,
+    SAMETERM = 122,
+    ISIRI = 123,
+    ISURI = 124,
+    ISBLANK = 125,
+    ISLITERAL = 126,
+    ISNUMERIC = 127,
+    REGEX = 128,
+    SUBSTR = 129,
+    REPLACE = 130,
+    EXISTS = 131,
+    COUNT = 132,
+    SUM = 133,
+    MIN = 134,
+    MAX = 135,
+    AVG = 136,
+    SAMPLE = 137,
+    SEPARATOR = 138,
+    IRI_REF = 139,
+    PNAME_NS = 140,
+    PNAME_LN = 141,
+    BLANK_NODE_LABEL = 142,
+    VAR1 = 143,
+    VAR2 = 144,
+    LANGTAG = 145,
+    PREFIX_LANGTAG = 146,
     INTEGER = 147,
     DECIMAL = 148,
     DOUBLE = 149,
@@ -191,121 +191,125 @@ class SparqlAutomaticParser : public antlr4::Parser {
     RuleSelectQuery = 4,
     RuleSubSelect = 5,
     RuleSelectClause = 6,
-    RuleAlias = 7,
-    RuleAliasWithouBrackes = 8,
-    RuleConstructQuery = 9,
-    RuleDescribeQuery = 10,
-    RuleAskQuery = 11,
-    RuleDatasetClause = 12,
-    RuleDefaultGraphClause = 13,
-    RuleNamedGraphClause = 14,
-    RuleSourceSelector = 15,
-    RuleWhereClause = 16,
-    RuleSolutionModifier = 17,
-    RuleGroupClause = 18,
-    RuleGroupCondition = 19,
-    RuleHavingClause = 20,
-    RuleHavingCondition = 21,
-    RuleOrderClause = 22,
-    RuleOrderCondition = 23,
-    RuleLimitOffsetClauses = 24,
-    RuleLimitClause = 25,
-    RuleOffsetClause = 26,
-    RuleTextLimitClause = 27,
-    RuleValuesClause = 28,
-    RuleTriplesTemplate = 29,
-    RuleGroupGraphPattern = 30,
-    RuleGroupGraphPatternSub = 31,
-    RuleTriplesBlock = 32,
-    RuleGraphPatternNotTriples = 33,
-    RuleOptionalGraphPattern = 34,
-    RuleGraphGraphPattern = 35,
-    RuleServiceGraphPattern = 36,
-    RuleBind = 37,
-    RuleInlineData = 38,
-    RuleDataBlock = 39,
-    RuleInlineDataOneVar = 40,
-    RuleInlineDataFull = 41,
-    RuleDataBlockSingle = 42,
-    RuleDataBlockValue = 43,
-    RuleMinusGraphPattern = 44,
-    RuleGroupOrUnionGraphPattern = 45,
-    RuleFilterR = 46,
-    RuleConstraint = 47,
-    RuleFunctionCall = 48,
-    RuleArgList = 49,
-    RuleExpressionList = 50,
-    RuleConstructTemplate = 51,
-    RuleConstructTriples = 52,
-    RuleTriplesSameSubject = 53,
-    RulePropertyList = 54,
-    RulePropertyListNotEmpty = 55,
-    RuleVerb = 56,
-    RuleObjectList = 57,
-    RuleObjectR = 58,
-    RuleTriplesSameSubjectPath = 59,
-    RulePropertyListPath = 60,
-    RulePropertyListPathNotEmpty = 61,
-    RuleVerbPath = 62,
-    RuleVerbSimple = 63,
-    RuleVerbPathOrSimple = 64,
-    RuleObjectListPath = 65,
-    RuleObjectPath = 66,
-    RulePath = 67,
-    RulePathAlternative = 68,
-    RulePathSequence = 69,
-    RulePathElt = 70,
-    RulePathEltOrInverse = 71,
-    RulePathMod = 72,
-    RulePathPrimary = 73,
-    RulePathNegatedPropertySet = 74,
-    RulePathOneInPropertySet = 75,
-    RuleInteger = 76,
-    RuleTriplesNode = 77,
-    RuleBlankNodePropertyList = 78,
-    RuleTriplesNodePath = 79,
-    RuleBlankNodePropertyListPath = 80,
-    RuleCollection = 81,
-    RuleCollectionPath = 82,
-    RuleGraphNode = 83,
-    RuleGraphNodePath = 84,
-    RuleVarOrTerm = 85,
-    RuleVarOrIri = 86,
-    RuleVar = 87,
-    RuleGraphTerm = 88,
-    RuleExpression = 89,
-    RuleConditionalOrExpression = 90,
-    RuleConditionalAndExpression = 91,
-    RuleValueLogical = 92,
-    RuleRelationalExpression = 93,
-    RuleNumericExpression = 94,
-    RuleAdditiveExpression = 95,
-    RuleStrangeMultiplicativeSubexprOfAdditive = 96,
-    RuleMultiplicativeExpression = 97,
-    RuleUnaryExpression = 98,
-    RulePrimaryExpression = 99,
-    RuleBrackettedExpression = 100,
-    RuleBuiltInCall = 101,
-    RuleRegexExpression = 102,
-    RuleSubstringExpression = 103,
-    RuleStrReplaceExpression = 104,
-    RuleExistsFunc = 105,
-    RuleNotExistsFunc = 106,
-    RuleAggregate = 107,
-    RuleIriOrFunction = 108,
-    RuleRdfLiteral = 109,
-    RuleNumericLiteral = 110,
-    RuleNumericLiteralUnsigned = 111,
-    RuleNumericLiteralPositive = 112,
-    RuleNumericLiteralNegative = 113,
-    RuleBooleanLiteral = 114,
-    RuleString = 115,
-    RuleIri = 116,
-    RulePrefixedName = 117,
-    RuleBlankNode = 118,
-    RuleIriref = 119,
-    RulePnameLn = 120,
-    RulePnameNs = 121
+    RuleVarOrAlias = 7,
+    RuleAlias = 8,
+    RuleAliasWithoutBrackets = 9,
+    RuleConstructQuery = 10,
+    RuleDescribeQuery = 11,
+    RuleAskQuery = 12,
+    RuleDatasetClause = 13,
+    RuleDefaultGraphClause = 14,
+    RuleNamedGraphClause = 15,
+    RuleSourceSelector = 16,
+    RuleWhereClause = 17,
+    RuleSolutionModifier = 18,
+    RuleGroupClause = 19,
+    RuleGroupCondition = 20,
+    RuleHavingClause = 21,
+    RuleHavingCondition = 22,
+    RuleOrderClause = 23,
+    RuleOrderCondition = 24,
+    RuleLimitOffsetClauses = 25,
+    RuleLimitClause = 26,
+    RuleOffsetClause = 27,
+    RuleTextLimitClause = 28,
+    RuleValuesClause = 29,
+    RuleTriplesTemplate = 30,
+    RuleGroupGraphPattern = 31,
+    RuleGroupGraphPatternSub = 32,
+    RuleGraphPatternNotTriplesAndMaybeTriples = 33,
+    RuleTriplesBlock = 34,
+    RuleGraphPatternNotTriples = 35,
+    RuleOptionalGraphPattern = 36,
+    RuleGraphGraphPattern = 37,
+    RuleServiceGraphPattern = 38,
+    RuleBind = 39,
+    RuleInlineData = 40,
+    RuleDataBlock = 41,
+    RuleInlineDataOneVar = 42,
+    RuleInlineDataFull = 43,
+    RuleDataBlockSingle = 44,
+    RuleDataBlockValue = 45,
+    RuleMinusGraphPattern = 46,
+    RuleGroupOrUnionGraphPattern = 47,
+    RuleFilterR = 48,
+    RuleConstraint = 49,
+    RuleFunctionCall = 50,
+    RuleArgList = 51,
+    RuleExpressionList = 52,
+    RuleConstructTemplate = 53,
+    RuleConstructTriples = 54,
+    RuleTriplesSameSubject = 55,
+    RulePropertyList = 56,
+    RulePropertyListNotEmpty = 57,
+    RuleVerb = 58,
+    RuleObjectList = 59,
+    RuleObjectR = 60,
+    RuleTriplesSameSubjectPath = 61,
+    RulePropertyListPath = 62,
+    RulePropertyListPathNotEmpty = 63,
+    RuleVerbPath = 64,
+    RuleVerbSimple = 65,
+    RuleTupleWithoutPath = 66,
+    RuleTupleWithPath = 67,
+    RuleVerbPathOrSimple = 68,
+    RuleObjectListPath = 69,
+    RuleObjectPath = 70,
+    RulePath = 71,
+    RulePathAlternative = 72,
+    RulePathSequence = 73,
+    RulePathElt = 74,
+    RulePathEltOrInverse = 75,
+    RulePathMod = 76,
+    RulePathPrimary = 77,
+    RulePathNegatedPropertySet = 78,
+    RulePathOneInPropertySet = 79,
+    RuleInteger = 80,
+    RuleTriplesNode = 81,
+    RuleBlankNodePropertyList = 82,
+    RuleTriplesNodePath = 83,
+    RuleBlankNodePropertyListPath = 84,
+    RuleCollection = 85,
+    RuleCollectionPath = 86,
+    RuleGraphNode = 87,
+    RuleGraphNodePath = 88,
+    RuleVarOrTerm = 89,
+    RuleVarOrIri = 90,
+    RuleVar = 91,
+    RuleGraphTerm = 92,
+    RuleExpression = 93,
+    RuleConditionalOrExpression = 94,
+    RuleConditionalAndExpression = 95,
+    RuleValueLogical = 96,
+    RuleRelationalExpression = 97,
+    RuleNumericExpression = 98,
+    RuleAdditiveExpression = 99,
+    RuleStrangeMultiplicativeSubexprOfAdditive = 100,
+    RuleMultiplicativeExpression = 101,
+    RuleUnaryExpression = 102,
+    RulePrimaryExpression = 103,
+    RuleBrackettedExpression = 104,
+    RuleBuiltInCall = 105,
+    RuleRegexExpression = 106,
+    RuleSubstringExpression = 107,
+    RuleStrReplaceExpression = 108,
+    RuleExistsFunc = 109,
+    RuleNotExistsFunc = 110,
+    RuleAggregate = 111,
+    RuleIriOrFunction = 112,
+    RuleRdfLiteral = 113,
+    RuleNumericLiteral = 114,
+    RuleNumericLiteralUnsigned = 115,
+    RuleNumericLiteralPositive = 116,
+    RuleNumericLiteralNegative = 117,
+    RuleBooleanLiteral = 118,
+    RuleString = 119,
+    RuleIri = 120,
+    RulePrefixedName = 121,
+    RuleBlankNode = 122,
+    RuleIriref = 123,
+    RulePnameLn = 124,
+    RulePnameNs = 125
   };
 
   explicit SparqlAutomaticParser(antlr4::TokenStream* input);
@@ -326,8 +330,9 @@ class SparqlAutomaticParser : public antlr4::Parser {
   class SelectQueryContext;
   class SubSelectContext;
   class SelectClauseContext;
+  class VarOrAliasContext;
   class AliasContext;
-  class AliasWithouBrackesContext;
+  class AliasWithoutBracketsContext;
   class ConstructQueryContext;
   class DescribeQueryContext;
   class AskQueryContext;
@@ -351,6 +356,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
   class TriplesTemplateContext;
   class GroupGraphPatternContext;
   class GroupGraphPatternSubContext;
+  class GraphPatternNotTriplesAndMaybeTriplesContext;
   class TriplesBlockContext;
   class GraphPatternNotTriplesContext;
   class OptionalGraphPatternContext;
@@ -383,6 +389,8 @@ class SparqlAutomaticParser : public antlr4::Parser {
   class PropertyListPathNotEmptyContext;
   class VerbPathContext;
   class VerbSimpleContext;
+  class TupleWithoutPathContext;
+  class TupleWithPathContext;
   class VerbPathOrSimpleContext;
   class ObjectListPathContext;
   class ObjectPathContext;
@@ -553,16 +561,15 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
   class SelectClauseContext : public antlr4::ParserRuleContext {
    public:
+    antlr4::Token* asterisk = nullptr;
     SelectClauseContext(antlr4::ParserRuleContext* parent,
                         size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode* SELECT();
     antlr4::tree::TerminalNode* DISTINCT();
     antlr4::tree::TerminalNode* REDUCED();
-    std::vector<VarContext*> var();
-    VarContext* var(size_t i);
-    std::vector<AliasContext*> alias();
-    AliasContext* alias(size_t i);
+    std::vector<VarOrAliasContext*> varOrAlias();
+    VarOrAliasContext* varOrAlias(size_t i);
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
@@ -573,11 +580,27 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
   SelectClauseContext* selectClause();
 
+  class VarOrAliasContext : public antlr4::ParserRuleContext {
+   public:
+    VarOrAliasContext(antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    VarContext* var();
+    AliasContext* alias();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual antlrcpp::Any accept(
+        antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  VarOrAliasContext* varOrAlias();
+
   class AliasContext : public antlr4::ParserRuleContext {
    public:
     AliasContext(antlr4::ParserRuleContext* parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    AliasWithouBrackesContext* aliasWithouBrackes();
+    AliasWithoutBracketsContext* aliasWithoutBrackets();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
@@ -588,10 +611,10 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
   AliasContext* alias();
 
-  class AliasWithouBrackesContext : public antlr4::ParserRuleContext {
+  class AliasWithoutBracketsContext : public antlr4::ParserRuleContext {
    public:
-    AliasWithouBrackesContext(antlr4::ParserRuleContext* parent,
-                              size_t invokingState);
+    AliasWithoutBracketsContext(antlr4::ParserRuleContext* parent,
+                                size_t invokingState);
     virtual size_t getRuleIndex() const override;
     ExpressionContext* expression();
     antlr4::tree::TerminalNode* AS();
@@ -604,7 +627,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
         antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
-  AliasWithouBrackesContext* aliasWithouBrackes();
+  AliasWithoutBracketsContext* aliasWithoutBrackets();
 
   class ConstructQueryContext : public antlr4::ParserRuleContext {
    public:
@@ -1004,10 +1027,11 @@ class SparqlAutomaticParser : public antlr4::Parser {
     GroupGraphPatternSubContext(antlr4::ParserRuleContext* parent,
                                 size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    std::vector<TriplesBlockContext*> triplesBlock();
-    TriplesBlockContext* triplesBlock(size_t i);
-    std::vector<GraphPatternNotTriplesContext*> graphPatternNotTriples();
-    GraphPatternNotTriplesContext* graphPatternNotTriples(size_t i);
+    TriplesBlockContext* triplesBlock();
+    std::vector<GraphPatternNotTriplesAndMaybeTriplesContext*>
+    graphPatternNotTriplesAndMaybeTriples();
+    GraphPatternNotTriplesAndMaybeTriplesContext*
+    graphPatternNotTriplesAndMaybeTriples(size_t i);
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
@@ -1017,6 +1041,25 @@ class SparqlAutomaticParser : public antlr4::Parser {
   };
 
   GroupGraphPatternSubContext* groupGraphPatternSub();
+
+  class GraphPatternNotTriplesAndMaybeTriplesContext
+      : public antlr4::ParserRuleContext {
+   public:
+    GraphPatternNotTriplesAndMaybeTriplesContext(
+        antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    GraphPatternNotTriplesContext* graphPatternNotTriples();
+    TriplesBlockContext* triplesBlock();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual antlrcpp::Any accept(
+        antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  GraphPatternNotTriplesAndMaybeTriplesContext*
+  graphPatternNotTriplesAndMaybeTriples();
 
   class TriplesBlockContext : public antlr4::ParserRuleContext {
    public:
@@ -1533,11 +1576,9 @@ class SparqlAutomaticParser : public antlr4::Parser {
     PropertyListPathNotEmptyContext(antlr4::ParserRuleContext* parent,
                                     size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    std::vector<VerbPathOrSimpleContext*> verbPathOrSimple();
-    VerbPathOrSimpleContext* verbPathOrSimple(size_t i);
-    ObjectListPathContext* objectListPath();
-    std::vector<ObjectListContext*> objectList();
-    ObjectListContext* objectList(size_t i);
+    TupleWithPathContext* tupleWithPath();
+    std::vector<TupleWithoutPathContext*> tupleWithoutPath();
+    TupleWithoutPathContext* tupleWithoutPath(size_t i);
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
@@ -1577,6 +1618,40 @@ class SparqlAutomaticParser : public antlr4::Parser {
   };
 
   VerbSimpleContext* verbSimple();
+
+  class TupleWithoutPathContext : public antlr4::ParserRuleContext {
+   public:
+    TupleWithoutPathContext(antlr4::ParserRuleContext* parent,
+                            size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    VerbPathOrSimpleContext* verbPathOrSimple();
+    ObjectListContext* objectList();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual antlrcpp::Any accept(
+        antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  TupleWithoutPathContext* tupleWithoutPath();
+
+  class TupleWithPathContext : public antlr4::ParserRuleContext {
+   public:
+    TupleWithPathContext(antlr4::ParserRuleContext* parent,
+                         size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    VerbPathOrSimpleContext* verbPathOrSimple();
+    ObjectListPathContext* objectListPath();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual antlrcpp::Any accept(
+        antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  TupleWithPathContext* tupleWithPath();
 
   class VerbPathOrSimpleContext : public antlr4::ParserRuleContext {
    public:
@@ -2534,7 +2609,7 @@ class SparqlAutomaticParser : public antlr4::Parser {
     virtual size_t getRuleIndex() const override;
     IrirefContext* iriref();
     PrefixedNameContext* prefixedName();
-    antlr4::tree::TerminalNode* LANGTAG();
+    antlr4::tree::TerminalNode* PREFIX_LANGTAG();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;

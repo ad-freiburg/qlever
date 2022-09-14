@@ -1,23 +1,26 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
-
-#include "GroupBy.h"
+// Author:
+//   2018      Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//   2020-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #include <absl/strings/str_join.h>
+#include <engine/CallFixedSize.h>
+#include <engine/GroupBy.h>
+#include <engine/sparqlExpressions/SparqlExpression.h>
+#include <index/Index.h>
+#include <parser/Alias.h>
+#include <util/Conversions.h>
+#include <util/HashSet.h>
 
-#include "../index/Index.h"
-#include "../util/Conversions.h"
-#include "../util/HashSet.h"
-#include "./sparqlExpressions/SparqlExpression.h"
-#include "CallFixedSize.h"
-
+// _______________________________________________________________________________________________
 GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
-                 std::vector<ParsedQuery::Alias> aliases)
-    : Operation(qec), _subtree(nullptr), _aliases{std::move(aliases)} {
+                 std::vector<Alias> aliases,
+                 std::shared_ptr<QueryExecutionTree> subtree)
+    : Operation{qec}, _aliases{std::move(aliases)} {
   std::sort(_aliases.begin(), _aliases.end(),
-            [](const ParsedQuery::Alias& a1, const ParsedQuery::Alias& a2) {
-              return a1._outVarName < a2._outVarName;
+            [](const Alias& a1, const Alias& a2) {
+              return a1._target.name() < a2._target.name();
             });
 
   std::transform(groupByVariables.begin(), groupByVariables.end(),
@@ -32,14 +35,13 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
     _varColMap[var] = colIndex;
     colIndex++;
   }
-  for (const ParsedQuery::Alias& a : _aliases) {
-    _varColMap[a._outVarName] = colIndex;
+  for (const Alias& a : _aliases) {
+    _varColMap[a._target.name()] = colIndex;
     colIndex++;
   }
-}
-
-void GroupBy::setSubtree(std::shared_ptr<QueryExecutionTree> subtree) {
-  _subtree = std::move(subtree);
+  auto sortColumns = computeSortColumns(subtree.get());
+  _subtree =
+      QueryExecutionTree::createSortedTree(std::move(subtree), sortColumns);
 }
 
 string GroupBy::asStringImpl(size_t indent) const {
@@ -55,7 +57,7 @@ string GroupBy::asStringImpl(size_t indent) const {
   }
   for (const auto& alias : _aliases) {
     os << alias._expression.getCacheKey(varMapInput) << " AS "
-       << varMap.at(alias._outVarName);
+       << varMap.at(alias._target.name());
   }
   os << std::endl;
   os << _subtree->asString(indent);
@@ -78,16 +80,15 @@ vector<size_t> GroupBy::resultSortedOn() const {
   return sortedOn;
 }
 
-vector<pair<size_t, bool>> GroupBy::computeSortColumns(
-    const QueryExecutionTree* inputTree) {
-  vector<pair<size_t, bool>> cols;
+vector<size_t> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
+  vector<size_t> cols;
   if (_groupByVariables.empty()) {
     // the entire input is a single group, no sorting needs to be done
     return cols;
   }
 
   ad_utility::HashMap<string, size_t> inVarColMap =
-      inputTree->getVariableColumns();
+      subtree->getVariableColumns();
 
   std::unordered_set<size_t> sortColSet;
 
@@ -96,7 +97,7 @@ vector<pair<size_t, bool>> GroupBy::computeSortColumns(
     // avoid sorting by a column twice
     if (sortColSet.find(col) == sortColSet.end()) {
       sortColSet.insert(col);
-      cols.emplace_back(col, false);
+      cols.push_back(col);
     }
   }
   return cols;
@@ -169,7 +170,7 @@ void GroupBy::processGroup(
           singleResult, *(outTable->_localVocab), false);
     } else {
       // This should never happen since aggregates always return constants.
-      AD_CHECK(false)
+      AD_FAIL()
     }
   };
 
@@ -266,6 +267,10 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
 
 void GroupBy::computeResult(ResultTable* result) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
+
+  std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
+  LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
+
   std::vector<size_t> groupByColumns;
 
   result->_sortedBy = resultSortedOn();
@@ -290,16 +295,10 @@ void GroupBy::computeResult(ResultTable* result) {
   }
 
   // parse the aggregate aliases
-  for (const ParsedQuery::Alias& alias : _aliases) {
-    aggregates.push_back(Aggregate{alias._expression,
-                                   _varColMap.find(alias._outVarName)->second});
+  for (const Alias& alias : _aliases) {
+    aggregates.push_back(Aggregate{
+        alias._expression, _varColMap.find(alias._target.name())->second});
   }
-
-  std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
-  LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
-
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
 
   // populate the result type vector
   result->_resultTypes.resize(result->_idTable.cols());

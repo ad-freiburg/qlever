@@ -48,13 +48,18 @@ class SparqlAutomaticBaseVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
+  virtual antlrcpp::Any visitVarOrAlias(
+      SparqlAutomaticParser::VarOrAliasContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual antlrcpp::Any visitAlias(
       SparqlAutomaticParser::AliasContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  virtual antlrcpp::Any visitAliasWithouBrackes(
-      SparqlAutomaticParser::AliasWithouBrackesContext* ctx) override {
+  virtual antlrcpp::Any visitAliasWithoutBrackets(
+      SparqlAutomaticParser::AliasWithoutBracketsContext* ctx) override {
     return visitChildren(ctx);
   }
 
@@ -170,6 +175,12 @@ class SparqlAutomaticBaseVisitor : public SparqlAutomaticVisitor {
 
   virtual antlrcpp::Any visitGroupGraphPatternSub(
       SparqlAutomaticParser::GroupGraphPatternSubContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual antlrcpp::Any visitGraphPatternNotTriplesAndMaybeTriples(
+      SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx)
+      override {
     return visitChildren(ctx);
   }
 
@@ -330,6 +341,16 @@ class SparqlAutomaticBaseVisitor : public SparqlAutomaticVisitor {
 
   virtual antlrcpp::Any visitVerbSimple(
       SparqlAutomaticParser::VerbSimpleContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual antlrcpp::Any visitTupleWithoutPath(
+      SparqlAutomaticParser::TupleWithoutPathContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual antlrcpp::Any visitTupleWithPath(
+      SparqlAutomaticParser::TupleWithPathContext* ctx) override {
     return visitChildren(ctx);
   }
 

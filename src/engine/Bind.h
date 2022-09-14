@@ -5,15 +5,15 @@
 #ifndef QLEVER_BIND_H
 #define QLEVER_BIND_H
 
-#include "../parser/ParsedQuery.h"
-#include "Operation.h"
-#include "sparqlExpressions/SparqlExpressionPimpl.h"
+#include "engine/Operation.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "parser/ParsedQuery.h"
 
 /// BIND operation, currently only supports a very limited subset of expressions
 class Bind : public Operation {
  public:
   Bind(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
-       GraphPatternOperation::Bind b)
+       parsedQuery::Bind b)
       : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {}
 
   // For the documentation of the overridden members, see Operation.h
@@ -33,14 +33,16 @@ class Bind : public Operation {
       const override;
 
   // Returns the variable to which the expression will be bound
-  [[nodiscard]] const string& targetVariable() const { return _bind._target; }
+  [[nodiscard]] const string& targetVariable() const {
+    return _bind._target.name();
+  }
 
  protected:
   [[nodiscard]] vector<size_t> resultSortedOn() const override;
 
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
-  GraphPatternOperation::Bind _bind;
+  parsedQuery::Bind _bind;
 
   void computeResult(ResultTable* result) override;
 

@@ -7,33 +7,38 @@
 #include "./CallFixedSize.h"
 
 // _____________________________________________________________________________
-CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec)
+CountAvailablePredicates::CountAvailablePredicates(
+    QueryExecutionContext* qec, std::string predicateVariable,
+    std::string countVariable)
     : Operation(qec),
       _subtree(nullptr),
       _subjectColumnIndex(0),
       _subjectEntityName(),
-      _predicateVarName("predicate"),
-      _countVarName("count") {}
+      _predicateVarName(std::move(predicateVariable)),
+      _countVarName(std::move(countVariable)) {}
 
 // _____________________________________________________________________________
 CountAvailablePredicates::CountAvailablePredicates(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
-    size_t subjectColumnIndex)
+    size_t subjectColumnIndex, std::string predicateVariable,
+    std::string countVariable)
     : Operation(qec),
-      _subtree(subtree),
+      _subtree(QueryExecutionTree::createSortedTree(std::move(subtree),
+                                                    {subjectColumnIndex})),
       _subjectColumnIndex(subjectColumnIndex),
       _subjectEntityName(),
-      _predicateVarName("predicate"),
-      _countVarName("count") {}
+      _predicateVarName(std::move(predicateVariable)),
+      _countVarName(std::move(countVariable)) {}
 
-CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec,
-                                                   TripleComponent entityName)
+CountAvailablePredicates::CountAvailablePredicates(
+    QueryExecutionContext* qec, TripleComponent entityName,
+    std::string predicateVariable, std::string countVariable)
     : Operation(qec),
       _subtree(nullptr),
       _subjectColumnIndex(0),
       _subjectEntityName(entityName.getString()),
-      _predicateVarName("predicate"),
-      _countVarName("count") {}
+      _predicateVarName(std::move(predicateVariable)),
+      _countVarName(std::move(countVariable)) {}
 
 // _____________________________________________________________________________
 string CountAvailablePredicates::asStringImpl(size_t indent) const {
@@ -69,13 +74,6 @@ size_t CountAvailablePredicates::getResultWidth() const { return 2; }
 vector<size_t> CountAvailablePredicates::resultSortedOn() const {
   // The result is not sorted on any column.
   return {};
-}
-
-// _____________________________________________________________________________
-void CountAvailablePredicates::setVarNames(const std::string& predicateVarName,
-                                           const std::string& countVarName) {
-  _predicateVarName = predicateVarName;
-  _countVarName = countVarName;
 }
 
 // _____________________________________________________________________________
@@ -168,7 +166,6 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
         &result->_idTable, hasPattern, hasPredicate, patterns);
   } else {
     std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
-    runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
 
@@ -282,7 +279,12 @@ void CountAvailablePredicates::computePatternTrick(
       if (inputIdx > 0 && subjectId == input(inputIdx - 1, subjectColumn)) {
         continue;
       }
-      AD_CHECK(subjectId.getDatatype() == Datatype::VocabIndex);
+      if (subjectId.getDatatype() != Datatype::VocabIndex) {
+        // Ignore numeric literals and other types that are folded into
+        // the value IDs. They can never be subjects and thus also have no
+        // patterns.
+        continue;
+      }
       auto subject = subjectId.getVocabIndex().get();
 
       if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
@@ -317,11 +319,8 @@ void CountAvailablePredicates::computePatternTrick(
 
   LOG(DEBUG) << "Converting PatternMap to vector" << std::endl;
   // flatten into a vector, to make iterable
-  std::vector<std::pair<size_t, size_t>> patternVec;
-  patternVec.reserve(patternCounts.size());
-  for (const auto& p : patternCounts) {
-    patternVec.push_back(p);
-  }
+  const std::vector<std::pair<size_t, size_t>> patternVec(patternCounts.begin(),
+                                                          patternCounts.end());
 
   LOG(DEBUG) << "Start translating pattern counts to predicate counts"
              << std::endl;

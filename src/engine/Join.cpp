@@ -1,16 +1,17 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author:
+//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include "./Join.h"
+#include <engine/CallFixedSize.h>
+#include <engine/IndexScan.h>
+#include <engine/Join.h>
 
 #include <functional>
 #include <sstream>
 #include <type_traits>
 #include <unordered_set>
-
-#include "./QueryExecutionTree.h"
-#include "CallFixedSize.h"
 
 using std::string;
 
@@ -20,6 +21,11 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            size_t t2JoinCol, bool keepJoinColumn)
     : Operation(qec) {
   AD_CHECK(t1 && t2);
+  // Currently all join algorithms require both inputs to be sorted, so we
+  // enforce the sorting here.
+  t1 = QueryExecutionTree::createSortedTree(std::move(t1), {t1JoinCol});
+  t2 = QueryExecutionTree::createSortedTree(std::move(t2), {t2JoinCol});
+
   // Make sure subtrees are ordered so that identical queries can be identified.
   if (t1->asString() > t2->asString()) {
     std::swap(t1, t2);
@@ -65,8 +71,6 @@ string Join::getDescriptor() const {
 
 // _____________________________________________________________________________
 void Join::computeResult(ResultTable* result) {
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-
   LOG(DEBUG) << "Getting sub-results for join result computation..." << endl;
   size_t leftWidth = _left->getResultWidth();
   size_t rightWidth = _right->getResultWidth();
@@ -97,7 +101,6 @@ void Join::computeResult(ResultTable* result) {
 
   LOG(TRACE) << "Computing left side..." << endl;
   shared_ptr<const ResultTable> leftRes = _left->getResult();
-  runtimeInfo.addChild(_left->getRootOperation()->getRuntimeInfo());
 
   // TODO<joka921> Currently the _resultTypes are set incorrectly in case
   // of early stopping. For now, early stopping is thus disabled.
@@ -117,7 +120,6 @@ void Join::computeResult(ResultTable* result) {
 
   LOG(TRACE) << "Computing right side..." << endl;
   shared_ptr<const ResultTable> rightRes = _right->getResult();
-  runtimeInfo.addChild(_right->getRootOperation()->getRuntimeInfo());
 
   LOG(DEBUG) << "Computing Join result..." << endl;
 
@@ -151,37 +153,33 @@ ad_utility::HashMap<string, size_t> Join::getVariableColumns() const {
   if (!isFullScanDummy(_left) && !isFullScanDummy(_right)) {
     retVal = _left->getVariableColumns();
     size_t leftSize = _left->getResultWidth();
-    for (auto it = _right->getVariableColumns().begin();
-         it != _right->getVariableColumns().end(); ++it) {
-      if (it->second < _rightJoinCol) {
-        retVal[it->first] = leftSize + it->second;
+    for (const auto& [variable, column] : _right->getVariableColumns()) {
+      if (column < _rightJoinCol) {
+        retVal[variable] = leftSize + column;
       }
-      if (it->second > _rightJoinCol) {
-        retVal[it->first] = leftSize + it->second - 1;
+      if (column > _rightJoinCol) {
+        retVal[variable] = leftSize + column - 1;
       }
     }
   } else {
     if (isFullScanDummy(_right)) {
       retVal = _left->getVariableColumns();
       size_t leftSize = _left->getResultWidth();
-      for (auto it = _right->getVariableColumns().begin();
-           it != _right->getVariableColumns().end(); ++it) {
+      for (const auto& [variable, column] : _right->getVariableColumns()) {
         // Skip the first col for the dummy
-        if (it->second != 0) {
-          retVal[it->first] = leftSize + it->second - 1;
+        if (column != 0) {
+          retVal[variable] = leftSize + column - 1;
         }
       }
     } else {
-      for (auto it = _left->getVariableColumns().begin();
-           it != _left->getVariableColumns().end(); ++it) {
+      for (const auto& [variable, column] : _left->getVariableColumns()) {
         // Skip+drop the first col for the dummy and subtract one from others.
-        if (it->second != 0) {
-          retVal[it->first] = it->second - 1;
+        if (column != 0) {
+          retVal[variable] = column - 1;
         }
       }
-      for (auto it = _right->getVariableColumns().begin();
-           it != _right->getVariableColumns().end(); ++it) {
-        retVal[it->first] = 2 + it->second;
+      for (const auto& [variable, column] : _right->getVariableColumns()) {
+        retVal[variable] = 2 + column;
       }
     }
   }
@@ -203,14 +201,6 @@ vector<size_t> Join::resultSortedOn() const {
   } else {
     return {2 + _rightJoinCol};
   }
-}
-
-// _____________________________________________________________________________
-std::unordered_set<string> Join::getContextVars() const {
-  auto cvars = _left->getContextVars();
-  cvars.insert(_right->getContextVars().begin(),
-               _right->getContextVars().end());
-  return cvars;
 }
 
 // _____________________________________________________________________________
@@ -258,7 +248,6 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
     result->_idTable.setCols(_right->getResultWidth() + 2);
     result->_sortedBy = {2 + _rightJoinCol};
     shared_ptr<const ResultTable> nonDummyRes = _right->getResult();
-    getRuntimeInfo().addChild(_right->getRootOperation()->getRuntimeInfo());
     result->_resultTypes.reserve(result->_idTable.cols());
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
@@ -273,7 +262,6 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
     result->_sortedBy = {_leftJoinCol};
 
     shared_ptr<const ResultTable> nonDummyRes = _left->getResult();
-    getRuntimeInfo().addChild(_left->getRootOperation()->getRuntimeInfo());
     result->_resultTypes.reserve(result->_idTable.cols());
     result->_resultTypes.insert(result->_resultTypes.end(),
                                 nonDummyRes->_resultTypes.begin(),
@@ -298,29 +286,30 @@ Join::ScanMethodType Join::getScanMethod(
   // this works because the join operations execution Context never changes
   // during its lifetime
   const auto& idx = _executionContext->getIndex();
-  const auto scanLambda = [&idx](const auto& perm) {
+  const auto scanLambda = [&idx](const Index::Permutation perm) {
     return
-        [&idx, &perm](Id id, IdTable* idTable) { idx.scan(id, idTable, perm); };
+        [&idx, perm](Id id, IdTable* idTable) { idx.scan(id, idTable, perm); };
   };
 
+  using enum Index::Permutation;
   switch (scan.getType()) {
     case IndexScan::FULL_INDEX_SCAN_SPO:
-      scanMethod = scanLambda(idx._SPO);
+      scanMethod = scanLambda(SPO);
       break;
     case IndexScan::FULL_INDEX_SCAN_SOP:
-      scanMethod = scanLambda(idx._SOP);
+      scanMethod = scanLambda(SOP);
       break;
     case IndexScan::FULL_INDEX_SCAN_PSO:
-      scanMethod = scanLambda(idx._PSO);
+      scanMethod = scanLambda(PSO);
       break;
     case IndexScan::FULL_INDEX_SCAN_POS:
-      scanMethod = scanLambda(idx._POS);
+      scanMethod = scanLambda(POS);
       break;
     case IndexScan::FULL_INDEX_SCAN_OSP:
-      scanMethod = scanLambda(idx._OSP);
+      scanMethod = scanLambda(OSP);
       break;
     case IndexScan::FULL_INDEX_SCAN_OPS:
-      scanMethod = scanLambda(idx._OPS);
+      scanMethod = scanLambda(OPS);
       break;
     default:
       AD_THROW(ad_semsearch::Exception::CHECK_FAILED,

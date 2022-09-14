@@ -7,7 +7,7 @@
 
 #include "./SampleExpression.h"
 
-#include "./SparqlExpressionGenerators.h"
+#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 
 using namespace sparqlExpression;
 using namespace sparqlExpression::detail;
@@ -22,14 +22,17 @@ ExpressionResult SampleExpression::evaluate(EvaluationContext* context) const {
     } else if constexpr (isVectorResult<T>) {
       AD_CHECK(!childResult.empty());
       return childResult[0];
-    } else if constexpr (std::is_same_v<T, Variable>) {
+    } else if constexpr (std::is_same_v<T, ::Variable>) {
       // TODO<joka921> Can't this be a simpler function (getIdAt)
       AD_CHECK(context->_endIndex > context->_beginIndex);
       EvaluationContext contextForSingleValue = *context;
       contextForSingleValue._endIndex = contextForSingleValue._beginIndex + 1;
       auto idOfFirstAsVector =
           detail::getIdsFromVariable(childResult, &contextForSingleValue);
-      return StrongIdWithResultType(idOfFirstAsVector[0]);
+      return StrongIdWithResultType{
+          idOfFirstAsVector[0],
+          context->_variableToColumnAndResultTypeMap.at(childResult.name())
+              .second};
     } else {
       static_assert(isConstantResult<T>);
       return childResult;

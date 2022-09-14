@@ -1,29 +1,44 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author:
+//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #include "./QueryExecutionTree.h"
-
-#include <absl/strings/str_join.h>
 
 #include <algorithm>
 #include <sstream>
 #include <string>
 #include <utility>
 
-#include "../parser/RdfEscaping.h"
-#include "./OrderBy.h"
-#include "./Sort.h"
+#include "absl/strings/str_join.h"
+#include "engine/Bind.h"
+#include "engine/CountAvailablePredicates.h"
+#include "engine/Distinct.h"
+#include "engine/Filter.h"
+#include "engine/GroupBy.h"
+#include "engine/HasPredicateScan.h"
+#include "engine/IndexScan.h"
+#include "engine/Join.h"
+#include "engine/NeutralElementOperation.h"
+#include "engine/OrderBy.h"
+#include "engine/Sort.h"
+#include "engine/TextOperationWithFilter.h"
+#include "engine/TransitivePath.h"
+#include "engine/TwoColumnJoin.h"
+#include "engine/Union.h"
+#include "engine/Values.h"
+#include "parser/RdfEscaping.h"
 
 using std::string;
+
+using parsedQuery::SelectClause;
 
 // _____________________________________________________________________________
 QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
     : _qec(qec),
-      _variableColumnMap(),
       _rootOperation(nullptr),
       _type(OperationType::UNDEFINED),
-      _contextVars(),
       _asString(),
       _sizeEstimate(std::numeric_limits<size_t>::max()) {}
 
@@ -63,61 +78,41 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
 }
 
 // _____________________________________________________________________________
-void QueryExecutionTree::setVariableColumn(string variable, size_t column) {
-  _variableColumnMap[std::move(variable)] = column;
-}
-
-// _____________________________________________________________________________
-void QueryExecutionTree::setVariableColumn(TripleComponent variable,
-                                           size_t column) {
-  AD_CHECK(variable.isVariable());
-  _variableColumnMap[std::move(variable).getString()] = column;
-}
-
-// _____________________________________________________________________________
 size_t QueryExecutionTree::getVariableColumn(const string& variable) const {
-  if (_variableColumnMap.count(variable) == 0) {
+  AD_CHECK(_rootOperation);
+  // TODO<joka921> unnecessary copies here...
+  const auto& varCols = _rootOperation->getVariableColumns();
+  if (!varCols.contains(variable)) {
     AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
              "Variable could not be mapped to result column. Var: " + variable);
   }
-  return _variableColumnMap.find(variable)->second;
-}
-
-// _____________________________________________________________________________
-void QueryExecutionTree::setVariableColumns(
-    ad_utility::HashMap<string, size_t> const& map) {
-  _variableColumnMap = map;
+  return varCols.find(variable)->second;
 }
 
 // ___________________________________________________________________________
 QueryExecutionTree::ColumnIndicesAndTypes
 QueryExecutionTree::selectedVariablesToColumnIndices(
-    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk,
-    const ResultTable& resultTable, bool includeQuestionMark) const {
+    const SelectClause& selectClause, const ResultTable& resultTable,
+    bool includeQuestionMark) const {
   ColumnIndicesAndTypes exportColumns;
 
-  for (auto var : selectedVarsOrAsterisk.getSelectedVariables()) {
-    // TODO: The TEXT(?variable) syntax is redundant and will probably removed
-    //  when we have a proper SPARQL parser.
-    constexpr std::string_view prefix = "TEXT(";
-    constexpr size_t prefixLength = prefix.length();
-    if (var.starts_with(prefix)) {
-      var = var.substr(prefixLength, var.rfind(')') - prefixLength);
-    }
-    if (getVariableColumns().contains(var)) {
-      auto columnIndex = getVariableColumns().at(var);
+  for (const auto& var : selectClause.getSelectedVariables()) {
+    std::string varString = var.name();
+    if (getVariableColumns().contains(varString)) {
+      auto columnIndex = getVariableColumns().at(varString);
       // Remove the question mark from the variable name if requested.
-      if (!includeQuestionMark && var.starts_with('?')) {
-        var = var.substr(1);
+      if (!includeQuestionMark && varString.starts_with('?')) {
+        varString = varString.substr(1);
       }
-      exportColumns.push_back(VariableAndColumnIndex{
-          var, columnIndex, resultTable.getResultType(columnIndex)});
+      exportColumns.push_back(
+          VariableAndColumnIndex{std::move(varString), columnIndex,
+                                 resultTable.getResultType(columnIndex)});
     } else {
       exportColumns.emplace_back(std::nullopt);
-      LOG(WARN) << "The variable \"" << var
+      LOG(WARN) << "The variable \"" << varString
                 << "\" was found in the original query, but not in the "
-                   "execution tree. "
-                   "This is likely a bug\n";
+                   "execution tree. This is likely a bug"
+                << std::endl;
     }
   }
   return exportColumns;
@@ -125,15 +120,15 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
 
 // _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeResultAsQLeverJson(
-    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
-    size_t offset, shared_ptr<const ResultTable> resultTable) const {
+    const SelectClause& selectClause, size_t limit, size_t offset,
+    shared_ptr<const ResultTable> resultTable) const {
   // They may trigger computation (but does not have to).
   if (!resultTable) {
     resultTable = getResult();
   }
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  ColumnIndicesAndTypes validIndices = selectedVariablesToColumnIndices(
-      selectedVarsOrAsterisk, *resultTable, true);
+  ColumnIndicesAndTypes validIndices =
+      selectedVariablesToColumnIndices(selectClause, *resultTable, true);
   if (validIndices.empty()) {
     return {std::vector<std::string>()};
   }
@@ -144,8 +139,8 @@ nlohmann::json QueryExecutionTree::writeResultAsQLeverJson(
 
 // _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
-    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
-    size_t offset, shared_ptr<const ResultTable> resultTable) const {
+    const SelectClause& selectClause, size_t limit, size_t offset,
+    shared_ptr<const ResultTable> resultTable) const {
   using nlohmann::json;
 
   // This might trigger the actual query processing.
@@ -156,8 +151,8 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
                 "Resolving strings in result...\n";
 
   // Don't include the question mark in the variable names.
-  ColumnIndicesAndTypes columns = selectedVariablesToColumnIndices(
-      selectedVarsOrAsterisk, *resultTable, false);
+  ColumnIndicesAndTypes columns =
+      selectedVariablesToColumnIndices(selectClause, *resultTable, false);
 
   std::erase(columns, std::nullopt);
 
@@ -168,7 +163,8 @@ nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
   const IdTable& idTable = resultTable->_idTable;
 
   json result;
-  auto selectedVars = selectedVarsOrAsterisk.getSelectedVariables();
+  std::vector<std::string> selectedVars =
+      selectClause.getSelectedVariablesAsStrings();
   // Strip the leading '?' from the variables, it is not part of the SPARQL JSON
   // output format.
   for (auto& var : selectedVars) {
@@ -292,7 +288,8 @@ bool QueryExecutionTree::knownEmptyResult() {
 
 // _____________________________________________________________________________
 bool QueryExecutionTree::varCovered(string var) const {
-  return _variableColumnMap.count(var) > 0;
+  AD_CHECK(_rootOperation);
+  return _rootOperation->getVariableColumns().contains(var);
 }
 
 // _______________________________________________________________________
@@ -348,7 +345,7 @@ QueryExecutionTree::idToStringAndType(Id id,
       return std::pair{_qec->getIndex().getTextExcerpt(id.getTextRecordIndex()),
                        nullptr};
   }
-  AD_CHECK(false);
+  AD_FAIL();
 }
 
 // __________________________________________________________________________________________________________
@@ -392,8 +389,7 @@ nlohmann::json QueryExecutionTree::writeQLeverJsonTable(
 // _____________________________________________________________________________
 template <QueryExecutionTree::ExportSubFormat format>
 ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
-    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
-    size_t offset) const {
+    const SelectClause& selectClause, size_t limit, size_t offset) const {
   static_assert(format == ExportSubFormat::BINARY ||
                 format == ExportSubFormat::CSV ||
                 format == ExportSubFormat::TSV);
@@ -404,8 +400,8 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
   resultTable->logResultSize();
   LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
              << std::endl;
-  auto selectedColumnIndices = selectedVariablesToColumnIndices(
-      selectedVarsOrAsterisk, *resultTable, true);
+  auto selectedColumnIndices =
+      selectedVariablesToColumnIndices(selectClause, *resultTable, true);
 
   const auto& idTable = resultTable->_idTable;
   size_t upperBound = std::min<size_t>(offset + limit, idTable.size());
@@ -427,7 +423,7 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
   static constexpr char sep = format == ExportSubFormat::TSV ? '\t' : ',';
   constexpr std::string_view sepView{&sep, 1};
   // Print header line
-  const auto& variables = selectedVarsOrAsterisk.getSelectedVariables();
+  const auto& variables = selectClause.getSelectedVariablesAsStrings();
   co_yield absl::StrJoin(variables, sepView);
   co_yield '\n';
 
@@ -470,7 +466,7 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
                      "Cannot deduce output type.");
         }
       }
-      co_yield(j + 1 < selectedColumnIndices.size() ? sep : '\n');
+      co_yield j + 1 < selectedColumnIndices.size() ? sep : '\n';
     }
   }
   LOG(DEBUG) << "Done creating readable result.\n";
@@ -480,18 +476,15 @@ ad_utility::streams::stream_generator QueryExecutionTree::generateResults(
 
 template ad_utility::streams::stream_generator
 QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::CSV>(
-    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
-    size_t offset) const;
+    const SelectClause& selectClause, size_t limit, size_t offset) const;
 
 template ad_utility::streams::stream_generator
 QueryExecutionTree::generateResults<QueryExecutionTree::ExportSubFormat::TSV>(
-    const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
-    size_t offset) const;
+    const SelectClause& selectClause, size_t limit, size_t offset) const;
 
 template ad_utility::streams::stream_generator QueryExecutionTree::
     generateResults<QueryExecutionTree::ExportSubFormat::BINARY>(
-        const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
-        size_t offset) const;
+        const SelectClause& selectClause, size_t limit, size_t offset) const;
 
 // _____________________________________________________________________________
 
@@ -594,4 +587,98 @@ nlohmann::json QueryExecutionTree::writeRdfGraphJson(
                          std::move(triple._object)});
   }
   return jsonArray;
+}
+
+bool QueryExecutionTree::isIndexScan() const { return _type == SCAN; }
+
+template <typename Op>
+void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
+  if constexpr (std::is_same_v<Op, IndexScan>) {
+    _type = SCAN;
+  } else if constexpr (std::is_same_v<Op, Union>) {
+    _type = UNION;
+  } else if constexpr (std::is_same_v<Op, Bind>) {
+    _type = BIND;
+  } else if constexpr (std::is_same_v<Op, Sort>) {
+    _type = SORT;
+  } else if constexpr (std::is_same_v<Op, Distinct>) {
+    _type = DISTINCT;
+  } else if constexpr (std::is_same_v<Op, Values>) {
+    _type = VALUES;
+  } else if constexpr (std::is_same_v<Op, TransitivePath>) {
+    _type = TRANSITIVE_PATH;
+  } else if constexpr (std::is_same_v<Op, OrderBy>) {
+    _type = ORDER_BY;
+  } else if constexpr (std::is_same_v<Op, GroupBy>) {
+    _type = GROUP_BY;
+  } else if constexpr (std::is_same_v<Op, HasPredicateScan>) {
+    _type = HAS_PREDICATE_SCAN;
+  } else if constexpr (std::is_same_v<Op, Filter>) {
+    _type = FILTER;
+  } else if constexpr (std::is_same_v<Op, NeutralElementOperation>) {
+    _type = NEUTRAL_ELEMENT;
+  } else if constexpr (std::is_same_v<Op, Join>) {
+    _type = JOIN;
+  } else if constexpr (std::is_same_v<Op, TwoColumnJoin>) {
+    _type = TWO_COL_JOIN;
+  } else if constexpr (std::is_same_v<Op, TextOperationWithFilter>) {
+    _type = TEXT_WITH_FILTER;
+  } else if constexpr (std::is_same_v<Op, CountAvailablePredicates>) {
+    _type = COUNT_AVAILABLE_PREDICATES;
+  } else {
+    static_assert(ad_utility::alwaysFalse<Op>,
+                  "New type of operation that was not yet registered");
+  }
+  _rootOperation = std::move(operation);
+}
+
+template void QueryExecutionTree::setOperation(std::shared_ptr<IndexScan>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<Union>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<Bind>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<Sort>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<Distinct>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<Values>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<TransitivePath>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<OrderBy>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<GroupBy>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<HasPredicateScan>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<Filter>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<NeutralElementOperation>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<Join>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<TwoColumnJoin>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<TextOperationWithFilter>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<CountAvailablePredicates>);
+
+// ________________________________________________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
+    std::shared_ptr<QueryExecutionTree> qet,
+    const vector<size_t>& sortColumns) {
+  auto inputSortedOn = qet->resultSortedOn();
+  bool inputSorted = sortColumns.size() <= inputSortedOn.size();
+  for (size_t i = 0; inputSorted && i < sortColumns.size(); ++i) {
+    inputSorted = sortColumns[i] == inputSortedOn[i];
+  }
+  if (sortColumns.empty() || inputSorted) {
+    return qet;
+  }
+
+  QueryExecutionContext* qec = qet->getRootOperation()->getExecutionContext();
+  if (sortColumns.size() == 1) {
+    auto sort = std::make_shared<Sort>(qec, std::move(qet), sortColumns[0]);
+    return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
+  } else {
+    std::vector<std::pair<size_t, bool>> sortColsForOrderBy;
+    for (auto i : sortColumns) {
+      // The second argument set to `false` means sort in ascending order.
+      // TODO<joka921> fix this.
+      sortColsForOrderBy.emplace_back(i, false);
+    }
+    auto sort = std::make_shared<OrderBy>(qec, std::move(qet),
+                                          std::move(sortColsForOrderBy));
+    return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
+  }
 }

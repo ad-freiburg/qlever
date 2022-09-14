@@ -55,7 +55,7 @@ class TwoColumnJoin : public Operation {
       return sizeEstimate;
     }
     // All cases should be covered now, so that we should never come here.
-    AD_CHECK(false);
+    AD_FAIL();
   }
 
   virtual bool knownEmptyResult() override {

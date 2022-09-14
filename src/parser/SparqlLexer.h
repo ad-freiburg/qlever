@@ -22,7 +22,8 @@ struct SparqlToken {
     INTEGER,
     FLOAT,
     LOGICAL_OR,
-    A_RDF_TYPE_ALIAS
+    A_RDF_TYPE_ALIAS,
+    BOOLEAN_LITERAL
   };
   static const std::string TYPE_NAMES[];
 

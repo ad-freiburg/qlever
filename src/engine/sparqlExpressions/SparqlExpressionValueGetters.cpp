@@ -26,7 +26,7 @@ double NumericValueGetter::operator()(StrongIdWithResultType strongId,
     case Datatype::TextRecordIndex:
       return std::numeric_limits<double>::quiet_NaN();
   }
-  AD_CHECK(false);
+  AD_FAIL();
 }
 
 // _____________________________________________________________________________
@@ -60,7 +60,7 @@ bool EffectiveBooleanValueGetter::operator()(StrongIdWithResultType strongId,
     case Datatype::TextRecordIndex:
       return true;
   }
-  AD_CHECK(false);
+  AD_FAIL();
 }
 
 // ____________________________________________________________________________
@@ -85,9 +85,9 @@ string StringValueGetter::operator()(StrongIdWithResultType strongId,
       return context->_localVocab[index];
     }
     case Datatype::TextRecordIndex:
-      context->_qec.getIndex().getTextExcerpt(id.getTextRecordIndex());
+      return context->_qec.getIndex().getTextExcerpt(id.getTextRecordIndex());
   }
-  AD_CHECK(false);
+  AD_FAIL();
 }
 
 // ____________________________________________________________________________

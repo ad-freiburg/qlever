@@ -11,6 +11,7 @@
 #include "../src/global/Pattern.h"
 #include "../src/index/Index.h"
 #include "./IndexTestHelpers.h"
+#include "index/IndexImpl.h"
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
@@ -51,6 +52,7 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
 }
 
 TEST(IndexTest, createFromTurtleTest) {
+  FILE_BUFFER_SIZE() = 1000;  // Increase performance in debug mode.
   string location = "./";
   string tail = "";
   writeStxxlConfigFile(location, tail);
@@ -79,7 +81,7 @@ TEST(IndexTest, createFromTurtleTest) {
       index.setOnDiskBase("_testindex");
       index.createFromFile<TurtleParserAuto>(filename);
     }
-    Index index;
+    IndexImpl index;
     index.createFromOnDiskIndex("_testindex");
 
     ASSERT_TRUE(index._PSO.metaData().col0IdExists(I(2)));
@@ -166,7 +168,7 @@ TEST(IndexTest, createFromTurtleTest) {
       index.setOnDiskBase("_testindex");
       index.createFromFile<TurtleParserAuto>(filename);
     }
-    Index index;
+    IndexImpl index;
     index.createFromOnDiskIndex("_testindex");
 
     ASSERT_TRUE(index._PSO.metaData().col0IdExists(I(7)));
@@ -248,6 +250,7 @@ class CreatePatternsFixture : public testing::Test {
 };
 
 TEST_F(CreatePatternsFixture, createPatterns) {
+  FILE_BUFFER_SIZE() = 1000;  // Increase performance in debug mode.
   {
     LOG(DEBUG) << "Testing createPatterns with ttl file..." << std::endl;
     std::ofstream f(inputFilename);
@@ -265,7 +268,7 @@ TEST_F(CreatePatternsFixture, createPatterns) {
       index.setOnDiskBase("_testindex");
       index.createFromFile<TurtleParserAuto>(inputFilename);
     }
-    Index index;
+    IndexImpl index;
     index.setUsePatterns(true);
     index.createFromOnDiskIndex("_testindex");
 
@@ -304,6 +307,7 @@ TEST_F(CreatePatternsFixture, createPatterns) {
 }
 
 TEST(IndexTest, createFromOnDiskIndexTest) {
+  FILE_BUFFER_SIZE() = 1000;  // Increase performance in debug mode.
   string location = "./";
   string tail = "";
   writeStxxlConfigFile(location, tail);
@@ -331,7 +335,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
     indexPrim.createFromFile<TurtleParserAuto>(filename);
   }
 
-  Index index;
+  IndexImpl index;
   index.createFromOnDiskIndex("_testindex2");
 
   ASSERT_TRUE(index.PSO().metaData().col0IdExists(I(2)));
@@ -355,6 +359,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
 };
 
 TEST(IndexTest, scanTest) {
+  FILE_BUFFER_SIZE() = 1000;  // Increase performance in debug mode.
   string location = "./";
   string tail = "";
   writeStxxlConfigFile(location, tail);
@@ -381,7 +386,7 @@ TEST(IndexTest, scanTest) {
       index.createFromFile<TurtleParserAuto>(filename);
     }
 
-    Index index;
+    IndexImpl index;
     index.createFromOnDiskIndex("_testindex");
 
     IdTable wol(1, allocator());
@@ -465,7 +470,7 @@ TEST(IndexTest, scanTest) {
       index.setOnDiskBase("_testindex");
       index.createFromFile<TurtleParserAuto>(filename);
     }
-    Index index;
+    IndexImpl index;
     index.createFromOnDiskIndex("_testindex");
 
     IdTable wol(1, allocator());
@@ -565,7 +570,7 @@ MATCHER_P2(IsPossiblyExternalString, content, isExternal, "") {
 
 TEST(IndexTest, TripleToInternalRepresentation) {
   {
-    Index index;
+    IndexImpl index;
     TurtleTriple turtleTriple{"<subject>", "<predicate>", "\"literal\""};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));
@@ -575,8 +580,7 @@ TEST(IndexTest, TripleToInternalRepresentation) {
     EXPECT_THAT(res._triple[2], IsPossiblyExternalString("\"literal\"", false));
   }
   {
-    Index index;
-    index.setOnDiskLiterals(true);
+    IndexImpl index;
     index.getNonConstVocabForTesting().initializeExternalizePrefixes(
         std::vector{"<subj"s});
     TurtleTriple turtleTriple{"<subject>", "<predicate>", "\"literal\"@fr"};
@@ -590,7 +594,7 @@ TEST(IndexTest, TripleToInternalRepresentation) {
                 IsPossiblyExternalString("\"literal\"@fr", true));
   }
   {
-    Index index;
+    IndexImpl index;
     TurtleTriple turtleTriple{"<subject>", "<predicate>", 42.0};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));

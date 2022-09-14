@@ -37,7 +37,7 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
                    "uncompressed vocabulary. This is not valid and a "
                    "programming error. Terminating"
                 << std::endl;
-      AD_CHECK(false);
+      AD_FAIL();
     }
 
     LOG(DEBUG) << "Registering external vocabulary" << std::endl;

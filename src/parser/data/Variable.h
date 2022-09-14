@@ -7,24 +7,21 @@
 #include <string>
 #include <utility>
 
-#include "../../engine/ResultTable.h"
-#include "../../index/Index.h"
+#include "Context.h"
+#include "engine/ResultTable.h"
+#include "index/Index.h"
 
 class Variable {
+ public:
   std::string _name;
 
- public:
-  explicit Variable(std::string name) : _name{std::move(name)} {
-    // verify variable name starts with ? or $ and continues without any
-    // special characters. This is weaker than the SPARQL grammar,
-    // but it is close enough so that it will likely never cause issues.
-    AD_CHECK(ctre::match<"[$?]\\w+">(_name));
-    // normalise notation for consistency
-    _name[0] = '?';
-  }
+  explicit Variable(std::string name);
 
-  // Todo<joka921> There are several similar variants of this function across
+  // TODO<joka921> There are several similar variants of this function across
   // the codebase. Unify them!
+  // TODO<joka921> This function can also be in the .cpp file, but we first
+  // have to figure out the link order.
+
   // ___________________________________________________________________________
   [[nodiscard]] std::optional<std::string> evaluate(
       const Context& context, [[maybe_unused]] ContextRole role) const {
@@ -59,7 +56,7 @@ class Variable {
           return qecIndex.getTextExcerpt(id.getTextRecordIndex());
       }
       // The switch is exhaustive
-      AD_CHECK(false);
+      AD_FAIL();
     }
     return std::nullopt;
   }
@@ -69,4 +66,9 @@ class Variable {
 
   // ___________________________________________________________________________
   [[nodiscard]] const std::string& name() const { return _name; }
+
+  // Needed for consistency with the `Alias` class.
+  [[nodiscard]] const std::string& targetVariable() const { return _name; }
+
+  bool operator==(const Variable&) const = default;
 };

@@ -18,6 +18,30 @@
 
 using std::string;
 
+namespace {
+// Convert a FilterType to the corresponding `Comparison`. Throws if no
+// corresponding `Comparison` exists (supported are LE, LT, EQ, NE, GE, GT).
+valueIdComparators::Comparison toComparison(
+    SparqlFilter::FilterType filterType) {
+  switch (filterType) {
+    case SparqlFilter::LT:
+      return valueIdComparators::Comparison::LT;
+    case SparqlFilter::LE:
+      return valueIdComparators::Comparison::LE;
+    case SparqlFilter::EQ:
+      return valueIdComparators::Comparison::EQ;
+    case SparqlFilter::NE:
+      return valueIdComparators::Comparison::NE;
+    case SparqlFilter::GT:
+      return valueIdComparators::Comparison::GT;
+    case SparqlFilter::GE:
+      return valueIdComparators::Comparison::GE;
+    default:
+      AD_FAIL();
+  }
+}
+}  // namespace
+
 // _____________________________________________________________________________
 size_t Filter::getResultWidth() const { return _subtree->getResultWidth(); }
 
@@ -185,9 +209,6 @@ void Filter::computeResultDynamicValue(IdTable* dynResult, size_t lhsInd,
 void Filter::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.setDescriptor(getDescriptor());
-  runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "Filter result computation..." << endl;
   result->_idTable.setCols(subRes->_idTable.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
@@ -264,7 +285,7 @@ void Filter::computeFilterRange(IdTableStatic<WIDTH>* res, size_t lhs,
     }
     default:
       // This should be unreachable.
-      AD_CHECK(false);
+      AD_FAIL();
   }
 }
 

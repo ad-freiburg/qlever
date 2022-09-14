@@ -1,17 +1,19 @@
 // Copyright 2011, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold <buchholb>
+//   2011-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+
+#include <CompilationInfo.h>
+#include <engine/Server.h>
+#include <global/Constants.h>
+#include <util/ProgramOptionsHelpers.h>
+#include <util/ReadableNumberFact.h>
 
 #include <boost/program_options.hpp>
 #include <cstdlib>
 #include <iostream>
 #include <string>
 #include <vector>
-
-#include "engine/Server.h"
-#include "global/Constants.h"
-#include "util/ProgramOptionsHelpers.h"
-#include "util/ReadableNumberFact.h"
 
 using std::cerr;
 using std::cout;
@@ -54,7 +56,7 @@ int main(int argc, char** argv) {
       &RuntimeParameters()};
 
   po::options_description options("Options for ServerMain");
-  auto add = [&options]<typename... Args>(Args && ... args) {
+  auto add = [&options]<typename... Args>(Args&&... args) {
     options.add_options()(std::forward<Args>(args)...);
   };
   add("help,h", "Produce this help message.");
@@ -108,21 +110,20 @@ int main(int argc, char** argv) {
 
   try {
     po::store(po::parse_command_line(argc, argv, options), optionsMap);
-
     if (optionsMap.count("help")) {
       std::cout << options << '\n';
       return EXIT_SUCCESS;
     }
-
     po::notify(optionsMap);
   } catch (const std::exception& e) {
-    std::cerr << "Error in command-line Argument: " << e.what() << '\n';
+    std::cerr << "Error in command-line argument: " << e.what() << '\n';
     std::cerr << options << '\n';
     return EXIT_FAILURE;
   }
 
-  LOG(INFO) << EMPH_ON << "QLever Server, compiled on " << __DATE__ << " "
-            << __TIME__ << EMPH_OFF << std::endl;
+  LOG(INFO) << EMPH_ON << "QLever Server, compiled on "
+            << qlever::version::DatetimeOfCompilation << " using git hash "
+            << qlever::version::GitShortHash() << EMPH_OFF << std::endl;
 
   try {
     Server server(port, static_cast<int>(numSimultaneousQueries),

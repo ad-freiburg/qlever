@@ -2,32 +2,55 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./SparqlParser.h"
+#include "parser/SparqlParser.h"
 
 #include <unordered_set>
 #include <variant>
 
-#include "../util/Algorithm.h"
-#include "../util/OverloadCallOperator.h"
-#include "./SparqlParserHelpers.h"
-#include "sparqlParser/SparqlQleverVisitor.h"
+#include "parser/Alias.h"
+#include "parser/data/Types.h"
+#include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "util/Conversions.h"
 
 using namespace std::literals::string_literals;
+using AntlrParser = SparqlAutomaticParser;
 
 SparqlParser::SparqlParser(const string& query) : lexer_(query), query_(query) {
   LOG(DEBUG) << "Parsing " << query << std::endl;
 }
 
+namespace {
+// Converts the PrefixMap to the legacy data format used by ParsedQuery
+vector<SparqlPrefix> convertPrefixMap(
+    const SparqlQleverVisitor::PrefixMap& map) {
+  vector<SparqlPrefix> prefixes;
+  for (auto const& [label, iri] : map) {
+    prefixes.emplace_back(label, iri);
+  }
+  return prefixes;
+}
+}  // namespace
+
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parse() {
   ParsedQuery result;
-  result._originalString = query_;
-  parsePrologue(&result);
+  std::string originalString = query_;
+  // parsePrologue parses all the prefixes which are stored in a member
+  // PrefixMap. This member is returned on parse.
+  SparqlQleverVisitor::PrefixMap prefixes = parseWithAntlr(
+      &AntlrParser::prologue,
+      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}});
+
   if (lexer_.accept("construct")) {
+    result._originalString = std::move(originalString);
+    result._prefixes = convertPrefixMap(prefixes);
     parseQuery(&result, CONSTRUCT_QUERY);
+  } else if (lexer_.peek("select")) {
+    result = parseWithAntlr(&AntlrParser::selectQuery, prefixes);
+    result._originalString = std::move(originalString);
+    result._prefixes = convertPrefixMap(prefixes);
   } else {
-    lexer_.expect("select");
-    parseQuery(&result, SELECT_QUERY);
+    throw ParseException("Query must either be a SELECT or CONSTRUCT.");
   }
   lexer_.expectEmpty();
 
@@ -36,544 +59,63 @@ ParsedQuery SparqlParser::parse() {
 
 // _____________________________________________________________________________
 void SparqlParser::parseQuery(ParsedQuery* query, QueryType queryType) {
-  if (queryType == CONSTRUCT_QUERY) {
-    auto str = lexer_.getUnconsumedInput();
-    SparqlQleverVisitor::PrefixMap prefixes;
-    for (const auto& prefix : query->_prefixes) {
-      prefixes[prefix._prefix] = prefix._uri;
-    }
-    auto parseResult =
-        sparqlParserHelpers::parseConstructTemplate(str, std::move(prefixes));
-    query->_clause = std::move(parseResult.resultOfParse_);
-    lexer_.reset(std::move(parseResult.remainingText_));
-    lexer_.expect("where");
-  } else if (queryType == SELECT_QUERY) {
-    parseSelect(query);
-  } else {
-    // Unsupported query type
-    AD_CHECK(false);
-  }
+  AD_CHECK(queryType == CONSTRUCT_QUERY);
+  query->_clause = parseWithAntlr(&AntlrParser::constructTemplate, *query)
+                       .value_or(ad_utility::sparql_types::Triples{});
 
-  lexer_.expect("{");
   parseWhere(query);
 
   parseSolutionModifiers(query);
 
-  if (!query->_groupByVariables.empty()) {
-    if (query->hasSelectClause() &&
-        query->selectClause()._varsOrAsterisk.isManuallySelectedVariables()) {
-      const auto& selectClause = query->selectClause();
-      // Check if all selected variables are either aggregated or
-      for (const string& var :
-           selectClause._varsOrAsterisk.getSelectedVariables()) {
-        if (var[0] == '?') {
-          if (ad_utility::contains_if(selectClause._aliases,
-                                      [&var](const ParsedQuery::Alias& alias) {
-                                        return alias._outVarName == var;
-                                      })) {
-            continue;
-          }
-          if (!ad_utility::contains_if(query->_groupByVariables,
-                                       [&var](const Variable& grouping) {
-                                         return var == grouping.name();
-                                       })) {
-            throw ParseException("Variable " + var +
-                                 " is selected but not "
-                                 "aggregated despite the query not being "
-                                 "grouped by " +
-                                 var + ".\n" + lexer_.input());
-          }
-        }
-      }
-    } else if (query->hasSelectClause() &&
-               query->selectClause()._varsOrAsterisk.isAllVariablesSelected()) {
-      throw ParseException(
-          "GROUP BY is not allowed when all variables are selected via SELECT "
-          "*");
-    } else if (query->hasConstructClause()) {
-      auto& constructClause = query->constructClause();
-      for (const auto& triple : constructClause) {
-        for (const auto& varOrTerm : triple) {
-          if (auto variable = std::get_if<Variable>(&varOrTerm)) {
-            const auto& var = variable->name();
-            if (!ad_utility::contains_if(query->_groupByVariables,
-                                         [&var](const Variable& grouping) {
-                                           return var == grouping.name();
-                                         })) {
-              throw ParseException("Variable " + var +
-                                   " is used but not "
-                                   "aggregated despite the query not being "
-                                   "grouped by " +
-                                   var + ".\n" + lexer_.input());
-            }
-          }
-        }
-      }
-    } else {
-      // Invalid clause type
-      AD_CHECK(false);
-    }
-  }
-  if (!query->hasSelectClause()) {
+  if (query->_groupByVariables.empty()) {
     return;
   }
-  const auto& selectClause = query->selectClause();
 
-  ad_utility::HashMap<std::string, size_t> variable_counts;
-  if (selectClause._varsOrAsterisk.isManuallySelectedVariables()) {
-    for (const std::string& s :
-         selectClause._varsOrAsterisk.getSelectedVariables()) {
-      variable_counts[s]++;
-    }
-  }
-
-  for (const ParsedQuery::Alias& a : selectClause._aliases) {
-    // The variable was already added to the selected variables while
-    // parsing the alias, thus it should appear exactly once
-    if (variable_counts[a._outVarName] > 1) {
-      throw ParseException("The variable name " + a._outVarName +
-                           " used in "
-                           "an alias was already selected on.\n" +
-                           lexer_.input());
+  AD_CHECK(query->hasConstructClause());
+  auto& constructClause = query->constructClause();
+  for (const auto& triple : constructClause) {
+    for (const auto& varOrTerm : triple) {
+      if (auto variable = std::get_if<Variable>(&varOrTerm)) {
+        if (!ad_utility::contains(query->_groupByVariables, *variable)) {
+          throw ParseException("Variable " + variable->name() +
+                               " is used but not "
+                               "aggregated despite the query not being "
+                               "grouped by " +
+                               variable->name() + ".\n" + lexer_.input());
+        }
+      }
     }
   }
 }
 
 // _____________________________________________________________________________
-void SparqlParser::parsePrologue(ParsedQuery* query) {
-  while (lexer_.accept("prefix")) {
-    lexer_.expect(SparqlToken::Type::IRI);
-    string key = lexer_.current().raw;
-    lexer_.expect(SparqlToken::Type::IRI);
-    string value = lexer_.current().raw;
-    addPrefix(key, value, query);
-  }
-}
-
-// _____________________________________________________________________________
-void SparqlParser::addPrefix(const string& key, const string& value,
-                             ParsedQuery* query) {
-  // Remove the trailing : from the key
-  SparqlPrefix p{key.substr(0, key.size() - 1), value};
-  query->_prefixes.emplace_back(p);
-}
-
-// _____________________________________________________________________________
-void SparqlParser::parseSelect(ParsedQuery* query) {
-  auto& selectClause = query->selectClause();
-  if (lexer_.accept("distinct")) {
-    selectClause._distinct = true;
-  }
-  if (lexer_.accept("reduced")) {
-    selectClause._reduced = true;
-  }
-  if (lexer_.accept("*")) {
-    selectClause._varsOrAsterisk.setAllVariablesSelected();
-  }
-  std::vector<std::string> manuallySelectedVariables;
-  while (!lexer_.accept("where")) {
-    if (selectClause._varsOrAsterisk.isAllVariablesSelected()) {
-      throw ParseException("Keyword WHERE expected after SELECT '*'");
-    }
-    if (lexer_.accept(SparqlToken::Type::VARIABLE)) {
-      manuallySelectedVariables.push_back(lexer_.current().raw);
-    } else if (lexer_.accept("text")) {
-      lexer_.expect("(");
-      std::ostringstream s;
-      s << "TEXT(";
-      lexer_.expect(SparqlToken::Type::VARIABLE);
-      s << lexer_.current().raw;
-      lexer_.expect(")");
-      s << ")";
-      manuallySelectedVariables.push_back(std::move(s).str());
-    } else if (lexer_.accept("score")) {
-      lexer_.expect("(");
-      std::ostringstream s;
-      s << "SCORE(";
-      lexer_.expect(SparqlToken::Type::VARIABLE);
-      s << lexer_.current().raw;
-      lexer_.expect(")");
-      s << ")";
-      manuallySelectedVariables.push_back(std::move(s).str());
-    } else if (lexer_.accept("(")) {
-      // Expect an alias.
-      ParsedQuery::Alias a =
-          parseWithAntlr(sparqlParserHelpers::parseAlias, *query);
-      selectClause._aliases.push_back(a);
-      manuallySelectedVariables.push_back(a._outVarName);
-      lexer_.expect(")");
-    } else {
-      lexer_.accept();
-      throw ParseException("Error in SELECT: unexpected token: " +
-                           lexer_.current().raw);
-    }
-    if (lexer_.empty()) {
-      throw ParseException("Keyword WHERE expected after SELECT.");
-    }
-  }
-  if (selectClause._varsOrAsterisk.isManuallySelectedVariables()) {
-    selectClause._varsOrAsterisk.setManuallySelected(manuallySelectedVariables);
-  }
-}
-
-// Helper function that converts the prefix map from `parsedQuery` (a vector of
-// pairs of prefix and IRI) to the prefix map we need for the
-// `SparqlQleverVisitor` (a hash map from prefixes to IRIs).
-namespace {
-SparqlQleverVisitor::PrefixMap getPrefixMap(const ParsedQuery& parsedQuery) {
+SparqlQleverVisitor::PrefixMap SparqlParser::getPrefixMap(
+    const ParsedQuery& parsedQuery) {
   SparqlQleverVisitor::PrefixMap prefixMap;
   for (const auto& prefixDef : parsedQuery._prefixes) {
     prefixMap[prefixDef._prefix] = prefixDef._uri;
   }
   return prefixMap;
 }
-}  // namespace
 
 // _____________________________________________________________________________
-void SparqlParser::parseWhere(ParsedQuery* query,
-                              ParsedQuery::GraphPattern* currentPattern) {
-  if (currentPattern == nullptr) {
-    // Make the shared pointer point to the root graphpattern without deleting
-    // it.
-    currentPattern = &query->_rootGraphPattern;
-    query->_rootGraphPattern._id = 0;
-  }
-
-  // If these are not empty the last subject and / or predicate is reused
-  std::string lastSubject;
-  std::string lastPredicate;
-  while (!lexer_.accept("}")) {
-    if (lexer_.empty()) {
-      throw ParseException(
-          "Expected a closing bracket for WHERE but reached "
-          "the end of the input.");
-    }
-    if (lexer_.accept("optional")) {
-      currentPattern->_children.emplace_back(
-          GraphPatternOperation::Optional{ParsedQuery::GraphPattern()});
-      auto& opt = currentPattern->_children.back()
-                      .get<GraphPatternOperation::Optional>();
-      auto& child = opt._child;
-      child._optional = true;
-      child._id = query->_numGraphPatterns;
-      query->_numGraphPatterns++;
-      lexer_.expect("{");
-      // Recursively call parseWhere to parse the optional part.
-      parseWhere(query, &child);
-      lexer_.accept(".");
-    } else if (lexer_.peek("bind")) {
-      GraphPatternOperation::Bind bind =
-          parseWithAntlr(sparqlParserHelpers::parseBind, *query);
-      query->registerVariableVisibleInQueryBody(bind._target);
-      currentPattern->_children.emplace_back(std::move(bind));
-      // The dot after a BIND is optional.
-      lexer_.accept(".");
-    } else if (lexer_.accept("minus")) {
-      currentPattern->_children.emplace_back(
-          GraphPatternOperation::Minus{ParsedQuery::GraphPattern()});
-      auto& opt =
-          currentPattern->_children.back().get<GraphPatternOperation::Minus>();
-      auto& child = opt._child;
-      child._optional = false;
-      child._id = query->_numGraphPatterns;
-      query->_numGraphPatterns++;
-      lexer_.expect("{");
-      // Recursively call parseWhere to parse the subtrahend.
-      parseWhere(query, &child);
-      lexer_.accept(".");
-    } else if (lexer_.accept("{")) {
-      // Subquery or union
-      if (lexer_.accept("select")) {
-        // subquery
-        // create the subquery operation
-        GraphPatternOperation::Subquery subq;
-        subq._subquery._prefixes = query->_prefixes;
-        parseQuery(&subq._subquery, SELECT_QUERY);
-
-        // Add the variables from the subquery that are visible to the outside
-        // (because they were selected, or because of a SELECT *) to the outer
-        // query.
-        ParsedQuery::SelectedVarsOrAsterisk varsOrAsteriskFromSubquery =
-            subq._subquery.selectClause()._varsOrAsterisk;
-        auto selectedVariablesFromSubquery =
-            varsOrAsteriskFromSubquery.getSelectedVariables();
-        for (const auto& variable : selectedVariablesFromSubquery) {
-          query->registerVariableVisibleInQueryBody(variable);
-        }
-
-        currentPattern->_children.emplace_back(std::move(subq));
-        // The closing bracket } is consumed by the subquery
-        lexer_.accept(".");
-      } else {
-        // union
-        // create the union operation
-        auto un = GraphPatternOperation::Union{ParsedQuery::GraphPattern{},
-                                               ParsedQuery::GraphPattern{}};
-        un._child1._optional = false;
-        un._child2._optional = false;
-        un._child1._id = query->_numGraphPatterns;
-        un._child2._id = query->_numGraphPatterns + 1;
-        query->_numGraphPatterns += 2;
-
-        // parse the left and right bracket
-        parseWhere(query, &un._child1);
-        lexer_.expect("union");
-        lexer_.expect("{");
-        parseWhere(query, &un._child2);
-        lexer_.accept(".");
-        currentPattern->_children.emplace_back(std::move(un));
-      }
-    } else if (lexer_.accept("filter")) {
-      // append to the global filters of the pattern.
-      parseFilter(&currentPattern->_filters, true, currentPattern);
-      // A filter may have an optional dot after it
-      lexer_.accept(".");
-    } else if (lexer_.peek("values")) {
-      auto values =
-          parseWithAntlr(sparqlParserHelpers::parseValuesClause, *query)
-              .value();
-      for (const auto& variable : values._inlineValues._variables) {
-        query->registerVariableVisibleInQueryBody(variable);
-      }
-      currentPattern->_children.emplace_back(std::move(values));
-      lexer_.accept(".");
-    } else {
-      std::string subject;
-      if (lastSubject.empty()) {
-        if (lexer_.accept(SparqlToken::Type::VARIABLE)) {
-          subject = lexer_.current().raw;
-          query->registerVariableVisibleInQueryBody(lexer_.current().raw);
-        } else {
-          lexer_.expect(SparqlToken::Type::IRI);
-          subject = lexer_.current().raw;
-        }
-      } else {
-        subject = lastSubject;
-        lastSubject.clear();
-      }
-
-      std::string predicate;
-      if (lastPredicate.empty()) {
-        if (lexer_.accept(SparqlToken::Type::VARIABLE)) {
-          predicate = lexer_.current().raw;
-          query->registerVariableVisibleInQueryBody(lexer_.current().raw);
-        } else if (lexer_.accept(SparqlToken::Type::A_RDF_TYPE_ALIAS)) {
-          predicate = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
-        } else {
-          // Assume the token is a predicate path. This will be verified
-          // separately later.
-          lexer_.expandNextUntilWhitespace();
-          lexer_.accept();
-          predicate = lexer_.current().raw;
-        }
-      } else {
-        predicate = lastPredicate;
-        lastPredicate.clear();
-      }
-
-      TripleComponent object;
-      if (lexer_.accept(SparqlToken::Type::VARIABLE)) {
-        object = lexer_.current().raw;
-        query->registerVariableVisibleInQueryBody(lexer_.current().raw);
-      } else if (lexer_.accept(SparqlToken::Type::RDFLITERAL)) {
-        object = parseLiteral(*query, lexer_.current().raw, true);
-      } else {
-        lexer_.expect(SparqlToken::Type::IRI);
-        object = lexer_.current().raw;
-      }
-
-      if (predicate == CONTAINS_WORD_PREDICATE ||
-          predicate == CONTAINS_WORD_PREDICATE_NS) {
-        // TODO<joka921, qup42> Make sure that the lowercasing of the words is
-        // also performed correctly in the ANTLR based parser. We also probably
-        // shouldn't allow anything other than plain literals without language
-        // tags or xsd types for the fulltext index.0
-        if (object.isString()) {
-          object.getString() =
-              stripAndLowercaseKeywordLiteral(object.getString());
-        }
-      }
-
-      SparqlTriple triple(
-          subject,
-          parseWithAntlr(sparqlParserHelpers::parseVerbPathOrSimple, predicate,
-                         getPrefixMap(*query)),
-          object);
-      auto& v = lastBasicPattern(currentPattern)._whereClauseTriples;
-      if (std::find(v.begin(), v.end(), triple) != v.end()) {
-        LOG(INFO) << "Ignoring duplicate triple: " << subject << ' '
-                  << predicate << ' ' << object << std::endl;
-      } else {
-        v.push_back(triple);
-      }
-
-      if (lexer_.accept(";")) {
-        lastSubject = subject;
-      } else if (lexer_.accept(",")) {
-        lastSubject = subject;
-        lastPredicate = predicate;
-      } else if (lexer_.accept("}")) {
-        break;
-      } else {
-        lexer_.expect(".");
-      }
-    }
-  }
-}
-
-std::string_view SparqlParser::readTriplePart(const std::string& s,
-                                              size_t* pos) {
-  size_t start = *pos;
-  bool insideUri = false;
-  bool insidePrefixed = false;
-  bool insideLiteral = false;
-  while (*pos < s.size()) {
-    if (!insideUri && !insideLiteral && !insidePrefixed) {
-      if (s[*pos] == '.' || std::isspace(static_cast<unsigned char>(s[*pos])) ||
-          s[*pos] == ';' || s[*pos] == ',' || s[*pos] == '}' ||
-          s[*pos] == ')') {
-        return std::string_view(s.data() + start, (*pos) - start);
-      }
-      if (s[*pos] == '<') {
-        insideUri = true;
-      }
-      if (s[*pos] == '\"') {
-        insideLiteral = true;
-      }
-      if (s[*pos] == ':') {
-        insidePrefixed = true;
-      }
-    } else if (insidePrefixed) {
-      if (std::isspace(static_cast<unsigned char>(s[*pos])) || s[*pos] == '}') {
-        return std::string_view(s.data() + start, (*pos) - start);
-      } else if (s[*pos] == '.' || s[*pos] == ';' || s[*pos] == ',') {
-        if ((*pos) + 1 >= s.size() ||
-            (s[(*pos) + 1] == '?' || s[(*pos) + 1] == '<' ||
-             s[(*pos) + 1] == '\"' ||
-             std::isspace(static_cast<unsigned char>(s[(*pos) + 1])))) {
-          insidePrefixed = false;
-          // Need to reevaluate the dot as a separator
-          (*pos)--;
-        }
-      }
-    } else {
-      if (insideUri && s[*pos] == '>') {
-        insideUri = false;
-      }
-      if (insideLiteral && s[*pos] == '\"') {
-        insideLiteral = false;
-      }
-    }
-    (*pos)++;
-  }
-
-  return std::string_view(s.data() + start, (*pos) - start);
+void SparqlParser::parseWhere(ParsedQuery* query) {
+  auto [pattern, visibleVariables] =
+      parseWithAntlr(&AntlrParser::whereClause, *query);
+  query->_rootGraphPattern = std::move(pattern);
+  query->registerVariablesVisibleInQueryBody(visibleVariables);
 }
 
 // _____________________________________________________________________________
 void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
-  while (!lexer_.empty() && !lexer_.accept("}")) {
-    if (lexer_.peek(SparqlToken::Type::ORDER_BY)) {
-      auto order_keys =
-          parseWithAntlr(sparqlParserHelpers::parseOrderClause, *query);
+  query->addSolutionModifiers(
+      parseWithAntlr(&AntlrParser::solutionModifier, *query));
 
-      auto processVariableOrderKey = [&query](VariableOrderKey orderKey) {
-        // Check whether grouping is done. The variable being ordered by
-        // must then be either grouped or the result of an alias in the select.
-        const vector<Variable>& groupByVariables = query->_groupByVariables;
-        if (!groupByVariables.empty() &&
-            !ad_utility::contains_if(groupByVariables,
-                                     [&orderKey](const Variable& var) {
-                                       return orderKey.variable_ == var.name();
-                                     }) &&
-            !ad_utility::contains_if(
-                query->selectClause()._aliases,
-                [&orderKey](const ParsedQuery::Alias& alias) {
-                  return alias._outVarName == orderKey.variable_;
-                })) {
-          throw ParseException(
-              "Variable " + orderKey.variable_ +
-              " was used in an ORDER BY "
-              "clause, but is neither grouped, nor created as an alias in the "
-              "SELECT clause.");
-        }
-
-        query->_orderBy.push_back(std::move(orderKey));
-      };
-
-      // QLever currently only supports ordering by variables. To allow
-      // all `orderConditions`, the corresponding expression is bound to a new
-      // internal variable. Ordering is then done by this variable.
-      auto processExpressionOrderKey = [&query,
-                                        this](ExpressionOrderKey orderKey) {
-        if (!query->_groupByVariables.empty())
-          // TODO<qup42> Implement this by adding a hidden alias in the
-          //  SELECT clause.
-          throw ParseException(
-              "Ordering by an expression while grouping is not supported by "
-              "QLever. (The expression is \"" +
-              orderKey.expression_.getDescriptor() +
-              "\"). Please assign this expression to a "
-              "new variable in the SELECT clause and then order by this "
-              "variable.");
-        auto additionalVariable =
-            addInternalBind(query, std::move(orderKey.expression_));
-        query->_orderBy.emplace_back(additionalVariable.name(),
-                                     orderKey.isDescending_);
-      };
-
-      for (auto& orderKey : order_keys) {
-        std::visit(ad_utility::OverloadCallOperator{processVariableOrderKey,
-                                                    processExpressionOrderKey},
-                   std::move(orderKey));
-      }
-    } else if (lexer_.peek("limit") || lexer_.peek("textlimit") ||
-               lexer_.peek("offset")) {
-      query->_limitOffset =
-          parseWithAntlr(sparqlParserHelpers::parseLimitOffsetClause, *query);
-    } else if (lexer_.peek(SparqlToken::Type::GROUP_BY)) {
-      auto group_keys =
-          parseWithAntlr(sparqlParserHelpers::parseGroupClause, *query);
-
-      auto processVariable = [&query](const Variable& groupKey) {
-        query->_groupByVariables.emplace_back(groupKey.name());
-      };
-      auto processExpression =
-          [&query, this](sparqlExpression::SparqlExpressionPimpl groupKey) {
-            auto helperTarget = addInternalBind(query, std::move(groupKey));
-            query->_groupByVariables.emplace_back(helperTarget.name());
-          };
-      auto processAlias = [&query](ParsedQuery::Alias groupKey) {
-        GraphPatternOperation::Bind helperBind{std::move(groupKey._expression),
-                                               groupKey._outVarName};
-        query->_rootGraphPattern._children.emplace_back(std::move(helperBind));
-        query->registerVariableVisibleInQueryBody(groupKey._outVarName);
-        query->_groupByVariables.emplace_back(groupKey._outVarName);
-      };
-
-      for (auto& orderKey : group_keys) {
-        std::visit(
-            ad_utility::OverloadCallOperator{processVariable, processExpression,
-                                             processAlias},
-            std::move(orderKey));
-      }
-    } else if (lexer_.accept("having")) {
-      parseFilter(&query->_havingClauses, true, &query->_rootGraphPattern);
-      while (parseFilter(&query->_havingClauses, false,
-                         &query->_rootGraphPattern)) {
-      }
-    } else {
-      lexer_.accept();
-      throw ParseException("Expected a solution modifier but got " +
-                           lexer_.current().raw);
-    }
-  }
+  lexer_.accept("}");
 }
 
 // _____________________________________________________________________________
-bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
-                               bool failOnNoFilter,
-                               ParsedQuery::GraphPattern* pattern) {
+std::optional<SparqlFilter> SparqlParser::parseFilter(bool failOnNoFilter) {
   size_t numParentheses = 0;
   while (lexer_.accept("(")) {
     numParentheses++;
@@ -593,8 +135,7 @@ bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
     lexer_.expect(SparqlToken::Type::RDFLITERAL);
     std::string rhs = lexer_.current().raw;
     expectClose();
-    addLangFilter(lhs, rhs, pattern);
-    return true;
+    return SparqlFilter{SparqlFilter::LANG_MATCHES, lhs, rhs};
   } else if (lexer_.accept("langmatches")) {
     lexer_.expect("(");
     lexer_.expect("lang");
@@ -606,8 +147,7 @@ bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
     lexer_.expect(SparqlToken::Type::RDFLITERAL);
     std::string rhs = lexer_.current().raw;
     expectClose();
-    addLangFilter(lhs, rhs, pattern);
-    return true;
+    return SparqlFilter{SparqlFilter::LANG_MATCHES, lhs, rhs};
   } else if (lexer_.accept("regex")) {
     std::vector<SparqlFilter> v;
     v.push_back(parseRegexFilter(false));
@@ -628,32 +168,8 @@ bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
       v[0]._additionalLhs.push_back(std::move(it->_lhs));
       v[0]._additionalPrefixes.push_back(std::move(it->_rhs));
     }
-    _filters->push_back(v[0]);
     expectClose();
-    return true;
-  } else if (lexer_.accept("prefix")) {
-    lexer_.expect("(");
-    SparqlFilter f1;
-    SparqlFilter f2;
-    f1._type = SparqlFilter::GE;
-    f2._type = SparqlFilter::LT;
-    // Do prefix filtering by using two filters (one testing >=, the other =)
-    lexer_.expect(SparqlToken::Type::VARIABLE);
-    f1._lhs = lexer_.current().raw;
-    f2._lhs = f1._lhs;
-    lexer_.expect(",");
-    lexer_.expect(SparqlToken::Type::RDFLITERAL);
-    f1._rhs = lexer_.current().raw;
-    f2._rhs = f1._lhs;
-    f1._rhs = f1._rhs.substr(0, f1._rhs.size() - 1) + " ";
-    f2._rhs = f2._rhs.substr(0, f2._rhs.size() - 2);
-    f2._rhs += f1._rhs[f1._rhs.size() - 2] + 1;
-    f2._rhs += f1._rhs[f1._rhs.size() - 1];
-    _filters->emplace_back(f1);
-    _filters->emplace_back(f2);
-    lexer_.expect(")");
-    expectClose();
-    return true;
+    return v[0];
   } else if (numParentheses) {
     SparqlFilter f;
     if (lexer_.accept("str")) {
@@ -720,154 +236,17 @@ bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
                            " is not a valid right hand side for a filter.");
     }
     expectClose();
-    _filters->emplace_back(f);
-    return true;
+    return f;
 
   } else if (failOnNoFilter) {
     lexer_.accept();
     throw ParseException("Expected a filter but got " + lexer_.current().raw);
   }
   expectClose();
-  return false;
-}
-
-void SparqlParser::addLangFilter(const std::string& lhs, const std::string& rhs,
-                                 ParsedQuery::GraphPattern* pattern) {
-  auto langTag = rhs.substr(1, rhs.size() - 2);
-  // First find a suitable triple for the given variable. It
-  // must use a predicate that is not a variable or complex
-  // predicate path
-  auto& t = lastBasicPattern(pattern)._whereClauseTriples;
-  auto it = std::find_if(t.begin(), t.end(), [&lhs](const auto& tr) {
-    return tr._o == lhs && (tr._p._operation == PropertyPath::Operation::IRI &&
-                            !isVariable(tr._p));
-  });
-  if (it == t.end()) {
-    LOG(DEBUG) << "language filter variable " + lhs +
-                      " did not appear as object in any suitable "
-                      "triple. "
-                      "Using literal-to-language predicate instead.\n";
-    auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
-    PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
-    taggedPredicate._iri = LANGUAGE_PREDICATE;
-    SparqlTriple triple(lhs, taggedPredicate, langEntity);
-    // Quadratic in number of triples in query.
-    // Shouldn't be a problem here, though.
-    // Could use a (hash)-set instead of vector.
-    if (std::find(t.begin(), t.end(), triple) != t.end()) {
-      LOG(DEBUG) << "Ignoring duplicate triple: lang(" << lhs << ") = " << rhs
-                 << std::endl;
-    } else {
-      t.push_back(triple);
-    }
-  } else {
-    // replace the triple
-    PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
-    taggedPredicate._iri = '@' + langTag + '@' + it->_p._iri;
-    SparqlTriple taggedTriple(it->_s, taggedPredicate, it->_o);
-    LOG(DEBUG) << "replacing predicate " << it->_p.asString() << " with "
-               << taggedTriple._p.asString() << std::endl;
-    *it = taggedTriple;
-  }
+  return std::nullopt;
 }
 
 // _____________________________________________________________________________
-string SparqlParser::stripAndLowercaseKeywordLiteral(std::string_view lit) {
-  if (lit.size() > 2 && lit[0] == '"' && lit.back() == '"') {
-    auto stripped = lit.substr(1, lit.size() - 2);
-    return ad_utility::getLowercaseUtf8(stripped);
-  }
-  return std::string{lit};
-}
-
-// _____________________________________________________________________________
-TripleComponent SparqlParser::parseLiteral(const ParsedQuery& pq,
-                                           const string& literal,
-                                           bool isEntireString,
-                                           size_t off /* defaults to 0 */) {
-  auto parseLiteralAsString = [&]() -> std::string {
-    std::stringstream out;
-    size_t pos = off;
-    // The delimiter of the string. Either ' or "
-    char delimiter = '"';
-    if (isEntireString) {
-      // check for a leading qutation mark
-      while (pos < literal.size() &&
-             std::isspace(static_cast<unsigned char>(literal[pos]))) {
-        pos++;
-      }
-      if (pos == literal.size() ||
-          (literal[pos] != '"' && literal[pos] != '\'')) {
-        throw ParseException("The literal: " + literal +
-                             " does not begin with a quotation mark.");
-      }
-    }
-    while (pos < literal.size() && literal[pos] != '"' &&
-           literal[pos] != '\'') {
-      pos++;
-    }
-    if (pos == literal.size()) {
-      // the string does not contain a literal
-      return "";
-    }
-    delimiter = literal[pos];
-    out << '"';
-    pos++;
-    bool escaped = false;
-    while (pos < literal.size() && (escaped || literal[pos] != delimiter)) {
-      escaped = false;
-      if (literal[pos] == '\\' && pos + 1 < literal.size() &&
-          literal[pos + 1] == delimiter) {
-        // Allow for escaping " using \ but do not change any other form of
-        // escaping.
-        escaped = true;
-      } else {
-        out << literal[pos];
-      }
-      pos++;
-    }
-    out << '"';
-    pos++;
-    if (pos < literal.size() && literal[pos] == '@') {
-      out << literal[pos];
-      pos++;
-      // add the language tag
-      // allow for ascii based language tags (no current language tag should
-      // contain non ascii letters).
-      while (pos < literal.size() &&
-             std::isalpha(static_cast<unsigned char>(literal[pos]))) {
-        out << literal[pos];
-        pos++;
-      }
-    }
-    if (pos + 1 < literal.size() && literal[pos] == '^' &&
-        literal[pos + 1] == '^') {
-      // add the xsd type
-      while (pos < literal.size() &&
-             !std::isspace(static_cast<unsigned char>(literal[pos]))) {
-        out << literal[pos];
-        pos++;
-      }
-    }
-    if (isEntireString && pos < literal.size()) {
-      // check for trailing non whitespace characters
-      while (pos < literal.size() &&
-             std::isspace(static_cast<unsigned char>(literal[pos]))) {
-        pos++;
-      }
-      if (pos < literal.size()) {
-        throw ParseException("The literal: " + literal +
-                             " was not terminated properly.");
-      }
-    }
-    return std::move(out).str();
-  };
-  auto resultAsString = parseLiteralAsString();
-  // Convert the Literals to ints or doubles if they have the appropriate
-  // types.
-  ParsedQuery::expandPrefix(resultAsString, getPrefixMap(pq));
-  return TurtleStringParser<TokenizerCtre>::parseTripleObject(resultAsString);
-}
 SparqlFilter SparqlParser::parseRegexFilter(bool expectKeyword) {
   if (expectKeyword) {
     lexer_.expect("regex");
@@ -945,53 +324,86 @@ SparqlFilter SparqlParser::parseRegexFilter(bool expectKeyword) {
   return f;
 }
 
-GraphPatternOperation::BasicGraphPattern& SparqlParser::lastBasicPattern(
-    ParsedQuery::GraphPattern* ptr) const {
-  auto& c = ptr->_children;
-  if (c.empty() || !c.back().is<GraphPatternOperation::BasicGraphPattern>()) {
-    c.emplace_back(GraphPatternOperation::BasicGraphPattern{});
-  }
-  return c.back().get<GraphPatternOperation::BasicGraphPattern>();
+// ________________________________________________________________________
+template <typename ContextType>
+auto SparqlParser::parseWithAntlr(
+    ContextType* (SparqlAutomaticParser::*F)(void),
+    const ParsedQuery& parsedQuery)
+    -> decltype((std::declval<sparqlParserHelpers::ParserAndVisitor>())
+                    .parseTypesafe(F)
+                    .resultOfParse_) {
+  return parseWithAntlr(F, getPrefixMap(parsedQuery));
 }
 
 // ________________________________________________________________________
-template <typename F>
-auto SparqlParser::parseWithAntlr(F f, const ParsedQuery& parsedQuery)
-    -> decltype(f(std::declval<const string&>(),
-                  std::declval<SparqlQleverVisitor::PrefixMap>())
+template <typename ContextType>
+auto SparqlParser::parseWithAntlr(
+    ContextType* (SparqlAutomaticParser::*F)(void),
+    SparqlQleverVisitor::PrefixMap prefixMap)
+    -> decltype((std::declval<sparqlParserHelpers::ParserAndVisitor>())
+                    .parseTypesafe(F)
                     .resultOfParse_) {
-  auto resultOfParseAndRemainingText =
-      f(lexer_.getUnconsumedInput(), getPrefixMap(parsedQuery));
+  sparqlParserHelpers::ParserAndVisitor p{lexer_.getUnconsumedInput(),
+                                          std::move(prefixMap)};
+  auto resultOfParseAndRemainingText = p.parseTypesafe(F);
   lexer_.reset(std::move(resultOfParseAndRemainingText.remainingText_));
   return std::move(resultOfParseAndRemainingText.resultOfParse_);
 }
 
-// ________________________________________________________________________
-template <typename F>
-auto SparqlParser::parseWithAntlr(
-    F f, const std::string& input,
-    const SparqlQleverVisitor::PrefixMap& prefixMap)
-    -> decltype(f(std::declval<const string&>(),
-                  std::declval<SparqlQleverVisitor::PrefixMap>())
-                    .resultOfParse_) {
-  auto resultOfParseAndRemainingText = f(input, prefixMap);
-  return std::move(resultOfParseAndRemainingText.resultOfParse_);
+namespace {
+// The legacy way of expanding prefixes in an IRI. Currently used only by
+// `parserFilterExpression` below.
+// TODO<joka921> Remove this function as soon as we have proper filters and
+// proper parsing of these filters.
+void expandPrefix(string& item,
+                  const ad_utility::HashMap<string, string>& prefixMap) {
+  if (!item.starts_with("?") && !item.starts_with("<")) {
+    std::optional<string> langtag = std::nullopt;
+    if (item.starts_with("@")) {
+      auto secondPos = item.find('@', 1);
+      if (secondPos == string::npos) {
+        throw ParseException(
+            "langtaged predicates must have form @lang@ActualPredicate. Second "
+            "@ is missing in " +
+            item);
+      }
+      langtag = item.substr(1, secondPos - 1);
+      item = item.substr(secondPos + 1);
+    }
+
+    size_t i = item.rfind(':');
+    size_t from = item.find("^^");
+    if (from == string::npos) {
+      from = 0;
+    } else {
+      from += 2;
+    }
+    if (i != string::npos && i >= from &&
+        prefixMap.contains(item.substr(from, i - from))) {
+      string prefixUri = prefixMap.at(item.substr(from, i - from));
+      // Note that substr(0, 0) yields the empty string.
+      item = item.substr(0, from) + prefixUri.substr(0, prefixUri.size() - 1) +
+             item.substr(i + 1) + '>';
+      item = RdfEscaping::unescapePrefixedIri(item);
+    }
+    if (langtag) {
+      item =
+          ad_utility::convertToLanguageTaggedPredicate(item, langtag.value());
+    }
+  }
 }
 
-// ________________________________________________________________________
-Variable SparqlParser::addInternalBind(
-    ParsedQuery* query, sparqlExpression::SparqlExpressionPimpl expression) {
-  // Internal variable name to which the result of the helper bind is
-  // assigned.
-  std::string targetVariable =
-      INTERNAL_VARIABLE_PREFIX + std::to_string(numInternalVariables_);
-  numInternalVariables_++;
-  GraphPatternOperation::Bind bind{std::move(expression), targetVariable};
-  query->_rootGraphPattern._children.emplace_back(std::move(bind));
-  // Don't register the targetVariable as visible because it is used
-  // internally and should not be selected by SELECT *.
-  // TODO<qup42, joka921> Implement "internal" variables, that can't be
-  //  selected at all and can never interfere with variables from the
-  //  query.
-  return Variable{std::move(targetVariable)};
+}  // namespace
+
+// _____________________________________________________________________________
+SparqlFilter SparqlParser::parseFilterExpression(
+    const string& filterContent,
+    const SparqlQleverVisitor::PrefixMap& prefixMap) {
+  SparqlParser parser(filterContent);
+  auto filter = parser.parseFilter(true).value();
+  expandPrefix(filter._lhs, prefixMap);
+  if (filter._type != SparqlFilter::REGEX) {
+    expandPrefix(filter._rhs, prefixMap);
+  }
+  return filter;
 }

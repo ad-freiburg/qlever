@@ -37,7 +37,7 @@ TextOperationWithFilter::getVariableColumns() const {
   // Subtract one because the entity that we filtered on
   // is provided by the filter table and still has the same place there.
   vcmap[_cvar] = 0;
-  vcmap["SCORE(" + _cvar + ")"] = 1;
+  vcmap[absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, _cvar.substr(1))] = 1;
   size_t colN = 2;
   const auto& filterColumns = _filterResult.get()->getVariableColumns();
   for (const string& var : _variables) {
@@ -82,9 +82,6 @@ void TextOperationWithFilter::computeResult(ResultTable* result) {
   AD_CHECK_GE(getNofVars(), 1);
   result->_idTable.setCols(getResultWidth());
   shared_ptr<const ResultTable> filterResult = _filterResult->getResult();
-
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.addChild(_filterResult->getRootOperation()->getRuntimeInfo());
 
   result->_resultTypes.reserve(result->_idTable.cols());
   result->_resultTypes.push_back(ResultTable::ResultType::TEXT);

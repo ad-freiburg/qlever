@@ -1,25 +1,27 @@
 // Copyright 2011, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author:
+//   2011-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #pragma once
+
+#include <engine/Engine.h>
+#include <engine/QueryPlanningCostFactors.h>
+#include <engine/ResultTable.h>
+#include <engine/RuntimeInformation.h>
+#include <engine/SortPerformanceEstimator.h>
+#include <global/Constants.h>
+#include <index/Index.h>
+#include <util/Cache.h>
+#include <util/ConcurrentCache.h>
+#include <util/Log.h>
+#include <util/Synchronized.h>
 
 #include <memory>
 #include <shared_mutex>
 #include <string>
 #include <vector>
-
-#include "../global/Constants.h"
-#include "../index/Index.h"
-#include "../util/Cache.h"
-#include "../util/ConcurrentCache.h"
-#include "../util/Log.h"
-#include "../util/Synchronized.h"
-#include "./Engine.h"
-#include "./ResultTable.h"
-#include "./SortPerformanceEstimator.h"
-#include "QueryPlanningCostFactors.h"
-#include "RuntimeInformation.h"
 
 using std::shared_ptr;
 using std::string;

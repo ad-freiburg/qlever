@@ -28,65 +28,67 @@ using std::string;
 class QueryExecutionTree {
  public:
   explicit QueryExecutionTree(QueryExecutionContext* const qec);
+  template <typename Op>
+  QueryExecutionTree(QueryExecutionContext* const qec,
+                     std::shared_ptr<Op> operation)
+      : QueryExecutionTree(qec) {
+    setOperation(std::move(operation));
+  }
 
   enum OperationType {
-    UNDEFINED = 0,
-    SCAN = 1,
-    JOIN = 2,
-    SORT = 3,
-    ORDER_BY = 4,
-    FILTER = 5,
-    DISTINCT = 6,
-    TEXT_FOR_CONTEXTS = 7,
-    TEXT_WITHOUT_FILTER = 8,
-    TEXT_WITH_FILTER = 9,
-    TWO_COL_JOIN = 10,
-    OPTIONAL_JOIN = 11,
-    COUNT_AVAILABLE_PREDICATES = 12,
-    GROUP_BY = 13,
-    HAS_RELATION_SCAN = 14,
-    UNION = 15,
-    MULTICOLUMN_JOIN = 16,
-    TRANSITIVE_PATH = 17,
-    VALUES = 18,
-    BIND = 19,
-    MINUS = 20
+    UNDEFINED,
+    SCAN,
+    JOIN,
+    SORT,
+    ORDER_BY,
+    FILTER,
+    DISTINCT,
+    TEXT_WITHOUT_FILTER,
+    TEXT_WITH_FILTER,
+    TWO_COL_JOIN,
+    OPTIONAL_JOIN,
+    COUNT_AVAILABLE_PREDICATES,
+    GROUP_BY,
+    HAS_PREDICATE_SCAN,
+    UNION,
+    MULTICOLUMN_JOIN,
+    TRANSITIVE_PATH,
+    VALUES,
+    BIND,
+    MINUS,
+    NEUTRAL_ELEMENT
   };
 
   enum class ExportSubFormat { CSV, TSV, BINARY };
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
 
+  template <typename Op>
+  void setOperation(std::shared_ptr<Op>);
+
   string asString(size_t indent = 0);
 
   const QueryExecutionContext* getQec() const { return _qec; }
 
-  const ad_utility::HashMap<string, size_t>& getVariableColumns() const {
-    return _variableColumnMap;
+  // TODO<joka921> make this a const&
+  ad_utility::HashMap<string, size_t> getVariableColumns() const {
+    AD_CHECK(_rootOperation);
+    return _rootOperation->getVariableColumns();
   }
 
   std::shared_ptr<Operation> getRootOperation() const { return _rootOperation; }
 
   const OperationType& getType() const { return _type; }
 
+  // Is the root operation of this tree an `IndexScan` operation.
+  // This is the only query for a concrete type that is frequently used.
+  bool isIndexScan() const;
+
   bool isEmpty() const {
     return _type == OperationType::UNDEFINED || !_rootOperation;
   }
 
-  void setVariableColumn(std::string variable, size_t columnIndex);
-  void setVariableColumn(TripleComponent variable, size_t columnIndex);
-
   size_t getVariableColumn(const string& var) const;
-
-  void setVariableColumns(const ad_utility::HashMap<string, size_t>& map);
-
-  void setContextVars(const std::unordered_set<string>& set) {
-    _contextVars = set;
-  }
-
-  const std::unordered_set<string>& getContextVars() const {
-    return _contextVars;
-  }
 
   size_t getResultWidth() const { return _rootOperation->getResultWidth(); }
 
@@ -102,19 +104,17 @@ class QueryExecutionTree {
     ResultTable::ResultType _resultType;
   };
 
-  using SelectedVarsOrAsterisk = ParsedQuery::SelectedVarsOrAsterisk;
-
   using ColumnIndicesAndTypes = vector<std::optional<VariableAndColumnIndex>>;
 
   // Returns a vector where the i-th element contains the column index and
   // `ResultType` of the i-th `selectVariable` in the `resultTable`
   ColumnIndicesAndTypes selectedVariablesToColumnIndices(
-      const SelectedVarsOrAsterisk& selectedVarsOrAsterisk,
+      const parsedQuery::SelectClause& selectClause,
       const ResultTable& resultTable, bool includeQuestionMark = true) const;
 
   template <ExportSubFormat format>
   ad_utility::streams::stream_generator generateResults(
-      const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+      const parsedQuery::SelectClause& selectClause, size_t limit,
       size_t offset) const;
 
   // Generate an RDF graph in turtle format for a CONSTRUCT query.
@@ -134,23 +134,17 @@ class QueryExecutionTree {
       size_t offset, std::shared_ptr<const ResultTable> res) const;
 
   nlohmann::json writeResultAsQLeverJson(
-      const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+      const parsedQuery::SelectClause& selectClause, size_t limit,
       size_t offset, shared_ptr<const ResultTable> resultTable = nullptr) const;
 
   nlohmann::json writeResultAsSparqlJson(
-      const SelectedVarsOrAsterisk& selectedVarsOrAsterisk, size_t limit,
+      const parsedQuery::SelectClause& selectClause, size_t limit,
       size_t offset,
       shared_ptr<const ResultTable> preComputedResult = nullptr) const;
 
   const std::vector<size_t>& resultSortedOn() const {
     return _rootOperation->getResultSortedOn();
   }
-
-  bool isContextvar(const string& var) const {
-    return _contextVars.count(var) > 0;
-  }
-
-  void addContextVar(const string& var) { _contextVars.insert(var); }
 
   void setTextLimit(size_t limit) {
     _rootOperation->setTextLimit(limit);
@@ -220,13 +214,18 @@ class QueryExecutionTree {
   bool& isRoot() noexcept { return _isRoot; }
   [[nodiscard]] const bool& isRoot() const noexcept { return _isRoot; }
 
+  // Create a `QueryExecutionTree` that produces exactly the same result as
+  // `qet`, but sorted according to the `sortColumns`. If `qet` is already
+  // sorted accordingly, it is simply returned.
+  static std::shared_ptr<QueryExecutionTree> createSortedTree(
+      std::shared_ptr<QueryExecutionTree> qet,
+      const vector<size_t>& sortColumns);
+
  private:
   QueryExecutionContext* _qec;  // No ownership
-  ad_utility::HashMap<string, size_t> _variableColumnMap;
   std::shared_ptr<Operation>
       _rootOperation;  // Owned child. Will be deleted at deconstruction.
   OperationType _type;
-  std::unordered_set<string> _contextVars;
   string _asString;
   size_t _indent = 0;  // the indent with which the _asString repr was formatted
   size_t _sizeEstimate;

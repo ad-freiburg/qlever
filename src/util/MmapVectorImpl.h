@@ -51,9 +51,9 @@ void MmapVector<T>::writeMetaDataToEnd() {
 // __________________________________________________________________________
 template <class T>
 void MmapVector<T>::readMetaDataFromEnd() {
-  std::ifstream fs(_filename, std::ios::binary | std::ios::ate);
+  auto fs =
+      ad_utility::makeIfstream(_filename, std::ios::binary | std::ios::ate);
   // since we do not know _bytesize yet we have to seek from the end
-  AD_CHECK(fs.is_open());
   static constexpr off_t metaDataSize = sizeof(_size) + sizeof(_capacity) +
                                         sizeof(_bytesize) +
                                         sizeof(MagicNumber) + sizeof(Version);
@@ -225,10 +225,7 @@ void MmapVector<T>::open(size_t size, string filename, AccessPattern pattern) {
 
   // open the file in case it does not exist yet
   // (data will be overwritten anyway)
-  {
-    std::ofstream ofs(_filename);
-    AD_CHECK(ofs.is_open());
-  }
+  { auto ofs = ad_utility::makeOfstream(_filename); }
   auto info = convertArraySizeToFileSize(std::max(size, MinCapacity));
   _bytesize = info._bytesize;
   _capacity = info._capacity;

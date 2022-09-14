@@ -5,10 +5,11 @@
 
 #include <string>
 
-#include "../util/Conversions.h"
 #include "./Operation.h"
 
 using std::string;
+
+class SparqlTriple;
 
 class IndexScan : public Operation {
  public:
@@ -36,19 +37,14 @@ class IndexScan : public Operation {
  public:
   virtual string getDescriptor() const override;
 
-  IndexScan(QueryExecutionContext* qec, ScanType type)
-      : Operation(qec),
-        _type(type),
-        _sizeEstimate(std::numeric_limits<size_t>::max()) {}
+  IndexScan(QueryExecutionContext* qec, ScanType type,
+            const SparqlTriple& triple);
 
-  virtual ~IndexScan() {}
+  virtual ~IndexScan() = default;
 
-  void setSubject(const TripleComponent& subject) { _subject = subject; }
-
-  void setPredicate(const string& predicate) { _predicate = predicate; }
   const string& getPredicate() const { return _predicate; }
-
-  void setObject(const TripleComponent& object) { _object = object; }
+  const TripleComponent& getSubject() const { return _subject; }
+  const TripleComponent& getObject() const { return _object; }
 
   virtual size_t getResultWidth() const override;
 
@@ -131,7 +127,8 @@ class IndexScan : public Operation {
 
   void computeOSPfreeS(ResultTable* result) const;
 
-  void computeFullScan(ResultTable* result, const auto& Permutation) const;
+  void computeFullScan(ResultTable* result,
+                       const Index::Permutation permutation) const;
 
   size_t computeSizeEstimate();
 };

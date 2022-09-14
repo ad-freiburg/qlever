@@ -36,11 +36,14 @@ class SparqlAutomaticVisitor : public antlr4::tree::AbstractParseTreeVisitor {
   virtual antlrcpp::Any visitSelectClause(
       SparqlAutomaticParser::SelectClauseContext* context) = 0;
 
+  virtual antlrcpp::Any visitVarOrAlias(
+      SparqlAutomaticParser::VarOrAliasContext* context) = 0;
+
   virtual antlrcpp::Any visitAlias(
       SparqlAutomaticParser::AliasContext* context) = 0;
 
-  virtual antlrcpp::Any visitAliasWithouBrackes(
-      SparqlAutomaticParser::AliasWithouBrackesContext* context) = 0;
+  virtual antlrcpp::Any visitAliasWithoutBrackets(
+      SparqlAutomaticParser::AliasWithoutBracketsContext* context) = 0;
 
   virtual antlrcpp::Any visitConstructQuery(
       SparqlAutomaticParser::ConstructQueryContext* context) = 0;
@@ -110,6 +113,10 @@ class SparqlAutomaticVisitor : public antlr4::tree::AbstractParseTreeVisitor {
 
   virtual antlrcpp::Any visitGroupGraphPatternSub(
       SparqlAutomaticParser::GroupGraphPatternSubContext* context) = 0;
+
+  virtual antlrcpp::Any visitGraphPatternNotTriplesAndMaybeTriples(
+      SparqlAutomaticParser::GraphPatternNotTriplesAndMaybeTriplesContext*
+          context) = 0;
 
   virtual antlrcpp::Any visitTriplesBlock(
       SparqlAutomaticParser::TriplesBlockContext* context) = 0;
@@ -206,6 +213,12 @@ class SparqlAutomaticVisitor : public antlr4::tree::AbstractParseTreeVisitor {
 
   virtual antlrcpp::Any visitVerbSimple(
       SparqlAutomaticParser::VerbSimpleContext* context) = 0;
+
+  virtual antlrcpp::Any visitTupleWithoutPath(
+      SparqlAutomaticParser::TupleWithoutPathContext* context) = 0;
+
+  virtual antlrcpp::Any visitTupleWithPath(
+      SparqlAutomaticParser::TupleWithPathContext* context) = 0;
 
   virtual antlrcpp::Any visitVerbPathOrSimple(
       SparqlAutomaticParser::VerbPathOrSimpleContext* context) = 0;

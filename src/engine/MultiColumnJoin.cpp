@@ -75,7 +75,6 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
   AD_CHECK(result);
   LOG(DEBUG) << "MultiColumnJoin result computation..." << endl;
 
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
   result->_sortedBy = resultSortedOn();
   result->_idTable.setCols(getResultWidth());
 
@@ -83,9 +82,6 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
-
-  runtimeInfo.addChild(_left->getRootOperation()->getRuntimeInfo());
-  runtimeInfo.addChild(_right->getRootOperation()->getRuntimeInfo());
 
   LOG(DEBUG) << "MultiColumnJoin subresult computation done." << std::endl;
 

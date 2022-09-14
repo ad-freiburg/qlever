@@ -3,6 +3,7 @@
 // Author: Björn Buchhold <buchholb>
 
 #pragma once
+#include <absl/strings/str_cat.h>
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
@@ -12,11 +13,13 @@
 #include <unistd.h>
 
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
 
 #include "./Exception.h"
+#include "./Forward.h"
 #include "Log.h"
 #include "Timer.h"
 
@@ -275,6 +278,35 @@ inline void deleteFile(const std::filesystem::path& path,
                 << std::endl;
     }
   }
+}
+
+namespace detail {
+template <typename Stream, bool forWriting>
+Stream makeFilestream(const std::filesystem::path& path, auto&&... args) {
+  Stream stream{path.string(), AD_FWD(args)...};
+  std::string_view mode = forWriting ? "for writing" : "for reading";
+  if (!stream.is_open()) {
+    std::string error =
+        absl::StrCat("Could not open file \"", path.string(), "\" ", mode,
+                     ". Possible causes: The file does not exist or the "
+                     "permissions are insufficient. The absolute path is \"",
+                     std::filesystem::absolute(path).string(), "\".");
+    throw std::runtime_error{error};
+  }
+  return stream;
+}
+}  // namespace detail
+
+// Open and return a std::ifstream from a given filename and optional
+// additionals `args`. Throw an exception stating the filename and the absolute
+// path when the file can't be opened.
+std::ifstream makeIfstream(const std::filesystem::path& path, auto&&... args) {
+  return detail::makeFilestream<std::ifstream, false>(path, AD_FWD(args)...);
+}
+
+// Similar to `makeIfstream`, but returns `std::ofstream`
+std::ofstream makeOfstream(const std::filesystem::path& path, auto&&... args) {
+  return detail::makeFilestream<std::ofstream, true>(path, AD_FWD(args)...);
 }
 
 }  // namespace ad_utility

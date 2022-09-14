@@ -1,18 +1,61 @@
 // Copyright 2011, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold <buchholb>
+// Author:
+//   2011-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include "./Server.h"
+#include "engine/Server.h"
 
 #include <cstring>
 #include <sstream>
 #include <string>
 #include <vector>
 
-#include "QueryPlanner.h"
-
+#include "engine/QueryPlanner.h"
+#include "util/BoostHelpers/AsyncWaitForFuture.h"
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
+
+// __________________________________________________________________________
+Server::Server(const int port, const int numThreads, size_t maxMemGB,
+               std::string accessToken)
+    : _numThreads(numThreads),
+      _port(port),
+      accessToken_(accessToken),
+      _allocator{ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+                     maxMemGB * (1ull << 30u)),
+                 [this](size_t numBytesToAllocate) {
+                   _cache.makeRoomAsMuchAsPossible(
+                       static_cast<double>(numBytesToAllocate) / sizeof(Id) *
+                       MAKE_ROOM_SLACK_FACTOR);
+                 }},
+      _sortPerformanceEstimator(),
+      _index(),
+      _engine(),
+      _initialized(false),
+      // The number of server threads currently also is the number of queries
+      // that can be processed simultaneously.
+      _queryProcessingSemaphore(numThreads) {
+  // TODO<joka921> Write a strong type for KB, MB, GB etc and use it
+  // in the cache and the memory limit
+  // Convert a number of gigabytes to the number of Ids that find in that
+  // amount of memory.
+  auto toNumIds = [](size_t gigabytes) -> size_t {
+    return gigabytes * (1ull << 30u) / sizeof(Id);
+  };
+  // This also directly triggers the update functions and propagates the
+  // values of the parameters to the cache.
+  RuntimeParameters().setOnUpdateAction<"cache-max-num-entries">(
+      [this](size_t newValue) { _cache.setMaxNumEntries(newValue); });
+  RuntimeParameters().setOnUpdateAction<"cache-max-size-gb">(
+      [this, toNumIds](size_t newValue) {
+        _cache.setMaxSize(toNumIds(newValue));
+      });
+  RuntimeParameters().setOnUpdateAction<"cache-max-size-gb-single-entry">(
+      [this, toNumIds](size_t newValue) {
+        _cache.setMaxSizeSingleEntry(toNumIds(newValue));
+      });
+}
 
 // __________________________________________________________________________
 void Server::initialize(const string& indexBaseName, bool useText,
@@ -51,19 +94,38 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
   // to `HttpServer` below.
   auto httpSessionHandler =
       [this](auto request, auto&& send) -> boost::asio::awaitable<void> {
-    // Version of send with maximally permissive CORS header (that allows the
+    // Version of send with maximally permissive CORS header (which allows the
     // client that receives the response to do with it what it wants).
-    auto sendWithCors = [&send](auto response) -> boost::asio::awaitable<void> {
+    // NOTE: For POST and GET requests, the "allow origin" header is sufficient,
+    // while the "allow headers" header is needed only for OPTIONS request. The
+    // "allow methods" header is purely informational. To avoid two similar
+    // lambdas here, we send the same headers for GET, POST, and OPTIONS.
+    auto sendWithAccessControlHeaders =
+        [&send](auto response) -> boost::asio::awaitable<void> {
       response.set(http::field::access_control_allow_origin, "*");
+      response.set(http::field::access_control_allow_headers, "*");
+      response.set(http::field::access_control_allow_methods,
+                   "GET, POST, OPTIONS");
       co_return co_await send(std::move(response));
     };
+    // Reply to OPTIONS requests immediately by allowing everything.
+    // NOTE: Handling OPTIONS requests is necessary because some POST queries
+    // (in particular, from the QLever UI) are preceded by an OPTIONS request (a
+    // so-called "preflight" request, which asks permission for the POST query).
+    if (request.method() == http::verb::options) {
+      LOG(INFO) << std::endl;
+      LOG(INFO) << "Request received via " << request.method()
+                << ", allowing everything" << std::endl;
+      co_return co_await sendWithAccessControlHeaders(
+          createOkResponse("", request, ad_utility::MediaType::textPlain));
+    }
     // Process the request using the `process` method and if it throws an
     // exception, log the error message and send a HTTP/1.1 400 Bad Request
     // response with that message. Note that the C++ standard forbids co_await
     // in the catch block, hence the workaround with the `exceptionErrorMsg`.
     std::optional<std::string> exceptionErrorMsg;
     try {
-      co_await process(std::move(request), sendWithCors);
+      co_await process(std::move(request), sendWithAccessControlHeaders);
     } catch (const std::exception& e) {
       exceptionErrorMsg = e.what();
     }
@@ -71,7 +133,7 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
       LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
       auto badRequestResponse = createBadRequestResponse(
           absl::StrCat(exceptionErrorMsg.value(), "\n"), request);
-      co_await sendWithCors(std::move(badRequestResponse));
+      co_await sendWithAccessControlHeaders(std::move(badRequestResponse));
     }
   };
 
@@ -358,26 +420,25 @@ Awaitable<json> Server::composeResponseQleverJson(
     j["status"] = "OK";
     j["warnings"] = qet.collectWarnings();
     if (query.hasSelectClause()) {
-      j["selected"] =
-          query.selectClause()._varsOrAsterisk.getSelectedVariables();
+      j["selected"] = query.selectClause().getSelectedVariablesAsStrings();
     } else {
       j["selected"] =
           std::vector<std::string>{"?subject", "?predicate", "?object"};
     }
 
-    j["runtimeInformation"] = RuntimeInformation::ordered_json(
-        qet.getRootOperation()->getRuntimeInfo());
+    j["runtimeInformation"] =
+        nlohmann::ordered_json(qet.getRootOperation()->getRuntimeInfo());
 
     {
       size_t limit = std::min(query._limitOffset._limit, maxSend);
       size_t offset = query._limitOffset._offset;
       requestTimer.cont();
-      j["res"] = query.hasSelectClause()
-                     ? qet.writeResultAsQLeverJson(
-                           query.selectClause()._varsOrAsterisk, limit, offset,
-                           std::move(resultTable))
-                     : qet.writeRdfGraphJson(query.constructClause(), limit,
-                                             offset, std::move(resultTable));
+      j["res"] =
+          query.hasSelectClause()
+              ? qet.writeResultAsQLeverJson(query.selectClause(), limit, offset,
+                                            std::move(resultTable))
+              : qet.writeRdfGraphJson(query.constructClause(), limit, offset,
+                                      std::move(resultTable));
       requestTimer.stop();
     }
     j["resultsize"] = query.hasSelectClause() ? resultSize : j["res"].size();
@@ -410,13 +471,35 @@ Awaitable<json> Server::composeResponseSparqlJson(
     size_t limit = std::min(query._limitOffset._limit, maxSend);
     size_t offset = query._limitOffset._offset;
     requestTimer.cont();
-    j = qet.writeResultAsSparqlJson(query.selectClause()._varsOrAsterisk, limit,
-                                    offset, std::move(resultTable));
+    j = qet.writeResultAsSparqlJson(query.selectClause(), limit, offset,
+                                    std::move(resultTable));
 
     requestTimer.stop();
     return j;
   };
   return computeInNewThread(compute);
+}
+
+// _______________________________________________________________________
+Awaitable<ad_utility::streams::stream_generator>
+Server::composeStreamableResponse(ad_utility::MediaType type,
+                                  const ParsedQuery& query,
+                                  const QueryExecutionTree& qet) const {
+  // TODO<joka921> Clean this up by removing the (unused) `ExportSubFormat`
+  // enum, And maybe by a `switch-constexpr`-abstraction
+  if (type == ad_utility::MediaType::csv) {
+    co_return co_await composeResponseSepValues<
+        QueryExecutionTree::ExportSubFormat::CSV>(query, qet);
+  } else if (type == ad_utility::MediaType::tsv) {
+    co_return co_await composeResponseSepValues<
+        QueryExecutionTree::ExportSubFormat::TSV>(query, qet);
+  } else if (type == ad_utility::MediaType::octetStream) {
+    co_return co_await composeResponseSepValues<
+        QueryExecutionTree::ExportSubFormat::BINARY>(query, qet);
+  } else if (type == ad_utility::MediaType::turtle) {
+    co_return composeTurtleResponse(query, qet);
+  }
+  AD_FAIL();
 }
 
 // _____________________________________________________________________________
@@ -428,8 +511,8 @@ Server::composeResponseSepValues(const ParsedQuery& query,
     size_t limit = query._limitOffset._limit;
     size_t offset = query._limitOffset._offset;
     return query.hasSelectClause()
-               ? qet.generateResults<format>(
-                     query.selectClause()._varsOrAsterisk, limit, offset)
+               ? qet.generateResults<format>(query.selectClause(), limit,
+                                             offset)
                : qet.writeRdfGraphSeparatedValues<format>(
                      query.constructClause(), limit, offset, qet.getResult());
   };
@@ -452,9 +535,10 @@ ad_utility::streams::stream_generator Server::composeTurtleResponse(
 }
 
 // _____________________________________________________________________________
-json Server::composeErrorResponseJson(const string& query,
-                                      const std::string& errorMsg,
-                                      ad_utility::Timer& requestTimer) {
+json Server::composeErrorResponseJson(
+    const string& query, const std::string& errorMsg,
+    ad_utility::Timer& requestTimer,
+    const std::optional<ExceptionMetadata>& metadata) {
   requestTimer.stop();
 
   json j;
@@ -464,6 +548,20 @@ json Server::composeErrorResponseJson(const string& query,
   j["time"]["total"] = requestTimer.msecs();
   j["time"]["computeResult"] = requestTimer.msecs();
   j["exception"] = errorMsg;
+
+  if (metadata.has_value()) {
+    auto& value = metadata.value();
+    j["metadata"]["startIndex"] = value.startIndex_;
+    j["metadata"]["stopIndex"] = value.stopIndex_;
+    j["metadata"]["line"] = value.line_;
+    j["metadata"]["positionInLine"] = value.charPositionInLine_;
+    // The ANTLR parser may not see the whole query. (The reason is value mixing
+    // of the old and new parser.) To detect/work with this we also transmit
+    // what ANTLR saw as query.
+    // TODO<qup42> remove once the whole query is parsed with ANTLR.
+    j["metadata"]["query"] = value.query_;
+  }
+
   return j;
 }
 
@@ -522,6 +620,10 @@ boost::asio::awaitable<void> Server::processQuery(
   // to the client. Note that the C++ standard forbids co_await in the catch
   // block, hence the workaround with the optional `exceptionErrorMsg`.
   std::optional<std::string> exceptionErrorMsg;
+  std::optional<ExceptionMetadata> metadata;
+  // Also store the QueryExecutionTree outside of the try-catch block to gain
+  // access to the runtimeInformation in the case of an error.
+  std::optional<QueryExecutionTree> queryExecutionTree;
   try {
     ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
         std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
@@ -545,7 +647,6 @@ boost::asio::awaitable<void> Server::processQuery(
               << (pinSubtrees ? " [pin subresults]" : "") << "\n"
               << query << std::endl;
     ParsedQuery pq = SparqlParser(query).parse();
-    pq.expandPrefixes();
 
     // The following code block determines the media type to be used for the
     // result. The media type is either determined by the "Accept:" header of
@@ -619,55 +720,58 @@ boost::asio::awaitable<void> Server::processQuery(
                               pinResult);
     QueryPlanner qp(&qec);
     qp.setEnablePatternTrick(_enablePatternTrick);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    queryExecutionTree = qp.createExecutionTree(pq);
+    auto& qet = queryExecutionTree.value();
     qet.isRoot() = true;  // allow pinning of the final result
     qet.recursivelySetTimeoutTimer(timeoutTimer);
+    qet.getRootOperation()->createRuntimeInfoFromEstimates();
     requestTimer.stop();
     LOG(INFO) << "Query planning done in " << requestTimer.msecs() << " ms"
               << " (can include index scans)" << std::endl;
     requestTimer.cont();
     LOG(TRACE) << qet.asString() << std::endl;
 
+    // Common code for sending responses for the streamable media types
+    // (tsv, csv, octet-stream, turtle).
+    auto sendStreamableResponse =
+        [&](ad_utility::MediaType mediaType) -> Awaitable<void> {
+      auto responseGenerator =
+          co_await composeStreamableResponse(mediaType, pq, qet);
+
+      // The `streamable_body` that is used internally turns all exceptions that
+      // occur while generating the rults into "broken pipe". We store the
+      // actual exceptions and manually rethrow them to propagate the correct
+      // error messages to the user.
+      // TODO<joka921> What happens, when part of the TSV export has already
+      // been sent and an exception occurs after that?
+      std::exception_ptr exceptionPtr;
+      responseGenerator.assignExceptionToThisPointer(&exceptionPtr);
+      try {
+        auto response =
+            createOkResponse(std::move(responseGenerator), request, mediaType);
+        co_await send(std::move(response));
+      } catch (...) {
+        if (exceptionPtr) {
+          std::rethrow_exception(exceptionPtr);
+        }
+        throw;
+      }
+    };
+
     // This actually processes the query and sends the result in the requested
     // format.
     switch (mediaType.value()) {
-      case ad_utility::MediaType::csv: {
-        auto responseGenerator = co_await composeResponseSepValues<
-            QueryExecutionTree::ExportSubFormat::CSV>(pq, qet);
-
-        auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::csv);
-        co_await send(std::move(response));
-
-      } break;
-      case ad_utility::MediaType::tsv: {
-        auto responseGenerator = co_await composeResponseSepValues<
-            QueryExecutionTree::ExportSubFormat::TSV>(pq, qet);
-
-        auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::tsv);
-        co_await send(std::move(response));
-      } break;
-      case ad_utility::MediaType::octetStream: {
-        auto responseGenerator = co_await composeResponseSepValues<
-            QueryExecutionTree::ExportSubFormat::BINARY>(pq, qet);
-
-        auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::octetStream);
-        co_await send(std::move(response));
+      case ad_utility::MediaType::csv:
+      case ad_utility::MediaType::tsv:
+      case ad_utility::MediaType::octetStream:
+      case ad_utility::MediaType::turtle: {
+        co_await sendStreamableResponse(mediaType.value());
       } break;
       case ad_utility::MediaType::qleverJson: {
         // Normal case: JSON response
         auto responseString =
             co_await composeResponseQleverJson(pq, qet, requestTimer, maxSend);
         co_await sendJson(std::move(responseString));
-      } break;
-      case ad_utility::MediaType::turtle: {
-        auto responseGenerator = composeTurtleResponse(pq, qet);
-
-        auto response = createOkResponse(std::move(responseGenerator), request,
-                                         ad_utility::MediaType::turtle);
-        co_await send(std::move(response));
       } break;
       case ad_utility::MediaType::sparqlJson: {
         auto responseString =
@@ -677,7 +781,7 @@ boost::asio::awaitable<void> Server::processQuery(
       default:
         // This should never happen, because we have carefully restricted the
         // subset of mediaTypes that can occur here.
-        AD_CHECK(false);
+        AD_FAIL();
     }
     // Print the runtime info. This needs to be done after the query
     // was computed.
@@ -697,13 +801,43 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(DEBUG) << "Runtime Info:\n"
                << qet.getRootOperation()->getRuntimeInfo().toString()
                << std::endl;
+  } catch (const ParseException& e) {
+    exceptionErrorMsg = e.errorMessageWithoutPositionalInfo();
+    metadata = e.metadata();
   } catch (const std::exception& e) {
     exceptionErrorMsg = e.what();
   }
+  // TODO<qup42> at this stage should probably have a wrapper that takes
+  //  optional<errorMsg> and optional<metadata> and does this logic
   if (exceptionErrorMsg) {
     LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
     auto errorResponseJson = composeErrorResponseJson(
-        query, exceptionErrorMsg.value(), requestTimer);
+        query, exceptionErrorMsg.value(), requestTimer, metadata);
+    if (metadata.has_value()) {
+      LOG(ERROR) << metadata.value().coloredError() << std::endl;
+    }
+    if (queryExecutionTree) {
+      errorResponseJson["runtimeInformation"] = nlohmann::ordered_json(
+          queryExecutionTree->getRootOperation()->getRuntimeInfo());
+    }
     co_return co_await sendJson(errorResponseJson, http::status::bad_request);
   }
+}
+
+// _____________________________________________________________________________
+template <typename Function, typename T>
+Awaitable<T> Server::computeInNewThread(Function function) const {
+  auto acquireComputeRelease = [this, function = std::move(function)] {
+    LOG(DEBUG) << "Acquiring new thread for query processing\n";
+    _queryProcessingSemaphore.acquire();
+    ad_utility::OnDestruction f{[this]() noexcept {
+      try {
+        _queryProcessingSemaphore.release();
+      } catch (...) {
+      }
+    }};
+    return function();
+  };
+  co_return co_await ad_utility::asio_helpers::async_on_external_thread(
+      std::move(acquireComputeRelease), boost::asio::use_awaitable);
 }

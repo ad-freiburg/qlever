@@ -34,7 +34,7 @@ class CompressorStreamTestFixture
       filterStream.push(io::zlib_decompressor());
     } else {
       // Unsupported decompression
-      AD_CHECK(false);
+      AD_FAIL();
     }
     filterStream.push(io::back_inserter(result));
 

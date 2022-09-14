@@ -1,183 +1,103 @@
 // Copyright 2019, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
-//
+// Author:
+//   2019      Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
+//   2022-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+
 #pragma once
 
 #include <absl/strings/str_join.h>
+#include <util/HashMap.h>
+#include <util/json.h>
 
 #include <iostream>
 #include <string>
 #include <vector>
 
-#include "../util/HashMap.h"
-#include "../util/StringUtils.h"
-#include "../util/Timer.h"
-#include "../util/json.h"
-
+/// A class to store information about the status of an operation (result size,
+/// time to compute, status, etc.). Also contains the functionality to print
+/// that information nicely formatted and to export it to JSON.
 class RuntimeInformation {
  public:
-  // Ordered JSON that preserves the insertion order.
-  // This helps to make the JSON more readable as it forces children to be
-  // printed after their parents. See also
-  // https://github.com/nlohmann/json/issues/485#issuecomment-333652309
-  using ordered_json = nlohmann::ordered_json;
+  /// The computation status of an operation.
+  enum struct Status {
+    notStarted,
+    completed,
+    failed,
+    failedBecauseChildFailed
+  };
+  using enum Status;
 
-  friend inline void to_json(RuntimeInformation::ordered_json& j,
-                             const RuntimeInformation& rti);
+  // Public members
 
-  RuntimeInformation()
-      : _time(0),
-        _rows(0),
-        _cols(0),
-        _wasCached(false),
-        _descriptor(),
-        _columnNames(),
-        _details(),
-        _children() {}
+  /// The total time spent computing this operation. This includes the
+  /// computation of the children.
+  double totalTime_ = 0.0;
 
-  std::string toString() const {
-    std::ostringstream buffer;
-    // imbue with the same locale as std::cout which uses for exanoke
-    // thousands separators
-    buffer.imbue(ad_utility::commaLocale);
-    // So floats use fixed precision
-    buffer << std::fixed << std::setprecision(2);
-    writeToStream(buffer);
-    return std::move(buffer).str();
-  }
+  /// In case this operation was read from the cache, we will store the time
+  /// information about the original computation in the following two members.
+  double originalTotalTime_ = 0.0;
+  double originalOperationTime_ = 0.0;
 
-  void writeToStream(std::ostream& out, size_t indent = 1) const {
-    using json = nlohmann::json;
-    out << indentStr(indent) << '\n';
-    out << indentStr(indent - 1) << "├─ " << _descriptor << '\n';
-    out << indentStr(indent) << "result_size: " << _rows << " x " << _cols
-        << '\n';
-    out << indentStr(indent) << "columns: " << absl::StrJoin(_columnNames, ", ")
-        << '\n';
-    out << indentStr(indent) << "total_time: " << _time << " ms" << '\n';
-    out << indentStr(indent) << "operation_time: " << getOperationTime()
-        << " ms" << '\n';
-    out << indentStr(indent) << "cached: " << ((_wasCached) ? "true" : "false")
-        << '\n';
-    for (const auto& el : _details.items()) {
-      out << indentStr(indent) << "  " << el.key() << ": ";
-      // We want to print doubles with fixed precision and stream ints as their
-      // native type so they get thousands separators. For everything else we
-      // let nlohmann::json handle it
-      if (el.value().type() == json::value_t::number_float) {
-        out << ad_utility::to_string(el.value().get<double>(), 2);
-      } else if (el.value().type() == json::value_t::number_unsigned) {
-        out << el.value().get<uint64_t>();
-      } else if (el.value().type() == json::value_t::number_integer) {
-        out << el.value().get<int64_t>();
-      } else {
-        out << el.value();
-      }
-      if (el.key().ends_with("Time")) {
-        out << " ms";
-      }
-      out << '\n';
-    }
-    if (_children.size()) {
-      out << indentStr(indent) << "┬\n";
-      for (const RuntimeInformation& child : _children) {
-        child.writeToStream(out, indent + 1);
-      }
-    }
-  }
+  /// The estimated cost, size, and column multiplicities of the operation.
+  size_t costEstimate_ = 0;
+  size_t sizeEstimate_ = 0;
+  std::vector<float> multiplicityEstimates_;
 
-  void setDescriptor(const std::string& descriptor) {
-    _descriptor = descriptor;
-  }
+  /// The actual number of rows and columns in the result.
+  size_t numRows_ = 0;
+  size_t numCols_ = 0;
 
+  /// The status of the operation.
+  Status status_ = Status::notStarted;
+
+  /// Was the result of the operation read from the cache or actually computed.
+  bool wasCached_ = false;
+
+  /// A short human-readable string that identifies the operation.
+  std::string descriptor_;
+
+  /// The names of the variables that are stored in the columsn of the result.
+  std::vector<std::string> columnNames_;
+
+  /// The child operations of this operation.
+  std::vector<RuntimeInformation> children_;
+
+  /// A key-value map of various other information that might be different for
+  /// different types of operations.
+  nlohmann::json details_;
+
+  // Default constructor.
+  RuntimeInformation() = default;
+
+  /// Formatted output to  std::string and streams.
+  [[nodiscard]] std::string toString() const;
+  void writeToStream(std::ostream& out, size_t indent = 1) const;
+
+  /// Output as json. The signature of this function is mandated by the json
+  /// library to allow for implicit conversion.
+  friend void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti);
+
+  /// Set the names of the columns from the HashMap format that is used in the
+  /// rest of the Qlever code.
   void setColumnNames(
-      const ad_utility::HashMap<std::string, size_t>& columnMap) {
-    _columnNames.resize(columnMap.size());
-    for (const auto& column : columnMap) {
-      _columnNames[column.second] = column.first;
-    }
-  }
+      const ad_utility::HashMap<std::string, size_t>& columnMap);
 
-  // Set the overall time in milliseconds
-  void setTime(double time) { _time = time; }
+  /// Get the time spent computing the operation. This is the total time minus
+  /// the time spent computing the children.
+  [[nodiscard]] double getOperationTime() const;
 
-  // Get the overall time in milliseconds
-  double getTime() const { return _time; }
+  /// Get the cost estimate for this operation. This is the total cost estimate
+  /// minus the sum of the cost estimates of all children.
+  [[nodiscard]] size_t getOperationCostEstimate() const;
 
-  // Set the number of rows
-  void setRows(size_t rows) { _rows = rows; }
-
-  // Get the number of rows
-  size_t getRows() { return _rows; }
-
-  // Set the number of columns
-  void setCols(size_t cols) { _cols = cols; }
-
-  // Get the number of columns
-  size_t getCols() { return _cols; }
-
-  double getOperationTime() const {
-    if (_wasCached) {
-      return getTime();
-    } else {
-      return getTime() - getChildrenTime();
-    }
-  }
-
-  // The time spend in children
-  double getChildrenTime() const {
-    double sum = 0;
-    for (const RuntimeInformation& child : _children) {
-      sum += child.getTime();
-    }
-    return sum;
-  }
-
-  void setWasCached(bool wasCached) { _wasCached = wasCached; }
-
-  void addChild(const RuntimeInformation& r) { _children.push_back(r); }
-
-  // direct access to the children
-  std::vector<RuntimeInformation>& children() { return _children; }
-  [[nodiscard]] const std::vector<RuntimeInformation>& children() const {
-    return _children;
-  }
-
+  /// Add a key-value pair to the `details` section of the output. `value` may
+  /// be any type that can be implicitly converted to `nlohmann::json`.
   template <typename T>
   void addDetail(const std::string& key, const T& value) {
-    _details[key] = value;
+    details_[key] = value;
   }
 
  private:
-  static std::string indentStr(size_t indent) {
-    std::string ind;
-    for (size_t i = 0; i < indent; i++) {
-      ind += "│  ";
-    }
-    return ind;
-  }
-
-  double _time;
-  size_t _rows;
-  size_t _cols;
-  bool _wasCached;
-  std::string _descriptor;
-  std::vector<std::string> _columnNames;
-  nlohmann::json _details;
-  std::vector<RuntimeInformation> _children;
+  static std::string_view toString(Status status);
 };
-
-inline void to_json(RuntimeInformation::ordered_json& j,
-                    const RuntimeInformation& rti) {
-  j = RuntimeInformation::ordered_json{
-      {"description", rti._descriptor},
-      {"result_rows", rti._rows},
-      {"result_cols", rti._cols},
-      {"column_names", rti._columnNames},
-      {"total_time", rti._time},
-      {"operation_time", rti.getOperationTime()},
-      {"was_cached", rti._wasCached},
-      {"details", rti._details},
-      {"children", rti._children}};
-}

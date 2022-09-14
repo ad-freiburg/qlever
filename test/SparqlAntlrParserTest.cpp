@@ -1,35 +1,98 @@
-//
-// Created by johannes on 08.05.21.
-//
+// Copyright 2021, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Authors:
+//   2021-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
+//   2022      Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
 
-#include <antlr4-runtime.h>
 #include <gtest/gtest.h>
 
 #include <iostream>
 #include <type_traits>
+#include <utility>
 
-#include "../../src/parser/sparqlParser/SparqlQleverVisitor.h"
-#include "../src/parser/SparqlParserHelpers.h"
-#include "../src/parser/data/Types.h"
-#include "../src/parser/sparqlParser/generated/SparqlAutomaticLexer.h"
-#include "../src/util/antlr/ANTLRErrorHandling.h"
 #include "SparqlAntlrParserTestHelpers.h"
+#include "parser/SparqlParserHelpers.h"
+#include "parser/sparqlParser/SparqlQleverVisitor.h"
+#include "util/SourceLocation.h"
 
-using namespace antlr4;
 using namespace sparqlParserHelpers;
+namespace m = matchers;
+using Parser = SparqlAutomaticParser;
 
-template <typename T>
-void testNumericLiteral(const std::string& input, T target) {
-  ParserAndVisitor p(input);
-  auto literalContext = p.parser_.numericLiteral();
-  auto result = p.visitor_.visitNumericLiteral(literalContext).as<T>();
+template <auto F>
+auto parse =
+    [](const string& input, SparqlQleverVisitor::PrefixMap prefixes = {}) {
+      ParserAndVisitor p{input, std::move(prefixes)};
+      return p.parseTypesafe(F);
+    };
 
-  if constexpr (std::is_floating_point_v<T>) {
-    ASSERT_FLOAT_EQ(target, result);
-  } else {
-    ASSERT_EQ(target, result);
+auto parseBlankNode = parse<&Parser::blankNode>;
+auto parseCollection = parse<&Parser::collection>;
+auto parseConstructTriples = parse<&Parser::constructTriples>;
+auto parseGraphNode = parse<&Parser::graphNode>;
+auto parseObjectList = parse<&Parser::objectList>;
+auto parsePropertyList = parse<&Parser::propertyList>;
+auto parsePropertyListNotEmpty = parse<&Parser::propertyListNotEmpty>;
+auto parseSelectClause = parse<&Parser::selectClause>;
+auto parseTriplesSameSubject = parse<&Parser::triplesSameSubject>;
+auto parseVariable = parse<&Parser::var>;
+auto parseVarOrTerm = parse<&Parser::varOrTerm>;
+auto parseVerb = parse<&Parser::verb>;
+
+template <auto Clause,
+          typename Value = decltype(parse<Clause>("").resultOfParse_)>
+struct ExpectCompleteParse {
+  SparqlQleverVisitor::PrefixMap prefixMap_ = {};
+
+  auto operator()(const string& input, const Value& value,
+                  ad_utility::source_location l =
+                      ad_utility::source_location::current()) const {
+    return operator()(input, value, prefixMap_, l);
+  };
+
+  auto operator()(const string& input, const auto& matcher,
+                  ad_utility::source_location l =
+                      ad_utility::source_location::current()) const {
+    return operator()(input, matcher, prefixMap_, l);
+  };
+
+  auto operator()(const string& input, const Value& value,
+                  SparqlQleverVisitor::PrefixMap prefixMap,
+                  ad_utility::source_location l =
+                      ad_utility::source_location::current()) const {
+    return operator()(input, testing::Eq(value), std::move(prefixMap), l);
+  };
+
+  auto operator()(const string& input, const auto& matcher,
+                  SparqlQleverVisitor::PrefixMap prefixMap,
+                  ad_utility::source_location l =
+                      ad_utility::source_location::current()) const {
+    return expectCompleteParse(parse<Clause>(input, std::move(prefixMap)),
+                               matcher, l);
+  };
+};
+
+template <auto Clause, typename Exception = ParseException>
+struct ExpectParseFails {
+  SparqlQleverVisitor::PrefixMap prefixMap_ = {};
+
+  auto operator()(
+      const string& input,
+      ad_utility::source_location l = ad_utility::source_location::current()) {
+    return operator()(input, prefixMap_, l);
   }
-}
+
+  auto operator()(
+      const string& input, SparqlQleverVisitor::PrefixMap prefixMap,
+      ad_utility::source_location l = ad_utility::source_location::current()) {
+    auto trace = generateLocationTrace(l);
+    EXPECT_THROW(parse<Clause>(input, std::move(prefixMap)), Exception)
+        << input;
+  }
+};
+
+// TODO: make function that creates both the complete and fails parser. and use
+// them with structured binding.
 
 auto nil = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>";
 auto first = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>";
@@ -37,80 +100,64 @@ auto rest = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>";
 auto type = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
 
 using ::testing::ElementsAre;
+using ::testing::Eq;
 using ::testing::IsEmpty;
+using ::testing::Pair;
 using ::testing::SizeIs;
+using ::testing::StrEq;
 
 TEST(SparqlParser, NumericLiterals) {
-  testNumericLiteral("3.0", 3.0);
-  testNumericLiteral("3.0e2", 300.0);
-  testNumericLiteral("3.0e-2", 0.030);
-  testNumericLiteral("3", 3ull);
-  testNumericLiteral("-3.0", -3.0);
-  testNumericLiteral("-3", -3ll);
-
-  // TODO<joka921> : Unit tests with random numbers
+  auto expectNumericLiteral = ExpectCompleteParse<&Parser::numericLiteral>{};
+  auto expectNumericLiteralFails = ExpectParseFails<&Parser::numericLiteral>{};
+  expectNumericLiteral("3.0", m::NumericLiteralDouble(3.0));
+  expectNumericLiteral("3.0e2", m::NumericLiteralDouble(300.0));
+  expectNumericLiteral("3.0e-2", m::NumericLiteralDouble(0.030));
+  expectNumericLiteral("3", m::NumericLiteralInt(3ll));
+  expectNumericLiteral("-3.0", m::NumericLiteralDouble(-3.0));
+  expectNumericLiteral("-3", m::NumericLiteralInt(-3ll));
+  expectNumericLiteral("+3", m::NumericLiteralInt(3ll));
+  expectNumericLiteral("+3.02", m::NumericLiteralDouble(3.02));
+  expectNumericLiteral("+3.1234e12", m::NumericLiteralDouble(3123400000000.0));
+  expectNumericLiteral(".234", m::NumericLiteralDouble(0.234));
+  expectNumericLiteral("+.0123", m::NumericLiteralDouble(0.0123));
+  expectNumericLiteral("-.5123", m::NumericLiteralDouble(-0.5123));
+  expectNumericLiteral(".234e4", m::NumericLiteralDouble(2340.0));
+  expectNumericLiteral("+.0123E-3", m::NumericLiteralDouble(0.0000123));
+  expectNumericLiteral("-.5123E12", m::NumericLiteralDouble(-512300000000.0));
+  expectNumericLiteralFails("1000000000000000000000000000000000000");
+  expectNumericLiteralFails("-99999999999999999999");
+  expectNumericLiteralFails("12E400");
+  expectNumericLiteralFails("-4.2E550");
 }
 
 TEST(SparqlParser, Prefix) {
-  {
-    string s = "PREFIX wd: <www.wikidata.org/>";
-    ParserAndVisitor p{s};
-    auto context = p.parser_.prefixDecl();
-    p.visitor_.visitPrefixDecl(context);
-    const auto& m = p.visitor_.prefixMap();
-    ASSERT_EQ(2ul, m.size());
-    ASSERT_TRUE(m.at("wd") == "<www.wikidata.org/>");
-    ASSERT_EQ(m.at(""), "<>");
-  }
-  {
-    string s = "wd:bimbam";
-    ParserAndVisitor p{s};
-    auto& m = p.visitor_.prefixMap();
-    m["wd"] = "<www.wikidata.org/>";
+  SparqlQleverVisitor::PrefixMap prefixMap{{"wd", "<www.wikidata.org/>"}};
 
-    auto context = p.parser_.pnameLn();
-    auto result = p.visitor_.visitPnameLn(context).as<string>();
-    ASSERT_EQ(result, "<www.wikidata.org/bimbam>");
-  }
   {
-    string s = "wd:";
-    ParserAndVisitor p{s};
-    auto& m = p.visitor_.prefixMap();
-    m["wd"] = "<www.wikidata.org/>";
-
-    auto context = p.parser_.pnameNs();
-    auto result = p.visitor_.visitPnameNs(context).as<string>();
-    ASSERT_EQ(result, "<www.wikidata.org/>");
+    ParserAndVisitor p{"PREFIX wd: <www.wikidata.org/>"};
+    auto defaultPrefixes = p.visitor_.prefixMap();
+    ASSERT_EQ(defaultPrefixes.size(), 0);
+    p.visitor_.visitTypesafe(p.parser_.prefixDecl());
+    auto prefixes = p.visitor_.prefixMap();
+    ASSERT_EQ(prefixes.size(), 1);
+    ASSERT_EQ(prefixes.at("wd"), "<www.wikidata.org/>");
   }
-  {
-    string s = "wd:bimbam";
-    ParserAndVisitor p{s};
-    auto& m = p.visitor_.prefixMap();
-    m["wd"] = "<www.wikidata.org/>";
-
-    auto context = p.parser_.prefixedName();
-    auto result = p.visitor_.visitPrefixedName(context).as<string>();
-    ASSERT_EQ(result, "<www.wikidata.org/bimbam>");
-  }
-  {
-    string s = "<somethingsomething> <rest>";
-    ParserAndVisitor p{s};
-    auto& m = p.visitor_.prefixMap();
-    m["wd"] = "<www.wikidata.org/>";
-
-    auto context = p.parser_.iriref();
-    auto result = p.visitor_.visitIriref(context).as<string>();
-    auto sz = context->getText().size();
-
-    ASSERT_EQ(result, "<somethingsomething>");
-    ASSERT_EQ(sz, 20u);
-  }
+  expectCompleteParse(
+      parse<&Parser::prefixDecl>("PREFIX wd: <www.wikidata.org/>"),
+      Eq(SparqlPrefix("wd", "<www.wikidata.org/>")));
+  expectCompleteParse(parse<&Parser::pnameLn>("wd:bimbam", prefixMap),
+                      StrEq("<www.wikidata.org/bimbam>"));
+  expectCompleteParse(parse<&Parser::pnameNs>("wd:", prefixMap),
+                      StrEq("<www.wikidata.org/>"));
+  expectCompleteParse(parse<&Parser::prefixedName>("wd:bimbam", prefixMap),
+                      StrEq("<www.wikidata.org/bimbam>"));
+  expectIncompleteParse(
+      parse<&Parser::iriref>("<somethingsomething> <rest>", prefixMap),
+      "<rest>", testing::StrEq("<somethingsomething>"));
 }
 
 TEST(SparqlExpressionParser, First) {
   string s = "(5 * 5 ) bimbam";
-  ParserAndVisitor p{s};
-  auto context = p.parser_.expression();
   // This is an example on how to access a certain parsed substring.
   /*
   LOG(INFO) << context->getText() << std::endl;
@@ -121,9 +168,9 @@ TEST(SparqlExpressionParser, First) {
             << std::endl;
   LOG(INFO) << p.parser_.getCurrentToken()->getStartIndex() << std::endl;
    */
-  auto resultAsAny = p.visitor_.visitExpression(context);
-  auto resultAsExpression =
-      std::move(resultAsAny.as<sparqlExpression::SparqlExpression::Ptr>());
+  auto resultofParse = parse<&Parser::expression>(s);
+  EXPECT_EQ(resultofParse.remainingText_.length(), 6);
+  auto resultAsExpression = std::move(resultofParse.resultOfParse_);
 
   QueryExecutionContext* qec = nullptr;
   sparqlExpression::VariableToColumnAndResultTypeMap map;
@@ -144,831 +191,750 @@ TEST(SparqlParser, ComplexConstructQuery) {
       "<http://wallscope.co.uk/resource/olympics/medal/#something> a "
       "<http://wallscope.co.uk/resource/olympics/medal/#somethingelse> } "
       "WHERE {}";
-  ParserAndVisitor p{input};
 
-  auto triples = p.parser_.constructQuery()
-                     ->accept(&p.visitor_)
-                     .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, SizeIs(11));
-  auto something =
-      "<http://wallscope.co.uk/resource/olympics/medal/#something>";
-  auto somethingElse =
-      "<http://wallscope.co.uk/resource/olympics/medal/#somethingelse>";
-
-  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsVariable("?a"),        //
-                                      IsBlankNode(true, "3")));
-
-  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "1"),  //
-                                      IsIri(first),            //
-                                      IsBlankNode(true, "2")));
-
-  EXPECT_THAT(triples[2], ElementsAre(IsBlankNode(true, "1"),  //
-                                      IsIri(rest),             //
-                                      IsIri(nil)));
-
-  EXPECT_THAT(triples[3], ElementsAre(IsBlankNode(true, "2"),  //
-                                      IsIri(first),            //
-                                      IsVariable("?c")));
-
-  EXPECT_THAT(triples[4], ElementsAre(IsBlankNode(true, "2"),  //
-                                      IsIri(rest),             //
-                                      IsIri(nil)));
-
-  EXPECT_THAT(triples[5], ElementsAre(IsBlankNode(true, "3"),  //
-                                      IsIri(first),            //
-                                      IsVariable("?b")));
-
-  EXPECT_THAT(triples[6], ElementsAre(IsBlankNode(true, "3"),  //
-                                      IsIri(rest),             //
-                                      IsBlankNode(true, "1")));
-
-  EXPECT_THAT(triples[7], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsVariable("?d"),        //
-                                      IsBlankNode(true, "4")));
-
-  EXPECT_THAT(triples[8], ElementsAre(IsBlankNode(true, "4"),  //
-                                      IsVariable("?e"),        //
-                                      IsBlankNode(true, "5")));
-
-  EXPECT_THAT(triples[9], ElementsAre(IsBlankNode(true, "5"),  //
-                                      IsVariable("?f"),        //
-                                      IsVariable("?g")));
-
-  EXPECT_THAT(triples[10], ElementsAre(IsIri(something),  //
-                                       IsIri(type),       //
-                                       IsIri(somethingElse)));
+  auto Var = m::VariableVariant;
+  auto Blank = [](const std::string& label) {
+    return m::BlankNode(true, label);
+  };
+  expectCompleteParse(
+      parse<&Parser::constructQuery>(input),
+      ElementsAre(
+          ElementsAre(Blank("0"), Var("?a"), Blank("3")),
+          ElementsAre(Blank("1"), m::Iri(first), Blank("2")),
+          ElementsAre(Blank("1"), m::Iri(rest), m::Iri(nil)),
+          ElementsAre(Blank("2"), m::Iri(first), Var("?c")),
+          ElementsAre(Blank("2"), m::Iri(rest), m::Iri(nil)),
+          ElementsAre(Blank("3"), m::Iri(first), Var("?b")),
+          ElementsAre(Blank("3"), m::Iri(rest), Blank("1")),
+          ElementsAre(Blank("0"), Var("?d"), Blank("4")),
+          ElementsAre(Blank("4"), Var("?e"), Blank("5")),
+          ElementsAre(Blank("5"), Var("?f"), Var("?g")),
+          ElementsAre(m::Iri("<http://wallscope.co.uk/resource/olympics/medal/"
+                             "#something>"),
+                      m::Iri(type),
+                      m::Iri("<http://wallscope.co.uk/resource/olympics/medal/"
+                             "#somethingelse>"))));
 }
 
-TEST(SparqlParser, GraphTermNumericLiteral) {
-  string input = "1337";
-  ParserAndVisitor p{input};
-
-  auto graphTerm = p.parser_.graphTerm()->accept(&p.visitor_).as<GraphTerm>();
-  EXPECT_THAT(graphTerm, IsLiteral("1337"));
-}
-
-TEST(SparqlParser, GraphTermBooleanLiteral) {
-  string input = "true";
-  ParserAndVisitor p{input};
-
-  auto graphTerm = p.parser_.graphTerm()->accept(&p.visitor_).as<GraphTerm>();
-  EXPECT_THAT(graphTerm, IsLiteral(input));
-}
-
-TEST(SparqlParser, GraphTermBlankNode) {
-  string input = "[]";
-  ParserAndVisitor p{input};
-
-  auto graphTerm = p.parser_.graphTerm()->accept(&p.visitor_).as<GraphTerm>();
-  EXPECT_THAT(graphTerm, IsBlankNode(true, "0"));
-}
-
-TEST(SparqlParser, GraphTermIri) {
-  string input = "<http://dummy-iri.com#fragment>";
-  ParserAndVisitor p{input};
-
-  auto graphTerm = p.parser_.graphTerm()->accept(&p.visitor_).as<GraphTerm>();
-  EXPECT_THAT(graphTerm, IsIri(input));
-}
-
-TEST(SparqlParser, GraphTermRdfLiteral) {
-  string input = "\"abc\"";
-  ParserAndVisitor p{input};
-
-  auto graphTerm = p.parser_.graphTerm()->accept(&p.visitor_).as<GraphTerm>();
-  EXPECT_THAT(graphTerm, IsLiteral(input));
-}
-
-TEST(SparqlParser, GraphTermRdfNil) {
-  string input = "()";
-  ParserAndVisitor p{input};
-
-  auto graphTerm = p.parser_.graphTerm()->accept(&p.visitor_).as<GraphTerm>();
-  EXPECT_THAT(graphTerm, IsIri(nil));
+TEST(SparqlParser, GraphTerm) {
+  auto expectGraphTerm = ExpectCompleteParse<&Parser::graphTerm>{};
+  expectGraphTerm("1337", m::Literal("1337"));
+  expectGraphTerm("true", m::Literal("true"));
+  expectGraphTerm("[]", m::BlankNode(true, "0"));
+  {
+    const std::string iri = "<http://dummy-iri.com#fragment>";
+    expectCompleteParse(parse<&Parser::graphTerm>(iri), m::Iri(iri));
+  }
+  expectGraphTerm("\"abc\"", m::Literal("\"abc\""));
+  expectGraphTerm("()", m::Iri(nil));
 }
 
 TEST(SparqlParser, RdfCollectionSingleVar) {
-  string input = "( ?a )";
-  ParserAndVisitor p{input};
-
-  const auto [node, triples] = p.parser_.collection()
-                                   ->accept(&p.visitor_)
-                                   .as<ad_utility::sparql_types::Node>();
-
-  EXPECT_THAT(node, IsBlankNode(true, "0"));
-
-  ASSERT_THAT(triples, SizeIs(2));
-
-  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(first),            //
-                                      IsVariable("?a")));
-
-  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(rest),             //
-                                      IsIri(nil)));
+  expectCompleteParse(
+      parseCollection("( ?a )"),
+      Pair(m::BlankNode(true, "0"),
+           ElementsAre(ElementsAre(m::BlankNode(true, "0"), m::Iri(first),
+                                   m::VariableVariant("?a")),
+                       ElementsAre(m::BlankNode(true, "0"), m::Iri(rest),
+                                   m::Iri(nil)))));
 }
 
 TEST(SparqlParser, RdfCollectionTripleVar) {
-  string input = "( ?a ?b ?c )";
-  ParserAndVisitor p{input};
-
-  const auto [node, triples] = p.parser_.collection()
-                                   ->accept(&p.visitor_)
-                                   .as<ad_utility::sparql_types::Node>();
-
-  EXPECT_THAT(node, IsBlankNode(true, "2"));
-
-  ASSERT_THAT(triples, SizeIs(6));
-
-  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(first),            //
-                                      IsVariable("?c")));
-
-  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(rest),             //
-                                      IsIri(nil)));
-
-  EXPECT_THAT(triples[2], ElementsAre(IsBlankNode(true, "1"),  //
-                                      IsIri(first),            //
-                                      IsVariable("?b")));
-
-  EXPECT_THAT(triples[3], ElementsAre(IsBlankNode(true, "1"),  //
-                                      IsIri(rest),             //
-                                      IsBlankNode(true, "0")));
-
-  EXPECT_THAT(triples[4], ElementsAre(IsBlankNode(true, "2"),  //
-                                      IsIri(first),            //
-                                      IsVariable("?a")));
-
-  EXPECT_THAT(triples[5], ElementsAre(IsBlankNode(true, "2"),  //
-                                      IsIri(rest),             //
-                                      IsBlankNode(true, "1")));
+  auto Var = m::VariableVariant;
+  auto Blank = [](const std::string& label) {
+    return m::BlankNode(true, label);
+  };
+  expectCompleteParse(
+      parseCollection("( ?a ?b ?c )"),
+      Pair(m::BlankNode(true, "2"),
+           ElementsAre(ElementsAre(Blank("0"), m::Iri(first), Var("?c")),
+                       ElementsAre(Blank("0"), m::Iri(rest), m::Iri(nil)),
+                       ElementsAre(Blank("1"), m::Iri(first), Var("?b")),
+                       ElementsAre(Blank("1"), m::Iri(rest), Blank("0")),
+                       ElementsAre(Blank("2"), m::Iri(first), Var("?a")),
+                       ElementsAre(Blank("2"), m::Iri(rest), Blank("1")))));
 }
 
 TEST(SparqlParser, BlankNodeAnonymous) {
-  string input = "[ \t\r\n]";
-  ParserAndVisitor p{input};
-
-  auto graphTerm = p.parser_.blankNode()->accept(&p.visitor_).as<BlankNode>();
-  EXPECT_THAT(graphTerm, IsBlankNode(true, "0"));
+  expectCompleteParse(parseBlankNode("[ \t\r\n]"), m::BlankNode(true, "0"));
 }
 
 TEST(SparqlParser, BlankNodeLabelled) {
-  string input = "_:label123";
-  ParserAndVisitor p{input};
-
-  auto graphTerm = p.parser_.blankNode()->accept(&p.visitor_).as<BlankNode>();
-  EXPECT_THAT(graphTerm, IsBlankNode(false, "label123"));
+  expectCompleteParse(parseBlankNode("_:label123"),
+                      m::BlankNode(false, "label123"));
 }
 
 TEST(SparqlParser, ConstructTemplateEmpty) {
-  string input = "{}";
-  ParserAndVisitor p{input};
-
-  auto triples = p.parser_.constructTemplate()
-                     ->accept(&p.visitor_)
-                     .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, IsEmpty());
+  expectCompleteParse(parse<&Parser::constructTemplate>("{}"),
+                      testing::Eq(std::nullopt));
 }
 
 TEST(SparqlParser, ConstructTriplesSingletonWithTerminator) {
-  string input = "?a ?b ?c .";
-  ParserAndVisitor p{input};
-
-  auto triples = p.parser_.constructTriples()
-                     ->accept(&p.visitor_)
-                     .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, SizeIs(1));
-
-  EXPECT_THAT(triples[0], ElementsAre(IsVariable("?a"),  //
-                                      IsVariable("?b"),  //
-                                      IsVariable("?c")));
+  expectCompleteParse(parseConstructTriples("?a ?b ?c ."),
+                      ElementsAre(ElementsAre(m::VariableVariant("?a"),
+                                              m::VariableVariant("?b"),
+                                              m::VariableVariant("?c"))));
 }
 
 TEST(SparqlParser, ConstructTriplesWithTerminator) {
-  string input = "?a ?b ?c . ?d ?e ?f . ?g ?h ?i .";
-  ParserAndVisitor p{input};
-
-  auto triples = p.parser_.constructTriples()
-                     ->accept(&p.visitor_)
-                     .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, SizeIs(3));
-
-  EXPECT_THAT(triples[0], ElementsAre(IsVariable("?a"),  //
-                                      IsVariable("?b"),  //
-                                      IsVariable("?c")));
-
-  EXPECT_THAT(triples[1], ElementsAre(IsVariable("?d"),  //
-                                      IsVariable("?e"),  //
-                                      IsVariable("?f")));
-
-  EXPECT_THAT(triples[2], ElementsAre(IsVariable("?g"),  //
-                                      IsVariable("?h"),  //
-                                      IsVariable("?i")));
+  auto IsVar = m::VariableVariant;
+  expectCompleteParse(
+      parseConstructTriples("?a ?b ?c . ?d ?e ?f . ?g ?h ?i ."),
+      ElementsAre(
+          ElementsAre(IsVar("?a"), IsVar("?b"), IsVar("?c")),
+          ElementsAre(IsVar("?d"), IsVar("?e"), IsVar("?f")),
+          ElementsAre(IsVar("?g"), IsVar("?h"), m::VariableVariant("?i"))));
 }
 
 TEST(SparqlParser, TriplesSameSubjectVarOrTerm) {
-  string input = "?a ?b ?c";
-  ParserAndVisitor p{input};
-
-  auto triples = p.parser_.constructTriples()
-                     ->accept(&p.visitor_)
-                     .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, SizeIs(1));
-
-  EXPECT_THAT(triples[0], ElementsAre(IsVariable("?a"),  //
-                                      IsVariable("?b"),  //
-                                      IsVariable("?c")));
+  expectCompleteParse(parseConstructTriples("?a ?b ?c"),
+                      ElementsAre(ElementsAre(m::VariableVariant("?a"),
+                                              m::VariableVariant("?b"),
+                                              m::VariableVariant("?c"))));
 }
 
 TEST(SparqlParser, TriplesSameSubjectTriplesNodeWithPropertyList) {
-  string input = "(?a) ?b ?c";
-  ParserAndVisitor p{input};
-
-  auto triples = p.parser_.triplesSameSubject()
-                     ->accept(&p.visitor_)
-                     .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, SizeIs(3));
-
-  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(first),            //
-                                      IsVariable("?a")));
-
-  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(rest),             //
-                                      IsIri(nil)));
-
-  EXPECT_THAT(triples[2], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsVariable("?b"),        //
-                                      IsVariable("?c")));
+  expectCompleteParse(
+      parseTriplesSameSubject("(?a) ?b ?c"),
+      ElementsAre(
+          ElementsAre(m::BlankNode(true, "0"), m::Iri(first),
+                      m::VariableVariant("?a")),
+          ElementsAre(m::BlankNode(true, "0"), m::Iri(rest), m::Iri(nil)),
+          ElementsAre(m::BlankNode(true, "0"), m::VariableVariant("?b"),
+                      m::VariableVariant("?c"))));
 }
 
 TEST(SparqlParser, TriplesSameSubjectTriplesNodeEmptyPropertyList) {
-  string input = "(?a)";
-  ParserAndVisitor p{input};
-
-  auto triples = p.parser_.triplesSameSubject()
-                     ->accept(&p.visitor_)
-                     .as<ad_utility::sparql_types::Triples>();
-  ASSERT_THAT(triples, SizeIs(2));
-
-  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(first),            //
-                                      IsVariable("?a")));
-
-  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(rest),             //
-                                      IsIri(nil)));
+  expectCompleteParse(
+      parseTriplesSameSubject("(?a)"),
+      ElementsAre(
+          ElementsAre(m::BlankNode(true, "0"), m::Iri(first),
+                      m::VariableVariant("?a")),
+          ElementsAre(m::BlankNode(true, "0"), m::Iri(rest), m::Iri(nil))));
 }
 
 TEST(SparqlParser, PropertyList) {
-  string input = "a ?a";
-  ParserAndVisitor p{input};
-
-  const auto [tuples, triples] =
-      p.parser_.propertyList()
-          ->accept(&p.visitor_)
-          .as<ad_utility::sparql_types::PropertyList>();
-
-  EXPECT_THAT(triples, IsEmpty());
-
-  ASSERT_THAT(tuples, SizeIs(1));
-
-  EXPECT_THAT(tuples[0], ElementsAre(IsIri(type), IsVariable("?a")));
+  expectCompleteParse(
+      parsePropertyList("a ?a"),
+      Pair(ElementsAre(ElementsAre(m::Iri(type), m::VariableVariant("?a"))),
+           IsEmpty()));
 }
 
 TEST(SparqlParser, EmptyPropertyList) {
-  ParserAndVisitor p{""};
-
-  const auto [tuples, triples] =
-      p.parser_.propertyList()
-          ->accept(&p.visitor_)
-          .as<ad_utility::sparql_types::PropertyList>();
-  ASSERT_THAT(tuples, IsEmpty());
-  ASSERT_THAT(triples, IsEmpty());
+  expectCompleteParse(parsePropertyList(""), Pair(IsEmpty(), IsEmpty()));
 }
 
 TEST(SparqlParser, PropertyListNotEmptySingletonWithTerminator) {
-  string input = "a ?a ;";
-  ParserAndVisitor p{input};
-
-  const auto [tuples, triples] =
-      p.parser_.propertyListNotEmpty()
-          ->accept(&p.visitor_)
-          .as<ad_utility::sparql_types::PropertyList>();
-  EXPECT_THAT(triples, IsEmpty());
-
-  ASSERT_THAT(tuples, SizeIs(1));
-
-  EXPECT_THAT(tuples[0], ElementsAre(IsIri(type), IsVariable("?a")));
+  expectCompleteParse(
+      parsePropertyListNotEmpty("a ?a ;"),
+      Pair(ElementsAre(ElementsAre(m::Iri(type), m::VariableVariant("?a"))),
+           IsEmpty()));
 }
 
 TEST(SparqlParser, PropertyListNotEmptyWithTerminator) {
-  string input = "a ?a ; a ?b ; a ?c ;";
-  ParserAndVisitor p{input};
-
-  const auto [tuples, triples] =
-      p.parser_.propertyListNotEmpty()
-          ->accept(&p.visitor_)
-          .as<ad_utility::sparql_types::PropertyList>();
-  EXPECT_THAT(triples, IsEmpty());
-
-  ASSERT_THAT(tuples, SizeIs(3));
-
-  EXPECT_THAT(tuples[0], ElementsAre(IsIri(type), IsVariable("?a")));
-  EXPECT_THAT(tuples[1], ElementsAre(IsIri(type), IsVariable("?b")));
-  EXPECT_THAT(tuples[2], ElementsAre(IsIri(type), IsVariable("?c")));
+  expectCompleteParse(
+      parsePropertyListNotEmpty("a ?a ; a ?b ; a ?c ;"),
+      Pair(ElementsAre(ElementsAre(m::Iri(type), m::VariableVariant("?a")),
+                       ElementsAre(m::Iri(type), m::VariableVariant("?b")),
+                       ElementsAre(m::Iri(type), m::VariableVariant("?c"))),
+           IsEmpty()));
 }
 
-TEST(SparqlParser, VerbA) {
-  string input = "a";
-  ParserAndVisitor p{input};
-
-  auto varOrTerm = p.parser_.verb()->accept(&p.visitor_).as<VarOrTerm>();
-  ASSERT_THAT(varOrTerm, IsIri(type));
-}
+TEST(SparqlParser, VerbA) { expectCompleteParse(parseVerb("a"), m::Iri(type)); }
 
 TEST(SparqlParser, VerbVariable) {
-  string input = "?a";
-  ParserAndVisitor p{input};
-
-  auto varOrTerm = p.parser_.verb()->accept(&p.visitor_).as<VarOrTerm>();
-  ASSERT_THAT(varOrTerm, IsVariable("?a"));
+  expectCompleteParse(parseVerb("?a"), m::VariableVariant("?a"));
 }
 
 TEST(SparqlParser, ObjectListSingleton) {
-  string input = "?a";
-  ParserAndVisitor p{input};
-
-  const auto [objects, triples] =
-      p.parser_.objectList()
-          ->accept(&p.visitor_)
-          .as<ad_utility::sparql_types::ObjectList>();
-  EXPECT_THAT(triples, IsEmpty());
-
-  ASSERT_THAT(objects, SizeIs(1));
-  ASSERT_THAT(objects[0], IsVariable("?a"));
+  expectCompleteParse(parseObjectList("?a"),
+                      Pair(ElementsAre(m::VariableVariant("?a")), IsEmpty()));
 }
 
 TEST(SparqlParser, ObjectList) {
-  string input = "?a , ?b , ?c";
-  ParserAndVisitor p{input};
-
-  const auto [objects, triples] =
-      p.parser_.objectList()
-          ->accept(&p.visitor_)
-          .as<ad_utility::sparql_types::ObjectList>();
-  EXPECT_THAT(triples, IsEmpty());
-
-  ASSERT_THAT(objects, SizeIs(3));
-  ASSERT_THAT(objects[0], IsVariable("?a"));
-  ASSERT_THAT(objects[1], IsVariable("?b"));
-  ASSERT_THAT(objects[2], IsVariable("?c"));
+  expectCompleteParse(
+      parseObjectList("?a , ?b , ?c"),
+      Pair(ElementsAre(m::VariableVariant("?a"), m::VariableVariant("?b"),
+                       m::VariableVariant("?c")),
+           IsEmpty()));
 }
 
 TEST(SparqlParser, BlankNodePropertyList) {
-  string input = "[ a ?a ; a ?b ; a ?c ]";
-  ParserAndVisitor p{input};
-
-  const auto [node, triples] = p.parser_.blankNodePropertyList()
-                                   ->accept(&p.visitor_)
-                                   .as<ad_utility::sparql_types::Node>();
-  EXPECT_THAT(node, IsBlankNode(true, "0"));
-
-  ASSERT_THAT(triples, SizeIs(3));
-
-  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(type),             //
-                                      IsVariable("?a")));
-
-  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(type),             //
-                                      IsVariable("?b")));
-
-  EXPECT_THAT(triples[2], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(type),             //
-                                      IsVariable("?c")));
+  expectCompleteParse(
+      parse<&Parser::blankNodePropertyList>("[ a ?a ; a ?b ; a ?c ]"),
+      Pair(m::BlankNode(true, "0"),
+           ElementsAre(ElementsAre(m::BlankNode(true, "0"), m::Iri(type),
+                                   m::VariableVariant("?a")),
+                       ElementsAre(m::BlankNode(true, "0"), m::Iri(type),
+                                   m::VariableVariant("?b")),
+                       ElementsAre(m::BlankNode(true, "0"), m::Iri(type),
+                                   m::VariableVariant("?c")))));
 }
 
 TEST(SparqlParser, GraphNodeVarOrTerm) {
-  string input = "?a";
-  ParserAndVisitor p{input};
-
-  const auto [node, triples] = p.parser_.graphNode()
-                                   ->accept(&p.visitor_)
-                                   .as<ad_utility::sparql_types::Node>();
-  EXPECT_THAT(node, IsVariable("?a"));
-  EXPECT_THAT(triples, IsEmpty());
+  expectCompleteParse(parseGraphNode("?a"),
+                      Pair(m::VariableVariant("?a"), IsEmpty()));
 }
 
 TEST(SparqlParser, GraphNodeTriplesNode) {
-  string input = "(?a)";
-  ParserAndVisitor p{input};
-
-  const auto [node, triples] = p.parser_.graphNode()
-                                   ->accept(&p.visitor_)
-                                   .as<ad_utility::sparql_types::Node>();
-  EXPECT_THAT(node, IsBlankNode(true, "0"));
-
-  ASSERT_THAT(triples, SizeIs(2));
-
-  EXPECT_THAT(triples[0], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(first),            //
-                                      IsVariable("?a")));
-
-  EXPECT_THAT(triples[1], ElementsAre(IsBlankNode(true, "0"),  //
-                                      IsIri(rest),             //
-                                      IsIri(nil)));
+  expectCompleteParse(
+      parseGraphNode("(?a)"),
+      Pair(m::BlankNode(true, "0"),
+           ElementsAre(ElementsAre(m::BlankNode(true, "0"), m::Iri(first),
+                                   m::VariableVariant("?a")),
+                       ElementsAre(m::BlankNode(true, "0"), m::Iri(rest),
+                                   m::Iri(nil)))));
 }
 
 TEST(SparqlParser, VarOrTermVariable) {
-  string input = "?a";
-  ParserAndVisitor p{input};
-
-  auto varOrTerm = p.parser_.varOrTerm()->accept(&p.visitor_).as<VarOrTerm>();
-  EXPECT_THAT(varOrTerm, IsVariable("?a"));
+  expectCompleteParse(parseVarOrTerm("?a"), m::VariableVariant("?a"));
 }
 
 TEST(SparqlParser, VarOrTermGraphTerm) {
-  string input = "()";
-  ParserAndVisitor p{input};
-
-  auto varOrTerm = p.parser_.varOrTerm()->accept(&p.visitor_).as<VarOrTerm>();
-  EXPECT_THAT(varOrTerm, IsIri(nil));
+  expectCompleteParse(parseVarOrTerm("()"), m::Iri(nil));
 }
 
-TEST(SparqlParser, VarOrIriVariable) {
-  string input = "?a";
-  ParserAndVisitor p{input};
-
-  auto varOrTerm = p.parser_.varOrIri()->accept(&p.visitor_).as<VarOrTerm>();
-  EXPECT_THAT(varOrTerm, IsVariable("?a"));
+TEST(SparqlParser, Iri) {
+  auto expectIri = ExpectCompleteParse<&Parser::iri>{};
+  expectIri("rdfs:label", "<http://www.w3.org/2000/01/rdf-schema#label>",
+            {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});
+  expectIri(
+      "rdfs:label", "<http://www.w3.org/2000/01/rdf-schema#label>",
+      {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}, {"foo", "<bar#>"}});
+  expectIri("<http://www.w3.org/2000/01/rdf-schema>",
+            "<http://www.w3.org/2000/01/rdf-schema>",
+            SparqlQleverVisitor::PrefixMap{});
+  expectIri("@en@rdfs:label",
+            "@en@<http://www.w3.org/2000/01/rdf-schema#label>",
+            {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});
+  expectIri("@en@<http://www.w3.org/2000/01/rdf-schema>",
+            "@en@<http://www.w3.org/2000/01/rdf-schema>",
+            SparqlQleverVisitor::PrefixMap{});
 }
 
 TEST(SparqlParser, VarOrIriIri) {
-  string input = "<http://testiri>";
-  ParserAndVisitor p{input};
-
-  auto varOrTerm = p.parser_.varOrIri()->accept(&p.visitor_).as<VarOrTerm>();
-  EXPECT_THAT(varOrTerm, IsIri(input));
+  expectCompleteParse(parseVarOrTerm("<http://testiri>"),
+                      m::Iri("<http://testiri>"));
 }
 
 TEST(SparqlParser, VariableWithQuestionMark) {
-  string input = "?variableName";
-  ParserAndVisitor p{input};
-
-  auto variable = p.parser_.var()->accept(&p.visitor_).as<Variable>();
-  EXPECT_THAT(variable, IsVariable(input));
+  expectCompleteParse(parseVariable("?variableName"),
+                      m::Variable("?variableName"));
 }
 
 TEST(SparqlParser, VariableWithDollarSign) {
-  string input = "$variableName";
-  ParserAndVisitor p{input};
-
-  auto variable = p.parser_.var()->accept(&p.visitor_).as<Variable>();
-  EXPECT_THAT(variable, IsVariable("?variableName"));
+  expectCompleteParse(parseVariable("$variableName"),
+                      m::Variable("?variableName"));
 }
 
 TEST(SparqlParser, Bind) {
-  {
-    string input = "BIND (10 - 5 as ?a)";
-    auto bindAndText = parseBind(input, {});
-
-    expectCompleteParse(bindAndText, IsBind("?a", "10-5"));
-  }
-
-  {
-    string input = "bInD (?age - 10 As ?s)";
-    auto bindAndText = parseBind(input, {});
-
-    expectCompleteParse(bindAndText, IsBind("?s", "?age-10"));
-  }
+  auto expectBind = ExpectCompleteParse<&Parser::bind>{};
+  expectBind("BIND (10 - 5 as ?a)", m::Bind(Variable{"?a"}, "10-5"));
+  expectBind("bInD (?age - 10 As ?s)", m::Bind(Variable{"?s"}, "?age-10"));
 }
 
 TEST(SparqlParser, Integer) {
-  {
-    string input = "1931";
-    ParserAndVisitor p{input};
-
-    unsigned long long result =
-        p.parser_.integer()->accept(&p.visitor_).as<unsigned long long>();
-    EXPECT_EQ(result, 1931ull);
-  }
-
-  {
-    string input = "0";
-    ParserAndVisitor p{input};
-
-    unsigned long long result =
-        p.parser_.integer()->accept(&p.visitor_).as<unsigned long long>();
-    EXPECT_EQ(result, 0ull);
-  }
-
-  {
-    string input = "18446744073709551615";
-    ParserAndVisitor p{input};
-
-    unsigned long long result =
-        p.parser_.integer()->accept(&p.visitor_).as<unsigned long long>();
-    EXPECT_EQ(result, 18446744073709551615ull);
-  }
-
-  {
-    string input = "18446744073709551616";
-    ParserAndVisitor p{input};
-
-    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_), ParseException);
-  }
-
-  {
-    string input = "10000000000000000000000000000000000000000";
-    ParserAndVisitor p{input};
-
-    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_), ParseException);
-  }
-
-  {
-    string input = "-1";
-    ParserAndVisitor p{input};
-
-    EXPECT_THROW(p.parser_.integer()->accept(&p.visitor_),
-                 antlr4::ParseCancellationException);
-  }
+  auto expectInteger = ExpectCompleteParse<&Parser::integer>{};
+  auto expectIntegerFails = ExpectParseFails<&Parser::integer>();
+  expectInteger("1931", 1931ull);
+  expectInteger("0", 0ull);
+  expectInteger("18446744073709551615", 18446744073709551615ull);
+  expectIntegerFails("18446744073709551616");
+  expectIntegerFails("10000000000000000000000000000000000000000");
+  expectIntegerFails("-1");
 }
 
 TEST(SparqlParser, LimitOffsetClause) {
-  {
-    string input = "LIMIT 10";
-
-    auto limitOffset = parseLimitOffsetClause(input, {});
-
-    expectCompleteParse(limitOffset, IsLimitOffset(10ull, 1ull, 0ull));
-  }
-
-  {
-    string input = "OFFSET 31 LIMIT 12 TEXTLIMIT 14";
-
-    auto limitOffset = parseLimitOffsetClause(input, {});
-
-    expectCompleteParse(limitOffset, IsLimitOffset(12ull, 14ull, 31ull));
-  }
-
-  {
-    string input = "textlimit 999";
-
-    auto limitOffset = parseLimitOffsetClause(input, {});
-
-    expectCompleteParse(
-        limitOffset,
-        IsLimitOffset(std::numeric_limits<uint64_t>::max(), 999ull, 0ull));
-  }
-
-  {
-    string input = "LIMIT      999";
-
-    auto limitOffset = parseLimitOffsetClause(input, {});
-
-    expectCompleteParse(limitOffset, IsLimitOffset(999ull, 1ull, 0ull));
-  }
-
-  {
-    string input = "OFFSET 43";
-
-    auto limitOffset = parseLimitOffsetClause(input, {});
-
-    expectCompleteParse(
-        limitOffset,
-        IsLimitOffset(std::numeric_limits<uint64_t>::max(), 1ull, 43ull));
-  }
-
-  {
-    string input = "TEXTLIMIT 43 LIMIT 19";
-
-    auto limitOffset = parseLimitOffsetClause(input, {});
-
-    expectCompleteParse(limitOffset, IsLimitOffset(19ull, 43ull, 0ull));
-  }
-
-  {
-    string input = "LIMIT20";
-
-    // parse* catches antlr4::ParseCancellationException and throws a
-    // std::runtime_error so this has to be checked instead.
-    EXPECT_THROW(parseLimitOffsetClause(input, {}), std::runtime_error);
-  }
-
-  {
-    string input = "Limit 10 TEXTLIMIT 20 offset 0 Limit 20";
-
-    auto limitOffset = parseLimitOffsetClause(input, {});
-
-    EXPECT_THAT(limitOffset.resultOfParse_, IsLimitOffset(10ull, 20ull, 0ull));
-    EXPECT_EQ(limitOffset.remainingText_, "Limit 20");
-  }
+  auto expectLimitOffset = ExpectCompleteParse<&Parser::limitOffsetClauses>{};
+  auto expectLimitOffsetFails = ExpectParseFails<&Parser::limitOffsetClauses>();
+  expectLimitOffset("LIMIT 10", m::LimitOffset(10, 1, 0));
+  expectLimitOffset("OFFSET 31 LIMIT 12 TEXTLIMIT 14",
+                    m::LimitOffset(12, 14, 31));
+  expectLimitOffset(
+      "textlimit 999",
+      m::LimitOffset(std::numeric_limits<uint64_t>::max(), 999, 0));
+  expectLimitOffset("LIMIT      999", m::LimitOffset(999, 1, 0));
+  expectLimitOffset(
+      "OFFSET 43", m::LimitOffset(std::numeric_limits<uint64_t>::max(), 1, 43));
+  expectLimitOffset("TEXTLIMIT 43 LIMIT 19", m::LimitOffset(19, 43, 0));
+  expectLimitOffsetFails("LIMIT20");
+  expectIncompleteParse(parse<&Parser::limitOffsetClauses>(
+                            "Limit 10 TEXTLIMIT 20 offset 0 Limit 20"),
+                        "Limit 20", m::LimitOffset(10ull, 20ull, 0ull));
 }
 
 TEST(SparqlParser, OrderCondition) {
-  auto parseOrderCondition = [](const std::string& input) {
-    ParserAndVisitor p{input};
-    return p.parse<OrderKey>(input, "order condition",
-                             &SparqlAutomaticParser::orderCondition);
-  };
-  auto expectParseVariable = [&parseOrderCondition](const string& input,
-                                                    const string& variable,
-                                                    bool isDescending) {
-    expectCompleteParse(parseOrderCondition(input),
-                        IsVariableOrderKey(variable, isDescending));
-  };
-  auto expectParseExpression = [&parseOrderCondition](const string& input,
-                                                      const string& expression,
-                                                      bool isDescending) {
-    expectCompleteParse(parseOrderCondition(input),
-                        IsExpressionOrderKey(expression, isDescending));
-  };
+  auto expectOrderCondition = ExpectCompleteParse<&Parser::orderCondition>{};
+  auto expectOrderConditionFails = ExpectParseFails<&Parser::orderCondition>();
   // var
-  expectParseVariable("?test", "?test", false);
+  expectOrderCondition("?test",
+                       m::VariableOrderKeyVariant(Variable{"?test"}, false));
   // brackettedExpression
-  expectParseVariable("DESC (?foo)", "?foo", true);
-  expectParseVariable("ASC (?bar)", "?bar", false);
-  expectParseExpression("ASC(?test - 5)", "?test-5", false);
-  expectParseExpression("DESC (10 || (5 && ?foo))", "10||(5&&?foo)", true);
+  expectOrderCondition("DESC (?foo)",
+                       m::VariableOrderKeyVariant(Variable{"?foo"}, true));
+  expectOrderCondition("ASC (?bar)",
+                       m::VariableOrderKeyVariant(Variable{"?bar"}, false));
+  expectOrderCondition("ASC(?test - 5)",
+                       m::ExpressionOrderKey("?test-5", false));
+  expectOrderCondition("DESC (10 || (5 && ?foo))",
+                       m::ExpressionOrderKey("10||(5&&?foo)", true));
   // constraint
-  expectParseExpression("(5 - ?mehr)", "5-?mehr", false);
-  expectParseExpression("SUM(?i)", "SUM(?i)", false);
-  EXPECT_THROW(parseOrderCondition("ASC SCORE(?i)"), ParseException);
+  expectOrderCondition("(5 - ?mehr)", m::ExpressionOrderKey("5-?mehr", false));
+  expectOrderCondition("SUM(?i)", m::ExpressionOrderKey("SUM(?i)", false));
+  expectOrderConditionFails("ASC SCORE(?i)");
 }
 
 TEST(SparqlParser, OrderClause) {
-  {
-    string input = "ORDER BY ?test DESC(?foo - 5)";
-    auto orderKeys = parseOrderClause(input, {});
-    expectCompleteArrayParse(orderKeys, IsVariableOrderKey("?test", false),
-                             IsExpressionOrderKey("?foo-5", true));
-  }
+  expectCompleteParse(
+      parse<&Parser::orderClause>("ORDER BY ?test DESC(?foo - 5)"),
+      m::OrderKeys({VariableOrderKey{Variable{"?test"}, false},
+                    m::ExpressionOrderKeyTest{"?foo-5", true}}));
 }
 
 TEST(SparqlParser, GroupCondition) {
-  auto parseGroupCondition = [](const std::string& input) {
-    ParserAndVisitor p{input};
-    return p.parse<GroupKey>(input, "group condition",
-                             &SparqlAutomaticParser::groupCondition);
-  };
-  auto expectParseVariable = [&parseGroupCondition](const string& input,
-                                                    const string& variable) {
-    expectCompleteParse(parseGroupCondition(input),
-                        IsVariableGroupKey(variable));
-  };
-  auto expectParseExpression =
-      [&parseGroupCondition](const string& input, const string& expression) {
-        expectCompleteParse(parseGroupCondition(input),
-                            IsExpressionGroupKey(expression));
-      };
-  auto expectParseExpressionAlias =
-      [&parseGroupCondition](const string& input, const string& expression,
-                             const string& variable) {
-        expectCompleteParse(parseGroupCondition(input),
-                            IsAliasGroupKey(expression, variable));
-      };
+  auto expectGroupCondition = ExpectCompleteParse<&Parser::groupCondition>{};
   // variable
-  expectParseVariable("?test", "?test");
+  expectGroupCondition("?test", m::VariableGroupKey("?test"));
   // expression without binding
-  expectParseExpression("(?test)", "?test");
+  expectGroupCondition("(?test)", m::ExpressionGroupKey("?test"));
   // expression with binding
-  expectParseExpressionAlias("(?test AS ?mehr)", "?test", "?mehr");
+  expectGroupCondition("(?test AS ?mehr)",
+                       m::AliasGroupKey("?test", Variable{"?mehr"}));
   // builtInCall
-  expectParseExpression("COUNT(?test)", "COUNT(?test)");
+  expectGroupCondition("COUNT(?test)", m::ExpressionGroupKey("COUNT(?test)"));
   // functionCall
-  expectParseExpression(
+  expectGroupCondition(
       "<http://www.opengis.net/def/function/geosparql/latitude> (?test)",
-      "<http://www.opengis.net/def/function/geosparql/latitude>(?test)");
+      m::ExpressionGroupKey(
+          "<http://www.opengis.net/def/function/geosparql/latitude>(?test)"));
 }
 
 TEST(SparqlParser, GroupClause) {
-  {
-    string input = "GROUP BY ?test (?foo - 10 as ?bar) COUNT(?baz)";
-    auto groupings = parseGroupClause(input, {});
-    expectCompleteArrayParse(groupings, IsVariableGroupKey("?test"),
-                             IsAliasGroupKey("?foo-10", "?bar"),
-                             IsExpressionGroupKey("COUNT(?baz)"));
-  }
+  expectCompleteParse(
+      parse<&Parser::groupClause>(
+          "GROUP BY ?test (?foo - 10 as ?bar) COUNT(?baz)"),
+      m::GroupKeys({Variable{"?test"}, std::pair{"?foo-10", Variable{"?bar"}},
+                    "COUNT(?baz)"}));
 }
 
-namespace {
-template <typename Exception = ParseException>
-void expectValuesFails(const string& input) {
-  EXPECT_THROW(parseValuesClause(input, {}), Exception) << input;
-}
-}  // namespace
-
-TEST(SparqlParser, ValuesClause) {
-  auto expectValue = [](const string& input, const vector<string>& expectedVars,
-                        const vector<vector<string>>& expectedVals) {
-    expectCompleteParse(parseValuesClause(input, {}),
-                        IsValues(expectedVars, expectedVals));
+TEST(SparqlParser, SolutionModifier) {
+  auto expectSolutionModifier =
+      ExpectCompleteParse<&Parser::solutionModifier>{};
+  auto expectIncompleteParse = [](const string& input) {
+    EXPECT_FALSE(
+        parse<&Parser::solutionModifier>(input).remainingText_.empty());
   };
-  expectValue("VALUES ?test { \"foo\" }", {"?test"}, {{"\"foo\""}});
+  using Var = Variable;
+  using VOK = VariableOrderKey;
+
+  expectSolutionModifier("", m::SolutionModifier({}, {}, {}, {}));
+  // The following are no valid solution modifiers, because ORDER BY
+  // has to appear before LIMIT.
+  expectIncompleteParse("GROUP BY ?var LIMIT 10 ORDER BY ?var");
+  expectSolutionModifier("LIMIT 10",
+                         m::SolutionModifier({}, {}, {}, {10, 1, 0}));
+  expectSolutionModifier(
+      "GROUP BY ?var (?b - 10) HAVING (?var != 10) ORDER BY ?var LIMIT 10 "
+      "OFFSET 2",
+      m::SolutionModifier({Var{"?var"}, "?b-10"},
+                          {{SparqlFilter::FilterType::NE, "?var", "10"}},
+                          {VOK{Variable{"?var"}, false}}, {10, 1, 2}));
+  expectSolutionModifier(
+      "GROUP BY ?var HAVING (?foo < ?bar) ORDER BY (5 - ?var) TEXTLIMIT 21 "
+      "LIMIT 2",
+      m::SolutionModifier({Var{"?var"}},
+                          {{SparqlFilter::FilterType::LT, "?foo", "?bar"}},
+                          {std::pair{"5-?var", false}}, {2, 21, 0}));
+  expectSolutionModifier(
+      "GROUP BY (?var - ?bar) ORDER BY (5 - ?var)",
+      m::SolutionModifier({"?var-?bar"}, {}, {std::pair{"5-?var", false}}, {}));
+}
+
+TEST(SparqlParser, DataBlock) {
+  auto expectDataBlock = ExpectCompleteParse<&Parser::dataBlock>{};
+  auto expectDataBlockFails = ExpectParseFails<&Parser::dataBlock>();
+  expectDataBlock(
+      "?test { \"foo\" }",
+      m::Values(vector<string>{"?test"}, vector<vector<string>>{{"\"foo\""}}));
   // These are not implemented yet in dataBlockValue
   // (numericLiteral/booleanLiteral)
-  expectValuesFails("VALUES ?test { true }");
-  expectValuesFails("VALUES ?test { 10.0 }");
-  expectValuesFails("VALUES ?test { UNDEF }");
-  expectValue(R"(VALUES ?foo { "baz" "bar" })", {"?foo"},
-              {{"\"baz\""}, {"\"bar\""}});
-  expectValuesFails(R"(VALUES ( ) { })");
-  expectValuesFails(R"(VALUES ?foo { })");
-  expectValuesFails(R"(VALUES ( ?foo ) { })");
-  expectValuesFails(R"(VALUES ( ?foo ?bar ) { (<foo>) (<bar>) })");
-  expectValue(R"(VALUES ( ?foo ?bar ) { (<foo> <bar>) })", {"?foo", "?bar"},
-              {{"<foo>", "<bar>"}});
-  expectValue(R"(VALUES ( ?foo ?bar ) { (<foo> "m") ("1" <bar>) })",
-              {"?foo", "?bar"}, {{"<foo>", "\"m\""}, {"\"1\"", "<bar>"}});
-  expectValue(R"(VALUES ( ?foo ?bar ) { (<foo> "m") (<bar> <e>) ("1" "f") })",
-              {"?foo", "?bar"},
-              {{"<foo>", "\"m\""}, {"<bar>", "<e>"}, {"\"1\"", "\"f\""}});
-  expectValuesFails(R"(VALUES ( ) { (<foo>) })");
+  // TODO<joka921/qup42> implement
+  expectDataBlockFails("?test { true }");
+  expectDataBlockFails("?test { 10.0 }");
+  expectDataBlockFails("?test { UNDEF }");
+  expectDataBlock(R"(?foo { "baz" "bar" })",
+                  m::Values({"?foo"}, {{"\"baz\""}, {"\"bar\""}}));
+  // TODO<joka921/qup42> implement
+  expectDataBlockFails(R"(( ) { })");
+  expectDataBlockFails(R"(?foo { })");
+  expectDataBlockFails(R"(( ?foo ) { })");
+  expectDataBlockFails(R"(( ?foo ?bar ) { (<foo>) (<bar>) })");
+  expectDataBlock(R"(( ?foo ?bar ) { (<foo> <bar>) })",
+                  m::Values({"?foo", "?bar"}, {{"<foo>", "<bar>"}}));
+  expectDataBlock(
+      R"(( ?foo ?bar ) { (<foo> "m") ("1" <bar>) })",
+      m::Values({"?foo", "?bar"}, {{"<foo>", "\"m\""}, {"\"1\"", "<bar>"}}));
+  expectDataBlock(
+      R"(( ?foo ?bar ) { (<foo> "m") (<bar> <e>) ("1" "f") })",
+      m::Values({"?foo", "?bar"},
+                {{"<foo>", "\"m\""}, {"<bar>", "<e>"}, {"\"1\"", "\"f\""}}));
+  // TODO<joka921/qup42> implement
+  expectDataBlockFails(R"(( ) { (<foo>) })");
+}
+
+TEST(SparqlParser, InlineData) {
+  auto expectInlineData = ExpectCompleteParse<&Parser::inlineData>{};
+  auto expectInlineDataFails = ExpectParseFails<&Parser::inlineData>();
+  expectInlineData("VALUES ?test { \"foo\" }",
+                   m::InlineData({"?test"}, {{"\"foo\""}}));
+  // There must always be a block present for InlineData
+  expectInlineDataFails("");
 }
 
 TEST(SparqlParser, propertyPaths) {
+  auto expectPathOrVar = ExpectCompleteParse<&Parser::verbPathOrSimple>{};
+  auto Iri = &PropertyPath::fromIri;
+  auto Sequence = &PropertyPath::makeSequence;
+  auto Alternative = &PropertyPath::makeAlternative;
+  auto Transitive = &PropertyPath::makeTransitive;
+  auto TransitiveMin = &PropertyPath::makeTransitiveMin;
+  auto TransitiveMax = &PropertyPath::makeTransitiveMax;
+  using PrefixMap = SparqlQleverVisitor::PrefixMap;
   // Test all the base cases.
   // "a" is a special case. It is a valid PropertyPath.
   // It is short for "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>".
-  expectCompleteParse(
-      parseVerbPathOrSimple("a", {}),
-      IsPropertyPath(PropertyPath::fromIri(
-          "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")));
-  EXPECT_THROW(parseVerbPathOrSimple("b", {}), std::runtime_error);
-  expectCompleteParse(
-      parseVerbPathOrSimple("test:foo",
-                            {{"test", "<http://www.example.com/>"}}),
-      IsPropertyPath(PropertyPath::fromIri("<http://www.example.com/foo>")));
-  expectCompleteParse(parseVerbPathOrSimple("?bar", {}),
-                      IsPropertyPath(PropertyPath::fromIri("?bar")));
-  expectCompleteParse(
-      parseVerbPathOrSimple(":", {{"", "<http://www.example.com/>"}}),
-      IsPropertyPath(PropertyPath::fromIri("<http://www.example.com/>")));
-  expectCompleteParse(
-      parseVerbPathOrSimple("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
-                            {}),
-      IsPropertyPath(PropertyPath::fromIri(
-          "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>")));
+  expectPathOrVar("a",
+                  Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"));
+  expectPathOrVar(
+      "@en@rdfs:label", Iri("@en@<http://www.w3.org/2000/01/rdf-schema#label>"),
+      PrefixMap{{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});
+  EXPECT_THROW(parse<&Parser::verbPathOrSimple>("b"), ParseException);
+  expectPathOrVar("test:foo", Iri("<http://www.example.com/foo>"),
+                  {{"test", "<http://www.example.com/>"}});
+  expectPathOrVar("?bar", Variable{"?bar"});
+  expectPathOrVar(":", Iri("<http://www.example.com/>"),
+                  {{"", "<http://www.example.com/>"}});
+  expectPathOrVar("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>",
+                  Iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"));
   // Test the basic combinators / | (...) + * ?.
-  expectCompleteParse(
-      parseVerbPathOrSimple("a:a / a:b", {{"a", "<http://www.example.com/>"}}),
-      IsPropertyPath(PropertyPath::makeSequence(
-          {PropertyPath::fromIri("<http://www.example.com/a>"),
-           PropertyPath::fromIri("<http://www.example.com/b>")})));
-  expectCompleteParse(
-      parseVerbPathOrSimple("a:a | a:b", {{"a", "<http://www.example.com/>"}}),
-      IsPropertyPath(PropertyPath::makeAlternative(
-          {PropertyPath::fromIri("<http://www.example.com/a>"),
-           PropertyPath::fromIri("<http://www.example.com/b>")})));
-  expectCompleteParse(
-      parseVerbPathOrSimple("(a:a)", {{"a", "<http://www.example.com/>"}}),
-      IsPropertyPath(
-          PropertyPath(PropertyPath::fromIri("<http://www.example.com/a>"))));
-  expectCompleteParse(
-      parseVerbPathOrSimple("a:a+", {{"a", "<http://www.example.com/>"}}),
-      IsPropertyPath(PropertyPath::makeTransitiveMin(
-          {PropertyPath::fromIri("<http://www.example.com/a>")}, 1)));
+  expectPathOrVar("a:a / a:b",
+                  Sequence({Iri("<http://www.example.com/a>"),
+                            Iri("<http://www.example.com/b>")}),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("a:a | a:b",
+                  Alternative({Iri("<http://www.example.com/a>"),
+                               Iri("<http://www.example.com/b>")}),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("(a:a)", Iri("<http://www.example.com/a>"),
+                  {{"a", "<http://www.example.com/>"}});
+  expectPathOrVar("a:a+", TransitiveMin({Iri("<http://www.example.com/a>")}, 1),
+                  {{"a", "<http://www.example.com/>"}});
   {
-    PropertyPath expected = PropertyPath::makeTransitiveMax(
-        {PropertyPath::fromIri("<http://www.example.com/a>")}, 1);
+    PropertyPath expected =
+        TransitiveMax({Iri("<http://www.example.com/a>")}, 1);
     expected._can_be_null = true;
-    expectCompleteParse(
-        parseVerbPathOrSimple("a:a?", {{"a", "<http://www.example.com/>"}}),
-        IsPropertyPath(expected));
+    expectPathOrVar("a:a?", expected, {{"a", "<http://www.example.com/>"}});
   }
   {
-    PropertyPath expected = PropertyPath::makeTransitive(
-        {PropertyPath::fromIri("<http://www.example.com/a>")});
+    PropertyPath expected = Transitive({Iri("<http://www.example.com/a>")});
     expected._can_be_null = true;
-    expectCompleteParse(
-        parseVerbPathOrSimple("a:a*", {{"a", "<http://www.example.com/>"}}),
-        IsPropertyPath(expected));
+    expectPathOrVar("a:a*", expected, {{"a", "<http://www.example.com/>"}});
   }
   // Test a bigger example that contains everything.
   {
-    PropertyPath expected = PropertyPath::makeAlternative(
-        {PropertyPath::makeSequence({
-             PropertyPath::fromIri("<http://www.example.com/a/a>"),
-             PropertyPath::makeTransitive(
-                 {PropertyPath::fromIri("<http://www.example.com/b/b>")}),
+    PropertyPath expected = Alternative(
+        {Sequence({
+             Iri("<http://www.example.com/a/a>"),
+             Transitive({Iri("<http://www.example.com/b/b>")}),
          }),
-         PropertyPath::fromIri("<http://www.example.com/c/c>"),
-         PropertyPath::makeTransitiveMin(
-             {PropertyPath::makeSequence(
-                 {PropertyPath::fromIri("<http://www.example.com/a/a>"),
-                  PropertyPath::fromIri("<http://www.example.com/b/b>"),
-                  PropertyPath::fromIri("<a/b/c>")})},
+         Iri("<http://www.example.com/c/c>"),
+         TransitiveMin(
+             {Sequence({Iri("<http://www.example.com/a/a>"),
+                        Iri("<http://www.example.com/b/b>"), Iri("<a/b/c>")})},
              1)});
     expected.computeCanBeNull();
     expected._can_be_null = false;
-    expectCompleteParse(
-        parseVerbPathOrSimple("a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+",
-                              {{"a", "<http://www.example.com/a/>"},
-                               {"b", "<http://www.example.com/b/>"},
-                               {"c", "<http://www.example.com/c/>"}}),
-        IsPropertyPath(expected));
+    expectPathOrVar("a:a/b:b*|c:c|(a:a/b:b/<a/b/c>)+", expected,
+                    {{"a", "<http://www.example.com/a/>"},
+                     {"b", "<http://www.example.com/b/>"},
+                     {"c", "<http://www.example.com/c/>"}});
   }
+}
+
+TEST(SparqlParser, propertyListPathNotEmpty) {
+  auto expectPropertyListPath =
+      ExpectCompleteParse<&Parser::propertyListPathNotEmpty>{};
+  auto expectPropertyListPathFails =
+      ExpectParseFails<&Parser::propertyListPathNotEmpty>();
+  auto Iri = &PropertyPath::fromIri;
+  expectPropertyListPath("<bar> ?foo", {{Iri("<bar>"), Variable{"?foo"}}});
+  expectPropertyListPath(
+      "<bar> ?foo ; <mehr> ?f",
+      {{Iri("<bar>"), Variable{"?foo"}}, {Iri("<mehr>"), Variable{"?f"}}});
+  expectPropertyListPath(
+      "<bar> ?foo , ?baz",
+      {{Iri("<bar>"), Variable{"?foo"}}, {Iri("<bar>"), Variable{"?baz"}}});
+  // Currently unsupported by QLever
+  expectPropertyListPathFails("<bar> ( ?foo ?baz )");
+  expectPropertyListPathFails("<bar> [ <foo> ?bar ]");
+}
+
+TEST(SparqlParser, triplesSameSubjectPath) {
+  auto expectTriples = ExpectCompleteParse<&Parser::triplesSameSubjectPath>{};
+  auto PathIri = &PropertyPath::fromIri;
+  using Var = Variable;
+  expectTriples("?foo <bar> ?baz",
+                {{Var{"?foo"}, PathIri("<bar>"), Var{"?baz"}}});
+  expectTriples("?foo <bar> ?baz ; <mehr> ?t",
+                {{Var{"?foo"}, PathIri("<bar>"), Var{"?baz"}},
+                 {Var{"?foo"}, PathIri("<mehr>"), Var{"?t"}}});
+  expectTriples("?foo <bar> ?baz , ?t",
+                {{Var{"?foo"}, PathIri("<bar>"), Var{"?baz"}},
+                 {Var{"?foo"}, PathIri("<bar>"), Var{"?t"}}});
+  expectTriples("?foo <bar> ?baz , ?t ; <mehr> ?d",
+                {{Var{"?foo"}, PathIri("<bar>"), Var{"?baz"}},
+                 {Var{"?foo"}, PathIri("<bar>"), Var{"?t"}},
+                 {Var{"?foo"}, PathIri("<mehr>"), Var{"?d"}}});
+  expectTriples("?foo <bar> ?baz ; <mehr> ?t , ?d",
+                {{Var{"?foo"}, PathIri("<bar>"), Var{"?baz"}},
+                 {Var{"?foo"}, PathIri("<mehr>"), Var{"?t"}},
+                 {Var{"?foo"}, PathIri("<mehr>"), Var{"?d"}}});
+  expectTriples("<foo> <bar> ?baz ; ?mehr \"a\"",
+                {{Iri("<foo>"), PathIri("<bar>"), Var{"?baz"}},
+                 {Iri("<foo>"), Var("?mehr"), Literal("\"a\"")}});
+  expectTriples("_:1 <bar> ?baz",
+                {{BlankNode(false, "1"), PathIri("<bar>"), Var{"?baz"}}});
+  expectTriples("10.0 <bar> true",
+                {{Literal(10.0), PathIri("<bar>"), Literal(true)}});
+  expectTriples(
+      "<foo> <QLever-internal-function/contains-word> \"Berlin Freiburg\"",
+      {{Iri("<foo>"), PathIri("<QLever-internal-function/contains-word>"),
+        Literal("berlin freiburg")}});
+}
+
+TEST(SparqlParser, SelectClause) {
+  auto expectSelectClause = ExpectCompleteParse<&Parser::selectClause>{};
+  auto expectSelectFails = ExpectParseFails<&Parser::selectClause>();
+
+  using Alias = std::pair<string, ::Variable>;
+  expectCompleteParse(parseSelectClause("SELECT *"),
+                      m::AsteriskSelect(false, false));
+  expectCompleteParse(parseSelectClause("SELECT DISTINCT *"),
+                      m::AsteriskSelect(true, false));
+  expectCompleteParse(parseSelectClause("SELECT REDUCED *"),
+                      m::AsteriskSelect(false, true));
+  expectSelectFails("SELECT DISTINCT REDUCED *");
+  expectSelectFails("SELECT");
+  expectSelectClause("SELECT ?foo", m::VariablesSelect({"?foo"}));
+  expectSelectClause("SELECT ?foo ?baz ?bar",
+                     m::VariablesSelect({"?foo", "?baz", "?bar"}));
+  expectSelectClause("SELECT DISTINCT ?foo ?bar",
+                     m::VariablesSelect({"?foo", "?bar"}, true, false));
+  expectSelectClause("SELECT REDUCED ?foo ?bar ?baz",
+                     m::VariablesSelect({"?foo", "?bar", "?baz"}, false, true));
+  expectSelectClause(
+      "SELECT (10 as ?foo) ?bar",
+      m::Select({Alias{"10", Variable{"?foo"}}, Variable{"?bar"}}));
+  expectSelectClause("SELECT DISTINCT (5 - 10 as ?m)",
+                     m::Select({Alias{"5-10", Variable{"?m"}}}, true, false));
+  expectSelectClause(
+      "SELECT (5 - 10 as ?m) ?foo (10 as ?bar)",
+      m::Select({Alias{"5-10", "?m"}, Variable{"?foo"}, Alias{"10", "?bar"}}));
+}
+
+TEST(SparqlParser, HavingCondition) {
+  auto expectHavingCondition = ExpectCompleteParse<&Parser::havingCondition>{};
+  auto expectHavingConditionFails =
+      ExpectParseFails<&Parser::havingCondition>();
+
+  expectHavingCondition("(?x <= 42.3)", {SparqlFilter::LE, "?x", "42.3"});
+  expectHavingCondition("(?height > 1.7)",
+                        {SparqlFilter::GT, "?height", "1.7"});
+  expectHavingCondition("(?predicate < \"<Z\")",
+                        {SparqlFilter::LT, "?predicate", "\"<Z\""});
+  expectHavingConditionFails("(LANG(?x) = \"en\")");
+}
+
+TEST(SparqlParser, GroupGraphPattern) {
+  auto expectGraphPattern = ExpectCompleteParse<&Parser::groupGraphPattern>{
+      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectGroupGraphPatternFails =
+      ExpectParseFails<&Parser::groupGraphPattern>();
+  auto DummyTriplesMatcher = m::Triples({{"?x", "?y", "?z"}});
+
+  // Empty GraphPatterns are not supported.
+  expectGroupGraphPatternFails("{ }");
+  expectGroupGraphPatternFails("{ SELECT *  WHERE { } }");
+  // Test the Components alone.
+  expectGraphPattern(
+      "{ { ?a ?b ?c } }",
+      m::GraphPattern(m::GroupGraphPattern(m::Triples({{"?a", "?b", "?c"}}))));
+  expectGraphPattern("{ { ?a ?b ?c } UNION { ?d ?e ?f } }",
+                     m::GraphPattern(m::Union(
+                         m::GraphPattern(m::Triples({{"?a", "?b", "?c"}})),
+                         m::GraphPattern(m::Triples({{"?d", "?e", "?f"}})))));
+  expectGraphPattern(
+      "{ { ?a ?b ?c } UNION { ?d ?e ?f } UNION { ?g ?h ?i } }",
+      m::GraphPattern(
+          m::Union(m::GraphPattern(m::Union(
+                       m::GraphPattern(m::Triples({{"?a", "?b", "?c"}})),
+                       m::GraphPattern(m::Triples({{"?d", "?e", "?f"}})))),
+                   m::GraphPattern(m::Triples({{"?g", "?h", "?i"}})))));
+  expectGraphPattern("{ OPTIONAL { ?a <foo> <bar> } }",
+                     m::GraphPattern(m::OptionalGraphPattern(
+                         m::Triples({{"?a", "<foo>", "<bar>"}}))));
+  expectGraphPattern("{ MINUS { ?a <foo> <bar> } }",
+                     m::GraphPattern(m::MinusGraphPattern(
+                         m::Triples({{"?a", "<foo>", "<bar>"}}))));
+  expectGraphPattern(
+      "{ FILTER (?a = 10) . ?x ?y ?z }",
+      m::GraphPattern(false, {{SparqlFilter::FilterType::EQ, "?a", "10"}},
+                      DummyTriplesMatcher));
+  expectGraphPattern("{ BIND (?f - ?b as ?c) }",
+                     m::GraphPattern(m::Bind(Variable{"?c"}, "?f-?b")));
+  expectGraphPattern("{ VALUES (?a ?b) { (<foo> <bar>) (<a> <b>) } }",
+                     m::GraphPattern(m::InlineData(
+                         {"?a", "?b"}, {{"<foo>", "<bar>"}, {"<a>", "<b>"}})));
+  expectGraphPattern("{ ?x ?y ?z }",
+                     m::GraphPattern(m::Triples({{"?x", "?y", "?z"}})));
+  expectGraphPattern(
+      "{ SELECT *  WHERE { ?x ?y ?z } }",
+      m::GraphPattern(m::SubSelect(m::AsteriskSelect(false, false),
+                                   m::GraphPattern(DummyTriplesMatcher))));
+  // Test mixes of the components to make sure that they interact correctly.
+  expectGraphPattern(
+      "{ ?x ?y ?z ; ?f <bar> }",
+      m::GraphPattern(m::Triples({{"?x", "?y", "?z"}, {"?x", "?f", "<bar>"}})));
+  expectGraphPattern("{ ?x ?y ?z . <foo> ?f <bar> }",
+                     m::GraphPattern(m::Triples(
+                         {{"?x", "?y", "?z"}, {"<foo>", "?f", "<bar>"}})));
+  expectGraphPattern(
+      "{ ?x <is-a> <Actor> . FILTER(?x != ?y) . ?y <is-a> <Actor> . "
+      "FILTER(?y < ?x) }",
+      m::GraphPattern(false,
+                      {{SparqlFilter::FilterType::NE, "?x", "?y"},
+                       {SparqlFilter::FilterType::LT, "?y", "?x"}},
+                      m::Triples({{"?x", "<is-a>", "<Actor>"},
+                                  {"?y", "<is-a>", "<Actor>"}})));
+  expectGraphPattern(
+      "{?x <is-a> <Actor> . FILTER(?x != ?y) . ?y <is-a> <Actor> . ?c "
+      "ql:contains-entity ?x . ?c ql:contains-word \"coca* abuse\"}",
+      m::GraphPattern(
+          false, {{SparqlFilter::FilterType::NE, "?x", "?y"}},
+          m::Triples({{"?x", "<is-a>", "<Actor>"},
+                      {"?y", "<is-a>", "<Actor>"},
+                      {"?c", CONTAINS_ENTITY_PREDICATE, "?x"},
+                      {"?c", CONTAINS_WORD_PREDICATE, "coca* abuse"}})));
+  expectGraphPattern("{?x <is-a> <Actor> . BIND(10 - ?foo as ?y) }",
+                     m::GraphPattern(m::Triples({{"?x", "<is-a>", "<Actor>"}}),
+                                     m::Bind(Variable{"?y"}, "10-?foo")));
+  expectGraphPattern("{?x <is-a> <Actor> . BIND(10 - ?foo as ?y) . ?a ?b ?c }",
+                     m::GraphPattern(m::Triples({{"?x", "<is-a>", "<Actor>"}}),
+                                     m::Bind(Variable{"?y"}, "10-?foo"),
+                                     m::Triples({{"?a", "?b", "?c"}})));
+  expectGraphPattern(
+      "{?x <is-a> <Actor> . OPTIONAL { ?x <foo> <bar> } }",
+      m::GraphPattern(
+          m::Triples({{"?x", "<is-a>", "<Actor>"}}),
+          m::OptionalGraphPattern(m::Triples({{"?x", "<foo>", "<bar>"}}))));
+  expectGraphPattern(
+      "{ SELECT *  WHERE { ?x ?y ?z } VALUES ?a { <a> <b> } }",
+      m::GraphPattern(m::SubSelect(m::AsteriskSelect(false, false),
+                                   m::GraphPattern(DummyTriplesMatcher)),
+                      m::InlineData({"?a"}, {{"<a>"}, {"<b>"}})));
+  // graphGraphPattern and serviceGraphPattern are not supported.
+  expectGroupGraphPatternFails("{ GRAPH ?a { } }");
+  expectGroupGraphPatternFails("{ GRAPH <foo> { } }");
+  expectGroupGraphPatternFails("{ SERVICE <foo> { } }");
+  expectGroupGraphPatternFails("{ SERVICE SILENT ?bar { } }");
+}
+
+TEST(SparqlParser, RDFLiteral) {
+  auto expectRDFLiteral = ExpectCompleteParse<&Parser::rdfLiteral>{
+      {{"xsd", "<http://www.w3.org/2001/XMLSchema#>"}}};
+  auto expectRDFLiteralFails = ExpectParseFails<&Parser::rdfLiteral>();
+
+  expectRDFLiteral("   \"Astronaut\"^^xsd:string  \t",
+                   "\"Astronaut\"^^<http://www.w3.org/2001/XMLSchema#string>");
+  // The conversion to the internal date format
+  // (":v:date:0000000000000001950-01-01T00:00:00") is done by
+  // TurtleStringParser<TokenizerCtre>::parseTripleObject(resultAsString) which
+  // is only called at triplesBlock.
+  expectRDFLiteral(
+      "\"1950-01-01T00:00:00\"^^xsd:dateTime",
+      "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>");
+  expectRDFLiteralFails(R"(?a ?b "The \"Moon\""@en .)");
+}
+
+TEST(SparqlParser, SelectQuery) {
+  auto expectSelectQuery = ExpectCompleteParse<&Parser::selectQuery>{
+      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectSelectQueryFails = ExpectParseFails<&Parser::selectQuery>{};
+  auto DummyGraphPatternMatcher =
+      m::GraphPattern(m::Triples({{"?x", "?y", "?z"}}));
+  expectSelectQuery(
+      "SELECT * WHERE { ?a <bar> ?foo }",
+      testing::AllOf(
+          m::SelectQuery(m::AsteriskSelect(), m::GraphPattern(m::Triples(
+                                                  {{"?a", "<bar>", "?foo"}}))),
+          m::pq::OriginalString("SELECT * WHERE { ?a <bar> ?foo }")));
+  expectSelectQuery(
+      "SELECT * WHERE { ?x ?y ?z }",
+      testing::AllOf(
+          m::SelectQuery(m::AsteriskSelect(), DummyGraphPatternMatcher),
+          m::pq::OriginalString("SELECT * WHERE { ?x ?y ?z }")));
+  expectSelectQuery(
+      "SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x",
+      testing::AllOf(
+          m::SelectQuery(m::VariablesSelect({"?x"}), DummyGraphPatternMatcher),
+          m::pq::OriginalString("SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x"),
+          m::pq::GroupKeys({Variable{"?x"}})));
+  expectSelectQuery(
+      "SELECT (COUNT(?y) as ?a) WHERE { ?x ?y ?z } GROUP BY ?x",
+      testing::AllOf(
+          m::SelectQuery(m::Select({std::pair{"COUNT(?y)", Variable{"?a"}}}),
+                         DummyGraphPatternMatcher),
+          m::pq::OriginalString(
+              "SELECT (COUNT(?y) as ?a) WHERE { ?x ?y ?z } GROUP BY ?x"),
+          m::pq::GroupKeys({Variable{"?x"}})));
+  expectSelectQuery(
+      "SELECT ?x WHERE { ?x ?y ?z . FILTER(?x != <foo>) } LIMIT 10 TEXTLIMIT 5",
+      testing::AllOf(
+          m::SelectQuery(
+              m::Select({Variable{"?x"}}),
+              m::GraphPattern(false,
+                              {{SparqlFilter::FilterType::NE, "?x", "<foo>"}},
+                              m::Triples({{"?x", "?y", "?z"}}))),
+          m::pq::LimitOffset({10, 5})));
+  expectSelectQuery(
+      "SELECT ?x WHERE { ?x ?y ?z } HAVING (?x > 5) ORDER BY ?y ",
+      testing::AllOf(
+          m::SelectQuery(m::Select({Variable{"?x"}}), DummyGraphPatternMatcher),
+          m::pq::Having({{SparqlFilter::FilterType::GT, "?x", "5"}}),
+          m::pq::OrderKeys({{Variable{"?y"}, false}})));
+  // TODO<qup42, joka921> enable Tests once the corresponding checks are
+  //  implemented.
+
+  // Grouping by a variable or expression which contains a variable
+  // that is not visible in the query body is not allowed.
+  expectSelectQueryFails("SELECT ?x WHERE { ?a ?b ?c } GROUP BY ?x");
+  // expectSelectQueryFails("SELECT (COUNT(?a) as ?d) WHERE { ?a ?b ?c } GROUP
+  // BY (?x - 10)");
+  // Ordering by a variable or expression which contains a variable that is not
+  // visible in the query body is not allowed.
+  // expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY ?x");
+  // expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY (?x - 10)");
+  // All variables used in an aggregate must be visible in the query body.
+  // expectSelectQueryFails(
+  //    "SELECT (COUNT(?x) as ?y) WHERE { ?a ?b ?c } GROUP BY ?a");
+  // `SELECT *` is not allowed while grouping.
+  expectSelectQueryFails("SELECT * WHERE { ?x ?y ?z } GROUP BY ?x");
+  // `?x` is selected twice. Once as variable and once as the result of an
+  // alias. This is not allowed.
+  expectSelectQueryFails("SELECT ?x (?y as ?x) WHERE { ?x ?y ?z }");
+  // When grouping selected variables must either be grouped by or aggregated.
+  // `?y` is neither.
+  expectSelectQueryFails("SELECT (?y as ?a) WHERE { ?x ?y ?z } GROUP BY ?x");
+  // Datasets are not supported.
+  expectSelectQueryFails("SELECT * FROM  WHERE <foo> { ?x ?y ?z }");
 }

@@ -6,20 +6,41 @@
 
 #include "CallFixedSize.h"
 
-template <typename A, typename R>
-void doComputeSubqueryS(const std::vector<A>* input,
-                        const size_t inputSubjectColumn, std::vector<R>* result,
-                        const std::vector<PatternID>& hasPattern,
-                        const CompactVectorOfStrings<Id>& hasPredicate,
-                        const CompactVectorOfStrings<Id>& patterns);
+HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
+                                   std::shared_ptr<QueryExecutionTree> subtree,
+                                   size_t subtreeJoinColumn,
+                                   std::string objectVariable)
+    : Operation{qec},
+      _type{ScanType::SUBQUERY_S},
+      _subtree{std::move(subtree)},
+      _subtreeJoinColumn{subtreeJoinColumn},
+      _object{std::move(objectVariable)} {}
 
-HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec, ScanType type)
-    : Operation(qec),
-      _type(type),
-      _subtree(nullptr),
-      _subtreeColIndex(-1),
-      _subject(),
-      _object() {}
+HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
+                                   SparqlTriple triple)
+    : Operation{qec} {
+  // Just pick one direction, they should be equivalent.
+  AD_CHECK(triple._p._iri == HAS_PREDICATE_PREDICATE);
+  // TODO(schnelle): Handle ?p ql:has-predicate ?p
+  _type = [&]() {
+    if (isVariable(triple._s) && (isVariable(triple._o))) {
+      if (triple._s == triple._o) {
+        throw std::runtime_error{
+            "ql:has-predicate with same variable for subject and object not "
+            "supported."};
+      }
+      return ScanType::FULL_SCAN;
+    } else if (isVariable(triple._s)) {
+      return ScanType::FREE_S;
+    } else if (isVariable(triple._o)) {
+      return ScanType::FREE_O;
+    } else {
+      AD_FAIL();
+    }
+  }();
+  setSubject(triple._s);
+  setObject(triple._o);
+}
 
 string HasPredicateScan::asStringImpl(size_t indent) const {
   std::ostringstream os;
@@ -28,16 +49,16 @@ string HasPredicateScan::asStringImpl(size_t indent) const {
   }
   switch (_type) {
     case ScanType::FREE_S:
-      os << "HAS_RELATION_SCAN with O = " << _object;
+      os << "HAS_PREDICATE_SCAN with O = " << _object;
       break;
     case ScanType::FREE_O:
-      os << "HAS_RELATION_SCAN with S = " << _subject;
+      os << "HAS_PREDICATE_SCAN with S = " << _subject;
       break;
     case ScanType::FULL_SCAN:
-      os << "HAS_RELATION_SCAN for the full relation";
+      os << "HAS_PREDICATE_SCAN for the full relation";
       break;
     case ScanType::SUBQUERY_S:
-      os << "HAS_RELATION_SCAN with S = " << _subtree->asString(indent);
+      os << "HAS_PREDICATE_SCAN with S = " << _subtree->asString(indent);
       break;
   }
   return std::move(os).str();
@@ -147,7 +168,7 @@ float HasPredicateScan::getMultiplicity(size_t col) {
         return _subtree->getMultiplicity(col) *
                getIndex().getHasPredicateMultiplicityPredicates();
       } else {
-        return _subtree->getMultiplicity(_subtreeColIndex) *
+        return _subtree->getMultiplicity(_subtreeJoinColumn) *
                getIndex().getHasPredicateMultiplicityPredicates();
       }
       break;
@@ -170,7 +191,7 @@ size_t HasPredicateScan::getSizeEstimate() {
       size_t nofDistinctLeft = std::max(
           size_t(1),
           static_cast<size_t>(_subtree->getSizeEstimate() /
-                              _subtree->getMultiplicity(_subtreeColIndex)));
+                              _subtree->getMultiplicity(_subtreeJoinColumn)));
       size_t nofDistinctRight = std::max(
           size_t(1), static_cast<size_t>(
                          getIndex().getHasPredicateFullSize() /
@@ -178,7 +199,7 @@ size_t HasPredicateScan::getSizeEstimate() {
       size_t nofDistinctInResult = std::min(nofDistinctLeft, nofDistinctRight);
 
       double jcMultiplicityInResult =
-          _subtree->getMultiplicity(_subtreeColIndex) *
+          _subtree->getMultiplicity(_subtreeJoinColumn) *
           getIndex().getHasPredicateMultiplicityPredicates();
       return std::max(size_t(1), static_cast<size_t>(jcMultiplicityInResult *
                                                      nofDistinctInResult));
@@ -210,11 +231,8 @@ void HasPredicateScan::computeResult(ResultTable* result) {
   const CompactVectorOfStrings<Id>& hasPredicate = getIndex().getHasPredicate();
   const CompactVectorOfStrings<Id>& patterns = getIndex().getPatterns();
 
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-
   switch (_type) {
     case ScanType::FREE_S: {
-      runtimeInfo.setDescriptor("HasPredicateScan free subject: " + _subject);
       Id objectId;
       if (!getIndex().getId(_object, &objectId)) {
         AD_THROW(ad_semsearch::Exception::BAD_INPUT,
@@ -224,7 +242,6 @@ void HasPredicateScan::computeResult(ResultTable* result) {
                                      patterns);
     } break;
     case ScanType::FREE_O: {
-      runtimeInfo.setDescriptor("HasPredicateScan free object: " + _object);
       Id subjectId;
       if (!getIndex().getId(_subject, &subjectId)) {
         AD_THROW(ad_semsearch::Exception::BAD_INPUT,
@@ -234,7 +251,6 @@ void HasPredicateScan::computeResult(ResultTable* result) {
                                      hasPredicate, patterns);
     } break;
     case ScanType::FULL_SCAN:
-      runtimeInfo.setDescriptor("HasPredicateScan full scan");
       HasPredicateScan::computeFullScan(result, hasPattern, hasPredicate,
                                         patterns,
                                         getIndex().getHasPredicateFullSize());
@@ -250,10 +266,7 @@ void HasPredicateScan::computeResult(ResultTable* result) {
       int outWidth = result->_idTable.cols();
       CALL_FIXED_SIZE_2(inWidth, outWidth, HasPredicateScan::computeSubqueryS,
                         &result->_idTable, subresult->_idTable,
-                        _subtreeColIndex, hasPattern, hasPredicate, patterns);
-      runtimeInfo.setDescriptor("HasPredicateScan with a subquery on " +
-                                _subject);
-      runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
+                        _subtreeJoinColumn, hasPattern, hasPredicate, patterns);
       break;
   }
 
@@ -415,13 +428,5 @@ void HasPredicateScan::setObject(const TripleComponent& object) {
 }
 
 const std::string& HasPredicateScan::getObject() const { return _object; }
-
-void HasPredicateScan::setSubtree(std::shared_ptr<QueryExecutionTree> subtree) {
-  _subtree = std::move(subtree);
-}
-
-void HasPredicateScan::setSubtreeSubjectColumn(size_t colIndex) {
-  _subtreeColIndex = colIndex;
-}
 
 HasPredicateScan::ScanType HasPredicateScan::getType() const { return _type; }

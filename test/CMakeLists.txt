@@ -70,7 +70,7 @@ addLinkAndDiscoverTest(CacheTest absl::flat_hash_map)
 addLinkAndDiscoverTest(ConcurrentCacheTest absl::flat_hash_map)
 
 # This test also seems to use the same filenames and should be fixed.
-addLinkAndDiscoverTestSerial(FileTest)
+addLinkAndDiscoverTestSerial(FileTest absl::strings)
 
 addLinkAndDiscoverTest(Simple8bTest)
 
@@ -89,7 +89,7 @@ addLinkAndDiscoverTest(EngineTest engine)
 
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
-addLinkAndDiscoverTest(ConversionsTest absl::strings)
+addLinkAndDiscoverTest(ConversionsTest util absl::strings)
 
 addLinkAndDiscoverTest(HashMapTest absl::flat_hash_map)
 
@@ -101,15 +101,15 @@ addLinkAndDiscoverTest(VocabularyGeneratorTest index)
 
 addLinkAndDiscoverTest(HasPredicateScanTest engine)
 
-addLinkAndDiscoverTest(MmapVectorTest)
+addLinkAndDiscoverTest(MmapVectorTest absl::strings)
 
 # BufferedVectorTest also uses conflicting filenames.
-addLinkAndDiscoverTestSerial(BufferedVectorTest)
+addLinkAndDiscoverTestSerial(BufferedVectorTest absl::strings)
 
 addLinkAndDiscoverTest(UnionTest engine)
 
 add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
-linkAndDiscoverTest(TokenTest parser re2 ${ICU_LIBRARIES})
+linkAndDiscoverTest(TokenTest parser re2 util ${ICU_LIBRARIES})
 
 addLinkAndDiscoverTest(TurtleParserTest parser absl::flat_hash_map re2)
 
@@ -192,7 +192,7 @@ addLinkAndDiscoverTest(MilestoneIdTest absl::strings)
 # TODO<qup42, joka921> fix this
 addLinkAndDiscoverTest(VocabularyOnDiskTest index)
 
-addLinkAndDiscoverTest(VocabularyTest index)
+addLinkAndDiscoverTest(VocabularyTest index absl::strings)
 
 addLinkAndDiscoverTest(IteratorTest)
 
@@ -226,6 +226,11 @@ addLinkAndDiscoverTest(TripleObjectTest absl::strings)
 
 addLinkAndDiscoverTest(ValueIdTest absl::flat_hash_set)
 
-#addLinkAndDiscoverTest(ValueIdComparatorsTest)
 
 addLinkAndDiscoverTest(LambdaHelpersTest)
+
+addLinkAndDiscoverTest(ParseExceptionTest parser)
+
+addLinkAndDiscoverTest(TransparentFunctorsTest)
+
+addLinkAndDiscoverTest(SelectClauseTest index)

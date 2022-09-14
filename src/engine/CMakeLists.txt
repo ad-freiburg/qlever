@@ -36,7 +36,7 @@ add_library(engine
         ../util/Random.h
         Minus.h Minus.cpp
         ResultType.h
-        ../util/Parameters.h)
+        ../util/Parameters.h RuntimeInformation.cpp)
 
 
 target_link_libraries(engine index parser sparqlExpressions httpServer SortPerformanceEstimator absl::flat_hash_set ${ICU_LIBRARIES} boost_iostreams)

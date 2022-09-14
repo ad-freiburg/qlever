@@ -167,8 +167,8 @@ class BatchedPipeline {
                 sizeof...(Transformers) + 1 == Parallelism);
 
   // the value type the previous pipeline stage delivers to us
-  using InT = std::decay_t<decltype(
-      std::declval<PreviousStage&>().pickupBatch().m_content[0])>;
+  using InT = std::decay_t<
+      decltype(std::declval<PreviousStage&>().pickupBatch().m_content[0])>;
 
   // the value type this BatchedPipeline produces
   using ResT = std::invoke_result_t<FirstTransformer, InT>;
@@ -459,8 +459,8 @@ template <class Pipeline>
 class BatchExtractor {
  public:
   /// The type of our elements after all transformations were applied
-  using ValueT = std::decay_t<decltype(
-      std::declval<Pipeline>().pickupBatch().m_content[0])>;
+  using ValueT = std::decay_t<
+      decltype(std::declval<Pipeline>().pickupBatch().m_content[0])>;
 
   /// Get the next completely transformed value from the pipeline. std::nullopt
   /// means that all elements have been extracted and the pipeline is exhausted.

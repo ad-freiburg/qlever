@@ -184,7 +184,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForDouble(
     rangeFilter.addEqual(beginOfNegatives, negativeEnd);
     rangeFilter.addSmaller(negativeEnd, end);
   } else {
-    AD_CHECK(false);
+    AD_FAIL();
   }
   return std::move(rangeFilter).getResult();
 }
@@ -233,7 +233,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForInt(
     rangeFilter.addEqual(eqBegin, eqEnd);
     rangeFilter.addGreater(eqEnd, end);
   } else {
-    AD_CHECK(false);
+    AD_FAIL();
   }
   return std::move(rangeFilter).getResult();
 }
@@ -314,7 +314,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
       return simplify(
           detail::getRangesForIndexTypes(begin, end, valueId, comparison));
   }
-  AD_CHECK(false);
+  AD_FAIL();
 }
 
 /// Similar to `getRangesForId` above but takes a range [valueIdBegin,
@@ -348,7 +348,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
       return simplifyRanges(detail::getRangesForIndexTypes(
           begin, end, valueIdBegin, valueIdEnd, comparison));
   }
-  AD_CHECK(false);
+  AD_FAIL();
 }
 
 namespace detail {
@@ -369,7 +369,7 @@ bool compareIdsImpl(ValueId a, ValueId b, auto comparator) {
     if constexpr (requires() { std::invoke(comparator, aValue, bValue); }) {
       return std::invoke(comparator, aValue, bValue);
     } else {
-      AD_CHECK(false);
+      AD_FAIL();
     }
   };
 
@@ -398,7 +398,7 @@ inline bool compareIds(ValueId a, ValueId b, Comparison comparison) {
     case Comparison::GT:
       return detail::compareIdsImpl(a, b, std::greater<>());
     default:
-      AD_CHECK(false);
+      AD_FAIL();
   }
 }
 
@@ -423,7 +423,7 @@ inline bool compareWithEqualIds(ValueId a, ValueId bBegin, ValueId bEnd,
     case Comparison::GT:
       return detail::compareIdsImpl(a, bEnd, std::greater_equal<>());
     default:
-      AD_CHECK(false);
+      AD_FAIL();
   }
 }
 
