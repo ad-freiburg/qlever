@@ -69,7 +69,7 @@ class SparqlExpressionPimpl {
   SparqlExpressionPimpl(const SparqlExpressionPimpl&);
   SparqlExpressionPimpl& operator=(const SparqlExpressionPimpl&);
 
-  std::vector<std::string*> strings();
+  std::vector<const Variable*> containedVariables() const;
 
   SparqlExpression* getPimpl() { return _pimpl.get(); }
   [[nodiscard]] const SparqlExpression* getPimpl() const {

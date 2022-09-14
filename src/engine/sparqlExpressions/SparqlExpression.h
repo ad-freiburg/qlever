@@ -39,16 +39,17 @@ class SparqlExpression {
 
   /// Return all variables and IRIs, needed for certain parser methods.
   /// TODO<joka921> should be called getStringLiteralsAndVariables
-  virtual vector<string*> strings() final {
-    vector<string*> result;
+  virtual vector<const Variable*> containedVariables() const final {
+    vector<const Variable*> result;
     // Recursively aggregate the strings from all children.
-    for (auto& child : children()) {
-      auto childStrings = child->strings();
-      result.insert(result.end(), childStrings.begin(), childStrings.end());
+    for (const auto& child : children()) {
+      auto variablesFromChild = child->containedVariables();
+      result.insert(result.end(), variablesFromChild.begin(),
+                    variablesFromChild.end());
     }
 
     // Add the strings from this expression.
-    auto locallyAdded = getStringLiteralsAndVariablesNonRecursive();
+    auto locallyAdded = getContainedVariablesNonRecursive();
     for (auto& el : locallyAdded) {
       result.push_back(&el);
     }
@@ -97,11 +98,15 @@ class SparqlExpression {
  private:
   // Get the direct child expressions.
   virtual std::span<SparqlExpression::Ptr> children() = 0;
+  virtual std::span<const SparqlExpression::Ptr> children() const final {
+    auto children = const_cast<SparqlExpression&>(*this).children();
+    return {children.data(), children.size()};
+  }
 
   // Helper function for strings(). Get all variables, iris, and string literals
   // that are included in this expression directly, ignoring possible child
   // expressions.
-  virtual std::span<string> getStringLiteralsAndVariablesNonRecursive() {
+  virtual std::span<const Variable> getContainedVariablesNonRecursive() const {
     // Default implementation: This expression adds no strings or variables.
     return {};
   }

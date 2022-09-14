@@ -121,19 +121,12 @@ struct Bind {
   sparqlExpression::SparqlExpressionPimpl _expression;
   Variable _target;  // the variable to which the expression will be bound
 
-  // Return all the strings contained in the BIND expression (variables,
-  // constants, etc. Is required e.g. by ParsedQuery::expandPrefix.
-  std::vector<std::string*> strings() {
-    auto r = _expression.strings();
-    r.push_back(&_target._name);
+  // Return all the variables that are used in the BIND expression (the target
+  // variable as well as all variables from the expression).
+  std::vector<const Variable*> containedVariables() const {
+    auto r = _expression.containedVariables();
+    r.push_back(&_target);
     return r;
-  }
-
-  // Const overload, needed by the query planner. The actual behavior is
-  // always const, so this is fine.
-  [[nodiscard]] std::vector<const string*> strings() const {
-    auto r = const_cast<Bind*>(this)->strings();
-    return {r.begin(), r.end()};
   }
 
   [[nodiscard]] string getDescriptor() const {
