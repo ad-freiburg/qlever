@@ -130,6 +130,22 @@ Variable ParsedQuery::addInternalBind(
 
 // ________________________________________________________________________
 void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
+  auto checkUsedVariablesAreVisible =
+      [this](const sparqlExpression::SparqlExpressionPimpl& expression,
+             const std::string& locationDescription) {
+        for (const auto* var : expression.containedVariables()) {
+          // TODO: think of a solution to make this work with ConstructClause as
+          //  well.
+          if (!ad_utility::contains(selectClause().getVisibleVariables(),
+                                    *var)) {
+            throw ParseException("Variable " + var->name() + " used in " +
+                                 locationDescription +
+                                 expression.getDescriptor() +
+                                 " is not visible in the Query Body.");
+          }
+        }
+      };
+
   // Process groupClause
   // TODO<qup42, joka921> Check that all variables that are part of an
   //  expression that is grouped on are visible in the Query Body.
@@ -287,8 +303,8 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
         throw ParseException("The variable name " + a._target.name() +
                              " used in an alias was already selected on.");
       }
-      // TODO<qup42, joka921> Check that all variables used in the expression of
-      //  Aliases are visible in the QueryBody.
+
+      checkUsedVariablesAreVisible(a._expression, "Alias");
     }
   } else if (hasConstructClause()) {
     if (_groupByVariables.empty()) {

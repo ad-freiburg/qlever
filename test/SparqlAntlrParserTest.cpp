@@ -911,8 +911,8 @@ TEST(SparqlParser, SelectQuery) {
   // Grouping by a variable or expression which contains a variable
   // that is not visible in the query body is not allowed.
   expectSelectQueryFails("SELECT ?x WHERE { ?a ?b ?c } GROUP BY ?x");
-  // expectSelectQueryFails("SELECT (COUNT(?a) as ?d) WHERE { ?a ?b ?c } GROUP
-  // BY (?x - 10)");
+  expectSelectQueryFails(
+      "SELECT (COUNT(?a) as ?d) WHERE { ?a ?b ?c } GROUP BY (?x - 10)");
   // Ordering by a variable or expression which contains a variable that is not
   // visible in the query body is not allowed.
   // expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY ?x");
