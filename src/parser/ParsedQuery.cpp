@@ -22,16 +22,6 @@ using std::vector;
 string ParsedQuery::asString() const {
   std::ostringstream os;
 
-  // PREFIX
-  os << "PREFIX: {";
-  for (size_t i = 0; i < _prefixes.size(); ++i) {
-    os << "\n\t" << _prefixes[i].asString();
-    if (i + 1 < _prefixes.size()) {
-      os << ',';
-    }
-  }
-  os << "\n}";
-
   bool usesSelect = hasSelectClause();
   bool usesAsterisk = usesSelect && selectClause().isAsterisk();
 
@@ -328,8 +318,6 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
 }
 
 void ParsedQuery::merge(const ParsedQuery& p) {
-  _prefixes.insert(_prefixes.begin(), p._prefixes.begin(), p._prefixes.end());
-
   auto& children = _rootGraphPattern._graphPatterns;
   auto& otherChildren = p._rootGraphPattern._graphPatterns;
   children.insert(children.end(), otherChildren.begin(), otherChildren.end());

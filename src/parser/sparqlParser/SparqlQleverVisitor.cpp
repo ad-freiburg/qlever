@@ -127,18 +127,6 @@ PathTuples joinPredicateAndObject(VarOrPath predicate, ObjectList objectList) {
   return tuples;
 }
 
-namespace {
-// Converts the PrefixMap to the legacy data format used by ParsedQuery
-vector<SparqlPrefix> convertPrefixMap(
-    const SparqlQleverVisitor::PrefixMap& map) {
-  vector<SparqlPrefix> prefixes;
-  for (auto const& [label, iri] : map) {
-    prefixes.emplace_back(label, iri);
-  }
-  return prefixes;
-}
-}  // namespace
-
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visitTypesafe(Parser::QueryContext* ctx) {
   // The prologue (BASE and PREFIX declarations)  only affects the internal
@@ -147,7 +135,6 @@ ParsedQuery Visitor::visitTypesafe(Parser::QueryContext* ctx) {
   auto query =
       visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery());
   query._originalString = ctx->getText();
-  query._prefixes = convertPrefixMap(_prefixMap);
 
   return query;
 }
