@@ -20,9 +20,15 @@ SparqlParser::SparqlParser(const string& query) : lexer_(query), query_(query) {
 }
 
 ParsedQuery SparqlParser::parseQuery(std::string_view query) {
-  return parseWithAntlr(
-      &AntlrParser::query,
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}, query);
+  sparqlParserHelpers::ParserAndVisitor p{
+      query, {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto resultOfParseAndRemainingText = p.parseTypesafe(&AntlrParser::query);
+  if (!resultOfParseAndRemainingText.remainingText_.empty()) {
+    // TODO: add Exception Metadata
+    throw ParseException("Query couldn't be parsed completely. Trailing: " +
+                         resultOfParseAndRemainingText.remainingText_);
+  }
+  return std::move(resultOfParseAndRemainingText.resultOfParse_);
 }
 
 // _____________________________________________________________________________
@@ -233,24 +239,6 @@ SparqlFilter SparqlParser::parseRegexFilter(bool expectKeyword) {
     }
   }
   return f;
-}
-
-// ________________________________________________________________________
-template <typename ContextType>
-auto SparqlParser::parseWithAntlr(
-    ContextType* (SparqlAutomaticParser::*F)(void),
-    SparqlQleverVisitor::PrefixMap prefixMap, std::string_view query)
-    -> decltype((std::declval<sparqlParserHelpers::ParserAndVisitor>())
-                    .parseTypesafe(F)
-                    .resultOfParse_) {
-  sparqlParserHelpers::ParserAndVisitor p{query, std::move(prefixMap)};
-  auto resultOfParseAndRemainingText = p.parseTypesafe(F);
-  if (!resultOfParseAndRemainingText.remainingText_.empty()) {
-    // TODO: add Exception Metadata
-    throw ParseException("Query couldn't be parsed completely. Trailing: " +
-                         resultOfParseAndRemainingText.remainingText_);
-  }
-  return std::move(resultOfParseAndRemainingText.resultOfParse_);
 }
 
 namespace {

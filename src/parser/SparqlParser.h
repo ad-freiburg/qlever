@@ -15,8 +15,6 @@
 
 using std::string;
 
-enum QueryType { CONSTRUCT_QUERY, SELECT_QUERY };
-
 // A simple parser of SPARQL.
 // No supposed to feature the complete query language.
 class SparqlParser {
@@ -38,14 +36,4 @@ class SparqlParser {
   SparqlLexer lexer_;
   string query_;
   SparqlFilter parseRegexFilter(bool expectKeyword);
-
-  // Parse the clause with the given explicitly specified prefixes and query
-  // string.
-  template <typename ContextType>
-  static auto parseWithAntlr(ContextType* (SparqlAutomaticParser::*F)(void),
-                             SparqlQleverVisitor::PrefixMap prefixMap,
-                             std::string_view query)
-      -> decltype((std::declval<sparqlParserHelpers::ParserAndVisitor>())
-                      .parseTypesafe(F)
-                      .resultOfParse_);
 };
