@@ -4,8 +4,9 @@
 
 #include "RelationalExpressions.h"
 
-#include "../../util/LambdaHelpers.h"
-#include "./SparqlExpressionGenerators.h"
+#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "util/LambdaHelpers.h"
+#include "util/TypeTraits.h"
 
 using namespace sparqlExpression;
 
@@ -13,28 +14,32 @@ namespace {
 
 using valueIdComparators::Comparison;
 
-template <valueIdComparators::Comparison Comp, typename Dummy = int>
-bool applyComparison(const auto& a, const auto& b) requires requires {
-  a <= b;
-}
-{
-  if constexpr (Comp == valueIdComparators::Comparison::LT) {
+// Apply the given `Comparison` to `a` and `b`. For example, if the `Comparison`
+// is `LT`, returns `a < b`. Note that the second template argument `Dummy` is
+// only needed to make the static check for the exhaustiveness of the if-else
+// cascade possible.
+template <Comparison Comp, typename Dummy = int>
+bool applyComparison(const auto& a, const auto& b) {
+  using enum Comparison;
+  if constexpr (Comp == LT) {
     return a < b;
-  } else if constexpr (Comp == valueIdComparators::Comparison::LE) {
+  } else if constexpr (Comp == LE) {
     return a <= b;
-  } else if constexpr (Comp == valueIdComparators::Comparison::EQ) {
+  } else if constexpr (Comp == EQ) {
     return a == b;
-  } else if constexpr (Comp == valueIdComparators::Comparison::NE) {
+  } else if constexpr (Comp == NE) {
     return a != b;
-  } else if constexpr (Comp == valueIdComparators::Comparison::GE) {
+  } else if constexpr (Comp == GE) {
     return a >= b;
-  } else if constexpr (Comp == valueIdComparators::Comparison::GT) {
+  } else if constexpr (Comp == GT) {
     return a > b;
   } else {
     static_assert(ad_utility::alwaysFalse<Dummy>);
   }
 }
 
+// Get the inverse comparison for a given comparison. For example the inverse of
+// `less than` is `greater than` because `a < b` if and only if `b > a`.
 constexpr Comparison getComplement(Comparison comp) {
   switch (comp) {
     case Comparison::LE:
@@ -51,70 +56,14 @@ constexpr Comparison getComplement(Comparison comp) {
   }
 }
 
-template <typename T>
-concept Arithmetic = std::integral<T> || std::floating_point<T>;
-
-template <typename A, typename B>
-concept BothVariables =
-    std::is_same_v<Variable, A> && std::is_same_v<Variable, B>;
-
-template <typename A, typename B>
-concept VariableAndVectorImpl = std::is_same_v<Variable, A> &&
-    (Arithmetic<B> || std::is_same_v<ValueId, B>);
-
-template <typename A, typename B>
-concept VariableAndVector =
-    VariableAndVectorImpl<A, B> || VariableAndVectorImpl<B, A>;
-
-template <typename A, typename B>
-concept NeitherString =
-    !std::is_same_v<A, std::string> && !std::is_same_v<B, std::string>;
-template <typename A, typename B>
-concept anyStrongId = (std::is_same_v<ValueId, A> ||
-                       std::is_same_v<ValueId, B>)&&NeitherString<A, B>;
-
-template <typename T>
-concept Boolean =
-    std::is_same_v<T, Bool> || std::is_same_v<T, ad_utility::SetOfIntervals> ||
-    std::is_same_v<VectorWithMemoryLimit<Bool>, T>;
-
-template <typename T>
-concept VarOrIdVec = ad_utility::SimilarTo<T, Variable> ||
-                     ad_utility::SimilarTo<T, VectorWithMemoryLimit<ValueId>> || ad_utility::SimilarTo<T, ValueId>;
-
-
-template <typename A, typename B>
-concept Incompatible = (Arithmetic<A> && std::is_same_v<B, std::string>) ||
-                       (Arithmetic<B> && std::is_same_v<std::string, A>);
-
-template <typename A, typename B>
-concept AnyBoolean = Boolean<A> || Boolean<B>;
-
-template<typename A, typename B>
-concept Compatible = !AnyBoolean<A, B> && !Incompatible<A, B> && (VarOrIdVec<A> || !VarOrIdVec<B>);
-
-template <typename T>
-struct ValueTypeImpl {
-  using type = T;
-};
-
-template <typename T>
-struct ValueTypeImpl<VectorWithMemoryLimit<T>> {
-  using type = T;
-};
-
-template <typename T>
-using ValueType = typename ValueTypeImpl<T>::type;
-
-static_assert(std::is_same_v<double, ValueType<VectorWithMemoryLimit<double>>>);
-
-static_assert(
-    Compatible<ValueType<VectorWithMemoryLimit<double>>, ValueType<double>>);
-
-
+// Return the ID range /[begin, end)` in which the entries of the vocabulary
+// compare equal to `s`. This is a range, because words that are different on
+// the byte level still can logically be equal depending on the chose unicode
+// collation level.
+// TODO<joka921> Make the collation level configurable.
 std::pair<ValueId, ValueId> getRangeFromVocab(const std::string& s,
                                               EvaluationContext* context) {
-  // TODO<joka921> In theory we could make the `level` comparable.
+  // TODO<joka921> In theory we could make the `level` configurable.
   auto level = TripleComponentComparator::Level::QUARTERNARY;
   // TODO<joka921> This should be `Vocab::equal_range`
   const ValueId lower = Id::makeFromVocabIndex(
@@ -124,7 +73,11 @@ std::pair<ValueId, ValueId> getRangeFromVocab(const std::string& s,
   return {lower, upper};
 }
 
-template <SingleExpressionResult S> requires isConstantResult<S>
+// Convert an int, double, or string value into a `ValueId`. For int and double
+// this is a single `ValueId`, for strings it is a `pair<ValueId, ValueId>` that
+// denotes a range (see `getRangeFromVocab` above).
+template <SingleExpressionResult S>
+requires isConstantResult<S>
 auto makeValueId(const S& value, EvaluationContext* context) {
   if constexpr (std::is_integral_v<S>) {
     return ValueId::makeFromInt(value);
@@ -132,19 +85,22 @@ auto makeValueId(const S& value, EvaluationContext* context) {
     return ValueId::makeFromDouble(value);
   } else if constexpr (ad_utility::isSimilar<S, ValueId>) {
     return value;
-  } else if constexpr (ad_utility::isSimilar<S, Variable>) {
-    // should never be reachable.
-    // TODO<joka921> make sure how to fix this.
-    return ValueId::makeUndefined();
   } else {
     static_assert(ad_utility::isSimilar<S, std::string>);
     return getRangeFromVocab(value, context);
   }
 }
 
-static_assert(!isConstantResult<Variable>);
-template <SingleExpressionResult S> requires isConstantResult<S>
-auto idGenerator(S value, size_t targetSize, EvaluationContext* context) -> cppcoro::generator<decltype(makeValueId(value, context))> {
+// For the various `SingleExpressionResult`s the `idGenerator` function returns
+// a generator that yields `targetSize` many `ValueId`s. One exception is the
+// case where `S` is `string` or `vector<string>`. In this case the generator
+// yields `pair<ValueId, ValueId>` (see `makeValueId` and `getRangeFromVocab`
+// above for details). First the `idGenerator` for constants (string, int,
+// double). It yields the same ID `targetSize` many times.
+template <SingleExpressionResult S>
+requires isConstantResult<S>
+auto idGenerator(S value, size_t targetSize, EvaluationContext* context)
+    -> cppcoro::generator<decltype(makeValueId(value, context))> {
   auto id = makeValueId(value, context);
   for (size_t i = 0; i < targetSize; ++i) {
     auto cpy = id;
@@ -152,8 +108,13 @@ auto idGenerator(S value, size_t targetSize, EvaluationContext* context) -> cppc
   }
 }
 
-template<SingleExpressionResult S> requires isVectorResult<S>
-auto idGenerator(S value, size_t targetSize, EvaluationContext* context) -> cppcoro::generator<decltype(makeValueId(value[0], context))> {
+// Version of `idGenerator` for vectors. Asserts that the size of the vector is
+// equal to `targetSize` and the yields the corresponding ID for each of the
+// elements in the vector.
+template <SingleExpressionResult S>
+requires isVectorResult<S>
+auto idGenerator(S value, size_t targetSize, EvaluationContext* context)
+    -> cppcoro::generator<decltype(makeValueId(value[0], context))> {
   AD_CHECK(targetSize == value.size());
   for (const auto& el : value) {
     auto id = makeValueId(el, context);
@@ -161,20 +122,28 @@ auto idGenerator(S value, size_t targetSize, EvaluationContext* context) -> cppc
   }
 }
 
-auto idGenerator(Variable variable, size_t targetSize, EvaluationContext* context) {
-  return sparqlExpression::detail::makeGenerator(std::move(variable), targetSize, context);
+// For the `Variable` class, the generator from the `sparqlExpressions` module
+// already yields the `ValueIds`.
+auto idGenerator(Variable variable, size_t targetSize,
+                 EvaluationContext* context) {
+  return sparqlExpression::detail::makeGenerator(std::move(variable),
+                                                 targetSize, context);
 }
-
-
-
-
 
 template <SingleExpressionResult A, SingleExpressionResult B>
 auto getGenerators(A a, B b, size_t targetSize, EvaluationContext* context) {
-  if constexpr (ad_utility::isTypeContainedIn<A, std::tuple<Variable, ValueId, VectorWithMemoryLimit<ValueId>>> ||ad_utility::isTypeContainedIn<B, std::tuple<Variable, ValueId, VectorWithMemoryLimit<ValueId>>>) {
-    return std::pair{idGenerator(std::move(a), targetSize, context), idGenerator(std::move(b), targetSize, context)};
+  if constexpr (
+      ad_utility::isTypeContainedIn<
+          A, std::tuple<Variable, ValueId, VectorWithMemoryLimit<ValueId>>> ||
+      ad_utility::isTypeContainedIn<
+          B, std::tuple<Variable, ValueId, VectorWithMemoryLimit<ValueId>>>) {
+    return std::pair{idGenerator(std::move(a), targetSize, context),
+                     idGenerator(std::move(b), targetSize, context)};
   } else {
-    return std::pair{sparqlExpression::detail::makeGenerator(std::move(a), targetSize, context), sparqlExpression::detail::makeGenerator(std::move(b), targetSize, context)};
+    return std::pair{sparqlExpression::detail::makeGenerator(
+                         std::move(a), targetSize, context),
+                     sparqlExpression::detail::makeGenerator(
+                         std::move(b), targetSize, context)};
   }
 }
 
@@ -210,6 +179,43 @@ ExpressionResult evaluateWithBinarySearch(const Variable& a, ValueId idB,
   return s;
 }
 
+template <typename T>
+concept Arithmetic = std::integral<T> || std::floating_point<T>;
+
+template <typename T>
+concept Boolean =
+    std::is_same_v<T, Bool> || std::is_same_v<T, ad_utility::SetOfIntervals> ||
+    std::is_same_v<VectorWithMemoryLimit<Bool>, T>;
+
+template <typename T>
+concept VarOrIdVec = ad_utility::SimilarTo<T, Variable> ||
+    ad_utility::SimilarTo<T, VectorWithMemoryLimit<ValueId>> ||
+    ad_utility::SimilarTo<T, ValueId>;
+
+template <typename A, typename B>
+concept Incompatible = (Arithmetic<A> && std::is_same_v<B, std::string>) ||
+                       (Arithmetic<B> && std::is_same_v<std::string, A>);
+
+template <typename A, typename B>
+concept AnyBoolean = Boolean<A> || Boolean<B>;
+
+template <typename A, typename B>
+concept Compatible = !AnyBoolean<A, B> && !Incompatible<A, B> &&
+                     (VarOrIdVec<A> || !VarOrIdVec<B>);
+
+template <typename T>
+struct ValueTypeImpl {
+  using type = T;
+};
+
+template <typename T>
+struct ValueTypeImpl<VectorWithMemoryLimit<T>> {
+  using type = T;
+};
+
+template <typename T>
+using ValueType = typename ValueTypeImpl<T>::type;
+
 template <Comparison Comp, typename A, typename B>
 requires Compatible<ValueType<A>, ValueType<B>> ExpressionResult
 evaluateR(A a, B b, EvaluationContext* context) {
@@ -225,15 +231,17 @@ evaluateR(A a, B b, EvaluationContext* context) {
     auto bId = makeValueId(b, context);
     const auto& cols = context->_columnsByWhichResultIsSorted;
     if (!cols.empty() && cols[0] == idxA) {
-      if constexpr(bIsString) {
-        return evaluateWithBinarySearch<Comp>(a, bId.first, bId.second, context);
+      if constexpr (bIsString) {
+        return evaluateWithBinarySearch<Comp>(a, bId.first, bId.second,
+                                              context);
       } else {
         return evaluateWithBinarySearch<Comp>(a, bId, std::nullopt, context);
       }
     }
   }
 
-  auto [generatorA, generatorB] = getGenerators(std::move(a), std::move(b), targetSize, context);
+  auto [generatorA, generatorB] =
+      getGenerators(std::move(a), std::move(b), targetSize, context);
   auto itA = generatorA.begin();
   auto itB = generatorB.begin();
 
@@ -242,10 +250,12 @@ evaluateR(A a, B b, EvaluationContext* context) {
                     valueIdComparators::compareIds(*itA, *itB, Comp);
                   }) {
       result.push_back(valueIdComparators::compareIds(*itA, *itB, Comp));
-    }  else if constexpr (requires {
-                    valueIdComparators::compareWithEqualIds(*itA, itB->first, itB->second, Comp);
-                  }) {
-      result.push_back(valueIdComparators::compareWithEqualIds(*itA, itB->first, itB->second, Comp));
+    } else if constexpr (requires {
+                           valueIdComparators::compareWithEqualIds(
+                               *itA, itB->first, itB->second, Comp);
+                         }) {
+      result.push_back(valueIdComparators::compareWithEqualIds(
+          *itA, itB->first, itB->second, Comp));
     } else {
       result.push_back(applyComparison<Comp>(*itA, *itB));
     }
@@ -274,8 +284,10 @@ evaluateR(const A&, const B&, EvaluationContext*) {
   return false;
 }
 
-template <Comparison Comp, SingleExpressionResult A, SingleExpressionResult B> requires (!Compatible<ValueType<A>, ValueType<B>> && Compatible<ValueType<B>, ValueType<A>>)
-ExpressionResult evaluateR(A a, B b, EvaluationContext* context) {
+template <Comparison Comp, SingleExpressionResult A, SingleExpressionResult B>
+requires(!Compatible<ValueType<A>, ValueType<B>> &&
+         Compatible<ValueType<B>, ValueType<A>>) ExpressionResult
+    evaluateR(A a, B b, EvaluationContext* context) {
   return evaluateR<getComplement(Comp)>(std::move(b), std::move(a), context);
 }
 
