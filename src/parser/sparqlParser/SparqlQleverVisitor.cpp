@@ -831,25 +831,28 @@ vector<Visitor::ExpressionPtr> Visitor::visitTypesafe(
   return visitVector(ctx->expression());
 }
 
-// ____________________________________________________________________________________
-Triples Visitor::visitTypesafe(Parser::ConstructTriplesContext* ctx) {
+template <typename Context>
+Triples Visitor::parseTriplesConstruction(Context* ctx,
+                                          Context* (Context::*F)(void)) {
   auto result = visitTypesafe(ctx->triplesSameSubject());
-  if (ctx->constructTriples()) {
-    auto newTriples = visitTypesafe(ctx->constructTriples());
+  Context* subContext = std::invoke(F, ctx);
+  if (subContext) {
+    auto newTriples = visitTypesafe(subContext);
     ad_utility::appendVector(result, std::move(newTriples));
   }
   return result;
 }
 
 // ____________________________________________________________________________________
+Triples Visitor::visitTypesafe(Parser::ConstructTriplesContext* ctx) {
+  return parseTriplesConstruction(
+      ctx, &Parser::ConstructTriplesContext::constructTriples);
+}
+
+// ____________________________________________________________________________________
 Triples Visitor::visitTypesafe(Parser::TriplesTemplateContext* ctx) {
-  // TODO: generalize. See ConstructTriplesContext
-  auto result = visitTypesafe(ctx->triplesSameSubject());
-  if (ctx->triplesTemplate()) {
-    auto newTriples = visitTypesafe(ctx->triplesTemplate());
-    ad_utility::appendVector(result, std::move(newTriples));
-  }
-  return result;
+  return parseTriplesConstruction(
+      ctx, &Parser::TriplesTemplateContext::triplesTemplate);
 }
 
 // ____________________________________________________________________________________
