@@ -32,9 +32,6 @@ class SparqlParser {
       const SparqlQleverVisitor::PrefixMap& prefixMap);
 
  private:
-  void parseQuery(ParsedQuery* query, QueryType queryType);
-  void parseWhere(ParsedQuery* query);
-  void parseSolutionModifiers(ParsedQuery* query);
   // Returns true if it found a filter
   std::optional<SparqlFilter> parseFilter(bool failOnNoFilter = true);
 
@@ -42,23 +39,12 @@ class SparqlParser {
   string query_;
   SparqlFilter parseRegexFilter(bool expectKeyword);
 
-  // Helper function that converts the prefix map from `parsedQuery` (a vector
-  // of pairs of prefix and IRI) to the prefix map we need for the
-  // `SparqlQleverVisitor` (a hash map from prefixes to IRIs).
-  static SparqlQleverVisitor::PrefixMap getPrefixMap(
-      const ParsedQuery& parsedQuery);
-  // Parse the clause with the prefixes of the given ParsedQuery.
+  // Parse the clause with the given explicitly specified prefixes and query
+  // string.
   template <typename ContextType>
   auto parseWithAntlr(ContextType* (SparqlAutomaticParser::*F)(void),
-                      const ParsedQuery& parsedQuery)
-      -> decltype((std::declval<sparqlParserHelpers::ParserAndVisitor>())
-                      .parseTypesafe(F)
-                      .resultOfParse_);
-
-  // Parse the clause with the given explicitly specified prefixes.
-  template <typename ContextType>
-  auto parseWithAntlr(ContextType* (SparqlAutomaticParser::*F)(void),
-                      SparqlQleverVisitor::PrefixMap prefixMap)
+                      SparqlQleverVisitor::PrefixMap prefixMap,
+                      std::string query)
       -> decltype((std::declval<sparqlParserHelpers::ParserAndVisitor>())
                       .parseTypesafe(F)
                       .resultOfParse_);

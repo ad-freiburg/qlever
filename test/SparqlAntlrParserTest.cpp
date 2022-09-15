@@ -185,20 +185,19 @@ TEST(SparqlExpressionParser, First) {
   ASSERT_FLOAT_EQ(25.0, std::get<double>(result));
 }
 
-TEST(SparqlParser, ComplexConstructQuery) {
+TEST(SparqlParser, ComplexConstructTemplate) {
   string input =
-      "CONSTRUCT { [?a ( ?b (?c) )] ?d [?e [?f ?g]] . "
+      "{ [?a ( ?b (?c) )] ?d [?e [?f ?g]] . "
       "<http://wallscope.co.uk/resource/olympics/medal/#something> a "
-      "<http://wallscope.co.uk/resource/olympics/medal/#somethingelse> } "
-      "WHERE {}";
+      "<http://wallscope.co.uk/resource/olympics/medal/#somethingelse> }";
 
   auto Var = m::VariableVariant;
   auto Blank = [](const std::string& label) {
     return m::BlankNode(true, label);
   };
   expectCompleteParse(
-      parse<&Parser::constructQuery>(input),
-      ElementsAre(
+      parse<&Parser::constructTemplate>(input),
+      testing::Optional(ElementsAre(
           ElementsAre(Blank("0"), Var("?a"), Blank("3")),
           ElementsAre(Blank("1"), m::Iri(first), Blank("2")),
           ElementsAre(Blank("1"), m::Iri(rest), m::Iri(nil)),
@@ -213,7 +212,7 @@ TEST(SparqlParser, ComplexConstructQuery) {
                              "#something>"),
                       m::Iri(type),
                       m::Iri("<http://wallscope.co.uk/resource/olympics/medal/"
-                             "#somethingelse>"))));
+                             "#somethingelse>")))));
 }
 
 TEST(SparqlParser, GraphTerm) {
@@ -874,28 +873,22 @@ TEST(SparqlParser, SelectQuery) {
       m::GraphPattern(m::Triples({{"?x", "?y", "?z"}}));
   expectSelectQuery(
       "SELECT * WHERE { ?a <bar> ?foo }",
-      testing::AllOf(
-          m::SelectQuery(m::AsteriskSelect(), m::GraphPattern(m::Triples(
-                                                  {{"?a", "<bar>", "?foo"}}))),
-          m::pq::OriginalString("SELECT * WHERE { ?a <bar> ?foo }")));
-  expectSelectQuery(
-      "SELECT * WHERE { ?x ?y ?z }",
-      testing::AllOf(
-          m::SelectQuery(m::AsteriskSelect(), DummyGraphPatternMatcher),
-          m::pq::OriginalString("SELECT * WHERE { ?x ?y ?z }")));
-  expectSelectQuery(
-      "SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x",
-      testing::AllOf(
-          m::SelectQuery(m::VariablesSelect({"?x"}), DummyGraphPatternMatcher),
-          m::pq::OriginalString("SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x"),
-          m::pq::GroupKeys({Variable{"?x"}})));
+      testing::AllOf(m::SelectQuery(
+          m::AsteriskSelect(),
+          m::GraphPattern(m::Triples({{"?a", "<bar>", "?foo"}})))));
+  expectSelectQuery("SELECT * WHERE { ?x ?y ?z }",
+                    testing::AllOf(m::SelectQuery(m::AsteriskSelect(),
+                                                  DummyGraphPatternMatcher)));
+  expectSelectQuery("SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x",
+                    testing::AllOf(m::SelectQuery(m::VariablesSelect({"?x"}),
+                                                  DummyGraphPatternMatcher),
+                                   m::pq::GroupKeys({Variable{"?x"}})));
   expectSelectQuery(
       "SELECT (COUNT(?y) as ?a) WHERE { ?x ?y ?z } GROUP BY ?x",
       testing::AllOf(
           m::SelectQuery(m::Select({std::pair{"COUNT(?y)", Variable{"?a"}}}),
                          DummyGraphPatternMatcher),
-          m::pq::OriginalString(
-              "SELECT (COUNT(?y) as ?a) WHERE { ?x ?y ?z } GROUP BY ?x"),
+
           m::pq::GroupKeys({Variable{"?x"}})));
   expectSelectQuery(
       "SELECT ?x WHERE { ?x ?y ?z . FILTER(?x != <foo>) } LIMIT 10 TEXTLIMIT 5",

@@ -219,6 +219,8 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   // Process limitOffsetClause
   _limitOffset = modifiers.limitOffset_;
 
+  // Check that the query is valid
+
   auto checkAliasOutNamesHaveNoOverlapWith =
       [this](const auto& container, const std::string& message) {
         for (const auto& alias : selectClause().getAliases()) {
@@ -227,8 +229,6 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           }
         }
       };
-
-  // Check that the query is valid
 
   if (hasSelectClause()) {
     if (!_groupByVariables.empty()) {
@@ -289,6 +289,24 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       }
       // TODO<qup42, joka921> Check that all variables used in the expression of
       //  Aliases are visible in the QueryBody.
+    }
+  } else if (hasConstructClause()) {
+    if (_groupByVariables.empty()) {
+      return;
+    }
+
+    for (const auto& triple : constructClause()) {
+      for (const auto& varOrTerm : triple) {
+        if (auto variable = std::get_if<Variable>(&varOrTerm)) {
+          if (!ad_utility::contains(_groupByVariables, *variable)) {
+            throw ParseException("Variable " + variable->name() +
+                                 " is used but not "
+                                 "aggregated despite the query not being "
+                                 "grouped by " +
+                                 variable->name() + ".");
+          }
+        }
+      }
     }
   }
 }
