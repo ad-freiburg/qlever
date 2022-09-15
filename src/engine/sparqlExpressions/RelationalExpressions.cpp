@@ -130,6 +130,12 @@ auto idGenerator(Variable variable, size_t targetSize,
                                                  targetSize, context);
 }
 
+// Return a pair of generators that generate the values from `a` and `b`. The
+// type of generators is chosen to met the needs of comparing `a` and `b`. If
+// any of them logically stores `ValueId`s (true for `ValueId, vector<ValueId>,
+// Variable`, then `idGenerator`s are returned for both inputs. Else the "plain`
+// generators from `sparqlExpression::detail` are returned, that simply yield
+// the values unchanged.
 template <SingleExpressionResult A, SingleExpressionResult B>
 auto getGenerators(A a, B b, size_t targetSize, EvaluationContext* context) {
   if constexpr (
@@ -147,10 +153,13 @@ auto getGenerators(A a, B b, size_t targetSize, EvaluationContext* context) {
   }
 }
 
+// Efficiently (using binary search) computes the result of `aVal Comp idB` for
+// each `ValueId` that the Variable `a` is bound to. This only works, if the
+// input (as stored in the `context`) is sorted by the Variable `a`.
 template <Comparison Comp>
-ExpressionResult evaluateWithBinarySearch(const Variable& a, ValueId idB,
-                                          std::optional<ValueId> idBUpper,
-                                          EvaluationContext* context) {
+ad_utility::SetOfIntervals evaluateWithBinarySearch(
+    const Variable& a, ValueId idB, std::optional<ValueId> idBUpper,
+    EvaluationContext* context) {
   auto idxA = getIndexForVariable(a, context);
 
   auto accessColumnLambda = ad_utility::makeAssignableLambda(
@@ -179,30 +188,48 @@ ExpressionResult evaluateWithBinarySearch(const Variable& a, ValueId idB,
   return s;
 }
 
+// Several concepts used to chose the proper evaluation methods for different
+// input types.
+
 template <typename T>
 concept Arithmetic = std::integral<T> || std::floating_point<T>;
 
+// Any of the `SingleExpressionResult`s that logically stores boolean values.
 template <typename T>
 concept Boolean =
     std::is_same_v<T, Bool> || std::is_same_v<T, ad_utility::SetOfIntervals> ||
     std::is_same_v<VectorWithMemoryLimit<Bool>, T>;
 
+// Any of the `SingleExpressionResult`s that logically stores `ValueId`s
+// TODO<joka921> rename this concept and use it above in the `Generator`
+// function.
 template <typename T>
 concept VarOrIdVec = ad_utility::SimilarTo<T, Variable> ||
     ad_utility::SimilarTo<T, VectorWithMemoryLimit<ValueId>> ||
     ad_utility::SimilarTo<T, ValueId>;
 
+// When `A` and `B` are `Incompatible`, comparisons between them will always
+// yield `false`, independent of the concrete values.
 template <typename A, typename B>
 concept Incompatible = (Arithmetic<A> && std::is_same_v<B, std::string>) ||
                        (Arithmetic<B> && std::is_same_v<std::string, A>);
 
+// True iff any of `A, B` is `Boolean` (see above).
 template <typename A, typename B>
 concept AnyBoolean = Boolean<A> || Boolean<B>;
 
+// The types for which comparisons like `<` are supported and not always false.
 template <typename A, typename B>
 concept Compatible = !AnyBoolean<A, B> && !Incompatible<A, B> &&
                      (VarOrIdVec<A> || !VarOrIdVec<B>);
 
+// Helper templates to get the `logical value type` for several types. For a
+// vector, it yields the value_type of the vector. For any other type it yields
+// the type itself.
+// TODO<joka921> Can be simplified using a function that returns a value and
+// then using decltype.
+// TODO<joka921> Should be further above and then used to make `vector<double>`
+// `Arithmetic`.
 template <typename T>
 struct ValueTypeImpl {
   using type = T;
@@ -216,7 +243,10 @@ struct ValueTypeImpl<VectorWithMemoryLimit<T>> {
 template <typename T>
 using ValueType = typename ValueTypeImpl<T>::type;
 
-template <Comparison Comp, typename A, typename B>
+// The actual comparison function for the `SingleExpressionResult`'s which are
+// `Compatible` (see above), which means that the comparison between them is
+// supported and not always false.
+template <Comparison Comp, SingleExpressionResult A, SingleExpressionResult B>
 requires Compatible<ValueType<A>, ValueType<B>> ExpressionResult
 evaluateR(A a, B b, EvaluationContext* context) {
   auto targetSize = sparqlExpression::detail::getResultSize(*context, a, b);
@@ -270,6 +300,12 @@ evaluateR(A a, B b, EvaluationContext* context) {
   }
 }
 
+// The relational comparisons like `less than` are not useful for booleans and
+// thus currently throw an exception.
+// TODO<joka921> Discuss with Hannah what should be the proper semantics,
+// implicit conversion to ints 0 and 1?
+// TODO<joka921> Give the `evaluateR` function a proper name (e.g.
+// evaluateRelationalExpression).
 template <Comparison, typename A, typename B>
 Bool evaluateR(const A&, const B&,
                EvaluationContext*) requires Boolean<A> || Boolean<B> {
@@ -293,7 +329,10 @@ requires(!Compatible<ValueType<A>, ValueType<B>> &&
 
 }  // namespace
 
+// Implementation of the member functions of the `RelationalExpression` class
+// using the above functions.
 namespace sparqlExpression::relational {
+// ____________________________________________________________________________
 template <Comparison Comp>
 ExpressionResult RelationalExpression<Comp>::evaluate(
     EvaluationContext* context) const {
@@ -307,6 +346,7 @@ ExpressionResult RelationalExpression<Comp>::evaluate(
   return std::visit(visitor, std::move(resA), std::move(resB));
 }
 
+// _____________________________________________________________________________
 template <Comparison Comp>
 string RelationalExpression<Comp>::getCacheKey(
     const VariableToColumnMap& varColMap) const {
@@ -317,6 +357,7 @@ string RelationalExpression<Comp>::getCacheKey(
   return key;
 }
 
+// _____________________________________________________________________________
 template <Comparison Comp>
 std::span<SparqlExpression::Ptr> RelationalExpression<Comp>::children() {
   return {_children.data(), _children.size()};

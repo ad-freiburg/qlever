@@ -14,9 +14,13 @@ namespace sparqlExpression::relational {
 
 using valueIdComparators::Comparison;
 
+// The class template for all the relational expressions like "less than",
+// "greater equal", "not equal" etc. The comparison function is specified as a
+// template parameter for efficiency reasons.
 template <Comparison Comp>
 class RelationalExpression : public SparqlExpression {
  public:
+  // All relational expressions are binary.
   using Children = std::array<SparqlExpression::Ptr, 2>;
 
  private:
@@ -24,6 +28,7 @@ class RelationalExpression : public SparqlExpression {
   static constexpr Comparison _comparison = Comp;
 
  public:
+  // Construct from the two children.
   explicit RelationalExpression(Children children)
       : _children{std::move(children)} {}
 
@@ -35,6 +40,7 @@ class RelationalExpression : public SparqlExpression {
       const VariableToColumnMap& varColMap) const override;
 };
 
+// Define aliases for the six relevant relational expressions.
 using LessThanExpression = RelationalExpression<Comparison::LT>;
 using LessEqualExpression = RelationalExpression<Comparison::LE>;
 using EqualExpression = RelationalExpression<Comparison::EQ>;
@@ -45,6 +51,8 @@ using GreaterEqualExpression = RelationalExpression<Comparison::GE>;
 }  // namespace sparqlExpression::relational
 
 namespace sparqlExpression {
+// Make the relational expressions accessible from the `sparqlExpression`
+// namespace.
 using relational::EqualExpression;
 using relational::GreaterEqualExpression;
 using relational::GreaterThanExpression;
