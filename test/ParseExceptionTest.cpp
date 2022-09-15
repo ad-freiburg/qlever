@@ -7,6 +7,7 @@
 #include "SparqlAntlrParserTestHelpers.h"
 #include "parser/ParseException.h"
 #include "parser/SparqlParser.h"
+#include "util/SourceLocation.h"
 
 TEST(ParseException, coloredError) {
   auto exampleQuery = "SELECT A ?var WHERE";
@@ -17,7 +18,9 @@ TEST(ParseException, coloredError) {
 }
 
 void expectParseExceptionWithMetadata(
-    const string& input, const std::optional<ExceptionMetadata>& metadata) {
+    const string& input, const std::optional<ExceptionMetadata>& metadata,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  auto trace = generateLocationTrace(l);
   try {
     SparqlParser(input).parse();
     FAIL();  // Should be unreachable.
