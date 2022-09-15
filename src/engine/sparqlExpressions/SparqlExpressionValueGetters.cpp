@@ -12,8 +12,7 @@
 
 using namespace sparqlExpression::detail;
 // _____________________________________________________________________________
-double NumericValueGetter::operator()(ValueId id,
-                                      EvaluationContext*) const {
+double NumericValueGetter::operator()(ValueId id, EvaluationContext*) const {
   switch (id.getDatatype()) {
     case Datatype::Double:
       return id.getDouble();
@@ -62,8 +61,7 @@ bool EffectiveBooleanValueGetter::operator()(ValueId id,
 }
 
 // ____________________________________________________________________________
-string StringValueGetter::operator()(Id id,
-                                     EvaluationContext* context) const {
+string StringValueGetter::operator()(Id id, EvaluationContext* context) const {
   switch (id.getDatatype()) {
     case Datatype::Undefined:
       return "";
@@ -89,8 +87,7 @@ string StringValueGetter::operator()(Id id,
 
 // ____________________________________________________________________________
 bool IsValidValueGetter::operator()(
-    ValueId id,
-    [[maybe_unused]] EvaluationContext* context) const {
+    ValueId id, [[maybe_unused]] EvaluationContext* context) const {
   // Every knowledge base value that is bound converts to "True"
   // TODO<joka921> check for the correct semantics of the error handling and
   // implement it in a further version.

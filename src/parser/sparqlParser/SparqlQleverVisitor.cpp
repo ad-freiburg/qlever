@@ -9,10 +9,10 @@
 #include <string>
 #include <vector>
 
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
-#include "engine/sparqlExpressions/RelationalExpressions.h"
 
 using namespace ad_utility::sparql_types;
 using namespace sparqlExpression;
@@ -1224,7 +1224,8 @@ auto SparqlQleverVisitor::visitTypesafe(
   auto children = visitVector(ctx->numericExpression());
 
   if (ctx->expressionList()) {
-    reportError(ctx,
+    reportError(
+        ctx,
         "IN/ NOT IN in expressions are currently not supported by QLever.");
   }
   AD_CHECK(children.size() == 1 || children.size() == 2);

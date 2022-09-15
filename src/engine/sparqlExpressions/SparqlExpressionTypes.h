@@ -182,8 +182,7 @@ using ConstantTypesAsVector =
     ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
 
 // Each type in this tuple also is a possible expression result type.
-using OtherTypes =
-    std::tuple<ad_utility::SetOfIntervals, ::Variable>;
+using OtherTypes = std::tuple<ad_utility::SetOfIntervals, ::Variable>;
 
 using AllTypesAsTuple =
     ad_utility::TupleCat<ConstantTypes, ConstantTypesAsVector, OtherTypes>;
@@ -243,11 +242,10 @@ Id constantExpressionResultToId(T&& result, LocalVocab& localVocab,
         LocalVocabIndex::make(localVocab.size() - 1));
   } else if constexpr (ad_utility::isSimilar<double, T>) {
     return Id::makeFromDouble(result);
-  }
-    else if constexpr(ad_utility::isSimilar<T, Id>) {
+  } else if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
 
-    } else {
+  } else {
     static_assert(ad_utility::isSimilar<int64_t, T> ||
                   ad_utility::isSimilar<Bool, T>);
     // This currently covers int and bool.

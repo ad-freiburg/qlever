@@ -157,8 +157,7 @@ void GroupBy::processGroup(
 
   auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                      T&& singleResult) mutable {
-    constexpr static bool isStrongId =
-        std::is_same_v<T, Id>;
+    constexpr static bool isStrongId = std::is_same_v<T, Id>;
     AD_CHECK(sparqlExpression::isConstantResult<T>);
     if constexpr (isStrongId) {
       resultEntry = singleResult;

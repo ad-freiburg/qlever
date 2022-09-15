@@ -744,7 +744,6 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   ExpressionPtr visitTypesafe(Parser::NumericExpressionContext* ctx);
 
-
   template <typename Expr>
   ExpressionPtr createExpression(auto... children) {
     return std::make_unique<Expr>(

@@ -9,8 +9,8 @@
 
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
-#include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
+#include "engine/sparqlExpressions/SparqlExpression.h"
 
 using namespace sparqlExpression;
 using namespace std::literals;

@@ -141,8 +141,7 @@ void Bind::computeExpressionBind(
   auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                      T&& singleResult) mutable {
     constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
-    constexpr static bool isStrongId =
-        std::is_same_v<T, Id>;
+    constexpr static bool isStrongId = std::is_same_v<T, Id>;
     if constexpr (isVariable) {
       auto column = getVariableColumns().at(singleResult.name());
       for (size_t i = 0; i < inSize; ++i) {
