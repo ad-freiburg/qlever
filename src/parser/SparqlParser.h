@@ -22,7 +22,7 @@ enum QueryType { CONSTRUCT_QUERY, SELECT_QUERY };
 class SparqlParser {
  public:
   explicit SparqlParser(const string& query);
-  ParsedQuery parse();
+  static ParsedQuery parseQuery(std::string_view query);
 
   /// Parse the expression of a filter statement (without the `FILTER` keyword).
   /// This helper method is needed as long as the set of expressions supported
@@ -42,9 +42,9 @@ class SparqlParser {
   // Parse the clause with the given explicitly specified prefixes and query
   // string.
   template <typename ContextType>
-  auto parseWithAntlr(ContextType* (SparqlAutomaticParser::*F)(void),
-                      SparqlQleverVisitor::PrefixMap prefixMap,
-                      std::string query)
+  static auto parseWithAntlr(ContextType* (SparqlAutomaticParser::*F)(void),
+                             SparqlQleverVisitor::PrefixMap prefixMap,
+                             std::string_view query)
       -> decltype((std::declval<sparqlParserHelpers::ParserAndVisitor>())
                       .parseTypesafe(F)
                       .resultOfParse_);

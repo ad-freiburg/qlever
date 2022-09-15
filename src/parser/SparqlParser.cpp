@@ -19,16 +19,10 @@ SparqlParser::SparqlParser(const string& query) : lexer_(query), query_(query) {
   LOG(DEBUG) << "Parsing " << query << std::endl;
 }
 
-// _____________________________________________________________________________
-ParsedQuery SparqlParser::parse() {
-  ParsedQuery result = parseWithAntlr(
+ParsedQuery SparqlParser::parseQuery(std::string_view query) {
+  return parseWithAntlr(
       &AntlrParser::query,
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}},
-      query_);
-
-  lexer_.expectEmpty();
-
-  return result;
+      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}, query);
 }
 
 // _____________________________________________________________________________
@@ -245,14 +239,17 @@ SparqlFilter SparqlParser::parseRegexFilter(bool expectKeyword) {
 template <typename ContextType>
 auto SparqlParser::parseWithAntlr(
     ContextType* (SparqlAutomaticParser::*F)(void),
-    SparqlQleverVisitor::PrefixMap prefixMap, std::string query)
+    SparqlQleverVisitor::PrefixMap prefixMap, std::string_view query)
     -> decltype((std::declval<sparqlParserHelpers::ParserAndVisitor>())
                     .parseTypesafe(F)
                     .resultOfParse_) {
-  sparqlParserHelpers::ParserAndVisitor p{std::move(query),
-                                          std::move(prefixMap)};
+  sparqlParserHelpers::ParserAndVisitor p{query, std::move(prefixMap)};
   auto resultOfParseAndRemainingText = p.parseTypesafe(F);
-  lexer_.reset(std::move(resultOfParseAndRemainingText.remainingText_));
+  if (!resultOfParseAndRemainingText.remainingText_.empty()) {
+    // TODO: add Exception Metadata
+    throw ParseException("Query couldn't be parsed completely. Trailing: " +
+                         resultOfParseAndRemainingText.remainingText_);
+  }
   return std::move(resultOfParseAndRemainingText.resultOfParse_);
 }
 

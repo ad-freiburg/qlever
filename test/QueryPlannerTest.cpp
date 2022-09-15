@@ -17,14 +17,13 @@ TEST(QueryPlannerTest, createTripleGraph) {
 
   try {
     {
-      ParsedQuery pq = SparqlParser(
-                           "PREFIX : <http://rdf.myprefix.com/>\n"
-                           "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
-                           "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
-                           "SELECT ?x ?z \n "
-                           "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y xxx:rel2 "
-                           "<http://abc.de>}")
-                           .parse();
+      ParsedQuery pq = SparqlParser::parseQuery(
+          "PREFIX : <http://rdf.myprefix.com/>\n"
+          "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
+          "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
+          "SELECT ?x ?z \n "
+          "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y xxx:rel2 "
+          "<http://abc.de>}");
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(
           &pq._rootGraphPattern._graphPatterns[0].getBasic());
@@ -52,9 +51,8 @@ TEST(QueryPlannerTest, createTripleGraph) {
     }
 
     {
-      ParsedQuery pq =
-          SparqlParser("SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}")
-              .parse();
+      ParsedQuery pq = SparqlParser::parseQuery(
+          "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
       TripleGraph expected =
@@ -75,10 +73,9 @@ TEST(QueryPlannerTest, createTripleGraph) {
     }
 
     {
-      ParsedQuery pq = SparqlParser(
-                           "SELECT ?x WHERE { ?x <is-a> <Book> . \n"
-                           "?x <Author> <Anthony_Newman_(Author)> }")
-                           .parse();
+      ParsedQuery pq = SparqlParser::parseQuery(
+          "SELECT ?x WHERE { ?x <is-a> <Book> . \n"
+          "?x <Author> <Anthony_Newman_(Author)> }");
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
 
@@ -108,9 +105,8 @@ TEST(QueryPlannerTest, createTripleGraph) {
 TEST(QueryPlannerTest, testCpyCtorWithKeepNodes) {
   try {
     {
-      ParsedQuery pq =
-          SparqlParser("SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}")
-              .parse();
+      ParsedQuery pq = SparqlParser::parseQuery(
+          "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
       ASSERT_EQ(2u, tg._nodeMap.find(0)->second->_variables.size());
@@ -170,9 +166,8 @@ TEST(QueryPlannerTest, testCpyCtorWithKeepNodes) {
 TEST(QueryPlannerTest, testBFSLeaveOut) {
   try {
     {
-      ParsedQuery pq =
-          SparqlParser("SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}")
-              .parse();
+      ParsedQuery pq = SparqlParser::parseQuery(
+          "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
       ASSERT_EQ(3u, tg._adjLists.size());
@@ -191,9 +186,8 @@ TEST(QueryPlannerTest, testBFSLeaveOut) {
       ASSERT_EQ(1u, out.size());
     }
     {
-      ParsedQuery pq =
-          SparqlParser("SELECT ?x WHERE {<A> <B> ?x. ?x <C> ?y. ?y <X> <Y>}")
-              .parse();
+      ParsedQuery pq = SparqlParser::parseQuery(
+          "SELECT ?x WHERE {<A> <B> ?x. ?x <C> ?y. ?y <X> <Y>}");
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
       ad_utility::HashSet<size_t> lo;
@@ -226,11 +220,9 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
   try {
     {
       {
-        ParsedQuery pq =
-            SparqlParser(
-                "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
-                "ql:contains-word \"abc\"}")
-                .parse();
+        ParsedQuery pq = SparqlParser::parseQuery(
+            "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
+            "ql:contains-word \"abc\"}");
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
         ASSERT_EQ(
@@ -264,13 +256,11 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
         ASSERT_TRUE(tg.isSimilar(expected));
       }
       {
-        ParsedQuery pq =
-            SparqlParser(
-                "SELECT ?x WHERE {?x <p> <X>. ?c "
-                "<QLever-internal-function/contains-entity> ?x. ?c "
-                "<QLever-internal-function/contains-word> \"abc\" . ?c "
-                "ql:contains-entity ?y}")
-                .parse();
+        ParsedQuery pq = SparqlParser::parseQuery(
+            "SELECT ?x WHERE {?x <p> <X>. ?c "
+            "<QLever-internal-function/contains-entity> ?x. ?c "
+            "<QLever-internal-function/contains-word> \"abc\" . ?c "
+            "ql:contains-entity ?y}");
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
         ASSERT_EQ(
@@ -307,12 +297,10 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
         ASSERT_TRUE(tg.isSimilar(expected));
       }
       {
-        ParsedQuery pq =
-            SparqlParser(
-                "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
-                "ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?y <P2> "
-                "<X2>}")
-                .parse();
+        ParsedQuery pq = SparqlParser::parseQuery(
+            "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
+            "ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?y <P2> "
+            "<X2>}");
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
         ASSERT_EQ(
@@ -354,12 +342,10 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
         ASSERT_TRUE(tg.isSimilar(expected));
       }
       {
-        ParsedQuery pq =
-            SparqlParser(
-                "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
-                "ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?c2 "
-                "ql:contains-entity ?y. ?c2 ql:contains-word \"xx\"}")
-                .parse();
+        ParsedQuery pq = SparqlParser::parseQuery(
+            "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
+            "ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?c2 "
+            "ql:contains-entity ?y. ?c2 ql:contains-word \"xx\"}");
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
         TripleGraph expected = TripleGraph(std::vector<std::pair<
@@ -436,13 +422,11 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
         ASSERT_TRUE(tg.isSimilar(expected2));
       }
       {
-        ParsedQuery pq =
-            SparqlParser(
-                "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
-                "ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?c2 "
-                "ql:contains-entity ?y. ?c2 ql:contains-word \"xx\". ?y <P2> "
-                "<X2>}")
-                .parse();
+        ParsedQuery pq = SparqlParser::parseQuery(
+            "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
+            "ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?c2 "
+            "ql:contains-entity ?y. ?c2 ql:contains-word \"xx\". ?y <P2> "
+            "<X2>}");
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
         ASSERT_EQ(
@@ -506,11 +490,10 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
 }
 
 TEST(QueryPlannerTest, testSPX) {
-  ParsedQuery pq = SparqlParser(
-                       "PREFIX : <http://rdf.myprefix.com/>\n"
-                       "SELECT ?x \n "
-                       "WHERE \t {?x :myrel :obj}")
-                       .parse();
+  ParsedQuery pq = SparqlParser::parseQuery(
+      "PREFIX : <http://rdf.myprefix.com/>\n"
+      "SELECT ?x \n "
+      "WHERE \t {?x :myrel :obj}");
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
@@ -520,11 +503,10 @@ TEST(QueryPlannerTest, testSPX) {
 }
 
 TEST(QueryPlannerTest, testXPO) {
-  ParsedQuery pq = SparqlParser(
-                       "PREFIX : <http://rdf.myprefix.com/>\n"
-                       "SELECT ?x \n "
-                       "WHERE \t {:subj :myrel ?x}")
-                       .parse();
+  ParsedQuery pq = SparqlParser::parseQuery(
+      "PREFIX : <http://rdf.myprefix.com/>\n"
+      "SELECT ?x \n "
+      "WHERE \t {:subj :myrel ?x}");
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
@@ -534,11 +516,10 @@ TEST(QueryPlannerTest, testXPO) {
 }
 
 TEST(QueryPlannerTest, testSP_free_) {
-  ParsedQuery pq = SparqlParser(
-                       "PREFIX : <http://rdf.myprefix.com/>\n"
-                       "SELECT ?x \n "
-                       "WHERE \t {?x :myrel ?y}")
-                       .parse();
+  ParsedQuery pq = SparqlParser::parseQuery(
+      "PREFIX : <http://rdf.myprefix.com/>\n"
+      "SELECT ?x \n "
+      "WHERE \t {?x :myrel ?y}");
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
@@ -549,11 +530,10 @@ TEST(QueryPlannerTest, testSP_free_) {
 
 TEST(QueryPlannerTest, testSPX_SPX) {
   try {
-    ParsedQuery pq = SparqlParser(
-                         "PREFIX : <pre/>\n"
-                         "SELECT ?x \n "
-                         "WHERE \t {:s1 :r ?x. :s2 :r ?x}")
-                         .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "PREFIX : <pre/>\n"
+        "SELECT ?x \n "
+        "WHERE \t {:s1 :r ?x. :s2 :r ?x}");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -573,11 +553,10 @@ TEST(QueryPlannerTest, testSPX_SPX) {
 
 TEST(QueryPlannerTest, test_free_PX_SPX) {
   try {
-    ParsedQuery pq = SparqlParser(
-                         "PREFIX : <pre/>\n"
-                         "SELECT ?x ?y \n "
-                         "WHERE  {?y :r ?x . :s2 :r ?x}")
-                         .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "PREFIX : <pre/>\n"
+        "SELECT ?x ?y \n "
+        "WHERE  {?y :r ?x . :s2 :r ?x}");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -597,11 +576,10 @@ TEST(QueryPlannerTest, test_free_PX_SPX) {
 
 TEST(QueryPlannerTest, test_free_PX__free_PX) {
   try {
-    ParsedQuery pq = SparqlParser(
-                         "PREFIX : <pre/>\n"
-                         "SELECT ?x ?y ?z \n "
-                         "WHERE {?y :r ?x. ?z :r ?x}")
-                         .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "PREFIX : <pre/>\n"
+        "SELECT ?x ?y ?z \n "
+        "WHERE {?y :r ?x. ?z :r ?x}");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -621,13 +599,11 @@ TEST(QueryPlannerTest, test_free_PX__free_PX) {
 
 TEST(QueryPlannerTest, testActorsBornInEurope) {
   try {
-    ParsedQuery pq =
-        SparqlParser(
-            "PREFIX : <pre/>\n"
-            "SELECT ?a \n "
-            "WHERE {?a :profession :Actor . ?a :born-in ?c. ?c :in :Europe}\n"
-            "ORDER BY ?a")
-            .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "PREFIX : <pre/>\n"
+        "SELECT ?a \n "
+        "WHERE {?a :profession :Actor . ?a :born-in ?c. ?c :in :Europe}\n"
+        "ORDER BY ?a");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(18340u, qet.getCostEstimate());
@@ -655,15 +631,13 @@ TEST(QueryPlannerTest, testActorsBornInEurope) {
 TEST(QueryPlannerTest, testStarTwoFree) {
   try {
     {
-      ParsedQuery pq =
-          SparqlParser(
-              "PREFIX : <http://rdf.myprefix.com/>\n"
-              "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
-              "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
-              "SELECT ?x ?z \n "
-              "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z. ?y xxx:rel2 "
-              "<http://abc.de>}")
-              .parse();
+      ParsedQuery pq = SparqlParser::parseQuery(
+          "PREFIX : <http://rdf.myprefix.com/>\n"
+          "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
+          "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
+          "SELECT ?x ?z \n "
+          "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z. ?y xxx:rel2 "
+          "<http://abc.de>}");
       QueryPlanner qp(nullptr);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
       ASSERT_EQ(
@@ -689,11 +663,10 @@ TEST(QueryPlannerTest, testStarTwoFree) {
 
 TEST(QueryPlannerTest, testFilterAfterSeed) {
   try {
-    ParsedQuery pq = SparqlParser(
-                         "SELECT ?x ?y ?z WHERE {"
-                         "?x <r> ?y . ?y <r> ?z . "
-                         "FILTER(?x != ?y) }")
-                         .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?x ?y ?z WHERE {"
+        "?x <r> ?y . ?y <r> ?z . "
+        "FILTER(?x != ?y) }");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -715,11 +688,10 @@ TEST(QueryPlannerTest, testFilterAfterSeed) {
 
 TEST(QueryPlannerTest, testFilterAfterJoin) {
   try {
-    ParsedQuery pq = SparqlParser(
-                         "SELECT ?x ?y ?z WHERE {"
-                         "?x <r> ?y . ?y <r> ?z . "
-                         "FILTER(?x != ?z) }")
-                         .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?x ?y ?z WHERE {"
+        "?x <r> ?y . ?y <r> ?z . "
+        "FILTER(?x != ?z) }");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -741,10 +713,9 @@ TEST(QueryPlannerTest, testFilterAfterJoin) {
 
 TEST(QueryPlannerTest, threeVarTriples) {
   try {
-    ParsedQuery pq = SparqlParser(
-                         "SELECT ?x ?p ?o WHERE {"
-                         "<s> <p> ?x . ?x ?p ?o }")
-                         .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?x ?p ?o WHERE {"
+        "<s> <p> ?x . ?x ?p ?o }");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -763,10 +734,9 @@ TEST(QueryPlannerTest, threeVarTriples) {
   }
 
   try {
-    ParsedQuery pq = SparqlParser(
-                         "SELECT ?x ?p ?o WHERE {"
-                         "<s> ?x <o> . ?x ?p ?o }")
-                         .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?x ?p ?o WHERE {"
+        "<s> ?x <o> . ?x ?p ?o }");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -785,10 +755,9 @@ TEST(QueryPlannerTest, threeVarTriples) {
   }
 
   try {
-    ParsedQuery pq = SparqlParser(
-                         "SELECT ?s ?p ?o WHERE {"
-                         "<s> <p> ?p . ?s ?p ?o }")
-                         .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?s ?p ?o WHERE {"
+        "<s> <p> ?p . ?s ?p ?o }");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -809,10 +778,9 @@ TEST(QueryPlannerTest, threeVarTriples) {
 
 TEST(QueryPlannerTest, threeVarTriplesTCJ) {
   try {
-    ParsedQuery pq = SparqlParser(
-                         "SELECT ?x ?p ?o WHERE {"
-                         "<s> ?p ?x . ?x ?p ?o }")
-                         .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?x ?p ?o WHERE {"
+        "<s> ?p ?x . ?x ?p ?o }");
     QueryPlanner qp(nullptr);
     ASSERT_THROW(qp.createExecutionTree(pq), ad_semsearch::Exception);
   } catch (const ad_semsearch::Exception& e) {
@@ -824,10 +792,9 @@ TEST(QueryPlannerTest, threeVarTriplesTCJ) {
   }
 
   try {
-    ParsedQuery pq = SparqlParser(
-                         "SELECT ?s ?p ?o WHERE {"
-                         "?s ?p ?o . ?s ?p <x> }")
-                         .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?s ?p ?o WHERE {"
+        "?s ?p ?o . ?s ?p <x> }");
     QueryPlanner qp(nullptr);
     ASSERT_THROW(QueryExecutionTree qet = qp.createExecutionTree(pq),
                  ad_semsearch::Exception);
@@ -842,10 +809,9 @@ TEST(QueryPlannerTest, threeVarTriplesTCJ) {
 
 TEST(QueryPlannerTest, threeVarXthreeVarException) {
   try {
-    ParsedQuery pq = SparqlParser(
-                         "SELECT ?s ?s2 WHERE {"
-                         "?s ?p ?o . ?s2 ?p ?o }")
-                         .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?s ?s2 WHERE {"
+        "?s ?p ?o . ?s2 ?p ?o }");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     FAIL() << "Was expecting exception, but got" << qet.asString() << std::endl;
@@ -863,10 +829,9 @@ TEST(QueryPlannerTest, threeVarXthreeVarException) {
 
 TEST(QueryExecutionTreeTest, testBooksbyNewman) {
   try {
-    ParsedQuery pq = SparqlParser(
-                         "SELECT ?x WHERE { ?x <is-a> <Book> . "
-                         "?x <Author> <Anthony_Newman_(Author)> }")
-                         .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?x WHERE { ?x <is-a> <Book> . "
+        "?x <Author> <Anthony_Newman_(Author)> }");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -887,13 +852,12 @@ TEST(QueryExecutionTreeTest, testBooksbyNewman) {
 
 TEST(QueryExecutionTreeTest, testBooksGermanAwardNomAuth) {
   try {
-    ParsedQuery pq = SparqlParser(
-                         "SELECT ?x ?y WHERE { "
-                         "?x <is-a> <Person> . "
-                         "?x <Country_of_nationality> <Germany> . "
-                         "?x <Author> ?y . "
-                         "?y <is-a> <Award-Nominated_Work> }")
-                         .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?x ?y WHERE { "
+        "?x <is-a> <Person> . "
+        "?x <Country_of_nationality> <Germany> . "
+        "?x <Author> ?y . "
+        "?y <is-a> <Award-Nominated_Work> }");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_GT(qet.asString().size(), 0u);
@@ -909,12 +873,10 @@ TEST(QueryExecutionTreeTest, testBooksGermanAwardNomAuth) {
 
 TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
   try {
-    ParsedQuery pq =
-        SparqlParser(
-            "SELECT ?a \n "
-            "WHERE  {?a <is-a> <Plant> . ?c ql:contains-entity ?a. "
-            "?c ql:contains-word \"edible leaves\"} TEXTLIMIT 5")
-            .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?a \n "
+        "WHERE  {?a <is-a> <Plant> . ?c ql:contains-entity ?a. "
+        "?c ql:contains-word \"edible leaves\"} TEXTLIMIT 5");
     QueryPlanner qp(nullptr);
     QueryPlanner::TripleGraph tg =
         qp.createTripleGraph(&pq.children()[0].getBasic());
@@ -938,10 +900,9 @@ TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
 
 TEST(QueryExecutionTreeTest, testTextQuerySE) {
   try {
-    ParsedQuery pq = SparqlParser(
-                         "SELECT ?c \n "
-                         "WHERE  {?c ql:contains-word \"search engine\"}")
-                         .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?c \n "
+        "WHERE  {?c ql:contains-word \"search engine\"}");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -960,16 +921,15 @@ TEST(QueryExecutionTreeTest, testTextQuerySE) {
 
 TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
   try {
-    ParsedQuery pq = SparqlParser(
-                         "PREFIX : <>\n"
-                         "SELECT ?x ?y ?c\n "
-                         "WHERE \t {"
-                         "?x :Place_of_birth ?y ."
-                         "?y :Contained_by :Europe ."
-                         "?c ql:contains-entity ?x ."
-                         "?c ql:contains-word \"cocaine\" ."
-                         "}")
-                         .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "PREFIX : <>\n"
+        "SELECT ?x ?y ?c\n "
+        "WHERE \t {"
+        "?x :Place_of_birth ?y ."
+        "?y :Contained_by :Europe ."
+        "?c ql:contains-entity ?x ."
+        "?c ql:contains-word \"cocaine\" ."
+        "}");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -996,15 +956,14 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
 
 TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
   try {
-    ParsedQuery pq = SparqlParser(
-                         "PREFIX : <>"
-                         "SELECT ?x ?y WHERE {"
-                         "?x :is-a :Politician ."
-                         "?c ql:contains-entity ?x ."
-                         "?c ql:contains-word \"friend*\" ."
-                         "?c ql:contains-entity ?y ."
-                         "}")
-                         .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "PREFIX : <>"
+        "SELECT ?x ?y WHERE {"
+        "?x :is-a :Politician ."
+        "?c ql:contains-entity ?x ."
+        "?c ql:contains-word \"friend*\" ."
+        "?c ql:contains-entity ?y ."
+        "}");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -1025,17 +984,16 @@ TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
 
 TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
   try {
-    ParsedQuery pq = SparqlParser(
-                         "SELECT ?p ?s \n "
-                         "WHERE {"
-                         "?a <is-a> <Politician> . "
-                         "?c ql:contains-entity ?a ."
-                         "?c ql:contains-word \"friend*\" ."
-                         "?c ql:contains-entity ?s ."
-                         "?s <is-a> <Scientist> ."
-                         "?c2 ql:contains-entity ?s ."
-                         "?c2 ql:contains-word \"manhattan project\"}")
-                         .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?p ?s \n "
+        "WHERE {"
+        "?a <is-a> <Politician> . "
+        "?c ql:contains-entity ?a ."
+        "?c ql:contains-word \"friend*\" ."
+        "?c ql:contains-entity ?s ."
+        "?s <is-a> <Scientist> ."
+        "?c2 ql:contains-entity ?s ."
+        "?c2 ql:contains-word \"manhattan project\"}");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -1064,11 +1022,9 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
 
 TEST(QueryExecutionTreeTest, testCyclicQuery) {
   try {
-    ParsedQuery pq =
-        SparqlParser(
-            "SELECT ?x ?y ?m WHERE { ?x <Spouse_(or_domestic_partner)> ?y . "
-            "?x <Film_performance> ?m . ?y <Film_performance> ?m }")
-            .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?x ?y ?m WHERE { ?x <Spouse_(or_domestic_partner)> ?y . "
+        "?x <Film_performance> ?m . ?y <Film_performance> ?m }");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
 
@@ -1186,21 +1142,19 @@ qet-width: 3
 
 TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
   try {
-    ParsedQuery pq =
-        SparqlParser(
-            "PREFIX fb: <http://rdf.freebase.com/ns/>\n"
-            "SELECT DISTINCT ?1 ?0 WHERE {\n"
-            "fb:m.0fkvn fb:government.government_office_category.officeholders "
-            "?0 "
-            ".\n"
-            "?0 fb:government.government_position_held.jurisdiction_of_office "
-            "fb:m.0vmt .\n"
-            "?0 fb:government.government_position_held.office_holder ?1 .\n"
-            "FILTER (?1 != fb:m.0fkvn) .\n"
-            "FILTER (?1 != fb:m.0vmt) .\n"
-            "FILTER (?1 != fb:m.018mts)"
-            "} LIMIT 300")
-            .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "PREFIX fb: <http://rdf.freebase.com/ns/>\n"
+        "SELECT DISTINCT ?1 ?0 WHERE {\n"
+        "fb:m.0fkvn fb:government.government_office_category.officeholders "
+        "?0 "
+        ".\n"
+        "?0 fb:government.government_position_held.jurisdiction_of_office "
+        "fb:m.0vmt .\n"
+        "?0 fb:government.government_position_held.office_holder ?1 .\n"
+        "FILTER (?1 != fb:m.0fkvn) .\n"
+        "FILTER (?1 != fb:m.0vmt) .\n"
+        "FILTER (?1 != fb:m.018mts)"
+        "} LIMIT 300");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_TRUE(qet.varCovered("?1"));
@@ -1218,10 +1172,9 @@ TEST(QueryPlannerTest, testSimpleOptional) {
   try {
     QueryPlanner qp(nullptr);
 
-    ParsedQuery pq = SparqlParser(
-                         "SELECT ?a ?b \n "
-                         "WHERE  {?a <rel1> ?b . OPTIONAL { ?a <rel2> ?c }}")
-                         .parse();
+    ParsedQuery pq = SparqlParser::parseQuery(
+        "SELECT ?a ?b \n "
+        "WHERE  {?a <rel1> ?b . OPTIONAL { ?a <rel2> ?c }}");
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  OPTIONAL_JOIN\n  {\n    SCAN PSO with P = \"<rel1>\"\n    "
@@ -1231,11 +1184,10 @@ TEST(QueryPlannerTest, testSimpleOptional) {
 
         qet.asString());
 
-    ParsedQuery pq2 = SparqlParser(
-                          "SELECT ?a ?b \n "
-                          "WHERE  {?a <rel1> ?b . "
-                          "OPTIONAL { ?a <rel2> ?c }} ORDER BY ?b")
-                          .parse();
+    ParsedQuery pq2 = SparqlParser::parseQuery(
+        "SELECT ?a ?b \n "
+        "WHERE  {?a <rel1> ?b . "
+        "OPTIONAL { ?a <rel2> ?c }} ORDER BY ?b");
     QueryExecutionTree qet2 = qp.createExecutionTree(pq2);
     ASSERT_EQ(
         "{\n  SORT / ORDER BY on columns:asc(1) \n  {\n    OPTIONAL_JOIN\n    "

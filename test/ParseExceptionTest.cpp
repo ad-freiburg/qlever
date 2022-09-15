@@ -22,7 +22,7 @@ void expectParseExceptionWithMetadata(
     ad_utility::source_location l = ad_utility::source_location::current()) {
   auto trace = generateLocationTrace(l);
   try {
-    SparqlParser(input).parse();
+    SparqlParser::parseQuery(input);
     FAIL();  // Should be unreachable.
   } catch (const ParseException& e) {
     // The constructor has to be bracketed because EXPECT_EQ is a macro.
