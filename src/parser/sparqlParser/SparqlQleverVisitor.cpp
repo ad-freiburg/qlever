@@ -141,7 +141,7 @@ ParsedQuery Visitor::visitTypesafe(Parser::QueryContext* ctx) {
     reportError(ctx, "QLever only supports SELECT and CONSTRUCT queries.");
   }
 
-  query._originalString = ctx->getText();
+  query._originalString = ctx->getStart()->getInputStream()->toString();
 
   return query;
 }

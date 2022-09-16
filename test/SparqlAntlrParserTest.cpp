@@ -889,7 +889,6 @@ TEST(SparqlParser, SelectQuery) {
       testing::AllOf(
           m::SelectQuery(m::Select({std::pair{"COUNT(?y)", Variable{"?a"}}}),
                          DummyGraphPatternMatcher),
-
           m::pq::GroupKeys({Variable{"?x"}})));
   expectSelectQuery(
       "SELECT ?x WHERE { ?x ?y ?z . FILTER(?x != <foo>) } LIMIT 10 TEXTLIMIT 5",
@@ -931,4 +930,28 @@ TEST(SparqlParser, SelectQuery) {
   expectSelectQueryFails("SELECT (?y as ?a) WHERE { ?x ?y ?z } GROUP BY ?x");
   // Datasets are not supported.
   expectSelectQueryFails("SELECT * FROM  WHERE <foo> { ?x ?y ?z }");
+}
+
+TEST(SparqlParser, Query) {
+  auto expectQuery = ExpectCompleteParse<&Parser::query>{
+      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectQueryFails = ExpectParseFails<&Parser::query>{};
+  // Test that `_originalString` is correctly set.
+  expectQuery("SELECT * WHERE { ?a <bar> ?foo }",
+              m::pq::OriginalString("SELECT * WHERE { ?a <bar> ?foo }"));
+  expectQuery("SELECT * WHERE { ?x ?y ?z }",
+              m::pq::OriginalString("SELECT * WHERE { ?x ?y ?z }"));
+  expectQuery(
+      "SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x",
+      m::pq::OriginalString("SELECT ?x WHERE { ?x ?y ?z } GROUP BY ?x"));
+  expectQuery(
+      "PREFIX a: <foo> SELECT (COUNT(?y) as ?a) WHERE { ?x ?y ?z } GROUP BY ?x",
+      m::pq::OriginalString("PREFIX a: <foo> SELECT (COUNT(?y) as ?a) WHERE { "
+                            "?x ?y ?z } GROUP BY ?x"));
+  expectQuery("CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } LIMIT 10",
+              m::pq::OriginalString(
+                  "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } LIMIT 10"));
+  // Describe and Ask Queries are not supported.
+  expectQueryFails("DESCRIBE *");
+  expectQueryFails("ASK WHERE { ?x <foo> <bar> }");
 }
