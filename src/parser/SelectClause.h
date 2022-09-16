@@ -13,6 +13,7 @@
 
 namespace parsedQuery {
 
+/// Base class for common functionality of `SelectClause` and `ConstructClause`.
 struct ClauseBase {
   // The variables that are visible in the query body. Will be used in the case
   // of `SELECT *` and to check invariants of the `ParsedQuery`.

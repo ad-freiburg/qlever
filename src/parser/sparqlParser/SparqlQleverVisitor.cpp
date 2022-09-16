@@ -131,6 +131,7 @@ ParsedQuery Visitor::visitTypesafe(Parser::QueryContext* ctx) {
   // state of the visitor.
   visitTypesafe(ctx->prologue());
   ParsedQuery query;
+  // TODO<joka921, qup42> Check if there are more instances of this pattern (like `visitAlternative`, but with a custom error message), that would justify extracting this pattern.
   if (ctx->selectQuery()) {
     query = visitTypesafe(ctx->selectQuery());
   } else if (ctx->constructQuery()) {
@@ -945,6 +946,7 @@ Node Visitor::visitTypesafe(Parser::ObjectRContext* ctx) {
 // ___________________________________________________________________________
 vector<TripleWithPropertyPath> SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::TriplesSameSubjectPathContext* ctx) {
+// If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity <entity>` is contained in the query, then the variable `?ql_textscore_var` is implicitly created and visible in the query body.
   auto setTextscoreVisibleIfPresent = [this](VarOrTerm& subject,
                                              VarOrPath& predicate) {
     if (auto* var = std::get_if<Variable>(&subject)) {

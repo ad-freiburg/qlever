@@ -132,15 +132,12 @@ class ParsedQuery {
     return std::get<ConstructClause>(_clause);
   }
 
-  // Add a variable, that was found in the SubQuery body.
+  // Add a variable, that was found in the query body.
   void registerVariableVisibleInQueryBody(const Variable& variable) {
-    auto addVariable = [&variable](auto& clause) {
-      clause.addVisibleVariable(variable);
-    };
-    std::visit(addVariable, _clause);
+    std::visit(&parsedQuery::ClauseBase::addVisibleVariable, _clause);
   }
 
-  // Add variables, that were found in the SubQuery body.
+  // Add variables, that were found in the query body.
   void registerVariablesVisibleInQueryBody(const vector<Variable>& variables) {
     for (const auto& var : variables) {
       registerVariableVisibleInQueryBody(var);

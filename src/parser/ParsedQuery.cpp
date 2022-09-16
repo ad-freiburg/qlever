@@ -125,7 +125,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
     if (!ad_utility::contains(getVisibleVariables(), var)) {
       throw ParseException("Variable " + var.name() + " was used in " +
                            locationDescription +
-                           " is not visible in the Query Body.");
+                           ", but is not visible in the Query Body.");
     }
   };
   auto checkUsedVariablesAreVisible =
