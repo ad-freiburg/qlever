@@ -132,8 +132,15 @@ ParsedQuery Visitor::visitTypesafe(Parser::QueryContext* ctx) {
   // The prologue (BASE and PREFIX declarations)  only affects the internal
   // state of the visitor.
   visitTypesafe(ctx->prologue());
-  auto query =
-      visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery());
+  ParsedQuery query;
+  if (ctx->selectQuery()) {
+    query = visitTypesafe(ctx->selectQuery());
+  } else if (ctx->constructQuery()) {
+    query = visitTypesafe(ctx->constructQuery());
+  } else {
+    reportError(ctx, "QLever only supports SELECT and CONSTRUCT queries.");
+  }
+
   query._originalString = ctx->getText();
 
   return query;
@@ -178,7 +185,7 @@ ParsedQuery Visitor::visitTypesafe(Parser::ConstructQueryContext* ctx) {
                 "QLever currently doesn't support FROM clauses");
   }
   ParsedQuery query;
-  // TODO: clean up
+  // TODO: clean up the construction of a ConstructClause.
   if (ctx->constructTemplate()) {
     query._clause = visitTypesafe(ctx->constructTemplate())
                         .value_or(parsedQuery::ConstructClause{});
@@ -825,10 +832,16 @@ vector<Visitor::ExpressionPtr> Visitor::visitTypesafe(
 }
 
 template <typename Context>
-Triples Visitor::parseTriplesConstruction(Context* ctx,
-                                          Context* (Context::*F)(void)) {
+Triples Visitor::parseTriplesConstruction(Context* ctx) {
   auto result = visitTypesafe(ctx->triplesSameSubject());
-  Context* subContext = std::invoke(F, ctx);
+  Context* subContext = [](Context* ctx) -> Context* {
+    if constexpr (std::is_same_v<Context, Parser::ConstructTriplesContext>) {
+      return ctx->constructTriples();
+    } else if constexpr (std::is_same_v<Context,
+                                        Parser::TriplesTemplateContext>) {
+      return ctx->triplesTemplate();
+    }
+  }(ctx);
   if (subContext) {
     auto newTriples = visitTypesafe(subContext);
     ad_utility::appendVector(result, std::move(newTriples));
@@ -838,14 +851,12 @@ Triples Visitor::parseTriplesConstruction(Context* ctx,
 
 // ____________________________________________________________________________________
 Triples Visitor::visitTypesafe(Parser::ConstructTriplesContext* ctx) {
-  return parseTriplesConstruction(
-      ctx, &Parser::ConstructTriplesContext::constructTriples);
+  return parseTriplesConstruction(ctx);
 }
 
 // ____________________________________________________________________________________
 Triples Visitor::visitTypesafe(Parser::TriplesTemplateContext* ctx) {
-  return parseTriplesConstruction(
-      ctx, &Parser::TriplesTemplateContext::triplesTemplate);
+  return parseTriplesConstruction(ctx);
 }
 
 // ____________________________________________________________________________________

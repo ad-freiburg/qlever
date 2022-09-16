@@ -948,6 +948,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   [[noreturn]] void reportError(antlr4::ParserRuleContext* ctx,
                                 const std::string& msg);
 
+  // Parse both `ConstructTriplesContext` and `TriplesTemplateContext` because
+  // they have the same structure.
   template <typename Context>
-  Triples parseTriplesConstruction(Context* ctx, Context* (Context::*F)(void));
+  Triples parseTriplesConstruction(Context* ctx);
 };
