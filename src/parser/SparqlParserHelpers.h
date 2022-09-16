@@ -28,7 +28,7 @@ struct ResultOfParseAndRemainingText {
 
 struct ParserAndVisitor {
  private:
-  string_view input_;
+  string input_;
   antlr4::ANTLRInputStream stream_{input_};
   SparqlAutomaticLexer lexer_{&stream_};
   antlr4::CommonTokenStream tokens_{&lexer_};
@@ -37,8 +37,8 @@ struct ParserAndVisitor {
  public:
   SparqlAutomaticParser parser_{&tokens_};
   SparqlQleverVisitor visitor_;
-  explicit ParserAndVisitor(string_view input);
-  ParserAndVisitor(string_view input, SparqlQleverVisitor::PrefixMap prefixes);
+  explicit ParserAndVisitor(string input);
+  ParserAndVisitor(string input, SparqlQleverVisitor::PrefixMap prefixes);
 
   template <typename ContextType>
   auto parseTypesafe(ContextType* (SparqlAutomaticParser::*F)(void)) {

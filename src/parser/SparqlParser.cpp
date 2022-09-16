@@ -20,9 +20,10 @@ SparqlParser::SparqlParser(const string& query) : lexer_(query), query_(query) {
 }
 
 // _____________________________________________________________________________
-ParsedQuery SparqlParser::parseQuery(std::string_view query) {
+ParsedQuery SparqlParser::parseQuery(std::string query) {
   sparqlParserHelpers::ParserAndVisitor p{
-      query, {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+      std::move(query),
+      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
   auto resultOfParseAndRemainingText = p.parseTypesafe(&AntlrParser::query);
   if (!resultOfParseAndRemainingText.remainingText_.empty()) {
     // TODO: add Exception Metadata

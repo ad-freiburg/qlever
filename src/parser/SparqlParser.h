@@ -20,7 +20,7 @@ using std::string;
 class SparqlParser {
  public:
   explicit SparqlParser(const string& query);
-  static ParsedQuery parseQuery(std::string_view query);
+  static ParsedQuery parseQuery(std::string query);
 
   /// Parse the expression of a filter statement (without the `FILTER` keyword).
   /// This helper method is needed as long as the set of expressions supported
