@@ -124,10 +124,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       [this](const sparqlExpression::SparqlExpressionPimpl& expression,
              const std::string& locationDescription) {
         for (const auto* var : expression.containedVariables()) {
-          // TODO: think of a solution to make this work with ConstructClause as
-          //  well.
-          if (!ad_utility::contains(selectClause().getVisibleVariables(),
-                                    *var)) {
+          if (!ad_utility::contains(getVisibleVariables(), *var)) {
             throw ParseException("Variable " + var->name() + " used in " +
                                  locationDescription +
                                  expression.getDescriptor() +
@@ -137,23 +134,19 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       };
 
   // Process groupClause
-  // TODO<qup42, joka921> Check that all variables that are part of an
-  //  expression that is grouped on are visible in the Query Body.
   auto processVariable = [this](const Variable& groupKey) {
-    // TODO: implement for `ConstructClause`
-    if (hasSelectClause()) {
-      if (!ad_utility::contains(selectClause().getVisibleVariables(),
-                                groupKey)) {
-        throw ParseException(
-            "Variable " + groupKey.name() +
-            " was used in an GROUP BY but is not visible in the query body.");
-      }
+    if (!ad_utility::contains(getVisibleVariables(), groupKey)) {
+      throw ParseException(
+          "Variable " + groupKey.name() +
+          " was used in an GROUP BY but is not visible in the query body.");
     }
 
     _groupByVariables.emplace_back(groupKey.name());
   };
   auto processExpression =
-      [this](sparqlExpression::SparqlExpressionPimpl groupKey) {
+      [this, &checkUsedVariablesAreVisible](
+          sparqlExpression::SparqlExpressionPimpl groupKey) {
+        checkUsedVariablesAreVisible(groupKey, "Group Key");
         auto helperTarget = addInternalBind(std::move(groupKey));
         _groupByVariables.emplace_back(helperTarget.name());
       };
@@ -184,10 +177,11 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
     const vector<Variable>& groupByVariables = _groupByVariables;
     if (!groupByVariables.empty() &&
         !ad_utility::contains(groupByVariables, orderKey.variable_) &&
-        !ad_utility::contains_if(selectClause().getAliases(),
-                                 [&orderKey](const Alias& alias) {
-                                   return alias._target == orderKey.variable_;
-                                 })) {
+        (hasConstructClause() ||
+         !ad_utility::contains_if(selectClause().getAliases(),
+                                  [&orderKey](const Alias& alias) {
+                                    return alias._target == orderKey.variable_;
+                                  }))) {
       throw ParseException(
           "Variable " + orderKey.variable_.name() +
           " was used in an ORDER BY "
@@ -201,8 +195,10 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   // QLever currently only supports ordering by variables. To allow
   // all `orderConditions`, the corresponding expression is bound to a new
   // internal variable. Ordering is then done by this variable.
-  auto processExpressionOrderKey = [this](ExpressionOrderKey orderKey) {
-    if (!_groupByVariables.empty())
+  auto processExpressionOrderKey = [this, &checkUsedVariablesAreVisible](
+                                       ExpressionOrderKey orderKey) {
+    checkUsedVariablesAreVisible(orderKey.expression_, "Order Key");
+    if (!_groupByVariables.empty()) {
       // TODO<qup42> Implement this by adding a hidden alias in the
       //  SELECT clause.
       throw ParseException(
@@ -212,6 +208,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           "\"). Please assign this expression to a "
           "new variable in the SELECT clause and then order by this "
           "variable.");
+    }
     auto additionalVariable = addInternalBind(std::move(orderKey.expression_));
     _orderBy.emplace_back(additionalVariable, orderKey.isDescending_);
   };
