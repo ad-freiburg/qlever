@@ -25,13 +25,10 @@ ParsedQuery SparqlParser::parseQuery(std::string query) {
       std::move(query),
       {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
   auto resultOfParseAndRemainingText = p.parseTypesafe(&AntlrParser::query);
-  if (!resultOfParseAndRemainingText.remainingText_.empty()) {
-    // TODO: add Exception Metadata
-    throw ParseException(
-        "A query was successfully parsed, but the following remainder of the "
-        "input was ignored by the parsed: " +
-        resultOfParseAndRemainingText.remainingText_);
-  }
+  // The query rule ends with <EOF> so the parse always has to consume the whole
+  // input. If this is not the case a ParseException should have been thrown at
+  // an earlier point.
+  AD_CHECK(!resultOfParseAndRemainingText.remainingText_.empty());
   return std::move(resultOfParseAndRemainingText.resultOfParse_);
 }
 

@@ -856,7 +856,7 @@ TEST(ParserTest, testSolutionModifiers) {
   {
     auto pq = SparqlParser::parseQuery(
         "SELECT DISTINCT ?x ?ql_textscore_x ?y WHERE \t {?x "
-        "<test:myrel> ?y}\n"
+        "ql:contains-entity ?y}\n"
         "ORDER BY ASC(?y) DESC(?ql_textscore_x) LIMIT 10 OFFSET 15");
     ASSERT_TRUE(pq.hasSelectClause());
     const auto& selectClause = pq.selectClause();

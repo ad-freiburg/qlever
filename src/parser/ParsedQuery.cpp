@@ -120,26 +120,27 @@ Variable ParsedQuery::addInternalBind(
 
 // ________________________________________________________________________
 void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
+  auto checkVariableIsVisible = [this](const Variable& var,
+                                       const std::string& locationDescription) {
+    if (!ad_utility::contains(getVisibleVariables(), var)) {
+      throw ParseException("Variable " + var.name() + " was used in " +
+                           locationDescription +
+                           " is not visible in the Query Body.");
+    }
+  };
   auto checkUsedVariablesAreVisible =
-      [this](const sparqlExpression::SparqlExpressionPimpl& expression,
-             const std::string& locationDescription) {
+      [&checkVariableIsVisible](
+          const sparqlExpression::SparqlExpressionPimpl& expression,
+          const std::string& locationDescription) {
         for (const auto* var : expression.containedVariables()) {
-          if (!ad_utility::contains(getVisibleVariables(), *var)) {
-            throw ParseException("Variable " + var->name() + " used in " +
-                                 locationDescription +
-                                 expression.getDescriptor() +
-                                 " is not visible in the Query Body.");
-          }
+          checkVariableIsVisible(*var, locationDescription);
         }
       };
 
   // Process groupClause
-  auto processVariable = [this](const Variable& groupKey) {
-    if (!ad_utility::contains(getVisibleVariables(), groupKey)) {
-      throw ParseException(
-          "Variable " + groupKey.name() +
-          " was used in an GROUP BY but is not visible in the query body.");
-    }
+  auto processVariable = [this,
+                          &checkVariableIsVisible](const Variable& groupKey) {
+    checkVariableIsVisible(groupKey, "GROUP BY");
 
     _groupByVariables.emplace_back(groupKey.name());
   };
@@ -169,19 +170,22 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   _havingClauses = std::move(modifiers.havingClauses_);
 
   // Process orderClause
-  // TODO<qup42, joka921> Check that all variables that are part of an
-  //  expression that is ordered on are visible in the Query Body.
-  auto processVariableOrderKey = [this](VariableOrderKey orderKey) {
+  auto processVariableOrderKey = [this, &checkVariableIsVisible](
+                                     VariableOrderKey orderKey) {
     // Check whether grouping is done. The variable being ordered by
     // must then be either grouped or the result of an alias in the select.
     const vector<Variable>& groupByVariables = _groupByVariables;
-    if (!groupByVariables.empty() &&
-        !ad_utility::contains(groupByVariables, orderKey.variable_) &&
-        (hasConstructClause() ||
-         !ad_utility::contains_if(selectClause().getAliases(),
-                                  [&orderKey](const Alias& alias) {
-                                    return alias._target == orderKey.variable_;
-                                  }))) {
+    if (groupByVariables.empty()) {
+      checkVariableIsVisible(orderKey.variable_, "ORDERY BY");
+    } else if (!ad_utility::contains(groupByVariables, orderKey.variable_) &&
+               // `ConstructClause` has no Aliases. So the variable can never be
+               // the result of an Alias.
+               (hasConstructClause() ||
+                !ad_utility::contains_if(selectClause().getAliases(),
+                                         [&orderKey](const Alias& alias) {
+                                           return alias._target ==
+                                                  orderKey.variable_;
+                                         }))) {
       throw ParseException(
           "Variable " + orderKey.variable_.name() +
           " was used in an ORDER BY "
@@ -298,13 +302,13 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       return;
     }
 
-    for (const auto* variable : constructClause().containedVariables()) {
-      if (!ad_utility::contains(_groupByVariables, *variable)) {
-        throw ParseException("Variable " + variable->name() +
+    for (const auto& variable : constructClause().containedVariables()) {
+      if (!ad_utility::contains(_groupByVariables, variable)) {
+        throw ParseException("Variable " + variable.name() +
                              " is used but not "
                              "aggregated despite the query not being "
                              "grouped by " +
-                             variable->name() + ".");
+                             variable.name() + ".");
       }
     }
   }

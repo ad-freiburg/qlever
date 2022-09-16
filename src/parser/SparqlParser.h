@@ -15,8 +15,12 @@
 
 using std::string;
 
-// A simple parser of SPARQL.
-// No supposed to feature the complete query language.
+// The SPARQL parser used by QLever. The actual parsing is delegated to a parser
+// that is based on ANTLR4, which recognises the complete SPARQL 1.1 QL grammar.
+// For valid SPARQL queries that are not supported by QLever a reasonable error
+// message is given. The only thing that is still parsed manually by this class
+// are FILTER clauses, because QLever doesn't support arbitrary expressions in
+// filters yet.
 class SparqlParser {
  public:
   explicit SparqlParser(const string& query);

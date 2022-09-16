@@ -113,9 +113,7 @@ PathTuples joinPredicateAndObject(VarOrPath predicate, ObjectList objectList) {
     // TODO The fulltext index should perform the splitting of its keywords,
     //  and not the SparqlParser.
     if (PropertyPath* path = std::get_if<PropertyPath>(&predicate)) {
-      if (path->asString() == CONTAINS_WORD_PREDICATE ||
-          // TODO _NS no longer needed?
-          path->asString() == CONTAINS_WORD_PREDICATE_NS) {
+      if (path->asString() == CONTAINS_WORD_PREDICATE) {
         if (const Literal* literal =
                 unwrapVariant<VarOrTerm, GraphTerm, Literal>(object)) {
           object = Literal{stripAndLowercaseKeywordLiteral(literal->literal())};
@@ -947,6 +945,19 @@ Node Visitor::visitTypesafe(Parser::ObjectRContext* ctx) {
 // ___________________________________________________________________________
 vector<TripleWithPropertyPath> SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::TriplesSameSubjectPathContext* ctx) {
+  auto setTextscoreVisibleIfPresent = [this](VarOrTerm& subject,
+                                             VarOrPath& predicate) {
+    if (auto* var = std::get_if<Variable>(&subject)) {
+      if (auto* propertyPath = std::get_if<PropertyPath>(&predicate)) {
+        if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE ||
+            propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
+          addVisibleVariable(
+              absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, var->name().substr(1)));
+        }
+      }
+    }
+  };
+
   if (ctx->varOrTerm()) {
     vector<TripleWithPropertyPath> triples;
     auto subject = visitTypesafe(ctx->varOrTerm());
@@ -954,6 +965,7 @@ vector<TripleWithPropertyPath> SparqlQleverVisitor::visitTypesafe(
     for (auto& [predicate, object] : tuples) {
       // TODO<clang,c++20> clang does not yet support emplace_back for
       // aggregates.
+      setTextscoreVisibleIfPresent(subject, predicate);
       triples.push_back(TripleWithPropertyPath{subject, std::move(predicate),
                                                std::move(object)});
     }

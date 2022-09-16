@@ -905,8 +905,6 @@ TEST(SparqlParser, SelectQuery) {
           m::SelectQuery(m::Select({Variable{"?x"}}), DummyGraphPatternMatcher),
           m::pq::Having({{SparqlFilter::FilterType::GT, "?x", "5"}}),
           m::pq::OrderKeys({{Variable{"?y"}, false}})));
-  // TODO<qup42, joka921> enable Tests once the corresponding checks are
-  //  implemented.
 
   // Grouping by a variable or expression which contains a variable
   // that is not visible in the query body is not allowed.
@@ -915,7 +913,7 @@ TEST(SparqlParser, SelectQuery) {
       "SELECT (COUNT(?a) as ?d) WHERE { ?a ?b ?c } GROUP BY (?x - 10)");
   // Ordering by a variable or expression which contains a variable that is not
   // visible in the query body is not allowed.
-  // expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY ?x");
+  expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY ?x");
   expectSelectQueryFails("SELECT ?a WHERE { ?a ?b ?c } ORDER BY (?x - 10)");
   // All variables used in an aggregate must be visible in the query body.
   expectSelectQueryFails(
@@ -936,9 +934,14 @@ TEST(SparqlParser, Query) {
   auto expectQuery = ExpectCompleteParse<&Parser::query>{
       {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
   auto expectQueryFails = ExpectParseFails<&Parser::query>{};
+  // TODO: re-add simple tests that also assert the ParsedQuery.
   // Test that `_originalString` is correctly set.
   expectQuery("SELECT * WHERE { ?a <bar> ?foo }",
-              m::pq::OriginalString("SELECT * WHERE { ?a <bar> ?foo }"));
+              testing::AllOf(
+                  m::SelectQuery(
+                      m::AsteriskSelect(),
+                      m::GraphPattern(m::Triples({{"?a", "<bar>", "?foo"}}))),
+                  m::pq::OriginalString("SELECT * WHERE { ?a <bar> ?foo }")));
   expectQuery("SELECT * WHERE { ?x ?y ?z }",
               m::pq::OriginalString("SELECT * WHERE { ?x ?y ?z }"));
   expectQuery(
