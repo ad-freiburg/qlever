@@ -289,6 +289,13 @@ auto Literal = [](const std::string& value) {
 
 // _____________________________________________________________________________
 
+auto ConstructClause =
+    [](const Matcher<const ad_utility::sparql_types::Triples&>& m)
+    -> Matcher<const std::optional<parsedQuery::ConstructClause>&> {
+  return testing::Optional(AD_FIELD(parsedQuery::ConstructClause, triples_, m));
+};
+
+// _____________________________________________________________________________
 namespace detail {
 auto Expression = [](const std::string& descriptor)
     -> Matcher<const sparqlExpression::SparqlExpressionPimpl&> {
