@@ -133,7 +133,8 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           const sparqlExpression::SparqlExpressionPimpl& expression,
           const std::string& locationDescription) {
         for (const auto* var : expression.containedVariables()) {
-          checkVariableIsVisible(*var, locationDescription);
+          checkVariableIsVisible(*var, locationDescription + " in Expression " +
+                                           expression.getDescriptor());
         }
       };
 
