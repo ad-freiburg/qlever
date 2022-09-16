@@ -298,17 +298,13 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       return;
     }
 
-    for (const auto& triple : constructClause().triples_) {
-      for (const auto& varOrTerm : triple) {
-        if (auto variable = std::get_if<Variable>(&varOrTerm)) {
-          if (!ad_utility::contains(_groupByVariables, *variable)) {
-            throw ParseException("Variable " + variable->name() +
-                                 " is used but not "
-                                 "aggregated despite the query not being "
-                                 "grouped by " +
-                                 variable->name() + ".");
-          }
-        }
+    for (const auto* variable : constructClause().containedVariables()) {
+      if (!ad_utility::contains(_groupByVariables, *variable)) {
+        throw ParseException("Variable " + variable->name() +
+                             " is used but not "
+                             "aggregated despite the query not being "
+                             "grouped by " +
+                             variable->name() + ".");
       }
     }
   }
