@@ -192,28 +192,26 @@ TEST(SparqlParser, ComplexConstructTemplate) {
       "<http://wallscope.co.uk/resource/olympics/medal/#something> a "
       "<http://wallscope.co.uk/resource/olympics/medal/#somethingelse> }";
 
-  auto Var = m::VariableVariant;
-  auto Blank = [](const std::string& label) {
-    return m::BlankNode(true, label);
-  };
+  using Var = Variable;
+  auto Blank = [](const std::string& label) { return BlankNode(true, label); };
   expectCompleteParse(
       parse<&Parser::constructTemplate>(input),
-      m::ConstructClause(ElementsAre(
-          ElementsAre(Blank("0"), Var("?a"), Blank("3")),
-          ElementsAre(Blank("1"), m::Iri(first), Blank("2")),
-          ElementsAre(Blank("1"), m::Iri(rest), m::Iri(nil)),
-          ElementsAre(Blank("2"), m::Iri(first), Var("?c")),
-          ElementsAre(Blank("2"), m::Iri(rest), m::Iri(nil)),
-          ElementsAre(Blank("3"), m::Iri(first), Var("?b")),
-          ElementsAre(Blank("3"), m::Iri(rest), Blank("1")),
-          ElementsAre(Blank("0"), Var("?d"), Blank("4")),
-          ElementsAre(Blank("4"), Var("?e"), Blank("5")),
-          ElementsAre(Blank("5"), Var("?f"), Var("?g")),
-          ElementsAre(m::Iri("<http://wallscope.co.uk/resource/olympics/medal/"
-                             "#something>"),
-                      m::Iri(type),
-                      m::Iri("<http://wallscope.co.uk/resource/olympics/medal/"
-                             "#somethingelse>")))));
+      m::ConstructClause(
+          {{Blank("0"), Var("?a"), Blank("3")},
+           {Blank("1"), Iri(first), Blank("2")},
+           {Blank("1"), Iri(rest), Iri(nil)},
+           {Blank("2"), Iri(first), Var("?c")},
+           {Blank("2"), Iri(rest), Iri(nil)},
+           {Blank("3"), Iri(first), Var("?b")},
+           {Blank("3"), Iri(rest), Blank("1")},
+           {Blank("0"), Var("?d"), Blank("4")},
+           {Blank("4"), Var("?e"), Blank("5")},
+           {Blank("5"), Var("?f"), Var("?g")},
+           {Iri("<http://wallscope.co.uk/resource/olympics/medal/"
+                "#something>"),
+            Iri(type),
+            Iri("<http://wallscope.co.uk/resource/olympics/medal/"
+                "#somethingelse>")}}));
 }
 
 TEST(SparqlParser, GraphTerm) {
@@ -930,11 +928,47 @@ TEST(SparqlParser, SelectQuery) {
   expectSelectQueryFails("SELECT * FROM  WHERE <foo> { ?x ?y ?z }");
 }
 
+TEST(SparqlParser, ConstructQuery) {
+  auto expectConstructQuery = ExpectCompleteParse<&Parser::constructQuery>{
+      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectConstructQueryFails = ExpectParseFails<&Parser::constructQuery>{};
+  expectConstructQuery(
+      "CONSTRUCT { } WHERE { ?a ?b ?c }",
+      m::ConstructQuery({}, m::GraphPattern(m::Triples({{"?a", "?b", "?c"}}))));
+  expectConstructQuery("CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c }",
+                       testing::AllOf(m::ConstructQuery(
+                           {{Variable{"?a"}, Iri{"<foo>"}, Variable{"?c"}}},
+                           m::GraphPattern(m::Triples({{"?a", "?b", "?c"}})))));
+  expectConstructQuery(
+      "CONSTRUCT { ?a <foo> ?c . <bar> ?b <baz> } WHERE { ?a ?b ?c . FILTER(?a "
+      "> 0) .}",
+      m::ConstructQuery(
+          {{Variable{"?a"}, Iri{"<foo>"}, Variable{"?c"}},
+           {Iri{"<bar>"}, Variable{"?b"}, Iri{"<baz>"}}},
+          m::GraphPattern(false, {{SparqlFilter::FilterType::GT, "?a", "0"}},
+                          m::Triples({{"?a", "?b", "?c"}}))));
+  expectConstructQuery(
+      "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c } ORDER BY ?a LIMIT 10",
+      testing::AllOf(
+          m::ConstructQuery({{Variable{"?a"}, Iri{"<foo>"}, Variable{"?c"}}},
+                            m::GraphPattern(m::Triples({{"?a", "?b", "?c"}}))),
+          m::pq::LimitOffset({10}),
+          m::pq::OrderKeys({{Variable{"?a"}, false}})));
+  // This case of the grammar is not useful without Datasets, but we still
+  // support it.
+  expectConstructQuery(
+      "CONSTRUCT WHERE { ?a <foo> ?b }",
+      m::ConstructQuery({{Variable{"?a"}, Iri{"<foo>"}, Variable{"?b"}}},
+                        m::GraphPattern()));
+  // Datasets are not supported.
+  expectConstructQueryFails("CONSTRUCT { } FROM <foo> WHERE { ?a ?b ?c }");
+  expectConstructQueryFails("CONSTRUCT FROM <foo> WHERE { }");
+}
+
 TEST(SparqlParser, Query) {
   auto expectQuery = ExpectCompleteParse<&Parser::query>{
       {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
   auto expectQueryFails = ExpectParseFails<&Parser::query>{};
-  // TODO: re-add simple tests that also assert the ParsedQuery.
   // Test that `_originalString` is correctly set.
   expectQuery("SELECT * WHERE { ?a <bar> ?foo }",
               testing::AllOf(
@@ -951,9 +985,18 @@ TEST(SparqlParser, Query) {
       "PREFIX a: <foo> SELECT (COUNT(?y) as ?a) WHERE { ?x ?y ?z } GROUP BY ?x",
       m::pq::OriginalString("PREFIX a: <foo> SELECT (COUNT(?y) as ?a) WHERE { "
                             "?x ?y ?z } GROUP BY ?x"));
-  expectQuery("CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } LIMIT 10",
-              m::pq::OriginalString(
-                  "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } LIMIT 10"));
+  expectQuery(
+      "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c }",
+      m::ConstructQuery({{Variable{"?a"}, Iri{"<foo>"}, Variable{"?c"}}},
+                        m::GraphPattern(m::Triples({{"?a", "?b", "?c"}}))));
+  expectQuery(
+      "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } LIMIT 10",
+      testing::AllOf(
+          m::ConstructQuery({{Variable{"?x"}, Iri{"<foo>"}, Iri{"<bar>"}}},
+                            m::GraphPattern(m::Triples({{"?x", "?y", "?z"}}))),
+          m::pq::OriginalString(
+              "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } LIMIT 10"),
+          m::pq::LimitOffset({10})));
   // Describe and Ask Queries are not supported.
   expectQueryFails("DESCRIBE *");
   expectQueryFails("ASK WHERE { ?x <foo> <bar> }");
