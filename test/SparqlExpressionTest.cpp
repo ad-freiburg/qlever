@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "./SparqlParserTestHelpers.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
@@ -14,24 +15,6 @@
 
 using namespace sparqlExpression;
 using namespace std::literals;
-
-/// Dummy expression for testing, that for `evaluate` returns the `result`
-/// that is specified in the constructor.
-struct DummyExpression : public SparqlExpression {
-  explicit DummyExpression(ExpressionResult result)
-      : _result{std::move(result)} {}
-  mutable ExpressionResult _result;
-  ExpressionResult evaluate(EvaluationContext*) const override {
-    return std::move(_result);
-  }
-  vector<std::string> getUnaggregatedVariables() override { return {}; }
-  string getCacheKey(
-      [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
-    return "DummyDummyDummDumm"s;
-  }
-
-  std::span<SparqlExpression::Ptr> children() override { return {}; }
-};
 
 using VD = VectorWithMemoryLimit<double>;
 auto checkResultsEqual = [](const auto& a, const auto& b) {
@@ -221,24 +204,4 @@ TEST(SparqlExpression, PlusAndMinus) {
   testMultiply(bTimesD, b, d);
   testDivide(bByD, b, d);
   testDivide(dByB, d, b);
-}
-
-TEST(SparqlExpression, LessThan) {
-  auto three = std::make_unique<DummyExpression>(3);
-  auto four = std::make_unique<DummyExpression>(4.2);
-
-  QueryExecutionContext* qec = nullptr;
-  auto expr = LessThanExpression{{std::move(three), std::move(four)}};
-
-  ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
-  sparqlExpression::VariableToColumnAndResultTypeMap map;
-  ResultTable::LocalVocab localVocab;
-  IdTable table{alloc};
-
-  sparqlExpression::EvaluationContext context{*qec, map, table, alloc,
-                                              localVocab};
-
-  auto res = expr.evaluate(&context);
-  ASSERT_TRUE(std::get<Bool>(res));
 }
