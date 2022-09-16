@@ -9,27 +9,28 @@
 #include <variant>
 #include <vector>
 
-#include "../engine/ResultType.h"
-#include "../engine/sparqlExpressions/SparqlExpressionPimpl.h"
-#include "../util/Algorithm.h"
-#include "../util/Exception.h"
-#include "../util/HashMap.h"
-#include "../util/OverloadCallOperator.h"
-#include "../util/StringUtils.h"
-#include "./TripleComponent.h"
-#include "Alias.h"
-#include "ParseException.h"
-#include "PropertyPath.h"
-#include "data/GroupKey.h"
-#include "data/LimitOffsetClause.h"
-#include "data/OrderKey.h"
-#include "data/SolutionModifiers.h"
-#include "data/SparqlFilter.h"
-#include "data/Types.h"
-#include "data/VarOrTerm.h"
+#include "engine/ResultType.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "parser/Alias.h"
+#include "parser/ConstructClause.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
+#include "parser/ParseException.h"
+#include "parser/PropertyPath.h"
 #include "parser/SelectClause.h"
+#include "parser/TripleComponent.h"
+#include "parser/data/GroupKey.h"
+#include "parser/data/LimitOffsetClause.h"
+#include "parser/data/OrderKey.h"
+#include "parser/data/SolutionModifiers.h"
+#include "parser/data/SparqlFilter.h"
+#include "parser/data/Types.h"
+#include "parser/data/VarOrTerm.h"
+#include "util/Algorithm.h"
+#include "util/Exception.h"
+#include "util/HashMap.h"
+#include "util/OverloadCallOperator.h"
+#include "util/StringUtils.h"
 
 using std::string;
 using std::vector;
@@ -88,13 +89,10 @@ class ParsedQuery {
 
   using SelectClause = parsedQuery::SelectClause;
 
-  using ConstructClause = ad_utility::sparql_types::Triples;
+  using ConstructClause = parsedQuery::ConstructClause;
 
   ParsedQuery() = default;
 
-  // The ql prefix for QLever specific additions is always defined.
-  vector<SparqlPrefix> _prefixes = {SparqlPrefix(
-      INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI)};
   GraphPattern _rootGraphPattern;
   vector<SparqlFilter> _havingClauses;
   size_t _numGraphPatterns = 1;
@@ -134,23 +132,14 @@ class ParsedQuery {
     return std::get<ConstructClause>(_clause);
   }
 
-  // Add a variable, that was found in the SubQuery body, when query has a
-  // Select Clause.
-  bool registerVariableVisibleInQueryBody(const Variable& variable) {
-    if (!hasSelectClause()) return false;
-    selectClause().addVisibleVariable(variable);
-    return true;
-  }
+  // Add a variable, that was found in the query body.
+  void registerVariableVisibleInQueryBody(const Variable& variable);
 
-  // Add variables, that were found in the SubQuery body, when query has a
-  // Select Clause.
-  bool registerVariablesVisibleInQueryBody(const vector<Variable>& variables) {
-    if (!hasSelectClause()) return false;
-    for (const auto& var : variables) {
-      selectClause().addVisibleVariable(var);
-    }
-    return true;
-  }
+  // Add variables, that were found in the query body.
+  void registerVariablesVisibleInQueryBody(const vector<Variable>& variables);
+
+  // Returns all variables that are visible in the Query Body.
+  const std::vector<Variable>& getVisibleVariables() const;
 
   auto& children() { return _rootGraphPattern._graphPatterns; }
   [[nodiscard]] const auto& children() const {

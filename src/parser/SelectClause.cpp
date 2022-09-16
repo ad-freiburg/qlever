@@ -9,6 +9,20 @@
 #include "util/OverloadCallOperator.h"
 
 using namespace parsedQuery;
+
+// ____________________________________________________________________
+// TODO<joka921, qup42> use a better mechanism to remove duplicates in the
+//  visible variables while still keeping the order.
+void ClauseBase::addVisibleVariable(const Variable& variable) {
+  if (!ad_utility::contains(visibleVariables_, variable)) {
+    visibleVariables_.emplace_back(variable);
+  }
+}
+
+const vector<Variable>& ClauseBase::getVisibleVariables() const {
+  return visibleVariables_;
+}
+
 // ____________________________________________________________________
 [[nodiscard]] bool SelectClause::isAsterisk() const {
   return std::holds_alternative<Asterisk>(varsAndAliasesOrAsterisk_);
@@ -40,17 +54,6 @@ void SelectClause::setSelected(std::vector<Variable> variables) {
   std::vector<VarOrAlias> v(std::make_move_iterator(variables.begin()),
                             std::make_move_iterator(variables.end()));
   setSelected(v);
-}
-
-// ____________________________________________________________________
-void SelectClause::addVisibleVariable(const Variable& variable) {
-  if (!ad_utility::contains(visibleVariables_, variable)) {
-    visibleVariables_.emplace_back(variable);
-  }
-}
-
-const vector<Variable>& SelectClause::getVisibleVariables() {
-  return visibleVariables_;
 }
 
 // ____________________________________________________________________

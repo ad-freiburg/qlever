@@ -22,16 +22,6 @@ using std::vector;
 string ParsedQuery::asString() const {
   std::ostringstream os;
 
-  // PREFIX
-  os << "PREFIX: {";
-  for (size_t i = 0; i < _prefixes.size(); ++i) {
-    os << "\n\t" << _prefixes[i].asString();
-    if (i + 1 < _prefixes.size()) {
-      os << ',';
-    }
-  }
-  os << "\n}";
-
   bool usesSelect = hasSelectClause();
   bool usesAsterisk = usesSelect && selectClause().isAsterisk();
 
@@ -56,7 +46,7 @@ string ParsedQuery::asString() const {
       os << "{";
     }
   } else if (hasConstructClause()) {
-    const auto& constructClause = this->constructClause();
+    const auto& constructClause = this->constructClause().triples_;
     os << "\n CONSTRUCT {\n\t";
     for (const auto& triple : constructClause) {
       os << triple[0].toSparql();
@@ -130,24 +120,35 @@ Variable ParsedQuery::addInternalBind(
 
 // ________________________________________________________________________
 void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
-  // Process groupClause
-  // TODO<qup42, joka921> Check that all variables that are part of an
-  //  expression that is grouped on are visible in the Query Body.
-  auto processVariable = [this](const Variable& groupKey) {
-    // TODO: implement for `ConstructClause`
-    if (hasSelectClause()) {
-      if (!ad_utility::contains(selectClause().getVisibleVariables(),
-                                groupKey)) {
-        throw ParseException(
-            "Variable " + groupKey.name() +
-            " was used in an GROUP BY but is not visible in the query body.");
-      }
+  auto checkVariableIsVisible = [this](const Variable& var,
+                                       const std::string& locationDescription) {
+    if (!ad_utility::contains(getVisibleVariables(), var)) {
+      throw ParseException("Variable " + var.name() + " was used in " +
+                           locationDescription +
+                           ", but is not visible in the Query Body.");
     }
+  };
+  auto checkUsedVariablesAreVisible =
+      [&checkVariableIsVisible](
+          const sparqlExpression::SparqlExpressionPimpl& expression,
+          const std::string& locationDescription) {
+        for (const auto* var : expression.containedVariables()) {
+          checkVariableIsVisible(*var, locationDescription + " in Expression " +
+                                           expression.getDescriptor());
+        }
+      };
+
+  // Process groupClause
+  auto processVariable = [this,
+                          &checkVariableIsVisible](const Variable& groupKey) {
+    checkVariableIsVisible(groupKey, "GROUP BY");
 
     _groupByVariables.emplace_back(groupKey.name());
   };
   auto processExpression =
-      [this](sparqlExpression::SparqlExpressionPimpl groupKey) {
+      [this, &checkUsedVariablesAreVisible](
+          sparqlExpression::SparqlExpressionPimpl groupKey) {
+        checkUsedVariablesAreVisible(groupKey, "Group Key");
         auto helperTarget = addInternalBind(std::move(groupKey));
         _groupByVariables.emplace_back(helperTarget.name());
       };
@@ -167,21 +168,27 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   }
 
   // Process havingClause
+  // TODO<joka921, qup42> as soon as FILTER and HAVING support proper
+  //  expressions, also add similar sanity checks for the HAVING clause here.
   _havingClauses = std::move(modifiers.havingClauses_);
 
   // Process orderClause
-  // TODO<qup42, joka921> Check that all variables that are part of an
-  //  expression that is ordered on are visible in the Query Body.
-  auto processVariableOrderKey = [this](VariableOrderKey orderKey) {
+  auto processVariableOrderKey = [this, &checkVariableIsVisible](
+                                     VariableOrderKey orderKey) {
     // Check whether grouping is done. The variable being ordered by
     // must then be either grouped or the result of an alias in the select.
     const vector<Variable>& groupByVariables = _groupByVariables;
-    if (!groupByVariables.empty() &&
-        !ad_utility::contains(groupByVariables, orderKey.variable_) &&
-        !ad_utility::contains_if(selectClause().getAliases(),
-                                 [&orderKey](const Alias& alias) {
-                                   return alias._target == orderKey.variable_;
-                                 })) {
+    if (groupByVariables.empty()) {
+      checkVariableIsVisible(orderKey.variable_, "ORDERY BY");
+    } else if (!ad_utility::contains(groupByVariables, orderKey.variable_) &&
+               // `ConstructClause` has no Aliases. So the variable can never be
+               // the result of an Alias.
+               (hasConstructClause() ||
+                !ad_utility::contains_if(selectClause().getAliases(),
+                                         [&orderKey](const Alias& alias) {
+                                           return alias._target ==
+                                                  orderKey.variable_;
+                                         }))) {
       throw ParseException(
           "Variable " + orderKey.variable_.name() +
           " was used in an ORDER BY "
@@ -195,8 +202,10 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   // QLever currently only supports ordering by variables. To allow
   // all `orderConditions`, the corresponding expression is bound to a new
   // internal variable. Ordering is then done by this variable.
-  auto processExpressionOrderKey = [this](ExpressionOrderKey orderKey) {
-    if (!_groupByVariables.empty())
+  auto processExpressionOrderKey = [this, &checkUsedVariablesAreVisible](
+                                       ExpressionOrderKey orderKey) {
+    checkUsedVariablesAreVisible(orderKey.expression_, "Order Key");
+    if (!_groupByVariables.empty()) {
       // TODO<qup42> Implement this by adding a hidden alias in the
       //  SELECT clause.
       throw ParseException(
@@ -206,6 +215,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           "\"). Please assign this expression to a "
           "new variable in the SELECT clause and then order by this "
           "variable.");
+    }
     auto additionalVariable = addInternalBind(std::move(orderKey.expression_));
     _orderBy.emplace_back(additionalVariable, orderKey.isDescending_);
   };
@@ -219,6 +229,8 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   // Process limitOffsetClause
   _limitOffset = modifiers.limitOffset_;
 
+  // Check that the query is valid
+
   auto checkAliasOutNamesHaveNoOverlapWith =
       [this](const auto& container, const std::string& message) {
         for (const auto& alias : selectClause().getAliases()) {
@@ -227,8 +239,6 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
           }
         }
       };
-
-  // Check that the query is valid
 
   if (hasSelectClause()) {
     if (!_groupByVariables.empty()) {
@@ -287,15 +297,27 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
         throw ParseException("The variable name " + a._target.name() +
                              " used in an alias was already selected on.");
       }
-      // TODO<qup42, joka921> Check that all variables used in the expression of
-      //  Aliases are visible in the QueryBody.
+
+      checkUsedVariablesAreVisible(a._expression, "Alias");
+    }
+  } else if (hasConstructClause()) {
+    if (_groupByVariables.empty()) {
+      return;
+    }
+
+    for (const auto& variable : constructClause().containedVariables()) {
+      if (!ad_utility::contains(_groupByVariables, variable)) {
+        throw ParseException("Variable " + variable.name() +
+                             " is used but not "
+                             "aggregated despite the query not being "
+                             "grouped by " +
+                             variable.name() + ".");
+      }
     }
   }
 }
 
 void ParsedQuery::merge(const ParsedQuery& p) {
-  _prefixes.insert(_prefixes.begin(), p._prefixes.begin(), p._prefixes.end());
-
   auto& children = _rootGraphPattern._graphPatterns;
   auto& otherChildren = p._rootGraphPattern._graphPatterns;
   children.insert(children.end(), otherChildren.begin(), otherChildren.end());
@@ -303,6 +325,27 @@ void ParsedQuery::merge(const ParsedQuery& p) {
   // update the ids
   _numGraphPatterns = 0;
   _rootGraphPattern.recomputeIds(&_numGraphPatterns);
+}
+
+// _____________________________________________________________________________
+const std::vector<Variable>& ParsedQuery::getVisibleVariables() const {
+  return std::visit(&parsedQuery::ClauseBase::getVisibleVariables, _clause);
+}
+
+// _____________________________________________________________________________
+void ParsedQuery::registerVariablesVisibleInQueryBody(
+    const vector<Variable>& variables) {
+  for (const auto& var : variables) {
+    registerVariableVisibleInQueryBody(var);
+  }
+}
+
+// _____________________________________________________________________________
+void ParsedQuery::registerVariableVisibleInQueryBody(const Variable& variable) {
+  auto addVariable = [&variable](auto& clause) {
+    clause.addVisibleVariable(variable);
+  };
+  std::visit(addVariable, _clause);
 }
 
 // _____________________________________________________________________________

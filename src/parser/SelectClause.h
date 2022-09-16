@@ -13,10 +13,23 @@
 
 namespace parsedQuery {
 
+/// Base class for common functionality of `SelectClause` and `ConstructClause`.
+struct ClauseBase {
+  // The variables that are visible in the query body. Will be used in the case
+  // of `SELECT *` and to check invariants of the `ParsedQuery`.
+  std::vector<Variable> visibleVariables_;
+
+  // Add a variable that is visible in the query body.
+  void addVisibleVariable(const Variable& variable);
+
+  // Get all the variables that are visible in the query body.
+  const std::vector<Variable>& getVisibleVariables() const;
+};
+
 /// The `SELECT` clause of a  SPARQL query. It contains the selected variables
 /// and aliases. If all variables are selected via `SELECT *` then this class
 /// also stores the variables to which the `*` will expand.
-struct SelectClause {
+struct SelectClause : ClauseBase {
   bool reduced_ = false;
   bool distinct_ = false;
 
@@ -31,10 +44,6 @@ struct SelectClause {
 
   // The `char` means `SELECT *`.
   std::variant<VarsAndAliases, Asterisk> varsAndAliasesOrAsterisk_;
-
-  // The variables that are visible in the query body. Will be used in the case
-  // of `SELECT *` and to check invariants of the `ParsedQuery`.
-  std::vector<Variable> visibleVariables_;
 
  public:
   /// If true, then this `SelectClause` represents `SELECT *`. If false,
@@ -54,12 +63,6 @@ struct SelectClause {
   // Overload of `setSelected` (see above) for the simple case, where only
   // variables and no aliases are selected.
   void setSelected(std::vector<Variable> variables);
-
-  // Add a variable that is visible in the query body.
-  void addVisibleVariable(const Variable& variable);
-
-  // Get all the variables that are visible in the query body.
-  const std::vector<Variable>& getVisibleVariables();
 
   /// Get all the selected variables. This includes the variables to which
   /// aliases are bound. For example for `SELECT ?x (?a + ?b AS ?c)`,

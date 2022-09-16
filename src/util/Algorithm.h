@@ -40,6 +40,21 @@ bool contains_if(const Container& container, const Predicate& predicate) {
 }
 
 /**
+ * Checks whether a container is contained in another container.
+ *
+ * @param container Container& Container to check
+ * @param containedContainer Container& Container where other container has to
+ * be contained in
+ * @return bool
+ */
+template <typename Container>
+inline bool includes(const Container& container,
+                     const Container& containedContainer) {
+  return std::includes(container.begin(), container.end(),
+                       containedContainer.begin(), containedContainer.end());
+}
+
+/**
  * Appends the second vector to the first one.
  *
  * @param destination Vector& to which to append

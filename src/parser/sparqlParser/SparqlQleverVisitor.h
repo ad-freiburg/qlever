@@ -12,6 +12,7 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/Alias.h"
+#include "parser/ConstructClause.h"
 #include "parser/ParsedQuery.h"
 #include "parser/RdfEscaping.h"
 #include "parser/data/BlankNode.h"
@@ -123,7 +124,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  std::variant<ParsedQuery, Triples> visitTypesafe(Parser::QueryContext* ctx);
+  ParsedQuery visitTypesafe(Parser::QueryContext* ctx);
 
   // ___________________________________________________________________________
   Any visitPrologue(Parser::PrologueContext* ctx) override {
@@ -188,7 +189,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  Triples visitTypesafe(Parser::ConstructQueryContext* ctx);
+  ParsedQuery visitTypesafe(Parser::ConstructQueryContext* ctx);
 
   Any visitDescribeQuery(Parser::DescribeQueryContext* ctx) override {
     // TODO: unsupported
@@ -297,8 +298,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       Parser::ValuesClauseContext* ctx);
 
   Any visitTriplesTemplate(Parser::TriplesTemplateContext* ctx) override {
-    return visitChildren(ctx);
+    return visitTypesafe(ctx);
   }
+
+  Triples visitTypesafe(Parser::TriplesTemplateContext* ctx);
 
   Any visitGroupGraphPattern(Parser::GroupGraphPatternContext* ctx) override {
     return visitTypesafe(ctx);
@@ -444,7 +447,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  std::optional<Triples> visitTypesafe(Parser::ConstructTemplateContext* ctx);
+  std::optional<parsedQuery::ConstructClause> visitTypesafe(
+      Parser::ConstructTemplateContext* ctx);
 
   Any visitConstructTriples(Parser::ConstructTriplesContext* ctx) override {
     return visitTypesafe(ctx);
@@ -943,4 +947,9 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   [[noreturn]] void reportError(antlr4::ParserRuleContext* ctx,
                                 const std::string& msg);
+
+  // Parse both `ConstructTriplesContext` and `TriplesTemplateContext` because
+  // they have the same structure.
+  template <typename Context>
+  Triples parseTriplesConstruction(Context* ctx);
 };

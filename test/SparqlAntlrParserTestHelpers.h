@@ -289,6 +289,13 @@ auto Literal = [](const std::string& value) {
 
 // _____________________________________________________________________________
 
+auto ConstructClause = [](const std::vector<std::array<VarOrTerm, 3>>& elems)
+    -> Matcher<const std::optional<parsedQuery::ConstructClause>&> {
+  return testing::Optional(
+      AD_FIELD(parsedQuery::ConstructClause, triples_, testing::Eq(elems)));
+};
+
+// _____________________________________________________________________________
 namespace detail {
 auto Expression = [](const std::string& descriptor)
     -> Matcher<const sparqlExpression::SparqlExpressionPimpl&> {
@@ -577,6 +584,11 @@ auto Minus = [](auto&& subMatcher) -> Matcher<const p::GraphPatternOperation&> {
       AD_FIELD(p::Minus, _child, subMatcher));
 };
 
+auto RootGraphPattern = [](const Matcher<const p::GraphPattern&>& m)
+    -> Matcher<const ::ParsedQuery&> {
+  return AD_FIELD(ParsedQuery, _rootGraphPattern, m);
+};
+
 template <auto SubMatcherLambda>
 struct MatcherWithDefaultFilters {
   Matcher<const p::GraphPatternOperation&> operator()(
@@ -670,7 +682,7 @@ auto SelectQuery =
   return testing::AllOf(
       AD_PROPERTY(ParsedQuery, hasSelectClause, testing::IsTrue()),
       AD_PROPERTY(ParsedQuery, selectClause, selectMatcher),
-      AD_FIELD(ParsedQuery, _rootGraphPattern, graphPatternMatcher));
+      RootGraphPattern(graphPatternMatcher));
 };
 
 namespace pq {
@@ -697,6 +709,24 @@ auto OrderKeys =
 };
 auto GroupKeys = GroupByVariables;
 }  // namespace pq
+
+// _____________________________________________________________________________
+auto ConstructQuery(const std::vector<std::array<VarOrTerm, 3>>& elems,
+                    const Matcher<const p::GraphPattern&>& m)
+    -> Matcher<const ParsedQuery&> {
+  return testing::AllOf(
+      AD_PROPERTY(ParsedQuery, hasConstructClause, testing::IsTrue()),
+      AD_PROPERTY(
+          ParsedQuery, constructClause,
+          AD_FIELD(parsedQuery::ConstructClause, triples_, testing::Eq(elems))),
+      RootGraphPattern(m));
+}
+
+// _____________________________________________________________________________
+auto VisibleVariables =
+    [](const std::vector<::Variable>& elems) -> Matcher<const ParsedQuery&> {
+  return AD_PROPERTY(ParsedQuery, getVisibleVariables, testing::Eq(elems));
+};
 
 }  // namespace matchers
 

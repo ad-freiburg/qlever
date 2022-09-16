@@ -113,9 +113,7 @@ PathTuples joinPredicateAndObject(VarOrPath predicate, ObjectList objectList) {
     // TODO The fulltext index should perform the splitting of its keywords,
     //  and not the SparqlParser.
     if (PropertyPath* path = std::get_if<PropertyPath>(&predicate)) {
-      if (path->asString() == CONTAINS_WORD_PREDICATE ||
-          // TODO _NS no longer needed?
-          path->asString() == CONTAINS_WORD_PREDICATE_NS) {
+      if (path->asString() == CONTAINS_WORD_PREDICATE) {
         if (const Literal* literal =
                 unwrapVariant<VarOrTerm, GraphTerm, Literal>(object)) {
           object = Literal{stripAndLowercaseKeywordLiteral(literal->literal())};
@@ -128,18 +126,25 @@ PathTuples joinPredicateAndObject(VarOrPath predicate, ObjectList objectList) {
 }
 
 // ____________________________________________________________________________________
-std::variant<ParsedQuery, Triples> Visitor::visitTypesafe(
-    Parser::QueryContext* ctx) {
+ParsedQuery Visitor::visitTypesafe(Parser::QueryContext* ctx) {
   // The prologue (BASE and PREFIX declarations)  only affects the internal
   // state of the visitor.
   visitTypesafe(ctx->prologue());
+  ParsedQuery query;
+  // TODO<joka921, qup42> Check if there are more instances of this pattern
+  //  (like `visitAlternative`, but with a custom error message), that would
+  //  justify extracting this pattern.
   if (ctx->selectQuery()) {
-    return visitTypesafe(ctx->selectQuery());
+    query = visitTypesafe(ctx->selectQuery());
+  } else if (ctx->constructQuery()) {
+    query = visitTypesafe(ctx->constructQuery());
+  } else {
+    reportError(ctx, "QLever only supports SELECT and CONSTRUCT queries.");
   }
-  if (ctx->constructQuery()) {
-    return visitTypesafe(ctx->constructQuery());
-  }
-  reportError(ctx, "QLever only supports select and construct queries");
+
+  query._originalString = ctx->getStart()->getInputStream()->toString();
+
+  return query;
 }
 
 // ____________________________________________________________________________________
@@ -175,17 +180,25 @@ Alias Visitor::visitTypesafe(Parser::AliasWithoutBracketsContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-Triples Visitor::visitTypesafe(Parser::ConstructQueryContext* ctx) {
+ParsedQuery Visitor::visitTypesafe(Parser::ConstructQueryContext* ctx) {
   if (!ctx->datasetClause().empty()) {
-    reportError(ctx, "Datasets are not supported");
+    reportError(ctx->datasetClause(0),
+                "QLever currently doesn't support FROM clauses");
   }
-  // TODO: once where clause is supported also process whereClause and
-  // solutionModifiers
+  ParsedQuery query;
   if (ctx->constructTemplate()) {
-    return visitTypesafe(ctx->constructTemplate()).value_or(Triples{});
+    query._clause = visitTypesafe(ctx->constructTemplate())
+                        .value_or(parsedQuery::ConstructClause{});
+    auto [pattern, visibleVariables] = visitTypesafe(ctx->whereClause());
+    query._rootGraphPattern = std::move(pattern);
+    query.registerVariablesVisibleInQueryBody(visibleVariables);
   } else {
-    return {};
+    query._clause = parsedQuery::ConstructClause{
+        visitOptional(ctx->triplesTemplate()).value_or(Triples{})};
   }
+  query.addSolutionModifiers(visitTypesafe(ctx->solutionModifier()));
+
+  return query;
 }
 
 // ____________________________________________________________________________________
@@ -463,9 +476,13 @@ vector<GroupKey> Visitor::visitTypesafe(Parser::GroupClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-std::optional<Triples> Visitor::visitTypesafe(
+std::optional<parsedQuery::ConstructClause> Visitor::visitTypesafe(
     Parser::ConstructTemplateContext* ctx) {
-  return visitOptional(ctx->constructTriples());
+  if (ctx->constructTriples()) {
+    return parsedQuery::ConstructClause{visitTypesafe(ctx->constructTriples())};
+  } else {
+    return std::nullopt;
+  }
 }
 
 // ____________________________________________________________________________________
@@ -573,8 +590,6 @@ ParsedQuery Visitor::visitTypesafe(Parser::SelectQueryContext* ctx) {
   query._rootGraphPattern = std::move(pattern);
   query.registerVariablesVisibleInQueryBody(visibleVariables);
   query.addSolutionModifiers(visitTypesafe(ctx->solutionModifier()));
-  // TODO: move up to visitTypesafe(QueryContext*)
-  query._originalString = ctx->getStart()->getInputStream()->toString();
 
   return query;
 }
@@ -812,14 +827,32 @@ vector<Visitor::ExpressionPtr> Visitor::visitTypesafe(
   return visitVector(ctx->expression());
 }
 
-// ____________________________________________________________________________________
-Triples Visitor::visitTypesafe(Parser::ConstructTriplesContext* ctx) {
+template <typename Context>
+Triples Visitor::parseTriplesConstruction(Context* ctx) {
   auto result = visitTypesafe(ctx->triplesSameSubject());
-  if (ctx->constructTriples()) {
-    auto newTriples = visitTypesafe(ctx->constructTriples());
+  Context* subContext = [](Context* ctx) -> Context* {
+    if constexpr (std::is_same_v<Context, Parser::ConstructTriplesContext>) {
+      return ctx->constructTriples();
+    } else if constexpr (std::is_same_v<Context,
+                                        Parser::TriplesTemplateContext>) {
+      return ctx->triplesTemplate();
+    }
+  }(ctx);
+  if (subContext) {
+    auto newTriples = visitTypesafe(subContext);
     ad_utility::appendVector(result, std::move(newTriples));
   }
   return result;
+}
+
+// ____________________________________________________________________________________
+Triples Visitor::visitTypesafe(Parser::ConstructTriplesContext* ctx) {
+  return parseTriplesConstruction(ctx);
+}
+
+// ____________________________________________________________________________________
+Triples Visitor::visitTypesafe(Parser::TriplesTemplateContext* ctx) {
+  return parseTriplesConstruction(ctx);
 }
 
 // ____________________________________________________________________________________
@@ -910,6 +943,22 @@ Node Visitor::visitTypesafe(Parser::ObjectRContext* ctx) {
 // ___________________________________________________________________________
 vector<TripleWithPropertyPath> SparqlQleverVisitor::visitTypesafe(
     SparqlAutomaticParser::TriplesSameSubjectPathContext* ctx) {
+  // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
+  // <entity>` is contained in the query, then the variable `?ql_textscore_var`
+  // is implicitly created and visible in the query body.
+  auto setTextscoreVisibleIfPresent = [this](VarOrTerm& subject,
+                                             VarOrPath& predicate) {
+    if (auto* var = std::get_if<Variable>(&subject)) {
+      if (auto* propertyPath = std::get_if<PropertyPath>(&predicate)) {
+        if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE ||
+            propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
+          addVisibleVariable(
+              absl::StrCat(TEXTSCORE_VARIABLE_PREFIX, var->name().substr(1)));
+        }
+      }
+    }
+  };
+
   if (ctx->varOrTerm()) {
     vector<TripleWithPropertyPath> triples;
     auto subject = visitTypesafe(ctx->varOrTerm());
@@ -917,6 +966,7 @@ vector<TripleWithPropertyPath> SparqlQleverVisitor::visitTypesafe(
     for (auto& [predicate, object] : tuples) {
       // TODO<clang,c++20> clang does not yet support emplace_back for
       // aggregates.
+      setTextscoreVisibleIfPresent(subject, predicate);
       triples.push_back(TripleWithPropertyPath{subject, std::move(predicate),
                                                std::move(object)});
     }
