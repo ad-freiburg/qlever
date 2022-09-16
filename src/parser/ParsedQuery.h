@@ -132,22 +132,31 @@ class ParsedQuery {
     return std::get<ConstructClause>(_clause);
   }
 
-  // Add a variable, that was found in the SubQuery body, when query has a
-  // Select Clause.
-  bool registerVariableVisibleInQueryBody(const Variable& variable) {
-    if (!hasSelectClause()) return false;
-    selectClause().addVisibleVariable(variable);
-    return true;
+  // Add a variable, that was found in the SubQuery body.
+  void registerVariableVisibleInQueryBody(const Variable& variable) {
+    auto addVariable = [&variable](auto& clause) {
+      clause.addVisibleVariable(variable);
+    };
+    std::visit(ad_utility::OverloadCallOperator{addVariable}, _clause);
   }
 
-  // Add variables, that were found in the SubQuery body, when query has a
-  // Select Clause.
-  bool registerVariablesVisibleInQueryBody(const vector<Variable>& variables) {
-    if (!hasSelectClause()) return false;
+  // Add variables, that were found in the SubQuery body.
+  void registerVariablesVisibleInQueryBody(const vector<Variable>& variables) {
     for (const auto& var : variables) {
-      selectClause().addVisibleVariable(var);
+      registerVariableVisibleInQueryBody(var);
     }
-    return true;
+  }
+
+  // Returns all variables that are visible in the Query Body.
+  const std::vector<Variable>& getVisibleVariables() {
+    // TODO: clang-tidy was complaining with visit.
+    if (hasSelectClause()) {
+      return selectClause().getVisibleVariables();
+    } else if (hasConstructClause()) {
+      return constructClause().getVisibleVariables();
+    } else {
+      AD_FAIL();
+    }
   }
 
   auto& children() { return _rootGraphPattern._graphPatterns; }
