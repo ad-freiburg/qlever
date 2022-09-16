@@ -1120,7 +1120,7 @@ queries:
     checks:
       - num_cols: 2
       - num_rows: 11
-      - selected: ["?x", "?t"]
+      - selected: [ "?x", "?t", "?ql_textscore_t" ]
       - contains_row: ["<Grete_Hermann>","Hermann's algorithm for primary decomposition is still in use now."]
 
 
