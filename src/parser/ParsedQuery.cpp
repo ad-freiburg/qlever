@@ -328,7 +328,7 @@ void ParsedQuery::merge(const ParsedQuery& p) {
 }
 
 // _____________________________________________________________________________
-const std::vector<Variable>& ParsedQuery::getVisibleVariables() {
+const std::vector<Variable>& ParsedQuery::getVisibleVariables() const {
   return std::visit(&parsedQuery::ClauseBase::getVisibleVariables, _clause);
 }
 

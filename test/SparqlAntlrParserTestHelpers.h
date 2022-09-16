@@ -722,6 +722,12 @@ auto ConstructQuery(const std::vector<std::array<VarOrTerm, 3>>& elems,
       RootGraphPattern(m));
 }
 
+// _____________________________________________________________________________
+auto VisibleVariables =
+    [](const std::vector<::Variable>& elems) -> Matcher<const ParsedQuery&> {
+  return AD_PROPERTY(ParsedQuery, getVisibleVariables, testing::Eq(elems));
+};
+
 }  // namespace matchers
 
 #undef AD_PROPERTY

@@ -139,7 +139,7 @@ class ParsedQuery {
   void registerVariablesVisibleInQueryBody(const vector<Variable>& variables);
 
   // Returns all variables that are visible in the Query Body.
-  const std::vector<Variable>& getVisibleVariables();
+  const std::vector<Variable>& getVisibleVariables() const;
 
   auto& children() { return _rootGraphPattern._graphPatterns; }
   [[nodiscard]] const auto& children() const {

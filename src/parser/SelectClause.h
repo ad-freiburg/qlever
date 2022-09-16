@@ -23,7 +23,7 @@ struct ClauseBase {
   void addVisibleVariable(const Variable& variable);
 
   // Get all the variables that are visible in the query body.
-  const std::vector<Variable>& getVisibleVariables();
+  const std::vector<Variable>& getVisibleVariables() const;
 };
 
 /// The `SELECT` clause of a  SPARQL query. It contains the selected variables

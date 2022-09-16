@@ -975,7 +975,8 @@ TEST(SparqlParser, Query) {
                   m::SelectQuery(
                       m::AsteriskSelect(),
                       m::GraphPattern(m::Triples({{"?a", "<bar>", "?foo"}}))),
-                  m::pq::OriginalString("SELECT * WHERE { ?a <bar> ?foo }")));
+                  m::pq::OriginalString("SELECT * WHERE { ?a <bar> ?foo }"),
+                  m::VisibleVariables({Variable{"?a"}, Variable{"?foo"}})));
   expectQuery("SELECT * WHERE { ?x ?y ?z }",
               m::pq::OriginalString("SELECT * WHERE { ?x ?y ?z }"));
   expectQuery(
@@ -987,8 +988,11 @@ TEST(SparqlParser, Query) {
                             "?x ?y ?z } GROUP BY ?x"));
   expectQuery(
       "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c }",
-      m::ConstructQuery({{Variable{"?a"}, Iri{"<foo>"}, Variable{"?c"}}},
-                        m::GraphPattern(m::Triples({{"?a", "?b", "?c"}}))));
+      testing::AllOf(
+          m::ConstructQuery({{Variable{"?a"}, Iri{"<foo>"}, Variable{"?c"}}},
+                            m::GraphPattern(m::Triples({{"?a", "?b", "?c"}}))),
+          m::VisibleVariables(
+              {Variable{"?a"}, Variable{"?b"}, Variable{"?c"}})));
   expectQuery(
       "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } LIMIT 10",
       testing::AllOf(
@@ -996,7 +1000,9 @@ TEST(SparqlParser, Query) {
                             m::GraphPattern(m::Triples({{"?x", "?y", "?z"}}))),
           m::pq::OriginalString(
               "CONSTRUCT { ?x <foo> <bar> } WHERE { ?x ?y ?z } LIMIT 10"),
-          m::pq::LimitOffset({10})));
+          m::pq::LimitOffset({10}),
+          m::VisibleVariables(
+              {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}})));
   // Describe and Ask Queries are not supported.
   expectQueryFails("DESCRIBE *");
   expectQueryFails("ASK WHERE { ?x <foo> <bar> }");
