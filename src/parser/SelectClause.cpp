@@ -11,6 +11,8 @@
 using namespace parsedQuery;
 
 // ____________________________________________________________________
+// TODO<joka921, qup42> use a better mechanism to remove duplicates in the
+//  visible variables while still keeping the order.
 void ClauseBase::addVisibleVariable(const Variable& variable) {
   if (!ad_utility::contains(visibleVariables_, variable)) {
     visibleVariables_.emplace_back(variable);

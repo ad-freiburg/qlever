@@ -167,6 +167,8 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   }
 
   // Process havingClause
+  // TODO<joka921, qup42> as soon as FILTER and HAVING support proper
+  //  expressions, also add similar sanity checks for the HAVING clause here.
   _havingClauses = std::move(modifiers.havingClauses_);
 
   // Process orderClause
@@ -322,6 +324,27 @@ void ParsedQuery::merge(const ParsedQuery& p) {
   // update the ids
   _numGraphPatterns = 0;
   _rootGraphPattern.recomputeIds(&_numGraphPatterns);
+}
+
+// _____________________________________________________________________________
+const std::vector<Variable>& ParsedQuery::getVisibleVariables() {
+  return std::visit(&parsedQuery::ClauseBase::getVisibleVariables, _clause);
+}
+
+// _____________________________________________________________________________
+void ParsedQuery::registerVariablesVisibleInQueryBody(
+    const vector<Variable>& variables) {
+  for (const auto& var : variables) {
+    registerVariableVisibleInQueryBody(var);
+  }
+}
+
+// _____________________________________________________________________________
+void ParsedQuery::registerVariableVisibleInQueryBody(const Variable& variable) {
+  auto addVariable = [&variable](auto& clause) {
+    clause.addVisibleVariable(variable);
+  };
+  std::visit(addVariable, _clause);
 }
 
 // _____________________________________________________________________________

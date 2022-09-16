@@ -133,21 +133,13 @@ class ParsedQuery {
   }
 
   // Add a variable, that was found in the query body.
-  void registerVariableVisibleInQueryBody(const Variable& variable) {
-    std::visit(&parsedQuery::ClauseBase::addVisibleVariable, _clause);
-  }
+  void registerVariableVisibleInQueryBody(const Variable& variable);
 
   // Add variables, that were found in the query body.
-  void registerVariablesVisibleInQueryBody(const vector<Variable>& variables) {
-    for (const auto& var : variables) {
-      registerVariableVisibleInQueryBody(var);
-    }
-  }
+  void registerVariablesVisibleInQueryBody(const vector<Variable>& variables);
 
   // Returns all variables that are visible in the Query Body.
-  const std::vector<Variable>& getVisibleVariables() {
-    return std::visit(&parsedQuery::ClauseBase::getVisibleVariables, _clause);
-  }
+  const std::vector<Variable>& getVisibleVariables();
 
   auto& children() { return _rootGraphPattern._graphPatterns; }
   [[nodiscard]] const auto& children() const {
