@@ -109,16 +109,6 @@ std::ostream& operator<<(std::ostream& out, const ExceptionMetadata& metadata) {
 }
 
 // _____________________________________________________________________________
-// Add the given `source_location`  to all gtest failure messages that occur,
-// while the return value is still in scope. It is important to bind the return
-// value to a variable, otherwise it will immediately go of scope and have no
-// effect.
-[[nodiscard]] testing::ScopedTrace generateLocationTrace(
-    ad_utility::source_location l) {
-  return {l.file_name(), static_cast<int>(l.line()),
-          "Actual location of the test failure"};
-}
-// _____________________________________________________________________________
 /**
  * Ensures that the matcher matches on the result of the parsing and that the
  * text has been fully consumed by the parser.

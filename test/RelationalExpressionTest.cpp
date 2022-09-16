@@ -3,10 +3,12 @@
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #include "./SparqlParserTestHelpers.h"
+#include "./util/GTestHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "gtest/gtest.h"
 
 using namespace sparqlExpression;
+using ad_utility::source_location;
 
 using enum valueIdComparators::Comparison;
 
@@ -32,19 +34,25 @@ auto evaluateWithEmpyContext = [](const SparqlExpression& expression) {
   return expression.evaluate(&context);
 };
 
-auto expectTrueBoolean = [](const SparqlExpression& expression) {
+auto expectTrueBoolean = [](const SparqlExpression& expression,
+                            source_location l = source_location::current()) {
+  auto trace = generateLocationTrace(l, "expectTrueBoolean was called here");
   auto result = evaluateWithEmpyContext(expression);
   EXPECT_TRUE(std::get<Bool>(result));
 };
 
-auto expectFalseBoolean = [](const SparqlExpression& expression) {
+auto expectFalseBoolean = [](const SparqlExpression& expression,
+                             source_location l = source_location::current()) {
+  auto trace = generateLocationTrace(l, "expectFalseBoolean was called here");
   auto result = evaluateWithEmpyContext(expression);
   EXPECT_FALSE(std::get<Bool>(result));
 };
 
 template <typename T, typename U>
 auto testNumericConstants(std::pair<T, U> lessThan, std::pair<T, U> greaterThan,
-                          std::pair<T, U> equal) {
+                          std::pair<T, U> equal,
+                          source_location l = source_location::current()) {
+  auto trace = generateLocationTrace(l, "testNumericConstants was called here");
   auto True = expectTrueBoolean;
   auto False = expectFalseBoolean;
 
@@ -86,7 +94,9 @@ TEST(RelationalExpression, DoubleAndDouble) {
                                        {-12.83, -12.83});
 }
 
-auto testNumericAndString = [](auto numeric, std::string s) {
+auto testNumericAndString = [](auto numeric, std::string s,
+                               source_location l = source_location::current()) {
+  auto trace = generateLocationTrace(l, "testNumericAndString was called here");
   auto True = expectTrueBoolean;
   auto False = expectFalseBoolean;
 
@@ -110,6 +120,59 @@ TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
   testNumericAndString(3, "3");
   testNumericAndString(-12.0, "hallo");
   testNumericAndString(-12.0, "-12.0");
+}
+
+// The vector must consist of 9 elements: The first three must be less than
+// constant, the next three greater than constant, and the last three equal to
+// constant
+template <typename T, typename U>
+auto testNumericConstantAndVector(
+    T constant, VectorWithMemoryLimit<U> vector,
+    source_location l = source_location::current()) {
+  auto trace =
+      generateLocationTrace(l, "testNumericConstantAndVector was called here");
+  ad_utility::AllocatorWithLimit<Id> alloc{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
+  sparqlExpression::VariableToColumnAndResultTypeMap map;
+  ResultTable::LocalVocab localVocab;
+  IdTable table{alloc};
+  QueryExecutionContext* qec = nullptr;
+  sparqlExpression::EvaluationContext context{*qec, map, table, alloc,
+                                              localVocab};
+  AD_CHECK(vector.size() == 9);
+  context._beginIndex = 0;
+  context._endIndex = 9;
+  auto expression = makeExpression<LT>(constant, vector.clone());
+  auto resultAsVariant = expression.evaluate(&context);
+  const auto& result = std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
+
+  EXPECT_EQ(result.size(), 9);
+  for (size_t i = 0; i < 3; ++i) {
+    EXPECT_FALSE(result[i])
+        << "Constant: " << constant << "vector element" << vector[i];
+  }
+  for (size_t i = 3; i < 6; ++i) {
+    EXPECT_TRUE(result[i]);
+  }
+  for (size_t i = 6; i < 9; ++i) {
+    EXPECT_FALSE(result[i]);
+  }
+
+  // TODO<joka921> Continue here with the other expressions (not only less
+  // than).
+  // TODO<joka921> Also check the inverse (`vector` as lhs of expression).
+}
+
+TEST(RelationalExpression, NumericConstantAndNumericVector) {
+  ad_utility::AllocatorWithLimit<Id> alloc{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
+  VectorWithMemoryLimit<double> doubles{
+      {-24.3, 0.0, 3.0, 12.8, 1235e12, 523.13, 3.8, 3.8, 3.8}, alloc};
+  testNumericConstantAndVector(3.8, doubles.clone());
+  VectorWithMemoryLimit<int64_t> ints{{-523, -15, -3, -1, 0, 12305, -2, -2, -2},
+                                      alloc};
+  testNumericConstantAndVector(-2.0, ints.clone());
+  testNumericConstantAndVector(int64_t{-2}, ints.clone());
 }
 
 TEST(SparqlExpression, LessThan) {

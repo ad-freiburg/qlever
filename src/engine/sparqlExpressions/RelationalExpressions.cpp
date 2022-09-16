@@ -314,10 +314,14 @@ Bool evaluateR(const A&, const B&,
       "boolean arguments");
 }
 
-template <Comparison, typename A, typename B>
+template <Comparison Comp, typename A, typename B>
 requires Incompatible<ValueType<A>, ValueType<B>> Bool
 evaluateR(const A&, const B&, EvaluationContext*) {
-  return false;
+  if constexpr (Comp == Comparison::NE) {
+    return true;
+  } else {
+    return false;
+  }
 }
 
 template <Comparison Comp, SingleExpressionResult A, SingleExpressionResult B>
