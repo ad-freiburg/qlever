@@ -12,6 +12,7 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/Alias.h"
+#include "parser/ConstructClause.h"
 #include "parser/ParsedQuery.h"
 #include "parser/RdfEscaping.h"
 #include "parser/data/BlankNode.h"
@@ -446,7 +447,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitTypesafe(ctx);
   }
 
-  std::optional<Triples> visitTypesafe(Parser::ConstructTemplateContext* ctx);
+  std::optional<parsedQuery::ConstructClause> visitTypesafe(
+      Parser::ConstructTemplateContext* ctx);
 
   Any visitConstructTriples(Parser::ConstructTriplesContext* ctx) override {
     return visitTypesafe(ctx);

@@ -46,7 +46,7 @@ string ParsedQuery::asString() const {
       os << "{";
     }
   } else if (hasConstructClause()) {
-    const auto& constructClause = this->constructClause();
+    const auto& constructClause = this->constructClause().triples_;
     os << "\n CONSTRUCT {\n\t";
     for (const auto& triple : constructClause) {
       os << triple[0].toSparql();
@@ -301,7 +301,7 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
       return;
     }
 
-    for (const auto& triple : constructClause()) {
+    for (const auto& triple : constructClause().triples_) {
       for (const auto& varOrTerm : triple) {
         if (auto variable = std::get_if<Variable>(&varOrTerm)) {
           if (!ad_utility::contains(_groupByVariables, *variable)) {

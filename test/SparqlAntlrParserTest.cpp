@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "SparqlAntlrParserTestHelpers.h"
+#include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 #include "util/SourceLocation.h"
@@ -197,22 +198,25 @@ TEST(SparqlParser, ComplexConstructTemplate) {
   };
   expectCompleteParse(
       parse<&Parser::constructTemplate>(input),
-      testing::Optional(ElementsAre(
-          ElementsAre(Blank("0"), Var("?a"), Blank("3")),
-          ElementsAre(Blank("1"), m::Iri(first), Blank("2")),
-          ElementsAre(Blank("1"), m::Iri(rest), m::Iri(nil)),
-          ElementsAre(Blank("2"), m::Iri(first), Var("?c")),
-          ElementsAre(Blank("2"), m::Iri(rest), m::Iri(nil)),
-          ElementsAre(Blank("3"), m::Iri(first), Var("?b")),
-          ElementsAre(Blank("3"), m::Iri(rest), Blank("1")),
-          ElementsAre(Blank("0"), Var("?d"), Blank("4")),
-          ElementsAre(Blank("4"), Var("?e"), Blank("5")),
-          ElementsAre(Blank("5"), Var("?f"), Var("?g")),
-          ElementsAre(m::Iri("<http://wallscope.co.uk/resource/olympics/medal/"
-                             "#something>"),
-                      m::Iri(type),
-                      m::Iri("<http://wallscope.co.uk/resource/olympics/medal/"
-                             "#somethingelse>")))));
+      testing::Optional(testing::Field(
+          "triples_", &parsedQuery::ConstructClause::triples_,
+          ElementsAre(
+              ElementsAre(Blank("0"), Var("?a"), Blank("3")),
+              ElementsAre(Blank("1"), m::Iri(first), Blank("2")),
+              ElementsAre(Blank("1"), m::Iri(rest), m::Iri(nil)),
+              ElementsAre(Blank("2"), m::Iri(first), Var("?c")),
+              ElementsAre(Blank("2"), m::Iri(rest), m::Iri(nil)),
+              ElementsAre(Blank("3"), m::Iri(first), Var("?b")),
+              ElementsAre(Blank("3"), m::Iri(rest), Blank("1")),
+              ElementsAre(Blank("0"), Var("?d"), Blank("4")),
+              ElementsAre(Blank("4"), Var("?e"), Blank("5")),
+              ElementsAre(Blank("5"), Var("?f"), Var("?g")),
+              ElementsAre(
+                  m::Iri("<http://wallscope.co.uk/resource/olympics/medal/"
+                         "#something>"),
+                  m::Iri(type),
+                  m::Iri("<http://wallscope.co.uk/resource/olympics/medal/"
+                         "#somethingelse>"))))));
 }
 
 TEST(SparqlParser, GraphTerm) {

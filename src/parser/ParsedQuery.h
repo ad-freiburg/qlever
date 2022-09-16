@@ -9,27 +9,28 @@
 #include <variant>
 #include <vector>
 
-#include "../engine/ResultType.h"
-#include "../engine/sparqlExpressions/SparqlExpressionPimpl.h"
-#include "../util/Algorithm.h"
-#include "../util/Exception.h"
-#include "../util/HashMap.h"
-#include "../util/OverloadCallOperator.h"
-#include "../util/StringUtils.h"
-#include "./TripleComponent.h"
-#include "Alias.h"
-#include "ParseException.h"
-#include "PropertyPath.h"
-#include "data/GroupKey.h"
-#include "data/LimitOffsetClause.h"
-#include "data/OrderKey.h"
-#include "data/SolutionModifiers.h"
-#include "data/SparqlFilter.h"
-#include "data/Types.h"
-#include "data/VarOrTerm.h"
+#include "engine/ResultType.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "parser/Alias.h"
+#include "parser/ConstructClause.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
+#include "parser/ParseException.h"
+#include "parser/PropertyPath.h"
 #include "parser/SelectClause.h"
+#include "parser/TripleComponent.h"
+#include "parser/data/GroupKey.h"
+#include "parser/data/LimitOffsetClause.h"
+#include "parser/data/OrderKey.h"
+#include "parser/data/SolutionModifiers.h"
+#include "parser/data/SparqlFilter.h"
+#include "parser/data/Types.h"
+#include "parser/data/VarOrTerm.h"
+#include "util/Algorithm.h"
+#include "util/Exception.h"
+#include "util/HashMap.h"
+#include "util/OverloadCallOperator.h"
+#include "util/StringUtils.h"
 
 using std::string;
 using std::vector;
@@ -88,7 +89,7 @@ class ParsedQuery {
 
   using SelectClause = parsedQuery::SelectClause;
 
-  using ConstructClause = ad_utility::sparql_types::Triples;
+  using ConstructClause = parsedQuery::ConstructClause;
 
   ParsedQuery() = default;
 

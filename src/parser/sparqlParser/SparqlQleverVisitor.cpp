@@ -180,15 +180,17 @@ ParsedQuery Visitor::visitTypesafe(Parser::ConstructQueryContext* ctx) {
   ParsedQuery query;
   // TODO: clean up
   if (ctx->constructTemplate()) {
-    query._clause = visitTypesafe(ctx->constructTemplate()).value_or(Triples{});
+    query._clause = visitTypesafe(ctx->constructTemplate())
+                        .value_or(parsedQuery::ConstructClause{});
     auto [pattern, visibleVariables] = visitTypesafe(ctx->whereClause());
     query._rootGraphPattern = std::move(pattern);
     query.registerVariablesVisibleInQueryBody(visibleVariables);
   } else {
     if (ctx->triplesTemplate()) {
-      query._clause = visitTypesafe(ctx->triplesTemplate());
+      query._clause =
+          parsedQuery::ConstructClause{visitTypesafe(ctx->triplesTemplate())};
     } else {
-      query._clause = Triples{};
+      query._clause = parsedQuery::ConstructClause{};
     }
   }
   query.addSolutionModifiers(visitTypesafe(ctx->solutionModifier()));
@@ -471,9 +473,13 @@ vector<GroupKey> Visitor::visitTypesafe(Parser::GroupClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-std::optional<Triples> Visitor::visitTypesafe(
+std::optional<parsedQuery::ConstructClause> Visitor::visitTypesafe(
     Parser::ConstructTemplateContext* ctx) {
-  return visitOptional(ctx->constructTriples());
+  if (ctx->constructTriples()) {
+    return parsedQuery::ConstructClause{visitTypesafe(ctx->constructTriples())};
+  } else {
+    return std::nullopt;
+  }
 }
 
 // ____________________________________________________________________________________

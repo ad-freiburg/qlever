@@ -437,8 +437,8 @@ Awaitable<json> Server::composeResponseQleverJson(
           query.hasSelectClause()
               ? qet.writeResultAsQLeverJson(query.selectClause(), limit, offset,
                                             std::move(resultTable))
-              : qet.writeRdfGraphJson(query.constructClause(), limit, offset,
-                                      std::move(resultTable));
+              : qet.writeRdfGraphJson(query.constructClause().triples_, limit,
+                                      offset, std::move(resultTable));
       requestTimer.stop();
     }
     j["resultsize"] = query.hasSelectClause() ? resultSize : j["res"].size();
@@ -510,11 +510,11 @@ Server::composeResponseSepValues(const ParsedQuery& query,
   auto compute = [&] {
     size_t limit = query._limitOffset._limit;
     size_t offset = query._limitOffset._offset;
-    return query.hasSelectClause()
-               ? qet.generateResults<format>(query.selectClause(), limit,
-                                             offset)
-               : qet.writeRdfGraphSeparatedValues<format>(
-                     query.constructClause(), limit, offset, qet.getResult());
+    return query.hasSelectClause() ? qet.generateResults<format>(
+                                         query.selectClause(), limit, offset)
+                                   : qet.writeRdfGraphSeparatedValues<format>(
+                                         query.constructClause().triples_,
+                                         limit, offset, qet.getResult());
   };
   return computeInNewThread(compute);
 }
@@ -530,8 +530,8 @@ ad_utility::streams::stream_generator Server::composeTurtleResponse(
   }
   size_t limit = query._limitOffset._limit;
   size_t offset = query._limitOffset._offset;
-  return qet.writeRdfGraphTurtle(query.constructClause(), limit, offset,
-                                 qet.getResult());
+  return qet.writeRdfGraphTurtle(query.constructClause().triples_, limit,
+                                 offset, qet.getResult());
 }
 
 // _____________________________________________________________________________

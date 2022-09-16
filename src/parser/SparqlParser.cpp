@@ -19,14 +19,17 @@ SparqlParser::SparqlParser(const string& query) : lexer_(query), query_(query) {
   LOG(DEBUG) << "Parsing " << query << std::endl;
 }
 
+// _____________________________________________________________________________
 ParsedQuery SparqlParser::parseQuery(std::string_view query) {
   sparqlParserHelpers::ParserAndVisitor p{
       query, {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
   auto resultOfParseAndRemainingText = p.parseTypesafe(&AntlrParser::query);
   if (!resultOfParseAndRemainingText.remainingText_.empty()) {
     // TODO: add Exception Metadata
-    throw ParseException("Query couldn't be parsed completely. Trailing: " +
-                         resultOfParseAndRemainingText.remainingText_);
+    throw ParseException(
+        "A query was successfully parsed, but the following remainder of the "
+        "input was ignored by the parsed: " +
+        resultOfParseAndRemainingText.remainingText_);
   }
   return std::move(resultOfParseAndRemainingText.resultOfParse_);
 }
