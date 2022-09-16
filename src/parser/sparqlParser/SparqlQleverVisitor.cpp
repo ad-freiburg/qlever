@@ -186,7 +186,6 @@ ParsedQuery Visitor::visitTypesafe(Parser::ConstructQueryContext* ctx) {
                 "QLever currently doesn't support FROM clauses");
   }
   ParsedQuery query;
-  // TODO: clean up the construction of a ConstructClause.
   if (ctx->constructTemplate()) {
     query._clause = visitTypesafe(ctx->constructTemplate())
                         .value_or(parsedQuery::ConstructClause{});
@@ -194,12 +193,8 @@ ParsedQuery Visitor::visitTypesafe(Parser::ConstructQueryContext* ctx) {
     query._rootGraphPattern = std::move(pattern);
     query.registerVariablesVisibleInQueryBody(visibleVariables);
   } else {
-    if (ctx->triplesTemplate()) {
-      query._clause =
-          parsedQuery::ConstructClause{visitTypesafe(ctx->triplesTemplate())};
-    } else {
-      query._clause = parsedQuery::ConstructClause{};
-    }
+    query._clause = parsedQuery::ConstructClause{
+        visitOptional(ctx->triplesTemplate()).value_or(Triples{})};
   }
   query.addSolutionModifiers(visitTypesafe(ctx->solutionModifier()));
 
