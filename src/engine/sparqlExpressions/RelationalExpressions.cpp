@@ -38,9 +38,10 @@ bool applyComparison(const auto& a, const auto& b) {
   }
 }
 
-// Get the inverse comparison for a given comparison. For example the inverse of
-// `less than` is `greater than` because `a < b` if and only if `b > a`.
-constexpr Comparison getComplement(Comparison comp) {
+// Get the comparison that yields the same result when the arguments are
+// swapped. For example the swapped comparison of `less than` is `greater than`
+// because `a < b` if and only if `b > a`.
+constexpr Comparison getComparisonForSwappedArguments(Comparison comp) {
   switch (comp) {
     case Comparison::LE:
       return Comparison::GE;
@@ -56,14 +57,13 @@ constexpr Comparison getComplement(Comparison comp) {
   }
 }
 
-// Return the ID range /[begin, end)` in which the entries of the vocabulary
-// compare equal to `s`. This is a range, because words that are different on
-// the byte level still can logically be equal depending on the chose unicode
+// Return the ID range `[begin, end)` in which the entries of the vocabulary
+// compare equal to `s`. This is a range because words that are different on
+// the byte level can still logically be equal, depending on the chosen Unicode
 // collation level.
 // TODO<joka921> Make the collation level configurable.
 std::pair<ValueId, ValueId> getRangeFromVocab(const std::string& s,
                                               EvaluationContext* context) {
-  // TODO<joka921> In theory we could make the `level` configurable.
   auto level = TripleComponentComparator::Level::QUARTERNARY;
   // TODO<joka921> This should be `Vocab::equal_range`
   const ValueId lower = Id::makeFromVocabIndex(
@@ -95,16 +95,17 @@ auto makeValueId(const S& value, EvaluationContext* context) {
 // a generator that yields `targetSize` many `ValueId`s. One exception is the
 // case where `S` is `string` or `vector<string>`. In this case the generator
 // yields `pair<ValueId, ValueId>` (see `makeValueId` and `getRangeFromVocab`
-// above for details). First the `idGenerator` for constants (string, int,
-// double). It yields the same ID `targetSize` many times.
+// above for details).
+
+// First the `idGenerator` for constants (string, int, double). It yields the
+// same ID `targetSize` many times.
 template <SingleExpressionResult S>
 requires isConstantResult<S>
 auto idGenerator(S value, size_t targetSize, EvaluationContext* context)
-    -> cppcoro::generator<decltype(makeValueId(value, context))> {
+    -> cppcoro::generator<const decltype(makeValueId(value, context))> {
   auto id = makeValueId(value, context);
   for (size_t i = 0; i < targetSize; ++i) {
-    auto cpy = id;
-    co_yield cpy;
+    co_yield id;
   }
 }
 
@@ -113,10 +114,10 @@ auto idGenerator(S value, size_t targetSize, EvaluationContext* context)
 // elements in the vector.
 template <SingleExpressionResult S>
 requires isVectorResult<S>
-auto idGenerator(S value, size_t targetSize, EvaluationContext* context)
-    -> cppcoro::generator<decltype(makeValueId(value[0], context))> {
-  AD_CHECK(targetSize == value.size());
-  for (const auto& el : value) {
+auto idGenerator(S values, size_t targetSize, EvaluationContext* context)
+    -> cppcoro::generator<decltype(makeValueId(values[0], context))> {
+  AD_CHECK(targetSize == values.size());
+  for (const auto& el : values) {
     auto id = makeValueId(el, context);
     co_yield id;
   }
@@ -130,57 +131,66 @@ auto idGenerator(Variable variable, size_t targetSize,
                                                  targetSize, context);
 }
 
-// Return a pair of generators that generate the values from `a` and `b`. The
-// type of generators is chosen to met the needs of comparing `a` and `b`. If
-// any of them logically stores `ValueId`s (true for `ValueId, vector<ValueId>,
-// Variable`, then `idGenerator`s are returned for both inputs. Else the "plain`
-// generators from `sparqlExpression::detail` are returned, that simply yield
-// the values unchanged.
-template <SingleExpressionResult A, SingleExpressionResult B>
-auto getGenerators(A a, B b, size_t targetSize, EvaluationContext* context) {
+// Return value1 pair of generators that generate the values from `value1` and
+// `value2`. The type of generators is chosen to meet the needs of comparing
+// `value1` and `value2`. If any of them logically stores `ValueId`s (true for
+// `ValueId, vector<ValueId>, Variable`), then `idGenerator`s are returned for
+// both inputs. Else the "plain" generators from `sparqlExpression::detail` are
+// returned. These simply yield the values unchanged.
+template <SingleExpressionResult S1, SingleExpressionResult S2>
+auto getGenerators(S1 value1, S2 value2, size_t targetSize,
+                   EvaluationContext* context) {
   if constexpr (
       ad_utility::isTypeContainedIn<
-          A, std::tuple<Variable, ValueId, VectorWithMemoryLimit<ValueId>>> ||
+          S1, std::tuple<Variable, ValueId, VectorWithMemoryLimit<ValueId>>> ||
       ad_utility::isTypeContainedIn<
-          B, std::tuple<Variable, ValueId, VectorWithMemoryLimit<ValueId>>>) {
-    return std::pair{idGenerator(std::move(a), targetSize, context),
-                     idGenerator(std::move(b), targetSize, context)};
+          S2, std::tuple<Variable, ValueId, VectorWithMemoryLimit<ValueId>>>) {
+    return std::pair{idGenerator(std::move(value1), targetSize, context),
+                     idGenerator(std::move(value2), targetSize, context)};
   } else {
     return std::pair{sparqlExpression::detail::makeGenerator(
-                         std::move(a), targetSize, context),
+                         std::move(value1), targetSize, context),
                      sparqlExpression::detail::makeGenerator(
-                         std::move(b), targetSize, context)};
+                         std::move(value2), targetSize, context)};
   }
 }
 
-// Efficiently (using binary search) computes the result of `aVal Comp idB` for
-// each `ValueId` that the Variable `a` is bound to. This only works, if the
-// input (as stored in the `context`) is sorted by the Variable `a`.
+// Efficiently (using binary search) computes the result of `aVal Comp valueId`
+// for each `ValueId` that the Variable `variable` is bound to. This only works,
+// if the input (as stored in the `context`) is sorted by the Variable
+// `variable`. If `valueIdUpper` is nullopt, we only have a single `valueId`,
+// otherwise we have a range, [`valueId`, `valueIdUpper`).
 template <Comparison Comp>
 ad_utility::SetOfIntervals evaluateWithBinarySearch(
-    const Variable& a, ValueId idB, std::optional<ValueId> idBUpper,
-    EvaluationContext* context) {
-  auto idxA = getIndexForVariable(a, context);
+    const Variable& variable, ValueId valueId,
+    std::optional<ValueId> valueIdUpper, EvaluationContext* context) {
+  // Set up iterators into the `IdTable` that only access the column where the
+  // `variable` is stored.
+  auto columnIndex = getColumnIndexForVariable(variable, context);
 
-  auto accessColumnLambda = ad_utility::makeAssignableLambda(
-      [idxA](const auto& idTable, auto i) { return idTable(i, idxA); });
+  auto getIdFromColumn = ad_utility::makeAssignableLambda(
+      [columnIndex](const auto& idTable, auto i) {
+        return idTable(i, columnIndex);
+      });
 
   using Iterator = ad_utility::IteratorForAccessOperator<
-      std::decay_t<decltype(context->_inputTable)>,
-      decltype(accessColumnLambda)>;
+      std::decay_t<decltype(context->_inputTable)>, decltype(getIdFromColumn)>;
   auto begin =
-      Iterator{&context->_inputTable, context->_beginIndex, accessColumnLambda};
+      Iterator{&context->_inputTable, context->_beginIndex, getIdFromColumn};
   auto end =
-      Iterator{&context->_inputTable, context->_endIndex, accessColumnLambda};
+      Iterator{&context->_inputTable, context->_endIndex, getIdFromColumn};
 
+  // Perform the actual evaluation.
   const auto resultRanges = [&]() {
-    if (idBUpper) {
-      return valueIdComparators::getRangesForEqualIds(begin, end, idB,
-                                                      idBUpper.value(), Comp);
+    if (valueIdUpper) {
+      return valueIdComparators::getRangesForEqualIds(
+          begin, end, valueId, valueIdUpper.value(), Comp);
     } else {
-      return valueIdComparators::getRangesForId(begin, end, idB, Comp);
+      return valueIdComparators::getRangesForId(begin, end, valueId, Comp);
     }
   }();
+
+  // Convert pairs of iterators to pairs of indexes.
   ad_utility::SetOfIntervals s;
   for (const auto& [rangeBegin, rangeEnd] : resultRanges) {
     s._intervals.emplace_back(rangeBegin - begin, rangeEnd - begin);
@@ -188,15 +198,14 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
   return s;
 }
 
-// Several concepts used to chose the proper evaluation methods for different
+// Several concepts used to choose the proper evaluation methods for different
 // input types.
-
 template <typename T>
 concept Arithmetic = std::integral<T> || std::floating_point<T>;
 
 // Any of the `SingleExpressionResult`s that logically stores boolean values.
 template <typename T>
-concept Boolean =
+concept StoresBoolean =
     std::is_same_v<T, Bool> || std::is_same_v<T, ad_utility::SetOfIntervals> ||
     std::is_same_v<VectorWithMemoryLimit<Bool>, T>;
 
@@ -204,24 +213,24 @@ concept Boolean =
 // TODO<joka921> rename this concept and use it above in the `Generator`
 // function.
 template <typename T>
-concept VarOrIdVec = ad_utility::SimilarTo<T, Variable> ||
+concept StoresValueId = ad_utility::SimilarTo<T, Variable> ||
     ad_utility::SimilarTo<T, VectorWithMemoryLimit<ValueId>> ||
     ad_utility::SimilarTo<T, ValueId>;
 
-// When `A` and `B` are `Incompatible`, comparisons between them will always
-// yield `false`, independent of the concrete values.
+// When `A` and `B` are `AreIncomparable`, comparisons between them will always
+// yield `not equal`, independent of the concrete values.
 template <typename A, typename B>
-concept Incompatible = (Arithmetic<A> && std::is_same_v<B, std::string>) ||
-                       (Arithmetic<B> && std::is_same_v<std::string, A>);
+concept AreIncomparable = (Arithmetic<A> && std::is_same_v<B, std::string>) ||
+                          (Arithmetic<B> && std::is_same_v<std::string, A>);
 
-// True iff any of `A, B` is `Boolean` (see above).
+// True iff any of `A, B` is `StoresBoolean` (see above).
 template <typename A, typename B>
-concept AnyBoolean = Boolean<A> || Boolean<B>;
+concept AtLeastOneIsBoolean = StoresBoolean<A> || StoresBoolean<B>;
 
 // The types for which comparisons like `<` are supported and not always false.
 template <typename A, typename B>
-concept Compatible = !AnyBoolean<A, B> && !Incompatible<A, B> &&
-                     (VarOrIdVec<A> || !VarOrIdVec<B>);
+concept AreComparable = !AtLeastOneIsBoolean<A, B> && !AreIncomparable<A, B> &&
+                        (StoresValueId<A> || !StoresValueId<B>);
 
 // Helper templates to get the `logical value type` for several types. For a
 // vector, it yields the value_type of the vector. For any other type it yields
@@ -244,49 +253,55 @@ template <typename T>
 using ValueType = typename ValueTypeImpl<T>::type;
 
 // The actual comparison function for the `SingleExpressionResult`'s which are
-// `Compatible` (see above), which means that the comparison between them is
+// `AreComparable` (see above), which means that the comparison between them is
 // supported and not always false.
-template <Comparison Comp, SingleExpressionResult A, SingleExpressionResult B>
-requires Compatible<ValueType<A>, ValueType<B>> ExpressionResult
-evaluateR(A a, B b, EvaluationContext* context) {
-  auto targetSize = sparqlExpression::detail::getResultSize(*context, a, b);
+template <Comparison Comp, SingleExpressionResult S1, SingleExpressionResult S2>
+requires AreComparable<ValueType<S1>, ValueType<S2>> ExpressionResult
+evaluateR(S1 value1, S2 value2, EvaluationContext* context) {
+  auto resultSize =
+      sparqlExpression::detail::getResultSize(*context, value1, value2);
   constexpr static bool resultIsConstant =
-      (isConstantResult<A> && isConstantResult<B>);
+      (isConstantResult<S1> && isConstantResult<S2>);
   VectorWithMemoryLimit<Bool> result{context->_allocator};
-  result.reserve(targetSize);
+  result.reserve(resultSize);
 
-  constexpr static bool bIsString = ad_utility::isSimilar<B, std::string>;
-  if constexpr (ad_utility::isSimilar<A, Variable> && isConstantResult<B>) {
-    auto idxA = getIndexForVariable(a, context);
-    auto bId = makeValueId(b, context);
+  constexpr static bool bIsString = ad_utility::isSimilar<S2, std::string>;
+  if constexpr (ad_utility::isSimilar<S1, Variable> && isConstantResult<S2>) {
+    auto idxA = getColumnIndexForVariable(value1, context);
+    auto bId = makeValueId(value2, context);
     const auto& cols = context->_columnsByWhichResultIsSorted;
     if (!cols.empty() && cols[0] == idxA) {
       if constexpr (bIsString) {
-        return evaluateWithBinarySearch<Comp>(a, bId.first, bId.second,
+        return evaluateWithBinarySearch<Comp>(value1, bId.first, bId.second,
                                               context);
       } else {
-        return evaluateWithBinarySearch<Comp>(a, bId, std::nullopt, context);
+        return evaluateWithBinarySearch<Comp>(value1, bId, std::nullopt,
+                                              context);
       }
     }
   }
 
   auto [generatorA, generatorB] =
-      getGenerators(std::move(a), std::move(b), targetSize, context);
+      getGenerators(std::move(value1), std::move(value2), resultSize, context);
   auto itA = generatorA.begin();
   auto itB = generatorB.begin();
 
-  for (size_t i = 0; i < targetSize; ++i) {
+  for (size_t i = 0; i < resultSize; ++i) {
     if constexpr (requires {
                     valueIdComparators::compareIds(*itA, *itB, Comp);
                   }) {
+      // Compare two `ValueId`s
       result.push_back(valueIdComparators::compareIds(*itA, *itB, Comp));
     } else if constexpr (requires {
                            valueIdComparators::compareWithEqualIds(
                                *itA, itB->first, itB->second, Comp);
                          }) {
+      // Compare `ValueId` with range of equal `ValueId`s (used when `value2` is
+      // `string` or `vector<string>`.
       result.push_back(valueIdComparators::compareWithEqualIds(
           *itA, itB->first, itB->second, Comp));
     } else {
+      // Compare two numeric values, or two string values.
       result.push_back(applyComparison<Comp>(*itA, *itB));
     }
     ++itA;
@@ -294,6 +309,7 @@ evaluateR(A a, B b, EvaluationContext* context) {
   }
 
   if constexpr (resultIsConstant) {
+    AD_CHECK(result.size() == 1);
     return result[0];
   } else {
     return result;
@@ -307,15 +323,15 @@ evaluateR(A a, B b, EvaluationContext* context) {
 // TODO<joka921> Give the `evaluateR` function a proper name (e.g.
 // evaluateRelationalExpression).
 template <Comparison, typename A, typename B>
-Bool evaluateR(const A&, const B&,
-               EvaluationContext*) requires Boolean<A> || Boolean<B> {
+Bool evaluateR(const A&, const B&, EvaluationContext*) requires
+    StoresBoolean<A> || StoresBoolean<B> {
   throw std::runtime_error(
       "Relational expressions like <, >, == are currently not supported for "
       "boolean arguments");
 }
 
 template <Comparison Comp, typename A, typename B>
-requires Incompatible<ValueType<A>, ValueType<B>> Bool
+requires AreIncomparable<ValueType<A>, ValueType<B>> Bool
 evaluateR(const A&, const B&, EvaluationContext*) {
   if constexpr (Comp == Comparison::NE) {
     return true;
@@ -324,11 +340,14 @@ evaluateR(const A&, const B&, EvaluationContext*) {
   }
 }
 
+// For comparisons where exactly one of the operands is a variable, the variable
+// must come first.
 template <Comparison Comp, SingleExpressionResult A, SingleExpressionResult B>
-requires(!Compatible<ValueType<A>, ValueType<B>> &&
-         Compatible<ValueType<B>, ValueType<A>>) ExpressionResult
+requires(!AreComparable<ValueType<A>, ValueType<B>> &&
+         AreComparable<ValueType<B>, ValueType<A>>) ExpressionResult
     evaluateR(A a, B b, EvaluationContext* context) {
-  return evaluateR<getComplement(Comp)>(std::move(b), std::move(a), context);
+  return evaluateR<getComparisonForSwappedArguments(Comp)>(
+      std::move(b), std::move(a), context);
 }
 
 }  // namespace
@@ -340,9 +359,10 @@ namespace sparqlExpression::relational {
 template <Comparison Comp>
 ExpressionResult RelationalExpression<Comp>::evaluate(
     EvaluationContext* context) const {
-  auto resA = _children[0]->evaluate(context);
-  auto resB = _children[1]->evaluate(context);
+  auto resA = children_[0]->evaluate(context);
+  auto resB = children_[1]->evaluate(context);
 
+  // `resA` and `resB` are variants, so we need `std::visit`.
   auto visitor = [context](auto a, auto b) -> ExpressionResult {
     return evaluateR<Comp>(std::move(a), std::move(b), context);
   };
@@ -354,17 +374,16 @@ ExpressionResult RelationalExpression<Comp>::evaluate(
 template <Comparison Comp>
 string RelationalExpression<Comp>::getCacheKey(
     const VariableToColumnMap& varColMap) const {
-  string key = typeid(*this).name();
-  for (const auto& child : _children) {
-    key += child->getCacheKey(varColMap);
-  }
-  return key;
+  static_assert(std::tuple_size_v<decltype(children_)> == 2);
+  return absl::StrCat(typeid(*this).name(),
+                      children_[0]->getCacheKey(varColMap),
+                      children_[1]->getCacheKey(varColMap));
 }
 
 // _____________________________________________________________________________
 template <Comparison Comp>
 std::span<SparqlExpression::Ptr> RelationalExpression<Comp>::children() {
-  return {_children.data(), _children.size()};
+  return {children_.data(), children_.size()};
 }
 
 // Explicit instantiations

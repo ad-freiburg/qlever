@@ -1249,7 +1249,7 @@ auto SparqlQleverVisitor::visitTypesafe(
   } else if (relation == "<=") {
     return make.operator()<LessEqualExpression>();
   } else if (relation == ">=") {
-    return make.operator()<relational::GreaterEqualExpression>();
+    return make.operator()<GreaterEqualExpression>();
   } else {
     AD_FAIL();
   }

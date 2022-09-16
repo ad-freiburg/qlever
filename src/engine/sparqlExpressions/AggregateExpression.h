@@ -7,6 +7,7 @@
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "global/ValueIdComparators.h"
 
 namespace sparqlExpression {
 
@@ -189,9 +190,10 @@ inline auto minLambdaForAllTypes = []<SingleExpressionResult T>(const T& a,
                 ad_utility::isSimilar<T, std::string>) {
     return std::min(a, b);
   } else if constexpr (ad_utility::isSimilar<T, Id>) {
-    // TODO<joka921> is this semantically correct for ValueIds?
-    // TODO<joka921> NO, it is not!
-    return a < b ? a : b;
+    return valueIdComparators::compareIds(a, b,
+                                          valueIdComparators::Comparison::LT)
+               ? a
+               : b;
   } else {
     return ad_utility::alwaysFalse<T>;
   }
@@ -211,9 +213,10 @@ inline auto maxLambdaForAllTypes = []<SingleExpressionResult T>(const T& a,
                 ad_utility::isSimilar<T, std::string>) {
     return std::max(a, b);
   } else if constexpr (ad_utility::isSimilar<T, Id>) {
-    // TODO<joka921> correct semantics for valueIds?
-    // TODO<joka921> No, it is not!
-    return a > b ? a : b;
+    return valueIdComparators::compareIds(a, b,
+                                          valueIdComparators::Comparison::GT)
+               ? a
+               : b;
   } else {
     return ad_utility::alwaysFalse<T>;
   }

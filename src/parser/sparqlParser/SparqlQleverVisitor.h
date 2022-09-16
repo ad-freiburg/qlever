@@ -723,8 +723,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       Parser::ConditionalAndExpressionContext* ctx) override {
     return visitTypesafe(ctx);
   }
-
   ExpressionPtr visitTypesafe(Parser::ConditionalAndExpressionContext* ctx);
+
   ExpressionPtr visitTypesafe(
       SparqlAutomaticParser::RelationalExpressionContext* ctx);
   antlrcpp::Any visitRelationalExpression(

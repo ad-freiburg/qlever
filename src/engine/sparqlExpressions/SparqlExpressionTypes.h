@@ -160,8 +160,8 @@ struct EvaluationContext {
 };
 
 // ____________________________________________________________________________
-inline size_t getIndexForVariable(const Variable& var,
-                                  const EvaluationContext* context) {
+inline size_t getColumnIndexForVariable(const Variable& var,
+                                        const EvaluationContext* context) {
   const auto& map = context->_variableToColumnAndResultTypeMap;
   if (!map.contains(var._name)) {
     throw std::runtime_error(absl::StrCat(
@@ -279,7 +279,7 @@ struct SpecializedFunction {
 
   // Check if the function can be applied to arguments of type(s) `Operands`
   template <typename... Operands>
-  static bool checkIfOperandsAreValid(const Operands&... operands) {
+  static bool areAllOperandsValid(const Operands&... operands) {
     return CheckT{}.template operator()<Operands...>(operands...);
   }
 
@@ -288,7 +288,7 @@ struct SpecializedFunction {
   template <typename... Operands>
   std::optional<ExpressionResult> evaluateIfOperandsAreValid(
       Operands&&... operands) {
-    if (!checkIfOperandsAreValid<Operands...>(operands...)) {
+    if (!areAllOperandsValid<Operands...>(operands...)) {
       return std::nullopt;
     } else {
       if constexpr (requires {
@@ -308,7 +308,7 @@ template <typename SpecializedFunctionsTuple, typename... Operands>
 constexpr bool isAnySpecializedFunctionPossible(SpecializedFunctionsTuple&& tup,
                                                 const Operands&... operands) {
   auto onPack = [&](auto&&... fs) constexpr {
-    return (... || fs.template checkIfOperandsAreValid(operands...));
+    return (... || fs.template areAllOperandsValid(operands...));
   };
 
   return std::apply(onPack, tup);
