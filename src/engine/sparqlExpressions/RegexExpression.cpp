@@ -74,9 +74,13 @@ RegexExpression::RegexExpression(SparqlExpression::Ptr child,
     throw std::runtime_error(
         "REGEX epxressions are currently supported on variables.");
   }
-  if (auto regexPtr =
-          dynamic_cast<const StringOrIriExpression*>(child_.get())) {
-    regex_ = std::get<std::string>(regexPtr->evaluate(nullptr));
+  if (auto regexPtr = dynamic_cast<const StringOrIriExpression*>(regex.get())) {
+    regex_ = regexPtr->value();
+    // TODO<joka921> Throw an error message if the regex is not enquoted.
+    // TODO<joka921> Check the paths for the StringExpressions, whether this
+    // is really an AD-CHECK.
+    AD_CHECK(regex_.size() >= 2);
+    regex_ = regex_.substr(1, regex_.size() - 2);
   } else {
     throw std::runtime_error(
         "The second argument to the REGEX function must be a string literal");
