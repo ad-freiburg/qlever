@@ -174,8 +174,7 @@ Alias Visitor::visit(Parser::AliasWithoutBracketsContext* ctx) {
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
   if (!ctx->datasetClause().empty()) {
-    reportError(ctx->datasetClause(0),
-                "QLever currently doesn't support FROM clauses");
+    reportNotSupported(ctx->datasetClause(0), "FROM clauses are");
   }
   ParsedQuery query;
   if (ctx->constructTemplate()) {
@@ -195,37 +194,37 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
-  reportError(ctx, "DESCRIBE Queries are not supported.");
+  reportNotSupported(ctx, "DESCRIBE queries are");
 }
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
-  reportError(ctx, "ASK Queries are not supported.");
+  reportNotSupported(ctx, "ASK queries are");
 }
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::DatasetClauseContext* ctx) {
-  reportError(ctx, "FROM is not supported.");
+  reportNotSupported(ctx, "FROM clauses are");
 }
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::DefaultGraphClauseContext*) {
-  // Should not be reachable. Superclause DatasetClause should have thrown an
-  // Exception.
+  // This rule is only used by the `DatasetClause` rule which also is not
+  // supported and should already have thrown an exception.
   AD_FAIL();
 }
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::NamedGraphClauseContext*) {
-  // Should not be reachable. Superclause DatasetClause should have thrown an
-  // Exception.
+  // This rule is only used by the `DatasetClause` rule which also is not
+  // supported and should already have thrown an exception.
   AD_FAIL();
 }
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::SourceSelectorContext*) {
-  // Should not be reachable. Superclause DatasetClause should have thrown an
-  // Exception.
+  // This rule is only indirectly used by the `DatasetClause` rule which also is
+  // not supported and should already have thrown an exception.
   AD_FAIL();
 }
 
@@ -419,13 +418,13 @@ GraphPatternOperation Visitor::visit(Parser::OptionalGraphPatternContext* ctx) {
 // ____________________________________________________________________________________
 parsedQuery::GraphPatternOperation Visitor::visit(
     Parser::GraphGraphPatternContext* ctx) {
-  reportError(ctx, "Named Graphs (FROM, GRAPH) are not supported.");
+  reportNotSupported(ctx, "Named Graphs (FROM, GRAPH) are");
 }
 
 // ____________________________________________________________________________________
 parsedQuery::GraphPatternOperation Visitor::visit(
     Parser::ServiceGraphPatternContext* ctx) {
-  reportError(ctx, "Federated Queries (SERVICE) are not supported.");
+  reportNotSupported(ctx, "Federated queries (SERVICE) are");
 }
 
 // ____________________________________________________________________________________
@@ -469,8 +468,7 @@ vector<SparqlFilter> Visitor::visit(Parser::HavingClauseContext* ctx) {
 }
 
 namespace {
-SparqlFilter parseFilter(auto* ctx,
-                         const SparqlQleverVisitor::PrefixMap& prefixMap) {
+SparqlFilter parseFilter(auto* ctx, const Visitor::PrefixMap& prefixMap) {
   try {
     return SparqlParser::parseFilterExpression(ctx->getText(), prefixMap);
   } catch (const std::bad_optional_access& error) {
@@ -490,10 +488,7 @@ SparqlFilter parseFilter(auto* ctx,
 SparqlFilter Visitor::visit(Parser::HavingConditionContext* ctx) {
   SparqlFilter filter = parseFilter(ctx, _prefixMap);
   if (filter._type == SparqlFilter::LANG_MATCHES) {
-    throw ParseException(
-        "Language filter in HAVING clause currently not "
-        "supported by QLever. Got: " +
-        ctx->getText());
+    reportNotSupported(ctx, "Language filters in HAVING clauses are");
   } else {
     return filter;
   }
@@ -532,12 +527,7 @@ string Visitor::visit(Parser::IriContext* ctx) {
   // TODO return an IRI, not a std::string.
   string langtag =
       ctx->PREFIX_LANGTAG() ? ctx->PREFIX_LANGTAG()->getText() : "";
-  if (ctx->iriref()) {
-    return langtag + visit(ctx->iriref());
-  } else {
-    AD_CHECK(ctx->prefixedName())
-    return langtag + visit(ctx->prefixedName());
-  }
+  return langtag + visitAlternative<string>(ctx->iriref(), ctx->prefixedName());
 }
 
 // ____________________________________________________________________________________
@@ -580,28 +570,22 @@ string Visitor::visit(Parser::PnameNsContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-SparqlQleverVisitor::PrefixMap SparqlQleverVisitor::visit(
-    SparqlAutomaticParser::PrologueContext* ctx) {
+void Visitor::visit(Parser::PrologueContext* ctx) {
   if (!ctx->baseDecl().empty()) {
     reportError(ctx->baseDecl(0), "BaseDecl is not supported.");
   }
   for (const auto& prefix : ctx->prefixDecl()) {
     visit(prefix);
   }
-  // TODO: we return a part of our internal state here. This will go away when
-  //  queries can be parsed completely with ANTLR.
-  return _prefixMap;
 }
 
 // ____________________________________________________________________________________
-SparqlPrefix SparqlQleverVisitor::visit(
-    SparqlAutomaticParser::BaseDeclContext* ctx) {
+SparqlPrefix Visitor::visit(Parser::BaseDeclContext* ctx) {
   reportError(ctx, "BaseDecl is not supported.");
 }
 
 // ____________________________________________________________________________________
-SparqlPrefix SparqlQleverVisitor::visit(
-    SparqlAutomaticParser::PrefixDeclContext* ctx) {
+SparqlPrefix Visitor::visit(Parser::PrefixDeclContext* ctx) {
   auto text = ctx->PNAME_NS()->getText();
   // Remove the ':' at the end of the PNAME_NS
   auto prefixLabel = text.substr(0, text.length() - 1);
@@ -617,8 +601,7 @@ ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
   if (!ctx->datasetClause().empty()) {
     // TODO: see if it is possible to extend reportError s.t. it can also take
     //  vector<ParserRuleContext>.
-    reportError(ctx->datasetClause(0),
-                "QLever currently doesn't support FROM clauses");
+    reportNotSupported(ctx->datasetClause(0), "FROM clauses are");
   }
   auto [pattern, visibleVariables] = visit(ctx->whereClause());
   query._rootGraphPattern = std::move(pattern);
@@ -700,17 +683,17 @@ OrderKey Visitor::visit(Parser::OrderConditionContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-unsigned long long int Visitor::visit(Parser::LimitClauseContext* ctx) {
+uint64_t Visitor::visit(Parser::LimitClauseContext* ctx) {
   return visit(ctx->integer());
 }
 
 // ____________________________________________________________________________________
-unsigned long long int Visitor::visit(Parser::OffsetClauseContext* ctx) {
+uint64_t Visitor::visit(Parser::OffsetClauseContext* ctx) {
   return visit(ctx->integer());
 }
 
 // ____________________________________________________________________________________
-unsigned long long int Visitor::visit(Parser::TextLimitClauseContext* ctx) {
+uint64_t Visitor::visit(Parser::TextLimitClauseContext* ctx) {
   return visit(ctx->integer());
 }
 
@@ -856,8 +839,8 @@ vector<Visitor::ExpressionPtr> Visitor::visit(Parser::ArgListContext* ctx) {
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::ExpressionListContext*) {
-  // ExpressionList can only come from RelationExpression or BuiltInCall both of
-  // which don't support the cases leading to ExpressionList.
+  // This rule is only used by the `RelationExpression` and `BuiltInCall` rules
+  // which also are not supported and should already have thrown an exception.
   AD_FAIL();
 }
 
@@ -944,8 +927,6 @@ PropertyList Visitor::visit(Parser::PropertyListNotEmptyContext* ctx) {
 
 // ____________________________________________________________________________________
 VarOrTerm Visitor::visit(Parser::VerbContext* ctx) {
-  // TODO<qup42, joka921> Is there a way to make this visitAlternative in the
-  // presence of the a case?
   if (ctx->varOrIri()) {
     return visit(ctx->varOrIri());
   } else if (ctx->getText() == "a") {
@@ -975,8 +956,8 @@ Node Visitor::visit(Parser::ObjectRContext* ctx) {
 }
 
 // ___________________________________________________________________________
-vector<TripleWithPropertyPath> SparqlQleverVisitor::visit(
-    SparqlAutomaticParser::TriplesSameSubjectPathContext* ctx) {
+vector<TripleWithPropertyPath> Visitor::visit(
+    Parser::TriplesSameSubjectPathContext* ctx) {
   // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
   // <entity>` is contained in the query, then the variable `?ql_textscore_var`
   // is implicitly created and visible in the query body.
@@ -1013,14 +994,12 @@ vector<TripleWithPropertyPath> SparqlQleverVisitor::visit(
 }
 
 // ___________________________________________________________________________
-std::optional<PathTuples> SparqlQleverVisitor::visit(
-    SparqlAutomaticParser::PropertyListPathContext* ctx) {
+std::optional<PathTuples> Visitor::visit(Parser::PropertyListPathContext* ctx) {
   return visitOptional(ctx->propertyListPathNotEmpty());
 }
 
 // ___________________________________________________________________________
-PathTuples SparqlQleverVisitor::visit(
-    SparqlAutomaticParser::PropertyListPathNotEmptyContext* ctx) {
+PathTuples Visitor::visit(Parser::PropertyListPathNotEmptyContext* ctx) {
   PathTuples tuples = visit(ctx->tupleWithPath());
   vector<PathTuples> tuplesWithoutPaths = visitVector(ctx->tupleWithoutPath());
   for (auto& tuplesWithoutPath : tuplesWithoutPaths) {
@@ -1044,16 +1023,14 @@ Variable Visitor::visit(Parser::VerbSimpleContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-PathTuples SparqlQleverVisitor::visit(
-    SparqlAutomaticParser::TupleWithoutPathContext* ctx) {
+PathTuples Visitor::visit(Parser::TupleWithoutPathContext* ctx) {
   VarOrPath predicate = visit(ctx->verbPathOrSimple());
   ObjectList objectList = visit(ctx->objectList());
   return joinPredicateAndObject(predicate, objectList);
 }
 
 // ____________________________________________________________________________________
-PathTuples SparqlQleverVisitor::visit(
-    SparqlAutomaticParser::TupleWithPathContext* ctx) {
+PathTuples Visitor::visit(Parser::TupleWithPathContext* ctx) {
   VarOrPath predicate = visit(ctx->verbPathOrSimple());
   ObjectList objectList = visit(ctx->objectListPath());
   return joinPredicateAndObject(predicate, objectList);
@@ -1066,8 +1043,7 @@ VarOrPath Visitor::visit(Parser::VerbPathOrSimpleContext* ctx) {
 }
 
 // ___________________________________________________________________________
-ObjectList SparqlQleverVisitor::visit(
-    SparqlAutomaticParser::ObjectListPathContext* ctx) {
+ObjectList Visitor::visit(Parser::ObjectListPathContext* ctx) {
   // The second parameter is empty because collections and blank not paths,
   // which might add additional triples, are currently not supported.
   // When this is implemented they will be returned by visit(ObjectPathContext).
@@ -1127,14 +1103,16 @@ PropertyPath Visitor::visit(Parser::PathEltOrInverseContext* ctx) {
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::PathModContext*) {
-  // PathMod should be handled by upper clauses. It should not be visited.
+  // This rule is only used by the `PathElt` rule which should have handled the
+  // content of this rule.
   AD_FAIL();
 }
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
-  // TODO<qup42, joka921> Is there a way to make this visitAlternative in the
-  // presence of the a case?
+  // TODO: implement a strong Iri type, s.t. the ctx->iri() case can become a
+  //  simple return visit(...). Then the three cases which are not the special a
+  //  case can be merged into a visitAlternative.
   if (ctx->iri()) {
     return PropertyPath::fromIri(visit(ctx->iri()));
   } else if (ctx->path()) {
@@ -1156,14 +1134,17 @@ PropertyPath Visitor::visit(Parser::PathNegatedPropertySetContext* ctx) {
 
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathOneInPropertySetContext*) {
-  // PathOneInPropertySet can only be called from PathNegatedPropertySet which
-  // itself is not supported.
+  // This rule is only used by the `PathNegatedPropertySet` rule which also is
+  // not supported and should already have thrown an exception.
   AD_FAIL();
 }
 
 // ____________________________________________________________________________________
-unsigned long long int Visitor::visit(Parser::IntegerContext* ctx) {
+uint64_t Visitor::visit(Parser::IntegerContext* ctx) {
   try {
+    // unsigned long long int might be larger than 8 bytes as per the standard.
+    // If that were the case this could lead to overflows.
+    static_assert(sizeof(unsigned long long int) == sizeof(uint64_t));
     return std::stoull(ctx->getText());
   } catch (const std::out_of_range&) {
     reportError(
@@ -1251,8 +1232,7 @@ Node Visitor::visit(Parser::GraphNodeContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-VarOrTerm SparqlQleverVisitor::visit(
-    SparqlAutomaticParser::GraphNodePathContext* ctx) {
+VarOrTerm Visitor::visit(Parser::GraphNodePathContext* ctx) {
   if (ctx->varOrTerm()) {
     return visit(ctx->varOrTerm());
   } else if (ctx->triplesNodePath()) {
@@ -1511,27 +1491,27 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::RegexExpressionContext* ctx) {
-  reportError(ctx, "The REGEX built in function is not yet implemented.");
+  reportNotSupported(ctx, "The REGEX function is");
 }
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::SubstringExpressionContext* ctx) {
-  reportError(ctx, "The SUBSTR built in function is not yet implemented.");
+  reportNotSupported(ctx, "The SUBSTR function is");
 }
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::StrReplaceExpressionContext* ctx) {
-  reportError(ctx, "The REPLACE built in function is not yet implemented.");
+  reportNotSupported(ctx, "The REPLACE function is");
 }
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::ExistsFuncContext* ctx) {
-  reportError(ctx, "The EXISTS built in function is not yet implemented.");
+  reportNotSupported(ctx, "The EXISTS function is");
 }
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::NotExistsFuncContext* ctx) {
-  reportError(ctx, "The NOT EXISTS built in function is not yet implemented.");
+  reportNotSupported(ctx, "The NOT EXISTS function is");
 }
 
 // ____________________________________________________________________________________
@@ -1689,7 +1669,7 @@ auto Visitor::visitVector(const std::vector<Ctx*>& childContexts)
     -> std::vector<decltype(visit(childContexts[0]))> {
   std::vector<decltype(visit(childContexts[0]))> children;
   for (const auto& child : childContexts) {
-    children.emplace_back(std::move(visit(child)));
+    children.emplace_back(visit(child));
   }
   return children;
 }
@@ -1732,4 +1712,10 @@ void Visitor::reportError(antlr4::ParserRuleContext* ctx,
                    ctx->getStart()->getLine(), ":",
                    ctx->getStart()->getCharPositionInLine(), " ", msg),
       generateMetadata(ctx)};
+}
+
+// ____________________________________________________________________________________
+void Visitor::reportNotSupported(antlr4::ParserRuleContext* ctx,
+                                 const std::string& feature) {
+  reportError(ctx, feature + " currently not supported by QLever.");
 }

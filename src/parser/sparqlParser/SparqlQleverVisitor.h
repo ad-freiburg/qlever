@@ -110,7 +110,7 @@ class SparqlQleverVisitor {
   ParsedQuery visit(Parser::QueryContext* ctx);
 
   // ___________________________________________________________________________
-  PrefixMap visit(SparqlAutomaticParser::PrologueContext* ctx);
+  void visit(Parser::PrologueContext* ctx);
 
   // ___________________________________________________________________________
   SparqlPrefix visit(Parser::BaseDeclContext* ctx);
@@ -132,6 +132,10 @@ class SparqlQleverVisitor {
 
   ParsedQuery visit(Parser::ConstructQueryContext* ctx);
 
+  // The parser rules for which the visit overload is annotated [[noreturn]]
+  // will always throw an exception because the corresponding feature is not
+  // (yet) supported by QLever. If they have return types other than void this
+  // is to make the usage of abstractions like `visitAlternative` easier.
   [[noreturn]] ParsedQuery visit(Parser::DescribeQueryContext* ctx);
 
   [[noreturn]] ParsedQuery visit(Parser::AskQueryContext* ctx);
@@ -162,11 +166,11 @@ class SparqlQleverVisitor {
 
   LimitOffsetClause visit(Parser::LimitOffsetClausesContext* ctx);
 
-  unsigned long long int visit(Parser::LimitClauseContext* ctx);
+  uint64_t visit(Parser::LimitClauseContext* ctx);
 
-  unsigned long long int visit(Parser::OffsetClauseContext* ctx);
+  uint64_t visit(Parser::OffsetClauseContext* ctx);
 
-  unsigned long long int visit(Parser::TextLimitClauseContext* ctx);
+  uint64_t visit(Parser::TextLimitClauseContext* ctx);
 
   std::optional<parsedQuery::Values> visit(Parser::ValuesClauseContext* ctx);
 
@@ -216,7 +220,7 @@ class SparqlQleverVisitor {
 
   ExpressionPtr visit(Parser::ConstraintContext* ctx);
 
-  ExpressionPtr visit(SparqlAutomaticParser::FunctionCallContext* ctx);
+  ExpressionPtr visit(Parser::FunctionCallContext* ctx);
 
   vector<ExpressionPtr> visit(Parser::ArgListContext* ctx);
 
@@ -242,23 +246,22 @@ class SparqlQleverVisitor {
   vector<TripleWithPropertyPath> visit(
       Parser::TriplesSameSubjectPathContext* ctx);
 
-  PathTuples visit(Parser::TupleWithoutPathContext* ctx);
-
-  PathTuples visit(Parser::TupleWithPathContext* ctx);
-
   [[noreturn]] void throwCollectionsAndBlankNodePathsNotSupported(auto* ctx) {
     reportError(
         ctx, "( ... ) and [ ... ] in triples are not yet supported by QLever.");
   }
 
-  std::optional<PathTuples> visit(
-      SparqlAutomaticParser::PropertyListPathContext* ctx);
+  std::optional<PathTuples> visit(Parser::PropertyListPathContext* ctx);
 
   PathTuples visit(Parser::PropertyListPathNotEmptyContext* ctx);
 
   PropertyPath visit(Parser::VerbPathContext* ctx);
 
   Variable visit(Parser::VerbSimpleContext* ctx);
+
+  PathTuples visit(Parser::TupleWithoutPathContext* ctx);
+
+  PathTuples visit(Parser::TupleWithPathContext* ctx);
 
   ad_utility::sparql_types::VarOrPath visit(
       Parser::VerbPathOrSimpleContext* ctx);
@@ -287,7 +290,7 @@ class SparqlQleverVisitor {
 
   /// Note that in the SPARQL grammar the INTEGER rule refers to positive
   /// integers without an explicit sign.
-  unsigned long long int visit(Parser::IntegerContext* ctx);
+  uint64_t visit(Parser::IntegerContext* ctx);
 
   Node visit(Parser::TriplesNodeContext* ctx);
 
@@ -402,8 +405,8 @@ class SparqlQleverVisitor {
 
   string visit(Parser::PnameNsContext* ctx);
 
-  // Visit a vector of Contexts and return the corresponding results as a
-  // vector. Only Contexts that have a matching `visit` are supported.
+  // Call `visit` for each of the `childContexts` and return the results of
+  // those calls as a `vector`.
   template <typename Ctx>
   auto visitVector(const std::vector<Ctx*>& childContexts)
       -> std::vector<decltype(visit(childContexts[0]))>;
@@ -431,6 +434,9 @@ class SparqlQleverVisitor {
 
   [[noreturn]] void reportError(antlr4::ParserRuleContext* ctx,
                                 const std::string& msg);
+
+  [[noreturn]] void reportNotSupported(antlr4::ParserRuleContext* ctx,
+                                       const std::string& feature);
 
   // Parse both `ConstructTriplesContext` and `TriplesTemplateContext` because
   // they have the same structure.
