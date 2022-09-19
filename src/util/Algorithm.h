@@ -21,8 +21,8 @@ namespace ad_utility {
  * @return bool
  */
 template <typename Container, typename T>
-inline bool contains(const Container& container, const T& element) {
-  return std::find(container.begin(), container.end(), element) !=
+inline bool contains(Container&& container, const T& element) {
+  return std::ranges::find(container.begin(), container.end(), element) !=
          container.end();
 }
 

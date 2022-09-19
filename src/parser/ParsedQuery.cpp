@@ -474,3 +474,64 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
     t.push_back(std::move(triple));
   }
 }
+
+bool ParsedQuery::isVariableContainedInGraphPattern(
+    const Variable& variable, const ParsedQuery::GraphPattern& graphPattern,
+    const SparqlTriple* tripleToIgnore) {
+  for (const SparqlFilter& filter : graphPattern._filters) {
+    if (filter._lhs == variable.name() || filter._rhs == variable.name()) {
+      return true;
+    }
+  }
+  auto check = [&](const parsedQuery::GraphPatternOperation& op) {
+    return isVariableContainedInGraphPatternOperation(variable, op,
+                                                      tripleToIgnore);
+  };
+  return std::any_of(graphPattern._graphPatterns.begin(),
+                     graphPattern._graphPatterns.end(), check);
+}
+
+namespace p = parsedQuery;
+bool ParsedQuery::isVariableContainedInGraphPatternOperation(
+    const Variable& variable,
+    const parsedQuery::GraphPatternOperation& operation,
+    const SparqlTriple* tripleToIgnore) {
+  auto check = [&](const GraphPattern& pattern) {
+    return isVariableContainedInGraphPattern(variable, pattern, tripleToIgnore);
+  };
+  return operation.visit([&](auto&& arg) -> bool {
+    using T = std::decay_t<decltype(arg)>;
+    if constexpr (std::is_same_v<T, p::Optional> ||
+                  std::is_same_v<T, p::GroupGraphPattern>) {
+      return check(arg._child);
+    } else if constexpr (std::is_same_v<T, p::Union>) {
+      return check(arg._child1) || check(arg._child2);
+    } else if constexpr (std::is_same_v<T, p::Subquery>) {
+      // Subqueries can never be CONSTRUCT queries according to the SPARQL
+      // standard.
+      AD_CHECK(arg.get().hasSelectClause());
+      const auto& selectClause = arg.get().selectClause();
+      return ad_utility::contains(selectClause.getSelectedVariables(), variable);
+    } else if constexpr (std::is_same_v<T, p::Bind>) {
+      return ad_utility::contains(arg.containedVariables(), variable);
+    } else if constexpr (std::is_same_v<T, p::BasicGraphPattern>) {
+      return ad_utility::contains_if(arg._triples, [&](const SparqlTriple& triple){
+        if (&triple == tripleToIgnore) {
+          return false;
+        }
+        if (triple._s == variable.name() || triple._p._iri == variable.name() ||
+            triple._o == variable.name()) {
+          return true;
+        }
+        return false;
+      });
+    } else {
+      // TODO<joka921> Those might also contain the variable.
+      static_assert(std::is_same_v<T, p::TransPath> ||
+                    std::is_same_v<T, p::Values> ||
+                    std::is_same_v<T, p::Minus>);
+      return false;
+    }
+    return false;
+  });
+}

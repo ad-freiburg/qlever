@@ -522,14 +522,18 @@ bool QueryPlanner::checkUsePatternTrick(
   // The first possibility for using the pattern trick is having a
   // ql:has-predicate predicate in the query
 
-  // look for a HAS_RELATION_PREDICATE triple which satisfies all constraints
-  // check in all the basic graph patterns that are direct children.
+  // look for a HAS_RELATION_PREDICATE triple which satisfies all constraints.
+  // Note that this triple has to appear in the last GraphPattern of the
+  // WHERE-clause, because otherwise there might be OPTIONAL and MINUS
+  // interfering with the semantics.
+
   // TODO<joka921, kramerfl> verify and proof that this is always legal
-  for (auto& child : pq->children()) {
-    auto* curPattern = std::get_if<p::BasicGraphPattern>(&child);
-    if (!curPattern) {
-      continue;
-    }
+
+  if (pq->children().empty()) {
+    return false;
+  }
+  if (auto* curPattern =
+          std::get_if<p::BasicGraphPattern>(&pq->children().back())) {
     for (size_t i = 0; i < curPattern->_triples.size(); i++) {
       bool usePatternTrick = true;
       const SparqlTriple& t = curPattern->_triples[i];
@@ -562,170 +566,14 @@ bool QueryPlanner::checkUsePatternTrick(
         continue;
       }
 
-      // Check for triples containing the ql:has-predicate triple's
-      // object.
-      for (auto& otherChild : pq->children()) {
-        auto* otherPattern = std::get_if<p::BasicGraphPattern>(&otherChild);
-        if (!otherPattern) {
-          continue;
-        }
-        for (size_t j = 0; usePatternTrick && j < otherPattern->_triples.size();
-             j++) {
-          const SparqlTriple& other = otherPattern->_triples[j];
-          if ((&child != &otherChild || j != i) &&
-              (other._s == t._o || other._p._iri == t._o || other._o == t._o)) {
-            usePatternTrick = false;
-          }
-        }
-      }
-      if (!usePatternTrick) {
-        continue;
-      }
-
-      // Check for filters on the ql:has-predicate triple's subject or
-      // object.
-      // Filters that filter on the triple's object but have a static
-      // rhs will be transformed to a having clause later on.
-      for (const SparqlFilter& filter : pq->_rootGraphPattern._filters) {
-        if (!(filter._lhs == t._o && filter._rhs[0] != '?') &&
-            (filter._lhs == t._s || filter._lhs == t._o ||
-             filter._rhs == t._o || filter._rhs == t._s)) {
-          usePatternTrick = false;
-          break;
-        }
-      }
-
-      if (!usePatternTrick) {
-        continue;
-      }
-
-      // Check for sub graph patterns containing the ql:has-predicate
-      // triple's object
-      std::vector<const ParsedQuery::GraphPattern*> graphsToProcess;
-      for (const auto& op : pq->_rootGraphPattern._graphPatterns) {
-        op.visit([&](auto&& arg) {
-          using T = std::decay_t<decltype(arg)>;
-          if constexpr (std::is_same_v<T, p::Optional> ||
-                        std::is_same_v<T, p::GroupGraphPattern>) {
-            graphsToProcess.push_back(&arg._child);
-          } else if constexpr (std::is_same_v<T, p::Union>) {
-            graphsToProcess.push_back(&arg._child1);
-            graphsToProcess.push_back(&arg._child2);
-          } else if constexpr (std::is_same_v<T, p::Subquery>) {
-            if (!arg.get().hasSelectClause()) {
-              usePatternTrick = false;
-              return;
-            }
-            const auto& selectClause = arg.get().selectClause();
-            for (const auto& v : selectClause.getSelectedVariablesAsStrings()) {
-              if (v == t._o) {
-                usePatternTrick = false;
-                break;
-              }
-            }
-          } else if constexpr (std::is_same_v<T, p::Bind>) {
-            // If the object variable of ql:has-predicate is used somewhere in a
-            // BIND, we cannot use the pattern trick.
-            for (const auto* v : arg.containedVariables()) {
-              if (v->_name == t._o) {
-                usePatternTrick = false;
-                break;
-              }
-            }
-
-          } else {
-            static_assert(std::is_same_v<T, p::TransPath> ||
-                          std::is_same_v<T, p::BasicGraphPattern> ||
-                          std::is_same_v<T, p::Values> ||
-                          std::is_same_v<T, p::Minus>);
-          }
-          // Transitive paths cannot yet exist in the query. They could also
-          // not contain the variables we are interested in.
-          // and the
-        });
-      }
-      while (!graphsToProcess.empty() && usePatternTrick) {
-        const ParsedQuery::GraphPattern* pattern = graphsToProcess.back();
-        graphsToProcess.pop_back();
-
-        for (const auto& op : pattern->_graphPatterns) {
-          op.visit([&](auto&& arg) {
-            using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, p::Optional> ||
-                          std::is_same_v<T, p::GroupGraphPattern> ||
-                          std::is_same_v<T, p::Minus>) {
-              graphsToProcess.push_back(&arg._child);
-
-            } else if constexpr (std::is_same_v<T, p::Union>) {
-              graphsToProcess.push_back(&arg._child1);
-              graphsToProcess.push_back(&arg._child2);
-            } else if constexpr (std::is_same_v<T, p::Subquery>) {
-              if (!arg.get().hasSelectClause()) {
-                usePatternTrick = false;
-                return;
-              }
-              const auto& selectClause = arg.get().selectClause();
-              for (const auto& v :
-                   selectClause.getSelectedVariablesAsStrings()) {
-                if (v == t._o) {
-                  usePatternTrick = false;
-                  break;
-                }
-              }
-            } else if constexpr (std::is_same_v<T, p::BasicGraphPattern>) {
-              for (const SparqlTriple& other : arg._triples) {
-                if (other._s == t._o || other._p._iri == t._o ||
-                    other._o == t._o) {
-                  usePatternTrick = false;
-                  break;
-                }
-              }
-            } else if constexpr (std::is_same_v<T, p::Values>) {
-              for (const auto& var : arg._inlineValues._variables) {
-                if (var == t._o) {
-                  usePatternTrick = false;
-                  break;
-                }
-              }
-            } else if constexpr (std::is_same_v<T, p::Bind>) {
-              // If the object variable of ql:has-predicate is used somewhere in
-              // a BIND, we cannot use the pattern trick.
-              for (const auto* v : arg.containedVariables()) {
-                if (v->_name == t._o) {
-                  usePatternTrick = false;
-                  break;
-                }
-              }
-            } else {
-              static_assert(std::is_same_v<T, p::TransPath>);
-            }
-            // Transitive paths cannot yet exist in the query. They could also
-            // not contain the variables we are interested in.
-          });
-        }
-
-        if (!usePatternTrick) {
-          break;
-        }
-      }
-      if (!usePatternTrick) {
+      // Check that the pattern trick triple is the only place in the query
+      // where the predicate variable occurs.
+      if (ParsedQuery::isVariableContainedInGraphPattern(
+              Variable{t._o.getString()}, pq->_rootGraphPattern, &t)) {
         continue;
       }
 
       LOG(DEBUG) << "Using the pattern trick to answer the query." << endl;
-      // Transform filters on the ql:has-relation triple's object that
-      // have a static rhs to having clauses
-      // Filters are only scoped within a GraphPattern, so we only
-      // have to  check curPattern
-      auto& filters = pq->_rootGraphPattern._filters;
-      auto it = std::remove_if(
-          filters.begin(), filters.end(), [&t](const SparqlFilter& filter) {
-            return filter._lhs == t._o && filter._rhs[0] != '?';
-          });
-      std::for_each(it, filters.end(), [&pq](const SparqlFilter& f) {
-        pq->_havingClauses.push_back(f);
-      });
-      filters.erase(it, filters.end());
 
       *patternTrickTriple = t;
       // Remove the triple from the graph. Note that this invalidates the
@@ -734,129 +582,6 @@ bool QueryPlanner::checkUsePatternTrick(
       return true;
     }
   }
-
-  return false;
-  // TODO<joka921>, <kramerfl> this second possibility is
-  // disabled for now, since we first have to discuss, whether
-  // the checks below suffice. IMHO (johannes) We have to distinguish,
-  // whether the special triple is "constrained" by an optional
-  // or by something else.
-  /*
-
-  // The second possibility for using the pattern trick is a subquery.
-
-  LOG(TRACE) << "Considering a subquery as a patterntrick candidate"
-             << std::endl;
-
-  // Check if the queries single child is a subquery that contains a triple
-  // of the form ?s ?p ?o with constraints solely on ?s and a select on
-  // distinct ?s and ?p
-  std::string predVar = pq->_selectClause._selectedVariables[0];
-  std::string subjVar = counted_var_name;
-  LOG(TRACE) << "The subject is " << subjVar << " the predicate " << predVar
-             << std::endl;
-  std::string objVar;
-  auto& root = pq->_rootGraphPattern;
-
-  // Check that pq does not have where clause triples or filters, but
-  // contains a single subquery child
-  if (root._graphPatterns.size() != 1 ||
-      !std::holds_alternative<p::Subquery>(
-          root._graphPatterns[0].variant_)) {
-    return false;
-  }
-
-  LOG(TRACE) << "Query has a single subquery of the right type" << std::endl;
-
-  // Check that the query is distinct and does not do any grouping and returns 2
-  // variables.
-  // Here we need to take a copy, since we modify it and merge it back
-  // into the root
-  auto sub =
-  root._graphPatterns[0].get<p::Subquery>().get(); if
-  (!sub.distinct_ || sub._groupByVariables.size() > 0 ||
-      sub._selectClause.aliases_.size() > 0 ||
-  sub._selectClause._selectedVariables.size() != 2) { return false;
-  }
-  // Also check that it returns the correct variables
-  for (const std::string& v : sub._selectClause._selectedVariables) {
-    if (v != predVar && v != subjVar) {
-      return false;
-    }
-  }
-
-  LOG(TRACE) << "The subquery has the correct variables" << std::endl;
-
-  // Look for a triple in the subquery of the form 'predVar subjVar ?o'
-  auto& subroot = sub._rootGraphPattern;
-  for (size_t i = 0; i < subroot._triples.size(); i++) {
-    const SparqlTriple& t = subroot._triples[i];
-    if ((returns_counts && t._s != subjVar) || t._p._iri != predVar ||
-        !isVariable(t._o)) {
-      continue;
-    }
-
-    LOG(TRACE) << "Found a triple matching the subject and predicate "
-                  "with object "
-               << t._o << std::endl;
-    if (!returns_counts) {
-      subjVar = t._s;
-    }
-    // The triple at i has the correct subject and predicate and a
-    // variable as an object
-    objVar = t._o;
-
-    // Check if either the predicate or the object are constrained in
-    // any way
-    bool is_constrained = false;
-    for (size_t j = 0; j < subroot._triples.size(); j++) {
-      if (j != i) {
-        const SparqlTriple& t2 = subroot._triples[j];
-        if (t2._s == predVar || t2._p._iri == predVar || t2._o == predVar ||
-            t2._s == objVar || t2._p._iri == objVar || t2._o == objVar) {
-          LOG(TRACE) << "There is another triple " << t2.asString()
-                     << " which constraints " << predVar << " or " << objVar
-                     << std::endl;
-          is_constrained = true;
-          break;
-        }
-      }
-    }
-    if (is_constrained) {
-      continue;
-    }
-
-    // Ensure the triple is not being filtered on either
-    for (size_t j = 0; j < subroot._filters.size(); j++) {
-      const SparqlFilter& f = subroot._filters[j];
-      if (f._lhs == subjVar || f._lhs == predVar || f._lhs == objVar ||
-          f._rhs == subjVar || f._rhs == predVar || f._rhs == objVar) {
-        LOG(TRACE) << "There is a filter on one of the three variables"
-                   << std::endl;
-        is_constrained = true;
-        break;
-      }
-    }
-    if (is_constrained) {
-      continue;
-    }
-
-    LOG(TRACE) << "Removing the triple and merging the subquery "
-                  "with its parent."
-               << std::endl;
-    LOG(DEBUG) << "Using the pattern trick to answer the query." << endl;
-    // If this used ql:has-predicate predVar would be the object
-    patternTrickTriple->_s = subjVar;
-    patternTrickTriple->_o = predVar;
-    // merge the subquery without the selected triple into the
-    // parent.
-    subroot._triples.erase(subroot._triples.begin() + i);
-    root._graphPatterns.clear();
-    pq->merge(sub);
-    break;
-  }
-  return true;
-   */
 }
 
 // _____________________________________________________________________________

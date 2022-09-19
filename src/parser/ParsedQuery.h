@@ -82,6 +82,11 @@ class SparqlTriple {
   [[nodiscard]] string asString() const;
 };
 
+// Forward declaration
+namespace parsedQuery {
+struct GraphPatternOperation;
+}
+
 // A parsed SPARQL query. To be extended.
 class ParsedQuery {
  public:
@@ -169,4 +174,15 @@ class ParsedQuery {
   void merge(const ParsedQuery& p);
 
   [[nodiscard]] string asString() const;
+
+  bool childrenThatContainVariableVisibly(const Variable& variable,
+                                          const SparqlTriple* tripleToIgnore);
+
+  static bool isVariableContainedInGraphPattern(
+      const Variable& variable, const GraphPattern& graphPattern,
+      const SparqlTriple* tripleToIgnore);
+  static bool isVariableContainedInGraphPatternOperation(
+      const Variable& variable,
+      const parsedQuery::GraphPatternOperation& operation,
+      const SparqlTriple* tripleToIgnore);
 };
