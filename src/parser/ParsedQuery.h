@@ -178,9 +178,19 @@ class ParsedQuery {
   bool childrenThatContainVariableVisibly(const Variable& variable,
                                           const SparqlTriple* tripleToIgnore);
 
+  // Return true if and only if the `variable` is contained and visible (not
+  // inside a subquery) anywhere in the `graphPattern`. If the only occurence of
+  // the triple is in the `ignoredTriple`, then false will be returned. This
+  // comparison is done on the pointer level. It is thus safe to pass `nullptr`
+  // as the `ignoredTriple` if no such triple exists. This function is used for
+  // checking, if a certain query is eligible for the pattern trick (see
+  // `QueryPlanner::checkUsePatternTrick`).
   static bool isVariableContainedInGraphPattern(
       const Variable& variable, const GraphPattern& graphPattern,
       const SparqlTriple* tripleToIgnore);
+
+  // Similar to `isVariableContainedInGraphPattern` but works on a
+  // `GraphPatternOperation`.
   static bool isVariableContainedInGraphPatternOperation(
       const Variable& variable,
       const parsedQuery::GraphPatternOperation& operation,

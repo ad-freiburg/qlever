@@ -485,8 +485,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
 
 bool QueryPlanner::checkUsePatternTrick(
     ParsedQuery* pq, SparqlTriple* patternTrickTriple) const {
-  //   TODO<joka921> does the pattern trick behave correctly if the elements
-  //   appear in a value clause?
   // Check if the query has the right number of variables for aliases and
   // group by.
   if (!pq->hasSelectClause()) {
@@ -503,8 +501,6 @@ bool QueryPlanner::checkUsePatternTrick(
   // These will only be set if the query returns the count of predicates
   // The variable the COUNT alias counts.
   std::string counted_var_name;
-  // The variable holding the counts
-  std::string count_var_name;
 
   if (returns_counts) {
     // We have already verified above that there is exactly one alias.
@@ -516,72 +512,54 @@ bool QueryPlanner::checkUsePatternTrick(
       return false;
     }
     counted_var_name = countVariable.value().name();
-    count_var_name = alias._target.name();
   }
 
   // The first possibility for using the pattern trick is having a
   // ql:has-predicate predicate in the query
 
   // look for a HAS_RELATION_PREDICATE triple which satisfies all constraints.
-  // Note that this triple has to appear in the last GraphPattern of the
-  // WHERE-clause, because otherwise there might be OPTIONAL and MINUS
-  // interfering with the semantics.
-
-  // TODO<joka921, kramerfl> verify and proof that this is always legal
 
   if (pq->children().empty()) {
     return false;
   }
-  if (auto* curPattern =
-          std::get_if<p::BasicGraphPattern>(&pq->children().back())) {
-    for (size_t i = 0; i < curPattern->_triples.size(); i++) {
-      bool usePatternTrick = true;
-      const SparqlTriple& t = curPattern->_triples[i];
-      // Check that the triples predicates is the HAS_PREDICATE_PREDICATE.
-      // Also check that the triples object or subject matches the aliases input
-      // variable and the group by variable.
-      if (t._p._iri != HAS_PREDICATE_PREDICATE || !isVariable(t._o) ||
-          (returns_counts &&
-           !(counted_var_name == t._o || counted_var_name == t._s)) ||
-          pq->_groupByVariables[0].name() != t._o) {
-        usePatternTrick = false;
-        continue;
-      }
 
-      // Check that all selected variables are outputs of
-      // CountAvailablePredicates
-      if (selectClause.isAsterisk()) {
-        return false;
-      }
-
-      const auto& selectedVariables =
-          selectClause.getSelectedVariablesAsStrings();
-      for (const std::string& s : selectedVariables) {
-        if (s != t._o && s != count_var_name) {
-          usePatternTrick = false;
-          break;
-        }
-      }
-      if (!usePatternTrick) {
-        continue;
-      }
-
-      // Check that the pattern trick triple is the only place in the query
-      // where the predicate variable occurs.
-      if (ParsedQuery::isVariableContainedInGraphPattern(
-              Variable{t._o.getString()}, pq->_rootGraphPattern, &t)) {
-        continue;
-      }
-
-      LOG(DEBUG) << "Using the pattern trick to answer the query." << endl;
-
-      *patternTrickTriple = t;
-      // Remove the triple from the graph. Note that this invalidates the
-      // reference `t`, so we perform this step at the very end.
-      curPattern->_triples.erase(curPattern->_triples.begin() + i);
-      return true;
-    }
+  // The triple has to appear in the last GraphPattern of the
+  // WHERE-clause, because otherwise there might be OPTIONAL and MINUS
+  // interfering with the semantics.
+  auto* curPattern = std::get_if<p::BasicGraphPattern>(&pq->children().back());
+  if (!curPattern) {
+    return false;
   }
+
+  for (size_t i = 0; i < curPattern->_triples.size(); i++) {
+    const SparqlTriple& t = curPattern->_triples[i];
+    // Check that the triples predicates is the HAS_PREDICATE_PREDICATE.
+    // Also check that the triples object or subject matches the aliases input
+    // variable and the group by variable.
+    if (t._p._iri != HAS_PREDICATE_PREDICATE || !isVariable(t._o) ||
+        (returns_counts &&
+         !(counted_var_name == t._o || counted_var_name == t._s)) ||
+        pq->_groupByVariables[0].name() != t._o) {
+      continue;
+    }
+
+    // Check that the pattern trick triple is the only place in the query
+    // where the predicate variable occurs.
+    if (ParsedQuery::isVariableContainedInGraphPattern(
+            Variable{t._o.getString()}, pq->_rootGraphPattern, &t)) {
+      continue;
+    }
+
+    LOG(DEBUG) << "Using the pattern trick to answer the query." << endl;
+
+    *patternTrickTriple = t;
+    // Remove the triple from the graph. Note that this invalidates the
+    // reference `t`, so we perform this step at the very end.
+    curPattern->_triples.erase(curPattern->_triples.begin() + i);
+    return true;
+  }
+  // No suitable triple for the pattern trick was found.
+  return false;
 }
 
 // _____________________________________________________________________________
@@ -772,34 +750,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
   }
   return added;
 }
-
-// _____________________________________________________________________________
-/*
-void QueryPlanner::getVarTripleMap(
-    const ParsedQuery& pq,
-    ad_utility::HashMap<string, vector<SparqlTriple>>* varToTrip,
-    ad_utility::HashSet<string>* contextVars) const {
-  for (const SparqlTriple& t : pq._rootGraphPattern._triples) {
-    if (isVariable(t._s)) {
-      (*varToTrip)[t._s].push_back(t);
-    }
-    if (isVariable(t._p)) {
-      (*varToTrip)[t._p._iri].push_back(t);
-    }
-    if (isVariable(t._o)) {
-      (*varToTrip)[t._o].push_back(t);
-    }
-    // TODO: Could use more refactoring.
-    // In Earlier versions there were no ql:contains... predicates but
-    // a symmetric <in-text> predicate. Therefore some parts are still more
-    // complex than need be.
-    if (t._p._iri == CONTAINS_WORD_PREDICATE ||
-        t._p._iri == CONTAINS_ENTITY_PREDICATE) {
-      contextVars->insert(t._s);
-    }
-  }
-}
- */
 
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(

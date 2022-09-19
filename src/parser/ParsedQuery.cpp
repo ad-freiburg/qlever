@@ -475,6 +475,7 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
   }
 }
 
+// __________________________________________________________________________
 bool ParsedQuery::isVariableContainedInGraphPattern(
     const Variable& variable, const ParsedQuery::GraphPattern& graphPattern,
     const SparqlTriple* tripleToIgnore) {
@@ -492,6 +493,8 @@ bool ParsedQuery::isVariableContainedInGraphPattern(
 }
 
 namespace p = parsedQuery;
+
+// __________________________________________________________________________
 bool ParsedQuery::isVariableContainedInGraphPatternOperation(
     const Variable& variable,
     const parsedQuery::GraphPatternOperation& operation,
@@ -502,35 +505,39 @@ bool ParsedQuery::isVariableContainedInGraphPatternOperation(
   return operation.visit([&](auto&& arg) -> bool {
     using T = std::decay_t<decltype(arg)>;
     if constexpr (std::is_same_v<T, p::Optional> ||
-                  std::is_same_v<T, p::GroupGraphPattern>) {
+                  std::is_same_v<T, p::GroupGraphPattern> ||
+                  std::is_same_v<T, p::Minus>) {
       return check(arg._child);
     } else if constexpr (std::is_same_v<T, p::Union>) {
       return check(arg._child1) || check(arg._child2);
     } else if constexpr (std::is_same_v<T, p::Subquery>) {
-      // Subqueries can never be CONSTRUCT queries according to the SPARQL
-      // standard.
-      AD_CHECK(arg.get().hasSelectClause());
+      // Subqueries always are SELECT clauses.
       const auto& selectClause = arg.get().selectClause();
-      return ad_utility::contains(selectClause.getSelectedVariables(), variable);
+      return ad_utility::contains(selectClause.getSelectedVariables(),
+                                  variable);
     } else if constexpr (std::is_same_v<T, p::Bind>) {
       return ad_utility::contains(arg.containedVariables(), variable);
     } else if constexpr (std::is_same_v<T, p::BasicGraphPattern>) {
-      return ad_utility::contains_if(arg._triples, [&](const SparqlTriple& triple){
+      return ad_utility::contains_if(arg._triples, [&](const SparqlTriple&
+                                                           triple) {
         if (&triple == tripleToIgnore) {
           return false;
         }
-        if (triple._s == variable.name() || triple._p._iri == variable.name() ||
-            triple._o == variable.name()) {
+        if (triple._s == variable.name() ||
+            // TODO<joka921> cases like `<iri>/?p*` should also be recognized.
+            triple._p._iri == variable.name() || triple._o == variable.name()) {
           return true;
         }
         return false;
       });
+    } else if constexpr (std::is_same_v<T, p::Values>) {
+      return ad_utility::contains(arg._inlineValues._variables,
+                                  variable.name());
     } else {
-      // TODO<joka921> Those might also contain the variable.
-      static_assert(std::is_same_v<T, p::TransPath> ||
-                    std::is_same_v<T, p::Values> ||
-                    std::is_same_v<T, p::Minus>);
-      return false;
+      static_assert(std::is_same_v<T, p::TransPath>);
+      // The `TransPath` is set up later in the query planning, when this
+      // function should not be called anymore.
+      AD_FAIL();
     }
     return false;
   });

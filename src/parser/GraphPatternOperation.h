@@ -127,7 +127,7 @@ struct Bind {
     for (const auto* ptr : _expression.containedVariables()) {
       co_yield *ptr;
     }
-    co_yield(_target);
+    co_yield (_target);
   }
 
   [[nodiscard]] string getDescriptor() const {
