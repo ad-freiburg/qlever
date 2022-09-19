@@ -50,7 +50,6 @@ class SparqlQleverVisitor {
   using GraphPatternOperation = parsedQuery::GraphPatternOperation;
   using Objects = ad_utility::sparql_types::Objects;
   using Tuples = ad_utility::sparql_types::Tuples;
-  using PredicateAndObject = ad_utility::sparql_types::PredicateAndObject;
   using PathTuples = ad_utility::sparql_types::PathTuples;
   using TripleWithPropertyPath =
       ad_utility::sparql_types::TripleWithPropertyPath;
@@ -133,9 +132,9 @@ class SparqlQleverVisitor {
 
   ParsedQuery visit(Parser::ConstructQueryContext* ctx);
 
-  [[noreturn]] void visit(Parser::DescribeQueryContext* ctx);
+  [[noreturn]] ParsedQuery visit(Parser::DescribeQueryContext* ctx);
 
-  [[noreturn]] void visit(Parser::AskQueryContext* ctx);
+  [[noreturn]] ParsedQuery visit(Parser::AskQueryContext* ctx);
 
   [[noreturn]] void visit(Parser::DatasetClauseContext* ctx);
 
@@ -189,9 +188,11 @@ class SparqlQleverVisitor {
   parsedQuery::GraphPatternOperation visit(
       Parser::OptionalGraphPatternContext* ctx);
 
-  [[noreturn]] void visit(Parser::GraphGraphPatternContext* ctx);
+  [[noreturn]] parsedQuery::GraphPatternOperation visit(
+      Parser::GraphGraphPatternContext* ctx);
 
-  [[noreturn]] void visit(Parser::ServiceGraphPatternContext* ctx);
+  [[noreturn]] parsedQuery::GraphPatternOperation visit(
+      Parser::ServiceGraphPatternContext* ctx);
 
   parsedQuery::GraphPatternOperation visit(Parser::BindContext* ctx);
 
@@ -280,9 +281,9 @@ class SparqlQleverVisitor {
 
   PropertyPath visit(Parser::PathPrimaryContext* ctx);
 
-  PropertyPath visit(Parser::PathNegatedPropertySetContext*);
+  [[noreturn]] PropertyPath visit(Parser::PathNegatedPropertySetContext*);
 
-  [[noreturn]] void visit(Parser::PathOneInPropertySetContext* ctx);
+  [[noreturn]] PropertyPath visit(Parser::PathOneInPropertySetContext* ctx);
 
   /// Note that in the SPARQL grammar the INTEGER rule refers to positive
   /// integers without an explicit sign.

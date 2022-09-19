@@ -130,17 +130,9 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
   // The prologue (BASE and PREFIX declarations)  only affects the internal
   // state of the visitor.
   visit(ctx->prologue());
-  ParsedQuery query;
-  // TODO<joka921, qup42> Check if there are more instances of this pattern
-  //  (like `visitAlternative`, but with a custom error message), that would
-  //  justify extracting this pattern.
-  if (ctx->selectQuery()) {
-    query = visit(ctx->selectQuery());
-  } else if (ctx->constructQuery()) {
-    query = visit(ctx->constructQuery());
-  } else {
-    reportError(ctx, "QLever only supports SELECT and CONSTRUCT queries.");
-  }
+  auto query =
+      visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery(),
+                                    ctx->describeQuery(), ctx->askQuery());
 
   query._originalString = ctx->getStart()->getInputStream()->toString();
 
@@ -202,12 +194,12 @@ ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::DescribeQueryContext* ctx) {
+ParsedQuery Visitor::visit(Parser::DescribeQueryContext* ctx) {
   reportError(ctx, "DESCRIBE Queries are not supported.");
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::AskQueryContext* ctx) {
+ParsedQuery Visitor::visit(Parser::AskQueryContext* ctx) {
   reportError(ctx, "ASK Queries are not supported.");
 }
 
@@ -218,17 +210,23 @@ void Visitor::visit(Parser::DatasetClauseContext* ctx) {
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::DefaultGraphClauseContext* ctx) {
-  reportError(ctx, "FROM is not supported.");
+  // Should not be reachable. Superclause DatasetClause should have thrown an
+  // Exception.
+  AD_FAIL();
 }
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::NamedGraphClauseContext* ctx) {
-  reportError(ctx, "FROM is not supported.");
+  // Should not be reachable. Superclause DatasetClause should have thrown an
+  // Exception.
+  AD_FAIL();
 }
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::SourceSelectorContext* ctx) {
-  reportError(ctx, "FROM is not supported.");
+  // Should not be reachable. Superclause DatasetClause should have thrown an
+  // Exception.
+  AD_FAIL();
 }
 
 // ____________________________________________________________________________________
@@ -406,14 +404,10 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
 // ____________________________________________________________________________________
 Visitor::OperationOrFilter Visitor::visit(
     Parser::GraphPatternNotTriplesContext* ctx) {
-  if (ctx->graphGraphPattern() || ctx->serviceGraphPattern()) {
-    reportError(ctx,
-                "GraphGraphPattern or ServiceGraphPattern are not supported.");
-  } else {
-    return visitAlternative<std::variant<GraphPatternOperation, SparqlFilter>>(
-        ctx->filterR(), ctx->optionalGraphPattern(), ctx->minusGraphPattern(),
-        ctx->bind(), ctx->inlineData(), ctx->groupOrUnionGraphPattern());
-  }
+  return visitAlternative<std::variant<GraphPatternOperation, SparqlFilter>>(
+      ctx->filterR(), ctx->optionalGraphPattern(), ctx->minusGraphPattern(),
+      ctx->bind(), ctx->inlineData(), ctx->groupOrUnionGraphPattern(),
+      ctx->graphGraphPattern(), ctx->serviceGraphPattern());
 }
 
 // ____________________________________________________________________________________
@@ -423,12 +417,14 @@ GraphPatternOperation Visitor::visit(Parser::OptionalGraphPatternContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::GraphGraphPatternContext* ctx) {
+parsedQuery::GraphPatternOperation Visitor::visit(
+    Parser::GraphGraphPatternContext* ctx) {
   reportError(ctx, "Named Graphs (FROM, GRAPH) are not supported.");
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
+parsedQuery::GraphPatternOperation Visitor::visit(
+    Parser::ServiceGraphPatternContext* ctx) {
   reportError(ctx, "Federated Queries (SERVICE) are not supported.");
 }
 
@@ -860,8 +856,9 @@ vector<Visitor::ExpressionPtr> Visitor::visit(Parser::ArgListContext* ctx) {
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::ExpressionListContext* ctx) {
-  reportError(
-      ctx, "Expression List (CONCAT, COALESCE, IN, NOT IN) is not supported.");
+  // ExpressionList can only come from RelationExpression or BuiltInCall both of
+  // which don't support the cases leading to ExpressionList.
+  AD_FAIL();
 }
 
 // ____________________________________________________________________________________
@@ -1158,9 +1155,10 @@ PropertyPath Visitor::visit(Parser::PathNegatedPropertySetContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::PathOneInPropertySetContext* ctx) {
-  reportError(
-      ctx, R"("!" and "^" inside a property path is not supported by QLever.)");
+PropertyPath Visitor::visit(Parser::PathOneInPropertySetContext* ctx) {
+  // PathOneInPropertySet can only be called from PathNegatedPropertySet which
+  // itself is not supported.
+  AD_FAIL();
 }
 
 // ____________________________________________________________________________________
@@ -1196,7 +1194,8 @@ Node Visitor::visit(Parser::BlankNodePropertyListContext* ctx) {
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::TriplesNodePathContext* ctx) {
   // TODO: should be moved into the children. But visitAlternative does not
-  //  support returning void.
+  //  support returning void. Using the return type of the other branch is
+  //  not sensible in this case.
   throwCollectionsAndBlankNodePathsNotSupported(ctx);
   AD_FAIL()  // Should be unreachable.
 }
@@ -1402,9 +1401,8 @@ ExpressionPtr Visitor::visit(Parser::AdditiveExpressionContext* ctx) {
 // ____________________________________________________________________________________
 void Visitor::visit(
     Parser::StrangeMultiplicativeSubexprOfAdditiveContext* ctx) {
-  reportError(
-      ctx,
-      "StrangeMultiplicativeSubexprOfAdditiveContext must not be visited.");
+  // StrangeMultiplicativeSubexprOfAdditiveContext must not be visited.
+  AD_FAIL();
 }
 
 // ____________________________________________________________________________________
