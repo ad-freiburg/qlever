@@ -6,9 +6,10 @@
 
 #include <sstream>
 
-#include "../util/Exception.h"
-#include "../util/HashSet.h"
-#include "./CallFixedSize.h"
+#include "engine/CallFixedSize.h"
+#include "parser/TurtleParser.h"
+#include "util/Exception.h"
+#include "util/HashSet.h"
 
 Values::Values(QueryExecutionContext* qec, SparqlValues values)
     : Operation(qec) {
@@ -133,7 +134,8 @@ void Values::computeResult(ResultTable* result) {
                               ResultTable::ResultType::KB);
 
   size_t resWidth = getResultWidth();
-  CALL_FIXED_SIZE_1(resWidth, writeValues, &result->_idTable, index, _values);
+  CALL_FIXED_SIZE_1(resWidth, writeValues, &result->_idTable, index, _values,
+                    result->_localVocab);
 }
 
 auto Values::sanitizeValues(SparqlValues&& values) -> SparqlValues {
@@ -186,28 +188,38 @@ auto Values::sanitizeValues(SparqlValues&& values) -> SparqlValues {
 }
 
 template <size_t I>
-void Values::writeValues(IdTable* res, const Index& index,
-                         const SparqlValues& values) {
+void Values::writeValues(
+    IdTable* res, const Index& index, const SparqlValues& values,
+    [[maybe_unused]] std::shared_ptr<ResultTable::LocalVocab> localVocab) {
   IdTableStatic<I> result = res->moveToStatic<I>();
   result.resize(values._values.size());
   size_t numActuallyWritten = 0;
   size_t numSkipped = 0;
   for (const auto& row : values._values) {
     for (size_t colIdx = 0; colIdx < result.cols(); colIdx++) {
-      Id id;
-      if (!index.getId(row[colIdx], &id)) {
-        getWarnings().push_back("The word " + row[colIdx] +
-                                " is not part of the vocabulary.");
-        numSkipped++;
-        // this goto is a continue in the outer loop. The current row was not
-        // sucessfully written, so the numActuallyWritten index is not advanced
-        goto skipRow;
+      const TripleComponent& tc =
+          TurtleStringParser<TokenizerCtre>::parseTripleObject(row[colIdx]);
+      std::optional<Id> id = tc.toValueId(index.getVocab());
+      if (!id) {
+        // HACK: Just add each string that is not in the vocabulary to
+        // localVocab, without even checking if it already exists.
+        auto localVocabIndex = LocalVocabIndex::make(localVocab->size());
+        localVocab->push_back(row[colIdx]);
+        id = Id::makeFromLocalVocabIndex(localVocabIndex);
+        LOG(INFO) << "NEW WORD added to localVocab: \"" << row[colIdx]
+                  << "\" -> " << id.value() << std::endl;
+        // getWarnings().push_back("The word " + row[colIdx] +
+        //                         " is not part of the vocabulary.");
+        // numSkipped++;
+        // // this goto is a continue in the outer loop. The current row was not
+        // // sucessfully written, so the numActuallyWritten index is not
+        // advanced goto skipRow;
       }
-      result(numActuallyWritten, colIdx) = id;
+      result(numActuallyWritten, colIdx) = id.value();
     }
     numActuallyWritten++;
-  skipRow:;  // the label for the goto. Jumping to this label is basically
-             // "continue" and can be also called from the inner loop
+    // skipRow:;  // the label for the goto. Jumping to this label is basically
+    //            // "continue" and can be also called from the inner loop
   }
   AD_CHECK(numActuallyWritten + numSkipped == values._values.size());
   if (numSkipped) {

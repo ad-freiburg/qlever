@@ -50,8 +50,8 @@ class Values : public Operation {
   virtual void computeResult(ResultTable* result) override;
 
   template <size_t I>
-  void writeValues(IdTable* res, const Index& index,
-                   const SparqlValues& values);
+  void writeValues(IdTable* res, const Index& index, const SparqlValues& values,
+                   std::shared_ptr<ResultTable::LocalVocab> localVocab);
 
   /// remove all completely undefined values and variables
   /// throw if nothing remains
