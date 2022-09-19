@@ -209,21 +209,21 @@ void Visitor::visit(Parser::DatasetClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::DefaultGraphClauseContext* ctx) {
+void Visitor::visit(Parser::DefaultGraphClauseContext*) {
   // Should not be reachable. Superclause DatasetClause should have thrown an
   // Exception.
   AD_FAIL();
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::NamedGraphClauseContext* ctx) {
+void Visitor::visit(Parser::NamedGraphClauseContext*) {
   // Should not be reachable. Superclause DatasetClause should have thrown an
   // Exception.
   AD_FAIL();
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::SourceSelectorContext* ctx) {
+void Visitor::visit(Parser::SourceSelectorContext*) {
   // Should not be reachable. Superclause DatasetClause should have thrown an
   // Exception.
   AD_FAIL();
@@ -855,7 +855,7 @@ vector<Visitor::ExpressionPtr> Visitor::visit(Parser::ArgListContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::ExpressionListContext* ctx) {
+void Visitor::visit(Parser::ExpressionListContext*) {
   // ExpressionList can only come from RelationExpression or BuiltInCall both of
   // which don't support the cases leading to ExpressionList.
   AD_FAIL();
@@ -1155,7 +1155,7 @@ PropertyPath Visitor::visit(Parser::PathNegatedPropertySetContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-PropertyPath Visitor::visit(Parser::PathOneInPropertySetContext* ctx) {
+PropertyPath Visitor::visit(Parser::PathOneInPropertySetContext*) {
   // PathOneInPropertySet can only be called from PathNegatedPropertySet which
   // itself is not supported.
   AD_FAIL();
@@ -1399,8 +1399,7 @@ ExpressionPtr Visitor::visit(Parser::AdditiveExpressionContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(
-    Parser::StrangeMultiplicativeSubexprOfAdditiveContext* ctx) {
+void Visitor::visit(Parser::StrangeMultiplicativeSubexprOfAdditiveContext*) {
   // StrangeMultiplicativeSubexprOfAdditiveContext must not be visited.
   AD_FAIL();
 }
