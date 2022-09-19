@@ -131,7 +131,7 @@ auto idGenerator(Variable variable, size_t targetSize,
                                                  targetSize, context);
 }
 
-// Return value1 pair of generators that generate the values from `value1` and
+// Return a pair of generators that generate the values from `value1` and
 // `value2`. The type of generators is chosen to meet the needs of comparing
 // `value1` and `value2`. If any of them logically stores `ValueId`s (true for
 // `ValueId, vector<ValueId>, Variable`), then `idGenerator`s are returned for
@@ -265,17 +265,18 @@ evaluateR(S1 value1, S2 value2, EvaluationContext* context) {
   VectorWithMemoryLimit<Bool> result{context->_allocator};
   result.reserve(resultSize);
 
-  constexpr static bool bIsString = ad_utility::isSimilar<S2, std::string>;
+  constexpr static bool value2IsString = ad_utility::isSimilar<S2, std::string>;
   if constexpr (ad_utility::isSimilar<S1, Variable> && isConstantResult<S2>) {
-    auto idxA = getColumnIndexForVariable(value1, context);
-    auto bId = makeValueId(value2, context);
+    auto columnIndex = getColumnIndexForVariable(value1, context);
+    auto valueId = makeValueId(value2, context);
     const auto& cols = context->_columnsByWhichResultIsSorted;
-    if (!cols.empty() && cols[0] == idxA) {
-      if constexpr (bIsString) {
-        return evaluateWithBinarySearch<Comp>(value1, bId.first, bId.second,
+    if (!cols.empty() && cols[0] == columnIndex) {
+      if constexpr (value2IsString) {
+        return evaluateWithBinarySearch<Comp>(value1, valueId.first,
+                                              valueId.second,
                                               context);
       } else {
-        return evaluateWithBinarySearch<Comp>(value1, bId, std::nullopt,
+        return evaluateWithBinarySearch<Comp>(value1, valueId, std::nullopt,
                                               context);
       }
     }
