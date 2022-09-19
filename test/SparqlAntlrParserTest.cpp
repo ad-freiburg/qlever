@@ -138,7 +138,7 @@ TEST(SparqlParser, Prefix) {
     ParserAndVisitor p{"PREFIX wd: <www.wikidata.org/>"};
     auto defaultPrefixes = p.visitor_.prefixMap();
     ASSERT_EQ(defaultPrefixes.size(), 0);
-    p.visitor_.visitTypesafe(p.parser_.prefixDecl());
+    p.visitor_.visit(p.parser_.prefixDecl());
     auto prefixes = p.visitor_.prefixMap();
     ASSERT_EQ(prefixes.size(), 1);
     ASSERT_EQ(prefixes.at("wd"), "<www.wikidata.org/>");

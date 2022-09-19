@@ -42,7 +42,7 @@ struct ParserAndVisitor {
 
   template <typename ContextType>
   auto parseTypesafe(ContextType* (SparqlAutomaticParser::*F)(void)) {
-    auto resultOfParse = visitor_.visitTypesafe(std::invoke(F, parser_));
+    auto resultOfParse = visitor_.visit(std::invoke(F, parser_));
 
     auto remainingString =
         input_.substr(parser_.getCurrentToken()->getStartIndex());
