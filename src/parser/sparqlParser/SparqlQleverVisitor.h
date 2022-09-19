@@ -802,8 +802,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   ExpressionPtr visitTypesafe(Parser::BuiltInCallContext* ctx);
 
   Any visitRegexExpression(Parser::RegexExpressionContext* context) override {
-    return visitChildren(context);
+    return visitTypesafe(context);
   }
+
+  ExpressionPtr visitTypesafe(Parser::RegexExpressionContext* context);
 
   Any visitSubstringExpression(
       Parser::SubstringExpressionContext* context) override {

@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "engine/sparqlExpressions/RegexExpression.h"
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
@@ -1415,6 +1416,8 @@ ExpressionPtr Visitor::visitTypesafe(
     [[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   if (ctx->aggregate()) {
     return visitTypesafe(ctx->aggregate());
+  } else if (ctx->regexExpression()) {
+    return visitTypesafe(ctx->regexExpression());
     // TODO: Implement built-in calls according to the following examples.
     //
     // } else if (ad_utility::getLowercase(ctx->children[0]->getText()) ==
@@ -1587,6 +1590,24 @@ BlankNode Visitor::visitTypesafe(Parser::BlankNodeContext* ctx) {
   }
   // invalid grammar
   AD_FAIL();
+}
+
+// _____________________________________________________________________________
+ExpressionPtr Visitor::visitTypesafe(Parser::RegexExpressionContext* ctx) {
+  const auto& exp = ctx->expression();
+  const auto& numArgs = exp.size();
+  AD_CHECK(numArgs >= 2 && numArgs <= 3);
+  if (numArgs == 3) {
+    reportError(ctx,
+                "REGEX expressions with a third argument (e.g. `i` for `case "
+                "insensitive`) are currently not supported by QLever");
+  }
+  try {
+    return std::make_unique<sparqlExpression::RegexExpression>(
+        visitTypesafe(exp[0]), visitTypesafe(exp[1]));
+  } catch (const std::exception& e) {
+    reportError(ctx, e.what());
+  }
 }
 
 // ____________________________________________________________________________________

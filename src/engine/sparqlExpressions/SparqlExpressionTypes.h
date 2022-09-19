@@ -189,6 +189,18 @@ struct EvaluationContext {
         _endIndex{endIndex},
         _allocator{allocator},
         _localVocab{localVocab} {}
+
+  bool isResultSortedBy(const Variable& variable) {
+    if (_columnsByWhichResultIsSorted.empty()) {
+      return false;
+    }
+    if (!_variableToColumnAndResultTypeMap.contains(variable.name())) {
+      return false;
+    }
+
+    return _variableToColumnAndResultTypeMap.at(variable.name()).first ==
+           _columnsByWhichResultIsSorted[0];
+  }
 };
 
 /// The result of an expression can either be a vector of bool/double/int/string
