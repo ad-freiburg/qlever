@@ -5,10 +5,13 @@
 #include <limits>
 #include <string>
 
+#include "./IndexTestHelpers.h"
 #include "./SparqlParserTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "gtest/gtest.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "index/Index.h"
 
 using namespace sparqlExpression;
 using ad_utility::source_location;
@@ -17,15 +20,92 @@ using namespace std::literals;
 using enum valueIdComparators::Comparison;
 
 namespace {
+
+ValueId Int(int64_t i) { return ValueId::makeFromInt(i); }
+
+ValueId Double(double d) { return ValueId::makeFromDouble(d); }
+
+Index makeTestIndex() {
+  std::string filename = "relationalExpressionTestIndex.ttl";
+  std::string dummyKb =
+      "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . <x> "
+      "<label> \"Beta\".";
+
+  FILE_BUFFER_SIZE() = 1000;
+  std::fstream f(filename, std::ios_base::out);
+  f << dummyKb;
+  f.close();
+  std::string indexBasename = "_relationalExpressionTestIndex";
+  {
+    Index index = makeIndexWithTestSettings();
+    index.setOnDiskBase(indexBasename);
+    index.createFromFile<TurtleParserAuto>(filename);
+  }
+  Index index;
+  index.createFromOnDiskIndex(indexBasename);
+  return index;
+}
+
+static QueryExecutionContext* getQec() {
+  static ad_utility::AllocatorWithLimit<Id> alloc{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)};
+  static const Index index = makeTestIndex();
+  static const Engine engine{};
+  static QueryResultCache cache{};
+  static QueryExecutionContext qec{
+      index,
+      engine,
+      &cache,
+      ad_utility::AllocatorWithLimit<Id>{
+          ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)},
+      {}};
+  return &qec;
+}
+
+struct TestContext {
+  QueryExecutionContext* qec = getQec();
+  sparqlExpression::VariableToColumnAndResultTypeMap map;
+  ResultTable::LocalVocab localVocab;
+  IdTable table{qec->getAllocator()};
+  sparqlExpression::EvaluationContext context{*getQec(), map, table,
+                                              qec->getAllocator(), localVocab};
+  TestContext() {
+    // TODO<joka921> Add tests for the local vocab.
+    // ?ints ?doubles ?numeric ?vocab ?mixed
+    Id alpha;
+    Id aelpha;
+    Id A;
+    Id Beta;
+
+    bool b = qec->getIndex().getId("\"alpha\"", &alpha);
+    AD_CHECK(b);
+    b = qec->getIndex().getId("\"älpha\"", &aelpha);
+    AD_CHECK(b);
+    b = qec->getIndex().getId("\"A\"", &A);
+    AD_CHECK(b);
+    b = qec->getIndex().getId("\"Beta\"", &Beta);
+    AD_CHECK(b);
+
+    table.setCols(5);
+    table.push_back({Int(1), Double(0.1), Int(1), Beta, Int(1)});
+    table.push_back({Int(0), Double(-.1), Double(-.1), alpha, Double(-.1)});
+    table.push_back({Int(-1), Double(2.8), Double(3.4), aelpha, A});
+
+    context._beginIndex = 0;
+    context._endIndex = table.size();
+    map["?ints"] = {0, qlever::ResultType::KB};
+    map["?doubles"] = {1, qlever::ResultType::KB};
+    map["?numeric"] = {2, qlever::ResultType::KB};
+    map["?vocab"] = {3, qlever::ResultType::KB};
+    map["?mixed"] = {4, qlever::ResultType::KB};
+  }
+};
+
 ad_utility::AllocatorWithLimit<Id> allocator{
     ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)};
 
 const auto inf = std::numeric_limits<double>::infinity();
 const auto NaN = std::numeric_limits<double>::quiet_NaN();
-
-ValueId Int(int64_t i) { return ValueId::makeFromInt(i); }
-
-ValueId Double(double d) { return ValueId::makeFromDouble(d); }
 
 VectorWithMemoryLimit<ValueId> makeValueIdVector(
     const VectorWithMemoryLimit<double>& vec) {
@@ -60,8 +140,7 @@ auto evaluateWithEmpyContext = [](const SparqlExpression& expression) {
   sparqlExpression::VariableToColumnAndResultTypeMap map;
   ResultTable::LocalVocab localVocab;
   IdTable table{allocator};
-  QueryExecutionContext* qec = nullptr;
-  sparqlExpression::EvaluationContext context{*qec, map, table, allocator,
+  sparqlExpression::EvaluationContext context{*getQec(), map, table, allocator,
                                               localVocab};
 
   return expression.evaluate(&context);
@@ -247,8 +326,7 @@ auto testNumericConstantAndVector(
   sparqlExpression::VariableToColumnAndResultTypeMap map;
   ResultTable::LocalVocab localVocab;
   IdTable table{alloc};
-  QueryExecutionContext* qec = nullptr;
-  sparqlExpression::EvaluationContext context{*qec, map, table, alloc,
+  sparqlExpression::EvaluationContext context{*getQec(), map, table, alloc,
                                               localVocab};
   AD_CHECK(vector.size() == 9);
   context._beginIndex = 0;
@@ -378,8 +456,7 @@ auto testNotComparable(T constant, U vector,
   sparqlExpression::VariableToColumnAndResultTypeMap map;
   ResultTable::LocalVocab localVocab;
   IdTable table{alloc};
-  QueryExecutionContext* qec = nullptr;
-  sparqlExpression::EvaluationContext context{*qec, map, table, alloc,
+  sparqlExpression::EvaluationContext context{*getQec(), map, table, alloc,
                                               localVocab};
   AD_CHECK(vector.size() == 5);
   context._beginIndex = 0;
@@ -532,7 +609,60 @@ TEST(RelationalExpression, StringVectorAndStringVector) {
   // the vocabulary).
 }
 
-// TODO<joka921> vector<ValueId> with mixed types.
+TEST(RelationalExpression, VariableAndConstant) {
+  TestContext ctx;
 
-// TODO<joka921> tests for the `Variable` type (needs mocking) including the
-// binary search case.
+  auto test = [&](const auto& expression, std::vector<Bool> expected,
+                  source_location l = source_location::current()) {
+    auto trace = generateLocationTrace(l, "test lambda was called here");
+    auto resultAsVariant = expression.evaluate(&ctx.context);
+    const auto& result = std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
+    ASSERT_EQ(result.size(), expected.size());
+    for (size_t i = 0; i < result.size(); ++i) {
+      EXPECT_EQ(expected[i], result[i]);
+    }
+  };
+
+  // ?ints column is `1, 0, -1`
+  test(makeExpression<LT>(0, Variable{"?ints"}), {true, false, false});
+  test(makeExpression<GE>(-0.0, Variable{"?ints"}), {false, true, true});
+  test(makeExpression<GE>(Variable{"?ints"}, Int(0)), {true, true, false});
+
+  // ?doubles column is `0.1, -0.1, 2.8`
+  test(makeExpression<LT>(-3.5, Variable{"?doubles"}), {true, true, true});
+  test(makeExpression<EQ>(Double(-0.1), Variable{"?doubles"}),
+       {false, true, false});
+  test(makeExpression<GT>(Variable{"?doubles"}, 0), {true, false, true});
+
+  // ?numeric column is 1, -0.1, 3.4
+  test(makeExpression<NE>(-0.1, Variable{"?numeric"}), {true, false, true});
+  test(makeExpression<GE>(Variable{"?numeric"}, 1), {true, false, true});
+  test(makeExpression<GT>(Variable{"?numeric"}, Double(1.2)),
+       {false, false, true});
+
+  // ?vocab column is `"Beta", "alpha", "älpha"
+  test(makeExpression<LE>(Variable{"?vocab"}, "\"älpha\""s),
+       {false, true, true});
+  test(makeExpression<GT>(Variable{"?vocab"}, "\"alpha\""s),
+       {true, false, true});
+  test(makeExpression<LT>("\"atm\""s, Variable{"?vocab"}),
+       {true, false, false});
+
+  // ?mixed column is `1, -0.1, A`
+  test(makeExpression<GT>("\"atm\""s, Variable{"?mixed"}),
+       {false, false, true});
+  test(makeExpression<LT>("\"atm\""s, Variable{"?mixed"}),
+       {false, false, false});
+
+  // TODO<joka921> Discuss with Hannah what the result of `"A" != 1"` should be.
+  // In the current implementation of the valueIdComparators it is `false` as in
+  // "this is an expression error", but we currently don't support this ternary
+  // logic.
+  test(makeExpression<NE>(1, Variable{"?mixed"}), {false, true, false});
+  test(makeExpression<GE>(Variable{"?mixed"}, Double(-0.1)),
+       {true, true, false});
+}
+
+// TODO<joka921> test for "Variable + constant" (binary search case)
+
+// TODO<joka921> Test for "Variable + Vector" or "Variable + Variable"

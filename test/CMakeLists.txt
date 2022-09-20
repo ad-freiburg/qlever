@@ -235,4 +235,4 @@ addLinkAndDiscoverTest(TransparentFunctorsTest)
 
 addLinkAndDiscoverTest(SelectClauseTest index)
 
-addLinkAndDiscoverTest(RelationalExpressionTest sparqlExpressions)
+addLinkAndDiscoverTestSerial(RelationalExpressionTest sparqlExpressions index engine)

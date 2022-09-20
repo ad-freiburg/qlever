@@ -392,6 +392,8 @@ inline bool compareIds(ValueId a, ValueId b, Comparison comparison) {
     case Comparison::EQ:
       return detail::compareIdsImpl(a, b, std::equal_to<>());
     case Comparison::NE:
+      // TODO<joka921> discuss this behavior with Hannah and comment!
+      // return !compareIds(a, b, Comparison::EQ);
       return detail::compareIdsImpl(a, b, std::not_equal_to<>());
     case Comparison::GE:
       return detail::compareIdsImpl(a, b, std::greater_equal<>());
@@ -406,7 +408,10 @@ inline bool compareIds(ValueId a, ValueId b, Comparison comparison) {
 /// are considered to be equal.
 inline bool compareWithEqualIds(ValueId a, ValueId bBegin, ValueId bEnd,
                                 Comparison comparison) {
-  AD_CHECK(bBegin < bEnd);
+  // `bBegin == bEnd` means that `a` can never be considered eqaul. This case
+  // happen when comparing IDs from QLever's vocabulary to "pseudo"-IDs that
+  // represent words that are not part of this vocabulary.
+  AD_CHECK(bBegin <= bEnd);
   switch (comparison) {
     case Comparison::LT:
       return detail::compareIdsImpl(a, bBegin, std::less<>());
@@ -416,6 +421,8 @@ inline bool compareWithEqualIds(ValueId a, ValueId bBegin, ValueId bEnd,
       return detail::compareIdsImpl(a, bBegin, std::greater_equal<>()) &&
              detail::compareIdsImpl(a, bEnd, std::less<>());
     case Comparison::NE:
+      // TODO<joka921> Discuss this behavior with Hannah and comment.
+      // return !compareWithEqualIds(a, bBegin, bEnd, Comparison::EQ);
       return detail::compareIdsImpl(a, bBegin, std::less<>()) ||
              detail::compareIdsImpl(a, bEnd, std::greater_equal<>());
     case Comparison::GE:
