@@ -26,7 +26,9 @@ ValueId Int(int64_t i) { return ValueId::makeFromInt(i); }
 // Make a `ValueId` from a double. Shorter name, as it will be used often.
 ValueId Double(double d) { return ValueId::makeFromDouble(d); }
 
-// Create an `Index` the vocabulary of which contains the literals `"alpha", "älpha", "A", "Beta"`. (The other properties of that index are not important for these unit tests.
+// Create an `Index` the vocabulary of which contains the literals `"alpha",
+// "älpha", "A", "Beta"`. (The other properties of that index are not important
+// for these unit tests.
 Index makeTestIndex() {
   std::string filename = "relationalExpressionTestIndex.ttl";
   std::string dummyKb =
@@ -48,7 +50,10 @@ Index makeTestIndex() {
   return index;
 }
 
-// Return a static  `QueryExecutionContext` that refers to an index that was build using `makeTestIndex()` (see above). The index (most notably its vocabulary) is the only part of the `QueryExecutionContext` that is actually relevant for these tests, so the other members are defaultet.
+// Return a static  `QueryExecutionContext` that refers to an index that was
+// build using `makeTestIndex()` (see above). The index (most notably its
+// vocabulary) is the only part of the `QueryExecutionContext` that is actually
+// relevant for these tests, so the other members are defaultet.
 static QueryExecutionContext* getQec() {
   static ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)};
@@ -65,7 +70,11 @@ static QueryExecutionContext* getQec() {
   return &qec;
 }
 
-// Struct that stores a `sparqlExpression::EvaluationContext` and all the data structures that this context refers to. Most importantly it uses the `QueryExecutionContext` from `getQec()` (see above), and  has an `inputTable` that refers to a previous partial query result with multiple columns of various types. For details see the constructor.
+// Struct that stores a `sparqlExpression::EvaluationContext` and all the data
+// structures that this context refers to. Most importantly it uses the
+// `QueryExecutionContext` from `getQec()` (see above), and  has an `inputTable`
+// that refers to a previous partial query result with multiple columns of
+// various types. For details see the constructor.
 struct TestContext {
   QueryExecutionContext* qec = getQec();
   sparqlExpression::VariableToColumnAndResultTypeMap map;
@@ -74,7 +83,6 @@ struct TestContext {
   sparqlExpression::EvaluationContext context{*getQec(), map, table,
                                               qec->getAllocator(), localVocab};
   TestContext() {
-
     // First get some IDs for strings from the vocabulary to later reuse them
     Id alpha;
     Id aelpha;
@@ -90,8 +98,10 @@ struct TestContext {
     b = qec->getIndex().getId("\"Beta\"", &Beta);
     AD_CHECK(b);
 
-    // Set up the `table` that represents the previous partial query results. It has five columns/variables:
-    // ?ints (only integers), ?doubles (only doubles), ?numeric (int and double), ?vocab (only entries from the vocabulary), ?mixed (all of the previous).
+    // Set up the `table` that represents the previous partial query results. It
+    // has five columns/variables: ?ints (only integers), ?doubles (only
+    // doubles), ?numeric (int and double), ?vocab (only entries from the
+    // vocabulary), ?mixed (all of the previous).
     table.setCols(5);
     // Order of the columns:
     // ?ints ?doubles ?numeric ?vocab ?mixed
@@ -114,11 +124,13 @@ struct TestContext {
 ad_utility::AllocatorWithLimit<Id> allocator{
     ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)};
 
-// Convenient access to constants for "infinity" and "not a number". The spelling `NaN` was chosen because `nan` conflicts with the standard library.
+// Convenient access to constants for "infinity" and "not a number". The
+// spelling `NaN` was chosen because `nan` conflicts with the standard library.
 const auto inf = std::numeric_limits<double>::infinity();
 const auto NaN = std::numeric_limits<double>::quiet_NaN();
 
-// Convert a vector of doubles into a vector of `ValueId`s that stores the values of the original vector.
+// Convert a vector of doubles into a vector of `ValueId`s that stores the
+// values of the original vector.
 VectorWithMemoryLimit<ValueId> makeValueIdVector(
     const VectorWithMemoryLimit<double>& vec) {
   VectorWithMemoryLimit<ValueId> result{allocator};
@@ -138,7 +150,8 @@ VectorWithMemoryLimit<ValueId> makeValueIdVector(
   return result;
 }
 
-// Create and return a `RelationalExpression` with the given Comparison and the given operands `l` and `r`.
+// Create and return a `RelationalExpression` with the given Comparison and the
+// given operands `l` and `r`.
 template <valueIdComparators::Comparison comp>
 auto makeExpression(auto l, auto r) {
   auto leftChild = std::make_unique<DummyExpression>(std::move(l));
@@ -154,8 +167,12 @@ auto evaluateOnTestContext = [](const SparqlExpression& expression) {
   return expression.evaluate(&context.context);
 };
 
-// If `input` has a `.clone` member function, return the result of that function. Otherwise return a copy of `input` (via the copy constructor). Used to generically create copies for `VectorWithMemoryLimit` (clone() method, but no copy constructor) and the other `SingleExpressionResult`s (which have a copy constructor, but no `.clone()` method.
-// The name `cloneIt` was chosen because `clone` conflicts with the standard library.
+// If `input` has a `.clone` member function, return the result of that
+// function. Otherwise return a copy of `input` (via the copy constructor). Used
+// to generically create copies for `VectorWithMemoryLimit` (clone() method, but
+// no copy constructor) and the other `SingleExpressionResult`s (which have a
+// copy constructor, but no `.clone()` method. The name `cloneIt` was chosen
+// because `clone` conflicts with the standard library.
 auto cloneIt = [](const auto& input) {
   if constexpr (requires { input.clone(); }) {
     return input.clone();
@@ -164,7 +181,8 @@ auto cloneIt = [](const auto& input) {
   }
 };
 
-// Assert that the given `expression` when evaluated on the `TestContext` (see above) has a single boolean result that is true.
+// Assert that the given `expression` when evaluated on the `TestContext` (see
+// above) has a single boolean result that is true.
 auto expectTrueBoolean = [](const SparqlExpression& expression,
                             source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l, "expectTrueBoolean was called here");
@@ -180,12 +198,14 @@ auto expectFalseBoolean = [](const SparqlExpression& expression,
   EXPECT_FALSE(std::get<Bool>(result));
 };
 
-// Run tests for all the different comparisons on constants of type `T` and `U` (e.g. numeric or string constants).
-// In the first pair `lessThan` the first entry must be less than the second. In `greaterThan` the first entry has to be greater than the second. In `equal`, the two entries have to be equal.
+// Run tests for all the different comparisons on constants of type `T` and `U`
+// (e.g. numeric or string constants). In the first pair `lessThan` the first
+// entry must be less than the second. In `greaterThan` the first entry has to
+// be greater than the second. In `equal`, the two entries have to be equal.
 template <typename T, typename U>
 auto testConstants(std::pair<T, U> lessThan, std::pair<T, U> greaterThan,
-                          std::pair<T, U> equal,
-                          source_location l = source_location::current()) {
+                   std::pair<T, U> equal,
+                   source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l, "testConstants was called here");
   auto True = expectTrueBoolean;
   auto False = expectFalseBoolean;
@@ -212,9 +232,11 @@ auto testConstants(std::pair<T, U> lessThan, std::pair<T, U> greaterThan,
   False(makeExpression<GT>(equal.first, equal.second));
 }
 
-// Test that all comparisons between `inputA` and `inputB` result in a single boolean that is false. The only exception is the `not equal` comparison, for which true is expected.
+// Test that all comparisons between `inputA` and `inputB` result in a single
+// boolean that is false. The only exception is the `not equal` comparison, for
+// which true is expected.
 auto testNotEqual = [](auto inputA, auto inputB,
-                               source_location l = source_location::current()) {
+                       source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l, "testNotEqual was called here");
   auto True = expectTrueBoolean;
   auto False = expectFalseBoolean;
