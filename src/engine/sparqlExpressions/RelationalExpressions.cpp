@@ -273,7 +273,7 @@ evaluateR(S1 value1, S2 value2, EvaluationContext* context) {
     if (!cols.empty() && cols[0] == columnIndex) {
       if constexpr (value2IsString) {
         return evaluateWithBinarySearch<Comp>(value1, valueId.first,
-                                             valueId.second, context);
+                                              valueId.second, context);
       } else {
         return evaluateWithBinarySearch<Comp>(value1, valueId, std::nullopt,
                                               context);

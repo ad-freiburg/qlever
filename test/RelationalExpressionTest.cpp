@@ -15,6 +15,11 @@ using namespace std::literals;
 
 using enum valueIdComparators::Comparison;
 
+namespace {
+ad_utility::AllocatorWithLimit<Id> allocator{
+    ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)};
+}
+
 template <valueIdComparators::Comparison comp>
 auto makeExpression(auto l, auto r) {
   auto leftChild = std::make_unique<DummyExpression>(std::move(l));
@@ -25,13 +30,11 @@ auto makeExpression(auto l, auto r) {
 }
 
 auto evaluateWithEmpyContext = [](const SparqlExpression& expression) {
-  ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   sparqlExpression::VariableToColumnAndResultTypeMap map;
   ResultTable::LocalVocab localVocab;
-  IdTable table{alloc};
+  IdTable table{allocator};
   QueryExecutionContext* qec = nullptr;
-  sparqlExpression::EvaluationContext context{*qec, map, table, alloc,
+  sparqlExpression::EvaluationContext context{*qec, map, table, allocator,
                                               localVocab};
 
   return expression.evaluate(&context);
@@ -138,14 +141,13 @@ auto testNumericAndString = [](auto numeric, auto s,
 };
 
 TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
-  ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   auto stringVec = VectorWithMemoryLimit<std::string>({"hallo",
                                                        "by"
                                                        ""},
-                                                      alloc);
-  auto intVec = VectorWithMemoryLimit<int64_t>({-12365, 0, 12}, alloc);
-  auto doubleVec = VectorWithMemoryLimit<double>({-12.365, 0, 12.1e5}, alloc);
+                                                      allocator);
+  auto intVec = VectorWithMemoryLimit<int64_t>({-12365, 0, 12}, allocator);
+  auto doubleVec =
+      VectorWithMemoryLimit<double>({-12.365, 0, 12.1e5}, allocator);
   testNumericAndString(3, "hallo"s);
   testNumericAndString(3, "3"s);
   testNumericAndString(-12.0, "hallo"s);
@@ -160,10 +162,11 @@ TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
 // The vector must consist of 9 elements: The first three must be less than
 // constant, the next three greater than constant, and the last three equal to
 // constant
+// TODO<joka921> The name of the function and the arguments are out of sync.
+// The function also works for two vectors.
 template <typename T, typename U>
 auto testNumericConstantAndVector(
-    T constant, VectorWithMemoryLimit<U> vector,
-    source_location l = source_location::current()) {
+    T constant, U vector, source_location l = source_location::current()) {
   auto trace =
       generateLocationTrace(l, "testNumericConstantAndVector was called here");
   ad_utility::AllocatorWithLimit<Id> alloc{
@@ -177,10 +180,20 @@ auto testNumericConstantAndVector(
   AD_CHECK(vector.size() == 9);
   context._beginIndex = 0;
   context._endIndex = 9;
+
+  auto clone = [](const auto& input) {
+    if constexpr (requires { input.clone(); }) {
+      return input.clone();
+    } else {
+      return input;
+    }
+  };
+
   auto m = [&]<auto comp>() {
-    auto expression = makeExpression<comp>(constant, vector.clone());
+    auto expression = makeExpression<comp>(clone(constant), clone(vector));
     auto resultAsVariant = expression.evaluate(&context);
-    auto expressionInverted = makeExpression<comp>(vector.clone(), constant);
+    auto expressionInverted =
+        makeExpression<comp>(clone(vector), clone(constant));
     auto resultAsVariantInverted = expressionInverted.evaluate(&context);
     auto& result = std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
     auto& resultInverted =
@@ -222,6 +235,13 @@ auto testNumericConstantAndVector(
     EXPECT_TRUE(resultNE[i]);
     EXPECT_FALSE(resultGE[i]);
     EXPECT_FALSE(resultGT[i]);
+
+    EXPECT_FALSE(invertedLT[i]);
+    EXPECT_FALSE(invertedLE[i]);
+    EXPECT_FALSE(invertedEQ[i]);
+    EXPECT_TRUE(invertedNE[i]);
+    EXPECT_TRUE(invertedGE[i]);
+    EXPECT_TRUE(invertedGT[i]);
   }
   for (size_t i = 6; i < 9; ++i) {
     EXPECT_FALSE(resultLT[i]);
@@ -230,28 +250,31 @@ auto testNumericConstantAndVector(
     EXPECT_FALSE(resultNE[i]);
     EXPECT_TRUE(resultGE[i]);
     EXPECT_FALSE(resultGT[i]);
+
+    EXPECT_FALSE(invertedLT[i]);
+    EXPECT_TRUE(invertedLE[i]);
+    EXPECT_TRUE(invertedEQ[i]);
+    EXPECT_FALSE(invertedNE[i]);
+    EXPECT_TRUE(invertedGE[i]);
+    EXPECT_FALSE(invertedGT[i]);
   }
 }
 
 TEST(RelationalExpression, NumericConstantAndNumericVector) {
-  ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   VectorWithMemoryLimit<double> doubles{
-      {-24.3, 0.0, 3.0, 12.8, 1235e12, 523.13, 3.8, 3.8, 3.8}, alloc};
+      {-24.3, 0.0, 3.0, 12.8, 1235e12, 523.13, 3.8, 3.8, 3.8}, allocator};
   testNumericConstantAndVector(3.8, doubles.clone());
   VectorWithMemoryLimit<int64_t> ints{{-523, -15, -3, -1, 0, 12305, -2, -2, -2},
-                                      alloc};
+                                      allocator};
   testNumericConstantAndVector(-2.0, ints.clone());
   testNumericConstantAndVector(int64_t{-2}, ints.clone());
 }
 
 TEST(RelationalExpression, StringConstantsAndStringVector) {
-  ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   VectorWithMemoryLimit<std::string> vec(
       {"alpha", "alpaka", "bertram", "sigma", "zeta", "kaulquappe", "caesar",
        "caesar", "caesar"},
-      alloc);
+      allocator);
   testNumericConstantAndVector("caesar"s, vec.clone());
 
   // TODO<joka921> These tests only work, when we actually use unicode
@@ -264,22 +287,29 @@ TEST(RelationalExpression, StringConstantsAndStringVector) {
   // "äpfel"}, {"xxx", "xxx"});
 }
 
-TEST(SparqlExpression, LessThan) {
-  auto three = std::make_unique<DummyExpression>(3);
-  auto four = std::make_unique<DummyExpression>(4.2);
+TEST(RelationalExpression, IntVectorAndIntVector) {
+  VectorWithMemoryLimit<int64_t> vecA{
+      {1065918, 17, 3, 1, 0, -102934, 2, -3120, 0}, allocator};
+  VectorWithMemoryLimit<int64_t> vecB{
+      {1065000, 16, -12340, 42, 1, -102930, 2, -3120, 0}, allocator};
+  testNumericConstantAndVector(vecA.clone(), vecB.clone());
+}
 
-  QueryExecutionContext* qec = nullptr;
-  auto expr = LessThanExpression{{std::move(three), std::move(four)}};
+TEST(RelationalExpression, DoubleVectorAndDoubleVector) {
+  VectorWithMemoryLimit<double> vecA{
+      {1.1e12, 0.0, 3.120, -1230, -1.3e12, 1.2e-13, -0.0, 13, -1.2e6},
+      allocator};
+  VectorWithMemoryLimit<double> vecB{
+      {1.0e12, -0.1, -3.120e5, 1230, -1.3e10, 1.1e-12, 0.0, 13, -1.2e6},
+      allocator};
+  testNumericConstantAndVector(vecA.clone(), vecB.clone());
+}
 
-  ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
-  sparqlExpression::VariableToColumnAndResultTypeMap map;
-  ResultTable::LocalVocab localVocab;
-  IdTable table{alloc};
-
-  sparqlExpression::EvaluationContext context{*qec, map, table, alloc,
-                                              localVocab};
-
-  auto res = expr.evaluate(&context);
-  ASSERT_TRUE(std::get<Bool>(res));
+TEST(RelationalExpression, DoubleVectorAndIntVector) {
+  VectorWithMemoryLimit<int64_t> vecA{
+      {1065918, 17, 3, 1, 0, -102934, 2, -3120, 0}, allocator};
+  VectorWithMemoryLimit<double> vecB{{1065917.9, 1.5e1, -3.120e5, 1.0e1, 1e-12,
+                                      -102934e-1, 20.0e-1, -3.120e3, -0.0},
+                                     allocator};
+  testNumericConstantAndVector(vecA.clone(), vecB.clone());
 }
