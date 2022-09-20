@@ -22,6 +22,29 @@ ad_utility::AllocatorWithLimit<Id> allocator{
 
 const auto inf = std::numeric_limits<double>::infinity();
 const auto NaN = std::numeric_limits<double>::quiet_NaN();
+
+ValueId Int(int64_t i) { return ValueId::makeFromInt(i); }
+
+ValueId Double(double d) { return ValueId::makeFromDouble(d); }
+
+VectorWithMemoryLimit<ValueId> makeValueIdVector(
+    const VectorWithMemoryLimit<double>& vec) {
+  VectorWithMemoryLimit<ValueId> result{allocator};
+  for (double d : vec) {
+    result.push_back(Double(d));
+  }
+  return result;
+}
+
+VectorWithMemoryLimit<ValueId> makeValueIdVector(
+    const VectorWithMemoryLimit<int64_t>& vec) {
+  VectorWithMemoryLimit<ValueId> result{allocator};
+  for (int64_t i : vec) {
+    result.push_back(Int(i));
+  }
+  return result;
+}
+
 }  // namespace
 
 template <valueIdComparators::Comparison comp>
@@ -119,25 +142,61 @@ auto testNumericAndString = [](auto numeric, auto s,
   False(makeExpression<GE>(clone(s), clone(numeric)));
 };
 TEST(RelationalExpression, IntAndDouble) {
-  testNumericConstants<int, double>({3, 3.3}, {4, -3.1}, {-12, -12.0});
+  testNumericConstants<int, double>({3, 3.3}, {4, -inf}, {-12, -12.0});
+  // Similar tests, but on the level of `ValueIds`.
+  testNumericConstants<ValueId, double>({Int(3), inf}, {Int(4), -3.1},
+                                        {Int(-12), -12.0});
+  testNumericConstants<int, ValueId>({3, Double(inf)}, {4, Double(-3.1)},
+                                     {-12, Double(-12.0)});
+  testNumericConstants<ValueId, ValueId>(
+      {Int(3), Double(inf)}, {Int(4), Double(-3.1)}, {Int(-12), Double(-12.0)});
+
   testNumericAndString(3, NaN);
+  testNumericAndString(3, Double(NaN));
 }
 
 TEST(RelationalExpression, DoubleAndInt) {
   testNumericConstants<double, int>({3.1, 4}, {4.2, -3}, {-12.0, -12});
+  // Similar tests, but on the level of `ValueIds`.
+  testNumericConstants<double, ValueId>({3.1, Int(4)}, {4.2, Int(-3)},
+                                        {-12.0, Int(-12)});
+  testNumericConstants<ValueId, int>({Double(3.1), 4}, {Double(4.2), -3},
+                                     {Double(-12.0), -12});
+  testNumericConstants<ValueId, ValueId>(
+      {Double(3.1), Int(4)}, {Double(4.2), Int(-3)}, {Double(-12.0), Int(-12)});
+
   testNumericAndString(NaN, 42);
+  testNumericAndString(Double(NaN), 42);
 }
 
 TEST(RelationalExpression, IntAndInt) {
   testNumericConstants<int, int>({-3, 3}, {4, 3}, {-12, -12});
+  // Similar tests, but on the level of `ValueIds`.
+  testNumericConstants<int, ValueId>({-3, Int(3)}, {4, Int(3)},
+                                     {-12, Int(-12)});
+  testNumericConstants<ValueId, int>({Int(-3), 3}, {Int(4), 3},
+                                     {Int(-12), -12});
+  testNumericConstants<ValueId, ValueId>({Int(-3), Int(3)}, {Int(4), Int(3)},
+                                         {Int(-12), Int(-12)});
 }
 
 TEST(RelationalExpression, DoubleAndDouble) {
   testNumericConstants<double, double>({-3.1, -3.0}, {4.2, 4.1},
                                        {-12.83, -12.83});
+  // Similar tests, but on the level of `ValueIds`.
+  testNumericConstants<ValueId, double>(
+      {Double(-3.1), -3.0}, {Double(4.2), 4.1}, {Double(-12.83), -12.83});
+  testNumericConstants<double, ValueId>(
+      {-3.1, Double(-3.0)}, {4.2, Double(4.1)}, {-12.83, Double(-12.83)});
+  testNumericConstants<ValueId, ValueId>({Double(-3.1), Double(-3.0)},
+                                         {Double(4.2), Double(4.1)},
+                                         {Double(-12.83), Double(-12.83)});
+
   testNumericAndString(NaN, NaN);
   testNumericAndString(12.0, NaN);
   testNumericAndString(NaN, -1.23e12);
+  testNumericAndString(Double(NaN), -1.23e12);
+  testNumericAndString(NaN, Double(-1.23e12));
 }
 
 TEST(RelationalExpression, StringAndString) {
@@ -149,6 +208,9 @@ TEST(RelationalExpression, StringAndString) {
   // (e.g.`ä` vs `a + dots`.
   // testNumericConstants<std::string, std::string>({"Alpha", "beta"}, {"beta",
   // "äpfel"}, {"xxx", "xxx"});
+
+  // TODO<joka921> To compare strings with `ValueId`s we actually need a context
+  // with vocabulary etc. which has yet to be mocked.
 }
 
 TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
@@ -271,6 +333,38 @@ auto testNumericConstantAndVector(
   }
 }
 
+template <typename A, typename B>
+void testIncludingValueIds(A a, B b,
+                           source_location l = source_location::current()) {
+  auto trace =
+      generateLocationTrace(l, "testIncludingValueIds was called here");
+
+  auto lift = []<typename T>(const T& t) {
+    if constexpr (std::is_same_v<T, double>) {
+      return Double(t);
+    } else if constexpr (std::is_integral_v<T>) {
+      return Int(t);
+    } else if constexpr (isVectorResult<T>) {
+      return makeValueIdVector(t);
+    } else {
+      static_assert(ad_utility::alwaysFalse<T>);
+    }
+  };
+
+  auto clone = [](const auto& input) {
+    if constexpr (requires { input.clone(); }) {
+      return input.clone();
+    } else {
+      return input;
+    }
+  };
+
+  testNumericConstantAndVector(clone(a), clone(b));
+  testNumericConstantAndVector(lift(a), clone(b));
+  testNumericConstantAndVector(clone(a), lift(b));
+  testNumericConstantAndVector(lift(a), lift(b));
+}
+
 // At least one of `T` `U` must be a vector type. The vectors must all have 5
 // elements. The corresponding pairs of values must all fulfill the "not equal"
 // relation, but none of the other relations must be true.
@@ -342,11 +436,12 @@ auto testNotComparable(T constant, U vector,
 TEST(RelationalExpression, NumericConstantAndNumericVector) {
   VectorWithMemoryLimit<double> doubles{
       {-24.3, 0.0, 3.0, 12.8, 1235e12, 523.13, 3.8, 3.8, 3.8}, allocator};
-  testNumericConstantAndVector(3.8, doubles.clone());
+  testIncludingValueIds(3.8, doubles.clone());
+
   VectorWithMemoryLimit<int64_t> ints{{-523, -15, -3, -1, 0, 12305, -2, -2, -2},
                                       allocator};
-  testNumericConstantAndVector(-2.0, ints.clone());
-  testNumericConstantAndVector(int64_t{-2}, ints.clone());
+  testIncludingValueIds(-2.0, ints.clone());
+  testIncludingValueIds(int64_t{-2}, ints.clone());
 
   // Test cases for comparison with NaN
   VectorWithMemoryLimit<double> nonNans{{1.0, 2.0, -inf, inf, 12e6}, allocator};
@@ -355,6 +450,8 @@ TEST(RelationalExpression, NumericConstantAndNumericVector) {
 
   testNotComparable(NaN, nonNans.clone());
   testNotComparable(NaN, fiveInts.clone());
+  testNotComparable(Double(NaN), fiveInts.clone());
+  testNotComparable(NaN, makeValueIdVector(fiveInts));
   testNotComparable(3.2, Nans.clone());
   testNotComparable(int64_t{-123}, Nans.clone());
   testNotComparable(NaN, Nans.clone());
@@ -375,6 +472,9 @@ TEST(RelationalExpression, StringConstantsAndStringVector) {
   // "Eta", "kaulQuappe", "Caesar", "Caesar", "Caesare"}, alloc);
   // testNumericConstants<std::string, std::string>({"Alpha", "beta"}, {"beta",
   // "äpfel"}, {"xxx", "xxx"});
+
+  // TODO<joka921> Add tests for Strings and ValueIds as soon as we have a
+  // mocked Vocabulary.
 }
 
 TEST(RelationalExpression, IntVectorAndIntVector) {
@@ -382,7 +482,7 @@ TEST(RelationalExpression, IntVectorAndIntVector) {
       {1065918, 17, 3, 1, 0, -102934, 2, -3120, 0}, allocator};
   VectorWithMemoryLimit<int64_t> vecB{
       {1065000, 16, -12340, 42, 1, -102930, 2, -3120, 0}, allocator};
-  testNumericConstantAndVector(vecA.clone(), vecB.clone());
+  testIncludingValueIds(vecA.clone(), vecB.clone());
 }
 
 TEST(RelationalExpression, DoubleVectorAndDoubleVector) {
@@ -392,7 +492,7 @@ TEST(RelationalExpression, DoubleVectorAndDoubleVector) {
   VectorWithMemoryLimit<double> vecB{
       {1.0e12, -0.1, -3.120e5, 1230, -1.3e10, 1.1e-12, 0.0, 13, -1.2e6},
       allocator};
-  testNumericConstantAndVector(vecA.clone(), vecB.clone());
+  testIncludingValueIds(vecA.clone(), vecB.clone());
 
   VectorWithMemoryLimit<double> nanA{{NaN, 1.0, NaN, 3.2, NaN}, allocator};
   VectorWithMemoryLimit<double> nanB{{-12.3, NaN, 0.0, NaN, inf}, allocator};
@@ -405,11 +505,14 @@ TEST(RelationalExpression, DoubleVectorAndIntVector) {
   VectorWithMemoryLimit<double> vecB{{1065917.9, 1.5e1, -3.120e5, 1.0e1, 1e-12,
                                       -102934e-1, 20.0e-1, -3.120e3, -0.0},
                                      allocator};
-  testNumericConstantAndVector(vecA.clone(), vecB.clone());
+  testIncludingValueIds(vecA.clone(), vecB.clone());
 
   VectorWithMemoryLimit<int64_t> fiveInts{{0, 1, 2, 3, -4}, allocator};
   VectorWithMemoryLimit<double> fiveNans{{NaN, NaN, NaN, NaN, NaN}, allocator};
   testNotComparable(fiveInts.clone(), fiveNans.clone());
+
+  // TODO<joka921> Consistently also test `includingValueIds` for the `NaN`
+  // cases.
 }
 
 TEST(RelationalExpression, StringVectorAndStringVector) {
@@ -424,4 +527,12 @@ TEST(RelationalExpression, StringVectorAndStringVector) {
   testNumericConstantAndVector(vecA.clone(), vecB.clone());
   // TODO<joka921> Add a test case for correct unicode collation as soon as that
   // is actually supported.
+
+  // TODO<joka921> Add comparison between string and ValueId (needs mocking of
+  // the vocabulary).
 }
+
+// TODO<joka921> vector<ValueId> with mixed types.
+
+// TODO<joka921> tests for the `Variable` type (needs mocking) including the
+// binary search case.
