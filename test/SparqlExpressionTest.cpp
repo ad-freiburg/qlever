@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "./SparqlParserTestHelpers.h"
+#include "./SparqlExpressionTestHelpers.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"

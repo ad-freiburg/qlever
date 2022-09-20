@@ -408,9 +408,11 @@ inline bool compareIds(ValueId a, ValueId b, Comparison comparison) {
 /// are considered to be equal.
 inline bool compareWithEqualIds(ValueId a, ValueId bBegin, ValueId bEnd,
                                 Comparison comparison) {
-  // `bBegin == bEnd` means that `a` can never be considered eqaul. This case
-  // happen when comparing IDs from QLever's vocabulary to "pseudo"-IDs that
-  // represent words that are not part of this vocabulary.
+  // The case `bBegin == bEnd`
+  // happens when IDs from QLever's vocabulary are compared to "pseudo"-IDs that
+  // represent words that are not part of the vocabulary. In this case the ID
+  // `bBegin` is the ID of the smallest vocabulary entry that is larger than the
+  // non-existing word that it represents.
   AD_CHECK(bBegin <= bEnd);
   switch (comparison) {
     case Comparison::LT:
