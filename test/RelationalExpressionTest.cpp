@@ -2,6 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
+#include <limits>
 #include <string>
 
 #include "./SparqlParserTestHelpers.h"
@@ -18,7 +19,10 @@ using enum valueIdComparators::Comparison;
 namespace {
 ad_utility::AllocatorWithLimit<Id> allocator{
     ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)};
-}
+
+const auto inf = std::numeric_limits<double>::infinity();
+const auto NaN = std::numeric_limits<double>::quiet_NaN();
+}  // namespace
 
 template <valueIdComparators::Comparison comp>
 auto makeExpression(auto l, auto r) {
@@ -83,34 +87,9 @@ auto testNumericConstants(std::pair<T, U> lessThan, std::pair<T, U> greaterThan,
   True(makeExpression<GE>(equal.first, equal.second));
   False(makeExpression<GT>(equal.first, equal.second));
 }
-TEST(RelationalExpression, IntAndDouble) {
-  testNumericConstants<int, double>({3, 3.3}, {4, -3.1}, {-12, -12.0});
-}
 
-TEST(RelationalExpression, DoubleAndInt) {
-  testNumericConstants<double, int>({3.1, 4}, {4.2, -3}, {-12.0, -12});
-}
-
-TEST(RelationalExpression, IntAndInt) {
-  testNumericConstants<int, int>({-3, 3}, {4, 3}, {-12, -12});
-}
-
-TEST(RelationalExpression, DoubleAndDouble) {
-  testNumericConstants<double, double>({-3.1, -3.0}, {4.2, 4.1},
-                                       {-12.83, -12.83});
-}
-
-TEST(RelationalExpression, StringAndString) {
-  testNumericConstants<std::string, std::string>(
-      {"alpha", "beta"}, {"sigma", "delta"}, {"epsilon", "epsilon"});
-  // TODO<joka921> These tests only work, when we actually use unicode
-  // comparisons for the string based expressions. TODDO<joka921> Add an example
-  // for strings that are bytewise different but equal on the unicode level
-  // (e.g.`ä` vs `a + dots`.
-  // testNumericConstants<std::string, std::string>({"Alpha", "beta"}, {"beta",
-  // "äpfel"}, {"xxx", "xxx"});
-}
-
+// TODO<joka921> Misnomer, it is "notComparable, constant result", rename and
+// comment.
 auto testNumericAndString = [](auto numeric, auto s,
                                source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l, "testNumericAndString was called here");
@@ -139,6 +118,38 @@ auto testNumericAndString = [](auto numeric, auto s,
   False(makeExpression<GT>(clone(s), clone(numeric)));
   False(makeExpression<GE>(clone(s), clone(numeric)));
 };
+TEST(RelationalExpression, IntAndDouble) {
+  testNumericConstants<int, double>({3, 3.3}, {4, -3.1}, {-12, -12.0});
+  testNumericAndString(3, NaN);
+}
+
+TEST(RelationalExpression, DoubleAndInt) {
+  testNumericConstants<double, int>({3.1, 4}, {4.2, -3}, {-12.0, -12});
+  testNumericAndString(NaN, 42);
+}
+
+TEST(RelationalExpression, IntAndInt) {
+  testNumericConstants<int, int>({-3, 3}, {4, 3}, {-12, -12});
+}
+
+TEST(RelationalExpression, DoubleAndDouble) {
+  testNumericConstants<double, double>({-3.1, -3.0}, {4.2, 4.1},
+                                       {-12.83, -12.83});
+  testNumericAndString(NaN, NaN);
+  testNumericAndString(12.0, NaN);
+  testNumericAndString(NaN, -1.23e12);
+}
+
+TEST(RelationalExpression, StringAndString) {
+  testNumericConstants<std::string, std::string>(
+      {"alpha", "beta"}, {"sigma", "delta"}, {"epsilon", "epsilon"});
+  // TODO<joka921> These tests only work, when we actually use unicode
+  // comparisons for the string based expressions. TODDO<joka921> Add an example
+  // for strings that are bytewise different but equal on the unicode level
+  // (e.g.`ä` vs `a + dots`.
+  // testNumericConstants<std::string, std::string>({"Alpha", "beta"}, {"beta",
+  // "äpfel"}, {"xxx", "xxx"});
+}
 
 TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
   auto stringVec = VectorWithMemoryLimit<std::string>({"hallo",
@@ -260,6 +271,74 @@ auto testNumericConstantAndVector(
   }
 }
 
+// At least one of `T` `U` must be a vector type. The vectors must all have 5
+// elements. The corresponding pairs of values must all fulfill the "not equal"
+// relation, but none of the other relations must be true.
+template <typename T, typename U>
+auto testNotComparable(T constant, U vector,
+                       source_location l = source_location::current()) {
+  auto trace =
+      generateLocationTrace(l, "testNumericConstantAndVector was called here");
+  ad_utility::AllocatorWithLimit<Id> alloc{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
+  sparqlExpression::VariableToColumnAndResultTypeMap map;
+  ResultTable::LocalVocab localVocab;
+  IdTable table{alloc};
+  QueryExecutionContext* qec = nullptr;
+  sparqlExpression::EvaluationContext context{*qec, map, table, alloc,
+                                              localVocab};
+  AD_CHECK(vector.size() == 5);
+  context._beginIndex = 0;
+  context._endIndex = 5;
+
+  auto clone = [](const auto& input) {
+    if constexpr (requires { input.clone(); }) {
+      return input.clone();
+    } else {
+      return input;
+    }
+  };
+
+  auto m = [&]<auto comp>() {
+    auto expression = makeExpression<comp>(clone(constant), clone(vector));
+    auto resultAsVariant = expression.evaluate(&context);
+    auto expressionInverted =
+        makeExpression<comp>(clone(vector), clone(constant));
+    auto resultAsVariantInverted = expressionInverted.evaluate(&context);
+    auto& result = std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
+    auto& resultInverted =
+        std::get<VectorWithMemoryLimit<Bool>>(resultAsVariantInverted);
+    return std::pair{std::move(result), std::move(resultInverted)};
+  };
+  auto [resultLT, invertedLT] = m.template operator()<LT>();
+  auto [resultLE, invertedLE] = m.template operator()<LE>();
+  auto [resultEQ, invertedEQ] = m.template operator()<EQ>();
+  auto [resultNE, invertedNE] = m.template operator()<NE>();
+  auto [resultGE, invertedGE] = m.template operator()<GE>();
+  auto [resultGT, invertedGT] = m.template operator()<GT>();
+
+  EXPECT_EQ(resultLT.size(), 5);
+  EXPECT_EQ(resultLE.size(), 5);
+  EXPECT_EQ(resultEQ.size(), 5);
+  EXPECT_EQ(resultNE.size(), 5);
+  EXPECT_EQ(resultGE.size(), 5);
+  EXPECT_EQ(resultGT.size(), 5);
+  for (size_t i = 0; i < 5; ++i) {
+    EXPECT_FALSE(resultLT[i]);
+    EXPECT_FALSE(resultLE[i]);
+    EXPECT_FALSE(resultEQ[i]);
+    EXPECT_TRUE(resultNE[i]);
+    EXPECT_FALSE(resultGE[i]);
+    EXPECT_FALSE(resultGT[i]);
+    EXPECT_FALSE(invertedLT[i]);
+    EXPECT_FALSE(invertedLE[i]);
+    EXPECT_FALSE(invertedEQ[i]);
+    EXPECT_TRUE(invertedNE[i]);
+    EXPECT_FALSE(invertedGE[i]);
+    EXPECT_FALSE(invertedGT[i]);
+  }
+}
+
 TEST(RelationalExpression, NumericConstantAndNumericVector) {
   VectorWithMemoryLimit<double> doubles{
       {-24.3, 0.0, 3.0, 12.8, 1235e12, 523.13, 3.8, 3.8, 3.8}, allocator};
@@ -268,6 +347,17 @@ TEST(RelationalExpression, NumericConstantAndNumericVector) {
                                       allocator};
   testNumericConstantAndVector(-2.0, ints.clone());
   testNumericConstantAndVector(int64_t{-2}, ints.clone());
+
+  // Test cases for comparison with NaN
+  VectorWithMemoryLimit<double> nonNans{{1.0, 2.0, -inf, inf, 12e6}, allocator};
+  VectorWithMemoryLimit<double> Nans{{NaN, NaN, NaN, NaN, NaN}, allocator};
+  VectorWithMemoryLimit<int64_t> fiveInts{{-1, 0, 1, 2, 3}, allocator};
+
+  testNotComparable(NaN, nonNans.clone());
+  testNotComparable(NaN, fiveInts.clone());
+  testNotComparable(3.2, Nans.clone());
+  testNotComparable(int64_t{-123}, Nans.clone());
+  testNotComparable(NaN, Nans.clone());
 }
 
 TEST(RelationalExpression, StringConstantsAndStringVector) {
@@ -303,6 +393,10 @@ TEST(RelationalExpression, DoubleVectorAndDoubleVector) {
       {1.0e12, -0.1, -3.120e5, 1230, -1.3e10, 1.1e-12, 0.0, 13, -1.2e6},
       allocator};
   testNumericConstantAndVector(vecA.clone(), vecB.clone());
+
+  VectorWithMemoryLimit<double> nanA{{NaN, 1.0, NaN, 3.2, NaN}, allocator};
+  VectorWithMemoryLimit<double> nanB{{-12.3, NaN, 0.0, NaN, inf}, allocator};
+  testNotComparable(nanA.clone(), nanB.clone());
 }
 
 TEST(RelationalExpression, DoubleVectorAndIntVector) {
@@ -312,4 +406,22 @@ TEST(RelationalExpression, DoubleVectorAndIntVector) {
                                       -102934e-1, 20.0e-1, -3.120e3, -0.0},
                                      allocator};
   testNumericConstantAndVector(vecA.clone(), vecB.clone());
+
+  VectorWithMemoryLimit<int64_t> fiveInts{{0, 1, 2, 3, -4}, allocator};
+  VectorWithMemoryLimit<double> fiveNans{{NaN, NaN, NaN, NaN, NaN}, allocator};
+  testNotComparable(fiveInts.clone(), fiveNans.clone());
+}
+
+TEST(RelationalExpression, StringVectorAndStringVector) {
+  VectorWithMemoryLimit<std::string> vecA{
+      {"alpha", "beta", "g", "epsilon", "fraud", "capitalism", "", "bo'sä30",
+       "Me"},
+      allocator};
+  VectorWithMemoryLimit<std::string> vecB{
+      {"alph", "alpha", "f", "epsiloo", "freud", "communism", "", "bo'sä30",
+       "Me"},
+      allocator};
+  testNumericConstantAndVector(vecA.clone(), vecB.clone());
+  // TODO<joka921> Add a test case for correct unicode collation as soon as that
+  // is actually supported.
 }
