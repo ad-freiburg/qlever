@@ -16,15 +16,17 @@
 using namespace sparqlExpression;
 using ad_utility::source_location;
 using namespace std::literals;
-
 using enum valueIdComparators::Comparison;
 
+// First some internal helper functions and constants.
 namespace {
-
+// Make a `ValueId` from an int. Shorter name, as it will be used often.
 ValueId Int(int64_t i) { return ValueId::makeFromInt(i); }
 
+// Make a `ValueId` from a double. Shorter name, as it will be used often.
 ValueId Double(double d) { return ValueId::makeFromDouble(d); }
 
+// Create an `Index` the vocabulary of which contains the literals `"alpha", "älpha", "A", "Beta"`. (The other properties of that index are not important for these unit tests.
 Index makeTestIndex() {
   std::string filename = "relationalExpressionTestIndex.ttl";
   std::string dummyKb =
@@ -46,6 +48,7 @@ Index makeTestIndex() {
   return index;
 }
 
+// Return a static  `QueryExecutionContext` that refers to an index that was build using `makeTestIndex()` (see above). The index (most notably its vocabulary) is the only part of the `QueryExecutionContext` that is actually relevant for these tests, so the other members are defaultet.
 static QueryExecutionContext* getQec() {
   static ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)};
@@ -62,6 +65,7 @@ static QueryExecutionContext* getQec() {
   return &qec;
 }
 
+// Struct that stores a `sparqlExpression::EvaluationContext` and all the data structures that this context refers to. Most importantly it uses the `QueryExecutionContext` from `getQec()` (see above), and  has an `inputTable` that refers to a previous partial query result with multiple columns of various types. For details see the constructor.
 struct TestContext {
   QueryExecutionContext* qec = getQec();
   sparqlExpression::VariableToColumnAndResultTypeMap map;
@@ -70,8 +74,8 @@ struct TestContext {
   sparqlExpression::EvaluationContext context{*getQec(), map, table,
                                               qec->getAllocator(), localVocab};
   TestContext() {
-    // TODO<joka921> Add tests for the local vocab.
-    // ?ints ?doubles ?numeric ?vocab ?mixed
+
+    // First get some IDs for strings from the vocabulary to later reuse them
     Id alpha;
     Id aelpha;
     Id A;
@@ -86,13 +90,18 @@ struct TestContext {
     b = qec->getIndex().getId("\"Beta\"", &Beta);
     AD_CHECK(b);
 
+    // Set up the `table` that represents the previous partial query results. It has five columns/variables:
+    // ?ints (only integers), ?doubles (only doubles), ?numeric (int and double), ?vocab (only entries from the vocabulary), ?mixed (all of the previous).
     table.setCols(5);
+    // Order of the columns:
+    // ?ints ?doubles ?numeric ?vocab ?mixed
     table.push_back({Int(1), Double(0.1), Int(1), Beta, Int(1)});
     table.push_back({Int(0), Double(-.1), Double(-.1), alpha, Double(-.1)});
     table.push_back({Int(-1), Double(2.8), Double(3.4), aelpha, A});
 
     context._beginIndex = 0;
     context._endIndex = table.size();
+    // Define the mapping from variable names to column indices.
     map["?ints"] = {0, qlever::ResultType::KB};
     map["?doubles"] = {1, qlever::ResultType::KB};
     map["?numeric"] = {2, qlever::ResultType::KB};
@@ -101,12 +110,15 @@ struct TestContext {
   }
 };
 
+// A global allocator that will be used to setup test inputs.
 ad_utility::AllocatorWithLimit<Id> allocator{
     ad_utility::makeAllocationMemoryLeftThreadsafeObject(100'000)};
 
+// Convenient access to constants for "infinity" and "not a number". The spelling `NaN` was chosen because `nan` conflicts with the standard library.
 const auto inf = std::numeric_limits<double>::infinity();
 const auto NaN = std::numeric_limits<double>::quiet_NaN();
 
+// Convert a vector of doubles into a vector of `ValueId`s that stores the values of the original vector.
 VectorWithMemoryLimit<ValueId> makeValueIdVector(
     const VectorWithMemoryLimit<double>& vec) {
   VectorWithMemoryLimit<ValueId> result{allocator};
@@ -116,6 +128,7 @@ VectorWithMemoryLimit<ValueId> makeValueIdVector(
   return result;
 }
 
+// Same as the above function, but for `int64_t` instead of `double`.
 VectorWithMemoryLimit<ValueId> makeValueIdVector(
     const VectorWithMemoryLimit<int64_t>& vec) {
   VectorWithMemoryLimit<ValueId> result{allocator};
@@ -125,8 +138,7 @@ VectorWithMemoryLimit<ValueId> makeValueIdVector(
   return result;
 }
 
-}  // namespace
-
+// Create and return a `RelationalExpression` with the given Comparison and the given operands `l` and `r`.
 template <valueIdComparators::Comparison comp>
 auto makeExpression(auto l, auto r) {
   auto leftChild = std::make_unique<DummyExpression>(std::move(l));
@@ -136,35 +148,45 @@ auto makeExpression(auto l, auto r) {
       {std::move(leftChild), std::move(rightChild)});
 }
 
-auto evaluateWithEmpyContext = [](const SparqlExpression& expression) {
-  sparqlExpression::VariableToColumnAndResultTypeMap map;
-  ResultTable::LocalVocab localVocab;
-  IdTable table{allocator};
-  sparqlExpression::EvaluationContext context{*getQec(), map, table, allocator,
-                                              localVocab};
-
-  return expression.evaluate(&context);
+// Evaluate the given `expression` on a `TestContext` (see above).
+auto evaluateOnTestContext = [](const SparqlExpression& expression) {
+  TestContext context{};
+  return expression.evaluate(&context.context);
 };
 
+// If `input` has a `.clone` member function, return the result of that function. Otherwise return a copy of `input` (via the copy constructor). Used to generically create copies for `VectorWithMemoryLimit` (clone() method, but no copy constructor) and the other `SingleExpressionResult`s (which have a copy constructor, but no `.clone()` method.
+// The name `cloneIt` was chosen because `clone` conflicts with the standard library.
+auto cloneIt = [](const auto& input) {
+  if constexpr (requires { input.clone(); }) {
+    return input.clone();
+  } else {
+    return input;
+  }
+};
+
+// Assert that the given `expression` when evaluated on the `TestContext` (see above) has a single boolean result that is true.
 auto expectTrueBoolean = [](const SparqlExpression& expression,
                             source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l, "expectTrueBoolean was called here");
-  auto result = evaluateWithEmpyContext(expression);
+  auto result = evaluateOnTestContext(expression);
   EXPECT_TRUE(std::get<Bool>(result));
 };
 
+// Similar to `expectTrueBoolean`, but assert that the boolean is `false`.
 auto expectFalseBoolean = [](const SparqlExpression& expression,
                              source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l, "expectFalseBoolean was called here");
-  auto result = evaluateWithEmpyContext(expression);
+  auto result = evaluateOnTestContext(expression);
   EXPECT_FALSE(std::get<Bool>(result));
 };
 
+// Run tests for all the different comparisons on constants of type `T` and `U` (e.g. numeric or string constants).
+// In the first pair `lessThan` the first entry must be less than the second. In `greaterThan` the first entry has to be greater than the second. In `equal`, the two entries have to be equal.
 template <typename T, typename U>
-auto testNumericConstants(std::pair<T, U> lessThan, std::pair<T, U> greaterThan,
+auto testConstants(std::pair<T, U> lessThan, std::pair<T, U> greaterThan,
                           std::pair<T, U> equal,
                           source_location l = source_location::current()) {
-  auto trace = generateLocationTrace(l, "testNumericConstants was called here");
+  auto trace = generateLocationTrace(l, "testConstants was called here");
   auto True = expectTrueBoolean;
   auto False = expectFalseBoolean;
 
@@ -190,102 +212,92 @@ auto testNumericConstants(std::pair<T, U> lessThan, std::pair<T, U> greaterThan,
   False(makeExpression<GT>(equal.first, equal.second));
 }
 
-// TODO<joka921> Misnomer, it is "notComparable, constant result", rename and
-// comment.
-auto testNumericAndString = [](auto numeric, auto s,
+// Test that all comparisons between `inputA` and `inputB` result in a single boolean that is false. The only exception is the `not equal` comparison, for which true is expected.
+auto testNotEqual = [](auto inputA, auto inputB,
                                source_location l = source_location::current()) {
-  auto trace = generateLocationTrace(l, "testNumericAndString was called here");
+  auto trace = generateLocationTrace(l, "testNotEqual was called here");
   auto True = expectTrueBoolean;
   auto False = expectFalseBoolean;
 
-  auto clone = [](const auto& input) {
-    if constexpr (requires { input.clone(); }) {
-      return input.clone();
-    } else {
-      return input;
-    }
-  };
+  False(makeExpression<LT>(cloneIt(inputA), cloneIt(inputB)));
+  False(makeExpression<LE>(cloneIt(inputA), cloneIt(inputB)));
+  False(makeExpression<EQ>(cloneIt(inputA), cloneIt(inputB)));
+  True(makeExpression<NE>(cloneIt(inputA), cloneIt(inputB)));
+  False(makeExpression<GT>(cloneIt(inputA), cloneIt(inputB)));
+  False(makeExpression<GE>(cloneIt(inputA), cloneIt(inputB)));
 
-  False(makeExpression<LT>(clone(numeric), clone(s)));
-  False(makeExpression<LE>(clone(numeric), clone(s)));
-  False(makeExpression<EQ>(clone(numeric), clone(s)));
-  True(makeExpression<NE>(clone(numeric), clone(s)));
-  False(makeExpression<GT>(clone(numeric), clone(s)));
-  False(makeExpression<GE>(clone(numeric), clone(s)));
-
-  False(makeExpression<LT>(clone(s), clone(numeric)));
-  False(makeExpression<LE>(clone(s), clone(numeric)));
-  False(makeExpression<EQ>(clone(s), clone(numeric)));
-  True(makeExpression<NE>(clone(s), clone(numeric)));
-  False(makeExpression<GT>(clone(s), clone(numeric)));
-  False(makeExpression<GE>(clone(s), clone(numeric)));
+  False(makeExpression<LT>(cloneIt(inputB), cloneIt(inputA)));
+  False(makeExpression<LE>(cloneIt(inputB), cloneIt(inputA)));
+  False(makeExpression<EQ>(cloneIt(inputB), cloneIt(inputA)));
+  True(makeExpression<NE>(cloneIt(inputB), cloneIt(inputA)));
+  False(makeExpression<GT>(cloneIt(inputB), cloneIt(inputA)));
+  False(makeExpression<GE>(cloneIt(inputB), cloneIt(inputA)));
 };
-TEST(RelationalExpression, IntAndDouble) {
-  testNumericConstants<int, double>({3, 3.3}, {4, -inf}, {-12, -12.0});
-  // Similar tests, but on the level of `ValueIds`.
-  testNumericConstants<ValueId, double>({Int(3), inf}, {Int(4), -3.1},
-                                        {Int(-12), -12.0});
-  testNumericConstants<int, ValueId>({3, Double(inf)}, {4, Double(-3.1)},
-                                     {-12, Double(-12.0)});
-  testNumericConstants<ValueId, ValueId>(
-      {Int(3), Double(inf)}, {Int(4), Double(-3.1)}, {Int(-12), Double(-12.0)});
+}  // namespace
 
-  testNumericAndString(3, NaN);
-  testNumericAndString(3, Double(NaN));
+TEST(RelationalExpression, IntAndDouble) {
+  testConstants<int, double>({3, 3.3}, {4, -inf}, {-12, -12.0});
+  // Similar tests, but on the level of `ValueIds`.
+  testConstants<ValueId, double>({Int(3), inf}, {Int(4), -3.1},
+                                 {Int(-12), -12.0});
+  testConstants<int, ValueId>({3, Double(inf)}, {4, Double(-3.1)},
+                              {-12, Double(-12.0)});
+  testConstants<ValueId, ValueId>({Int(3), Double(inf)}, {Int(4), Double(-3.1)},
+                                  {Int(-12), Double(-12.0)});
+
+  testNotEqual(3, NaN);
+  testNotEqual(3, Double(NaN));
 }
 
 TEST(RelationalExpression, DoubleAndInt) {
-  testNumericConstants<double, int>({3.1, 4}, {4.2, -3}, {-12.0, -12});
+  testConstants<double, int>({3.1, 4}, {4.2, -3}, {-12.0, -12});
   // Similar tests, but on the level of `ValueIds`.
-  testNumericConstants<double, ValueId>({3.1, Int(4)}, {4.2, Int(-3)},
-                                        {-12.0, Int(-12)});
-  testNumericConstants<ValueId, int>({Double(3.1), 4}, {Double(4.2), -3},
-                                     {Double(-12.0), -12});
-  testNumericConstants<ValueId, ValueId>(
-      {Double(3.1), Int(4)}, {Double(4.2), Int(-3)}, {Double(-12.0), Int(-12)});
+  testConstants<double, ValueId>({3.1, Int(4)}, {4.2, Int(-3)},
+                                 {-12.0, Int(-12)});
+  testConstants<ValueId, int>({Double(3.1), 4}, {Double(4.2), -3},
+                              {Double(-12.0), -12});
+  testConstants<ValueId, ValueId>({Double(3.1), Int(4)}, {Double(4.2), Int(-3)},
+                                  {Double(-12.0), Int(-12)});
 
-  testNumericAndString(NaN, 42);
-  testNumericAndString(Double(NaN), 42);
+  testNotEqual(NaN, 42);
+  testNotEqual(Double(NaN), 42);
 }
 
 TEST(RelationalExpression, IntAndInt) {
-  testNumericConstants<int, int>({-3, 3}, {4, 3}, {-12, -12});
+  testConstants<int, int>({-3, 3}, {4, 3}, {-12, -12});
   // Similar tests, but on the level of `ValueIds`.
-  testNumericConstants<int, ValueId>({-3, Int(3)}, {4, Int(3)},
-                                     {-12, Int(-12)});
-  testNumericConstants<ValueId, int>({Int(-3), 3}, {Int(4), 3},
-                                     {Int(-12), -12});
-  testNumericConstants<ValueId, ValueId>({Int(-3), Int(3)}, {Int(4), Int(3)},
-                                         {Int(-12), Int(-12)});
+  testConstants<int, ValueId>({-3, Int(3)}, {4, Int(3)}, {-12, Int(-12)});
+  testConstants<ValueId, int>({Int(-3), 3}, {Int(4), 3}, {Int(-12), -12});
+  testConstants<ValueId, ValueId>({Int(-3), Int(3)}, {Int(4), Int(3)},
+                                  {Int(-12), Int(-12)});
 }
 
 TEST(RelationalExpression, DoubleAndDouble) {
-  testNumericConstants<double, double>({-3.1, -3.0}, {4.2, 4.1},
-                                       {-12.83, -12.83});
+  testConstants<double, double>({-3.1, -3.0}, {4.2, 4.1}, {-12.83, -12.83});
   // Similar tests, but on the level of `ValueIds`.
-  testNumericConstants<ValueId, double>(
-      {Double(-3.1), -3.0}, {Double(4.2), 4.1}, {Double(-12.83), -12.83});
-  testNumericConstants<double, ValueId>(
-      {-3.1, Double(-3.0)}, {4.2, Double(4.1)}, {-12.83, Double(-12.83)});
-  testNumericConstants<ValueId, ValueId>({Double(-3.1), Double(-3.0)},
-                                         {Double(4.2), Double(4.1)},
-                                         {Double(-12.83), Double(-12.83)});
+  testConstants<ValueId, double>({Double(-3.1), -3.0}, {Double(4.2), 4.1},
+                                 {Double(-12.83), -12.83});
+  testConstants<double, ValueId>({-3.1, Double(-3.0)}, {4.2, Double(4.1)},
+                                 {-12.83, Double(-12.83)});
+  testConstants<ValueId, ValueId>({Double(-3.1), Double(-3.0)},
+                                  {Double(4.2), Double(4.1)},
+                                  {Double(-12.83), Double(-12.83)});
 
-  testNumericAndString(NaN, NaN);
-  testNumericAndString(12.0, NaN);
-  testNumericAndString(NaN, -1.23e12);
-  testNumericAndString(Double(NaN), -1.23e12);
-  testNumericAndString(NaN, Double(-1.23e12));
+  testNotEqual(NaN, NaN);
+  testNotEqual(12.0, NaN);
+  testNotEqual(NaN, -1.23e12);
+  testNotEqual(Double(NaN), -1.23e12);
+  testNotEqual(NaN, Double(-1.23e12));
 }
 
 TEST(RelationalExpression, StringAndString) {
-  testNumericConstants<std::string, std::string>(
-      {"alpha", "beta"}, {"sigma", "delta"}, {"epsilon", "epsilon"});
+  testConstants<std::string, std::string>({"alpha", "beta"}, {"sigma", "delta"},
+                                          {"epsilon", "epsilon"});
   // TODO<joka921> These tests only work, when we actually use unicode
   // comparisons for the string based expressions. TODDO<joka921> Add an example
   // for strings that are bytewise different but equal on the unicode level
   // (e.g.`ä` vs `a + dots`.
-  // testNumericConstants<std::string, std::string>({"Alpha", "beta"}, {"beta",
+  // testConstants<std::string, std::string>({"Alpha", "beta"}, {"beta",
   // "äpfel"}, {"xxx", "xxx"});
 
   // TODO<joka921> To compare strings with `ValueId`s we actually need a context
@@ -300,15 +312,15 @@ TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
   auto intVec = VectorWithMemoryLimit<int64_t>({-12365, 0, 12}, allocator);
   auto doubleVec =
       VectorWithMemoryLimit<double>({-12.365, 0, 12.1e5}, allocator);
-  testNumericAndString(3, "hallo"s);
-  testNumericAndString(3, "3"s);
-  testNumericAndString(-12.0, "hallo"s);
-  testNumericAndString(-12.0, "-12.0"s);
-  testNumericAndString(intVec.clone(), "someString"s);
-  testNumericAndString(doubleVec.clone(), "someString"s);
-  testNumericAndString(3, stringVec.clone());
-  testNumericAndString(intVec.clone(), stringVec.clone());
-  testNumericAndString(doubleVec.clone(), stringVec.clone());
+  testNotEqual(3, "hallo"s);
+  testNotEqual(3, "3"s);
+  testNotEqual(-12.0, "hallo"s);
+  testNotEqual(-12.0, "-12.0"s);
+  testNotEqual(intVec.clone(), "someString"s);
+  testNotEqual(doubleVec.clone(), "someString"s);
+  testNotEqual(3, stringVec.clone());
+  testNotEqual(intVec.clone(), stringVec.clone());
+  testNotEqual(doubleVec.clone(), stringVec.clone());
 }
 
 // The vector must consist of 9 elements: The first three must be less than
@@ -332,19 +344,11 @@ auto testNumericConstantAndVector(
   context._beginIndex = 0;
   context._endIndex = 9;
 
-  auto clone = [](const auto& input) {
-    if constexpr (requires { input.clone(); }) {
-      return input.clone();
-    } else {
-      return input;
-    }
-  };
-
   auto m = [&]<auto comp>() {
-    auto expression = makeExpression<comp>(clone(constant), clone(vector));
+    auto expression = makeExpression<comp>(cloneIt(constant), cloneIt(vector));
     auto resultAsVariant = expression.evaluate(&context);
     auto expressionInverted =
-        makeExpression<comp>(clone(vector), clone(constant));
+        makeExpression<comp>(cloneIt(vector), cloneIt(constant));
     auto resultAsVariantInverted = expressionInverted.evaluate(&context);
     auto& result = std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
     auto& resultInverted =
@@ -429,17 +433,9 @@ void testIncludingValueIds(A a, B b,
     }
   };
 
-  auto clone = [](const auto& input) {
-    if constexpr (requires { input.clone(); }) {
-      return input.clone();
-    } else {
-      return input;
-    }
-  };
-
-  testNumericConstantAndVector(clone(a), clone(b));
-  testNumericConstantAndVector(lift(a), clone(b));
-  testNumericConstantAndVector(clone(a), lift(b));
+  testNumericConstantAndVector(cloneIt(a), cloneIt(b));
+  testNumericConstantAndVector(lift(a), cloneIt(b));
+  testNumericConstantAndVector(cloneIt(a), lift(b));
   testNumericConstantAndVector(lift(a), lift(b));
 }
 
@@ -462,19 +458,11 @@ auto testNotComparable(T constant, U vector,
   context._beginIndex = 0;
   context._endIndex = 5;
 
-  auto clone = [](const auto& input) {
-    if constexpr (requires { input.clone(); }) {
-      return input.clone();
-    } else {
-      return input;
-    }
-  };
-
   auto m = [&]<auto comp>() {
-    auto expression = makeExpression<comp>(clone(constant), clone(vector));
+    auto expression = makeExpression<comp>(cloneIt(constant), cloneIt(vector));
     auto resultAsVariant = expression.evaluate(&context);
     auto expressionInverted =
-        makeExpression<comp>(clone(vector), clone(constant));
+        makeExpression<comp>(cloneIt(vector), cloneIt(constant));
     auto resultAsVariantInverted = expressionInverted.evaluate(&context);
     auto& result = std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
     auto& resultInverted =
@@ -547,7 +535,7 @@ TEST(RelationalExpression, StringConstantsAndStringVector) {
   // (e.g.`ä` vs `a + dots`.
   // VectorWithMemoryLimit<std::string> vec2({"AlpHa", "älpaka", "Æ", "sigma",
   // "Eta", "kaulQuappe", "Caesar", "Caesar", "Caesare"}, alloc);
-  // testNumericConstants<std::string, std::string>({"Alpha", "beta"}, {"beta",
+  // testConstants<std::string, std::string>({"Alpha", "beta"}, {"beta",
   // "äpfel"}, {"xxx", "xxx"});
 
   // TODO<joka921> Add tests for Strings and ValueIds as soon as we have a
