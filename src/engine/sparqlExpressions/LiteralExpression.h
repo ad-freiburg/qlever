@@ -43,10 +43,8 @@ class LiteralExpression : public SparqlExpression {
   std::span<SparqlExpression::Ptr> children() override { return {}; }
 
   // Variables and string constants add their values.
-  std::span<string> getStringLiteralsAndVariablesNonRecursive() override {
+  std::span<const Variable> getContainedVariablesNonRecursive() const override {
     if constexpr (std::is_same_v<T, ::Variable>) {
-      return {&_value._name, 1};
-    } else if constexpr (std::is_same_v<T, string>) {
       return {&_value, 1};
     } else {
       return {};

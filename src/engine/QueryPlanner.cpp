@@ -626,8 +626,8 @@ bool QueryPlanner::checkUsePatternTrick(
           } else if constexpr (std::is_same_v<T, p::Bind>) {
             // If the object variable of ql:has-predicate is used somewhere in a
             // BIND, we cannot use the pattern trick.
-            for (const std::string* v : arg.strings()) {
-              if (*v == t._o) {
+            for (const auto* v : arg.containedVariables()) {
+              if (v->_name == t._o) {
                 usePatternTrick = false;
                 break;
               }
@@ -690,8 +690,8 @@ bool QueryPlanner::checkUsePatternTrick(
             } else if constexpr (std::is_same_v<T, p::Bind>) {
               // If the object variable of ql:has-predicate is used somewhere in
               // a BIND, we cannot use the pattern trick.
-              for (const std::string* v : arg.strings()) {
-                if (*v == t._o) {
+              for (const auto* v : arg.containedVariables()) {
+                if (v->_name == t._o) {
                   usePatternTrick = false;
                   break;
                 }

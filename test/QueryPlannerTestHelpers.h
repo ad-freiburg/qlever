@@ -46,7 +46,7 @@ auto IndexScan(TripleComponent subject, std::string predicate,
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`
 QueryExecutionTree parseAndPlan(std::string query) {
-  ParsedQuery pq = SparqlParser{std::move(query)}.parse();
+  ParsedQuery pq = SparqlParser::parseQuery(std::move(query));
   // TODO<joka921> make it impossible to pass `nullptr` here, properly mock a
   // queryExecutionContext.
   return QueryPlanner{nullptr}.createExecutionTree(pq);

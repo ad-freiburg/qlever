@@ -1118,10 +1118,10 @@ queries:
           ?t ql:contains-word "algo*"
       }
     checks:
-      - num_cols: 2
+      - num_cols: 3
       - num_rows: 11
-      - selected: ["?x", "?t"]
-      - contains_row: ["<Grete_Hermann>","Hermann's algorithm for primary decomposition is still in use now."]
+      - selected: [ "?x", "?ql_textscore_t", "?t" ]
+      - contains_row: [ "<Grete_Hermann>",null,"Hermann's algorithm for primary decomposition is still in use now." ]
 
 
   - query : select_asterisk_regex-lastname-stein

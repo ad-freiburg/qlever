@@ -7,6 +7,7 @@
 #include "SparqlAntlrParserTestHelpers.h"
 #include "parser/ParseException.h"
 #include "parser/SparqlParser.h"
+#include "util/SourceLocation.h"
 
 TEST(ParseException, coloredError) {
   auto exampleQuery = "SELECT A ?var WHERE";
@@ -17,9 +18,11 @@ TEST(ParseException, coloredError) {
 }
 
 void expectParseExceptionWithMetadata(
-    const string& input, const std::optional<ExceptionMetadata>& metadata) {
+    const string& input, const std::optional<ExceptionMetadata>& metadata,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  auto trace = generateLocationTrace(l);
   try {
-    SparqlParser(input).parse();
+    SparqlParser::parseQuery(input);
     FAIL();  // Should be unreachable.
   } catch (const ParseException& e) {
     // The constructor has to be bracketed because EXPECT_EQ is a macro.
@@ -28,23 +31,20 @@ void expectParseExceptionWithMetadata(
 }
 
 TEST(ParseException, MetadataGeneration) {
-  // The SparqlLexer changes the input that has already been read into a token
-  // when it is outputted with getUnconsumedInput (which is used for ANtLR).
   // A is not a valid argument for select.
   expectParseExceptionWithMetadata(
       "SELECT A ?a WHERE { ?a ?b ?c }",
-      {{"select   A ?a WHERE { ?a ?b ?c }", 9, 9, 1, 9}});
-  // The ANTLR Parser currently doesn't always have the whole query.
+      {{"SELECT A ?a WHERE { ?a ?b ?c }", 7, 7, 1, 7}});
   // Error is the undefined Prefix "a".
   expectParseExceptionWithMetadata(
       "SELECT * WHERE { ?a a:b ?b }",
-      {{"select   * WHERE { ?a a:b ?b }", 22, 24, 1, 22}});
+      {{"SELECT * WHERE { ?a a:b ?b }", 20, 22, 1, 20}});
   // "%" doesn't match any valid token. So in this case we will get an Error
   // from the Lexer.
   expectParseExceptionWithMetadata("SELECT * WHERE { % }",
-                                   {{"select   * WHERE { % }", 19, 19, 1, 19}});
+                                   {{"SELECT * WHERE { % }", 17, 17, 1, 17}});
   // Error is the undefined Prefix "f".
   expectParseExceptionWithMetadata(
       "SELECT * WHERE {\n ?a ?b ?c . \n f:d ?d ?e\n}",
-      {{"select   * WHERE {\n ?a ?b ?c . \n f:d ?d ?e\n}", 33, 35, 3, 1}});
+      {{"SELECT * WHERE {\n ?a ?b ?c . \n f:d ?d ?e\n}", 31, 33, 3, 1}});
 }

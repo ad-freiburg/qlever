@@ -15,14 +15,16 @@
 
 using std::string;
 
-enum QueryType { CONSTRUCT_QUERY, SELECT_QUERY };
-
-// A simple parser of SPARQL.
-// No supposed to feature the complete query language.
+// The SPARQL parser used by QLever. The actual parsing is delegated to a parser
+// that is based on ANTLR4, which recognises the complete SPARQL 1.1 QL grammar.
+// For valid SPARQL queries that are not supported by QLever a reasonable error
+// message is given. The only thing that is still parsed manually by this class
+// are FILTER clauses, because QLever doesn't support arbitrary expressions in
+// filters yet.
 class SparqlParser {
  public:
   explicit SparqlParser(const string& query);
-  ParsedQuery parse();
+  static ParsedQuery parseQuery(std::string query);
 
   /// Parse the expression of a filter statement (without the `FILTER` keyword).
   /// This helper method is needed as long as the set of expressions supported
@@ -32,34 +34,10 @@ class SparqlParser {
       const SparqlQleverVisitor::PrefixMap& prefixMap);
 
  private:
-  void parseQuery(ParsedQuery* query, QueryType queryType);
-  void parseWhere(ParsedQuery* query);
-  void parseSolutionModifiers(ParsedQuery* query);
   // Returns true if it found a filter
   std::optional<SparqlFilter> parseFilter(bool failOnNoFilter = true);
 
   SparqlLexer lexer_;
   string query_;
   SparqlFilter parseRegexFilter(bool expectKeyword);
-
-  // Helper function that converts the prefix map from `parsedQuery` (a vector
-  // of pairs of prefix and IRI) to the prefix map we need for the
-  // `SparqlQleverVisitor` (a hash map from prefixes to IRIs).
-  static SparqlQleverVisitor::PrefixMap getPrefixMap(
-      const ParsedQuery& parsedQuery);
-  // Parse the clause with the prefixes of the given ParsedQuery.
-  template <typename ContextType>
-  auto parseWithAntlr(ContextType* (SparqlAutomaticParser::*F)(void),
-                      const ParsedQuery& parsedQuery)
-      -> decltype((std::declval<sparqlParserHelpers::ParserAndVisitor>())
-                      .parseTypesafe(F)
-                      .resultOfParse_);
-
-  // Parse the clause with the given explicitly specified prefixes.
-  template <typename ContextType>
-  auto parseWithAntlr(ContextType* (SparqlAutomaticParser::*F)(void),
-                      SparqlQleverVisitor::PrefixMap prefixMap)
-      -> decltype((std::declval<sparqlParserHelpers::ParserAndVisitor>())
-                      .parseTypesafe(F)
-                      .resultOfParse_);
 };
