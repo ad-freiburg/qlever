@@ -45,7 +45,7 @@ class Reversed {
  * Transform the nodes of the Parse Tree into their application specific
  * model. The `SparqlQleverVisitor` must be able to handle every rule that is
  * the SPARQL QL grammar. Rules that are not supported have the
- * `[[noreturn]]` attribute and may just throw an Exception.
+ * `[[noreturn]]` attribute and always throw an Exception.
  */
 class SparqlQleverVisitor {
   using GraphPatternOperation = parsedQuery::GraphPatternOperation;
