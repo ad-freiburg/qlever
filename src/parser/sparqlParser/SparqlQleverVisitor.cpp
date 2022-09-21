@@ -1671,7 +1671,7 @@ template <typename Out, typename... Contexts>
 Out Visitor::visitAlternative(Contexts*... ctxs) {
   // Check that exactly one of the `ctxs` is not `nullptr`.
   AD_CHECK(1u == (... + static_cast<bool>(ctxs)));
-  if constexpr (std::is_same_v<Out, void>) {
+  if constexpr (std::is_void_v<Out>) {
     (..., visitIf(ctxs));
   } else {
     std::optional<Out> out;
