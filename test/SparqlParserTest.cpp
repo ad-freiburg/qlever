@@ -1079,7 +1079,7 @@ TEST(ParserTest, Order) {
     auto variant = pq._rootGraphPattern._graphPatterns[1];
     ASSERT_TRUE(holds_alternative<p::Bind>(variant));
     auto helperBind = get<p::Bind>(variant);
-    ASSERT_EQ(helperBind._expression.getDescriptor(), "?x-?y");
+    ASSERT_EQ(helperBind._expression.getDescriptor(), "(?x-?y)");
     ASSERT_EQ(pq._orderBy[0].variable_, helperBind._target);
   }
   {
