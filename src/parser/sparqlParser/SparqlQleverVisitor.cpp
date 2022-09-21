@@ -1111,8 +1111,8 @@ void Visitor::visit(Parser::PathModContext*) {
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
   // TODO: implement a strong Iri type, s.t. the ctx->iri() case can become a
-  //  simple return visit(...). Then the three cases which are not the special a
-  //  case can be merged into a visitAlternative.
+  //  simple `return visit(...)`. Then the three cases which are not the `special a`
+  //  case can be merged into a `visitAlternative(...)`.
   if (ctx->iri()) {
     return PropertyPath::fromIri(visit(ctx->iri()));
   } else if (ctx->path()) {
@@ -1144,6 +1144,7 @@ uint64_t Visitor::visit(Parser::IntegerContext* ctx) {
   try {
     // unsigned long long int might be larger than 8 bytes as per the standard.
     // If that were the case this could lead to overflows.
+    // TODO<joka921> Use `std::from_chars` but first check for the compiler support.
     static_assert(sizeof(unsigned long long int) == sizeof(uint64_t));
     return std::stoull(ctx->getText());
   } catch (const std::out_of_range&) {
