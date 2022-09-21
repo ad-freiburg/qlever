@@ -125,6 +125,10 @@ PathTuples joinPredicateAndObject(VarOrPath predicate, ObjectList objectList) {
   return tuples;
 }
 
+SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx) {
+  return SparqlExpressionPimpl{visit(ctx), std::move(ctx->getText())};
+}
+
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
   // The prologue (BASE and PREFIX declarations)  only affects the internal
@@ -632,23 +636,14 @@ Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
 
 // ____________________________________________________________________________________
 GroupKey Visitor::visit(Parser::GroupConditionContext* ctx) {
-  // TODO<qup42> Deploy an abstraction `visitExpressionPimpl(someContext*)` that
-  // performs exactly those two steps and is also used in all the other places
-  // where we currently call
-  // `SparqlExpressionPimpl(visit(ctx->something()))` manually.
-  auto makeExpression = [&ctx, this](auto* subCtx) -> GroupKey {
-    auto expr = SparqlExpressionPimpl{visit(subCtx)};
-    expr.setDescriptor(ctx->getText());
-    return expr;
-  };
   if (ctx->var() && !ctx->expression()) {
     return Variable{ctx->var()->getText()};
   } else if (ctx->builtInCall() || ctx->functionCall()) {
     // builtInCall and functionCall are both also an Expression
-    return (ctx->builtInCall() ? makeExpression(ctx->builtInCall())
-                               : makeExpression(ctx->functionCall()));
+    return (ctx->builtInCall() ? visitExpressionPimpl(ctx->builtInCall())
+                               : visitExpressionPimpl(ctx->functionCall()));
   } else if (ctx->expression()) {
-    auto expr = SparqlExpressionPimpl{visit(ctx->expression())};
+    auto expr = visitExpressionPimpl(ctx->expression());
     if (ctx->AS() && ctx->var()) {
       return Alias{std::move(expr), visit(ctx->var())};
     } else {
@@ -662,7 +657,7 @@ GroupKey Visitor::visit(Parser::GroupConditionContext* ctx) {
 OrderKey Visitor::visit(Parser::OrderConditionContext* ctx) {
   auto visitExprOrderKey = [this](bool isDescending,
                                   auto* context) -> OrderKey {
-    auto expr = SparqlExpressionPimpl{visit(context)};
+    auto expr = visitExpressionPimpl(context);
     if (auto exprIsVariable = expr.getVariableOrNullopt();
         exprIsVariable.has_value()) {
       return VariableOrderKey{exprIsVariable.value(), isDescending};
@@ -1111,8 +1106,8 @@ void Visitor::visit(Parser::PathModContext*) {
 // ____________________________________________________________________________________
 PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
   // TODO: implement a strong Iri type, s.t. the ctx->iri() case can become a
-  //  simple `return visit(...)`. Then the three cases which are not the `special a`
-  //  case can be merged into a `visitAlternative(...)`.
+  //  simple `return visit(...)`. Then the three cases which are not the
+  //  `special a` case can be merged into a `visitAlternative(...)`.
   if (ctx->iri()) {
     return PropertyPath::fromIri(visit(ctx->iri()));
   } else if (ctx->path()) {
@@ -1144,7 +1139,8 @@ uint64_t Visitor::visit(Parser::IntegerContext* ctx) {
   try {
     // unsigned long long int might be larger than 8 bytes as per the standard.
     // If that were the case this could lead to overflows.
-    // TODO<joka921> Use `std::from_chars` but first check for the compiler support.
+    // TODO<joka921> Use `std::from_chars` but first check for the compiler
+    //  support.
     static_assert(sizeof(unsigned long long int) == sizeof(uint64_t));
     return std::stoull(ctx->getText());
   } catch (const std::out_of_range&) {
@@ -1651,16 +1647,15 @@ bool Visitor::visit(Parser::BooleanLiteralContext* ctx) {
 BlankNode Visitor::visit(Parser::BlankNodeContext* ctx) {
   if (ctx->ANON()) {
     return newBlankNode();
-  }
-  if (ctx->BLANK_NODE_LABEL()) {
+  } else if (ctx->BLANK_NODE_LABEL()) {
     // strip _: prefix from string
     constexpr size_t length = std::string_view{"_:"}.length();
     const string label = ctx->BLANK_NODE_LABEL()->getText().substr(length);
     // false means the query explicitly contains a blank node label
     return {false, label};
+  } else {
+    AD_FAIL();
   }
-  // invalid grammar
-  AD_FAIL();
 }
 
 // ____________________________________________________________________________________
