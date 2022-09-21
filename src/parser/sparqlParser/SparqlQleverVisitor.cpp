@@ -584,7 +584,7 @@ void Visitor::visit(Parser::PrologueContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-SparqlPrefix Visitor::visit(Parser::BaseDeclContext* ctx) {
+void Visitor::visit(Parser::BaseDeclContext* ctx) {
   reportNotSupported(ctx, "BASE declarations are");
 }
 

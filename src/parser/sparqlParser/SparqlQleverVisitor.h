@@ -117,7 +117,7 @@ class SparqlQleverVisitor {
   void visit(Parser::PrologueContext* ctx);
 
   // ___________________________________________________________________________
-  [[noreturn]] SparqlPrefix visit(Parser::BaseDeclContext* ctx);
+  [[noreturn]] void visit(Parser::BaseDeclContext* ctx);
 
   // ___________________________________________________________________________
   // The return type is currently only required for testing. It should be
