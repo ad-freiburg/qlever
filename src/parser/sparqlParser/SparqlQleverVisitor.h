@@ -42,12 +42,11 @@ class Reversed {
 };
 
 /**
- * Transform the nodes of the Parse Tree into their application specific
- * model. The `SparqlQleverVisitor` must be able to handle every rule that is
- * the SPARQL QL grammar. Rules that are not supported have the
- * `[[noreturn]]` attribute and always throw an Exception.
+ * This is a visitor that takes the parse tree from ANTLR and transforms it into
+ * a `ParsedQuery`.
  */
 class SparqlQleverVisitor {
+ public:
   using GraphPatternOperation = parsedQuery::GraphPatternOperation;
   using Objects = ad_utility::sparql_types::Objects;
   using Tuples = ad_utility::sparql_types::Tuples;
@@ -69,6 +68,11 @@ class SparqlQleverVisitor {
   using PatternAndVisibleVariables =
       std::pair<ParsedQuery::GraphPattern, vector<Variable>>;
   using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
+  using PrefixMap = ad_utility::HashMap<string, string>;
+  using Parser = SparqlAutomaticParser;
+  using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
+
+ private:
   size_t _blankNodeCounter = 0;
   int64_t numInternalVariables_ = 0;
   int64_t numGraphPatterns_ = 0;
@@ -76,40 +80,15 @@ class SparqlQleverVisitor {
   // query body. Each element corresponds to nested Queries that the parse is
   // currently parsing.
   std::vector<std::vector<Variable>> visibleVariables_{{}};
+  PrefixMap prefixMap_{};
 
  public:
-  using PrefixMap = ad_utility::HashMap<string, string>;
-  using Parser = SparqlAutomaticParser;
-  const PrefixMap& prefixMap() const { return _prefixMap; }
   SparqlQleverVisitor() = default;
-  SparqlQleverVisitor(PrefixMap prefixMap) : _prefixMap{std::move(prefixMap)} {}
-  using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
+  SparqlQleverVisitor(PrefixMap prefixMap) : prefixMap_{std::move(prefixMap)} {}
 
-  void setPrefixMapManually(PrefixMap map) { _prefixMap = std::move(map); }
+  const PrefixMap& prefixMap() const { return prefixMap_; }
+  void setPrefixMapManually(PrefixMap map) { prefixMap_ = std::move(map); }
 
- private:
-  PrefixMap _prefixMap{};
-
-  BlankNode newBlankNode() {
-    std::string label = std::to_string(_blankNodeCounter);
-    _blankNodeCounter++;
-    // true means automatically generated
-    return {true, std::move(label)};
-  }
-
-  // Process an IRI function call. This is used in both `visitFunctionCall` and
-  // `visitIriOrFunction`.
-  ExpressionPtr processIriFunctionCall(const std::string& iri,
-                                       std::vector<ExpressionPtr> argList);
-
-  // TODO: Remove addVisibleVariable(const string&) when all Types use the
-  //  strong type `Variable`.
-  void addVisibleVariable(string var);
-  void addVisibleVariable(Variable var);
-
-  [[nodiscard]] SparqlExpressionPimpl visitExpressionPimpl(auto* ctx);
-
- public:
   // ___________________________________________________________________________
   [[nodiscard]] ParsedQuery visit(Parser::QueryContext* ctx);
 
@@ -120,10 +99,7 @@ class SparqlQleverVisitor {
   [[noreturn]] void visit(Parser::BaseDeclContext* ctx);
 
   // ___________________________________________________________________________
-  // The return type is currently only required for testing. It should be
-  // `void`. For this reason this function is not annotated with
-  // `[[nodiscard]]`.
-  SparqlPrefix visit(Parser::PrefixDeclContext* ctx);
+  void visit(Parser::PrefixDeclContext* ctx);
 
   [[nodiscard]] ParsedQuery visit(Parser::SelectQueryContext* ctx);
 
@@ -267,11 +243,6 @@ class SparqlQleverVisitor {
   [[nodiscard]] vector<TripleWithPropertyPath> visit(
       Parser::TriplesSameSubjectPathContext* ctx);
 
-  [[noreturn]] void throwCollectionsAndBlankNodePathsNotSupported(auto* ctx) {
-    reportError(
-        ctx, "( ... ) and [ ... ] in triples are not yet supported by QLever.");
-  }
-
   [[nodiscard]] std::optional<PathTuples> visit(
       Parser::PropertyListPathContext* ctx);
 
@@ -340,19 +311,6 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] ExpressionPtr visit(Parser::ExpressionContext* ctx);
 
-  std::vector<std::string> visitOperationTags(
-      const std::vector<antlr4::tree::ParseTree*>& childContexts,
-      const ad_utility::HashSet<string>& allowedTags) {
-    std::vector<std::string> operations;
-
-    for (const auto& c : childContexts) {
-      if (allowedTags.contains(c->getText())) {
-        operations.emplace_back(c->getText());
-      }
-    }
-    return operations;
-  }
-
   [[nodiscard]] ExpressionPtr visit(
       Parser::ConditionalOrExpressionContext* ctx);
 
@@ -364,12 +322,6 @@ class SparqlQleverVisitor {
   [[nodiscard]] ExpressionPtr visit(Parser::RelationalExpressionContext* ctx);
 
   [[nodiscard]] ExpressionPtr visit(Parser::NumericExpressionContext* ctx);
-
-  template <typename Expr>
-  ExpressionPtr createExpression(auto... children) {
-    return std::make_unique<Expr>(
-        std::array<ExpressionPtr, sizeof...(children)>{std::move(children)...});
-  }
 
   [[nodiscard]] ExpressionPtr visit(Parser::AdditiveExpressionContext* ctx);
 
@@ -431,11 +383,68 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] string visit(Parser::PnameNsContext* ctx);
 
+ private:
+  template <typename Visitor, typename Ctx>
+  static constexpr bool voidWhenVisited =
+      std::is_void_v<decltype(std::declval<Visitor&>().visit(
+          std::declval<Ctx*>()))>;
+
+  [[nodiscard]] BlankNode newBlankNode() {
+    std::string label = std::to_string(_blankNodeCounter);
+    _blankNodeCounter++;
+    // true means automatically generated
+    return {true, std::move(label)};
+  }
+
+  // Process an IRI function call. This is used in both `visitFunctionCall` and
+  // `visitIriOrFunction`.
+  [[nodiscard]] ExpressionPtr processIriFunctionCall(
+      const std::string& iri, std::vector<ExpressionPtr> argList);
+
+  // TODO: Remove addVisibleVariable(const string&) when all Types use the
+  //  strong type `Variable`.
+  void addVisibleVariable(string var);
+  void addVisibleVariable(Variable var);
+
+  [[noreturn]] void throwCollectionsAndBlankNodePathsNotSupported(auto* ctx) {
+    reportError(
+        ctx, "( ... ) and [ ... ] in triples are not yet supported by QLever.");
+  }
+
+  // Return the `SparqlExpressionPimpl` for a context that returns a
+  // `ExpressionPtr` when visited. The descriptor is set automatically on the
+  // `SparqlExpressionPimpl`.
+  [[nodiscard]] SparqlExpressionPimpl visitExpressionPimpl(auto* ctx);
+
+  template <typename Expr>
+  [[nodiscard]] ExpressionPtr createExpression(auto... children) {
+    return std::make_unique<Expr>(
+        std::array<ExpressionPtr, sizeof...(children)>{std::move(children)...});
+  }
+
+  [[nodiscard]] static std::vector<std::string> visitOperationTags(
+      const std::vector<antlr4::tree::ParseTree*>& childContexts,
+      const ad_utility::HashSet<string>& allowedTags) {
+    std::vector<std::string> operations;
+
+    for (const auto& c : childContexts) {
+      if (allowedTags.contains(c->getText())) {
+        operations.emplace_back(c->getText());
+      }
+    }
+    return operations;
+  }
+
+  template <typename Ctx>
+  void visitVector(const std::vector<Ctx*>& childContexts)
+    requires voidWhenVisited<SparqlQleverVisitor, Ctx>;
+
   // Call `visit` for each of the `childContexts` and return the results of
   // those calls as a `vector`.
   template <typename Ctx>
   [[nodiscard]] auto visitVector(const std::vector<Ctx*>& childContexts)
-      -> std::vector<decltype(visit(childContexts[0]))>;
+      -> std::vector<decltype(visit(childContexts[0]))>
+    requires(!voidWhenVisited<SparqlQleverVisitor, Ctx>);
 
   // Check that exactly one of the `ctxs` is not `null`, visit that context,
   // cast the result to `Out` and return it. Requires that for all of the
@@ -458,6 +467,10 @@ class SparqlQleverVisitor {
   /// `Intermediate` (see for example the implementation of `visitAlternative`).
   template <typename Target, typename Intermediate = Target, typename Ctx>
   void visitIf(Target* target, Ctx* ctx);
+
+  template <typename Ctx>
+  void visitIf(Ctx* ctx)
+    requires voidWhenVisited<SparqlQleverVisitor, Ctx>;
 
   [[noreturn]] void reportError(antlr4::ParserRuleContext* ctx,
                                 const std::string& msg);

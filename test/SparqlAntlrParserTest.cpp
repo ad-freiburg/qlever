@@ -143,9 +143,6 @@ TEST(SparqlParser, Prefix) {
     ASSERT_EQ(prefixes.size(), 1);
     ASSERT_EQ(prefixes.at("wd"), "<www.wikidata.org/>");
   }
-  expectCompleteParse(
-      parse<&Parser::prefixDecl>("PREFIX wd: <www.wikidata.org/>"),
-      Eq(SparqlPrefix("wd", "<www.wikidata.org/>")));
   expectCompleteParse(parse<&Parser::pnameLn>("wd:bimbam", prefixMap),
                       StrEq("<www.wikidata.org/bimbam>"));
   expectCompleteParse(parse<&Parser::pnameNs>("wd:", prefixMap),

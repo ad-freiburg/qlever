@@ -178,9 +178,7 @@ Alias Visitor::visit(Parser::AliasWithoutBracketsContext* ctx) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
-  if (!ctx->datasetClause().empty()) {
-    reportNotSupported(ctx->datasetClause(0), "FROM clauses are");
-  }
+  visitVector(ctx->datasetClause());
   ParsedQuery query;
   if (ctx->constructTemplate()) {
     query._clause = visit(ctx->constructTemplate())
@@ -491,7 +489,7 @@ SparqlFilter parseFilter(auto* ctx, const Visitor::PrefixMap& prefixMap) {
 
 // ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::HavingConditionContext* ctx) {
-  SparqlFilter filter = parseFilter(ctx, _prefixMap);
+  SparqlFilter filter = parseFilter(ctx, prefixMap_);
   if (filter._type == SparqlFilter::LANG_MATCHES) {
     reportNotSupported(ctx, "Language filters in HAVING clauses are");
   } else {
@@ -551,12 +549,12 @@ string Visitor::visit(Parser::PnameLnContext* ctx) {
   auto pos = text.find(':');
   auto pnameNS = text.substr(0, pos);
   auto pnLocal = text.substr(pos + 1);
-  if (!_prefixMap.contains(pnameNS)) {
+  if (!prefixMap_.contains(pnameNS)) {
     // TODO<joka921> : proper name
     reportError(ctx, "Prefix " + pnameNS +
                          " was not registered using a PREFIX declaration");
   }
-  auto inner = _prefixMap[pnameNS];
+  auto inner = prefixMap_[pnameNS];
   // strip the trailing ">"
   inner = inner.substr(0, inner.size() - 1);
   return inner + RdfEscaping::unescapePrefixedIri(pnLocal) + ">";
@@ -566,22 +564,18 @@ string Visitor::visit(Parser::PnameLnContext* ctx) {
 string Visitor::visit(Parser::PnameNsContext* ctx) {
   auto text = ctx->getText();
   auto prefix = text.substr(0, text.length() - 1);
-  if (!_prefixMap.contains(prefix)) {
+  if (!prefixMap_.contains(prefix)) {
     // TODO<joka921> : proper name
     reportError(ctx, "Prefix " + prefix +
                          " was not registered using a PREFIX declaration");
   }
-  return _prefixMap[prefix];
+  return prefixMap_[prefix];
 }
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::PrologueContext* ctx) {
-  if (!ctx->baseDecl().empty()) {
-    reportNotSupported(ctx->baseDecl(0), "BASE declarations are");
-  }
-  for (const auto& prefix : ctx->prefixDecl()) {
-    visit(prefix);
-  }
+  visitVector(ctx->baseDecl());
+  visitVector(ctx->prefixDecl());
 }
 
 // ____________________________________________________________________________________
@@ -590,24 +584,19 @@ void Visitor::visit(Parser::BaseDeclContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-SparqlPrefix Visitor::visit(Parser::PrefixDeclContext* ctx) {
+void Visitor::visit(Parser::PrefixDeclContext* ctx) {
   auto text = ctx->PNAME_NS()->getText();
   // Remove the ':' at the end of the PNAME_NS
   auto prefixLabel = text.substr(0, text.length() - 1);
   auto prefixIri = visit(ctx->iriref());
-  _prefixMap[prefixLabel] = prefixIri;
-  return {prefixLabel, prefixIri};
+  prefixMap_[prefixLabel] = prefixIri;
 }
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
   ParsedQuery query;
   query._clause = visit(ctx->selectClause());
-  if (!ctx->datasetClause().empty()) {
-    // TODO: see if it is possible to extend reportError s.t. it can also take
-    //  vector<ParserRuleContext>.
-    reportNotSupported(ctx->datasetClause(0), "FROM clauses are");
-  }
+  visitVector(ctx->datasetClause());
   auto [pattern, visibleVariables] = visit(ctx->whereClause());
   query._rootGraphPattern = std::move(pattern);
   query.registerVariablesVisibleInQueryBody(visibleVariables);
@@ -802,7 +791,7 @@ GraphPatternOperation Visitor::visit(
 
 // ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
-  return parseFilter(ctx->constraint(), _prefixMap);
+  return parseFilter(ctx->constraint(), prefixMap_);
 }
 
 // ____________________________________________________________________________________
@@ -983,7 +972,7 @@ vector<TripleWithPropertyPath> Visitor::visit(
     }
     return triples;
   } else if (ctx->triplesNodePath()) {
-    throwCollectionsAndBlankNodePathsNotSupported(ctx->triplesNodePath());
+    visit(ctx->triplesNodePath());
   } else {
     AD_FAIL()  // Should be unreachable.
   }
@@ -1172,17 +1161,14 @@ Node Visitor::visit(Parser::BlankNodePropertyListContext* ctx) {
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::TriplesNodePathContext* ctx) {
-  // TODO: should be moved into the children. But visitAlternative does not
-  //  support returning void. Using the return type of the other branch is
-  //  not sensible in this case.
-  throwCollectionsAndBlankNodePathsNotSupported(ctx);
-  AD_FAIL()  // Should be unreachable.
+  visitAlternative<void>(ctx->blankNodePropertyListPath(),
+                         ctx->collectionPath());
+  AD_FAIL();
 }
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::BlankNodePropertyListPathContext* ctx) {
   throwCollectionsAndBlankNodePathsNotSupported(ctx);
-  AD_FAIL()  // Should be unreachable.
 }
 
 // ____________________________________________________________________________________
@@ -1215,7 +1201,6 @@ Node Visitor::visit(Parser::CollectionContext* ctx) {
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::CollectionPathContext* ctx) {
   throwCollectionsAndBlankNodePathsNotSupported(ctx);
-  AD_FAIL()  // Should be unreachable.
 }
 
 // ____________________________________________________________________________________
@@ -1234,7 +1219,7 @@ VarOrTerm Visitor::visit(Parser::GraphNodePathContext* ctx) {
   if (ctx->varOrTerm()) {
     return visit(ctx->varOrTerm());
   } else if (ctx->triplesNodePath()) {
-    throwCollectionsAndBlankNodePathsNotSupported(ctx->triplesNodePath());
+    visit(ctx->triplesNodePath());
   } else {
     AD_FAIL()  // Should be unreachable.
   }
@@ -1660,10 +1645,21 @@ BlankNode Visitor::visit(Parser::BlankNodeContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-
 template <typename Ctx>
-auto Visitor::visitVector(const std::vector<Ctx*>& childContexts)
-    -> std::vector<decltype(visit(childContexts[0]))> {
+void Visitor::visitVector(const std::vector<Ctx*>& childContexts)
+  requires voidWhenVisited<Visitor, Ctx>
+{
+  for (const auto& child : childContexts) {
+    visit(child);
+  }
+}
+
+// ____________________________________________________________________________________
+template <typename Ctx>
+[[nodiscard]] auto Visitor::visitVector(const std::vector<Ctx*>& childContexts)
+    -> std::vector<decltype(visit(childContexts[0]))>
+  requires(!voidWhenVisited<Visitor, Ctx>)
+{
   std::vector<decltype(visit(childContexts[0]))> children;
   for (const auto& child : childContexts) {
     children.emplace_back(visit(child));
@@ -1677,10 +1673,14 @@ template <typename Out, typename... Contexts>
 Out Visitor::visitAlternative(Contexts*... ctxs) {
   // Check that exactly one of the `ctxs` is not `nullptr`.
   AD_CHECK(1u == (... + static_cast<bool>(ctxs)));
-  std::optional<Out> out;
-  // Visit the one `context` which is not null and write the result to `out`.
-  (..., visitIf<std::optional<Out>, Out>(&out, ctxs));
-  return std::move(out.value());
+  if constexpr (std::is_same_v<Out, void>) {
+    (..., visitIf(ctxs));
+  } else {
+    std::optional<Out> out;
+    // Visit the one `context` which is not null and write the result to `out`.
+    (..., visitIf<std::optional<Out>, Out>(&out, ctxs));
+    return std::move(out.value());
+  }
 }
 
 // ____________________________________________________________________________________
@@ -1698,6 +1698,16 @@ template <typename Target, typename Intermediate, typename Ctx>
 void Visitor::visitIf(Target* target, Ctx* ctx) {
   if (ctx) {
     *target = Intermediate{visit(ctx)};
+  }
+}
+
+// ____________________________________________________________________________________
+template <typename Ctx>
+void Visitor::visitIf(Ctx* ctx)
+  requires voidWhenVisited<Visitor, Ctx>
+{
+  if (ctx) {
+    visit(ctx);
   }
 }
 
