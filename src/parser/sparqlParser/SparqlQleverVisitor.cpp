@@ -125,6 +125,7 @@ PathTuples joinPredicateAndObject(VarOrPath predicate, ObjectList objectList) {
   return tuples;
 }
 
+// ___________________________________________________________________________
 SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx) {
   return SparqlExpressionPimpl{visit(ctx), std::move(ctx->getText())};
 }
@@ -172,7 +173,7 @@ Alias Visitor::visit(Parser::AliasContext* ctx) {
 
 // ____________________________________________________________________________________
 Alias Visitor::visit(Parser::AliasWithoutBracketsContext* ctx) {
-  return {{visit(ctx->expression())}, visit(ctx->var())};
+  return {visitExpressionPimpl(ctx->expression()), visit(ctx->var())};
 }
 
 // ____________________________________________________________________________________
@@ -241,7 +242,7 @@ Variable Visitor::visit(Parser::VarContext* ctx) {
 GraphPatternOperation Visitor::visit(Parser::BindContext* ctx) {
   addVisibleVariable(ctx->var()->getText());
   return GraphPatternOperation{
-      Bind{{visit(ctx->expression())}, visit(ctx->var())}};
+      Bind{visitExpressionPimpl(ctx->expression()), visit(ctx->var())}};
 }
 
 // ____________________________________________________________________________________

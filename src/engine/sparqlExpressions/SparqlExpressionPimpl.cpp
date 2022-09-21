@@ -9,11 +9,6 @@ namespace sparqlExpression {
 
 // __________________________________________________________________________
 SparqlExpressionPimpl::SparqlExpressionPimpl(
-    std::shared_ptr<SparqlExpression>&& pimpl)
-    : _pimpl{std::move(pimpl)} {};
-
-// __________________________________________________________________________
-SparqlExpressionPimpl::SparqlExpressionPimpl(
     std::shared_ptr<SparqlExpression>&& pimpl, std::string descriptor)
     : _pimpl{std::move(pimpl)} {
   _pimpl->descriptor() = std::move(descriptor);
