@@ -305,6 +305,30 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
   return std::move(rangeFilter).getResult();
 }
 
+// Helper function: Sort the non-overlapping ranges in `input` by the first
+// element, remove the empty ranges, and merge  directly adjacent ranges
+auto simplifyRanges =
+    []<typename RandomIt>(std::vector<std::pair<RandomIt, RandomIt>> input) {
+      // Eliminate empty ranges
+      std::erase_if(input, [](const auto& p) { return p.first == p.second; });
+      std::sort(input.begin(), input.end());
+      if (input.empty()) {
+        return std::move(input);
+      }
+      // Merge directly adjacent ranges.
+      // TODO<joka921, C++20> use `std::ranges`
+      decltype(input) result;
+      result.push_back(input.front());
+      for (auto it = input.begin() + 1; it != input.end(); ++it) {
+        if (it->first == result.back().second) {
+          result.back().second = it->second;
+        } else {
+          result.push_back(*it);
+        }
+      }
+      return result;
+    };
+
 }  // namespace detail
 
 // The function returns the sequence of all IDs x (as a sequence of
@@ -317,24 +341,18 @@ template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     RandomIt begin, RandomIt end, ValueId valueId, Comparison comparison) {
   // This lambda enforces the invariants `non-empty` and `sorted`.
-  auto simplify = [](std::vector<std::pair<RandomIt, RandomIt>>&& result) {
-    std::sort(result.begin(), result.end());
-    // Eliminate empty ranges
-    std::erase_if(result, [](const auto& p) { return p.first == p.second; });
-    return std::move(result);
-  };
   switch (valueId.getDatatype()) {
     case Datatype::Double:
-      return simplify(detail::getRangesForIntsAndDoubles(
+      return detail::simplifyRanges(detail::getRangesForIntsAndDoubles(
           begin, end, valueId.getDouble(), comparison));
     case Datatype::Int:
-      return simplify(detail::getRangesForIntsAndDoubles(
+      return detail::simplifyRanges(detail::getRangesForIntsAndDoubles(
           begin, end, valueId.getInt(), comparison));
     case Datatype::Undefined:
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::TextRecordIndex:
-      return simplify(
+      return detail::simplifyRanges(
           detail::getRangesForIndexTypes(begin, end, valueId, comparison));
   }
   AD_FAIL();
@@ -349,16 +367,9 @@ template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
     RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
     Comparison comparison) {
-  AD_CHECK(valueIdBegin < valueIdEnd);
-  // This lambda enforces the invariants `non-empty` and `sorted`.
-  auto simplifyRanges =
-      [](std::vector<std::pair<RandomIt, RandomIt>>&& result) {
-        std::sort(result.begin(), result.end());
-        // Eliminate empty ranges
-        std::erase_if(result,
-                      [](const auto& p) { return p.first == p.second; });
-        return std::move(result);
-      };
+  AD_CHECK(valueIdBegin <= valueIdEnd);
+  // This lambda enforces the invariants `non-empty` and `sorted` and also
+  // merges directly adjacent ranges.
   AD_CHECK(valueIdBegin.getDatatype() == valueIdEnd.getDatatype());
   switch (valueIdBegin.getDatatype()) {
     case Datatype::Double:
@@ -368,7 +379,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::TextRecordIndex:
-      return simplifyRanges(detail::getRangesForIndexTypes(
+      return detail::simplifyRanges(detail::getRangesForIndexTypes(
           begin, end, valueIdBegin, valueIdEnd, comparison));
   }
   AD_FAIL();

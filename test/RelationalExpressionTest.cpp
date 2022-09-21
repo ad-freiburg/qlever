@@ -17,6 +17,7 @@ using namespace sparqlExpression;
 using ad_utility::source_location;
 using namespace std::literals;
 using enum valueIdComparators::Comparison;
+using valueIdComparators::Comparison;
 
 // First some internal helper functions and constants.
 namespace {
@@ -30,6 +31,10 @@ ValueId DoubleId(double d) { return ValueId::makeFromDouble(d); }
 // "älpha", "A", "Beta"`. The subjects and predicates of the triples are not
 // important for these unit tests.
 Index makeTestIndex() {
+  // Ignore the (irrelevant) log output of the index building and loading during
+  // these tests.
+  static std::ostringstream ignoreLogStream;
+  ad_utility::setGlobalLogginStream(&ignoreLogStream);
   std::string filename = "relationalExpressionTestIndex.ttl";
   std::string dummyKb =
       "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . <x> "
@@ -167,7 +172,7 @@ VectorWithMemoryLimit<ValueId> makeValueIdVector(
 
 // Create and return a `RelationalExpression` with the given Comparison and the
 // given operands `leftValue` and `rightValue`.
-template <valueIdComparators::Comparison comp>
+template <Comparison comp>
 auto makeExpression(SingleExpressionResult auto leftValue,
                     SingleExpressionResult auto rightValue) {
   auto leftChild = std::make_unique<DummyExpression>(std::move(leftValue));
@@ -491,9 +496,8 @@ void testWithAndWithoutValueIds(
 // elements. The corresponding pairs of values must all fulfill the "not equal"
 // relation, but none of the other relations (less, less equal, equal  , greater
 // equal, greater) must be true.
-// TODO<joka921> arguments out of sync.
 template <typename T, typename U>
-auto testNotComparable(T constant, U vector,
+auto testNotComparable(T leftValue, U rightValue,
                        source_location l = source_location::current()) {
   auto trace = generateLocationTrace(
       l, "testLessThanGreaterThanEqualMultipleValues was called here");
@@ -504,16 +508,16 @@ auto testNotComparable(T constant, U vector,
   IdTable table{alloc};
   sparqlExpression::EvaluationContext context{*getQec(), map, table, alloc,
                                               localVocab};
-  AD_CHECK(vector.size() == 5);
+  AD_CHECK(rightValue.size() == 5);
   context._beginIndex = 0;
   context._endIndex = 5;
 
   auto m = [&]<auto comp>() {
     auto expression =
-        makeExpression<comp>(makeCopy(constant), makeCopy(vector));
+        makeExpression<comp>(makeCopy(leftValue), makeCopy(rightValue));
     auto resultAsVariant = expression.evaluate(&context);
     auto expressionInverted =
-        makeExpression<comp>(makeCopy(vector), makeCopy(constant));
+        makeExpression<comp>(makeCopy(rightValue), makeCopy(leftValue));
     auto resultAsVariantInverted = expressionInverted.evaluate(&context);
     auto& result = std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
     auto& resultInverted =
@@ -642,61 +646,9 @@ TEST(RelationalExpression, StringVectorAndStringVector) {
   // is actually supported.
 }
 
-TEST(RelationalExpression, VariableAndConstant) {
-  TestContext ctx;
-
-  auto test = [&](const auto& expression, std::vector<Bool> expected,
-                  source_location l = source_location::current()) {
-    auto trace = generateLocationTrace(l, "test lambda was called here");
-    auto resultAsVariant = expression.evaluate(&ctx.context);
-    const auto& result = std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
-    // TODO<joka921> There is a matcher for that (ElementsAre or something like
-    // that).
-    ASSERT_EQ(result.size(), expected.size());
-    for (size_t i = 0; i < result.size(); ++i) {
-      EXPECT_EQ(expected[i], result[i]);
-    }
-  };
-
-  // ?ints column is `1, 0, -1`
-  test(makeExpression<LT>(int64_t{0}, Variable{"?ints"}), {true, false, false});
-  test(makeExpression<GE>(-0.0, Variable{"?ints"}), {false, true, true});
-  test(makeExpression<GE>(Variable{"?ints"}, IntId(0)), {true, true, false});
-
-  // ?doubles column is `0.1, -0.1, 2.8`
-  test(makeExpression<LT>(-3.5, Variable{"?doubles"}), {true, true, true});
-  test(makeExpression<EQ>(DoubleId(-0.1), Variable{"?doubles"}),
-       {false, true, false});
-  test(makeExpression<GT>(Variable{"?doubles"}, int64_t{0}),
-       {true, false, true});
-
-  // ?numeric column is 1, -0.1, 3.4
-  test(makeExpression<NE>(-0.1, Variable{"?numeric"}), {true, false, true});
-  test(makeExpression<GE>(Variable{"?numeric"}, int64_t{1}),
-       {true, false, true});
-  test(makeExpression<GT>(Variable{"?numeric"}, DoubleId(1.2)),
-       {false, false, true});
-
-  // ?vocab column is `"Beta", "alpha", "älpha"
-  test(makeExpression<LE>(Variable{"?vocab"}, "\"älpha\""s),
-       {false, true, true});
-  test(makeExpression<GT>(Variable{"?vocab"}, "\"alpha\""s),
-       {true, false, true});
-  test(makeExpression<LT>("\"atm\""s, Variable{"?vocab"}),
-       {true, false, false});
-
-  // ?mixed column is `1, -0.1, A`
-  test(makeExpression<GT>("\"atm\""s, Variable{"?mixed"}),
-       {false, false, true});
-  test(makeExpression<LT>("\"atm\""s, Variable{"?mixed"}),
-       {false, false, false});
-
-  test(makeExpression<NE>(int64_t{1}, Variable{"?mixed"}), {false, true, true});
-  test(makeExpression<GE>(Variable{"?mixed"}, DoubleId(-0.1)),
-       {true, true, false});
-}
-
-template <valueIdComparators::Comparison Comp>
+// Assert that the expression `leftValue Comp rightValue`, when evaluated on the
+// `TestContext` (see above), yields the `expected` result.
+template <Comparison Comp>
 auto testWithExplicitResult =
     [](SingleExpressionResult auto leftValue,
        SingleExpressionResult auto rightValue, std::vector<Bool> expected,
@@ -708,13 +660,52 @@ auto testWithExplicitResult =
       auto resultAsVariant = expression.evaluate(&ctx.context);
       const auto& result =
           std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
-      // TODO<joka921> There is a matcher for that (ElementsAre or something
-      // like that).
       ASSERT_EQ(result.size(), expected.size());
       for (size_t i = 0; i < result.size(); ++i) {
         EXPECT_EQ(expected[i], result[i]);
       }
     };
+
+TEST(RelationalExpression, VariableAndConstant) {
+  // ?ints column is `1, 0, -1`
+  testWithExplicitResult<LT>(int64_t{0}, Variable{"?ints"},
+                             {true, false, false});
+  testWithExplicitResult<GE>(-0.0, Variable{"?ints"}, {false, true, true});
+  testWithExplicitResult<GE>(Variable{"?ints"}, IntId(0), {true, true, false});
+
+  // ?doubles column is `0.1, -0.1, 2.8`
+  testWithExplicitResult<LT>(-3.5, Variable{"?doubles"}, {true, true, true});
+  testWithExplicitResult<EQ>(DoubleId(-0.1), Variable{"?doubles"},
+                             {false, true, false});
+  testWithExplicitResult<GT>(Variable{"?doubles"}, int64_t{0},
+                             {true, false, true});
+
+  // ?numeric column is 1, -0.1, 3.4
+  testWithExplicitResult<NE>(-0.1, Variable{"?numeric"}, {true, false, true});
+  testWithExplicitResult<GE>(Variable{"?numeric"}, int64_t{1},
+                             {true, false, true});
+  testWithExplicitResult<GT>(Variable{"?numeric"}, DoubleId(1.2),
+                             {false, false, true});
+
+  // ?vocab column is `"Beta", "alpha", "älpha"
+  testWithExplicitResult<LE>(Variable{"?vocab"}, "\"älpha\""s,
+                             {false, true, true});
+  testWithExplicitResult<GT>(Variable{"?vocab"}, "\"alpha\""s,
+                             {true, false, true});
+  testWithExplicitResult<LT>("\"atm\""s, Variable{"?vocab"},
+                             {true, false, false});
+
+  // ?mixed column is `1, -0.1, A`
+  testWithExplicitResult<GT>("\"atm\""s, Variable{"?mixed"},
+                             {false, false, true});
+  testWithExplicitResult<LT>("\"atm\""s, Variable{"?mixed"},
+                             {false, false, false});
+
+  testWithExplicitResult<NE>(int64_t{1}, Variable{"?mixed"},
+                             {false, true, true});
+  testWithExplicitResult<GE>(Variable{"?mixed"}, DoubleId(-0.1),
+                             {true, true, false});
+}
 
 TEST(RelationalExpression, VariableAndVariable) {
   auto ints = Variable{"?ints"};
@@ -747,4 +738,60 @@ TEST(RelationalExpression, VariableAndVariable) {
   testWithExplicitResult<GT>(vocab, mixed, {false, false, true});
 }
 
-// TODO<joka921> test for "Variable + constant" (binary search case)
+// `rightValue` must be a constant. Sort the `IdTable` of the `TestContext`
+// `ctx` by the variable `leftValue` and then check that the expression
+// `leftValue Comp rightValue`, when evaluated on this sortest `IdTable` yields
+// the `expected` result. The type of `expected`, `SetOfIntervals` indicates
+// that the expression was evaluated using binary search on the sorted table.
+template <Comparison Comp>
+auto testSortedVariableAndConstant =
+    [](Variable leftValue, SingleExpressionResult auto rightValue,
+       ad_utility::SetOfIntervals expected,
+       source_location l = source_location::current()) {
+      auto trace = generateLocationTrace(
+          l, "test between sorted variable and constant was called here");
+      TestContext ctx = TestContext::sortedBy(leftValue);
+      auto expression = makeExpression<Comp>(leftValue, std::move(rightValue));
+      auto resultAsVariant = expression.evaluate(&ctx.context);
+      const auto& result =
+          std::get<ad_utility::SetOfIntervals>(resultAsVariant);
+      ASSERT_EQ(result, expected);
+    };
+
+TEST(RelationalExpression, VariableAndConstantBinarySearch) {
+  // Sorted order (by bits of the valueIds):
+  // ?ints column is `0, 1,  -1`
+  // ?doubles column is `0.1 , 2.8`,-0.1
+  // ?numeric column is 1, 3.4, -0.1
+  // ?vocab column is  "alpha", "älpha", "Beta"
+  // ?mixed column is `1, -0.1, A`
+
+  auto ints = Variable{"?ints"};
+  auto doubles = Variable{"?doubles"};
+  auto numeric = Variable{"?numeric"};
+  auto vocab = Variable{"?vocab"};
+  auto mixed = Variable{"?mixed"};
+  testSortedVariableAndConstant<LT>(ints, int64_t{-1}, {});
+  testSortedVariableAndConstant<GE>(ints, int64_t{-1}, {{{0, 3}}});
+  testSortedVariableAndConstant<LE>(ints, 0.3, {{{0, 1}, {2, 3}}});
+  testSortedVariableAndConstant<NE>(ints, "a string"s, {{{0, 3}}});
+
+  testSortedVariableAndConstant<GT>(doubles, int64_t{0}, {{{0, 2}}});
+  testSortedVariableAndConstant<EQ>(doubles, 2.8, {{{1, 2}}});
+  testSortedVariableAndConstant<LE>(doubles, 0.1, {{{0, 1}, {2, 3}}});
+
+  testSortedVariableAndConstant<GT>(numeric, -0.1, {{{0, 2}}});
+  testSortedVariableAndConstant<EQ>(numeric, 1.0, {{{0, 1}}});
+  testSortedVariableAndConstant<NE>(numeric, 3.4, {{{0, 1}, {2, 3}}});
+
+  testSortedVariableAndConstant<GT>(vocab, "\"alpha\""s, {{{1, 3}}});
+  testSortedVariableAndConstant<GE>(vocab, "\"alpha\""s, {{{0, 3}}});
+  testSortedVariableAndConstant<LE>(vocab, "\"ball\""s, {{{0, 2}}});
+  testSortedVariableAndConstant<NE>(vocab, "\"älpha\""s, {{{0, 1}, {2, 3}}});
+  testSortedVariableAndConstant<LE>(vocab, inf, {});
+  testSortedVariableAndConstant<NE>(vocab, 3.2, {{{0, 3}}});
+
+  testSortedVariableAndConstant<NE>(mixed, 1.0, {{{1, 3}}});
+  testSortedVariableAndConstant<GT>(mixed, -inf, {{{0, 2}}});
+  testSortedVariableAndConstant<LE>(mixed, "\"b\""s, {{{2, 3}}});
+}

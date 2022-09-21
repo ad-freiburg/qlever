@@ -26,3 +26,12 @@ struct DummyExpression : public SparqlExpression {
   std::span<SparqlExpression::Ptr> children() override { return {}; }
 };
 }  // namespace sparqlExpression
+
+// Add output for `SetOfIntervals for Gtest.
+namespace ad_utility {
+void PrintTo(const SetOfIntervals& set, std::ostream* os) {
+  for (auto [first, second] : set._intervals) {
+    *os << '{' << first << ", " << second << '}';
+  }
+}
+}  // namespace ad_utility
