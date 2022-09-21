@@ -677,12 +677,8 @@ TEST(RelationalExpression, VariableAndConstant) {
   test(makeExpression<LT>("\"atm\""s, Variable{"?mixed"}),
        {false, false, false});
 
-  // TODO<joka921> Discuss with Hannah what the result of `"A" != 1"` should be.
-  // In the current implementation of the valueIdComparators it is `false` as in
-  // "this is an expression error", but we currently don't support this ternary
-  // logic.
   test(makeExpression<NE>(int64_t{1}, Variable{"?mixed"}),
-       {false, true, false});
+       {false, true, true});
   test(makeExpression<GE>(Variable{"?mixed"}, DoubleId(-0.1)),
        {true, true, false});
 }

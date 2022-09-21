@@ -246,6 +246,18 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIntsAndDoubles(
   auto result = getRangesForDouble(begin, end, value, comparison);
   auto resultInt = getRangesForInt(begin, end, value, comparison);
   result.insert(result.end(), resultInt.begin(), resultInt.end());
+
+  // If the comparison is "not equal" we also have to add the ranges for
+  // non-matching datatypes.
+  if (comparison == Comparison::NE) {
+    auto rangeOfDoubles = getRangeForDatatype(begin, end, Datatype::Double);
+    auto rangeOfInts = getRangeForDatatype(begin, end, Datatype::Int);
+    AD_CHECK(rangeOfInts.first <= rangeOfDoubles.first);
+    result.push_back({begin, rangeOfInts.first});
+    result.push_back({rangeOfInts.second, rangeOfDoubles.first});
+    result.push_back({rangeOfDoubles.second, end});
+  }
+
   return result;
 }
 
@@ -254,13 +266,19 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIntsAndDoubles(
 template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
     RandomIt begin, RandomIt end, ValueId valueId, Comparison comparison) {
-  std::tie(begin, end) = getRangeForDatatype(begin, end, valueId.getDatatype());
+  auto [beginType, endType] =
+      getRangeForDatatype(begin, end, valueId.getDatatype());
 
   RangeFilter<RandomIt> rangeFilter{comparison};
-  auto [eqBegin, eqEnd] = std::equal_range(begin, end, valueId, &compareByBits);
-  rangeFilter.addSmaller(begin, eqBegin);
+  auto [eqBegin, eqEnd] =
+      std::equal_range(beginType, endType, valueId, &compareByBits);
+  if (comparison == Comparison::NE) {
+    rangeFilter.addSmaller(begin, beginType);
+    rangeFilter.addGreater(endType, end);
+  }
+  rangeFilter.addSmaller(beginType, eqBegin);
   rangeFilter.addEqual(eqBegin, eqEnd);
-  rangeFilter.addGreater(eqEnd, end);
+  rangeFilter.addGreater(eqEnd, endType);
   return std::move(rangeFilter).getResult();
 }
 
@@ -270,15 +288,20 @@ template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
     RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
     Comparison comparison) {
-  std::tie(begin, end) =
+  auto [beginType, endType] =
       getRangeForDatatype(begin, end, valueIdBegin.getDatatype());
 
   RangeFilter<RandomIt> rangeFilter{comparison};
-  auto eqBegin = std::lower_bound(begin, end, valueIdBegin, &compareByBits);
-  auto eqEnd = std::lower_bound(begin, end, valueIdEnd, &compareByBits);
-  rangeFilter.addSmaller(begin, eqBegin);
+  auto eqBegin =
+      std::lower_bound(beginType, endType, valueIdBegin, &compareByBits);
+  auto eqEnd = std::lower_bound(beginType, endType, valueIdEnd, &compareByBits);
+  if (comparison == Comparison::NE) {
+    rangeFilter.addSmaller(begin, beginType);
+    rangeFilter.addGreater(endType, end);
+  }
+  rangeFilter.addSmaller(beginType, eqBegin);
   rangeFilter.addEqual(eqBegin, eqEnd);
-  rangeFilter.addGreater(eqEnd, end);
+  rangeFilter.addGreater(eqEnd, endType);
   return std::move(rangeFilter).getResult();
 }
 
@@ -392,9 +415,8 @@ inline bool compareIds(ValueId a, ValueId b, Comparison comparison) {
     case Comparison::EQ:
       return detail::compareIdsImpl(a, b, std::equal_to<>());
     case Comparison::NE:
-      // TODO<joka921> discuss this behavior with Hannah and comment!
-      // return !compareIds(a, b, Comparison::EQ);
-      return detail::compareIdsImpl(a, b, std::not_equal_to<>());
+      // IDs with incompatible datatypes are also considered "not equal".
+      return !compareIds(a, b, Comparison::EQ);
     case Comparison::GE:
       return detail::compareIdsImpl(a, b, std::greater_equal<>());
     case Comparison::GT:
@@ -408,11 +430,11 @@ inline bool compareIds(ValueId a, ValueId b, Comparison comparison) {
 /// are considered to be equal.
 inline bool compareWithEqualIds(ValueId a, ValueId bBegin, ValueId bEnd,
                                 Comparison comparison) {
-  // The case `bBegin == bEnd`
-  // happens when IDs from QLever's vocabulary are compared to "pseudo"-IDs that
-  // represent words that are not part of the vocabulary. In this case the ID
-  // `bBegin` is the ID of the smallest vocabulary entry that is larger than the
-  // non-existing word that it represents.
+  // The case `bBegin == bEnd` happens when IDs from QLever's vocabulary are
+  // compared to "pseudo"-IDs that represent words that are not part of the
+  // vocabulary. In this case the ID `bBegin` is the ID of the smallest
+  // vocabulary entry that is larger than the non-existing word that it
+  // represents.
   AD_CHECK(bBegin <= bEnd);
   switch (comparison) {
     case Comparison::LT:
@@ -423,10 +445,8 @@ inline bool compareWithEqualIds(ValueId a, ValueId bBegin, ValueId bEnd,
       return detail::compareIdsImpl(a, bBegin, std::greater_equal<>()) &&
              detail::compareIdsImpl(a, bEnd, std::less<>());
     case Comparison::NE:
-      // TODO<joka921> Discuss this behavior with Hannah and comment.
-      // return !compareWithEqualIds(a, bBegin, bEnd, Comparison::EQ);
-      return detail::compareIdsImpl(a, bBegin, std::less<>()) ||
-             detail::compareIdsImpl(a, bEnd, std::greater_equal<>());
+      // IDs with incompatible datatypes are also considered "not equal".
+      return !compareWithEqualIds(a, bBegin, bEnd, Comparison::EQ);
     case Comparison::GE:
       return detail::compareIdsImpl(a, bBegin, std::greater_equal<>());
     case Comparison::GT:
