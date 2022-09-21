@@ -42,9 +42,10 @@ class Reversed {
 };
 
 /**
- * This class provides an empty implementation of SparqlVisitor, which can be
- * extended to create a visitor which only needs to handle a subset of the
- * available methods.
+ * Transform the nodes of the Parse Tree into their application specific
+ * model. The `SparqlQleverVisitor` must be able to handle every rule that is
+ * the SPARQL QL grammar. Rules that are not supported have the
+ * `[[noreturn]]` attribute and may just throw an Exception.
  */
 class SparqlQleverVisitor {
   using GraphPatternOperation = parsedQuery::GraphPatternOperation;

@@ -572,7 +572,7 @@ string Visitor::visit(Parser::PnameNsContext* ctx) {
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::PrologueContext* ctx) {
   if (!ctx->baseDecl().empty()) {
-    reportError(ctx->baseDecl(0), "BaseDecl is not supported.");
+    reportNotSupported(ctx->baseDecl(0), "BASE declarations are");
   }
   for (const auto& prefix : ctx->prefixDecl()) {
     visit(prefix);
@@ -581,7 +581,7 @@ void Visitor::visit(Parser::PrologueContext* ctx) {
 
 // ____________________________________________________________________________________
 SparqlPrefix Visitor::visit(Parser::BaseDeclContext* ctx) {
-  reportError(ctx, "BaseDecl is not supported.");
+  reportNotSupported(ctx, "BASE declarations are");
 }
 
 // ____________________________________________________________________________________
