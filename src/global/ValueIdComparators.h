@@ -99,8 +99,10 @@ class RangeFilter {
     addImpl<Comparison::GE, Comparison::GT, Comparison::NE>(begin, end);
   }
 
-  // Analogous to `addEqual`.
-  void addNan(RandomIt begin, RandomIt end) {
+  // Analogous to `addEqual`. Used for IDs or numbers that are not equal, but
+  // also not smaller or greater. This applies for example for `not a number`
+  // and IDs that represent different incompatible datatypes.
+  void addNotEqual(RandomIt begin, RandomIt end) {
     addImpl<Comparison::NE>(begin, end);
   }
 
@@ -154,7 +156,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForDouble(
 
   RangeFilter<RandomIt> rangeFilter{comparison};
 
-  rangeFilter.addNan(beginOfNans, beginOfNegatives);
+  rangeFilter.addNotEqual(beginOfNans, beginOfNegatives);
   if (value > 0) {
     // The order is [smaller positives, equal, greater positives, nan, all
     // negatives].
@@ -272,13 +274,11 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
   RangeFilter<RandomIt> rangeFilter{comparison};
   auto [eqBegin, eqEnd] =
       std::equal_range(beginType, endType, valueId, &compareByBits);
-  if (comparison == Comparison::NE) {
-    rangeFilter.addSmaller(begin, beginType);
-    rangeFilter.addGreater(endType, end);
-  }
+  rangeFilter.addNotEqual(begin, beginType);
   rangeFilter.addSmaller(beginType, eqBegin);
   rangeFilter.addEqual(eqBegin, eqEnd);
   rangeFilter.addGreater(eqEnd, endType);
+  rangeFilter.addNotEqual(endType, end);
   return std::move(rangeFilter).getResult();
 }
 

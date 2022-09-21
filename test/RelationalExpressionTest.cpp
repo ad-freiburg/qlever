@@ -119,6 +119,20 @@ struct TestContext {
     varToColMap["?vocab"] = {3, qlever::ResultType::KB};
     varToColMap["?mixed"] = {4, qlever::ResultType::KB};
   }
+
+  // Get a test context where the rows are the same as by default, but sorted by
+  // the `variable`
+  static TestContext sortedBy(const Variable& variable) {
+    TestContext result;
+    auto columnIndex = result.varToColMap.at(variable.name()).first;
+    std::sort(result.table.begin(), result.table.end(),
+              [columnIndex](const auto& a, const auto& b) {
+                return valueIdComparators::compareByBits(a[columnIndex],
+                                                         b[columnIndex]);
+              });
+    result.context._columnsByWhichResultIsSorted.push_back(columnIndex);
+    return result;
+  }
 };
 
 // A global allocator that will be used to setup test inputs.
@@ -677,12 +691,60 @@ TEST(RelationalExpression, VariableAndConstant) {
   test(makeExpression<LT>("\"atm\""s, Variable{"?mixed"}),
        {false, false, false});
 
-  test(makeExpression<NE>(int64_t{1}, Variable{"?mixed"}),
-       {false, true, true});
+  test(makeExpression<NE>(int64_t{1}, Variable{"?mixed"}), {false, true, true});
   test(makeExpression<GE>(Variable{"?mixed"}, DoubleId(-0.1)),
        {true, true, false});
 }
 
-// TODO<joka921> test for "Variable + constant" (binary search case)
+template <valueIdComparators::Comparison Comp>
+auto testWithExplicitResult =
+    [](SingleExpressionResult auto leftValue,
+       SingleExpressionResult auto rightValue, std::vector<Bool> expected,
+       source_location l = source_location::current()) {
+      static TestContext ctx;
+      auto expression =
+          makeExpression<Comp>(std::move(leftValue), std::move(rightValue));
+      auto trace = generateLocationTrace(l, "test lambda was called here");
+      auto resultAsVariant = expression.evaluate(&ctx.context);
+      const auto& result =
+          std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
+      // TODO<joka921> There is a matcher for that (ElementsAre or something
+      // like that).
+      ASSERT_EQ(result.size(), expected.size());
+      for (size_t i = 0; i < result.size(); ++i) {
+        EXPECT_EQ(expected[i], result[i]);
+      }
+    };
 
-// TODO<joka921> Test for "Variable + Vector" or "Variable + Variable"
+TEST(RelationalExpression, VariableAndVariable) {
+  auto ints = Variable{"?ints"};
+  auto doubles = Variable{"?doubles"};
+  auto numeric = Variable{"?numeric"};
+  auto vocab = Variable{"?vocab"};
+  auto mixed = Variable{"?mixed"};
+
+  // Variables have to be equal to themselves.
+  testWithExplicitResult<LT>(ints, ints, {false, false, false});
+  testWithExplicitResult<EQ>(ints, ints, {true, true, true});
+
+  testWithExplicitResult<LT>(mixed, mixed, {false, false, false});
+  testWithExplicitResult<EQ>(mixed, mixed, {true, true, true});
+
+  // ?ints column is `1, 0, -1`
+  // ?doubles column is `0.1, -0.1, 2.8`
+  // ?numeric column is 1, -0.1, 3.4
+  // ?vocab column is `"Beta", "alpha", "älpha"
+  // ?mixed column is `1, -0.1, A`
+
+  testWithExplicitResult<GT>(doubles, ints, {false, false, true});
+  testWithExplicitResult<LE>(numeric, doubles, {false, true, false});
+  testWithExplicitResult<NE>(ints, mixed, {false, true, true});
+
+  testWithExplicitResult<NE>(doubles, vocab, {true, true, true});
+  testWithExplicitResult<LE>(vocab, doubles, {false, false, false});
+  testWithExplicitResult<GE>(vocab, doubles, {false, false, false});
+
+  testWithExplicitResult<GT>(vocab, mixed, {false, false, true});
+}
+
+// TODO<joka921> test for "Variable + constant" (binary search case)
