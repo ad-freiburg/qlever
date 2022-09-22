@@ -37,7 +37,7 @@ std::vector<std::string> SparqlExpressionPimpl::getUnaggregatedVariables()
 }
 
 // ___________________________________________________________________________
-std::optional<::Variable>
+std::optional<SparqlExpressionPimpl::VariableAndIsDistinct>
 SparqlExpressionPimpl::getVariableForDistinctCountOrNullopt() const {
   return _pimpl->getVariableForDistinctCountOrNullopt();
 }

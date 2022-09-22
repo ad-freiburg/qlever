@@ -15,6 +15,7 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/ResultTable.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/Id.h"
@@ -80,8 +81,8 @@ class SparqlExpression {
   /// For the pattern trick we need to know, whether this expression
   /// is a non-distinct count of a single variable. In this case we return
   /// the variable. Otherwise we return std::nullopt.
-  virtual std::optional<::Variable> getVariableForDistinctCountOrNullopt()
-      const {
+  virtual std::optional<SparqlExpressionPimpl::VariableAndIsDistinct>
+  getVariableForDistinctCountOrNullopt() const {
     return std::nullopt;
   }
 

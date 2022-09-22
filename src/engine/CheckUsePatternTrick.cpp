@@ -88,13 +88,14 @@ bool checkUsePatternTrick(ParsedQuery* pq, SparqlTriple* patternTrickTriple) {
     return false;
   }
 
-  bool returns_counts = aliases.size() == 1;
+  bool returnsCounts = aliases.size() == 1;
 
   // These will only be set if the query returns the count of predicates
   // The variable the COUNT alias counts.
-  std::string counted_var_name;
+  std::string countedVariable;
+  bool countedVariableIsDistinct;
 
-  if (returns_counts) {
+  if (returnsCounts) {
     // We have already verified above that there is exactly one alias.
     const Alias& alias = aliases.front();
     auto countVariable =
@@ -102,7 +103,8 @@ bool checkUsePatternTrick(ParsedQuery* pq, SparqlTriple* patternTrickTriple) {
     if (!countVariable.has_value()) {
       return false;
     }
-    counted_var_name = countVariable.value().name();
+    countedVariable = countVariable.value().variable_.name();
+    countedVariableIsDistinct = countVariable.value().isDistinct_;
   }
 
   if (pq->children().empty()) {
@@ -130,6 +132,7 @@ bool checkUsePatternTrick(ParsedQuery* pq, SparqlTriple* patternTrickTriple) {
         Variable predicateVariable_;
         Variable allowedCountVariable_;
         std::vector<Variable> variablesNotAllowedInRestOfQuery_;
+        bool countMustBeDistinct_;
       };
 
       const auto isTriplePossible = [&]() -> std::optional<S> {
@@ -138,15 +141,20 @@ bool checkUsePatternTrick(ParsedQuery* pq, SparqlTriple* patternTrickTriple) {
           if (isVariable(t._s)) {
             return S{predicateVariable,
                      Variable{t._s.getString()},
-                     {predicateVariable}};
+                     {predicateVariable},
+                     true};
           } else {
-            return S{predicateVariable, predicateVariable, {predicateVariable}};
+            return S{predicateVariable,
+                     predicateVariable,
+                     {predicateVariable},
+                     false};
           }
         } else if (isVariable(t._s) && isVariable(t._p) && isVariable(t._o)) {
           Variable predicateVariable{t._p.getIri()};
           return S{predicateVariable,
                    Variable{t._s.getString()},
-                   {predicateVariable, Variable{t._o.getString()}}};
+                   {predicateVariable, Variable{t._o.getString()}},
+                   true};
         } else {
           return std::nullopt;
         }
@@ -161,8 +169,9 @@ bool checkUsePatternTrick(ParsedQuery* pq, SparqlTriple* patternTrickTriple) {
         continue;
       }
 
-      if (returns_counts &&
-          counted_var_name != data.allowedCountVariable_.name()) {
+      if (returnsCounts &&
+          (countedVariable != data.allowedCountVariable_.name() ||
+           data.countMustBeDistinct_ != countedVariableIsDistinct)) {
         continue;
       }
 
