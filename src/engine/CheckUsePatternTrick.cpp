@@ -79,37 +79,33 @@ bool isVariableContainedInGraphPatternOperation(
 bool checkUsePatternTrick(ParsedQuery* pq, SparqlTriple* patternTrickTriple) {
   // Check if the query has the right number of variables for aliases and
   // group by.
+
+  // TODO<joka921> We could actually make this work for CONSTRUCT clauses.
   if (!pq->hasSelectClause()) {
     return false;
   }
-  const auto& selectClause = pq->selectClause();
-  auto aliases = selectClause.getAliases();
+  auto aliases = pq->selectClause().getAliases();
   if (pq->_groupByVariables.size() != 1 || aliases.size() > 1) {
     return false;
   }
 
   bool returnsCounts = aliases.size() == 1;
 
-  // These will only be set if the query returns the count of predicates
+  // This will only be set if the query returns the count of predicates
   // The variable the COUNT alias counts.
-  std::string countedVariable;
-  bool countedVariableIsDistinct = false;
-
+  using VariableAndDistinct =
+      sparqlExpression::SparqlExpressionPimpl::VariableAndIsDistinct;
+  std::optional<VariableAndDistinct> countedVariable;
   if (returnsCounts) {
     // We have already verified above that there is exactly one alias.
     const Alias& alias = aliases.front();
-    auto countVariable =
-        alias._expression.getVariableForDistinctCountOrNullopt();
-    if (!countVariable.has_value()) {
+    countedVariable = alias._expression.getVariableForDistinctCountOrNullopt();
+    if (!countedVariable.has_value()) {
       return false;
     }
-    countedVariable = countVariable.value().variable_.name();
-    countedVariableIsDistinct = countVariable.value().isDistinct_;
   }
 
-  if (pq->children().empty()) {
-    return false;
-  }
+  AD_CHECK(returnsCounts == countedVariable.has_value());
 
   // We currently accept the pattern trick triple anywhere in the query.
   // TODO<joka921, hannah> Discuss whether it is also ok before an OPTIONAL or
@@ -122,12 +118,9 @@ bool checkUsePatternTrick(ParsedQuery* pq, SparqlTriple* patternTrickTriple) {
       continue;
     }
 
+    // Try to find a
     for (size_t i = 0; i < curPattern->_triples.size(); i++) {
       const SparqlTriple& t = curPattern->_triples[i];
-      // Check that the triples predicates is the HAS_PREDICATE_PREDICATE.
-      // Also check that the triples object or subject matches the aliases input
-      // variable and the group by variable.
-
       struct S {
         Variable predicateVariable_;
         Variable allowedCountVariable_;
@@ -170,8 +163,8 @@ bool checkUsePatternTrick(ParsedQuery* pq, SparqlTriple* patternTrickTriple) {
       }
 
       if (returnsCounts &&
-          (countedVariable != data.allowedCountVariable_.name() ||
-           data.countMustBeDistinct_ != countedVariableIsDistinct)) {
+          (countedVariable.value().variable_ != data.allowedCountVariable_ ||
+           data.countMustBeDistinct_ != countedVariable.value().isDistinct_)) {
         continue;
       }
 
