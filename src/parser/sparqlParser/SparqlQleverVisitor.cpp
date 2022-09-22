@@ -1297,8 +1297,7 @@ ExpressionPtr Visitor::visit(Parser::ValueLogicalContext* ctx) {
 }
 
 // ___________________________________________________________________________
-ExpressionPtr Visitor::visit(
-    Parser::RelationalExpressionContext* ctx) {
+ExpressionPtr Visitor::visit(Parser::RelationalExpressionContext* ctx) {
   auto children = visitVector(ctx->numericExpression());
 
   if (ctx->expressionList()) {
