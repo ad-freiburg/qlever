@@ -9,8 +9,8 @@
 #include <string>
 #include <vector>
 
-#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
@@ -1554,9 +1554,10 @@ ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
   AD_CHECK(numArgs >= 2 && numArgs <= 3);
   // TODO<joka921> support at least "i", because Hannah needs it.
   if (numArgs == 3) {
-    reportNotSupported(ctx,
-                "REGEX expressions with a third argument (e.g. `i` for `case "
-                       "insensitive`) are ");
+    reportNotSupported(
+        ctx,
+        "REGEX expressions with a third argument (e.g. `i` for `case "
+        "insensitive`) are ");
   }
   try {
     return std::make_unique<sparqlExpression::RegexExpression>(visit(exp[0]),
@@ -1564,6 +1565,7 @@ ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
   } catch (const std::exception& e) {
     reportError(ctx, e.what());
   }
+  RegexExpression.cpp
 }
 
 // ____________________________________________________________________________________
