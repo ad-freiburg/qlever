@@ -316,12 +316,32 @@ class SparqlAutomaticVisitor : public antlr4::tree::AbstractParseTreeVisitor {
   virtual antlrcpp::Any visitAdditiveExpression(
       SparqlAutomaticParser::AdditiveExpressionContext* context) = 0;
 
-  virtual antlrcpp::Any visitStrangeMultiplicativeSubexprOfAdditive(
-      SparqlAutomaticParser::StrangeMultiplicativeSubexprOfAdditiveContext*
+  virtual antlrcpp::Any visitMultiplicativeExpressionWithSign(
+      SparqlAutomaticParser::MultiplicativeExpressionWithSignContext*
           context) = 0;
+
+  virtual antlrcpp::Any visitPlusSubexpression(
+      SparqlAutomaticParser::PlusSubexpressionContext* context) = 0;
+
+  virtual antlrcpp::Any visitMinusSubexpression(
+      SparqlAutomaticParser::MinusSubexpressionContext* context) = 0;
+
+  virtual antlrcpp::Any visitMultiplicativeExpressionWithLeadingSignButNoSpace(
+      SparqlAutomaticParser::
+          MultiplicativeExpressionWithLeadingSignButNoSpaceContext*
+              context) = 0;
 
   virtual antlrcpp::Any visitMultiplicativeExpression(
       SparqlAutomaticParser::MultiplicativeExpressionContext* context) = 0;
+
+  virtual antlrcpp::Any visitMultiplyOrDivideExpression(
+      SparqlAutomaticParser::MultiplyOrDivideExpressionContext* context) = 0;
+
+  virtual antlrcpp::Any visitMultiplyExpression(
+      SparqlAutomaticParser::MultiplyExpressionContext* context) = 0;
+
+  virtual antlrcpp::Any visitDivideExpression(
+      SparqlAutomaticParser::DivideExpressionContext* context) = 0;
 
   virtual antlrcpp::Any visitUnaryExpression(
       SparqlAutomaticParser::UnaryExpressionContext* context) = 0;

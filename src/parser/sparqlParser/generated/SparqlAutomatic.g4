@@ -426,17 +426,31 @@ numericExpression
     : additiveExpression
     ;
 
+// The  rule `multiplicativeExpressionWithSign` and the simple alias rules `plusSubexpression` and `minusSubexpression`
+// are not part of the SPARQL standard, but are added for easier identification of the signs in an `additiveExpression`.
 additiveExpression :
-    multiplicativeExpression ( '+' multiplicativeExpression | '-' multiplicativeExpression |  strangeMultiplicativeSubexprOfAdditive)*
+    multiplicativeExpression multiplicativeExpressionWithSign*
     ;
 
-strangeMultiplicativeSubexprOfAdditive:
-( numericLiteralPositive | numericLiteralNegative ) ( ( '*' unaryExpression ) | ( '/' unaryExpression ) )*
+multiplicativeExpressionWithSign :  '+' plusSubexpression | '-' minusSubexpression |  multiplicativeExpressionWithLeadingSignButNoSpace;
+
+
+plusSubexpression : multiplicativeExpression;
+minusSubexpression : multiplicativeExpression;
+
+// A multiplicative expression with an explicit `+` or `-` sign in front of it, but without a space after that sign.
+multiplicativeExpressionWithLeadingSignButNoSpace:
+( numericLiteralPositive | numericLiteralNegative ) multiplyOrDivideExpression*
 ;
 
 multiplicativeExpression
-    : unaryExpression ( '*' unaryExpression | '/' unaryExpression )*
+    : unaryExpression multiplyOrDivideExpression*
     ;
+
+// Helper rules that combine a `*` or `/` with the expression after it
+multiplyOrDivideExpression : multiplyExpression | divideExpression;
+multiplyExpression : '*' unaryExpression;
+divideExpression : '/' unaryExpression;
 
 unaryExpression
     :  '!' primaryExpression
