@@ -307,7 +307,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
 
 // Helper function: Sort the non-overlapping ranges in `input` by the first
 // element, remove the empty ranges, and merge  directly adjacent ranges
-auto simplifyRanges =
+inline auto simplifyRanges =
     []<typename RandomIt>(std::vector<std::pair<RandomIt, RandomIt>> input) {
       // Eliminate empty ranges
       std::erase_if(input, [](const auto& p) { return p.first == p.second; });
