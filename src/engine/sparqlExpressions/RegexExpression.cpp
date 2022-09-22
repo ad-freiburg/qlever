@@ -26,9 +26,8 @@ std::optional<std::string> getPrefixRegex(std::string regex) {
   // of an expensive regex filter.
   bool escaped = false;
 
-  // Positions of backslashes that are used for
-  // escaping within the regex
-  // these have to be removed if the regex is simply a prefix filter.
+  // Positions of backslashes that are used for escaping within the regex. These
+  // have to be removed if the regex is simply a prefix filter.
   std::vector<size_t> escapePositions;
 
   // Check if the regex is only a prefix regex or also contains other special
@@ -99,7 +98,9 @@ RegexExpression::RegexExpression(SparqlExpression::Ptr child,
 // ___________________________________________________________________________
 string RegexExpression::getCacheKey(
     const sparqlExpression::VariableToColumnMap& varColMap) const {
-  return "REGEX expression " + child_->getCacheKey(varColMap);
+  return "REGEX expression " + child_->getCacheKey(varColMap) + " with " +
+         regex_;
+  // TODO<joka921> Don't forget to add the separate options here.
 }
 
 // ___________________________________________________________________________
@@ -142,9 +143,8 @@ ExpressionResult RegexExpression::evaluate(
       for (auto id : detail::makeGenerator(
                *variablePtr, context->_endIndex - context->_beginIndex,
                context)) {
-        result.push_back(
-            !valueIdComparators::compareByBits(id, lowerId) &&
-            valueIdComparators::compareByBits(id, upperId));
+        result.push_back(!valueIdComparators::compareByBits(id, lowerId) &&
+                         valueIdComparators::compareByBits(id, upperId));
       }
       return result;
     }
