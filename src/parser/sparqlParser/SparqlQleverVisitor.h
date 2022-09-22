@@ -445,19 +445,6 @@ class SparqlQleverVisitor {
         std::array<ExpressionPtr, sizeof...(children)>{std::move(children)...});
   }
 
-  [[nodiscard]] static std::vector<std::string> visitOperationTags(
-      const std::vector<antlr4::tree::ParseTree*>& childContexts,
-      const ad_utility::HashSet<string>& allowedTags) {
-    std::vector<std::string> operations;
-
-    for (const auto& c : childContexts) {
-      if (allowedTags.contains(c->getText())) {
-        operations.emplace_back(c->getText());
-      }
-    }
-    return operations;
-  }
-
   template <typename Ctx>
   void visitVector(const std::vector<Ctx*>& childContexts) requires
       voidWhenVisited<SparqlQleverVisitor, Ctx>;
