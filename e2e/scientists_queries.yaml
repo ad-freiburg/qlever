@@ -228,7 +228,7 @@ queries:
   - query : pattern-trick
     type: no-text
     sparql: |
-      SELECT ?r (COUNT(?r) as ?count) WHERE {
+      SELECT ?r (COUNT(DISTINCT ?a) as ?count) WHERE {
         ?a <is-a> <Scientist> .
         ?a ql:has-predicate ?r .
       }
@@ -245,13 +245,9 @@ queries:
   - query : pattern-trick-without-has-predicate
     type: no-text
     sparql: |
-      SELECT ?r (COUNT(?a) as ?count) WHERE {
-        {
-          SELECT DISTINCT ?a ?r WHERE {
-            ?a <is-a> <Scientist> .
-            ?a ?r ?o .
-          }
-        }
+      SELECT ?r (COUNT(DISTINCT ?a) as ?count) WHERE {
+        ?a <is-a> <Scientist> .
+        ?a ?r ?o .
       }
       GROUP BY ?r
       ORDER BY DESC(?count)
@@ -472,7 +468,7 @@ queries:
   - query : pattern-trick-automatic-having
     type: no-text
     sparql: |
-      SELECT ?predicate (COUNT(?predicate) as ?count) WHERE {
+      SELECT ?predicate (COUNT(DISTINCT(?x) as ?count) WHERE {
         ?x ql:has-predicate ?predicate .
         FILTER (?predicate = <Gender>)
       }
@@ -1140,27 +1136,6 @@ queries:
       - contains_row: ["<Albert_Einstein>"]
       - contains_row: ["<Albert_Zylberstein>"]
       - contains_row: ["<Greg_Stein>"]
-
-
-  - query : select_asterisk_pattern-trick-without-has-predicate
-    type: no-text
-    sparql: |
-      SELECT * WHERE {
-        {
-          SELECT DISTINCT ?a ?r WHERE {
-            ?a <is-a> <Scientist> .
-            ?a ?r ?o .
-          }
-        }
-      }
-    checks:
-      #The query returns too many rows, the current limit is 4096
-      - num_cols: 2
-      - selected: ["?a", "?r"]
-      - contains_row: ["<Aafia_Siddiqui>","<Religion>"]
-      - contains_row: ["<Aban_Marker_Kabraji>","<Religion>"]
-      - contains_row: ["<Abd_al-Rahman_al-Sufi>","<Religion>"]
-      - contains_row: ["<Aaldert_Wapstra>","<Place_of_birth>"]
 
 
   - query: scientists-with-curie-in-their-name

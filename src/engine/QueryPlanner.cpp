@@ -5,6 +5,7 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #include <engine/Bind.h>
+#include <engine/CheckUsePatternTrick.h>
 #include <engine/CountAvailablePredicates.h>
 #include <engine/Distinct.h>
 #include <engine/Filter.h>
@@ -79,7 +80,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   // will be handled using a HasRelationScan.
   SparqlTriple patternTrickTriple("", PropertyPath(), "");
   bool usePatternTrick =
-      _enablePatternTrick && checkUsePatternTrick(&pq, &patternTrickTriple);
+      _enablePatternTrick &&
+      checkUsePatternTrick::checkUsePatternTrick(&pq, &patternTrickTriple);
 
   bool doGrouping = !pq._groupByVariables.empty() || usePatternTrick;
   if (!doGrouping && pq.hasSelectClause()) {
@@ -481,85 +483,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   } else {
     return candidatePlans[0];
   }
-}
-
-bool QueryPlanner::checkUsePatternTrick(
-    ParsedQuery* pq, SparqlTriple* patternTrickTriple) const {
-  // Check if the query has the right number of variables for aliases and
-  // group by.
-  if (!pq->hasSelectClause()) {
-    return false;
-  }
-  const auto& selectClause = pq->selectClause();
-  auto aliases = selectClause.getAliases();
-  if (pq->_groupByVariables.size() != 1 || aliases.size() > 1) {
-    return false;
-  }
-
-  bool returns_counts = aliases.size() == 1;
-
-  // These will only be set if the query returns the count of predicates
-  // The variable the COUNT alias counts.
-  std::string counted_var_name;
-
-  if (returns_counts) {
-    // We have already verified above that there is exactly one alias.
-    // TODO<joka921> this should be `DISTINCT` not `nonDistinct`.
-    const Alias& alias = aliases.front();
-    auto countVariable =
-        alias._expression.getVariableForNonDistinctCountOrNullopt();
-    if (!countVariable.has_value()) {
-      return false;
-    }
-    counted_var_name = countVariable.value().name();
-  }
-
-  // The first possibility for using the pattern trick is having a
-  // ql:has-predicate predicate in the query
-
-  // look for a HAS_RELATION_PREDICATE triple which satisfies all constraints.
-
-  if (pq->children().empty()) {
-    return false;
-  }
-
-  // The triple has to appear in the last GraphPattern of the
-  // WHERE-clause, because otherwise there might be OPTIONAL and MINUS
-  // interfering with the semantics.
-  auto* curPattern = std::get_if<p::BasicGraphPattern>(&pq->children().back());
-  if (!curPattern) {
-    return false;
-  }
-
-  for (size_t i = 0; i < curPattern->_triples.size(); i++) {
-    const SparqlTriple& t = curPattern->_triples[i];
-    // Check that the triples predicates is the HAS_PREDICATE_PREDICATE.
-    // Also check that the triples object or subject matches the aliases input
-    // variable and the group by variable.
-    if (t._p._iri != HAS_PREDICATE_PREDICATE || !isVariable(t._o) ||
-        (returns_counts &&
-         !(counted_var_name == t._o || counted_var_name == t._s)) ||
-        pq->_groupByVariables[0].name() != t._o) {
-      continue;
-    }
-
-    // Check that the pattern trick triple is the only place in the query
-    // where the predicate variable occurs.
-    if (ParsedQuery::isVariableContainedInGraphPattern(
-            Variable{t._o.getString()}, pq->_rootGraphPattern, &t)) {
-      continue;
-    }
-
-    LOG(DEBUG) << "Using the pattern trick to answer the query." << endl;
-
-    *patternTrickTriple = t;
-    // Remove the triple from the graph. Note that this invalidates the
-    // reference `t`, so we perform this step at the very end.
-    curPattern->_triples.erase(curPattern->_triples.begin() + i);
-    return true;
-  }
-  // No suitable triple for the pattern trick was found.
-  return false;
 }
 
 // _____________________________________________________________________________

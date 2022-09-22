@@ -41,8 +41,8 @@ class AggregateExpression : public SparqlExpression {
       const VariableToColumnMap& varColMap) const override;
 
   // __________________________________________________________________________
-  [[nodiscard]] std::optional<::Variable>
-  getVariableForNonDistinctCountOrNullopt() const override;
+  [[nodiscard]] std::optional<::Variable> getVariableForDistinctCountOrNullopt()
+      const override;
 
   // This is the visitor for the `evaluateAggregateExpression` function below.
   // It works on a `SingleExpressionResult` rather than on the
@@ -150,9 +150,9 @@ inline auto count = [](const auto& a, const auto& b) -> int64_t {
 using CountExpressionBase = AGG_EXP<decltype(count), IsValidValueGetter>;
 class CountExpression : public CountExpressionBase {
   using CountExpressionBase::CountExpressionBase;
-  [[nodiscard]] std::optional<::Variable>
-  getVariableForNonDistinctCountOrNullopt() const override {
-    if (this->_distinct) {
+  [[nodiscard]] std::optional<::Variable> getVariableForDistinctCountOrNullopt()
+      const override {
+    if (!this->_distinct) {
       return std::nullopt;
     }
     return _child->getVariableOrNullopt();

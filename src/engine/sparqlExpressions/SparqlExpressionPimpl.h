@@ -48,8 +48,8 @@ class SparqlExpressionPimpl {
   // If this expression is a non-distinct count of a single variable,
   // return that variable, else return std::nullopt. This is needed by the
   // pattern trick.
-  [[nodiscard]] std::optional<::Variable>
-  getVariableForNonDistinctCountOrNullopt() const;
+  [[nodiscard]] std::optional<::Variable> getVariableForDistinctCountOrNullopt()
+      const;
 
   // If this expression is a single variable, return that variable, else return
   // std::nullopt. Knowing this enables some optimizations because we can

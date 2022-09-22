@@ -6,6 +6,7 @@
 #define QLEVER_ALGORITHM_H
 
 #include <numeric>
+#include <string>
 #include <utility>
 
 #include "util/TypeTraits.h"
@@ -22,8 +23,13 @@ namespace ad_utility {
  */
 template <typename Container, typename T>
 inline bool contains(Container&& container, const T& element) {
-  return std::ranges::find(container.begin(), container.end(), element) !=
-         container.end();
+  // Overload for types like std::string that have a `find` member function
+  if constexpr (ad_utility::isSimilar<Container, std::string>) {
+    return container.find(element) != container.npos;
+  } else {
+    return std::ranges::find(container.begin(), container.end(), element) !=
+           container.end();
+  }
 }
 
 /**
