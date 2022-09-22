@@ -143,8 +143,8 @@ ExpressionResult RegexExpression::evaluate(
                *variablePtr, context->_endIndex - context->_beginIndex,
                context)) {
         result.push_back(
-            !valueIdComparators::compareByBits(id._id._value, lowerId) &&
-            valueIdComparators::compareByBits(id._id._value, upperId));
+            !valueIdComparators::compareByBits(id, lowerId) &&
+            valueIdComparators::compareByBits(id, upperId));
       }
       return result;
     }

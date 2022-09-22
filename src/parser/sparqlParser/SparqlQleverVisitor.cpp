@@ -1565,7 +1565,6 @@ ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
   } catch (const std::exception& e) {
     reportError(ctx, e.what());
   }
-  RegexExpression.cpp
 }
 
 // ____________________________________________________________________________________
