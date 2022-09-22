@@ -34,7 +34,7 @@ Index makeTestIndex() {
   // Ignore the (irrelevant) log output of the index building and loading during
   // these tests.
   static std::ostringstream ignoreLogStream;
-  ad_utility::setGlobalLogginStream(&ignoreLogStream);
+  ad_utility::setGlobalLoggingStream(&ignoreLogStream);
   std::string filename = "relationalExpressionTestIndex.ttl";
   std::string dummyKb =
       "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . <x> "
@@ -126,7 +126,7 @@ struct TestContext {
   }
 
   // Get a test context where the rows are the same as by default, but sorted by
-  // the `variable`
+  // `variable`
   static TestContext sortedBy(const Variable& variable) {
     TestContext result;
     auto columnIndex = result.varToColMap.at(variable.name()).first;
@@ -239,11 +239,11 @@ auto expectFalseBoolean = [](const SparqlExpression& expression,
 // entry has to be greater than the second. In `equalPair`, the two entries have
 // to be equalPair.
 template <typename T, typename U>
-auto testLessThanGreaterThanEqual(
+auto testLessThanGreaterThanEqualHelper(
     std::pair<T, U> lessThanPair, std::pair<T, U> greaterThanPair,
     std::pair<T, U> equalPair, source_location l = source_location::current()) {
-  auto trace =
-      generateLocationTrace(l, "testLessThanGreaterThanEqual was called here");
+  auto trace = generateLocationTrace(
+      l, "testLessThanGreaterThanEqualHelper was called here");
   auto True = expectTrueBoolean;
   auto False = expectFalseBoolean;
 
@@ -271,14 +271,14 @@ auto testLessThanGreaterThanEqual(
 
 // Call `testLessThanGreaterThanEqualThan` for the given values and also for the
 // following variants: The first element from each pair is converted to a
-// ValueID before the call. The second element "" Both elements "" Requires that
-// both `leftValue` and `rightValue` are numeric constants.
+// ValueID before the call. The second element  is... Both elements are ...
+// Requires that both `leftValue` and `rightValue` are numeric constants.
 template <SingleExpressionResult L, SingleExpressionResult R>
-void testWithAndWithoutValueIds(
+void testLessThanGreaterThanEqual(
     std::pair<L, R> lessThanPair, std::pair<L, R> greaterThanPair,
     std::pair<L, R> equalPair, source_location l = source_location::current()) {
   auto trace =
-      generateLocationTrace(l, "testWithAndWithoutValueIds was called here");
+      generateLocationTrace(l, "testLessThanGreaterThanEqual was called here");
 
   // Helper functions to lift only the first, only the second, or both of the
   // elements of a pair to a valueId.
@@ -292,24 +292,24 @@ void testWithAndWithoutValueIds(
     return std::pair{liftToValueId(p.first), liftToValueId(p.second)};
   };
 
-  testLessThanGreaterThanEqual(lessThanPair, greaterThanPair, equalPair);
-  testLessThanGreaterThanEqual(liftFirst(lessThanPair),
-                               liftFirst(greaterThanPair),
-                               liftFirst(equalPair));
-  testLessThanGreaterThanEqual(liftSecond(lessThanPair),
-                               liftSecond(greaterThanPair),
-                               liftSecond(equalPair));
-  testLessThanGreaterThanEqual(liftBoth(lessThanPair),
-                               liftBoth(greaterThanPair), liftBoth(equalPair));
+  testLessThanGreaterThanEqualHelper(lessThanPair, greaterThanPair, equalPair);
+  testLessThanGreaterThanEqualHelper(liftFirst(lessThanPair),
+                                     liftFirst(greaterThanPair),
+                                     liftFirst(equalPair));
+  testLessThanGreaterThanEqualHelper(liftSecond(lessThanPair),
+                                     liftSecond(greaterThanPair),
+                                     liftSecond(equalPair));
+  testLessThanGreaterThanEqualHelper(
+      liftBoth(lessThanPair), liftBoth(greaterThanPair), liftBoth(equalPair));
 }
 
 // Test that all comparisons between `leftValue` and `rightValue` result in a
 // single boolean that is false. The only exception is the `not equal`
 // comparison, for which true is expected.
-auto testNotEqual = [](SingleExpressionResult auto leftValue,
-                       SingleExpressionResult auto rightValue,
-                       source_location l = source_location::current()) {
-  auto trace = generateLocationTrace(l, "testNotEqual was called here");
+auto testNotEqualHelper = [](SingleExpressionResult auto leftValue,
+                             SingleExpressionResult auto rightValue,
+                             source_location l = source_location::current()) {
+  auto trace = generateLocationTrace(l, "testNotEqualHelper was called here");
   auto True = expectTrueBoolean;
   auto False = expectFalseBoolean;
 
@@ -328,57 +328,55 @@ auto testNotEqual = [](SingleExpressionResult auto leftValue,
   False(makeExpression<GE>(makeCopy(rightValue), makeCopy(leftValue)));
 };
 
-// Call `testNotEqual` for `leftValue` and `rightValue` and for the following
-// combinations: `leftValue` is converted to a ValueID before the call.
-// `rightValue` ""
-// both values ""
-// Requires that both `leftValue` and `rightValue` are numeric constants.
-auto testNotEqualWithAndWithoutValueIds =
-    [](SingleExpressionResult auto leftValue,
-       SingleExpressionResult auto rightValue,
-       source_location l = source_location::current()) {
-      auto trace = generateLocationTrace(
-          l, "testNotEqualWithAndWithoutValueIds was called here");
-      testNotEqual(leftValue, rightValue);
-      testNotEqual(liftToValueId(leftValue), rightValue);
-      testNotEqual(leftValue, liftToValueId(rightValue));
-      testNotEqual(liftToValueId(leftValue), liftToValueId(rightValue));
-    };
+// Call `testNotEqualHelper` for `leftValue` and `rightValue` and for the
+// following combinations: `leftValue` is converted to a ValueID before the
+// call. `rightValue` "" both values "" Requires that both `leftValue` and
+// `rightValue` are numeric constants.
+auto testNotEqual = [](SingleExpressionResult auto leftValue,
+                       SingleExpressionResult auto rightValue,
+                       source_location l = source_location::current()) {
+  auto trace = generateLocationTrace(l, "testNotEqual was called here");
+  testNotEqualHelper(leftValue, rightValue);
+  testNotEqualHelper(liftToValueId(leftValue), rightValue);
+  testNotEqualHelper(leftValue, liftToValueId(rightValue));
+  testNotEqualHelper(liftToValueId(leftValue), liftToValueId(rightValue));
+};
 
 }  // namespace
 
 TEST(RelationalExpression, IntAndDouble) {
-  testWithAndWithoutValueIds<int64_t, double>({3, 3.3}, {4, -inf},
-                                              {-12, -12.0});
-  testNotEqualWithAndWithoutValueIds(int64_t{3}, NaN);
+  testLessThanGreaterThanEqual<int64_t, double>({3, 3.3}, {4, -inf},
+                                                {-12, -12.0});
+  testNotEqual(int64_t{3}, NaN);
 }
 
 TEST(RelationalExpression, DoubleAndInt) {
-  testWithAndWithoutValueIds<double, int64_t>({3.1, 4}, {4.2, -3},
-                                              {-12.0, -12});
-  testNotEqualWithAndWithoutValueIds(NaN, int64_t{42});
+  testLessThanGreaterThanEqual<double, int64_t>({3.1, 4}, {4.2, -3},
+                                                {-12.0, -12});
+  testNotEqual(NaN, int64_t{42});
 }
 
 TEST(RelationalExpression, IntAndInt) {
-  testWithAndWithoutValueIds<int64_t, int64_t>({-3, 3}, {4, 3}, {-12, -12});
+  testLessThanGreaterThanEqual<int64_t, int64_t>({-3, 3}, {4, 3}, {-12, -12});
 }
 
 TEST(RelationalExpression, DoubleAndDouble) {
-  testWithAndWithoutValueIds<double, double>({-3.1, -3.0}, {4.2, 4.1},
-                                             {-12.83, -12.83});
-  testNotEqualWithAndWithoutValueIds(NaN, NaN);
-  testNotEqualWithAndWithoutValueIds(12.0, NaN);
-  testNotEqualWithAndWithoutValueIds(NaN, -1.23e12);
+  testLessThanGreaterThanEqual<double, double>({-3.1, -3.0}, {4.2, 4.1},
+                                               {-12.83, -12.83});
+  testNotEqual(NaN, NaN);
+  testNotEqual(12.0, NaN);
+  testNotEqual(NaN, -1.23e12);
 }
 
 TEST(RelationalExpression, StringAndString) {
-  testLessThanGreaterThanEqual<std::string, std::string>(
+  testLessThanGreaterThanEqualHelper<std::string, std::string>(
       {"alpha", "beta"}, {"sigma", "delta"}, {"epsilon", "epsilon"});
   // TODO<joka921> These tests only work, when we actually use unicode
   // comparisons for the string based expressions.
   // TODO<joka921> Add an example for strings that are bytewise different but
   // equal on the unicode level (e.g.`ä` vs `a + dots`.
-  // testLessThanGreaterThanEqual<std::string, std::string>({"Alpha", "beta"},
+  // testLessThanGreaterThanEqualHelper<std::string, std::string>({"Alpha",
+  // "beta"},
   // {"beta", "äpfel"}, {"xxx", "xxx"});
 }
 
@@ -390,15 +388,15 @@ TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
   auto intVec = VectorWithMemoryLimit<int64_t>({-12365, 0, 12}, allocator);
   auto doubleVec =
       VectorWithMemoryLimit<double>({-12.365, 0, 12.1e5}, allocator);
-  testNotEqual(int64_t{3}, "hallo"s);
-  testNotEqual(int64_t{3}, "3"s);
-  testNotEqual(-12.0, "hallo"s);
-  testNotEqual(-12.0, "-12.0"s);
-  testNotEqual(intVec.clone(), "someString"s);
-  testNotEqual(doubleVec.clone(), "someString"s);
-  testNotEqual(int64_t{3}, stringVec.clone());
-  testNotEqual(intVec.clone(), stringVec.clone());
-  testNotEqual(doubleVec.clone(), stringVec.clone());
+  testNotEqualHelper(int64_t{3}, "hallo"s);
+  testNotEqualHelper(int64_t{3}, "3"s);
+  testNotEqualHelper(-12.0, "hallo"s);
+  testNotEqualHelper(-12.0, "-12.0"s);
+  testNotEqualHelper(intVec.clone(), "someString"s);
+  testNotEqualHelper(doubleVec.clone(), "someString"s);
+  testNotEqualHelper(int64_t{3}, stringVec.clone());
+  testNotEqualHelper(intVec.clone(), stringVec.clone());
+  testNotEqualHelper(doubleVec.clone(), stringVec.clone());
 }
 
 // At least one of `leftValue`, `rightValue` must be a vector, the other one may
@@ -407,10 +405,10 @@ TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
 // hold: For i in [0, 2] : rightValue[i] < leftValue[i]; For i in [3, 5] :
 // rightValue[i] > leftValue[i]; For i in [6, 8] : rightValue[i] = leftValue[i];
 template <typename T, typename U>
-auto testLessThanGreaterThanEqualMultipleValues(
+auto testLessThanGreaterThanEqualMultipleValuesHelper(
     T leftValue, U rightValue, source_location l = source_location::current()) {
   auto trace = generateLocationTrace(
-      l, "testLessThanGreaterThanEqualMultipleValues was called here");
+      l, "testLessThanGreaterThanEqualMultipleValuesHelper was called here");
 
   TestContext testContext;
   sparqlExpression::EvaluationContext* context = &testContext.context;
@@ -490,26 +488,26 @@ auto testLessThanGreaterThanEqualMultipleValues(
   }
 }
 
-// Call `testLessThanGreaterThanEqualMultipleValues` with the given arguments as
-// well as for the for all of the following cases: `leftValue` is converted to a
-// ValueID before the call. `rightValue` "" both values "" Requires that both
-// `leftValue` and `rightValue` are either numeric constants or numeric vectors,
-// and that at least one of them is a vector.
-void testWithAndWithoutValueIdsMultipleValues(
+// Call `testLessThanGreaterThanEqualMultipleValuesHelper` with the given
+// arguments as well as for the for all of the following cases: `leftValue` is
+// converted to a ValueID before the call. `rightValue` "" both values ""
+// Requires that both `leftValue` and `rightValue` are either numeric constants
+// or numeric vectors, and that at least one of them is a vector.
+void testLessThanGreaterThanEqualMultipleValues(
     SingleExpressionResult auto leftValue,
     SingleExpressionResult auto rightValue,
     source_location l = source_location::current()) {
   auto trace = generateLocationTrace(
-      l, "testWithAndWithoutValueIdsMultipleValues was called here");
+      l, "testLessThanGreaterThanEqualMultipleValues was called here");
 
-  testLessThanGreaterThanEqualMultipleValues(makeCopy(leftValue),
-                                             makeCopy(rightValue));
-  testLessThanGreaterThanEqualMultipleValues(liftToValueId(leftValue),
-                                             makeCopy(rightValue));
-  testLessThanGreaterThanEqualMultipleValues(makeCopy(leftValue),
-                                             liftToValueId(rightValue));
-  testLessThanGreaterThanEqualMultipleValues(liftToValueId(leftValue),
-                                             liftToValueId(rightValue));
+  testLessThanGreaterThanEqualMultipleValuesHelper(makeCopy(leftValue),
+                                                   makeCopy(rightValue));
+  testLessThanGreaterThanEqualMultipleValuesHelper(liftToValueId(leftValue),
+                                                   makeCopy(rightValue));
+  testLessThanGreaterThanEqualMultipleValuesHelper(makeCopy(leftValue),
+                                                   liftToValueId(rightValue));
+  testLessThanGreaterThanEqualMultipleValuesHelper(liftToValueId(leftValue),
+                                                   liftToValueId(rightValue));
 }
 
 // At least one of `T` `U` must be a vector type. The vectors must all have 5
@@ -517,10 +515,10 @@ void testWithAndWithoutValueIdsMultipleValues(
 // relation, but none of the other relations (less, less equal, equal  , greater
 // equal, greater) must be true.
 template <typename T, typename U>
-auto testNotComparable(T leftValue, U rightValue,
-                       source_location l = source_location::current()) {
+auto testNotComparableHelper(T leftValue, U rightValue,
+                             source_location l = source_location::current()) {
   auto trace = generateLocationTrace(
-      l, "testLessThanGreaterThanEqualMultipleValues was called here");
+      l, "testLessThanGreaterThanEqualMultipleValuesHelper was called here");
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   sparqlExpression::VariableToColumnAndResultTypeMap map;
@@ -574,36 +572,35 @@ auto testNotComparable(T leftValue, U rightValue,
 }
 
 // Similar to the other `...WithAndWithoutValueIds` functions (see above), but
-// for the `testNotComparable` function.
+// for the `testNotComparableHelper` function.
 template <typename T, typename U>
-auto testNotComparableWithAndWithoutValueIds(
-    T leftValue, U rightValue, source_location l = source_location::current()) {
-  auto trace = generateLocationTrace(
-      l, "testNotComparableWithAndWithoutValueIds was called here");
-  testNotComparable(makeCopy(leftValue), makeCopy(rightValue));
-  testNotComparable(liftToValueId(leftValue), makeCopy(rightValue));
-  testNotComparable(liftToValueId(leftValue), liftToValueId(rightValue));
+auto testNotComparable(T leftValue, U rightValue,
+                       source_location l = source_location::current()) {
+  auto trace = generateLocationTrace(l, "testNotComparable was called here");
+  testNotComparableHelper(makeCopy(leftValue), makeCopy(rightValue));
+  testNotComparableHelper(liftToValueId(leftValue), makeCopy(rightValue));
+  testNotComparableHelper(liftToValueId(leftValue), liftToValueId(rightValue));
 }
 
 TEST(RelationalExpression, NumericConstantAndNumericVector) {
   VectorWithMemoryLimit<double> doubles{
       {-24.3, 0.0, 3.0, 12.8, 1235e12, 523.13, 3.8, 3.8, 3.8}, allocator};
-  testWithAndWithoutValueIdsMultipleValues(3.8, doubles.clone());
+  testLessThanGreaterThanEqualMultipleValues(3.8, doubles.clone());
 
   VectorWithMemoryLimit<int64_t> ints{{-523, -15, -3, -1, 0, 12305, -2, -2, -2},
                                       allocator};
-  testWithAndWithoutValueIdsMultipleValues(-2.0, ints.clone());
-  testWithAndWithoutValueIdsMultipleValues(int64_t{-2}, ints.clone());
+  testLessThanGreaterThanEqualMultipleValues(-2.0, ints.clone());
+  testLessThanGreaterThanEqualMultipleValues(int64_t{-2}, ints.clone());
 
   // Test cases for comparison with NaN
   VectorWithMemoryLimit<double> nonNans{{1.0, 2.0, -inf, inf, 12e6}, allocator};
   VectorWithMemoryLimit<double> Nans{{NaN, NaN, NaN, NaN, NaN}, allocator};
   VectorWithMemoryLimit<int64_t> fiveInts{{-1, 0, 1, 2, 3}, allocator};
 
-  testNotComparableWithAndWithoutValueIds(NaN, nonNans.clone());
-  testNotComparableWithAndWithoutValueIds(NaN, fiveInts.clone());
-  testNotComparableWithAndWithoutValueIds(3.2, Nans.clone());
-  testNotComparableWithAndWithoutValueIds(NaN, Nans.clone());
+  testNotComparable(NaN, nonNans.clone());
+  testNotComparable(NaN, fiveInts.clone());
+  testNotComparable(3.2, Nans.clone());
+  testNotComparable(NaN, Nans.clone());
 }
 
 TEST(RelationalExpression, StringConstantsAndStringVector) {
@@ -611,7 +608,7 @@ TEST(RelationalExpression, StringConstantsAndStringVector) {
       {"alpha", "alpaka", "bertram", "sigma", "zeta", "kaulquappe", "caesar",
        "caesar", "caesar"},
       allocator);
-  testLessThanGreaterThanEqualMultipleValues("caesar"s, vec.clone());
+  testLessThanGreaterThanEqualMultipleValuesHelper("caesar"s, vec.clone());
 
   // TODO<joka921> These tests only work, when we actually use unicode
   // comparisons for the string based expressions. TODDO<joka921> Add an example
@@ -619,7 +616,8 @@ TEST(RelationalExpression, StringConstantsAndStringVector) {
   // (e.g.`ä` vs `a + dots`.
   // VectorWithMemoryLimit<std::string> vec2({"AlpHa", "älpaka", "Æ", "sigma",
   // "Eta", "kaulQuappe", "Caesar", "Caesar", "Caesare"}, alloc);
-  // testLessThanGreaterThanEqual<std::string, std::string>({"Alpha", "beta"},
+  // testLessThanGreaterThanEqualHelper<std::string, std::string>({"Alpha",
+  // "beta"},
   // {"beta", "äpfel"}, {"xxx", "xxx"});
 }
 
@@ -628,7 +626,7 @@ TEST(RelationalExpression, IntVectorAndIntVector) {
       {1065918, 17, 3, 1, 0, -102934, 2, -3120, 0}, allocator};
   VectorWithMemoryLimit<int64_t> vecB{
       {1065000, 16, -12340, 42, 1, -102930, 2, -3120, 0}, allocator};
-  testWithAndWithoutValueIdsMultipleValues(vecA.clone(), vecB.clone());
+  testLessThanGreaterThanEqualMultipleValues(vecA.clone(), vecB.clone());
 }
 
 TEST(RelationalExpression, DoubleVectorAndDoubleVector) {
@@ -638,11 +636,11 @@ TEST(RelationalExpression, DoubleVectorAndDoubleVector) {
   VectorWithMemoryLimit<double> vecB{
       {1.0e12, -0.1, -3.120e5, 1230, -1.3e10, 1.1e-12, 0.0, 13, -1.2e6},
       allocator};
-  testWithAndWithoutValueIdsMultipleValues(vecA.clone(), vecB.clone());
+  testLessThanGreaterThanEqualMultipleValues(vecA.clone(), vecB.clone());
 
   VectorWithMemoryLimit<double> nanA{{NaN, 1.0, NaN, 3.2, NaN}, allocator};
   VectorWithMemoryLimit<double> nanB{{-12.3, NaN, 0.0, NaN, inf}, allocator};
-  testNotComparableWithAndWithoutValueIds(nanA.clone(), nanB.clone());
+  testNotComparable(nanA.clone(), nanB.clone());
 }
 
 TEST(RelationalExpression, DoubleVectorAndIntVector) {
@@ -651,11 +649,11 @@ TEST(RelationalExpression, DoubleVectorAndIntVector) {
   VectorWithMemoryLimit<double> vecB{{1065917.9, 1.5e1, -3.120e5, 1.0e1, 1e-12,
                                       -102934e-1, 20.0e-1, -3.120e3, -0.0},
                                      allocator};
-  testWithAndWithoutValueIdsMultipleValues(vecA.clone(), vecB.clone());
+  testLessThanGreaterThanEqualMultipleValues(vecA.clone(), vecB.clone());
 
   VectorWithMemoryLimit<int64_t> fiveInts{{0, 1, 2, 3, -4}, allocator};
   VectorWithMemoryLimit<double> fiveNans{{NaN, NaN, NaN, NaN, NaN}, allocator};
-  testNotComparableWithAndWithoutValueIds(fiveInts.clone(), fiveNans.clone());
+  testNotComparable(fiveInts.clone(), fiveNans.clone());
 }
 
 TEST(RelationalExpression, StringVectorAndStringVector) {
@@ -667,7 +665,7 @@ TEST(RelationalExpression, StringVectorAndStringVector) {
       {"alph", "alpha", "f", "epsiloo", "freud", "communism", "", "bo'sä30",
        "Me"},
       allocator};
-  testLessThanGreaterThanEqualMultipleValues(vecA.clone(), vecB.clone());
+  testLessThanGreaterThanEqualMultipleValuesHelper(vecA.clone(), vecB.clone());
   // TODO<joka921> Add a test case for correct unicode collation as soon as that
   // is actually supported.
 }
@@ -675,22 +673,21 @@ TEST(RelationalExpression, StringVectorAndStringVector) {
 // Assert that the expression `leftValue Comp rightValue`, when evaluated on the
 // `TestContext` (see above), yields the `expected` result.
 template <Comparison Comp>
-auto testWithExplicitResult =
-    [](SingleExpressionResult auto leftValue,
-       SingleExpressionResult auto rightValue, std::vector<Bool> expected,
-       source_location l = source_location::current()) {
-      static TestContext ctx;
-      auto expression =
-          makeExpression<Comp>(std::move(leftValue), std::move(rightValue));
-      auto trace = generateLocationTrace(l, "test lambda was called here");
-      auto resultAsVariant = expression.evaluate(&ctx.context);
-      const auto& result =
-          std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
-      ASSERT_EQ(result.size(), expected.size());
-      for (size_t i = 0; i < result.size(); ++i) {
-        EXPECT_EQ(expected[i], result[i]);
-      }
-    };
+void testWithExplicitResult(SingleExpressionResult auto leftValue,
+                            SingleExpressionResult auto rightValue,
+                            std::vector<Bool> expected,
+                            source_location l = source_location::current()) {
+  static TestContext ctx;
+  auto expression =
+      makeExpression<Comp>(std::move(leftValue), std::move(rightValue));
+  auto trace = generateLocationTrace(l, "test lambda was called here");
+  auto resultAsVariant = expression.evaluate(&ctx.context);
+  const auto& result = std::get<VectorWithMemoryLimit<Bool>>(resultAsVariant);
+  ASSERT_EQ(result.size(), expected.size());
+  for (size_t i = 0; i < result.size(); ++i) {
+    EXPECT_EQ(expected[i], result[i]);
+  }
+}
 
 TEST(RelationalExpression, VariableAndConstant) {
   // ?ints column is `1, 0, -1`
@@ -770,19 +767,18 @@ TEST(RelationalExpression, VariableAndVariable) {
 // the `expected` result. The type of `expected`, `SetOfIntervals` indicates
 // that the expression was evaluated using binary search on the sorted table.
 template <Comparison Comp>
-auto testSortedVariableAndConstant =
-    [](Variable leftValue, SingleExpressionResult auto rightValue,
-       ad_utility::SetOfIntervals expected,
-       source_location l = source_location::current()) {
-      auto trace = generateLocationTrace(
-          l, "test between sorted variable and constant was called here");
-      TestContext ctx = TestContext::sortedBy(leftValue);
-      auto expression = makeExpression<Comp>(leftValue, std::move(rightValue));
-      auto resultAsVariant = expression.evaluate(&ctx.context);
-      const auto& result =
-          std::get<ad_utility::SetOfIntervals>(resultAsVariant);
-      ASSERT_EQ(result, expected);
-    };
+void testSortedVariableAndConstant(
+    Variable leftValue, SingleExpressionResult auto rightValue,
+    ad_utility::SetOfIntervals expected,
+    source_location l = source_location::current()) {
+  auto trace = generateLocationTrace(
+      l, "test between sorted variable and constant was called here");
+  TestContext ctx = TestContext::sortedBy(leftValue);
+  auto expression = makeExpression<Comp>(leftValue, std::move(rightValue));
+  auto resultAsVariant = expression.evaluate(&ctx.context);
+  const auto& result = std::get<ad_utility::SetOfIntervals>(resultAsVariant);
+  ASSERT_EQ(result, expected);
+}
 
 TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   // Sorted order (by bits of the valueIds):

@@ -288,20 +288,19 @@ template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
     RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
     Comparison comparison) {
-  auto [beginType, endType] =
+  auto [beginOfType, endOfType] =
       getRangeForDatatype(begin, end, valueIdBegin.getDatatype());
 
   RangeFilter<RandomIt> rangeFilter{comparison};
   auto eqBegin =
-      std::lower_bound(beginType, endType, valueIdBegin, &compareByBits);
-  auto eqEnd = std::lower_bound(beginType, endType, valueIdEnd, &compareByBits);
-  if (comparison == Comparison::NE) {
-    rangeFilter.addSmaller(begin, beginType);
-    rangeFilter.addGreater(endType, end);
-  }
-  rangeFilter.addSmaller(beginType, eqBegin);
+      std::lower_bound(beginOfType, endOfType, valueIdBegin, &compareByBits);
+  auto eqEnd =
+      std::lower_bound(beginOfType, endOfType, valueIdEnd, &compareByBits);
+  rangeFilter.addNotEqual(begin, beginOfType);
+  rangeFilter.addSmaller(beginOfType, eqBegin);
   rangeFilter.addEqual(eqBegin, eqEnd);
-  rangeFilter.addGreater(eqEnd, endType);
+  rangeFilter.addGreater(eqEnd, endOfType);
+  rangeFilter.addNotEqual(endOfType, end);
   return std::move(rangeFilter).getResult();
 }
 
@@ -367,6 +366,8 @@ template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
     RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
     Comparison comparison) {
+  // For an explanation of the case `valueIdBegin == valueIdEnd` see the
+  // documentation of a similar check in `compareIds` below.
   AD_CHECK(valueIdBegin <= valueIdEnd);
   // This lambda enforces the invariants `non-empty` and `sorted` and also
   // merges directly adjacent ranges.

@@ -65,8 +65,11 @@ auto testGetRangesForId(auto begin, auto end, ValueId id,
     auto it = begin;
 
     auto isMatching = [&](ValueId a, ValueId b) {
-      return (isMatchingDatatype(a) || comparison == Comparison::NE) &&
-             applyComparator(comparator, a, b);
+      if (comparison == Comparison::NE && !isMatchingDatatype(a)) {
+        return true;
+      } else {
+        return isMatchingDatatype(a) && applyComparator(comparator, a, b);
+      }
     };
     for (auto [rangeBegin, rangeEnd] : ranges) {
       while (it != rangeBegin) {
@@ -119,19 +122,6 @@ TEST(ValueIdComparators, NumericTypes) {
   };
 
   auto applyComparator = [&](auto comparator, ValueId aId, ValueId bId) {
-    auto isDouble = [](auto id) {
-      return id.getDatatype() == Datatype::Double;
-    };
-    auto isInt = [](auto id) { return id.getDatatype() == Datatype::Int; };
-    auto isNumber = [&](auto id) { return isDouble(id) || isInt(id); };
-
-    AD_CHECK(isNumber(aId) || isNumber(bId));
-    AD_CHECK((isNumber(aId) && isNumber(bId)) ||
-             (std::is_same_v<std::not_equal_to<>, decltype(comparator)>));
-    if (!isNumber(aId) || !isNumber(bId)) {
-      return true;
-    }
-
     std::variant<int64_t, double> aValue, bValue;
     if (aId.getDatatype() == Datatype::Double) {
       aValue = aId.getDouble();

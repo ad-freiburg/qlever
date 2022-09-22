@@ -17,12 +17,14 @@ using valueIdComparators::Comparison;
 // Several concepts used to choose the proper evaluation methods for different
 // input types.
 
-// Helper templates to get the `logical value type` for several types. For a
-// vector, it yields the value_type of the vector. For any other type it yields
-// the type itself.
+// For `X == VectorWithMemoryLimit<T>`, `ValueType<X>` is `U`. For any other
+// type `X`, `ValueType<X>` is `X`.
 namespace detail {
+// TODO<joka921> This helper function may never be called and could in principle
+// be formulated directly within the `decltype` statement below. However, this
+// doesn't compile with G++11. Find out, why.
 template <typename T>
-constexpr auto valueTypeImplDoNotCall(T&& t) {
+constexpr auto getObjectOfValueTypeHelper(T&& t) {
   if constexpr (ad_utility::similarToInstantiation<VectorWithMemoryLimit,
                                                    std::decay_t<T>>) {
     return std::move(t[0]);
@@ -33,24 +35,27 @@ constexpr auto valueTypeImplDoNotCall(T&& t) {
 }  // namespace detail
 template <typename T>
 using ValueType =
-    decltype(detail::valueTypeImplDoNotCall<T>(std::declval<T>()));
+    decltype(detail::getObjectOfValueTypeHelper<T>(std::declval<T>()));
 
-// Any of the `SingleExpressionResult`s that logically stores numeric values.
+static_assert(std::is_same_v<int, ValueType<VectorWithMemoryLimit<int>>>);
+static_assert(std::is_same_v<double, ValueType<double>>);
+
+// Concept that requires that `T` logically stores numeric values.
 template <typename T>
 concept StoresNumeric =
     std::integral<ValueType<T>> || std::floating_point<ValueType<T>>;
 
-// Any of the `SingleExpressionResult`s that logically stores strings.
+// Concept that requires that `T` logically stores `std::string`s.
 template <typename T>
 concept StoresStrings = ad_utility::SimilarTo<ValueType<T>, std::string>;
 
-// Any of the `SingleExpressionResult`s that logically stores boolean values.
+// Concept that requires that `T` logically stores boolean values.
 template <typename T>
 concept StoresBoolean =
     std::is_same_v<T, Bool> || std::is_same_v<T, ad_utility::SetOfIntervals> ||
     std::is_same_v<VectorWithMemoryLimit<Bool>, T>;
 
-// Any of the `SingleExpressionResult`s that logically stores `ValueId`s.
+// Concept that requires that `T` logically stores `ValueId`s.
 template <typename T>
 concept StoresValueId = ad_utility::SimilarTo<T, Variable> ||
     ad_utility::SimilarTo<T, VectorWithMemoryLimit<ValueId>> ||
