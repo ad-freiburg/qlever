@@ -21,39 +21,46 @@ using valueIdComparators::Comparison;
 // vector, it yields the value_type of the vector. For any other type it yields
 // the type itself.
 namespace detail {
-template<typename T>
+template <typename T>
 constexpr auto valueTypeImplDoNotCall(T&& t) {
-  if constexpr (ad_utility::isInstantiation<VectorWithMemoryLimit, T>) {
+  if constexpr (ad_utility::similarToInstantiation<VectorWithMemoryLimit,
+                                                   std::decay_t<T>>) {
     return std::move(t[0]);
   } else {
     return std::move(t);
   }
 }
-}
-template<typename T>
-using ValueType = decltype(detail::valueTypeImplDoNotCall<T>(std::declval<T>()));
+}  // namespace detail
+template <typename T>
+using ValueType =
+    decltype(detail::valueTypeImplDoNotCall<T>(std::declval<T>()));
 
 // Any of the `SingleExpressionResult`s that logically stores numeric values.
 template <typename T>
-concept StoresNumeric = std::integral<ValueType<T>> || std::floating_point<ValueType<T>>;
+concept StoresNumeric =
+    std::integral<ValueType<T>> || std::floating_point<ValueType<T>>;
+
+// Any of the `SingleExpressionResult`s that logically stores strings.
+template <typename T>
+concept StoresStrings = ad_utility::SimilarTo<ValueType<T>, std::string>;
 
 // Any of the `SingleExpressionResult`s that logically stores boolean values.
 template <typename T>
 concept StoresBoolean =
-std::is_same_v<T, Bool> || std::is_same_v<T, ad_utility::SetOfIntervals> ||
-std::is_same_v<VectorWithMemoryLimit<Bool>, T>;
+    std::is_same_v<T, Bool> || std::is_same_v<T, ad_utility::SetOfIntervals> ||
+    std::is_same_v<VectorWithMemoryLimit<Bool>, T>;
 
 // Any of the `SingleExpressionResult`s that logically stores `ValueId`s.
 template <typename T>
 concept StoresValueId = ad_utility::SimilarTo<T, Variable> ||
-                        ad_utility::SimilarTo<T, VectorWithMemoryLimit<ValueId>> ||
-                        ad_utility::SimilarTo<T, ValueId>;
+    ad_utility::SimilarTo<T, VectorWithMemoryLimit<ValueId>> ||
+    ad_utility::SimilarTo<T, ValueId>;
 
 // When `A` and `B` are `AreIncomparable`, comparisons between them will always
 // yield `not equal`, independent of the concrete values.
 template <typename A, typename B>
-concept AreIncomparable = (StoresNumeric<A> && std::is_same_v<B, std::string>) ||
-                          (StoresNumeric<B> && std::is_same_v<std::string, A>);
+concept AreIncomparable = (StoresNumeric<A> && StoresStrings<B>) ||
+                          (StoresNumeric<B> && StoresStrings<A>);
 
 // True iff any of `A, B` is `StoresBoolean` (see above).
 template <typename A, typename B>
@@ -63,7 +70,6 @@ concept AtLeastOneIsBoolean = StoresBoolean<A> || StoresBoolean<B>;
 template <typename A, typename B>
 concept AreComparable = !AtLeastOneIsBoolean<A, B> && !AreIncomparable<A, B> &&
                         (StoresValueId<A> || !StoresValueId<B>);
-
 
 // Apply the given `Comparison` to `a` and `b`. For example, if the `Comparison`
 // is `LT`, returns `a < b`. Note that the second template argument `Dummy` is
@@ -191,11 +197,7 @@ auto idGenerator(Variable variable, size_t targetSize,
 template <SingleExpressionResult S1, SingleExpressionResult S2>
 auto getGenerators(S1 value1, S2 value2, size_t targetSize,
                    EvaluationContext* context) {
-  if constexpr (
-      StoresValueId<
-          S1> ||
-      StoresValueId<
-          S2>) {
+  if constexpr (StoresValueId<S1> || StoresValueId<S2>) {
     return std::pair{idGenerator(std::move(value1), targetSize, context),
                      idGenerator(std::move(value2), targetSize, context)};
   } else {
@@ -249,12 +251,11 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
   return s;
 }
 
-
 // The actual comparison function for the `SingleExpressionResult`'s which are
 // `AreComparable` (see above), which means that the comparison between them is
 // supported and not always false.
 template <Comparison Comp, SingleExpressionResult S1, SingleExpressionResult S2>
-requires AreComparable<ValueType<S1>, ValueType<S2>> ExpressionResult
+requires AreComparable<S1, S2> ExpressionResult
 evaluateRelationalExpression(S1 value1, S2 value2, EvaluationContext* context) {
   auto resultSize =
       sparqlExpression::detail::getResultSize(*context, value1, value2);
@@ -317,7 +318,8 @@ evaluateRelationalExpression(S1 value1, S2 value2, EvaluationContext* context) {
 // The relational comparisons like `less than` are not useful for booleans and
 // thus currently throw an exception.
 template <Comparison, typename A, typename B>
-Bool evaluateRelationalExpression(const A&, const B&, EvaluationContext*) requires
+Bool evaluateRelationalExpression(const A&, const B&,
+                                  EvaluationContext*) requires
     StoresBoolean<A> || StoresBoolean<B> {
   throw std::runtime_error(
       "Relational expressions like <, >, == are currently not supported for "
@@ -325,7 +327,7 @@ Bool evaluateRelationalExpression(const A&, const B&, EvaluationContext*) requir
 }
 
 template <Comparison Comp, typename A, typename B>
-requires AreIncomparable<ValueType<A>, ValueType<B>> Bool
+requires AreIncomparable<A, B> Bool
 evaluateRelationalExpression(const A&, const B&, EvaluationContext*) {
   if constexpr (Comp == Comparison::NE) {
     return true;
@@ -337,8 +339,7 @@ evaluateRelationalExpression(const A&, const B&, EvaluationContext*) {
 // For comparisons where exactly one of the operands is a variable, the variable
 // must come first.
 template <Comparison Comp, SingleExpressionResult A, SingleExpressionResult B>
-requires(!AreComparable<ValueType<A>, ValueType<B>> &&
-         AreComparable<ValueType<B>, ValueType<A>>) ExpressionResult
+requires(!AreComparable<A, B> && AreComparable<B, A>) ExpressionResult
     evaluateRelationalExpression(A a, B b, EvaluationContext* context) {
   return evaluateRelationalExpression<getComparisonForSwappedArguments(Comp)>(
       std::move(b), std::move(a), context);
@@ -358,7 +359,8 @@ ExpressionResult RelationalExpression<Comp>::evaluate(
 
   // `resA` and `resB` are variants, so we need `std::visit`.
   auto visitor = [context](auto a, auto b) -> ExpressionResult {
-    return evaluateRelationalExpression<Comp>(std::move(a), std::move(b), context);
+    return evaluateRelationalExpression<Comp>(std::move(a), std::move(b),
+                                              context);
   };
 
   return std::visit(visitor, std::move(resA), std::move(resB));
