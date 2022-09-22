@@ -1339,68 +1339,132 @@ ExpressionPtr Visitor::visit(Parser::NumericExpressionContext* ctx) {
 
 // ____________________________________________________________________________________
 ExpressionPtr Visitor::visit(Parser::AdditiveExpressionContext* ctx) {
-  auto children = visitVector(ctx->multiplicativeExpression());
-  auto opTypes = visitOperationTags(ctx->children, {"+", "-"});
+  auto result = visit(ctx->multiplicativeExpression());
 
-  if (!ctx->strangeMultiplicativeSubexprOfAdditive().empty()) {
-    reportError(ctx,
-                "You currently have to put a space between a +/- and the "
-                "number after it.");
-  }
-
-  AD_CHECK(!children.empty());
-  AD_CHECK(children.size() == opTypes.size() + 1);
-
-  auto result = std::move(children.front());
-  auto childIt = children.begin() + 1;
-  auto opIt = opTypes.begin();
-  while (childIt != children.end()) {
-    if (*opIt == "+") {
-      result = createExpression<sparqlExpression::AddExpression>(
-          std::move(result), std::move(*childIt));
-    } else if (*opIt == "-") {
-      result = createExpression<sparqlExpression::SubtractExpression>(
-          std::move(result), std::move(*childIt));
-    } else {
-      AD_FAIL();
+  for (OperatorAndExpression& signAndExpression :
+       visitVector(ctx->multiplicativeExpressionWithSign())) {
+    switch (signAndExpression.operator_) {
+      case Operator::Plus:
+        result = createExpression<sparqlExpression::AddExpression>(
+            std::move(result), std::move(signAndExpression.expression_));
+        break;
+      case Operator::Minus:
+        result = createExpression<sparqlExpression::SubtractExpression>(
+            std::move(result), std::move(signAndExpression.expression_));
+        break;
+      default:
+        AD_FAIL()
     }
-    ++childIt;
-    ++opIt;
   }
   return result;
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::StrangeMultiplicativeSubexprOfAdditiveContext*) {
-  // StrangeMultiplicativeSubexprOfAdditiveContext must not be visited.
-  AD_FAIL();
+Visitor::OperatorAndExpression Visitor::visit(
+    Parser::MultiplicativeExpressionWithSignContext* ctx) {
+  return visitAlternative<OperatorAndExpression>(
+      ctx->plusSubexpression(), ctx->minusSubexpression(),
+      ctx->multiplicativeExpressionWithLeadingSignButNoSpace());
+}
+
+// ____________________________________________________________________________________
+Visitor::OperatorAndExpression Visitor::visit(
+    Parser::PlusSubexpressionContext* ctx) {
+  return {Operator::Plus, visit(ctx->multiplicativeExpression())};
+}
+
+// ____________________________________________________________________________________
+Visitor::OperatorAndExpression Visitor::visit(
+    Parser::MinusSubexpressionContext* ctx) {
+  return {Operator::Minus, visit(ctx->multiplicativeExpression())};
+}
+
+// ____________________________________________________________________________________
+Visitor::OperatorAndExpression Visitor::visit(
+    Parser::MultiplicativeExpressionWithLeadingSignButNoSpaceContext* ctx) {
+  Operator op =
+      ctx->numericLiteralPositive() ? Operator::Plus : Operator::Minus;
+
+  // Helper function that inverts a number if  the leading sign of this
+  // expression is `-`
+  auto invertIfNecessary = [ctx](auto number) {
+    return ctx->numericLiteralPositive() ? number : -number;
+  };
+
+  // Create the initial expression from a double literal
+  auto createFromDouble = [&](double d) -> ExpressionPtr {
+    return std::make_unique<sparqlExpression::DoubleExpression>(
+        invertIfNecessary(d));
+  };
+  auto createFromInt = [&](int64_t i) -> ExpressionPtr {
+    return std::make_unique<sparqlExpression::IntExpression>(
+        invertIfNecessary(i));
+  };
+
+  auto literalAsVariant = visitAlternative<IntOrDouble>(
+      ctx->numericLiteralPositive(), ctx->numericLiteralNegative());
+
+  auto expression = std::visit(
+      ad_utility::OverloadCallOperator{createFromInt, createFromDouble},
+      literalAsVariant);
+
+  for (OperatorAndExpression& opAndExp :
+       visitVector(ctx->multiplyOrDivideExpression())) {
+    switch (opAndExp.operator_) {
+      case Operator::Multiply:
+        expression = createExpression<sparqlExpression::MultiplyExpression>(
+            std::move(expression), std::move(opAndExp.expression_));
+        break;
+      case Operator::Divide:
+        expression = createExpression<sparqlExpression::DivideExpression>(
+            std::move(expression), std::move(opAndExp.expression_));
+        break;
+      default:
+        AD_FAIL();
+    }
+  }
+  return {op, std::move(expression)};
 }
 
 // ____________________________________________________________________________________
 ExpressionPtr Visitor::visit(Parser::MultiplicativeExpressionContext* ctx) {
-  auto children = visitVector(ctx->unaryExpression());
-  auto opTypes = visitOperationTags(ctx->children, {"*", "/"});
+  auto result = visit(ctx->unaryExpression());
 
-  AD_CHECK(!children.empty());
-  AD_CHECK(children.size() == opTypes.size() + 1);
-
-  auto result = std::move(children.front());
-  auto childIt = children.begin() + 1;
-  auto opIt = opTypes.begin();
-  while (childIt != children.end()) {
-    if (*opIt == "*") {
-      result = createExpression<sparqlExpression::MultiplyExpression>(
-          std::move(result), std::move(*childIt));
-    } else if (*opIt == "/") {
-      result = createExpression<sparqlExpression::DivideExpression>(
-          std::move(result), std::move(*childIt));
-    } else {
-      AD_FAIL();
+  for (OperatorAndExpression& opAndExp :
+       visitVector(ctx->multiplyOrDivideExpression())) {
+    switch (opAndExp.operator_) {
+      case Operator::Multiply:
+        result = createExpression<sparqlExpression::MultiplyExpression>(
+            std::move(result), std::move(opAndExp.expression_));
+        break;
+      case Operator::Divide:
+        result = createExpression<sparqlExpression::DivideExpression>(
+            std::move(result), std::move(opAndExp.expression_));
+        break;
+      default:
+        AD_FAIL();
     }
-    ++childIt;
-    ++opIt;
   }
   return result;
+}
+
+// ____________________________________________________________________________________
+Visitor::OperatorAndExpression Visitor::visit(
+    Parser::MultiplyOrDivideExpressionContext* ctx) {
+  return visitAlternative<OperatorAndExpression>(ctx->multiplyExpression(),
+                                                 ctx->divideExpression());
+}
+
+// ____________________________________________________________________________________
+Visitor::OperatorAndExpression Visitor::visit(
+    Parser::MultiplyExpressionContext* ctx) {
+  return {Operator::Multiply, visit(ctx->unaryExpression())};
+}
+
+// ____________________________________________________________________________________
+Visitor::OperatorAndExpression Visitor::visit(
+    Parser::DivideExpressionContext* ctx) {
+  return {Operator::Divide, visit(ctx->unaryExpression())};
 }
 
 // ____________________________________________________________________________________

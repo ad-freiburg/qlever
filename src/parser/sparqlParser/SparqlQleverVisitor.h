@@ -71,6 +71,7 @@ class SparqlQleverVisitor {
   using PrefixMap = ad_utility::HashMap<string, string>;
   using Parser = SparqlAutomaticParser;
   using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
+  using IntOrDouble = std::variant<int64_t, double>;
 
  private:
   size_t _blankNodeCounter = 0;
@@ -325,11 +326,37 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] ExpressionPtr visit(Parser::AdditiveExpressionContext* ctx);
 
-  [[noreturn]] void visit(
-      Parser::StrangeMultiplicativeSubexprOfAdditiveContext* ctx);
+  // Helper structs, needed in the following `visit` functions. Combine an
+  // explicit operator (+ - * /) with an expression.
+  enum struct Operator { Plus, Minus, Multiply, Divide };
+  struct OperatorAndExpression {
+    Operator operator_;
+    ExpressionPtr expression_;
+  };
+
+  [[nodiscard]] OperatorAndExpression visit(
+      Parser::MultiplicativeExpressionWithSignContext* ctx);
+
+  [[nodiscard]] OperatorAndExpression visit(
+      Parser::PlusSubexpressionContext* ctx);
+
+  [[nodiscard]] OperatorAndExpression visit(
+      Parser::MinusSubexpressionContext* ctx);
+
+  [[nodiscard]] OperatorAndExpression visit(
+      Parser::MultiplicativeExpressionWithLeadingSignButNoSpaceContext* ctx);
 
   [[nodiscard]] ExpressionPtr visit(
       Parser::MultiplicativeExpressionContext* ctx);
+
+  [[nodiscard]] OperatorAndExpression visit(
+      Parser::MultiplyOrDivideExpressionContext* ctx);
+
+  [[nodiscard]] OperatorAndExpression visit(
+      Parser::MultiplyExpressionContext* ctx);
+
+  [[nodiscard]] OperatorAndExpression visit(
+      Parser::DivideExpressionContext* ctx);
 
   [[nodiscard]] ExpressionPtr visit(Parser::UnaryExpressionContext* ctx);
 
@@ -355,17 +382,13 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] std::string visit(Parser::RdfLiteralContext* ctx);
 
-  [[nodiscard]] std::variant<int64_t, double> visit(
-      Parser::NumericLiteralContext* ctx);
+  [[nodiscard]] IntOrDouble visit(Parser::NumericLiteralContext* ctx);
 
-  [[nodiscard]] std::variant<int64_t, double> visit(
-      Parser::NumericLiteralUnsignedContext* ctx);
+  [[nodiscard]] IntOrDouble visit(Parser::NumericLiteralUnsignedContext* ctx);
 
-  [[nodiscard]] std::variant<int64_t, double> visit(
-      Parser::NumericLiteralPositiveContext* ctx);
+  [[nodiscard]] IntOrDouble visit(Parser::NumericLiteralPositiveContext* ctx);
 
-  [[nodiscard]] std::variant<int64_t, double> visit(
-      Parser::NumericLiteralNegativeContext* ctx);
+  [[nodiscard]] IntOrDouble visit(Parser::NumericLiteralNegativeContext* ctx);
 
   [[nodiscard]] bool visit(Parser::BooleanLiteralContext* ctx);
 
@@ -420,19 +443,6 @@ class SparqlQleverVisitor {
   [[nodiscard]] ExpressionPtr createExpression(auto... children) {
     return std::make_unique<Expr>(
         std::array<ExpressionPtr, sizeof...(children)>{std::move(children)...});
-  }
-
-  [[nodiscard]] static std::vector<std::string> visitOperationTags(
-      const std::vector<antlr4::tree::ParseTree*>& childContexts,
-      const ad_utility::HashSet<string>& allowedTags) {
-    std::vector<std::string> operations;
-
-    for (const auto& c : childContexts) {
-      if (allowedTags.contains(c->getText())) {
-        operations.emplace_back(c->getText());
-      }
-    }
-    return operations;
   }
 
   template <typename Ctx>
