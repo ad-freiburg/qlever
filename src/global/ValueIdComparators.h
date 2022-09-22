@@ -313,7 +313,7 @@ auto simplifyRanges =
       std::erase_if(input, [](const auto& p) { return p.first == p.second; });
       std::sort(input.begin(), input.end());
       if (input.empty()) {
-        return std::move(input);
+        return input;
       }
       // Merge directly adjacent ranges.
       // TODO<joka921, C++20> use `std::ranges`
