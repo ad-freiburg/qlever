@@ -271,7 +271,7 @@ auto testLessThanGreaterThanEqualHelper(
 
 // Call `testLessThanGreaterThanEqualThan` for the given values and also for the
 // following variants: The first element from each pair is converted to a
-// `ValueId` before the call; The second element  is ...; Both elements are ...
+// `ValueId` before the call; the second element  is ...; both elements are ...
 // Requires that both `leftValue` and `rightValue` are numeric constants.
 template <SingleExpressionResult L, SingleExpressionResult R>
 void testLessThanGreaterThanEqual(

@@ -17,7 +17,7 @@ using valueIdComparators::Comparison;
 // Several concepts used to choose the proper evaluation methods for different
 // input types.
 
-// For `T == VectorWithMemoryLimit<U>`, `ValueType<U>` is `T`. For any other
+// For `T == VectorWithMemoryLimit<U>`, `ValueType<T>` is `U`. For any other
 // type `T`, `ValueType<T>` is `T`.
 namespace detail {
 // TODO<joka921> This helper function may never be called and could in principle
