@@ -14,6 +14,7 @@ using namespace std::literals;
 
 namespace {
 
+// Check if `regex` is a prefix regex which means that it starts with `^` and contains no other "special" regex characters like `*` or `.`. If this check suceeds, the prefix is returned without the leading `^` and with all escaping undone. Else, `std::nullopt` is returned.
 std::optional<std::string> getPrefixRegex(std::string regex) {
   if (!regex.starts_with('^')) {
     return std::nullopt;
@@ -21,14 +22,14 @@ std::optional<std::string> getPrefixRegex(std::string regex) {
   // Check if we can use the more efficient prefix filter instead
   // of an expensive regex filter.
   bool escaped = false;
-  std::vector<size_t>
-      escapePositions;  // position of backslashes that are used for
+
+  // Positions of backslashes that are used for
   // escaping within the regex
   // these have to be removed if the regex is simply a prefix filter.
+  std::vector<size_t>
+      escapePositions;
 
-  // Check if the regex is only a prefix regex or also does
-  // anything else.
-  const static string regexControlChars = "[]^$.|?*+()";
+  // Check if the regex is only a prefix regex or also contains other special regex characters that are not properly escaped.
   for (size_t i = 1; i < regex.size(); i++) {
     if (regex[i] == '\\') {
       if (!escaped) {
@@ -38,7 +39,8 @@ std::optional<std::string> getPrefixRegex(std::string regex) {
       continue;
     }
     char c = regex[i];
-    bool isControlChar = regexControlChars.find(c) != string::npos;
+    const static string regexSpecialChars = "[]^$.|?*+()";
+    bool isControlChar = regexSpecialChars.find(c) != string::npos;
     if (!escaped && isControlChar) {
       return std::nullopt;
     } else if (escaped && !isControlChar) {
@@ -46,7 +48,7 @@ std::optional<std::string> getPrefixRegex(std::string regex) {
           "Escaping the character "s + c +
           " is not allowed in QLever's regex filters. (Regex was " + regex +
           ") Please note that "
-          "there are two levels of Escaping in place here: One for Sparql "
+          "there are two levels of escaping in place here: One for SPARQL "
           "and one for the regex engine";
       throw std::runtime_error(error);
     }
@@ -76,7 +78,7 @@ RegexExpression::RegexExpression(SparqlExpression::Ptr child,
   }
   if (auto regexPtr = dynamic_cast<const StringOrIriExpression*>(regex.get())) {
     regex_ = regexPtr->value();
-    // TODO<joka921> Throw an error message if the regex is not enquoted.
+    // TODO<joka921> Throw an error message if the regex is not quoted.
     // TODO<joka921> Check the paths for the StringExpressions, whether this
     // is really an AD-CHECK.
     AD_CHECK(regex_.size() >= 2);
@@ -145,9 +147,9 @@ ExpressionResult RegexExpression::evaluate(
     }
   } else {
     // TODO<joka921> don't use std::regex...
-    std::regex self_regex;
+    std::regex regex;
     try {
-      self_regex.assign(regex_, std::regex_constants::ECMAScript);
+      regex.assign(regex_, std::regex_constants::ECMAScript);
     } catch (const std::regex_error& e) {
       // Rethrow the regex error with more information. Can't use the
       // regex_error here as the constructor does not allow setting the
@@ -159,11 +161,13 @@ ExpressionResult RegexExpression::evaluate(
     auto resultSize = context->_endIndex - context->_beginIndex;
     VectorWithMemoryLimit<Bool> result{context->_allocator};
     result.reserve(resultSize);
+    // TODO<joka921> is the second argument not ALWAYS and BY definition
+    // endIndex - beginIndex?
     for (auto id : detail::makeGenerator(
              *variablePtr, context->_endIndex - context->_beginIndex,
              context)) {
       result.push_back(std::regex_search(
-          detail::StringValueGetter{}(id, context), self_regex));
+          detail::StringValueGetter{}(id, context), regex));
     }
     return result;
   }

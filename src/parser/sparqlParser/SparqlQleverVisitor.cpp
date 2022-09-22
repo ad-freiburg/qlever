@@ -1479,10 +1479,11 @@ ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
   const auto& exp = ctx->expression();
   const auto& numArgs = exp.size();
   AD_CHECK(numArgs >= 2 && numArgs <= 3);
+  // TODO<joka921> support at least "i", because Hannah needs it.
   if (numArgs == 3) {
-    reportError(ctx,
+    reportNotSupported(ctx,
                 "REGEX expressions with a third argument (e.g. `i` for `case "
-                "insensitive`) are currently not supported by QLever");
+                       "insensitive`) are ");
   }
   try {
     return std::make_unique<sparqlExpression::RegexExpression>(visit(exp[0]),

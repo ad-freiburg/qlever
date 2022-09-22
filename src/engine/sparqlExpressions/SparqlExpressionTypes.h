@@ -198,6 +198,7 @@ struct EvaluationContext {
       return false;
     }
 
+    // TODO<joka921> make this "getColumnIndex(const Variable&)"
     return _variableToColumnAndResultTypeMap.at(variable.name()).first ==
            _columnsByWhichResultIsSorted[0];
   }

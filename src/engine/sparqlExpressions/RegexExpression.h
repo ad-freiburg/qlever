@@ -16,7 +16,7 @@ class RegexExpression : public SparqlExpression {
   bool isPrefixRegex_ = false;
 
  public:
-  // TODO<joka921> Check that currently only variables are supported as inputs.
+  // `child` must be a `VariableExpression` and `regex` must be a `LiteralExpression` that stores a string, else an exception will be thrown.
   RegexExpression(SparqlExpression::Ptr child, SparqlExpression::Ptr regex);
 
   ExpressionResult evaluate(EvaluationContext* context) const override;
