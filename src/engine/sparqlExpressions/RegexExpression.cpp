@@ -14,7 +14,10 @@ using namespace std::literals;
 
 namespace {
 
-// Check if `regex` is a prefix regex which means that it starts with `^` and contains no other "special" regex characters like `*` or `.`. If this check suceeds, the prefix is returned without the leading `^` and with all escaping undone. Else, `std::nullopt` is returned.
+// Check if `regex` is a prefix regex which means that it starts with `^` and
+// contains no other "special" regex characters like `*` or `.`. If this check
+// suceeds, the prefix is returned without the leading `^` and with all escaping
+// undone. Else, `std::nullopt` is returned.
 std::optional<std::string> getPrefixRegex(std::string regex) {
   if (!regex.starts_with('^')) {
     return std::nullopt;
@@ -26,10 +29,10 @@ std::optional<std::string> getPrefixRegex(std::string regex) {
   // Positions of backslashes that are used for
   // escaping within the regex
   // these have to be removed if the regex is simply a prefix filter.
-  std::vector<size_t>
-      escapePositions;
+  std::vector<size_t> escapePositions;
 
-  // Check if the regex is only a prefix regex or also contains other special regex characters that are not properly escaped.
+  // Check if the regex is only a prefix regex or also contains other special
+  // regex characters that are not properly escaped.
   for (size_t i = 1; i < regex.size(); i++) {
     if (regex[i] == '\\') {
       if (!escaped) {
@@ -166,8 +169,8 @@ ExpressionResult RegexExpression::evaluate(
     for (auto id : detail::makeGenerator(
              *variablePtr, context->_endIndex - context->_beginIndex,
              context)) {
-      result.push_back(std::regex_search(
-          detail::StringValueGetter{}(id, context), regex));
+      result.push_back(
+          std::regex_search(detail::StringValueGetter{}(id, context), regex));
     }
     return result;
   }
