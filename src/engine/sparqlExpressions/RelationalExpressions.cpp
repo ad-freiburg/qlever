@@ -17,8 +17,8 @@ using valueIdComparators::Comparison;
 // Several concepts used to choose the proper evaluation methods for different
 // input types.
 
-// For `X == VectorWithMemoryLimit<T>`, `ValueType<X>` is `U`. For any other
-// type `X`, `ValueType<X>` is `X`.
+// For `T == VectorWithMemoryLimit<U>`, `ValueType<U>` is `T`. For any other
+// type `T`, `ValueType<T>` is `T`.
 namespace detail {
 // TODO<joka921> This helper function may never be called and could in principle
 // be formulated directly within the `decltype` statement below. However, this
@@ -36,9 +36,6 @@ constexpr auto getObjectOfValueTypeHelper(T&& t) {
 template <typename T>
 using ValueType =
     decltype(detail::getObjectOfValueTypeHelper<T>(std::declval<T>()));
-
-static_assert(std::is_same_v<int, ValueType<VectorWithMemoryLimit<int>>>);
-static_assert(std::is_same_v<double, ValueType<double>>);
 
 // Concept that requires that `T` logically stores numeric values.
 template <typename T>

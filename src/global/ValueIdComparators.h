@@ -366,7 +366,7 @@ template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
     RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
     Comparison comparison) {
-  // For an explanation of the case `valueIdBegin == valueIdEnd` see the
+  // For an explanation of the case `valueIdBegin == valueIdEnd`, see the
   // documentation of a similar check in `compareIds` below.
   AD_CHECK(valueIdBegin <= valueIdEnd);
   // This lambda enforces the invariants `non-empty` and `sorted` and also

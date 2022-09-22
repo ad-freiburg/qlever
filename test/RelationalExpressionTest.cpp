@@ -271,7 +271,7 @@ auto testLessThanGreaterThanEqualHelper(
 
 // Call `testLessThanGreaterThanEqualThan` for the given values and also for the
 // following variants: The first element from each pair is converted to a
-// ValueID before the call. The second element  is... Both elements are ...
+// `ValueId` before the call; The second element  is ...; Both elements are ...
 // Requires that both `leftValue` and `rightValue` are numeric constants.
 template <SingleExpressionResult L, SingleExpressionResult R>
 void testLessThanGreaterThanEqual(
@@ -306,9 +306,9 @@ void testLessThanGreaterThanEqual(
 // Test that all comparisons between `leftValue` and `rightValue` result in a
 // single boolean that is false. The only exception is the `not equal`
 // comparison, for which true is expected.
-auto testNotEqualHelper = [](SingleExpressionResult auto leftValue,
-                             SingleExpressionResult auto rightValue,
-                             source_location l = source_location::current()) {
+void testNotEqualHelper(SingleExpressionResult auto leftValue,
+                        SingleExpressionResult auto rightValue,
+                        source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l, "testNotEqualHelper was called here");
   auto True = expectTrueBoolean;
   auto False = expectFalseBoolean;
@@ -326,21 +326,21 @@ auto testNotEqualHelper = [](SingleExpressionResult auto leftValue,
   True(makeExpression<NE>(makeCopy(rightValue), makeCopy(leftValue)));
   False(makeExpression<GT>(makeCopy(rightValue), makeCopy(leftValue)));
   False(makeExpression<GE>(makeCopy(rightValue), makeCopy(leftValue)));
-};
+}
 
 // Call `testNotEqualHelper` for `leftValue` and `rightValue` and for the
 // following combinations: `leftValue` is converted to a ValueID before the
 // call. `rightValue` "" both values "" Requires that both `leftValue` and
 // `rightValue` are numeric constants.
-auto testNotEqual = [](SingleExpressionResult auto leftValue,
-                       SingleExpressionResult auto rightValue,
-                       source_location l = source_location::current()) {
+void testNotEqual(SingleExpressionResult auto leftValue,
+                  SingleExpressionResult auto rightValue,
+                  source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l, "testNotEqual was called here");
   testNotEqualHelper(leftValue, rightValue);
   testNotEqualHelper(liftToValueId(leftValue), rightValue);
   testNotEqualHelper(leftValue, liftToValueId(rightValue));
   testNotEqualHelper(liftToValueId(leftValue), liftToValueId(rightValue));
-};
+}
 
 }  // namespace
 
@@ -405,7 +405,7 @@ TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
 // hold: For i in [0, 2] : rightValue[i] < leftValue[i]; For i in [3, 5] :
 // rightValue[i] > leftValue[i]; For i in [6, 8] : rightValue[i] = leftValue[i];
 template <typename T, typename U>
-auto testLessThanGreaterThanEqualMultipleValuesHelper(
+void testLessThanGreaterThanEqualMultipleValuesHelper(
     T leftValue, U rightValue, source_location l = source_location::current()) {
   auto trace = generateLocationTrace(
       l, "testLessThanGreaterThanEqualMultipleValuesHelper was called here");
