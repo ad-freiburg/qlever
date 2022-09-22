@@ -14,6 +14,60 @@ namespace {
 
 using valueIdComparators::Comparison;
 
+// Several concepts used to choose the proper evaluation methods for different
+// input types.
+template <typename T>
+concept Arithmetic = std::integral<T> || std::floating_point<T>;
+
+// Any of the `SingleExpressionResult`s that logically stores boolean values.
+template <typename T>
+concept StoresBoolean =
+std::is_same_v<T, Bool> || std::is_same_v<T, ad_utility::SetOfIntervals> ||
+std::is_same_v<VectorWithMemoryLimit<Bool>, T>;
+
+// Any of the `SingleExpressionResult`s that logically stores `ValueId`s
+// TODO<joka921> Use this concept above in the `Generator`
+// function.
+template <typename T>
+concept StoresValueId = ad_utility::SimilarTo<T, Variable> ||
+                        ad_utility::SimilarTo<T, VectorWithMemoryLimit<ValueId>> ||
+                        ad_utility::SimilarTo<T, ValueId>;
+
+// When `A` and `B` are `AreIncomparable`, comparisons between them will always
+// yield `not equal`, independent of the concrete values.
+template <typename A, typename B>
+concept AreIncomparable = (Arithmetic<A> && std::is_same_v<B, std::string>) ||
+                          (Arithmetic<B> && std::is_same_v<std::string, A>);
+
+// True iff any of `A, B` is `StoresBoolean` (see above).
+template <typename A, typename B>
+concept AtLeastOneIsBoolean = StoresBoolean<A> || StoresBoolean<B>;
+
+// The types for which comparisons like `<` are supported and not always false.
+template <typename A, typename B>
+concept AreComparable = !AtLeastOneIsBoolean<A, B> && !AreIncomparable<A, B> &&
+                        (StoresValueId<A> || !StoresValueId<B>);
+
+// Helper templates to get the `logical value type` for several types. For a
+// vector, it yields the value_type of the vector. For any other type it yields
+// the type itself.
+// TODO<joka921> Can be simplified using a function that returns a value and
+// then using decltype.
+// TODO<joka921> Should be further above and then used to make `vector<double>`
+// `Arithmetic`.
+template <typename T>
+struct ValueTypeImpl {
+  using type = T;
+};
+
+template <typename T>
+struct ValueTypeImpl<VectorWithMemoryLimit<T>> {
+  using type = T;
+};
+
+template <typename T>
+using ValueType = typename ValueTypeImpl<T>::type;
+
 // Apply the given `Comparison` to `a` and `b`. For example, if the `Comparison`
 // is `LT`, returns `a < b`. Note that the second template argument `Dummy` is
 // only needed to make the static check for the exhaustiveness of the if-else
@@ -141,10 +195,10 @@ template <SingleExpressionResult S1, SingleExpressionResult S2>
 auto getGenerators(S1 value1, S2 value2, size_t targetSize,
                    EvaluationContext* context) {
   if constexpr (
-      ad_utility::isTypeContainedIn<
-          S1, std::tuple<Variable, ValueId, VectorWithMemoryLimit<ValueId>>> ||
-      ad_utility::isTypeContainedIn<
-          S2, std::tuple<Variable, ValueId, VectorWithMemoryLimit<ValueId>>>) {
+      StoresValueId<
+          S1> ||
+      StoresValueId<
+          S2>) {
     return std::pair{idGenerator(std::move(value1), targetSize, context),
                      idGenerator(std::move(value2), targetSize, context)};
   } else {
@@ -198,59 +252,6 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
   return s;
 }
 
-// Several concepts used to choose the proper evaluation methods for different
-// input types.
-template <typename T>
-concept Arithmetic = std::integral<T> || std::floating_point<T>;
-
-// Any of the `SingleExpressionResult`s that logically stores boolean values.
-template <typename T>
-concept StoresBoolean =
-    std::is_same_v<T, Bool> || std::is_same_v<T, ad_utility::SetOfIntervals> ||
-    std::is_same_v<VectorWithMemoryLimit<Bool>, T>;
-
-// Any of the `SingleExpressionResult`s that logically stores `ValueId`s
-// TODO<joka921> rename this concept and use it above in the `Generator`
-// function.
-template <typename T>
-concept StoresValueId = ad_utility::SimilarTo<T, Variable> ||
-    ad_utility::SimilarTo<T, VectorWithMemoryLimit<ValueId>> ||
-    ad_utility::SimilarTo<T, ValueId>;
-
-// When `A` and `B` are `AreIncomparable`, comparisons between them will always
-// yield `not equal`, independent of the concrete values.
-template <typename A, typename B>
-concept AreIncomparable = (Arithmetic<A> && std::is_same_v<B, std::string>) ||
-                          (Arithmetic<B> && std::is_same_v<std::string, A>);
-
-// True iff any of `A, B` is `StoresBoolean` (see above).
-template <typename A, typename B>
-concept AtLeastOneIsBoolean = StoresBoolean<A> || StoresBoolean<B>;
-
-// The types for which comparisons like `<` are supported and not always false.
-template <typename A, typename B>
-concept AreComparable = !AtLeastOneIsBoolean<A, B> && !AreIncomparable<A, B> &&
-                        (StoresValueId<A> || !StoresValueId<B>);
-
-// Helper templates to get the `logical value type` for several types. For a
-// vector, it yields the value_type of the vector. For any other type it yields
-// the type itself.
-// TODO<joka921> Can be simplified using a function that returns a value and
-// then using decltype.
-// TODO<joka921> Should be further above and then used to make `vector<double>`
-// `Arithmetic`.
-template <typename T>
-struct ValueTypeImpl {
-  using type = T;
-};
-
-template <typename T>
-struct ValueTypeImpl<VectorWithMemoryLimit<T>> {
-  using type = T;
-};
-
-template <typename T>
-using ValueType = typename ValueTypeImpl<T>::type;
 
 // The actual comparison function for the `SingleExpressionResult`'s which are
 // `AreComparable` (see above), which means that the comparison between them is
