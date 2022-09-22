@@ -93,7 +93,7 @@ bool checkUsePatternTrick(ParsedQuery* pq, SparqlTriple* patternTrickTriple) {
   // These will only be set if the query returns the count of predicates
   // The variable the COUNT alias counts.
   std::string countedVariable;
-  bool countedVariableIsDistinct;
+  bool countedVariableIsDistinct = false;
 
   if (returnsCounts) {
     // We have already verified above that there is exactly one alias.
