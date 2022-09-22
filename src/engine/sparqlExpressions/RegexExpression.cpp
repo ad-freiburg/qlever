@@ -61,7 +61,7 @@ std::optional<std::string> getPrefixRegex(std::string regex) {
   }
   // also remove the leading "^".
   regex.erase(regex.begin());
-  return std::move(regex);
+  return regex;
 }
 }  // namespace
 

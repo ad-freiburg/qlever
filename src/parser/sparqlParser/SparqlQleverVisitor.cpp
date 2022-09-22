@@ -1469,14 +1469,27 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     //   return createExpression<sparqlExpression::DistExpression>(
     //       std::move(children[0]), std::move(children[1]));
   } else {
-    reportNotSupported(ctx,
-                "Built-in functions (other than aggregates and REGEX) are ");
+    reportNotSupported(
+        ctx, "Built-in functions (other than aggregates and REGEX) are ");
   }
 }
 
-// ____________________________________________________________________________________
-void Visitor::visit(Parser::RegexExpressionContext* ctx) {
-  reportNotSupported(ctx, "The REGEX function is");
+// _____________________________________________________________________________
+ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
+  const auto& exp = ctx->expression();
+  const auto& numArgs = exp.size();
+  AD_CHECK(numArgs >= 2 && numArgs <= 3);
+  if (numArgs == 3) {
+    reportError(ctx,
+                "REGEX expressions with a third argument (e.g. `i` for `case "
+                "insensitive`) are currently not supported by QLever");
+  }
+  try {
+    return std::make_unique<sparqlExpression::RegexExpression>(visit(exp[0]),
+                                                               visit(exp[1]));
+  } catch (const std::exception& e) {
+    reportError(ctx, e.what());
+  }
 }
 
 // ____________________________________________________________________________________
@@ -1643,24 +1656,6 @@ BlankNode Visitor::visit(Parser::BlankNodeContext* ctx) {
     return {false, label};
   } else {
     AD_FAIL();
-  }
-}
-
-// _____________________________________________________________________________
-ExpressionPtr Visitor::visitTypesafe(Parser::RegexExpressionContext* ctx) {
-  const auto& exp = ctx->expression();
-  const auto& numArgs = exp.size();
-  AD_CHECK(numArgs >= 2 && numArgs <= 3);
-  if (numArgs == 3) {
-    reportError(ctx,
-                "REGEX expressions with a third argument (e.g. `i` for `case "
-                "insensitive`) are currently not supported by QLever");
-  }
-  try {
-    return std::make_unique<sparqlExpression::RegexExpression>(
-        visitTypesafe(exp[0]), visitTypesafe(exp[1]));
-  } catch (const std::exception& e) {
-    reportError(ctx, e.what());
   }
 }
 
