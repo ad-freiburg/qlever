@@ -1334,14 +1334,17 @@ ExpressionPtr Visitor::visit(Parser::AdditiveExpressionContext* ctx) {
 
   for (OperatorAndExpression& signAndExpression :
        visitVector(ctx->multiplicativeExpressionWithSign())) {
-    if (signAndExpression.operator_ == Operator::Plus) {
-      result = createExpression<sparqlExpression::AddExpression>(
-          std::move(result), std::move(signAndExpression.expression_));
-    } else if (signAndExpression.operator_ == Operator::Minus) {
-      result = createExpression<sparqlExpression::SubtractExpression>(
-          std::move(result), std::move(signAndExpression.expression_));
-    } else {
-      AD_FAIL();
+    switch (signAndExpression.operator_) {
+      case Operator::Plus:
+        result = createExpression<sparqlExpression::AddExpression>(
+            std::move(result), std::move(signAndExpression.expression_));
+        break;
+      case Operator::Minus:
+        result = createExpression<sparqlExpression::SubtractExpression>(
+            std::move(result), std::move(signAndExpression.expression_));
+        break;
+      default:
+        AD_FAIL()
     }
   }
   return result;
@@ -1398,15 +1401,17 @@ Visitor::OperatorAndExpression Visitor::visit(
 
   for (OperatorAndExpression& opAndExp :
        visitVector(ctx->multiplyOrDivideExpression())) {
-    if (opAndExp.operator_ == Operator::Multiply) {
-      expression = createExpression<sparqlExpression::MultiplyExpression>(
-          std::move(expression), std::move(opAndExp.expression_));
-
-    } else if (opAndExp.operator_ == Operator::Divide) {
-      expression = createExpression<sparqlExpression::DivideExpression>(
-          std::move(expression), std::move(opAndExp.expression_));
-    } else {
-      AD_FAIL();
+    switch (opAndExp.operator_) {
+      case Operator::Multiply:
+        expression = createExpression<sparqlExpression::MultiplyExpression>(
+            std::move(expression), std::move(opAndExp.expression_));
+        break;
+      case Operator::Divide:
+        expression = createExpression<sparqlExpression::DivideExpression>(
+            std::move(expression), std::move(opAndExp.expression_));
+        break;
+      default:
+        AD_FAIL();
     }
   }
   return {op, std::move(expression)};
@@ -1418,15 +1423,17 @@ ExpressionPtr Visitor::visit(Parser::MultiplicativeExpressionContext* ctx) {
 
   for (OperatorAndExpression& opAndExp :
        visitVector(ctx->multiplyOrDivideExpression())) {
-    if (opAndExp.operator_ == Operator::Multiply) {
-      result = createExpression<sparqlExpression::MultiplyExpression>(
-          std::move(result), std::move(opAndExp.expression_));
-
-    } else if (opAndExp.operator_ == Operator::Divide) {
-      result = createExpression<sparqlExpression::DivideExpression>(
-          std::move(result), std::move(opAndExp.expression_));
-    } else {
-      AD_FAIL();
+    switch (opAndExp.operator_) {
+      case Operator::Multiply:
+        result = createExpression<sparqlExpression::MultiplyExpression>(
+            std::move(result), std::move(opAndExp.expression_));
+        break;
+      case Operator::Divide:
+        result = createExpression<sparqlExpression::DivideExpression>(
+            std::move(result), std::move(opAndExp.expression_));
+        break;
+      default:
+        AD_FAIL();
     }
   }
   return result;
