@@ -99,8 +99,10 @@ class RangeFilter {
     addImpl<Comparison::GE, Comparison::GT, Comparison::NE>(begin, end);
   }
 
-  // Analogous to `addEqual`.
-  void addNan(RandomIt begin, RandomIt end) {
+  // Analogous to `addEqual`. Used for IDs or numbers that are not equal, but
+  // also not smaller or greater. This applies for example for `not a number`
+  // and IDs that represent different incompatible datatypes.
+  void addNotEqual(RandomIt begin, RandomIt end) {
     addImpl<Comparison::NE>(begin, end);
   }
 
@@ -154,7 +156,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForDouble(
 
   RangeFilter<RandomIt> rangeFilter{comparison};
 
-  rangeFilter.addNan(beginOfNans, beginOfNegatives);
+  rangeFilter.addNotEqual(beginOfNans, beginOfNegatives);
   if (value > 0) {
     // The order is [smaller positives, equal, greater positives, nan, all
     // negatives].
@@ -246,6 +248,18 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIntsAndDoubles(
   auto result = getRangesForDouble(begin, end, value, comparison);
   auto resultInt = getRangesForInt(begin, end, value, comparison);
   result.insert(result.end(), resultInt.begin(), resultInt.end());
+
+  // If the comparison is "not equal" we also have to add the ranges for
+  // non-matching datatypes.
+  if (comparison == Comparison::NE) {
+    auto rangeOfDoubles = getRangeForDatatype(begin, end, Datatype::Double);
+    auto rangeOfInts = getRangeForDatatype(begin, end, Datatype::Int);
+    AD_CHECK(rangeOfInts.first <= rangeOfDoubles.first);
+    result.push_back({begin, rangeOfInts.first});
+    result.push_back({rangeOfInts.second, rangeOfDoubles.first});
+    result.push_back({rangeOfDoubles.second, end});
+  }
+
   return result;
 }
 
@@ -254,13 +268,17 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIntsAndDoubles(
 template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
     RandomIt begin, RandomIt end, ValueId valueId, Comparison comparison) {
-  std::tie(begin, end) = getRangeForDatatype(begin, end, valueId.getDatatype());
+  auto [beginType, endType] =
+      getRangeForDatatype(begin, end, valueId.getDatatype());
 
   RangeFilter<RandomIt> rangeFilter{comparison};
-  auto [eqBegin, eqEnd] = std::equal_range(begin, end, valueId, &compareByBits);
-  rangeFilter.addSmaller(begin, eqBegin);
+  auto [eqBegin, eqEnd] =
+      std::equal_range(beginType, endType, valueId, &compareByBits);
+  rangeFilter.addNotEqual(begin, beginType);
+  rangeFilter.addSmaller(beginType, eqBegin);
   rangeFilter.addEqual(eqBegin, eqEnd);
-  rangeFilter.addGreater(eqEnd, end);
+  rangeFilter.addGreater(eqEnd, endType);
+  rangeFilter.addNotEqual(endType, end);
   return std::move(rangeFilter).getResult();
 }
 
@@ -270,17 +288,45 @@ template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
     RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
     Comparison comparison) {
-  std::tie(begin, end) =
+  auto [beginOfType, endOfType] =
       getRangeForDatatype(begin, end, valueIdBegin.getDatatype());
 
   RangeFilter<RandomIt> rangeFilter{comparison};
-  auto eqBegin = std::lower_bound(begin, end, valueIdBegin, &compareByBits);
-  auto eqEnd = std::lower_bound(begin, end, valueIdEnd, &compareByBits);
-  rangeFilter.addSmaller(begin, eqBegin);
+  auto eqBegin =
+      std::lower_bound(beginOfType, endOfType, valueIdBegin, &compareByBits);
+  auto eqEnd =
+      std::lower_bound(beginOfType, endOfType, valueIdEnd, &compareByBits);
+  rangeFilter.addNotEqual(begin, beginOfType);
+  rangeFilter.addSmaller(beginOfType, eqBegin);
   rangeFilter.addEqual(eqBegin, eqEnd);
-  rangeFilter.addGreater(eqEnd, end);
+  rangeFilter.addGreater(eqEnd, endOfType);
+  rangeFilter.addNotEqual(endOfType, end);
   return std::move(rangeFilter).getResult();
 }
+
+// Helper function: Sort the non-overlapping ranges in `input` by the first
+// element, remove the empty ranges, and merge  directly adjacent ranges
+inline auto simplifyRanges =
+    []<typename RandomIt>(std::vector<std::pair<RandomIt, RandomIt>> input) {
+      // Eliminate empty ranges
+      std::erase_if(input, [](const auto& p) { return p.first == p.second; });
+      std::sort(input.begin(), input.end());
+      if (input.empty()) {
+        return input;
+      }
+      // Merge directly adjacent ranges.
+      // TODO<joka921, C++20> use `std::ranges`
+      decltype(input) result;
+      result.push_back(input.front());
+      for (auto it = input.begin() + 1; it != input.end(); ++it) {
+        if (it->first == result.back().second) {
+          result.back().second = it->second;
+        } else {
+          result.push_back(*it);
+        }
+      }
+      return result;
+    };
 
 }  // namespace detail
 
@@ -294,24 +340,18 @@ template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
     RandomIt begin, RandomIt end, ValueId valueId, Comparison comparison) {
   // This lambda enforces the invariants `non-empty` and `sorted`.
-  auto simplify = [](std::vector<std::pair<RandomIt, RandomIt>>&& result) {
-    std::sort(result.begin(), result.end());
-    // Eliminate empty ranges
-    std::erase_if(result, [](const auto& p) { return p.first == p.second; });
-    return std::move(result);
-  };
   switch (valueId.getDatatype()) {
     case Datatype::Double:
-      return simplify(detail::getRangesForIntsAndDoubles(
+      return detail::simplifyRanges(detail::getRangesForIntsAndDoubles(
           begin, end, valueId.getDouble(), comparison));
     case Datatype::Int:
-      return simplify(detail::getRangesForIntsAndDoubles(
+      return detail::simplifyRanges(detail::getRangesForIntsAndDoubles(
           begin, end, valueId.getInt(), comparison));
     case Datatype::Undefined:
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::TextRecordIndex:
-      return simplify(
+      return detail::simplifyRanges(
           detail::getRangesForIndexTypes(begin, end, valueId, comparison));
   }
   AD_FAIL();
@@ -326,16 +366,11 @@ template <typename RandomIt>
 inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
     RandomIt begin, RandomIt end, ValueId valueIdBegin, ValueId valueIdEnd,
     Comparison comparison) {
-  AD_CHECK(valueIdBegin < valueIdEnd);
-  // This lambda enforces the invariants `non-empty` and `sorted`.
-  auto simplifyRanges =
-      [](std::vector<std::pair<RandomIt, RandomIt>>&& result) {
-        std::sort(result.begin(), result.end());
-        // Eliminate empty ranges
-        std::erase_if(result,
-                      [](const auto& p) { return p.first == p.second; });
-        return std::move(result);
-      };
+  // For an explanation of the case `valueIdBegin == valueIdEnd`, see the
+  // documentation of a similar check in `compareIds` below.
+  AD_CHECK(valueIdBegin <= valueIdEnd);
+  // This lambda enforces the invariants `non-empty` and `sorted` and also
+  // merges directly adjacent ranges.
   AD_CHECK(valueIdBegin.getDatatype() == valueIdEnd.getDatatype());
   switch (valueIdBegin.getDatatype()) {
     case Datatype::Double:
@@ -345,7 +380,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::TextRecordIndex:
-      return simplifyRanges(detail::getRangesForIndexTypes(
+      return detail::simplifyRanges(detail::getRangesForIndexTypes(
           begin, end, valueIdBegin, valueIdEnd, comparison));
   }
   AD_FAIL();
@@ -392,7 +427,8 @@ inline bool compareIds(ValueId a, ValueId b, Comparison comparison) {
     case Comparison::EQ:
       return detail::compareIdsImpl(a, b, std::equal_to<>());
     case Comparison::NE:
-      return detail::compareIdsImpl(a, b, std::not_equal_to<>());
+      // IDs with incompatible datatypes are also considered "not equal".
+      return !compareIds(a, b, Comparison::EQ);
     case Comparison::GE:
       return detail::compareIdsImpl(a, b, std::greater_equal<>());
     case Comparison::GT:
@@ -406,7 +442,12 @@ inline bool compareIds(ValueId a, ValueId b, Comparison comparison) {
 /// are considered to be equal.
 inline bool compareWithEqualIds(ValueId a, ValueId bBegin, ValueId bEnd,
                                 Comparison comparison) {
-  AD_CHECK(bBegin < bEnd);
+  // The case `bBegin == bEnd` happens when IDs from QLever's vocabulary are
+  // compared to "pseudo"-IDs that represent words that are not part of the
+  // vocabulary. In this case the ID `bBegin` is the ID of the smallest
+  // vocabulary entry that is larger than the non-existing word that it
+  // represents.
+  AD_CHECK(bBegin <= bEnd);
   switch (comparison) {
     case Comparison::LT:
       return detail::compareIdsImpl(a, bBegin, std::less<>());
@@ -416,8 +457,8 @@ inline bool compareWithEqualIds(ValueId a, ValueId bBegin, ValueId bEnd,
       return detail::compareIdsImpl(a, bBegin, std::greater_equal<>()) &&
              detail::compareIdsImpl(a, bEnd, std::less<>());
     case Comparison::NE:
-      return detail::compareIdsImpl(a, bBegin, std::less<>()) ||
-             detail::compareIdsImpl(a, bEnd, std::greater_equal<>());
+      // IDs with incompatible datatypes are also considered "not equal".
+      return !compareWithEqualIds(a, bBegin, bEnd, Comparison::EQ);
     case Comparison::GE:
       return detail::compareIdsImpl(a, bBegin, std::greater_equal<>());
     case Comparison::GT:
@@ -425,6 +466,26 @@ inline bool compareWithEqualIds(ValueId a, ValueId bBegin, ValueId bEnd,
     default:
       AD_FAIL();
   }
+}
+
+// ____________________________________________________________________________
+inline bool compareIds(ValueId a, double b, Comparison comparison) {
+  return compareIds(a, ValueId::makeFromDouble(b), comparison);
+}
+
+// ____________________________________________________________________________
+inline bool compareIds(double a, ValueId b, Comparison comparison) {
+  return compareIds(ValueId::makeFromDouble(a), b, comparison);
+}
+
+// ____________________________________________________________________________
+inline bool compareIds(ValueId a, int64_t b, Comparison comparison) {
+  return compareIds(a, ValueId::makeFromInt(b), comparison);
+}
+
+// ____________________________________________________________________________
+inline bool compareIds(int64_t a, ValueId b, Comparison comparison) {
+  return compareIds(ValueId::makeFromInt(a), b, comparison);
 }
 
 }  // namespace valueIdComparators

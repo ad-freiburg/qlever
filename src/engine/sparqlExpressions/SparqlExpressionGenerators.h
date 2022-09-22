@@ -16,7 +16,7 @@ namespace sparqlExpression::detail {
 // Internal implementation of `getIdsFromVariable` (see below).
 // It is required because of the `CALL_FIXED_SIZE` mechanism for the `IdTable`s.
 template <size_t WIDTH>
-void getIdsFromVariableImpl(VectorWithMemoryLimit<StrongId>& result,
+void getIdsFromVariableImpl(VectorWithMemoryLimit<ValueId>& result,
                             const ::Variable& variable,
                             EvaluationContext* context) {
   AD_CHECK(result.empty());
@@ -36,7 +36,7 @@ void getIdsFromVariableImpl(VectorWithMemoryLimit<StrongId>& result,
 
   result.reserve(endIndex - endIndex);
   for (size_t i = beginIndex; i < endIndex; ++i) {
-    result.push_back(StrongId{inputTable(i, columnIndex)});
+    result.push_back(ValueId{inputTable(i, columnIndex)});
   }
 }
 
@@ -44,10 +44,10 @@ void getIdsFromVariableImpl(VectorWithMemoryLimit<StrongId>& result,
 /// `context`.
 // TODO<joka921> Restructure QLever to column based design, then this will
 // become a noop;
-inline VectorWithMemoryLimit<StrongId> getIdsFromVariable(
+inline VectorWithMemoryLimit<ValueId> getIdsFromVariable(
     const ::Variable& variable, EvaluationContext* context) {
   auto cols = context->_inputTable.cols();
-  VectorWithMemoryLimit<StrongId> result{context->_allocator};
+  VectorWithMemoryLimit<ValueId> result{context->_allocator};
   CALL_FIXED_SIZE_1(cols, getIdsFromVariableImpl, result, variable, context);
   return result;
 }
@@ -68,14 +68,6 @@ resultGenerator(T vector, size_t numItems) {
   AD_CHECK(numItems == vector.size());
   for (auto& element : vector) {
     co_yield std::move(element);
-  }
-}
-
-inline cppcoro::generator<StrongIdWithResultType> resultGenerator(
-    StrongIdsWithResultType ids, size_t targetSize) {
-  AD_CHECK(targetSize == ids.size());
-  for (const auto& strongId : ids._ids) {
-    co_yield StrongIdWithResultType{strongId, ids._type};
   }
 }
 
@@ -105,8 +97,7 @@ auto makeGenerator(Input&& input, [[maybe_unused]] size_t numItems,
   if constexpr (ad_utility::isSimilar<::Variable, Input>) {
     // TODO: Also directly write a generator that lazily gets the Ids in chunks.
     StrongIdsWithResultType inputWithVariableResolved{
-        getIdsFromVariable(std::forward<Input>(input), context),
-        context->_variableToColumnAndResultTypeMap.at(input.name()).second};
+        getIdsFromVariable(std::forward<Input>(input), context)};
     return resultGenerator(std::move(inputWithVariableResolved), numItems);
   } else {
     return resultGenerator(std::forward<Input>(input), numItems);

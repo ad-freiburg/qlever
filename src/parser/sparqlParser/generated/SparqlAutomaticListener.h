@@ -470,17 +470,47 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
   virtual void exitAdditiveExpression(
       SparqlAutomaticParser::AdditiveExpressionContext* ctx) = 0;
 
-  virtual void enterStrangeMultiplicativeSubexprOfAdditive(
-      SparqlAutomaticParser::StrangeMultiplicativeSubexprOfAdditiveContext*
-          ctx) = 0;
-  virtual void exitStrangeMultiplicativeSubexprOfAdditive(
-      SparqlAutomaticParser::StrangeMultiplicativeSubexprOfAdditiveContext*
-          ctx) = 0;
+  virtual void enterMultiplicativeExpressionWithSign(
+      SparqlAutomaticParser::MultiplicativeExpressionWithSignContext* ctx) = 0;
+  virtual void exitMultiplicativeExpressionWithSign(
+      SparqlAutomaticParser::MultiplicativeExpressionWithSignContext* ctx) = 0;
+
+  virtual void enterPlusSubexpression(
+      SparqlAutomaticParser::PlusSubexpressionContext* ctx) = 0;
+  virtual void exitPlusSubexpression(
+      SparqlAutomaticParser::PlusSubexpressionContext* ctx) = 0;
+
+  virtual void enterMinusSubexpression(
+      SparqlAutomaticParser::MinusSubexpressionContext* ctx) = 0;
+  virtual void exitMinusSubexpression(
+      SparqlAutomaticParser::MinusSubexpressionContext* ctx) = 0;
+
+  virtual void enterMultiplicativeExpressionWithLeadingSignButNoSpace(
+      SparqlAutomaticParser::
+          MultiplicativeExpressionWithLeadingSignButNoSpaceContext* ctx) = 0;
+  virtual void exitMultiplicativeExpressionWithLeadingSignButNoSpace(
+      SparqlAutomaticParser::
+          MultiplicativeExpressionWithLeadingSignButNoSpaceContext* ctx) = 0;
 
   virtual void enterMultiplicativeExpression(
       SparqlAutomaticParser::MultiplicativeExpressionContext* ctx) = 0;
   virtual void exitMultiplicativeExpression(
       SparqlAutomaticParser::MultiplicativeExpressionContext* ctx) = 0;
+
+  virtual void enterMultiplyOrDivideExpression(
+      SparqlAutomaticParser::MultiplyOrDivideExpressionContext* ctx) = 0;
+  virtual void exitMultiplyOrDivideExpression(
+      SparqlAutomaticParser::MultiplyOrDivideExpressionContext* ctx) = 0;
+
+  virtual void enterMultiplyExpression(
+      SparqlAutomaticParser::MultiplyExpressionContext* ctx) = 0;
+  virtual void exitMultiplyExpression(
+      SparqlAutomaticParser::MultiplyExpressionContext* ctx) = 0;
+
+  virtual void enterDivideExpression(
+      SparqlAutomaticParser::DivideExpressionContext* ctx) = 0;
+  virtual void exitDivideExpression(
+      SparqlAutomaticParser::DivideExpressionContext* ctx) = 0;
 
   virtual void enterUnaryExpression(
       SparqlAutomaticParser::UnaryExpressionContext* ctx) = 0;

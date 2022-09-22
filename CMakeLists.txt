@@ -38,8 +38,8 @@ if ("${CMAKE_GENERATOR}" STREQUAL "Ninja")
 endif ()
 
 if (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU") AND
-(CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "12") AND
-(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "12.2"))
+   (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "12") AND
+   (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "12.2"))
     message(STATUS "Adding -Wno-restrict for g++12.0 because of false positives")
     add_compile_options(-Wno-restrict)
     else()

@@ -520,12 +520,31 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
   virtual void exitAdditiveExpression(
       SparqlAutomaticParser::AdditiveExpressionContext* /*ctx*/) override {}
 
-  virtual void enterStrangeMultiplicativeSubexprOfAdditive(
+  virtual void enterMultiplicativeExpressionWithSign(
+      SparqlAutomaticParser::MultiplicativeExpressionWithSignContext* /*ctx*/)
+      override {}
+  virtual void exitMultiplicativeExpressionWithSign(
+      SparqlAutomaticParser::MultiplicativeExpressionWithSignContext* /*ctx*/)
+      override {}
+
+  virtual void enterPlusSubexpression(
+      SparqlAutomaticParser::PlusSubexpressionContext* /*ctx*/) override {}
+  virtual void exitPlusSubexpression(
+      SparqlAutomaticParser::PlusSubexpressionContext* /*ctx*/) override {}
+
+  virtual void enterMinusSubexpression(
+      SparqlAutomaticParser::MinusSubexpressionContext* /*ctx*/) override {}
+  virtual void exitMinusSubexpression(
+      SparqlAutomaticParser::MinusSubexpressionContext* /*ctx*/) override {}
+
+  virtual void enterMultiplicativeExpressionWithLeadingSignButNoSpace(
       SparqlAutomaticParser::
-          StrangeMultiplicativeSubexprOfAdditiveContext* /*ctx*/) override {}
-  virtual void exitStrangeMultiplicativeSubexprOfAdditive(
+          MultiplicativeExpressionWithLeadingSignButNoSpaceContext* /*ctx*/)
+      override {}
+  virtual void exitMultiplicativeExpressionWithLeadingSignButNoSpace(
       SparqlAutomaticParser::
-          StrangeMultiplicativeSubexprOfAdditiveContext* /*ctx*/) override {}
+          MultiplicativeExpressionWithLeadingSignButNoSpaceContext* /*ctx*/)
+      override {}
 
   virtual void enterMultiplicativeExpression(
       SparqlAutomaticParser::MultiplicativeExpressionContext* /*ctx*/)
@@ -533,6 +552,23 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
   virtual void exitMultiplicativeExpression(
       SparqlAutomaticParser::MultiplicativeExpressionContext* /*ctx*/)
       override {}
+
+  virtual void enterMultiplyOrDivideExpression(
+      SparqlAutomaticParser::MultiplyOrDivideExpressionContext* /*ctx*/)
+      override {}
+  virtual void exitMultiplyOrDivideExpression(
+      SparqlAutomaticParser::MultiplyOrDivideExpressionContext* /*ctx*/)
+      override {}
+
+  virtual void enterMultiplyExpression(
+      SparqlAutomaticParser::MultiplyExpressionContext* /*ctx*/) override {}
+  virtual void exitMultiplyExpression(
+      SparqlAutomaticParser::MultiplyExpressionContext* /*ctx*/) override {}
+
+  virtual void enterDivideExpression(
+      SparqlAutomaticParser::DivideExpressionContext* /*ctx*/) override {}
+  virtual void exitDivideExpression(
+      SparqlAutomaticParser::DivideExpressionContext* /*ctx*/) override {}
 
   virtual void enterUnaryExpression(
       SparqlAutomaticParser::UnaryExpressionContext* /*ctx*/) override {}
