@@ -8,7 +8,9 @@
 #ifndef QLEVER_MEDIATYPES_H
 #define QLEVER_MEDIATYPES_H
 
+#include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "../HashMap.h"

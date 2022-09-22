@@ -7,6 +7,7 @@
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "global/ValueIdComparators.h"
 
 namespace sparqlExpression {
 
@@ -188,8 +189,11 @@ inline auto minLambdaForAllTypes = []<SingleExpressionResult T>(const T& a,
   if constexpr (std::is_arithmetic_v<T> || ad_utility::isSimilar<T, Bool> ||
                 ad_utility::isSimilar<T, std::string>) {
     return std::min(a, b);
-  } else if constexpr (ad_utility::isSimilar<T, StrongIdWithResultType>) {
-    return a._id < b._id ? a : b;
+  } else if constexpr (ad_utility::isSimilar<T, Id>) {
+    return valueIdComparators::compareIds(a, b,
+                                          valueIdComparators::Comparison::LT)
+               ? a
+               : b;
   } else {
     return ad_utility::alwaysFalse<T>;
   }
@@ -208,8 +212,11 @@ inline auto maxLambdaForAllTypes = []<SingleExpressionResult T>(const T& a,
   if constexpr (std::is_arithmetic_v<T> || ad_utility::isSimilar<T, Bool> ||
                 ad_utility::isSimilar<T, std::string>) {
     return std::max(a, b);
-  } else if constexpr (ad_utility::isSimilar<T, StrongIdWithResultType>) {
-    return a._id > b._id ? a : b;
+  } else if constexpr (ad_utility::isSimilar<T, Id>) {
+    return valueIdComparators::compareIds(a, b,
+                                          valueIdComparators::Comparison::GT)
+               ? a
+               : b;
   } else {
     return ad_utility::alwaysFalse<T>;
   }

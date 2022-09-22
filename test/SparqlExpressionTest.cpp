@@ -7,30 +7,14 @@
 
 #include <string>
 
+#include "./SparqlExpressionTestHelpers.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
 using namespace sparqlExpression;
 using namespace std::literals;
-
-/// Dummy expression for testing, that for `evaluate` returns the `result`
-/// that is specified in the constructor.
-struct DummyExpression : public SparqlExpression {
-  explicit DummyExpression(ExpressionResult result)
-      : _result{std::move(result)} {}
-  mutable ExpressionResult _result;
-  ExpressionResult evaluate(EvaluationContext*) const override {
-    return std::move(_result);
-  }
-  vector<std::string> getUnaggregatedVariables() override { return {}; }
-  string getCacheKey(
-      [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
-    return "DummyDummyDummDumm"s;
-  }
-
-  std::span<SparqlExpression::Ptr> children() override { return {}; }
-};
 
 using VD = VectorWithMemoryLimit<double>;
 auto checkResultsEqual = [](const auto& a, const auto& b) {
@@ -221,21 +205,3 @@ TEST(SparqlExpression, PlusAndMinus) {
   testDivide(bByD, b, d);
   testDivide(dByB, d, b);
 }
-
-// auto testDist = testBinaryExpressionCommutative<DistExpression>;
-// TEST(SparqlExpression, Dist) {
-//   auto nan = std::numeric_limits<double>::quiet_NaN();
-//   ad_utility::AllocatorWithLimit<Id> alloc{
-//       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
-//
-//   V<std::string> p1{{"\"POINT(2.0 1.5)\"", "\"PoInT(3   0.0)\"", "\"POINT"},
-//                     alloc};
-//   V<std::string> p2{{"\"POINT(2.0 -1.5)\"", "\"pOiNt(7 -0.0)\"", "\"POINT"},
-//                     alloc};
-//   // The first value is 331.70172, the second value is 445.2828.
-//   V<double> result{{3.0 * (111.13209 - 0.56605 + 0.0012),
-//                     4.0 * (111.41513 - 0.09455 + 0.00012), nan},
-//                    alloc};
-//
-//   testDist(result, p1, p2);
-// }

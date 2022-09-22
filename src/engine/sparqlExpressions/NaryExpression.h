@@ -107,11 +107,12 @@ using FV = FunctionAndValueGetters<T...>;
 template <size_t N, typename X, typename... T>
 using NARY = NaryExpression<Operation<N, X, T...>>;
 
-inline auto allowedForSetOfIntervals = []<typename... Ts>() constexpr {
+// True iff all types `Ts` are `SetOfIntervals`.
+inline auto areAllSetOfIntervals = []<typename... Ts>(const Ts&...) constexpr {
   return (... && ad_utility::isSimilar<Ts, ad_utility::SetOfIntervals>);
 };
 template <typename F>
-using SET = SpecializedFunction<F, decltype(allowedForSetOfIntervals)>;
+using SET = SpecializedFunction<F, decltype(areAllSetOfIntervals)>;
 
 using ad_utility::SetOfIntervals;
 

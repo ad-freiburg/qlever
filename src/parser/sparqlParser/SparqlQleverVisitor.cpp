@@ -9,11 +9,13 @@
 #include <string>
 #include <vector>
 
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
 
 using namespace ad_utility::sparql_types;
+using namespace sparqlExpression;
 using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
 using SparqlExpressionPimpl = sparqlExpression::SparqlExpressionPimpl;
 using SelectClause = parsedQuery::SelectClause;
@@ -1294,32 +1296,39 @@ ExpressionPtr Visitor::visit(Parser::ValueLogicalContext* ctx) {
   return visit(ctx->relationalExpression());
 }
 
-// ____________________________________________________________________________________
+// ___________________________________________________________________________
 ExpressionPtr Visitor::visit(Parser::RelationalExpressionContext* ctx) {
-  auto childContexts = ctx->numericExpression();
+  auto children = visitVector(ctx->numericExpression());
 
-  if (childContexts.size() == 1) {
-    return visit(childContexts[0]);
-  }
-  if (false) {
-    // TODO<joka921> Once we have reviewed and merged the EqualsExpression,
-    // this can be uncommented.
-    /*
-   if (ctx->children[1]->getText() == "=") {
-     auto leftChild = std::move(
-         visitNumericExpression(childContexts[0]).as<ExpressionPtr>());
-     auto rightChild = std::move(
-         visitNumericExpression(childContexts[1]).as<ExpressionPtr>());
-
-     return
-   ExpressionPtr{std::make_unique<sparqlExpression::EqualsExpression>(
-         std::move(leftChild), std::move(rightChild))};
-
-     */
-  } else {
+  if (ctx->expressionList()) {
     reportError(
         ctx,
-        "This parser does not yet support relational expressions = < etc.");
+        "IN/ NOT IN in expressions are currently not supported by QLever.");
+  }
+  AD_CHECK(children.size() == 1 || children.size() == 2);
+  if (children.size() == 1) {
+    return std::move(children[0]);
+  }
+
+  auto make = [&]<typename Expr>() {
+    return createExpression<Expr>(std::move(children[0]),
+                                  std::move(children[1]));
+  };
+  std::string relation = ctx->children[1]->getText();
+  if (relation == "=") {
+    return make.operator()<EqualExpression>();
+  } else if (relation == "!=") {
+    return make.operator()<NotEqualExpression>();
+  } else if (relation == "<") {
+    return make.operator()<LessThanExpression>();
+  } else if (relation == ">") {
+    return make.operator()<GreaterThanExpression>();
+  } else if (relation == "<=") {
+    return make.operator()<LessEqualExpression>();
+  } else if (relation == ">=") {
+    return make.operator()<GreaterEqualExpression>();
+  } else {
+    AD_FAIL();
   }
 }
 
