@@ -202,6 +202,20 @@ auto makeCopy = [](const auto& input) {
   }
 };
 
+// Convert `t` into a `ValueId`. `T` must be `double`, `int64_t`, or a
+// `VectorWithMemoryLimit` of any of those types.
+auto liftToValueId = []<typename T>(const T& t) {
+  if constexpr (std::is_same_v<T, double>) {
+    return DoubleId(t);
+  } else if constexpr (std::is_integral_v<T>) {
+    return IntId(t);
+  } else if constexpr (isVectorResult<T>) {
+    return makeValueIdVector(t);
+  } else {
+    static_assert(ad_utility::alwaysFalse<T>);
+  }
+};
+
 // Assert that the given `expression`, when evaluated on the `TestContext` (see
 // above), has a single boolean result that is true.
 auto expectTrueBoolean = [](const SparqlExpression& expression,
@@ -255,91 +269,106 @@ auto testLessThanGreaterThanEqual(
   False(makeExpression<GT>(equalPair.first, equalPair.second));
 }
 
-// Test that all comparisons between `inputA` and `inputB` result in a single
-// boolean that is false. The only exception is the `not equal` comparison, for
-// which true is expected.
-auto testNotEqual = [](auto inputA, auto inputB,
+// Call `testLessThanGreaterThanEqualThan` for the given values and also for the
+// following variants: The first element from each pair is converted to a
+// ValueID before the call. The second element "" Both elements "" Requires that
+// both `leftValue` and `rightValue` are numeric constants.
+template <SingleExpressionResult L, SingleExpressionResult R>
+void testWithAndWithoutValueIds(
+    std::pair<L, R> lessThanPair, std::pair<L, R> greaterThanPair,
+    std::pair<L, R> equalPair, source_location l = source_location::current()) {
+  auto trace =
+      generateLocationTrace(l, "testWithAndWithoutValueIds was called here");
+
+  // Helper functions to lift only the first, only the second, or both of the
+  // elements of a pair to a valueId.
+  auto liftFirst = [](const auto& p) {
+    return std::pair{liftToValueId(p.first), p.second};
+  };
+  auto liftSecond = [](const auto& p) {
+    return std::pair{p.first, liftToValueId(p.second)};
+  };
+  auto liftBoth = [](const auto& p) {
+    return std::pair{liftToValueId(p.first), liftToValueId(p.second)};
+  };
+
+  testLessThanGreaterThanEqual(lessThanPair, greaterThanPair, equalPair);
+  testLessThanGreaterThanEqual(liftFirst(lessThanPair),
+                               liftFirst(greaterThanPair),
+                               liftFirst(equalPair));
+  testLessThanGreaterThanEqual(liftSecond(lessThanPair),
+                               liftSecond(greaterThanPair),
+                               liftSecond(equalPair));
+  testLessThanGreaterThanEqual(liftBoth(lessThanPair),
+                               liftBoth(greaterThanPair), liftBoth(equalPair));
+}
+
+// Test that all comparisons between `leftValue` and `rightValue` result in a
+// single boolean that is false. The only exception is the `not equal`
+// comparison, for which true is expected.
+auto testNotEqual = [](SingleExpressionResult auto leftValue,
+                       SingleExpressionResult auto rightValue,
                        source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l, "testNotEqual was called here");
   auto True = expectTrueBoolean;
   auto False = expectFalseBoolean;
 
-  False(makeExpression<LT>(makeCopy(inputA), makeCopy(inputB)));
-  False(makeExpression<LE>(makeCopy(inputA), makeCopy(inputB)));
-  False(makeExpression<EQ>(makeCopy(inputA), makeCopy(inputB)));
-  True(makeExpression<NE>(makeCopy(inputA), makeCopy(inputB)));
-  False(makeExpression<GT>(makeCopy(inputA), makeCopy(inputB)));
-  False(makeExpression<GE>(makeCopy(inputA), makeCopy(inputB)));
+  False(makeExpression<LT>(makeCopy(leftValue), makeCopy(rightValue)));
+  False(makeExpression<LE>(makeCopy(leftValue), makeCopy(rightValue)));
+  False(makeExpression<EQ>(makeCopy(leftValue), makeCopy(rightValue)));
+  True(makeExpression<NE>(makeCopy(leftValue), makeCopy(rightValue)));
+  False(makeExpression<GT>(makeCopy(leftValue), makeCopy(rightValue)));
+  False(makeExpression<GE>(makeCopy(leftValue), makeCopy(rightValue)));
 
-  False(makeExpression<LT>(makeCopy(inputB), makeCopy(inputA)));
-  False(makeExpression<LE>(makeCopy(inputB), makeCopy(inputA)));
-  False(makeExpression<EQ>(makeCopy(inputB), makeCopy(inputA)));
-  True(makeExpression<NE>(makeCopy(inputB), makeCopy(inputA)));
-  False(makeExpression<GT>(makeCopy(inputB), makeCopy(inputA)));
-  False(makeExpression<GE>(makeCopy(inputB), makeCopy(inputA)));
+  False(makeExpression<LT>(makeCopy(rightValue), makeCopy(leftValue)));
+  False(makeExpression<LE>(makeCopy(rightValue), makeCopy(leftValue)));
+  False(makeExpression<EQ>(makeCopy(rightValue), makeCopy(leftValue)));
+  True(makeExpression<NE>(makeCopy(rightValue), makeCopy(leftValue)));
+  False(makeExpression<GT>(makeCopy(rightValue), makeCopy(leftValue)));
+  False(makeExpression<GE>(makeCopy(rightValue), makeCopy(leftValue)));
 };
+
+// Call `testNotEqual` for `leftValue` and `rightValue` and for the following
+// combinations: `leftValue` is converted to a ValueID before the call.
+// `rightValue` ""
+// both values ""
+// Requires that both `leftValue` and `rightValue` are numeric constants.
+auto testNotEqualWithAndWithoutValueIds =
+    [](SingleExpressionResult auto leftValue,
+       SingleExpressionResult auto rightValue,
+       source_location l = source_location::current()) {
+      auto trace = generateLocationTrace(
+          l, "testNotEqualWithAndWithoutValueIds was called here");
+      testNotEqual(leftValue, rightValue);
+      testNotEqual(liftToValueId(leftValue), rightValue);
+      testNotEqual(leftValue, liftToValueId(rightValue));
+      testNotEqual(liftToValueId(leftValue), liftToValueId(rightValue));
+    };
+
 }  // namespace
 
 TEST(RelationalExpression, IntAndDouble) {
-  testLessThanGreaterThanEqual<int64_t, double>({3, 3.3}, {4, -inf},
-                                                {-12, -12.0});
-  // Similar tests, but on the level of `ValueIds`.
-  testLessThanGreaterThanEqual<ValueId, double>(
-      {IntId(3), inf}, {IntId(4), -3.1}, {IntId(-12), -12.0});
-  testLessThanGreaterThanEqual<int64_t, ValueId>(
-      {3, DoubleId(inf)}, {4, DoubleId(-3.1)}, {-12, DoubleId(-12.0)});
-  testLessThanGreaterThanEqual<ValueId, ValueId>({IntId(3), DoubleId(inf)},
-                                                 {IntId(4), DoubleId(-3.1)},
-                                                 {IntId(-12), DoubleId(-12.0)});
-
-  testNotEqual(int64_t{3}, NaN);
-  testNotEqual(int64_t{3}, DoubleId(NaN));
+  testWithAndWithoutValueIds<int64_t, double>({3, 3.3}, {4, -inf},
+                                              {-12, -12.0});
+  testNotEqualWithAndWithoutValueIds(int64_t{3}, NaN);
 }
 
 TEST(RelationalExpression, DoubleAndInt) {
-  testLessThanGreaterThanEqual<double, int64_t>({3.1, 4}, {4.2, -3},
-                                                {-12.0, -12});
-  // Similar tests, but on the level of `ValueIds`.
-  testLessThanGreaterThanEqual<double, ValueId>(
-      {3.1, IntId(4)}, {4.2, IntId(-3)}, {-12.0, IntId(-12)});
-  testLessThanGreaterThanEqual<ValueId, int64_t>(
-      {DoubleId(3.1), 4}, {DoubleId(4.2), -3}, {DoubleId(-12.0), -12});
-  testLessThanGreaterThanEqual<ValueId, ValueId>({DoubleId(3.1), IntId(4)},
-                                                 {DoubleId(4.2), IntId(-3)},
-                                                 {DoubleId(-12.0), IntId(-12)});
-
-  testNotEqual(NaN, int64_t{42});
-  testNotEqual(DoubleId(NaN), int64_t{42});
+  testWithAndWithoutValueIds<double, int64_t>({3.1, 4}, {4.2, -3},
+                                              {-12.0, -12});
+  testNotEqualWithAndWithoutValueIds(NaN, int64_t{42});
 }
 
 TEST(RelationalExpression, IntAndInt) {
-  testLessThanGreaterThanEqual<int64_t, int64_t>({-3, 3}, {4, 3}, {-12, -12});
-  // Similar tests, but on the level of `ValueIds`.
-  testLessThanGreaterThanEqual<int64_t, ValueId>({-3, IntId(3)}, {4, IntId(3)},
-                                                 {-12, IntId(-12)});
-  testLessThanGreaterThanEqual<ValueId, int64_t>({IntId(-3), 3}, {IntId(4), 3},
-                                                 {IntId(-12), -12});
-  testLessThanGreaterThanEqual<ValueId, ValueId>(
-      {IntId(-3), IntId(3)}, {IntId(4), IntId(3)}, {IntId(-12), IntId(-12)});
+  testWithAndWithoutValueIds<int64_t, int64_t>({-3, 3}, {4, 3}, {-12, -12});
 }
 
 TEST(RelationalExpression, DoubleAndDouble) {
-  testLessThanGreaterThanEqual<double, double>({-3.1, -3.0}, {4.2, 4.1},
-                                               {-12.83, -12.83});
-  // Similar tests, but on the level of `ValueIds`.
-  testLessThanGreaterThanEqual<ValueId, double>(
-      {DoubleId(-3.1), -3.0}, {DoubleId(4.2), 4.1}, {DoubleId(-12.83), -12.83});
-  testLessThanGreaterThanEqual<double, ValueId>(
-      {-3.1, DoubleId(-3.0)}, {4.2, DoubleId(4.1)}, {-12.83, DoubleId(-12.83)});
-  testLessThanGreaterThanEqual<ValueId, ValueId>(
-      {DoubleId(-3.1), DoubleId(-3.0)}, {DoubleId(4.2), DoubleId(4.1)},
-      {DoubleId(-12.83), DoubleId(-12.83)});
-
-  testNotEqual(NaN, NaN);
-  testNotEqual(12.0, NaN);
-  testNotEqual(NaN, -1.23e12);
-  testNotEqual(DoubleId(NaN), -1.23e12);
-  testNotEqual(NaN, DoubleId(-1.23e12));
+  testWithAndWithoutValueIds<double, double>({-3.1, -3.0}, {4.2, 4.1},
+                                             {-12.83, -12.83});
+  testNotEqualWithAndWithoutValueIds(NaN, NaN);
+  testNotEqualWithAndWithoutValueIds(12.0, NaN);
+  testNotEqualWithAndWithoutValueIds(NaN, -1.23e12);
 }
 
 TEST(RelationalExpression, StringAndString) {
@@ -374,10 +403,9 @@ TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
 
 // At least one of `leftValue`, `rightValue` must be a vector, the other one may
 // be a constant or also a vector. The vectors must have 9 elements each. When
-// comparing The first three must be less than leftValue, the next three greater
-// than leftValue, and the last three equal to leftValue
-// TODO<joka921> The name of the function and the arguments are out of sync.
-// The function also works for two vectors.
+// comparing the `leftValue` and `rightValue` elementwise, the following has to
+// hold: For i in [0, 2] : rightValue[i] < leftValue[i]; For i in [3, 5] :
+// rightValue[i] > leftValue[i]; For i in [6, 8] : rightValue[i] = leftValue[i];
 template <typename T, typename U>
 auto testLessThanGreaterThanEqualMultipleValues(
     T leftValue, U rightValue, source_location l = source_location::current()) {
@@ -462,25 +490,17 @@ auto testLessThanGreaterThanEqualMultipleValues(
   }
 }
 
-// TODO<joka921> Comment
-void testWithAndWithoutValueIds(
+// Call `testLessThanGreaterThanEqualMultipleValues` with the given arguments as
+// well as for the for all of the following cases: `leftValue` is converted to a
+// ValueID before the call. `rightValue` "" both values "" Requires that both
+// `leftValue` and `rightValue` are either numeric constants or numeric vectors,
+// and that at least one of them is a vector.
+void testWithAndWithoutValueIdsMultipleValues(
     SingleExpressionResult auto leftValue,
     SingleExpressionResult auto rightValue,
     source_location l = source_location::current()) {
-  auto trace =
-      generateLocationTrace(l, "testWithAndWithoutValueIds was called here");
-
-  auto liftToValueId = []<typename T>(const T& t) {
-    if constexpr (std::is_same_v<T, double>) {
-      return DoubleId(t);
-    } else if constexpr (std::is_integral_v<T>) {
-      return IntId(t);
-    } else if constexpr (isVectorResult<T>) {
-      return makeValueIdVector(t);
-    } else {
-      static_assert(ad_utility::alwaysFalse<T>);
-    }
-  };
+  auto trace = generateLocationTrace(
+      l, "testWithAndWithoutValueIdsMultipleValues was called here");
 
   testLessThanGreaterThanEqualMultipleValues(makeCopy(leftValue),
                                              makeCopy(rightValue));
@@ -553,28 +573,37 @@ auto testNotComparable(T leftValue, U rightValue,
   }
 }
 
+// Similar to the other `...WithAndWithoutValueIds` functions (see above), but
+// for the `testNotComparable` function.
+template <typename T, typename U>
+auto testNotComparableWithAndWithoutValueIds(
+    T leftValue, U rightValue, source_location l = source_location::current()) {
+  auto trace = generateLocationTrace(
+      l, "testNotComparableWithAndWithoutValueIds was called here");
+  testNotComparable(makeCopy(leftValue), makeCopy(rightValue));
+  testNotComparable(liftToValueId(leftValue), makeCopy(rightValue));
+  testNotComparable(liftToValueId(leftValue), liftToValueId(rightValue));
+}
+
 TEST(RelationalExpression, NumericConstantAndNumericVector) {
   VectorWithMemoryLimit<double> doubles{
       {-24.3, 0.0, 3.0, 12.8, 1235e12, 523.13, 3.8, 3.8, 3.8}, allocator};
-  testWithAndWithoutValueIds(3.8, doubles.clone());
+  testWithAndWithoutValueIdsMultipleValues(3.8, doubles.clone());
 
   VectorWithMemoryLimit<int64_t> ints{{-523, -15, -3, -1, 0, 12305, -2, -2, -2},
                                       allocator};
-  testWithAndWithoutValueIds(-2.0, ints.clone());
-  testWithAndWithoutValueIds(int64_t{-2}, ints.clone());
+  testWithAndWithoutValueIdsMultipleValues(-2.0, ints.clone());
+  testWithAndWithoutValueIdsMultipleValues(int64_t{-2}, ints.clone());
 
   // Test cases for comparison with NaN
   VectorWithMemoryLimit<double> nonNans{{1.0, 2.0, -inf, inf, 12e6}, allocator};
   VectorWithMemoryLimit<double> Nans{{NaN, NaN, NaN, NaN, NaN}, allocator};
   VectorWithMemoryLimit<int64_t> fiveInts{{-1, 0, 1, 2, 3}, allocator};
 
-  testNotComparable(NaN, nonNans.clone());
-  testNotComparable(NaN, fiveInts.clone());
-  testNotComparable(DoubleId(NaN), fiveInts.clone());
-  testNotComparable(NaN, makeValueIdVector(fiveInts));
-  testNotComparable(3.2, Nans.clone());
-  testNotComparable(int64_t{-123}, Nans.clone());
-  testNotComparable(NaN, Nans.clone());
+  testNotComparableWithAndWithoutValueIds(NaN, nonNans.clone());
+  testNotComparableWithAndWithoutValueIds(NaN, fiveInts.clone());
+  testNotComparableWithAndWithoutValueIds(3.2, Nans.clone());
+  testNotComparableWithAndWithoutValueIds(NaN, Nans.clone());
 }
 
 TEST(RelationalExpression, StringConstantsAndStringVector) {
@@ -599,7 +628,7 @@ TEST(RelationalExpression, IntVectorAndIntVector) {
       {1065918, 17, 3, 1, 0, -102934, 2, -3120, 0}, allocator};
   VectorWithMemoryLimit<int64_t> vecB{
       {1065000, 16, -12340, 42, 1, -102930, 2, -3120, 0}, allocator};
-  testWithAndWithoutValueIds(vecA.clone(), vecB.clone());
+  testWithAndWithoutValueIdsMultipleValues(vecA.clone(), vecB.clone());
 }
 
 TEST(RelationalExpression, DoubleVectorAndDoubleVector) {
@@ -609,11 +638,11 @@ TEST(RelationalExpression, DoubleVectorAndDoubleVector) {
   VectorWithMemoryLimit<double> vecB{
       {1.0e12, -0.1, -3.120e5, 1230, -1.3e10, 1.1e-12, 0.0, 13, -1.2e6},
       allocator};
-  testWithAndWithoutValueIds(vecA.clone(), vecB.clone());
+  testWithAndWithoutValueIdsMultipleValues(vecA.clone(), vecB.clone());
 
   VectorWithMemoryLimit<double> nanA{{NaN, 1.0, NaN, 3.2, NaN}, allocator};
   VectorWithMemoryLimit<double> nanB{{-12.3, NaN, 0.0, NaN, inf}, allocator};
-  testNotComparable(nanA.clone(), nanB.clone());
+  testNotComparableWithAndWithoutValueIds(nanA.clone(), nanB.clone());
 }
 
 TEST(RelationalExpression, DoubleVectorAndIntVector) {
@@ -622,14 +651,11 @@ TEST(RelationalExpression, DoubleVectorAndIntVector) {
   VectorWithMemoryLimit<double> vecB{{1065917.9, 1.5e1, -3.120e5, 1.0e1, 1e-12,
                                       -102934e-1, 20.0e-1, -3.120e3, -0.0},
                                      allocator};
-  testWithAndWithoutValueIds(vecA.clone(), vecB.clone());
+  testWithAndWithoutValueIdsMultipleValues(vecA.clone(), vecB.clone());
 
   VectorWithMemoryLimit<int64_t> fiveInts{{0, 1, 2, 3, -4}, allocator};
   VectorWithMemoryLimit<double> fiveNans{{NaN, NaN, NaN, NaN, NaN}, allocator};
-  testNotComparable(fiveInts.clone(), fiveNans.clone());
-
-  // TODO<joka921> Consistently also test `includingValueIds` for the `NaN`
-  // cases.
+  testNotComparableWithAndWithoutValueIds(fiveInts.clone(), fiveNans.clone());
 }
 
 TEST(RelationalExpression, StringVectorAndStringVector) {
@@ -795,3 +821,8 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   testSortedVariableAndConstant<GT>(mixed, -inf, {{{0, 2}}});
   testSortedVariableAndConstant<LE>(mixed, "\"b\""s, {{{2, 3}}});
 }
+
+// TODO<joka921> We currently do not have tests for the `LocalVocab` case,
+// because the relational expressions do not work properly with the current
+// limited implementation of the local vocabularies. Add those tests, as soon as
+// the local vocabularies are implemented properly.
