@@ -138,14 +138,11 @@ TEST(SparqlParser, Prefix) {
     ParserAndVisitor p{"PREFIX wd: <www.wikidata.org/>"};
     auto defaultPrefixes = p.visitor_.prefixMap();
     ASSERT_EQ(defaultPrefixes.size(), 0);
-    p.visitor_.visitTypesafe(p.parser_.prefixDecl());
+    p.visitor_.visit(p.parser_.prefixDecl());
     auto prefixes = p.visitor_.prefixMap();
     ASSERT_EQ(prefixes.size(), 1);
     ASSERT_EQ(prefixes.at("wd"), "<www.wikidata.org/>");
   }
-  expectCompleteParse(
-      parse<&Parser::prefixDecl>("PREFIX wd: <www.wikidata.org/>"),
-      Eq(SparqlPrefix("wd", "<www.wikidata.org/>")));
   expectCompleteParse(parse<&Parser::pnameLn>("wd:bimbam", prefixMap),
                       StrEq("<www.wikidata.org/bimbam>"));
   expectCompleteParse(parse<&Parser::pnameNs>("wd:", prefixMap),
@@ -473,11 +470,12 @@ TEST(SparqlParser, OrderCondition) {
   expectOrderCondition("ASC (?bar)",
                        m::VariableOrderKeyVariant(Variable{"?bar"}, false));
   expectOrderCondition("ASC(?test - 5)",
-                       m::ExpressionOrderKey("?test-5", false));
+                       m::ExpressionOrderKey("(?test-5)", false));
   expectOrderCondition("DESC (10 || (5 && ?foo))",
-                       m::ExpressionOrderKey("10||(5&&?foo)", true));
+                       m::ExpressionOrderKey("(10||(5&&?foo))", true));
   // constraint
-  expectOrderCondition("(5 - ?mehr)", m::ExpressionOrderKey("5-?mehr", false));
+  expectOrderCondition("(5 - ?mehr)",
+                       m::ExpressionOrderKey("(5-?mehr)", false));
   expectOrderCondition("SUM(?i)", m::ExpressionOrderKey("SUM(?i)", false));
   expectOrderConditionFails("ASC SCORE(?i)");
 }
@@ -486,7 +484,7 @@ TEST(SparqlParser, OrderClause) {
   expectCompleteParse(
       parse<&Parser::orderClause>("ORDER BY ?test DESC(?foo - 5)"),
       m::OrderKeys({VariableOrderKey{Variable{"?test"}, false},
-                    m::ExpressionOrderKeyTest{"?foo-5", true}}));
+                    m::ExpressionOrderKeyTest{"(?foo-5)", true}}));
 }
 
 TEST(SparqlParser, GroupCondition) {
@@ -542,10 +540,11 @@ TEST(SparqlParser, SolutionModifier) {
       "LIMIT 2",
       m::SolutionModifier({Var{"?var"}},
                           {{SparqlFilter::FilterType::LT, "?foo", "?bar"}},
-                          {std::pair{"5-?var", false}}, {2, 21, 0}));
+                          {std::pair{"(5-?var)", false}}, {2, 21, 0}));
   expectSolutionModifier(
       "GROUP BY (?var - ?bar) ORDER BY (5 - ?var)",
-      m::SolutionModifier({"?var-?bar"}, {}, {std::pair{"5-?var", false}}, {}));
+      m::SolutionModifier({"?var-?bar"}, {}, {std::pair{"(5-?var)", false}},
+                          {}));
 }
 
 TEST(SparqlParser, DataBlock) {
