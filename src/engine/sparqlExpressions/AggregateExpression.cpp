@@ -55,9 +55,8 @@ AggregateExpression<AggregateOperation, FinalOperation>::getCacheKey(
 
 // __________________________________________________________________________
 template <typename AggregateOperation, typename FinalOperation>
-[[nodiscard]] std::optional<SparqlExpressionPimpl::VariableAndIsDistinct>
-AggregateExpression<AggregateOperation,
-                    FinalOperation>::getVariableForDistinctCountOrNullopt()
+[[nodiscard]] std::optional<SparqlExpressionPimpl::VariableAndDistinctness>
+AggregateExpression<AggregateOperation, FinalOperation>::getVariableForCount()
     const {
   // This behavior is not correct for the `COUNT` aggregate. The count is
   // therefore implemented in a separate `CountExpression` class, which

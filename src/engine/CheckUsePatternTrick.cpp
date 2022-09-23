@@ -4,6 +4,8 @@
 
 #include "CheckUsePatternTrick.h"
 
+#include <algorithm>
+
 namespace checkUsePatternTrick {
 // __________________________________________________________________________
 bool isVariableContainedInGraphPattern(
@@ -18,8 +20,7 @@ bool isVariableContainedInGraphPattern(
     return isVariableContainedInGraphPatternOperation(variable, op,
                                                       tripleToIgnore);
   };
-  return std::any_of(graphPattern._graphPatterns.begin(),
-                     graphPattern._graphPatterns.end(), check);
+  return std::ranges::any_of(graphPattern._graphPatterns, check);
 }
 
 namespace p = parsedQuery;
@@ -53,14 +54,12 @@ bool isVariableContainedInGraphPatternOperation(
             if (&triple == tripleToIgnore) {
               return false;
             }
-            if (triple._s == variable.name() ||
+            return (
+                triple._s == variable.name() ||
                 // TODO<joka921> The check for the property path is rather
                 // hacky. That class should be refactored.
                 ad_utility::contains(triple._p.asString(), variable.name()) ||
-                triple._o == variable.name()) {
-              return true;
-            }
-            return false;
+                triple._o == variable.name());
           });
     } else if constexpr (std::is_same_v<T, p::Values>) {
       return ad_utility::contains(arg._inlineValues._variables,
@@ -76,35 +75,36 @@ bool isVariableContainedInGraphPatternOperation(
 }
 
 // ____________________________________________________________________________
-bool checkUsePatternTrick(ParsedQuery* pq, SparqlTriple* patternTrickTriple) {
+// TODO<joka921> Should return `std::optional<SparqlTriple` instead of out
+// parameter.
+bool checkUsePatternTrick(ParsedQuery* parsedQuery,
+                          SparqlTriple* patternTrickTriple) {
   // Check if the query has the right number of variables for aliases and
   // group by.
 
   // TODO<joka921> We could actually make this work for CONSTRUCT clauses.
-  if (!pq->hasSelectClause()) {
+  if (!parsedQuery->hasSelectClause()) {
     return false;
   }
-  auto aliases = pq->selectClause().getAliases();
-  if (pq->_groupByVariables.size() != 1 || aliases.size() > 1) {
+  auto aliases = parsedQuery->selectClause().getAliases();
+  if (parsedQuery->_groupByVariables.size() != 1 || aliases.size() > 1) {
     return false;
   }
 
   bool returnsCounts = aliases.size() == 1;
 
-  // This will only be set if the query returns the count of predicates
-  // The variable the COUNT alias counts.
-  using VariableAndDistinct =
-      sparqlExpression::SparqlExpressionPimpl::VariableAndIsDistinct;
-  std::optional<VariableAndDistinct> countedVariable;
+  // The variable that is the argument of the COUNT.
+  std::optional<
+      sparqlExpression::SparqlExpressionPimpl::VariableAndDistinctness>
+      countedVariable;
   if (returnsCounts) {
     // We have already verified above that there is exactly one alias.
     const Alias& alias = aliases.front();
-    countedVariable = alias._expression.getVariableForDistinctCountOrNullopt();
+    countedVariable = alias._expression.getVariableForCount();
     if (!countedVariable.has_value()) {
       return false;
     }
   }
-
   AD_CHECK(returnsCounts == countedVariable.has_value());
 
   // We currently accept the pattern trick triple anywhere in the query.
@@ -112,78 +112,96 @@ bool checkUsePatternTrick(ParsedQuery* pq, SparqlTriple* patternTrickTriple) {
   // MINUS etc.
   // TODO<joka921> This loop can be made much easier using ranges and view once
   // they are supported by clang.
-  for (auto& pattern : pq->children()) {
+  for (auto& pattern : parsedQuery->children()) {
     auto* curPattern = std::get_if<p::BasicGraphPattern>(&pattern);
     if (!curPattern) {
       continue;
     }
 
-    // Try to find a
+    // Try to find a triple that either has `ql:has-predicate` as the predicate,
+    // or consists of three variables, and fulfills all the other preconditions
+    // for the pattern trick.
     for (size_t i = 0; i < curPattern->_triples.size(); i++) {
-      const SparqlTriple& t = curPattern->_triples[i];
-      struct S {
+      const SparqlTriple& triple = curPattern->_triples[i];
+      struct PatternTrickData {
         Variable predicateVariable_;
         Variable allowedCountVariable_;
         std::vector<Variable> variablesNotAllowedInRestOfQuery_;
+        // TODO<joka921> implement CountAvailablePredicates for the nonDistinct case.
         bool countMustBeDistinct_;
       };
 
-      const auto isTriplePossible = [&]() -> std::optional<S> {
-        if ((t._p._iri == HAS_PREDICATE_PREDICATE) && isVariable(t._o)) {
-          Variable predicateVariable{t._o.getString()};
-          if (isVariable(t._s)) {
-            return S{predicateVariable,
-                     Variable{t._s.getString()},
-                     {predicateVariable},
-                     true};
+      const auto patternTrickDataIfTripleIsPossible =
+          [&]() -> std::optional<PatternTrickData> {
+        if ((triple._p._iri == HAS_PREDICATE_PREDICATE) &&
+            isVariable(triple._o)) {
+          Variable predicateVariable{triple._o.getString()};
+          if (isVariable(triple._s)) {
+            return PatternTrickData{predicateVariable,
+                                    Variable{triple._s.getString()},
+                                    {predicateVariable},
+                                    true};
           } else {
-            return S{predicateVariable,
-                     predicateVariable,
-                     {predicateVariable},
-                     false};
+            return PatternTrickData{
+                predicateVariable,
+                predicateVariable,
+                {predicateVariable},
+                // TODO<joka921> In this case both possibilities are legal.
+                // But on the other hand, that case is super cheap, we
+                // can probably remove it from CountAvailablePredicates.
+                // TODO<joka921> Decision with Hannah: Throw it out.
+                false};
           }
-        } else if (isVariable(t._s) && isVariable(t._p) && isVariable(t._o)) {
-          Variable predicateVariable{t._p.getIri()};
-          return S{predicateVariable,
-                   Variable{t._s.getString()},
-                   {predicateVariable, Variable{t._o.getString()}},
-                   true};
+        } else if (isVariable(triple._s) && isVariable(triple._p) &&
+                   isVariable(triple._o)) {
+          Variable predicateVariable{triple._p.getIri()};
+          return PatternTrickData{
+              predicateVariable,
+              Variable{triple._s.getString()},
+              {predicateVariable, Variable{triple._o.getString()}},
+              true};
         } else {
           return std::nullopt;
         }
       }();
 
-      if (!isTriplePossible.has_value()) {
+      if (!patternTrickDataIfTripleIsPossible.has_value()) {
         continue;
       }
-      const S& data = isTriplePossible.value();
+      const PatternTrickData& patternTrickData =
+          patternTrickDataIfTripleIsPossible.value();
 
-      if (pq->_groupByVariables[0] != data.predicateVariable_) {
+      if (parsedQuery->_groupByVariables[0] !=
+          patternTrickData.predicateVariable_) {
         continue;
       }
 
-      if (returnsCounts &&
-          (countedVariable.value().variable_ != data.allowedCountVariable_ ||
-           data.countMustBeDistinct_ != countedVariable.value().isDistinct_)) {
+      // If the query returns a COUNT then the part of the `patternTrickData`
+      // that refers to the COUNT has to match.
+      if (returnsCounts && !(countedVariable.value().variable_ ==
+                                 patternTrickData.allowedCountVariable_ &&
+                             patternTrickData.countMustBeDistinct_ ==
+                                 countedVariable.value().isDistinct_)) {
         continue;
       }
 
       // Check that the pattern trick triple is the only place in the query
       // where the predicate variable (and the object variable in the three
       // variables case) occurs.
-      if (std::ranges::any_of(data.variablesNotAllowedInRestOfQuery_,
-                              [&](const Variable& variable) {
-                                return isVariableContainedInGraphPattern(
-                                    variable, pq->_rootGraphPattern, &t);
-                              })) {
+      if (std::ranges::any_of(
+              patternTrickData.variablesNotAllowedInRestOfQuery_,
+              [&](const Variable& variable) {
+                return isVariableContainedInGraphPattern(
+                    variable, parsedQuery->_rootGraphPattern, &triple);
+              })) {
         continue;
       }
 
       LOG(DEBUG) << "Using the pattern trick to answer the query." << endl;
 
-      *patternTrickTriple = t;
+      *patternTrickTriple = triple;
       // Remove the triple from the graph. Note that this invalidates the
-      // reference `t`, so we perform this step at the very end.
+      // reference `triple`, so we perform this step at the very end.
       curPattern->_triples.erase(curPattern->_triples.begin() + i);
       return true;
     }

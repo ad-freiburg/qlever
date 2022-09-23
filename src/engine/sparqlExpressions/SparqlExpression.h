@@ -81,12 +81,12 @@ class SparqlExpression {
   /// For the pattern trick we need to know, whether this expression
   /// is a non-distinct count of a single variable. In this case we return
   /// the variable. Otherwise we return std::nullopt.
-  virtual std::optional<SparqlExpressionPimpl::VariableAndIsDistinct>
-  getVariableForDistinctCountOrNullopt() const {
+  virtual std::optional<SparqlExpressionPimpl::VariableAndDistinctness>
+  getVariableForCount() const {
     return std::nullopt;
   }
 
-  /// Helper function for getVariableForDistinctCountOrNullopt() : If this
+  /// Helper function for getVariableForCount() : If this
   /// expression is a single variable, return the name of this variable.
   /// Otherwise, return std::nullopt.
   virtual std::optional<::Variable> getVariableOrNullopt() const {

@@ -174,7 +174,4 @@ class ParsedQuery {
   void merge(const ParsedQuery& p);
 
   [[nodiscard]] string asString() const;
-
-  bool childrenThatContainVariableVisibly(const Variable& variable,
-                                          const SparqlTriple* tripleToIgnore);
 };
