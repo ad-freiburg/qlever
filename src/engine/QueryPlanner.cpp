@@ -76,24 +76,24 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
     ParsedQuery& pq) {
   // Look for ql:has-predicate to determine if the pattern trick should be used.
   // If the pattern trick is used the ql:has-predicate triple will be removed
-  // from the list of where clause triples. Otherwise the ql:has-relation triple
+  // from the list of where clause triples. Otherwise, the ql:has-relation triple
   // will be handled using a HasRelationScan.
-  SparqlTriple patternTrickTriple("", PropertyPath(), "");
-  bool usePatternTrick =
-      _enablePatternTrick &&
-      checkUsePatternTrick::checkUsePatternTrick(&pq, &patternTrickTriple);
-
-  bool doGrouping = !pq._groupByVariables.empty() || usePatternTrick;
-  if (!doGrouping && pq.hasSelectClause()) {
-    // if there is no group by statement, but an aggregate alias is used
-    // somewhere do grouping anyways.
-    for (const Alias& alias : pq.selectClause().getAliases()) {
-      if (alias._expression.isAggregate({})) {
-        doGrouping = true;
-        break;
-      }
+  using checkUsePatternTrick::PatternTrickTuple;
+  const auto patternTrickTuple = [&]() -> std::optional<PatternTrickTuple> {
+    if (!_enablePatternTrick) {
+      return std::nullopt;
     }
-  }
+    return checkUsePatternTrick::checkUsePatternTrick(&pq);
+  }();
+
+  bool doGrouping = !pq._groupByVariables.empty() || patternTrickTuple.has_value();
+    // If there is no explicit GROUP BY statement, but an aggregate alias is
+    // used somewhere do grouping anyway.
+    // TODO<joka921> Is this correct for queries that have a global aggregate AND non-aggregating statements?
+    doGrouping |= std::ranges::any_of(pq.getAliases(),
+                                      [](const Alias& alias) {
+                                        return alias._expression.isAggregate({});
+                                      });
 
   // Optimize the graph pattern tree
   std::vector<std::vector<SubtreePlan>> plans;
@@ -102,11 +102,10 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   // Add the query level modifications
 
   // GROUP BY
-  if (doGrouping && !usePatternTrick) {
+  if (patternTrickTuple.has_value()) {
+    getPatternTrickRow(pq.selectClause(), plans, patternTrickTuple.value());
+  } else if (doGrouping) {
     plans.emplace_back(getGroupByRow(pq, plans));
-  } else if (usePatternTrick) {
-    plans.emplace_back(
-        getPatternTrickRow(pq.selectClause(), plans, patternTrickTriple));
   }
 
   // HAVING

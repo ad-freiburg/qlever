@@ -75,20 +75,17 @@ bool isVariableContainedInGraphPatternOperation(
 }
 
 // ____________________________________________________________________________
-// TODO<joka921> Should return `std::optional<SparqlTriple` instead of out
-// parameter.
-bool checkUsePatternTrick(ParsedQuery* parsedQuery,
-                          SparqlTriple* patternTrickTriple) {
+std::optional<PatternTrickTuple> checkUsePatternTrick(ParsedQuery* parsedQuery) {
   // Check if the query has the right number of variables for aliases and
   // group by.
 
   // TODO<joka921> We could actually make this work for CONSTRUCT clauses.
   if (!parsedQuery->hasSelectClause()) {
-    return false;
+    return std::nullopt;
   }
   auto aliases = parsedQuery->selectClause().getAliases();
   if (parsedQuery->_groupByVariables.size() != 1 || aliases.size() > 1) {
-    return false;
+    return std::nullopt;
   }
 
   // TODO<joka921> The returnsCounts is only used for the initial checks,
@@ -103,7 +100,7 @@ bool checkUsePatternTrick(ParsedQuery* parsedQuery,
     // We have already verified above that there is exactly one alias.
     countedVariable = aliases.front()._expression.getVariableForCount();
     if (!countedVariable.has_value()) {
-      return false;
+      return std::nullopt;
     }
   }
   AD_CHECK(returnsCounts == countedVariable.has_value());
@@ -134,25 +131,13 @@ bool checkUsePatternTrick(ParsedQuery* parsedQuery,
 
       const auto patternTrickDataIfTripleIsPossible =
           [&]() -> std::optional<PatternTrickData> {
-        if ((triple._p._iri == HAS_PREDICATE_PREDICATE) &&
+        if ((triple._p._iri == HAS_PREDICATE_PREDICATE) && isVariable(triple._s) &&
             isVariable(triple._o)) {
           Variable predicateVariable{triple._o.getString()};
-          if (isVariable(triple._s)) {
             return PatternTrickData{predicateVariable,
                                     Variable{triple._s.getString()},
                                     {predicateVariable},
                                     true};
-          } else {
-            return PatternTrickData{
-                predicateVariable,
-                predicateVariable,
-                {predicateVariable},
-                // TODO<joka921> In this case both possibilities are legal.
-                // But on the other hand, that case is super cheap, we
-                // can probably remove it from CountAvailablePredicates.
-                // TODO<joka921> Decision with Hannah: Throw it out.
-                false};
-          }
         } else if (isVariable(triple._s) && isVariable(triple._p) &&
                    isVariable(triple._o)) {
           Variable predicateVariable{triple._p.getIri()};
@@ -200,14 +185,14 @@ bool checkUsePatternTrick(ParsedQuery* parsedQuery,
 
       LOG(DEBUG) << "Using the pattern trick to answer the query." << endl;
 
-      *patternTrickTriple = triple;
+      PatternTrickTuple patternTrickTuple {Variable{triple._s.getString()}, patternTrickData.predicateVariable_};
       // Remove the triple from the graph. Note that this invalidates the
       // reference `triple`, so we perform this step at the very end.
       curPattern->_triples.erase(curPattern->_triples.begin() + i);
-      return true;
+      return patternTrickTuple;
     }
   }
   // No suitable triple for the pattern trick was found.
-  return false;
+  return std::nullopt;
 }
 }  // namespace checkUsePatternTrick

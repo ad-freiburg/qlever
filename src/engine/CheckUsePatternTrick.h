@@ -3,9 +3,17 @@
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #pragma once
+#include <optional>
 #include "parser/ParsedQuery.h"
 
 namespace checkUsePatternTrick {
+
+// If the pattern trick can be applied, then this struct is used to communicate
+// the subject and predicate variable for the pattern trick.
+struct PatternTrickTuple {
+  Variable subject_;
+  Variable predicate_;
+};
 /**
  * @brief Determines if the pattern trick (and in turn the
  * CountAvailablePredicates operation) are applicable to the given
@@ -17,8 +25,7 @@ namespace checkUsePatternTrick {
  * satisfies the requirements for the pattern trick is stored.
  * @return True if the pattern trick should be used.
  */
-bool checkUsePatternTrick(ParsedQuery* parsedQuery,
-                          SparqlTriple* patternTrickTriple);
+std::optional<PatternTrickTuple> checkUsePatternTrick(ParsedQuery* parsedQuery);
 
 // Return true if and only if the `variable` is contained and visible (not
 // inside a subquery) anywhere in the `graphPattern`. If the only occurrence of

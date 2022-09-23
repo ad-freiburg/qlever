@@ -474,3 +474,27 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
     t.push_back(std::move(triple));
   }
 }
+
+// ____________________________________________________________________________
+cppcoro::generator<const Alias> ParsedQuery::getAliases() const {
+  if (hasSelectClause()) {
+    for (const auto& alias : selectClause().getAliases()) {
+      co_yield alias;
+    }
+  }
+  // Nothing to yield in the construct case
+}
+
+// ____________________________________________________________________________
+cppcoro::generator<const Variable> ParsedQuery::getExportedVariables() const {
+  if (hasSelectClause()) {
+    for (const auto& variable : selectClause().getSelectedVariables()) {
+      co_yield variable;
+    }
+  } else {
+    for (const auto& variable : constructClause().containedVariables()) {
+      co_yield variable;
+    }
+  }
+  // Nothing to yield in the CONSTRUCT case.
+}
