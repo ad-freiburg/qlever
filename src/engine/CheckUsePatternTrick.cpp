@@ -91,6 +91,8 @@ bool checkUsePatternTrick(ParsedQuery* parsedQuery,
     return false;
   }
 
+  // TODO<joka921> The returnsCounts is only used for the initial checks,
+  // later on it can always be written as `countedVariable.has_value()`
   bool returnsCounts = aliases.size() == 1;
 
   // The variable that is the argument of the COUNT.
@@ -99,8 +101,7 @@ bool checkUsePatternTrick(ParsedQuery* parsedQuery,
       countedVariable;
   if (returnsCounts) {
     // We have already verified above that there is exactly one alias.
-    const Alias& alias = aliases.front();
-    countedVariable = alias._expression.getVariableForCount();
+    countedVariable = aliases.front()._expression.getVariableForCount();
     if (!countedVariable.has_value()) {
       return false;
     }
