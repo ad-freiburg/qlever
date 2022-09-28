@@ -514,14 +514,46 @@ class SparqlAutomaticBaseVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  virtual antlrcpp::Any visitStrangeMultiplicativeSubexprOfAdditive(
-      SparqlAutomaticParser::StrangeMultiplicativeSubexprOfAdditiveContext* ctx)
+  virtual antlrcpp::Any visitMultiplicativeExpressionWithSign(
+      SparqlAutomaticParser::MultiplicativeExpressionWithSignContext* ctx)
+      override {
+    return visitChildren(ctx);
+  }
+
+  virtual antlrcpp::Any visitPlusSubexpression(
+      SparqlAutomaticParser::PlusSubexpressionContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual antlrcpp::Any visitMinusSubexpression(
+      SparqlAutomaticParser::MinusSubexpressionContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual antlrcpp::Any visitMultiplicativeExpressionWithLeadingSignButNoSpace(
+      SparqlAutomaticParser::
+          MultiplicativeExpressionWithLeadingSignButNoSpaceContext* ctx)
       override {
     return visitChildren(ctx);
   }
 
   virtual antlrcpp::Any visitMultiplicativeExpression(
       SparqlAutomaticParser::MultiplicativeExpressionContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual antlrcpp::Any visitMultiplyOrDivideExpression(
+      SparqlAutomaticParser::MultiplyOrDivideExpressionContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual antlrcpp::Any visitMultiplyExpression(
+      SparqlAutomaticParser::MultiplyExpressionContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual antlrcpp::Any visitDivideExpression(
+      SparqlAutomaticParser::DivideExpressionContext* ctx) override {
     return visitChildren(ctx);
   }
 

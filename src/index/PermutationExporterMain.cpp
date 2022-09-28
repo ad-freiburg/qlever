@@ -31,7 +31,7 @@ void dumpToStdout(const Permutation& permutation) {
 ///  (<permutation>  must be one of pso, pos, spo, sop, osp, ops
 int main(int argc, char** argv) {
   // Actual output goes to std::cout,output of LOG(...) to std::cerr
-  ad_utility::setGlobalLogginStream(&std::cerr);
+  ad_utility::setGlobalLoggingStream(&std::cerr);
 
   if (argc != 3) {
     LOG(ERROR) << "Usage: PermutationExporterMain <indexBasename> <permutation "

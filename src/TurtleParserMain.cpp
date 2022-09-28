@@ -133,7 +133,7 @@ void printUsage(char* execName) {
 int main(int argc, char** argv) {
   // we possibly write to stdout to pipe it somewhere else, so redirect all
   // logging output to std::err
-  ad_utility::setGlobalLogginStream(&std::cerr);
+  ad_utility::setGlobalLoggingStream(&std::cerr);
   struct option options[] = {{"help", no_argument, NULL, 'h'},
                              {"file-format", required_argument, NULL, 'F'},
                              {"input-file", required_argument, NULL, 'i'},

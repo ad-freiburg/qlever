@@ -50,19 +50,6 @@ class VectorWithMemoryLimit
   }
 };
 
-/// A strong type for Ids from the knowledge base to distinguish them from plain
-/// integers.
-struct StrongId {
-  Id _value;
-  friend auto operator<=>(const StrongId&, const StrongId&) = default;
-
-  // Make the type hashable for absl, see https://abseil.io/docs/cpp/guides/hash
-  template <typename H>
-  friend H AbslHashValue(H h, const StrongId& id) {
-    return H::combine(std::move(h), id._value);
-  }
-};
-
 /// A simple wrapper around a bool that prevents the strangely-behaving
 /// std::vector<bool> optimization.
 struct Bool {
@@ -102,27 +89,8 @@ struct common_type<sparqlExpression::Bool, T> {
 
 namespace sparqlExpression {
 
-/// A StrongId and its type. The type is needed to get the actual value from the
-/// knowledge base.
-struct StrongIdWithResultType {
-  StrongId _id;
-  ResultTable::ResultType _type;
-  bool operator==(const StrongIdWithResultType&) const = default;
-  size_t size() const { return 1; }
-
-  // Make the type hashable for absl, see https://abseil.io/docs/cpp/guides/hash
-  template <typename H>
-  friend H AbslHashValue(H h, const StrongIdWithResultType& id) {
-    return H::combine(std::move(h), id._id, id._type);
-  }
-};
-
 /// A list of StrongIds that all have the same datatype.
-struct StrongIdsWithResultType {
-  VectorWithMemoryLimit<StrongId> _ids;
-  ResultTable::ResultType _type;
-  size_t size() const { return _ids.size(); }
-};
+using StrongIdsWithResultType = VectorWithMemoryLimit<ValueId>;
 
 /// Typedef for a map from variable names to the corresponding column in the
 /// input of a SparqlExpression.
@@ -191,6 +159,17 @@ struct EvaluationContext {
         _localVocab{localVocab} {}
 };
 
+// ____________________________________________________________________________
+inline size_t getColumnIndexForVariable(const Variable& var,
+                                        const EvaluationContext* context) {
+  const auto& map = context->_variableToColumnAndResultTypeMap;
+  if (!map.contains(var._name)) {
+    throw std::runtime_error(absl::StrCat(
+        "Variable ", var._name, " was not found in input to expression."));
+  }
+  return map.at(var._name).first;
+}
+
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
 /// the row indices in which a boolean expression evaluates to "true". Constant
@@ -198,13 +177,12 @@ struct EvaluationContext {
 namespace detail {
 // For each type T in this tuple, T as well as VectorWithMemoryLimit<T> are
 // possible expression result types.
-using ConstantTypes = std::tuple<double, int64_t, Bool, string>;
+using ConstantTypes = std::tuple<double, int64_t, Bool, string, ValueId>;
 using ConstantTypesAsVector =
     ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
 
 // Each type in this tuple also is a possible expression result type.
-using OtherTypes =
-    std::tuple<ad_utility::SetOfIntervals, StrongIdWithResultType, ::Variable>;
+using OtherTypes = std::tuple<ad_utility::SetOfIntervals, ::Variable>;
 
 using AllTypesAsTuple =
     ad_utility::TupleCat<ConstantTypes, ConstantTypesAsVector, OtherTypes>;
@@ -223,8 +201,7 @@ concept SingleExpressionResult =
 /// True iff T represents a constant.
 template <typename T>
 constexpr static bool isConstantResult =
-    ad_utility::isTypeContainedIn<T, detail::ConstantTypes> ||
-    std::is_same_v<T, StrongIdWithResultType>;
+    ad_utility::isTypeContainedIn<T, detail::ConstantTypes>;
 
 /// True iff T is one of the ConstantTypesAsVector
 template <typename T>
@@ -265,6 +242,9 @@ Id constantExpressionResultToId(T&& result, LocalVocab& localVocab,
         LocalVocabIndex::make(localVocab.size() - 1));
   } else if constexpr (ad_utility::isSimilar<double, T>) {
     return Id::makeFromDouble(result);
+  } else if constexpr (ad_utility::isSimilar<T, Id>) {
+    return result;
+
   } else {
     static_assert(ad_utility::isSimilar<int64_t, T> ||
                   ad_utility::isSimilar<Bool, T>);
@@ -299,8 +279,8 @@ struct SpecializedFunction {
 
   // Check if the function can be applied to arguments of type(s) `Operands`
   template <typename... Operands>
-  static constexpr bool checkIfOperandsAreValid() {
-    return CheckT{}.template operator()<Operands...>();
+  static bool areAllOperandsValid(const Operands&... operands) {
+    return CheckT{}.template operator()<Operands...>(operands...);
   }
 
   // Evaluate the function on the `operands`. Return std::nullopt if the
@@ -308,10 +288,16 @@ struct SpecializedFunction {
   template <typename... Operands>
   std::optional<ExpressionResult> evaluateIfOperandsAreValid(
       Operands&&... operands) {
-    if constexpr (!checkIfOperandsAreValid<Operands...>()) {
+    if (!areAllOperandsValid<Operands...>(operands...)) {
       return std::nullopt;
     } else {
-      return Function{}(std::forward<Operands>(operands)...);
+      if constexpr (requires {
+                      Function{}(std::forward<Operands>(operands)...);
+                    }) {
+        return Function{}(std::forward<Operands>(operands)...);
+      } else {
+        AD_CHECK(false);
+      }
     }
   }
 };
@@ -320,9 +306,9 @@ struct SpecializedFunction {
 /// `SpecializedFunctionsTuple` that can be evaluated on all the `Operands`
 template <typename SpecializedFunctionsTuple, typename... Operands>
 constexpr bool isAnySpecializedFunctionPossible(SpecializedFunctionsTuple&& tup,
-                                                Operands&&...) {
-  auto onPack = [](auto&&... fs) constexpr {
-    return (... || fs.template checkIfOperandsAreValid<Operands...>());
+                                                const Operands&... operands) {
+  auto onPack = [&](auto&&... fs) constexpr {
+    return (... || fs.template areAllOperandsValid(operands...));
   };
 
   return std::apply(onPack, tup);

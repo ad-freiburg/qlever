@@ -157,12 +157,11 @@ void GroupBy::processGroup(
 
   auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                      T&& singleResult) mutable {
-    constexpr static bool isStrongId =
-        std::is_same_v<T, sparqlExpression::StrongIdWithResultType>;
+    constexpr static bool isStrongId = std::is_same_v<T, Id>;
     AD_CHECK(sparqlExpression::isConstantResult<T>);
     if constexpr (isStrongId) {
-      resultEntry = singleResult._id._value;
-      *resultType = singleResult._type;
+      resultEntry = singleResult;
+      *resultType = qlever::ResultType::KB;
     } else if constexpr (sparqlExpression::isConstantResult<T>) {
       *resultType =
           sparqlExpression::detail::expressionResultTypeToQleverResultType<T>();

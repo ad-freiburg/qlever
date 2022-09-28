@@ -63,23 +63,28 @@ auto testGetRangesForId(auto begin, auto end, ValueId id,
     auto ranges = getRangesForId(begin, end, id, comparison);
     auto comparator = getComparisonFunctor<comparison>();
     auto it = begin;
+
+    auto isMatching = [&](ValueId a, ValueId b) {
+      if (comparison == Comparison::NE && !isMatchingDatatype(a)) {
+        return true;
+      } else {
+        return isMatchingDatatype(a) && applyComparator(comparator, a, b);
+      }
+    };
     for (auto [rangeBegin, rangeEnd] : ranges) {
       while (it != rangeBegin) {
-        ASSERT_FALSE(isMatchingDatatype(*it) &&
-                     applyComparator(comparator, *it, id));
+        ASSERT_FALSE(isMatching(*it, id)) << *it << ' ' << id;
         ASSERT_FALSE(compareIds(*it, id, comparison));
         ++it;
       }
       while (it != rangeEnd) {
-        ASSERT_TRUE(isMatchingDatatype(*it) &&
-                    applyComparator(comparator, *it, id));
+        ASSERT_TRUE(isMatching(*it, id)) << *it << ' ' << id;
         ASSERT_TRUE(compareIds(*it, id, comparison));
         ++it;
       }
     }
     while (it != end) {
-      ASSERT_FALSE(isMatchingDatatype(*it) &&
-                   applyComparator(comparator, *it, id));
+      ASSERT_FALSE(isMatching(*it, id));
       ASSERT_FALSE(compareIds(*it, id, comparison));
       ++it;
     }
@@ -137,7 +142,7 @@ TEST(ValueIdComparators, NumericTypes) {
   impl(Datatype::Int, isTypeMatching, applyComparator);
 }
 
-// Test that `getRangesFromId` works correctly for the undefined Id.
+// Test that `getRangesFromId` works correctly for the undefined ID.
 TEST(ValueIdComparators, Undefined) {
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end(), compareByBits);
@@ -152,7 +157,14 @@ TEST(ValueIdComparators, Undefined) {
     ASSERT_EQ(equalRange.size(), 1);
     ASSERT_EQ(equalRange[0], undefinedRange);
   }
-  for (auto comparison : {Comparison::NE, Comparison::GT, Comparison::LT}) {
+  {
+    auto equalRange =
+        getRangesForId(ids.begin(), ids.end(), undefined, Comparison::NE);
+    ASSERT_EQ(equalRange.size(), 1);
+    ASSERT_EQ(equalRange[0].first, undefinedRange.second);
+    ASSERT_EQ(equalRange[0].second, ids.end());
+  }
+  for (auto comparison : {Comparison::GT, Comparison::LT}) {
     auto equalRange =
         getRangesForId(ids.begin(), ids.end(), undefined, comparison);
     ASSERT_TRUE(equalRange.empty());
@@ -165,15 +177,22 @@ auto testGetRangesForEqualIds(auto begin, auto end, ValueId idBegin,
                               ValueId idEnd, auto isMatchingDatatype) {
   // Perform the testing for a single `Comparison`
   auto testImpl = [&]<Comparison comparison>() {
+    if (comparison == Comparison::NE &&
+        idBegin.getDatatype() == Datatype::VocabIndex) {
+      EXPECT_TRUE(true);
+    }
     auto ranges = getRangesForEqualIds(begin, end, idBegin, idEnd, comparison);
     auto it = begin;
     for (auto [rangeBegin, rangeEnd] : ranges) {
       while (it != rangeBegin) {
-        ASSERT_FALSE(compareWithEqualIds(*it, idBegin, idEnd, comparison));
+        ASSERT_FALSE(compareWithEqualIds(*it, idBegin, idEnd, comparison))
+            << *it << " " << idBegin << ' ' << idEnd << ' '
+            << static_cast<int>(comparison);
         ++it;
       }
       while (it != rangeEnd) {
-        ASSERT_TRUE(isMatchingDatatype(*it));
+        // The "not equal" relation also yields true for different datatypes.
+        ASSERT_TRUE(isMatchingDatatype(*it) || comparison == Comparison::NE);
         ASSERT_TRUE(compareWithEqualIds(*it, idBegin, idEnd, comparison));
         ++it;
       }

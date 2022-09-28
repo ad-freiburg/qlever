@@ -67,7 +67,7 @@ struct LogstreamChoice {
  *         to the stream that the argument points to.
  *         Typically called in the main function of an executable.
  */
-inline void setGlobalLogginStream(std::ostream* streamPtr) {
+inline void setGlobalLoggingStream(std::ostream* streamPtr) {
   LogstreamChoice::get().setStream(streamPtr);
 }
 

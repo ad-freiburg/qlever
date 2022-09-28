@@ -284,32 +284,38 @@ class SparqlAutomaticParser : public antlr4::Parser {
     RuleRelationalExpression = 97,
     RuleNumericExpression = 98,
     RuleAdditiveExpression = 99,
-    RuleStrangeMultiplicativeSubexprOfAdditive = 100,
-    RuleMultiplicativeExpression = 101,
-    RuleUnaryExpression = 102,
-    RulePrimaryExpression = 103,
-    RuleBrackettedExpression = 104,
-    RuleBuiltInCall = 105,
-    RuleRegexExpression = 106,
-    RuleSubstringExpression = 107,
-    RuleStrReplaceExpression = 108,
-    RuleExistsFunc = 109,
-    RuleNotExistsFunc = 110,
-    RuleAggregate = 111,
-    RuleIriOrFunction = 112,
-    RuleRdfLiteral = 113,
-    RuleNumericLiteral = 114,
-    RuleNumericLiteralUnsigned = 115,
-    RuleNumericLiteralPositive = 116,
-    RuleNumericLiteralNegative = 117,
-    RuleBooleanLiteral = 118,
-    RuleString = 119,
-    RuleIri = 120,
-    RulePrefixedName = 121,
-    RuleBlankNode = 122,
-    RuleIriref = 123,
-    RulePnameLn = 124,
-    RulePnameNs = 125
+    RuleMultiplicativeExpressionWithSign = 100,
+    RulePlusSubexpression = 101,
+    RuleMinusSubexpression = 102,
+    RuleMultiplicativeExpressionWithLeadingSignButNoSpace = 103,
+    RuleMultiplicativeExpression = 104,
+    RuleMultiplyOrDivideExpression = 105,
+    RuleMultiplyExpression = 106,
+    RuleDivideExpression = 107,
+    RuleUnaryExpression = 108,
+    RulePrimaryExpression = 109,
+    RuleBrackettedExpression = 110,
+    RuleBuiltInCall = 111,
+    RuleRegexExpression = 112,
+    RuleSubstringExpression = 113,
+    RuleStrReplaceExpression = 114,
+    RuleExistsFunc = 115,
+    RuleNotExistsFunc = 116,
+    RuleAggregate = 117,
+    RuleIriOrFunction = 118,
+    RuleRdfLiteral = 119,
+    RuleNumericLiteral = 120,
+    RuleNumericLiteralUnsigned = 121,
+    RuleNumericLiteralPositive = 122,
+    RuleNumericLiteralNegative = 123,
+    RuleBooleanLiteral = 124,
+    RuleString = 125,
+    RuleIri = 126,
+    RulePrefixedName = 127,
+    RuleBlankNode = 128,
+    RuleIriref = 129,
+    RulePnameLn = 130,
+    RulePnameNs = 131
   };
 
   explicit SparqlAutomaticParser(antlr4::TokenStream* input);
@@ -423,8 +429,14 @@ class SparqlAutomaticParser : public antlr4::Parser {
   class RelationalExpressionContext;
   class NumericExpressionContext;
   class AdditiveExpressionContext;
-  class StrangeMultiplicativeSubexprOfAdditiveContext;
+  class MultiplicativeExpressionWithSignContext;
+  class PlusSubexpressionContext;
+  class MinusSubexpressionContext;
+  class MultiplicativeExpressionWithLeadingSignButNoSpaceContext;
   class MultiplicativeExpressionContext;
+  class MultiplyOrDivideExpressionContext;
+  class MultiplyExpressionContext;
+  class DivideExpressionContext;
   class UnaryExpressionContext;
   class PrimaryExpressionContext;
   class BrackettedExpressionContext;
@@ -2168,12 +2180,11 @@ class SparqlAutomaticParser : public antlr4::Parser {
     AdditiveExpressionContext(antlr4::ParserRuleContext* parent,
                               size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    std::vector<MultiplicativeExpressionContext*> multiplicativeExpression();
-    MultiplicativeExpressionContext* multiplicativeExpression(size_t i);
-    std::vector<StrangeMultiplicativeSubexprOfAdditiveContext*>
-    strangeMultiplicativeSubexprOfAdditive();
-    StrangeMultiplicativeSubexprOfAdditiveContext*
-    strangeMultiplicativeSubexprOfAdditive(size_t i);
+    MultiplicativeExpressionContext* multiplicativeExpression();
+    std::vector<MultiplicativeExpressionWithSignContext*>
+    multiplicativeExpressionWithSign();
+    MultiplicativeExpressionWithSignContext* multiplicativeExpressionWithSign(
+        size_t i);
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
@@ -2184,16 +2195,16 @@ class SparqlAutomaticParser : public antlr4::Parser {
 
   AdditiveExpressionContext* additiveExpression();
 
-  class StrangeMultiplicativeSubexprOfAdditiveContext
+  class MultiplicativeExpressionWithSignContext
       : public antlr4::ParserRuleContext {
    public:
-    StrangeMultiplicativeSubexprOfAdditiveContext(
-        antlr4::ParserRuleContext* parent, size_t invokingState);
+    MultiplicativeExpressionWithSignContext(antlr4::ParserRuleContext* parent,
+                                            size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    NumericLiteralPositiveContext* numericLiteralPositive();
-    NumericLiteralNegativeContext* numericLiteralNegative();
-    std::vector<UnaryExpressionContext*> unaryExpression();
-    UnaryExpressionContext* unaryExpression(size_t i);
+    PlusSubexpressionContext* plusSubexpression();
+    MinusSubexpressionContext* minusSubexpression();
+    MultiplicativeExpressionWithLeadingSignButNoSpaceContext*
+    multiplicativeExpressionWithLeadingSignButNoSpace();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
@@ -2202,16 +2213,71 @@ class SparqlAutomaticParser : public antlr4::Parser {
         antlr4::tree::ParseTreeVisitor* visitor) override;
   };
 
-  StrangeMultiplicativeSubexprOfAdditiveContext*
-  strangeMultiplicativeSubexprOfAdditive();
+  MultiplicativeExpressionWithSignContext* multiplicativeExpressionWithSign();
+
+  class PlusSubexpressionContext : public antlr4::ParserRuleContext {
+   public:
+    PlusSubexpressionContext(antlr4::ParserRuleContext* parent,
+                             size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    MultiplicativeExpressionContext* multiplicativeExpression();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual antlrcpp::Any accept(
+        antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  PlusSubexpressionContext* plusSubexpression();
+
+  class MinusSubexpressionContext : public antlr4::ParserRuleContext {
+   public:
+    MinusSubexpressionContext(antlr4::ParserRuleContext* parent,
+                              size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    MultiplicativeExpressionContext* multiplicativeExpression();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual antlrcpp::Any accept(
+        antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  MinusSubexpressionContext* minusSubexpression();
+
+  class MultiplicativeExpressionWithLeadingSignButNoSpaceContext
+      : public antlr4::ParserRuleContext {
+   public:
+    MultiplicativeExpressionWithLeadingSignButNoSpaceContext(
+        antlr4::ParserRuleContext* parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    NumericLiteralPositiveContext* numericLiteralPositive();
+    NumericLiteralNegativeContext* numericLiteralNegative();
+    std::vector<MultiplyOrDivideExpressionContext*>
+    multiplyOrDivideExpression();
+    MultiplyOrDivideExpressionContext* multiplyOrDivideExpression(size_t i);
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual antlrcpp::Any accept(
+        antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  MultiplicativeExpressionWithLeadingSignButNoSpaceContext*
+  multiplicativeExpressionWithLeadingSignButNoSpace();
 
   class MultiplicativeExpressionContext : public antlr4::ParserRuleContext {
    public:
     MultiplicativeExpressionContext(antlr4::ParserRuleContext* parent,
                                     size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    std::vector<UnaryExpressionContext*> unaryExpression();
-    UnaryExpressionContext* unaryExpression(size_t i);
+    UnaryExpressionContext* unaryExpression();
+    std::vector<MultiplyOrDivideExpressionContext*>
+    multiplyOrDivideExpression();
+    MultiplyOrDivideExpressionContext* multiplyOrDivideExpression(size_t i);
 
     virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
@@ -2221,6 +2287,55 @@ class SparqlAutomaticParser : public antlr4::Parser {
   };
 
   MultiplicativeExpressionContext* multiplicativeExpression();
+
+  class MultiplyOrDivideExpressionContext : public antlr4::ParserRuleContext {
+   public:
+    MultiplyOrDivideExpressionContext(antlr4::ParserRuleContext* parent,
+                                      size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    MultiplyExpressionContext* multiplyExpression();
+    DivideExpressionContext* divideExpression();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual antlrcpp::Any accept(
+        antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  MultiplyOrDivideExpressionContext* multiplyOrDivideExpression();
+
+  class MultiplyExpressionContext : public antlr4::ParserRuleContext {
+   public:
+    MultiplyExpressionContext(antlr4::ParserRuleContext* parent,
+                              size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    UnaryExpressionContext* unaryExpression();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual antlrcpp::Any accept(
+        antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  MultiplyExpressionContext* multiplyExpression();
+
+  class DivideExpressionContext : public antlr4::ParserRuleContext {
+   public:
+    DivideExpressionContext(antlr4::ParserRuleContext* parent,
+                            size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    UnaryExpressionContext* unaryExpression();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener* listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener* listener) override;
+
+    virtual antlrcpp::Any accept(
+        antlr4::tree::ParseTreeVisitor* visitor) override;
+  };
+
+  DivideExpressionContext* divideExpression();
 
   class UnaryExpressionContext : public antlr4::ParserRuleContext {
    public:
