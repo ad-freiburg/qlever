@@ -486,7 +486,8 @@ const std::vector<Alias>& ParsedQuery::getAliases() const {
 }
 
 // ____________________________________________________________________________
-cppcoro::generator<const Variable> ParsedQuery::getExportedVariables() const {
+cppcoro::generator<const Variable>
+ParsedQuery::getConstructedOrSelectedVariables() const {
   if (hasSelectClause()) {
     for (const auto& variable : selectClause().getSelectedVariables()) {
       co_yield variable;

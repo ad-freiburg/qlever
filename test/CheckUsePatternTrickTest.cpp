@@ -18,9 +18,9 @@ ParsedQuery parseWhereClause(const std::string& whereClause) {
   return SparqlParser::parseQuery(query);
 }
 
-// Test that `whereClause`, when parsed as the WHERE clause as a SPARQL query,
+// Test that `whereClause`, when parsed as the WHERE clause of a SPARQL query,
 // contains the `variable`. If `shouldBeContained` is false, then the variable
-// must NOT be contained in that where clause.
+// must NOT be contained in that WHERE clause.
 auto expectContained = [](const std::string& whereClause,
                           const std::string& variable,
                           bool shouldBeContained = true,
@@ -45,8 +45,9 @@ auto expectNotContained = [](const std::string& whereClause,
   expectContained(whereClause, variable, false);
 };
 
+// Return a reference to the first triple of the `parsedQuery`
 // Assume that the WHERE clause of the `parsedQuery` starts with a triple (else
-// throw an exception). Return a reference to this triple.
+// throw an exception).
 const SparqlTriple& getFirstTriple(const ParsedQuery& parsedQuery) {
   const auto& children = parsedQuery._rootGraphPattern._graphPatterns;
   AD_CHECK_GE(children.size(), 1);
@@ -56,8 +57,8 @@ const SparqlTriple& getFirstTriple(const ParsedQuery& parsedQuery) {
   return firstChild._triples[0];
 }
 
-// Test that `whereClause`, when parsed as the WHERE clause as a SPARQL query,
-// contains the variables `?x`, `?y`, and `?z`, but not the variable `?not`
+// Test that `whereClause`, when parsed as the WHERE clause of a SPARQL query,
+// contains the variables `?x`, `?y`, and `?z`, but not the variable `?not`.
 auto expectXYZContained(const std::string& whereClause,
                         source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l, "expectContained");
@@ -86,7 +87,7 @@ TEST(CheckUsePatternTrick, isVariableContainedInGraphPatternIgnoredTriple) {
   auto pq = parseWhereClause("?x ?not ?z. ?x ?y ?z");
   // Get a pointer to the first triple.
   const auto* ignoredTriple = &getFirstTriple(pq);
-  // The variable `?not` is containedd in the WHERE clause.
+  // The variable `?not` is contained in the WHERE clause.
   ASSERT_TRUE(isVariableContainedInGraphPattern(Variable{"?not"},
                                                 pq._rootGraphPattern, nullptr));
   // The variable `?not` is contained only in the second triple, which is
@@ -139,14 +140,15 @@ TEST(CheckUsePatternTrick, isTripleSuitable) {
   auto expectNot = expectFirstTripleNotSuitableForPatternTrick;
   expect("SELECT ?p WHERE {?s ql:has-predicate ?p} GROUP BY ?p", "?s", "?p");
   expect("SELECT ?p WHERE {?s ?p ?o} GROUP BY ?p", "?s", "?p");
-  expect("SELECT ?p WHERE {?s ?p ?o . ?s <is-a> ?z} GROUP BY ?p", "?s", "?p");
+  expect("SELECT ?p WHERE {?s ql:has-predicate ?p . ?s <is-a> ?z} GROUP BY ?p",
+         "?s", "?p");
   expect("SELECT ?p WHERE {?s ?p ?o . ?s <is-a> ?z} GROUP BY ?p", "?s", "?p");
 
   // Not the correct form of the triple
   expectNot("SELECT ?p WHERE {?p <is-a> ?o} GROUP BY ?p");
   expectNot("SELECT ?p WHERE {?s <is-a> ?p} GROUP BY ?p");
 
-  // The variables in the pattern trick triple must be distinct.
+  // The variables in the pattern trick triple must be all different.
   expectNot("SELECT ?p WHERE {?p ql:has-predicate ?p} GROUP BY ?p");
   expectNot("SELECT ?p WHERE {?s ?p ?p} GROUP BY ?p");
   expectNot("SELECT ?p WHERE {?s ?p ?s} GROUP BY ?p");
@@ -158,32 +160,33 @@ TEST(CheckUsePatternTrick, isTripleSuitable) {
   expectNot(
       "SELECT ?p WHERE {?s ql:has-predicate ?p . ?p <is-a> ?z} GROUP BY ?p");
 
-  // Wrong groupBy Variable
+  // Wrong GROUP BY variable.
   expectNot("SELECT ?s WHERE {?s ql:has-predicate ?p} GROUP BY ?s");
   expectNot("SELECT ?s WHERE {?s ?p ?o} GROUP BY ?s");
   expectNot("SELECT ?o WHERE {?s ?p ?o} GROUP BY ?o");
 
   // Check for the cases with explicit COUNT variables.
-  sparqlExpression::SparqlExpressionPimpl::VariableAndDistinctness
-      variableAndDistinctness{Variable{"?s"}, true};
+  using VarAndDistinct =
+      sparqlExpression::SparqlExpressionPimpl::VariableAndDistinctness;
+  Variable s = Variable{"?s"};
   expect("SELECT ?p WHERE {?s ql:has-predicate ?p} GROUP BY ?p", "?s", "?p",
-         variableAndDistinctness);
+         VarAndDistinct{s, true});
   expect("SELECT ?p WHERE {?s ?p ?o} GROUP BY ?p", "?s", "?p",
-         variableAndDistinctness);
+         VarAndDistinct{s, true});
   // Mismatch in counted variable: `?x` vs `?s`.
-  expectNot("SELECT ?p WHERE {?x ?p ?o} GROUP BY ?p", variableAndDistinctness);
+  expectNot("SELECT ?p WHERE {?x ?p ?o} GROUP BY ?p", VarAndDistinct{s, true});
 
   // Currently the counted variable always has to be DISTINCT.
-  variableAndDistinctness.isDistinct_ = false;
-  expectNot("SELECT ?p WHERE {?s ?p ?o} GROUP BY ?p", variableAndDistinctness);
+  expectNot("SELECT ?p WHERE {?s ?p ?o} GROUP BY ?p", VarAndDistinct{s, false});
   // TODO<joka921> Add a test here as soon as we allow the non-distinct COUNT of
   // the `ql:has-predicate`.
   expectNot("SELECT ?p WHERE {?s ql:has-predicate ?p} GROUP BY ?p",
-            variableAndDistinctness);
+            VarAndDistinct{s, false});
 }
 
 // Expect that the pattern trick can be applied to the given SPARQL query, and
-// that the `subjectVariable` and `objectVariable` of the pattern trick match.
+// that the `subjectVariable` and `objectVariable` of the pattern trick are as
+// expected.
 auto expectQuerySuitableForPatternTrick =
     [](const std::string& query, const std::string& subjectVariable,
        const std::string& predicateVariable, bool shouldBeSuitable = true,
@@ -235,7 +238,7 @@ TEST(CheckUsePatternTrick, checkUsePatternTrick) {
   // TODO<joka921> Add tests for the not distinct ql:has-predicate case as soon
   // as we support that.
 
-  // GROUP BY, but no suitable triple
+  // GROUP BY, but no suitable triple.
   expectNot("SELECT ?p WHERE {?x <is-a> ?p } GROUP BY ?p");
 
   // More than one alias.
@@ -243,10 +246,10 @@ TEST(CheckUsePatternTrick, checkUsePatternTrick) {
       "SELECT (COUNT(DISTINCT ?s) as ?cnt) (MAX(?s) as ?max) WHERE {?s "
       "ql:has-predicate ?p} GROUP BY ?p");
 
-  // More than one GroupBy variable
+  // More than one GROUP BY variable.
   expectNot("SELECT ?p WHERE {?s ql:has-predicate ?p} GROUP BY ?p ?s");
 
-  // Wrong alias (not a count of a single variable)
+  // Wrong alias (not a COUNT of a single variable).
   expectNot(
       "SELECT (MAX(?s) as ?max) WHERE {?s ql:has-predicate ?p} GROUP BY ?p");
   expectNot(

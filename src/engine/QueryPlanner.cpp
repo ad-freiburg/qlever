@@ -75,26 +75,27 @@ QueryPlanner::QueryPlanner(QueryExecutionContext* qec)
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
     ParsedQuery& pq) {
   // Look for ql:has-predicate to determine if the pattern trick should be used.
-  // If the pattern trick is used the ql:has-predicate triple will be removed
-  // from the list of where clause triples. Otherwise, the ql:has-relation
-  // triple will be handled using a HasRelationScan.
+  // If the pattern trick is used, the ql:has-predicate triple will be removed
+  // from the list of where clause triples. Otherwise, the ql:has-predicate
+  // triple will be handled using a `HasPredicateScan`.
   using checkUsePatternTrick::PatternTrickTuple;
-  const auto patternTrickTuple = [&]() -> std::optional<PatternTrickTuple> {
-    if (!_enablePatternTrick) {
-      return std::nullopt;
-    }
-    return checkUsePatternTrick::checkUsePatternTrick(&pq);
-  }();
+  const auto patternTrickTuple =
+      _enablePatternTrick ? checkUsePatternTrick::checkUsePatternTrick(&pq)
+                          : std::nullopt;
 
-  bool doGrouping =
-      !pq._groupByVariables.empty() || patternTrickTuple.has_value();
-  // If there is no explicit GROUP BY statement, but an aggregate alias is
-  // used somewhere do grouping anyway.
-  // TODO<joka921> Is this correct for queries that have a global aggregate AND
-  // non-aggregating statements?
-  doGrouping |= std::ranges::any_of(pq.getAliases(), [](const Alias& alias) {
-    return alias._expression.isAggregate({});
-  });
+  // Do GROUP BY if one of the following applies:
+  // 1. There is an explicit group by
+  // 2. The pattern trick is applied
+  // 3. There is an alias with an aggregate expression
+  // TODO<joka921> The behavior when aggregating and non-aggregating aliases are
+  // mixed is currently wrong.
+  // TODO<joka921> The behavior, when only non-aggregating aliases are used
+  // (without GROUP BY) is also wrong.
+  bool doGroupBy = !pq._groupByVariables.empty() ||
+                   patternTrickTuple.has_value() ||
+                   std::ranges::any_of(pq.getAliases(), [](const Alias& alias) {
+                     return alias._expression.isAggregate({});
+                   });
 
   // Optimize the graph pattern tree
   std::vector<std::vector<SubtreePlan>> plans;
@@ -102,10 +103,10 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
 
   // Add the query level modifications
 
-  // GROUP BY
+  // GROUP BY (Either the pattern trick or a "normal" GROUP BY)
   if (patternTrickTuple.has_value()) {
     getPatternTrickRow(pq.selectClause(), plans, patternTrickTuple.value());
-  } else if (doGrouping) {
+  } else if (doGroupBy) {
     plans.emplace_back(getGroupByRow(pq, plans));
   }
 

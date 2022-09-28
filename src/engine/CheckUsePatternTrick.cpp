@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#include "CheckUsePatternTrick.h"
+#include "./CheckUsePatternTrick.h"
 
 #include <algorithm>
 
@@ -109,13 +109,14 @@ std::optional<PatternTrickTuple> checkUsePatternTrick(
     // Try to find a triple that either has `ql:has-predicate` as the predicate,
     // or consists of three variables, and fulfills all the other preconditions
     // for the pattern trick.
-    for (size_t i = 0; i < curPattern->_triples.size(); i++) {
-      auto patternTrickTuple = isTripleSuitableForPatternTrick(
-          curPattern->_triples[i], parsedQuery, countedVariable);
+    auto& triples = curPattern->_triples;
+    for (auto it = triples.begin(); it != triples.end(); ++it) {
+      auto patternTrickTuple =
+          isTripleSuitableForPatternTrick(*it, parsedQuery, countedVariable);
       if (patternTrickTuple.has_value()) {
         // Remove the triple from the graph. Note that this invalidates the
         // reference `triple`, so we perform this step at the very end.
-        curPattern->_triples.erase(curPattern->_triples.begin() + i);
+        triples.erase(it);
         return patternTrickTuple;
       }
     }
@@ -124,6 +125,7 @@ std::optional<PatternTrickTuple> checkUsePatternTrick(
   return std::nullopt;
 }
 
+// _____________________________________________________________________________
 std::optional<PatternTrickTuple> isTripleSuitableForPatternTrick(
     const SparqlTriple& triple, const ParsedQuery* parsedQuery,
     const std::optional<
