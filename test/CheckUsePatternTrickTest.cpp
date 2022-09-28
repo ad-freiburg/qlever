@@ -45,9 +45,8 @@ auto expectNotContained = [](const std::string& whereClause,
   expectContained(whereClause, variable, false);
 };
 
-// Return a reference to the first triple of the `parsedQuery`
-// Assume that the WHERE clause of the `parsedQuery` starts with a triple (else
-// throw an exception).
+// Return a reference to the first triple of the `parsedQuery`. If the WHERE
+// clause doesn't start with a triple, throw an exception.
 const SparqlTriple& getFirstTriple(const ParsedQuery& parsedQuery) {
   const auto& children = parsedQuery._rootGraphPattern._graphPatterns;
   AD_CHECK_GE(children.size(), 1);

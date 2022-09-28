@@ -87,8 +87,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   // 1. There is an explicit group by
   // 2. The pattern trick is applied
   // 3. There is an alias with an aggregate expression
-  // TODO<joka921> The behavior when aggregating and non-aggregating aliases are
-  // mixed is currently wrong.
+  // TODO<joka921> The behavior, when aggregating and non-aggregating aliases
+  // are mixed is currently wrong.
   // TODO<joka921> The behavior, when only non-aggregating aliases are used
   // (without GROUP BY) is also wrong.
   bool doGroupBy = !pq._groupByVariables.empty() ||
