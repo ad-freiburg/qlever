@@ -121,6 +121,8 @@ auto expectFirstTripleSuitableForPatternTrick =
       }
     };
 
+// Similar to the previous function, but expect that the first triple is NOT
+// suitable for the pattern trick.
 auto expectFirstTripleNotSuitableForPatternTrick =
     [](const std::string& query,
        const std::optional<
@@ -182,6 +184,8 @@ TEST(CheckUsePatternTrick, isTripleSuitable) {
             variableAndDistinctness);
 }
 
+// Expect that the pattern trick can be applied to the given SPARQL query, and
+// that the `subjectVariable` and `objectVariable` of the pattern trick match.
 auto expectQuerySuitableForPatternTrick =
     [](const std::string& query, const std::string& subjectVariable,
        const std::string& predicateVariable, bool shouldBeSuitable = true,
@@ -199,6 +203,7 @@ auto expectQuerySuitableForPatternTrick =
       }
     };
 
+// Expect that the pattern trick cannot be applied to the given `query`.
 auto expectQueryNotSuitableForPatternTrick =
     [](const std::string& query,
        source_location l = source_location::current()) {

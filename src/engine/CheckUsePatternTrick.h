@@ -28,7 +28,10 @@ struct PatternTrickTuple {
  */
 std::optional<PatternTrickTuple> checkUsePatternTrick(ParsedQuery* parsedQuery);
 
-// TODO<joka921> Comment.
+// Internal helper function used by `checkUsePatternTrick`. Check whether the
+// given `triple` is suitable as a pattern trick triple in the given
+// `parsedQuery`. If the `countedVariable` is not `nullopt`, it also has to
+// match the given triple and parsedQuery.
 std::optional<PatternTrickTuple> isTripleSuitableForPatternTrick(
     const SparqlTriple& triple, const ParsedQuery* parsedQuery,
     const std::optional<
