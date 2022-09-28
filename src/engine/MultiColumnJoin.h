@@ -21,8 +21,6 @@ class MultiColumnJoin : public Operation {
   bool _multiplicitiesComputed;
 
  public:
-  // TODO<joka921> Make ColumnIndex a strong type across QLever
-  using ColumnIndex = uint64_t;
   MultiColumnJoin(QueryExecutionContext* qec,
                   std::shared_ptr<QueryExecutionTree> t1,
                   std::shared_ptr<QueryExecutionTree> t2,

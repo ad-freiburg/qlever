@@ -25,8 +25,6 @@ class OptionalJoin : public Operation {
   bool _multiplicitiesComputed;
 
  public:
-  // TODO<joka921> Make the column index a strong type
-  using ColumnIndex = uint64_t;
   OptionalJoin(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> t1, bool t1Optional,
                std::shared_ptr<QueryExecutionTree> t2, bool t2Optional,
