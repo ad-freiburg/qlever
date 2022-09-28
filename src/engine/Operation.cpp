@@ -277,7 +277,7 @@ const Operation::VariableToColumnMap& Operation::getVariableColumns() const {
   // on inheritance, we can get rid of the locking here, as we can enforce,
   // that `computeVariableToColumnMap` is always called in the constructor of
   // each `Operation`.
-  std::lock_guard l{variableTocolumnMapMutex};
+  std::lock_guard l{variableToColumnMapMutex_};
   if (!variableToColumnMap_.has_value()) {
     variableToColumnMap_ = computeVariableToColumnMap();
   }

@@ -12,15 +12,13 @@
 using std::list;
 
 class Sort : public Operation {
- public:
+ private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   size_t _sortCol;
 
+ public:
   Sort(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
        size_t sortCol);
-
- private:
-  virtual string asStringImpl(size_t indent = 0) const override;
 
  public:
   virtual string getDescriptor() const override;
@@ -67,4 +65,6 @@ class Sort : public Operation {
       const override {
     return _subtree->getVariableColumns();
   }
+
+  virtual string asStringImpl(size_t indent = 0) const override;
 };

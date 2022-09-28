@@ -69,8 +69,7 @@ class OrderBy : public Operation {
  private:
   virtual void computeResult(ResultTable* result) override;
 
-  virtual ad_utility::HashMap<string, size_t> computeVariableToColumnMap()
-      const override {
+  virtual VariableToColumnMap computeVariableToColumnMap() const override {
     return _subtree->getVariableColumns();
   }
 };

@@ -378,15 +378,15 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         // not visible.
         auto removeNotSelectedVariables = [&](SubtreePlan& plan) {
           Operation::VariableToColumnMap visibleVariables;
-          auto& inputVariables =
+          auto& variablesFromSubquery =
               plan._qet->getRootOperation()->getVariableColumnsNotConst();
           for (const std::string& variable :
                arg.get().selectClause().getSelectedVariablesAsStrings()) {
-            if (inputVariables.contains(variable)) {
-              visibleVariables[variable] = inputVariables.at(variable);
+            if (variablesFromSubquery.contains(variable)) {
+              visibleVariables[variable] = variablesFromSubquery.at(variable);
             }
           }
-          inputVariables = std::move(visibleVariables);
+          variablesFromSubquery = std::move(visibleVariables);
         };
         std::ranges::for_each(candidatesForSubquery,
                               removeNotSelectedVariables);

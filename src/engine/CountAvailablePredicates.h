@@ -123,8 +123,7 @@ class CountAvailablePredicates : public Operation {
       const CompactVectorOfStrings<Id>& patterns);
 
  private:
-  [[nodiscard]] ad_utility::HashMap<string, size_t> computeVariableToColumnMap()
-      const override;
+  [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 
   void computeResult(ResultTable* result) override;
 };

@@ -99,7 +99,7 @@ class IndexScan : public Operation {
 
   ScanType getType() const { return _type; }
 
- protected:
+ private:
   virtual void computeResult(ResultTable* result) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
@@ -127,7 +127,6 @@ class IndexScan : public Operation {
 
   size_t computeSizeEstimate();
 
- private:
   virtual string asStringImpl(size_t indent = 0) const override;
 
   virtual VariableToColumnMap computeVariableToColumnMap() const override;

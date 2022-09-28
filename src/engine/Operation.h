@@ -237,8 +237,8 @@ class Operation {
   // The limit from a SPARQL `LIMIT` clause.
   std::optional<uint64_t> _limit;
 
-  // A mutext that can be `copied`. The semantics are, that copying will create
-  // a new method. This is sufficient for applications like in
+  // A mutex that can be "copied". The semantics are, that copying will create
+  // a new mutex. This is sufficient for applications like in
   // `getVariableColumns()` where we just want to make a `const` member function
   // that modifies a `mutable` member threadsafe.
   struct CopyableMutex : std::mutex {
@@ -247,7 +247,7 @@ class Operation {
   };
 
   // Mutex that protects the `variableToColumnMap_` below.
-  mutable CopyableMutex variableTocolumnMapMutex;
+  mutable CopyableMutex variableToColumnMapMutex_;
   // Store the mapping from variables to column indices. `nullopt` means that
   // this map has not yet been computed. This computation is typically performed
   // in the const member function `getVariableColumns`, so we have to make it

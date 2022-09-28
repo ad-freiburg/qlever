@@ -77,7 +77,7 @@ vector<size_t> CountAvailablePredicates::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, size_t>
+Operation::VariableToColumnMap
 CountAvailablePredicates::computeVariableToColumnMap() const {
   ad_utility::HashMap<string, size_t> varCols;
   varCols[_predicateVarName] = 0;

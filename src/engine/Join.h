@@ -100,7 +100,7 @@ class Join : public Operation {
   virtual string asStringImpl(size_t indent = 0) const override;
 
  private:
-  virtual void computeResult(ResultTable* result) override;
+  void computeResult(ResultTable* result) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
