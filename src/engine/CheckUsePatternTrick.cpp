@@ -71,7 +71,6 @@ bool isVariableContainedInGraphPatternOperation(
       // function should not be called anymore.
       AD_FAIL();
     }
-    return false;
   });
 }
 

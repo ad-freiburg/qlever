@@ -235,6 +235,9 @@ TEST(CheckUsePatternTrick, checkUsePatternTrick) {
   // TODO<joka921> Add tests for the not distinct ql:has-predicate case as soon
   // as we support that.
 
+  // GROUP BY, but no suitable triple
+  expectNot("SELECT ?p WHERE {?x <is-a> ?p } GROUP BY ?p");
+
   // More than one alias.
   expectNot(
       "SELECT (COUNT(DISTINCT ?s) as ?cnt) (MAX(?s) as ?max) WHERE {?s "

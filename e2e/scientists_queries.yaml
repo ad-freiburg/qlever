@@ -468,7 +468,7 @@ queries:
   - query : pattern-trick-automatic-having
     type: no-text
     sparql: |
-      SELECT ?predicate (COUNT(DISTINCT(?x) as ?count) WHERE {
+      SELECT ?predicate (COUNT(DISTINCT ?x as ?count) WHERE {
         ?x ql:has-predicate ?predicate .
         FILTER (?predicate = <Gender>)
       }
