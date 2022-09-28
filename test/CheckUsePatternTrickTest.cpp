@@ -142,17 +142,15 @@ TEST(CheckUsePatternTrick, isTripleSuitable) {
   expect("SELECT ?p WHERE {?s ?p ?o . ?s <is-a> ?z} GROUP BY ?p", "?s", "?p");
   expect("SELECT ?p WHERE {?s ?p ?o . ?s <is-a> ?z} GROUP BY ?p", "?s", "?p");
 
+  // Not the correct form of the triple
   expectNot("SELECT ?p WHERE {?p <is-a> ?o} GROUP BY ?p");
   expectNot("SELECT ?p WHERE {?s <is-a> ?p} GROUP BY ?p");
-  // TODO<joka921> The following are NOT valid uses of the pattern trick
-  // (duplicate variables in the pattern trick triple), but these errors are
-  // currently not detected by the function.
-  /*
+
+  // The variables in the pattern trick triple must be distinct.
   expectNot("SELECT ?p WHERE {?p ql:has-predicate ?p} GROUP BY ?p");
   expectNot("SELECT ?p WHERE {?s ?p ?p} GROUP BY ?p");
   expectNot("SELECT ?p WHERE {?s ?p ?s} GROUP BY ?p");
   expectNot("SELECT ?p WHERE {?p ?p ?s} GROUP BY ?p");
-   */
 
   // Predicate and object variable must not appear elsewhere in the query.
   expectNot("SELECT ?p WHERE {?s ?p ?o . ?p <is-a> ?z} GROUP BY ?p");
@@ -230,6 +228,10 @@ TEST(CheckUsePatternTrick, checkUsePatternTrick) {
       "?s", "?p");
   expect("SELECT (COUNT(DISTINCT ?s) as ?cnt) ?p WHERE {?s ?p ?o} GROUP BY ?p",
          "?s", "?p");
+  expect(
+      "SELECT ?p WHERE {OPTIONAL {?s <is-a> ?y} ?s ql:has-predicate ?p} GROUP "
+      "BY ?p",
+      "?s", "?p");
   // TODO<joka921> Add tests for the not distinct ql:has-predicate case as soon
   // as we support that.
 
@@ -247,7 +249,30 @@ TEST(CheckUsePatternTrick, checkUsePatternTrick) {
   expectNot(
       "SELECT (COUNT(DISTINCT ?s + ?p) as ?cnt) WHERE {?s ql:has-predicate ?p} "
       "GROUP BY ?p");
+}
 
-  // TODO<joka921> Add Tests, that the triple is correctly removed from the
-  // query body.
+TEST(CheckUsePatternTrick, tripleIsCorrectlyRemoved) {
+  auto pq = SparqlParser::parseQuery(
+      "SELECT ?p WHERE {?x ql:has-predicate ?p} GROUP BY ?p");
+  auto patternTrickTuple = checkUsePatternTrick::checkUsePatternTrick(&pq);
+  ASSERT_TRUE(patternTrickTuple.has_value());
+  // The pattern trick triple has been removed from the query.
+  const auto& triples = std::get<parsedQuery::BasicGraphPattern>(
+                            pq._rootGraphPattern._graphPatterns.at(0))
+                            ._triples;
+  ASSERT_TRUE(triples.empty());
+
+  pq = SparqlParser::parseQuery(
+      "SELECT ?p WHERE {?x ql:has-predicate ?p . ?x <is-a> ?y } GROUP BY ?p");
+  patternTrickTuple = checkUsePatternTrick::checkUsePatternTrick(&pq);
+  ASSERT_TRUE(patternTrickTuple.has_value());
+  // The pattern trick triple has been removed from the query.,
+  const auto& triples2 = std::get<parsedQuery::BasicGraphPattern>(
+                             pq._rootGraphPattern._graphPatterns.at(0))
+                             ._triples;
+  ASSERT_EQ(triples2.size(), 1u);
+  const auto& triple = triples2[0];
+  ASSERT_EQ(triple._s.getString(), "?x");
+  ASSERT_EQ(triple._p.asString(), "<is-a>");
+  ASSERT_EQ(triple._o.getString(), "?y");
 }
