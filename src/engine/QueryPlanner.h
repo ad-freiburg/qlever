@@ -5,13 +5,13 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #pragma once
-
-#include <engine/Filter.h>
-#include <engine/QueryExecutionTree.h>
-#include <parser/ParsedQuery.h>
-
 #include <set>
 #include <vector>
+
+#include "engine/CheckUsePatternTrick.h"
+#include "engine/Filter.h"
+#include "engine/QueryExecutionTree.h"
+#include "parser/ParsedQuery.h"
 
 using std::vector;
 
@@ -292,7 +292,7 @@ class QueryPlanner {
   vector<SubtreePlan> getPatternTrickRow(
       const parsedQuery::SelectClause& selectClause,
       const vector<vector<SubtreePlan>>& dpTab,
-      const SparqlTriple& patternTrickTriple);
+      const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple);
 
   vector<SubtreePlan> getHavingRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;

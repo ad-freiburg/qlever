@@ -476,13 +476,13 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
 }
 
 // ____________________________________________________________________________
-cppcoro::generator<const Alias> ParsedQuery::getAliases() const {
+const std::vector<Alias>& ParsedQuery::getAliases() const {
   if (hasSelectClause()) {
-    for (const auto& alias : selectClause().getAliases()) {
-      co_yield alias;
-    }
+    return selectClause().getAliases();
+  } else {
+    static const std::vector<Alias> dummyForConstructClause;
+    return dummyForConstructClause;
   }
-  // Nothing to yield in the construct case
 }
 
 // ____________________________________________________________________________

@@ -28,10 +28,10 @@
 #include "parser/data/VarOrTerm.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
+#include "util/Generator.h"
 #include "util/HashMap.h"
 #include "util/OverloadCallOperator.h"
 #include "util/StringUtils.h"
-#include "util/Generator.h"
 
 using std::string;
 using std::vector;
@@ -176,9 +176,11 @@ class ParsedQuery {
 
   [[nodiscard]] string asString() const;
 
-  // If this is a SELECT query, yield all the selected aliases. Yield nothing for a CONSTRUCT query
-  [[nodiscard]] cppcoro::generator<const Alias> getAliases() const;
-  // If this is a SELECT query, yield all the selected variables. If this is a CONSTRUCT query,
-  // yield all the variables the are used in the CONSTRUCT clause. Note that the result may contain duplicates in the CONSTRUCT case.
+  // If this is a SELECT query, return all the selected aliases. Return an empty
+  // vector for construct clauses.
+  [[nodiscard]] const std::vector<Alias>& getAliases() const;
+  // If this is a SELECT query, yield all the selected variables. If this is a
+  // CONSTRUCT query, yield all the variables that are used in the CONSTRUCT
+  // clause. Note that the result may contain duplicates in the CONSTRUCT case.
   [[nodiscard]] cppcoro::generator<const Variable> getExportedVariables() const;
 };

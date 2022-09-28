@@ -76,8 +76,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
     ParsedQuery& pq) {
   // Look for ql:has-predicate to determine if the pattern trick should be used.
   // If the pattern trick is used the ql:has-predicate triple will be removed
-  // from the list of where clause triples. Otherwise, the ql:has-relation triple
-  // will be handled using a HasRelationScan.
+  // from the list of where clause triples. Otherwise, the ql:has-relation
+  // triple will be handled using a HasRelationScan.
   using checkUsePatternTrick::PatternTrickTuple;
   const auto patternTrickTuple = [&]() -> std::optional<PatternTrickTuple> {
     if (!_enablePatternTrick) {
@@ -86,14 +86,15 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
     return checkUsePatternTrick::checkUsePatternTrick(&pq);
   }();
 
-  bool doGrouping = !pq._groupByVariables.empty() || patternTrickTuple.has_value();
-    // If there is no explicit GROUP BY statement, but an aggregate alias is
-    // used somewhere do grouping anyway.
-    // TODO<joka921> Is this correct for queries that have a global aggregate AND non-aggregating statements?
-    doGrouping |= std::ranges::any_of(pq.getAliases(),
-                                      [](const Alias& alias) {
-                                        return alias._expression.isAggregate({});
-                                      });
+  bool doGrouping =
+      !pq._groupByVariables.empty() || patternTrickTuple.has_value();
+  // If there is no explicit GROUP BY statement, but an aggregate alias is
+  // used somewhere do grouping anyway.
+  // TODO<joka921> Is this correct for queries that have a global aggregate AND
+  // non-aggregating statements?
+  doGrouping |= std::ranges::any_of(pq.getAliases(), [](const Alias& alias) {
+    return alias._expression.isAggregate({});
+  });
 
   // Optimize the graph pattern tree
   std::vector<std::vector<SubtreePlan>> plans;
@@ -542,7 +543,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
 vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     const p::SelectClause& selectClause,
     const vector<vector<SubtreePlan>>& dpTab,
-    const SparqlTriple& patternTrickTriple) {
+    const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple) {
   const vector<SubtreePlan>* previous = nullptr;
   auto aliases = selectClause.getAliases();
   if (!dpTab.empty()) {
@@ -550,7 +551,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
   }
   vector<SubtreePlan> added;
 
-  std::string predicateVariable = patternTrickTriple._o.getString();
+  std::string predicateVariable = patternTrickTuple.predicate_.name();
   std::string countVariable =
       aliases.empty() ? generateUniqueVarName() : aliases[0]._target.name();
   if (previous != nullptr && !previous->empty()) {
@@ -559,16 +560,11 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
       // Determine the column containing the subjects for which we are
       // interested in their predicates.
       auto subjectColumn =
-          parent._qet->getVariableColumn(patternTrickTriple._s.getString());
+          parent._qet->getVariableColumn(patternTrickTuple.subject_.name());
       auto patternTrickPlan = makeSubtreePlan<CountAvailablePredicates>(
           _qec, parent._qet, subjectColumn, predicateVariable, countVariable);
       added.push_back(std::move(patternTrickPlan));
     }
-  } else if (!patternTrickTriple._s.isVariable()) {
-    // The subject of the pattern trick is not a variable
-    SubtreePlan patternTrickPlan = makeSubtreePlan<CountAvailablePredicates>(
-        _qec, patternTrickTriple._s, predicateVariable, countVariable);
-    added.push_back(std::move(patternTrickPlan));
   } else {
     // Use the pattern trick without a subtree
     SubtreePlan patternTrickPlan = makeSubtreePlan<CountAvailablePredicates>(
