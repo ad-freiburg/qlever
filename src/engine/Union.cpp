@@ -61,7 +61,8 @@ size_t Union::getResultWidth() const {
 
 vector<size_t> Union::resultSortedOn() const { return {}; }
 
-ad_utility::HashMap<string, size_t> Union::getVariableColumns() const {
+// _____________________________________________________________________________
+Operation::VariableToColumnMap Union::computeVariableToColumnMap() const {
   ad_utility::HashMap<string, size_t> variableColumns(
       _subtrees[0]->getVariableColumns());
 

@@ -17,6 +17,10 @@ using std::pair;
 using std::vector;
 
 class OrderBy : public Operation {
+ private:
+  std::shared_ptr<QueryExecutionTree> _subtree;
+  vector<pair<size_t, bool>> _sortIndices;
+
  public:
   OrderBy(QueryExecutionContext* qec,
           std::shared_ptr<QueryExecutionTree> subtree,
@@ -58,18 +62,15 @@ class OrderBy : public Operation {
 
   virtual size_t getResultWidth() const override;
 
-  virtual ad_utility::HashMap<string, size_t> getVariableColumns()
-      const override {
-    return _subtree->getVariableColumns();
-  }
-
   vector<QueryExecutionTree*> getChildren() override {
     return {_subtree.get()};
   }
 
  private:
-  std::shared_ptr<QueryExecutionTree> _subtree;
-  vector<pair<size_t, bool>> _sortIndices;
-
   virtual void computeResult(ResultTable* result) override;
+
+  virtual ad_utility::HashMap<string, size_t> computeVariableToColumnMap()
+      const override {
+    return _subtree->getVariableColumns();
+  }
 };

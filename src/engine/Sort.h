@@ -13,6 +13,9 @@ using std::list;
 
 class Sort : public Operation {
  public:
+  std::shared_ptr<QueryExecutionTree> _subtree;
+  size_t _sortCol;
+
   Sort(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
        size_t sortCol);
 
@@ -53,18 +56,15 @@ class Sort : public Operation {
 
   [[nodiscard]] size_t getResultWidth() const override;
 
-  [[nodiscard]] ad_utility::HashMap<string, size_t> getVariableColumns()
-      const override {
-    return _subtree->getVariableColumns();
-  }
-
   vector<QueryExecutionTree*> getChildren() override {
     return {_subtree.get()};
   }
 
  private:
-  std::shared_ptr<QueryExecutionTree> _subtree;
-  size_t _sortCol;
-
   virtual void computeResult(ResultTable* result) override;
+
+  [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
+      const override {
+    return _subtree->getVariableColumns();
+  }
 };

@@ -12,6 +12,18 @@
 using std::list;
 
 class OptionalJoin : public Operation {
+ private:
+  std::shared_ptr<QueryExecutionTree> _left;
+  std::shared_ptr<QueryExecutionTree> _right;
+  bool _leftOptional;
+  bool _rightOptional;
+
+  std::vector<std::array<ColumnIndex, 2>> _joinColumns;
+
+  vector<float> _multiplicities;
+  size_t _sizeEstimate;
+  bool _multiplicitiesComputed;
+
  public:
   // TODO<joka921> Make the column index a strong type
   using ColumnIndex = uint64_t;
@@ -29,8 +41,6 @@ class OptionalJoin : public Operation {
   virtual size_t getResultWidth() const override;
 
   virtual vector<size_t> resultSortedOn() const override;
-
-  ad_utility::HashMap<string, size_t> getVariableColumns() const override;
 
   virtual void setTextLimit(size_t limit) override {
     _left->setTextLimit(limit);
@@ -92,16 +102,7 @@ class OptionalJoin : public Operation {
       const std::vector<ColumnIndex>& joinColumnAToB,
       IdTableStatic<OUT_WIDTH>* res);
 
-  std::shared_ptr<QueryExecutionTree> _left;
-  std::shared_ptr<QueryExecutionTree> _right;
-  bool _leftOptional;
-  bool _rightOptional;
-
-  std::vector<std::array<ColumnIndex, 2>> _joinColumns;
-
-  vector<float> _multiplicities;
-  size_t _sizeEstimate;
-  bool _multiplicitiesComputed;
-
   virtual void computeResult(ResultTable* result) override;
+
+  Operation::VariableToColumnMap computeVariableToColumnMap() const override;
 };

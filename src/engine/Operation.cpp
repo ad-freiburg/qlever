@@ -270,3 +270,19 @@ void Operation::createRuntimeInfoFromEstimates() {
         cachedResult->_runtimeInfo.getOperationTime();
   }
 }
+
+// ___________________________________________________________________________
+const Operation::VariableToColumnMap& Operation::getVariableColumns() const {
+  std::lock_guard l{variableTocolumnMapMutex};
+  if (!variableToColumnMap_.has_value()) {
+    variableToColumnMap_ = computeVariableToColumnMap();
+  }
+  return variableToColumnMap_.value();
+}
+
+// ___________________________________________________________________________
+Operation::VariableToColumnMap& Operation::getVariableColumnsNotConst() {
+  // This is a safe const-cast because the actual access is to the non-const
+  // `*this` object.
+  return const_cast<VariableToColumnMap&>(getVariableColumns());
+}

@@ -31,8 +31,8 @@ TextOperationWithFilter::TextOperationWithFilter(
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, size_t>
-TextOperationWithFilter::getVariableColumns() const {
+Operation::VariableToColumnMap
+TextOperationWithFilter::computeVariableToColumnMap() const {
   ad_utility::HashMap<string, size_t> vcmap;
   // Subtract one because the entity that we filtered on
   // is provided by the filter table and still has the same place there.

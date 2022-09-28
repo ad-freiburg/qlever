@@ -28,8 +28,8 @@ TextOperationWithoutFilter::TextOperationWithoutFilter(
       _sizeEstimate(std::numeric_limits<size_t>::max()) {}
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, size_t>
-TextOperationWithoutFilter::getVariableColumns() const {
+Operation::VariableToColumnMap
+TextOperationWithoutFilter::computeVariableToColumnMap() const {
   ad_utility::HashMap<string, size_t> vcmap;
   size_t index = 0;
   vcmap[_cvar] = index++;

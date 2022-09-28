@@ -23,6 +23,11 @@ using std::string;
 using std::vector;
 
 class GroupBy : public Operation {
+ private:
+  std::shared_ptr<QueryExecutionTree> _subtree;
+  vector<string> _groupByVariables;
+  std::vector<Alias> _aliases;
+
  public:
   /**
    * @brief Represents an aggregate alias in the select part of the query.
@@ -45,8 +50,6 @@ class GroupBy : public Operation {
   virtual size_t getResultWidth() const override;
 
   virtual vector<size_t> resultSortedOn() const override;
-
-  ad_utility::HashMap<string, size_t> getVariableColumns() const override;
 
   virtual void setTextLimit(size_t limit) override {
     _subtree->setTextLimit(limit);
@@ -75,10 +78,7 @@ class GroupBy : public Operation {
   }
 
  private:
-  std::shared_ptr<QueryExecutionTree> _subtree;
-  vector<string> _groupByVariables;
-  std::vector<Alias> _aliases;
-  ad_utility::HashMap<string, size_t> _varColMap;
+  VariableToColumnMap computeVariableToColumnMap() const override;
 
   virtual void computeResult(ResultTable* result) override;
 

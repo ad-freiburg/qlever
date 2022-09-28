@@ -22,7 +22,7 @@ add_library(engine
         Server.h Server.cpp
         QueryPlanner.cpp QueryPlanner.h
         QueryPlanningCostFactors.cpp QueryPlanningCostFactors.h
-        TwoColumnJoin.cpp TwoColumnJoin.h
+        TwoColumnJoin.h
         OptionalJoin.cpp OptionalJoin.h
         CountAvailablePredicates.cpp CountAvailablePredicates.h
         GroupBy.cpp GroupBy.h
