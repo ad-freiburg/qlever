@@ -628,7 +628,7 @@ queries:
       SELECT ?a ?h WHERE {
         ?a <is-a> <Scientist> .
         {
-          SELECT ?a WHERE {
+          SELECT ?a ?h WHERE {
             ?a <Height> ?h .
           }
           ORDER BY DESC(?h)
