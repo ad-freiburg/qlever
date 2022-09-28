@@ -54,12 +54,13 @@ bool isVariableContainedInGraphPatternOperation(
             if (&triple == tripleToIgnore) {
               return false;
             }
-            return (
-                triple._s == variable.name() ||
-                // TODO<joka921> The check for the property path is rather
-                // hacky. That class should be refactored.
-                ad_utility::contains(triple._p.asString(), variable.name()) ||
-                triple._o == variable.name());
+            return (triple._s == variable.name() ||
+                    // Complex property paths are not allowed to contain
+                    // variables in SPARQL, so this check is sufficient.
+                    // TODO<joka921> Still make the interface of the
+                    // `PropertyPath` class typesafe.
+                    triple._p.asString() == variable.name() ||
+                    triple._o == variable.name());
           });
     } else if constexpr (std::is_same_v<T, p::Values>) {
       return ad_utility::contains(arg._inlineValues._variables,
@@ -98,8 +99,6 @@ std::optional<PatternTrickTuple> checkUsePatternTrick(
   }
 
   // We currently accept the pattern trick triple anywhere in the query.
-  // TODO<joka921, hannah> Discuss whether it is also ok before an OPTIONAL or
-  // MINUS etc.
   // TODO<joka921> This loop can be made much easier using ranges and view once
   // they are supported by clang.
   for (auto& pattern : parsedQuery->children()) {
@@ -128,8 +127,8 @@ std::optional<PatternTrickTuple> checkUsePatternTrick(
 
 std::optional<PatternTrickTuple> isTripleSuitableForPatternTrick(
     const SparqlTriple& triple, const ParsedQuery* parsedQuery,
-    std::optional<
-        sparqlExpression::SparqlExpressionPimpl::VariableAndDistinctness>
+    const std::optional<
+        sparqlExpression::SparqlExpressionPimpl::VariableAndDistinctness>&
         countedVariable) {
   struct PatternTrickData {
     Variable predicateVariable_;

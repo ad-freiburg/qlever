@@ -31,8 +31,8 @@ std::optional<PatternTrickTuple> checkUsePatternTrick(ParsedQuery* parsedQuery);
 // TODO<joka921> Comment.
 std::optional<PatternTrickTuple> isTripleSuitableForPatternTrick(
     const SparqlTriple& triple, const ParsedQuery* parsedQuery,
-    std::optional<
-        sparqlExpression::SparqlExpressionPimpl::VariableAndDistinctness>
+    const std::optional<
+        sparqlExpression::SparqlExpressionPimpl::VariableAndDistinctness>&
         countedVariable);
 
 // Return true if and only if the `variable` is contained and visible (not
