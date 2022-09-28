@@ -27,26 +27,22 @@ class OrderBy : public Operation {
           vector<pair<size_t, bool>> sortIndices);
 
  protected:
-  virtual string asStringImpl(size_t indent = 0) const override;
+  string asStringImpl(size_t indent = 0) const override;
 
  public:
-  virtual string getDescriptor() const override;
+  string getDescriptor() const override;
 
-  virtual vector<size_t> resultSortedOn() const override;
+  vector<size_t> resultSortedOn() const override;
 
-  virtual void setTextLimit(size_t limit) override {
-    _subtree->setTextLimit(limit);
-  }
+  void setTextLimit(size_t limit) override { _subtree->setTextLimit(limit); }
 
-  virtual size_t getSizeEstimate() override {
-    return _subtree->getSizeEstimate();
-  }
+  size_t getSizeEstimate() override { return _subtree->getSizeEstimate(); }
 
-  virtual float getMultiplicity(size_t col) override {
+  float getMultiplicity(size_t col) override {
     return _subtree->getMultiplicity(col);
   }
 
-  virtual size_t getCostEstimate() override {
+  size_t getCostEstimate() override {
     size_t size = getSizeEstimate();
     size_t logSize = std::max(
         size_t(1),
@@ -56,20 +52,18 @@ class OrderBy : public Operation {
     return nlogn + subcost;
   }
 
-  virtual bool knownEmptyResult() override {
-    return _subtree->knownEmptyResult();
-  }
+  bool knownEmptyResult() override { return _subtree->knownEmptyResult(); }
 
-  virtual size_t getResultWidth() const override;
+  size_t getResultWidth() const override;
 
   vector<QueryExecutionTree*> getChildren() override {
     return {_subtree.get()};
   }
 
  private:
-  virtual void computeResult(ResultTable* result) override;
+  void computeResult(ResultTable* result) override;
 
-  virtual VariableToColumnMap computeVariableToColumnMap() const override {
+  VariableToColumnMap computeVariableToColumnMap() const override {
     return _subtree->getVariableColumns();
   }
 };
