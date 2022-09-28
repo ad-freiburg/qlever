@@ -112,7 +112,8 @@ std::optional<PatternTrickTuple> checkUsePatternTrick(
     // or consists of three variables, and fulfills all the other preconditions
     // for the pattern trick.
     for (size_t i = 0; i < curPattern->_triples.size(); i++) {
-      auto patternTrickTuple = isTripleSuitableForPatternTrick(curPattern->_triples[i], parsedQuery, countedVariable);
+      auto patternTrickTuple = isTripleSuitableForPatternTrick(
+          curPattern->_triples[i], parsedQuery, countedVariable);
       if (patternTrickTuple.has_value()) {
         // Remove the triple from the graph. Note that this invalidates the
         // reference `triple`, so we perform this step at the very end.
