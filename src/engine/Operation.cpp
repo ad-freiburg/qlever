@@ -273,6 +273,10 @@ void Operation::createRuntimeInfoFromEstimates() {
 
 // ___________________________________________________________________________
 const Operation::VariableToColumnMap& Operation::getVariableColumns() const {
+  // TODO<joka921> Once the operation class is based on a variant rather than
+  // on inheritance, we can get rid of the locking here, as we can enforce,
+  // that `computeVariableToColumnMap` is always called in the constructor of
+  // each `Operation`.
   std::lock_guard l{variableTocolumnMapMutex};
   if (!variableToColumnMap_.has_value()) {
     variableToColumnMap_ = computeVariableToColumnMap();
