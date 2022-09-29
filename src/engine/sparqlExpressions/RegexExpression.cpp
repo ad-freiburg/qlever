@@ -4,11 +4,10 @@
 
 #include "./RegexExpression.h"
 
-#include <regex>
-
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "global/ValueIdComparators.h"
+#include "re2/re2.h"
 
 using namespace std::literals;
 
@@ -71,27 +70,50 @@ std::optional<std::string> getPrefixRegex(std::string regex) {
 
 namespace sparqlExpression {
 // ___________________________________________________________________________
-RegexExpression::RegexExpression(SparqlExpression::Ptr child,
-                                 SparqlExpression::Ptr regex)
+RegexExpression::RegexExpression(
+    SparqlExpression::Ptr child, SparqlExpression::Ptr regex,
+    std::optional<SparqlExpression::Ptr> optionalFlags)
     : child_{std::move(child)} {
   if (!dynamic_cast<const VariableExpression*>(child_.get())) {
     throw std::runtime_error(
         "REGEX epxressions are currently supported on variables.");
   }
+  std::string regexString;
   if (auto regexPtr = dynamic_cast<const StringOrIriExpression*>(regex.get())) {
-    regex_ = regexPtr->value();
+    regexString = regexPtr->value();
     // TODO<joka921> Throw an error message if the regex is not quoted.
     // TODO<joka921> Check the paths for the StringExpressions, whether this
     // is really an AD-CHECK.
-    AD_CHECK(regex_.size() >= 2);
-    regex_ = regex_.substr(1, regex_.size() - 2);
+    AD_CHECK(regexString.size() >= 2);
+    regexString = regexString.substr(1, regexString.size() - 2);
   } else {
     throw std::runtime_error(
-        "The second argument to the REGEX function must be a string literal");
+        "The second argument to the REGEX function (the regex) must be a "
+        "string literal");
   }
-  if (auto opt = getPrefixRegex(regex_)) {
-    isPrefixRegex_ = true;
+  if (optionalFlags.has_value()) {
+    if (auto flagsPtr = dynamic_cast<const StringOrIriExpression*>(
+            optionalFlags.value().get())) {
+      auto flags = flagsPtr->value();
+      AD_CHECK(flags.size() >= 2);
+      flags = flags.substr(1, flags.size() - 2);
+      // TODO<joka921> Check for valid set of flags
+      if (!flags.empty()) {
+        regexString = absl::StrCat("(?", flags, ":", regexString);
+      }
+    }
+  }
+
+  regexAsString_ = regexString;
+  if (auto opt = getPrefixRegex(regexString)) {
     regex_ = std::move(opt.value());
+  } else {
+    regex_.emplace<RE2>(regexString);
+    if (std::get<RE2>(regex_).error_code() != RE2::NoError) {
+      throw std::runtime_error{
+          "The regex '" + regexString +
+          "'is not supported by QLever. We use Google's RE2 regex library"};
+    }
   }
 }
 
@@ -99,8 +121,7 @@ RegexExpression::RegexExpression(SparqlExpression::Ptr child,
 string RegexExpression::getCacheKey(
     const sparqlExpression::VariableToColumnMap& varColMap) const {
   return "REGEX expression " + child_->getCacheKey(varColMap) + " with " +
-         regex_;
-  // TODO<joka921> Don't forget to add the separate options here.
+         regexAsString_;
 }
 
 // ___________________________________________________________________________
@@ -114,9 +135,10 @@ ExpressionResult RegexExpression::evaluate(
   auto variablePtr = std::get_if<Variable>(&resultAsVariant);
   AD_CHECK(variablePtr);
 
-  if (isPrefixRegex_) {
+  if (auto prefixRegex = std::get_if<std::string>(&regex_)) {
     // TODO<joka921> Make this a function of the context
-    auto prefixRange = context->_qec.getIndex().getVocab().prefix_range(regex_);
+    auto prefixRange =
+        context->_qec.getIndex().getVocab().prefix_range(*prefixRegex);
     Id lowerId = Id::makeFromVocabIndex(prefixRange.first);
     Id upperId = Id::makeFromVocabIndex(prefixRange.second);
     auto beg = context->_inputTable.begin() + context->_beginIndex;
@@ -149,18 +171,7 @@ ExpressionResult RegexExpression::evaluate(
       return result;
     }
   } else {
-    // TODO<joka921> don't use std::regex...
-    std::regex regex;
-    try {
-      regex.assign(regex_, std::regex_constants::ECMAScript);
-    } catch (const std::regex_error& e) {
-      // Rethrow the regex error with more information. Can't use the
-      // regex_error here as the constructor does not allow setting the
-      // error message.
-      throw std::runtime_error(
-          "The regex '" + regex_ +
-          "'is not an ECMAScript regex: " + std::string(e.what()));
-    }
+    AD_CHECK(std::holds_alternative<RE2>(regex_));
     auto resultSize = context->_endIndex - context->_beginIndex;
     VectorWithMemoryLimit<Bool> result{context->_allocator};
     result.reserve(resultSize);
@@ -169,8 +180,8 @@ ExpressionResult RegexExpression::evaluate(
     for (auto id : detail::makeGenerator(
              *variablePtr, context->_endIndex - context->_beginIndex,
              context)) {
-      result.push_back(
-          std::regex_search(detail::StringValueGetter{}(id, context), regex));
+      result.push_back(RE2::FullMatch(detail::StringValueGetter{}(id, context),
+                                      std::get<RE2>(regex_)));
     }
     return result;
   }

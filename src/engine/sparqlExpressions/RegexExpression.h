@@ -7,18 +7,22 @@
 #include <string>
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "re2/re2.h"
 
 namespace sparqlExpression {
 class RegexExpression : public SparqlExpression {
  private:
   SparqlExpression::Ptr child_;
-  std::string regex_;
-  bool isPrefixRegex_ = false;
+  // If this variant holds a string, this prefix is a prefix regex.
+  std::variant<std::string, RE2> regex_;
+  // The regex as a string, used for the cache key
+  std::string regexAsString_;
 
  public:
   // `child` must be a `VariableExpression` and `regex` must be a
   // `LiteralExpression` that stores a string, else an exception will be thrown.
-  RegexExpression(SparqlExpression::Ptr child, SparqlExpression::Ptr regex);
+  RegexExpression(SparqlExpression::Ptr child, SparqlExpression::Ptr regex,
+                  std::optional<SparqlExpression::Ptr> optionalFlags);
 
   ExpressionResult evaluate(EvaluationContext* context) const override;
 

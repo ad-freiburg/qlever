@@ -92,8 +92,7 @@ inline cppcoro::generator<Bool> resultGenerator(ad_utility::SetOfIntervals set,
 /// Return a generator that yields `numItems` many items for the various
 /// `SingleExpressionResult`
 template <SingleExpressionResult Input>
-auto makeGenerator(Input&& input, [[maybe_unused]] size_t numItems,
-                   EvaluationContext* context) {
+auto makeGenerator(Input&& input, size_t numItems, EvaluationContext* context) {
   if constexpr (ad_utility::isSimilar<::Variable, Input>) {
     // TODO: Also directly write a generator that lazily gets the Ids in chunks.
     StrongIdsWithResultType inputWithVariableResolved{
