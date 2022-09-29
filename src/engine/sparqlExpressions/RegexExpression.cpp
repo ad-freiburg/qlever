@@ -122,6 +122,8 @@ RegexExpression::RegexExpression(
   } else {
     regex_.emplace<RE2>(regexString, RE2::Quiet);
     if (std::get<RE2>(regex_).error_code() != RE2::NoError) {
+      // TODO<joka921> get the detailed error message out of RE2 and pass it
+      // on to the user.
       throw std::runtime_error{
           "The regex " + originalRegexString +
           " is not supported by QLever. We use Google's RE2 regex library"};

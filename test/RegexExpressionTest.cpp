@@ -17,6 +17,13 @@ using ad_utility::source_location;
 RegexExpression makeRegexExpression(
     std::string variable, std::string regex,
     std::optional<std::string> flags = std::nullopt) {
+  // The regex and the flags both have to be enquoted. This is normally ensured
+  // by the SPARQL parser. For easier readability of the tests we add those
+  // quotes here.
+  regex = absl::StrCat("\"", regex, "\"");
+  if (flags.has_value()) {
+    flags.value() = absl::StrCat("\"", flags.value(), "\"");
+  }
   auto variableExpression =
       std::make_unique<VariableExpression>(Variable{std::move(variable)});
   auto regexExpression =
@@ -51,9 +58,6 @@ auto testUnorderedRegexExpressionWithoutFlags =
        const std::vector<Bool>& expectedResult,
        source_location l = source_location::current()) {
       auto trace = generateLocationTrace(l, "testUnorderedWithoutFlags");
-      // Add the quotation marks around the regex. Those are normally added by
-      // the SPARQL parser.
-      regex = absl::StrCat("\"", regex, "\"");
       auto expr = makeRegexExpression(std::move(variable), std::move(regex));
       ASSERT_FALSE(expr.isPrefixExpression());
       testWithExplicitResult(expr, expectedResult);
@@ -71,8 +75,8 @@ TEST(RegexExpression, regexExpressionUnorderedWithoutFlags) {
   // case-sensitive by default.
   test("?vocab", "b", {false, false, false});
 
-  // TODO<joka921> Add tests for "prefix" expressions that are no prefix
-  // expressions because they contain other special characters.
+  // Not a prefix expression because of the "special" regex characters
+  test("?vocab", "^\"a.*", {false, true, false});
 }
 
 auto testUnorderedRegexExpressionWithFlags =
@@ -80,10 +84,6 @@ auto testUnorderedRegexExpressionWithFlags =
        const std::vector<Bool>& expectedResult,
        source_location l = source_location::current()) {
       auto trace = generateLocationTrace(l, "testUnorderedWithFlags");
-      // Add the quotation marks around the regex and flags. Those are normally
-      // added by the SPARQL parser.
-      regex = absl::StrCat("\"", regex, "\"");
-      flags = absl::StrCat("\"", flags, "\"");
       auto expr = makeRegexExpression(std::move(variable), std::move(regex),
                                       std::move(flags));
       ASSERT_FALSE(expr.isPrefixExpression());
@@ -104,9 +104,14 @@ TEST(RegexExpression, regexExpressionUnorderedWithFlags) {
   test("?vocab", "b", "", {false, false, false});
   test("?vocab", "b", "i", {true, false, false});
 
+  // Not a special prefix filter because of the explicit flags.
+  // TODO<joka921>, Discuss with Hannah: The behavior here is inconsistent
+  // because of the primary level prefix filter. Should we introduce a special
+  // syntax for the prefix filter, as it is non-standard?
+
+  test("?vocab", "^\"alp", "i", {false, true, false});
+
   // TODO<joka921>  Add tests for other flags (maybe the non-greedy one?)
-  // TODO<joka921> Add tests for "prefix" expressions that are no prefix
-  // expressions because of the explicit flags.
 }
 
 TEST(RegexExpression, getPrefixRegex) {
@@ -125,9 +130,6 @@ auto testUnorderedPrefixExpression = [](std::string variable, std::string regex,
                                         source_location l =
                                             source_location::current()) {
   auto trace = generateLocationTrace(l, "testUnorderedPrefix");
-  // Add the quotation marks around the regex and flags. Those are normally
-  // added by the SPARQL parser.
-  regex = absl::StrCat("\"", regex, "\"");
   auto expr = makeRegexExpression(std::move(variable), std::move(regex));
   ASSERT_TRUE(expr.isPrefixExpression());
   testWithExplicitResult(expr, expectedResult);
@@ -156,8 +158,6 @@ auto testOrderedPrefixExpression = [](std::string variableAsString,
   auto trace = generateLocationTrace(l, "testOrderedPrefixExpression");
   auto variable = Variable{variableAsString};
   TestContext ctx = TestContext::sortedBy(variable);
-  // Add the required quotation marks around the regex.
-  regex = absl::StrCat("\"", regex, "\"");
   auto expression = makeRegexExpression(variableAsString, regex);
   ASSERT_TRUE(expression.isPrefixExpression());
   auto resultAsVariant = expression.evaluate(&ctx.context);
@@ -178,7 +178,47 @@ TEST(RegexExpression, orderedPrefixExpression) {
   test("?vocab", "^\"al", {{{0, 2}}});
   test("?vocab", "^\"äl", {{{0, 2}}});
   test("?vocab", "^\"c", {});
-  // TODO<joka921> Also add a case where ALL the entries match.
 }
 
-// TODO<joka921> Also add tests for the other columns (numeric regexes etc).
+TEST(RegexExpression, getCacheKey) {
+  const auto exp1 = makeRegexExpression("?first", "alp");
+  auto exp2 = makeRegexExpression("?first", "alp");
+
+  VariableToColumnMap map;
+  map["?first"] = 0;
+  map["?second"] = 1;
+  ASSERT_EQ(exp1.getCacheKey(map), exp2.getCacheKey(map));
+
+  // Different regex, different cache key.
+  auto exp3 = makeRegexExpression("?first", "alk");
+  ASSERT_NE(exp1.getCacheKey(map), exp3.getCacheKey(map));
+
+  // Different variable, different cache key.
+  auto exp4 = makeRegexExpression("?second", "alp");
+  ASSERT_NE(exp1.getCacheKey(map), exp4.getCacheKey(map));
+
+  // Different flags, different cache key.
+  auto exp5 = makeRegexExpression("?first", "alp", "im");
+  ASSERT_NE(exp1.getCacheKey(map), exp5.getCacheKey(map));
+
+  // Different variable name, but the variable is stored in the same column ->
+  // same cache key.
+  auto map2 = map;
+  map2["?otherFirst"] = 0;
+  auto exp6 = makeRegexExpression("?otherFirst", "alp");
+  ASSERT_EQ(exp1.getCacheKey(map), exp6.getCacheKey(map2));
+}
+
+TEST(RegexExpression, getChildren) {
+  auto expression = makeRegexExpression("?a", "someRegex");
+  auto vars = expression.containedVariables();
+  ASSERT_EQ(vars.size(), 1);
+  ASSERT_EQ(*vars[0], Variable{"?a"});
+}
+
+// TODO<joka921> The behavior for numeric regexes is currently inconsistent.
+// Discuss with Hannah, how we want to handle them for now (until we deal with
+// the "STR" function properly.
+
+// TODO<joka921> Add tests for all the ways in which the RegexExpression
+// constructor can fail.
