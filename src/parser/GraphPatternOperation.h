@@ -123,10 +123,11 @@ struct Bind {
 
   // Return all the variables that are used in the BIND expression (the target
   // variable as well as all variables from the expression).
-  std::vector<const Variable*> containedVariables() const {
-    auto r = _expression.containedVariables();
-    r.push_back(&_target);
-    return r;
+  cppcoro::generator<const Variable> containedVariables() const {
+    for (const auto* ptr : _expression.containedVariables()) {
+      co_yield *ptr;
+    }
+    co_yield (_target);
   }
 
   [[nodiscard]] string getDescriptor() const {

@@ -226,7 +226,6 @@ addLinkAndDiscoverTest(TripleObjectTest absl::strings)
 
 addLinkAndDiscoverTest(ValueIdTest absl::flat_hash_set)
 
-
 addLinkAndDiscoverTest(LambdaHelpersTest)
 
 addLinkAndDiscoverTest(ParseExceptionTest parser)
@@ -236,3 +235,5 @@ addLinkAndDiscoverTest(TransparentFunctorsTest)
 addLinkAndDiscoverTest(SelectClauseTest index)
 
 addLinkAndDiscoverTestSerial(RelationalExpressionTest sparqlExpressions index engine)
+
+addLinkAndDiscoverTest(CheckUsePatternTrickTest parser engine)

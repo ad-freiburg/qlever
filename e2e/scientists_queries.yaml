@@ -228,7 +228,7 @@ queries:
   - query : pattern-trick
     type: no-text
     sparql: |
-      SELECT ?r (COUNT(?r) as ?count) WHERE {
+      SELECT ?r (COUNT(DISTINCT ?a) as ?count) WHERE {
         ?a <is-a> <Scientist> .
         ?a ql:has-predicate ?r .
       }
@@ -245,13 +245,9 @@ queries:
   - query : pattern-trick-without-has-predicate
     type: no-text
     sparql: |
-      SELECT ?r (COUNT(?a) as ?count) WHERE {
-        {
-          SELECT DISTINCT ?a ?r WHERE {
-            ?a <is-a> <Scientist> .
-            ?a ?r ?o .
-          }
-        }
+      SELECT ?r (COUNT(DISTINCT ?a) as ?count) WHERE {
+        ?a <is-a> <Scientist> .
+        ?a ?r ?o .
       }
       GROUP BY ?r
       ORDER BY DESC(?count)
@@ -472,7 +468,7 @@ queries:
   - query : pattern-trick-automatic-having
     type: no-text
     sparql: |
-      SELECT ?predicate (COUNT(?predicate) as ?count) WHERE {
+      SELECT ?predicate (COUNT(DISTINCT ?x) as ?count) WHERE {
         ?x ql:has-predicate ?predicate .
         FILTER (?predicate = <Gender>)
       }
@@ -688,7 +684,7 @@ queries:
   - query : count-available-predicates-on-variable-columns
     type: no-text
     sparql: |
-      SELECT ?p (COUNT(?p) as ?count) WHERE {
+      SELECT ?p (COUNT(DISTINCT ?a) as ?count) WHERE {
         ?a ql:has-predicate ?p .
         ?a <Height> ?h1 .
         ?a <Height> ?h2 .
@@ -725,7 +721,7 @@ queries:
   - query : count-available-predicates-mixed-datatypes
     type: no-text
     sparql: |
-      SELECT ?p (COUNT(?p) as ?count) WHERE {
+      SELECT ?p (COUNT(DISTINCT ?a) as ?count) WHERE {
         ?a ql:has-predicate ?p .
         {
           ?a <Height> ?h1 .

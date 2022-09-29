@@ -28,8 +28,6 @@ class CountAvailablePredicates : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   size_t _subjectColumnIndex;
-  // This can be used to aquire the predicates for a single entity
-  std::optional<std::string> _subjectEntityName;
   std::string _predicateVarName;
   std::string _countVarName;
 
@@ -50,15 +48,6 @@ class CountAvailablePredicates : public Operation {
   CountAvailablePredicates(QueryExecutionContext* qec,
                            std::shared_ptr<QueryExecutionTree> subtree,
                            size_t subjectColumnIndex,
-                           std::string predicateVariable,
-                           std::string countVariable);
-
-  /**
-   * @brief Creates a new CountAvailblePredicates operation that returns
-   * predicates and their counts for the entity given by the entityName.
-   */
-  CountAvailablePredicates(QueryExecutionContext* qec,
-                           TripleComponent entityName,
                            std::string predicateVariable,
                            std::string countVariable);
 
@@ -123,7 +112,6 @@ class CountAvailablePredicates : public Operation {
       const CompactVectorOfStrings<Id>& patterns);
 
  private:
-  [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
-
   void computeResult(ResultTable* result) override;
+  [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };

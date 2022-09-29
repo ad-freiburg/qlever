@@ -13,7 +13,6 @@ CountAvailablePredicates::CountAvailablePredicates(
     : Operation(qec),
       _subtree(nullptr),
       _subjectColumnIndex(0),
-      _subjectEntityName(),
       _predicateVarName(std::move(predicateVariable)),
       _countVarName(std::move(countVariable)) {}
 
@@ -26,17 +25,6 @@ CountAvailablePredicates::CountAvailablePredicates(
       _subtree(QueryExecutionTree::createSortedTree(std::move(subtree),
                                                     {subjectColumnIndex})),
       _subjectColumnIndex(subjectColumnIndex),
-      _subjectEntityName(),
-      _predicateVarName(std::move(predicateVariable)),
-      _countVarName(std::move(countVariable)) {}
-
-CountAvailablePredicates::CountAvailablePredicates(
-    QueryExecutionContext* qec, TripleComponent entityName,
-    std::string predicateVariable, std::string countVariable)
-    : Operation(qec),
-      _subtree(nullptr),
-      _subjectColumnIndex(0),
-      _subjectEntityName(entityName.getString()),
       _predicateVarName(std::move(predicateVariable)),
       _countVarName(std::move(countVariable)) {}
 
@@ -46,9 +34,7 @@ string CountAvailablePredicates::asStringImpl(size_t indent) const {
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
-  if (_subjectEntityName) {
-    os << "COUNT_AVAILABLE_PREDICATES for " << _subjectEntityName.value();
-  } else if (_subtree == nullptr) {
+  if (_subtree == nullptr) {
     os << "COUNT_AVAILABLE_PREDICATES for all entities";
   } else {
     os << "COUNT_AVAILABLE_PREDICATES (col " << _subjectColumnIndex << ")\n"
@@ -59,9 +45,7 @@ string CountAvailablePredicates::asStringImpl(size_t indent) const {
 
 // _____________________________________________________________________________
 string CountAvailablePredicates::getDescriptor() const {
-  if (_subjectEntityName) {
-    return "CountAvailablePredicates for a single entity";
-  } else if (_subtree == nullptr) {
+  if (_subtree == nullptr) {
     return "CountAvailablePredicates for a all entities";
   }
   return "CountAvailablePredicates";
@@ -146,21 +130,7 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
   const CompactVectorOfStrings<Id>& patterns =
       _executionContext->getIndex().getPatterns();
 
-  if (_subjectEntityName) {
-    Id entityId;
-    // If the entity exists return the all predicates for that entitity,
-    // otherwise return an empty result.
-    if (getIndex().getId(_subjectEntityName.value(), &entityId)) {
-      IdTable input(1, _executionContext->getAllocator());
-      // TODO<joka921> What does this push back do? Is it wrong? or right? or
-      // will it be overwritten anyway?
-      input.push_back({entityId});
-      int width = input.cols();
-      CALL_FIXED_SIZE_1(width, CountAvailablePredicates::computePatternTrick,
-                        input, &result->_idTable, hasPattern, hasPredicate,
-                        patterns, 0, &runtimeInfo);
-    }
-  } else if (_subtree == nullptr) {
+  if (_subtree == nullptr) {
     // Compute the predicates for all entities
     CountAvailablePredicates::computePatternTrickAllEntities(
         &result->_idTable, hasPattern, hasPredicate, patterns);
