@@ -30,10 +30,6 @@ class NeutralElementOperation : public Operation {
   size_t getSizeEstimate() override { return 1; }
   float getMultiplicity(size_t) override { return 0; };
   bool knownEmptyResult() override { return false; };
-  [[nodiscard]] ad_utility::HashMap<string, size_t> getVariableColumns()
-      const override {
-    return {};
-  };
 
  protected:
   [[nodiscard]] vector<size_t> resultSortedOn() const override { return {}; };
@@ -43,4 +39,9 @@ class NeutralElementOperation : public Operation {
     result->_idTable.setCols(0);
     result->_idTable.resize(1);
   }
+
+  [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
+      const override {
+    return {};
+  };
 };

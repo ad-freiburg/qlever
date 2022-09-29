@@ -141,7 +141,7 @@ vector<size_t> IndexScan::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, size_t> IndexScan::getVariableColumns() const {
+Operation::VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   ad_utility::HashMap<string, size_t> res;
   size_t col = 0;
 

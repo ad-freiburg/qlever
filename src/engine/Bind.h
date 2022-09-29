@@ -16,6 +16,9 @@ class Bind : public Operation {
        parsedQuery::Bind b)
       : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {}
 
+ private:
+  std::shared_ptr<QueryExecutionTree> _subtree;
+  parsedQuery::Bind _bind;
   // For the documentation of the overridden members, see Operation.h
  protected:
   [[nodiscard]] string asStringImpl(size_t indent) const override;
@@ -29,8 +32,6 @@ class Bind : public Operation {
   size_t getSizeEstimate() override;
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
-  [[nodiscard]] ad_utility::HashMap<string, size_t> getVariableColumns()
-      const override;
 
   // Returns the variable to which the expression will be bound
   [[nodiscard]] const string& targetVariable() const {
@@ -41,9 +42,6 @@ class Bind : public Operation {
   [[nodiscard]] vector<size_t> resultSortedOn() const override;
 
  private:
-  std::shared_ptr<QueryExecutionTree> _subtree;
-  parsedQuery::Bind _bind;
-
   void computeResult(ResultTable* result) override;
 
   // Implementation for the binding of arbitrary expressions.
@@ -52,6 +50,8 @@ class Bind : public Operation {
       ResultTable* outputResultTable, ResultTable::ResultType* resultType,
       const ResultTable& inputResultTable,
       sparqlExpression::SparqlExpression* expression) const;
+
+  [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };
 
 #endif  // QLEVER_BIND_H

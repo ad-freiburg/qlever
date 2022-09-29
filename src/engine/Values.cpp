@@ -77,7 +77,7 @@ size_t Values::getResultWidth() const { return _values._variables.size(); }
 
 vector<size_t> Values::resultSortedOn() const { return {}; }
 
-ad_utility::HashMap<string, size_t> Values::getVariableColumns() const {
+Operation::VariableToColumnMap Values::computeVariableToColumnMap() const {
   ad_utility::HashMap<string, size_t> map;
   for (size_t i = 0; i < _values._variables.size(); i++) {
     map[_values._variables[i]] = i;

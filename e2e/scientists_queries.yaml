@@ -228,7 +228,7 @@ queries:
   - query : pattern-trick
     type: no-text
     sparql: |
-      SELECT ?r (COUNT(?r) as ?count) WHERE {
+      SELECT ?r (COUNT(DISTINCT ?a) as ?count) WHERE {
         ?a <is-a> <Scientist> .
         ?a ql:has-predicate ?r .
       }
@@ -245,13 +245,9 @@ queries:
   - query : pattern-trick-without-has-predicate
     type: no-text
     sparql: |
-      SELECT ?r (COUNT(?a) as ?count) WHERE {
-        {
-          SELECT DISTINCT ?a ?r WHERE {
-            ?a <is-a> <Scientist> .
-            ?a ?r ?o .
-          }
-        }
+      SELECT ?r (COUNT(DISTINCT ?a) as ?count) WHERE {
+        ?a <is-a> <Scientist> .
+        ?a ?r ?o .
       }
       GROUP BY ?r
       ORDER BY DESC(?count)
@@ -472,7 +468,7 @@ queries:
   - query : pattern-trick-automatic-having
     type: no-text
     sparql: |
-      SELECT ?predicate (COUNT(?predicate) as ?count) WHERE {
+      SELECT ?predicate (COUNT(DISTINCT ?x) as ?count) WHERE {
         ?x ql:has-predicate ?predicate .
         FILTER (?predicate = <Gender>)
       }
@@ -628,7 +624,7 @@ queries:
       SELECT ?a ?h WHERE {
         ?a <is-a> <Scientist> .
         {
-          SELECT ?a WHERE {
+          SELECT ?a ?h WHERE {
             ?a <Height> ?h .
           }
           ORDER BY DESC(?h)
@@ -688,7 +684,7 @@ queries:
   - query : count-available-predicates-on-variable-columns
     type: no-text
     sparql: |
-      SELECT ?p (COUNT(?p) as ?count) WHERE {
+      SELECT ?p (COUNT(DISTINCT ?a) as ?count) WHERE {
         ?a ql:has-predicate ?p .
         ?a <Height> ?h1 .
         ?a <Height> ?h2 .
@@ -725,7 +721,7 @@ queries:
   - query : count-available-predicates-mixed-datatypes
     type: no-text
     sparql: |
-      SELECT ?p (COUNT(?p) as ?count) WHERE {
+      SELECT ?p (COUNT(DISTINCT ?a) as ?count) WHERE {
         ?a ql:has-predicate ?p .
         {
           ?a <Height> ?h1 .
@@ -1320,3 +1316,21 @@ queries:
       - num_rows : 194
       - selected: [ "?x" ]
       - contains_row: [ "<Albert_Einstein>" ]
+
+
+  # The query checks the bugfix of issue #802. The variable `?cls` from inside the subquery
+  # is not visible outside the subquery because it is not selected. Thus, it is not connected
+  # to the variable of the same name that appears outside the subquery.
+  - query: scoping-of-subqueries
+    type: no-text
+    sparql: |
+      SELECT ?cls (count(?s) as ?cnt) WHERE {
+        {SELECT DISTINCT ?cls WHERE {?s <is-a> ?cls} }
+        ?s <is-a> ?cls .
+      } 
+      GROUP BY ?cls
+    checks:
+      - num_cols: 2
+      - num_rows : 1031
+      - selected: [ "?cls", "?cnt" ]
+      - contains_row: [ "<Academic>", 4909 ]

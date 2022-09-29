@@ -148,7 +148,7 @@ void Join::computeResult(ResultTable* result) {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, size_t> Join::getVariableColumns() const {
+Operation::VariableToColumnMap Join::computeVariableToColumnMap() const {
   ad_utility::HashMap<string, size_t> retVal;
   if (!isFullScanDummy(_left) && !isFullScanDummy(_right)) {
     retVal = _left->getVariableColumns();

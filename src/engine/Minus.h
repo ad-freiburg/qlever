@@ -10,6 +10,13 @@
 #include "./QueryExecutionTree.h"
 
 class Minus : public Operation {
+ private:
+  std::shared_ptr<QueryExecutionTree> _left;
+  std::shared_ptr<QueryExecutionTree> _right;
+
+  vector<float> _multiplicities;
+  std::vector<array<size_t, 2>> _matchedColumns;
+
   enum class RowComparison { EQUAL, LEFT_SMALLER, RIGHT_SMALLER };
 
  public:
@@ -30,8 +37,6 @@ class Minus : public Operation {
   virtual size_t getResultWidth() const override;
 
   virtual vector<size_t> resultSortedOn() const override;
-
-  ad_utility::HashMap<string, size_t> getVariableColumns() const override;
 
   virtual void setTextLimit(size_t limit) override {
     _left->setTextLimit(limit);
@@ -73,9 +78,5 @@ class Minus : public Operation {
 
   virtual void computeResult(ResultTable* result) override;
 
-  std::shared_ptr<QueryExecutionTree> _left;
-  std::shared_ptr<QueryExecutionTree> _right;
-
-  vector<float> _multiplicities;
-  std::vector<array<size_t, 2>> _matchedColumns;
+  VariableToColumnMap computeVariableToColumnMap() const override;
 };

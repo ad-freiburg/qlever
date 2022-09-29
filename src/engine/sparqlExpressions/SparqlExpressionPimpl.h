@@ -46,11 +46,16 @@ class SparqlExpressionPimpl {
     return true;
   }
 
+  struct VariableAndDistinctness {
+    ::Variable variable_;
+    bool isDistinct_;
+  };
+  // TODO<joka921> Comment out of sync.
   // If this expression is a non-distinct count of a single variable,
   // return that variable, else return std::nullopt. This is needed by the
   // pattern trick.
-  [[nodiscard]] std::optional<::Variable>
-  getVariableForNonDistinctCountOrNullopt() const;
+  [[nodiscard]] std::optional<VariableAndDistinctness> getVariableForCount()
+      const;
 
   // If this expression is a single variable, return that variable, else return
   // std::nullopt. Knowing this enables some optimizations because we can

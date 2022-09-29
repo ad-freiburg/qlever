@@ -63,8 +63,8 @@ class DummyOperation : public Operation {
 
   virtual bool knownEmptyResult() override { return false; }
 
-  virtual ad_utility::HashMap<string, size_t> getVariableColumns()
-      const override {
+ private:
+  virtual VariableToColumnMap computeVariableToColumnMap() const override {
     ad_utility::HashMap<string, size_t> m;
     m["?a"] = 0;
     m["?b"] = 1;

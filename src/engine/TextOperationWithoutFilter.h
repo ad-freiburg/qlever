@@ -14,6 +14,16 @@ using std::pair;
 using std::vector;
 
 class TextOperationWithoutFilter : public Operation {
+ private:
+  const string _words;
+  const std::set<string> _variables;
+  const string _cvar;
+
+  size_t _textLimit;
+
+  size_t _sizeEstimate;
+  vector<float> _multiplicities;
+
  public:
   TextOperationWithoutFilter(QueryExecutionContext* qec, const string& words,
                              const std::set<string>& variables,
@@ -60,21 +70,9 @@ class TextOperationWithoutFilter : public Operation {
            _executionContext->getIndex().getSizeEstimate(_words) == 0;
   }
 
-  virtual ad_utility::HashMap<string, size_t> getVariableColumns()
-      const override;
-
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
  private:
-  const string _words;
-  const std::set<string> _variables;
-  const string _cvar;
-
-  size_t _textLimit;
-
-  size_t _sizeEstimate;
-  vector<float> _multiplicities;
-
   void computeMultiplicities();
 
   virtual void computeResult(ResultTable* result) override;
@@ -84,4 +82,6 @@ class TextOperationWithoutFilter : public Operation {
   void computeResultOneVar(ResultTable* result) const;
 
   void computeResultMultVars(ResultTable* result) const;
+
+  virtual VariableToColumnMap computeVariableToColumnMap() const override;
 };

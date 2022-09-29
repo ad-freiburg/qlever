@@ -27,6 +27,7 @@ class QueryExecutionTree;
 
 class Operation {
  public:
+  using VariableToColumnMap = ad_utility::HashMap<std::string, size_t>;
   // Default Constructor.
   Operation() : _executionContext(nullptr), _hasComputedSortColumns(false) {}
 
@@ -97,7 +98,9 @@ class Operation {
   virtual size_t getSizeEstimate() = 0;
   virtual float getMultiplicity(size_t col) = 0;
   virtual bool knownEmptyResult() = 0;
-  virtual ad_utility::HashMap<string, size_t> getVariableColumns() const = 0;
+
+  virtual const VariableToColumnMap& getVariableColumns() const final;
+  virtual VariableToColumnMap& getVariableColumnsNotConst() final;
 
   RuntimeInformation& getRuntimeInfo() { return _runtimeInfo; }
 
@@ -210,6 +213,10 @@ class Operation {
   // failed.
   void updateRuntimeInformationOnFailure(size_t timeInMilliseconds);
 
+  // Compute the variable to column index mapping. Is used internally by
+  // `getVariableColumns`.
+  virtual VariableToColumnMap computeVariableToColumnMap() const = 0;
+
   // Recursively call a function on all children.
   template <typename F>
   void forAllDescendants(F f);
@@ -223,10 +230,27 @@ class Operation {
 
   bool _hasComputedSortColumns;
 
-  /// Collect all the warnings that were created during the creation or
-  /// execution of this operation.
+  // Collect all the warnings that were created during the creation or
+  // execution of this operation.
   std::vector<std::string> _warnings;
 
-  /// The limit from a SPARQL `LIMIT` clause.
+  // The limit from a SPARQL `LIMIT` clause.
   std::optional<uint64_t> _limit;
+
+  // A mutex that can be "copied". The semantics are, that copying will create
+  // a new mutex. This is sufficient for applications like in
+  // `getVariableColumns()` where we just want to make a `const` member function
+  // that modifies a `mutable` member threadsafe.
+  struct CopyableMutex : std::mutex {
+    using std::mutex::mutex;
+    CopyableMutex(const CopyableMutex&) {}
+  };
+
+  // Mutex that protects the `variableToColumnMap_` below.
+  mutable CopyableMutex variableToColumnMapMutex_;
+  // Store the mapping from variables to column indices. `nullopt` means that
+  // this map has not yet been computed. This computation is typically performed
+  // in the const member function `getVariableColumns`, so we have to make it
+  // threadsafe.
+  mutable std::optional<VariableToColumnMap> variableToColumnMap_;
 };

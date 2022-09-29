@@ -5,13 +5,13 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #pragma once
-
-#include <engine/Filter.h>
-#include <engine/QueryExecutionTree.h>
-#include <parser/ParsedQuery.h>
-
 #include <set>
 #include <vector>
+
+#include "engine/CheckUsePatternTrick.h"
+#include "engine/Filter.h"
+#include "engine/QueryExecutionTree.h"
+#include "parser/ParsedQuery.h"
 
 using std::vector;
 
@@ -156,7 +156,7 @@ class QueryPlanner {
     void addAllNodes(uint64_t otherNodes);
   };
 
-  TripleGraph createTripleGraph(
+  [[nodiscard]] TripleGraph createTripleGraph(
       const parsedQuery::BasicGraphPattern* pattern) const;
 
   void setEnablePatternTrick(bool enablePatternTrick);
@@ -168,7 +168,7 @@ class QueryPlanner {
   // result. This is relevant for subqueries, which are currently optimized
   // independently from the rest of the query, but where it depends on the rest
   // of the query, which ordering of the result is best.
-  std::vector<SubtreePlan> createExecutionTrees(ParsedQuery& pq);
+  [[nodiscard]] std::vector<SubtreePlan> createExecutionTrees(ParsedQuery& pq);
 
  private:
   QueryExecutionContext* _qec;
@@ -179,7 +179,7 @@ class QueryPlanner {
 
   bool _enablePatternTrick;
 
-  std::vector<QueryPlanner::SubtreePlan> optimize(
+  [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> optimize(
       ParsedQuery::GraphPattern* rootPattern);
 
   /**
@@ -197,7 +197,7 @@ class QueryPlanner {
    * @brief Fills children with all operations that are associated with a single
    * node in the triple graph (e.g. IndexScans).
    */
-  vector<SubtreePlan> seedWithScansAndText(
+  [[nodiscard]] vector<SubtreePlan> seedWithScansAndText(
       const TripleGraph& tg,
       const vector<vector<QueryPlanner::SubtreePlan>>& children);
 
@@ -206,41 +206,42 @@ class QueryPlanner {
    * variables in this single triple. Depending on the triple's PropertyPath
    * this subtree can be arbitrarily large.
    */
-  vector<SubtreePlan> seedFromPropertyPathTriple(const SparqlTriple& triple);
+  [[nodiscard]] vector<SubtreePlan> seedFromPropertyPathTriple(
+      const SparqlTriple& triple);
 
   /**
    * @brief Returns a parsed query for the property path.
    */
-  std::shared_ptr<ParsedQuery::GraphPattern> seedFromPropertyPath(
+  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromPropertyPath(
       const TripleComponent& left, const PropertyPath& path,
       const TripleComponent& right);
 
-  std::shared_ptr<ParsedQuery::GraphPattern> seedFromSequence(
+  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromSequence(
       const TripleComponent& left, const PropertyPath& path,
       const TripleComponent& right);
-  std::shared_ptr<ParsedQuery::GraphPattern> seedFromAlternative(
+  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromAlternative(
       const TripleComponent& left, const PropertyPath& path,
       const TripleComponent& right);
-  std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitive(
+  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitive(
       const TripleComponent& left, const PropertyPath& path,
       const TripleComponent& right);
-  std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitiveMin(
+  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern>
+  seedFromTransitiveMin(const TripleComponent& left, const PropertyPath& path,
+                        const TripleComponent& right);
+  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern>
+  seedFromTransitiveMax(const TripleComponent& left, const PropertyPath& path,
+                        const TripleComponent& right);
+  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromInverse(
       const TripleComponent& left, const PropertyPath& path,
       const TripleComponent& right);
-  std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitiveMax(
-      const TripleComponent& left, const PropertyPath& path,
-      const TripleComponent& right);
-  std::shared_ptr<ParsedQuery::GraphPattern> seedFromInverse(
-      const TripleComponent& left, const PropertyPath& path,
-      const TripleComponent& right);
-  std::shared_ptr<ParsedQuery::GraphPattern> seedFromIri(
+  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromIri(
       const TripleComponent& left, const PropertyPath& path,
       const TripleComponent& right);
 
-  std::string generateUniqueVarName();
+  [[nodiscard]] std::string generateUniqueVarName();
 
   // Creates a tree of unions with the given patterns as the trees leaves
-  ParsedQuery::GraphPattern uniteGraphPatterns(
+  [[nodiscard]] ParsedQuery::GraphPattern uniteGraphPatterns(
       std::vector<ParsedQuery::GraphPattern>&& patterns) const;
 
   /**
@@ -249,11 +250,11 @@ class QueryPlanner {
    * @return A new row for the dp table that contains plans created by joining
    * the result of a plan in a and a plan in b.
    */
-  vector<SubtreePlan> merge(const vector<SubtreePlan>& a,
-                            const vector<SubtreePlan>& b,
-                            const TripleGraph& tg) const;
+  [[nodiscard]] vector<SubtreePlan> merge(const vector<SubtreePlan>& a,
+                                          const vector<SubtreePlan>& b,
+                                          const TripleGraph& tg) const;
 
-  std::vector<QueryPlanner::SubtreePlan> createJoinCandidates(
+  [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> createJoinCandidates(
       const SubtreePlan& a, const SubtreePlan& b,
       std::optional<TripleGraph> tg) const;
 
@@ -261,7 +262,7 @@ class QueryPlanner {
   // path operation and the other input can be bound to this transitive path
   // (see `TransitivePath.cpp` for details), then returns that bound transitive
   // path. Else returns `std::nullopt`
-  static std::optional<SubtreePlan> createJoinWithTransitivePath(
+  [[nodiscard]] static std::optional<SubtreePlan> createJoinWithTransitivePath(
       SubtreePlan a, SubtreePlan b, const vector<array<ColumnIndex, 2>>& jcs);
 
   // Used internally by `createJoinCandidates`. If  `a` or `b` is a
@@ -269,48 +270,49 @@ class QueryPlanner {
   // <VariableOrIri>`) and `a` and `b` can be joined on that subject variable,
   // then returns a `HasPredicateScan` that takes the other input as a subtree.
   // Else returns `std::nullopt`.
-  static std::optional<SubtreePlan> createJoinWithHasPredicateScan(
-      SubtreePlan a, SubtreePlan b, const vector<array<ColumnIndex, 2>>& jcs);
+  [[nodiscard]] static std::optional<SubtreePlan>
+  createJoinWithHasPredicateScan(SubtreePlan a, SubtreePlan b,
+                                 const vector<array<ColumnIndex, 2>>& jcs);
 
   // Used internally by `createJoinCandidates`. If  `a` or `b` is a
   // `TextOperationWithoutFilter` create a `TextOperationWithFilter` that takes
   // the result of the other input as the filter input. Else return
   // `std::nullopt`.
-  static std::optional<SubtreePlan> createJoinAsTextFilter(
+  [[nodiscard]] static std::optional<SubtreePlan> createJoinAsTextFilter(
       SubtreePlan a, SubtreePlan b, const vector<array<ColumnIndex, 2>>& jcs);
 
-  vector<SubtreePlan> getOrderByRow(
+  [[nodiscard]] vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
 
-  vector<SubtreePlan> getGroupByRow(
+  [[nodiscard]] vector<SubtreePlan> getGroupByRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
 
-  vector<SubtreePlan> getDistinctRow(
+  [[nodiscard]] vector<SubtreePlan> getDistinctRow(
       const parsedQuery::SelectClause& selectClause,
       const vector<vector<SubtreePlan>>& dpTab) const;
 
-  vector<SubtreePlan> getPatternTrickRow(
+  [[nodiscard]] vector<SubtreePlan> getPatternTrickRow(
       const parsedQuery::SelectClause& selectClause,
       const vector<vector<SubtreePlan>>& dpTab,
-      const SparqlTriple& patternTrickTriple);
+      const checkUsePatternTrick::PatternTrickTuple& patternTrickTuple);
 
-  vector<SubtreePlan> getHavingRow(
+  [[nodiscard]] vector<SubtreePlan> getHavingRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
 
-  bool connected(const SubtreePlan& a, const SubtreePlan& b,
-                 const TripleGraph& graph) const;
+  [[nodiscard]] bool connected(const SubtreePlan& a, const SubtreePlan& b,
+                               const TripleGraph& graph) const;
 
-  vector<array<ColumnIndex, 2>> getJoinColumns(const SubtreePlan& a,
-                                               const SubtreePlan& b) const;
+  [[nodiscard]] vector<array<ColumnIndex, 2>> getJoinColumns(
+      const SubtreePlan& a, const SubtreePlan& b) const;
 
-  string getPruningKey(const SubtreePlan& plan,
-                       const vector<size_t>& orderedOnColumns) const;
+  [[nodiscard]] string getPruningKey(
+      const SubtreePlan& plan, const vector<size_t>& orderedOnColumns) const;
 
-  void applyFiltersIfPossible(vector<SubtreePlan>& row,
-                              const vector<SparqlFilter>& filters,
-                              bool replaceInsteadOfAddPlans) const;
+  [[nodiscard]] void applyFiltersIfPossible(
+      vector<SubtreePlan>& row, const vector<SparqlFilter>& filters,
+      bool replaceInsteadOfAddPlans) const;
 
-  std::shared_ptr<Filter> createFilterOperation(
+  [[nodiscard]] std::shared_ptr<Filter> createFilterOperation(
       const SparqlFilter& filter, const SubtreePlan& parent) const;
 
   /**
@@ -370,29 +372,19 @@ class QueryPlanner {
    * Cycles have to be avoided (by previously removing a triple and using
    * it as a filter later on).
    */
-  vector<vector<SubtreePlan>> fillDpTab(
+  [[nodiscard]] vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, const vector<SparqlFilter>& fs,
       const vector<vector<SubtreePlan>>& children);
 
-  SubtreePlan getTextLeafPlan(const TripleGraph::Node& node) const;
+  [[nodiscard]] SubtreePlan getTextLeafPlan(
+      const TripleGraph::Node& node) const;
 
-  SubtreePlan optionalJoin(const SubtreePlan& a, const SubtreePlan& b) const;
-  SubtreePlan minus(const SubtreePlan& a, const SubtreePlan& b) const;
-  SubtreePlan multiColumnJoin(const SubtreePlan& a, const SubtreePlan& b) const;
-
-  /**
-   * @brief Determines if the pattern trick (and in turn the
-   * CountAvailablePredicates operation) are applicable to the given
-   * parsed query. If a ql:has-predicate triple is found and
-   * CountAvailblePredicates can be used for it, the triple will be removed from
-   * the parsed query.
-   * @param pq The parsed query.
-   * @param patternTrickTriple An output parameter in which the triple that
-   * satisfies the requirements for the pattern trick is stored.
-   * @return True if the pattern trick should be used.
-   */
-  bool checkUsePatternTrick(ParsedQuery* pq,
-                            SparqlTriple* patternTrickTriple) const;
+  [[nodiscard]] SubtreePlan optionalJoin(const SubtreePlan& a,
+                                         const SubtreePlan& b) const;
+  [[nodiscard]] SubtreePlan minus(const SubtreePlan& a,
+                                  const SubtreePlan& b) const;
+  [[nodiscard]] SubtreePlan multiColumnJoin(const SubtreePlan& a,
+                                            const SubtreePlan& b) const;
 
   /**
    * @brief return the index of the cheapest execution tree in the argument.
@@ -401,7 +393,7 @@ class QueryPlanner {
    * sorting by the cache key when comparing equally cheap indices, else the
    * first element that has the minimum index is returned.
    */
-  size_t findCheapestExecutionTree(
+  [[nodiscard]] size_t findCheapestExecutionTree(
       const std::vector<SubtreePlan>& lastRow) const;
 
   /// if this Planner is not associated with a queryExecutionContext we are only

@@ -26,6 +26,15 @@ class HasPredicateScan : public Operation {
     SUBQUERY_S
   };
 
+ private:
+  ScanType _type;
+  std::shared_ptr<QueryExecutionTree> _subtree;
+  size_t _subtreeJoinColumn;
+
+  std::string _subject;
+  std::string _object;
+
+ public:
   HasPredicateScan() = delete;
 
   HasPredicateScan(QueryExecutionContext* qec,
@@ -47,9 +56,6 @@ class HasPredicateScan : public Operation {
   [[nodiscard]] size_t getResultWidth() const override;
 
   [[nodiscard]] vector<size_t> resultSortedOn() const override;
-
-  [[nodiscard]] ad_utility::HashMap<string, size_t> getVariableColumns()
-      const override;
 
   void setTextLimit(size_t limit) override;
 
@@ -99,12 +105,7 @@ class HasPredicateScan : public Operation {
                                const CompactVectorOfStrings<Id>& patterns);
 
  private:
-  ScanType _type;
-  std::shared_ptr<QueryExecutionTree> _subtree;
-  size_t _subtreeJoinColumn;
-
-  std::string _subject;
-  std::string _object;
-
   void computeResult(ResultTable* result) override;
+
+  [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };
