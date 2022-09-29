@@ -684,7 +684,7 @@ queries:
   - query : count-available-predicates-on-variable-columns
     type: no-text
     sparql: |
-      SELECT ?p (COUNT(?p) as ?count) WHERE {
+      SELECT ?p (COUNT(DISTINCT ?a) as ?count) WHERE {
         ?a ql:has-predicate ?p .
         ?a <Height> ?h1 .
         ?a <Height> ?h2 .
@@ -721,7 +721,7 @@ queries:
   - query : count-available-predicates-mixed-datatypes
     type: no-text
     sparql: |
-      SELECT ?p (COUNT(DISTINCT ?p) as ?count) WHERE {
+      SELECT ?p (COUNT(DISTINCT ?a) as ?count) WHERE {
         ?a ql:has-predicate ?p .
         {
           ?a <Height> ?h1 .

@@ -105,7 +105,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
 
   // GROUP BY (Either the pattern trick or a "normal" GROUP BY)
   if (patternTrickTuple.has_value()) {
-    getPatternTrickRow(pq.selectClause(), plans, patternTrickTuple.value());
+    plans.emplace_back(getPatternTrickRow(pq.selectClause(), plans,
+                                          patternTrickTuple.value()));
   } else if (doGroupBy) {
     plans.emplace_back(getGroupByRow(pq, plans));
   }
