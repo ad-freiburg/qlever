@@ -132,7 +132,7 @@ TEST(RegexExpression, getPrefixRegex) {
   ASSERT_THROW(getPrefixRegex(R"(^\")"), std::runtime_error);
 }
 
-auto testPrefixExpressionUnorderedColumn =
+auto testPrefixRegexUnorderedColumn =
     [](std::string variable, std::string regex,
        const std::vector<Bool>& expectedResult,
        source_location l = source_location::current()) {
@@ -142,8 +142,8 @@ auto testPrefixExpressionUnorderedColumn =
       testWithExplicitResult(expr, expectedResult);
     };
 
-TEST(RegexExpression, unorderedPrefixExpressionUnorderedColumn) {
-  auto test = testPrefixExpressionUnorderedColumn;
+TEST(RegexExpression, unorderedPrefixRegexUnorderedColumn) {
+  auto test = testPrefixRegexUnorderedColumn;
   // ?vocab column is `"Beta", "alpha", "älpha"
   // ?mixed column is `1, -0.1, A`
   test("?vocab", "^\"Be", {true, false, false});
