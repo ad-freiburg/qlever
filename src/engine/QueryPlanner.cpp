@@ -87,10 +87,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   // 1. There is an explicit group by
   // 2. The pattern trick is applied
   // 3. There is an alias with an aggregate expression
-  // TODO<joka921> The behavior, when aggregating and non-aggregating aliases
-  // are mixed is currently wrong.
-  // TODO<joka921> The behavior, when only non-aggregating aliases are used
-  // (without GROUP BY) is also wrong.
+  // TODO<joka921> Non-aggretating aliases (for example (?x AS ?y)) are
+  // currently not handled properly. When fixing this you have to distinguish
+  // the following two cases:
+  // 1. Mix of aggregating and non-aggregating aliases without GROUP BY.
+  // 2. Only non-aggretating aliases without GROUP BY.
+  // Note: When a GROUP BY is present, then all aliases have to be aggregating,
+  // this is handled correctly in all cases.
   bool doGroupBy = !pq._groupByVariables.empty() ||
                    patternTrickTuple.has_value() ||
                    std::ranges::any_of(pq.getAliases(), [](const Alias& alias) {
