@@ -166,24 +166,22 @@ struct EvaluationContext {
       return false;
     }
 
-    // TODO<joka921> make this "getColumnIndex(const Variable&)"
-    return _variableToColumnAndResultTypeMap.at(variable.name()).first ==
-           _columnsByWhichResultIsSorted[0];
+    return getColumnIndexForVariable(variable) == _columnsByWhichResultIsSorted[0];
   }
   // The size (in number of elements) that this evaluation context refers to.
   [[nodiscard]] size_t size() const { return _endIndex - _beginIndex; }
-};
 
 // ____________________________________________________________________________
-inline size_t getColumnIndexForVariable(const Variable& var,
-                                        const EvaluationContext* context) {
-  const auto& map = context->_variableToColumnAndResultTypeMap;
-  if (!map.contains(var._name)) {
-    throw std::runtime_error(absl::StrCat(
-        "Variable ", var._name, " was not found in input to expression."));
+  [[nodiscard]] size_t getColumnIndexForVariable(const Variable& var) const {
+    const auto& map = _variableToColumnAndResultTypeMap;
+    if (!map.contains(var._name)) {
+      throw std::runtime_error(absl::StrCat(
+          "Variable ", var._name, " was not found in input to expression."));
+    }
+    return map.at(var._name).first;
   }
-  return map.at(var._name).first;
-}
+};
+
 
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies

@@ -159,13 +159,13 @@ ExpressionResult RegexExpression::evaluate(
     auto end = context->_inputTable.begin() + context->_endIndex;
     AD_CHECK(end <= context->_inputTable.end());
     if (context->isResultSortedBy(*variablePtr)) {
-      auto column = getColumnIndexForVariable(*variablePtr, context);
+      auto column = context->getColumnIndexForVariable(*variablePtr);
       auto lower = std::lower_bound(beg, end, nullptr,
-                                    [&, lowerId](const auto& l, const auto&) {
+                                    [column, lowerId](const auto& l, const auto&) {
                                       return l[column] < lowerId;
                                     });
       auto upper = std::lower_bound(beg, end, nullptr,
-                                    [&, upperId](const auto& l, const auto&) {
+                                    [column, upperId](const auto& l, const auto&) {
                                       return l[column] < upperId;
                                     });
 

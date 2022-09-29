@@ -221,7 +221,7 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
     std::optional<ValueId> valueIdUpper, EvaluationContext* context) {
   // Set up iterators into the `IdTable` that only access the column where the
   // `variable` is stored.
-  auto columnIndex = getColumnIndexForVariable(variable, context);
+  auto columnIndex = context->getColumnIndexForVariable(variable);
 
   auto getIdFromColumn = ad_utility::makeAssignableLambda(
       [columnIndex](const auto& idTable, auto i) {
@@ -268,7 +268,7 @@ evaluateRelationalExpression(S1 value1, S2 value2, EvaluationContext* context) {
 
   constexpr static bool value2IsString = ad_utility::isSimilar<S2, std::string>;
   if constexpr (ad_utility::isSimilar<S1, Variable> && isConstantResult<S2>) {
-    auto columnIndex = getColumnIndexForVariable(value1, context);
+    auto columnIndex = context->getColumnIndexForVariable(value1);
     auto valueId = makeValueId(value2, context);
     const auto& cols = context->_columnsByWhichResultIsSorted;
     if (!cols.empty() && cols[0] == columnIndex) {
