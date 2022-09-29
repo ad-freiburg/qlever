@@ -170,6 +170,8 @@ struct EvaluationContext {
     return _variableToColumnAndResultTypeMap.at(variable.name()).first ==
            _columnsByWhichResultIsSorted[0];
   }
+  // The size (in number of elements) that this evaluation context refers to.
+  [[nodiscard]] size_t size() const { return _endIndex - _beginIndex; }
 };
 
 // ____________________________________________________________________________
@@ -389,9 +391,7 @@ constexpr bool isOperation<Operation<NumOperations, Ts...>> = true;
 // size of the `context`.
 template <SingleExpressionResult... Inputs>
 size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
-  return (... && isConstantResult<Inputs>)
-             ? 1ul
-             : context._endIndex - context._beginIndex;
+  return (... && isConstantResult<Inputs>) ? 1ul : context.size();
 }
 
 }  // namespace detail

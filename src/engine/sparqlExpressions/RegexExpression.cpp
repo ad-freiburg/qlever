@@ -171,12 +171,10 @@ ExpressionResult RegexExpression::evaluate(
 
       return ad_utility::SetOfIntervals{{{lower - beg, upper - beg}}};
     } else {
-      auto resultSize = context->_endIndex - context->_beginIndex;
+      auto resultSize = context->size();
       VectorWithMemoryLimit<Bool> result{context->_allocator};
       result.reserve(resultSize);
-      for (auto id : detail::makeGenerator(
-               *variablePtr, context->_endIndex - context->_beginIndex,
-               context)) {
+      for (auto id : detail::makeGenerator(*variablePtr, resultSize, context)) {
         result.push_back(!valueIdComparators::compareByBits(id, lowerId) &&
                          valueIdComparators::compareByBits(id, upperId));
       }
@@ -184,14 +182,10 @@ ExpressionResult RegexExpression::evaluate(
     }
   } else {
     AD_CHECK(std::holds_alternative<RE2>(regex_));
-    auto resultSize = context->_endIndex - context->_beginIndex;
+    auto resultSize = context->size();
     VectorWithMemoryLimit<Bool> result{context->_allocator};
     result.reserve(resultSize);
-    // TODO<joka921> is the second argument not ALWAYS and BY definition
-    // endIndex - beginIndex?
-    for (auto id : detail::makeGenerator(
-             *variablePtr, context->_endIndex - context->_beginIndex,
-             context)) {
+    for (auto id : detail::makeGenerator(*variablePtr, resultSize, context)) {
       result.push_back(RE2::PartialMatch(
           detail::StringValueGetter{}(id, context), std::get<RE2>(regex_)));
     }
