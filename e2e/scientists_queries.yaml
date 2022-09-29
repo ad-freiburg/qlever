@@ -628,7 +628,7 @@ queries:
       SELECT ?a ?h WHERE {
         ?a <is-a> <Scientist> .
         {
-          SELECT ?a WHERE {
+          SELECT ?a ?h WHERE {
             ?a <Height> ?h .
           }
           ORDER BY DESC(?h)
@@ -1320,3 +1320,21 @@ queries:
       - num_rows : 194
       - selected: [ "?x" ]
       - contains_row: [ "<Albert_Einstein>" ]
+
+
+  # The query checks the bugfix of issue #802. The variable `?cls` from inside the subquery
+  # is not visible outside the subquery because it is not selected. Thus, it is not connected
+  # to the variable of the same name that appears outside the subquery.
+  - query: scoping-of-subqueries
+    type: no-text
+    sparql: |
+      SELECT ?cls (count(?s) as ?cnt) WHERE {
+        {SELECT DISTINCT ?cls WHERE {?s <is-a> ?cls} }
+        ?s <is-a> ?cls .
+      } 
+      GROUP BY ?cls
+    checks:
+      - num_cols: 2
+      - num_rows : 1031
+      - selected: [ "?cls", "?cnt" ]
+      - contains_row: [ "<Academic>", 4909 ]

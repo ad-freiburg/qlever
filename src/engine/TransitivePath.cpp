@@ -132,7 +132,7 @@ vector<size_t> TransitivePath::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<std::string, size_t> TransitivePath::getVariableColumns()
+Operation::VariableToColumnMap TransitivePath::computeVariableToColumnMap()
     const {
   return _variableColumns;
 }

@@ -270,3 +270,23 @@ void Operation::createRuntimeInfoFromEstimates() {
         cachedResult->_runtimeInfo.getOperationTime();
   }
 }
+
+// ___________________________________________________________________________
+const Operation::VariableToColumnMap& Operation::getVariableColumns() const {
+  // TODO<joka921> Once the operation class is based on a variant rather than
+  // on inheritance, we can get rid of the locking here, as we can enforce,
+  // that `computeVariableToColumnMap` is always called in the constructor of
+  // each `Operation`.
+  std::lock_guard l{variableToColumnMapMutex_};
+  if (!variableToColumnMap_.has_value()) {
+    variableToColumnMap_ = computeVariableToColumnMap();
+  }
+  return variableToColumnMap_.value();
+}
+
+// ___________________________________________________________________________
+Operation::VariableToColumnMap& Operation::getVariableColumnsNotConst() {
+  // This is a safe const-cast because the actual access is to the non-const
+  // `*this` object.
+  return const_cast<VariableToColumnMap&>(getVariableColumns());
+}

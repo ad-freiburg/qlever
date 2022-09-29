@@ -25,6 +25,14 @@ using std::vector;
 // predicate. This operation requires the use of the usePatterns option both
 // when building as well as when loading the index.
 class CountAvailablePredicates : public Operation {
+ private:
+  std::shared_ptr<QueryExecutionTree> _subtree;
+  size_t _subjectColumnIndex;
+  // This can be used to aquire the predicates for a single entity
+  std::optional<std::string> _subjectEntityName;
+  std::string _predicateVarName;
+  std::string _countVarName;
+
  public:
   /**
    * @brief Creates a new CountAvailablePredicates operation that returns
@@ -68,9 +76,6 @@ class CountAvailablePredicates : public Operation {
     using R = vector<QueryExecutionTree*>;
     return _subtree != nullptr ? R{_subtree.get()} : R{};
   }
-
-  [[nodiscard]] ad_utility::HashMap<string, size_t> getVariableColumns()
-      const override;
 
   void setTextLimit(size_t limit) override {
     if (_subtree != nullptr) {
@@ -118,12 +123,7 @@ class CountAvailablePredicates : public Operation {
       const CompactVectorOfStrings<Id>& patterns);
 
  private:
-  std::shared_ptr<QueryExecutionTree> _subtree;
-  size_t _subjectColumnIndex;
-  // This can be used to aquire the predicates for a single entity
-  std::optional<std::string> _subjectEntityName;
-  std::string _predicateVarName;
-  std::string _countVarName;
+  [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 
   void computeResult(ResultTable* result) override;
 };

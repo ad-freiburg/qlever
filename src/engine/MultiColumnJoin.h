@@ -10,9 +10,17 @@
 #include "./QueryExecutionTree.h"
 
 class MultiColumnJoin : public Operation {
+ private:
+  std::shared_ptr<QueryExecutionTree> _left;
+  std::shared_ptr<QueryExecutionTree> _right;
+
+  std::vector<std::array<ColumnIndex, 2>> _joinColumns;
+
+  vector<float> _multiplicities;
+  size_t _sizeEstimate;
+  bool _multiplicitiesComputed;
+
  public:
-  // TODO<joka921> Make ColumnIndex a strong type across QLever
-  using ColumnIndex = uint64_t;
   MultiColumnJoin(QueryExecutionContext* qec,
                   std::shared_ptr<QueryExecutionTree> t1,
                   std::shared_ptr<QueryExecutionTree> t2,
@@ -27,8 +35,6 @@ class MultiColumnJoin : public Operation {
   virtual size_t getResultWidth() const override;
 
   virtual vector<size_t> resultSortedOn() const override;
-
-  ad_utility::HashMap<string, size_t> getVariableColumns() const override;
 
   virtual void setTextLimit(size_t limit) override {
     _left->setTextLimit(limit);
@@ -61,18 +67,11 @@ class MultiColumnJoin : public Operation {
       const vector<array<ColumnIndex, 2>>& joinColumns, IdTable* result);
 
  private:
-  void computeSizeEstimateAndMultiplicities();
-
-  std::shared_ptr<QueryExecutionTree> _left;
-  std::shared_ptr<QueryExecutionTree> _right;
-
-  std::vector<std::array<ColumnIndex, 2>> _joinColumns;
-
-  vector<float> _multiplicities;
-  size_t _sizeEstimate;
-  bool _multiplicitiesComputed;
-
   virtual void computeResult(ResultTable* result) override;
+
+  VariableToColumnMap computeVariableToColumnMap() const override;
+
+  void computeSizeEstimateAndMultiplicities();
 };
 
 template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>

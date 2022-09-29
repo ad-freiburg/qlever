@@ -6,8 +6,8 @@
 
 #include <sstream>
 
-#include "./CallFixedSize.h"
-#include "./QueryExecutionTree.h"
+#include "engine/CallFixedSize.h"
+#include "engine/QueryExecutionTree.h"
 
 using std::string;
 
@@ -34,7 +34,7 @@ string Distinct::asStringImpl(size_t indent) const {
 string Distinct::getDescriptor() const { return "Distinct"; }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, size_t> Distinct::getVariableColumns() const {
+Operation::VariableToColumnMap Distinct::computeVariableToColumnMap() const {
   return _subtree->getVariableColumns();
 }
 

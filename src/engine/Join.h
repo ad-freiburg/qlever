@@ -16,6 +16,20 @@
 using std::list;
 
 class Join : public Operation {
+ private:
+  std::shared_ptr<QueryExecutionTree> _left;
+  std::shared_ptr<QueryExecutionTree> _right;
+
+  size_t _leftJoinCol;
+  size_t _rightJoinCol;
+
+  bool _keepJoinColumn;
+
+  bool _sizeEstimateComputed;
+  size_t _sizeEstimate;
+
+  vector<float> _multiplicities;
+
  public:
   Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
        std::shared_ptr<QueryExecutionTree> t2, size_t t1JoinCol,
@@ -28,17 +42,11 @@ class Join : public Operation {
   struct InvalidOnlyForTestingJoinTag {};
   explicit Join(InvalidOnlyForTestingJoinTag) {}
 
- protected:
-  virtual string asStringImpl(size_t indent = 0) const override;
-
- public:
   virtual string getDescriptor() const override;
 
   virtual size_t getResultWidth() const override;
 
   virtual vector<size_t> resultSortedOn() const override;
-
-  ad_utility::HashMap<string, size_t> getVariableColumns() const override;
 
   virtual void setTextLimit(size_t limit) override {
     _left->setTextLimit(limit);
@@ -83,29 +91,19 @@ class Join : public Operation {
                                 size_t jc1, const IdTableView<R_WIDTH>& l2,
                                 size_t jc2, IdTableStatic<OUT_WIDTH>* result);
 
- private:
-  std::shared_ptr<QueryExecutionTree> _left;
-  std::shared_ptr<QueryExecutionTree> _right;
-
-  size_t _leftJoinCol;
-  size_t _rightJoinCol;
-
-  bool _keepJoinColumn;
-
-  bool _sizeEstimateComputed;
-  size_t _sizeEstimate;
-
-  vector<float> _multiplicities;
-
-  virtual void computeResult(ResultTable* result) override;
-
- public:
   static bool isFullScanDummy(std::shared_ptr<QueryExecutionTree> tree) {
     return tree->getType() == QueryExecutionTree::SCAN &&
            tree->getResultWidth() == 3;
   }
 
+ protected:
+  virtual string asStringImpl(size_t indent = 0) const override;
+
  private:
+  void computeResult(ResultTable* result) override;
+
+  VariableToColumnMap computeVariableToColumnMap() const override;
+
   void computeResultForJoinWithFullScanDummy(ResultTable* result);
 
   using ScanMethodType = std::function<void(Id, IdTable*)>;

@@ -116,7 +116,7 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, size_t> MultiColumnJoin::getVariableColumns()
+Operation::VariableToColumnMap MultiColumnJoin::computeVariableToColumnMap()
     const {
   ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumns());
   size_t columnIndex = retVal.size();

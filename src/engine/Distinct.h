@@ -17,16 +17,16 @@ using std::pair;
 using std::vector;
 
 class Distinct : public Operation {
- public:
-  [[nodiscard]] size_t getResultWidth() const override;
+ private:
+  std::shared_ptr<QueryExecutionTree> _subtree;
+  vector<size_t> _keepIndices;
 
  public:
   Distinct(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree,
            const vector<size_t>& keepIndices);
 
- protected:
-  [[nodiscard]] string asStringImpl(size_t indent = 0) const override;
+  [[nodiscard]] size_t getResultWidth() const override;
 
  public:
   [[nodiscard]] string getDescriptor() const override;
@@ -53,15 +53,15 @@ class Distinct : public Operation {
 
   bool knownEmptyResult() override { return _subtree->knownEmptyResult(); }
 
-  ad_utility::HashMap<string, size_t> getVariableColumns() const override;
-
   vector<QueryExecutionTree*> getChildren() override {
     return {_subtree.get()};
   }
 
- private:
-  std::shared_ptr<QueryExecutionTree> _subtree;
-  vector<size_t> _keepIndices;
+ protected:
+  [[nodiscard]] string asStringImpl(size_t indent = 0) const override;
 
+ private:
   virtual void computeResult(ResultTable* result) override;
+
+  VariableToColumnMap computeVariableToColumnMap() const override;
 };

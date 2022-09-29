@@ -11,6 +11,32 @@
 #include "QueryExecutionTree.h"
 
 class TransitivePath : public Operation {
+ private:
+  // If this is not nullptr then the left side of all paths is within the result
+  // of this tree.
+  std::shared_ptr<QueryExecutionTree> _leftSideTree;
+  size_t _leftSideCol;
+
+  // If this is not nullptr then the right side of all paths is within the
+  // result of this tree.
+  std::shared_ptr<QueryExecutionTree> _rightSideTree;
+  size_t _rightSideCol;
+
+  size_t _resultWidth;
+  ad_utility::HashMap<std::string, size_t> _variableColumns;
+
+  std::shared_ptr<QueryExecutionTree> _subtree;
+  bool _leftIsVar;
+  bool _rightIsVar;
+  size_t _leftSubCol;
+  size_t _rightSubCol;
+  Id _leftValue;
+  Id _rightValue;
+  std::string _leftColName;
+  std::string _rightColName;
+  size_t _minDist;
+  size_t _maxDist;
+
  public:
   TransitivePath(QueryExecutionContext* qec,
                  std::shared_ptr<QueryExecutionTree> child, bool leftIsVar,
@@ -54,8 +80,6 @@ class TransitivePath : public Operation {
   virtual size_t getResultWidth() const override;
 
   virtual vector<size_t> resultSortedOn() const override;
-
-  ad_utility::HashMap<std::string, size_t> getVariableColumns() const override;
 
   virtual void setTextLimit(size_t limit) override;
 
@@ -112,28 +136,5 @@ class TransitivePath : public Operation {
  private:
   virtual void computeResult(ResultTable* result) override;
 
-  // If this is not nullptr then the left side of all paths is within the result
-  // of this tree.
-  std::shared_ptr<QueryExecutionTree> _leftSideTree;
-  size_t _leftSideCol;
-
-  // If this is not nullptr then the right side of all paths is within the
-  // result of this tree.
-  std::shared_ptr<QueryExecutionTree> _rightSideTree;
-  size_t _rightSideCol;
-
-  size_t _resultWidth;
-  ad_utility::HashMap<std::string, size_t> _variableColumns;
-
-  std::shared_ptr<QueryExecutionTree> _subtree;
-  bool _leftIsVar;
-  bool _rightIsVar;
-  size_t _leftSubCol;
-  size_t _rightSubCol;
-  Id _leftValue;
-  Id _rightValue;
-  std::string _leftColName;
-  std::string _rightColName;
-  size_t _minDist;
-  size_t _maxDist;
+  Operation::VariableToColumnMap computeVariableToColumnMap() const override;
 };

@@ -16,6 +16,17 @@ using std::pair;
 using std::vector;
 
 class Filter : public Operation {
+ private:
+  std::shared_ptr<QueryExecutionTree> _subtree;
+  SparqlFilter::FilterType _type;
+  string _lhs;
+  string _rhs;
+
+  std::vector<string> _additionalLhs;
+  std::vector<string> _additionalPrefixRegexes;
+  bool _regexIgnoreCase;
+  bool _lhsAsString;
+
  public:
   virtual size_t getResultWidth() const override;
 
@@ -111,21 +122,10 @@ class Filter : public Operation {
     return _subtree->getMultiplicity(col);
   }
 
-  virtual ad_utility::HashMap<string, size_t> getVariableColumns()
-      const override {
+ private:
+  virtual VariableToColumnMap computeVariableToColumnMap() const override {
     return _subtree->getVariableColumns();
   }
-
- private:
-  std::shared_ptr<QueryExecutionTree> _subtree;
-  SparqlFilter::FilterType _type;
-  string _lhs;
-  string _rhs;
-
-  std::vector<string> _additionalLhs;
-  std::vector<string> _additionalPrefixRegexes;
-  bool _regexIgnoreCase;
-  bool _lhsAsString;
 
   [[nodiscard]] bool isLhsSorted() const {
     const auto& subresSortedOn = _subtree->resultSortedOn();

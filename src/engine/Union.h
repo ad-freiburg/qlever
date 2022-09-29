@@ -15,6 +15,15 @@
 #include "QueryExecutionTree.h"
 
 class Union : public Operation {
+ private:
+  /**
+   * @brief This stores the input column from each of the two subtrees or
+   * NO_COLUMN if the subtree does not have a matching column for each result
+   * column.
+   */
+  std::vector<std::array<size_t, 2>> _columnOrigins;
+  std::shared_ptr<QueryExecutionTree> _subtrees[2];
+
  public:
   Union(QueryExecutionContext* qec,
         const std::shared_ptr<QueryExecutionTree>& t1,
@@ -34,8 +43,6 @@ class Union : public Operation {
   virtual size_t getResultWidth() const override;
 
   virtual vector<size_t> resultSortedOn() const override;
-
-  ad_utility::HashMap<string, size_t> getVariableColumns() const override;
 
   virtual void setTextLimit(size_t limit) override;
 
@@ -62,11 +69,5 @@ class Union : public Operation {
  private:
   virtual void computeResult(ResultTable* result) override;
 
-  /**
-   * @brief This stores the input column from each of the two subtrees or
-   * NO_COLUMN if the subtree does not have a matching column for each result
-   * column.
-   */
-  std::vector<std::array<size_t, 2>> _columnOrigins;
-  std::shared_ptr<QueryExecutionTree> _subtrees[2];
+  VariableToColumnMap computeVariableToColumnMap() const override;
 };

@@ -25,7 +25,6 @@
 #include "engine/Sort.h"
 #include "engine/TextOperationWithFilter.h"
 #include "engine/TransitivePath.h"
-#include "engine/TwoColumnJoin.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
 #include "parser/RdfEscaping.h"
@@ -619,8 +618,6 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
     _type = NEUTRAL_ELEMENT;
   } else if constexpr (std::is_same_v<Op, Join>) {
     _type = JOIN;
-  } else if constexpr (std::is_same_v<Op, TwoColumnJoin>) {
-    _type = TWO_COL_JOIN;
   } else if constexpr (std::is_same_v<Op, TextOperationWithFilter>) {
     _type = TEXT_WITH_FILTER;
   } else if constexpr (std::is_same_v<Op, CountAvailablePredicates>) {
@@ -647,7 +644,6 @@ template void QueryExecutionTree::setOperation(std::shared_ptr<Filter>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<NeutralElementOperation>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Join>);
-template void QueryExecutionTree::setOperation(std::shared_ptr<TwoColumnJoin>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<TextOperationWithFilter>);
 template void QueryExecutionTree::setOperation(

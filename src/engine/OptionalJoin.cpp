@@ -122,7 +122,8 @@ void OptionalJoin::computeResult(ResultTable* result) {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, size_t> OptionalJoin::getVariableColumns() const {
+Operation::VariableToColumnMap OptionalJoin::computeVariableToColumnMap()
+    const {
   ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumns());
   size_t leftSize = _left->getResultWidth();
   for (const auto& [variable, columnIndexRight] :

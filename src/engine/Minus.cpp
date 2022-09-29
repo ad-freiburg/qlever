@@ -71,7 +71,7 @@ void Minus::computeResult(ResultTable* result) {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, size_t> Minus::getVariableColumns() const {
+Operation::VariableToColumnMap Minus::computeVariableToColumnMap() const {
   return _left->getVariableColumns();
 }
 
