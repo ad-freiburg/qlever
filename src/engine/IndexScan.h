@@ -32,7 +32,12 @@ class IndexScan : public Operation {
   };
 
  private:
-  virtual string asStringImpl(size_t indent = 0) const override;
+  ScanType _type;
+  TripleComponent _subject;
+  string _predicate;
+  TripleComponent _object;
+  size_t _sizeEstimate;
+  vector<float> _multiplicity;
 
  public:
   virtual string getDescriptor() const override;
@@ -77,9 +82,6 @@ class IndexScan : public Operation {
 
   virtual bool knownEmptyResult() override { return getSizeEstimate() == 0; }
 
-  virtual ad_utility::HashMap<string, size_t> getVariableColumns()
-      const override;
-
   // Currently only the full scans support a limit clause.
   [[nodiscard]] bool supportsLimit() const override {
     switch (_type) {
@@ -97,14 +99,7 @@ class IndexScan : public Operation {
 
   ScanType getType() const { return _type; }
 
- protected:
-  ScanType _type;
-  TripleComponent _subject;
-  string _predicate;
-  TripleComponent _object;
-  size_t _sizeEstimate;
-  vector<float> _multiplicity;
-
+ private:
   virtual void computeResult(ResultTable* result) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
@@ -131,4 +126,8 @@ class IndexScan : public Operation {
                        const Index::Permutation permutation) const;
 
   size_t computeSizeEstimate();
+
+  virtual string asStringImpl(size_t indent = 0) const override;
+
+  virtual VariableToColumnMap computeVariableToColumnMap() const override;
 };

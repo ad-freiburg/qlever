@@ -108,7 +108,7 @@ vector<size_t> HasPredicateScan::resultSortedOn() const {
   return {};
 }
 
-ad_utility::HashMap<string, size_t> HasPredicateScan::getVariableColumns()
+Operation::VariableToColumnMap HasPredicateScan::computeVariableToColumnMap()
     const {
   ad_utility::HashMap<string, size_t> varCols;
   switch (_type) {

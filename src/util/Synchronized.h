@@ -90,7 +90,7 @@ class Synchronized {
   /// Constructor that is not copy or move, tries to instantiate the underlying
   /// type via perfect forwarding (this includes the default constructor)
   template <typename... Args>
-  explicit Synchronized(Args&&... args)
+  explicit(sizeof...(Args) == 1) Synchronized(Args&&... args)
       : data_{std::forward<Args>(args)...}, m_{} {}
 
   template <typename... Args>

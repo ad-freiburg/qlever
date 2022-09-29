@@ -29,16 +29,6 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
   // sort the groupByVariables to ensure the cache key is order invariant
   std::sort(_groupByVariables.begin(), _groupByVariables.end());
 
-  // The returned columns are all groupByVariables followed by aggregrates
-  size_t colIndex = 0;
-  for (const std::string& var : _groupByVariables) {
-    _varColMap[var] = colIndex;
-    colIndex++;
-  }
-  for (const Alias& a : _aliases) {
-    _varColMap[a._target.name()] = colIndex;
-    colIndex++;
-  }
   auto sortColumns = computeSortColumns(subtree.get());
   _subtree =
       QueryExecutionTree::createSortedTree(std::move(subtree), sortColumns);
@@ -68,7 +58,7 @@ string GroupBy::getDescriptor() const {
   return "GroupBy on " + absl::StrJoin(_groupByVariables, " ");
 }
 
-size_t GroupBy::getResultWidth() const { return _varColMap.size(); }
+size_t GroupBy::getResultWidth() const { return getVariableColumns().size(); }
 
 vector<size_t> GroupBy::resultSortedOn() const {
   auto varCols = getVariableColumns();
@@ -103,8 +93,19 @@ vector<size_t> GroupBy::computeSortColumns(const QueryExecutionTree* subtree) {
   return cols;
 }
 
-ad_utility::HashMap<string, size_t> GroupBy::getVariableColumns() const {
-  return _varColMap;
+Operation::VariableToColumnMap GroupBy::computeVariableToColumnMap() const {
+  VariableToColumnMap result;
+  // The returned columns are all groupByVariables followed by aggregrates.
+  size_t colIndex = 0;
+  for (const std::string& var : _groupByVariables) {
+    result[var] = colIndex;
+    colIndex++;
+  }
+  for (const Alias& a : _aliases) {
+    result[a._target.name()] = colIndex;
+    colIndex++;
+  }
+  return result;
 }
 
 float GroupBy::getMultiplicity(size_t col) {
@@ -294,9 +295,10 @@ void GroupBy::computeResult(ResultTable* result) {
   }
 
   // parse the aggregate aliases
+  const auto& varColMap = getVariableColumns();
   for (const Alias& alias : _aliases) {
-    aggregates.push_back(Aggregate{
-        alias._expression, _varColMap.find(alias._target.name())->second});
+    aggregates.push_back(
+        Aggregate{alias._expression, varColMap.at(alias._target.name())});
   }
 
   // populate the result type vector
@@ -306,7 +308,7 @@ void GroupBy::computeResult(ResultTable* result) {
   // also copied. The result type of the other columns is set when the
   // values are computed.
   for (const string& var : _groupByVariables) {
-    result->_resultTypes[_varColMap[var]] =
+    result->_resultTypes[varColMap.at(var)] =
         subresult->getResultType(subtreeVarCols[var]);
   }
 

@@ -10,6 +10,11 @@
 class Values : public Operation {
   using SparqlValues = parsedQuery::SparqlValues;
 
+ private:
+  std::vector<size_t> _multiplicities;
+
+  SparqlValues _values;
+
  public:
   /// constructor sanitizes the input by removing completely undefined variables
   /// and values.
@@ -24,8 +29,6 @@ class Values : public Operation {
   virtual size_t getResultWidth() const override;
 
   virtual vector<size_t> resultSortedOn() const override;
-
-  ad_utility::HashMap<string, size_t> getVariableColumns() const override;
 
   virtual void setTextLimit(size_t limit) override { (void)limit; }
 
@@ -42,12 +45,9 @@ class Values : public Operation {
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
  private:
-  void computeMultiplicities();
-  std::vector<size_t> _multiplicities;
-
-  SparqlValues _values;
-
   virtual void computeResult(ResultTable* result) override;
+
+  Operation::VariableToColumnMap computeVariableToColumnMap() const override;
 
   template <size_t I>
   void writeValues(IdTable* res, const Index& index,
@@ -56,4 +56,6 @@ class Values : public Operation {
   /// remove all completely undefined values and variables
   /// throw if nothing remains
   SparqlValues sanitizeValues(SparqlValues&& values);
+
+  void computeMultiplicities();
 };
