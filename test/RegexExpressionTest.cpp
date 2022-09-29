@@ -207,7 +207,7 @@ TEST(RegexExpression, getCacheKey) {
   // same cache key.
   auto map2 = map;
   map2["?otherFirst"] = 0;
-  auto exp6= makeRegexExpression("?otherFirst", "alp");
+  auto exp6 = makeRegexExpression("?otherFirst", "alp");
   ASSERT_EQ(exp1.getCacheKey(map), exp6.getCacheKey(map2));
 }
 
@@ -248,6 +248,11 @@ TEST(RegexExpression, invalidConstruction) {
   // Invalid regex (parentheses that are never closed).
   ASSERT_THROW(
       RegexExpression(variable("?a"), literal("\"(open\""), std::nullopt),
+      std::runtime_error);
+
+  // Invalid option flag.
+  ASSERT_THROW(
+      RegexExpression(variable("?a"), literal("\"a\""), literal("\"x\"")),
       std::runtime_error);
 }
 
