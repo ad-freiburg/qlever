@@ -122,9 +122,8 @@ RegexExpression::RegexExpression(
       }
     } else {
       throw std::runtime_error(
-          "The third argument to the REGEX function (the configuration flags) "
-          "must be a "
-          "string literal");
+          "The optional third argument to the REGEX function must be a string "
+          "literal (which contains the configuration flags)");
     }
   }
 
@@ -138,7 +137,7 @@ RegexExpression::RegexExpression(
       // on to the user.
       throw std::runtime_error{
           "The regex " + originalRegexString +
-          " is not supported by QLever. We use Google's RE2 regex library"};
+          " is not supported by QLever (which uses Google's RE2 library)"};
     }
   }
 }
@@ -180,7 +179,8 @@ ExpressionResult RegexExpression::evaluate(
             return l[column] < upperId;
           });
 
-      // Consistent representation of the empty result for improved testability.
+      // Return the empty result as an empty `SetOfIntervals` instead of as an
+      // empty range.
       if (lower == upper) {
         return ad_utility::SetOfIntervals{};
       }

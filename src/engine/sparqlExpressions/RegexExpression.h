@@ -13,9 +13,10 @@ namespace sparqlExpression {
 class RegexExpression : public SparqlExpression {
  private:
   SparqlExpression::Ptr child_;
-  // If this variant holds a string, this prefix is a prefix regex.
+  // If this variant holds a string, we consider this string as the prefix of a
+  // prefix regex.
   std::variant<std::string, RE2> regex_;
-  // The regex as a string, used for the cache key
+  // The regex as a string, used for the cache key.
   std::string regexAsString_;
 
  public:

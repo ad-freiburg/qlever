@@ -1549,7 +1549,6 @@ ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
   const auto& exp = ctx->expression();
   const auto& numArgs = exp.size();
   AD_CHECK(numArgs >= 2 && numArgs <= 3);
-  // TODO<joka921> support at least "i", because Hannah needs it.
   auto flags = numArgs == 3 ? visitOptional(exp[2]) : std::nullopt;
   try {
     return std::make_unique<sparqlExpression::RegexExpression>(
