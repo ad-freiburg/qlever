@@ -207,7 +207,7 @@ TEST(RegexExpression, getCacheKey) {
   // same cache key.
   auto map2 = map;
   map2["?otherFirst"] = 0;
-  auto exp6.= makeRegexExpression("?otherFirst", "alp");
+  auto exp6= makeRegexExpression("?otherFirst", "alp");
   ASSERT_EQ(exp1.getCacheKey(map), exp6.getCacheKey(map2));
 }
 
