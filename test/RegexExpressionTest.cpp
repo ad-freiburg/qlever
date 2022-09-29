@@ -123,6 +123,8 @@ TEST(RegexExpression, getPrefixRegex) {
 
   ASSERT_EQ("alpha", getPrefixRegex("^alpha"));
   ASSERT_EQ(R"(\al*ph.a()", getPrefixRegex(R"(^\\al\*ph\.a\()"));
+  // Invalid escaping of `"` (no need to escape it).
+  ASSERT_THROW(getPrefixRegex(R"(^\")"), std::runtime_error);
 }
 
 auto testUnorderedPrefixExpression = [](std::string variable, std::string regex,
@@ -205,7 +207,7 @@ TEST(RegexExpression, getCacheKey) {
   // same cache key.
   auto map2 = map;
   map2["?otherFirst"] = 0;
-  auto exp6 = makeRegexExpression("?otherFirst", "alp");
+  auto exp6.= makeRegexExpression("?otherFirst", "alp");
   ASSERT_EQ(exp1.getCacheKey(map), exp6.getCacheKey(map2));
 }
 
@@ -216,9 +218,39 @@ TEST(RegexExpression, getChildren) {
   ASSERT_EQ(*vars[0], Variable{"?a"});
 }
 
+TEST(RegexExpression, invalidConstruction) {
+  auto literal = [](std::string literal) {
+    return std::make_unique<StringOrIriExpression>(std::move(literal));
+  };
+  auto variable = [](std::string literal) {
+    return std::make_unique<VariableExpression>(Variable{std::move(literal)});
+  };
+  // The first argument must be a variable.
+  ASSERT_THROW(RegexExpression(literal("a"), literal("\"b\""), std::nullopt),
+               std::runtime_error);
+
+  // The second argument must be a string literal.
+  ASSERT_THROW(RegexExpression(variable("?a"), variable("?b"), std::nullopt),
+               std::runtime_error);
+
+  // The regex must not be an IRI.
+  ASSERT_THROW(RegexExpression(variable("?a"), literal("<a>"), std::nullopt),
+               std::runtime_error);
+
+  // The third argument must be a string literal.
+  ASSERT_THROW(
+      RegexExpression(variable("?a"), literal("\"b\""), variable("?b")),
+      std::runtime_error);
+  ASSERT_THROW(
+      RegexExpression(variable("?a"), literal("\"b\""), literal("<b>")),
+      std::runtime_error);
+
+  // Invalid regex (parentheses that are never closed).
+  ASSERT_THROW(
+      RegexExpression(variable("?a"), literal("\"(open\""), std::nullopt),
+      std::runtime_error);
+}
+
 // TODO<joka921> The behavior for numeric regexes is currently inconsistent.
 // Discuss with Hannah, how we want to handle them for now (until we deal with
 // the "STR" function properly.
-
-// TODO<joka921> Add tests for all the ways in which the RegexExpression
-// constructor can fail.

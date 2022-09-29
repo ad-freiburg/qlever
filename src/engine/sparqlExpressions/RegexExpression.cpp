@@ -68,6 +68,13 @@ std::optional<std::string> getPrefixRegex(std::string regex) {
 // quotes.
 std::string removeQuotes(std::string_view input) {
   AD_CHECK(input.size() >= 2);
+  // Currently, IRIs are also passed as strings, but are not allowed here.
+  if (input.starts_with('<')) {
+    AD_CHECK(input.ends_with('>'));
+    throw std::runtime_error(
+        "An IRI was passed as the second or third argument to the REGEX "
+        "function, but only string literals are allowed.");
+  }
   AD_CHECK(input.starts_with('"'));
   AD_CHECK(input.ends_with('"'));
   input.remove_prefix(1);
@@ -113,6 +120,11 @@ RegexExpression::RegexExpression(
       if (!flags.empty()) {
         regexString = absl::StrCat("(?", flags, ":", regexString + ")");
       }
+    } else {
+      throw std::runtime_error(
+          "The third argument to the REGEX function (the configuration flags) "
+          "must be a "
+          "string literal");
     }
   }
 
