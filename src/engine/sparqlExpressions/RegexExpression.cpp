@@ -11,12 +11,9 @@
 
 using namespace std::literals;
 
-namespace {
+namespace sparqlExpression::detail {
 
-// Check if `regex` is a prefix regex which means that it starts with `^` and
-// contains no other "special" regex characters like `*` or `.`. If this check
-// suceeds, the prefix is returned without the leading `^` and with all escaping
-// undone. Else, `std::nullopt` is returned.
+// ____________________________________________________________________________
 std::optional<std::string> getPrefixRegex(std::string regex) {
   if (!regex.starts_with('^')) {
     return std::nullopt;
@@ -77,7 +74,7 @@ std::string removeQuotes(std::string_view input) {
   input.remove_suffix(1);
   return std::string{input};
 }
-}  // namespace
+}  // namespace sparqlExpression::detail
 
 namespace sparqlExpression {
 // ___________________________________________________________________________
@@ -93,7 +90,7 @@ RegexExpression::RegexExpression(
   std::string originalRegexString;
   if (auto regexPtr = dynamic_cast<const StringOrIriExpression*>(regex.get())) {
     originalRegexString = regexPtr->value();
-    regexString = removeQuotes(originalRegexString);
+    regexString = detail::removeQuotes(originalRegexString);
   } else {
     throw std::runtime_error(
         "The second argument to the REGEX function (the regex) must be a "
@@ -102,7 +99,7 @@ RegexExpression::RegexExpression(
   if (optionalFlags.has_value()) {
     if (auto flagsPtr = dynamic_cast<const StringOrIriExpression*>(
             optionalFlags.value().get())) {
-      auto flags = removeQuotes(flagsPtr->value());
+      auto flags = detail::removeQuotes(flagsPtr->value());
       auto firstInvalidFlag = flags.find_first_not_of("imsu");
       if (firstInvalidFlag != std::string::npos) {
         throw std::runtime_error{absl::StrCat(
@@ -120,7 +117,7 @@ RegexExpression::RegexExpression(
   }
 
   regexAsString_ = regexString;
-  if (auto opt = getPrefixRegex(regexString)) {
+  if (auto opt = detail::getPrefixRegex(regexString)) {
     regex_ = std::move(opt.value());
   } else {
     regex_.emplace<RE2>(regexString, RE2::Quiet);
@@ -169,6 +166,10 @@ ExpressionResult RegexExpression::evaluate(
             return l[column] < upperId;
           });
 
+      // Consistent representation of the empty result for improved testability.
+      if (lower == upper) {
+        return ad_utility::SetOfIntervals{};
+      }
       return ad_utility::SetOfIntervals{{{lower - beg, upper - beg}}};
     } else {
       auto resultSize = context->size();
@@ -191,6 +192,11 @@ ExpressionResult RegexExpression::evaluate(
     }
     return result;
   }
+}
+
+// ____________________________________________________________________________
+bool RegexExpression::isPrefixExpression() const {
+  return std::holds_alternative<std::string>(regex_);
 }
 
 }  // namespace sparqlExpression
