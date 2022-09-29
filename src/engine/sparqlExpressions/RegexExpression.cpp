@@ -91,7 +91,7 @@ RegexExpression::RegexExpression(
     : child_{std::move(child)} {
   if (!dynamic_cast<const VariableExpression*>(child_.get())) {
     throw std::runtime_error(
-        "REGEX expressions are currently supported on variables.");
+        "REGEX expressions are currently supported only on variables.");
   }
   std::string regexString;
   std::string originalRegexString;
@@ -100,8 +100,8 @@ RegexExpression::RegexExpression(
     regexString = detail::removeQuotes(originalRegexString);
   } else {
     throw std::runtime_error(
-        "The second argument to the REGEX function (the regex) must be a "
-        "string literal");
+        "The second argument to the REGEX function must be a "
+        "string literal (which contains the regular expression)");
   }
   if (optionalFlags.has_value()) {
     if (auto flagsPtr = dynamic_cast<const StringOrIriExpression*>(
