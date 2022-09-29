@@ -166,12 +166,13 @@ struct EvaluationContext {
       return false;
     }
 
-    return getColumnIndexForVariable(variable) == _columnsByWhichResultIsSorted[0];
+    return getColumnIndexForVariable(variable) ==
+           _columnsByWhichResultIsSorted[0];
   }
   // The size (in number of elements) that this evaluation context refers to.
   [[nodiscard]] size_t size() const { return _endIndex - _beginIndex; }
 
-// ____________________________________________________________________________
+  // ____________________________________________________________________________
   [[nodiscard]] size_t getColumnIndexForVariable(const Variable& var) const {
     const auto& map = _variableToColumnAndResultTypeMap;
     if (!map.contains(var._name)) {
@@ -181,7 +182,6 @@ struct EvaluationContext {
     return map.at(var._name).first;
   }
 };
-
 
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies

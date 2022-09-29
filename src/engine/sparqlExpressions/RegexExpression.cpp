@@ -160,14 +160,14 @@ ExpressionResult RegexExpression::evaluate(
     AD_CHECK(end <= context->_inputTable.end());
     if (context->isResultSortedBy(*variablePtr)) {
       auto column = context->getColumnIndexForVariable(*variablePtr);
-      auto lower = std::lower_bound(beg, end, nullptr,
-                                    [column, lowerId](const auto& l, const auto&) {
-                                      return l[column] < lowerId;
-                                    });
-      auto upper = std::lower_bound(beg, end, nullptr,
-                                    [column, upperId](const auto& l, const auto&) {
-                                      return l[column] < upperId;
-                                    });
+      auto lower = std::lower_bound(
+          beg, end, nullptr, [column, lowerId](const auto& l, const auto&) {
+            return l[column] < lowerId;
+          });
+      auto upper = std::lower_bound(
+          beg, end, nullptr, [column, upperId](const auto& l, const auto&) {
+            return l[column] < upperId;
+          });
 
       return ad_utility::SetOfIntervals{{{lower - beg, upper - beg}}};
     } else {
