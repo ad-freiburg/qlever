@@ -66,6 +66,17 @@ std::optional<std::string> getPrefixRegex(std::string regex) {
   regex.erase(regex.begin());
   return regex;
 }
+
+// Assert that `input` starts and ends with double quotes `"` and remove those
+// quotes.
+std::string removeQuotes(std::string_view input) {
+  AD_CHECK(input.size() >= 2);
+  AD_CHECK(input.starts_with('"'));
+  AD_CHECK(input.ends_with('"'));
+  input.remove_prefix(1);
+  input.remove_suffix(1);
+  return std::string{input};
+}
 }  // namespace
 
 namespace sparqlExpression {
@@ -76,16 +87,13 @@ RegexExpression::RegexExpression(
     : child_{std::move(child)} {
   if (!dynamic_cast<const VariableExpression*>(child_.get())) {
     throw std::runtime_error(
-        "REGEX epxressions are currently supported on variables.");
+        "REGEX expressions are currently supported on variables.");
   }
   std::string regexString;
+  std::string originalRegexString;
   if (auto regexPtr = dynamic_cast<const StringOrIriExpression*>(regex.get())) {
-    regexString = regexPtr->value();
-    // TODO<joka921> Throw an error message if the regex is not quoted.
-    // TODO<joka921> Check the paths for the StringExpressions, whether this
-    // is really an AD-CHECK.
-    AD_CHECK(regexString.size() >= 2);
-    regexString = regexString.substr(1, regexString.size() - 2);
+    originalRegexString = regexPtr->value();
+    regexString = removeQuotes(originalRegexString);
   } else {
     throw std::runtime_error(
         "The second argument to the REGEX function (the regex) must be a "
@@ -94,12 +102,19 @@ RegexExpression::RegexExpression(
   if (optionalFlags.has_value()) {
     if (auto flagsPtr = dynamic_cast<const StringOrIriExpression*>(
             optionalFlags.value().get())) {
-      auto flags = flagsPtr->value();
-      AD_CHECK(flags.size() >= 2);
-      flags = flags.substr(1, flags.size() - 2);
-      // TODO<joka921> Check for valid set of flags
+      auto flags = removeQuotes(flagsPtr->value());
+      auto firstInvalidFlag = flags.find_first_not_of("imsu");
+      if (firstInvalidFlag != std::string::npos) {
+        throw std::runtime_error{absl::StrCat(
+            "Invalid regex flag '", std::string{flags[firstInvalidFlag]},
+            "' found in \"", flags,
+            "\". The only supported flags are 'i', 's', 'm', 's', 'u', and any "
+            "combination of them")};
+      }
+
+      // In Google RE2 the flags are directly part of the regex.
       if (!flags.empty()) {
-        regexString = absl::StrCat("(?", flags, ":", regexString);
+        regexString = absl::StrCat("(?", flags, ":", regexString + ")");
       }
     }
   }
@@ -108,11 +123,11 @@ RegexExpression::RegexExpression(
   if (auto opt = getPrefixRegex(regexString)) {
     regex_ = std::move(opt.value());
   } else {
-    regex_.emplace<RE2>(regexString);
+    regex_.emplace<RE2>(regexString, RE2::Quiet);
     if (std::get<RE2>(regex_).error_code() != RE2::NoError) {
       throw std::runtime_error{
-          "The regex '" + regexString +
-          "'is not supported by QLever. We use Google's RE2 regex library"};
+          "The regex " + originalRegexString +
+          " is not supported by QLever. We use Google's RE2 regex library"};
     }
   }
 }
@@ -136,7 +151,6 @@ ExpressionResult RegexExpression::evaluate(
   AD_CHECK(variablePtr);
 
   if (auto prefixRegex = std::get_if<std::string>(&regex_)) {
-    // TODO<joka921> Make this a function of the context
     auto prefixRange =
         context->_qec.getIndex().getVocab().prefix_range(*prefixRegex);
     Id lowerId = Id::makeFromVocabIndex(prefixRange.first);
@@ -145,17 +159,15 @@ ExpressionResult RegexExpression::evaluate(
     auto end = context->_inputTable.begin() + context->_endIndex;
     AD_CHECK(end <= context->_inputTable.end());
     if (context->isResultSortedBy(*variablePtr)) {
-      auto column =
-          context->_variableToColumnAndResultTypeMap.at(variablePtr->name())
-              .first;
-      auto lower = std::lower_bound(
-          beg, end, nullptr,
-          [&, lowerId = Id::makeFromVocabIndex(prefixRange.first)](
-              const auto& l, const auto&) { return l[column] < lowerId; });
-      auto upper = std::lower_bound(
-          beg, end, nullptr,
-          [&, lowerId = Id::makeFromVocabIndex(prefixRange.first)](
-              const auto& l, const auto&) { return l[column] < lowerId; });
+      auto column = getColumnIndexForVariable(*variablePtr, context);
+      auto lower = std::lower_bound(beg, end, nullptr,
+                                    [&, lowerId](const auto& l, const auto&) {
+                                      return l[column] < lowerId;
+                                    });
+      auto upper = std::lower_bound(beg, end, nullptr,
+                                    [&, upperId](const auto& l, const auto&) {
+                                      return l[column] < upperId;
+                                    });
 
       return ad_utility::SetOfIntervals{{{lower - beg, upper - beg}}};
     } else {
@@ -180,8 +192,8 @@ ExpressionResult RegexExpression::evaluate(
     for (auto id : detail::makeGenerator(
              *variablePtr, context->_endIndex - context->_beginIndex,
              context)) {
-      result.push_back(RE2::FullMatch(detail::StringValueGetter{}(id, context),
-                                      std::get<RE2>(regex_)));
+      result.push_back(RE2::PartialMatch(
+          detail::StringValueGetter{}(id, context), std::get<RE2>(regex_)));
     }
     return result;
   }

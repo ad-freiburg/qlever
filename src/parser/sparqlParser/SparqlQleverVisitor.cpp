@@ -522,10 +522,7 @@ std::optional<parsedQuery::ConstructClause> Visitor::visit(
 
 // ____________________________________________________________________________________
 string Visitor::visit(Parser::StringContext* ctx) {
-  // TODO: The string rule also allow triple quoted strings with different
-  //  escaping rules. These are currently not handled. They should be parsed
-  //  into a typesafe format with a unique representation.
-  return ctx->getText();
+  return RdfEscaping::normalizeRDFLiteral(ctx->getText());
 }
 
 // ____________________________________________________________________________________
@@ -1491,7 +1488,7 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
   if (ctx->rdfLiteral()) {
     // TODO<joka921> : handle strings with value datatype that are
     // not in the knowledge base correctly.
-    return make_unique<StringOrIriExpression>(ctx->rdfLiteral()->getText());
+    return make_unique<StringOrIriExpression>(visit(ctx->rdfLiteral()));
   } else if (ctx->numericLiteral()) {
     auto integralWrapper = [](int64_t x) {
       return ExpressionPtr{make_unique<IntExpression>(x)};
@@ -1647,7 +1644,7 @@ ExpressionPtr Visitor::visit(Parser::IriOrFunctionContext* ctx) {
   // Case 1: Just an IRI.
   if (ctx->argList() == nullptr) {
     return std::make_unique<sparqlExpression::StringOrIriExpression>(
-        ctx->getText());
+        visit(ctx->iri()));
   }
   // Case 2: Function call, where the function name is an IRI.
   return processIriFunctionCall(visit(ctx->iri()), visit(ctx->argList()));
