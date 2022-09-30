@@ -1347,6 +1347,6 @@ queries:
       }
     checks:
       - num_cols: 1
-      - num_rows : 149
+      - num_rows : 150
       - selected: [ "?x" ]
       - contains_row: [ "<Max_Planck_Medal>" ]
