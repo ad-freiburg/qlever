@@ -135,15 +135,25 @@ std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
   return {numCodepoints, sv.substr(0, i)};
 }
 
+/**
+ * Get the substring from the UTF8-encoded str that starts at the start-th
+ * codepoint as has a length of size codepoints. If start >= the number of
+ * codepoints in str, std::out_of_range is thrown. If start + size >= the number
+ * of codepoints in str then the substring will reach until the end of str. This
+ * behavior is consistent with std::string::substr, but working on UTF-8
+ * characters that might have multiple bytes.
+ */
 inline string_view getUTF8Substring(const std::string_view str, size_t start,
                                     size_t size) {
   auto [numCodepoints, upToEnd] = getUTF8Prefix(str, start + size);
   auto [numCodepoints2, prefix] = getUTF8Prefix(upToEnd, start);
   return upToEnd.substr(prefix.size());
 }
-// Overload for the above function that creates the substring from the `start`-th codepoint to the end of the string.
+// Overload for the above function that creates the substring from the
+// `start`-th codepoint to the end of the string.
 inline string_view getUTF8Substring(const std::string_view str, size_t start) {
-  // `str.size()` is >= the number of codepoints because each codepoint has at least one byte in UTF-8
+  // `str.size()` is >= the number of codepoints because each codepoint has at
+  // least one byte in UTF-8
   return getUTF8Substring(str, start, str.size());
 }
 

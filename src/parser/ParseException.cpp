@@ -7,10 +7,12 @@
 #include <util/Exception.h>
 
 std::string ExceptionMetadata::coloredError() const {
-  // stopIndex_ == startIndex_ - 1 might happen if the offending string is empty.
+  // stopIndex_ == startIndex_ - 1 might happen if the offending string is
+  // empty.
   AD_CHECK(stopIndex_ + 1 >= startIndex_);
   std::string_view query = query_;
-  // The `startIndex_` and `stopIndex_` are wrt Unicode codepoints, but the `query_` is UTF-8 encoded. 
+  // The `startIndex_` and `stopIndex_` are wrt Unicode codepoints, but the
+  // `query_` is UTF-8 encoded.
   auto first = ad_utility::getUTF8Substring(query, 0, startIndex_);
   auto middle = ad_utility::getUTF8Substring(query, startIndex_,
                                              stopIndex_ + 1 - startIndex_);
