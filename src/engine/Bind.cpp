@@ -109,11 +109,8 @@ void Bind::computeExpressionBind(
     sparqlExpression::SparqlExpression* expression) const {
   sparqlExpression::VariableToColumnAndResultTypeMap columnMap;
   for (const auto& [variable, columnIndex] : _subtree->getVariableColumns()) {
-    // Ignore the added (bound) variable.
-    if (columnIndex < inputResultTable.width()) {
       columnMap[variable] =
           std::pair(columnIndex, inputResultTable.getResultType(columnIndex));
-    }
   }
 
   sparqlExpression::EvaluationContext evaluationContext(
@@ -143,7 +140,8 @@ void Bind::computeExpressionBind(
     constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
     if constexpr (isVariable) {
-      auto column = _subtree->getVariableColumns().at(singleResult.name());
+      auto column =
+          getInternallyVisibleVariableColumns().at(singleResult.name());
       for (size_t i = 0; i < inSize; ++i) {
         output(i, inCols) = output(i, column);
       }
