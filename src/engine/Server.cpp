@@ -812,6 +812,7 @@ boost::asio::awaitable<void> Server::processQuery(
   if (exceptionErrorMsg) {
     LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
     if (metadata.has_value()) {
+     // The `coloredError()` message might fail because of the different Unicode handling of QLever and ANTLR. Make sure to detect this case so that we can fix it if it happens.
       try {
         LOG(ERROR) << metadata.value().coloredError() << std::endl;
       } catch (const std::exception&) {

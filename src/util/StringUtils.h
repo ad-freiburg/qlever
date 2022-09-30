@@ -141,7 +141,9 @@ inline string_view getUTF8Substring(const std::string_view str, size_t start,
   auto [numCodepoints2, prefix] = getUTF8Prefix(upToEnd, start);
   return upToEnd.substr(prefix.size());
 }
+// Overload for the above function that creates the substring from the `start`-th codepoint to the end of the string.
 inline string_view getUTF8Substring(const std::string_view str, size_t start) {
+  // `str.size()` is >= the number of codepoints because each codepoint has at least one byte in UTF-8
   return getUTF8Substring(str, start, str.size());
 }
 
