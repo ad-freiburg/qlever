@@ -138,16 +138,20 @@ std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
 /**
  * Get the substring from the UTF8-encoded str that starts at the start-th
  * codepoint as has a length of size codepoints. If start >= the number of
- * codepoints in str, std::out_of_range is thrown. If start + size >= the number
+ * codepoints in str, an empty string is returned. If start + size >= the number
  * of codepoints in str then the substring will reach until the end of str. This
  * behavior is consistent with std::string::substr, but working on UTF-8
  * characters that might have multiple bytes.
  */
 inline string_view getUTF8Substring(const std::string_view str, size_t start,
                                     size_t size) {
-  auto [numCodepoints, upToEnd] = getUTF8Prefix(str, start + size);
-  auto [numCodepoints2, prefix] = getUTF8Prefix(upToEnd, start);
-  return upToEnd.substr(prefix.size());
+  // To generate a substring we have to "cut off" part of the string at the
+  // start and end. The end can be removed with `getUTF8Prefix`.
+  auto strWithEndRemoved = getUTF8Prefix(str, start + size).second;
+  // Generate the prefix that should be removed from `str`. Actually remove it
+  // from `str` by using the size in UTF-8 of the prefix and `string.substr`.
+  auto prefixToRemove = getUTF8Prefix(strWithEndRemoved, start).second;
+  return strWithEndRemoved.substr(prefixToRemove.size());
 }
 // Overload for the above function that creates the substring from the
 // `start`-th codepoint to the end of the string.
