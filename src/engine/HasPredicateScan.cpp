@@ -297,11 +297,13 @@ void HasPredicateScan::computeFreeO(
     const std::vector<PatternID>& hasPattern,
     const CompactVectorOfStrings<Id>& hasPredicate,
     const CompactVectorOfStrings<Id>& patterns) {
-  IdTableStatic<1> result = resultTable->_idTable.moveToStatic<1>();
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
+  // Subjects always have to be from the vocabulary
+  if (subjectAsId.getDatatype() != Datatype::VocabIndex) {
+    return;
+  }
+  IdTableStatic<1> result = resultTable->_idTable.moveToStatic<1>();
 
-  // subjects are always from the vocabulary
-  AD_CHECK(subjectAsId.getDatatype() == Datatype::VocabIndex);
   auto subjectIndex = subjectAsId.getVocabIndex().get();
   if (subjectIndex < hasPattern.size() &&
       hasPattern[subjectIndex] != NO_PATTERN) {
@@ -365,7 +367,9 @@ void HasPredicateScan::computeSubqueryS(
 
   for (size_t i = 0; i < input.size(); i++) {
     Id subjectAsId = input(i, subtreeColIndex);
-    AD_CHECK(subjectAsId.getDatatype() == Datatype::VocabIndex);
+    if (subjectAsId.getDatatype() != Datatype::VocabIndex) {
+      continue;
+    }
     auto subjectIndex = subjectAsId.getVocabIndex().get();
     if (subjectIndex < hasPattern.size() &&
         hasPattern[subjectIndex] != NO_PATTERN) {
