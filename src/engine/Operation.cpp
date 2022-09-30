@@ -272,7 +272,8 @@ void Operation::createRuntimeInfoFromEstimates() {
 }
 
 // ___________________________________________________________________________
-const Operation::VariableToColumnMap& Operation::getInternallyVisibleVariableColumns() const {
+const Operation::VariableToColumnMap&
+Operation::getInternallyVisibleVariableColumns() const {
   // TODO<joka921> Once the operation class is based on a variant rather than
   // on inheritance, we can get rid of the locking here, as we can enforce,
   // that `computeVariableToColumnMap` is always called in the constructor of
@@ -285,7 +286,8 @@ const Operation::VariableToColumnMap& Operation::getInternallyVisibleVariableCol
 }
 
 // ___________________________________________________________________________
-const Operation::VariableToColumnMap& Operation::getExternallyVisibleVariableColumns() const {
+const Operation::VariableToColumnMap&
+Operation::getExternallyVisibleVariableColumns() const {
   // TODO<joka921> Once the operation class is based on a variant rather than
   // on inheritance, we can get rid of the locking here, as we can enforce,
   // that `computeVariableToColumnMap` is always called in the constructor of
@@ -298,7 +300,8 @@ const Operation::VariableToColumnMap& Operation::getExternallyVisibleVariableCol
 }
 
 // ___________________________________________________________________________
-Operation::VariableToColumnMap& Operation::getExternallyVisibleVariableColumnsNotConst() {
+Operation::VariableToColumnMap&
+Operation::getExternallyVisibleVariableColumnsNotConst() {
   // This is a safe const-cast because the actual access is to the non-const
   // `*this` object.
   return const_cast<VariableToColumnMap&>(

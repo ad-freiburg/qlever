@@ -109,8 +109,8 @@ void Bind::computeExpressionBind(
     sparqlExpression::SparqlExpression* expression) const {
   sparqlExpression::VariableToColumnAndResultTypeMap columnMap;
   for (const auto& [variable, columnIndex] : _subtree->getVariableColumns()) {
-      columnMap[variable] =
-          std::pair(columnIndex, inputResultTable.getResultType(columnIndex));
+    columnMap[variable] =
+        std::pair(columnIndex, inputResultTable.getResultType(columnIndex));
   }
 
   sparqlExpression::EvaluationContext evaluationContext(

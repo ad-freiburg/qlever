@@ -58,7 +58,9 @@ string GroupBy::getDescriptor() const {
   return "GroupBy on " + absl::StrJoin(_groupByVariables, " ");
 }
 
-size_t GroupBy::getResultWidth() const { return getInternallyVisibleVariableColumns().size(); }
+size_t GroupBy::getResultWidth() const {
+  return getInternallyVisibleVariableColumns().size();
+}
 
 vector<size_t> GroupBy::resultSortedOn() const {
   auto varCols = getInternallyVisibleVariableColumns();
