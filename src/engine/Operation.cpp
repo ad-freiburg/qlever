@@ -305,5 +305,5 @@ Operation::getExternallyVisibleVariableColumnsNotConst() {
   // This is a safe const-cast because the actual access is to the non-const
   // `*this` object.
   return const_cast<VariableToColumnMap&>(
-      getInternallyVisibleVariableColumns());
+      getExternallyVisibleVariableColumns());
 }
