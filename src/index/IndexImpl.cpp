@@ -689,10 +689,9 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
 
   if (_usePatterns) {
     PatternCreator::readPatternsFromFile(
-        _onDiskBase + ".index.patterns",
-        _fullHasPredicateMultiplicityPredicates,
-        _fullHasPredicateMultiplicityEntities, _fullHasPredicateSize, _patterns,
-        _hasPattern);
+        _onDiskBase + ".index.patterns", _avgNumDistinctSubjectsPerPredicate,
+        _avgNumDistinctPredicatesPerSubject, _numDistinctSubjectPredicatePairs,
+        _patterns, _hasPattern);
   }
 }
 
@@ -724,21 +723,21 @@ const CompactVectorOfStrings<Id>& IndexImpl::getPatterns() const {
 }
 
 // _____________________________________________________________________________
-double IndexImpl::getHasPredicateMultiplicityEntities() const {
+double IndexImpl::getAvgNumDistinctPredicatesPerSubject() const {
   throwExceptionIfNoPatterns();
-  return _fullHasPredicateMultiplicityEntities;
+  return _avgNumDistinctPredicatesPerSubject;
 }
 
 // _____________________________________________________________________________
-double IndexImpl::getHasPredicateMultiplicityPredicates() const {
+double IndexImpl::getAvgNumDistinctSubjectsPerPredicate() const {
   throwExceptionIfNoPatterns();
-  return _fullHasPredicateMultiplicityPredicates;
+  return _avgNumDistinctSubjectsPerPredicate;
 }
 
 // _____________________________________________________________________________
-size_t IndexImpl::getHasPredicateFullSize() const {
+size_t IndexImpl::getNumDistinctSubjectPredicatePairs() const {
   throwExceptionIfNoPatterns();
-  return _fullHasPredicateSize;
+  return _numDistinctSubjectPredicatePairs;
 }
 
 // _____________________________________________________________________________

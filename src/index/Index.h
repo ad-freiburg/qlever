@@ -116,19 +116,19 @@ class Index {
    * @return The multiplicity of the entites column (0) of the full has-relation
    *         relation after unrolling the patterns.
    */
-  [[nodiscard]] double getHasPredicateMultiplicityEntities() const;
+  [[nodiscard]] double getAvgNumDistinctPredicatesPerSubject() const;
 
   /**
    * @return The multiplicity of the predicates column (0) of the full
    * has-relation relation after unrolling the patterns.
    */
-  [[nodiscard]] double getHasPredicateMultiplicityPredicates() const;
+  [[nodiscard]] double getAvgNumDistinctSubjectsPerPredicate() const;
 
   /**
    * @return The size of the full has-relation relation after unrolling the
    *         patterns.
    */
-  [[nodiscard]] size_t getHasPredicateFullSize() const;
+  [[nodiscard]] size_t getNumDistinctSubjectPredicatePairs() const;
 
   // --------------------------------------------------------------------------
   // TEXT RETRIEVAL

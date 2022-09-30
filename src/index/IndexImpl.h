@@ -243,19 +243,19 @@ class IndexImpl {
    * @return The multiplicity of the Entites column (0) of the full has-relation
    *         relation after unrolling the patterns.
    */
-  double getHasPredicateMultiplicityEntities() const;
+  double getAvgNumDistinctPredicatesPerSubject() const;
 
   /**
    * @return The multiplicity of the Predicates column (0) of the full
    * has-relation relation after unrolling the patterns.
    */
-  double getHasPredicateMultiplicityPredicates() const;
+  double getAvgNumDistinctSubjectsPerPredicate() const;
 
   /**
    * @return The size of the full has-relation relation after unrolling the
    *         patterns.
    */
-  size_t getHasPredicateFullSize() const;
+  size_t getNumDistinctSubjectPredicatePairs() const;
 
   // --------------------------------------------------------------------------
   // TEXT RETRIEVAL
@@ -567,9 +567,9 @@ class IndexImpl {
 
   // Pattern trick data
   bool _usePatterns;
-  double _fullHasPredicateMultiplicityEntities;
-  double _fullHasPredicateMultiplicityPredicates;
-  size_t _fullHasPredicateSize;
+  double _avgNumDistinctPredicatesPerSubject;
+  double _avgNumDistinctSubjectsPerPredicate;
+  size_t _numDistinctSubjectPredicatePairs;
 
   size_t _parserBatchSize = PARSER_BATCH_SIZE;
   size_t _numTriplesPerBatch = NUM_TRIPLES_PER_PARTIAL_VOCAB;
