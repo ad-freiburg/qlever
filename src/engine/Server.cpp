@@ -811,11 +811,16 @@ boost::asio::awaitable<void> Server::processQuery(
   //  optional<errorMsg> and optional<metadata> and does this logic
   if (exceptionErrorMsg) {
     LOG(ERROR) << exceptionErrorMsg.value() << std::endl;
+    if (metadata.has_value()) {
+      try {
+        LOG(ERROR) << metadata.value().coloredError() << std::endl;
+      } catch (const std::exception&) {
+        LOG(ERROR) << "Failed to highlight error in query " << std::endl;
+        LOG(ERROR) << metadata.value().query_ << std::endl;
+      }
+    }
     auto errorResponseJson = composeErrorResponseJson(
         query, exceptionErrorMsg.value(), requestTimer, metadata);
-    if (metadata.has_value()) {
-      LOG(ERROR) << metadata.value().coloredError() << std::endl;
-    }
     if (queryExecutionTree) {
       errorResponseJson["runtimeInformation"] = nlohmann::ordered_json(
           queryExecutionTree->getRootOperation()->getRuntimeInfo());

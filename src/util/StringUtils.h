@@ -30,8 +30,8 @@ inline string getUppercase(const string& orig);
 
 inline string getLowercaseUtf8(std::string_view s);
 
-inline std::pair<size_t, std::string> getUTF8Prefix(std::string_view s,
-                                                    size_t prefixLength);
+inline std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view s,
+                                                         size_t prefixLength);
 
 //! Gets the last part of a string that is somehow split by the given separator.
 inline string getLastPartOfString(const string& text, const char separator);
@@ -116,8 +116,8 @@ std::string getLowercaseUtf8(std::string_view s) {
  * @return the first max(prefixLength, numCodepointsInArgSP) Unicode
  * codepoints of sv, encoded as UTF-8
  */
-std::pair<size_t, std::string> getUTF8Prefix(std::string_view sv,
-                                             size_t prefixLength) {
+std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
+                                                  size_t prefixLength) {
   const char* s = sv.data();
   int32_t length = sv.length();
   size_t numCodepoints = 0;
@@ -132,7 +132,17 @@ std::pair<size_t, std::string> getUTF8Prefix(std::string_view sv,
           "Illegal UTF sequence in ad_utility::getUTF8Prefix");
     }
   }
-  return {numCodepoints, std::string(sv.data(), i)};
+  return {numCodepoints, sv.substr(0, i)};
+}
+
+inline string_view getUTF8Substring(const std::string_view str, size_t start,
+                                    size_t size) {
+  auto [numCodepoints, upToEnd] = getUTF8Prefix(str, start + size);
+  auto [numCodepoints2, prefix] = getUTF8Prefix(upToEnd, start);
+  return upToEnd.substr(prefix.size());
+}
+inline string_view getUTF8Substring(const std::string_view str, size_t start) {
+  return getUTF8Substring(str, start, str.size());
 }
 
 // ____________________________________________________________________________

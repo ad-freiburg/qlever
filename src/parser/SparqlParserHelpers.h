@@ -44,11 +44,8 @@ struct ParserAndVisitor {
   auto parseTypesafe(ContextType* (SparqlAutomaticParser::*F)(void)) {
     auto resultOfParse = visitor_.visit(std::invoke(F, parser_));
 
-    // Use `ANTLRInputStream.getText` because queries may contain multibyte
-    // characters. ANTLR uses UTF-32 internally so this problem can be
-    // circumvented by using this method.
-    auto remainingString = stream_.getText(antlr4::misc::Interval(
-        parser_.getCurrentToken()->getStartIndex(), stream_.size()));
+    auto remainingString = ad_utility::getUTF8Substring(
+        input_, parser_.getCurrentToken()->getStartIndex());
     return ResultOfParseAndRemainingText{std::move(resultOfParse),
                                          std::string{remainingString}};
   }
