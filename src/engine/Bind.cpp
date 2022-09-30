@@ -58,7 +58,7 @@ string Bind::asStringImpl(size_t indent) const {
   }
 
   os << "BIND ";
-  os << _bind._expression.getCacheKey(getVariableColumns());
+  os << _bind._expression.getCacheKey(_subtree->getVariableColumns());
   os << "\n" << _subtree->asString(indent);
   return std::move(os).str();
 }
@@ -108,7 +108,7 @@ void Bind::computeExpressionBind(
     const ResultTable& inputResultTable,
     sparqlExpression::SparqlExpression* expression) const {
   sparqlExpression::VariableToColumnAndResultTypeMap columnMap;
-  for (const auto& [variable, columnIndex] : getVariableColumns()) {
+  for (const auto& [variable, columnIndex] : _subtree->getVariableColumns()) {
     // Ignore the added (bound) variable.
     if (columnIndex < inputResultTable.width()) {
       columnMap[variable] =
@@ -143,7 +143,7 @@ void Bind::computeExpressionBind(
     constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
     if constexpr (isVariable) {
-      auto column = getVariableColumns().at(singleResult.name());
+      auto column = _subtree->getVariableColumns().at(singleResult.name());
       for (size_t i = 0; i < inSize; ++i) {
         output(i, inCols) = output(i, column);
       }
