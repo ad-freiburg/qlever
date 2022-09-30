@@ -132,12 +132,13 @@ RegexExpression::RegexExpression(
     regex_ = std::move(opt.value());
   } else {
     regex_.emplace<RE2>(regexString, RE2::Quiet);
-    if (std::get<RE2>(regex_).error_code() != RE2::NoError) {
-      // TODO<joka921> get the detailed error message out of RE2 and pass it
-      // on to the user.
-      throw std::runtime_error{
-          "The regex " + originalRegexString +
-          " is not supported by QLever (which uses Google's RE2 library)"};
+    const auto& r = std::get<RE2>(regex_);
+    if (r.error_code() != RE2::NoError) {
+      throw std::runtime_error{absl::StrCat(
+          "The regex ", originalRegexString,
+          " is not supported by QLever (which uses Google's RE2 library). "
+          "Error from RE2 is: ",
+          r.error())};
     }
   }
 }
