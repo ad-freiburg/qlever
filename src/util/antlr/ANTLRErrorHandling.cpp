@@ -57,9 +57,16 @@ ExceptionMetadata generateMetadata(antlr4::ParserRuleContext* ctx) {
 
 std::string generateExceptionMessage(antlr4::Token* offendingSymbol,
                                      const std::string& msg) {
-  return (offendingSymbol)
-             ? absl::StrCat("Token \"", offendingSymbol->getText(), "\": ", msg)
-             : msg;
+  if (!offendingSymbol) {
+    return msg;
+  } else if (offendingSymbol->getStartIndex() ==
+             offendingSymbol->getStopIndex() + 1) {
+    // This can only happen at the end of the query when a token is expected,
+    // but none is found. The offending token is then empty.
+    return absl::StrCat("Unexpected end of Query: ", msg);
+  } else {
+    return absl::StrCat("Token \"", offendingSymbol->getText(), "\": ", msg);
+  }
 }
 
 // _____________________________________________________________________________

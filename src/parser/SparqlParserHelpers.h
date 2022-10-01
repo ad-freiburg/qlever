@@ -44,8 +44,10 @@ struct ParserAndVisitor {
   auto parseTypesafe(ContextType* (SparqlAutomaticParser::*F)(void)) {
     auto resultOfParse = visitor_.visit(std::invoke(F, parser_));
 
-    auto remainingString =
-        input_.substr(parser_.getCurrentToken()->getStartIndex());
+    // The `startIndex()` denotes the index of a Unicode codepoint, but `input_`
+    // is UTF-8 encoded.
+    auto remainingString = ad_utility::getUTF8Substring(
+        input_, parser_.getCurrentToken()->getStartIndex());
     return ResultOfParseAndRemainingText{std::move(resultOfParse),
                                          std::string{remainingString}};
   }
