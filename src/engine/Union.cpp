@@ -3,7 +3,8 @@
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 #include "Union.h"
 
-#include "CallFixedSize.h"
+#include "engine/CallFixedSize.h"
+#include "util/TransparentFunctors.h"
 
 const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
 
@@ -63,15 +64,25 @@ vector<size_t> Union::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
 Operation::VariableToColumnMap Union::computeVariableToColumnMap() const {
+  const auto& subtreeCols = _subtrees[0]->getVariableColumns();
+  std::vector<std::pair<std::string, size_t>> varsAsPairs(subtreeCols.begin(),
+                                                          subtreeCols.end());
+  std::ranges::sort(varsAsPairs, {}, ad_utility::secondOfPair);
   VariableToColumnMap variableColumns;
   size_t column = 0;
-  for (const auto& subtree : _subtrees) {
-    for (const auto& [variable, idx] : subtree->getVariableColumns()) {
-      (void)idx;  // `idx` is unused.
-      if (!variableColumns.contains(variable)) {
-        variableColumns[variable] = column;
-        column++;
-      }
+  for (const auto& [variable, idx] : varsAsPairs) {
+    (void)idx;  // `idx` is unused.
+    if (!variableColumns.contains(variable)) {
+      variableColumns[variable] = column;
+      column++;
+    }
+  }
+
+  for (const auto& [variable, idx] : _subtrees[1]->getVariableColumns()) {
+    (void)idx;  // `idx` is unused.
+    if (!variableColumns.contains(variable)) {
+      variableColumns[variable] = column;
+      column++;
     }
   }
   return variableColumns;
@@ -189,6 +200,10 @@ void Union::computeUnion(
 
   if (left.size() > 0) {
     bool columnsMatch = left.cols() == columnOrigins.size();
+    auto max = std::ranges::max(columnOrigins, {},
+                                [](const auto& arr) { return arr[0]; })[0] +
+               1;
+    columnsMatch = columnsMatch && (max == left.cols());
     // checkAfterChunkSize if the order of the columns matches
     for (size_t i = 0; columnsMatch && i < columnOrigins.size(); i++) {
       const std::array<size_t, 2>& co = columnOrigins[i];
