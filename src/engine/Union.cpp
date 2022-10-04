@@ -63,14 +63,15 @@ vector<size_t> Union::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
 Operation::VariableToColumnMap Union::computeVariableToColumnMap() const {
-  ad_utility::HashMap<string, size_t> variableColumns(
-      _subtrees[0]->getVariableColumns());
-
-  size_t column = variableColumns.size();
-  for (auto it : _subtrees[1]->getVariableColumns()) {
-    if (variableColumns.find(it.first) == variableColumns.end()) {
-      variableColumns[it.first] = column;
-      column++;
+  VariableToColumnMap variableColumns;
+  size_t column = 0;
+  for (const auto& subtree : _subtrees) {
+    for (const auto& [variable, idx] : subtree->getVariableColumns()) {
+      (void)idx;  // `idx` is unused.
+      if (!variableColumns.contains(variable)) {
+        variableColumns[variable] = column;
+        column++;
+      }
     }
   }
   return variableColumns;
