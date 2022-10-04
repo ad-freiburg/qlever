@@ -18,6 +18,8 @@
 #include <memory>
 #include <utility>
 
+#include "parser/data/Variable.h"
+
 using std::endl;
 using std::pair;
 using std::shared_ptr;
@@ -104,8 +106,8 @@ class Operation {
   // subquery.
   virtual const VariableToColumnMap& getExternallyVisibleVariableColumns()
       const final;
-  virtual VariableToColumnMap& getExternallyVisibleVariableColumnsNotConst()
-      final;
+  virtual void setSelectedVariablesForSubquery(
+      const std::vector<Variable>& selectedVariables) final;
 
   RuntimeInformation& getRuntimeInfo() { return _runtimeInfo; }
 

@@ -275,7 +275,7 @@ void Operation::createRuntimeInfoFromEstimates() {
 const Operation::VariableToColumnMap&
 Operation::getInternallyVisibleVariableColumns() const {
   // TODO<joka921> Once the operation class is based on a variant rather than
-  // on inheritance, we can get rid of the locking here, as we can enforce,
+  // on inheritance, we can get rid of the locking here because we can enforce
   // that `computeVariableToColumnMap` is always called in the constructor of
   // each `Operation`.
   std::lock_guard l{variableToColumnMapMutex_};
@@ -289,7 +289,7 @@ Operation::getInternallyVisibleVariableColumns() const {
 const Operation::VariableToColumnMap&
 Operation::getExternallyVisibleVariableColumns() const {
   // TODO<joka921> Once the operation class is based on a variant rather than
-  // on inheritance, we can get rid of the locking here, as we can enforce,
+  // on inheritance, we can get rid of the locking here because we can enforce
   // that `computeVariableToColumnMap` is always called in the constructor of
   // each `Operation`.
   std::lock_guard l{variableToColumnMapMutex_};
@@ -300,10 +300,17 @@ Operation::getExternallyVisibleVariableColumns() const {
 }
 
 // ___________________________________________________________________________
-Operation::VariableToColumnMap&
-Operation::getExternallyVisibleVariableColumnsNotConst() {
-  // This is a safe const-cast because the actual access is to the non-const
-  // `*this` object.
-  return const_cast<VariableToColumnMap&>(
-      getExternallyVisibleVariableColumns());
+void Operation::setSelectedVariablesForSubquery(
+    const std::vector<Variable>& selectedVariables) {
+  const auto& internalVariables = getInternallyVisibleVariableColumns();
+  // This `const_cast` is safe.
+  auto& externalVariables =
+      const_cast<VariableToColumnMap&>(getExternallyVisibleVariableColumns());
+  externalVariables.clear();
+  for (const Variable& variable : selectedVariables) {
+    if (internalVariables.contains(variable.name())) {
+      externalVariables[variable.name()] =
+          internalVariables.at(variable.name());
+    }
+  }
 }
