@@ -157,18 +157,31 @@ struct EvaluationContext {
         _endIndex{endIndex},
         _allocator{allocator},
         _localVocab{localVocab} {}
-};
 
-// ____________________________________________________________________________
-inline size_t getColumnIndexForVariable(const Variable& var,
-                                        const EvaluationContext* context) {
-  const auto& map = context->_variableToColumnAndResultTypeMap;
-  if (!map.contains(var._name)) {
-    throw std::runtime_error(absl::StrCat(
-        "Variable ", var._name, " was not found in input to expression."));
+  bool isResultSortedBy(const Variable& variable) {
+    if (_columnsByWhichResultIsSorted.empty()) {
+      return false;
+    }
+    if (!_variableToColumnAndResultTypeMap.contains(variable.name())) {
+      return false;
+    }
+
+    return getColumnIndexForVariable(variable) ==
+           _columnsByWhichResultIsSorted[0];
   }
-  return map.at(var._name).first;
-}
+  // The size (in number of elements) that this evaluation context refers to.
+  [[nodiscard]] size_t size() const { return _endIndex - _beginIndex; }
+
+  // ____________________________________________________________________________
+  [[nodiscard]] size_t getColumnIndexForVariable(const Variable& var) const {
+    const auto& map = _variableToColumnAndResultTypeMap;
+    if (!map.contains(var._name)) {
+      throw std::runtime_error(absl::StrCat(
+          "Variable ", var._name, " was not found in input to expression."));
+    }
+    return map.at(var._name).first;
+  }
+};
 
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
@@ -376,9 +389,7 @@ constexpr bool isOperation<Operation<NumOperations, Ts...>> = true;
 // size of the `context`.
 template <SingleExpressionResult... Inputs>
 size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
-  return (... && isConstantResult<Inputs>)
-             ? 1ul
-             : context._endIndex - context._beginIndex;
+  return (... && isConstantResult<Inputs>) ? 1ul : context.size();
 }
 
 }  // namespace detail

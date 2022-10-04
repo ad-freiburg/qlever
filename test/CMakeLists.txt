@@ -237,3 +237,5 @@ addLinkAndDiscoverTest(SelectClauseTest index)
 addLinkAndDiscoverTestSerial(RelationalExpressionTest sparqlExpressions index engine)
 
 addLinkAndDiscoverTest(CheckUsePatternTrickTest parser engine)
+
+addLinkAndDiscoverTestSerial(RegexExpressionTest sparqlExpressions index engine)

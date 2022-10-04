@@ -22,6 +22,9 @@ class LiteralExpression : public SparqlExpression {
   // _________________________________________________________________________
   LiteralExpression(T _value) : _value{std::move(_value)} {}
 
+  // A simple getter for the stored value.
+  const T& value() const { return _value; }
+
   // Evaluating just returns the constant/literal value.
   ExpressionResult evaluate(
       [[maybe_unused]] EvaluationContext* context) const override {

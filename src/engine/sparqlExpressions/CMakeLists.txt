@@ -10,6 +10,6 @@ add_library(sparqlExpressions
         LiteralExpression.h GroupConcatExpression.h
         SparqlExpressionPimpl.h SparqlExpressionPimpl.cpp
         SampleExpression.h SampleExpression.cpp NaryExpression.cpp
-        RelationalExpressions.cpp AggregateExpression.cpp)
+        RelationalExpressions.cpp AggregateExpression.cpp RegexExpression.cpp)
 
 target_link_libraries(sparqlExpressions index)

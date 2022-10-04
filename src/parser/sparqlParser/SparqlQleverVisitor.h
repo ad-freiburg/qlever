@@ -366,7 +366,7 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] ExpressionPtr visit(Parser::BuiltInCallContext* ctx);
 
-  [[noreturn]] void visit(Parser::RegexExpressionContext* ctx);
+  [[nodiscard]] ExpressionPtr visit(Parser::RegexExpressionContext* ctx);
 
   [[noreturn]] void visit(Parser::SubstringExpressionContext* ctx);
 

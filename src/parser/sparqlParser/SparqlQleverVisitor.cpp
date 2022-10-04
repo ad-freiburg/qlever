@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
@@ -521,10 +522,7 @@ std::optional<parsedQuery::ConstructClause> Visitor::visit(
 
 // ____________________________________________________________________________________
 string Visitor::visit(Parser::StringContext* ctx) {
-  // TODO: The string rule also allow triple quoted strings with different
-  //  escaping rules. These are currently not handled. They should be parsed
-  //  into a typesafe format with a unique representation.
-  return ctx->getText();
+  return RdfEscaping::normalizeRDFLiteral(ctx->getText());
 }
 
 // ____________________________________________________________________________________
@@ -1490,7 +1488,7 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
   if (ctx->rdfLiteral()) {
     // TODO<joka921> : handle strings with value datatype that are
     // not in the knowledge base correctly.
-    return make_unique<StringOrIriExpression>(ctx->rdfLiteral()->getText());
+    return make_unique<StringOrIriExpression>(visit(ctx->rdfLiteral()));
   } else if (ctx->numericLiteral()) {
     auto integralWrapper = [](int64_t x) {
       return ExpressionPtr{make_unique<IntExpression>(x)};
@@ -1520,6 +1518,8 @@ ExpressionPtr Visitor::visit(Parser::BrackettedExpressionContext* ctx) {
 ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   if (ctx->aggregate()) {
     return visit(ctx->aggregate());
+  } else if (ctx->regexExpression()) {
+    return visit(ctx->regexExpression());
     // TODO: Implement built-in calls according to the following examples.
     //
     // } else if (ad_utility::getLowercase(ctx->children[0]->getText()) ==
@@ -1539,15 +1539,23 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     //   return createExpression<sparqlExpression::DistExpression>(
     //       std::move(children[0]), std::move(children[1]));
   } else {
-    reportError(ctx,
-                "Built-in function not yet implemented (only aggregates like "
-                "COUNT so far)");
+    reportNotSupported(
+        ctx, "Built-in functions (other than aggregates and REGEX) are ");
   }
 }
 
-// ____________________________________________________________________________________
-void Visitor::visit(Parser::RegexExpressionContext* ctx) {
-  reportNotSupported(ctx, "The REGEX function is");
+// _____________________________________________________________________________
+ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
+  const auto& exp = ctx->expression();
+  const auto& numArgs = exp.size();
+  AD_CHECK(numArgs >= 2 && numArgs <= 3);
+  auto flags = numArgs == 3 ? visitOptional(exp[2]) : std::nullopt;
+  try {
+    return std::make_unique<sparqlExpression::RegexExpression>(
+        visit(exp[0]), visit(exp[1]), std::move(flags));
+  } catch (const std::exception& e) {
+    reportError(ctx, e.what());
+  }
 }
 
 // ____________________________________________________________________________________
@@ -1635,7 +1643,7 @@ ExpressionPtr Visitor::visit(Parser::IriOrFunctionContext* ctx) {
   // Case 1: Just an IRI.
   if (ctx->argList() == nullptr) {
     return std::make_unique<sparqlExpression::StringOrIriExpression>(
-        ctx->getText());
+        visit(ctx->iri()));
   }
   // Case 2: Function call, where the function name is an IRI.
   return processIriFunctionCall(visit(ctx->iri()), visit(ctx->argList()));
