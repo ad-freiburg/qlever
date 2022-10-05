@@ -11,22 +11,22 @@
 
 TEST(TransparentFunctors, FirstOfPair) {
   std::pair<std::string, std::vector<int>> pair{"hello", {2}};
-  auto first = ad_utility::firstOfPair(pair);
+  auto first = ad_utility::first(pair);
   ASSERT_EQ("hello", first);
   ASSERT_EQ("hello", pair.first);
 
-  auto firstMoved = ad_utility::firstOfPair(std::move(pair));
+  auto firstMoved = ad_utility::first(std::move(pair));
   ASSERT_EQ("hello", firstMoved);
   ASSERT_TRUE(pair.first.empty());
 }
 
 TEST(TransparentFunctors, SecondOfPair) {
   std::pair<std::string, std::vector<int>> pair{"hello", {2}};
-  auto second = ad_utility::secondOfPair(pair);
+  auto second = ad_utility::second(pair);
   ASSERT_EQ(std::vector{2}, second);
   ASSERT_EQ(std::vector{2}, pair.second);
 
-  auto secondMoved = ad_utility::secondOfPair(std::move(pair));
+  auto secondMoved = ad_utility::second(std::move(pair));
   ASSERT_EQ(std::vector{2}, secondMoved);
   ASSERT_TRUE(pair.second.empty());
 }
