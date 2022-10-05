@@ -10,6 +10,7 @@
 #include "../parser/ParsedQuery.h"
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
+#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
 using std::list;
 using std::pair;
@@ -18,14 +19,7 @@ using std::vector;
 class Filter : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
-  SparqlFilter::FilterType _type;
-  string _lhs;
-  string _rhs;
-
-  std::vector<string> _additionalLhs;
-  std::vector<string> _additionalPrefixRegexes;
-  bool _regexIgnoreCase;
-  bool _lhsAsString;
+  sparqlExpression::SparqlExpressionPimpl _expression;
 
  public:
   virtual size_t getResultWidth() const override;
@@ -33,8 +27,7 @@ class Filter : public Operation {
  public:
   Filter(QueryExecutionContext* qec,
          std::shared_ptr<QueryExecutionTree> subtree,
-         SparqlFilter::FilterType type, string lhs, string rhs,
-         vector<string> additionalLhs, vector<string> additionalPrefixes);
+         sparqlExpression::SparqlExpressionPimpl expression);
 
  private:
   virtual string asStringImpl(size_t indent = 0) const override;
@@ -51,6 +44,8 @@ class Filter : public Operation {
   }
 
   virtual size_t getSizeEstimate() override {
+    // TODO<joka921> integrate the size estimates into the expressions.
+    /*
     if (_type == SparqlFilter::FilterType::REGEX) {
       // TODO(jbuerklin): return a better estimate
       return std::numeric_limits<size_t>::max();
@@ -87,9 +82,13 @@ class Filter : public Operation {
         return _subtree->getSizeEstimate() / 50;
       }
     }
+     */
   }
 
   virtual size_t getCostEstimate() override {
+    return _subtree->getCostEstimate();
+    // TODO<joka921> include the cost estimates into the expressions.
+    /*
     if (_type == SparqlFilter::FilterType::REGEX) {
       // We assume that checking a REGEX for an element is 10 times more
       // expensive than an "ordinary" filter check.
@@ -104,10 +103,8 @@ class Filter : public Operation {
     // we have to look at each element of the result
     return getSizeEstimate() + _subtree->getSizeEstimate() +
            _subtree->getCostEstimate();
+           */
   }
-
-  void setRegexIgnoreCase(bool i) { _regexIgnoreCase = i; }
-  void setLhsAsString(bool i) { _lhsAsString = i; }
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; };
   vector<QueryExecutionTree*> getChildren() override {
@@ -127,40 +124,9 @@ class Filter : public Operation {
     return _subtree->getVariableColumns();
   }
 
-  [[nodiscard]] bool isLhsSorted() const {
-    const auto& subresSortedOn = _subtree->resultSortedOn();
-    size_t lhsInd = _subtree->getVariableColumn(_lhs);
-    return !subresSortedOn.empty() && subresSortedOn[0] == lhsInd;
-  }
-
-  template <int WIDTH>
-  void computeResultDynamicValue(IdTable* dynResult, size_t lhsInd,
-                                 size_t rhsInd, const IdTable& dynInput);
-
-  /**
-   * @brief Uses the result type and the filter type (_type) to apply the filter
-   * to subRes and store it in res.
-   * @return The pointer res.
-   */
-  template <int WIDTH>
-  void computeFilterFixedValue(IdTableStatic<WIDTH>* res, size_t lhs, Id rhs,
-                               const IdTableView<WIDTH>& input,
-                               shared_ptr<const ResultTable> subRes) const;
-  /**
-   * @brief Uses the result type and applies a range filter
-   * ( input[lhs] >= rhs_lower && input[rhs] < rhs_upper)
-   * to subRes and store it in res.
-   *
-   */
-  template <int WIDTH>
-  void computeFilterRange(IdTableStatic<WIDTH>* res, size_t lhs, Id rhs_lower,
-                          Id rhs_upper, const IdTableView<WIDTH>& input,
-                          shared_ptr<const ResultTable> subRes) const;
-
-  template <int WIDTH>
-  void computeResultFixedValue(
-      ResultTable* result,
-      const std::shared_ptr<const ResultTable> subRes) const;
-
   virtual void computeResult(ResultTable* result) override;
+
+  template <int WIDTH>
+  void computeFilterImpl(ResultTable* outputResultTable,
+                         const ResultTable& inputResultTable);
 };
