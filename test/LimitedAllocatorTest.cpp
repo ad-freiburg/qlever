@@ -19,6 +19,7 @@ TEST(AllocatorWithLimit, initial) {
   [[maybe_unused]] auto ptr = all.allocate(6);
   ASSERT_THROW(all.allocate(1),
                ad_utility::detail::AllocationExceedsLimitException);
+  all.deallocate(ptr, 6);
 }
 
 TEST(AllocatorWithLimit, vector) {
