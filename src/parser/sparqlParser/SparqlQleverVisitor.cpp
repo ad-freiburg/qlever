@@ -397,7 +397,7 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
             varOrTerm(std::move(triple.object_))};
   };
 
-  BasicGraphPattern triples = {ad_utility::transformToVector(
+  BasicGraphPattern triples = {ad_utility::transform(
       visit(ctx->triplesSameSubjectPath()), convertAndRegisterTriple)};
   if (ctx->triplesBlock()) {
     triples.appendTriples(visit(ctx->triplesBlock()));

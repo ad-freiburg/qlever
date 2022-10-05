@@ -82,7 +82,7 @@ void appendVector(std::vector<T>& destination, U&& source) {
  */
 template <typename Input, typename F,
           typename Output = std::invoke_result_t<F, Input&&>>
-std::vector<Output> transformToVector(std::vector<Input>&& input, F unaryOp) {
+std::vector<Output> transform(std::vector<Input>&& input, F unaryOp) {
   std::vector<Output> out;
   out.reserve(input.size());
   std::transform(std::make_move_iterator(input.begin()),

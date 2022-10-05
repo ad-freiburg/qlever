@@ -42,8 +42,6 @@ struct SecondImpl {
 };
 }  // namespace detail
 
-// TODO<joka921> Names and tests out of sync. Takes anything that statically has
-// at least two elements.
 /// Return the first element via perfect forwarding of any type for which
 /// `std::get<0>(x)` is valid. This holds e.g. for `std::pair`, `std::tuple`,
 /// and `std::array`.

@@ -1,6 +1,8 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+// Author:
+//   2018     Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//   2022-    Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 #include "Union.h"
 
 #include "engine/CallFixedSize.h"
@@ -67,9 +69,9 @@ Operation::VariableToColumnMap Union::computeVariableToColumnMap() const {
   using VarAndIndex = std::pair<std::string, size_t>;
 
   auto getVarsSortedByIndex = [](const auto& subtree) {
-    const auto& subtreeCols = subtree->getVariableColumns();
-    std::vector<VarAndIndex> varsAsPairs(subtreeCols.begin(),
-                                         subtreeCols.end());
+    const auto& subtreeVariableColumns = subtree->getVariableColumns();
+    std::vector<VarAndIndex> varsAsPairs(subtreeVariableColumns.begin(),
+                                         subtreeVariableColumns.end());
     std::ranges::sort(varsAsPairs, {}, ad_utility::second);
     return varsAsPairs;
   };
@@ -77,18 +79,20 @@ Operation::VariableToColumnMap Union::computeVariableToColumnMap() const {
   VariableToColumnMap variableColumns;
   size_t column = 0;
 
-  auto addVariableColumn = [&variableColumns,
-                            &column](const VarAndIndex& varAndIndex) {
-    if (!variableColumns.contains(varAndIndex.first)) {
-      variableColumns[varAndIndex.first] = column;
-      column++;
-    }
-  };
+  auto addVariableColumnIfNotExists =
+      [&variableColumns, &column](const VarAndIndex& varAndIndex) {
+        if (!variableColumns.contains(varAndIndex.first)) {
+          variableColumns[varAndIndex.first] = column;
+          column++;
+        }
+      };
 
-  auto addVariablesForSubtree = [&getVarsSortedByIndex,
-                                 &addVariableColumn](const auto& subtree) {
-    std::ranges::for_each(getVarsSortedByIndex(subtree), addVariableColumn);
-  };
+  auto addVariablesForSubtree =
+      [&getVarsSortedByIndex,
+       &addVariableColumnIfNotExists](const auto& subtree) {
+        std::ranges::for_each(getVarsSortedByIndex(subtree),
+                              addVariableColumnIfNotExists);
+      };
 
   std::ranges::for_each(_subtrees, addVariablesForSubtree);
   return variableColumns;
@@ -213,6 +217,11 @@ void Union::computeUnion(
     return allColumnsAreUsed && columnsAreSorted && noGapsInColumns;
   };
 
+  // Append the result of one the children (`left` or `right`), passed via the
+  // `inputTable` argument to the final result of this `UNION` operation. The
+  // `WIDTH` must be the width of the input table (`LEFT_WIDTH` or
+  // `RIGHT_WIDTH`) and  `getter` must be a function that extracts the correct
+  // column index for the `inputTable` from an element of the `columnOrigins`.
   auto appendResult = [&columnOrigins, &res, &appendToResultChunked,
                        &checkAfterChunkSize, &columnsMatch]<size_t WIDTH>(
                           const auto& inputTable, const auto& getter) {
