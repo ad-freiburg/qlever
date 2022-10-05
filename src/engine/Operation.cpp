@@ -237,7 +237,7 @@ void Operation::updateRuntimeInformationOnFailure(size_t timeInMilliseconds) {
 void Operation::createRuntimeInfoFromEstimates() {
   // reset
   _runtimeInfo = RuntimeInformation{};
-  _runtimeInfo.setColumnNames(getVariableColumns());
+  _runtimeInfo.setColumnNames(getInternallyVisibleVariableColumns());
   const auto numCols = getResultWidth();
   _runtimeInfo.numCols_ = numCols;
   _runtimeInfo.descriptor_ = getDescriptor();
@@ -272,9 +272,10 @@ void Operation::createRuntimeInfoFromEstimates() {
 }
 
 // ___________________________________________________________________________
-const Operation::VariableToColumnMap& Operation::getVariableColumns() const {
+const Operation::VariableToColumnMap&
+Operation::getInternallyVisibleVariableColumns() const {
   // TODO<joka921> Once the operation class is based on a variant rather than
-  // on inheritance, we can get rid of the locking here, as we can enforce,
+  // on inheritance, we can get rid of the locking here because we can enforce
   // that `computeVariableToColumnMap` is always called in the constructor of
   // each `Operation`.
   std::lock_guard l{variableToColumnMapMutex_};
@@ -285,8 +286,29 @@ const Operation::VariableToColumnMap& Operation::getVariableColumns() const {
 }
 
 // ___________________________________________________________________________
-Operation::VariableToColumnMap& Operation::getVariableColumnsNotConst() {
-  // This is a safe const-cast because the actual access is to the non-const
-  // `*this` object.
-  return const_cast<VariableToColumnMap&>(getVariableColumns());
+const Operation::VariableToColumnMap&
+Operation::getExternallyVisibleVariableColumns() const {
+  // TODO<joka921> Once the operation class is based on a variant rather than
+  // on inheritance, we can get rid of the locking here because we can enforce
+  // that `computeVariableToColumnMap` is always called in the constructor of
+  // each `Operation`.
+  std::lock_guard l{variableToColumnMapMutex_};
+  if (!externallyVisibleVariableToColumnMap_.has_value()) {
+    externallyVisibleVariableToColumnMap_ = computeVariableToColumnMap();
+  }
+  return externallyVisibleVariableToColumnMap_.value();
+}
+
+// ___________________________________________________________________________
+void Operation::setSelectedVariablesForSubquery(
+    const std::vector<Variable>& selectedVariables) {
+  const auto& internalVariables = getInternallyVisibleVariableColumns();
+  externallyVisibleVariableToColumnMap_.emplace();
+  auto& externalVariables = externallyVisibleVariableToColumnMap_.value();
+  for (const Variable& variable : selectedVariables) {
+    if (internalVariables.contains(variable.name())) {
+      externalVariables[variable.name()] =
+          internalVariables.at(variable.name());
+    }
+  }
 }

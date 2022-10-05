@@ -16,7 +16,8 @@ Union::Union(QueryExecutionContext* qec,
   _subtrees[1] = t2;
 
   // compute the column origins
-  ad_utility::HashMap<string, size_t> variableColumns = getVariableColumns();
+  ad_utility::HashMap<string, size_t> variableColumns =
+      getInternallyVisibleVariableColumns();
   _columnOrigins.resize(variableColumns.size(), {NO_COLUMN, NO_COLUMN});
   const auto& t1VarCols = t1->getVariableColumns();
   const auto& t2VarCols = t2->getVariableColumns();

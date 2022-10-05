@@ -35,7 +35,7 @@ GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
 }
 
 string GroupBy::asStringImpl(size_t indent) const {
-  const auto varMap = getVariableColumns();
+  const auto varMap = getInternallyVisibleVariableColumns();
   const auto varMapInput = _subtree->getVariableColumns();
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
@@ -58,10 +58,12 @@ string GroupBy::getDescriptor() const {
   return "GroupBy on " + absl::StrJoin(_groupByVariables, " ");
 }
 
-size_t GroupBy::getResultWidth() const { return getVariableColumns().size(); }
+size_t GroupBy::getResultWidth() const {
+  return getInternallyVisibleVariableColumns().size();
+}
 
 vector<size_t> GroupBy::resultSortedOn() const {
-  auto varCols = getVariableColumns();
+  auto varCols = getInternallyVisibleVariableColumns();
   vector<size_t> sortedOn;
   sortedOn.reserve(_groupByVariables.size());
   for (const std::string& var : _groupByVariables) {
@@ -295,7 +297,7 @@ void GroupBy::computeResult(ResultTable* result) {
   }
 
   // parse the aggregate aliases
-  const auto& varColMap = getVariableColumns();
+  const auto& varColMap = getInternallyVisibleVariableColumns();
   for (const Alias& alias : _aliases) {
     aggregates.push_back(
         Aggregate{alias._expression, varColMap.at(alias._target.name())});

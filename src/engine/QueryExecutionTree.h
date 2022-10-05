@@ -69,10 +69,9 @@ class QueryExecutionTree {
 
   const QueryExecutionContext* getQec() const { return _qec; }
 
-  // TODO<joka921> make this a const&
-  ad_utility::HashMap<string, size_t> getVariableColumns() const {
+  const Operation::VariableToColumnMap& getVariableColumns() const {
     AD_CHECK(_rootOperation);
-    return _rootOperation->getVariableColumns();
+    return _rootOperation->getExternallyVisibleVariableColumns();
   }
 
   std::shared_ptr<Operation> getRootOperation() const { return _rootOperation; }
