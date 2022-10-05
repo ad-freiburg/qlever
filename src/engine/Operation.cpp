@@ -303,10 +303,8 @@ Operation::getExternallyVisibleVariableColumns() const {
 void Operation::setSelectedVariablesForSubquery(
     const std::vector<Variable>& selectedVariables) {
   const auto& internalVariables = getInternallyVisibleVariableColumns();
-  // This `const_cast` is safe.
-  auto& externalVariables =
-      const_cast<VariableToColumnMap&>(getExternallyVisibleVariableColumns());
-  externalVariables.clear();
+  externallyVisibleVariableToColumnMap_.emplace();
+  auto& externalVariables = externallyVisibleVariableToColumnMap_.value();
   for (const Variable& variable : selectedVariables) {
     if (internalVariables.contains(variable.name())) {
       externalVariables[variable.name()] =

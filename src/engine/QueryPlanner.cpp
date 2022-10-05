@@ -383,12 +383,11 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         auto candidatesForSubquery = createExecutionTrees(arg.get());
         // Make sure that variables that are not selected by the subquery are
         // not visible.
-        auto removeNotSelectedVariables = [&](SubtreePlan& plan) {
+        auto setSelectedVariables = [&](SubtreePlan& plan) {
           plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
               arg.get().selectClause().getSelectedVariables());
         };
-        std::ranges::for_each(candidatesForSubquery,
-                              removeNotSelectedVariables);
+        std::ranges::for_each(candidatesForSubquery, setSelectedVariables);
         joinCandidates(std::move(candidatesForSubquery));
       } else if constexpr (std::is_same_v<T, p::TransPath>) {
         // TODO<kramerfl> This is obviously how you set up transitive paths.
