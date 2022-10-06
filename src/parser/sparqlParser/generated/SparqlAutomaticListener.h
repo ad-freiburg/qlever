@@ -537,6 +537,11 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
   virtual void exitRegexExpression(
       SparqlAutomaticParser::RegexExpressionContext* ctx) = 0;
 
+  virtual void enterLangExpression(
+      SparqlAutomaticParser::LangExpressionContext* ctx) = 0;
+  virtual void exitLangExpression(
+      SparqlAutomaticParser::LangExpressionContext* ctx) = 0;
+
   virtual void enterSubstringExpression(
       SparqlAutomaticParser::SubstringExpressionContext* ctx) = 0;
   virtual void exitSubstringExpression(

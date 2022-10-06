@@ -35,6 +35,8 @@ class RelationalExpression : public SparqlExpression {
 
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
+
+  std::optional<LangFilterData> getLanguageFilterExpression() const override;
 };
 
 }  // namespace sparqlExpression::relational

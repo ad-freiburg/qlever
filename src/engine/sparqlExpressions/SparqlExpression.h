@@ -93,6 +93,18 @@ class SparqlExpression {
     return std::nullopt;
   }
 
+  virtual bool containsLangExpression() const {
+    return std::ranges::any_of(children(),
+                               [](const SparqlExpression::Ptr& child) {
+                                 return child->containsLangExpression();
+                               });
+  }
+
+  using LangFilterData = SparqlExpressionPimpl::LangFilterData;
+  virtual std::optional<LangFilterData> getLanguageFilterExpression() const {
+    return std::nullopt;
+  }
+
   // __________________________________________________________________________
   virtual ~SparqlExpression() = default;
 

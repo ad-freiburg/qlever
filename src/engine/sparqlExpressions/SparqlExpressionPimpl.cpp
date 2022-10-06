@@ -71,4 +71,9 @@ bool SparqlExpressionPimpl::isVariableContained(
       containedVariables(),
       [&variable](const auto* varPtr) { return *varPtr == variable; });
 }
+
+std::optional<SparqlExpressionPimpl::LangFilterData>
+SparqlExpressionPimpl::getLanguageFilterExpression() const {
+  return _pimpl->getLanguageFilterExpression();
+}
 }  // namespace sparqlExpression

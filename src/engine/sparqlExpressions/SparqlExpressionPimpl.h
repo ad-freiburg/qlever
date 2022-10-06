@@ -80,6 +80,13 @@ class SparqlExpressionPimpl {
 
   bool isVariableContained(const Variable&) const;
 
+  struct LangFilterData {
+    Variable variable_;
+    std::string language_;
+  };
+
+  std::optional<LangFilterData> getLanguageFilterExpression() const;
+
   SparqlExpression* getPimpl() { return _pimpl.get(); }
   [[nodiscard]] const SparqlExpression* getPimpl() const {
     return _pimpl.get();

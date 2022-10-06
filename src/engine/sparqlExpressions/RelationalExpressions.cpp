@@ -4,6 +4,8 @@
 
 #include "RelationalExpressions.h"
 
+#include "engine/sparqlExpressions/LangExpression.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "util/LambdaHelpers.h"
 #include "util/TypeTraits.h"
@@ -382,6 +384,26 @@ string RelationalExpression<Comp>::getCacheKey(
 template <Comparison Comp>
 std::span<SparqlExpression::Ptr> RelationalExpression<Comp>::children() {
   return {children_.data(), children_.size()};
+}
+
+// _____________________________________________________________________________
+template <Comparison Comp>
+std::optional<SparqlExpression::LangFilterData>
+RelationalExpression<Comp>::getLanguageFilterExpression() const {
+  if (Comp != valueIdComparators::Comparison::EQ) {
+    return std::nullopt;
+  }
+
+  const auto* varPtr =
+      dynamic_cast<const LangExpression*>(std::get<0>(children_).get());
+  const auto* langPtr =
+      dynamic_cast<const StringOrIriExpression*>(std::get<1>(children_).get());
+
+  if (!varPtr || !langPtr) {
+    return std::nullopt;
+  }
+
+  return LangFilterData{varPtr->variable(), langPtr->value()};
 }
 
 // Explicit instantiations

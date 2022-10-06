@@ -595,6 +595,11 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
   virtual void exitRegexExpression(
       SparqlAutomaticParser::RegexExpressionContext* /*ctx*/) override {}
 
+  virtual void enterLangExpression(
+      SparqlAutomaticParser::LangExpressionContext* /*ctx*/) override {}
+  virtual void exitLangExpression(
+      SparqlAutomaticParser::LangExpressionContext* /*ctx*/) override {}
+
   virtual void enterSubstringExpression(
       SparqlAutomaticParser::SubstringExpressionContext* /*ctx*/) override {}
   virtual void exitSubstringExpression(

@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "parser/SparqlParser.h"
@@ -288,10 +289,13 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
 
     pattern._graphPatterns = std::move(subOps);
     for (auto& filter : filters) {
-      // TODO<joka921> reinstate the special logic for language filters
-      if (false) {
-        // if (filter._type == SparqlFilter::LANG_MATCHES) {
-        // pattern.addLanguageFilter(filter._lhs, filter._rhs);
+      // TODO<joka921> Add the checks that there are no LANG() expressions left
+      // after this adding.
+      if (auto langFilterData =
+              filter.expression_.getLanguageFilterExpression();
+          langFilterData.has_value()) {
+        const auto& [variable, language] = langFilterData.value();
+        pattern.addLanguageFilter(variable.name(), language);
       } else {
         pattern._filters.push_back(std::move(filter));
       }
@@ -482,16 +486,12 @@ vector<SparqlFilter> Visitor::visit(Parser::HavingClauseContext* ctx) {
 
 // ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::HavingConditionContext* ctx) {
-  return {visitExpressionPimpl(ctx->constraint())};
-  // TODO<joka921> Reinstate the special logic for language filters.
-  // if (filter._type == SparqlFilter::LANG_MATCHES) {
-  /*
-  if (false) {
+  auto expression = visitExpressionPimpl(ctx->constraint());
+  if (auto langFilterData = expression.getLanguageFilterExpression();
+      langFilterData.has_value()) {
     reportNotSupported(ctx, "Language filters in HAVING clauses are");
-  } else {
-    return filter;
   }
-   */
+  return {std::move(expression)};
 }
 
 // ____________________________________________________________________________________
@@ -1514,6 +1514,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return visit(ctx->aggregate());
   } else if (ctx->regexExpression()) {
     return visit(ctx->regexExpression());
+  } else if (ctx->langExpression()) {
+    return visit(ctx->langExpression());
     // TODO: Implement built-in calls according to the following examples.
     //
     // } else if (ad_utility::getLowercase(ctx->children[0]->getText()) ==
@@ -1547,6 +1549,16 @@ ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
   try {
     return std::make_unique<sparqlExpression::RegexExpression>(
         visit(exp[0]), visit(exp[1]), std::move(flags));
+  } catch (const std::exception& e) {
+    reportError(ctx, e.what());
+  }
+}
+
+// _____________________________________________________________________________
+ExpressionPtr Visitor::visit(Parser::LangExpressionContext* ctx) {
+  try {
+    return std::make_unique<sparqlExpression::LangExpression>(
+        visit(ctx->expression()));
   } catch (const std::exception& e) {
     reportError(ctx, e.what());
   }
