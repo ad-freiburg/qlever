@@ -119,8 +119,6 @@ addLinkAndDiscoverTest(IdTableTest)
 
 addLinkAndDiscoverTest(TransitivePathTest engine)
 
-addLinkAndDiscoverTest(SparqlLexerTest parser ${ICU_LIBRARIES})
-
 addLinkAndDiscoverTest(BatchedPipelineTest)
 
 addLinkAndDiscoverTest(TupleHelpersTest)

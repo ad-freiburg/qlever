@@ -13,7 +13,6 @@ add_library(parser
         Tokenizer.h Tokenizer.cpp
         ContextFileParser.cpp ContextFileParser.h
         ParallelParseBuffer.h
-        SparqlLexer.h SparqlLexer.cpp
         TokenizerCtre.h TurtleTokenId.h
         ParallelBuffer.cpp
         SparqlParserHelpers.h SparqlParserHelpers.cpp
