@@ -91,12 +91,12 @@ size_t CountAvailablePredicates::getSizeEstimate() {
     // for the type of optimizations the optimizer can currently do.
     size_t num_distinct = _subtree->getSizeEstimate() /
                           _subtree->getMultiplicity(_subjectColumnIndex);
-    return num_distinct / getIndex().getHasPredicateMultiplicityPredicates();
+    return num_distinct / getIndex().getAvgNumDistinctSubjectsPerPredicate();
   } else {
     // Predicates are counted for all entities. In this case the size estimate
     // should be accurate.
-    return getIndex().getHasPredicateFullSize() /
-           getIndex().getHasPredicateMultiplicityPredicates();
+    return getIndex().getNumDistinctSubjectPredicatePairs() /
+           getIndex().getAvgNumDistinctSubjectsPerPredicate();
   }
 }
 

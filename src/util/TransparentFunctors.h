@@ -25,30 +25,32 @@ namespace ad_utility {
 
 namespace detail {
 
-// Implementation of `firstOfPair` (see below).
-struct FirstOfPairImpl {
+// Implementation of `first` (see below).
+struct FirstImpl {
   template <typename T>
-  requires similarToInstantiation<std::pair, T>
   constexpr decltype(auto) operator()(T&& pair) const noexcept {
-    return AD_FWD(pair).first;
+    return std::get<0>(AD_FWD(pair));
   }
 };
 
-// Implementation of `secondOfPair` (see below).
-struct SecondOfPairImpl {
+// Implementation of `second` (see below).
+struct SecondImpl {
   template <typename T>
-  requires similarToInstantiation<std::pair, T>
   constexpr decltype(auto) operator()(T&& pair) const noexcept {
-    return AD_FWD(pair).second;
+    return std::get<1>(AD_FWD(pair));
   }
 };
 }  // namespace detail
 
-/// Return the first element of a `std::pair`.
-static constexpr detail::FirstOfPairImpl firstOfPair;
+/// Return the first element via perfect forwarding of any type for which
+/// `std::get<0>(x)` is valid. This holds e.g. for `std::pair`, `std::tuple`,
+/// and `std::array`.
+static constexpr detail::FirstImpl first;
 
-/// Return the second element of a `std::pair`.
-static constexpr detail::SecondOfPairImpl secondOfPair;
+/// Return the second element via perfect forwarding of any type for which
+/// `std::get<1>(x)` is valid. This holds e.g. for `std::pair`, `std::tuple`,
+/// and `std::array`.
+static constexpr detail::SecondImpl second;
 }  // namespace ad_utility
 
 #endif  // QLEVER_TRANSPARENTFUNCTORS_H

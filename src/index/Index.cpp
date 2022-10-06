@@ -113,18 +113,18 @@ const CompactVectorOfStrings<Id>& Index::getPatterns() const {
 }
 
 // _________________________________________
-double Index::getHasPredicateMultiplicityEntities() const {
-  return pimpl_->getHasPredicateMultiplicityEntities();
+double Index::getAvgNumDistinctPredicatesPerSubject() const {
+  return pimpl_->getAvgNumDistinctPredicatesPerSubject();
 }
 
 // ________________________________________
-double Index::getHasPredicateMultiplicityPredicates() const {
-  return pimpl_->getHasPredicateMultiplicityPredicates();
+double Index::getAvgNumDistinctSubjectsPerPredicate() const {
+  return pimpl_->getAvgNumDistinctSubjectsPerPredicate();
 }
 
 // _______________________________________
-size_t Index::getHasPredicateFullSize() const {
-  return pimpl_->getHasPredicateFullSize();
+size_t Index::getNumDistinctSubjectPredicatePairs() const {
+  return pimpl_->getNumDistinctSubjectPredicatePairs();
 }
 
 // ______________________________________

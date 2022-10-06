@@ -15,8 +15,8 @@ auto I = [](const auto& id) {
 TEST(PatternStatistics, Initialization) {
   PatternStatistics patternStatistics{50, 25, 4};
   ASSERT_EQ(patternStatistics._numDistinctSubjectPredicatePairs, 50u);
-  ASSERT_FLOAT_EQ(patternStatistics._avgNumPredicatesPerSubject, 2.0);
-  ASSERT_FLOAT_EQ(patternStatistics._avgNumSubjectsPerPredicate, 12.5);
+  ASSERT_FLOAT_EQ(patternStatistics._avgNumDistinctPredicatesPerSubject, 2.0);
+  ASSERT_FLOAT_EQ(patternStatistics._avgNumDistinctSubjectsPerPredicate, 12.5);
 }
 
 TEST(PatternStatistics, Serialization) {
@@ -30,8 +30,8 @@ TEST(PatternStatistics, Serialization) {
   reader >> statistics2;
 
   ASSERT_EQ(statistics2._numDistinctSubjectPredicatePairs, 50u);
-  ASSERT_FLOAT_EQ(statistics2._avgNumPredicatesPerSubject, 2.0);
-  ASSERT_FLOAT_EQ(statistics2._avgNumSubjectsPerPredicate, 12.5);
+  ASSERT_FLOAT_EQ(statistics2._avgNumDistinctPredicatesPerSubject, 2.0);
+  ASSERT_FLOAT_EQ(statistics2._avgNumDistinctSubjectsPerPredicate, 12.5);
 }
 
 // Create patterns from a small SPO-sorted sequence of triples.

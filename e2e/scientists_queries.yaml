@@ -1334,3 +1334,19 @@ queries:
       - num_rows : 1031
       - selected: [ "?cls", "?cnt" ]
       - contains_row: [ "<Academic>", 4909 ]
+
+  # The query checks the bugfix of issue #804.  The variable `?y` is not visible outside the subquery,
+  # but it is visible inside the subquery for the (completely pointless) BIND.
+  - query: scoping-of-subqueries-only-externally
+    type: no-text
+    sparql: |
+      SELECT ?x WHERE {
+        SELECT ?x WHERE {
+          <Albert_Einstein> ?y ?x . 
+          BIND (?y AS ?z)}
+      }
+    checks:
+      - num_cols: 1
+      - num_rows : 150
+      - selected: [ "?x" ]
+      - contains_row: [ "<Max_Planck_Medal>" ]

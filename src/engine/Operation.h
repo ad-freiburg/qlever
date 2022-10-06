@@ -18,6 +18,8 @@
 #include <memory>
 #include <utility>
 
+#include "parser/data/Variable.h"
+
 using std::endl;
 using std::pair;
 using std::shared_ptr;
@@ -99,8 +101,13 @@ class Operation {
   virtual float getMultiplicity(size_t col) = 0;
   virtual bool knownEmptyResult() = 0;
 
-  virtual const VariableToColumnMap& getVariableColumns() const final;
-  virtual VariableToColumnMap& getVariableColumnsNotConst() final;
+  // Get the mapping from variables to columns but without the variables that
+  // are not visible to the outside because they were not selected by a
+  // subquery.
+  virtual const VariableToColumnMap& getExternallyVisibleVariableColumns()
+      const final;
+  virtual void setSelectedVariablesForSubquery(
+      const std::vector<Variable>& selectedVariables) final;
 
   RuntimeInformation& getRuntimeInfo() { return _runtimeInfo; }
 
@@ -190,6 +197,12 @@ class Operation {
     };
   }
 
+  // Get the mapping from variables to column indices. This mapping may only be
+  // used internally, because the actually visible variables might be different
+  // in case of a subquery.
+  virtual const VariableToColumnMap& getInternallyVisibleVariableColumns()
+      const final;
+
  private:
   //! Compute the result of the query-subtree rooted at this element..
   //! Computes both, an EntityList and a HitList.
@@ -214,7 +227,7 @@ class Operation {
   void updateRuntimeInformationOnFailure(size_t timeInMilliseconds);
 
   // Compute the variable to column index mapping. Is used internally by
-  // `getVariableColumns`.
+  // `getInternallyVisibleVariableColumns`.
   virtual VariableToColumnMap computeVariableToColumnMap() const = 0;
 
   // Recursively call a function on all children.
@@ -239,8 +252,8 @@ class Operation {
 
   // A mutex that can be "copied". The semantics are, that copying will create
   // a new mutex. This is sufficient for applications like in
-  // `getVariableColumns()` where we just want to make a `const` member function
-  // that modifies a `mutable` member threadsafe.
+  // `getInternallyVisibleVariableColumns()` where we just want to make a
+  // `const` member function that modifies a `mutable` member threadsafe.
   struct CopyableMutex : std::mutex {
     using std::mutex::mutex;
     CopyableMutex(const CopyableMutex&) {}
@@ -250,7 +263,13 @@ class Operation {
   mutable CopyableMutex variableToColumnMapMutex_;
   // Store the mapping from variables to column indices. `nullopt` means that
   // this map has not yet been computed. This computation is typically performed
-  // in the const member function `getVariableColumns`, so we have to make it
-  // threadsafe.
+  // in the const member function `getInternallyVisibleVariableColumns`, so we
+  // have to make it threadsafe.
   mutable std::optional<VariableToColumnMap> variableToColumnMap_;
+
+  // Store the mapping from variables to column indices that is externally
+  // visible. This might be different from the `variableToColumnMap_` in case of
+  // a subquery that doesn't select all variables.
+  mutable std::optional<VariableToColumnMap>
+      externallyVisibleVariableToColumnMap_;
 };

@@ -10,6 +10,7 @@
 #include <string_view>
 #include <utility>
 
+#include "util/Iterators.h"
 #include "util/TypeTraits.h"
 
 // TODO: Test the algorithms.
@@ -70,13 +71,9 @@ inline bool includes(const Container& container,
  */
 template <typename T, ad_utility::SimilarTo<std::vector<T>> U>
 void appendVector(std::vector<T>& destination, U&& source) {
-  if constexpr (std::is_rvalue_reference_v<U&&>) {
-    destination.insert(destination.end(),
-                       std::make_move_iterator(source.begin()),
-                       std::make_move_iterator(source.end()));
-  } else {
-    destination.insert(destination.end(), source.begin(), source.end());
-  }
+  destination.insert(destination.end(),
+                     ad_utility::makeForwardingIterator<U>(source.begin()),
+                     ad_utility::makeForwardingIterator<U>(source.end()));
 }
 
 /**
