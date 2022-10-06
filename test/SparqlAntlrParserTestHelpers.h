@@ -169,12 +169,12 @@ constexpr const ad_utility::Last<Current, Others...>* unwrapVariant(
 }
 // _____________________________________________________________________________
 auto NumericLiteralDouble =
-    [](double value) -> Matcher<std::variant<int64_t, double>> {
+    [](double value) -> Matcher<const std::variant<int64_t, double>&> {
   return testing::VariantWith<double>(testing::DoubleEq(value));
 };
 
 auto NumericLiteralInt =
-    [](int64_t value) -> Matcher<std::variant<int64_t, double>> {
+    [](int64_t value) -> Matcher<const std::variant<int64_t, double>&> {
   return testing::VariantWith<int64_t>(testing::Eq(value));
 };
 // _____________________________________________________________________________
@@ -595,7 +595,7 @@ auto RootGraphPattern = [](const Matcher<const p::GraphPattern&>& m)
 template <auto SubMatcherLambda>
 struct MatcherWithDefaultFilters {
   Matcher<const p::GraphPatternOperation&> operator()(
-      vector<SparqlFilter>&& filters, const auto&... childMatchers) {
+      vector<std::string>&& filters, const auto&... childMatchers) {
     return SubMatcherLambda(std::move(filters), childMatchers...);
   }
 
@@ -636,7 +636,7 @@ auto GraphPattern =
     MatcherWithDefaultFiltersAndOptional<detail::GraphPattern>{};
 
 namespace detail {
-auto OptionalGraphPattern = [](vector<SparqlFilter>&& filters,
+auto OptionalGraphPattern = [](vector<std::string>&& filters,
                                const auto&... childMatchers)
     -> Matcher<const p::GraphPatternOperation&> {
   return detail::Optional(
@@ -648,7 +648,7 @@ auto OptionalGraphPattern =
     MatcherWithDefaultFilters<detail::OptionalGraphPattern>{};
 
 namespace detail {
-auto GroupGraphPattern = [](vector<SparqlFilter>&& filters,
+auto GroupGraphPattern = [](vector<std::string>&& filters,
                             const auto&... childMatchers)
     -> Matcher<const p::GraphPatternOperation&> {
   return Group(detail::GraphPattern(false, filters, childMatchers...));
@@ -658,7 +658,7 @@ auto GroupGraphPattern = [](vector<SparqlFilter>&& filters,
 auto GroupGraphPattern = MatcherWithDefaultFilters<detail::GroupGraphPattern>{};
 
 namespace detail {
-auto MinusGraphPattern = [](vector<SparqlFilter>&& filters,
+auto MinusGraphPattern = [](vector<std::string>&& filters,
                             const auto&... childMatchers)
     -> Matcher<const p::GraphPatternOperation&> {
   return Minus(detail::GraphPattern(false, filters, childMatchers...));

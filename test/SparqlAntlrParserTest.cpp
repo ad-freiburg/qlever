@@ -19,6 +19,7 @@
 using namespace sparqlParserHelpers;
 namespace m = matchers;
 using Parser = SparqlAutomaticParser;
+using namespace std::literals;
 
 template <auto F>
 auto parse =
@@ -51,7 +52,8 @@ struct ExpectCompleteParse {
     return operator()(input, value, prefixMap_, l);
   };
 
-  auto operator()(const string& input, const auto& matcher,
+  auto operator()(const string& input,
+                  const testing::Matcher<const Value&>& matcher,
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) const {
     return operator()(input, matcher, prefixMap_, l);
@@ -64,7 +66,8 @@ struct ExpectCompleteParse {
     return operator()(input, testing::Eq(value), std::move(prefixMap), l);
   };
 
-  auto operator()(const string& input, const auto& matcher,
+  auto operator()(const string& input,
+                  const testing::Matcher<const Value&>& matcher,
                   SparqlQleverVisitor::PrefixMap prefixMap,
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) const {
@@ -391,19 +394,19 @@ TEST(SparqlParser, VarOrTermGraphTerm) {
 
 TEST(SparqlParser, Iri) {
   auto expectIri = ExpectCompleteParse<&Parser::iri>{};
-  expectIri("rdfs:label", "<http://www.w3.org/2000/01/rdf-schema#label>",
+  expectIri("rdfs:label", "<http://www.w3.org/2000/01/rdf-schema#label>"s,
             {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});
   expectIri(
-      "rdfs:label", "<http://www.w3.org/2000/01/rdf-schema#label>",
+      "rdfs:label", "<http://www.w3.org/2000/01/rdf-schema#label>"s,
       {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}, {"foo", "<bar#>"}});
-  expectIri("<http://www.w3.org/2000/01/rdf-schema>",
-            "<http://www.w3.org/2000/01/rdf-schema>",
+  expectIri("<http://www.w3.org/2000/01/rdf-schema>"s,
+            "<http://www.w3.org/2000/01/rdf-schema>"s,
             SparqlQleverVisitor::PrefixMap{});
-  expectIri("@en@rdfs:label",
-            "@en@<http://www.w3.org/2000/01/rdf-schema#label>",
+  expectIri("@en@rdfs:label"s,
+            "@en@<http://www.w3.org/2000/01/rdf-schema#label>"s,
             {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});
-  expectIri("@en@<http://www.w3.org/2000/01/rdf-schema>",
-            "@en@<http://www.w3.org/2000/01/rdf-schema>",
+  expectIri("@en@<http://www.w3.org/2000/01/rdf-schema>"s,
+            "@en@<http://www.w3.org/2000/01/rdf-schema>"s,
             SparqlQleverVisitor::PrefixMap{});
 }
 
