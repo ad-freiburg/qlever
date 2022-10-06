@@ -535,7 +535,7 @@ TEST(SparqlParser, SolutionModifier) {
   expectSolutionModifier(
       "GROUP BY ?var (?b - 10) HAVING (?var != 10) ORDER BY ?var LIMIT 10 "
       "OFFSET 2",
-      m::SolutionModifier({Var{"?var"}, "?b-10"}, {{"(?va!=10)"}},
+      m::SolutionModifier({Var{"?var"}, "?b-10"}, {{"(?var!=10)"}},
                           {VOK{Variable{"?var"}, false}}, {10, 1, 2}));
   expectSolutionModifier(
       "GROUP BY ?var HAVING (?foo < ?bar) ORDER BY (5 - ?var) TEXTLIMIT 21 "
@@ -749,7 +749,7 @@ TEST(SparqlParser, HavingCondition) {
   expectHavingCondition("(?height > 1.7)",
                         m::stringMatchesFilter("(?height>1.7)"));
   expectHavingCondition("(?predicate < \"<Z\")",
-                        m::stringMatchesFilter("(?predicate<\"<Z\""));
+                        m::stringMatchesFilter("(?predicate<\"<Z\")"));
   expectHavingConditionFails("(LANG(?x) = \"en\")");
 }
 
@@ -849,14 +849,14 @@ TEST(SparqlParser, RDFLiteral) {
   auto expectRDFLiteralFails = ExpectParseFails<&Parser::rdfLiteral>();
 
   expectRDFLiteral("   \"Astronaut\"^^xsd:string  \t",
-                   "\"Astronaut\"^^<http://www.w3.org/2001/XMLSchema#string>");
+                   "\"Astronaut\"^^<http://www.w3.org/2001/XMLSchema#string>"s);
   // The conversion to the internal date format
   // (":v:date:0000000000000001950-01-01T00:00:00") is done by
   // TurtleStringParser<TokenizerCtre>::parseTripleObject(resultAsString) which
   // is only called at triplesBlock.
   expectRDFLiteral(
       "\"1950-01-01T00:00:00\"^^xsd:dateTime",
-      "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>");
+      "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>"s);
   expectRDFLiteralFails(R"(?a ?b "The \"Moon\""@en .)");
 }
 
@@ -936,10 +936,10 @@ TEST(SparqlParser, ConstructQuery) {
   expectConstructQuery(
       "CONSTRUCT { ?a <foo> ?c . <bar> ?b <baz> } WHERE { ?a ?b ?c . FILTER(?a "
       "> 0) .}",
-      m::ConstructQuery(
-          {{Variable{"?a"}, Iri{"<foo>"}, Variable{"?c"}},
-           {Iri{"<bar>"}, Variable{"?b"}, Iri{"<baz>"}}},
-          m::GraphPattern(false, {"?a>0"}, m::Triples({{"?a", "?b", "?c"}}))));
+      m::ConstructQuery({{Variable{"?a"}, Iri{"<foo>"}, Variable{"?c"}},
+                         {Iri{"<bar>"}, Variable{"?b"}, Iri{"<baz>"}}},
+                        m::GraphPattern(false, {"(?a>0)"},
+                                        m::Triples({{"?a", "?b", "?c"}}))));
   expectConstructQuery(
       "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c } ORDER BY ?a LIMIT 10",
       testing::AllOf(

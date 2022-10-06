@@ -481,8 +481,8 @@ vector<SparqlFilter> Visitor::visit(Parser::HavingClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-SparqlExpressionPimpl Visitor::visit(Parser::HavingConditionContext* ctx) {
-  return visitExpressionPimpl(ctx->constraint());
+SparqlFilter Visitor::visit(Parser::HavingConditionContext* ctx) {
+  return {visitExpressionPimpl(ctx->constraint())};
   // TODO<joka921> Reinstate the special logic for language filters.
   // if (filter._type == SparqlFilter::LANG_MATCHES) {
   /*
