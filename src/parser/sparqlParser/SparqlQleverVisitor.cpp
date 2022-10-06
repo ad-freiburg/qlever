@@ -732,12 +732,8 @@ std::string Visitor::visit(Parser::DataBlockValueContext* ctx) {
   if (ctx->iri()) {
     return visit(ctx->iri());
   } else if (ctx->rdfLiteral()) {
-    auto tripleComponent = visit(ctx->rdfLiteral());
-    if (!tripleComponent.isString()) {
-      reportNotSupported(
-          ctx, "Value literals (numbers, dates, etc) in VALUES clauses are");
-    }
-    return tripleComponent.getString();
+    // TODO<joka921> This is yet wrong for xsd-typed literals
+    return visit(ctx->rdfLiteral());
   } else if (ctx->numericLiteral()) {
     // TODO implement
     reportError(ctx, "Numbers in values clauses are not supported.");
@@ -1485,7 +1481,8 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
   using namespace sparqlExpression;
 
   if (ctx->rdfLiteral()) {
-    auto tripleComponent = visit(ctx->rdfLiteral());
+    auto tripleComponent = TurtleStringParser<TokenizerCtre>::parseTripleObject(
+        visit(ctx->rdfLiteral()));
     if (tripleComponent.isString()) {
       return make_unique<StringOrIriExpression>(tripleComponent.getString());
     } else {
@@ -1665,18 +1662,15 @@ ExpressionPtr Visitor::visit(Parser::IriOrFunctionContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-TripleComponent Visitor::visit(Parser::RdfLiteralContext* ctx) {
+std::string Visitor::visit(Parser::RdfLiteralContext* ctx) {
   // TODO: This should really be an RdfLiteral class that stores a unified
   //  version of the string, and the langtag/datatype separately.
-  // string ret = visit(ctx->string());
-  // The `parseTripleObject` method below will handle all escaping for us`
-  string ret = ctx->string()->getText();
+  string ret = visit(ctx->string());
   if (ctx->LANGTAG()) {
     ret += ctx->LANGTAG()->getText();
   } else if (ctx->iri()) {
     ret += ("^^" + visit(ctx->iri()));
   }
-  return TurtleStringParser<TokenizerCtre>::parseTripleObject(ret);
   return ret;
 }
 

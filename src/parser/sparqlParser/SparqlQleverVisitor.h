@@ -382,7 +382,7 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] ExpressionPtr visit(Parser::IriOrFunctionContext* ctx);
 
-  [[nodiscard]] TripleComponent visit(Parser::RdfLiteralContext* ctx);
+  [[nodiscard]] std::string visit(Parser::RdfLiteralContext* ctx);
 
   [[nodiscard]] IntOrDouble visit(Parser::NumericLiteralContext* ctx);
 
