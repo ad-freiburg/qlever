@@ -69,6 +69,8 @@ class LiteralExpression : public SparqlExpression {
       return {"#column_" + std::to_string(varColMap.at(_value.name())) + "#"};
     } else if constexpr (std::is_same_v<T, string>) {
       return _value;
+    } else if constexpr (std::is_same_v<T, ValueId>) {
+      return absl::StrCat("#valueId ", _value.getBits(), "#");
     } else {
       return {std::to_string(_value)};
     }
@@ -94,6 +96,7 @@ using IntExpression = detail::LiteralExpression<int64_t>;
 using DoubleExpression = detail::LiteralExpression<double>;
 using VariableExpression = detail::LiteralExpression<::Variable>;
 using StringOrIriExpression = detail::LiteralExpression<string>;
+using IdExpression = detail::LiteralExpression<ValueId>;
 }  // namespace sparqlExpression
 
 #endif  // QLEVER_LITERALEXPRESSION_H
