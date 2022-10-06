@@ -62,7 +62,8 @@ class Operation {
    * @return A list of columns on which the result of this operation is sorted.
    */
   const vector<size_t>& getResultSortedOn() const {
-    std::lock_guard lock{variableToColumnMapMutex_};
+    // TODO<joka921> This is currently not threadsafe, but we have to make sure
+    // that there are no deadlocks.
     if (!_resultSortedColumns.has_value()) {
       _resultSortedColumns = resultSortedOn();
     }

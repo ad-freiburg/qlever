@@ -35,8 +35,10 @@ bool EffectiveBooleanValueGetter::operator()(ValueId id,
       auto d = id.getDouble();
       return d != 0.0 && !std::isnan(d);
     }
-    case Datatype::Int:
-      return id.getInt() != 0;
+    case Datatype::Int: {
+      auto i = id.getInt();
+      return i != 0;
+    }
     case Datatype::Undefined:
       return false;
     case Datatype::VocabIndex: {

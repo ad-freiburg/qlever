@@ -12,6 +12,8 @@
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
 using std::string;
 
@@ -98,10 +100,17 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
         output.insert(output.end(), input.begin() + beg, input.begin() + end);
       }
     } else {
-      throw std::runtime_error(
-          "Evaluated a filter expression that did not evaluate to a set of "
-          "boolean values This is not allowed. TODO(developers): Catch this "
-          "error earlier, e.g. during parsing");
+      auto resultGenerator = sparqlExpression::detail::makeGenerator(
+          std::forward<T>(singleResult), input.size(), &evaluationContext);
+      size_t i = 0;
+
+      for (auto&& resultValue : resultGenerator) {
+        if (sparqlExpression::detail::EffectiveBooleanValueGetter{}(
+                resultValue, &evaluationContext)) {
+          output.push_back(input[i]);
+        }
+        ++i;
+      }
     }
   };
 
