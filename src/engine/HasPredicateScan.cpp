@@ -148,28 +148,28 @@ float HasPredicateScan::getMultiplicity(size_t col) {
   switch (_type) {
     case ScanType::FREE_S:
       if (col == 0) {
-        return getIndex().getHasPredicateMultiplicityEntities();
+        return getIndex().getAvgNumDistinctPredicatesPerSubject();
       }
       break;
     case ScanType::FREE_O:
       if (col == 0) {
-        return getIndex().getHasPredicateMultiplicityPredicates();
+        return getIndex().getAvgNumDistinctSubjectsPerPredicate();
       }
       break;
     case ScanType::FULL_SCAN:
       if (col == 0) {
-        return getIndex().getHasPredicateMultiplicityEntities();
+        return getIndex().getAvgNumDistinctPredicatesPerSubject();
       } else if (col == 1) {
-        return getIndex().getHasPredicateMultiplicityPredicates();
+        return getIndex().getAvgNumDistinctSubjectsPerPredicate();
       }
       break;
     case ScanType::SUBQUERY_S:
       if (col < getResultWidth() - 1) {
         return _subtree->getMultiplicity(col) *
-               getIndex().getHasPredicateMultiplicityPredicates();
+               getIndex().getAvgNumDistinctSubjectsPerPredicate();
       } else {
         return _subtree->getMultiplicity(_subtreeJoinColumn) *
-               getIndex().getHasPredicateMultiplicityPredicates();
+               getIndex().getAvgNumDistinctSubjectsPerPredicate();
       }
       break;
   }
@@ -180,29 +180,15 @@ size_t HasPredicateScan::getSizeEstimate() {
   switch (_type) {
     case ScanType::FREE_S:
       return static_cast<size_t>(
-          getIndex().getHasPredicateMultiplicityEntities());
+          getIndex().getAvgNumDistinctPredicatesPerSubject());
     case ScanType::FREE_O:
       return static_cast<size_t>(
-          getIndex().getHasPredicateMultiplicityPredicates());
+          getIndex().getAvgNumDistinctSubjectsPerPredicate());
     case ScanType::FULL_SCAN:
-      return getIndex().getHasPredicateFullSize();
+      return getIndex().getNumDistinctSubjectPredicatePairs();
     case ScanType::SUBQUERY_S:
-
-      size_t nofDistinctLeft = std::max(
-          size_t(1),
-          static_cast<size_t>(_subtree->getSizeEstimate() /
-                              _subtree->getMultiplicity(_subtreeJoinColumn)));
-      size_t nofDistinctRight = std::max(
-          size_t(1), static_cast<size_t>(
-                         getIndex().getHasPredicateFullSize() /
-                         getIndex().getHasPredicateMultiplicityPredicates()));
-      size_t nofDistinctInResult = std::min(nofDistinctLeft, nofDistinctRight);
-
-      double jcMultiplicityInResult =
-          _subtree->getMultiplicity(_subtreeJoinColumn) *
-          getIndex().getHasPredicateMultiplicityPredicates();
-      return std::max(size_t(1), static_cast<size_t>(jcMultiplicityInResult *
-                                                     nofDistinctInResult));
+      return _subtree->getSizeEstimate() *
+             getIndex().getAvgNumDistinctPredicatesPerSubject();
   }
   return 0;
 }
@@ -251,9 +237,9 @@ void HasPredicateScan::computeResult(ResultTable* result) {
                                      hasPredicate, patterns);
     } break;
     case ScanType::FULL_SCAN:
-      HasPredicateScan::computeFullScan(result, hasPattern, hasPredicate,
-                                        patterns,
-                                        getIndex().getHasPredicateFullSize());
+      HasPredicateScan::computeFullScan(
+          result, hasPattern, hasPredicate, patterns,
+          getIndex().getNumDistinctSubjectPredicatePairs());
       break;
     case ScanType::SUBQUERY_S:
 
@@ -311,11 +297,13 @@ void HasPredicateScan::computeFreeO(
     const std::vector<PatternID>& hasPattern,
     const CompactVectorOfStrings<Id>& hasPredicate,
     const CompactVectorOfStrings<Id>& patterns) {
-  IdTableStatic<1> result = resultTable->_idTable.moveToStatic<1>();
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
+  // Subjects always have to be from the vocabulary
+  if (subjectAsId.getDatatype() != Datatype::VocabIndex) {
+    return;
+  }
+  IdTableStatic<1> result = resultTable->_idTable.moveToStatic<1>();
 
-  // subjects are always from the vocabulary
-  AD_CHECK(subjectAsId.getDatatype() == Datatype::VocabIndex);
   auto subjectIndex = subjectAsId.getVocabIndex().get();
   if (subjectIndex < hasPattern.size() &&
       hasPattern[subjectIndex] != NO_PATTERN) {
@@ -379,7 +367,9 @@ void HasPredicateScan::computeSubqueryS(
 
   for (size_t i = 0; i < input.size(); i++) {
     Id subjectAsId = input(i, subtreeColIndex);
-    AD_CHECK(subjectAsId.getDatatype() == Datatype::VocabIndex);
+    if (subjectAsId.getDatatype() != Datatype::VocabIndex) {
+      continue;
+    }
     auto subjectIndex = subjectAsId.getVocabIndex().get();
     if (subjectIndex < hasPattern.size() &&
         hasPattern[subjectIndex] != NO_PATTERN) {

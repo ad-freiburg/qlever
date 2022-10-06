@@ -122,8 +122,8 @@ void PatternCreator::readPatternsFromFile(
 
   numDistinctSubjectPredicatePairs =
       statistics._numDistinctSubjectPredicatePairs;
-  avgNumSubjectsPerPredicate = statistics._avgNumSubjectsPerPredicate;
-  avgNumPredicatesPerSubject = statistics._avgNumPredicatesPerSubject;
+  avgNumSubjectsPerPredicate = statistics._avgNumDistinctSubjectsPerPredicate;
+  avgNumPredicatesPerSubject = statistics._avgNumDistinctPredicatesPerSubject;
 }
 
 // ____________________________________________________________________________
@@ -137,8 +137,10 @@ void PatternCreator::printStatistics(
             << _numDistinctSubjectPredicatePairs << std::endl;
   LOG(INFO) << "Average number of predicates per subject: " << std::fixed
             << std::setprecision(1)
-            << patternStatistics._avgNumPredicatesPerSubject << std::endl;
+            << patternStatistics._avgNumDistinctPredicatesPerSubject
+            << std::endl;
   LOG(INFO) << "Average number of subjects per predicate: " << std::fixed
             << std::setprecision(0)
-            << patternStatistics._avgNumSubjectsPerPredicate << std::endl;
+            << patternStatistics._avgNumDistinctSubjectsPerPredicate
+            << std::endl;
 }

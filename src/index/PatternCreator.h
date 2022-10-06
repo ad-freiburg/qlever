@@ -25,9 +25,9 @@ struct PatternStatistics {
   // The number of distinct subject-predicate pairs contained in the patterns.
   uint64_t _numDistinctSubjectPredicatePairs;
   // The average number of distinct predicates per subject.
-  double _avgNumPredicatesPerSubject;
+  double _avgNumDistinctPredicatesPerSubject;
   // The average number of distinct subjects per predicate.
-  double _avgNumSubjectsPerPredicate;
+  double _avgNumDistinctSubjectsPerPredicate;
 
   /// Uninitialized default construction, necessary for the serialization to
   /// work.
@@ -40,17 +40,17 @@ struct PatternStatistics {
                     uint64_t numDistinctSubjects,
                     uint64_t numDistinctPredicates)
       : _numDistinctSubjectPredicatePairs{numDistinctSubjectPredicate},
-        _avgNumPredicatesPerSubject{
+        _avgNumDistinctPredicatesPerSubject{
             static_cast<double>(_numDistinctSubjectPredicatePairs) /
             static_cast<double>(numDistinctSubjects)},
-        _avgNumSubjectsPerPredicate{
+        _avgNumDistinctSubjectsPerPredicate{
             static_cast<double>(_numDistinctSubjectPredicatePairs) /
             static_cast<double>(numDistinctPredicates)} {}
 
   /// Symmetric serialization.
   AD_SERIALIZE_FRIEND_FUNCTION(PatternStatistics) {
-    serializer | arg._avgNumPredicatesPerSubject;
-    serializer | arg._avgNumSubjectsPerPredicate;
+    serializer | arg._avgNumDistinctPredicatesPerSubject;
+    serializer | arg._avgNumDistinctSubjectsPerPredicate;
     serializer | arg._numDistinctSubjectPredicatePairs;
   }
 };
