@@ -22,7 +22,7 @@ class Union : public Operation {
    * column.
    */
   std::vector<std::array<size_t, 2>> _columnOrigins;
-  std::shared_ptr<QueryExecutionTree> _subtrees[2];
+  std::array<std::shared_ptr<QueryExecutionTree>, 2> _subtrees;
 
  public:
   Union(QueryExecutionContext* qec,

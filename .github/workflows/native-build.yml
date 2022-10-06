@@ -20,11 +20,8 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [ gcc11, gcc12, clang13, clang14 ]
-        #TODO<joka921> We can run all jobs on the same queue as soon as the ubuntu-22.04
-        # runner is no longer in the beta stage. Only runners that support all the platforms
-        # will pick up a job, and so we have to wait for a very long time currently.
         os: [ ubuntu-20.04, ubuntu-22.04 ]
-        warnings: [  "-Wall -Wextra -Werror" ]
+        warnings: [  "-Wall -Wextra -Werror -fsanitize=address -fno-omit-frame-pointer" ]
         exclude:
           - compiler: gcc11
             os: ubuntu-22.04

@@ -1,9 +1,12 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+// Author:
+//   2018     Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//   2022-    Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 #include "Union.h"
 
-#include "CallFixedSize.h"
+#include "engine/CallFixedSize.h"
+#include "util/TransparentFunctors.h"
 
 const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
 
@@ -64,16 +67,35 @@ vector<size_t> Union::resultSortedOn() const { return {}; }
 
 // _____________________________________________________________________________
 Operation::VariableToColumnMap Union::computeVariableToColumnMap() const {
-  ad_utility::HashMap<string, size_t> variableColumns(
-      _subtrees[0]->getVariableColumns());
+  using VarAndIndex = std::pair<std::string, size_t>;
 
-  size_t column = variableColumns.size();
-  for (auto it : _subtrees[1]->getVariableColumns()) {
-    if (variableColumns.find(it.first) == variableColumns.end()) {
-      variableColumns[it.first] = column;
-      column++;
-    }
-  }
+  auto getVarsSortedByIndex = [](const auto& subtree) {
+    const auto& subtreeVariableColumns = subtree->getVariableColumns();
+    std::vector<VarAndIndex> varsAsPairs(subtreeVariableColumns.begin(),
+                                         subtreeVariableColumns.end());
+    std::ranges::sort(varsAsPairs, {}, ad_utility::second);
+    return varsAsPairs;
+  };
+
+  VariableToColumnMap variableColumns;
+  size_t column = 0;
+
+  auto addVariableColumnIfNotExists =
+      [&variableColumns, &column](const VarAndIndex& varAndIndex) {
+        if (!variableColumns.contains(varAndIndex.first)) {
+          variableColumns[varAndIndex.first] = column;
+          column++;
+        }
+      };
+
+  auto addVariablesForSubtree =
+      [&getVarsSortedByIndex,
+       &addVariableColumnIfNotExists](const auto& subtree) {
+        std::ranges::for_each(getVarsSortedByIndex(subtree),
+                              addVariableColumnIfNotExists);
+      };
+
+  std::ranges::for_each(_subtrees, addVariablesForSubtree);
   return variableColumns;
 }
 
@@ -187,75 +209,52 @@ void Union::computeUnion(
                inputTable.end());
   };
 
-  if (left.size() > 0) {
-    bool columnsMatch = left.cols() == columnOrigins.size();
-    // checkAfterChunkSize if the order of the columns matches
-    for (size_t i = 0; columnsMatch && i < columnOrigins.size(); i++) {
-      const std::array<size_t, 2>& co = columnOrigins[i];
-      if (co[0] != i) {
-        columnsMatch = false;
-      }
-    }
-    if (columnsMatch) {
+  auto columnsMatch = [&columnOrigins](const auto& inputTable,
+                                       const auto& getter) {
+    bool allColumnsAreUsed = inputTable.cols() == columnOrigins.size();
+    bool columnsAreSorted = std::ranges::is_sorted(columnOrigins, {}, getter);
+    bool noGapsInColumns =
+        getter(columnOrigins.back()) == inputTable.cols() - 1;
+    return allColumnsAreUsed && columnsAreSorted && noGapsInColumns;
+  };
+
+  // Append the result of one the children (`left` or `right`), passed via the
+  // `inputTable` argument to the final result of this `UNION` operation. The
+  // `WIDTH` must be the width of the input table (`LEFT_WIDTH` or
+  // `RIGHT_WIDTH`) and  `getter` must be a function that extracts the correct
+  // column index for the `inputTable` from an element of the `columnOrigins`.
+  auto appendResult = [&columnOrigins, &res, &appendToResultChunked,
+                       &checkAfterChunkSize, &columnsMatch]<size_t WIDTH>(
+                          const auto& inputTable, const auto& getter) {
+    (void)appendToResultChunked;
+    if (columnsMatch(inputTable, getter)) {
       // Left and right have the same columns, we can simply copy the entries.
-      // As the variableColumnMap of left was simply copied over to create
-      // this operations variableColumnMap the order of the columns will
-      // be the same.
       // This if clause is only here to avoid creating the call to insert when
       // it would not be possible to call the function due to not matching
       // columns.
-      AD_CHECK(LEFT_WIDTH == OUT_WIDTH);
-      if constexpr (LEFT_WIDTH == OUT_WIDTH) {
-        appendToResultChunked(left);
+      AD_CHECK(WIDTH == OUT_WIDTH);
+      if constexpr (WIDTH == OUT_WIDTH) {
+        appendToResultChunked(inputTable);
       }
     } else {
-      for (const auto& l : left) {
+      for (const auto& row : inputTable) {
         checkAfterChunkSize();
         res.emplace_back();
         size_t backIdx = res.size() - 1;
         for (size_t i = 0; i < columnOrigins.size(); i++) {
-          const std::array<size_t, 2>& co = columnOrigins[i];
-          if (co[0] != Union::NO_COLUMN) {
-            res(backIdx, i) = l[co[0]];
-          } else {
-            res(backIdx, i) = ID_NO_VALUE;
-          }
+          const auto column = getter(columnOrigins[i]);
+          res(backIdx, i) = column != NO_COLUMN ? row[column] : ID_NO_VALUE;
         }
       }
     }
+  };
+
+  if (left.size() > 0) {
+    appendResult.template operator()<LEFT_WIDTH>(left, ad_utility::first);
   }
 
   if (right.size() > 0) {
-    bool columnsMatch = right.cols() == columnOrigins.size();
-    // checkAfterChunkSize if the order of the columns matches
-    for (size_t i = 0; columnsMatch && i < columnOrigins.size(); i++) {
-      const std::array<size_t, 2>& co = columnOrigins[i];
-      if (co[1] != i) {
-        columnsMatch = false;
-      }
-    }
-    if (columnsMatch) {
-      // The columns of the right subtree and the result match, we can
-      // just copy the entries.
-      AD_CHECK(RIGHT_WIDTH == OUT_WIDTH);
-      if constexpr (RIGHT_WIDTH == OUT_WIDTH) {
-        appendToResultChunked(right);
-      }
-    } else {
-      for (const auto& r : right) {
-        checkAfterChunkSize();
-        res.emplace_back();
-        size_t backIdx = res.size() - 1;
-        for (size_t i = 0; i < columnOrigins.size(); i++) {
-          const std::array<size_t, 2>& co = columnOrigins[i];
-          if (co[1] != Union::NO_COLUMN) {
-            res(backIdx, i) = r[co[1]];
-          } else {
-            res(backIdx, i) = ID_NO_VALUE;
-          }
-        }
-      }
-    }
+    appendResult.template operator()<RIGHT_WIDTH>(right, ad_utility::second);
   }
   *dynRes = res.moveToDynamic();
 }
