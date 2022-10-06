@@ -2,22 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "parser/SparqlParser.h"
+#include "./SparqlParser.h"
 
-#include <unordered_set>
-#include <variant>
-
-#include "parser/Alias.h"
-#include "parser/data/Types.h"
-#include "parser/sparqlParser/SparqlQleverVisitor.h"
-#include "util/Conversions.h"
+#include "parser/SparqlParserHelpers.h"
 
 using namespace std::literals::string_literals;
 using AntlrParser = SparqlAutomaticParser;
-
-SparqlParser::SparqlParser(const string& query) : lexer_(query), query_(query) {
-  LOG(DEBUG) << "Parsing " << query << std::endl;
-}
 
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parseQuery(std::string query) {

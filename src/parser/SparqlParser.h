@@ -5,13 +5,7 @@
 
 #include <string>
 
-#include "../engine/sparqlExpressions/SparqlExpressionPimpl.h"
-#include "../util/HashMap.h"
-#include "./TripleComponent.h"
-#include "ParsedQuery.h"
-#include "SparqlLexer.h"
-#include "SparqlParserHelpers.h"
-#include "sparqlParser/SparqlQleverVisitor.h"
+#include "parser/ParsedQuery.h"
 
 using std::string;
 
@@ -23,9 +17,5 @@ using std::string;
 // filters yet.
 class SparqlParser {
  public:
-  explicit SparqlParser(const string& query);
   static ParsedQuery parseQuery(std::string query);
-
-  SparqlLexer lexer_;
-  string query_;
 };
