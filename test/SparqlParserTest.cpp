@@ -120,12 +120,8 @@ TEST(ParserTest, testParse) {
       const auto& triples = pq.children()[0].getBasic()._triples;
       auto filters = pq._rootGraphPattern._filters;
       ASSERT_EQ(2u, filters.size());
-      ASSERT_EQ("?x", filters[0]._lhs);
-      ASSERT_EQ("?y", filters[0]._rhs);
-      ASSERT_EQ(SparqlFilter::FilterType::NE, filters[0]._type);
-      ASSERT_EQ("?y", filters[1]._lhs);
-      ASSERT_EQ("?x", filters[1]._rhs);
-      ASSERT_EQ(SparqlFilter::FilterType::LT, filters[1]._type);
+      ASSERT_EQ("(?x!=?y)", filters[0].expression_.getDescriptor());
+      ASSERT_EQ("(?y<?x)", filters[1].expression_.getDescriptor());
       ASSERT_EQ(2u, triples.size());
     }
 
@@ -137,9 +133,7 @@ TEST(ParserTest, testParse) {
       const auto& triples = pq.children()[0].getBasic()._triples;
       auto filters = pq._rootGraphPattern._filters;
       ASSERT_EQ(1u, filters.size());
-      ASSERT_EQ("?x", filters[0]._lhs);
-      ASSERT_EQ("?y", filters[0]._rhs);
-      ASSERT_EQ(SparqlFilter::FilterType::NE, filters[0]._type);
+      ASSERT_EQ("(?x!=?y)", filters[0].expression_.getDescriptor());
       ASSERT_EQ(2u, triples.size());
     }
 
@@ -152,9 +146,7 @@ TEST(ParserTest, testParse) {
       const auto& triples = pq.children()[0].getBasic()._triples;
       auto filters = pq._rootGraphPattern._filters;
       ASSERT_EQ(1u, filters.size());
-      ASSERT_EQ("?x", filters[0]._lhs);
-      ASSERT_EQ("?y", filters[0]._rhs);
-      ASSERT_EQ(SparqlFilter::FilterType::NE, filters[0]._type);
+      ASSERT_EQ("(?x!=?y)", filters[0].expression_.getDescriptor());
       ASSERT_EQ(4u, triples.size());
       ASSERT_EQ("?c", triples[2]._s);
       ASSERT_EQ(CONTAINS_ENTITY_PREDICATE, triples[2]._p._iri);
@@ -508,12 +500,8 @@ TEST(ParserTest, testParse) {
           parsed_sub_query.get()._rootGraphPattern._graphPatterns[0]);
       ASSERT_EQ(2u, c_subquery._triples.size());
       ASSERT_EQ(1u, parsed_sub_query.get()._rootGraphPattern._filters.size());
-      ASSERT_EQ("?year",
-                parsed_sub_query.get()._rootGraphPattern._filters[0]._lhs);
-      ASSERT_EQ("\"00-00-2000\"",
-                parsed_sub_query.get()._rootGraphPattern._filters[0]._rhs);
-      ASSERT_EQ(SparqlFilter::GT,
-                parsed_sub_query.get()._rootGraphPattern._filters[0]._type);
+      const auto& filter = parsed_sub_query.get()._rootGraphPattern._filters[0];
+      ASSERT_EQ("(?year>\"00-00-2000\")", filter.expression_.getDescriptor());
       ASSERT_EQ(0, parsed_sub_query.get()._limitOffset._offset);
 
       ASSERT_EQ(c_subquery._triples[0]._s, "?movie");
@@ -592,12 +580,8 @@ TEST(ParserTest, testParse) {
           parsed_sub_query.get()._rootGraphPattern._graphPatterns[0]);
       ASSERT_EQ(1u, c_subquery._triples.size());
       ASSERT_EQ(1u, parsed_sub_query.get()._rootGraphPattern._filters.size());
-      ASSERT_EQ("?year",
-                parsed_sub_query.get()._rootGraphPattern._filters[0]._lhs);
-      ASSERT_EQ("\"00-00-2000\"",
-                parsed_sub_query.get()._rootGraphPattern._filters[0]._rhs);
-      ASSERT_EQ(SparqlFilter::GT,
-                parsed_sub_query.get()._rootGraphPattern._filters[0]._type);
+      const auto& filter = parsed_sub_query.get()._rootGraphPattern._filters[0];
+      ASSERT_EQ("(?year>\"00-00-2000\")", filter.expression_.getDescriptor());
       ASSERT_EQ(0, parsed_sub_query.get()._limitOffset._offset);
 
       ASSERT_EQ(c_subquery._triples[0]._s, "?movie");
@@ -726,15 +710,9 @@ TEST(ParserTest, testFilterWithoutDot) {
   ASSERT_EQ(3u, c._triples.size());
   const auto& filters = pq._rootGraphPattern._filters;
   ASSERT_EQ(3u, filters.size());
-  ASSERT_EQ("?1", filters[0]._lhs);
-  ASSERT_EQ("<http://rdf.freebase.com/ns/m.0fkvn>", filters[0]._rhs);
-  ASSERT_EQ(SparqlFilter::FilterType::NE, filters[0]._type);
-  ASSERT_EQ("?1", filters[1]._lhs);
-  ASSERT_EQ("<http://rdf.freebase.com/ns/m.0vmt>", filters[1]._rhs);
-  ASSERT_EQ(SparqlFilter::FilterType::NE, filters[1]._type);
-  ASSERT_EQ("?1", filters[2]._lhs);
-  ASSERT_EQ("<http://rdf.freebase.com/ns/m.018mts>", filters[2]._rhs);
-  ASSERT_EQ(SparqlFilter::FilterType::NE, filters[2]._type);
+  ASSERT_EQ("(?1!=fb:m.0fkvn)", filters[0].expression_.getDescriptor());
+  ASSERT_EQ("(?1!=fb:m.0vmt)", filters[1].expression_.getDescriptor());
+  ASSERT_EQ("(?1!=fb:m.018mts)", filters[2].expression_.getDescriptor());
 }
 
 TEST(ParserTest, testExpandPrefixes) {
@@ -1167,18 +1145,6 @@ TEST(ParserTest, Group) {
                      "SELECT ?x ?y WHERE { ?x <test/myrel> ?y } GROUP BY ?x"),
                  ParseException);
   }
-}
-
-TEST(ParserTest, ParseFilterExpression) {
-  auto f = SparqlParser::parseFilterExpression("(LANG(?x) = \"en\")", {});
-  ASSERT_EQ(f, (SparqlFilter{SparqlFilter::LANG_MATCHES, "?x", "\"en\""}));
-
-  f = SparqlParser::parseFilterExpression("(?x <= 42.3)", {});
-  ASSERT_EQ(f, (SparqlFilter{SparqlFilter::LE, "?x", "42.3"}));
-
-  f = SparqlParser::parseFilterExpression("(?x = me:you)",
-                                          {{"me", "<www.me.de/>"}});
-  ASSERT_EQ(f, (SparqlFilter{SparqlFilter::EQ, "?x", "<www.me.de/you>"}));
 }
 
 TEST(ParserTest, LanguageFilterPostProcessing) {

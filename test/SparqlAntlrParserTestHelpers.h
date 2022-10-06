@@ -525,18 +525,31 @@ auto Select =
       detail::Select(distinct, reduced, std::move(selection)));
 };
 
+auto stringMatchesFilter =
+    [](const std::string& s) -> Matcher<const SparqlFilter&> {
+  auto inner = AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl,
+                           getDescriptor, testing::Eq(s));
+  return AD_FIELD(SparqlFilter, expression_, inner);
+};
+auto stringsMatchFilters = [](const std::vector<std::string>& expressions)
+    -> Matcher<const std::vector<SparqlFilter>&> {
+  auto matchers = ad_utility::transform(expressions, stringMatchesFilter);
+  return testing::ElementsAreArray(matchers);
+};
+
 auto SolutionModifier =
     [](const std::vector<std::variant<
            std::string, std::pair<std::string, ::Variable>, ::Variable>>&
            groupKeys = {},
-       const vector<SparqlFilter>& havingClauses = {},
+       const vector<std::string>& havingClauses = {},
        const std::vector<std::variant<::VariableOrderKey,
                                       ExpressionOrderKeyTest>>& orderKeys = {},
        const LimitOffsetClause& limitOffset = {})
     -> Matcher<const SolutionModifiers&> {
   return testing::AllOf(
       AD_FIELD(SolutionModifiers, groupByVariables_, GroupKeys(groupKeys)),
-      AD_FIELD(SolutionModifiers, havingClauses_, testing::Eq(havingClauses)),
+      AD_FIELD(SolutionModifiers, havingClauses_,
+               stringsMatchFilters(havingClauses)),
       AD_FIELD(SolutionModifiers, orderBy_, OrderKeys(orderKeys)),
       AD_FIELD(SolutionModifiers, limitOffset_, testing::Eq(limitOffset)));
 };
@@ -595,7 +608,7 @@ struct MatcherWithDefaultFilters {
 template <auto SubMatcherLambda>
 struct MatcherWithDefaultFiltersAndOptional {
   Matcher<const ParsedQuery::GraphPattern&> operator()(
-      bool optional, vector<SparqlFilter>&& filters,
+      bool optional, vector<std::string>&& filters,
       const auto&... childMatchers) {
     return SubMatcherLambda(optional, std::move(filters), childMatchers...);
   }
@@ -608,12 +621,12 @@ struct MatcherWithDefaultFiltersAndOptional {
 
 namespace detail {
 auto GraphPattern =
-    [](bool optional, const vector<SparqlFilter>& filters,
+    [](bool optional, const vector<std::string>& filters,
        auto&&... childMatchers) -> Matcher<const ParsedQuery::GraphPattern&> {
   return testing::AllOf(
       AD_FIELD(ParsedQuery::GraphPattern, _optional, testing::Eq(optional)),
       AD_FIELD(ParsedQuery::GraphPattern, _filters,
-               testing::UnorderedElementsAreArray(filters)),
+               stringsMatchFilters(filters)),
       AD_FIELD(ParsedQuery::GraphPattern, _graphPatterns,
                testing::ElementsAre(childMatchers...)));
 };
@@ -688,9 +701,10 @@ auto LimitOffset = [](const LimitOffsetClause& limitOffset = {})
     -> Matcher<const ::ParsedQuery&> {
   return AD_FIELD(ParsedQuery, _limitOffset, testing::Eq(limitOffset));
 };
-auto Having = [](const vector<SparqlFilter>& havingClauses = {})
+auto Having = [](const vector<std::string>& havingClauses = {})
     -> Matcher<const ::ParsedQuery&> {
-  return AD_FIELD(ParsedQuery, _havingClauses, testing::Eq(havingClauses));
+  return AD_FIELD(ParsedQuery, _havingClauses,
+                  stringsMatchFilters(havingClauses));
 };
 auto OrderKeys =
     [](const std::vector<std::pair<::Variable, bool>>& orderKeys = {})

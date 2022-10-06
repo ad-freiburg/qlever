@@ -532,14 +532,12 @@ TEST(SparqlParser, SolutionModifier) {
   expectSolutionModifier(
       "GROUP BY ?var (?b - 10) HAVING (?var != 10) ORDER BY ?var LIMIT 10 "
       "OFFSET 2",
-      m::SolutionModifier({Var{"?var"}, "?b-10"},
-                          {{SparqlFilter::FilterType::NE, "?var", "10"}},
+      m::SolutionModifier({Var{"?var"}, "?b-10"}, {{"(?va!=10)"}},
                           {VOK{Variable{"?var"}, false}}, {10, 1, 2}));
   expectSolutionModifier(
       "GROUP BY ?var HAVING (?foo < ?bar) ORDER BY (5 - ?var) TEXTLIMIT 21 "
       "LIMIT 2",
-      m::SolutionModifier({Var{"?var"}},
-                          {{SparqlFilter::FilterType::LT, "?foo", "?bar"}},
+      m::SolutionModifier({Var{"?var"}}, {{"(?foo<?bar)"}},
                           {std::pair{"(5-?var)", false}}, {2, 21, 0}));
   expectSolutionModifier(
       "GROUP BY (?var - ?bar) ORDER BY (5 - ?var)",
@@ -744,11 +742,11 @@ TEST(SparqlParser, HavingCondition) {
   auto expectHavingConditionFails =
       ExpectParseFails<&Parser::havingCondition>();
 
-  expectHavingCondition("(?x <= 42.3)", {SparqlFilter::LE, "?x", "42.3"});
+  expectHavingCondition("(?x <= 42.3)", m::stringMatchesFilter("(?x<=42.3)"));
   expectHavingCondition("(?height > 1.7)",
-                        {SparqlFilter::GT, "?height", "1.7"});
+                        m::stringMatchesFilter("(?height>1.7)"));
   expectHavingCondition("(?predicate < \"<Z\")",
-                        {SparqlFilter::LT, "?predicate", "\"<Z\""});
+                        m::stringMatchesFilter("(?predicate<\"<Z\""));
   expectHavingConditionFails("(LANG(?x) = \"en\")");
 }
 
@@ -783,10 +781,8 @@ TEST(SparqlParser, GroupGraphPattern) {
   expectGraphPattern("{ MINUS { ?a <foo> <bar> } }",
                      m::GraphPattern(m::MinusGraphPattern(
                          m::Triples({{"?a", "<foo>", "<bar>"}}))));
-  expectGraphPattern(
-      "{ FILTER (?a = 10) . ?x ?y ?z }",
-      m::GraphPattern(false, {{SparqlFilter::FilterType::EQ, "?a", "10"}},
-                      DummyTriplesMatcher));
+  expectGraphPattern("{ FILTER (?a = 10) . ?x ?y ?z }",
+                     m::GraphPattern(false, {"(?a=10)"}, DummyTriplesMatcher));
   expectGraphPattern("{ BIND (?f - ?b as ?c) }",
                      m::GraphPattern(m::Bind(Variable{"?c"}, "?f-?b")));
   expectGraphPattern("{ VALUES (?a ?b) { (<foo> <bar>) (<a> <b>) } }",
@@ -808,16 +804,14 @@ TEST(SparqlParser, GroupGraphPattern) {
   expectGraphPattern(
       "{ ?x <is-a> <Actor> . FILTER(?x != ?y) . ?y <is-a> <Actor> . "
       "FILTER(?y < ?x) }",
-      m::GraphPattern(false,
-                      {{SparqlFilter::FilterType::NE, "?x", "?y"},
-                       {SparqlFilter::FilterType::LT, "?y", "?x"}},
+      m::GraphPattern(false, {"(?x!=?y)", "(?y<?x)"},
                       m::Triples({{"?x", "<is-a>", "<Actor>"},
                                   {"?y", "<is-a>", "<Actor>"}})));
   expectGraphPattern(
       "{?x <is-a> <Actor> . FILTER(?x != ?y) . ?y <is-a> <Actor> . ?c "
       "ql:contains-entity ?x . ?c ql:contains-word \"coca* abuse\"}",
       m::GraphPattern(
-          false, {{SparqlFilter::FilterType::NE, "?x", "?y"}},
+          false, {"(?x!=?y)"},
           m::Triples({{"?x", "<is-a>", "<Actor>"},
                       {"?y", "<is-a>", "<Actor>"},
                       {"?c", CONTAINS_ENTITY_PREDICATE, "?x"},
@@ -890,17 +884,15 @@ TEST(SparqlParser, SelectQuery) {
   expectSelectQuery(
       "SELECT ?x WHERE { ?x ?y ?z . FILTER(?x != <foo>) } LIMIT 10 TEXTLIMIT 5",
       testing::AllOf(
-          m::SelectQuery(
-              m::Select({Variable{"?x"}}),
-              m::GraphPattern(false,
-                              {{SparqlFilter::FilterType::NE, "?x", "<foo>"}},
-                              m::Triples({{"?x", "?y", "?z"}}))),
+          m::SelectQuery(m::Select({Variable{"?x"}}),
+                         m::GraphPattern(false, {"(?x!=<foo>)"},
+                                         m::Triples({{"?x", "?y", "?z"}}))),
           m::pq::LimitOffset({10, 5})));
   expectSelectQuery(
       "SELECT ?x WHERE { ?x ?y ?z } HAVING (?x > 5) ORDER BY ?y ",
       testing::AllOf(
           m::SelectQuery(m::Select({Variable{"?x"}}), DummyGraphPatternMatcher),
-          m::pq::Having({{SparqlFilter::FilterType::GT, "?x", "5"}}),
+          m::pq::Having({"(?x>5)"}),
           m::pq::OrderKeys({{Variable{"?y"}, false}})));
 
   // Grouping by a variable or expression which contains a variable
@@ -944,8 +936,7 @@ TEST(SparqlParser, ConstructQuery) {
       m::ConstructQuery(
           {{Variable{"?a"}, Iri{"<foo>"}, Variable{"?c"}},
            {Iri{"<bar>"}, Variable{"?b"}, Iri{"<baz>"}}},
-          m::GraphPattern(false, {{SparqlFilter::FilterType::GT, "?a", "0"}},
-                          m::Triples({{"?a", "?b", "?c"}}))));
+          m::GraphPattern(false, {"?a>0"}, m::Triples({{"?a", "?b", "?c"}}))));
   expectConstructQuery(
       "CONSTRUCT { ?a <foo> ?c . } WHERE { ?a ?b ?c } ORDER BY ?a LIMIT 10",
       testing::AllOf(

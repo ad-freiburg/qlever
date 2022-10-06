@@ -17,5 +17,9 @@ class SparqlFilter {
   [[nodiscard]] string asString() const;
 
   sparqlExpression::SparqlExpressionPimpl expression_;
-  bool operator==(const SparqlFilter&) const = default;
+  // TODO<joka921> This comparison is only used for the unit tests, maybe it
+  // should be defined there, because it is only approximate.
+  bool operator==(const SparqlFilter& other) const {
+    return expression_.getDescriptor() == other.expression_.getDescriptor();
+  }
 };
