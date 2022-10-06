@@ -109,4 +109,3 @@ void Filter::computeFilterImpl(ResultTable* outputResultTable,
 
   outputResultTable->_idTable = output.moveToDynamic();
 }
-

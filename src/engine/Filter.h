@@ -44,6 +44,7 @@ class Filter : public Operation {
   }
 
   virtual size_t getSizeEstimate() override {
+    return _subtree->getSizeEstimate();
     // TODO<joka921> integrate the size estimates into the expressions.
     /*
     if (_type == SparqlFilter::FilterType::REGEX) {

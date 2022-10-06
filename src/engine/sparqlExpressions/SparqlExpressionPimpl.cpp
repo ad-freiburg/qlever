@@ -64,4 +64,11 @@ const std::string& SparqlExpressionPimpl::getDescriptor() const {
 void SparqlExpressionPimpl::setDescriptor(std::string descriptor) {
   _pimpl->descriptor() = std::move(descriptor);
 }
+
+bool SparqlExpressionPimpl::isVariableContained(
+    const Variable& variable) const {
+  return std::ranges::any_of(
+      containedVariables(),
+      [&variable](const auto* varPtr) { return *varPtr == variable; });
+}
 }  // namespace sparqlExpression

@@ -804,11 +804,16 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         scanTriple._o = filterVar;
         auto scanTree =
             makeExecutionTree<IndexScan>(_qec, PSO_FREE_S, scanTriple);
+        // TODO<joka921> Setup the appropriate expression (equal between two
+        // variables) here
+        AD_FAIL()
+        /*
         auto plan = makeSubtreePlan<Filter>(
             _qec, scanTree, SparqlFilter::FilterType::EQ,
             node._triple._s.getString(), filterVar, vector<string>{},
             vector<string>{});
         pushPlan(std::move(plan));
+        */
       } else if (isVariable(node._triple._s)) {
         addIndexScan(POS_BOUND_O);
       } else if (isVariable(node._triple._o)) {
@@ -1577,18 +1582,14 @@ void QueryPlanner::applyFiltersIfPossible(
       continue;
     }
     for (size_t i = 0; i < filters.size(); ++i) {
-      LOG(TRACE) << "filter type: " << filters[i]._type << std::endl;
       if (((row[n]._idsOfIncludedFilters >> i) & 1) != 0) {
         continue;
       }
-      if (row[n]._qet.get()->varCovered(filters[i]._lhs) &&
-          std::all_of(filters[i]._additionalLhs.begin(),
-                      filters[i]._additionalLhs.end(),
-                      [&row, &n](const auto& lhs) {
-                        return row[n]._qet->varCovered(lhs);
-                      }) &&
-          (!isVariable(filters[i]._rhs) ||
-           row[n]._qet->varCovered(filters[i]._rhs))) {
+      if (std::ranges::all_of(filters[i].expression_.containedVariables(),
+                              [&row, &n](const auto& variable) {
+                                return row[n]._qet->varCovered(
+                                    variable->name());
+                              })) {
         // Apply this filter.
         SubtreePlan newPlan =
             makeSubtreePlan(createFilterOperation(filters[i], row[n]));
@@ -1609,13 +1610,8 @@ void QueryPlanner::applyFiltersIfPossible(
 // _____________________________________________________________________________
 std::shared_ptr<Filter> QueryPlanner::createFilterOperation(
     const SparqlFilter& filter, const SubtreePlan& parent) const {
-  std::shared_ptr<Filter> op = std::make_shared<Filter>(
-      _qec, parent._qet, filter._type, filter._lhs, filter._rhs,
-      filter._additionalLhs, filter._additionalPrefixes);
-  op->setLhsAsString(filter._lhsAsString);
-  if (filter._type == SparqlFilter::REGEX) {
-    op->setRegexIgnoreCase(filter._regexIgnoreCase);
-  }
+  std::shared_ptr<Filter> op =
+      std::make_shared<Filter>(_qec, parent._qet, filter.expression_);
   return op;
 }
 
@@ -1796,8 +1792,10 @@ vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
     coveredVariables.insert(node._variables.begin(), node._variables.end());
   }
   for (auto& f : origFilters) {
-    if (coveredVariables.count(f._lhs) > 0 ||
-        coveredVariables.count(f._rhs) > 0) {
+    if (std::ranges::any_of(f.expression_.containedVariables(),
+                            [&](const auto* var) {
+                              return coveredVariables.contains(var->name());
+                            })) {
       ret.push_back(f);
     }
   }

@@ -78,6 +78,8 @@ class SparqlExpressionPimpl {
 
   std::vector<const Variable*> containedVariables() const;
 
+  bool isVariableContained(const Variable&) const;
+
   SparqlExpression* getPimpl() { return _pimpl.get(); }
   [[nodiscard]] const SparqlExpression* getPimpl() const {
     return _pimpl.get();

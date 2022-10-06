@@ -288,8 +288,10 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
 
     pattern._graphPatterns = std::move(subOps);
     for (auto& filter : filters) {
-      if (filter._type == SparqlFilter::LANG_MATCHES) {
-        pattern.addLanguageFilter(filter._lhs, filter._rhs);
+      // TODO<joka921> reinstate the special logic for language filters
+      if (false) {
+        // if (filter._type == SparqlFilter::LANG_MATCHES) {
+        // pattern.addLanguageFilter(filter._lhs, filter._rhs);
       } else {
         pattern._filters.push_back(std::move(filter));
       }
@@ -470,34 +472,26 @@ LimitOffsetClause Visitor::visit(Parser::LimitOffsetClausesContext* ctx) {
 
 // ____________________________________________________________________________________
 vector<SparqlFilter> Visitor::visit(Parser::HavingClauseContext* ctx) {
-  return visitVector(ctx->havingCondition());
+  // TODO<joka921> we should check for the illegal language filters here,
+  // not in the downstream path.
+  auto expressions = visitVector(ctx->havingCondition());
+  return ad_utility::transform(std::move(expressions), [](auto&& expression) {
+    return SparqlFilter{std::move(expression)};
+  });
 }
-
-namespace {
-SparqlFilter parseFilter(auto* ctx, const Visitor::PrefixMap& prefixMap) {
-  try {
-    return SparqlParser::parseFilterExpression(ctx->getText(), prefixMap);
-  } catch (const std::bad_optional_access& error) {
-    throw ParseException("The expression " + ctx->getText() +
-                         " is currently not supported by Qlever inside a "
-                         "FILTER or HAVING clause.");
-  } catch (const ParseException& error) {
-    throw ParseException("The expression " + ctx->getText() +
-                         " is currently not supported by Qlever inside a "
-                         "FILTER or HAVING clause. Details: " +
-                         error.what());
-  }
-}
-}  // namespace
 
 // ____________________________________________________________________________________
-SparqlFilter Visitor::visit(Parser::HavingConditionContext* ctx) {
-  SparqlFilter filter = parseFilter(ctx, prefixMap_);
-  if (filter._type == SparqlFilter::LANG_MATCHES) {
+SparqlExpressionPimpl Visitor::visit(Parser::HavingConditionContext* ctx) {
+  return visitExpressionPimpl(ctx->constraint());
+  // TODO<joka921> Reinstate the special logic for language filters.
+  // if (filter._type == SparqlFilter::LANG_MATCHES) {
+  /*
+  if (false) {
     reportNotSupported(ctx, "Language filters in HAVING clauses are");
   } else {
     return filter;
   }
+   */
 }
 
 // ____________________________________________________________________________________
@@ -791,7 +785,7 @@ GraphPatternOperation Visitor::visit(
 
 // ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
-  return parseFilter(ctx->constraint(), prefixMap_);
+  return SparqlFilter{visitExpressionPimpl(ctx->constraint())};
 }
 
 // ____________________________________________________________________________________

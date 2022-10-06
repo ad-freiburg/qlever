@@ -145,7 +145,8 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] vector<SparqlFilter> visit(Parser::HavingClauseContext* ctx);
 
-  [[nodiscard]] SparqlFilter visit(Parser::HavingConditionContext* ctx);
+  [[nodiscard]] SparqlExpressionPimpl visit(
+      Parser::HavingConditionContext* ctx);
 
   [[nodiscard]] vector<OrderKey> visit(Parser::OrderClauseContext* ctx);
 

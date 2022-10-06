@@ -34,6 +34,9 @@ ParsedQuery SparqlParser::parseQuery(std::string query) {
 
 // _____________________________________________________________________________
 std::optional<SparqlFilter> SparqlParser::parseFilter(bool failOnNoFilter) {
+  AD_FAIL();
+  // TODO<joka921> Integrate language filters and remove this method.
+  /*
   size_t numParentheses = 0;
   while (lexer_.accept("(")) {
     numParentheses++;
@@ -162,8 +165,10 @@ std::optional<SparqlFilter> SparqlParser::parseFilter(bool failOnNoFilter) {
   }
   expectClose();
   return std::nullopt;
+   */
 }
 
+/*
 // _____________________________________________________________________________
 SparqlFilter SparqlParser::parseRegexFilter(bool expectKeyword) {
   if (expectKeyword) {
@@ -241,6 +246,7 @@ SparqlFilter SparqlParser::parseRegexFilter(bool expectKeyword) {
   }
   return f;
 }
+ */
 
 namespace {
 // The legacy way of expanding prefixes in an IRI. Currently used only by
@@ -291,6 +297,9 @@ void expandPrefix(string& item,
 SparqlFilter SparqlParser::parseFilterExpression(
     const string& filterContent,
     const SparqlQleverVisitor::PrefixMap& prefixMap) {
+  // TODO<joka921> Remove this.
+  AD_FAIL();
+  /*
   SparqlParser parser(filterContent);
   auto filter = parser.parseFilter(true).value();
   expandPrefix(filter._lhs, prefixMap);
@@ -298,4 +307,5 @@ SparqlFilter SparqlParser::parseFilterExpression(
     expandPrefix(filter._rhs, prefixMap);
   }
   return filter;
+   */
 }
