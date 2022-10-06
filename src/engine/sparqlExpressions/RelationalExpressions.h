@@ -37,6 +37,10 @@ class RelationalExpression : public SparqlExpression {
       const VariableToColumnMap& varColMap) const override;
 
   std::optional<LangFilterData> getLanguageFilterExpression() const override;
+
+  Estimates getEstimatesForFilterExpression(
+      uint64_t inputSize,
+      const std::optional<Variable>& firstSortedVariable) const override;
 };
 
 }  // namespace sparqlExpression::relational

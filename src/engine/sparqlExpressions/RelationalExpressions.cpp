@@ -406,6 +406,32 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
   return LangFilterData{varPtr->variable(), langPtr->value()};
 }
 
+template <Comparison comp>
+SparqlExpression::Estimates
+RelationalExpression<comp>::getEstimatesForFilterExpression(
+    uint64_t inputSize,
+    [[maybe_unused]] const std::optional<Variable>& firstSortedVariable) const {
+  size_t sizeEstimate = 0;
+
+  if (comp == valueIdComparators::Comparison::EQ) {
+    sizeEstimate = inputSize / 1000;
+  } else if (comp == valueIdComparators::Comparison::NE) {
+    sizeEstimate = inputSize;
+  } else {
+    sizeEstimate = inputSize / 50;
+  }
+
+  size_t costEstimate = sizeEstimate;
+  // TODO<joka921> The cost is actually cheaper if the expression can be
+  // evaluated by binary search. It also is more expensive, if one of the
+  // subexpressions is expensive. To properly estimate this, we need a more
+  // detailed interface for cost estimates in the sparqlExpression module and an
+  // easier interface to evaluate the result type of an expression without
+  // actually evaluating it.
+
+  return {sizeEstimate, costEstimate};
+}
+
 // Explicit instantiations
 template class RelationalExpression<Comparison::LT>;
 template class RelationalExpression<Comparison::LE>;
