@@ -312,3 +312,24 @@ void Operation::setSelectedVariablesForSubquery(
     }
   }
 }
+
+// ___________________________________________________________________________
+std::optional<Variable> Operation::getFirstSortedVariable() const {
+  const auto& varToColMap = getExternallyVisibleVariableColumns();
+  const auto& sortedIndices = getResultSortedOn();
+
+  if (sortedIndices.empty()) {
+    return std::nullopt;
+  }
+
+  // TODO<joka921> Can be simplified using views once they are properly
+  // supported inside clang.
+  auto it = std::ranges::find_if(
+      varToColMap, [idx = sortedIndices.front()](const auto& varAndIndex) {
+        return idx == varAndIndex.second;
+      });
+  if (it == varToColMap.end()) {
+    return std::nullopt;
+  }
+  return Variable{it->first};
+}

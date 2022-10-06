@@ -76,4 +76,11 @@ std::optional<SparqlExpressionPimpl::LangFilterData>
 SparqlExpressionPimpl::getLanguageFilterExpression() const {
   return _pimpl->getLanguageFilterExpression();
 }
+
+auto SparqlExpressionPimpl::getEstimatesForFilterExpression(
+    uint64_t inputSize, const std::optional<Variable>& firstSortedVariable)
+    -> Estimates {
+  return _pimpl->getEstimatesForFilterExpression(inputSize,
+                                                 firstSortedVariable);
+}
 }  // namespace sparqlExpression

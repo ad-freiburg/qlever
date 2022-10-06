@@ -31,11 +31,11 @@ class Operation {
  public:
   using VariableToColumnMap = ad_utility::HashMap<std::string, size_t>;
   // Default Constructor.
-  Operation() : _executionContext(nullptr), _hasComputedSortColumns(false) {}
+  Operation() : _executionContext(nullptr) {}
 
   // Typical Constructor.
   explicit Operation(QueryExecutionContext* executionContext)
-      : _executionContext(executionContext), _hasComputedSortColumns(false) {}
+      : _executionContext(executionContext) {}
 
   // Destructor.
   virtual ~Operation() {
@@ -61,12 +61,12 @@ class Operation {
   /**
    * @return A list of columns on which the result of this operation is sorted.
    */
-  const vector<size_t>& getResultSortedOn() {
-    if (!_hasComputedSortColumns) {
-      _hasComputedSortColumns = true;
+  const vector<size_t>& getResultSortedOn() const {
+    std::lock_guard lock{variableToColumnMapMutex_};
+    if (!_resultSortedColumns.has_value()) {
       _resultSortedColumns = resultSortedOn();
     }
-    return _resultSortedColumns;
+    return _resultSortedColumns.value();
   }
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
@@ -139,6 +139,8 @@ class Operation {
   QueryExecutionContext* getExecutionContext() const {
     return _executionContext;
   }
+
+  virtual std::optional<Variable> getFirstSortedVariable() const final;
 
  protected:
   // The QueryExecutionContext for this particular element.
@@ -238,10 +240,8 @@ class Operation {
   template <typename F>
   void forAllDescendants(F f) const;
 
-  vector<size_t> _resultSortedColumns;
+  mutable std::optional<vector<size_t>> _resultSortedColumns = std::nullopt;
   RuntimeInformation _runtimeInfo;
-
-  bool _hasComputedSortColumns;
 
   // Collect all the warnings that were created during the creation or
   // execution of this operation.

@@ -44,67 +44,20 @@ class Filter : public Operation {
   }
 
   virtual size_t getSizeEstimate() override {
-    return _subtree->getSizeEstimate();
-    // TODO<joka921> integrate the size estimates into the expressions.
-    /*
-    if (_type == SparqlFilter::FilterType::REGEX) {
-      // TODO(jbuerklin): return a better estimate
-      return std::numeric_limits<size_t>::max();
-    }
-    // TODO(schnelle): return a better estimate
-    if (_rhs[0] == '?') {
-      if (_type == SparqlFilter::FilterType::EQ) {
-        return _subtree->getSizeEstimate() / 1000;
-      }
-      if (_type == SparqlFilter::FilterType::NE) {
-        return _subtree->getSizeEstimate() / 4;
-      } else {
-        return _subtree->getSizeEstimate() / 2;
-      }
-    } else {
-      if (_type == SparqlFilter::FilterType::EQ) {
-        return _subtree->getSizeEstimate() / 1000;
-      }
-      if (_type == SparqlFilter::FilterType::NE) {
-        return _subtree->getSizeEstimate();
-      } else if (_type == SparqlFilter::FilterType::PREFIX) {
-        // Assume that only 10^-k entries remain, where k is the length of the
-        // prefix. The reason for the -2 is that at this point, _rhs always
-        // starts with ^"
-        double reductionFactor =
-            std::pow(10, std::max(0, static_cast<int>(_rhs.size()) - 2));
-        // Cap to reasonable minimal and maximal values to prevent numerical
-        // stability problems.
-        reductionFactor = std::min(100000000.0, reductionFactor);
-        reductionFactor = std::max(1.0, reductionFactor);
-        return _subtree->getSizeEstimate() /
-               static_cast<size_t>(reductionFactor);
-      } else {
-        return _subtree->getSizeEstimate() / 50;
-      }
-    }
-     */
+    return _expression
+        .getEstimatesForFilterExpression(
+            _subtree->getSizeEstimate(),
+            _subtree->getRootOperation()->getFirstSortedVariable())
+        .sizeEstimate;
   }
 
   virtual size_t getCostEstimate() override {
-    return _subtree->getCostEstimate();
-    // TODO<joka921> include the cost estimates into the expressions.
-    /*
-    if (_type == SparqlFilter::FilterType::REGEX) {
-      // We assume that checking a REGEX for an element is 10 times more
-      // expensive than an "ordinary" filter check.
-      return getSizeEstimate() + 10 * _subtree->getSizeEstimate() +
-             _subtree->getCostEstimate();
-      // return std::numeric_limits<size_t>::max();
-    }
-    if (isLhsSorted()) {
-      // we can apply the very cheap binary sort filter
-      return getSizeEstimate() + _subtree->getCostEstimate();
-    }
-    // we have to look at each element of the result
-    return getSizeEstimate() + _subtree->getSizeEstimate() +
-           _subtree->getCostEstimate();
-           */
+    return _subtree->getCostEstimate() +
+           _expression
+               .getEstimatesForFilterExpression(
+                   _subtree->getSizeEstimate(),
+                   _subtree->getRootOperation()->getFirstSortedVariable())
+               .costEstimate;
   }
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; };

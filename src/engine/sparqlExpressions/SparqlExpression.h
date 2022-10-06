@@ -105,6 +105,14 @@ class SparqlExpression {
     return std::nullopt;
   }
 
+  using Estimates = SparqlExpressionPimpl::Estimates;
+  virtual Estimates getEstimatesForFilterExpression(
+      uint64_t inputSize,
+      [[maybe_unused]] const std::optional<Variable>& firstSortedVariable)
+      const {
+    return {inputSize, inputSize};
+  }
+
   // __________________________________________________________________________
   virtual ~SparqlExpression() = default;
 

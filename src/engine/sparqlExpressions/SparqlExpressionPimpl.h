@@ -87,6 +87,14 @@ class SparqlExpressionPimpl {
 
   std::optional<LangFilterData> getLanguageFilterExpression() const;
 
+  struct Estimates {
+    size_t sizeEstimate;
+    size_t costEstimate;
+  };
+
+  Estimates getEstimatesForFilterExpression(
+      uint64_t inputSize, const std::optional<Variable>& firstSortedVariable);
+
   SparqlExpression* getPimpl() { return _pimpl.get(); }
   [[nodiscard]] const SparqlExpression* getPimpl() const {
     return _pimpl.get();
