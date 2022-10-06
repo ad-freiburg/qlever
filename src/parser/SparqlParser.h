@@ -26,18 +26,6 @@ class SparqlParser {
   explicit SparqlParser(const string& query);
   static ParsedQuery parseQuery(std::string query);
 
-  /// Parse the expression of a filter statement (without the `FILTER` keyword).
-  /// This helper method is needed as long as the set of expressions supported
-  /// by FILTER and BIND/GROUP BY is not the same.
-  static SparqlFilter parseFilterExpression(
-      const string& filterContent,
-      const SparqlQleverVisitor::PrefixMap& prefixMap);
-
- private:
-  // Returns true if it found a filter
-  std::optional<SparqlFilter> parseFilter(bool failOnNoFilter = true);
-
   SparqlLexer lexer_;
   string query_;
-  SparqlFilter parseRegexFilter(bool expectKeyword);
 };
