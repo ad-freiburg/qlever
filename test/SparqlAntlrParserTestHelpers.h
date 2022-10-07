@@ -525,15 +525,23 @@ auto Select =
       detail::Select(distinct, reduced, std::move(selection)));
 };
 
+// Return a `Matcher` that tests whether the descriptor of the expression of a
+// `SparqlFilter` matches the given `expectedDescriptor`.
 auto stringMatchesFilter =
-    [](const std::string& s) -> Matcher<const SparqlFilter&> {
+    [](const std::string& expectedDescriptor) -> Matcher<const SparqlFilter&> {
   auto inner = AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl,
-                           getDescriptor, testing::Eq(s));
+                           getDescriptor, testing::Eq(expectedDescriptor));
   return AD_FIELD(SparqlFilter, expression_, inner);
 };
-auto stringsMatchFilters = [](const std::vector<std::string>& expressions)
+
+// Return a `Matcher` that tests whether the descriptors of the expressions of
+// the given `vector` of `SparqlFilter`s  matches the given
+// `expectedDescriptors`.
+auto stringsMatchFilters =
+    [](const std::vector<std::string>& expectedDescriptors)
     -> Matcher<const std::vector<SparqlFilter>&> {
-  auto matchers = ad_utility::transform(expressions, stringMatchesFilter);
+  auto matchers =
+      ad_utility::transform(expectedDescriptors, stringMatchesFilter);
   return testing::ElementsAreArray(matchers);
 };
 

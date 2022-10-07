@@ -216,8 +216,8 @@ bool RegexExpression::isPrefixExpression() const {
 
 // ____________________________________________________________________________
 auto RegexExpression::getEstimatesForFilterExpression(
-    uint64_t inputSize, const std::optional<Variable>& firstSortedVariable) const
-    -> Estimates  {
+    uint64_t inputSize,
+    const std::optional<Variable>& firstSortedVariable) const -> Estimates {
   if (isPrefixExpression()) {
     // Assume that only 10^-k entries remain, where k is the length of the
     // prefix. The reason for the -2 is that at this point, _rhs always
