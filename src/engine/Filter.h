@@ -1,20 +1,17 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author:
+//   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//   2020-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 #pragma once
 
-#include <list>
 #include <utility>
 #include <vector>
 
-#include "../parser/ParsedQuery.h"
-#include "./Operation.h"
-#include "./QueryExecutionTree.h"
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
-
-using std::list;
-using std::pair;
-using std::vector;
+#include "parser/ParsedQuery.h"
 
 class Filter : public Operation {
  private:
@@ -35,7 +32,7 @@ class Filter : public Operation {
  public:
   virtual string getDescriptor() const override;
 
-  virtual vector<size_t> resultSortedOn() const override {
+  virtual std::vector<size_t> resultSortedOn() const override {
     return _subtree->resultSortedOn();
   }
 
@@ -61,7 +58,7 @@ class Filter : public Operation {
   }
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; };
-  vector<QueryExecutionTree*> getChildren() override {
+  std::vector<QueryExecutionTree*> getChildren() override {
     return {_subtree.get()};
   }
 

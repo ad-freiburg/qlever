@@ -6,23 +6,18 @@
 
 #pragma once
 
-#include <engine/QueryExecutionContext.h>
-#include <engine/ResultTable.h>
-#include <engine/RuntimeInformation.h>
-#include <util/Exception.h>
-#include <util/Log.h>
-#include <util/Timer.h>
-
 #include <iomanip>
 #include <iostream>
 #include <memory>
 #include <utility>
 
+#include "engine/QueryExecutionContext.h"
+#include "engine/ResultTable.h"
+#include "engine/RuntimeInformation.h"
 #include "parser/data/Variable.h"
-
-using std::endl;
-using std::pair;
-using std::shared_ptr;
+#include "util/Exception.h"
+#include "util/Log.h"
+#include "util/Timer.h"
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
@@ -61,21 +56,14 @@ class Operation {
   /**
    * @return A list of columns on which the result of this operation is sorted.
    */
-  const vector<size_t>& getResultSortedOn() const {
-    // TODO<joka921> This is currently not threadsafe, but we have to make sure
-    // that there are no deadlocks.
-    if (!_resultSortedColumns.has_value()) {
-      _resultSortedColumns = resultSortedOn();
-    }
-    return _resultSortedColumns.value();
-  }
+  const vector<size_t>& getResultSortedOn() const;
 
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
   const Engine& getEngine() const { return _executionContext->getEngine(); }
 
   // Get a unique, not ambiguous string representation for a subtree.
-  // This should possible act like an ID for each subtree.
+  // This should act like an ID for each subtree.
   // Calls  `asStringImpl` and adds the information about the `LIMIT` clause.
   virtual string asString(size_t indent = 0) const final {
     auto result = asStringImpl(indent);
@@ -141,6 +129,10 @@ class Operation {
     return _executionContext;
   }
 
+  // If the result of this `Operation` is sorted (either because this
+  // `Operation` enforces this sorting, or because it preserve the sorting of
+  // its children), return the variable that is the primary sort key. Else
+  // return nullopt.
   virtual std::optional<Variable> getFirstSortedVariable() const final;
 
  protected:
@@ -241,7 +233,6 @@ class Operation {
   template <typename F>
   void forAllDescendants(F f) const;
 
-  mutable std::optional<vector<size_t>> _resultSortedColumns = std::nullopt;
   RuntimeInformation _runtimeInfo;
 
   // Collect all the warnings that were created during the creation or
@@ -273,4 +264,10 @@ class Operation {
   // a subquery that doesn't select all variables.
   mutable std::optional<VariableToColumnMap>
       externallyVisibleVariableToColumnMap_;
+
+  // Mutex that protects the `_resultSortedColumns` below.
+  mutable CopyableMutex _resultSortedColumnsMutex;
+
+  // Store the list of columns by which the result is sorted.
+  mutable std::optional<vector<size_t>> _resultSortedColumns = std::nullopt;
 };

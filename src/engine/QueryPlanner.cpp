@@ -26,6 +26,7 @@
 #include <engine/Union.h>
 #include <engine/Values.h>
 #include <parser/Alias.h>
+#include <parser/SparqlParserHelpers.h>
 
 #include <algorithm>
 #include <ctime>
@@ -596,13 +597,10 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getHavingRow(
   for (const auto& parent : previous) {
     SubtreePlan filtered = parent;
     for (const SparqlFilter& filter : pq._havingClauses) {
-      SubtreePlan plan(_qec);
-      auto& tree = *plan._qet;
-      tree.setOperation(QueryExecutionTree::FILTER,
-                        createFilterOperation(filter, parent));
-      filtered = plan;
+      filtered =
+          makeSubtreePlan<Filter>(_qec, filtered._qet, filter.expression_);
     }
-    added.push_back(filtered);
+    added.push_back(std::move(filtered));
   }
   return added;
 }
@@ -795,16 +793,17 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         scanTriple._o = filterVar;
         auto scanTree =
             makeExecutionTree<IndexScan>(_qec, PSO_FREE_S, scanTriple);
-        // TODO<joka921> Setup the appropriate expression (equal between two
-        // variables) here
-        AD_FAIL()
-        /*
-        auto plan = makeSubtreePlan<Filter>(
-            _qec, scanTree, SparqlFilter::FilterType::EQ,
-            node._triple._s.getString(), filterVar, vector<string>{},
-            vector<string>{});
+        // TODO<joka921> Setup a unit or e2e test for this case.
+        // The simplest way to set up the filtering expression is to use the
+        // parser.
+        std::string filterString = absl::StrCat(
+            "FILTER (", scanTriple._s.getString(), "=", filterVar, ")");
+        auto filter = sparqlParserHelpers::ParserAndVisitor{filterString}
+                          .parseTypesafe(&SparqlAutomaticParser::filterR)
+                          .resultOfParse_;
+        auto plan = makeSubtreePlan<Filter>(_qec, scanTree,
+                                            std::move(filter.expression_));
         pushPlan(std::move(plan));
-        */
       } else if (isVariable(node._triple._s)) {
         addIndexScan(POS_BOUND_O);
       } else if (isVariable(node._triple._o)) {
@@ -1195,7 +1194,8 @@ ParsedQuery::GraphPattern QueryPlanner::uniteGraphPatterns(
 
 // _____________________________________________________________________________
 std::string QueryPlanner::generateUniqueVarName() {
-  return "?:" + std::to_string(_internalVarCount++);
+  return "?_qlever_internal_variable_query_planner_" +
+         std::to_string(_internalVarCount++);
 }
 
 // _____________________________________________________________________________
@@ -1566,44 +1566,37 @@ void QueryPlanner::applyFiltersIfPossible(
   // where applying the filter later is better. Finally, the replace flag can
   // be set to enforce that all filters are applied. This should be done for
   // the last row in the DPTab so that no filters are missed.
-  for (size_t n = 0; n < row.size(); ++n) {
-    if (row[n]._qet->getType() == QueryExecutionTree::SCAN &&
-        row[n]._qet->getResultWidth() == 3) {
-      // Do not apply filters to dummies!
+  for (auto& plan : row) {
+    auto& qet = *plan._qet;
+    if (qet.getType() == QueryExecutionTree::SCAN &&
+        qet.getResultWidth() == 3 && !replace) {
+      // Do not apply filters to dummies, except at the very end of query
+      // planning.
       continue;
     }
     for (size_t i = 0; i < filters.size(); ++i) {
-      if (((row[n]._idsOfIncludedFilters >> i) & 1) != 0) {
+      if (((plan._idsOfIncludedFilters >> i) & 1) != 0) {
         continue;
       }
       if (std::ranges::all_of(filters[i].expression_.containedVariables(),
-                              [&row, &n](const auto& variable) {
-                                return row[n]._qet->varCovered(
-                                    variable->name());
+                              [&qet](const auto& variable) {
+                                return qet.varCovered(variable->name());
                               })) {
         // Apply this filter.
         SubtreePlan newPlan =
-            makeSubtreePlan(createFilterOperation(filters[i], row[n]));
-        newPlan._idsOfIncludedFilters = row[n]._idsOfIncludedFilters;
+            makeSubtreePlan<Filter>(_qec, plan._qet, filters[i].expression_);
+        newPlan._idsOfIncludedFilters = plan._idsOfIncludedFilters;
         newPlan._idsOfIncludedFilters |= (size_t(1) << i);
-        newPlan._idsOfIncludedNodes = row[n]._idsOfIncludedNodes;
-        newPlan.type = row[n].type;
+        newPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
+        newPlan.type = plan.type;
         if (replace) {
-          row[n] = newPlan;
+          plan = std::move(newPlan);
         } else {
-          row.push_back(newPlan);
+          row.push_back(std::move(newPlan));
         }
       }
     }
   }
-}
-
-// _____________________________________________________________________________
-std::shared_ptr<Filter> QueryPlanner::createFilterOperation(
-    const SparqlFilter& filter, const SubtreePlan& parent) const {
-  std::shared_ptr<Filter> op =
-      std::make_shared<Filter>(_qec, parent._qet, filter.expression_);
-  return op;
 }
 
 // _____________________________________________________________________________
