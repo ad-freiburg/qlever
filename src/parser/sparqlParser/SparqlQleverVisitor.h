@@ -439,7 +439,8 @@ class SparqlQleverVisitor {
   // Return the `SparqlExpressionPimpl` for a context that returns a
   // `ExpressionPtr` when visited. The descriptor is set automatically on the
   // `SparqlExpressionPimpl`.
-  [[nodiscard]] SparqlExpressionPimpl visitExpressionPimpl(auto* ctx);
+  [[nodiscard]] SparqlExpressionPimpl visitExpressionPimpl(
+      auto* ctx, bool allowLanguageFilters = false);
 
   template <typename Expr>
   [[nodiscard]] ExpressionPtr createExpression(auto... children) {
@@ -488,6 +489,17 @@ class SparqlQleverVisitor {
 
   [[noreturn]] void reportNotSupported(antlr4::ParserRuleContext* ctx,
                                        const std::string& feature);
+
+  // Throw an exception if the `expression` contains the `LANG()` function. The
+  // `context` will be used to create the exception metadata.
+  void checkUnsupportedLangOperation(antlr4::ParserRuleContext* context,
+                                     SparqlExpressionPimpl expression);
+
+  // Similar to `checkUnsupportedLangOperation` but doesn't throw for the
+  // expression `LANG(?someVariable) = "someLangtag"` which is supported by
+  // QLever inside a FILTER clause.
+  void checkUnsupportedLangOperationAllowFilters(
+      antlr4::ParserRuleContext* ctx, SparqlExpressionPimpl expression);
 
   // Parse both `ConstructTriplesContext` and `TriplesTemplateContext` because
   // they have the same structure.

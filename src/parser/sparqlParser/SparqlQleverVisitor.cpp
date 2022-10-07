@@ -1,8 +1,9 @@
 // Copyright 2021, University of Freiburg,
 // Chair of Algorithms and Data Structures
 // Authors:
-//   Hannah Bast <bast@cs.uni-freiburg.de>
-//   2022 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+//   2021 -    Hannah Bast <bast@cs.uni-freiburg.de>
+//   2022      Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
+//   2022 -    Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
@@ -130,8 +131,15 @@ PathTuples joinPredicateAndObject(VarOrPath predicate, ObjectList objectList) {
 }
 
 // ___________________________________________________________________________
-SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx) {
-  return SparqlExpressionPimpl{visit(ctx), std::move(ctx->getText())};
+SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx,
+                                                    bool allowLanguageFilters) {
+  SparqlExpressionPimpl result{visit(ctx), std::move(ctx->getText())};
+  if (allowLanguageFilters) {
+    checkUnsupportedLangOperationAllowFilters(ctx, result);
+  } else {
+    checkUnsupportedLangOperation(ctx, result);
+  }
+  return result;
 }
 
 // ____________________________________________________________________________________
@@ -289,14 +297,13 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
 
     pattern._graphPatterns = std::move(subOps);
     for (auto& filter : filters) {
-      // TODO<joka921> Add the checks that there are no LANG() expressions left
-      // after this adding.
       if (auto langFilterData =
               filter.expression_.getLanguageFilterExpression();
           langFilterData.has_value()) {
         const auto& [variable, language] = langFilterData.value();
         pattern.addLanguageFilter(variable.name(), language);
       } else {
+        checkUnsupportedLangOperation(ctx, filter.expression_);
         pattern._filters.push_back(std::move(filter));
       }
     }
@@ -786,7 +793,7 @@ GraphPatternOperation Visitor::visit(
 
 // ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
-  return SparqlFilter{visitExpressionPimpl(ctx->constraint())};
+  return SparqlFilter{visitExpressionPimpl(ctx->constraint(), true)};
 }
 
 // ____________________________________________________________________________________
@@ -1792,7 +1799,7 @@ void Visitor::visitIf(Target* target, Ctx* ctx) {
   }
 }
 
-// ____________________________________________________________________________________
+// _____________________________________________________________________________
 template <typename Ctx>
 void Visitor::visitIf(Ctx* ctx) requires voidWhenVisited<Visitor, Ctx> {
   if (ctx) {
@@ -1800,7 +1807,7 @@ void Visitor::visitIf(Ctx* ctx) requires voidWhenVisited<Visitor, Ctx> {
   }
 }
 
-// ____________________________________________________________________________________
+// _____________________________________________________________________________
 void Visitor::reportError(antlr4::ParserRuleContext* ctx,
                           const std::string& msg) {
   throw ParseException{
@@ -1810,8 +1817,31 @@ void Visitor::reportError(antlr4::ParserRuleContext* ctx,
       generateMetadata(ctx)};
 }
 
-// ____________________________________________________________________________________
+// _____________________________________________________________________________
 void Visitor::reportNotSupported(antlr4::ParserRuleContext* ctx,
                                  const std::string& feature) {
   reportError(ctx, feature + " currently not supported by QLever.");
+}
+
+// _____________________________________________________________________________
+void Visitor::checkUnsupportedLangOperation(
+    antlr4::ParserRuleContext* ctx,
+    SparqlQleverVisitor::SparqlExpressionPimpl expression) {
+  if (expression.containsLangExpression()) {
+    reportError(ctx,
+                "The `LANG()` function is only supported in the construct "
+                "`FILTER(LANG(?variable) = \"langtag\"`");
+  }
+}
+
+// _____________________________________________________________________________
+void Visitor::checkUnsupportedLangOperationAllowFilters(
+    antlr4::ParserRuleContext* ctx,
+    SparqlQleverVisitor::SparqlExpressionPimpl expression) {
+  if (expression.containsLangExpression() &&
+      !expression.getLanguageFilterExpression()) {
+    reportError(ctx,
+                "The `LANG()` function is only supported in the construct "
+                "`FILTER(LANG(?variable) = \"langtag\"`");
+  }
 }

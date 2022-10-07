@@ -66,7 +66,7 @@ void SparqlExpressionPimpl::setDescriptor(std::string descriptor) {
   _pimpl->descriptor() = std::move(descriptor);
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 bool SparqlExpressionPimpl::isVariableContained(
     const Variable& variable) const {
   return std::ranges::any_of(
@@ -74,17 +74,22 @@ bool SparqlExpressionPimpl::isVariableContained(
       [&variable](const auto* varPtr) { return *varPtr == variable; });
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 std::optional<SparqlExpressionPimpl::LangFilterData>
 SparqlExpressionPimpl::getLanguageFilterExpression() const {
   return _pimpl->getLanguageFilterExpression();
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 auto SparqlExpressionPimpl::getEstimatesForFilterExpression(
     uint64_t inputSize, const std::optional<Variable>& firstSortedVariable)
     -> Estimates {
   return _pimpl->getEstimatesForFilterExpression(inputSize,
                                                  firstSortedVariable);
+}
+
+// _____________________________________________________________________________
+bool SparqlExpressionPimpl::containsLangExpression() const {
+  return _pimpl->containsLangExpression();
 }
 }  // namespace sparqlExpression

@@ -80,18 +80,26 @@ class SparqlExpressionPimpl {
 
   bool isVariableContained(const Variable&) const;
 
+  // If `this` is an expression of the form `LANG(?variable) = "language"`,
+  // return the variable and the language. Else return `std::nullopt`.
   struct LangFilterData {
     Variable variable_;
     std::string language_;
   };
-
   std::optional<LangFilterData> getLanguageFilterExpression() const;
 
+  // Return true iff the `LANG()` function is used inside this expression.
+  bool containsLangExpression() const;
+
+  // Return the size and cost estimate for this expression if it is used as the
+  // expression of a `FILTER` clause given that the input has `inputSize` many
+  // elements and the input is sorted by the variable `firstSortedVariable`.
+  // `std::nullopt` for the second argument means, that the input is not sorted
+  // at all.0
   struct Estimates {
     size_t sizeEstimate;
     size_t costEstimate;
   };
-
   Estimates getEstimatesForFilterExpression(
       uint64_t inputSize, const std::optional<Variable>& firstSortedVariable);
 
