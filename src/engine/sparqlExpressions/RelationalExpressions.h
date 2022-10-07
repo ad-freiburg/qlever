@@ -36,8 +36,12 @@ class RelationalExpression : public SparqlExpression {
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
 
+  // Check if this expression has the form `LANG(?var) = "literal"` and return
+  // the appropriate data.
   std::optional<LangFilterData> getLanguageFilterExpression() const override;
 
+  // These expressions are typically used inside `FILTER` clauses, so wee need
+  // proper estimates.
   Estimates getEstimatesForFilterExpression(
       uint64_t inputSize,
       const std::optional<Variable>& firstSortedVariable) const override;

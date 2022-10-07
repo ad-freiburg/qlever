@@ -3,12 +3,11 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 // Author: Florian Kramer (flo.kramer@arcor.de)
 
-#include "SparqlFilter.h"
+#include "./SparqlFilter.h"
 
-#include <sstream>
+#include "absl/strings/str_cat.h"
 
+// _____________________________________________________________________________
 string SparqlFilter::asString() const {
-  std::ostringstream os;
-  os << "FILTER(" << expression_.getDescriptor() << ")";
-  return std::move(os).str();
+  return absl::StrCat("FILTER(", expression_.getDescriptor(), ")");
 }

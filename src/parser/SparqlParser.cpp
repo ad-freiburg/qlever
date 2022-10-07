@@ -1,12 +1,11 @@
-// Copyright 2014, University of Freiburg,
-// Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Copyright 2022, University of Freiburg,
+//                 Chair of Algorithms and Data Structures.
+// Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
 
 #include "./SparqlParser.h"
 
 #include "parser/SparqlParserHelpers.h"
 
-using namespace std::literals::string_literals;
 using AntlrParser = SparqlAutomaticParser;
 
 // _____________________________________________________________________________

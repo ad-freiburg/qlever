@@ -394,6 +394,8 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
     return std::nullopt;
   }
 
+  // TODO<joka921> Discuss with Hannah: We could also support
+  // `FILTER("en" = LANG(?var))` (the switched version).
   const auto* varPtr =
       dynamic_cast<const LangExpression*>(std::get<0>(children_).get());
   const auto* langPtr =
@@ -428,6 +430,10 @@ RelationalExpression<comp>::getEstimatesForFilterExpression(
   // detailed interface for cost estimates in the sparqlExpression module and an
   // easier interface to evaluate the result type of an expression without
   // actually evaluating it.
+
+  // TODO<joka921> What could be done for now is:
+  // If the filter is between a constant (LiteralExpression) and a variable, and
+  // The variable is sorted, THEN we can assume that the filter is cheap.
 
   return {sizeEstimate, costEstimate};
 }

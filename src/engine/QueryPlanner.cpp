@@ -1566,10 +1566,13 @@ void QueryPlanner::applyFiltersIfPossible(
   // where applying the filter later is better. Finally, the replace flag can
   // be set to enforce that all filters are applied. This should be done for
   // the last row in the DPTab so that no filters are missed.
+
+  // Note: we are first collecting the newly added plans and then adding them
+  // in one go. Changing `row` inside the loop would invalidate the iterators.
+  std::vector<SubtreePlan> addedPlans;
   for (auto& plan : row) {
-    auto& qet = *plan._qet;
-    if (qet.getType() == QueryExecutionTree::SCAN &&
-        qet.getResultWidth() == 3 && !replace) {
+    if (plan._qet->getType() == QueryExecutionTree::SCAN &&
+        plan._qet->getResultWidth() == 3 && !replace) {
       // Do not apply filters to dummies, except at the very end of query
       // planning.
       continue;
@@ -1579,8 +1582,8 @@ void QueryPlanner::applyFiltersIfPossible(
         continue;
       }
       if (std::ranges::all_of(filters[i].expression_.containedVariables(),
-                              [&qet](const auto& variable) {
-                                return qet.varCovered(variable->name());
+                              [&plan](const auto& variable) {
+                                return plan._qet->varCovered(variable->name());
                               })) {
         // Apply this filter.
         SubtreePlan newPlan =
@@ -1592,11 +1595,12 @@ void QueryPlanner::applyFiltersIfPossible(
         if (replace) {
           plan = std::move(newPlan);
         } else {
-          row.push_back(std::move(newPlan));
+          addedPlans.push_back(std::move(newPlan));
         }
       }
     }
   }
+  row.insert(row.end(), addedPlans.begin(), addedPlans.end());
 }
 
 // _____________________________________________________________________________

@@ -5,16 +5,12 @@
 #pragma once
 
 #include <string>
-#include <vector>
 
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
-using std::string;
-using std::vector;
-
 class SparqlFilter {
  public:
-  [[nodiscard]] string asString() const;
+  [[nodiscard]] std::string asString() const;
 
   sparqlExpression::SparqlExpressionPimpl expression_;
   // TODO<joka921> This comparison is only used for the unit tests, maybe it

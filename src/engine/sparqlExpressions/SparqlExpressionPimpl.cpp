@@ -1,7 +1,8 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
-//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+//  Copyright 2021, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "SparqlExpressionPimpl.h"
+#include "./SparqlExpressionPimpl.h"
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
@@ -65,6 +66,7 @@ void SparqlExpressionPimpl::setDescriptor(std::string descriptor) {
   _pimpl->descriptor() = std::move(descriptor);
 }
 
+// ____________________________________________________________________________
 bool SparqlExpressionPimpl::isVariableContained(
     const Variable& variable) const {
   return std::ranges::any_of(
@@ -72,11 +74,13 @@ bool SparqlExpressionPimpl::isVariableContained(
       [&variable](const auto* varPtr) { return *varPtr == variable; });
 }
 
+// ____________________________________________________________________________
 std::optional<SparqlExpressionPimpl::LangFilterData>
 SparqlExpressionPimpl::getLanguageFilterExpression() const {
   return _pimpl->getLanguageFilterExpression();
 }
 
+// ____________________________________________________________________________
 auto SparqlExpressionPimpl::getEstimatesForFilterExpression(
     uint64_t inputSize, const std::optional<Variable>& firstSortedVariable)
     -> Estimates {
