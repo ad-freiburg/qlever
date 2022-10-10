@@ -78,6 +78,7 @@ class SparqlExpressionPimpl {
 
   std::vector<const Variable*> containedVariables() const;
 
+  // Return true iff the `Variable` is used inside the expression.
   bool isVariableContained(const Variable&) const;
 
   // If `this` is an expression of the form `LANG(?variable) = "language"`,
@@ -95,13 +96,14 @@ class SparqlExpressionPimpl {
   // expression of a `FILTER` clause given that the input has `inputSize` many
   // elements and the input is sorted by the variable `firstSortedVariable`.
   // `std::nullopt` for the second argument means, that the input is not sorted
-  // at all.0
+  // at all.
   struct Estimates {
     size_t sizeEstimate;
     size_t costEstimate;
   };
   Estimates getEstimatesForFilterExpression(
-      uint64_t inputSize, const std::optional<Variable>& firstSortedVariable);
+      uint64_t inputSizeEstimate,
+      const std::optional<Variable>& firstSortedVariable);
 
   SparqlExpression* getPimpl() { return _pimpl.get(); }
   [[nodiscard]] const SparqlExpression* getPimpl() const {

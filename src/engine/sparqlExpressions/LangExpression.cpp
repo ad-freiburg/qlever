@@ -8,14 +8,19 @@
 
 namespace sparqlExpression {
 
-// _____________________________________________________________________________
-LangExpression::LangExpression(SparqlExpression::Ptr child) {
-  if (auto stringPtr = dynamic_cast<const VariableExpression*>(child.get())) {
-    variable_ = stringPtr->value();
+namespace {
+Variable getVariableOrThrow(const SparqlExpression::Ptr& ptr) {
+  if (auto stringPtr = dynamic_cast<const VariableExpression*>(ptr.get())) {
+    return stringPtr->value();
   } else {
     throw std::runtime_error{
         "The argument to the LANG function must be a single variable"};
   }
 }
+}  // namespace
+
+// _____________________________________________________________________________
+LangExpression::LangExpression(SparqlExpression::Ptr child)
+    : variable_{getVariableOrThrow(child)} {}
 
 }  // namespace sparqlExpression

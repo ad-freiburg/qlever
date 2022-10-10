@@ -394,33 +394,43 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
     return std::nullopt;
   }
 
-  // TODO<joka921> Discuss with Hannah: We could also support
-  // `FILTER("en" = LANG(?var))` (the switched version).
-  const auto* varPtr =
-      dynamic_cast<const LangExpression*>(std::get<0>(children_).get());
-  const auto* langPtr =
-      dynamic_cast<const StringOrIriExpression*>(std::get<1>(children_).get());
+  // We support both directions (LANG(?x) = "ln" and "ln" = LANG(?x)
+  auto getLangFilterData =
+      [](const auto& left, const auto& right) -> std::optional<LangFilterData> {
+    const auto* varPtr = dynamic_cast<const LangExpression*>(left.get());
+    const auto* langPtr =
+        dynamic_cast<const StringOrIriExpression*>(right.get());
 
-  if (!varPtr || !langPtr) {
-    return std::nullopt;
+    if (!varPtr || !langPtr) {
+      return std::nullopt;
+    }
+
+    return LangFilterData{varPtr->variable(), langPtr->value()};
+  };
+
+  const auto& child1 = children_[0];
+  const auto& child2 = children_[1];
+
+  if (auto langFilterData = getLangFilterData(child1, child2)) {
+    return langFilterData;
+  } else {
+    return getLangFilterData(child2, child1);
   }
-
-  return LangFilterData{varPtr->variable(), langPtr->value()};
 }
 
 template <Comparison comp>
 SparqlExpression::Estimates
 RelationalExpression<comp>::getEstimatesForFilterExpression(
-    uint64_t inputSize,
+    uint64_t inputSizeEstimate,
     [[maybe_unused]] const std::optional<Variable>& firstSortedVariable) const {
   size_t sizeEstimate = 0;
 
   if (comp == valueIdComparators::Comparison::EQ) {
-    sizeEstimate = inputSize / 1000;
+    sizeEstimate = inputSizeEstimate / 1000;
   } else if (comp == valueIdComparators::Comparison::NE) {
-    sizeEstimate = inputSize;
+    sizeEstimate = inputSizeEstimate;
   } else {
-    sizeEstimate = inputSize / 50;
+    sizeEstimate = inputSizeEstimate / 50;
   }
 
   size_t costEstimate = sizeEstimate;

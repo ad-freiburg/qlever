@@ -15,7 +15,7 @@ namespace sparqlExpression {
 class LangExpression : public SparqlExpression {
  private:
   // The stored variable.
-  Variable variable_{"?uninitialized"};
+  Variable variable_;
 
  public:
   // Construct from a child expression. The child must be a single variable,

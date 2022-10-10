@@ -116,12 +116,12 @@ class SparqlExpression {
   // ___________________________________________________________________________
   using Estimates = SparqlExpressionPimpl::Estimates;
   virtual Estimates getEstimatesForFilterExpression(
-      uint64_t inputSize,
+      uint64_t inputSizeEstimate,
       [[maybe_unused]] const std::optional<Variable>& firstSortedVariable)
       const {
-    // Default estimates: Each element can be accessed in O(1) and nothing is
+    // Default estimates: Each element can be computed in O(1) and nothing is
     // filtered out.
-    return {inputSize, inputSize};
+    return {inputSizeEstimate, inputSizeEstimate};
   }
 
   // __________________________________________________________________________

@@ -237,15 +237,14 @@ auto RegexExpression::getEstimatesForFilterExpression(
                               : sizeEstimate + inputSize;
 
     return {sizeEstimate, costEstimate};
-  }
-  // TODO<joka921> Discuss with Hannah. Previously was "max()" which
-  // definitely is not correct.
-  size_t sizeEstimate = inputSize / 2;
-  // We assume that checking a REGEX for an element is 10 times more
-  // expensive than an "ordinary" filter check.
-  size_t costEstimate = sizeEstimate + 10 * inputSize;
+  } else {  // Not a prefix filter.
+    size_t sizeEstimate = inputSize / 2;
+    // We assume that checking a REGEX for an element is 10 times more
+    // expensive than an "ordinary" filter check.
+    size_t costEstimate = sizeEstimate + 10 * inputSize;
 
-  return {sizeEstimate, costEstimate};
+    return {sizeEstimate, costEstimate};
+  }
 }
 
 }  // namespace sparqlExpression

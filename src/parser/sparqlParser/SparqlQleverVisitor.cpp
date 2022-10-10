@@ -483,8 +483,6 @@ LimitOffsetClause Visitor::visit(Parser::LimitOffsetClausesContext* ctx) {
 
 // ____________________________________________________________________________________
 vector<SparqlFilter> Visitor::visit(Parser::HavingClauseContext* ctx) {
-  // TODO<joka921> we should check for the illegal language filters here,
-  // not in the downstream path.
   auto expressions = visitVector(ctx->havingCondition());
   return ad_utility::transform(std::move(expressions), [](auto&& expression) {
     return SparqlFilter{std::move(expression)};
@@ -493,12 +491,7 @@ vector<SparqlFilter> Visitor::visit(Parser::HavingClauseContext* ctx) {
 
 // ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::HavingConditionContext* ctx) {
-  auto expression = visitExpressionPimpl(ctx->constraint());
-  if (auto langFilterData = expression.getLanguageFilterExpression();
-      langFilterData.has_value()) {
-    reportNotSupported(ctx, "Language filters in HAVING clauses are");
-  }
-  return {std::move(expression)};
+  return {visitExpressionPimpl(ctx->constraint())};
 }
 
 // ____________________________________________________________________________________
@@ -739,7 +732,7 @@ std::string Visitor::visit(Parser::DataBlockValueContext* ctx) {
   if (ctx->iri()) {
     return visit(ctx->iri());
   } else if (ctx->rdfLiteral()) {
-    // TODO<joka921> This is yet wrong for xsd-typed literals
+    // TODO<joka921> This is still wrong for XSD literals
     return visit(ctx->rdfLiteral());
   } else if (ctx->numericLiteral()) {
     // TODO implement
@@ -793,6 +786,8 @@ GraphPatternOperation Visitor::visit(
 
 // ____________________________________________________________________________________
 SparqlFilter Visitor::visit(Parser::FilterRContext* ctx) {
+  // The second argument means that the expression `LANG(?var) = "language"` is
+  // allowed.
   return SparqlFilter{visitExpressionPimpl(ctx->constraint(), true)};
 }
 
@@ -1569,6 +1564,8 @@ ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
 
 // _____________________________________________________________________________
 ExpressionPtr Visitor::visit(Parser::LangExpressionContext* ctx) {
+  // The constructor of `LangExpression` throws if the subexpression is not a
+  // single variable.
   try {
     return std::make_unique<sparqlExpression::LangExpression>(
         visit(ctx->expression()));
