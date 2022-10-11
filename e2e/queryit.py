@@ -382,45 +382,51 @@ def main() -> None:
             query_sparql = query['sparql']
             print(Color.HEADER + 'Trying: ', query_name,
                   '(%s)' % query_type + Color.ENDC)
-            print('SPARQL:')
-            print(query_sparql)
             sys.stdout.flush()
             result = exec_query(endpoint_url, query_sparql, action="qlever_json_export")
-            if not result:
-                # A print was already done in exec_query()
+
+            # common code for the error case
+            def set_error():
+                nonlocal error_detected
+                nonlocal query_sparql
+                print('SPARQL:', query_sparql)
                 error_detected = True
+
+            if not result:
+                set_error()
+                # A print was already done in exec_query()
                 print_qlever_result(result)
                 continue
 
             if not check_structure_qlever_json(result):
-                error_detected = True
+                set_error()
                 print_qlever_result(result)
                 continue
 
             if result['status'] != 'OK':
+                set_error()
                 eprint('QLever Result "status" is not "OK"')
-                error_detected = True
                 print_qlever_result(result)
                 continue
 
             if not query_checks(query, result, test_check):
-                error_detected = True
+                set_error()
                 continue
 
             result = exec_query(endpoint_url, query_sparql, action="sparql_json_export")
             if not result:
                 # A print was already done in exec_query()
-                error_detected = True
+                set_error()
                 print_qlever_result(result)
                 continue
 
             if not check_structure_sparql_json(result):
-                error_detected = True
+                set_error()
                 print_qlever_result(result)
                 continue
 
             if not query_checks(query, result, test_check_sparql_json):
-                error_detected = True
+                set_error()
                 continue
 
     if error_detected:
