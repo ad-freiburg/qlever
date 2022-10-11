@@ -434,17 +434,22 @@ RelationalExpression<comp>::getEstimatesForFilterExpression(
   }
 
   size_t costEstimate = sizeEstimate;
-  // TODO<joka921> The cost is actually cheaper if the expression can be
-  // evaluated by binary search. It also is more expensive, if one of the
-  // subexpressions is expensive. To properly estimate this, we need a more
-  // detailed interface for cost estimates in the sparqlExpression module and an
-  // easier interface to evaluate the result type of an expression without
-  // actually evaluating it.
 
-  // TODO<joka921> What could be done for now is:
-  // If the filter is between a constant (LiteralExpression) and a variable, and
-  // The variable is sorted, THEN we can assume that the filter is cheap.
+  auto canBeEvaluatedWithBinarySearch = [&firstSortedVariable](
+                                            const Ptr& left, const Ptr& right) {
+    auto varPtr = dynamic_cast<const VariableExpression*>(left.get());
+    if (!varPtr || varPtr->value() != firstSortedVariable) {
+      return false;
+    }
+    return right->isConstantExpression();
+  };
 
+  // TODO<joka921> This check has to be more complex once we support proper
+  // filtering on the `LocalVocab`.
+  if (canBeEvaluatedWithBinarySearch(children_[0], children_[1]) ||
+      canBeEvaluatedWithBinarySearch(children_[1], children_[0])) {
+    costEstimate = 0;
+  }
   return {sizeEstimate, costEstimate};
 }
 

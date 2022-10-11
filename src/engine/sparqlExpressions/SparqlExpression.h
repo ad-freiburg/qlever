@@ -124,6 +124,10 @@ class SparqlExpression {
     return {inputSizeEstimate, inputSizeEstimate};
   }
 
+  // Returns true iff this expression is a simple constant. Default
+  // implementation returns `false`.
+  virtual bool isConstantExpression() const { return true; }
+
   // __________________________________________________________________________
   virtual ~SparqlExpression() = default;
 

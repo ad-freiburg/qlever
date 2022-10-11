@@ -1602,6 +1602,7 @@ void QueryPlanner::applyFiltersIfPossible(
     }
     row.insert(row.end(), addedPlans.begin(), addedPlans.end());
   }
+}
 
   // _____________________________________________________________________________
   vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
